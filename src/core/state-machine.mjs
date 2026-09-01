@@ -192,6 +192,19 @@ export class Registry {
     /** @type {Record<string, {supported:boolean, installed:boolean}>} */
     this._hookStatus = {};
 
+    /**
+     * Evidence that installed hooks are actually reaching us.
+     *
+     * "Installed" is a statement about a settings file, not about delivery: a
+     * hook aimed at the wrong port, or blocked by a security tool, leaves the
+     * file looking perfect while nothing ever arrives. The port mismatch is
+     * caught deterministically by the adapter; this is the residual signal for
+     * everything else, surfaced in the hooks screen rather than guessed at.
+     * @type {Map<string, {eventsSeen:number, lastEventAt:number|null}>}
+     */
+    this._hookHealth = new Map();
+    this._startedAt = Date.now();
+
     /** @type {Set<(snapshot: ReturnType<Registry['snapshot']>) => void>} */
     this._subscribers = new Set();
 
@@ -236,6 +249,9 @@ export class Registry {
       takenNames: this.identity ? this.identity.takenNames() : [],
       hooks: { ...this._hookStatus },
       degraded: this._degraded(),
+      // A store that cannot write is losing every acknowledgement made since
+      // it last succeeded. Carried in the snapshot so the client can say so.
+      writeError: this.store.writeError || null,
       scannedAt: this._scannedAt,
     };
   }
@@ -279,6 +295,19 @@ export class Registry {
     this._hookStatus = { ...this._hookStatus, ...(status || {}) };
     this._rebuild();
     this._emitIfChanged();
+  }
+
+  /**
+   * Delivery evidence for one runtime, for the hooks screen.
+   * @param {string} runtime
+   */
+  hookHealthFor(runtime) {
+    const h = this._hookHealth.get(runtime);
+    return {
+      eventsSeen: h ? h.eventsSeen : 0,
+      lastEventAt: h ? h.lastEventAt : null,
+      daemonStartedAt: this._startedAt,
+    };
   }
 
   /** @param {string} runtime */
@@ -457,6 +486,11 @@ export class Registry {
     const now = typeof event.at === 'number' ? event.at : Date.now();
     const obs = this._ensureObserved(id, runtime, event.cwd);
 
+    const health = this._hookHealth.get(runtime) || { eventsSeen: 0, lastEventAt: null };
+    health.eventsSeen += 1;
+    health.lastEventAt = now;
+    this._hookHealth.set(runtime, health);
+
     switch (event.hookEvent) {
       case 'SessionStart':
         // A restart/resume of a session id that was already for_review (e.g.
@@ -553,7 +587,7 @@ export class Registry {
   /**
    * @param {string} id
    * @param {typeof ACK_ACTIONS[number]} action
-   * @returns {Promise<void>}
+   * @returns {Promise<Agent|undefined>} the agent as it now stands
    */
   async act(id, action) {
     if (!ACK_ACTIONS.includes(action)) {
@@ -601,6 +635,7 @@ export class Registry {
 
     this._rebuild();
     this._emitIfChanged();
+    return this._agents.find((a) => a.id === id);
   }
 
   /**

@@ -18,6 +18,7 @@ import { register as registerHooks } from './http/routes/hooks.mjs';
 import { register as registerSettings } from './http/routes/settings.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
+import { STATE_FILE, migrateLegacyState } from './core/paths.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
 import * as adapters from './adapters/index.mjs';
@@ -25,7 +26,10 @@ import * as adapters from './adapters/index.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(HERE, '..');
 export const PUBLIC_DIR = path.join(REPO_ROOT, 'public');
-export const STATE_FILE = path.join(REPO_ROOT, 'state.json');
+
+// State lives in the user's home directory, never in the package directory.
+// See src/core/paths.mjs for why.
+export { STATE_FILE };
 
 const HOST = '127.0.0.1';
 
@@ -36,6 +40,8 @@ const HOST = '127.0.0.1';
 export async function startDaemon(opts = {}) {
   const log = createLog('daemon');
   const publicDir = opts.publicDir || PUBLIC_DIR;
+  // Carry over state written by a build that kept it inside the package.
+  if (!opts.stateFile) migrateLegacyState(REPO_ROOT, log);
   const store = new Store(opts.stateFile || STATE_FILE);
   await store.load();
 
@@ -51,7 +57,10 @@ export async function startDaemon(opts = {}) {
 
   const router = new Router();
   /** @type {any} */
-  const ctx = { registry, store, adapters, identity, log, publicDir };
+  // `port` is filled in once the listener is bound. The hooks routes read it
+  // so the hook command they write points at THIS daemon, not at 4317 by
+  // assumption — see src/adapters/claude-code/hooks.mjs.
+  const ctx = { registry, store, adapters, identity, log, publicDir, port: null };
   registerState(router, ctx);
   registerActions(router, ctx);
   registerHooks(router, ctx);
@@ -132,6 +141,7 @@ export async function startDaemon(opts = {}) {
   server.timeout = 0;
 
   const port = await listen(server, opts.port ?? 4317, log);
+  ctx.port = port;
 
   await ctx.refreshHookStatus?.().catch?.(() => {});
   await registry.start();

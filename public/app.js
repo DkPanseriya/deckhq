@@ -76,6 +76,8 @@ const el = {
   forReview: document.getElementById('stat-for-review'),
   atDesk: document.getElementById('stat-at-desk'),
   benched: document.getElementById('stat-benched'),
+  writeErrorBanner: document.getElementById('write-error-banner'),
+  writeErrorText: document.getElementById('write-error-text'),
   degradedBanner: document.getElementById('degraded-banner'),
   degradedText: document.getElementById('degraded-text'),
   degradedLink: document.getElementById('degraded-link'),
@@ -395,6 +397,17 @@ function renderHeader(snapshot) {
 
   const degradedRuntimes = normalizeDegraded(snapshot.degraded);
   el.degradedBanner.hidden = degradedRuntimes.length === 0;
+
+  // A store that cannot write is quietly throwing away every acknowledgement
+  // as soon as the daemon restarts. Never let that be silent.
+  const writeError = snapshot.writeError;
+  el.writeErrorBanner.hidden = !writeError;
+  if (writeError) {
+    el.writeErrorText.textContent =
+      `DeckHQ cannot save your acknowledgements to ${writeError.file} ` +
+      `(${writeError.message}). They will be lost when it restarts. ` +
+      'Set DECKHQ_STATE_DIR to a writable directory and start it again.';
+  }
 
   if (snapshot.settings) {
     el.showLetGoToggle.setAttribute('aria-pressed', String(Boolean(snapshot.settings.showLetGo)));

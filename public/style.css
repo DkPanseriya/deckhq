@@ -369,6 +369,20 @@ button {
   flex: 0 0 auto;
 }
 
+.write-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-line);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 620px;
+}
+
 .connection-status {
   font-family: var(--font-mono);
   font-size: 0.65rem;

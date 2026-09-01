@@ -144,6 +144,14 @@ export class Store {
     this._saveTimer = null;
     /** @type {Promise<void>|null} chain of in-flight/queued disk writes, serialized */
     this._writing = null;
+    /**
+     * The last disk write that failed, or null. Read by the daemon and shown
+     * in the interface: a store that cannot write is a store whose
+     * acknowledgements vanish on restart, and the user has to be told rather
+     * than left to discover it.
+     * @type {{file:string, message:string, at:number}|null}
+     */
+    this.writeError = null;
   }
 
   /**
@@ -329,7 +337,19 @@ export class Store {
     const prior = this._writing || Promise.resolve();
     const p = prior
       .then(() => this._writeNow())
+      .then(() => {
+        this.writeError = null;
+      })
       .catch((err) => {
+        // A failed write means every acknowledgement made since the last good
+        // one is gone at the next restart — the user-owned half of the model,
+        // silently discarded. A log line is not enough: this is surfaced in
+        // the interface. See `writeError`.
+        this.writeError = {
+          file: this.file,
+          message: (err && err.message) || String(err),
+          at: Date.now(),
+        };
         this._log.error(`failed to write ${this.file}`, err);
       })
       .finally(() => {
