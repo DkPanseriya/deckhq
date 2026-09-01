@@ -19,7 +19,7 @@
     "url": "https://github.com/DkPanseriya/deckhq/issues"
   },
   "license": "MIT",
-  "author": "Vikalp Panseriya",
+  "author": "Darshak Panseriya",
   "type": "module",
   "bin": {
     "deckhq": "./bin/deckhq.mjs"
