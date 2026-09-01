@@ -663,6 +663,7 @@ export const adapter = {
     install: hooksImpl.install,
     remove: hooksImpl.remove,
     installed: hooksImpl.installed,
+    installedPort: hooksImpl.installedPort,
   },
 };
 

@@ -10,6 +10,7 @@
  * runtime, so it acknowledges first and processes on the next tick.
  */
 import { readJson, sendError, sendJson } from '../server.mjs';
+import { DEFAULT_PORT } from '../../adapters/claude-code/hooks.mjs';
 
 /**
  * @param {import('../server.mjs').Router} router
@@ -18,16 +19,19 @@ import { readJson, sendError, sendJson } from '../server.mjs';
 export function register(router, ctx) {
   const { registry, adapters, log } = ctx;
 
+  /** The port this daemon actually bound, known once the listener is up. */
+  const port = () => ctx.port ?? DEFAULT_PORT;
+
   async function statusFor(adapter) {
     let installed = false;
     let plan = null;
     let error = null;
+    let installedAtPort = null;
     try {
+      plan = adapter.hooks.describe(port());
       if (adapter.hooks.supported) {
-        installed = await adapter.hooks.installed();
-        plan = adapter.hooks.describe();
-      } else {
-        plan = adapter.hooks.describe();
+        installed = await adapter.hooks.installed(port());
+        installedAtPort = (await adapter.hooks.installedPort?.()) ?? null;
       }
     } catch (err) {
       error = err.message;
@@ -39,6 +43,11 @@ export function register(router, ctx) {
       installed,
       plan,
       error,
+      port: port(),
+      // Set only when hooks are present but aimed somewhere else — the one
+      // failure mode that otherwise looks exactly like a working install.
+      staleAtPort: installedAtPort != null && installedAtPort !== port() ? installedAtPort : null,
+      ...registry.hookHealthFor(adapter.id),
     };
   }
 
@@ -64,7 +73,7 @@ export function register(router, ctx) {
       return sendError(res, 400, `${adapter.label} does not support hooks`);
     }
     try {
-      await adapter.hooks.install();
+      await adapter.hooks.install(port());
       await refreshHookStatus();
       return sendJson(res, 200, await statusFor(adapter));
     } catch (err) {
@@ -136,7 +145,7 @@ export function register(router, ctx) {
     for (const adapter of adapters.getAdapters()) {
       let installed = false;
       try {
-        installed = adapter.hooks.supported ? await adapter.hooks.installed() : false;
+        installed = adapter.hooks.supported ? await adapter.hooks.installed(port()) : false;
       } catch {
         installed = false;
       }

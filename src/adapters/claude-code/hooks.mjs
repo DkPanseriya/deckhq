@@ -10,8 +10,8 @@
 
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { CLAUDE_DIR } from './parse.mjs';
+import { BACKUP_DIR } from '../../core/paths.mjs';
 
 /** `true` — Claude Code supports the hook mechanism this module implements. */
 export const supported = true;
@@ -19,10 +19,13 @@ export const supported = true;
 /** Absolute path to the settings file we read and write. */
 export const SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** Repo root, resolved relative to this file (src/adapters/claude-code/). */
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const STATE_DIR = path.join(REPO_ROOT, 'state');
+/**
+ * The port the daemon listens on by default. Every function here takes the
+ * real port, because the daemon walks forward when 4317 is taken and accepts
+ * `--port`: a hook pointing at the wrong port posts into a void, and the
+ * header would go on claiming state is exact while nothing arrives.
+ */
+export const DEFAULT_PORT = 4317;
 
 const HOOK_EVENTS = [
   'UserPromptSubmit',
@@ -45,48 +48,69 @@ const HOOK_EVENTS = [
  * each of those is interpreted differently (or specially) by one shell or
  * the other.
  */
-const HOOK_SCRIPT =
-  "const http=require('node:http');" +
-  'let d=[];' +
-  "process.stdin.on('data',function(c){d.push(c);});" +
-  "process.stdin.on('error',function(){process.exit(0);});" +
-  "process.stdin.on('end',function(){" +
-  'try{' +
-  'var body=Buffer.concat(d);' +
-  "var req=http.request({host:'127.0.0.1',port:4317,path:'/api/hook',method:'POST'," +
-  "headers:{'Content-Type':'application/json','Content-Length':body.length},timeout:300}," +
-  'function(res){res.resume();process.exit(0);});' +
-  "req.on('error',function(){process.exit(0);});" +
-  "req.on('timeout',function(){try{req.destroy();}catch(e){}process.exit(0);});" +
-  'req.end(body);' +
-  '}catch(e){process.exit(0);}' +
-  '});' +
-  'process.stdin.resume();';
+function hookScript(port) {
+  return (
+    "const http=require('node:http');" +
+    'let d=[];' +
+    "process.stdin.on('data',function(c){d.push(c);});" +
+    "process.stdin.on('error',function(){process.exit(0);});" +
+    "process.stdin.on('end',function(){" +
+    'try{' +
+    'var body=Buffer.concat(d);' +
+    `var req=http.request({host:'127.0.0.1',port:${port},path:'/api/hook',method:'POST',` +
+    "headers:{'Content-Type':'application/json','Content-Length':body.length},timeout:300}," +
+    'function(res){res.resume();process.exit(0);});' +
+    "req.on('error',function(){process.exit(0);});" +
+    "req.on('timeout',function(){try{req.destroy();}catch(e){}process.exit(0);});" +
+    'req.end(body);' +
+    '}catch(e){process.exit(0);}' +
+    '});' +
+    'process.stdin.resume();'
+  );
+}
 
-const HOOK_COMMAND = `node -e "${HOOK_SCRIPT}"`;
+/** @param {number} port */
+function hookCommand(port) {
+  return `node -e "${hookScript(port)}"`;
+}
 
-/** One `{type:'command', ...}` hook entry, tagged for exact removal. */
-function hookEntry() {
-  return { type: 'command', command: HOOK_COMMAND, _deckhq: true };
+/**
+ * The port a `_deckhq`-tagged command posts to, or null if it does not look
+ * like one of ours.
+ * @param {unknown} command
+ * @returns {number|null}
+ */
+function portOfCommand(command) {
+  const m = /port:(\d+),path:'\/api\/hook'/.exec(String(command || ''));
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * One `{type:'command', ...}` hook entry, tagged for exact removal.
+ * @param {number} port
+ */
+function hookEntry(port) {
+  return { type: 'command', command: hookCommand(port), _deckhq: true };
 }
 
 /**
  * The `hooks` block we merge into settings.json. Notification is split into
  * two matcher entries (docs §4.1: matcher `permission_prompt` or
  * `idle_prompt`) rather than relying on matcher regex/alternation support.
+ * @param {number} port
  * @returns {Record<string, any[]>}
  */
-function buildHooksBlock() {
+function buildHooksBlock(port) {
   return {
-    UserPromptSubmit: [{ hooks: [hookEntry()] }],
+    UserPromptSubmit: [{ hooks: [hookEntry(port)] }],
     Notification: [
-      { matcher: 'permission_prompt', hooks: [hookEntry()] },
-      { matcher: 'idle_prompt', hooks: [hookEntry()] },
+      { matcher: 'permission_prompt', hooks: [hookEntry(port)] },
+      { matcher: 'idle_prompt', hooks: [hookEntry(port)] },
     ],
-    Stop: [{ hooks: [hookEntry()] }],
-    SubagentStop: [{ hooks: [hookEntry()] }],
-    SessionStart: [{ hooks: [hookEntry()] }],
-    SessionEnd: [{ hooks: [hookEntry()] }],
+    Stop: [{ hooks: [hookEntry(port)] }],
+    SubagentStop: [{ hooks: [hookEntry(port)] }],
+    SessionStart: [{ hooks: [hookEntry(port)] }],
+    SessionEnd: [{ hooks: [hookEntry(port)] }],
   };
 }
 
@@ -94,10 +118,11 @@ function buildHooksBlock() {
  * Exactly what would be written and where, for the consent screen.
  * docs §6: "The consent screen shows the literal JSON that will be written
  * and the file it will be written to."
+ * @param {number} [port]
  * @returns {import('../../core/model.mjs').HookPlan}
  */
-export function describe() {
-  const block = { hooks: buildHooksBlock() };
+export function describe(port = DEFAULT_PORT) {
+  const block = { hooks: buildHooksBlock(port) };
   return {
     file: SETTINGS_FILE,
     json: JSON.stringify(block, null, 2),
@@ -105,7 +130,7 @@ export function describe() {
     note:
       'DeckHQ adds one command hook per event below to your Claude Code settings so it can ' +
       'show exact, real-time state instead of polling. Each hook POSTs the event payload to ' +
-      'DeckHQ on your own machine (127.0.0.1:4317) and nothing else. Nothing leaves this ' +
+      `DeckHQ on your own machine (127.0.0.1:${port}) and nothing else. Nothing leaves this ` +
       'computer. Remove it any time from the header — removal deletes only what was added here.',
   };
 }
@@ -184,6 +209,30 @@ async function writeFileAtomic(file, content) {
 }
 
 /**
+ * The port of the first `_deckhq`-tagged entry in a settings object, or null
+ * if there is none. All of ours are written in one pass, so the first is
+ * representative of the set.
+ * @param {any} settings
+ * @returns {number|null}
+ */
+function firstDeckhqPort(settings) {
+  const hooks = settings && settings.hooks;
+  if (!isPlainObject(hooks)) return null;
+  for (const groups of Object.values(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      const list = group && Array.isArray(group.hooks) ? group.hooks : [];
+      for (const h of list) {
+        if (!h || h._deckhq !== true) continue;
+        const port = portOfCommand(h.command);
+        if (port != null) return port;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * @param {any} settings
  * @returns {boolean} true if any `_deckhq`-tagged hook entry is present
  */
@@ -201,14 +250,40 @@ function hasDeckhqEntries(settings) {
 }
 
 /**
- * True if DeckHQ's hooks are currently installed. Never throws: a
- * missing or malformed settings file simply reads as "not installed".
- * @returns {Promise<boolean>}
+ * The port the installed hooks currently post to, or null if none are
+ * installed. Never throws.
+ * @returns {Promise<number|null>}
  */
-export async function installed() {
+export async function installedPort() {
   try {
     const { parsed } = await readSettings();
-    return hasDeckhqEntries(parsed);
+    return firstDeckhqPort(parsed);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True if DeckHQ's hooks are currently installed AND pointing at this
+ * daemon. Never throws: a missing or malformed settings file simply reads as
+ * "not installed".
+ *
+ * The port matters. Hooks installed while the daemon was on 4317 keep posting
+ * to 4317 after a restart on 4318 or a `--port 4400`, and every event lands
+ * nowhere. Reporting that as "installed" would leave the interface promising
+ * exact state while it silently ran on the inference path — so a port
+ * mismatch reads as not installed, which puts the banner back up and offers
+ * the user the one-click reinstall that fixes it.
+ *
+ * @param {number} [port] omit to ask only whether anything of ours is present
+ * @returns {Promise<boolean>}
+ */
+export async function installed(port) {
+  try {
+    const { parsed } = await readSettings();
+    if (!hasDeckhqEntries(parsed)) return false;
+    if (port == null) return true;
+    return firstDeckhqPort(parsed) === Number(port);
   } catch {
     return false;
   }
@@ -218,21 +293,32 @@ export async function installed() {
  * Install DeckHQ's hooks. Reads the current settings, aborts with a clear
  * error and changes nothing if the file is malformed, otherwise backs up the
  * exact original bytes, merges our tagged entries in, and writes atomically.
- * A no-op if already installed.
+ *
+ * A no-op if already installed at this port. If ours are present but pointing
+ * at a different port, they are removed first and re-added — otherwise the
+ * daemon could never recover from a port change.
+ *
+ * @param {number} [port]
  * @returns {Promise<void>}
  */
-export async function install() {
+export async function install(port = DEFAULT_PORT) {
+  {
+    const { parsed } = await readSettings();
+    if (hasDeckhqEntries(parsed)) {
+      if (firstDeckhqPort(parsed) === Number(port)) return; // already correct
+      await remove(); // stale port: take ours out, then put them back below
+    }
+  }
+
   const { existed, raw, parsed } = await readSettings();
 
-  if (hasDeckhqEntries(parsed)) return; // already installed: no-op
-
-  await fsp.mkdir(STATE_DIR, { recursive: true });
-  const backupPath = path.join(STATE_DIR, `settings-backup-${Date.now()}.json`);
+  await fsp.mkdir(BACKUP_DIR, { recursive: true });
+  const backupPath = path.join(BACKUP_DIR, `settings-backup-${Date.now()}.json`);
   await fsp.writeFile(backupPath, JSON.stringify({ existed, raw }, null, 2), 'utf8');
 
   const next = { ...parsed };
   const hooks = isPlainObject(next.hooks) ? { ...next.hooks } : {};
-  const ours = buildHooksBlock();
+  const ours = buildHooksBlock(port);
   for (const event of HOOK_EVENTS) {
     const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
     hooks[event] = [...existing, ...ours[event]];
@@ -242,17 +328,17 @@ export async function install() {
   await writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2));
 }
 
-/** Most recently created `settings-backup-*.json` in state/, or null. */
+/** Most recently created `settings-backup-*.json` in the data dir, or null. */
 async function latestBackup() {
   let names;
   try {
-    names = await fsp.readdir(STATE_DIR);
+    names = await fsp.readdir(BACKUP_DIR);
   } catch {
     return null;
   }
   const backups = names.filter((n) => /^settings-backup-\d+\.json$/.test(n)).sort();
   if (backups.length === 0) return null;
-  const file = path.join(STATE_DIR, backups[backups.length - 1]);
+  const file = path.join(BACKUP_DIR, backups[backups.length - 1]);
   try {
     const text = await fsp.readFile(file, 'utf8');
     return JSON.parse(text);

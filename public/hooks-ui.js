@@ -22,6 +22,47 @@ const LOSS_COPY =
   '"Stalled" and "hands up" are not detectable at all in that mode — DeckHQ will ' +
   'say so plainly in the header rather than guessing.';
 
+/** How long to wait before "no events yet" is worth mentioning at all. */
+const QUIET_HOOK_MS = 10 * 60 * 1000;
+
+/** @param {number} ms */
+function ago(ms) {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+/**
+ * Whether hooks are demonstrably delivering, and what to say about it.
+ *
+ * "Installed" describes a settings file, not delivery. A wrong port is caught
+ * exactly (the daemon compares them), but a hook blocked by a security tool or
+ * a missing `node` on PATH looks identical to a working one from here. So the
+ * screen reports what it actually knows: how many events arrived, and when the
+ * last one did.
+ *
+ * @param {any} adapter
+ * @returns {string|null}
+ */
+function deliveryNote(adapter) {
+  if (!adapter.installed) return null;
+  const seen = Number(adapter.eventsSeen || 0);
+  if (seen > 0) {
+    const last = Number(adapter.lastEventAt || 0);
+    return `Receiving events — ${seen} so far, most recent ${ago(Date.now() - last)}.`;
+  }
+  const up = Date.now() - Number(adapter.daemonStartedAt || Date.now());
+  if (up < QUIET_HOOK_MS) return 'Installed. Waiting for the first event.';
+  return (
+    'Installed, but no hook events have arrived since DeckHQ started. If sessions are ' +
+    'running, something is stopping the hook from reaching this machine — check that ' +
+    '`node` is on the PATH Claude Code runs with.'
+  );
+}
+
 /**
  * @param {object} opts
  * @param {HTMLDialogElement} opts.dialogEl
@@ -86,6 +127,8 @@ export function createHooksUI(opts) {
     } else if (adapter.installed) {
       badge.textContent = 'Installed';
       badge.classList.add('is-installed');
+    } else if (adapter.staleAtPort) {
+      badge.textContent = 'Wrong port';
     } else {
       badge.textContent = 'Not installed';
     }
@@ -97,6 +140,19 @@ export function createHooksUI(opts) {
       errEl.className = 'hooks-error';
       errEl.textContent = adapter.error;
       section.appendChild(errEl);
+    }
+
+    // Hooks are present but aimed at a port nothing is listening on. This is
+    // the one failure that otherwise looks exactly like a healthy install:
+    // the settings file is perfect and every event goes nowhere.
+    if (adapter.staleAtPort) {
+      const stale = document.createElement('p');
+      stale.className = 'hooks-error';
+      stale.textContent =
+        `Your hooks post to port ${adapter.staleAtPort}, but DeckHQ is listening on ` +
+        `${adapter.port}. Nothing is reaching it, so state is being inferred instead. ` +
+        'Reinstall below to point them at this daemon.';
+      section.appendChild(stale);
     }
 
     if (!adapter.supported) {
@@ -164,6 +220,14 @@ export function createHooksUI(opts) {
       }
     }
 
+    const delivery = deliveryNote(adapter);
+    if (delivery) {
+      const p = document.createElement('p');
+      p.className = 'hooks-note';
+      p.textContent = delivery;
+      section.appendChild(p);
+    }
+
     const actions = document.createElement('div');
     actions.className = 'hooks-actions';
 
@@ -181,7 +245,9 @@ export function createHooksUI(opts) {
       const installBtn = document.createElement('button');
       installBtn.type = 'button';
       installBtn.className = 'btn btn--primary';
-      installBtn.textContent = 'Install';
+      installBtn.textContent = adapter.staleAtPort
+        ? `Reinstall for port ${adapter.port}`
+        : 'Install';
       // No installation without this explicit click. The consent flag is
       // sent only because the user pressed this exact button.
       installBtn.addEventListener('click', () => install(adapter.runtime, installBtn));
