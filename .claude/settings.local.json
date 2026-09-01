@@ -1,5 +1,0 @@
-{
-  "permissions": {
-    "allow": ["Bash(grep -m1 -o '{\"type\":\"last-prompt\".\\\\{0,200\\\\}')"]
-  }
-}
