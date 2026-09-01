@@ -14,7 +14,7 @@ standing in your office waiting.
 npx deckhq
 ```
 
-That is the whole install. Node 18+, no build step, no dependencies, no account.
+That is the whole install. Node 18+, no build step, no runtime dependencies, no account.
 
 ---
 
@@ -63,9 +63,18 @@ Everything is read locally and nothing leaves the machine.
 - `~/.codex/sessions/**` — Codex rollout files, when Codex is installed.
 - `~/.claude/settings.json` — only if you opt into hooks, and only the block DeckHQ wrote.
 
-It writes exactly two things: `state.json` next to the package (your acknowledgements and
-settings), and — only with your explicit consent — a tagged hook block in your Claude Code
-settings, backed up first.
+## What it writes
+
+- `~/.deckhq/state.json` — your acknowledgements, bench states, names and settings. Set
+  `DECKHQ_STATE_DIR` to put it somewhere else. It is deliberately **not** stored beside the
+  package: `npx` owns that directory and may replace it on any version bump, which would throw
+  your queue away silently.
+- `~/.deckhq/backups/` — a copy of your Claude Code settings file, taken before DeckHQ ever
+  modifies it.
+- `~/.claude/settings.json` — **only with your explicit consent**, and only a tagged hook block.
+
+If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
+quietly.
 
 ## Hooks are optional and reversible
 
@@ -81,10 +90,17 @@ The consent screen shows you the literal JSON that will be written and the exact
 Nothing is written until you click. Every entry DeckHQ writes is tagged, removal deletes only
 tagged entries, and your settings file is backed up before the first write.
 
+The hook command carries the port DeckHQ was actually listening on when you installed it. If you
+later start it on a different port, the hooks screen tells you they are pointing at the wrong one
+and offers to repoint them — rather than letting the header claim exact state while nothing
+arrives. It also shows how many hook events have actually reached the daemon, so a silently
+undelivered install is visible instead of assumed to be fine.
+
 ## Privacy
 
 - **The daemon binds `127.0.0.1` and nothing else.** There is no `--host` flag and there never
-  will be one. It is not reachable from your network, which is why it needs no password.
+  will be one. It is not reachable from your network, which is why it needs no password. It also
+  refuses cross-site requests, so a page in another tab cannot drive it.
 - **No network egress whatsoever.** No analytics, no telemetry, no update checks, no crash
   reporting, no fonts or scripts from a CDN. The only sockets are the loopback listener and the
   runtime processes DeckHQ starts on your behalf.
@@ -93,10 +109,17 @@ tagged entries, and your settings file is backed up before the first write.
 
 ## Honest limits
 
+These are real, and listed here rather than discovered later.
+
 - **Codex support is unverified.** The adapter is implemented against documented rollout-file
   conventions but has never run against real Codex data, because Codex is not installed on the
   development machine. It reports itself unavailable cleanly and degrades without throwing. Treat
   DeckHQ as a Claude Code tool until that adapter has been exercised end to end.
+- **Replying from the panel has not been run end to end.** `send()` posts a real prompt into a
+  real conversation and spends real tokens, so it was implemented and reviewed but never exercised
+  against a live session. Use the terminal escape hatch if that matters to you.
+- **"Open in terminal" is verified on Windows only.** The macOS and Linux paths are implemented
+  and reviewed but have not been run. The rest of the product is CI-tested on all three.
 - **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by public list
   prices so you can compare projects against each other. It has no idea what your plan actually
   charges you, and it is labelled as an estimate everywhere it appears.
@@ -104,8 +127,6 @@ tagged entries, and your settings file is backed up before the first write.
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.
 - **Local only.** One machine, one human. No remote sessions, no team presence, no cloud sync.
-- **One verified runtime.** Claude Code. A Codex adapter ships alongside it but is unverified,
-  as above. No other runtime is supported yet.
 
 ## Keyboard
 
@@ -131,8 +152,31 @@ npx deckhq --no-open      # start the daemon without opening a browser
 npx deckhq --version
 ```
 
+| Environment variable | Effect                                             |
+| -------------------- | -------------------------------------------------- |
+| `DECKHQ_STATE_DIR`   | Where state and backups live. Default `~/.deckhq`  |
+| `DECKHQ_PORT`        | Default port, if `--port` is not given             |
+| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude` |
+| `DECKHQ_DEBUG`       | Verbose logging                                    |
+
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —
 the whole point is that debts accumulate while you are not looking.
+
+## Per-project actions
+
+Furniture on the floor is a verb. A shelf opens the project folder; a screen runs the project's
+dashboard, if it has one. DeckHQ finds a `dashboard.sh` / `dashboard.bat` / `dashboard.ps1` in the
+repo root on its own, and you can bind your own with a `.deckhq.json`:
+
+```json
+{
+  "actions": [{ "id": "storybook", "label": "Run Storybook", "file": "scripts/storybook.sh" }]
+}
+```
+
+The browser never sends a command — it sends an action id, and the daemon resolves what that id
+means for that project. Every runnable action must resolve to a file that already exists inside
+the project directory, and a manifest pointing outside its own repo is refused rather than clamped.
 
 ## Development
 
@@ -143,10 +187,24 @@ npm test        # node --test, no test framework
 npm run lint
 ```
 
-Layout, contracts and the reasoning behind every decision are in [`docs/`](docs/README.md).
-`reference/` holds the prototype that validated the idea against real data. It is reference, not
-foundation.
+CI runs lint, format check and the full suite on Windows, macOS and Linux against Node 18, 20 and 22.
+
+Layout, contracts and the reasoning behind every decision are in [`docs/`](docs/README.md). Start
+with [`docs/01-PRODUCT.md`](docs/01-PRODUCT.md) for what this is and
+[`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md) for how it works.
+[`docs/DEVIATIONS.md`](docs/DEVIATIONS.md) records every place the build departed from the
+blueprint and why, including the budgets it missed.
+
+### Contributing
+
+Issues and pull requests are welcome. Two things to know before you open one:
+
+1. **The invariant in `docs/01-PRODUCT.md` §2 is not negotiable.** No observed event may clear a
+   user-owned state. There are tests named `INVARIANT:` that exist to enforce this; a change that
+   needs them relaxed is the wrong change.
+2. **No network egress.** No analytics, no update checks, no CDN assets, no telemetry of any kind.
+   A dependency that phones home will not be merged.
 
 ## Licence
 
-MIT.
+MIT. See [CHANGELOG.md](CHANGELOG.md) for what changed and when.

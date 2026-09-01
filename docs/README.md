@@ -30,6 +30,7 @@ guess costs more than a question.
 
 ## Status of existing code
 
-`reference/` (after WP0) holds the working prototype that validated the idea against real data:
-session discovery, transcript parsing, the ack model, and the Studio renderer. **It is reference,
-not foundation.** Consult it freely; do not build on it.
+`reference/` held the working prototype that validated the idea against real data: session
+discovery, transcript parsing, the ack model, and the Studio renderer. It was reference, never
+foundation, and was removed from the tree when the project was opened up. It remains in git
+history at tag `v1.0.0` for anyone who wants to read it.

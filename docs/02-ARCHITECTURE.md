@@ -59,13 +59,17 @@ interface RuntimeAdapter {
   /** Spawn an interactive terminal attached to this session. */
   openInTerminal(id: string, cwd: string): Promise<void>;
 
-  /** Hook support. Adapters without hooks return supported:false and the daemon degrades. */
+  /**
+   * Hook support. Adapters without hooks return supported:false and the daemon degrades.
+   * Every entry point takes the daemon's real port; see §6.
+   */
   hooks: {
     supported: boolean;
-    describe(): HookPlan;              // exactly what would be written, for the consent screen
-    install(): Promise<void>;
+    describe(port: number): HookPlan;   // exactly what would be written, for the consent screen
+    install(port: number): Promise<void>;
     remove(): Promise<void>;
-    installed(): Promise<boolean>;
+    installed(port?: number): Promise<boolean>;  // false when installed at a DIFFERENT port
+    installedPort(): Promise<number | null>;     // what the installed hooks actually target
   };
 }
 ```
@@ -149,9 +153,10 @@ The header shows the total plus a breakdown: *hands up* (`needs_input`), *stalle
 | `SessionEnd` | `live = false`. **`activityState` becomes `ended` only if it is not `for_review`; `reviewSince` is never touched.** A session that finished a turn and then exited still owes you a review. |
 | `SessionStart` | register the session, `live = true`. **`activityState` becomes `working` only if it is not `for_review`; `reviewSince` is never touched.** |
 
-Hooks POST to `http://127.0.0.1:4317/api/hook` with the payload the runtime provides. The daemon
-must respond within 200 ms and must never block the hook — process asynchronously, respond
-immediately.
+Hooks POST to `http://127.0.0.1:<port>/api/hook` with the payload the runtime provides, where
+`<port>` is the port the daemon was actually listening on when the hooks were installed — never a
+fixed 4317 (see §6). The daemon must respond within 200 ms and must never block the hook — process
+asynchronously, respond immediately.
 
 > **Amendment, 30 Aug 2026 (tech lead).** The rows above are subordinate to §2. Where this table
 > and the invariant disagree, the invariant wins: no row here may clear `reviewSince`. The single
@@ -233,14 +238,29 @@ No installation without an explicit click.
 
 - Claude Code hooks are written to the user's settings under a single dedicated block, tagged with
   `"_deckhq": true` so removal is exact.
-- The daemon backs up the settings file before writing, to `state/settings-backup-<ts>.json`.
+- **The hook command carries the daemon's real port.** The daemon walks forward from 4317 when the
+  port is taken and accepts `--port`, so a fixed port in the hook command would post into a void
+  while the settings file went on looking perfect. `installed()` therefore compares the port in the
+  installed command against the listening port: a mismatch reads as *not installed*, which puts
+  the degraded banner back up and offers a one-click reinstall. Installing at a new port removes
+  the stale entries first rather than accumulating a second set.
+- The daemon backs up the settings file before writing, to
+  `~/.deckhq/backups/settings-backup-<ts>.json`.
 - Removal deletes only entries carrying the tag. It must be safe to run on a settings file the
   user has since edited by hand.
 - If the settings file is malformed, abort with a clear error and change nothing.
 
 ## 7. Persistence
 
-`state.json`, alongside the package:
+`state.json`, in the user's data directory — `~/.deckhq/state.json`, or `$DECKHQ_STATE_DIR` if
+set. **Never inside the package directory:** `npx` owns that directory and is free to evict or
+replace it on a version bump, and a root-owned global install cannot write to it at all. Either
+would silently discard the user-owned half of the model. A `state.json` left beside the package by
+a pre-1.1 build is copied across once, on first start, and the original is left in place.
+
+A write that fails is not only logged — it is reported in `snapshot().writeError` and shown in the
+header, because an acknowledgement that did not reach disk is an acknowledgement that will be gone
+at the next restart.
 
 ```jsonc
 {
@@ -298,6 +318,7 @@ deckhq/
 │   │   ├── model.mjs             # Agent shape, placement, needsYou
 │   │   ├── state-machine.mjs     # hook + poll → activityState
 │   │   ├── store.mjs             # state.json, atomic writes
+│   │   ├── paths.mjs             # where state lives, and the legacy migration
 │   │   └── seed.mjs              # first-run seeding
 │   └── http/routes/*.mjs
 ├── public/

@@ -1,6 +1,6 @@
 {
   "name": "deckhq",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Command deck for every agent session on your machine. Claude Code, on one office floor. (Codex adapter included but unverified.)",
   "keywords": [
     "claude-code",
@@ -10,7 +10,16 @@
     "control-plane",
     "sessions"
   ],
+  "homepage": "https://github.com/DkPanseriya/deckhq#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DkPanseriya/deckhq.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DkPanseriya/deckhq/issues"
+  },
   "license": "MIT",
+  "author": "Vikalp Panseriya",
   "type": "module",
   "bin": {
     "deckhq": "./bin/deckhq.mjs"
