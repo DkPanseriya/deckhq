@@ -1,0 +1,1362 @@
+/**
+ * DeckHQ — interface shell styles.
+ *
+ * Register: PRODUCT, not marketing. This sits beside dark terminals at 11pm
+ * and must never glare. Neutrals are tinted toward the accent hue (~355deg)
+ * rather than default warmth. The single saturated accent is crimson-rose,
+ * reserved exclusively for `for_review` and primary actions — see
+ * docs/03-VISUAL-SPEC.md §5, §7. If red appears anywhere decorative, that is
+ * a bug.
+ *
+ * State colours below are the literal contract with public/render/palette.js
+ * (docs/03-VISUAL-SPEC.md §5). Do not tweak them for "taste" — they are
+ * measured to sit >= 3:1 against --bg. Small text is never set directly in a
+ * state colour (several fall short of the 4.5:1 text contrast floor at small
+ * sizes) — state is always carried by an icon or dot *plus* a neutral-ink
+ * text label, never colour alone.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Tinted near-black neutrals, hue pulled toward 355deg. */
+  --bg: #17121a;
+  --surface: #1f171c;
+  --surface-2: #291f25;
+  --surface-3: #33262f;
+  --line: #3a2c34;
+  --line-2: #55404a;
+
+  --ink: #f2ecee;
+  --ink-2: #cbc0c5;
+  --muted: #96878f;
+  --focus: #f2ecee;
+
+  /* The one accent. Spent only on for_review and primary actions. */
+  --accent: #c0392b;
+  --accent-ink: #f2ecee;
+  --accent-soft: rgba(192, 57, 43, 0.16);
+  --accent-soft-line: rgba(192, 57, 43, 0.45);
+
+  /* State colours — exact match with render/palette.js STATE_COLORS. */
+  --state-working: #2e7d63;
+  --state-needs_input: #b87333;
+  --state-stalled: #9a7b4f;
+  --state-for_review: #c0392b;
+  --state-benched: #7b8794;
+  --state-let_go: #bdb7aa;
+  --state-ended: #6e6a63;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --shadow-elevated: 0 16px 48px rgba(0, 0, 0, 0.55);
+
+  --t-fast: 120ms ease;
+  --t-med: 200ms ease;
+
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* A class that sets `display` outranks the UA rule for [hidden]; restate it
+   once, globally, so JS-driven hidden panels stay hidden. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans, var(--font-sans));
+  font-size: 0.875rem;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 0.5rem;
+  z-index: 100;
+  background: var(--surface-3);
+  color: var(--ink);
+  padding: 0.5rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+}
+.skip-link:focus {
+  top: 0.5rem;
+}
+
+.mono,
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* -------------------------------------------------------------- buttons */
+.btn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.42rem 0.7rem;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    border-color var(--t-fast);
+  white-space: nowrap;
+}
+.btn:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.btn:active {
+  transform: translateY(0.5px);
+}
+.btn[aria-pressed='true'] {
+  background: var(--surface-3);
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.is-busy {
+  color: var(--muted);
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.btn--primary:hover {
+  filter: brightness(1.08);
+  color: var(--accent-ink);
+}
+.btn--danger {
+  border-color: var(--line);
+}
+.btn--danger:hover {
+  border-color: var(--accent-soft-line);
+  color: var(--accent);
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.icon-btn:hover {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+.link-btn:hover {
+  color: var(--ink);
+}
+
+/* --------------------------------------------------------------- topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.55rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  row-gap: 0.5rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+.brand-mark {
+  /* Neutral, deliberately: the accent is spent only on for_review and
+     primary actions (docs/03-VISUAL-SPEC.md §5). A red logo mark would
+     "cry wolf" beside a real for_review signal in the header. */
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--ink-2);
+  box-shadow: 0 0 0 3px var(--surface-3);
+}
+.brand-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 3rem;
+}
+.stat-v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.stat-k {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.needs-you {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-right: 1rem;
+  border-right: 1px solid var(--line);
+}
+.needs-you-total .stat-v {
+  color: var(--accent);
+  font-size: 1.3rem;
+}
+.needs-you-total.is-zero .stat-v {
+  color: var(--ink);
+}
+
+.needs-you-breakdown {
+  list-style: none;
+  display: flex;
+  gap: 0.9rem;
+  margin: 0;
+  padding: 0;
+}
+.breakdown-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.breakdown-item .stat-v {
+  font-size: 0.85rem;
+}
+.breakdown-item .stat-k {
+  margin-top: 0;
+}
+
+.state-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.dot--needs_input,
+.state-dot--needs_input {
+  background: var(--state-needs_input);
+}
+.dot--stalled,
+.state-dot--stalled {
+  background: var(--state-stalled);
+}
+.dot--for_review,
+.state-dot--for_review {
+  background: var(--state-for_review);
+}
+.dot--working,
+.state-dot--working {
+  background: var(--state-working);
+}
+.dot--benched,
+.state-dot--benched {
+  background: var(--state-benched);
+}
+.dot--let_go,
+.state-dot--let_go {
+  background: var(--state-let_go);
+}
+
+.floor-counts {
+  display: flex;
+  gap: 1.1rem;
+}
+
+.degraded-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+}
+.degraded-banner::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--state-stalled);
+  flex: 0 0 auto;
+}
+
+.connection-status {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.connection-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+.tools {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* ----------------------------------------------------------------- app */
+.app {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  /* On a very short window the header would otherwise eat every pixel and
+     the floor — the whole product — would silently vanish. */
+  min-height: 240px;
+}
+
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* The floor is always sized to fit the stage exactly, so there is never
+     anything to scroll to; hidden just guards against a stray sub-pixel
+     overflow at the fitted size. */
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* The canvas fills the stage absolutely rather than by percentage height.
+   Sizing it from its own intrinsic bitmap creates a feedback loop: Scene
+   reads the element box to pick a backing-store size, which then becomes the
+   element box, which grows again on the next resize. */
+#floor-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+#floor-canvas.is-hit {
+  cursor: pointer;
+}
+
+.floor-skeleton {
+  position: absolute;
+  inset: 1rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+.sk-block {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  animation: sk-pulse 1.1s ease-in-out infinite;
+}
+.sk-block:nth-child(1) {
+  grid-column: span 2;
+}
+.sk-block:nth-child(4) {
+  grid-column: span 4;
+  height: 3rem;
+}
+@keyframes sk-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.75;
+  }
+}
+
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 2rem;
+  gap: 0.5rem;
+  max-width: 32rem;
+  margin: 0 auto;
+}
+.empty-state h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.empty-state p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.empty-state code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-sm);
+  justify-self: center;
+  margin-top: 0.4rem;
+}
+
+.error-banner {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 0.4rem;
+  color: var(--ink-2);
+}
+
+/* -------------------------------------------------------------- tooltip
+   On-demand detail, not always-visible chrome (the floor's own labels and
+   room plates are the "no background" part of the restraint pass — those
+   live in render/scene.js). This carries a lot of detail and floats over a
+   busy floor, so it keeps a solid surface — dark-tinted, never white — with
+   a hairline border, the same vocabulary as every other DeckHQ surface. */
+.tooltip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.65rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.6;
+  max-width: 22rem;
+  box-shadow: var(--shadow-elevated);
+}
+.tooltip-title {
+  color: var(--ink);
+  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  margin-bottom: 0.15rem;
+}
+.tooltip-tag {
+  color: var(--ink-2);
+  margin-bottom: 0.3rem;
+}
+.tooltip-tag b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.tooltip-line {
+  color: var(--muted);
+  display: block;
+}
+
+/* ----------------------------------------------------------------- panel
+   Restraint pass: no panel surface. The side panel sits on the same dark
+   ground as the rest of the shell; the one hairline on its left edge is the
+   only thing that separates it from the floor. */
+.panel {
+  flex: 0 0 27rem;
+  max-width: 60vw;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+}
+
+.panel-top {
+  flex: 0 0 auto;
+  padding: 0.85rem 0.9rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.panel-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+/* The agent's identity: the literal MK tag beside the full title (heading),
+   and — when a display name is set — the name it stands in for on the
+   floor. See app.js/panel.js: "the panel keeps the full title as its
+   heading, with the MK tag beside it." */
+.mk-chip {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding-top: 0.2rem;
+  white-space: nowrap;
+}
+.mk-chip-label {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.mk-chip-tag {
+  color: var(--muted);
+}
+
+.panel-meta {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--muted);
+  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+/* No chip surface: the icon (already state-coloured) plus a plain text
+   label is the "never colour alone" pairing — the box around it was
+   decoration, not information. */
+.state-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.state-chip .state-icon {
+  font-size: 0.95em;
+}
+
+.panel-facts {
+  display: flex;
+  gap: 1.4rem;
+  margin-top: 0.8rem;
+}
+.fact {
+  padding: 0;
+}
+.fact-v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.fact-k {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 0.15rem;
+  line-height: 1.4;
+}
+
+.panel-closeup {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.7rem;
+  /* No box around the render — it sits directly on the panel's own ground. */
+}
+.panel-closeup-note {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+
+/* --------------------------------------------------------------- thread */
+.panel-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.85rem 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.panel-thread:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.msg-who {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.msg-body {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-2);
+}
+.msg--user .msg-body {
+  border-left: 2px solid var(--line-2);
+  padding: 0.1rem 0 0.1rem 0.65rem;
+  color: var(--ink);
+}
+.msg-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 1rem;
+}
+
+.thread-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.sk-line {
+  height: 0.6rem;
+  background: var(--surface-2);
+  border-radius: 2px;
+  animation: sk-pulse 1.1s ease-in-out infinite;
+}
+.sk-line:nth-child(2) {
+  width: 82%;
+}
+.sk-line:nth-child(3) {
+  width: 64%;
+}
+.sk-line:nth-child(4) {
+  width: 90%;
+}
+
+/* ------------------------------------------------------------- composer */
+.panel-composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  padding: 0.65rem 0.9rem 0.8rem;
+}
+.panel-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 3rem;
+  max-height: 12rem;
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.5rem 0.6rem;
+}
+.panel-composer textarea::placeholder {
+  color: var(--muted);
+}
+.panel-composer textarea:focus {
+  outline: none;
+  border-color: var(--line-2);
+  box-shadow: 0 0 0 2px var(--focus) inset;
+}
+.panel-composer textarea[disabled] {
+  opacity: 0.55;
+}
+.composer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.composer-hint {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--muted);
+  flex: 1 1 auto;
+  line-height: 1.4;
+}
+.composer-hint.is-warn {
+  color: var(--accent);
+}
+
+.panel-empty {
+  padding: 1.5rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ----------------------------------------------------------------- dialog
+   On-demand, not always-visible: this is the one place a real popup opens,
+   dense with fields and copy, so it keeps a solid surface — a dark tinted
+   neutral, never white — with a hairline border. The restraint pass (the
+   user's words: "do not make white background pop up box") is about what
+   sits on screen without being asked for: the floor's own labels and plates
+   (render/scene.js) and the side panel (below), which stay bare. */
+.dialog {
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  padding: 0;
+  max-width: 34rem;
+  width: min(92vw, 34rem);
+  box-shadow: var(--shadow-elevated);
+}
+.dialog::backdrop {
+  background: rgba(10, 6, 8, 0.6);
+}
+.dialog--wide {
+  max-width: 46rem;
+  width: min(94vw, 46rem);
+}
+
+.dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 1rem 1.1rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+.dialog-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  flex: 1 1 auto;
+}
+.dialog-body {
+  padding: 1rem 1.1rem;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.dialog-body p {
+  line-height: 1.65;
+  margin: 0 0 0.8rem;
+}
+.dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.7rem 1.1rem 1rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ------------------------------------------------------------- onboarding */
+.state-guide {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.state-guide li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  line-height: 1.5;
+}
+.state-guide .state-dot {
+  margin-top: 0.45rem;
+}
+.state-guide b {
+  color: var(--ink);
+}
+.invariant-callout {
+  /* Deliberately neutral: the accent colour is reserved exclusively for
+     for_review and primary actions (docs/03-VISUAL-SPEC.md §5). Emphasis
+     here comes from typography and layout, not from spending red on a
+     decorative border — and, per the restraint pass, not from a background
+     fill either. A single hairline rule carries the same weight. */
+  border-left: 2px solid var(--line-2);
+  padding: 0.1rem 0 0.1rem 0.8rem;
+  line-height: 1.6;
+}
+.invariant-callout strong {
+  color: var(--ink);
+}
+
+/* ---------------------------------------------------------- hooks dialog
+   Restraint pass: each runtime's section is separated from the next by a
+   hairline rule instead of a bordered card. */
+.hooks-runtime {
+  padding-top: 0.9rem;
+  margin-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+.hooks-runtime:first-child {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+.hooks-runtime-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.hooks-runtime-head h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  flex: 1 1 auto;
+}
+.hooks-badge {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.2em 0.5em;
+  border-radius: 2px;
+  border: 1px solid var(--line-2);
+  color: var(--ink-2);
+}
+.hooks-badge.is-installed {
+  border-color: var(--state-working);
+  color: var(--state-working);
+}
+.hooks-copy p {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+.hooks-copy .gain {
+  color: var(--ink);
+}
+/* This is a consent requirement (docs/02-ARCHITECTURE.md §4.1, §6): the
+   literal file path and JSON block must stay verbatim and legible. Only the
+   box around them goes — a left rule marks them as a quoted block instead
+   of a filled panel. */
+.hooks-file {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+  border-left: 2px solid var(--line-2);
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  overflow-x: auto;
+  white-space: pre;
+  margin-bottom: 0.5rem;
+}
+.hooks-json-block {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+  border-left: 2px solid var(--line-2);
+  padding: 0.1rem 0 0.1rem 0.7rem;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre;
+  margin: 0 0 0.5rem;
+}
+.hooks-events {
+  margin: 0 0 0.6rem;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  line-height: 1.7;
+}
+.hooks-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.hooks-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.hooks-error {
+  color: var(--accent);
+  font-size: 0.82rem;
+}
+
+/* ------------------------------------------------------------------ toast */
+.toast {
+  position: fixed;
+  bottom: 1.1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink);
+  box-shadow: var(--shadow-elevated);
+  max-width: min(40rem, 90vw);
+}
+.toast.is-error {
+  border-color: var(--accent-soft-line);
+  color: var(--accent);
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width: 980px) {
+  .app {
+    flex-direction: column;
+  }
+  .panel {
+    flex: 1 1 auto;
+    max-width: none;
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+  .topbar {
+    gap: 0.8rem;
+  }
+}
+
+/* -------------------------------------------------------- reduced motion
+   docs/03-VISUAL-SPEC.md §10: characters snap between positions (a render
+   concern, not ours), the hand-raise pulse becomes a static ring (ditto),
+   and — in scope here — every transition/animation in the shell itself is
+   neutralised. The product must stay fully usable and legible in this mode. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* -------------------------------------------------- room-plate project filter
+   Clicking a room plate scopes the panel and the J/K queue to one project.
+   The chip has to be obviously clearable, or the filter becomes an invisible
+   mode that makes the queue look empty. VISUAL-SPEC section 8. */
+.project-filter {
+  padding: 0 14px 8px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter-chip::after {
+  content: '×';
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.filter-chip:hover {
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+
+/* The floor is the product. If the renderer fails, say so rather than showing
+   an empty canvas that reads as "nothing is waiting on you". */
+.renderer-error {
+  position: absolute;
+  inset: auto 20px 20px 20px;
+  max-width: 46ch;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------ creation-flow dialogs
+   Shared fields for "New project", "New agent" and "Rename / re-avatar"
+   (public/app.js). Inputs and toggles keep a hairline border and sit on
+   the same --bg ground as the rest of the dialog — they are the "fields"
+   the restraint pass explicitly keeps, just never on a lighter surface. */
+.field {
+  display: block;
+  margin: 1rem 0 0.4rem;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field-input {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+textarea.field-input {
+  font-family: var(--font-sans);
+  resize: vertical;
+  min-height: 3.4rem;
+}
+
+.field-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.field-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+/* A toggle is a button, not a checkbox: no native control chrome to fight
+   (some platforms render an unstyleable white checkbox), and it reuses the
+   same aria-pressed vocabulary as the header's "Show let go" toggle. */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.9rem 0;
+}
+.toggle-row .field-label {
+  margin-bottom: 0;
+}
+
+/* Name/avatar pickers: a wrapped row of toggle buttons rather than a
+   native <select> — a <select> popup is OS-drawn and, on several
+   platforms, an unavoidable white box. */
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  max-height: 9.5rem;
+  overflow-y: auto;
+  padding: 0.15rem 0.05rem;
+}
+.picker-btn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  padding: 0.32rem 0.6rem;
+  background: none;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.picker-btn:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.picker-btn[aria-pressed='true'] {
+  color: var(--ink);
+  border-color: var(--ink-2);
+  background: var(--surface-2);
+}
+.picker-btn.avatar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 3.5rem;
+  padding: 0.4rem 0.5rem;
+}
+.picker-btn.avatar-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke: var(--ink-2);
+  fill: none;
+  stroke-width: 1.5;
+}
+.picker-btn.avatar-btn[aria-pressed='true'] svg {
+  stroke: var(--ink);
+}
+
+/* --------------------------------------------------------- the project board
+   Every project room has a whiteboard on its wall (public/render/plan.js).
+   Clicking it reports { kind: 'whiteboard', id } through Scene's onSelect and
+   opens the board itself: the floor's one deliberate change of plane, from
+   looking down at the room to standing in front of the thing on its wall.
+
+   This is the one surface in the product that is genuinely white, because it
+   is a whiteboard. Everything else stays dark-tinted (see the tooltip note
+   above); a board that was not white would not read as one. */
+.whiteboard-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: rgba(12, 9, 11, 0.62);
+  backdrop-filter: blur(2px);
+}
+.whiteboard-board {
+  position: relative;
+  width: min(46rem, 100%);
+  max-height: 100%;
+  overflow: auto;
+  padding: 1.5rem 1.6rem 1.9rem;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fbfaf6 0%, #f1efe7 100%);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.55),
+    0 2px 0 rgba(255, 255, 255, 0.9) inset;
+  color: #2f2a24;
+  font-family: var(--font-mono);
+  transform-origin: center;
+  animation: whiteboard-zoom 220ms cubic-bezier(0.16, 0.84, 0.44, 1);
+}
+/* The tray along the bottom, with the markers resting in it. */
+.whiteboard-board::after {
+  content: '';
+  position: absolute;
+  left: 1.1rem;
+  right: 1.1rem;
+  bottom: 0.45rem;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #cdc7bb, #a8a196);
+}
+@keyframes whiteboard-zoom {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.whiteboard-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.7rem;
+  border-bottom: 2px solid #2f6fb5;
+}
+.whiteboard-title {
+  color: #23324a;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.whiteboard-sub {
+  color: #6d6559;
+  font-size: 0.72rem;
+}
+.whiteboard-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr));
+  gap: 0.55rem;
+  margin-bottom: 1.2rem;
+}
+.whiteboard-tile {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #ddd7ca;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+}
+.whiteboard-tile b {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #23324a;
+}
+.whiteboard-tile span {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.63rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6d6559;
+}
+.whiteboard-tile[data-tone='needs'] b {
+  color: #b3372a;
+}
+.whiteboard-tile[data-tone='working'] b {
+  color: #2a6b55;
+}
+.whiteboard-section {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #2f6fb5;
+}
+.whiteboard-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.4rem;
+  padding: 0.22rem 0;
+  border-bottom: 1px dashed #e2dccf;
+  color: #4a443a;
+  font-size: 0.74rem;
+}
+.whiteboard-row em {
+  font-style: normal;
+  color: #8a8275;
+  font-size: 0.66rem;
+}
+.whiteboard-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.4rem;
+  margin-top: 0.55rem;
+  padding-top: 0.45rem;
+  border-top: 2px solid #2f6fb5;
+  color: #23324a;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.whiteboard-hint {
+  margin-top: 1rem;
+  color: #8a8275;
+  font-size: 0.66rem;
+}
+@media (prefers-reduced-motion: reduce) {
+  .whiteboard-board {
+    animation: none;
+  }
+}
+
+.dialog-error {
+  margin: 0.8rem 0 0;
+  padding: 0.15rem 0 0.15rem 0.65rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}

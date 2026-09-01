@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "deckhq",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["bin/deckhq.mjs", "--no-open", "--port", "4317"],
+      "port": 4317
+    }
+  ]
+}

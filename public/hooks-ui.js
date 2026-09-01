@@ -1,0 +1,251 @@
+/**
+ * DeckHQ hook consent screen.
+ *
+ * docs/02-ARCHITECTURE.md §4.1, §6; docs/04-BUILD-PLAN.md WP5 copy, WP11.
+ *
+ * Shows, per runtime, the literal JSON that would be written and the exact
+ * absolute file it would land in — verbatim from `plan.file` and
+ * `plan.json` — before any install. No installation happens without an
+ * explicit click, and the install call always sends `{ consent: true }`.
+ *
+ * All daemon-provided strings (file paths, JSON text, event names, error
+ * messages) are rendered with `textContent`, never `innerHTML`.
+ */
+
+const GAIN_COPY =
+  'With hooks installed, DeckHQ knows exact, instant state the moment it changes — ' +
+  'no polling delay. Two states become distinguishable that otherwise are not: ' +
+  '"stalled" (gone quiet) and "hands up" (blocked on a question).';
+
+const LOSS_COPY =
+  'Without hooks, state is inferred by periodically re-reading the transcript. ' +
+  '"Stalled" and "hands up" are not detectable at all in that mode — DeckHQ will ' +
+  'say so plainly in the header rather than guessing.';
+
+/**
+ * @param {object} opts
+ * @param {HTMLDialogElement} opts.dialogEl
+ * @param {HTMLElement} opts.bodyEl
+ * @param {(message:string, opts?:{isError?:boolean}) => void} opts.toast
+ */
+export function createHooksUI(opts) {
+  const { dialogEl, bodyEl, toast } = opts;
+  let loading = false;
+
+  /** Fetch GET /api/hooks and render the whole dialog body from scratch. */
+  async function load() {
+    if (loading) return;
+    loading = true;
+    bodyEl.textContent = '';
+    const loadingMsg = document.createElement('p');
+    loadingMsg.textContent = 'Loading…';
+    bodyEl.appendChild(loadingMsg);
+    try {
+      const res = await fetch('/api/hooks');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      renderAdapters(body.adapters || []);
+    } catch (err) {
+      bodyEl.textContent = '';
+      const errEl = document.createElement('p');
+      errEl.className = 'hooks-error';
+      errEl.textContent = `Could not load hook status: ${err.message}`;
+      bodyEl.appendChild(errEl);
+    } finally {
+      loading = false;
+    }
+  }
+
+  /** @param {any[]} adapters */
+  function renderAdapters(adapters) {
+    bodyEl.textContent = '';
+    if (adapters.length === 0) {
+      const p = document.createElement('p');
+      p.textContent = 'No runtimes registered.';
+      bodyEl.appendChild(p);
+      return;
+    }
+    for (const adapter of adapters) {
+      bodyEl.appendChild(renderRuntime(adapter));
+    }
+  }
+
+  /** @param {any} adapter */
+  function renderRuntime(adapter) {
+    const section = document.createElement('div');
+    section.className = 'hooks-runtime';
+
+    const head = document.createElement('div');
+    head.className = 'hooks-runtime-head';
+    const h3 = document.createElement('h3');
+    h3.textContent = adapter.label || adapter.runtime;
+    const badge = document.createElement('span');
+    badge.className = 'hooks-badge';
+    if (!adapter.supported) {
+      badge.textContent = 'Not supported';
+    } else if (adapter.installed) {
+      badge.textContent = 'Installed';
+      badge.classList.add('is-installed');
+    } else {
+      badge.textContent = 'Not installed';
+    }
+    head.append(h3, badge);
+    section.appendChild(head);
+
+    if (adapter.error) {
+      const errEl = document.createElement('p');
+      errEl.className = 'hooks-error';
+      errEl.textContent = adapter.error;
+      section.appendChild(errEl);
+    }
+
+    if (!adapter.supported) {
+      const copy = document.createElement('p');
+      copy.className = 'hooks-note';
+      copy.textContent = `${adapter.label || adapter.runtime} does not support hooks. It falls back to polling for state.`;
+      section.appendChild(copy);
+      return section;
+    }
+
+    const copyWrap = document.createElement('div');
+    copyWrap.className = 'hooks-copy';
+    const gainP = document.createElement('p');
+    gainP.className = 'gain';
+    gainP.textContent = GAIN_COPY;
+    const lossP = document.createElement('p');
+    lossP.textContent = LOSS_COPY;
+    copyWrap.append(gainP, lossP);
+    section.appendChild(copyWrap);
+
+    const plan = adapter.plan;
+    if (plan) {
+      const fileLabel = document.createElement('p');
+      fileLabel.className = 'hooks-note';
+      fileLabel.textContent = 'Written to:';
+      section.appendChild(fileLabel);
+
+      const fileBlock = document.createElement('div');
+      fileBlock.className = 'hooks-file mono';
+      // Verbatim, from plan.file. Text only.
+      fileBlock.textContent = plan.file;
+      section.appendChild(fileBlock);
+
+      const jsonLabel = document.createElement('p');
+      jsonLabel.className = 'hooks-note';
+      jsonLabel.textContent = 'The literal JSON block that will be written:';
+      section.appendChild(jsonLabel);
+
+      const jsonBlock = document.createElement('pre');
+      jsonBlock.className = 'hooks-json-block mono';
+      // Verbatim, from plan.json. Text only — never innerHTML.
+      jsonBlock.textContent = plan.json;
+      section.appendChild(jsonBlock);
+
+      if (Array.isArray(plan.events) && plan.events.length > 0) {
+        const eventsLabel = document.createElement('p');
+        eventsLabel.className = 'hooks-note';
+        eventsLabel.textContent = 'Events captured:';
+        section.appendChild(eventsLabel);
+        const ul = document.createElement('ul');
+        ul.className = 'hooks-events';
+        for (const ev of plan.events) {
+          const li = document.createElement('li');
+          li.textContent = ev;
+          ul.appendChild(li);
+        }
+        section.appendChild(ul);
+      }
+
+      if (plan.note) {
+        const noteP = document.createElement('p');
+        noteP.className = 'hooks-note';
+        noteP.textContent = plan.note;
+        section.appendChild(noteP);
+      }
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'hooks-actions';
+
+    if (adapter.installed) {
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'btn btn--danger';
+      removeBtn.textContent = 'Remove';
+      removeBtn.addEventListener('click', () => remove(adapter.runtime, removeBtn));
+      const note = document.createElement('span');
+      note.className = 'hooks-note';
+      note.textContent = 'Removes only what DeckHQ wrote. The settings file is backed up first.';
+      actions.append(removeBtn, note);
+    } else {
+      const installBtn = document.createElement('button');
+      installBtn.type = 'button';
+      installBtn.className = 'btn btn--primary';
+      installBtn.textContent = 'Install';
+      // No installation without this explicit click. The consent flag is
+      // sent only because the user pressed this exact button.
+      installBtn.addEventListener('click', () => install(adapter.runtime, installBtn));
+      actions.append(installBtn);
+    }
+
+    section.appendChild(actions);
+    return section;
+  }
+
+  /** @param {string} runtime @param {HTMLButtonElement} btn */
+  async function install(runtime, btn) {
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    try {
+      const res = await fetch('/api/hooks/install', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ runtime, consent: true }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      toast(`Hooks installed for ${body.label || runtime}`);
+      await load();
+    } catch (err) {
+      toast(`Could not install hooks: ${err.message}`, { isError: true });
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+    }
+  }
+
+  /** @param {string} runtime @param {HTMLButtonElement} btn */
+  async function remove(runtime, btn) {
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    try {
+      const res = await fetch('/api/hooks/remove', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ runtime }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      toast(`Hooks removed for ${body.label || runtime}`);
+      await load();
+    } catch (err) {
+      toast(`Could not remove hooks: ${err.message}`, { isError: true });
+      btn.disabled = false;
+      btn.classList.remove('is-busy');
+    }
+  }
+
+  function open() {
+    load();
+    if (typeof dialogEl.showModal === 'function') {
+      dialogEl.showModal();
+    } else {
+      dialogEl.setAttribute('open', '');
+    }
+  }
+
+  function close() {
+    dialogEl.close();
+  }
+
+  return { open, close };
+}

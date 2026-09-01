@@ -1,0 +1,171 @@
+/**
+ * GET  /api/hooks           what each adapter would write, and whether it has
+ * POST /api/hooks/install   consent-gated install
+ * POST /api/hooks/remove    exact removal
+ * POST /api/hook            the callback the runtime itself calls
+ *
+ * docs/02-ARCHITECTURE.md §4.1, §5, §6.
+ *
+ * The hook callback must respond within 200 ms and must never block the
+ * runtime, so it acknowledges first and processes on the next tick.
+ */
+import { readJson, sendError, sendJson } from '../server.mjs';
+
+/**
+ * @param {import('../server.mjs').Router} router
+ * @param {{registry:any, adapters:any, log:any}} ctx
+ */
+export function register(router, ctx) {
+  const { registry, adapters, log } = ctx;
+
+  async function statusFor(adapter) {
+    let installed = false;
+    let plan = null;
+    let error = null;
+    try {
+      if (adapter.hooks.supported) {
+        installed = await adapter.hooks.installed();
+        plan = adapter.hooks.describe();
+      } else {
+        plan = adapter.hooks.describe();
+      }
+    } catch (err) {
+      error = err.message;
+    }
+    return {
+      runtime: adapter.id,
+      label: adapter.label,
+      supported: Boolean(adapter.hooks.supported),
+      installed,
+      plan,
+      error,
+    };
+  }
+
+  router.get('/api/hooks', async (_req, res) => {
+    const list = await Promise.all(adapters.getAdapters().map(statusFor));
+    sendJson(res, 200, { adapters: list });
+  });
+
+  router.post('/api/hooks/install', async (req, res) => {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch (err) {
+      return sendError(res, 400, err.message);
+    }
+    const runtime = String(body.runtime || 'claude-code');
+    if (body.consent !== true) {
+      return sendError(res, 400, 'Explicit consent is required to write hooks');
+    }
+    const adapter = adapters.getAdapter(runtime);
+    if (!adapter) return sendError(res, 404, `Unknown runtime "${runtime}"`);
+    if (!adapter.hooks.supported) {
+      return sendError(res, 400, `${adapter.label} does not support hooks`);
+    }
+    try {
+      await adapter.hooks.install();
+      await refreshHookStatus();
+      return sendJson(res, 200, await statusFor(adapter));
+    } catch (err) {
+      log.error('hook install failed', runtime, err.message);
+      return sendError(res, 500, err.message);
+    }
+  });
+
+  router.post('/api/hooks/remove', async (req, res) => {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch (err) {
+      return sendError(res, 400, err.message);
+    }
+    const runtime = String(body.runtime || 'claude-code');
+    const adapter = adapters.getAdapter(runtime);
+    if (!adapter) return sendError(res, 404, `Unknown runtime "${runtime}"`);
+    if (!adapter.hooks.supported) {
+      return sendError(res, 400, `${adapter.label} does not support hooks`);
+    }
+    try {
+      await adapter.hooks.remove();
+      await refreshHookStatus();
+      return sendJson(res, 200, await statusFor(adapter));
+    } catch (err) {
+      log.error('hook removal failed', runtime, err.message);
+      return sendError(res, 500, err.message);
+    }
+  });
+
+  router.post('/api/hook', (req, res) => {
+    // Acknowledge immediately. The runtime is blocked until we answer.
+    let size = 0;
+    /** @type {Buffer[]} */
+    const chunks = [];
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > 512 * 1024) {
+        req.destroy();
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      sendJson(res, 200, { ok: true });
+      const raw = Buffer.concat(chunks).toString('utf8');
+      setImmediate(() => {
+        try {
+          const payload = raw ? JSON.parse(raw) : {};
+          registry.applyHook(normaliseHookPayload(payload));
+        } catch (err) {
+          log.warn('bad hook payload', err.message);
+        }
+      });
+    });
+    req.on('error', () => {
+      try {
+        res.end();
+      } catch {
+        /* already gone */
+      }
+    });
+  });
+
+  async function refreshHookStatus() {
+    /** @type {Record<string, {supported:boolean, installed:boolean}>} */
+    const status = {};
+    for (const adapter of adapters.getAdapters()) {
+      let installed = false;
+      try {
+        installed = adapter.hooks.supported ? await adapter.hooks.installed() : false;
+      } catch {
+        installed = false;
+      }
+      status[adapter.id] = { supported: Boolean(adapter.hooks.supported), installed };
+    }
+    registry.setHookStatus(status);
+    return status;
+  }
+
+  // Expose it so the daemon can prime the status on boot.
+  register.refreshHookStatus = refreshHookStatus;
+  ctx.refreshHookStatus = refreshHookStatus;
+}
+
+/**
+ * Claude Code posts its own payload shape. Normalise it into the shape the
+ * registry expects, without assuming any particular key is present.
+ * @param {Record<string, any>} p
+ */
+function normaliseHookPayload(p) {
+  const hookEvent = String(p.hook_event_name || p.hookEventName || p.event || '');
+  return {
+    runtime: String(p.runtime || 'claude-code'),
+    sessionId: String(p.session_id || p.sessionId || ''),
+    hookEvent,
+    cwd: String(p.cwd || p.workspace || ''),
+    matcher: String(p.matcher || p.notification_type || p.type || ''),
+    message: String(p.message || ''),
+    at: Date.now(),
+    payload: p,
+  };
+}

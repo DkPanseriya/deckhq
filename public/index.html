@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DeckHQ</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#floor-canvas">Skip to floor</a>
+
+    <header class="topbar" id="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">DeckHQ</span>
+      </div>
+
+      <div class="needs-you" id="needs-you" role="group" aria-label="Sessions that need you">
+        <div class="stat needs-you-total is-zero" id="needs-you-total">
+          <span class="stat-v num" id="stat-needs-you">0</span>
+          <span class="stat-k">needs you</span>
+        </div>
+        <ul class="needs-you-breakdown" id="needs-you-breakdown">
+          <li class="breakdown-item" data-state="needs_input">
+            <span class="state-dot dot--needs_input" aria-hidden="true"></span>
+            <span class="stat-v num" id="stat-hands-up">0</span>
+            <span class="stat-k">hands up</span>
+          </li>
+          <li class="breakdown-item" data-state="stalled">
+            <span class="state-dot dot--stalled" aria-hidden="true"></span>
+            <span class="stat-v num" id="stat-stalled">0</span>
+            <span class="stat-k">stalled</span>
+          </li>
+          <li class="breakdown-item" data-state="for_review">
+            <span class="state-dot dot--for_review" aria-hidden="true"></span>
+            <span class="stat-v num" id="stat-for-review">0</span>
+            <span class="stat-k">for review</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="floor-counts">
+        <div class="stat">
+          <span class="stat-v num" id="stat-at-desk">0</span>
+          <span class="stat-k">at desk</span>
+        </div>
+        <div class="stat">
+          <span class="stat-v num" id="stat-benched">0</span>
+          <span class="stat-k">benched</span>
+        </div>
+      </div>
+
+      <div class="project-filter" id="project-filter" hidden></div>
+
+      <div class="degraded-banner" id="degraded-banner" hidden>
+        <span id="degraded-text">Install hooks for exact state</span>
+        <button type="button" class="link-btn" id="degraded-link">Install hooks</button>
+      </div>
+
+      <div class="connection-status" id="connection-status" hidden>Reconnecting…</div>
+
+      <div class="tools">
+        <button type="button" class="btn" id="show-letgo-toggle" aria-pressed="false">
+          Show let go
+        </button>
+        <button
+          type="button"
+          class="btn"
+          id="settle-btn"
+          title="Send every idle (not running) agent to the lounge"
+        >
+          Settle floor
+        </button>
+        <button type="button" class="btn btn--primary" id="new-project-btn">New project</button>
+        <button type="button" class="btn" id="hook-status-btn">Hooks</button>
+        <button type="button" class="btn" id="refresh-btn">Refresh</button>
+        <button type="button" class="btn" id="notif-btn" hidden>Enable notifications</button>
+      </div>
+    </header>
+
+    <main class="app">
+      <section class="stage" aria-label="Office floor">
+        <canvas
+          id="floor-canvas"
+          role="img"
+          tabindex="0"
+          aria-label="Office floor. Loading session data."
+        ></canvas>
+
+        <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+        <div
+          class="whiteboard-scrim"
+          id="whiteboard-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Project board"
+          hidden
+        ></div>
+
+        <div class="floor-skeleton" id="floor-skeleton" aria-hidden="true">
+          <div class="sk-block"></div>
+          <div class="sk-block"></div>
+          <div class="sk-block"></div>
+          <div class="sk-block"></div>
+        </div>
+
+        <div class="empty-state" id="empty-state" hidden>
+          <h2>Nothing on the floor yet</h2>
+          <p>
+            Start a Claude Code session in any project directory and it will appear here within a
+            few seconds, grouped by project. Nothing you have ever run is left out.
+          </p>
+          <code>claude</code>
+        </div>
+
+        <div class="error-banner" id="error-banner" hidden>
+          <h2>Can't reach the DeckHQ daemon</h2>
+          <p id="error-banner-text">Retrying…</p>
+        </div>
+      </section>
+
+      <aside class="panel" id="panel" aria-label="Session detail" hidden></aside>
+    </main>
+
+    <dialog id="onboarding-dialog" class="dialog" aria-labelledby="onboarding-title">
+      <div class="dialog-head">
+        <h2 id="onboarding-title">How DeckHQ works</h2>
+      </div>
+      <div class="dialog-body">
+        <p>
+          DeckHQ watches every Claude Code session and shows what needs you. Each agent is always in
+          one of six states:
+        </p>
+        <ul class="state-guide">
+          <li>
+            <span class="state-dot dot--working" aria-hidden="true"></span>
+            <span><b>Working</b>: producing output, at its desk.</span>
+          </li>
+          <li>
+            <span class="state-dot dot--needs_input" aria-hidden="true"></span>
+            <span><b>Hands up</b>: blocked on a question, mid-task, still at its desk.</span>
+          </li>
+          <li>
+            <span class="state-dot dot--stalled" aria-hidden="true"></span>
+            <span><b>Stalled</b>: gone quiet, still at its desk.</span>
+          </li>
+          <li>
+            <span class="state-dot dot--for_review" aria-hidden="true"></span>
+            <span><b>For review</b>: finished, standing in your office, waiting on you.</span>
+          </li>
+          <li>
+            <span class="state-dot dot--benched" aria-hidden="true"></span>
+            <span><b>Benched</b>: reviewed, no work assigned, resting in the lounge.</span>
+          </li>
+          <li>
+            <span class="state-dot dot--let_go" aria-hidden="true"></span>
+            <span><b>Let go</b>: removed from the floor.</span>
+          </li>
+        </ul>
+        <p>
+          What matters: <b>hands up</b> is mid-task, asking you something now. <b>For review</b>
+          already finished; it's waiting on your look. Different problems, different responses.
+        </p>
+        <p class="invariant-callout">
+          Once an agent is standing in your office, it stays until you act: acknowledge, bench, or
+          send new work. <strong>Reading its conversation never dismisses it.</strong> Only a button
+          does.
+        </p>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn--primary" id="onboarding-dismiss">Got it</button>
+      </div>
+    </dialog>
+
+    <dialog id="new-project-dialog" class="dialog" aria-labelledby="new-project-title">
+      <form method="dialog" class="dialog-head">
+        <h2 id="new-project-title">Start a new project</h2>
+        <button type="submit" class="icon-btn" id="new-project-close" aria-label="Close">
+          &times;
+        </button>
+      </form>
+      <div class="dialog-body">
+        <p>
+          A project is just a directory. DeckHQ opens a session there; the room appears on the floor
+          within a few seconds, with a table sized to however many sessions you end up running in
+          it.
+        </p>
+        <label class="field">
+          <span class="field-label">Project directory</span>
+          <input
+            type="text"
+            id="new-project-path"
+            class="field-input"
+            spellcheck="false"
+            autocomplete="off"
+            placeholder="C:\path\to\your\repo"
+          />
+        </label>
+
+        <div class="toggle-row">
+          <span class="field-label">Create the directory</span>
+          <button type="button" class="btn" id="new-project-create-toggle" aria-pressed="false">
+            Off
+          </button>
+        </div>
+        <div class="toggle-row">
+          <span class="field-label">Run git init</span>
+          <button type="button" class="btn" id="new-project-gitinit-toggle" aria-pressed="false">
+            Off
+          </button>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Short name (optional)</span>
+          <input
+            type="text"
+            id="new-project-name"
+            class="field-input"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="40"
+            placeholder="Defaults to the folder name"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field-label">First instructions (optional)</span>
+          <textarea
+            id="new-project-instructions"
+            class="field-input"
+            rows="3"
+            placeholder="What should the first session start on?"
+          ></textarea>
+        </label>
+
+        <p class="field-note">
+          Off leaves the directory as-is — it has to exist already. On, and DeckHQ creates it before
+          starting the first session.
+        </p>
+        <p class="dialog-error" id="new-project-error" hidden></p>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn--primary" id="new-project-go">Create project</button>
+      </div>
+    </dialog>
+
+    <dialog id="new-agent-dialog" class="dialog" aria-labelledby="new-agent-title">
+      <form method="dialog" class="dialog-head">
+        <h2 id="new-agent-title">New agent</h2>
+        <button type="submit" class="icon-btn" id="new-agent-close" aria-label="Close">
+          &times;
+        </button>
+      </form>
+      <div class="dialog-body">
+        <p id="new-agent-intro">Starts another session in this project.</p>
+
+        <div class="field">
+          <span class="field-label">Short name (optional)</span>
+          <div class="picker" id="new-agent-name-picker" role="group" aria-label="Short name"></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Avatar (optional)</span>
+          <div class="picker" id="new-agent-avatar-picker" role="group" aria-label="Avatar"></div>
+        </div>
+
+        <label class="field">
+          <span class="field-label">Instructions (optional)</span>
+          <textarea
+            id="new-agent-instructions"
+            class="field-input"
+            rows="3"
+            placeholder="What should this session start on?"
+          ></textarea>
+        </label>
+
+        <p class="dialog-error" id="new-agent-error" hidden></p>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn--primary" id="new-agent-go">Start agent</button>
+      </div>
+    </dialog>
+
+    <dialog id="identity-dialog" class="dialog" aria-labelledby="identity-title">
+      <form method="dialog" class="dialog-head">
+        <h2 id="identity-title">Rename agent</h2>
+        <button type="submit" class="icon-btn" id="identity-close" aria-label="Close">
+          &times;
+        </button>
+      </form>
+      <div class="dialog-body">
+        <p id="identity-intro">Sets what this agent is called on the floor.</p>
+
+        <div class="field">
+          <span class="field-label">Short name</span>
+          <div class="picker" id="identity-name-picker" role="group" aria-label="Short name"></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">Avatar</span>
+          <div class="picker" id="identity-avatar-picker" role="group" aria-label="Avatar"></div>
+        </div>
+
+        <p class="dialog-error" id="identity-error" hidden></p>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn--primary" id="identity-go">Save</button>
+      </div>
+    </dialog>
+
+    <dialog id="hooks-dialog" class="dialog dialog--wide" aria-labelledby="hooks-title">
+      <div class="dialog-head">
+        <h2 id="hooks-title">Hook installation</h2>
+        <button type="button" class="icon-btn" id="hooks-close" aria-label="Close">✕</button>
+      </div>
+      <div class="dialog-body" id="hooks-body">
+        <p>Loading…</p>
+      </div>
+    </dialog>
+
+    <div id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

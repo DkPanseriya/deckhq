@@ -1,0 +1,11 @@
+{"timestamp":"2026-08-20T10:00:00.000Z","type":"session_meta","payload":{"id":"5b1f6e2a-1234-4abc-9def-000000000001","timestamp":"2026-08-20T10:00:00.000Z","cwd":"C:\\Dk\\Projects\\demo-app","originator":"codex_cli_rs","cli_version":"0.21.0","instructions":null}}
+{"timestamp":"2026-08-20T10:00:05.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Please refactor the auth module to use async/await."}]}}
+{"timestamp":"2026-08-20T10:00:42.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Sure, I will convert the callback-based auth module to async/await."}]}}
+{"timestamp":"2026-08-20T10:00:43.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1200,"output_tokens":340,"cached_input_tokens":200}}}}
+{"timestamp":"2026-08-20T10:00:44.000Z","type":"turn_context","payload":{"cwd":"C:\\Dk\\Projects\\demo-app","model":"gpt-5-codex","approval_policy":"on-request"}}
+{"timestamp":"2026-08-20T10:01:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"this line is intentionally broken
+{"timestamp":"2026-08-20T10:01:10.000Z","role":"user","content":"Also run the test suite when done.","cwd":"C:\\Dk\\Projects\\demo-app"}
+{"timestamp":"2026-08-20T10:01:15.000Z","type":"response_item","payload":{"type":"function_call","name":"shell","arguments":"{\"command\":[\"npm\",\"test\"]}","call_id":"call_1"}}
+{"timestamp":"2026-08-20T10:01:20.000Z","type":"response_item","payload":{"type":"reasoning","summary":[{"type":"summary_text","text":"Thinking about which tests to run..."}]}}
+{"timestamp":"2026-08-20T10:01:40.000Z","type":"event_msg","payload":{"type":"agent_message","message":"Tests are passing now."}}
+{"timestamp":"2026-08-20T10:01:41.000Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1800,"output_tokens":500,"cached_input_tokens":250}}}}

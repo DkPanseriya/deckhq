@@ -1,0 +1,350 @@
+/**
+ * Claude Code hook install / remove. docs/02-ARCHITECTURE.md §6.
+ *
+ * We write one command hook per event into `~/.claude/settings.json`, each
+ * tagged `"_deckhq": true` so removal is exact and never touches anything the
+ * user (or another tool) put there. Every write is preceded by a backup of
+ * the file's exact original bytes so `remove()` can restore them verbatim
+ * when nothing else has changed in the meantime.
+ */
+
+import fsp from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CLAUDE_DIR } from './parse.mjs';
+
+/** `true` — Claude Code supports the hook mechanism this module implements. */
+export const supported = true;
+
+/** Absolute path to the settings file we read and write. */
+export const SETTINGS_FILE = path.join(CLAUDE_DIR, 'settings.json');
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+/** Repo root, resolved relative to this file (src/adapters/claude-code/). */
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
+const STATE_DIR = path.join(REPO_ROOT, 'state');
+
+const HOOK_EVENTS = [
+  'UserPromptSubmit',
+  'Notification',
+  'Stop',
+  'SubagentStop',
+  'SessionStart',
+  'SessionEnd',
+];
+
+/**
+ * The `node -e` one-liner every hook entry runs. Reads the hook's JSON
+ * payload from stdin and POSTs it verbatim to the daemon's loopback-only
+ * `/api/hook` endpoint (node:http, no dependency on `curl` existing).
+ * Exits 0 on any error and never blocks Claude Code waiting on the daemon.
+ *
+ * The whole script is embedded as a single double-quoted shell argument so
+ * it survives both POSIX shells and cmd.exe unmodified: it deliberately
+ * contains no `$`, backtick, `%` or embedded double-quote character, since
+ * each of those is interpreted differently (or specially) by one shell or
+ * the other.
+ */
+const HOOK_SCRIPT =
+  "const http=require('node:http');" +
+  'let d=[];' +
+  "process.stdin.on('data',function(c){d.push(c);});" +
+  "process.stdin.on('error',function(){process.exit(0);});" +
+  "process.stdin.on('end',function(){" +
+  'try{' +
+  'var body=Buffer.concat(d);' +
+  "var req=http.request({host:'127.0.0.1',port:4317,path:'/api/hook',method:'POST'," +
+  "headers:{'Content-Type':'application/json','Content-Length':body.length},timeout:300}," +
+  'function(res){res.resume();process.exit(0);});' +
+  "req.on('error',function(){process.exit(0);});" +
+  "req.on('timeout',function(){try{req.destroy();}catch(e){}process.exit(0);});" +
+  'req.end(body);' +
+  '}catch(e){process.exit(0);}' +
+  '});' +
+  'process.stdin.resume();';
+
+const HOOK_COMMAND = `node -e "${HOOK_SCRIPT}"`;
+
+/** One `{type:'command', ...}` hook entry, tagged for exact removal. */
+function hookEntry() {
+  return { type: 'command', command: HOOK_COMMAND, _deckhq: true };
+}
+
+/**
+ * The `hooks` block we merge into settings.json. Notification is split into
+ * two matcher entries (docs §4.1: matcher `permission_prompt` or
+ * `idle_prompt`) rather than relying on matcher regex/alternation support.
+ * @returns {Record<string, any[]>}
+ */
+function buildHooksBlock() {
+  return {
+    UserPromptSubmit: [{ hooks: [hookEntry()] }],
+    Notification: [
+      { matcher: 'permission_prompt', hooks: [hookEntry()] },
+      { matcher: 'idle_prompt', hooks: [hookEntry()] },
+    ],
+    Stop: [{ hooks: [hookEntry()] }],
+    SubagentStop: [{ hooks: [hookEntry()] }],
+    SessionStart: [{ hooks: [hookEntry()] }],
+    SessionEnd: [{ hooks: [hookEntry()] }],
+  };
+}
+
+/**
+ * Exactly what would be written and where, for the consent screen.
+ * docs §6: "The consent screen shows the literal JSON that will be written
+ * and the file it will be written to."
+ * @returns {import('../../core/model.mjs').HookPlan}
+ */
+export function describe() {
+  const block = { hooks: buildHooksBlock() };
+  return {
+    file: SETTINGS_FILE,
+    json: JSON.stringify(block, null, 2),
+    events: HOOK_EVENTS.slice(),
+    note:
+      'DeckHQ adds one command hook per event below to your Claude Code settings so it can ' +
+      'show exact, real-time state instead of polling. Each hook POSTs the event payload to ' +
+      'DeckHQ on your own machine (127.0.0.1:4317) and nothing else. Nothing leaves this ' +
+      'computer. Remove it any time from the header — removal deletes only what was added here.',
+  };
+}
+
+/** @param {unknown} v */
+function isPlainObject(v) {
+  return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * Order-independent deep equality over JSON-compatible values.
+ * @param {unknown} a
+ * @param {unknown} b
+ * @returns {boolean}
+ */
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  if (isPlainObject(a) || isPlainObject(b)) {
+    if (!isPlainObject(a) || !isPlainObject(b)) return false;
+    const ak = Object.keys(a);
+    const bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    for (const k of ak) {
+      if (!Object.prototype.hasOwnProperty.call(b, k) || !deepEqual(a[k], b[k])) return false;
+    }
+    return true;
+  }
+  return a === b;
+}
+
+/**
+ * Read + parse the current settings file.
+ * @returns {Promise<{existed:boolean, raw:string|null, parsed:any}>}
+ */
+async function readSettings() {
+  let raw = null;
+  try {
+    raw = await fsp.readFile(SETTINGS_FILE, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') {
+      return { existed: false, raw: null, parsed: {} };
+    }
+    throw err;
+  }
+  let parsed;
+  try {
+    parsed = raw.trim() === '' ? {} : JSON.parse(raw);
+  } catch {
+    throw new Error(
+      `Cannot read Claude Code hooks: ${SETTINGS_FILE} is not valid JSON. Fix or remove it by ` +
+        'hand, then try again. Nothing was changed.',
+    );
+  }
+  if (!isPlainObject(parsed)) {
+    throw new Error(
+      `Cannot read Claude Code hooks: ${SETTINGS_FILE} does not contain a JSON object at its ` +
+        'top level. Nothing was changed.',
+    );
+  }
+  return { existed: true, raw, parsed };
+}
+
+/** Atomic write: temp file in the same directory, then rename. */
+async function writeFileAtomic(file, content) {
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.deckhq-${process.pid}-${Date.now()}.tmp`;
+  await fsp.writeFile(tmp, content, 'utf8');
+  await fsp.rename(tmp, file);
+}
+
+/**
+ * @param {any} settings
+ * @returns {boolean} true if any `_deckhq`-tagged hook entry is present
+ */
+function hasDeckhqEntries(settings) {
+  const hooks = settings && settings.hooks;
+  if (!isPlainObject(hooks)) return false;
+  for (const groups of Object.values(hooks)) {
+    if (!Array.isArray(groups)) continue;
+    for (const group of groups) {
+      const list = group && Array.isArray(group.hooks) ? group.hooks : [];
+      if (list.some((h) => h && h._deckhq === true)) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * True if DeckHQ's hooks are currently installed. Never throws: a
+ * missing or malformed settings file simply reads as "not installed".
+ * @returns {Promise<boolean>}
+ */
+export async function installed() {
+  try {
+    const { parsed } = await readSettings();
+    return hasDeckhqEntries(parsed);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Install DeckHQ's hooks. Reads the current settings, aborts with a clear
+ * error and changes nothing if the file is malformed, otherwise backs up the
+ * exact original bytes, merges our tagged entries in, and writes atomically.
+ * A no-op if already installed.
+ * @returns {Promise<void>}
+ */
+export async function install() {
+  const { existed, raw, parsed } = await readSettings();
+
+  if (hasDeckhqEntries(parsed)) return; // already installed: no-op
+
+  await fsp.mkdir(STATE_DIR, { recursive: true });
+  const backupPath = path.join(STATE_DIR, `settings-backup-${Date.now()}.json`);
+  await fsp.writeFile(backupPath, JSON.stringify({ existed, raw }, null, 2), 'utf8');
+
+  const next = { ...parsed };
+  const hooks = isPlainObject(next.hooks) ? { ...next.hooks } : {};
+  const ours = buildHooksBlock();
+  for (const event of HOOK_EVENTS) {
+    const existing = Array.isArray(hooks[event]) ? hooks[event] : [];
+    hooks[event] = [...existing, ...ours[event]];
+  }
+  next.hooks = hooks;
+
+  await writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2));
+}
+
+/** Most recently created `settings-backup-*.json` in state/, or null. */
+async function latestBackup() {
+  let names;
+  try {
+    names = await fsp.readdir(STATE_DIR);
+  } catch {
+    return null;
+  }
+  const backups = names.filter((n) => /^settings-backup-\d+\.json$/.test(n)).sort();
+  if (backups.length === 0) return null;
+  const file = path.join(STATE_DIR, backups[backups.length - 1]);
+  try {
+    const text = await fsp.readFile(file, 'utf8');
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove only the hook entries DeckHQ added (`_deckhq: true`), pruning
+ * emptied matcher groups and emptied event keys. If the result matches the
+ * backed-up pre-install content exactly, the original bytes are restored
+ * verbatim so the file comes back byte-identical, even though our own
+ * merge/prune cycle does not guarantee identical key ordering on its own.
+ * Safe to run if the user hand-edited unrelated parts of the file since
+ * install — in that case the pruned object is written as 2-space JSON.
+ * A no-op if nothing tagged is present.
+ * @returns {Promise<void>}
+ */
+export async function remove() {
+  const { existed, parsed } = await readSettings();
+  if (!hasDeckhqEntries(parsed)) return; // nothing to remove
+
+  const next = { ...parsed };
+  if (isPlainObject(next.hooks)) {
+    const hooks = { ...next.hooks };
+    for (const event of Object.keys(hooks)) {
+      const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
+      const prunedGroups = [];
+      for (const group of groups) {
+        if (!isPlainObject(group)) {
+          prunedGroups.push(group);
+          continue;
+        }
+        const list = Array.isArray(group.hooks) ? group.hooks : [];
+        const prunedList = list.filter((h) => !(h && h._deckhq === true));
+        if (prunedList.length > 0) {
+          prunedGroups.push({ ...group, hooks: prunedList });
+        }
+        // else: this matcher group had only our hook(s); drop the group.
+      }
+      if (prunedGroups.length > 0) {
+        hooks[event] = prunedGroups;
+      } else {
+        delete hooks[event];
+      }
+    }
+    if (Object.keys(hooks).length > 0) {
+      next.hooks = hooks;
+    } else {
+      delete next.hooks;
+    }
+  }
+
+  const backup = await latestBackup();
+
+  if (backup && !backup.existed && Object.keys(next).length === 0) {
+    // The settings file did not exist before install, and nothing else has
+    // added content since: restore that exact absence.
+    try {
+      await fsp.unlink(SETTINGS_FILE);
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+    return;
+  }
+
+  if (backup && backup.existed && typeof backup.raw === 'string') {
+    let original;
+    try {
+      original = JSON.parse(backup.raw);
+    } catch {
+      original = null;
+    }
+    if (original !== null && deepEqual(next, original)) {
+      await writeFileAtomic(SETTINGS_FILE, backup.raw);
+      return;
+    }
+  }
+
+  // No usable backup, or the user changed something else in the meantime:
+  // write the pruned object as clean 2-space JSON. If the file did not
+  // exist before install (no `existed` info available), write it anyway,
+  // since the object still holds other content the user or another tool
+  // added after our install.
+  if (!existed && Object.keys(next).length === 0) {
+    try {
+      await fsp.unlink(SETTINGS_FILE);
+    } catch (err) {
+      if (!err || err.code !== 'ENOENT') throw err;
+    }
+    return;
+  }
+  await writeFileAtomic(SETTINGS_FILE, JSON.stringify(next, null, 2));
+}
