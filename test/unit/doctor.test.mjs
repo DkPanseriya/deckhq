@@ -662,7 +662,7 @@ test('the CLI actually exits, cleanly, with one JSON document on stdout', async 
   // value. That is why 364 of them passed against a binary that aborted at
   // exit: `process.exit()` tore the loop down while the daemon socket was
   // still closing, and libuv killed the process with 127 after printing a
-  // perfectly correct report (docs/DEVIATIONS.md §70). A command's contract
+  // perfectly correct report (docs/DEVIATIONS.md §76). A command's contract
   // includes how it ends, so this one spawns the real thing.
   //
   // The exit code is asserted as "a code doctor chose", not a specific value:

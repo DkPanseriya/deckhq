@@ -1629,7 +1629,7 @@ and Bold, not one as §2.3 assumes. A basic-Latin woff2 subset runs roughly 15�
 `@font-face` blocks go at the top of `public/style.css`, above `:root`, alongside a
 `--font-condensed` token; the renderer does not read CSS variables today, so `scene.js` and
 `rig.js` would each need their own font constant updated, and both are outside this package.
-## 66. `deckhq doctor` cannot print the runtime's version — **RAISE**
+## 72. `deckhq doctor` cannot print the runtime's version — **RAISE**
 
 **Spec:** `06-ENGINEERING-WORKPLAN.md` WP-05 shows the first row of the report
 as `claude          2.1.184 on PATH`.
@@ -1654,7 +1654,7 @@ branches.
 cached for the process lifetime like `available()`. It is one `execFile` per
 adapter and it makes the launch asset noticeably more concrete.
 
-## 67. Report wording that departs from the WP-05 sample
+## 73. Report wording that departs from the WP-05 sample
 
 Three small departures, all in the same direction — say only what can be
 checked.
@@ -1684,7 +1684,7 @@ running, 62 already finished; hooks installed on port 4400 with 37 events
 delivered; exit 0. The `--capture-proof` PNG rendered at 2400×1260 in about
 four seconds.
 
-## 68. The capture proof overclaimed, and the claim has been retired
+## 74. The capture proof overclaimed, and the claim has been retired
 
 This is the most important entry in this file, because the thing it corrects
 had already been written, reviewed, screenshotted and committed.
@@ -1741,7 +1741,7 @@ floor, 62 finished, 0 genuinely waiting (all 3 waiting sessions were still
 running), so the card correctly rendered the fallback headline rather than a
 debt it could not substantiate.
 
-## 69. `doctor` exits 0 when hooks are installed and DeckHQ is simply not running
+## 75. `doctor` exits 0 when hooks are installed and DeckHQ is simply not running
 
 **Spec:** WP-05 lists "hooks installed at a port nothing is listening on" as a
 condition that must exit non-zero.
@@ -1769,7 +1769,7 @@ the ports that answered, identifying a daemon by a well-formed `/api/state`.
 Exit 1 is now reserved for: state not writable, a hook/daemon port mismatch, no
 runtime available at all, or an adapter that threw.
 
-## 70. `process.exit()` turned a healthy `doctor` run into exit 127
+## 76. `process.exit()` turned a healthy `doctor` run into exit 127
 
 Found by running the finished command, not by any test.
 

@@ -231,7 +231,7 @@ async function collectRuntime(adapter, scan) {
      * asking the runtime directly would mean spawning its CLI from outside an
      * adapter, which the architecture forbids. Read through an optional
      * method so this row fills itself in the day the interface grows one.
-     * See docs/DEVIATIONS.md §66.
+     * See docs/DEVIATIONS.md §72.
      */
     version: null,
     sessions: 0,
@@ -286,7 +286,7 @@ async function collectRuntime(adapter, scan) {
   // they are alive. What it does not do is remember one after it exits. So
   // this number is exactly what it says — finished — and the claim attached
   // to it is only that a view of running processes no longer lists them.
-  // See docs/DEVIATIONS.md §68.
+  // See docs/DEVIATIONS.md §74.
   //
   // Clamped at zero: a runtime reporting more running sessions than we have
   // transcripts for (a session seconds old whose file has not landed yet)
@@ -673,7 +673,7 @@ function esc(s) {
  * debt — sessions waiting on the user that are NOT running, which no
  * live-process view lists by construction — and falls back to a bare
  * descriptive count when no daemon is running to supply it, rather than
- * reinstating a softer version of the old claim. docs/DEVIATIONS.md §68.
+ * reinstating a softer version of the old claim. docs/DEVIATIONS.md §74.
  *
  * Self-contained on purpose — no web font, no stylesheet, no image, no script.
  * A launch asset that fetches anything is a launch asset that contradicts the
