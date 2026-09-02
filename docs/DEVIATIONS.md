@@ -1392,3 +1392,87 @@ It is a modal, opened by a click and dismissed by Esc or by clicking off it.
 It used to open on HOVER, which meant a panel appearing under the cursor as it
 crossed the floor. And it is the one genuinely white surface in the product,
 because it is a whiteboard; every other surface stays dark-tinted.
+
+## 66. `--muted` is one step lighter than the repalette spec proposed
+
+**Spec:** the WP-06 chrome repalette — `docs/plan/05-GUI-UX-SPEC.md` §2.2, which lives on the
+planning branch and is not in this tree — proposes `--muted: #7C8494` as part of the violet-blue
+chrome ramp, with the acceptance criterion "body text ≥ 4.5:1".
+
+**Shipped:** `--muted: #8A92A3`.
+
+**Why.** `#7C8494` clears the bar on the two grounds the spec names — 4.89:1 on `--bg` and
+4.52:1 on `--surface` — but `--muted` is not confined to those two. It sets normal-size text on
+`--surface-2` in three places: `.tooltip-line` (0.68rem, the floor tooltip's detail lines),
+`.btn.is-busy` (0.72rem) and `.filter-chip::after` (the project filter's clear glyph). There it
+measures **4.02:1**. The warm palette this replaces measured **4.68:1** on the same ground, so
+shipping the proposed value would have been a real accessibility regression introduced by an
+accessibility-motivated change — and one that a suite testing only `--bg` and `--surface` would
+have called green.
+
+`#8A92A3` measures 5.89 / 5.45 / **4.84** on `--bg` / `--surface` / `--surface-2`. It is still
+comfortably the quietest ink in the set (`--ink-2` is 9.77 on `--bg`), and it stays on the same
+~221° ramp as the rest of the neutrals.
+
+The alternative was darkening `--surface-2`, which would have flattened the raised-surface step
+the ramp exists to create. The spec's own instruction is that the *ground* moves when a **state**
+colour fails; `--muted` is ours, so the ink moved instead.
+
+The test now asserts the threshold rather than assuming it: it finds every rule that sets text in
+`--muted`, checks whether any is below the WCAG large-text size, and only then holds the token to
+4.5:1 — on all three grounds, naming the offending selector when it fails.
+
+## 67. Error and status text left the accent colour
+
+**Spec:** `docs/03-VISUAL-SPEC.md` §5 and §10, and `public/style.css`'s own header: state is
+never carried by colour alone, and small text is never set directly in a state colour.
+
+**Measured:** four rules were breaking that, and the repalette made each of them worse rather
+than better, because the cold ground is slightly darker than the warm one it replaced:
+
+| Rule | Size | Colour | On | Was | Now | Needs |
+|---|---|---|---|---|---|---|
+| `.toast.is-error` | 0.70rem | `--accent` | `--surface-3` | 2.65 | 2.39 | 4.5 |
+| `.btn--danger:hover` | 0.72rem | `--accent` | `--surface-2` | 2.93 | 2.78 | 4.5 |
+| `.hooks-error` | 0.82rem | `--accent` | `--surface` | 3.22 | 3.13 | 4.5 |
+| `.composer-hint.is-warn` | 0.60rem | `--accent` | `--bg` | 3.39 | 3.38 | 4.5 |
+| `.hooks-badge.is-installed` | 0.60rem | `--state-working` | `--surface` | 3.53 | 3.43 | 4.5 |
+
+The toast is the worst of these and the most consequential: it is the surface that tells you a
+send failed, it is on screen for a few seconds, and at 2.39:1 the sentence was close to
+unreadable on the dark ground.
+
+**Shipped:** the colour moves off the words and onto a carrier that only has to clear the 3:1
+non-text floor — a 2px left rule for `.hooks-error` and `.composer-hint.is-warn`, the existing
+border plus a 6px dot for `.toast.is-error`, the existing border for `.btn--danger:hover` and
+`.hooks-badge.is-installed`. The message itself is now `--ink` (14.66:1 on `--surface`). This is
+the pairing `.dialog-error` and `.state-chip` already used; these five were the stragglers.
+
+The one place the accent still colours text is `.needs-you-total .stat-v`, and it survives on
+size: 1.3rem at weight 700 is 20.8px bold, which WCAG counts as large text, so its floor is 3:1
+and it measures 3.13 on the topbar. It is also always paired with its "NEEDS YOU" label. A test
+now asserts that this is the *only* such rule, so the next `color: var(--accent)` fails the suite
+rather than the user.
+
+## 68. IBM Plex Sans Condensed was not added — **RAISE**
+
+**Spec:** `docs/plan/05-GUI-UX-SPEC.md` §2.3 (planning branch, not in this tree) calls for adding
+IBM Plex Sans Condensed, self-hosted in `public/fonts/`, for floor labels — room plates, name
+labels, badges.
+
+**Not shipped.** It requires vendoring binary woff2 files into the repository, which is the
+orchestrator's decision and has not been made. WP-06 shipped the repalette only. The floor labels
+remain IBM Plex Sans, so the 15–18% horizontal saving §2.3 wants for label collision
+(DEVIATIONS §15) is still outstanding, and §6.2's label sizes are unaffected either way.
+
+No web font link was added and none may be: rule 2 of the orchestrator brief forbids network
+egress and the CSP in `src/http/server.mjs` forbids it independently.
+
+If the decision is to proceed, the shape of the work is fixed by what the floor already draws.
+`public/render/rig.js`'s `sansFont()` sets agent name labels at **600**, and
+`public/render/scene.js:1252` sets the room-plate name at **700** — so it is two weights, SemiBold
+and Bold, not one as §2.3 assumes. A basic-Latin woff2 subset runs roughly 15–25 KB per weight
+(30–50 KB for the pair); the full Latin-1/2/3 coverage IBM ships is closer to 25–35 KB each. The
+`@font-face` blocks go at the top of `public/style.css`, above `:root`, alongside a
+`--font-condensed` token; the renderer does not read CSS variables today, so `scene.js` and
+`rig.js` would each need their own font constant updated, and both are outside this package.
