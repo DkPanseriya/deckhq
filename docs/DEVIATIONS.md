@@ -1392,3 +1392,84 @@ It is a modal, opened by a click and dismissed by Esc or by clicking off it.
 It used to open on HOVER, which meant a panel appearing under the cursor as it
 crossed the floor. And it is the one genuinely white surface in the product,
 because it is a whiteboard; every other surface stays dark-tinted.
+
+## 66. The summary cache persists, and it deliberately does not paint stale
+
+§11 closed with "a persistent on-disk summary cache would remove even [the cold
+scan], and is the obvious next step". It is now in, at
+`~/.deckhq/cache/<runtime>.json` (`DECKHQ_STATE_DIR` honoured exactly as for
+`state.json` and `backups/`), keyed by `(path, mtime, size)` — the same
+invalidation rule the in-memory cache already used — and carrying a schema
+version that discards rather than migrates.
+
+Measured on this machine (Windows 11 ARM64, **66** real sessions across 14
+project directories, 307 MB of transcripts, one at 74 MB), before and after,
+the two arms interleaved and then re-run with their order flipped so machine
+drift hit both equally. A "start" is a fresh process doing its first scan —
+what a daemon start actually costs. Medians, with ranges:
+
+| | before | after |
+|---|---|---|
+| Cold start, no cache file | 838 ms (737–1166) | 778–868 ms (761–1073) |
+| **Second start** | **780–854 ms** | **59–90 ms** (56–90) |
+| Poll — warm scan, same process | 64–68 ms | 63 ms |
+| Cache file on disk | — | 62 KB |
+
+The target was a populated floor under 400 ms on the second start with 51
+sessions. Met at 66 sessions with better than 4x of headroom: **under 90 ms in
+the worst run measured**, roughly twelve times faster than before. The cold
+start is unchanged within noise — the only thing added to it is one 62 KB
+atomic write.
+
+**The cache deliberately does not paint stale summaries and reconcile in the
+background, which is what the work package asked for.** Only entries that are
+provably current — mtime *and* size unchanged, so the file cannot have changed
+in any way `parseSummary` could see — are served; anything else is parsed
+before it is returned.
+
+The reason is the invariant. A stale summary's `turnEnded` feeds
+`_computeAgents`, and `for_review` there calls `_markForReview`, which writes
+`reviewSince` — a **user-owned** field that only `act()` can clear. The single
+most likely reason a transcript's mtime moved while the daemon was down is that
+the user typed into it, which is exactly the case where the cached summary says
+"turn ended, up for review" and the truth is "the user already replied".
+Painting that provisionally would manufacture a review debt on the floor that
+then survives forever. Speed bought with a false debt is not speed; it is the
+bug the product exists to prevent. The measured second start is 68 ms, so there
+was nothing to buy by taking the risk.
+
+What the cache is allowed to change is nothing at all, and that is asserted
+directly: a scan served from the cache is deep-equal and `JSON.stringify`-equal
+to a scan by a process that has never seen one.
+
+**The §46 trap, which persistence sharpened.** The desktop app's `archived`
+flag is stamped onto summaries *after* the cache, because archiving does not
+touch the transcript. The old in-memory cache handed callers the object it was
+holding, so that stamp landed *in* the cache — harmless only because the flag
+was re-applied from a fresh read on every poll, and only for as long as that
+read kept succeeding. Persisted, the same bug writes `archived: true` to disk
+and survives restarts, and `archived` drives `let_go`: an agent the user
+rehired would be re-fired on every poll, forever, with nothing on the floor to
+say why. The cache now copies on the way out and strips `archived` on the way
+in. Both halves are asserted, as `INVARIANT:` tests.
+
+The rest is the discipline the package asked for, all of it asserted: a
+corrupt, truncated, empty, mis-shaped, foreign-runtime or wrong-version file is
+discarded in silence and rebuilt — it is an optimisation, never state, so it
+must never block a start and must never reach the user as an error; one
+malformed *entry* is dropped without condemning the file; entries for
+transcripts that no longer exist are evicted; the file is capped at 2000
+entries and 8 MB, keeping the most recently active; and it is written
+temp-file-then-rename like `store.mjs`. Writes are rate-limited to one per 30 s
+after the first, so a live session churning on a 5 s poll cannot rewrite the
+file forever.
+
+**One thing the measurement found that is not the cache.** With the cache in, a
+62–94 ms warm start is only **6–8 ms** of DeckHQ's own scan. The rest is
+`readDesktopSessions()`, which `readFileSync`s and `JSON.parse`s every file in
+`%APPDATA%/Claude/claude-code-sessions/` — 57 files, **8.3 MB** — synchronously,
+on **every 5-second poll**. Pointing it at an empty directory drops the warm
+start to 6–8 ms and the poll from 52–57 ms to 5–7 ms. It is now essentially the
+entire cost of a scan, and it is what holds the warm scan against §8's < 50 ms
+budget instead of comfortably inside it. Out of scope here: flagged, not
+touched.

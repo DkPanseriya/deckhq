@@ -25,6 +25,34 @@ export const STATE_FILE = path.join(DATA_DIR, 'state.json');
 /** Pre-install copies of files DeckHQ modifies on the user's behalf. */
 export const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
+/**
+ * Derived scan caches, one file per runtime. Nothing user-owned lives here:
+ * every byte is re-derivable from the transcripts on disk, so this directory
+ * can be deleted at any time and the only cost is one slow scan. That is why
+ * it sits beside `state.json` rather than inside it — a corrupt cache must be
+ * discardable without touching the half of the model the user wrote.
+ */
+export const CACHE_DIR = path.join(DATA_DIR, 'cache');
+
+/**
+ * Where one runtime adapter's scan cache lives.
+ *
+ * The id is sanitised rather than trusted: it becomes a filename, and an
+ * adapter id carrying a separator or a `..` would otherwise write outside
+ * CACHE_DIR. Adapter ids are ours today, but a path that can escape its
+ * directory is a path that eventually does.
+ *
+ * @param {string} runtimeId
+ * @returns {string}
+ */
+export function cacheFileFor(runtimeId) {
+  const safe = String(runtimeId || '')
+    .replace(/[^A-Za-z0-9._-]/g, '-')
+    .replace(/^\.+/, '')
+    .slice(0, 64);
+  return path.join(CACHE_DIR, `${safe || 'runtime'}.json`);
+}
+
 function resolveDataDir() {
   const override = process.env.DECKHQ_STATE_DIR;
   if (override && String(override).trim()) return path.resolve(String(override).trim());

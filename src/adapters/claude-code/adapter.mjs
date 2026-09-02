@@ -10,6 +10,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import { agentId, splitAgentId } from '../../core/model.mjs';
+import { cacheFileFor } from '../../core/paths.mjs';
+import { SummaryCache } from '../../core/summary-cache.mjs';
 import {
   CLAUDE_DIR,
   PROJECTS_DIR,
@@ -200,9 +202,14 @@ async function listSessionFiles() {
  *
  * A file whose mtime and size are both unchanged cannot have changed content
  * in any way this parser would see, so its previous summary is reused.
- * @type {Map<string, {mtimeMs:number, size:number, summary:object}>}
+ *
+ * It persists to `~/.deckhq/cache/claude-code.json`, so the *first* scan after
+ * a daemon start is served from it too and the floor is populated immediately
+ * rather than after a second of parsing. See src/core/summary-cache.mjs for
+ * why a corrupt one is discarded in silence, and for the copy-in/copy-out rule
+ * that keeps the desktop archive flag out of it (docs/DEVIATIONS.md §46).
  */
-const summaryCache = new Map();
+const summaryCache = new SummaryCache(cacheFileFor(RUNTIME_ID), { runtime: RUNTIME_ID });
 
 /**
  * Measured: the cold scan is dominated by JSON parsing, not by disk, so
@@ -212,25 +219,31 @@ const summaryCache = new Map();
 const SCAN_CONCURRENCY = 8;
 
 async function scanSessions({ maxAgeDays, limit }) {
-  const all = await listSessionFiles();
+  // Reading the cache file is a one-off per process and never throws; a
+  // missing or unusable one simply leaves every lookup below a miss, which is
+  // exactly the behaviour before it existed.
+  const [all] = await Promise.all([listSessionFiles(), summaryCache.load()]);
   const cutoff = Date.now() - maxAgeDays * 86400_000;
   const candidates = all
     .filter((f) => f.mtimeMs >= cutoff)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, limit);
 
-  // Drop cache entries for files that are no longer candidates, so the map
-  // cannot grow without bound over a long-running daemon.
-  if (summaryCache.size > candidates.length * 2) {
-    const live = new Set(candidates.map((c) => c.file));
-    for (const key of summaryCache.keys()) if (!live.has(key)) summaryCache.delete(key);
-  }
+  // Drop cache entries for transcripts that are no longer on disk, so neither
+  // the map nor the file can grow without bound over a long-lived machine.
+  // Measured against every file that EXISTS, not against this scan's
+  // candidates: a session outside this call's age window or limit is still a
+  // session, and evicting it would only buy a re-parse later.
+  //
+  // An empty listing is not evidence that every transcript was deleted — it is
+  // also what an unreadable or momentarily missing projects directory returns.
+  // Emptying the cache on that would throw away a perfectly good one and buy a
+  // full cold scan next start, for nothing.
+  if (all.length) summaryCache.retain(new Set(all.map((f) => f.file)));
 
   const summaries = await mapWithConcurrency(candidates, SCAN_CONCURRENCY, async (entry) => {
-    const cached = summaryCache.get(entry.file);
-    if (cached && cached.mtimeMs === entry.mtimeMs && cached.size === entry.size) {
-      return cached.summary;
-    }
+    const cached = summaryCache.get(entry.file, entry.mtimeMs, entry.size);
+    if (cached) return cached;
     try {
       // The full 2 MB tail window is read deliberately, even though a few
       // hundred KB would be enough for state. Token totals are summed over
@@ -250,11 +263,7 @@ async function scanSessions({ maxAgeDays, limit }) {
       });
       const prefixed = { ...summary, id: agentId(RUNTIME_ID, summary.id) };
       if (entry.size !== undefined) {
-        summaryCache.set(entry.file, {
-          mtimeMs: entry.mtimeMs,
-          size: entry.size,
-          summary: prefixed,
-        });
+        summaryCache.set(entry.file, entry.mtimeMs, entry.size, prefixed);
       }
       return prefixed;
     } catch (err) {
@@ -268,10 +277,24 @@ async function scanSessions({ maxAgeDays, limit }) {
     }
   });
 
+  // Everything that could change is now parsed, so this is the moment the
+  // cache is worth keeping. Rate-limited and silent — see `persist`. Awaited
+  // rather than fired and forgotten so a daemon killed straight after a scan
+  // still leaves a usable cache behind; it only writes when a parse actually
+  // happened, so a warm scan pays nothing for this line.
+  await summaryCache.persist();
+
   // The desktop app's archive flag, joined on `cliSessionId`. Applied AFTER
   // the summary cache on purpose: archiving a session does not touch its
   // transcript, so a cached summary would keep a stale flag until the
   // conversation happened to change. Read once per scan, not per session.
+  //
+  // Persisting the cache makes that ordering sharper, not softer: the flag
+  // would otherwise survive restarts, and `archived` drives `let_go`, so a
+  // stale `true` would re-fire an agent the user had rehired on every poll,
+  // forever. The stamp below therefore lands on summaries the cache hands out
+  // by value — `SummaryCache.get` returns a copy and `set` strips `archived`
+  // — so it can never reach the stored entry. Both halves are asserted.
   let desktop;
   try {
     desktop = readDesktopSessions();
