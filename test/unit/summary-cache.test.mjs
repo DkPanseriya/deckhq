@@ -294,6 +294,48 @@ test('a summary handed out is a copy: scribbling on it cannot reach the cache', 
   }
 });
 
+test('INVARIANT: an archive flag already on disk cannot be resurrected by a load', async () => {
+  // A cache file is not a trusted input. This one carries `archived: true` on
+  // its entry — which is what a hand-edit, a restored backup, a file copied
+  // between machines, or a build with the §66 copy-out bug would leave behind.
+  // Serving it would hand the registry a stale `let_go` for a session whose
+  // transcript will never change again, so the flag can never age out.
+  const { dir, file } = await tmpFile();
+  try {
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    await fsp.writeFile(
+      file,
+      JSON.stringify({
+        version: CACHE_SCHEMA_VERSION,
+        runtime: 'claude-code',
+        entries: {
+          '/p/a.jsonl': {
+            mtimeMs: 1000,
+            size: 500,
+            summary: summary('a', { archived: true }),
+          },
+        },
+      }),
+      'utf8',
+    );
+
+    const cache = new SummaryCache(file, { runtime: 'claude-code' });
+    await cache.load();
+
+    const served = cache.get('/p/a.jsonl', 1000, 500);
+    assert.ok(served, 'the rest of the entry is still perfectly good');
+    assert.equal('archived' in served, false, 'but the archive flag is gone');
+    assert.equal(served.title, 'title a');
+
+    // And it does not come back on the next round trip either.
+    cache.set('/p/b.jsonl', 1, 1, summary('b'));
+    await cache.persist({ force: true });
+    assert.equal((await fsp.readFile(file, 'utf8')).includes('archived'), false);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
 test('an archived flag is stripped on the way in and never reaches disk', async () => {
   const { dir, file } = await tmpFile();
   try {

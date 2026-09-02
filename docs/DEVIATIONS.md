@@ -1453,6 +1453,23 @@ rehired would be re-fired on every poll, forever, with nothing on the floor to
 say why. The cache now copies on the way out and strips `archived` on the way
 in. Both halves are asserted, as `INVARIANT:` tests.
 
+Stripping on `set` only covers files *this* build wrote, which is not the same
+as covering the files it reads. A cache file is not a trusted input — it can be
+hand-edited, restored from a backup, copied between machines, or left behind by
+a build that had the copy-out bug above — so the flag is stripped at **both**
+ingress points, `set` and every entry read off disk. Without the load-side
+strip a planted `archived: true` is served straight back with no desktop store
+present to correct it, and because the transcript is finished the entry stays a
+cache hit forever, so the flag can never age out. Two more `INVARIANT:` tests
+pin it, one on the cache and one through a real scan; both were confirmed to
+fail with the load-side strip removed, so neither is vacuous.
+
+Note which way the absent case goes: a summary from a cache hit carries **no**
+`archived` key rather than `archived: false`. The registry reads a missing flag
+as "this runtime cannot see an archive" and leaves `ackState` alone, and reads
+`false` as "not archived", which rehires a let-go agent (§46). Neither of those
+is a decision the cache is entitled to make.
+
 The rest is the discipline the package asked for, all of it asserted: a
 corrupt, truncated, empty, mis-shaped, foreign-runtime or wrong-version file is
 discarded in silence and rebuilt — it is an optimisation, never state, so it

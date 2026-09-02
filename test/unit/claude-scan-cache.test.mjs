@@ -90,7 +90,10 @@ async function writeCache(world, payload) {
  * carries an unmistakable title. If a scan returns that title, the transcript
  * was not re-read — which is the only way to prove a cache hit from outside.
  */
-async function plantedCache(world, { version = 1, mtimeShift = 0, sizeShift = 0 } = {}) {
+async function plantedCache(
+  world,
+  { version = 1, mtimeShift = 0, sizeShift = 0, archived = undefined } = {},
+) {
   const stat = await fsp.stat(world.transcript);
   await writeCache(
     world,
@@ -117,6 +120,7 @@ async function plantedCache(world, { version = 1, mtimeShift = 0, sizeShift = 0 
             lastRole: 'assistant',
             lastText: 'planted',
             turnEnded: true,
+            ...(archived === undefined ? {} : { archived }),
           },
         },
       },
@@ -313,6 +317,31 @@ test('INVARIANT: an archive flag never enters the persisted cache', async () => 
 
     const raw = await fsp.readFile(world.cacheFile, 'utf8');
     assert.equal(raw.includes('archived'), false, 'but it is not what got written down');
+  } finally {
+    await cleanup(world);
+  }
+});
+
+test('INVARIANT: a persisted cache entry cannot resurrect a stale archive state', async () => {
+  const world = await makeWorld();
+  try {
+    // The exact shape a build with the §66 copy-out bug would have left on
+    // disk: a cache entry with the archive flag baked into it. The desktop
+    // store does not exist here, so nothing in this scan can legitimately
+    // produce an archive state — and the transcript is finished, so the entry
+    // stays a cache hit forever and the flag could never age out.
+    await plantedCache(world, { archived: true });
+    await fsp.rm(world.desktopDir, { recursive: true, force: true });
+
+    const summaries = inChild(world, 'out(await scan())');
+    assert.equal(summaries.length, 1);
+    assert.equal(summaries[0].title, 'FROM THE CACHE', 'still a cache hit');
+
+    // Absent, not `false`. The registry reads a missing `archived` as "this
+    // runtime cannot see an archive" and leaves ackState alone; it reads
+    // `false` as "not archived" and would rehire a let-go agent. Neither of
+    // those decisions is the cache's to make.
+    assert.equal('archived' in summaries[0], false);
   } finally {
     await cleanup(world);
   }

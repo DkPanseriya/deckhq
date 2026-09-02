@@ -78,6 +78,28 @@ function isFiniteNumber(n) {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
+/**
+ * A copy of `summary` that cannot carry an archive state.
+ *
+ * Applied at BOTH ingress points — `set`, and every entry read off disk — and
+ * that second one is the point. `set` stripping it means this build never
+ * writes the flag down; stripping on load means no file we did not write can
+ * make us read one. A cache file is not a trusted input: it can be
+ * hand-edited, restored from a backup, copied between machines, or written by
+ * a build that had the copy-out bug docs/DEVIATIONS.md §66 describes. Any of
+ * those would otherwise hand a stale `archived: true` straight back to the
+ * registry, which reads it as `let_go` and re-fires an agent the user rehired
+ * — on every poll, forever, with nothing on the floor to say why.
+ *
+ * `archived` is the desktop app's to answer, freshly, on every scan.
+ * @param {object} summary
+ */
+function withoutArchived(summary) {
+  const copy = { ...summary };
+  delete (/** @type {any} */ (copy).archived);
+  return copy;
+}
+
 export class SummaryCache {
   /**
    * @param {string} file absolute path to this runtime's cache file
@@ -191,7 +213,8 @@ export class SummaryCache {
       this._entries.set(file, {
         mtimeMs: entry.mtimeMs,
         size: entry.size,
-        summary: entry.summary,
+        // Never trust a file we did not write to be free of an archive flag.
+        summary: withoutArchived(entry.summary),
       });
     }
     this.stats.loadedEntries = this._entries.size;
@@ -235,9 +258,7 @@ export class SummaryCache {
    */
   set(file, mtimeMs, size, summary) {
     if (!isFiniteNumber(mtimeMs) || !isFiniteNumber(size) || !isPlainObject(summary)) return;
-    const stored = { ...summary };
-    delete (/** @type {any} */ (stored).archived);
-    this._entries.set(file, { mtimeMs, size, summary: stored });
+    this._entries.set(file, { mtimeMs, size, summary: withoutArchived(summary) });
     this._dirty = true;
   }
 
