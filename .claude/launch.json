@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["bin/deckhq.mjs", "--no-open", "--port", "4317"],
       "port": 4317
+    },
+    {
+      "name": "deckhq-demo",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/demo-floor.mjs", "--port", "4499"],
+      "port": 4499
     }
   ]
 }
