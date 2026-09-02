@@ -5,15 +5,33 @@
  *   npx deckhq            start the daemon and open the browser
  *   npx deckhq --no-open  start the daemon only
  *   npx deckhq --port N   listen on a different loopback port
+ *   npx deckhq doctor     print what DeckHQ can see here, and start nothing
  *
  * The daemon binds 127.0.0.1 and nothing else. There is no --host flag and
  * there never will be one; see docs/02-ARCHITECTURE.md §9.
  */
 import { spawn } from 'node:child_process';
 import process from 'node:process';
-import { startDaemon } from '../src/daemon.mjs';
 
 const argv = process.argv.slice(2);
+
+// Subcommands are dispatched before anything else is imported. `doctor` must
+// not start the server or open a browser, and importing the daemon eagerly
+// would pull the whole HTTP stack in for a command that only reads.
+const SUBCOMMANDS = new Set(['doctor']);
+const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
+
+if (subcommand === 'doctor') {
+  const { runDoctor } = await import('../src/cli/doctor.mjs');
+  process.exit(await runDoctor(argv.slice(1)));
+}
+
+if (subcommand && !SUBCOMMANDS.has(subcommand)) {
+  process.stderr.write(`deckhq: unknown command "${subcommand}". Try "deckhq --help".\n`);
+  process.exit(2);
+}
+
+const { startDaemon } = await import('../src/daemon.mjs');
 
 function flag(name) {
   return argv.includes(name);
@@ -31,11 +49,16 @@ if (flag('--help') || flag('-h')) {
       'DeckHQ — command deck for every agent session on your machine.',
       '',
       'Usage: deckhq [options]',
+      '       deckhq doctor [--json] [--capture-proof]',
       '',
       '  --port <n>    loopback port (default 4317)',
       '  --no-open     do not open a browser',
       '  --version     print the version',
       '  --help        this message',
+      '',
+      'Commands:',
+      '  doctor        what DeckHQ can see here, and what it cannot.',
+      '                Starts nothing. `deckhq doctor --help` for its options.',
       '',
       'The daemon binds 127.0.0.1 only and makes no outbound network calls.',
       '',

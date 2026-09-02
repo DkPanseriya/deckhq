@@ -1392,3 +1392,58 @@ It is a modal, opened by a click and dismissed by Esc or by clicking off it.
 It used to open on HOVER, which meant a panel appearing under the cursor as it
 crossed the floor. And it is the one genuinely white surface in the product,
 because it is a whiteboard; every other surface stays dark-tinted.
+
+## 66. `deckhq doctor` cannot print the runtime's version — **RAISE**
+
+**Spec:** `06-ENGINEERING-WORKPLAN.md` WP-05 shows the first row of the report
+as `claude          2.1.184 on PATH`.
+
+**Why it is not there:** the only way to learn a runtime's version is to ask the
+runtime — `claude --version` — and that is spawning a runtime CLI. The
+orchestrator brief §7.8 and `02-ARCHITECTURE.md` §2 both put that strictly
+inside an adapter, and the adapter interface exposes no `version()`. The
+transcript format does carry a version field, but reading it here would be
+transcript parsing outside an adapter, which is the same rule. WP-05's own
+package boundary excludes `src/adapters/**`, so the interface could not be
+extended in this package either.
+
+**Shipped:** the row reads `claude code     available` when the runtime is
+present and `codex           not installed` when it is not. `collectRuntime()`
+calls `adapter.version?.()` and renders `<version> on PATH` when it gets a
+string, so the row fills itself in with no further change here on the day the
+adapter interface grows the method. `test/unit/doctor.test.mjs` pins both
+branches.
+
+**The call to make:** add `version(): Promise<string|null>` to `RuntimeAdapter`,
+cached for the process lifetime like `available()`. It is one `execFile` per
+adapter and it makes the launch asset noticeably more concrete.
+
+## 67. Report wording that departs from the WP-05 sample
+
+Three small departures, all in the same direction — say only what can be
+checked.
+
+**`claude code`, not `claude`.** The row label is `adapter.label` lowercased, so
+every runtime in the registry names itself and nothing here holds a table of CLI
+binary names; a third adapter gets a correct row the day it is registered. The
+proof card's left column reads `claude code · its own agent view` rather than
+`claude agents` for the same reason, and because `claude code agents` is not a
+command anyone can run.
+
+**`live now  5   (claude code's own agent view reports 5)`.** The sample reads
+`(claude agents reports 3)`. The two numbers are necessarily equal — DeckHQ's
+live count *is* `liveSessions()`, which is that view — and printing both is the
+point: it shows we are not inflating our side of the subtraction.
+
+**`egress  none. no outbound sockets.`** The sample says `0 outbound sockets
+since start`. `doctor` is a one-shot command with no "since start" to measure
+and no socket counter to read, so it does not imply one. The claim is still
+exact: every socket the command opens is to 127.0.0.1 — one TCP probe for "is
+anything listening on the hooks' port", and, when there is, one read of the
+running daemon's `/api/hooks` for the event counters, which exist only in that
+daemon's memory.
+
+**Measured on the reference machine:** 66 sessions across 15 projects, 5 live,
+61 the agent view cannot see; hooks installed on port 4400 with 20 events
+delivered; exit 0. The `--capture-proof` PNG rendered at 2400×1260 in about
+four seconds.
