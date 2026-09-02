@@ -34,8 +34,9 @@ while that was true, so this release is mostly the unglamorous work of making on
   Now correct, and `*.tgz` is ignored so a stray `npm pack` cannot commit a tarball of the package
   into the package.
 
-The tarball is unchanged at 39 files and 203 kB: `bin`, `src`, `public`, the README and the
-licence. No state, no logs, no tests, no `docs/`, no `.claude/`.
+The tarball is 42 files and 225 kB: `bin`, `src`, `public`, the README and the licence. It grew by
+three files because `deckhq doctor` added `src/cli/`. No state, no logs, no tests, no `docs/`, no
+`.claude/`.
 
 ### Repository
 
@@ -55,6 +56,59 @@ Everything a stranger looks for before they open a pull request, and none of whi
 - `.github/FUNDING.yml`.
 - `docs/plan/RELEASE-CHECKLIST.md`, the ordered commands for cutting a release, written down
   because the thing that went wrong with 1.1.0 was a step nobody had written down.
+
+### Added
+
+- **`deckhq doctor`.** One command that answers "what does DeckHQ actually know about this
+  machine": how many sessions are on disk, how many the runtime reports as running, whether hooks
+  are installed and — separately, which matters — whether they are being _delivered_, and whether
+  state can be written. `--json` for scripting. The bug report form asks for its output, so an
+  environment report now arrives with the first message instead of after three round trips.
+- **`deckhq doctor --capture-proof`** writes a PNG comparing what the runtime reports against what
+  DeckHQ holds. It renders the number of finished sessions still waiting on you, which is the only
+  version of that comparison that survives a reader checking it — see `docs/DEVIATIONS.md` §74.
+
+### Changed
+
+- **The interface chrome is cold now, and the floor reads as lit.** The neutrals were tinted
+  toward the accent hue, which put warm chrome around a warm floor: herringbone, carpet and warm
+  light sitting on a ground of the same temperature, so the floor never looked illuminated, only
+  brown. The neutrals moved to a violet-blue bias, taking hue separation from the floor from about
+  66° to about 169°. The seven state colours are untouched — they are a measured contract with the
+  renderer, and the rule when something failed was that the ground moves, not the state colour.
+
+### Fixed
+
+- **The desktop archive flag was being written into cached session summaries.** In memory this was
+  masked, because a fresh read re-applied the flag on every poll and only while that read kept
+  succeeding. It would not have stayed masked: `archived` drives `let_go`, so a persisted copy
+  would have re-fired a deliberately rehired agent on every poll, for ever. The flag is now
+  stripped both when an entry is written and when one is read off disk, because a cache file can
+  arrive from a backup, another machine, or an older build. A cache hit carries no `archived` key
+  at all rather than `archived: false` — the two mean different things to the registry, and
+  neither is a decision a cache is entitled to make.
+- **Five interface surfaces set small text in a state or accent colour**, all of them below the
+  4.5:1 floor the stylesheet's own header already required. The worst was the error toast at
+  2.39:1 — the surface that tells you a send has failed. Contrast is now asserted in the test
+  suite against every ground the text can actually land on, reading the literal values back out of
+  the stylesheet rather than a copy.
+- **`deckhq doctor` aborted with exit 127 after printing a correct report.** `process.exit()` tore
+  down the event loop while a loopback socket was still closing. Worth recording how it survived:
+  364 tests passed against a binary that could not exit, because every one of them called the
+  function and asserted its return value and none spawned the command. A command's contract
+  includes how it ends.
+
+### Performance
+
+- **The summary cache persists across restarts**, so a daemon start no longer re-parses every
+  transcript on disk. Measured on 66 real sessions across 307 MB of transcripts: a second start
+  falls from 780–854 ms to **59–90 ms**. Cold start is unchanged; the only addition is one 62 KB
+  atomic write.
+- Only entries that are provably current are served. Painting a stale summary and reconciling
+  afterwards was specified, built, and rejected: a stale `turnEnded` reaches the code that writes
+  `reviewSince`, a user-owned field nothing observed is allowed to clear, and the likeliest reason
+  a transcript moved while the daemon was down is that you replied to it in a terminal. That would
+  have manufactured a review debt that then survives for ever.
 
 ### Known gaps
 

@@ -72,7 +72,7 @@ Windows".
 npm pack --dry-run
 ```
 
-Expect roughly **39 files, ~203 kB** (`bin`, `src`, `public`, `README.md`, `LICENSE`; the count
+Expect roughly **42 files, ~225 kB** (`bin`, `src`, `public`, `README.md`, `LICENSE`; the count
 moves if a source file was added). Read the list and confirm none of the following appear:
 
 - `state.json` or `state/` — user data
