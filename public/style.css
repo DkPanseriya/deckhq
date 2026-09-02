@@ -2,39 +2,69 @@
  * DeckHQ — interface shell styles.
  *
  * Register: PRODUCT, not marketing. This sits beside dark terminals at 11pm
- * and must never glare. Neutrals are tinted toward the accent hue (~355deg)
- * rather than default warmth. The single saturated accent is crimson-rose,
- * reserved exclusively for `for_review` and primary actions — see
- * docs/03-VISUAL-SPEC.md §5, §7. If red appears anywhere decorative, that is
- * a bug.
+ * and must never glare.
+ *
+ * THE GROUND IS COLD ON PURPOSE (WP-06; the GUI/UX spec §2.2 lives on the
+ * planning branch, and docs/DEVIATIONS.md §66-68 records what shipped). The
+ * whole window is an architect's drawing on a lit table in a dark studio: the
+ * plan is warm and lit, everything around it is cool, dark, and recedes. The
+ * neutrals below therefore carry a violet-blue bias (~230deg) rather than the
+ * warm ~355deg tint they used to. That is not a taste change — the floor's
+ * materials (herringbone wood, woven carpet, warm light) are warm, and when
+ * the chrome was warm too the two competed and the floor lost its glow,
+ * reading as one more brown rectangle on a brown ground.
+ *
+ * The single saturated accent is crimson, reserved exclusively for
+ * `for_review` and primary actions — see docs/03-VISUAL-SPEC.md §5, §7. If red
+ * appears anywhere decorative, that is a bug.
  *
  * State colours below are the literal contract with public/render/palette.js
- * (docs/03-VISUAL-SPEC.md §5). Do not tweak them for "taste" — they are
- * measured to sit >= 3:1 against --bg. Small text is never set directly in a
- * state colour (several fall short of the 4.5:1 text contrast floor at small
- * sizes) — state is always carried by an icon or dot *plus* a neutral-ink
- * text label, never colour alone.
+ * (docs/03-VISUAL-SPEC.md §5). Do not tweak them for "taste" — the ground
+ * moves, never they. Every ratio in this file is asserted by
+ * test/unit/state-visuals.test.mjs, which recomputes WCAG relative luminance
+ * from these literals; if you change a neutral, that suite tells you what you
+ * broke.
+ *
+ * The measured floors after the repalette:
+ *   - every state colour >= 3:1 on --bg and --surface (worst: for_review 3.38 / 3.13)
+ *   - --ink 15.84 / 14.66, --ink-2 9.77 / 9.04 on --bg / --surface
+ *   - --muted >= 4.5:1 on every ground it sets text on, including --surface-2
+ *   - --focus >= 3:1 on every surface a ring can land on, --accent included
+ *
+ * Small text is NEVER set directly in a state or accent colour — several fall
+ * short of the 4.5:1 text floor at 9-13px, crimson on every ground included.
+ * State and error are carried by an icon, a dot, or a rule *plus* a
+ * neutral-ink label, never by colouring the words themselves.
  */
 
 :root {
   color-scheme: dark;
 
-  /* Tinted near-black neutrals, hue pulled toward 355deg. */
-  --bg: #17121a;
-  --surface: #1f171c;
-  --surface-2: #291f25;
-  --surface-3: #33262f;
-  --line: #3a2c34;
-  --line-2: #55404a;
+  /* The dark studio. Violet-blue near-blacks, hue ~230deg — cold on purpose,
+     so the warm floor reads as illuminated rather than as more of the same. */
+  --bg: #131419;
+  --surface: #1a1c23;
+  --surface-2: #23262f;
+  --surface-3: #2d313c;
+  --line: #333846;
+  --line-2: #464c5e;
 
-  --ink: #f2ecee;
-  --ink-2: #cbc0c5;
-  --muted: #96878f;
-  --focus: #f2ecee;
+  --ink: #eceef3;
+  --ink-2: #b8bdc9;
+  /* One step up the ramp from the spec's proposed #7c8494. That value clears
+     4.5:1 on --bg (4.89) and --surface (4.52) but only reaches 4.02 on
+     --surface-2 — and --surface-2 is a real ground for muted *text*: the
+     tooltip's detail lines, a busy button's label, the filter chip's clear
+     glyph. The warm palette this replaces measured 4.68 there, so shipping
+     #7c8494 would have been a silent accessibility regression hidden behind a
+     green suite. #8a92a3 measures 5.89 / 5.45 / 4.84 and is still plainly the
+     quietest ink in the set. */
+  --muted: #8a92a3;
+  --focus: #eceef3;
 
   /* The one accent. Spent only on for_review and primary actions. */
   --accent: #c0392b;
-  --accent-ink: #f2ecee;
+  --accent-ink: #eceef3;
   --accent-soft: rgba(192, 57, 43, 0.16);
   --accent-soft-line: rgba(192, 57, 43, 0.45);
 
@@ -181,8 +211,11 @@ button {
   border-color: var(--line);
 }
 .btn--danger:hover {
+  /* Crimson marks the border, never the label. #c0392b on --surface-2 measures
+     2.78:1 — well under the 4.5:1 text floor at this 0.72rem size — so the
+     border carries the warning and the words stay in neutral ink. */
   border-color: var(--accent-soft-line);
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .icon-btn {
@@ -284,6 +317,12 @@ button {
   padding-right: 1rem;
   border-right: 1px solid var(--line);
 }
+/* The one place accent is allowed to colour text, and it survives the audit
+   only because of its size: 1.3rem at weight 700 is 20.8px bold, which WCAG
+   counts as large text, so the floor is 3:1 and #c0392b on --surface measures
+   3.13. Shrink it or unbold it and it becomes a violation — the numeral is
+   also always paired with its "NEEDS YOU" label, so the colour is never the
+   only carrier. */
 .needs-you-total .stat-v {
   color: var(--accent);
   font-size: 1.3rem;
@@ -793,8 +832,14 @@ button {
   flex: 1 1 auto;
   line-height: 1.4;
 }
+/* A send failure. The words are the message, and at 0.6rem crimson text
+   measures 3.38:1 on --bg — under the text floor. So the rule is crimson and
+   the message is ink: colour plus a neutral label, the same pairing the state
+   chip and .dialog-error use. */
 .composer-hint.is-warn {
-  color: var(--accent);
+  color: var(--ink);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
 }
 
 .panel-empty {
@@ -821,7 +866,9 @@ button {
   box-shadow: var(--shadow-elevated);
 }
 .dialog::backdrop {
-  background: rgba(10, 6, 8, 0.6);
+  /* Cool, like the rest of the studio — a warm scrim over a warm floor was
+     part of what made the whole window read as one brown temperature. */
+  background: rgba(8, 9, 13, 0.62);
 }
 .dialog--wide {
   max-width: 46rem;
@@ -927,8 +974,11 @@ button {
   color: var(--ink-2);
 }
 .hooks-badge.is-installed {
+  /* The border carries the green; the word "installed" stays in ink. At
+     0.6rem, #2e7d63 on --surface measures 3.43:1 — fine for a border
+     (>= 3:1) and short of the 4.5:1 a nine-pixel word needs. */
   border-color: var(--state-working);
-  color: var(--state-working);
+  color: var(--ink);
 }
 .hooks-copy p {
   margin: 0 0 0.5rem;
@@ -983,7 +1033,9 @@ button {
   line-height: 1.5;
 }
 .hooks-error {
-  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding: 0.1rem 0 0.1rem 0.6rem;
+  color: var(--ink);
   font-size: 0.82rem;
 }
 
@@ -1004,9 +1056,23 @@ button {
   box-shadow: var(--shadow-elevated);
   max-width: min(40rem, 90vw);
 }
+/* The worst offender of the old scheme: crimson toast text on --surface-3
+   measures 2.39:1, and a toast is exactly the message you have one second to
+   read. The border and a crimson dot say "error"; the sentence stays in ink. */
 .toast.is-error {
   border-color: var(--accent-soft-line);
-  color: var(--accent);
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.toast.is-error::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 @keyframes pulse-soft {
@@ -1227,7 +1293,7 @@ textarea.field-input {
   display: grid;
   place-items: center;
   padding: 2rem;
-  background: rgba(12, 9, 11, 0.62);
+  background: rgba(9, 10, 14, 0.62);
   backdrop-filter: blur(2px);
 }
 .whiteboard-board {
