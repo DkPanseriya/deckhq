@@ -52,19 +52,34 @@ accumulate whether or not the manager is looking. That is the product.
 
 Each is a verifiable technical fact, not a claim. Each is a demo.
 
-### M1 — Absolute capture
+### M1 — The runtime forgets. DeckHQ doesn't.
 
-Claude Code shipped its own agent view on 11 May 2026. Its documentation states the limit
-plainly: *"Interactive sessions you have open in other terminals don't appear until you
-background them."* The Desktop sidebar shows only sessions the app launched. Every orchestrator
-in §2 sees only what it spawned.
+> **Corrected 2 Sep 2026, after measuring it.** This section previously claimed that
+> `claude agents` cannot see sessions started in other terminals, on the strength of a line in
+> Anthropic's documentation. **That is not true of Claude Code as installed on the reference
+> machine.** `claude agents --json` returned all five live sessions, every one
+> `kind: "interactive"`, across four different repositories. The documented limitation may apply
+> to a different surface or an older version. Either way we do not get to build a headline on it.
+> The moat below is what survived measurement, and it is stronger.
 
-DeckHQ reads `~/.claude/projects/**/*.jsonl` from disk. It sees **every session that has ever
-existed on the machine**, whoever started it, in whatever terminal, alongside Codex, with no
-opt-in and no configuration.
+`claude agents` reports what is **running right now**. On the reference machine that is 5. The
+instant a session finishes its turn and the process exits, it leaves that view and there is no
+record that it ever wanted anything from you.
 
-*The launch screenshot is this comparison, side by side.* `claude agents` showing 3. DeckHQ
-showing 51, 7 of them waiting on you, oldest 26 hours.
+DeckHQ reads `~/.claude/projects/**/*.jsonl` from disk, so it holds all **66** — every session
+that has ever existed on the machine, whoever started it, in whatever terminal, alongside Codex,
+with no opt-in and no configuration. And because of M2 it knows which of them are still owed an
+answer.
+
+**The claim, stated so that it survives someone checking it:**
+
+> `claude agents` shows 5 running. DeckHQ shows 66, and **7 of them are still waiting on you** —
+> the oldest for over a day. None of those 7 appear in the agent view, because they have already
+> exited.
+
+The launch screenshot leads with the debt number, never with the raw 66 − 5 difference. That
+difference is mostly finished sessions, and presenting it as concealed work is an overclaim a
+reader can disprove in one command. See [`01-AUDIT.md`](01-AUDIT.md) §6.
 
 ### M2 — The invariant
 

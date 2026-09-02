@@ -246,3 +246,82 @@ A macOS developer with twelve Claude Code sessions across four repos sees a post
 | Day 7 | Has forgotten it exists. | Monday: "Your week: 61 turns, 9.4M tokens, longest wait 26h → 2h". Shares the card. |
 
 That table is the product plan in one page. The rest of `docs/plan/` is how.
+
+## 6. Corrections and findings from execution
+
+Added 2 September 2026, as work packages landed. The audit was written from reading; these are
+what running it taught. Each one changed a plan document.
+
+### C1 — The capture claim was wrong, and the corrected version is stronger
+
+**Claimed:** that `claude agents` cannot see sessions started in other terminals, sourced from a
+line in Anthropic's own documentation and repeated into the thesis, the market positioning and
+WP-05.
+
+**Measured on the reference machine:** `claude agents --json` returned all five live sessions,
+every one `kind: "interactive"`, spanning four different repositories. It sees terminal sessions
+perfectly well.
+
+What is true is narrower and better: it reports what is **running**. Five of sixty-six. A session
+that finishes its turn and exits leaves that view, and nothing records that it wanted something
+from you. DeckHQ keeps all sixty-six and knows which are owed an answer.
+
+The first `--capture-proof` image rendered *"DeckHQ sees 61 sessions the agent view cannot"* —
+literally true, since 66 − 5 = 61, and rhetorically dishonest, because it compares all-history
+against live-now and invites the reader to picture 61 hidden agents. On our single most important
+launch asset. Rejected and reworked to lead with the debt count.
+
+Corrected in [`00`](00-ORCHESTRATOR-BRIEF.md) §3 M1, [`02`](02-MARKET-AND-LAUNCH.md) §1.4 and
+§3 A1. **The general lesson, which is now a standing rule: a claim in a competitor's
+documentation is a hypothesis, not a fact. Measure it before it reaches a headline.**
+
+### C2 — The archive flag was already being written into the cache
+
+Found while persisting the summary cache. The in-memory cache returned its stored object and the
+adapter then stamped `summary.archived` onto it, writing the desktop app's archive flag *into*
+the cached entry. In memory this was masked, because a fresh read re-applied the flag every poll
+and only while that read kept succeeding.
+
+Persisted, it would have written `archived: true` to disk permanently — and `archived` drives
+`let_go`. An agent the user deliberately rehired would have been re-fired on every poll, for
+ever. Exactly the class of failure `docs/DEVIATIONS.md` §46 was written to prevent, sitting live
+in the code the whole time. Fixed by copy-out and strip-on-write, with two `INVARIANT:` tests.
+
+### C3 — Cached summaries must not be painted before reconciliation
+
+WP-11 as specified said paint from cache immediately, reconcile in the background. The Architect
+declined, correctly.
+
+A stale summary carries `turnEnded`, which reaches `_markForReview`, which writes `reviewSince` —
+a user-owned field only `act()` may clear. The likeliest reason a transcript changed while the
+daemon was down is that the user typed into it, which is precisely the case where the cached
+answer says "turn ended, up for review" and the truth is "already answered". Painting that
+provisionally manufactures a debt that then survives for ever, because nothing observed is
+allowed to clear it.
+
+Only provably-current entries are served. The measured second start is 59–90 ms against a 400 ms
+target, so there was nothing to buy by taking the risk. **The spec was wrong; the invariant was
+right.**
+
+### C4 — The real scan bottleneck is not the transcripts · **new work**
+
+With the cache in place, `readDesktopSessions()` is roughly **90% of every scan**: it
+synchronously reads and parses 57 files totalling 8.3 MB, on every five-second poll, for ever.
+Pointed at an empty directory, warm start drops from 62–94 ms to **6–8 ms** and the poll from
+52–57 ms to **5–7 ms**.
+
+This is what holds the warm scan against `docs/02-ARCHITECTURE.md` §8's < 50 ms budget instead of
+sitting comfortably inside it, and it is a straight repeat of the pattern §11 already documented:
+re-reading unchanging files on a timer. Now WP-35.
+
+### C5 — Measured performance, before and after WP-11
+
+| | before | after |
+|---|---|---|
+| Cold start, no cache | 838 ms | 778–868 ms |
+| **Second start** | **780–854 ms** | **59–90 ms** |
+| Warm poll | 64–68 ms | 63 ms |
+| Cache file on disk | — | 62 KB |
+
+66 real sessions, 307 MB of transcripts, one of them 74 MB. Cold start is unchanged within noise;
+the only addition is a single 62 KB atomic write.

@@ -295,6 +295,26 @@ rooms, anchors and nav. Address the documented duplication between `derivePlacem
 **Accepted when:** typecheck is green and gating; no file over 900 lines; the full suite still
 passes; **no behaviour change** (WP-21's goldens are the proof).
 
+### WP-35 · The desktop-sessions read is now the whole scan · `AR` · 1.5d · after WP-11
+
+Found while measuring WP-11, and it is a straight repeat of the pattern `docs/DEVIATIONS.md` §11
+already documented: re-reading unchanging files on a timer.
+
+With the transcript cache in place, `readDesktopSessions()` is roughly **90% of every scan**. It
+synchronously reads and parses 57 files totalling 8.3 MB, every five seconds, for ever. Pointed
+at an empty directory, warm start drops from 62–94 ms to **6–8 ms** and the poll from 52–57 ms to
+**5–7 ms**. This is the only thing holding the warm scan against `docs/02-ARCHITECTURE.md` §8's
+< 50 ms budget rather than sitting comfortably inside it.
+
+Apply the same treatment WP-11 applied to transcripts: invalidate on `(path, mtime, size)`, read
+asynchronously, and skip entirely when nothing in the directory has changed. The archive flag
+must still be applied *after* the transcript cache — see §46, and C2 in
+[`01-AUDIT.md`](01-AUDIT.md) §6 for the live bug that ordering was already hiding.
+
+**Accepted when:** warm poll is under 15 ms on the reference machine with 66 sessions; archiving
+a session in the desktop app is still reflected within one poll; the two `INVARIANT:` tests
+guarding the archive round-trip still pass.
+
 ---
 
 ## Phase 3 — The spread · weeks 9–12

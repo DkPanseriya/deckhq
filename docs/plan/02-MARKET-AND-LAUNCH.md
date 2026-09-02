@@ -45,8 +45,15 @@ Anthropic closed the "tell me which session is blocked" request (#36885) as **no
 
 ### 1.4 The four gaps nobody occupies
 
-1. **Terminal-launched sessions.** Every first-party surface and every orchestrator sees only
-   what it started. DeckHQ reads the disk.
+> **Gap 1 corrected 2 Sep 2026, after measuring it.** It previously read "terminal-launched
+> sessions are invisible to every first-party surface". `claude agents --json` on the reference
+> machine returns every live interactive session, including ones started in other terminals in
+> other repositories. Restated below to what measurement supports.
+
+1. **Sessions that have already exited.** Every first-party surface and every orchestrator
+   reports what is *running*. A session that finished its turn and exited leaves the list, taking
+   with it any record that it wanted something. DeckHQ reads the disk, so it still has all of
+   them — and it still knows which are owed an answer.
 2. **An acknowledgement that survives reading.** Every queue in the category is derived from
    runtime state.
 3. **Cross-repo cost.** ccusage earned 18.3k stars filling half of this; nothing shows spend
@@ -81,16 +88,24 @@ Ranked by expected return. Growth owns these; none of them ships before P0.
 
 ### A1 — The capture-proof screenshot (highest value)
 
-A single image, split down the middle.
-Left: a terminal running `claude agents`, showing 3 rows.
-Right: DeckHQ, showing 51 people across 15 rooms, header reading **7 NEEDS YOU**, and one badge
-reading **1d 2h**.
-Caption: *"Same machine. Same moment."*
+A single image, split down the middle. Left: `claude agents`, **5 running right now**. Right:
+DeckHQ, **66 on the floor**. Caption: *"Same machine. Same moment."*
 
-This is one image that proves M1 and M2 at once, needs no explanation, and is impossible for a
-competitor to reproduce. **Build the tooling for it in P0** (`deckhq doctor --capture-proof`,
-WP-05) so any user can generate their own — a user-generated version of this image is worth ten
-of ours.
+**The headline underneath is the debt, never the arithmetic:**
+
+> 7 finished sessions are still waiting on you. The agent view lists none of them.
+
+That distinction is not pedantry, it is the difference between an asset and a liability. The
+raw 66 − 5 gap is mostly sessions that finished weeks ago; presenting it as *concealed work* is
+an overclaim any reader disproves by running one command, and this project's entire credibility
+rests on an honest-limits discipline. The debt number is unarguable, it is the actual product,
+and it is the thing no competitor has.
+
+Never write that the runtime *cannot see* those sessions. Write that it **no longer lists them**,
+or that it **forgets them when the process exits**. Both are true and both are enough.
+
+**Build the tooling for it in P0** (`deckhq doctor --capture-proof`, WP-05) so any user can
+generate their own — a user-generated version of this image is worth ten of ours.
 
 ### A2 — The hero GIF, 6 seconds, above the fold in the README
 

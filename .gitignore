@@ -6,3 +6,6 @@ state/
 coverage/
 .impeccable/
 .claude/settings.local.json
+
+# Agent worktrees, created by the orchestrator. Never committed.
+.claude/worktrees/
