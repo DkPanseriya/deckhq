@@ -33,6 +33,10 @@ import { DATA_DIR, STATE_FILE } from '../core/paths.mjs';
 export const SCAN_MAX_AGE_DAYS = 36500;
 export const SCAN_LIMIT = 5000;
 
+/** The port the daemon prefers, and how far it walks when that one is taken. */
+const DEFAULT_PORT = 4317;
+const PORT_SCAN_SPAN = 10;
+
 /** Column width for the report's label gutter. */
 const LABEL_WIDTH = 16;
 
@@ -68,34 +72,114 @@ export function probeLoopbackPort(port, timeoutMs = 500) {
 }
 
 /**
- * Hook delivery evidence, read from a DeckHQ daemon already running on this
- * port. The counters live in the daemon's memory, so there is no other place
- * to get them — and if no daemon is running there is nothing to report, which
- * is not an error.
+ * Ask whatever is listening on this loopback port whether it is a DeckHQ
+ * daemon, and if so what it knows.
+ *
+ * Two things live only in a running daemon's memory and have no other source:
+ * the hook delivery counters, and the deck — how many sessions are actually
+ * waiting on the user right now. No daemon means both are simply unknown,
+ * which is not an error.
+ *
  * @param {number} port
- * @returns {Promise<Map<string, {eventsSeen:number, lastEventAt:number|null}>>}
+ * @returns {Promise<{port:number, hookHealth:Map<string,{eventsSeen:number,lastEventAt:number|null}>, deck:any}|null>}
  */
-export async function fetchHookHealth(port) {
+export async function inspectDaemon(port) {
+  /** @type {any} */
+  let snapshot;
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/state`, {
+      signal: AbortSignal.timeout(1500),
+      // A one-shot command has no use for a pooled connection, and an idle
+      // keep-alive socket outliving the report is exactly what turned a
+      // healthy run into a libuv abort at exit.
+      headers: { connection: 'close' },
+    });
+    if (!res.ok) return null;
+    snapshot = await res.json();
+  } catch {
+    return null; // nothing there, or not answering
+  }
+  // Something else on the port answering 200 to /api/state is not a daemon.
+  if (!snapshot || !Array.isArray(snapshot.agents) || !snapshot.counts) return null;
+
   /** @type {Map<string, {eventsSeen:number, lastEventAt:number|null}>} */
-  const out = new Map();
+  const hookHealth = new Map();
   try {
     const res = await fetch(`http://127.0.0.1:${port}/api/hooks`, {
       signal: AbortSignal.timeout(1500),
+      // A one-shot command has no use for a pooled connection, and an idle
+      // keep-alive socket outliving the report is exactly what turned a
+      // healthy run into a libuv abort at exit.
+      headers: { connection: 'close' },
     });
-    if (!res.ok) return out;
-    const body = await res.json();
-    for (const entry of body.adapters || []) {
-      if (!entry || typeof entry.runtime !== 'string') continue;
-      out.set(entry.runtime, {
-        eventsSeen: Number(entry.eventsSeen) || 0,
-        lastEventAt: typeof entry.lastEventAt === 'number' ? entry.lastEventAt : null,
-      });
+    if (res.ok) {
+      const body = await res.json();
+      for (const entry of body.adapters || []) {
+        if (!entry || typeof entry.runtime !== 'string') continue;
+        hookHealth.set(entry.runtime, {
+          eventsSeen: Number(entry.eventsSeen) || 0,
+          lastEventAt: typeof entry.lastEventAt === 'number' ? entry.lastEventAt : null,
+        });
+      }
     }
   } catch {
-    // Not a DeckHQ daemon, or not answering. Nothing to add.
+    // The deck is still worth having without the counters.
   }
-  return out;
+
+  return { port, hookHealth, deck: deckFrom(snapshot) };
 }
+
+/**
+ * What the machine currently owes the user, from a daemon snapshot.
+ *
+ * `waitingNotRunning` is the number that matters and the only one safe to
+ * claim anything about. A session the runtime still lists as running may well
+ * be waiting on a permission prompt — the runtime's own view would show that
+ * one, so counting it as something the runtime hides would be false. Each
+ * agent carries its own `live` flag, so the intersection is exact rather than
+ * inferred.
+ *
+ * @param {any} snapshot
+ */
+export function deckFrom(snapshot) {
+  const agents = Array.isArray(snapshot?.agents) ? snapshot.agents : [];
+  const waiting = agents.filter(
+    (a) =>
+      a &&
+      a.ackState === 'active' &&
+      (a.activityState === 'for_review' ||
+        a.activityState === 'needs_input' ||
+        a.activityState === 'stalled'),
+  );
+  const notRunning = waiting.filter((a) => a.live !== true);
+
+  let oldestWaitAt = null;
+  for (const a of notRunning) {
+    for (const t of [a.reviewSince, a.needsInputSince, a.lastOutputAt]) {
+      if (typeof t === 'number' && t > 0) {
+        if (oldestWaitAt === null || t < oldestWaitAt) oldestWaitAt = t;
+        break; // the first set field is this agent's own wait start
+      }
+    }
+  }
+
+  return {
+    found: true,
+    waiting: waiting.length,
+    waitingNotRunning: notRunning.length,
+    oldestWaitAt,
+    total: agents.length,
+  };
+}
+
+/** The deck when no daemon could be found to ask. */
+const NO_DECK = {
+  found: false,
+  waiting: null,
+  waitingNotRunning: null,
+  oldestWaitAt: null,
+  total: null,
+};
 
 /**
  * Can DeckHQ actually write the state it owns?
@@ -154,7 +238,7 @@ async function collectRuntime(adapter, scan) {
     projects: 0,
     live: 0,
     liveReported: 0,
-    unseenByRuntime: 0,
+    finished: 0,
     error: null,
   };
 
@@ -196,11 +280,18 @@ async function collectRuntime(adapter, scan) {
     row.error = row.error || err?.message || String(err);
   }
 
-  // The moat, as arithmetic. Clamped at zero: a runtime reporting more live
-  // sessions than we have transcripts for (a brand-new session whose file has
-  // not been written yet, or a scan bound that excluded one) means we are not
-  // ahead, not that we are behind by a negative number.
-  row.unseenByRuntime = Math.max(0, row.sessions - row.liveReported);
+  // Sessions on disk whose process is no longer running. This used to be
+  // called "sessions the agent view cannot see", which was false: `claude
+  // agents --json` lists interactive terminal sessions perfectly well while
+  // they are alive. What it does not do is remember one after it exits. So
+  // this number is exactly what it says — finished — and the claim attached
+  // to it is only that a view of running processes no longer lists them.
+  // See docs/DEVIATIONS.md §68.
+  //
+  // Clamped at zero: a runtime reporting more running sessions than we have
+  // transcripts for (a session seconds old whose file has not landed yet)
+  // means none have finished, not that a negative number have.
+  row.finished = Math.max(0, row.sessions - row.liveReported);
   return row;
 }
 
@@ -241,6 +332,21 @@ async function collectHooks(adapter, deps) {
 }
 
 /**
+ * Loopback ports worth asking about: wherever the hooks point, whatever the
+ * user named, and the range the daemon walks when 4317 is taken. Finding a
+ * daemon on a port DIFFERENT from the one the hooks target is the whole
+ * reason this scan exists — see the exit-code rules below.
+ * @param {number[]} hookPorts
+ * @param {number|null} explicit
+ */
+function candidatePorts(hookPorts, explicit) {
+  const ports = new Set(hookPorts.filter((p) => typeof p === 'number'));
+  if (explicit != null) ports.add(explicit);
+  for (let p = DEFAULT_PORT; p < DEFAULT_PORT + PORT_SCAN_SPAN; p++) ports.add(p);
+  return [...ports];
+}
+
+/**
  * The whole report, as data. Every external dependency is injectable so the
  * tests can drive a fake registry and a fake machine.
  *
@@ -249,7 +355,8 @@ async function collectHooks(adapter, deps) {
  *   stateFile?: string,
  *   dataDir?: string,
  *   probe?: (port:number) => Promise<boolean>,
- *   hookHealth?: (port:number) => Promise<Map<string, {eventsSeen:number, lastEventAt:number|null}>>,
+ *   inspect?: (port:number) => Promise<any>,
+ *   port?: number|null,
  *   now?: number,
  *   scan?: {maxAgeDays:number, limit:number},
  * }} [opts]
@@ -259,7 +366,7 @@ export async function collectReport(opts = {}) {
   const stateFile = opts.stateFile || STATE_FILE;
   const dataDir = opts.dataDir || DATA_DIR;
   const probe = opts.probe || probeLoopbackPort;
-  const hookHealth = opts.hookHealth || fetchHookHealth;
+  const inspect = opts.inspect || inspectDaemon;
   const now = opts.now ?? Date.now();
   const scan = opts.scan || { maxAgeDays: SCAN_MAX_AGE_DAYS, limit: SCAN_LIMIT };
 
@@ -267,41 +374,94 @@ export async function collectReport(opts = {}) {
   const runtimes = await Promise.all(list.map((a) => collectRuntime(a, scan)));
   const hooks = await Promise.all(list.map((a) => collectHooks(a, { probe })));
 
-  // Hook counters live in a running daemon. Ask once, on the first port that
-  // has something listening, rather than once per adapter.
-  const livePort = hooks.find((h) => h.listening)?.port ?? null;
-  if (livePort != null) {
-    const health = await hookHealth(livePort);
+  // Find the daemon, if there is one. TCP-probe every candidate in parallel
+  // first — cheap — then only speak HTTP to the ports that answered.
+  const candidates = candidatePorts(
+    hooks.map((h) => h.port),
+    opts.port ?? null,
+  );
+  const open = await Promise.all(candidates.map((p) => probe(p)));
+  const listening = new Set(candidates.filter((_p, i) => open[i]));
+
+  for (const row of hooks) {
+    if (row.installed && row.port != null) row.listening = listening.has(row.port);
+  }
+
+  /** @type {{port:number, hookHealth:Map<string,any>, deck:any}|null} */
+  let daemon = null;
+  // Prefer the port the hooks target, so a healthy install is identified in
+  // one request and the mismatch case is the one that costs a scan.
+  const ordered = [...listening].sort((a, b) => {
+    const aHook = hooks.some((h) => h.port === a) ? 0 : 1;
+    const bHook = hooks.some((h) => h.port === b) ? 0 : 1;
+    return aHook - bHook || a - b;
+  });
+  for (const port of ordered) {
+    const found = await inspect(port);
+    if (found) {
+      daemon = found;
+      break;
+    }
+  }
+
+  if (daemon) {
     for (const row of hooks) {
       // A runtime with no hook mechanism has no delivery evidence to report,
       // and a zero there would read as "installed but silent" rather than
       // "not a thing this runtime does".
       if (!row.supported) continue;
-      const found = health.get(row.runtime);
+      const found = daemon.hookHealth.get(row.runtime);
       if (!found) continue;
       row.eventsSeen = found.eventsSeen;
       row.lastEventAt = found.lastEventAt;
     }
   }
 
+  const deck = daemon ? { ...daemon.deck, port: daemon.port } : { ...NO_DECK, port: null };
   const state = checkState({ stateFile, dataDir });
 
   /** @type {string[]} */
   const problems = [];
+  /** @type {string[]} */
+  const notes = [];
+
   if (!state.writable) {
     problems.push(
       `state is not writable at ${state.path}${state.error ? ` (${state.error})` : ''}`,
     );
   }
+
   for (const row of hooks) {
-    if (row.installed && row.port != null && row.listening === false) {
+    if (row.error) {
+      problems.push(`${row.label} hooks could not be read: ${row.error}`);
+      continue;
+    }
+    if (!row.installed || row.port == null || row.listening !== false) continue;
+
+    // Hooks aimed at a silent port. Which of these it is decides everything:
+    //
+    //   - No daemon anywhere: DeckHQ simply is not running. That is the
+    //     normal state of most machines most of the time — the hooks are
+    //     inert, not broken, and they start working again the moment the
+    //     daemon does. Informational, exit 0.
+    //   - A daemon running on a DIFFERENT port: every event is being posted
+    //     into a void while the interface claims exact state. That is the
+    //     failure this check exists for, and it is silent in every other
+    //     surface. Exit 1.
+    if (daemon) {
       problems.push(
-        `${row.label} hooks post to 127.0.0.1:${row.port} and nothing is listening there — ` +
-          `start DeckHQ (deckhq --port ${row.port}), or reinstall the hooks from the header`,
+        `${row.label} hooks post to 127.0.0.1:${row.port}, but DeckHQ is running on ` +
+          `${daemon.port} — every hook event is being dropped. Reinstall the hooks from the ` +
+          `header, or restart DeckHQ with --port ${row.port}.`,
+      );
+    } else {
+      notes.push(
+        `${row.label} hooks post to 127.0.0.1:${row.port} and DeckHQ is not running. ` +
+          'They start delivering again when it is.',
       );
     }
-    if (row.error) problems.push(`${row.label} hooks could not be read: ${row.error}`);
   }
+
   if (!runtimes.some((r) => r.available)) {
     problems.push('no agent runtime is available on this machine — DeckHQ has nothing to show');
   }
@@ -314,12 +474,14 @@ export async function collectReport(opts = {}) {
     ok: problems.length === 0,
     runtimes,
     hooks,
+    deck,
     state,
     // Static and deliberate. The core opens no outbound socket at all
     // (docs/02-ARCHITECTURE.md §9), including from this command: the only
     // connections it makes are to 127.0.0.1.
     egress: { outbound: 0, note: 'none. no outbound sockets.' },
     problems,
+    notes,
   };
 }
 
@@ -397,7 +559,7 @@ export function renderReport(report, opts = {}) {
     );
     lines.push(
       row(
-        'live now',
+        'running now',
         `${group(rt.live)}   (${name}'s own agent view reports ${group(rt.liveReported)})`,
       ),
     );
@@ -405,14 +567,17 @@ export function renderReport(report, opts = {}) {
     lines.push(
       row(
         'on the floor',
-        rt.unseenByRuntime > 0
-          ? `${floor}  ← DeckHQ sees ${group(rt.unseenByRuntime)} ` +
-              `${plural(rt.unseenByRuntime, 'session')} the agent view cannot`
+        rt.finished > 0
+          ? `${floor}  ← ${group(rt.finished)} ${plural(rt.finished, 'session')} ` +
+              `${rt.finished === 1 ? 'has' : 'have'} already finished; ` +
+              'the agent view no longer lists them'
           : floor,
       ),
     );
     if (rt.error) lines.push(row('', `error: ${rt.error}`));
   }
+
+  lines.push(row('waiting on you', describeDeck(report.deck, report.generatedAt)));
 
   const hookRows = report.hooks.filter((h) => h.supported);
   for (const h of hookRows) {
@@ -429,10 +594,9 @@ export function renderReport(report, opts = {}) {
   );
   lines.push(row('egress', report.egress.note));
 
-  if (!report.ok) {
-    lines.push('');
-    for (const problem of report.problems) lines.push(`  ! ${problem}`);
-  }
+  if (report.notes.length || !report.ok) lines.push('');
+  for (const problem of report.problems) lines.push(`  ! ${problem}`);
+  for (const note of report.notes) lines.push(`  · ${note}`);
 
   return lines.join('\n') + '\n';
 }
@@ -455,6 +619,25 @@ function describeHooks(h, now) {
   return parts.join(', ');
 }
 
+/**
+ * The debt line. This is the number that cannot be argued with: sessions that
+ * owe the user an answer AND are not running, so no view derived from live
+ * processes lists them at all.
+ * @param {any} deck
+ * @param {number} now
+ */
+function describeDeck(deck, now) {
+  if (!deck.found) return 'needs a running DeckHQ to count';
+  if (deck.waitingNotRunning === 0) {
+    return deck.waiting > 0
+      ? `0   (${group(deck.waiting)} waiting, all still running)`
+      : '0   nothing is waiting on you';
+  }
+  const parts = [`${group(deck.waitingNotRunning)}  ← none of these are running`];
+  if (deck.oldestWaitAt) parts.push(`oldest ${ago(now - deck.oldestWaitAt)}`);
+  return parts.join('; ');
+}
+
 /** @param {number} n @param {string} word */
 function plural(n, word) {
   return n === 1 ? word : `${word}s`;
@@ -473,8 +656,24 @@ function esc(s) {
 }
 
 /**
- * The comparison card: the runtime's own count beside DeckHQ's, on this
- * machine at this moment.
+ * The comparison card: what is running right now beside what is on the floor,
+ * on this machine at this moment.
+ *
+ * WHAT THIS CARD MAY AND MAY NOT CLAIM. An earlier version headlined "DeckHQ
+ * sees 61 sessions the agent view cannot", comparing 5 running against 66
+ * all-history. `claude agents --json` was then measured on the reference
+ * machine and returns every live session, `kind: "interactive"`, including
+ * terminal-launched ones in other repositories — it is not blind to them. The
+ * claim was literally true and rhetorically dishonest, and a reader who ran
+ * the command would have caught us. It is gone.
+ *
+ * The real difference is persistence, not sight: a view of running processes
+ * forgets a session the moment its process exits, and DeckHQ keeps it along
+ * with whether it still owes you an answer. So the headline leads with the
+ * debt — sessions waiting on the user that are NOT running, which no
+ * live-process view lists by construction — and falls back to a bare
+ * descriptive count when no daemon is running to supply it, rather than
+ * reinstating a softer version of the old claim. docs/DEVIATIONS.md §68.
  *
  * Self-contained on purpose — no web font, no stylesheet, no image, no script.
  * A launch asset that fetches anything is a launch asset that contradicts the
@@ -489,21 +688,37 @@ export function buildProofHtml(report, opts = {}) {
   const width = opts.width || 1200;
   const height = opts.height || 630;
   const rt =
-    report.runtimes.find((r) => r.available && r.unseenByRuntime > 0) ||
+    report.runtimes.find((r) => r.available && r.finished > 0) ||
     report.runtimes.find((r) => r.available) ||
     report.runtimes[0];
 
   const name = rt ? rt.label.toLowerCase() : 'runtime';
-  const theirs = rt ? group(rt.liveReported) : '0';
+  const theirs = rt ? group(rt.live) : '0';
   const ours = rt ? group(rt.sessions) : '0';
-  const unseen = rt ? rt.unseenByRuntime : 0;
+  const finished = rt ? rt.finished : 0;
   const when = new Date(report.generatedAt).toISOString().slice(0, 16).replace('T', ' ');
   const host = opts.host ?? os.hostname();
 
-  const headline =
-    unseen > 0
-      ? `DeckHQ sees ${group(unseen)} ${plural(unseen, 'session')} the agent view cannot`
-      : `DeckHQ and the agent view agree on this machine right now`;
+  const owed = report.deck.found ? report.deck.waitingNotRunning : null;
+  let headline;
+  let sub;
+  if (owed) {
+    headline =
+      `${group(owed)} finished ${plural(owed, 'session')} ` +
+      `${owed === 1 ? 'is' : 'are'} still waiting on you.`;
+    sub = 'The agent view lists none of them.';
+    if (report.deck.oldestWaitAt) {
+      sub += ` Oldest: ${ago(report.generatedAt - report.deck.oldestWaitAt)}.`;
+    }
+  } else if (finished > 0) {
+    // No daemon to ask, or nothing owed. State the count and stop — no
+    // comparative claim at all.
+    headline = `${group(finished)} of them have already finished.`;
+    sub = report.deck.found ? 'Nothing is waiting on you right now.' : '';
+  } else {
+    headline = 'Every session on this machine is running right now.';
+    sub = '';
+  }
 
   return `<!doctype html>
 <meta charset="utf-8">
@@ -532,8 +747,8 @@ export function buildProofHtml(report, opts = {}) {
   .num { font-size: 132px; line-height: 1.02; font-weight: 800; letter-spacing: -.04em; margin-top: 8px; }
   .col.ours .num { color: #A9E08F; }
   .unit { font-size: 22px; color: #8A8178; margin-top: 6px; }
-  .headline { font-size: 40px; font-weight: 700; line-height: 1.2; letter-spacing: -.02em; }
-  .headline .n { color: #A9E08F; }
+  .headline { font-size: 40px; font-weight: 700; line-height: 1.22; letter-spacing: -.02em; }
+  .sub { font-size: 27px; color: #B5ACA1; margin-top: 10px; line-height: 1.3; }
   .foot { font-size: 19px; color: #6F6860; display: flex; justify-content: space-between; gap: 24px; }
   .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace; }
 </style>
@@ -543,7 +758,7 @@ export function buildProofHtml(report, opts = {}) {
   <div class="col">
     <div class="who mono">${esc(name)} &middot; its own agent view</div>
     <div class="num">${esc(theirs)}</div>
-    <div class="unit">sessions it can see</div>
+    <div class="unit">sessions running right now</div>
   </div>
   <div class="col ours">
     <div class="who mono">deckhq</div>
@@ -552,7 +767,10 @@ export function buildProofHtml(report, opts = {}) {
   </div>
 </div>
 
-<div class="headline">${esc(headline)}</div>
+<div>
+  <div class="headline">${esc(headline)}</div>
+  ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
+</div>
 
 <div class="foot">
   <span>${esc(host)} &middot; ${esc(when)} UTC</span>
@@ -643,6 +861,7 @@ export async function runDoctor(argv = [], deps = {}) {
         '  --json             emit the same report as a JSON object',
         '  --capture-proof    also write a PNG of the comparison to',
         '                     ~/.deckhq/snapshots/, ready to post',
+        '  --port <n>         also look for a running DeckHQ on this port',
         '  --help             this message',
         '',
         'Starts nothing and opens nothing. Makes no outbound network calls.',
@@ -652,7 +871,10 @@ export async function runDoctor(argv = [], deps = {}) {
     return 0;
   }
 
-  const report = await collect();
+  const portIndex = argv.indexOf('--port');
+  const port = portIndex !== -1 ? Number(argv[portIndex + 1]) || null : null;
+
+  const report = await collect({ port });
   const json = argv.includes('--json');
   const wantProof = argv.includes('--capture-proof');
 

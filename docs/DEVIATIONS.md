@@ -1443,7 +1443,121 @@ anything listening on the hooks' port", and, when there is, one read of the
 running daemon's `/api/hooks` for the event counters, which exist only in that
 daemon's memory.
 
-**Measured on the reference machine:** 66 sessions across 15 projects, 5 live,
-61 the agent view cannot see; hooks installed on port 4400 with 20 events
+**Measured on the reference machine:** 67 sessions across 16 projects, 5
+running, 62 already finished; hooks installed on port 4400 with 37 events
 delivered; exit 0. The `--capture-proof` PNG rendered at 2400×1260 in about
 four seconds.
+
+## 68. The capture proof overclaimed, and the claim has been retired
+
+This is the most important entry in this file, because the thing it corrects
+had already been written, reviewed, screenshotted and committed.
+
+**What shipped first.** `deckhq doctor --capture-proof` headlined:
+
+> DeckHQ sees 61 sessions the agent view cannot
+
+**The measurement that killed it.** `claude agents --json` was run on the
+reference machine. It returns **all** live sessions, every one
+`kind: "interactive"`, including sessions launched from terminals in other
+repositories. It is not blind to terminal sessions on this version.
+
+So the headline was comparing **5 running** against **66 all-history** and
+calling the difference invisibility. Literally true — 61 is a real subtraction
+— and rhetorically dishonest. Anyone who ran `claude agents` after reading the
+image would have seen their terminal sessions listed, concluded we had fudged
+the number, and been right. The whole project's credibility rests on an
+honest-limits discipline (this file is that discipline), and one overstated
+launch image costs more than it wins.
+
+**What is actually true.** The difference is not sight, it is **persistence**.
+A view derived from live processes forgets a session the instant its process
+exits. DeckHQ keeps it, and keeps whether it still owes you an answer. That is
+the invariant (`01-PRODUCT.md` §2), it is the actual product, and it cannot be
+disputed by running any command.
+
+**Shipped instead.**
+
+- The left number is labelled as what it is — *sessions running right now* —
+  not "sessions it can see".
+- The headline leads with the debt: `7 finished sessions are still waiting on
+  you.` / `The agent view lists none of them. Oldest: 26h.` That number is
+  `waitingNotRunning`: sessions that owe the user an answer **and** whose
+  process is not running. A session the runtime still lists as live may be
+  sitting on a permission prompt — the runtime's own view *would* show that
+  one, so counting it here would repeat the original sin at smaller scale. The
+  snapshot carries a per-agent `live` flag, so the intersection is exact.
+- The debt is only knowable from a running daemon. With no daemon, the card
+  falls back to a bare descriptive count — `62 of them have already finished.`
+  — and makes **no comparative claim at all**, rather than a softened version
+  of the old one.
+- The words "cannot see", "invisible", "blind" and "hidden" appear nowhere.
+  Where the difference is named, it is *no longer lists* or *forgets when the
+  process exits*.
+
+**Guarded by** a test named `INVARIANT OF HONESTY: nothing ever claims the
+agent view cannot SEE a session`, which asserts those phrasings are absent from
+both the stdout report and the card, and by a test that the no-daemon fallback
+reinstates no comparative claim. The absence is tested, not just the presence.
+
+**Measured on the reference machine after the change:** 5 running, 67 on the
+floor, 62 finished, 0 genuinely waiting (all 3 waiting sessions were still
+running), so the card correctly rendered the fallback headline rather than a
+debt it could not substantiate.
+
+## 69. `doctor` exits 0 when hooks are installed and DeckHQ is simply not running
+
+**Spec:** WP-05 lists "hooks installed at a port nothing is listening on" as a
+condition that must exit non-zero.
+
+**Why that was wrong:** it is the state of most machines most of the time. The
+daemon is not running, so nothing is listening, so the hooks are inert — and
+they resume delivering the moment it starts. `doctor` is going to end up in
+health checks and CI, and a command that fails on the normal resting state of
+the product is useless there.
+
+**Shipped:** the check now distinguishes the two cases by looking for the
+daemon rather than only at the one port.
+
+- No daemon anywhere on the loopback range: an informational `·` note, exit 0.
+- A daemon running on a **different** port from the one the hooks target: exit
+  1. This is the failure the check is actually for, and it is invisible in
+  every other surface — the settings file is valid, the header claims exact
+  state, and every event is dropped.
+
+Detection TCP-probes the hook ports plus `4317..4326` (the range the daemon
+walks when its preferred port is taken) in parallel, then speaks HTTP only to
+the ports that answered, identifying a daemon by a well-formed `/api/state`.
+`--port` widens the search for anyone running further out.
+
+Exit 1 is now reserved for: state not writable, a hook/daemon port mismatch, no
+runtime available at all, or an adapter that threw.
+
+## 70. `process.exit()` turned a healthy `doctor` run into exit 127
+
+Found by running the finished command, not by any test.
+
+`bin/deckhq.mjs` ended the subcommand with `process.exit(await runDoctor(...))`.
+Once `doctor` started reading the deck from a running daemon, every invocation
+aborted **after printing a complete and correct report**:
+
+```
+Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c, line 94
+EXIT=127
+```
+
+`process.exit()` tears the event loop down immediately; the loopback socket
+from the `fetch` was still closing, and libuv aborts the process rather than
+touch a closing handle. Reproduced deterministically, and bisected: the probe
+alone exits 0, the fetches alone exit 0, both together exit 0 — only
+`process.exit()` afterwards aborts.
+
+Fixed on both sides: the bin script sets `process.exitCode` and lets the loop
+drain (measured: no delay, nothing holds it open), and `doctor` sends
+`Connection: close` on its two loopback requests so no idle keep-alive socket
+outlives the report in the first place.
+
+The lesson worth keeping: **the exit code is part of the output.** 364 unit
+tests all passed against a binary that could not exit successfully, because
+they call `runDoctor()` and assert its return value — they never spawn the
+CLI. A command's contract includes how it ends.
