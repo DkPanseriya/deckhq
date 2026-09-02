@@ -30,6 +30,25 @@ Once the agent goes idle the item is "complete" and disappears — including in 
 Pixel Agents). Manual mark-as-unread exists in several, and in every one the derived bucket still
 overrides the human flag.
 
+> **Amendment, 2 Sep 2026 (product owner) — the problem above is stated too narrowly.**
+>
+> Losing a session is the sharpest symptom, and §2 is the mechanism that fixes it, but neither is
+> the product. The product is **a place to run an AI workforce across many projects at once.**
+>
+> The user is an entrepreneur or builder with several things in flight. Their agents are spread
+> over a dozen terminals in a dozen repositories, and no surface exists that shows the whole team
+> at once: who is working, who is blocked, who finished and is waiting, who is idle and available,
+> and what each project is costing. They manage that workforce by alt-tabbing and remembering.
+>
+> DeckHQ's answer is to make the workforce a *place* — rooms for projects, people for sessions —
+> so that managing it uses the intuitions anyone already has about a room full of people, rather
+> than a list nobody reads. Everything in §4 and §5 already serves that reading: project rooms
+> that grow with headcount, per-project token plates, the lounge as visible spare capacity,
+> furniture that launches the project it belongs to, dispatching new work into a room.
+>
+> The invariant in §2 is not demoted by this. It is what makes the office *honest* — an office
+> that forgets who is waiting on you is worse than a list. It is the mechanism, not the pitch.
+
 ## 2. The invariant
 
 > **What the user owes is decided by the user, never by the runtime.**
@@ -47,11 +66,20 @@ Any implementation that violates this has rebuilt a tool that already exists and
 
 ## 3. Who it is for
 
-A solo developer or a very small team running 5–25 concurrent agent sessions across unrelated
-repositories, on one machine. They live in terminals, and they want a single surface that answers
-one question in under two seconds: **is anything waiting on me right now?**
+An entrepreneur, indie builder or solo developer with **several projects in flight at once**,
+running 5–25 concurrent agent sessions across unrelated repositories on one machine. They are the
+only manager their AI team has, and the constraint on how much they can ship is how much of that
+team they can hold in their head at one time.
 
-They are not looking for a metaverse, a team presence tool, or a chat product.
+They live in terminals, and they want one surface that answers, in under two seconds:
+
+- **Is anything waiting on me right now?** — the question §2 exists to answer honestly.
+- **Who is working, and on what?**
+- **Who is free to take the next job?**
+- **Which project is eating my quota?**
+
+They are not looking for a metaverse, a team presence tool, or a chat product. They are looking
+for the thing a manager gets for free by walking onto a floor and looking around.
 
 ## 4. The model
 

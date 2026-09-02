@@ -1,22 +1,29 @@
 # DeckHQ
 
-**Command deck for every agent session on your machine.**
+**Your AI team, on one office floor.**
 
-You run a lot of Claude Code sessions. Claude finishes a turn, asks a question, and you read the
-answer, think _I'll come back to that_, open another terminal, and never return. The session sits
-there. The runtime believes it is finished. You have no record that anything is outstanding.
+If you are building more than one thing at a time, your agents are scattered across a dozen
+terminals in a dozen repositories. Nothing shows you all of them at once: who is working, who is
+blocked on a question, who finished twenty minutes ago and is waiting on you, who is sitting idle
+and could take the next job, and which project is quietly burning the most tokens. You run a
+workforce by alt-tabbing and remembering.
 
-DeckHQ is a local dashboard that fixes exactly that, and it renders as a top-down office floor:
-every session is a person, every project is a room, and the sessions that owe you a reply are
-standing in your office waiting.
+DeckHQ puts that workforce in one room — literally. Every project is a room, every session is a
+person at a desk, and you run the floor the way you would run an actual office: take in the whole
+team at a glance, walk over to anyone and read what they are doing, reply, hand them the next
+task, send them to the lounge when there is nothing for them, let them go when the work is done.
+
+It is for people who ship several projects at once and want their AI team to be as legible as a
+room full of people would be.
 
 ![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](docs/media/floor.png)
 
 **Read it in one glance.** The header counts what needs you. Your office, top left, holds the
 sessions that finished and are waiting on your reply — oldest first, with how long they have been
-waiting. Each project is a room, and the people in it are that project's sessions: typing if
-they are working, **hand up** if they are blocked on a question, slumped if they have gone quiet.
-The lounge holds agents you have reviewed and benched — available capacity, resting.
+waiting. Each project is a room with its own session count and token spend on the plate, and the
+people in it are that project's sessions: typing if they are working, **hand up** if they are
+blocked on a question, slumped if they have gone quiet. The lounge holds agents you have reviewed
+and benched — available capacity, resting, ready for the next job.
 
 ```bash
 npx deckhq
@@ -27,6 +34,10 @@ That is the whole install. Node 18+, no build step, no runtime dependencies, no 
 ---
 
 ## The one rule
+
+An office is only worth having if it tells the truth about who is waiting on you. This is the rule
+that makes the rest of it trustworthy, and it is the one thing every other tool in this category
+gets wrong.
 
 > **What you owe is decided by you, never by the runtime.**
 
@@ -60,11 +71,16 @@ need different responses from you, so they look different and are counted separa
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
 yours. `for_review` is entered automatically and can only be _left_ by you.
 
-## Triage without leaving the floor
+## Run the floor, don't just watch it
 
 Click anyone and their real conversation opens beside the floor, with the token spend, a cost
 estimate that is labelled an estimate, and the buttons that move them: acknowledge, bench, let go,
-resume in a terminal or the app. You can reply to a session straight from the composer.
+resume in a terminal or the app. Reply straight from the composer, or start a fresh agent in any
+room without leaving the page.
+
+The furniture works too. A room's shelf opens that project's folder; its screen runs that
+project's dashboard script. The object is the verb, and it lives in the room the project lives in,
+so there is nothing to hunt for in a menu.
 
 ![The side panel: a session's conversation, its token and cost figures, and the acknowledge, bench, let go and resume actions](docs/media/panel.png)
 

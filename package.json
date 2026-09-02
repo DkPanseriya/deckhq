@@ -1,14 +1,17 @@
 {
   "name": "deckhq",
   "version": "1.1.0",
-  "description": "Command deck for every agent session on your machine. Claude Code, on one office floor. (Codex adapter included but unverified.)",
+  "description": "Your AI team on one office floor. Manage every Claude Code session across every project from one local, private surface — who is working, who is blocked, who is waiting on you, who is free. (Codex adapter included but unverified.)",
   "keywords": [
     "claude-code",
     "codex",
-    "agents",
+    "ai-agents",
+    "agent-management",
     "dashboard",
-    "control-plane",
-    "sessions"
+    "developer-tools",
+    "multi-project",
+    "sessions",
+    "control-plane"
   ],
   "homepage": "https://github.com/DkPanseriya/deckhq#readme",
   "repository": {
