@@ -33,7 +33,9 @@
     "test:unit": "node scripts/test.mjs test/unit",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "demo": "node scripts/demo-floor.mjs",
+    "demo:capture": "node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ --width 1600 --height 1000 --settle 8000"
   },
   "engines": {
     "node": ">=18"

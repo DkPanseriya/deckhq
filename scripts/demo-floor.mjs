@@ -1,0 +1,384 @@
+/**
+ * Start DeckHQ against a synthetic machine, for screenshots and demos.
+ *
+ * The floor in the README has to show the product doing its job — agents in
+ * every state, across several projects — without publishing anybody's real
+ * project names, session titles or token spend. So this builds a fake
+ * `~/.claude` from scratch, points a daemon at it with `CLAUDE_CONFIG_DIR` and
+ * `DECKHQ_STATE_DIR`, and drives it into the states we want to show through
+ * the real `/api/hook` endpoint — exactly the way Claude Code drives it.
+ *
+ * Nothing here is a mock of the product. The transcripts are parsed by the
+ * real parser, the states are produced by the real state machine, and the
+ * floor is laid out by the real planner. Only the data is invented.
+ *
+ *   node scripts/demo-floor.mjs            # start and print the URL
+ *   node scripts/demo-floor.mjs --port N   # a different port
+ *
+ * Ctrl-C to stop. The fixture lives in a temp directory and is rebuilt on
+ * every run; nothing is written to your real ~/.claude or ~/.deckhq.
+ */
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import process from 'node:process';
+import http from 'node:http';
+
+const argv = process.argv.slice(2);
+const portArg = argv.indexOf('--port');
+const PORT = portArg !== -1 ? Number(argv[portArg + 1]) : 4499;
+
+const ROOT = path.join(os.tmpdir(), 'deckhq-demo');
+const CLAUDE_DIR = path.join(ROOT, 'claude');
+const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
+const STATE_DIR = path.join(ROOT, 'state');
+const BIN_DIR = path.join(ROOT, 'bin');
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+/**
+ * The floor we want to photograph.
+ *
+ * `state` is what the session should end up in, not something written
+ * directly — `working`, `needs_input` and `stalled` are produced by posting
+ * real hook events below, and `for_review` by the transcript ending on a
+ * finished assistant turn.
+ */
+const SESSIONS = [
+  // orbital-api — the busy room: someone working, someone with a hand up.
+  ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
+  ['orbital-api', 'Migrate auth to short-lived tokens', 'needs_input', 3.4, 0.9],
+  ['orbital-api', 'Backfill the events table', 'for_review', 5.2, 1.6],
+  ['orbital-api', 'Fix flaky integration suite', 'idle', 12, 0.8],
+  ['orbital-api', 'Drop the legacy /v1 routes', 'idle', 30, 0.3],
+  ['orbital-api', 'Split the deploy pipeline', 'benched', 52, 1.1],
+  ['orbital-api', 'Postgres connection pool exhaustion', 'benched', 66, 0.7],
+
+  // checkout-flow — two waiting on review.
+  ['checkout-flow', 'Apple Pay in the express lane', 'for_review', 1.2, 2.2],
+  ['checkout-flow', 'Refund path leaves orphaned rows', 'for_review', 7.8, 0.6],
+  ['checkout-flow', 'Stripe webhook retries', 'idle', 26, 0.4],
+  ['checkout-flow', 'Copy pass on the error states', 'benched', 44, 0.2],
+  ['checkout-flow', 'Tax rounding off by a cent', 'benched', 58, 0.5],
+
+  // design-system — one gone quiet.
+  ['design-system', 'Token pipeline to Figma', 'stalled', 0.8, 1.3],
+  ['design-system', 'Dark mode audit across 40 components', 'working', 1.1, 3.1],
+  ['design-system', 'Drop the old Button API', 'idle', 33, 0.5],
+  ['design-system', 'Storybook a11y violations', 'benched', 47, 0.4],
+
+  // data-pipeline — quiet room.
+  ['data-pipeline', 'dbt models for retention', 'for_review', 19, 0.7],
+  ['data-pipeline', 'Airflow DAG keeps timing out', 'idle', 40, 0.9],
+  ['data-pipeline', 'Backfill 2024 events', 'benched', 63, 1.4],
+
+  // mobile-app
+  ['mobile-app', 'Offline queue for draft posts', 'working', 3.0, 1.8],
+  ['mobile-app', 'Crash on cold start, Android 14', 'needs_input', 4.5, 0.5],
+  ['mobile-app', 'Bump RN and unbreak the build', 'idle', 61, 2.4],
+  ['mobile-app', 'Push notification permissions copy', 'benched', 70, 0.2],
+  ['mobile-app', 'Deep links open the wrong tab', 'benched', 74, 0.3],
+
+  // infra — all resting.
+  ['infra-terraform', 'Move state to a remote backend', 'benched', 55, 0.6],
+  ['infra-terraform', 'Least-privilege the CI role', 'let_go', 90, 0.3],
+];
+
+/** A deterministic uuid-shaped id, so runs are reproducible. */
+function fakeId(n) {
+  const hex = (n * 2654435761).toString(16).padStart(8, '0').slice(-8);
+  return `${hex}-d3m0-4f00-9a1b-${String(n).padStart(12, '0')}`;
+}
+
+/** Claude Code's directory name for a cwd: separators become dashes. */
+function slugForCwd(cwd) {
+  return cwd.replace(/[\\/:]/g, '-');
+}
+
+function rmrf(dir) {
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+/**
+ * One synthetic transcript.
+ *
+ * The final record decides `turnEnded`, which is what actually puts a session
+ * in the office: an assistant message with text and no `tool_use` means the
+ * turn finished and the session is up for review. Anything mid-turn ends on a
+ * `tool_use` instead.
+ */
+function writeTranscript({ id, cwd, title, ageHours, tokensM, finished }) {
+  const dir = path.join(PROJECTS_DIR, slugForCwd(cwd));
+  fs.mkdirSync(dir, { recursive: true });
+
+  const end = Date.now() - ageHours * HOUR;
+  const at = (offsetMs) => new Date(end + offsetMs).toISOString();
+  const base = { cwd, gitBranch: 'main', sessionId: id, version: '2.0.0' };
+
+  const inputTokens = Math.round(tokensM * 1_000_000 * 0.08);
+  const outputTokens = Math.round(tokensM * 1_000_000 * 0.02);
+  const cacheRead = Math.round(tokensM * 1_000_000 * 0.85);
+  const cacheWrite = Math.round(tokensM * 1_000_000 * 0.05);
+
+  const lines = [
+    { type: 'custom-title', customTitle: title },
+    {
+      ...base,
+      type: 'user',
+      timestamp: at(-12 * MINUTE),
+      message: { role: 'user', content: title },
+    },
+    {
+      ...base,
+      type: 'assistant',
+      timestamp: at(-8 * MINUTE),
+      message: {
+        id: `msg_${id}_1`,
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [{ type: 'text', text: 'Reading the relevant modules first.' }],
+        usage: {
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          cache_read_input_tokens: cacheRead,
+          cache_creation_input_tokens: cacheWrite,
+        },
+      },
+    },
+  ];
+
+  if (finished) {
+    lines.push({
+      ...base,
+      type: 'assistant',
+      timestamp: at(0),
+      message: {
+        id: `msg_${id}_2`,
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [
+          {
+            type: 'text',
+            text: 'Done. Tests pass and the change is on the branch — want me to open the PR?',
+          },
+        ],
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    });
+  } else {
+    // Mid-turn: the last record carries a tool_use, so turnEnded is false.
+    lines.push({
+      ...base,
+      type: 'assistant',
+      timestamp: at(0),
+      message: {
+        id: `msg_${id}_2`,
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [
+          { type: 'text', text: 'Checking the call sites.' },
+          { type: 'tool_use', id: `tu_${id}`, name: 'Grep', input: { pattern: 'foo' } },
+        ],
+        usage: { input_tokens: 0, output_tokens: 0 },
+      },
+    });
+  }
+
+  const file = path.join(dir, `${id}.jsonl`);
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  const mtime = new Date(end);
+  fs.utimesSync(file, mtime, mtime);
+}
+
+/**
+ * A `claude` on PATH that reports no live sessions.
+ *
+ * Without this the adapter shells out to the REAL Claude Code, whose live
+ * session ids would be unioned into the floor — putting the user's actual
+ * work in a screenshot meant to contain none of it. Liveness for the demo
+ * comes from hook events instead, which is the accurate path anyway.
+ */
+function writeClaudeShim() {
+  fs.mkdirSync(BIN_DIR, { recursive: true });
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(BIN_DIR, 'claude.cmd'), '@echo off\r\necho []\r\n', 'utf8');
+  }
+  const sh = path.join(BIN_DIR, 'claude');
+  fs.writeFileSync(sh, '#!/bin/sh\necho "[]"\n', 'utf8');
+  try {
+    fs.chmodSync(sh, 0o755);
+  } catch {
+    /* not POSIX */
+  }
+}
+
+/** An empty settings file for the fake machine. Hooks are installed later. */
+function writeSettings() {
+  fs.mkdirSync(CLAUDE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(CLAUDE_DIR, 'settings.json'), '{}', 'utf8');
+}
+
+/** POST one hook event, the way the installed hook command would. */
+function postHook(port, body) {
+  return new Promise((resolve) => {
+    const payload = Buffer.from(JSON.stringify(body));
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: '/api/hook',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
+      },
+      (res) => {
+        res.resume();
+        res.on('end', resolve);
+      },
+    );
+    req.on('error', resolve);
+    req.end(payload);
+  });
+}
+
+function post(port, route, body) {
+  return new Promise((resolve) => {
+    const payload = Buffer.from(JSON.stringify(body));
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        path: route,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length },
+      },
+      (res) => {
+        res.resume();
+        res.on('end', resolve);
+      },
+    );
+    req.on('error', resolve);
+    req.end(payload);
+  });
+}
+
+// ---------------------------------------------------------------- build
+
+rmrf(ROOT);
+fs.mkdirSync(PROJECTS_DIR, { recursive: true });
+fs.mkdirSync(STATE_DIR, { recursive: true });
+writeClaudeShim();
+writeSettings();
+
+const root = process.platform === 'win32' ? 'C:\\code' : path.join(os.homedir(), 'code');
+const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
+  const id = fakeId(i + 1);
+  const cwd = path.join(root, project);
+  writeTranscript({
+    id,
+    cwd,
+    title,
+    ageHours,
+    tokensM,
+    // Only the ones we want standing in the office end on a finished turn.
+    finished: state === 'for_review',
+  });
+  return { id, agentId: `claude-code:${id}`, cwd, project, title, state };
+});
+
+// Seed ack state so the lounge is populated the moment the daemon starts,
+// and so seeding does not re-derive something else on first run.
+// Ack state the daemon restores on start. `reviewSince` is what actually puts
+// an agent in the office and gives it a waiting-time badge; staggering the
+// values is what makes the queue look like a queue rather than a clump.
+const ack = {};
+const WAITS = [26 * HOUR, 4 * HOUR, 40 * MINUTE, 7 * MINUTE];
+let waitIndex = 0;
+for (const s of built) {
+  if (s.state === 'benched') ack[s.agentId] = { state: 'benched', updatedAt: Date.now() };
+  else if (s.state === 'let_go') ack[s.agentId] = { state: 'let_go', updatedAt: Date.now() };
+  else if (s.state === 'for_review') {
+    ack[s.agentId] = {
+      state: 'active',
+      reviewSince: Date.now() - WAITS[waitIndex++ % WAITS.length],
+      updatedAt: Date.now(),
+    };
+  }
+}
+fs.writeFileSync(
+  path.join(STATE_DIR, 'state.json'),
+  JSON.stringify(
+    {
+      version: 1,
+      seededAt: Date.now(),
+      settings: { stallWindowMs: 2 * MINUTE, notifications: false, showLetGo: false, zoom: 0 },
+      ack,
+    },
+    null,
+    2,
+  ),
+);
+
+process.env.CLAUDE_CONFIG_DIR = CLAUDE_DIR;
+process.env.DECKHQ_STATE_DIR = STATE_DIR;
+process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH}`;
+
+const { startDaemon } = await import('../src/daemon.mjs');
+// stateFile is passed explicitly so the daemon skips its legacy migration —
+// the demo must never pull anything out of a real install.
+const { url, port, close } = await startDaemon({
+  port: PORT,
+  stateFile: path.join(STATE_DIR, 'state.json'),
+});
+
+// Install hooks through the real consent-gated endpoint, AFTER the listener is
+// up. The port has to be the one actually bound — `--port` may have been taken
+// and walked forward — and installing here also refreshes the daemon's own
+// hook status, which is what switches it off the degraded path.
+await post(port, '/api/hooks/install', { runtime: 'claude-code', consent: true });
+
+// Drive the floor into the states we want to show, through the real hook
+// endpoint. Order matters: SessionStart makes a session live, and only a live
+// session can be working, blocked or stalled.
+const hook = (s, hookEvent) =>
+  postHook(port, {
+    session_id: s.id,
+    cwd: s.cwd,
+    hook_event_name: hookEvent,
+    runtime: 'claude-code',
+  });
+
+for (const s of built) {
+  if (s.state === 'working' || s.state === 'needs_input' || s.state === 'stalled') {
+    await hook(s, 'SessionStart');
+  }
+}
+for (const s of built) {
+  if (s.state === 'needs_input') await hook(s, 'Notification');
+  if (s.state === 'stalled') await hook(s, 'UserPromptSubmit'); // starts the stall clock
+}
+
+const stallSeconds = 2 * 60;
+process.stdout.write(
+  [
+    '',
+    `  DeckHQ demo floor  ${url}`,
+    '',
+    `  fixture:  ${ROOT}`,
+    `  projects: ${new Set(built.map((s) => s.project)).size}`,
+    `  sessions: ${built.length}`,
+    '',
+    `  "stalled" appears after ~${stallSeconds}s (the minimum stall window).`,
+    '  Ctrl-C to stop. Nothing was written to your real ~/.claude or ~/.deckhq.',
+    '',
+  ].join('\n'),
+);
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    close().finally(() => {
+      rmrf(ROOT);
+      process.exit(0);
+    });
+  });
+}
