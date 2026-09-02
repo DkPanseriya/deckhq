@@ -1449,7 +1449,7 @@ a directory other work is live in.
 
 Left for the owner to delete by hand, whenever no daemon is running:
 `rm -f run.log run.err.log state.json && rm -rf state/`.
-## 66. The summary cache persists, and it deliberately does not paint stale
+## 68. The summary cache persists, and it deliberately does not paint stale
 
 §11 closed with "a persistent on-disk summary cache would remove even [the cold
 scan], and is the obvious next step". It is now in, at
@@ -1546,7 +1546,7 @@ start to 6–8 ms and the poll from 52–57 ms to 5–7 ms. It is now essentiall
 entire cost of a scan, and it is what holds the warm scan against §8's < 50 ms
 budget instead of comfortably inside it. Out of scope here: flagged, not
 touched.
-## 66. `--muted` is one step lighter than the repalette spec proposed
+## 69. `--muted` is one step lighter than the repalette spec proposed
 
 **Spec:** the WP-06 chrome repalette — `docs/plan/05-GUI-UX-SPEC.md` §2.2, which lives on the
 planning branch and is not in this tree — proposes `--muted: #7C8494` as part of the violet-blue
@@ -1575,7 +1575,7 @@ The test now asserts the threshold rather than assuming it: it finds every rule 
 `--muted`, checks whether any is below the WCAG large-text size, and only then holds the token to
 4.5:1 — on all three grounds, naming the offending selector when it fails.
 
-## 67. Error and status text left the accent colour
+## 70. Error and status text left the accent colour
 
 **Spec:** `docs/03-VISUAL-SPEC.md` §5 and §10, and `public/style.css`'s own header: state is
 never carried by colour alone, and small text is never set directly in a state colour.
@@ -1607,7 +1607,7 @@ and it measures 3.13 on the topbar. It is also always paired with its "NEEDS YOU
 now asserts that this is the *only* such rule, so the next `color: var(--accent)` fails the suite
 rather than the user.
 
-## 68. IBM Plex Sans Condensed was not added — **RAISE**
+## 71. IBM Plex Sans Condensed was not added — **RAISE**
 
 **Spec:** `docs/plan/05-GUI-UX-SPEC.md` §2.3 (planning branch, not in this tree) calls for adding
 IBM Plex Sans Condensed, self-hosted in `public/fonts/`, for floor labels — room plates, name

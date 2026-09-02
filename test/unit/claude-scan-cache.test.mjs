@@ -325,7 +325,7 @@ test('INVARIANT: an archive flag never enters the persisted cache', async () => 
 test('INVARIANT: a persisted cache entry cannot resurrect a stale archive state', async () => {
   const world = await makeWorld();
   try {
-    // The exact shape a build with the §66 copy-out bug would have left on
+    // The exact shape a build with the §68 copy-out bug would have left on
     // disk: a cache entry with the archive flag baked into it. The desktop
     // store does not exist here, so nothing in this scan can legitimately
     // produce an archive state — and the transcript is finished, so the entry

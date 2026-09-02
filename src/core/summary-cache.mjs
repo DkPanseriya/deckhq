@@ -6,7 +6,7 @@
  *
  * A cold scan is CPU-bound JSON parsing of every transcript on the machine —
  * 0.8–1.4 s for 66 sessions on the reference machine, and it grows linearly
- * with the session count (docs/DEVIATIONS.md §11, §66). The in-memory cache
+ * with the session count (docs/DEVIATIONS.md §11, §68). The in-memory cache
  * that already existed removed that cost from every poll but not from the
  * first one, so every daemon start paid it again and the user watched a blank
  * floor while it ran. Almost every transcript on disk is finished and can
@@ -86,7 +86,7 @@ function isFiniteNumber(n) {
  * writes the flag down; stripping on load means no file we did not write can
  * make us read one. A cache file is not a trusted input: it can be
  * hand-edited, restored from a backup, copied between machines, or written by
- * a build that had the copy-out bug docs/DEVIATIONS.md §66 describes. Any of
+ * a build that had the copy-out bug docs/DEVIATIONS.md §68 describes. Any of
  * those would otherwise hand a stale `archived: true` straight back to the
  * registry, which reads it as `let_go` and re-fires an agent the user rehired
  * — on every poll, forever, with nothing on the floor to say why.

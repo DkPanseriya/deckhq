@@ -297,7 +297,7 @@ test('a summary handed out is a copy: scribbling on it cannot reach the cache', 
 test('INVARIANT: an archive flag already on disk cannot be resurrected by a load', async () => {
   // A cache file is not a trusted input. This one carries `archived: true` on
   // its entry — which is what a hand-edit, a restored backup, a file copied
-  // between machines, or a build with the §66 copy-out bug would leave behind.
+  // between machines, or a build with the §68 copy-out bug would leave behind.
   // Serving it would hand the registry a stale `let_go` for a session whose
   // transcript will never change again, so the flag can never age out.
   const { dir, file } = await tmpFile();

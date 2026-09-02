@@ -94,7 +94,7 @@ test('the attention states map to their spec clips', () => {
 });
 
 // ---------------------------------------------------------------------------
-// CONTRAST. docs/03-VISUAL-SPEC.md §10, and docs/DEVIATIONS.md §66-68 for what
+// CONTRAST. docs/03-VISUAL-SPEC.md §10, and docs/DEVIATIONS.md §69-71 for what
 // the WP-06 repalette moved and why.
 //
 // The chrome neutrals moved from a warm ~355deg tint to a cold ~230deg one so
@@ -327,7 +327,7 @@ test('COLOUR DISCIPLINE: the accent sets text in exactly one place, and it is la
 });
 
 test('the chrome ground is cold, and colder than every state colour', () => {
-  // The whole point of the repalette (WP-06, docs/DEVIATIONS.md §66): the
+  // The whole point of the repalette (WP-06, docs/DEVIATIONS.md §69): the
   // floor is warm, so the studio around it must not be. A regression to the
   // old pink-black would pass every contrast test above and undo the change,
   // so assert the temperature directly: every neutral's blue channel leads.
