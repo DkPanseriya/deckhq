@@ -1,5 +1,70 @@
 # Changelog
 
+<!-- Sections in an unreleased entry are additive: append bullets under the existing headings
+     rather than starting a parallel list, and move an item out of "Known gaps" the moment it
+     stops being true. -->
+
+## 1.2.0
+
+The release that can actually be installed. 1.1.0 called itself the first public release and was
+then never pushed to the registry, so `npx deckhq` — the README's only install instruction —
+returned `E404` for the whole of its life. Every other improvement in this project was academic
+while that was true, so this release is mostly the unglamorous work of making one command work.
+
+### Packaging
+
+- **The package is publishable without a private-by-default accident.** `publishConfig.access` is
+  now `public`. A scoped or first-time publish that omits it fails at the registry, or worse
+  succeeds as a private package on an account that has no private plan.
+- **A broken build can no longer reach the registry.** `prepublishOnly` runs `npm run lint` and
+  `npm test` before anything is uploaded. Publishing is the one operation in this project that
+  cannot be undone — npm unpublish is time-boxed and the version number is burned either way — so
+  it is the one that gets the gate.
+- **The description is the pitch again.** It used to end with "(Codex adapter included but
+  unverified.)", which is honest and belongs in the README's Honest limits, where it still is. The
+  description is the single line that appears in npm search results next to a dozen competitors;
+  spending its last forty characters on a caveat about a secondary adapter was a bad trade. The
+  caveat has not been softened, only moved.
+- `control-plane` dropped from the keywords. DeckHQ does not orchestrate anything and should not
+  turn up when someone searches for a tool that does. `claude`, `local-first` and `privacy` added,
+  because those are what the intended user actually types.
+- A `funding` field pointing at GitHub Sponsors, matching the new `.github/FUNDING.yml`.
+- `package-lock.json` said `1.0.0`. It had not been regenerated for the 1.1.0 bump, so the one file
+  whose job is to describe exactly what gets installed was describing a version two releases old.
+  Now correct, and `*.tgz` is ignored so a stray `npm pack` cannot commit a tarball of the package
+  into the package.
+
+The tarball is unchanged at 39 files and 203 kB: `bin`, `src`, `public`, the README and the
+licence. No state, no logs, no tests, no `docs/`, no `.claude/`.
+
+### Repository
+
+Everything a stranger looks for before they open a pull request, and none of which existed.
+
+- `CONTRIBUTING.md`, leading with the two things that get a change rejected regardless of how good
+  it is: the invariant in `docs/01-PRODUCT.md` §2, and network egress. Both were only written down
+  in the README's footer, where a contributor finds them after they have written the code.
+- `SECURITY.md`, describing the actual model rather than a template one — loopback bind with no
+  `--host` flag, why that is not sufficient on its own and what the CSRF guard adds, path-confined
+  static serving, argv-array spawns, conversation text rendered as text — plus a private route to
+  report something that is wrong with it.
+- `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1).
+- Issue forms for bugs and features, and a pull request template. The bug form asks for the output
+  of `deckhq doctor`, so an environment report arrives with the first message instead of after
+  three round trips.
+- `.github/FUNDING.yml`.
+- `docs/plan/RELEASE-CHECKLIST.md`, the ordered commands for cutting a release, written down
+  because the thing that went wrong with 1.1.0 was a step nobody had written down.
+
+### Known gaps
+
+Carried forward from `docs/DEVIATIONS.md` §8–9, unchanged by this release:
+
+- **Codex support is unverified.** The adapter is written against documented rollout-file
+  conventions and has never run against real Codex data.
+- **`openInTerminal()` is verified on Windows only.** The macOS and Linux paths are implemented and
+  reviewed but have not been run.
+
 ## 1.1.0
 
 First public release. Everything below is a fix to something that would have bitten a real

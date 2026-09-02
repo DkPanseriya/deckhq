@@ -1,9 +1,10 @@
 {
   "name": "deckhq",
-  "version": "1.1.0",
-  "description": "Your AI team on one office floor. Manage every Claude Code session across every project from one local, private surface — who is working, who is blocked, who is waiting on you, who is free. (Codex adapter included but unverified.)",
+  "version": "1.2.0",
+  "description": "Every AI coding session on your machine, on one office floor. It sees the ones your terminal forgot, and remembers what's waiting on you even after you've read it. Local, private, zero dependencies.",
   "keywords": [
     "claude-code",
+    "claude",
     "codex",
     "ai-agents",
     "agent-management",
@@ -11,7 +12,8 @@
     "developer-tools",
     "multi-project",
     "sessions",
-    "control-plane"
+    "local-first",
+    "privacy"
   ],
   "homepage": "https://github.com/DkPanseriya/deckhq#readme",
   "repository": {
@@ -23,7 +25,11 @@
   },
   "license": "MIT",
   "author": "Darshak Panseriya",
+  "funding": "https://github.com/sponsors/DkPanseriya",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "deckhq": "./bin/deckhq.mjs"
   },
@@ -38,7 +44,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "demo": "node scripts/demo-floor.mjs",
-    "demo:capture": "node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ --width 1600 --height 1000 --settle 8000"
+    "demo:capture": "node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ --width 1600 --height 1000 --settle 8000",
+    "prepublishOnly": "npm run lint && npm test"
   },
   "engines": {
     "node": ">=18"
