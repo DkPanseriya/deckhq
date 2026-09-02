@@ -41,14 +41,28 @@ First public release. Everything below is a fix to something that would have bit
   and is dead weight in a public tree. Still in git history at `v1.0.0`.
 - `docs/00-PRODUCT-legacy.md`, superseded by `docs/01-PRODUCT.md`.
 
+### Verified
+
+- **`send()` now has been run end to end**, closing the gap `docs/DEVIATIONS.md` §9 recorded.
+  `claude --resume <id> -p` was exercised against a throwaway session: it returns the _same_
+  session id and appends both turns to the _same_ transcript file. It does not fork a new session,
+  which would have put a duplicate agent on the floor for every reply.
+
+### Added
+
+- `scripts/demo-floor.mjs` builds a synthetic `~/.claude` in a temp directory and drives a daemon
+  into all six states through the real hook endpoint, so the README screenshots can show the
+  product working without publishing anyone's real project names or session titles.
+- `scripts/capture-floor.mjs` photographs a running floor over the DevTools protocol. Chrome's own
+  `--screenshot` flag is no use: it waits for the page to go quiet, and DeckHQ deliberately never
+  does.
+
 ### Known gaps
 
-Carried forward from `docs/DEVIATIONS.md` §8–9, unchanged in this release:
+Carried forward from `docs/DEVIATIONS.md` §8–9:
 
 - **Codex support is unverified.** The adapter is written against documented rollout-file
   conventions and has never run against real Codex data.
-- **`send()` has never been run end to end.** Replying from the panel spends real tokens in a real
-  conversation, so it was reviewed but not exercised.
 - **`openInTerminal()` is verified on Windows only.** The macOS and Linux paths are implemented and
   reviewed but have not been run.
 

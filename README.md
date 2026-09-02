@@ -10,6 +10,14 @@ DeckHQ is a local dashboard that fixes exactly that, and it renders as a top-dow
 every session is a person, every project is a room, and the sessions that owe you a reply are
 standing in your office waiting.
 
+![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](docs/media/floor.png)
+
+**Read it in one glance.** The header counts what needs you. Your office, top left, holds the
+sessions that finished and are waiting on your reply — oldest first, with how long they have been
+waiting. Each project is a room, and the people in it are that project's sessions: typing if
+they are working, **hand up** if they are blocked on a question, slumped if they have gone quiet.
+The lounge holds agents you have reviewed and benched — available capacity, resting.
+
 ```bash
 npx deckhq
 ```
@@ -51,6 +59,14 @@ need different responses from you, so they look different and are counted separa
 
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
 yours. `for_review` is entered automatically and can only be _left_ by you.
+
+## Triage without leaving the floor
+
+Click anyone and their real conversation opens beside the floor, with the token spend, a cost
+estimate that is labelled an estimate, and the buttons that move them: acknowledge, bench, let go,
+resume in a terminal or the app. You can reply to a session straight from the composer.
+
+![The side panel: a session's conversation, its token and cost figures, and the acknowledge, bench, let go and resume actions](docs/media/panel.png)
 
 ## What it reads from your disk
 
@@ -115,9 +131,6 @@ These are real, and listed here rather than discovered later.
   conventions but has never run against real Codex data, because Codex is not installed on the
   development machine. It reports itself unavailable cleanly and degrades without throwing. Treat
   DeckHQ as a Claude Code tool until that adapter has been exercised end to end.
-- **Replying from the panel has not been run end to end.** `send()` posts a real prompt into a
-  real conversation and spends real tokens, so it was implemented and reviewed but never exercised
-  against a live session. Use the terminal escape hatch if that matters to you.
 - **"Open in terminal" is verified on Windows only.** The macOS and Linux paths are implemented
   and reviewed but have not been run. The rest of the product is CI-tested on all three.
 - **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by public list

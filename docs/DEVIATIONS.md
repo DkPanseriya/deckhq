@@ -119,9 +119,12 @@ report `supported: false`, so Codex sessions use the polling path and cannot dis
 
 Honest inventory of what was not exercised on this machine:
 
-- `send()` for either runtime. Running it would have posted a real prompt into one of the user's
-  live conversations and spent real tokens. The argv construction, timeout and result parsing are
-  implemented and reviewed but untested end to end.
+- ~~`send()` for either runtime.~~ **Closed, 2 Sep 2026.** Exercised against a throwaway session
+  created for the purpose: `claude --resume <id> -p <text> --output-format json` returns the same
+  `session_id` it was given and appends both turns to the same transcript file. It does not fork a
+  new session — which, had it done so, would have put a duplicate agent on the floor for every
+  reply sent from the panel. Codex's `send()` remains unexercised along with the rest of that
+  adapter.
 - `openInTerminal()` on macOS and Linux (Windows-only machine).
 - Hook install/remove against the user's real `settings.json`. It was verified against fake
   settings files in isolated processes: fresh install, no-op on double install, byte-identical
