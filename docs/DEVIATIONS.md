@@ -1392,3 +1392,60 @@ It is a modal, opened by a click and dismissed by Esc or by clicking off it.
 It used to open on HOVER, which meant a panel appearing under the cursor as it
 crossed the floor. And it is the one genuinely white surface in the product,
 because it is a whiteboard; every other surface stays dark-tinted.
+
+## 66. The description is not a changelog
+
+`package.json`'s description ended with "(Codex adapter included but
+unverified.)". Honest, and in the wrong place. That one line is what npm search
+renders under the package name, next to a dozen competitors, and it was
+spending its last forty characters warning about a secondary adapter before it
+had finished making the case for the primary one. The caveat has not been
+softened — it is in the README's Honest limits, where someone deciding whether
+to trust the tool will read it, rather than in the sentence deciding whether
+they look at all.
+
+Three further changes went past what WP-01 asked for, all in the same file:
+
+- `control-plane` removed from the keywords. `02-MARKET-AND-LAUNCH.md` §2 lists
+  "that we orchestrate" under **what we never say**, and a control plane is
+  exactly the thing we are positioned against. Turning up in that search is a
+  wrong-audience impression, not a free one. `claude`, `local-first` and
+  `privacy` added in its place.
+- A `funding` field pointing at GitHub Sponsors, to match `.github/FUNDING.yml`.
+  npm renders it on the package page; there was no reason for the two files to
+  disagree.
+- `.github/ISSUE_TEMPLATE/config.yml`, which WP-02 did not ask for. Without it
+  GitHub keeps the "open a blank issue" escape hatch, and a security report
+  filed through that escape hatch is public the moment it is filed. The chooser
+  now sends those to the private advisory form instead.
+
+`CHANGELOG.md` was **not** added to the `files` array, though it was tempting.
+The tarball stays at exactly the 39 files and 203 kB `01-AUDIT.md` F1 measured,
+so "confirm that stays true" has a clean answer. npm rewrites the README's
+relative link to it against the `repository` field, so nothing is broken by its
+absence.
+
+## 67. The stray working files were left where they are
+
+WP-02 asks for `run.log`, `run.err.log`, `state.json` and `state/` to be
+removed from the working tree. They were not, and this is a deliberate refusal
+rather than an oversight.
+
+`.gitignore` already covers all four (`*.log`, `state.json`, `state/`), none of
+them is tracked, and the `files` array keeps every one of them out of the
+tarball. So the hygiene the finding actually cares about — that they never
+reach git or npm — is already true. Deleting them buys a tidier `ls`.
+
+Against that: `state/settings-backup-*.json` is a copy of the user's real
+runtime settings file, taken before DeckHQ edited it to install hooks. It is a
+recovery artifact. `state.json` is the pre-1.1.0 state file, holding
+acknowledgements from before the move to `~/.deckhq/`; 1.1.0 copies it across
+on first start and deliberately leaves the original where it is, for exactly
+this reason. Deleting either is irreversible and buys cosmetics.
+
+They also sit in the shared checkout rather than in the worktree this work was
+done in, so removing them would reach outside the change under review and into
+a directory other work is live in.
+
+Left for the owner to delete by hand, whenever no daemon is running:
+`rm -f run.log run.err.log state.json && rm -rf state/`.

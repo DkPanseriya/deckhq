@@ -1,0 +1,73 @@
+name: Feature request
+description: Propose something DeckHQ should do that it does not do yet.
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write this up, two things that decide a surprising number of proposals:
+
+        **The invariant.** No observed event may clear a user-owned state. Opening a conversation,
+        reading it, or scrolling past it must never remove it from your waiting area — only an
+        explicit action does. A proposal that needs this relaxed will be declined, however
+        convenient it is. See `docs/01-PRODUCT.md` §2.
+
+        **No network egress.** DeckHQ makes no outbound calls of any kind and has no runtime
+        dependencies. A feature that needs the network does not go in the core.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What goes wrong for you today? Describe the situation, not the solution — the fix is often
+        not the one that first comes to mind.
+      placeholder: >
+        Three agents finished overnight. I only found out the next morning because I happened to
+        reopen the tab.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: Your proposed behaviour, in as much detail as you have.
+    validations:
+      required: true
+
+  - type: textarea
+    id: attention
+    attributes:
+      label: Does this reduce time spent looking at DeckHQ?
+      description: >
+        The one question every proposal is scored against. DeckHQ's job is to let you *stop*
+        watching your agents — to reach you when the tab is closed, and to let you discharge an
+        item in one keystroke when you come back. A feature that mainly gives you more to look at
+        makes the product worse at its job, however good it looks. Make the case.
+      placeholder: >
+        Yes — today I have to keep the tab open to find out anything. This would let me close it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: >
+        Existing DeckHQ features, other tools, or a manual workaround — and why each one falls
+        short. Optional.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the existing issues and this is not already proposed.
+          required: true
+        - label: This does not require any outbound network call from the core.
+          required: true
+        - label: This does not require an observed event to clear a user-owned state.
+          required: true

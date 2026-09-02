@@ -1,0 +1,129 @@
+name: Bug report
+description: Something in DeckHQ does not work, or is wrong about what it shows you.
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. The single most useful thing you can include is the output of
+        `deckhq doctor` — it answers most of the environment questions in one paste.
+
+        **If this is a security problem, please do not file it here.** See
+        [SECURITY.md](https://github.com/DkPanseriya/deckhq/blob/main/SECURITY.md) for the private
+        reporting route.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you see, and what did you expect to see instead?
+      placeholder: |
+        An agent finished its turn, but it never appeared in my office. The counter stayed at 0.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The smallest sequence of steps that shows the problem.
+      placeholder: |
+        1. Start `npx deckhq`
+        2. Start a Claude Code session in another terminal
+        3. Let it finish a turn
+        4. The floor never shows it
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `deckhq doctor`
+      description: >
+        Run `npx deckhq doctor` (or `deckhq doctor` if you installed it globally) and paste the
+        whole thing. It reports your runtime versions, how many transcripts were found, hook
+        installation and delivery, and whether the state file is writable. Redact project names if
+        you would rather not share them — the shape of the output is what matters.
+      render: shell
+      placeholder: |
+        $ deckhq doctor
+        ...
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Name and version.
+      placeholder: macOS 15.2 · Windows 11 23H2 · Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node -v`.
+      placeholder: v20.18.0
+    validations:
+      required: true
+
+  - type: input
+    id: deckhq-version
+    attributes:
+      label: DeckHQ version
+      description: Output of `npx deckhq --version`, or the commit you are running from.
+      placeholder: 1.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: runtime-version
+    attributes:
+      label: Runtime version
+      description: >
+        The AI runtime this is about, and its version — `claude --version`, `codex --version`.
+      placeholder: claude 2.1.184
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hooks
+    attributes:
+      label: Are DeckHQ hooks installed?
+      description: >
+        The hooks screen in DeckHQ tells you, including whether the installed hooks point at the
+        port the daemon is actually listening on. Without hooks, `needs_input` and `stalled` are
+        not detectable at all, which explains a large share of "it did not notice" reports.
+      options:
+        - 'Yes, and the hooks screen shows events arriving'
+        - 'Yes, but the hooks screen shows no events arriving'
+        - 'Yes, but they point at the wrong port'
+        - 'No'
+        - "I don't know"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Daemon output
+      description: >
+        Anything the daemon printed around the time of the problem, and any errors in the browser
+        console. Optional, but often decisive.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched the existing issues and this is not already reported.
+          required: true
+        - label: >
+            I have read the "Honest limits" section of the README, and this is not one of the
+            things listed there as known and unfinished.
+          required: true
