@@ -27,6 +27,11 @@ import {
   readingSeconds,
   visibleMarks,
 } from '../../public/coach-marks.js';
+// The renderer's own anchor arithmetic, so the two floor marks are checked
+// against what the floor actually draws rather than against a stub of it.
+import { computeAnchor, computeFitScale, characterScaleFor } from '../../public/render/scene.js';
+import { buildPlan, U } from '../../public/render/plan.js';
+import { AgentRuntime, assignSeats } from '../../public/render/agents.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -369,6 +374,105 @@ test('an anchor the renderer cannot place drops the pointer instead of guessing'
   assert.equal(card(layer).dataset.side, 'none');
   assert.equal(layer.querySelector('.coach-ring').hidden, true);
   marks.stop();
+});
+
+// ----------------------------------------------- the two floor marks, for real
+//
+// WP-13 shipped with marks 2 and 3 pointing at the WHOLE CANVAS, because the
+// renderer exposed no geometry and `public/render/**` was another engineer's
+// file (DEVIATIONS §108.1). `Scene.anchorFor` has since landed. These tests
+// close the raise: they resolve the marks' own anchor descriptors through the
+// renderer's real arithmetic over a real plan, and assert the answer is a room
+// and a person rather than the fallback.
+
+test('mark 2 points at the office and mark 3 at one person, not at the whole canvas', () => {
+  const now = 1_800_000_000_000;
+  const projects = [{ id: 'p0', name: 'deckhq', sessionCount: 2 }];
+  const agents = [
+    {
+      id: 'a-wait',
+      projectId: 'p0',
+      ackState: 'active',
+      activityState: 'for_review',
+      reviewSince: now - 60_000,
+      lastActivityAt: now - 60_000,
+    },
+    {
+      id: 'a-desk',
+      projectId: 'p0',
+      ackState: 'active',
+      activityState: 'working',
+      lastActivityAt: now,
+    },
+  ];
+  const plan = buildPlan(projects, agents, { targetAspect: 1.6, now });
+  const runtime = new AgentRuntime();
+  runtime.sync(agents, plan, assignSeats(plan, agents));
+
+  const stage = { w: 1600, h: 900 };
+  const scale = computeFitScale(plan.width, plan.height, stage.w, stage.h);
+  const view = {
+    plan,
+    camera: { zoom: scale / U, panX: 0, panY: 0, U },
+    scale,
+    charScale: characterScaleFor(scale),
+  };
+
+  // Resolved exactly as `coachAnchorFor` resolves them: the mark names a
+  // target, the agent mark names the head of the needs-you queue.
+  const resolve = (mark) =>
+    computeAnchor(mark.anchor.target, mark.anchor.target === 'agent' ? 'a-wait' : undefined, {
+      ...view,
+      record: mark.anchor.target === 'agent' ? runtime.get('a-wait') : null,
+    });
+
+  const [, officeMark, agentMark] = COACH_MARKS;
+  assert.equal(officeMark.anchor.target, 'office');
+  assert.equal(agentMark.anchor.target, 'agent');
+
+  const office = resolve(officeMark);
+  const person = resolve(agentMark);
+  assert.ok(office, 'mark 2 fell through to the canvas fallback');
+  assert.ok(person, 'mark 3 fell through to the canvas fallback');
+
+  // Neither is the stage. The fallback returns the canvas's own box, so "is
+  // this the whole canvas" is the exact question that separates a mark that
+  // points from a mark that shrugs.
+  for (const box of [office, person]) {
+    assert.ok(box.w < stage.w && box.h < stage.h, 'an anchor is the size of the whole canvas');
+    assert.ok(box.x >= -0.001 && box.y >= -0.001);
+    assert.ok(box.x + box.w <= stage.w + 0.001 && box.y + box.h <= stage.h + 0.001);
+  }
+  // Mark 2 is the office room as the plan draws it, plate band and all.
+  const room = plan.rooms.find((r) => r.kind === 'office');
+  assert.ok(Math.abs(office.w - room.w * scale) < 1e-6);
+  assert.ok(Math.abs(office.h - room.h * scale) < 1e-6);
+  // Mark 3 is a body, and the person it names is standing in the office —
+  // "Click anyone" has to be pointing at somebody the reader can see.
+  assert.ok(person.w < office.w && person.h < office.h);
+  assert.ok(person.x >= office.x - 1 && person.x + person.w <= office.x + office.w + 1);
+  assert.ok(person.y >= office.y - 1 && person.y + person.h <= office.y + office.h + 1);
+});
+
+test('app.js asks the renderer first, and only falls back when it cannot answer', () => {
+  const app = fs
+    .readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
+  const start = app.indexOf('function coachAnchorFor(');
+  assert.notEqual(start, -1, 'coachAnchorFor() not found in app.js');
+  const body = app.slice(start, app.indexOf('\nfunction ', start + 1));
+
+  // The scene is asked before the canvas is measured, and the fallback is
+  // still there for a renderer that failed to load.
+  assert.match(body, /scene\.anchorFor\(anchor\.target, id\)/);
+  assert.ok(
+    body.indexOf('scene.anchorFor') < body.indexOf('arrow: false'),
+    'the canvas fallback is reached before the renderer is asked',
+  );
+  assert.match(body, /arrow: false/);
+  // And `Scene` really does export it, so the preferred path is not dead code.
+  const scene = fs.readFileSync(path.join(ROOT, 'public', 'render', 'scene.js'), 'utf8');
+  assert.match(scene, /\n {2}anchorFor\(target, id\) \{/);
 });
 
 // --------------------------------------------------------------- security
