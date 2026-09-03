@@ -1,6 +1,10 @@
 node_modules/
 *.log
 *.tgz
+
+# The VS Code extension package, built by `npx @vscode/vsce package` in
+# vscode/. Generated from the committed sources; never committed itself.
+*.vsix
 state.json
 state/
 .DS_Store
