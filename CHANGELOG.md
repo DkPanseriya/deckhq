@@ -32,6 +32,17 @@
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
 
+### Fixed
+
+- **Agents teleport to your office instead of walking to it.** The floor plan's signature counts
+  who is waiting, benched and let go, so the product's most important transition — a turn ends and
+  the agent leaves its desk for your office — was also a plan rebuild, and a rebuilt plan seats
+  everybody in one snap. Measured on the demo floor at 10 fps: **one frame of movement, 431,956
+  pixels changed, no walk at all**. The new snapshot is now bridged onto the rebuilt plan by first
+  seating the previous roster where it already was, so agents whose state did not change stay put
+  and the one whose state did change walks — **41 frames, 4.1 seconds**, and nobody interpolates
+  across two different buildings. `docs/DEVIATIONS.md` §80.
+
 ## 1.2.0
 
 The release that can actually be installed. 1.1.0 called itself the first public release and was

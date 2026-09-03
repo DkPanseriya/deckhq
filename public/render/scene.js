@@ -415,6 +415,7 @@ export class Scene {
 
   /** Push a fresh state snapshot ({agents, projects, counts, ...}). */
   setState(snapshot) {
+    const previousAgents = (this._snapshot && this._snapshot.agents) || [];
     this._snapshot = snapshot || { agents: [], projects: [], counts: {} };
     const agents = this._snapshot.agents || [];
     this._agentsById = new Map(agents.map((a) => [a.id, a]));
@@ -430,6 +431,16 @@ export class Scene {
     if (signature !== this._planSignature) {
       this._rebuildPlan(computeTargetAspect(this._viewW, this._viewH));
       this._planSignature = signature;
+      // The signature counts who is waiting, benched and let go, so the very
+      // change that should be seen as a walk — a turn ends and the agent
+      // heads for your office — is also a rebuild, and the runtime snaps the
+      // whole floor on a rebuilt plan (see `sync`). Bridge it: seat everybody
+      // in the new building where they *were*, as one snap, and only then
+      // apply the new snapshot, so the agents whose own state changed walk
+      // from their old seat to their new one and nobody else moves.
+      if (this._plan) {
+        this._runtime.sync(previousAgents, this._plan, assignSeats(this._plan, previousAgents));
+      }
     }
 
     if (this._plan) {
