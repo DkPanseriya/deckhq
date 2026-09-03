@@ -559,6 +559,21 @@ function moveNeedsYouQueue(direction) {
   selectAgent(queue[idx].id);
 }
 
+/**
+ * Step through the agents the floor is not drawing because they went home.
+ *
+ * The list comes from the Scene, which got it from the plan — one answer to
+ * "who went home", not a second copy of the rule living here. Selecting one
+ * opens the panel on it, which is the same surface a click on the floor
+ * would have reached.
+ */
+function selectNextGoneHome() {
+  const ids = scene && typeof scene.goneHomeAgentIds === 'function' ? scene.goneHomeAgentIds() : [];
+  if (ids.length === 0) return;
+  const at = ids.indexOf(selectedId);
+  selectAgent(ids[(at + 1) % ids.length]);
+}
+
 // -------------------------------------------------------------- keyboard
 
 /**
@@ -605,6 +620,15 @@ function handleKeydown(e) {
     case 'b':
     case 'B':
       panel.performAction('bench');
+      break;
+    // The floor stops drawing a benched agent that has been quiet for longer
+    // than `settings.goneHomeDays` (WP-50 / `08` B6, "N went home" on the
+    // lounge plate). Nothing about their state changed — only whether they are
+    // drawn — so they stay reachable: `g` selects them one at a time, newest
+    // activity first, and opens the panel on each exactly as a click would.
+    case 'g':
+    case 'G':
+      selectNextGoneHome();
       break;
     // The review card's weighted actions (docs/plan/05-GUI-UX-SPEC.md §4.2):
     // 1 focuses the composer, 2 approves (a send), 3 benches. The panel

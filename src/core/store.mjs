@@ -49,6 +49,10 @@ export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
  * @property {boolean} showLetGo
  * @property {ResumeTarget} resumeIn
  * @property {string} approveText   what the panel's `2 Approve` sends
+ * @property {number} goneHomeDays  days of no activity after which a benched
+ *                                  agent is not DRAWN on the floor. A display
+ *                                  filter only — see `public/render/plan.js`'s
+ *                                  `isGoneHome`. 0 disables it.
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -60,10 +64,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showLetGo: false,
   resumeIn: 'terminal',
   approveText: 'Yes, go ahead.',
+  goneHomeDays: 7,
 });
 
 /** An approval is one line the user would have typed; anything longer is a reply. */
 const MAX_APPROVE_TEXT = 500;
+
+/**
+ * A gone-home window past a year is indistinguishable from "never", and a
+ * negative one is meaningless. `0` is the honest way to say "draw everybody".
+ */
+const MAX_GONE_HOME_DAYS = 365;
 
 /**
  * How long `save()` waits for further mutations before it writes. Exported so
@@ -111,6 +122,20 @@ function sanitizeApproveText(v) {
   return s ? s.slice(0, MAX_APPROVE_TEXT) : DEFAULT_SETTINGS.approveText;
 }
 
+/**
+ * How many days of silence make a benched agent stop being drawn. Clamped the
+ * same way as the stall window: an out-of-range or non-numeric value is a
+ * hand-edited state.json or a stale build, and falls back to the default
+ * rather than reaching the renderer as a NaN that hides everybody.
+ * @param {unknown} v
+ * @returns {number}
+ */
+function clampGoneHomeDays(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.goneHomeDays;
+  return Math.min(MAX_GONE_HOME_DAYS, Math.max(0, n));
+}
+
 function defaultData() {
   return {
     version: 1,
@@ -141,6 +166,7 @@ function normalize(parsed) {
   settings.stallWindowMs = clampStallWindow(settings.stallWindowMs);
   settings.resumeIn = sanitizeResumeIn(settings.resumeIn);
   settings.approveText = sanitizeApproveText(settings.approveText);
+  settings.goneHomeDays = clampGoneHomeDays(settings.goneHomeDays);
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -279,6 +305,9 @@ export class Store {
     }
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'approveText')) {
       next.approveText = sanitizeApproveText(patch.approveText);
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'goneHomeDays')) {
+      next.goneHomeDays = clampGoneHomeDays(patch.goneHomeDays);
     }
     this._data.settings = next;
     this.save();

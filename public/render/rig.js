@@ -91,6 +91,44 @@ const LEG_LEN_STAND = 0.55,
 const SELECTION_RING_R = 1.35;
 const RING_BASE_R = 1.15;
 
+/**
+ * A standing character's height in plan units, crown to sole: the top of the
+ * head (`HEAD_OFFSET_Y - HEAD_R`) down to the far end of a leg at rest, plus
+ * the round cap on the leg stroke.
+ *
+ * Exported because `05-GUI-UX-SPEC.md` §6.2's "a character body is never under
+ * 16 px" is a claim about THIS number times the character scale, and a test
+ * that checks it must measure what the rig actually draws rather than a second
+ * estimate of it (docs/DEVIATIONS.md §16, §35, §38: two representations of the
+ * same thing, allowed to disagree).
+ */
+export const BODY_HEIGHT_U = HEAD_R - HEAD_OFFSET_Y + HIP_OFFSET_Y + LEG_LEN_STAND + LEG_WIDTH / 2;
+
+/**
+ * Per-element legibility floors, in screen pixels (05-GUI-UX-SPEC.md §6.2's
+ * table). They are floors on the ELEMENT, not on the scale: the label is set
+ * in the larger of its natural size and 11 px, which is what keeps a name
+ * readable on a floor drawn small without inflating the people carrying it.
+ *
+ * `body` is the one floor the rig cannot enforce on its own — it is a floor on
+ * `u`, and `u` is the caller's — so `scene.js` applies it in
+ * `_characterScale()` and this object is where both halves agree on the number.
+ */
+export const LEGIBILITY_MIN_PX = Object.freeze({ body: 16, label: 11, icon: 12, badge: 13 });
+
+const LABEL_MIN_PX = LEGIBILITY_MIN_PX.label;
+const ICON_MIN_PX = LEGIBILITY_MIN_PX.icon;
+const BADGE_MIN_PX = LEGIBILITY_MIN_PX.badge;
+
+/**
+ * The point size a name label is set in at character scale `u`. Exported so
+ * the legibility test measures the size the rig actually uses.
+ * @param {number} u
+ */
+export function labelFontSize(u) {
+  return Math.max(LABEL_MIN_PX, u * 0.62);
+}
+
 const SIDES = [1, -1]; // right, left — a module constant, never reallocated
 
 // -------------------------------------------------------------------- pose
@@ -735,9 +773,9 @@ function drawCheckIcon(ctx, cx, topY, size, color) {
   ctx.stroke();
 }
 
-/** Minimum 10px tall, high-contrast vector icons — no fonts, no emoji. */
+/** High-contrast vector icons — no fonts, no emoji. Never under ICON_MIN_PX. */
 function drawIcon(ctx, ox, oy, u, kind, color, ringPhase) {
-  const size = Math.max(10, u * 0.9);
+  const size = Math.max(ICON_MIN_PX, u * 0.9);
   const topY = oy - u * 1.05 - size;
   if (kind === 'hand') {
     const pulse = Math.sin(ringPhase * TAU) * 0.5 + 0.5;
@@ -836,10 +874,13 @@ function drawSelectionRing(ctx, ox, oy, u) {
 }
 
 function drawBadge(ctx, ox, oy, u, text, color) {
-  ctx.font = monoFont(Math.max(10, u * 0.7));
+  const fontPx = Math.max(BADGE_MIN_PX, u * 0.7);
+  ctx.font = monoFont(fontPx);
   const padX = u * 0.35;
   const w = ctx.measureText(text).width + padX * 2;
-  const h = u * 1.05;
+  // The pill grows with its text, so a floored font must not be drawn into an
+  // unfloored box: at a tight fit scale the glyphs stood proud of the badge.
+  const h = Math.max(u * 1.05, fontPx * 1.5);
   const topY = oy - u * 2.35 - h;
   ctx.fillStyle = color;
   roundRectFill(ctx, ox - w / 2, topY, w, h, h * 0.32);
@@ -874,7 +915,7 @@ function drawBadge(ctx, ox, oy, u, text, color) {
  */
 export function labelBox(ctx, ox, oy, u, rawLabel) {
   const text = truncateLabel(rawLabel);
-  const fontPx = Math.max(9, u * 0.62);
+  const fontPx = labelFontSize(u);
   ctx.font = sansFont(fontPx);
   const textW = ctx.measureText(text).width;
   const padX = Math.max(3, u * 0.18);
@@ -909,7 +950,7 @@ function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.font = sansFont(Math.max(9, u * 0.62)); // labelBox already set it; re-assert before drawing
+  ctx.font = sansFont(labelFontSize(u)); // labelBox already set it; re-assert before drawing
   ctx.lineWidth = Math.max(2, u * 0.16);
   ctx.strokeStyle = 'rgba(255,253,249,0.95)';
   ctx.strokeText(box.text, ox, box.top + dy);

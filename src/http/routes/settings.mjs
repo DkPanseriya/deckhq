@@ -18,6 +18,7 @@ const ALLOWED = new Set([
   'onboarded',
   'resumeIn',
   'approveText',
+  'goneHomeDays',
 ]);
 
 /**
@@ -53,6 +54,9 @@ export function register(router, ctx) {
       // Same for `approveText`: only a string is a candidate. The store trims,
       // caps and falls back to the default for a blank one.
       if (k === 'approveText' && typeof v !== 'string') continue;
+      // And `goneHomeDays`: only a finite number is a candidate. The store
+      // clamps it to [0, 365] and falls back to the default for anything else.
+      if (k === 'goneHomeDays' && !Number.isFinite(Number(v))) continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');
