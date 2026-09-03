@@ -8681,3 +8681,59 @@ Node/browser split; 0 after the fixes above. Suite unchanged at 1,520. Goldens
 **0 px moved at all** on all four populations — which is the whole point: every
 fix above is a comment, a type annotation, one duplicate object key and one
 provably dead line.
+
+### F21's other half, part one: `plan.js`, 3,255 lines → seven modules
+
+| file | lines | what it is |
+|---|---|---|
+| `plan.js` | 962 | `buildPlan`, the population rule, and the re-exports |
+| `plan-service.js` | 876 | the office and the lounge, plus `seatOffice` |
+| `plan-rooms.js` | 505 | a project's room, the idle strip, the two plate formatters |
+| `plan-units.js` | 482 | every shape and every dimension |
+| `plan-packing.js` | 302 | `flowBlocks`, `shelfPack`, `squarify`, `tileRows` |
+| `plan-nav.js` | 184 | walls, corridor centrelines, doors |
+| `plan-anchors.js` | 162 | `resolveAnchors`, `translateContents`, the table sizes |
+
+**Not one function body changed.** The split is a move: whole declarations,
+their doc comments with them, from one file to seven. Two things prove it
+rather than assert it:
+
+1. **91 of 91.** A verification pass took every top-level declaration in the
+   old file, normalised away whitespace and the added `export` keyword, and
+   looked for it in the new modules. All ninety-one appear, character for
+   character, in **exactly one** of them.
+2. **The goldens moved 0 px.** All four populations, `0 px moved at all` — not
+   "within tolerance", not one pixel different. That is also the proof that the
+   static server serves the six new files: had any of them 404'd, `scene.js`'s
+   import of `plan.js` would have failed and the floor would have been blank.
+
+**Nothing outside `plan.js` had to change.** Every name the old module exported
+is re-exported from the same path, so `scene.js`, `minifloor.js` and six test
+files import exactly what they imported before. `test/unit/plan.test.mjs` gains
+a test that lists those sixteen names, because a re-export is easy to drop by
+accident and nothing else in the suite would notice.
+
+The typedefs went to `plan-units.js` and are re-exported too, so
+`import('./plan.js').Room` — which `agents.js`, `scene.js` and `backdrop.js`
+all write — still resolves.
+
+**One comment moved as well as its code.** The `NavLine` typedef was declared
+*inside* `buildNavLines`'s own doc block. That is why §121 defect 3 was
+possible: `agents.js` referenced `NavLine` in five annotations with nothing
+defining it. It is a shape, so it is in `plan-units.js` with the other shapes,
+and the prose that surrounded it stayed on `buildNavLines`.
+
+**Why seven and not five.** `plan-units.js` exists because a dimension shared
+by four modules needs one definition, not four; without it the split would have
+duplicated constants, which is the class of bug this repository keeps having.
+`plan-service.js` is separate from `plan-rooms.js` because the office and the
+lounge are one column of the building, sized and stacked together, and putting
+them with the project rooms would have made a 1,300-line file — over the
+ceiling this package set itself.
+
+**`buildPlan` was not split, and that is deliberate.** It is 733 lines and
+thirteen of those lines are closures over its own locals — `measureService`,
+`bandsOf`, `layBand`, `layWorkingFloor`, `workingShape`, `envelopeFor`,
+`place`. Lifting any of them out means giving it an explicit parameter list,
+which means changing a function body, which is the one thing this package
+promised not to do. It is the assembly step; it reads top to bottom; it stays.

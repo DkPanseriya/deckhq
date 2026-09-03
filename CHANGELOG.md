@@ -557,6 +557,19 @@
   `MK1.2j1` — so a busy week does not drain a project's numbering or the name pool. All the
   parsing is in the adapter, as always. `docs/DEVIATIONS.md` §117.
 
+- **`npm run typecheck` — `tsc --noEmit --checkJs` over the JSDoc that was already there.** Two
+  projects, because the two sides of the static-file boundary do not share a platform: the root
+  `tsconfig.json` covers `src/`, `scripts/`, `plugin/`, `vscode/` and `bin/` with no DOM, and
+  `public/tsconfig.json` covers the browser with no `process` and no `Buffer` — so `public/`
+  reaching for a Node global is a type error now rather than a code review. CI runs it on Ubuntu
+  once, after lint, and `prepublishOnly` runs it too. One dev dependency, `typescript`; Node and
+  the VS Code API are declared by hand in `types/` rather than installed, with the cost of that
+  written at the top of the file. **Zero `@ts-ignore` in the tree.** It found thirty-two places
+  where the documentation and the code had drifted apart, including the one
+  `docs/plan/01-AUDIT.md` F21 named: `placement()` in `src/core/model.mjs` reads `subagent` and
+  its signature did not say so, while `derivePlacement()` — its copy on the other side of the
+  boundary — always did. `docs/DEVIATIONS.md` §121.
+
 ### Changed
 
 - **The building is the size of what is in it.** The floor drew the right rooms and then measured
@@ -720,18 +733,14 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   before the server stops. A `SIGKILL` of the daemon itself still runs no JavaScript and leaves
   its children reparented; that case is named rather than claimed.
 
-- **`npm run typecheck` — `tsc --noEmit --checkJs` over the JSDoc that was already there.** Two
-  projects, because the two sides of the static-file boundary do not share a platform: the root
-  `tsconfig.json` covers `src/`, `scripts/`, `plugin/`, `vscode/` and `bin/` with no DOM, and
-  `public/tsconfig.json` covers the browser with no `process` and no `Buffer` — so `public/`
-  reaching for a Node global is a type error now rather than a code review. CI runs it on Ubuntu
-  once, after lint, and `prepublishOnly` runs it too. One dev dependency, `typescript`; Node and
-  the VS Code API are declared by hand in `types/` rather than installed, with the cost of that
-  written at the top of the file. **Zero `@ts-ignore` in the tree.** It found thirty-two places
-  where the documentation and the code had drifted apart, including the one
-  `docs/plan/01-AUDIT.md` F21 named: `placement()` in `src/core/model.mjs` reads `subagent` and
-  its signature did not say so, while `derivePlacement()` — its copy on the other side of the
-  boundary — always did. `docs/DEVIATIONS.md` §121.
+- **`public/render/plan.js` was 3,255 lines and is now seven modules.** `plan-units` (the shapes
+  and every dimension), `plan-packing` (flow, shelf, squarify, tileRows), `plan-anchors`,
+  `plan-rooms` (a project's room and the idle strip), `plan-service` (the office and the lounge)
+  and `plan-nav` (walls, corridors, doors) — with `plan.js` left as the assembly step, re-exporting
+  all sixteen names it exported before, so nothing outside it had to change. Not one function body
+  moved a character: a verification pass found all ninety-one top-level declarations verbatim in
+  exactly one module each, and the goldens moved **0 px** on all four populations.
+  `docs/DEVIATIONS.md` §121.
 
 ### Fixed
 
