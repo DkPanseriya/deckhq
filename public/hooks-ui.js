@@ -73,6 +73,25 @@ function deliveryNote(adapter) {
 }
 
 /**
+ * The one line the screen says when a managed policy has switched these hooks
+ * off (WP-56). The settings file is correct, the port is correct and nothing
+ * arrives — so the screen names the key and the file rather than leaving the
+ * user to conclude the install failed, and says plainly that installing again
+ * changes nothing, because the button above it would otherwise imply it might.
+ *
+ * @param {{key:string, file:string}|null|undefined} blocked
+ * @returns {string|null}
+ */
+export function policyNote(blocked) {
+  if (!blocked || !blocked.key || !blocked.file) return null;
+  return (
+    `A managed policy on this machine sets ${blocked.key} in ${blocked.file}, so Claude Code ` +
+    'does not run these hooks. Installing them again will not change that — whoever manages ' +
+    'this machine sets that key. DeckHQ falls back to reading transcripts until it changes.'
+  );
+}
+
+/**
  * @param {object} opts
  * @param {(message:string, opts?:{isError?:boolean}) => void} opts.toast
  */
@@ -162,6 +181,16 @@ export function createHooksUI(opts) {
         `${adapter.port}. Nothing is reaching it, so state is being inferred instead. ` +
         'Reinstall below to point them at this daemon.';
       section.appendChild(stale);
+    }
+
+    // The other failure that looks exactly like a healthy install, and the one
+    // no reinstall can fix (WP-56).
+    const policy = policyNote(adapter.blockedByPolicy);
+    if (policy) {
+      const blocked = document.createElement('p');
+      blocked.className = 'hooks-error';
+      blocked.textContent = policy;
+      section.appendChild(blocked);
     }
 
     if (!adapter.supported) {
