@@ -24,6 +24,7 @@ import {
   computeFitScale,
   resolveLabelCollisions,
   characterScaleFor,
+  computeAnchor,
   CHAR_MIN_PX_PER_UNIT,
 } from '../../public/render/scene.js';
 import { buildPlan } from '../../public/render/plan.js';
@@ -33,6 +34,7 @@ import {
   labelFontSize,
   BODY_HEIGHT_U,
   LEGIBILITY_MIN_PX,
+  SELECTION_RING_R,
 } from '../../public/render/rig.js';
 
 // ------------------------------------------------------- world <-> screen
@@ -818,6 +820,125 @@ test('a character is never under 16 px of body, and its label never under 11 px'
       );
     }
   }
+});
+
+// --------------------------------------------- anchors: pointing at the floor
+//
+// `computeAnchor` is the inverse of the scene's hit test: a thing in, the box
+// it occupies out. WP-13's coach marks point at the office and at one person
+// with it, and the mini-floor's own camera is built on the same arithmetic, so
+// the contract that matters is that it never invents a rect for something the
+// floor is not drawing.
+
+/** A camera in the shape `worldToScreen` expects. */
+function cameraAt(scale, panX = 0, panY = 0) {
+  return { zoom: scale / 14, panX, panY, U: 14 };
+}
+
+/** The minimum plan `computeAnchor` reads: rooms, and who is hidden. */
+function stubPlan() {
+  return {
+    rooms: [
+      { kind: 'office', id: '__office__', x: 0, y: 0, w: 30, h: 20 },
+      { kind: 'corridor', id: '__spine__', x: 30, y: 0, w: 4, h: 60 },
+      { kind: 'project', id: 'p0', x: 34, y: 0, w: 22, h: 18 },
+      { kind: 'project', id: 'p1', x: 34, y: 18, w: 22, h: 18 },
+      { kind: 'lounge', id: '__lounge__', x: 0, y: 20, w: 30, h: 40 },
+    ],
+    hidden: new Set(['gone-home-agent']),
+  };
+}
+
+test('an anchor is the room exactly where the camera puts it', () => {
+  const plan = stubPlan();
+  const scale = 12;
+  const view = { plan, camera: cameraAt(scale, 40, 25), scale, charScale: scale };
+
+  assert.deepEqual(computeAnchor('office', undefined, view), {
+    x: 40,
+    y: 25,
+    w: 30 * scale,
+    h: 20 * scale,
+  });
+  assert.deepEqual(computeAnchor('room', 'p1', view), {
+    x: 40 + 34 * scale,
+    y: 25 + 18 * scale,
+    w: 22 * scale,
+    h: 18 * scale,
+  });
+  // A numeric id from a snapshot and the string in the plan are the same room.
+  assert.deepEqual(computeAnchor('room', 'p0', view), computeAnchor('room', 'p0', view));
+});
+
+test('an agent’s anchor is the box its body is drawn in, at the character scale', () => {
+  const plan = stubPlan();
+  const scale = 6;
+  const charScale = characterScaleFor(scale); // the floor is small: people stop shrinking
+  assert.ok(charScale > scale, 'the fixture is not exercising the decoupled scale');
+  const record = { id: 'a1', x: 10, y: 8, initialised: true };
+  const view = { plan, camera: cameraAt(scale), scale, charScale, record };
+
+  const box = computeAnchor('agent', 'a1', view);
+  // Feet on the floor at the world point, body running up from there.
+  assert.equal(box.x + box.w / 2, 10 * scale);
+  assert.equal(box.y + box.h, 8 * scale);
+  assert.equal(box.h, BODY_HEIGHT_U * charScale);
+  assert.equal(box.w, 2 * SELECTION_RING_R * charScale);
+  // Whatever else changes, the box is at least as tall as the legibility floor.
+  assert.ok(box.h >= LEGIBILITY_MIN_PX.body);
+});
+
+test('nothing the floor is not drawing gets an anchor', () => {
+  const plan = stubPlan();
+  const view = {
+    plan,
+    camera: cameraAt(12),
+    scale: 12,
+    charScale: 12,
+    record: { id: 'x', x: 1, y: 1, initialised: true },
+  };
+
+  // No plan at all — the floor has not been built yet.
+  assert.equal(computeAnchor('office', undefined, { ...view, plan: null }), null);
+  assert.equal(computeAnchor('office', undefined, { ...view, camera: null }), null);
+  // A room that is not on this floor, and a room of the wrong kind.
+  assert.equal(computeAnchor('room', 'not-a-project', view), null);
+  assert.equal(computeAnchor('room', '__lounge__', view), null);
+  assert.equal(computeAnchor('room', undefined, view), null);
+  // An agent with no record yet, and one seated but never initialised.
+  assert.equal(computeAnchor('agent', 'a1', { ...view, record: null }), null);
+  assert.equal(
+    computeAnchor('agent', 'a1', { ...view, record: { x: 1, y: 1, initialised: false } }),
+    null,
+  );
+  assert.equal(computeAnchor('agent', undefined, view), null);
+  // An agent the plan hides: they have a position and no presence.
+  assert.equal(computeAnchor('agent', 'gone-home-agent', view), null);
+  // An unknown target is not an error and not a guess.
+  assert.equal(computeAnchor('lounge', undefined, view), null);
+});
+
+test('an anchor lands on the same room a real plan draws, at fit', () => {
+  const now = 1_800_000_000_000;
+  const projects = [{ id: 'p0', name: 'deckhq', sessionCount: 2 }];
+  const agents = [
+    { id: 'a', projectId: 'p0', activityState: 'working', ackState: 'active', lastActivityAt: now },
+  ];
+  const plan = buildPlan(projects, agents, { targetAspect: 1.6, now });
+  const scale = computeFitScale(plan.width, plan.height, 1600, 900);
+  const view = { plan, camera: cameraAt(scale), scale, charScale: characterScaleFor(scale) };
+
+  const office = computeAnchor('office', undefined, view);
+  const room = computeAnchor('room', 'p0', view);
+  assert.ok(office && room);
+  // Both are inside the stage the fit scale was computed for, and they do not
+  // overlap — the office is in the service column, the room across the spine.
+  for (const box of [office, room]) {
+    assert.ok(box.x >= -0.001 && box.y >= -0.001);
+    assert.ok(box.x + box.w <= 1600 + 0.001);
+    assert.ok(box.y + box.h <= 900 + 0.001);
+  }
+  assert.ok(office.x + office.w <= room.x + 0.001, 'the office is not beside the room');
 });
 
 test('the character scale is a floor on the world scale, not a replacement for it', () => {
