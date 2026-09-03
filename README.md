@@ -1,22 +1,29 @@
 # DeckHQ
 
-**Your AI team, on one office floor.**
+**Every AI coding session on your machine, on one office floor.**
 
-If you are building more than one thing at a time, your agents are scattered across a dozen
-terminals in a dozen repositories. Nothing shows you all of them at once: who is working, who is
-blocked on a question, who finished twenty minutes ago and is waiting on you, who is sitting idle
-and could take the next job, and which project is quietly burning the most tokens. You run a
-workforce by alt-tabbing and remembering.
-
-DeckHQ puts that workforce in one room — literally. Every project is a room, every session is a
-person at a desk, and you run the floor the way you would run an actual office: take in the whole
-team at a glance, walk over to anyone and read what they are doing, reply, hand them the next
-task, send them to the lounge when there is nothing for them, let them go when the work is done.
-
-It is for people who ship several projects at once and want their AI team to be as legible as a
-room full of people would be.
+```bash
+npx deckhq
+```
 
 ![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](docs/media/floor.png)
+
+Node 18+. No build step, no runtime dependencies, no account, no network calls of any kind.
+
+---
+
+## What it is for
+
+If you are building more than one thing at a time, your agents are scattered across a dozen
+terminals in a dozen repositories. `claude agents` tells you what is **running**. It cannot tell
+you what is **owed** — the moment a session finishes its turn and exits, it leaves that list, and
+nothing records that it asked you a question twenty minutes ago.
+
+DeckHQ reads every transcript on disk, so it has all of them. Every project is a room, every
+session is a person at a desk, and you run the floor the way you would run an actual office: take
+in the whole team at a glance, walk over to anyone and read what they are doing, reply, hand them
+the next task, send them to the lounge when there is nothing for them, let them go when the work
+is done.
 
 **Read it in one glance.** The header counts what needs you. Your office, top left, holds the
 sessions that finished and are waiting on your reply — oldest first, with how long they have been
@@ -24,14 +31,6 @@ waiting. Each project is a room with its own session count and token spend on th
 people in it are that project's sessions: typing if they are working, **hand up** if they are
 blocked on a question, slumped if they have gone quiet. The lounge holds agents you have reviewed
 and benched — available capacity, resting, ready for the next job.
-
-```bash
-npx deckhq
-```
-
-That is the whole install. Node 18+, no build step, no runtime dependencies, no account.
-
----
 
 ## The one rule
 
@@ -84,6 +83,34 @@ so there is nothing to hunt for in a menu.
 
 ![The side panel: a session's conversation, its token and cost figures, and the acknowledge, bench, let go and resume actions](docs/media/panel.png)
 
+## `deckhq doctor`
+
+One command that says what DeckHQ actually knows about this machine, and whether the parts that
+have to be working are working.
+
+```
+$ deckhq doctor
+
+  claude code     available
+  transcripts     67 sessions across 16 projects
+  running now     5   (claude code's own agent view reports 5)
+  on the floor    67  ← 62 sessions have already finished; the agent view no longer lists them
+  codex           not installed
+  waiting on you  0   (2 waiting, all still running)
+  hooks           installed, port 4400, 39 events, last 1m ago
+  state           ~/.deckhq/state.json, writable
+  egress          none. no outbound sockets.
+```
+
+Note what the fifth and sixth rows are doing. Two sessions want something, and DeckHQ counts
+neither as work the runtime has forgotten — **because both are still running, so its own view
+lists them too**. It reports the number it can substantiate, which is the only kind worth
+reporting.
+
+`--json` gives the same data for scripting. `--capture-proof` writes a PNG of the comparison.
+Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
+listening on leaves a settings file that looks perfect while every event goes nowhere.
+
 ## What it reads from your disk
 
 Everything is read locally and nothing leaves the machine.
@@ -101,8 +128,11 @@ Everything is read locally and nothing leaves the machine.
   `DECKHQ_STATE_DIR` to put it somewhere else. It is deliberately **not** stored beside the
   package: `npx` owns that directory and may replace it on any version bump, which would throw
   your queue away silently.
+- `~/.deckhq/cache/` — parsed session summaries, so a restart does not re-read every transcript on
+  disk. Derived and disposable; delete it any time and it rebuilds.
 - `~/.deckhq/backups/` — a copy of your Claude Code settings file, taken before DeckHQ ever
   modifies it.
+- `~/.deckhq/snapshots/` — only what `--capture-proof` writes, when you ask for it.
 - `~/.claude/settings.json` — **only with your explicit consent**, and only a tagged hook block.
 
 If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
@@ -137,7 +167,8 @@ undelivered install is visible instead of assumed to be fine.
   reporting, no fonts or scripts from a CDN. The only sockets are the loopback listener and the
   runtime processes DeckHQ starts on your behalf.
 - Your conversation content never leaves the machine, and is rendered as text, never as HTML.
-- No accounts, no billing, no licence checks. MIT licensed.
+- No accounts, no billing, no licence checks. MIT licensed, zero dependencies — you can read the
+  whole thing in an afternoon, and there is nothing underneath it to read.
 
 ## Honest limits
 
@@ -178,15 +209,16 @@ instead of walking, clips hold a representative pose, and the floor stays fully 
 ```bash
 npx deckhq --port 4400    # a different loopback port
 npx deckhq --no-open      # start the daemon without opening a browser
+npx deckhq doctor         # the environment report above
 npx deckhq --version
 ```
 
-| Environment variable | Effect                                             |
-| -------------------- | -------------------------------------------------- |
-| `DECKHQ_STATE_DIR`   | Where state and backups live. Default `~/.deckhq`  |
-| `DECKHQ_PORT`        | Default port, if `--port` is not given             |
-| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude` |
-| `DECKHQ_DEBUG`       | Verbose logging                                    |
+| Environment variable | Effect                                                   |
+| -------------------- | -------------------------------------------------------- |
+| `DECKHQ_STATE_DIR`   | Where state, cache and backups live. Default `~/.deckhq` |
+| `DECKHQ_PORT`        | Default port, if `--port` is not given                   |
+| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`       |
+| `DECKHQ_DEBUG`       | Verbose logging                                          |
 
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —
 the whole point is that debts accumulate while you are not looking.
@@ -214,6 +246,7 @@ npm install     # dev tooling only; the product itself has zero runtime dependen
 npm start
 npm test        # node --test, no test framework
 npm run lint
+npm run demo    # a synthetic floor in a temp directory, for screenshots
 ```
 
 CI runs lint, format check and the full suite on Windows, macOS and Linux against Node 18, 20 and 22.
@@ -222,17 +255,16 @@ Layout, contracts and the reasoning behind every decision are in [`docs/`](docs/
 with [`docs/01-PRODUCT.md`](docs/01-PRODUCT.md) for what this is and
 [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md) for how it works.
 [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md) records every place the build departed from the
-blueprint and why, including the budgets it missed.
+blueprint and why, including the budgets it missed and the claims that did not survive
+measurement.
 
-### Contributing
+## Contributing
 
-Issues and pull requests are welcome. Two things to know before you open one:
+Issues and pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first — it leads
+with the two things that get a change rejected regardless of how good it is: **the invariant**
+above, and **network egress of any kind**.
 
-1. **The invariant in `docs/01-PRODUCT.md` §2 is not negotiable.** No observed event may clear a
-   user-owned state. There are tests named `INVARIANT:` that exist to enforce this; a change that
-   needs them relaxed is the wrong change.
-2. **No network egress.** No analytics, no update checks, no CDN assets, no telemetry of any kind.
-   A dependency that phones home will not be merged.
+Security policy in [`SECURITY.md`](SECURITY.md).
 
 ## Licence
 
