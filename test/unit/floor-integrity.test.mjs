@@ -20,13 +20,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildPlan } from '../../public/render/plan.js';
+import {
+  buildPlan,
+  floorPopulation,
+  isGoneHome,
+  GONE_HOME_DAYS,
+  DIRECTORY_MAX_H,
+  PLATE_BAND,
+} from '../../public/render/plan.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
 
 const EPS = 1e-6;
 
 /** How far from square a project room may be before it reads as a splinter. */
 const PROJECT_ASPECT_BAND = 2.6;
+
+/**
+ * A fixed clock. Every gone-home decision is `now - lastActivityAt` against a
+ * window, so a fixture that used the real clock would be a different floor
+ * every time it ran.
+ */
+const NOW = 1_800_000_000_000;
+const DAY = 24 * 60 * 60 * 1000;
 
 /** @param {string} id @param {object} over */
 function agent(id, over = {}) {
@@ -36,16 +51,24 @@ function agent(id, over = {}) {
     activityState: 'working',
     ackState: 'active',
     reviewSince: null,
+    // Recent by default: an agent the floor has no reason to hide.
+    lastActivityAt: NOW - 60_000,
     ...over,
   };
 }
 
 /**
  * A population with a given mix, plus the projects to match.
- * @param {{projects?: number[], waiting?: number, benched?: number, letGo?: number}} spec
+ *
+ * `idleProjects` are repos with sessions and nobody active — the shape WP-50
+ * turns into directory lines. `goneHome` are benched agents whose last
+ * activity is well past the window, which the lounge must not size itself to.
+ * @param {{projects?: number[], waiting?: number, benched?: number,
+ *   letGo?: number, idleProjects?: number[], goneHome?: number}} spec
  */
 function floor(spec) {
   const sizes = spec.projects ?? [3];
+  const idleSizes = spec.idleProjects ?? [];
   const agents = [];
   const projects = sizes.map((n, i) => ({
     id: `p${i}`,
@@ -59,6 +82,33 @@ function floor(spec) {
       agents.push(agent(`p${i}-${k}`, { projectId: `p${i}` }));
     }
   });
+  idleSizes.forEach((n, i) => {
+    projects.push({
+      id: `idle${i}`,
+      name: `idle${i}`,
+      sessionCount: n,
+      tokens: 500 * (i + 1),
+      needsYou: 0,
+    });
+    for (let k = 0; k < n; k++) {
+      agents.push(
+        agent(`idle${i}-${k}`, {
+          projectId: `idle${i}`,
+          activityState: 'ended',
+          lastActivityAt: NOW - (i + 2) * DAY,
+        }),
+      );
+    }
+  });
+  for (let k = 0; k < (spec.goneHome ?? 0); k++) {
+    agents.push(
+      agent(`gh${k}`, {
+        ackState: 'benched',
+        activityState: 'ended',
+        lastActivityAt: NOW - (GONE_HOME_DAYS + 3) * DAY,
+      }),
+    );
+  }
   for (let k = 0; k < (spec.waiting ?? 0); k++) {
     agents.push(agent(`w${k}`, { activityState: 'for_review', reviewSince: 1_000_000 + k * 1000 }));
   }
@@ -84,6 +134,20 @@ const POPULATIONS = [
   { projects: [8, 2], benched: 7, waiting: 4 },
   { projects: [21, 5, 3, 1], benched: 12, waiting: 9, letGo: 6 },
   { projects: [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4], benched: 37, waiting: 25, letGo: 17 },
+  // WP-50's own shapes: idle repos that must become directory lines, and a
+  // benched population most of which has gone home.
+  { projects: [1], idleProjects: [3, 1, 1], benched: 2 },
+  { projects: [2, 1], idleProjects: [5, 4, 3, 2, 2, 1, 1, 1], benched: 4, goneHome: 20 },
+  { projects: [], idleProjects: [2, 1], benched: 1, goneHome: 6 },
+  {
+    // The reference machine's shape: one active repo, seventeen idle ones,
+    // and a lounge whose benched population is mostly gone home.
+    projects: [3],
+    idleProjects: Array.from({ length: 17 }, (_, i) => (i % 3) + 1),
+    benched: 8,
+    waiting: 2,
+    goneHome: 39,
+  },
 ];
 
 const ASPECTS = [1.2, 1.6, 1.78, 2.06, 2.2];
@@ -98,7 +162,7 @@ test('every prop resolves inside the room it belongs to, at every population and
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
     for (const targetAspect of ASPECTS) {
-      const plan = buildPlan(projects, agents, { targetAspect });
+      const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
       for (const room of plan.rooms) {
         for (const prop of room.props || []) {
           assert.ok(
@@ -123,7 +187,7 @@ test("the reception's free-standing furniture stays with its wall furniture", ()
   // and the rug they surround stranded in the middle of a much wider room.
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
     const rug = office.props.find((p) => p.kind === 'rug');
     const sofas = office.props.filter((p) => p.kind === 'sofa');
@@ -145,7 +209,7 @@ test('rooms tile the envelope exactly and never overlap, at every aspect', () =>
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
     for (const targetAspect of ASPECTS) {
-      const plan = buildPlan(projects, agents, { targetAspect });
+      const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
       let area = 0;
       for (const r of plan.rooms) {
         area += r.w * r.h;
@@ -178,13 +242,20 @@ test('every agent on the floor has a place of its own', () => {
   // population. Both now size themselves to their occupants.
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const seats = assignSeats(plan, agents);
 
-    // Archived sessions are off the floor and get no place at all; everybody
-    // still in play gets one of their own.
-    const onFloor = agents.filter((a) => a.ackState !== 'let_go');
+    // Archived sessions are off the floor and get no place at all, and nor
+    // does anyone the plan hides — an agent who went home, or one at a desk in
+    // a project with no room. Everybody the floor DRAWS gets a place of their
+    // own; that is what `plan.hidden` exists to keep honest.
+    const onFloor = agents.filter((a) => a.ackState !== 'let_go' && !plan.hidden.has(a.id));
     assert.equal(seats.size, onFloor.length, 'every agent on the floor must be given a place');
+    for (const a of agents) {
+      if (plan.hidden.has(a.id)) {
+        assert.ok(!seats.has(a.id), `${a.id} is hidden and was still given a seat`);
+      }
+    }
 
     const seen = new Map();
     for (const [id, seat] of seats) {
@@ -201,7 +272,7 @@ test('every agent on the floor has a place of its own', () => {
 test('every agent stands inside the room its placement names', () => {
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const seats = assignSeats(plan, agents);
     const roomFor = (a) => {
       const placement = derivePlacement(a);
@@ -213,6 +284,7 @@ test('every agent stands inside the room its placement names', () => {
     };
     for (const a of agents) {
       if (a.ackState === 'let_go') continue; // off the floor entirely
+      if (plan.hidden.has(a.id)) continue; // went home, or a desk with no room
       const seat = seats.get(a.id);
       const room = roomFor(a);
       assert.ok(room, `${a.id}: no room for placement ${derivePlacement(a)}`);
@@ -231,7 +303,7 @@ test('every agent stands inside the room its placement names', () => {
 
 test('the waiting queue is seated oldest first, one to a seat', () => {
   const { projects, agents } = floor({ projects: [2], waiting: 9 });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const seats = assignSeats(plan, agents);
   const waiting = agents
     .filter((a) => a.activityState === 'for_review')
@@ -253,12 +325,12 @@ test('a plan rebuild snaps the floor rather than marching everyone across it', (
   // building it was never standing in. On a window resize that was the whole
   // population walking at once.
   const { projects, agents } = floor({ projects: [6, 3], benched: 4, waiting: 2 });
-  const wide = buildPlan(projects, agents, { targetAspect: 2.2 });
+  const wide = buildPlan(projects, agents, { targetAspect: 2.2, now: NOW });
   const runtime = new AgentRuntime();
   runtime.sync(agents, wide, assignSeats(wide, agents));
   for (const rec of runtime.all()) assert.equal(rec.path.length, 0, 'first sync must not walk');
 
-  const narrow = buildPlan(projects, agents, { targetAspect: 1.2 });
+  const narrow = buildPlan(projects, agents, { targetAspect: 1.2, now: NOW });
   const narrowSeats = assignSeats(narrow, agents);
   runtime.sync(agents, narrow, narrowSeats);
 
@@ -274,12 +346,12 @@ test('a plan rebuild snaps the floor rather than marching everyone across it', (
 
 test('a state change on a settled floor DOES walk the agent that changed, and only it', () => {
   const { projects, agents } = floor({ projects: [6] });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const runtime = new AgentRuntime();
   runtime.sync(agents, plan, assignSeats(plan, agents));
 
   const moved = agents.map((a) => (a.id === 'p0-0' ? { ...a, ackState: 'benched' } : a));
-  const rebuilt = buildPlan(projects, moved, { targetAspect: 2.06 });
+  const rebuilt = buildPlan(projects, moved, { targetAspect: 2.06, now: NOW });
   // Same plan OBJECT: this is the ordinary per-push sync, not a rebuild.
   runtime.sync(moved, plan, assignSeats(plan, moved));
 
@@ -296,7 +368,7 @@ test('a state change on a settled floor DOES walk the agent that changed, and on
 test('every room opens onto the corridor network, and the network is connected', () => {
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const lines = plan.nav;
     assert.ok(lines.length > 0, 'a floor needs at least one walkable line');
 
@@ -358,7 +430,7 @@ test('the working rooms are the subject of the floor, not the service rooms', ()
     waiting: 1,
     letGo: 17,
   });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const area = (kind) =>
     plan.rooms.filter((r) => r.kind === kind).reduce((a, r) => a + r.w * r.h, 0);
   const total = plan.width * plan.height;
@@ -381,7 +453,7 @@ test('the reception grows with its queue and never becomes a corridor', () => {
   let previous = 0;
   for (const waiting of [0, 1, 5, 12, 25]) {
     const { projects, agents } = floor({ projects: [4], waiting });
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
     const size = office.w * office.h;
     assert.ok(size >= previous - 1e-6, `the reception shrank going from ${waiting} waiting`);
@@ -393,34 +465,35 @@ test('the reception grows with its queue and never becomes a corridor', () => {
   }
 });
 
-test('a collapsed project room is sized to the repo it stands for', () => {
-  const sizes = [1, 4, 15];
-  const rooms = sizes.map((n) => {
-    const { projects, agents } = floor({ projects: [n], benched: n });
-    // Every session benched, so the room collapses.
-    const withIdle = projects.map((p) => ({ ...p, activeCount: 0 }));
-    const plan = buildPlan(withIdle, agents, { targetAspect: 2.06 });
-    return plan.rooms.find((r) => r.kind === 'project');
-  });
-  assert.ok(
-    rooms.every((r) => r && r.collapsed),
-    'all three rooms should be collapsed',
-  );
-  assert.ok(
-    rooms[0].w * rooms[0].h < rooms[1].w * rooms[1].h,
-    'a four-session repo should read larger than a one-session repo',
-  );
-  assert.ok(
-    rooms[1].w * rooms[1].h < rooms[2].w * rooms[2].h,
-    'a fifteen-session repo should read larger than a four-session one',
-  );
+test('an idle repo costs a directory line, never a room', () => {
+  // The defect WP-50 exists to fix: a repo with nobody in it used to get a
+  // collapsed ROOM, which still bid for area in the treemap. On the reference
+  // machine that turned the working floor into large empty cells.
+  for (const n of [1, 4, 15]) {
+    // One repo, every session benched, nobody active in it.
+    const { projects, agents } = floor({ projects: [], benched: n });
+    projects.push({ id: 'p0', name: 'p0', sessionCount: n, tokens: 0, needsYou: 0 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
+    assert.equal(
+      plan.rooms.find((r) => r.kind === 'project'),
+      undefined,
+      `${n} benched sessions and nobody active should be a line, not a room`,
+    );
+    const directory = plan.rooms.find((r) => r.kind === 'directory');
+    assert.ok(directory, 'the repo still has to be visible somewhere');
+    assert.equal(directory.entries.length, 1);
+    assert.ok(
+      directory.h <= DIRECTORY_MAX_H + EPS,
+      `the strip is ${directory.h.toFixed(1)} U tall, past the ${DIRECTORY_MAX_H} U cap`,
+    );
+  }
 });
 
 test('the reception sofas form one continuous C, corner to corner', () => {
   // Three runs that stop short of each other read as three separate benches.
   for (const waiting of [1, 9, 25]) {
     const { projects, agents } = floor({ projects: [3], waiting });
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
     const by = (id) => office.props.find((p) => p.id === id);
     const west = by('wait-sofa-w');
@@ -447,7 +520,7 @@ test('the working floor is two rows with one corridor between them', () => {
     benched: 37,
     waiting: 2,
   });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
   const spine = plan.rooms.find((r) => r.id === '__spine__');
   const workingX = spine.x + spine.w;
@@ -477,7 +550,7 @@ test('a project room is a room, not a splinter', () => {
     { projects: [3, 3, 3], benched: 1 },
   ]) {
     const { projects, agents } = floor(spec);
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     for (const r of plan.rooms.filter((x) => x.kind === 'project')) {
       const aspect = r.w / r.h;
       assert.ok(
@@ -494,7 +567,7 @@ test('the working floor has one corridor and no other circulation in it', () => 
     benched: 37,
     waiting: 2,
   });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const corridors = plan.rooms.filter((r) => r.kind === 'corridor');
   // Exactly two pieces of circulation on the whole floor: the spine, and the
   // one cross corridor. Everything else is a room.
@@ -520,7 +593,7 @@ test('the working floor has one corridor and no other circulation in it', () => 
 test('the service column has no empty strip beside either of its rooms', () => {
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
-    const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+    const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
     assert.ok(
@@ -544,7 +617,7 @@ test('the lounge only offers activities it has the furniture for', () => {
   // else. Offering pool anyway had the agent playing an imaginary game in the
   // middle of the floor.
   const { projects, agents } = floor({ projects: [2], benched: 1 });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const kinds = new Set(plan.loungeSpots.map((s) => s.kind));
   assert.ok(!kinds.has('pool'), 'a one-person lounge has no pool table to stand at');
 
@@ -565,7 +638,7 @@ test('the lounge only offers activities it has the furniture for', () => {
 
 test('two benched agents never end up standing in the same place', () => {
   const { projects, agents } = floor({ projects: [2], benched: 12 });
-  const plan = buildPlan(projects, agents, { targetAspect: 2.06 });
+  const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const runtime = new AgentRuntime();
   runtime.sync(agents, plan, assignSeats(plan, agents));
   for (let i = 0; i < 400; i++) {
@@ -578,4 +651,194 @@ test('two benched agents never end up standing in the same place', () => {
       held.set(key, rec.id);
     }
   }
+});
+
+// ------------------------------------------------------- WP-50: the rule itself
+
+test('no room exists without an active occupant, at every population and aspect', () => {
+  // `08` B6, stated as a property. A room is drawn only for a project with an
+  // agent at a desk, hand up, or waiting — and "waiting" is a real occupant of
+  // that room even though it is standing in the office at the time, which is
+  // why the count comes from the population rather than from the seats.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const targetAspect of ASPECTS) {
+      const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
+      const pop = floorPopulation(agents, { now: NOW });
+      for (const room of plan.rooms) {
+        if (room.kind !== 'project') continue;
+        assert.ok(
+          (pop.active.get(room.id) ?? 0) > 0,
+          `${room.id} has a room and nobody active in it (${targetAspect}:1)`,
+        );
+      }
+      // And the converse: every project with somebody active has a room, so
+      // an active agent is never left without one.
+      for (const [id, n] of pop.active) {
+        if (n === 0) continue;
+        const project = projects.find((p) => p.id === id);
+        if (!project || (project.sessionCount ?? 0) === 0) continue;
+        assert.ok(
+          plan.rooms.some((r) => r.kind === 'project' && r.id === id),
+          `${id} has ${n} active agents and no room`,
+        );
+      }
+    }
+  }
+});
+
+test('the idle-projects strip costs a plate per repo, and is capped whatever the count', () => {
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const targetAspect of ASPECTS) {
+      const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
+      const strip = plan.rooms.find((r) => r.kind === 'directory');
+      const idle = projects.filter(
+        (p) =>
+          (p.sessionCount ?? 0) > 0 &&
+          !plan.rooms.some((r) => r.kind === 'project' && r.id === p.id),
+      );
+      if (idle.length === 0) {
+        assert.equal(strip, undefined, 'a floor with no idle repos needs no strip');
+        continue;
+      }
+      assert.ok(strip, `${idle.length} idle repos and no strip to list them in`);
+      assert.equal(strip.entries.length, idle.length, 'every idle repo gets a line');
+      // A plate's height per repo, not a room's — the whole point of B6's
+      // "it takes the space of a room plate, not a room". The strip's own
+      // header band is the one fixed overhead and is excluded, the same way a
+      // room's plate band is not part of what its furniture pays for.
+      for (const e of strip.entries) {
+        assert.ok(
+          e.h <= PLATE_BAND + EPS,
+          `a directory line is ${e.h.toFixed(2)} U tall, more than a room plate`,
+        );
+      }
+      assert.ok(
+        (strip.h - PLATE_BAND) / strip.entries.length <= PLATE_BAND + EPS,
+        `the strip spends ${((strip.h - PLATE_BAND) / strip.entries.length).toFixed(2)} U per repo past its header`,
+      );
+      assert.ok(
+        strip.h <= DIRECTORY_MAX_H + EPS,
+        `the strip is ${strip.h.toFixed(1)} U tall, past the ${DIRECTORY_MAX_H} U cap`,
+      );
+      // And it never crowds out the rooms it stands beside.
+      for (const room of plan.rooms) {
+        if (room.kind !== 'project') continue;
+        assert.ok(
+          strip.h < room.h + EPS,
+          `the strip (${strip.h.toFixed(1)} U) is taller than room ${room.id} (${room.h.toFixed(1)} U)`,
+        );
+      }
+    }
+  }
+});
+
+test('every room is furnished, not just occupied: no cell is mostly bare carpet', () => {
+  // Desks count agents now, so a room's furniture is routinely smaller than
+  // the cell the treemap gives it. §64 measured content fill in an occupied
+  // room at 94%; the floor for that here is 60%, which is what "no cell more
+  // than 40% bare carpet" means (`08` WP-50's acceptance).
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const targetAspect of ASPECTS) {
+      const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
+      for (const room of plan.rooms) {
+        if (room.kind !== 'project') continue;
+        const box = room.props.reduce(
+          (a, p) => ({
+            x0: Math.min(a.x0, p.x),
+            y0: Math.min(a.y0, p.y),
+            x1: Math.max(a.x1, p.x + p.w),
+            y1: Math.max(a.y1, p.y + p.h),
+          }),
+          { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity },
+        );
+        const fill = ((box.x1 - box.x0) * (box.y1 - box.y0)) / (room.w * room.h);
+        assert.ok(
+          fill >= 0.6,
+          `${room.id} is ${((1 - fill) * 100).toFixed(0)}% bare carpet at ${targetAspect}:1`,
+        );
+      }
+    }
+  }
+});
+
+// ------------------------------------------------------------ WP-50: gone home
+
+test('the gone-home window is a boundary, and it is exclusive', () => {
+  const at = (ms) => ({ ackState: 'benched', lastActivityAt: NOW - ms });
+  const window = GONE_HOME_DAYS * DAY;
+  assert.equal(isGoneHome(at(window - 1), NOW), false, 'a millisecond inside the window is drawn');
+  assert.equal(isGoneHome(at(window), NOW), false, 'exactly the window is still drawn');
+  assert.equal(isGoneHome(at(window + 1), NOW), true, 'a millisecond past it goes home');
+  // The window is a setting, and 0 turns the filter off rather than hiding
+  // everybody — which is the failure mode a clamp bug would otherwise have.
+  assert.equal(isGoneHome(at(window + 1), NOW, 0), false, '0 days draws everybody');
+  assert.equal(isGoneHome(at(2 * DAY), NOW, 1), true, 'a shorter window sends more people home');
+  // An agent nobody can date is drawn. The floor does not hide what it cannot
+  // measure.
+  assert.equal(isGoneHome({ ackState: 'benched' }, NOW), false);
+  assert.equal(isGoneHome({ ackState: 'benched', lastActivityAt: 0 }, NOW), false);
+  // And only a benched agent can go home at all.
+  assert.equal(isGoneHome({ ackState: 'active', lastActivityAt: NOW - 400 * DAY }, NOW), false);
+});
+
+test('activity brings an agent back, and its ackState never moved', () => {
+  const projects = [{ id: 'p0', name: 'p0', sessionCount: 2, tokens: 0, needsYou: 0 }];
+  const away = {
+    id: 'sleeper',
+    projectId: 'p0',
+    ackState: 'benched',
+    activityState: 'ended',
+    lastActivityAt: NOW - (GONE_HOME_DAYS + 30) * DAY,
+  };
+  const working = agent('worker', { projectId: 'p0' });
+
+  const before = buildPlan(projects, [working, away], { targetAspect: 1.78, now: NOW });
+  assert.ok(before.goneHome.has('sleeper'), 'a benched agent quiet for 37 days is not drawn');
+  assert.ok(!assignSeats(before, [working, away]).has('sleeper'));
+
+  // The SAME agent, with a fresh timestamp: nothing about `ackState` has been
+  // touched — this is a display filter over an observed field, which is
+  // exactly why it can never interact with the invariant.
+  const back = { ...away, lastActivityAt: NOW - 1000 };
+  const after = buildPlan(projects, [working, back], { targetAspect: 1.78, now: NOW });
+  assert.equal(after.goneHome.size, 0, 'activity brings them straight back');
+  assert.ok(assignSeats(after, [working, back]).has('sleeper'), 'and back to a spot of their own');
+  assert.equal(back.ackState, 'benched', 'and they are still benched, because nothing wrote to it');
+  assert.equal(away.ackState, 'benched', 'nor did going home write to it');
+});
+
+test('the lounge is sized by who is drawn, and its plate carries the rest', () => {
+  const projects = [{ id: 'p0', name: 'p0', sessionCount: 1, tokens: 0, needsYou: 0 }];
+  const working = agent('worker');
+  const benched = (n, ageDays) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `b${ageDays}-${i}`,
+      projectId: 'p0',
+      ackState: 'benched',
+      activityState: 'ended',
+      lastActivityAt: NOW - ageDays * DAY,
+    }));
+
+  const all = buildPlan(projects, [working, ...benched(47, 1)], {
+    targetAspect: 1.78,
+    now: NOW,
+  });
+  const mostAway = buildPlan(projects, [working, ...benched(8, 1), ...benched(39, 30)], {
+    targetAspect: 1.78,
+    now: NOW,
+  });
+
+  const loungeOf = (plan) => plan.rooms.find((r) => r.kind === 'lounge');
+  assert.ok(
+    loungeOf(mostAway).w * loungeOf(mostAway).h < loungeOf(all).w * loungeOf(all).h,
+    'a lounge drawing 8 people must be smaller than one drawing 47',
+  );
+  assert.deepEqual(loungeOf(mostAway).plateLines, ['Lounge', '8 benched · 39 went home']);
+  assert.deepEqual(loungeOf(all).plateLines, ['Lounge', '47 benched']);
+  // Every one of them is still reachable: the plan names them, which is what
+  // the palette/keyboard command reads.
+  assert.equal(mostAway.goneHome.size, 39);
 });
