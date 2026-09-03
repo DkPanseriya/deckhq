@@ -39,6 +39,13 @@
  *      are cleared together, rather than leaving a stale reviewSince behind
  *      in the store once nothing shows it in the UI any more.
  *
+ * WP-19's pending permissions ride along beside all of this and touch none of
+ * it: `setPendingPermission`/`clearPendingPermission` write into one map that
+ * only `_computeAgents` reads, and a permission being raised, answered or
+ * withdrawn changes no activity state and no ack field. A raised hand on the
+ * floor is put there by `Notification` and stays until the runtime says
+ * otherwise, whatever the panel did with the card.
+ *
  * To make that structural rather than aspirational, the observed merge
  * (`_computeAgents`) never touches the store's ack fields directly except
  * through `_markForReview` / `_markNeedsInput`, which are strictly
@@ -203,6 +210,18 @@ export class Registry {
     this._hookStatus = {};
 
     /**
+     * WP-19. Permission prompts this daemon is holding open, by agent id.
+     *
+     * Observed and transient, exactly like `currentTool`: set when a
+     * `PermissionRequest` arrives, cleared when it is answered, withdrawn or
+     * times out. It never touches `activityState` — the raised hand on the
+     * floor belongs to the runtime's own `Notification`, and stays up until
+     * the runtime moves on — and it never touches a user-owned field.
+     * @type {Map<string, import('./model.mjs').PendingPermission>}
+     */
+    this._pendingPermissions = new Map();
+
+    /**
      * Evidence that installed hooks are actually reaching us.
      *
      * "Installed" is a statement about a settings file, not about delivery: a
@@ -303,6 +322,37 @@ export class Registry {
    */
   setHookStatus(status) {
     this._hookStatus = { ...this._hookStatus, ...(status || {}) };
+    this._rebuild();
+    this._emitIfChanged();
+  }
+
+  /**
+   * WP-19. A permission prompt is now waiting on this session.
+   *
+   * Write-only into observed state: it sets nothing but the map below, and
+   * `_computeAgents` copies it onto the agent. It must never reach
+   * `store.setAck`, `activityState`, or the needs-you count — a request for
+   * permission is the runtime asking a question, and answering it is not the
+   * same act as acknowledging the session.
+   * @param {string} id agent id, runtime-prefixed
+   * @param {import('./model.mjs').PendingPermission} pending
+   */
+  setPendingPermission(id, pending) {
+    this._pendingPermissions.set(id, pending);
+    this._rebuild();
+    this._emitIfChanged();
+  }
+
+  /**
+   * Take a permission card off a session: answered, withdrawn or expired.
+   * @param {string} id agent id
+   * @param {string} [requestId] only clear if this is still the card showing
+   */
+  clearPendingPermission(id, requestId) {
+    const current = this._pendingPermissions.get(id);
+    if (!current) return;
+    if (requestId != null && current.id !== requestId) return;
+    this._pendingPermissions.delete(id);
     this._rebuild();
     this._emitIfChanged();
   }
@@ -876,6 +926,11 @@ export class Registry {
         // WP-52. A copy, not the live record: a snapshot handed to a
         // subscriber must not be a handle on registry state.
         currentTool: obs.currentTool ? { ...obs.currentTool } : null,
+        // WP-19. Same discipline: a copy, and null for every session that has
+        // no prompt waiting — which is nearly all of them, nearly always.
+        pendingPermission: this._pendingPermissions.has(id)
+          ? { ...this._pendingPermissions.get(id) }
+          : null,
       };
       agents.push(agent);
     }
