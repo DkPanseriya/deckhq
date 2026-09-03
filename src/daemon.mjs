@@ -17,6 +17,7 @@ import { register as registerState } from './http/routes/state.mjs';
 import { register as registerActions } from './http/routes/actions.mjs';
 import { register as registerHooks } from './http/routes/hooks.mjs';
 import { register as registerSettings } from './http/routes/settings.mjs';
+import { register as registerChanges } from './http/routes/changes.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { STATE_FILE, migrateLegacyState } from './core/paths.mjs';
@@ -209,6 +210,7 @@ export async function startDaemon(opts = {}) {
   registerActions(router, ctx);
   registerHooks(router, ctx);
   registerSettings(router, ctx);
+  registerChanges(router, ctx);
 
   const server = http.createServer((req, res) => {
     // A missing Host header, or one pointing anywhere but loopback, is not a

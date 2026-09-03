@@ -48,6 +48,7 @@ export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
  * @property {number} pollIntervalMs
  * @property {boolean} showLetGo
  * @property {ResumeTarget} resumeIn
+ * @property {string} approveText   what the panel's `2 Approve` sends
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -58,7 +59,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   pollIntervalMs: 5000,
   showLetGo: false,
   resumeIn: 'terminal',
+  approveText: 'Yes, go ahead.',
 });
+
+/** An approval is one line the user would have typed; anything longer is a reply. */
+const MAX_APPROVE_TEXT = 500;
 
 /**
  * How long `save()` waits for further mutations before it writes. Exported so
@@ -93,6 +98,19 @@ function sanitizeResumeIn(v) {
     : DEFAULT_SETTINGS.resumeIn;
 }
 
+/**
+ * The affirmative `2 Approve` sends. A blank or non-string value falls back
+ * to the default — an approve key that sent nothing would be a silent no-op —
+ * and it is trimmed and capped so a stray paste cannot turn the key into a
+ * prompt injector.
+ * @param {unknown} v
+ * @returns {string}
+ */
+function sanitizeApproveText(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s ? s.slice(0, MAX_APPROVE_TEXT) : DEFAULT_SETTINGS.approveText;
+}
+
 function defaultData() {
   return {
     version: 1,
@@ -122,6 +140,7 @@ function normalize(parsed) {
   };
   settings.stallWindowMs = clampStallWindow(settings.stallWindowMs);
   settings.resumeIn = sanitizeResumeIn(settings.resumeIn);
+  settings.approveText = sanitizeApproveText(settings.approveText);
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -257,6 +276,9 @@ export class Store {
     }
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'resumeIn')) {
       next.resumeIn = sanitizeResumeIn(patch.resumeIn);
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'approveText')) {
+      next.approveText = sanitizeApproveText(patch.approveText);
     }
     this._data.settings = next;
     this.save();

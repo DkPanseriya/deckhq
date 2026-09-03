@@ -340,3 +340,27 @@ test('load() clamps an out-of-range stallWindowMs found on disk', async () => {
     await cleanup(dir);
   }
 });
+
+test('approveText: what `2 Approve` sends is configurable, trimmed, capped, and never blank', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    assert.equal(store.settings.approveText, 'Yes, go ahead.');
+
+    store.setSettings({ approveText: '  Approved, carry on.  ' });
+    assert.equal(store.settings.approveText, 'Approved, carry on.');
+
+    // Blank, or not a string: back to the default rather than an approve key
+    // that sends nothing.
+    store.setSettings({ approveText: '   ' });
+    assert.equal(store.settings.approveText, DEFAULT_SETTINGS.approveText);
+    store.setSettings({ approveText: 42 });
+    assert.equal(store.settings.approveText, DEFAULT_SETTINGS.approveText);
+
+    store.setSettings({ approveText: 'x'.repeat(2000) });
+    assert.equal(store.settings.approveText.length, 500);
+  } finally {
+    await cleanup(dir);
+  }
+});
