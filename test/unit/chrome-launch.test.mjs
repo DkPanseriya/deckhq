@@ -2,7 +2,7 @@
  * How the CDP driver starts a browser, and what it does when it cannot.
  *
  * `docs/DEVIATIONS.md` §87 promised that the goldens job degrades to a SKIPPED
- * line and exit 0 when the machine cannot give it a browser; §113 is the entry
+ * line and exit 0 when the machine cannot give it a browser; §114 is the entry
  * about the run where it did not. The promise has two halves, and both are
  * asserted here without launching anything:
  *

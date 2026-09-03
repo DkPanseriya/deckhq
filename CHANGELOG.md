@@ -801,7 +801,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   negative that a stray `deckhq.cmd` on a posix PATH resolves to nothing. All five run on all nine
   matrix jobs. The rest of the suite was swept for the same defect by forcing `process.platform` to
   `linux`; the three other tests that read it are testing host behaviour and are correct as they
-  are. §113.
+  are. §114.
 - **8 tests for how the CDP driver starts a browser, and what it does when it cannot.** That the
   Linux sandbox and `/dev/shm` flags are added on Linux and **nowhere else** — the committed
   `win32` goldens were captured against an exact command line — that a launch failure is labelled
@@ -809,7 +809,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   which has already died is reported at once instead of at the deadline, and that a browser which
   is not there at all ends as that label rather than as a stack trace. None of them launches a
   real Chrome; the test that would is the goldens gate, which is a separate npm script for exactly
-  that reason. §113.
+  that reason. §114.
 - **The goldens job skips a browser it cannot start, as §87 said it would.** It named two tooling
   gaps — no WebSocket, no Chrome — and missed the third and likeliest: a Chrome that is present and
   will not start. The Ubuntu runner has one, both guards passed, and the job then failed a merge
@@ -824,7 +824,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   all still fail loudly. Windows is byte-identical and still passes at 0 px on all four
   populations. CI also gains a `concurrency` group that cancels superseded **pull request** runs
   only — a push to `main` is keyed on its own commit, so every merge runs to completion instead of
-  being recorded as cancelled — and `timeout-minutes` on both jobs. §113.
+  being recorded as cancelled — and `timeout-minutes` on both jobs. §114.
 
 ### Packaging
 

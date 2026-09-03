@@ -55,7 +55,7 @@ jobs:
   # Three tooling gaps are skips rather than failures, because a red build on a
   # missing browser teaches people to ignore the gate: no WebSocket, no Chrome,
   # and a Chrome that will not start (each says so and exits 0); plus no
-  # goldens committed for this platform yet — see DEVIATIONS.md §87 and §113,
+  # goldens committed for this platform yet — see DEVIATIONS.md §87 and §114,
   # this is the state linux is in today. In every case the fresh captures are
   # uploaded below, which is how the first linux set gets generated and
   # committed.

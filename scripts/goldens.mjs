@@ -419,7 +419,7 @@ const run = withChrome(
 // A browser that will not start is the third tooling gap, beside "no
 // WebSocket" and "no Chrome on this machine", and it is treated the same way:
 // say so plainly and exit 0 rather than paint the build red over something
-// nobody's commit broke (DEVIATIONS §87, §113). Only a launch failure is
+// nobody's commit broke (DEVIATIONS §87, §114). Only a launch failure is
 // forgiven — `CHROME_UNAVAILABLE` is set by `src/cli/chrome.mjs` and nothing
 // else — so a real capture failure still fails, loudly, as it must.
 try {

@@ -7088,7 +7088,7 @@ one.
 31 new tests in `test/unit/minifloor.test.mjs` (composition, drawing against a stub canvas, the
 fallback, and the six source-reading guards above) and 5 in `scene-math.test.mjs` for
 `computeAnchor`. 1265 → 1301. Lint, format and all four goldens green.
-## 113. CI — a Windows-shaped assertion, a Chrome that would not start, and a cancellation that ate the verdict
+## 114. CI — a Windows-shaped assertion, a Chrome that would not start, and a cancellation that ate the verdict
 
 The `merge: WP-10` run on `main` (3 September 2026, 17:45 UTC) was red on every Ubuntu and macOS
 job and green on all three Windows ones. Two independent failures with the same underlying shape:
