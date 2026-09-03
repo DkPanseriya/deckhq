@@ -2186,3 +2186,113 @@ one under test.
 the file alone three times, 13/13 each. What cannot be produced here is the
 acceptance criterion itself — ten consecutive green runs on `main` across all
 nine combinations — because it is CI's to produce after the merge.
+
+## 81. WP-43: the manifests are release assets, and winget and scoop install a zip
+
+**Spec:** WP-43 (`08-PLAN-V2-100X.md` §9) item (3): "Homebrew tap, winget and
+scoop manifests from the same workflow." `07-AGENT-HANDOVERS.md`: "a tag
+publishes to npm with provenance, creates the GitHub Release, and generates the
+Homebrew, winget and scoop manifests." The orchestrator's brief for this
+package: generate all three in the job and "upload them as release assets
+(simplest correct option)".
+
+**Shipped as briefed, with these departures from the plan text recorded.**
+
+1. **No tap, no bucket, no winget-pkgs PR — release assets instead.** A
+   Homebrew tap is a second repository (`homebrew-deckhq`), a scoop bucket is
+   a third, and `winget install DkPanseriya.DeckHQ` is a reviewed pull request
+   to `microsoft/winget-pkgs`. None of the three exists, and a workflow with
+   `contents: write` on *this* repository can create none of them. The job
+   renders the five manifest files and attaches them to the release; each is
+   usable from there today (`brew install --formula ./deckhq.rb`, `winget
+   install --manifest <folder>`, `scoop install <url-to-deckhq.json>`), and
+   each is exactly what gets committed to the tap, bucket or PR when those
+   exist. `packaging/README.md` says so, per asset. **RAISE:** whether to
+   create the tap and bucket repositories, and under which account, is the
+   owner's call — the workflow can push to them once they exist and a token
+   with access is provided, and not before.
+
+2. **winget and scoop install a zip, not the npm tarball.** Neither can
+   install an npm package: winget's installer types are exe/msi/msix/zip/
+   portable and scoop shims executables. The job unpacks the published
+   tarball, adds `packaging/deckhq.cmd` — two lines, `node
+   "%~dp0package\bin\deckhq.mjs" %*` — and zips the result, then both
+   manifests point at that zip with Node declared as a dependency
+   (`OpenJS.NodeJS.LTS`, `nodejs-lts`). The installed tool is byte-for-byte
+   the registry's; the launcher is the only addition. Homebrew installs the
+   registry tarball directly. The zip's sha256 is computed in the job and the
+   tarball's is checked against the registry's own `dist.integrity` before it
+   is used, so neither manifest can carry a digest of bytes a user will not
+   receive.
+
+3. **A changelog gate before the publish.** Not in the plan. The release
+   job's notes are the `## X.Y.Z` section of `CHANGELOG.md`; finding it missing
+   after `npm publish` would leave a version on the registry with no release
+   page and no way back. The publish job now runs
+   `scripts/release/changelog-section.mjs "$TAG"` before `npm publish` and
+   stops if the section is absent. The same check is a unit test — the version
+   in `package.json` must have a section — so `npm test`, and therefore
+   `prepublishOnly`, fails on a bump without an entry. That is a new failure
+   mode for anyone bumping the version locally; it is the intended one.
+
+4. **`npm@^11.5.1`, asserted, instead of `npm@latest`.** Per the brief. A
+   tag push should not pick up whatever npm major shipped that morning; the
+   trusted-publishing floor is what matters, and a step now proves the
+   installed version meets it instead of assuming it.
+
+5. **`gh release create`, not a marketplace action.** The GitHub CLI is on
+   every hosted runner and is the same command `RELEASE-CHECKLIST.md` step 12
+   already documents, so the workflow and the hand procedure agree. A re-run of
+   the job after a partial failure finds the release already there and
+   re-uploads the assets onto it rather than failing.
+
+6. **`Architecture: neutral`** in the winget installer manifest, because a
+   Node script is. A `winget-pkgs` reviewer may ask for `x64`; the generator
+   is one line to change.
+
+7. **The workflow defaults to `contents: read`.** The `release` job's comment
+   claimed it was the only job in the file that can write to the repository,
+   and that was not yet true: `verify` named no permissions at all, so its
+   token took whatever the organisation's default scope is, which for a
+   repository created before the read-only default is read-write. A
+   workflow-level `permissions: contents: read` makes the claim structural —
+   `release` raises itself and nothing else can. Verified by parsing the file:
+   `verify` inherits read, `publish` is `contents: read` + `id-token: write`,
+   `release` is the sole `contents: write`.
+
+8. **`*.cmd text eol=crlf` in `.gitattributes`.** `.gitattributes` sets
+   `* text=auto eol=lf`, so `packaging/deckhq.cmd` left a checkout with LF
+   endings — including the Linux checkout in the `release` job that zips it
+   for Windows users. `cmd.exe` tolerates LF for a two-line script and stops
+   tolerating it as soon as one has a label or a `goto`, which is a trap for
+   whoever edits the launcher next rather than a bug today. The launcher is
+   now the one file in the tree checked out with CRLF.
+
+**Measurement.** What could be verified on this machine: `publish.yml` parses
+(js-yaml) into three jobs, with `contents: read` at the workflow level and
+`contents: write` on `release` alone; `scripts/release/manifests.mjs` renders
+against the real `package.json` and the three winget documents parse with
+js-yaml; `changelog-section.mjs 1.2.0` prints the section and exits 1 for a
+version with none; the npm floor comparison accepts 11.5.1, 11.6.0 and 12.0.0
+and exits 1 for 11.5.0, 11.4.9 and 10.9.4; ten unit tests over both scripts;
+`npm test` (453), `npm run lint`, `npm run format:check` green.
+
+The zip step was rehearsed by hand, which is as close to the job as this
+machine gets: `npm pack` produced the 42-file tarball, `tar -xzf` into a
+staging directory satisfied the job's own `test -f
+stage/package/bin/deckhq.mjs` guard, `packaging/deckhq.cmd` went in beside
+it, and the launcher then **ran from that layout** — `deckhq.cmd --version`
+printed `1.2.0` (which is also exactly what the Homebrew formula's `test do`
+block asserts) and `deckhq.cmd doctor` printed a report. So the one thing in
+the packaging path that is easy to get wrong and impossible to spot in YAML —
+the relative path from the launcher to the bin — is proved rather than
+reasoned about.
+
+What could not: the release job itself. It has never run, and it cannot run
+without a `v*` tag, which is the irreversible publish. The registry-side
+retry, the `dist.integrity` cross-check, `zip` and `gh` on the runner, and
+the asset upload are all written against documented behaviour and unexecuted.
+WP-43's acceptance — "a `vX.Y.Z` tag produces a published package with the
+provenance badge and a release page with no manual step after the tag" — is
+still the owner's next tag to produce, after the one-time trusted-publisher
+setup in the workflow's header.

@@ -5,6 +5,11 @@ state.json
 state/
 .DS_Store
 coverage/
+
+# Where the release job — and packaging/README.md's local rehearsal of it —
+# renders the manifests and the Windows zip. Generated, never committed.
+dist/
+stage/
 .impeccable/
 .claude/settings.local.json
 

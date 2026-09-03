@@ -1,4 +1,8 @@
 * text=auto eol=lf
+# The Windows launcher is zipped up by the release job, which runs on Linux,
+# and then executed by cmd.exe. It is the one file in the tree that has to
+# leave a Linux checkout with CRLF endings.
+*.cmd text eol=crlf
 *.png binary
 *.jpg binary
 *.gif binary
