@@ -4125,13 +4125,14 @@ cannot silently go stale.
 
 ### Not fixed, and deliberately so
 
-1. **`openNewSession()` still runs `codex resume new`.** It delegates to
+1. ~~**`openNewSession()` still runs `codex resume new`.** It delegates to
    `openInTerminal('codex:new', cwd)`, so the literal argv is `['codex', 'resume', 'new']`. That is
    almost certainly not how Codex starts a fresh session, and `opts.instructions` is still dropped
    where the Claude Code adapter now carries it (§91 deviation 5). Both are behaviour, not the
    shell-string defect this change is for, and neither can be checked without Codex on the machine.
    WP-23's. The user's pinned emulator IS now forwarded, because the point of routing both adapters
-   through `launchTerminal()` is that they obey one setting.
+   through `launchTerminal()` is that they obey one setting.~~ **Closed by §99**: it now runs
+   `codex`, with the first prompt as one argv element.
 2. **The adapter remains unverified against real Codex.** §8 stands unchanged: Codex is not
    installed on the reference machine, `available()` returns false, and every method degrades
    rather than throwing. Nothing in this change was executed against Codex. What was proved is the
@@ -4700,3 +4701,46 @@ argv:
 - `launchTerminal()` forwards the form's `spawnOptions` to `spawn()`.
 
 777 tests to 786. `npm run lint`, `npm run format:check` and `npm test` clean.
+
+## 99. Codex `openNewSession()` — `codex`, not `codex resume new`, and the prompt it dropped
+
+**Spec:** `07-AGENT-HANDOVERS.md` Agent Backend, and §95's "not fixed" item 1, which named this and
+handed it to WP-23. It did not need to wait: the fix is one pure function and one call.
+
+**The defect.** `openNewSession(cwd, opts)` delegated to `openInTerminal('codex:new', cwd)`, so
+"new Codex session" opened a terminal running `codex resume new` — a resume of a session called
+`new`, which does not exist — and `opts.instructions`, the first prompt the panel collects, was
+dropped on the floor. The Claude Code adapter has carried that prompt since §91 (deviation 5);
+Codex silently did not, which is exactly the kind of cross-adapter difference §95 was removing.
+
+**Shipped.** A third pure builder beside `codexExecArgs` and `codexResumeCommand`:
+
+```js
+codexNewSessionCommand(instructions); // ['codex'] or ['codex', <prompt>]
+```
+
+and `openNewSession()` hands it to `launchTerminal()` itself, with `prefix: 'codex-new'` and the
+user's pinned emulator, instead of borrowing the resume path. The prompt is user text from a
+request body and travels the way a session id does: one argv element to `spawn()`, or one
+single-quoted word inside the wrapper script for the three macOS applications that take no argv,
+or one double-quoted word of the `cmd.exe` line on Windows (§98). Blank or whitespace-only
+instructions mean no prompt at all rather than an empty argument.
+
+**One deliberate change in behaviour.** `openNewSession()` no longer swallows a launcher failure.
+Before, through `openInTerminal`'s best-effort contract, "no terminal emulator found" was
+silently nothing and the route reported success; now the launcher's own message ("Could not open
+a terminal. Tried: …") reaches the panel. This is what the Claude Code adapter does. The
+best-effort contract on `openInTerminal()` itself is untouched, and `openNewSession()` still
+throws `Codex is not installed` first, as `test/unit/codex-terminal.test.mjs` asserts.
+
+**Still unverified against real Codex.** §8 and §95 item 2 stand. Whether plain `codex <prompt>`
+is the right invocation for the installed Codex version is now the same class of assumption as
+`codex resume <id>`, asserted as an array and run on nothing.
+
+**Acceptance.** Three additions to `test/unit/codex-terminal.test.mjs`: the builder in both its
+forms, including trimming and the absence of `resume` and `new`; `SECURITY:` a hostile first
+prompt over all 19 (platform, emulator, launch form) pairs — exactly one carrier element equal to
+it, none for the wrapper-script emulators, one quoted word with no bare metacharacters on Windows,
+and the wrapper's `exec` line read back through `sh`'s grammar to the exact argv; and the source
+scan now also asserts that `openNewSession` no longer resumes `'codex:new'` and does name
+`codexNewSessionCommand`.
