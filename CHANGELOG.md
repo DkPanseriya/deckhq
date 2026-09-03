@@ -425,6 +425,25 @@
   building and one answer to where each session is standing. It also keeps the people moving while
   the tab is hidden, which is the only time it is the thing you are looking at.
   `public/minifloor.js`, `docs/DEVIATIONS.md` §113, `docs/media/mini-floor.png`.
+- **A project room's door plate carries today's spend.** Under the name and the session line, in
+  the same quiet mono: `today ≈ $22.93 · list price`. The number was already being computed and
+  already carried in every snapshot; the renderer drew two lines and stopped, because the file it
+  had to be drawn in belonged to another package. It is drawn now. A room whose models the rate
+  card cannot price gets **no third line at all** rather than `$0.00` — a floor of unpriced rooms
+  looks exactly as it did before the meter existed. `docs/DEVIATIONS.md` §111.
+- **The team's record shows on the floor's hover card, not only in the panel.** "longest wait ever
+  was here: 3d 4h, 28 Aug", "the room that never slept: 24 hours of the day" — the same line, from
+  the same `records.js`, off the same five-minute `GET /api/stats` cache the panel already keeps,
+  so the card and the panel can never disagree about a record while both are on screen. A hover
+  never waits on the network. It is context and never a call to action, and the test that no
+  record line addresses the reader covers this surface too. `docs/DEVIATIONS.md` §107.
+- **Five more tools say what they are doing above an agent's head.** `Write src/foo.ts`,
+  `MultiEdit src/foo.ts`, `Grep TODO\(.*\)`, `Glob src/**/*.ts`, `WebFetch example.com` — they
+  used to show as their bare names. Same rules as the first three: a path is resolved against the
+  **session's** working directory and reduced to its file name when it escapes, so a bubble on a
+  screenshot never carries somebody else's directory tree. `WebFetch` shows the **host only** —
+  the path and the query are where an issue number, a document id or a token live.
+  `docs/DEVIATIONS.md` §89.
 
 ### Changed
 
@@ -572,6 +591,13 @@
   `no rate for this model`, and a room nothing can price gets no cost line at all. `$0.00` is a
   claim about the money; "no rate" is the truth. `Agent.costEstimate` is `number|null`
   accordingly.
+- **The project board names the rate card its figures came from, and the deny message is a
+  sentence.** The whiteboard's cost line now reads `Cost is an estimate at public list prices, not
+a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVersion`, and a figure
+  whose table nobody can name is a figure nobody can check. Separately, the string DeckHQ writes
+  into a session's transcript when you press Deny is `Denied from DeckHQ.` rather than the
+  lower-case fragment that shipped: it is the only sentence this product writes into somebody
+  else's terminal, so it is a sentence. `docs/DEVIATIONS.md` §111, §97.
 
 ### Fixed
 
@@ -648,6 +674,12 @@
   seating the previous roster where it already was, so agents whose state did not change stay put
   and the one whose state did change walks — **42 frames, 4.1 seconds**, and nobody interpolates
   across two different buildings. `docs/DEVIATIONS.md` §88.
+- **A project nothing could price read `$0.00` on its whiteboard.** The board summed each
+  session's cost estimate with `|| 0`, and a session on a model the rate card has no row for
+  carries `null` — so a room of unknown models produced a confident zero, which is a claim about
+  the money nobody had made. It sums only what can be priced now, and a room with nothing
+  priceable at all says `no rate`. A test scans every client module for the pattern, so the next
+  surface that adds it fails the build. `docs/DEVIATIONS.md` §111.
 
 ### Performance
 
