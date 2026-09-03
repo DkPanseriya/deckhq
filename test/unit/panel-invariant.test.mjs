@@ -43,6 +43,19 @@ function functionBody(src, name) {
   return src.slice(start, i + 1);
 }
 
+/** The body of a plain (non-async) `function name(...) { ... }`. */
+function functionBodyOf(src, name) {
+  const start = src.indexOf(`function ${name}(`);
+  assert.notEqual(start, -1, `${name}() not found`);
+  let i = src.indexOf('{', start);
+  let depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) break;
+  }
+  return src.slice(start, i + 1);
+}
+
 test('INVARIANT: /api/ack is called from exactly one place in the client, performAction()', () => {
   const offenders = [];
   for (const file of clientFiles()) {
@@ -97,6 +110,61 @@ test('INVARIANT: performAction() is reached only from explicit clicks and explic
   const keydownEnd = app.indexOf('\nfunction ', keydownStart + 1);
   const keydown = app.slice(keydownStart, keydownEnd);
   assert.equal((keydown.match(/panel\.performAction\(/g) || []).length, 2);
+});
+
+test('INVARIANT: the permission card never reaches /api/ack, and answering is its own funnel', () => {
+  // WP-19. Allowing or denying one tool call says nothing about whether the
+  // user is done with the session. Routing a permission decision through
+  // performAction() would let it clear a review debt — an observed event
+  // moving a user-owned state, which is the whole thing the invariant forbids.
+  const panel = read(path.join(PUBLIC, 'panel.js'));
+
+  // Rendering a question is not answering it.
+  const render = functionBodyOf(panel, 'renderPermission');
+  assert.doesNotMatch(render, /performAction\(|\/api\/ack|\/api\/permission/);
+
+  // The one funnel, and it touches nothing user-owned.
+  const answerFn = functionBody(panel, 'answerPermission');
+  assert.match(answerFn, /fetch\(\s*'\/api\/permission\/decide'/);
+  assert.doesNotMatch(answerFn, /performAction\(|\/api\/ack|acknowledge|reviewSince/);
+
+  // Exactly one caller of the decide endpoint in the whole client.
+  for (const file of clientFiles()) {
+    const src = read(file);
+    const hits = src.match(/\/api\/permission\/decide/g) || [];
+    const rel = path.relative(PUBLIC, file).replace(/\\/g, '/');
+    if (rel === 'panel.js') assert.equal(hits.length, 1);
+    else assert.equal(hits.length, 0, `${rel} answers permission prompts`);
+  }
+});
+
+test('INVARIANT: A / D / S only ever answer a card that is actually up', () => {
+  // `A` is app.js's acknowledge shortcut. The panel's own listener runs first
+  // and takes the key ONLY while a permission card is showing; with no card it
+  // must fall through untouched, or acknowledging by keyboard would break.
+  const panel = read(path.join(PUBLIC, 'panel.js'));
+  const start = panel.indexOf("document.addEventListener('keydown'");
+  assert.notEqual(start, -1, 'the panel registers no keydown listener');
+  let i = panel.indexOf('{', start);
+  let depth = 0;
+  for (; i < panel.length; i++) {
+    if (panel[i] === '{') depth++;
+    else if (panel[i] === '}' && --depth === 0) break;
+  }
+  const handler = panel.slice(start, i + 1);
+
+  // Every guard that has to be there before the key is claimed.
+  assert.match(handler, /root\.hidden/, 'it acts while the panel is closed');
+  assert.match(handler, /TEXTAREA/, 'it acts while the composer has focus');
+  assert.match(handler, /isContentEditable/);
+  assert.match(handler, /dialog\[open\]/);
+  assert.match(handler, /pendingPermission\(\)/);
+  assert.match(handler, /requiresUserInteraction/);
+  // It never acknowledges, benches or sends.
+  assert.doesNotMatch(handler, /performAction\(|\/api\/ack|sendText\(/);
+  // The key is only swallowed after a decision has been settled on.
+  const claim = handler.indexOf('stopImmediatePropagation');
+  assert.ok(claim > handler.indexOf("case 'a'"), 'the key is claimed before the card is checked');
 });
 
 test('SECURITY: no client module assigns innerHTML or builds HTML from strings', () => {
