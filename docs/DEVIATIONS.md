@@ -6878,3 +6878,170 @@ with a test around it, not a green run. The site itself was built, served locall
 and in the FAQ is the reference machine on 3 September 2026, labelled as such, with "your numbers
 will differ" beside it. [`08`](plan/08-PLAN-V2-100X.md) §3.0.1 requires it to be re-measured before
 every launch wave and reworded the day it stops being true.
+
+## 113. CI — a Windows-shaped assertion, a Chrome that would not start, and a cancellation that ate the verdict
+
+The `merge: WP-10` run on `main` (3 September 2026, 17:45 UTC) was red on every Ubuntu and macOS
+job and green on all three Windows ones. Two independent failures with the same underlying shape:
+**something the developer's machine happened to be was being relied on as though it had been
+stated.**
+
+### 1. One test asserted the host's platform rather than the code's answer for a platform
+
+```
+not ok 659 - a .cmd shim is run as an argument to the interpreter, never as a shell string
+  location: 'test/unit/plugin-hook.test.mjs:420:1'
+  error: "Cannot read properties of null (reading 'command')"
+```
+
+`resolveLauncher()` in `plugin/lib/start.mjs` answers "how would DeckHQ be launched on this
+machine". The test handed it a fabricated `C:\tools` PATH and a fabricated `deckhq.cmd`, then
+asserted the argv is `cmd.exe /d /s /c <shim>` — the SECURITY property that Node has refused to
+spawn a batch file directly since 18.20.2 and that this project will not reach for a shell string
+instead. Every input was injected except the one that decided the outcome. On a non-Windows host
+the resolver read `process.platform` and never looked for a `.cmd` at all, and `path.delimiter`
+split `C:\tools` on the `:` into two directories that do not exist. It returned `null` and the
+assertion dereferenced it.
+
+**This is the failure mode the property exists to guard against, inverted.** The argv for Windows
+is the one worth asserting hardest, and it was being asserted only where it was least likely to be
+wrong — on the machine that had run it by hand. Six of the nine matrix jobs proved nothing about
+it; the seventh through ninth were the only ones that did, and it took a merge to `main` to find
+out.
+
+**Fixed by injecting the platform, not by weakening the assertion.** `resolveLauncher` takes
+`platform` alongside `env` and `exists`, exactly as `src/core/editor.mjs` `findOnPath()` and
+`editorArgv()` already did — the sibling precedent, followed rather than reinvented. Everything
+downstream of it reads that value: the extension list, and `path.win32` vs `path.posix` for
+`delimiter`, `join` and `extname`, because a PATH of `C:\tools` must not be split on `:` merely
+because the host is Linux. `ComSpec` now comes from the injected `env` first (falling back to the
+real one, then `cmd.exe`), so the exact interpreter path is an input too. `ensureDaemon` threads
+`platform` through for the same reason.
+
+The assertion got **stronger**, not weaker. It was one test; it is now five, and each names the
+platform it is about:
+
+| Test | Proves |
+|---|---|
+| a `.cmd` shim is run as an argument to the interpreter | `cmd.exe /d /s /c <shim>`, with the exact `ComSpec` asserted, not a regex |
+| a machine with no `ComSpec` still goes through `cmd.exe` | the fallback is still an interpreter, still an argv array |
+| the `.exe` beside a `.cmd` wins | preference order, and that the winner needs no interpreter |
+| a posix machine never looks for a `.cmd` | the negative — a stray `deckhq.cmd` on a Linux PATH resolves to nothing |
+| an extensionless executable is spawned directly | the posix answer, on an injected posix |
+
+All five now run on all nine matrix jobs and prove the same thing on each.
+
+**The rest of the suite was swept for the same defect, and it does not have it.** Three tests read
+`process.platform`, and all three are correct: `ledger.test.mjs` declines to assert `0600` on a
+filesystem that does not enforce a mode (§100), `actions.test.mjs` writes the script extension the
+host will actually run, and `hooks.test.mjs` picks a path shape the host's `path` will parse.
+Those adapt to the host because what they test *is* host behaviour; test 659 was asserting what
+the code **builds**, which is a different thing and must not vary. Verified by running the whole
+suite with `process.platform` forced to `linux` on the Windows host: 1275 of 1276 pass, and the
+one that does not is the `0600` line, which cannot pass on NTFS whatever `process.platform` says
+— the CI log agrees, test 659 was the only failure across all six Linux and macOS jobs.
+
+### 2. The goldens job failed instead of skipping, which §87 had promised it would not
+
+```
+Error: Chrome did not expose a page target in time
+    at waitForPageTarget (src/cli/chrome.mjs:116:38)
+```
+
+[§87](#87-wp-21--the-goldens-gate-and-the-numbers-it-was-calibrated-with) says both tooling gaps
+"degrade to a skip with exit 0 rather than a red build — because a gate that goes red over a
+missing browser is a gate people learn to ignore". It named two gaps: no WebSocket, and no Chrome
+on the machine. **It missed the third and most likely one: a Chrome that is present and will not
+start.** The Ubuntu runner has `/usr/bin/google-chrome`, so both guards passed, and then the
+launch failed 21 s later with an unhandled rejection. Linux has no committed goldens, so this job
+could not have proved anything even had it worked — it failed a merge over a gate that was
+explicitly documented as proving nothing yet.
+
+**The launch.** `src/cli/chrome.mjs`:
+
+- **`--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage`, on Linux only.** CI and
+  container kernels commonly have user namespaces off and the zygote dies at startup; `/dev/shm`
+  is 64 MB in most containers and Chrome's default shared-memory backing overruns it. The page
+  being rendered is our own loopback demo floor, so there is nothing here for the sandbox to
+  contain. `platformLaunchArgs()` returns `[]` on every other platform and a test asserts that it
+  does — **the committed `win32` goldens were captured against an exact command line, so a flag
+  added to it is a regeneration, not a fix.**
+- **A longer wait, and a shorter one where it is not needed.** 20 s locally, 60 s under `CI`.
+  Chrome on a shared runner with a cold page cache is an order of magnitude slower to start than
+  Chrome on a laptop; a healthy one answers in about a second either way, so this is a hang guard
+  and not a budget.
+- **Three attempts, on a fresh debugging port each time.** The port is obtained by asking the OS
+  for a free one and then handing it to Chrome, which leaves a window in which something else can
+  take it — on a runner opening and closing sockets constantly that window is not theoretical, and
+  the symptom is indistinguishable from a slow Chrome. An explicitly requested `debugPort` is kept
+  across attempts, because the caller asked for that port.
+- **Chrome's stderr is read rather than dropped.** When it refuses to start it says exactly why,
+  and that sentence is the entire value of the skip line. `stdio` went from `ignore` to a drained
+  pipe, capped at 20 chunks.
+- **A dead process is reported at once.** `waitForPageTarget` takes a `died` probe, so a browser
+  that exited fails in under a second with its own reason instead of after the full budget with
+  none. This is what keeps the three attempts inside the job timeout.
+- **`CHROME_BIN` beside `CHROME_PATH`, and a PATH pass.** `CHROME_BIN` is the name CI images and
+  Puppeteer already set. The PATH pass (`google-chrome`, `google-chrome-stable`, `chromium`,
+  `chromium-browser`, `microsoft-edge`) is last, after every absolute candidate, so it can only
+  ever add a machine that would otherwise have been reported as having no browser at all — the
+  Windows and macOS outcomes are unchanged.
+
+**The skip is labelled, so it cannot swallow a real failure.** Every launch error carries
+`code === CHROME_UNAVAILABLE`; `goldens.mjs` forgives that code and rethrows everything else. A
+capture that fails, a floor that will not settle, a golden that does not match — all still fail,
+loudly. What is forgiven is precisely "this machine could not give us a browser":
+
+```
+goldens: could not start a browser: Chrome at /usr/bin/google-chrome could not be started in
+  3 attempt(s): Chrome exited with 1 before it exposed a page target — Chrome said: ...
+goldens: SKIPPED (nothing checked) — this run proves nothing about the floor.
+```
+
+Exit 0. The wording is deliberate and matches §87's existing skip: a green line over an empty
+comparison is the failure mode that would actually hurt.
+
+**`timeout-minutes: 4` became 8** on the goldens job. Three attempts against a 60 s wait is up to
+3 minutes before the skip line is even reached, and a job the runner kills at the timeout has
+*failed* — which is the exact outcome this change exists to prevent. The `test` job had no
+`timeout-minutes` at all and now has 10, against a suite that takes 5 seconds; it is a guard on a
+socket that never answers, not a budget.
+
+**Verified on Windows: the goldens still pass at 0 px on all four populations, 27.6 s** — inside
+§87's measured 26–28 s band, and the argv on this platform is byte-identical to what produced the
+committed set. The skip path was exercised by pointing `CHROME_PATH` at `node.exe`: it reports
+Node's own complaint about `--headless=new` and exits 0.
+
+**Unproven until this runs on Linux — RAISE.** Whether the Ubuntu runner's Chrome now starts is
+not something a Windows host can demonstrate. The flags are the standard set for exactly this
+failure and the retry loop is defensive, but the honest statement is that the *skip* is proven and
+the *capture* is not. If it still cannot start, the job now says so in one sentence and exits 0
+instead of failing the merge, which is what §87 promised; the linux goldens set remains
+uncommitted either way, and the artifact upload is still how it gets made.
+
+### 3. Concurrency: pushes to `main` were being cancelled by later pushes
+
+The workflow had no `concurrency` block, and the default GitHub behaviour left most `main` runs
+recorded as *cancelled* — a history of merges with no verdict on them, which is how two failures
+this size survived to be found in one sitting.
+
+```yaml
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+Superseding a run is only ever right on a branch somebody is iterating on. A pull request groups
+by ref and cancels in progress; a push to `main` groups by **commit**, so every merge gets a group
+of its own and runs to completion. Grouping `main` by ref with cancellation off would have been
+worse than the problem: back-to-back merges would queue behind each other, and the history would
+still contain runs that never reported.
+
+### What this cost, and the rule it earns
+
+Nine matrix jobs existed and six of them were proving less than they appeared to. The rule is not
+"add more platforms" — they were already there. It is: **a test that asserts what the code builds
+must be handed every input that decides it, the host's own platform included.** The injection
+seams were already in this codebase (`editor.mjs`, `terminals.mjs`, `notify.mjs` all take a
+`platform`); one module had not been given one, and one line of a workflow comment had promised a
+skip that the code did not implement.
