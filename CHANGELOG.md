@@ -55,6 +55,28 @@
   `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
   a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
   client-side: the daemon never sees a draft and a draft never touches ack state.
+- **Every file in "what changed" opens its own diff, in the panel.** Click a row — or focus it
+  and press Enter — and the unified diff for that file unfolds under it: hunk headers, added and
+  removed lines, context, in a mono face, collapsed by default, with `[ expand all ]` under the
+  table. New endpoint `GET /api/diff?id=&file=` runs `git diff` and `git diff --cached` for the
+  one file, in the session's cwd, as argv arrays, cached per scan exactly like `/api/changes`.
+  A path that resolves outside the session's repository is a 400, never a clamp, and a diff past
+  200 KB comes back marked truncated rather than silently halved. The renderer,
+  `public/diff-view.js`, is two stages like the markdown one — `parseDiff()` classifies lines and
+  touches no DOM, `renderDiff()` builds elements with `textContent` — so a diff of an HTML file
+  full of `<script>` renders as the visible characters it is and creates no element. That is a
+  `SECURITY:` test. The heading still names the **project**: `05` §4.2's honesty requirement is
+  untouched.
+- **"Open in editor", per file row, from an allowlist of five.** The `↗` on a row POSTs
+  `{id, file, line}` to `/api/open-in-editor` and the daemon opens it at the first changed line.
+  The browser never sends a command: which program that means is the new `editor` setting —
+  `code`, `cursor`, `zed`, `idea` or `subl`, or blank for "the first one on PATH" — resolved
+  against a frozen table and spawned as an argv array. Anything else is refused at the settings
+  route, refused by the store, and refused again by the resolver; `$EDITOR` is consulted only to
+  choose between allowlisted editors, so an `$EDITOR` of `rm` selects nothing. On Windows, where
+  `code` is `code.cmd` and Node will not spawn a batch file without a shell, the launch goes
+  through `cmd.exe` with a command line DeckHQ quotes itself and a path containing a quote or a
+  percent sign is refused rather than run. `docs/DEVIATIONS.md` §88.
 
 ### Changed
 
@@ -139,6 +161,17 @@
   disk until it is fired; one write with the right contents lands when it is. Same proof, no
   timing. The sibling "rapid successive writes coalesce" test, which slept 350 ms for the same
   reason, is on the same clock. `docs/DEVIATIONS.md` §80.
+- **29 tests for the diff and the editor.** The route is exercised against real repositories in
+  temp directories for all seven shapes it has to answer — dirty, clean, not a repository, git
+  absent, directory gone, a path outside the repository, and a diff past the cap — including one
+  where the session's cwd is a subdirectory of its repository, which is the case that decides
+  whether a row's path resolves at all. The renderer is run against a stub document that parses
+  no HTML, so the only way a `<script>` in a diff could become an element is if the renderer
+  created one, and it does not. The editor allowlist is tested by refusal: `rm`, `sh`, `curl`,
+  `node` and `../../bin/sh` are each rejected, an `$EDITOR` of `rm -rf /` selects nothing, and
+  the exact argv — including the doubled quotes Windows needs — is asserted without any program
+  starting. Three of the tests recompute the new colour tokens' WCAG contrast from the stylesheet
+  itself. `docs/DEVIATIONS.md` §88.
 
 ### Packaging
 

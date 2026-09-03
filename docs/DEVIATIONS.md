@@ -3233,3 +3233,144 @@ populations with a uniform speckle across every project room's floor and nothing
 person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
 tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
 floor (36 px) is unchanged.
+
+## 88. WP-47 — the diff in the panel, and the one setting that becomes a program
+
+WP-08 stopped at the file table and said so (§85.2): `[ open the diff ]` in
+`docs/plan/05-GUI-UX-SPEC.md` §4.1 was this package. It is now there, as a
+disclosure on every row rather than one button under the table, and six things
+about it are decisions rather than transcription.
+
+**1. Two routes, not one.** `08` §8.1 describes the diff and "open in editor"
+as one addition. They are `GET /api/diff?id=&file=` and
+`POST /api/open-in-editor {id, file, line}`, in one module
+(`src/http/routes/diff.mjs`) because they share the confinement rule, and the
+confinement rule is the security-relevant part of both. `/api/diff` is
+`/api/changes` one level deeper and copies it exactly: `git diff` and
+`git diff --cached` for the one file, argv arrays, run in the session's cwd,
+cached per scan, five outcomes as a `status` rather than an error, and it never
+touches ack state.
+
+**2. The repository's top level defines "inside", not the session's cwd.** A
+session's cwd is often a subdirectory of its repository, and
+`git diff --numstat` — which is what WP-08's rows are built from — reports
+paths relative to the **top level** regardless of where it is run. So a path
+that is perfectly valid on a row (`src/events/backfill.ts`) does not resolve
+against the cwd. The route asks `git rev-parse --show-toplevel` and confines
+against that, with `path.relative` rather than a prefix comparison, because
+drive letters and case-insensitivity make prefix comparison unsafe on Windows —
+the same rule `serveStatic` uses. A path that lands outside is a 400, not a
+clamp. `git rev-parse --show-toplevel` was checked on git 2.55: it returns
+forward slashes on Windows, and an absolute forward-slash pathspec after `--`
+resolves from any cwd inside the repository, which is what the route passes.
+
+**3. `--no-ext-diff --no-textconv`, which the plan does not mention.** Both
+`diff.external` and a `textconv` attribute let a repository's own config name a
+program that git runs while producing a diff. This diff is produced because a
+browser asked for it, on a repository an agent has been writing to. Both are
+turned off.
+
+**4. The cap is 200 KB per diff, cut on a line boundary, and it is reported.**
+A diff is unbounded — a regenerated lockfile is megabytes — and this one is
+being rendered into a side panel. Past the cap the response carries
+`truncated: true` and the real byte count, and the panel says *"the rest of this
+diff is too large to show here"* rather than showing half a file as though it
+were the whole one.
+
+**5. The rows are stacked blocks now, not one `display: contents` grid.** WP-08
+drew the file table as a three-column grid whose rows were `display: contents`.
+A row that expands has to own a diff element beneath it and be a `<button>` —
+`display: contents` is ignored on interactive elements, and a keydown handler
+reimplementing Enter, Space, focus and `aria-expanded` for a fake button is
+strictly worse than the real one. So each row is a block with its own
+three-column head, and the numeric columns hold their alignment on a fixed
+`5ch` track instead of `auto`. Same content, same figures, same reading.
+Expansion state is kept per file in the panel, not in the DOM, because a new
+scan re-renders the whole table every few seconds and a diff the user opened
+must not close itself.
+
+**6. Three new colour tokens, and why they do not break the stylesheet's own
+rule.** `--diff-add`, `--diff-del` and `--diff-hunk` are the first tokens in
+this project that set small text in a colour. The rule they look like they
+break is about **state** colours and the **accent**: several of those sit
+between 3:1 and 4.5:1 and, more importantly, crimson means "in your office" and
+green means "working" — a removed line means neither. These three are their own
+tokens, they name nothing on the floor, and they are held to the full 4.5:1
+text floor on `--surface-2` (the diff's ground) and on both chrome grounds:
+measured 8.08, 5.88 and 7.16 on `--surface-2`. `test/unit/diff-view.test.mjs`
+recomputes all nine ratios from the stylesheet and also asserts that none of
+the three is a state colour or the accent. And colour is never the carrier: a
+unified diff already begins every added line with `+` and every removed one
+with `-`.
+
+### 88.1 "Open in editor": the allowlist, and what Windows costs
+
+The client sends `{id, file, line}`. It never sends a command. Which program
+that means is a lookup in a frozen table of five — `code`, `cursor`, `zed`,
+`idea`, `subl` — and everything else is refused at three separate points: the
+settings route rejects the value with a 400, the store refuses to persist it,
+and `core/editor.mjs` refuses to resolve it. `$EDITOR` is consulted only to
+*choose between* members of that set; an `$EDITOR` of `rm -rf /` selects
+nothing and the PATH order decides instead. `subl` is on the list beyond `08`
+§9's four because Sublime takes the same `file:line` form and leaving it out
+would only push that user to a shell.
+
+`editor: ''` is the default and means "decide for me". Guessing at install time
+and freezing the answer into `state.json` would be wrong on the first machine
+that installs a different editor.
+
+**The Windows problem, and the measurement.** `code` on Windows is `code.cmd`.
+Node refuses to spawn a `.cmd` without a shell (CVE-2024-27980; `spawn EINVAL`,
+reproduced on Node 24.19 with the real `code.cmd` on the reference machine),
+and `shell: true` with an args array concatenates without escaping — Node
+deprecated exactly that as a vulnerability (DEP0190, and it was reproduced
+here: `x&calc.ts` ran `calc.ts` as a command). So a batch launcher goes through
+`cmd.exe /d /s /c` with `windowsVerbatimArguments` and a command line this
+project quotes itself. Three things were checked against a real `cmd.exe`
+rather than reasoned about:
+
+| | Result |
+|---|---|
+| `"exe" "arg"` after `/s /c` | fails — `/s` strips the outer pair, so the line needs its own: `""exe" "arg""` |
+| `&`, `\|`, `<`, `>`, `^` inside the quotes | literal. `ARG1=["C:/a b/x&whoami.ts:12"]` |
+| `"` and `%` inside the quotes | escape. A path containing either is **refused**, with a message pointing at the editor |
+
+An `.exe` launcher, and every non-Windows platform, take the straight argv path
+with no shell at all. `test/unit/editor.test.mjs` asserts the exact argv for
+both, including the doubled quotes, without starting a program: `resolveEditor`
+takes a fake PATH and a fake "is this a file" predicate, and `editorArgv`
+returns the `[command, argv, options]` a launch would use.
+
+**What is not covered.** Only `code` exists on the reference machine, so
+`cursor`, `zed`, `idea` and `subl` are unit-tested for their argv and have
+never been launched. The argv forms are from each editor's own documented CLI
+(`-g file:line` for the two VS Code builds, `file:line` for Zed and Sublime,
+`--line N file` for IntelliJ); the first of the four to be tried on a real
+machine is the one that will say whether that is enough.
+
+### 88.2 What the screenshot proves
+
+`docs/media/panel-diff.png` (rule 10), the demo floor at 1600x1000 with the
+panel open on the `for_review` session in `orbital-api` and
+`src/events/backfill.ts` expanded. The heading still reads **"what changed in
+orbital-api"** — `05` §4.2's honesty requirement is untouched by this package —
+over `+142 −18 3 files`, and under the expanded row are the real `git diff`
+lines for that working tree: the `diff --git` and `index` headers in muted
+ink, two `@@` hunk headers, four removals, context, and the run of additions,
+each line a `textContent` node. Reproduced with `npm run demo` and:
+
+```
+node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ --width 1600 --height 1000 \
+  --settle 9000 --press j --click ".review-file-head" \
+  --scroll ".review-changes .review-heading-row, .review-heading-row" \
+  --out docs/media/panel-diff.png
+```
+
+`--click` and `--scroll` are new on `scripts/capture-floor.mjs`: `--press` walks
+the needs-you queue, but a file row is a button inside the panel with no
+keyboard route of its own, and once a diff is open the part worth photographing
+is below the fold.
+
+**The goldens are untouched.** `npm run goldens:check` passes on all four
+populations with 0 pixels over tolerance, because the panel is closed in every
+one of them and nothing in this package changes the floor.

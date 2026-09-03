@@ -45,6 +45,20 @@ const DEBUG_PORT = Number(opt('--debug-port', 9222));
  * you aim the shot at one particular agent.
  */
 const PRESS = opt('--press', '');
+/**
+ * A CSS selector to click after the keys have been pressed, for the parts of
+ * the interface that have no keyboard route to them — WP-47's file rows,
+ * which are disclosure buttons inside the panel. The first match is clicked;
+ * a selector that matches nothing is reported and the shot is still taken,
+ * because a screenshot of the wrong thing is more useful than none.
+ */
+const CLICK = opt('--click', '');
+/**
+ * A CSS selector to bring to the top of its scroller after the click — the
+ * panel is a long column and the interesting part of a shot is often below
+ * the fold once a diff is open.
+ */
+const SCROLL = opt('--scroll', '');
 
 if (!hasWebSocket()) {
   throw new Error(
@@ -92,6 +106,32 @@ await withChrome(
         });
       }
       await new Promise((r) => setTimeout(r, 2500));
+    }
+
+    if (CLICK) {
+      const { result } = await client.send('Runtime.evaluate', {
+        expression: `(() => {
+      const el = document.querySelector(${JSON.stringify(CLICK)});
+      if (!el) return 'no match';
+      el.click();
+      return 'clicked';
+    })()`,
+      });
+      process.stdout.write(`--click ${CLICK}: ${result?.value}\n`);
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+
+    if (SCROLL) {
+      const { result } = await client.send('Runtime.evaluate', {
+        expression: `(() => {
+      const el = document.querySelector(${JSON.stringify(SCROLL)});
+      if (!el) return 'no match';
+      el.scrollIntoView({ block: 'start' });
+      return 'scrolled';
+    })()`,
+      });
+      process.stdout.write(`--scroll ${SCROLL}: ${result?.value}\n`);
+      await new Promise((r) => setTimeout(r, 800));
     }
 
     const { data } = await client.send('Page.captureScreenshot', {
