@@ -88,7 +88,7 @@ test('the client only writes settings the store knows about', () => {
 });
 
 test('the settings sheet offers every setting a person can meaningfully change', () => {
-  // The five it does not: `approveText` belongs to the panel's `2 Approve`
+  // The six it does not: `approveText` belongs to the panel's `2 Approve`
   // and is edited there; `onboarded` is a fact, not a preference; and
   // `editor` (WP-47) and `terminal` (WP-04) both default to "work it out",
   // which is the right answer on nearly every machine — the sheet's own rule
@@ -108,6 +108,12 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // start by `ledger.prune()`, ninety days is right on nearly every machine,
   // and it is pinned by POSTing to /api/settings until the sheet's data
   // section grows a row for it.
+  // `osNotify` (WP-16, §101) is the seventh, and it is exempt for a sharper
+  // reason: it decides whether a background process may interrupt this
+  // machine's user, it ships OFF, and who gets to turn it on — and what the
+  // row says when they do — is an open decision for the owner. Until that is
+  // answered it is `deckhq --notify` and a POST to /api/settings, not a
+  // toggle somebody flips without reading it.
   const sheetOwned = new Set(SETTINGS_KEYS);
   const exempt = new Set([
     'approveText',
@@ -116,6 +122,7 @@ test('the settings sheet offers every setting a person can meaningfully change',
     'terminal',
     'goneHomeDays',
     'ledgerRetentionDays',
+    'osNotify',
   ]);
   const missing = Object.keys(DEFAULT_SETTINGS).filter((k) => !sheetOwned.has(k) && !exempt.has(k));
   assert.deepEqual(

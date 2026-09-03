@@ -28,6 +28,7 @@ import { LEDGER_DIR, STATE_FILE, migrateLegacyState } from './core/paths.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
 import { Permissions } from './core/permissions.mjs';
+import { createNotificationWatcher } from './core/notify-watch.mjs';
 import * as adapters from './adapters/index.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -183,10 +184,13 @@ function envHoldMs() {
 
 /**
  * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string,
- *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number }} [opts]
+ *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
+ *           notify?: boolean }} [opts]
  *   `adoptHooksPort` is set by the CLI when the user named no port: the daemon
  *   may then prefer the port the installed hooks post to (see `adoptHooksPort`
  *   above). Tests and embedders that pass a port leave it unset.
+ *   `notify` is `--notify`: OS notifications for this run, without writing
+ *   `settings.osNotify` (WP-16).
  * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, ledger:Ledger, permissions:Permissions, close:() => Promise<void> }>}
  * @throws {DeckhqAlreadyRunningError} when adopting and the hooks' port is
  *   already a running DeckHQ daemon. Thrown before anything is opened or
@@ -358,6 +362,18 @@ export async function startDaemon(opts = {}) {
   await ctx.refreshHookStatus?.().catch?.(() => {});
   await registry.start();
 
+  // WP-16. The one thing the browser's own Notification cannot do: reach the
+  // user with every window closed. Two events only — a raised hand, and a
+  // working session whose process went away without saying goodbye. Started
+  // after the first scan so the floor as it already stands is the baseline
+  // rather than a backlog to announce.
+  const notifier = createNotificationWatcher({
+    registry,
+    store,
+    flag: opts.notify === true,
+    log: createLog('notify'),
+  });
+
   const url = `http://${HOST}:${port}/`;
   log.info(`listening on ${url}`);
 
@@ -369,6 +385,7 @@ export async function startDaemon(opts = {}) {
     // nothing: a closing DeckHQ must never leave a session blocked, and must
     // never spend its last act deciding something (docs/DEVIATIONS.md §97).
     permissions.shutdown();
+    notifier.stop();
     registry.stop();
     await store.flush?.();
     // Never allowed to fail the shutdown: a measurement is not worth an

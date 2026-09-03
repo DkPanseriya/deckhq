@@ -14,6 +14,7 @@ const MIME = {
   '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.woff2': 'font/woff2',
@@ -156,8 +157,16 @@ export async function serveStatic(res, root, urlPath) {
     'cache-control': 'no-cache',
     // Nothing in this page may reach the network. Belt and braces alongside
     // the fact that we make no outbound calls at all.
+    //
+    // `worker-src` and `manifest-src` are stated rather than left to fall back
+    // through `default-src`, because WP-16 made the page install a service
+    // worker and a manifest: a directive that matters is one worth reading in
+    // the header rather than deriving. Both are `'self'` — the worker is
+    // `/sw.js` on this loopback origin and the manifest is `/manifest.webmanifest`.
     'content-security-policy':
-      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'",
+      "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; " +
+      "connect-src 'self'; font-src 'self'; worker-src 'self'; manifest-src 'self'; " +
+      "object-src 'none'; base-uri 'none'; form-action 'none'",
     'x-content-type-options': 'nosniff',
     'referrer-policy': 'no-referrer',
   });

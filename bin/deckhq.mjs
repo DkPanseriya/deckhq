@@ -4,6 +4,7 @@
  *
  *   npx deckhq            start the daemon and open the browser
  *   npx deckhq --no-open  start the daemon only
+ *   npx deckhq --notify   OS notifications for a raised hand, tab or no tab
  *   npx deckhq --port N   listen on a different loopback port
  *   npx deckhq doctor     print what DeckHQ can see here, and start nothing
  *   npx deckhq ls         the deck, as a table
@@ -94,6 +95,8 @@ async function main() {
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
+        '  --notify      OS notification when a hand goes up, or when a working',
+        '                session dies. Two events only; everything else is a badge.',
         '  --version     print the version',
         '  --help        this message',
         '',
@@ -153,7 +156,14 @@ async function main() {
 
   let daemon;
   try {
-    daemon = await startDaemon({ port, adoptHooksPort: !explicitPort });
+    // `--notify` is for this run only: it never writes `settings.osNotify`, so
+    // a one-off `deckhq --notify` does not quietly become the machine's
+    // permanent answer. WP-16.
+    daemon = await startDaemon({
+      port,
+      adoptHooksPort: !explicitPort,
+      notify: flag('--notify'),
+    });
   } catch (err) {
     if (err instanceof DeckhqAlreadyRunningError) {
       // The hooks already deliver to a DeckHQ on that port. A second daemon

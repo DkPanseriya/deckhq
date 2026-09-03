@@ -351,12 +351,20 @@ instead of walking, clips hold a representative pose, and the floor stays fully 
 ```bash
 npx deckhq --port 4400    # a different loopback port
 npx deckhq --no-open      # start the daemon without opening a browser
+npx deckhq --notify       # OS notifications, with or without a tab open
 npx deckhq doctor         # the environment report above
 npx deckhq waiting        # the queue, in the terminal
 npx deckhq statusline     # the queue, as one line
 npx deckhq stats          # what the floor did, from the local ledger
 npx deckhq --version
 ```
+
+| Flag         | Effect                                                              |
+| ------------ | ------------------------------------------------------------------- |
+| `--port <n>` | Loopback port. Default 4317, or wherever your installed hooks post  |
+| `--no-open`  | Start the daemon without opening a browser                          |
+| `--notify`   | OS notification when a hand goes up, or when a working session dies |
+| `--version`  | Print the version                                                   |
 
 | Environment variable | Effect                                                           |
 | -------------------- | ---------------------------------------------------------------- |
@@ -367,6 +375,19 @@ npx deckhq --version
 
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —
 the whole point is that debts accumulate while you are not looking.
+
+`--notify` is how that reaches you. Two events are worth an interruption and no more: an agent
+raising its hand, and a working session whose process goes away without its runtime saying
+goodbye. Finished-and-waiting and stalled are a count you consult when you choose to, never a
+toast. It is off unless you ask — `--notify` turns it on for one run and writes nothing, and
+`{"osNotify": true}` posted to `/api/settings` turns it on for good. A machine with no notifier
+falls back to the badge in silence. Verified on Windows; the macOS and Linux commands are
+asserted in the test suite and have not been run on those platforms.
+
+DeckHQ is also installable as an app. Install it from the browser's address bar and the dock or
+taskbar icon carries the needs-you count with every window closed. The service worker that makes
+that possible caches nothing and intercepts nothing — a cached floor would lie about who is
+waiting.
 
 ## Per-project actions
 

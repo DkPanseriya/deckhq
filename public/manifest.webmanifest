@@ -1,0 +1,27 @@
+{
+  "name": "DeckHQ",
+  "short_name": "DeckHQ",
+  "description": "Every AI coding session on your machine, on one office floor.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#131419",
+  "theme_color": "#131419",
+  "categories": ["developer", "productivity"],
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -412,6 +412,10 @@ function renderHeader(snapshot) {
   el.benched.textContent = formatNumber(c.benched);
 
   document.title = c.needsYou > 0 ? `(${formatNumber(c.needsYou)}) DeckHQ` : 'DeckHQ';
+  // WP-16 · begin — the dock/taskbar badge of an installed DeckHQ. Unsupported
+  // or refused degrades to the tab title above, silently.
+  setAppBadge(c.needsYou);
+  // WP-16 · end
 
   const degradedRuntimes = normalizeDegraded(snapshot.degraded);
   el.degradedBanner.hidden = degradedRuntimes.length === 0;
@@ -596,6 +600,44 @@ async function saveSetting(patch) {
     return null;
   }
 }
+
+// WP-16 · begin ------------------------------------------------------- PWA
+//
+// Three things, and nothing else lives in this file for this package: the
+// manifest link (index.html), the badge call (renderHeader above), and the
+// registration below. The service worker itself is public/sw.js and caches
+// nothing; the daemon's own OS notifications are src/core/notify-watch.mjs.
+//
+// The point of all of it: an installed DeckHQ keeps the needs-you count on
+// the dock icon when the tab, and the window, are gone.
+// docs/plan/08-PLAN-V2-100X.md §1.2, §14.
+
+/**
+ * Put the needs-you count on the app icon. Every browser that lacks the
+ * Badging API, and every window that is not installed, silently does nothing
+ * — the tab title carries the same number either way.
+ * @param {number} count
+ */
+function setAppBadge(count) {
+  try {
+    const n = Number(count) || 0;
+    if (n > 0) navigator.setAppBadge?.(n);
+    else navigator.clearAppBadge?.();
+  } catch {
+    /* an unsupported or refused badge is not an error the user can act on */
+  }
+}
+
+/** Register the service worker. Failure costs installability and nothing else. */
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('./sw.js', { scope: '/' }).catch((err) => {
+    console.debug('[deckhq] service worker not registered', err);
+  });
+}
+
+registerServiceWorker();
+// WP-16 · end ---------------------------------------------------------------
 
 // --------------------------------------------------------------- actions
 

@@ -157,6 +157,28 @@
   as a section rather than opened as a dialog of its own. Nothing about the consent contract
   changed: the literal file path and the literal JSON block are still shown before anything is
   written.
+- **Notifications that survive the closed tab.** Every notification DeckHQ could raise used to
+  come from the page, which meant the one moment it most needed to reach you — every window shut,
+  the daemon still running, a hand going up — was the one it could not. `deckhq --notify` gives
+  the daemon its own: a Windows toast, `osascript` on macOS, `notify-send` on Linux, **no
+  dependency**. Exactly two events are worth interrupting for, per
+  `docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §6 — a hand going up, and a working session whose
+  process goes away without the runtime saying goodbye. Finished-and-waiting and stalled get the
+  badge and nothing else, and a test fails if either is ever added. The copy says what an agent
+  did — _"Ada raised a hand in orbital-api"_ — never what you failed to do. Coalescing is the
+  client's: one notification per ten seconds, several sessions inside it becoming _"3 sessions
+  raised a hand"_. Off until you ask: `--notify` turns it on for one run and persists nothing,
+  `settings.osNotify` turns it on for good, and the master notifications switch turns it off
+  along with the browser's. A machine with no notifier, or one whose policy refuses ours, falls
+  back to the badge in silence. `docs/DEVIATIONS.md` §101.
+- **DeckHQ installs, and the dock icon carries the count.** A web app manifest, an icon, and a
+  service worker that exists to make the floor installable and does nothing else — it caches
+  nothing and intercepts nothing, because a cached floor is a floor that lies about who is
+  waiting and `/api/events` is a live stream. Installed, `navigator.setAppBadge()` keeps the
+  needs-you number on the dock or taskbar icon with every window closed. The icons are generated
+  from the stylesheet's own palette by `scripts/make-pwa-icons.mjs`, so no binary in this
+  repository is one nobody can regenerate, and a test fails on any host in the manifest or the
+  worker that is not this machine.
 - **A permission prompt can be answered from the panel — not yet proven against a live session.**
   DeckHQ now installs a ninth hook, `PermissionRequest`, and it is the only one in the block the
   runtime waits on: when a tool call is about to ask your permission in the terminal, the request
@@ -440,6 +462,17 @@ changes neither the agents nor one byte of ack state` drives one scripted sessio
   imports and it should fail loudly if anyone reaches past it. The 2-second flush is proved on an
   injected clock, never by sleeping (§80's lesson), and the append is proved by flushing two
   ledgers at one directory and counting both files' worth of records. `docs/DEVIATIONS.md` §100.
+- **49 tests for the notifier and the PWA, none of which start a process.** The interruption
+  budget is asserted as a table, including the absence of finished-and-waiting and stalled —
+  the two states most likely to be added back by someone who thinks more notification is more
+  product. Death detection is walked through all four shapes, and the registry's own record of
+  whether a runtime said goodbye through `SessionStart → PreToolUse → Stop → UserPromptSubmit →
+SessionEnd`. Coalescing is proved on an injected clock rather than slept through, the same
+  discipline §80 established. The exact argv array for each of the three platforms is asserted
+  whole, and a title containing `"; & $(` has to reach every one of them as a single argument
+  that equals it. The PowerShell script is read back and must contain neither value inside a
+  double-quoted string. The service worker and the manifest are read for any host that is not
+  loopback, for a cache, and for a `respondWith`. `docs/DEVIATIONS.md` §101.
 
 ### Packaging
 
@@ -523,6 +556,22 @@ changes neither the agents nor one byte of ack state` drives one scripted sessio
 - The Ubuntu runner's time for the job is the one unmeasured number: 26–29 s for all four
   populations on the Windows laptop over six runs, against the 90 s budget the work package asked
   for, plus roughly 5 s of checkout and Node setup with nothing to install.
+- **`--notify` has been run for real on Windows only.** The whole chain fired a toast on Windows
+  11 with a hostile agent name and exited 0, and Windows registered the notifier's app identity,
+  which is what a delivered toast looks like from outside. The `osascript` and `notify-send`
+  argument lists are asserted in the suite and have been executed nowhere — the same standing gap
+  as the terminal table. The Windows toast also presents itself as Windows PowerShell, because a
+  node process has no app identity of its own and giving DeckHQ one means a Start Menu shortcut,
+  which is an installer's job.
+- **Installing the app is unverified.** The manifest parses, both icons resolve at the sizes they
+  claim, and the badge call resolves against a live daemon. Whether a browser offers **Install**,
+  and whether the installed icon then takes the badge, has not been seen: the browsing context
+  available for this work refuses to register any service worker at all, including one that does
+  not exist. `docs/DEVIATIONS.md` §101.6.
+- **`settings.osNotify` ships off, and has no row in the settings sheet.** Whether a background
+  process may raise toasts on this machine is a different consent from the one the browser asked
+  for, and defaulting it on because the browser's is on would be deciding for the owner. Until
+  that decision is made, `deckhq --notify` and a POST to `/api/settings` are the interface.
 
 ### Repository
 

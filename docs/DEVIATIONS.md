@@ -4860,3 +4860,226 @@ what a measurement is for.
 
 **Acceptance.** 52 tests, 714 to 766. `npm run goldens:check` is unaffected and was run: 4 of 4
 match, 0 px over tolerance — nothing in this package touches `public/`.
+## 101. WP-16 — the notification the closed tab cannot send, and the PowerShell flag that had to change
+
+WP-16's premise is in `docs/plan/08-PLAN-V2-100X.md` §1.2: *the product's job is to let you stop
+watching*. Until this package every notification DeckHQ could raise came from `public/app.js`
+through the browser's `Notification`, which needs the page alive — so the one moment the product
+most needed to reach you, with every window closed and the daemon still running, was the one it
+could not. §14's added refusal ("no feature that requires the browser tab to be open to be
+useful") is the same sentence written as a rule.
+
+What landed: a PWA the floor can be installed as, the Badging API on the dock icon, and the
+daemon's own OS notifications behind `--notify` / `settings.osNotify`.
+
+### 1. `powershell -Command` cannot take arguments, and the brief assumed it could
+
+The package brief, and `06-ENGINEERING-WORKPLAN.md` WP-16, both say "PowerShell toast" and the
+handover adds the rule this project has held since §28: **argv arrays, never shell strings with
+interpolated user data.** The natural reading is
+`powershell -NoProfile -Command <fixed script> <title> <body>`, with the script reading `$args`.
+
+Measured on the reference machine, that form does not exist. `powershell.exe -Command` treats a
+string value as the last parameter and **appends everything after it to the command text**. With
+a title of `Ada "; & $( rm -rf ) \`whoami\` %PATH%`:
+
+```
+CMD  powershell -NoProfile -NonInteractive -Command "ARGS=[" + ($args -join "|") + "]" Ada "; & $( rm -rf ) `whoami` %PATH% orbital-api
+     → At line:1 char:36  Unexpected token 'Ada' in expression or statement.
+       The string is missing the terminator: ".
+```
+
+That is not a quoting bug to be fixed with better escaping. The title *became script source* — the
+exact failure §28 exists to make impossible. The same value through `-File`:
+
+```
+FILE powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File notify.ps1 -Title <hostile> -Body orbital-api
+     → TITLE=[Ada "; & $( rm -rf ) `whoami` %PATH%]
+       BODY=[orbital-api]
+```
+
+**Deviation 1: the Windows path is `-File`, not `-Command`.** The fixed script is
+`src/core/notify.ps1`, it ships in the package (`files` already includes `src`), and it declares
+`param([string]$Title, [string]$Body)`. `-ExecutionPolicy Bypass` is passed for that one
+invocation because `-File` is subject to execution policy and `-Command` was not; it changes no
+machine policy, and a machine whose Group Policy refuses it anyway degrades to the badge in
+silence, which is the documented behaviour for every notifier failure.
+
+Inside the script the two values never touch XML text either: the toast is built through
+`CreateTextNode($Title)` on the template DOM, so a title containing `<b>` is characters, not
+markup. `test/unit/notify.test.mjs` asserts the script contains no `$Title`/`$Body` inside a
+double-quoted PowerShell string and no `Invoke-Expression`.
+
+### 2. The one real run, on Windows
+
+The whole chain — snapshot diff, coalescing window, composed copy, argv array, `spawn`,
+`ToastNotificationManager` — was run once for real on the reference machine (Windows 11, Windows
+PowerShell 5.1), with the hostile label above as the agent's display name:
+
+```
+argv: ["powershell","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File",
+       "…/src/core/notify.ps1","-Title","DeckHQ",
+       "-Body","Ada\"; & $(rm -rf ~) `whoami` | notify-s… raised a hand in orbital-api"]
+exit code: 0   stdout: ""   stderr: ""
+```
+
+Corroboration beyond the exit code: after the run,
+`HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Notifications\Settings` contains a new
+`{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe` key — Windows
+registers an AUMID there when it accepts a toast from it. The notification platform took it.
+
+Two honest limits on that. The toast presents itself as Windows PowerShell, because a node process
+has no AppUserModelID of its own and borrowing PowerShell's shortcut identity is the only
+dependency-free way to have one; giving DeckHQ its own identity means a shortcut in the Start Menu,
+which is an installer's job, not a daemon's. And the machine's notification database was not
+updated, so the toast was shown rather than persisted into the Action Center. Both are cosmetic
+and neither is worth a dependency.
+
+**macOS and Linux have not been run.** `osascript` and `notify-send` are argv-asserted in the test
+suite and executed nowhere — the same standing gap as §9 and §91. Per `08` §1.1 rule 11 that makes
+them hypotheses. The README claims nothing about them that a reader could be surprised by.
+
+### 3. What "died unexpectedly" is allowed to mean
+
+`04-ENGAGEMENT-AND-GAMIFICATION.md` §6 budgets exactly two interruptions: a raised hand, and *a
+session that dies unexpectedly while working*. The second needs a definition the state machine can
+actually supply.
+
+`Registry` now keeps one observed, transient boolean per session, `closedCleanly`: `Stop` and
+`SessionEnd` set it, every other hook event clears it, and `registry.wasClosedCleanly(id)` reads
+it. It is deliberately **not** in the snapshot — it answers one question for the notifier and is
+not a fact about an agent that any surface draws. It touches nothing user-owned; the invariant is
+untouched, and `state-machine.test.mjs` is unchanged.
+
+A death interrupts when a session was `working` or `stalled` and live, is now `ended` and not
+live, and never said goodbye. Three consequences, all deliberate:
+
+1. A session that dies after `Stop` is `for_review`, which survives death by design (`endedOr`),
+   so it never reaches this path — it is a badge, which is what §6 asks for.
+2. A `SessionEnd` is the user closing their own session. Their action. Nothing interrupts them
+   about it.
+3. **Deviation 2: on a machine with no hooks installed, `closedCleanly` is always false**, and the
+   rule reduces to the only signal the degraded path has — a live session whose transcript's last
+   turn had not ended is now not live (`08` §4.2's `turnEnded`). That is a real signal, not a
+   guess: a finished turn would have moved the session to `for_review` before the process went.
+   But it inherits the degraded path's latency, including the 60 s live-roster cache (§77), so a
+   session that exits within that window can be reported as having stopped mid-task when it
+   finished normally a moment earlier. The right fix is hooks, which the floor already asks for on
+   its own banner. Named here rather than papered over.
+
+A session dying out of `needs_input` is not a second interruption: its hand is already up, it
+already produced one, and `needsInputSince` keeps it in the needs-you count regardless.
+
+### 4. The copy, and the two states that get nothing
+
+`for_review` and `stalled` are badge-only. That is asserted rather than assumed —
+`NOTIFYING_ENTRY` has exactly one key and a test fails if either state is added — because they are
+the two most likely to be added back by someone who thinks more notification is more product.
+
+The body copy carries no second-person fault. "Ada raised a hand in orbital-api", "Bram stopped
+mid-task in orbital-api", "3 sessions raised a hand"; never "you left", never "you forgot".
+A test greps every line the composer can produce for `you`, `your`, `forgot`, `left`, `neglect`,
+`ignored`, `abandon`. This is `04` §1's rule — the agents are the characters, the manager is never
+scored — applied to the one surface that speaks to the user when they are not looking.
+
+Coalescing is the client's window unchanged: one notification per 10 s, several sessions inside it
+become "3 sessions raised a hand".
+
+### 5. `osNotify` ships off, and has no row in the settings sheet
+
+**Deviation 3, and the open decision.** `settings.osNotify` defaults to `false`, and it is exempt
+from `settings-keys.test.mjs`'s "every setting has a control" rule the way `editor` and `terminal`
+are (§94.3).
+
+`notifications` — the switch that already existed — governs a permission the *browser* asked for
+and the user granted in a browser dialog. `osNotify` governs a background process on this machine
+raising toasts with no window open and nothing having asked. Those are not the same consent, and
+defaulting the second one on because the first is on would be deciding for the owner. So:
+`deckhq --notify` turns it on for one run and writes nothing; a POST to `/api/settings` turns it
+on for good.
+
+**The owner decides**: whether `osNotify` should default on once WP-19 makes a raised hand
+answerable from the panel (an interruption you can discharge in one keystroke is worth much more
+than one that sends you to a terminal), and what the settings row says when it gets one. Until
+then the flag is the interface.
+
+The master `notifications: false` turns the daemon off along with the browser, so a user who has
+said "no notifications" is not surprised by a process that never asked.
+
+### 6. The PWA, and what a service worker is not allowed to be here
+
+`public/manifest.webmanifest`, `public/sw.js`, and two generated icons.
+
+The service worker **caches nothing and intercepts nothing**. Its `fetch` listener never calls
+`respondWith`, so every request is issued exactly as the browser would have issued it. Two
+reasons, both load-bearing: a cached floor is a floor that lies about who is waiting, which is the
+one thing this product cannot do; and `/api/events` is an SSE stream, which passing through a
+worker's response pipeline is a well-known way to break. The worker exists so the app is
+installable, so the dock icon exists, so `navigator.setAppBadge(needsYou)` has somewhere to put
+the count with every window closed. `test/unit/pwa.test.mjs` fails on `caches`, on `respondWith`,
+and on any host in either file that is not loopback — `08` §1.1 rule 2 is not something a script
+that runs with the page closed gets an exemption from.
+
+The icons are generated, not drawn: `scripts/make-pwa-icons.mjs` renders a floor plate and four
+desks, one of them `--accent` red, straight from `public/style.css`'s palette through
+`scripts/lib/png.mjs` over `node:zlib`. `--check` re-renders and compares byte for byte, so the
+committed PNGs are reproducible and the mark cannot drift from the chrome by hand-editing. No
+binary asset in this repository is one nobody can regenerate.
+
+`src/http/server.mjs` gained `.webmanifest` as `application/manifest+json`, and the CSP now states
+`worker-src 'self'` and `manifest-src 'self'` rather than leaving both to fall through
+`default-src` — a directive that matters is worth reading in the header.
+
+**Deviation 4: installation itself is unverified.** The manifest parses, both icons resolve at the
+sizes they claim, and `navigator.setAppBadge(3)` resolves — all checked against a live daemon on
+`127.0.0.1:4571`. Service worker registration could not be exercised: the browsing context
+available here refuses `navigator.serviceWorker.register` for every script, including one that
+does not exist (a missing file returns the same "unknown error occurred when fetching the script"
+as a real one), so the failure is the environment and not the file. Whether Chrome offers
+**Install** on the real floor, and whether the installed icon takes a badge, is unproven. Per
+rule 11 it stays a hypothesis until someone runs it, and nothing in the README promises it.
+
+### 7. Acceptance
+
+`test/unit/notify.test.mjs` (38 tests) and `test/unit/pwa.test.mjs` (11), none of which start a
+process:
+
+- the interruption budget as a table: `needs_input` entry fires once and only on entry;
+  `for_review` and `stalled` fire nothing; a benched or let-go session fires nothing; a session
+  first seen with its hand already up is not announced, so a daemon restart does not replay the
+  backlog;
+- death detection over all four shapes — vanished while working, vanished while stalled, closed
+  cleanly, and dying out of `for_review` — plus the registry's own `wasClosedCleanly` walked
+  through `SessionStart → PreToolUse → Stop → UserPromptSubmit → SessionEnd`;
+- coalescing on an injected clock (§80's discipline): three hands in one window is **one**
+  notification reading "3 sessions raised a hand"; a fourth inside the window waits for it;
+- `SECURITY:` the exact argv array for each of the three platforms, asserted whole;
+- `SECURITY:` a title containing `"; & $(` reaches every notifier as exactly one argument that
+  **equals** it, and no argument on any platform is a shell or a `-c`;
+- `SECURITY:` the notifier's own source, comments stripped, contains no `shell: true` and no
+  `exec(`, and spawns with a named argv array; the PowerShell script interpolates neither value
+  into a double-quoted string;
+- the copy tests above, and every switch: off by default, `--notify` on without persisting,
+  master switch off wins, and turning it on mid-run announces nothing that happened while it was
+  off;
+- the PWA files: no non-loopback host in either, no cache, no `respondWith`, both icons present at
+  the sizes the manifest claims, the `.webmanifest` MIME type, the two new CSP directives, and the
+  client's WP-16 block still being one delimited region.
+
+838 tests to 887, lint and format clean.
+
+This package was built on a branch taken before WP-50, WP-19, WP-54 and the Codex follow-up
+landed, and merged onto them at the end — which is why it is §101 and not §96, the number the
+brief named. Four files conflicted and all four resolutions are additive: `src/daemon.mjs` (the
+notifier is constructed beside `Permissions`, and `close()` releases held permission requests
+first — a session blocked on an answer outranks a toast); `test/unit/settings-keys.test.mjs` (the
+exempt set now has six entries, not five, and says why for each); `CHANGELOG.md` (both entries
+kept). `src/core/state-machine.mjs` merged clean beside WP-19's pending-permission map, which
+`closedCleanly` neither reads nor touches.
+
+`npm run goldens:check` is unaffected, and that is measured rather than reasoned: all four
+populations match, **0 pixels moved at all** — not "inside tolerance", zero — in 33.4 s. It could
+hardly be otherwise, since the client's whole footprint is a `<link rel="manifest">`, one
+`setAppBadge` call and a registration, none of which paints anything; but §1.1 rule 11 says a
+claim is a hypothesis until it is run on a machine, and this one is cheap to run. The live floor
+was also screenshotted against a running daemon after the change (`08` §1.1 rule 10).
