@@ -127,7 +127,7 @@ Honest inventory of what was not exercised on this machine:
   adapter.
 - `openInTerminal()` and `openNewSession()` on macOS and Linux (Windows-only machine).
   **Widened and re-stated, WP-04.** Both now go through a table of ten emulators
-  (`src/core/terminals.mjs` since §94) instead of one `.command` file and four `-e`
+  (`src/core/terminals.mjs` since §95) instead of one `.command` file and four `-e`
   guesses. Every one of them is **implemented against the emulator's own documented CLI or
   scheme, and unit-tested**: `test/unit/terminals.test.mjs` asserts the exact argv array for
   all 21 (platform, emulator, launch form) pairs, and the pair list is checked against the
@@ -3702,7 +3702,7 @@ shared temp directory is a delete loop, and the OS clears it.
 
 ### Left for other owners
 
-- ~~**`src/adapters/codex/adapter.mjs` still builds shell strings.**~~ **Closed by §94.** Its
+- ~~**`src/adapters/codex/adapter.mjs` still builds shell strings.**~~ **Closed by §95.** Its
   macOS path interpolated the session id into an AppleScript
   `do script "cd \"…\" && codex resume <id>"`, and its Linux path into
   `bash -lc "codex resume <id>"` — the exact form this module was written to remove, and a
@@ -3711,7 +3711,7 @@ shared temp directory is a delete loop, and the OS clears it.
 - **No UI.** The `terminal` setting is reachable through `POST /api/settings` and nowhere else;
   `public/` is outside this package. A picker in the settings panel, populated from
   `terminalIds()` filtered to the running platform, is Product Engineering's.
-- **The module's home.** ~~It lives under `src/adapters/claude-code/`~~ **Moved by §94.** It was
+- **The module's home.** ~~It lives under `src/adapters/claude-code/`~~ **Moved by §95.** It was
   under `src/adapters/claude-code/` because WP-04 said so, and because the spawn discipline
   belongs beside the adapter that spawns. It is not Claude-Code-specific, and both
   `src/cli/doctor.mjs` and `src/http/routes/settings.mjs` were importing it across that
@@ -4055,7 +4055,7 @@ every test and obvious in one screenshot, and the first one the gate caught by i
 - **The view toggle does not put let-go agents on the floor.** It makes them reachable — palette,
   panel, selection — which is everything the dead setting ever promised minus the drawing, and the
   drawing is `public/render/**`.
-## 94. Codex adapter — the last shell string in the tree, and the module that moved to meet it
+## 95. Codex adapter — the last shell string in the tree, and the module that moved to meet it
 
 **Spec:** `08-PLAN-V2-100X.md` §1.1 rule 8 keeps runtime CLI knowledge inside its adapter;
 `07-AGENT-HANDOVERS.md` Agent Backend states the discipline that goes with it — "argv arrays only,

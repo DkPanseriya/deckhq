@@ -354,7 +354,7 @@ test('buildLaunch refuses a launch form the emulator does not have', () => {
 
 test('the old adapter path re-exports the moved module, binding for binding', () => {
   // The module moved to `src/core/` when the Codex adapter became its second
-  // caller (docs/DEVIATIONS.md §94). `src/cli/doctor.mjs` and
+  // caller (docs/DEVIATIONS.md §95). `src/cli/doctor.mjs` and
   // `src/http/routes/settings.mjs` still import it by the old path, so the
   // re-export has to carry everything, not just what those two happen to use.
   assert.deepEqual(Object.keys(shim).sort(), Object.keys(moved).sort());
@@ -366,7 +366,7 @@ test('the old adapter path re-exports the moved module, binding for binding', ()
 test('no launch form anywhere hands a command to a shell', () => {
   // The failure this catches by name: `sh -c "<line>"`, `bash -lc "<line>"`,
   // and the `-c`/`-lc` forms an emulator's own docs sometimes suggest. The
-  // Codex adapter did exactly this until §94; `codex-terminal.test.mjs` now
+  // Codex adapter did exactly this until §95; `codex-terminal.test.mjs` now
   // runs this same assertion over its command.
   for (const { terminal, via, platform, key } of pairsInTable()) {
     const { cmd, args } = buildLaunch(terminal, {

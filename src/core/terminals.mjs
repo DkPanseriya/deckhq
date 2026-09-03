@@ -34,7 +34,7 @@
  * its second caller, which is the condition §91 set for moving it here. It
  * imports only node builtins and knows nothing about any runtime, so it does
  * not invert `02-ARCHITECTURE.md` §2's layering. See `docs/DEVIATIONS.md`
- * §94; `src/adapters/claude-code/terminals.mjs` remains as a re-export.
+ * §95; `src/adapters/claude-code/terminals.mjs` remains as a re-export.
  */
 
 import fs from 'node:fs';

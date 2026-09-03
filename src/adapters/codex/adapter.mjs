@@ -21,7 +21,7 @@
  * to be kept in here too. Opening a terminal is delegated whole to
  * `src/core/terminals.mjs`, which owns the per-emulator argv and is the only
  * place a shell line can exist at all (a quoted `#!/bin/sh` wrapper file, for
- * the three macOS applications that accept nothing else). §94.
+ * the three macOS applications that accept nothing else). §95.
  */
 
 import { spawn } from 'node:child_process';
@@ -555,7 +555,7 @@ async function send(id, text, { cwd, timeoutMs } = {}) {
  * as an argv array and hand it to `launchTerminal()`, which owns detection,
  * the per-emulator argv, and the one quoted wrapper file the three macOS
  * applications with no argv surface require. Nothing here builds a string.
- * §94, and `test/unit/codex-terminal.test.mjs`.
+ * §95, and `test/unit/codex-terminal.test.mjs`.
  *
  * Best effort, unchanged: any failure is swallowed rather than thrown, since
  * there is no result channel for this method and a silently-missing terminal
@@ -601,7 +601,7 @@ async function openInTerminal(id, cwd, opts = {}) {
  * .instructions` is still dropped where the Claude Code adapter now carries
  * it — but both are behaviour, not the shell-string defect this change is
  * for, and neither can be checked without Codex on the machine (§8). WP-23
- * owns them; `docs/DEVIATIONS.md` §94 records them so they are not forgotten.
+ * owns them; `docs/DEVIATIONS.md` §95 records them so they are not forgotten.
  *
  * The user's pinned emulator IS forwarded, because the whole point of routing
  * through `launchTerminal()` is that both adapters obey the same setting.

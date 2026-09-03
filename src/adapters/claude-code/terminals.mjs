@@ -4,7 +4,7 @@
  * WP-04 put it here because the spawn discipline belonged beside the adapter
  * that spawns, and left the note in `docs/DEVIATIONS.md` §91: "when a second
  * adapter adopts it, it should move to `src/core/terminals.mjs`". The Codex
- * adapter is that second adapter (§94), so it has moved.
+ * adapter is that second adapter (§95), so it has moved.
  *
  * Nothing Claude-Code-specific was ever in it, and it imports only node
  * builtins, so it does not invert `02-ARCHITECTURE.md` §2's layering the way

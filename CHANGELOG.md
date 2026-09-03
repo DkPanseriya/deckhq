@@ -223,7 +223,7 @@
   the whole of WP-04 in passing: ten emulators instead of four, `$TERMINAL`, and the `terminal`
   setting, which this adapter used to ignore. The adapter is still unverified against real Codex
   (`docs/DEVIATIONS.md` §8) — what is proved here is the arrays, not the behaviour.
-  `docs/DEVIATIONS.md` §94.
+  `docs/DEVIATIONS.md` §95.
 - **SECURITY: a session id could choose where a launcher script was written.** The macOS
   "open in terminal" path built its temp filename as `deckhq-resume-<session id>-<timestamp>`,
   and the id arrives in a request body. An id containing `../` therefore picked the directory.

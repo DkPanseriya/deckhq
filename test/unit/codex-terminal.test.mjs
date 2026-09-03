@@ -8,7 +8,7 @@
  * (platform, emulator) pair, and assert that no user-supplied value can ever
  * become part of a string a shell would parse.
  *
- * The defect this file exists to keep out was live until §94. `openInTerminal`
+ * The defect this file exists to keep out was live until §95. `openInTerminal`
  * built its command as a shell string on both POSIX platforms:
  *
  *     osascript -e 'tell application "Terminal" to do script
