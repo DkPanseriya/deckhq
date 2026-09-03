@@ -238,7 +238,10 @@ export function register(router, ctx) {
     }
 
     try {
-      await adapter.openNewSession(resolved, { instructions });
+      await adapter.openNewSession(resolved, {
+        instructions,
+        terminal: store.settings.terminal,
+      });
       queuePendingIdentity(resolved, body.name, body.avatar);
       // Pick the new session up as soon as the runtime writes its transcript.
       setTimeout(() => registry.refresh().catch(() => {}), 2500);
@@ -317,7 +320,10 @@ export function register(router, ctx) {
     }
 
     try {
-      await adapter.openNewSession(resolved, { instructions });
+      await adapter.openNewSession(resolved, {
+        instructions,
+        terminal: store.settings.terminal,
+      });
       queuePendingIdentity(resolved, body.name, body.avatar);
       setTimeout(() => registry.refresh().catch(() => {}), 2500);
       return sendJson(res, 200, { ok: true, cwd: resolved });
@@ -446,7 +452,9 @@ export function register(router, ctx) {
     const agent = registry.agents.find((a) => a.id === id);
     if (!agent) return sendError(res, 404, 'Unknown session');
     try {
-      await adapterFor(id).openInTerminal(splitAgentId(id).sessionId, agent.cwd);
+      await adapterFor(id).openInTerminal(splitAgentId(id).sessionId, agent.cwd, {
+        terminal: store.settings.terminal,
+      });
       return sendJson(res, 200, { ok: true });
     } catch (err) {
       log.warn('open failed', id, err.message);
@@ -499,7 +507,9 @@ export function register(router, ctx) {
       if (target === 'app') {
         await adapter.openInApp(splitAgentId(id).sessionId, agent.cwd);
       } else {
-        await adapter.openInTerminal(splitAgentId(id).sessionId, agent.cwd);
+        await adapter.openInTerminal(splitAgentId(id).sessionId, agent.cwd, {
+          terminal: store.settings.terminal,
+        });
       }
       return sendJson(res, 200, { ok: true, target });
     } catch (err) {

@@ -8,6 +8,7 @@
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { RESUME_TARGETS } from '../../core/store.mjs';
 import { EDITOR_NAMES } from '../../core/editor.mjs';
+import { terminalIds } from '../../adapters/claude-code/terminals.mjs';
 
 const ALLOWED = new Set([
   'stallWindowMs',
@@ -20,7 +21,14 @@ const ALLOWED = new Set([
   'resumeIn',
   'approveText',
   'editor',
+  'terminal',
 ]);
+
+/**
+ * Every id `terminal` may name, across every platform — `auto` plus the
+ * emulator table. Computed once: the table is static.
+ */
+const TERMINAL_IDS = new Set(terminalIds());
 
 /**
  * @param {import('../server.mjs').Router} router
@@ -68,6 +76,12 @@ export function register(router, ctx) {
         patch[k] = name;
         continue;
       }
+      // And for `terminal`: this is the only layer that can know which
+      // emulators exist, so it is the layer that rejects an id none of them
+      // matches. A valid id for another platform IS accepted — a state file
+      // that travels between a Mac and a Linux box is not a bad request, and
+      // detection ignores a pin it cannot resolve.
+      if (k === 'terminal' && !(typeof v === 'string' && TERMINAL_IDS.has(v))) continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

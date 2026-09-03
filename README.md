@@ -212,8 +212,12 @@ These are real, and listed here rather than discovered later.
   conventions but has never run against real Codex data, because Codex is not installed on the
   development machine. It reports itself unavailable cleanly and degrades without throwing. Treat
   DeckHQ as a Claude Code tool until that adapter has been exercised end to end.
-- **"Open in terminal" is verified on Windows only.** The macOS and Linux paths are implemented
-  and reviewed but have not been run. The rest of the product is CI-tested on all three.
+- **"Open in terminal" is verified on Windows only.** macOS knows Ghostty, iTerm2, Warp, kitty,
+  WezTerm and Terminal.app; Linux honours `$TERMINAL` and then Alacritty, foot, kitty, WezTerm,
+  GNOME Terminal, Konsole, Xfce Terminal and xterm. Every one of them is implemented against
+  that emulator's documented interface and unit-tested down to the exact argument list — and
+  none of them has been run on a real Mac or a real Linux desktop. Treat them as untested until
+  this line says otherwise. The rest of the product is CI-tested on all three.
 - **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by public list
   prices so you can compare projects against each other. It has no idea what your plan actually
   charges you, and it is labelled as an estimate everywhere it appears.
