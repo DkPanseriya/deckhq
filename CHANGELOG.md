@@ -188,6 +188,14 @@
 - The README's panel shot is the **review card** (`docs/media/panel-review-card.png`), and the
   section above it describes three weighted actions rather than the seven-button row that shipped
   before it.
+- **1.2.0 has a GitHub release**, with the floor, the review card and the hero GIF attached and the
+  changelog section as its notes — the package had been on the registry with no release page at
+  all. The repository description is now the `package.json` description verbatim, so the two cannot
+  drift apart, and `local-first` and `privacy` join the topics.
+- **The release workflow stops attaching a screenshot of a panel that no longer exists.**
+  `publish.yml` and `packaging/README.md` named `docs/media/panel.png`, which is the panel from
+  before WP-08, so every future release page would have shown the superseded surface. Both now name
+  the review card and the hero GIF, matching what v1.2.0 actually carries.
 
 ## 1.2.0
 
