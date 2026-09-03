@@ -91,7 +91,9 @@ import { rateCardVersion } from './rates.mjs';
 
 /**
  * @typedef {object} RuntimeAdapter
- * @property {string} id
+ * @property {import('./model.mjs').RuntimeId} id  the same value that prefixes
+ *   every `Agent.runtime` this adapter produces. It was declared as a bare
+ *   `string`, so the two could not be compared (WP-22).
  * @property {string} [label]
  * @property {() => Promise<boolean>} available
  * @property {() => Promise<LiveSession[]>} liveSessions
@@ -257,7 +259,10 @@ function compareAgents(a, b) {
 
 export class Registry {
   /**
-   * @param {{store: Store, adapters: RuntimeAdapter[], log?: import('./log.mjs').Log}} opts
+   * `identity` and `ledger` are destructured below and were never declared;
+   * `daemon.mjs` has been passing `identity` since WP-20 (WP-22).
+   * @param {{store: Store, adapters: RuntimeAdapter[], log?: import('./log.mjs').Log,
+   *         identity?: any, ledger?: any}} opts
    */
   constructor({ store, adapters, log, identity, ledger }) {
     this.store = store;

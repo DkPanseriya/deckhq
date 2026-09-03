@@ -54,6 +54,8 @@ export const DEMO_NOTE = 'These are actors. Run `claude` in any repo and a real 
  *
  * @type {ReadonlyArray<readonly [string, string, string, string, number, number]>}
  */
+/** @type {ReadonlyArray<[string, string, import('./model.mjs').ActivityState,
+ *   import('./model.mjs').AckState, number, number]>} */
 const CAST = Object.freeze([
   ['orbital-api', 'Rate limiter for the public API', 'working', 'active', 6, 0],
   ['orbital-api', 'Migrate auth to short-lived tokens', 'needs_input', 'active', 41, 12],
@@ -109,6 +111,7 @@ export function buildDemoSnapshot(opts = {}) {
   /** @type {Map<string, number>} project slug -> how many actors it has so far */
   const seatsTaken = new Map();
 
+  /** @type {import('./model.mjs').Agent[]} */
   const agents = CAST.map(([project, title, activityState, ackState, ageMin, waitMin], i) => {
     const cwd = demoCwd(project);
     const projectId = `deckhq-demo-${project}`;

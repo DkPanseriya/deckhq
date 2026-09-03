@@ -140,7 +140,10 @@ test('the page links the manifest', () => {
 });
 
 test('the client registers the worker and badges the count', () => {
-  const app = read('public', 'app.js');
+  // WP-22 moved renderHeader — and with it WP-16's whole client footprint —
+  // into app-header.js. The block is one block still; it is in the file the
+  // comment inside it names.
+  const app = read('public', 'app-header.js');
   assert.match(app, /navigator\.serviceWorker\.register\('\.\/sw\.js'/);
   assert.match(app, /navigator\.setAppBadge\?\.\(n\)/);
   assert.match(app, /navigator\.clearAppBadge\?\.\(\)/);
@@ -152,7 +155,7 @@ test("WP-16's client footprint stays three delimited lines' worth", () => {
   // Other agents are editing app.js at the same time. Everything this package
   // adds is inside one marked block plus the single call in renderHeader, so a
   // merge conflict is a conflict about one region rather than a scavenger hunt.
-  const app = read('public', 'app.js');
+  const app = read('public', 'app.js') + read('public', 'app-header.js');
   assert.equal((app.match(/WP-16 · begin/g) || []).length, 2);
   assert.equal((app.match(/WP-16 · end/g) || []).length, 2);
 });

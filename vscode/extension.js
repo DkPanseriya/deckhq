@@ -35,7 +35,7 @@ const VIEW_TYPE = 'deckhq.floor';
 let panel;
 /** @type {vscode.StatusBarItem|undefined} */
 let statusItem;
-/** @type {Monitor|undefined} */
+/** @type {InstanceType<typeof Monitor>|undefined} */
 let monitor;
 /** @type {vscode.OutputChannel|undefined} */
 let output;

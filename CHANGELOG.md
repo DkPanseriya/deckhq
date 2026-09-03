@@ -557,6 +557,19 @@
   `MK1.2j1` — so a busy week does not drain a project's numbering or the name pool. All the
   parsing is in the adapter, as always. `docs/DEVIATIONS.md` §117.
 
+- **`npm run typecheck` — `tsc --noEmit --checkJs` over the JSDoc that was already there.** Two
+  projects, because the two sides of the static-file boundary do not share a platform: the root
+  `tsconfig.json` covers `src/`, `scripts/`, `plugin/`, `vscode/` and `bin/` with no DOM, and
+  `public/tsconfig.json` covers the browser with no `process` and no `Buffer` — so `public/`
+  reaching for a Node global is a type error now rather than a code review. CI runs it on Ubuntu
+  once, after lint, and `prepublishOnly` runs it too. One dev dependency, `typescript`; Node and
+  the VS Code API are declared by hand in `types/` rather than installed, with the cost of that
+  written at the top of the file. **Zero `@ts-ignore` in the tree.** It found thirty-two places
+  where the documentation and the code had drifted apart, including the one
+  `docs/plan/01-AUDIT.md` F21 named: `placement()` in `src/core/model.mjs` reads `subagent` and
+  its signature did not say so, while `derivePlacement()` — its copy on the other side of the
+  boundary — always did. `docs/DEVIATIONS.md` §121.
+
 ### Changed
 
 - **The building is the size of what is in it.** The floor drew the right rooms and then measured
@@ -720,8 +733,48 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   before the server stops. A `SIGKILL` of the daemon itself still runs no JavaScript and leaves
   its children reparented; that case is named rather than claimed.
 
+- **`public/render/plan.js` was 3,255 lines and is now seven modules.** `plan-units` (the shapes
+  and every dimension), `plan-packing` (flow, shelf, squarify, tileRows), `plan-anchors`,
+  `plan-rooms` (a project's room and the idle strip), `plan-service` (the office and the lounge)
+  and `plan-nav` (walls, corridors, doors) — with `plan.js` left as the assembly step, re-exporting
+  all sixteen names it exported before, so nothing outside it had to change. Not one function body
+  moved a character: a verification pass found all ninety-one top-level declarations verbatim in
+  exactly one module each, and the goldens moved **0 px** on all four populations.
+  `docs/DEVIATIONS.md` §121.
+
+- **`public/app.js` was 2,721 lines and is now a composition root over ten parts.** The keyboard
+  map, the header, the hover card and the floor wiring — plus the notifications, the snapshot, the
+  day's card, the creation dialogs, the furniture launchers and the state they share. Three rules
+  made it safe: every `document` listener stayed on the line it was on, because the panel's own
+  keydown handler must still run before the floor's; the shared mutable state moved to one leaf
+  module as live bindings a part can read and cannot write; and no part imports the root back.
+  `app.js` is 748 lines. Seven static-scan tests had their file lists updated and not one of their
+  assertions. Goldens **0 px**, and the keyboard, the palette, the deck, the redaction toggle and
+  the new-agent dialog were each driven in a real browser. `docs/DEVIATIONS.md` §121.
+
+- **"Who is on the floor" is one rule in one file.** It used to be two, either side of the
+  static-file boundary — `placement()` and `isGoneHome()` in `src/core/model.mjs`,
+  `derivePlacement()` and `isGoneHome()` in `public/render/` — each with a comment asking the next
+  person not to let them drift, and both had drifted. The boundary was never symmetrical: a
+  browser genuinely cannot resolve `src/`, but Node resolves `public/` fine and has been importing
+  `public/names.js` since WP-20. So the rule lives in `public/floor-rule.js`, which both sides
+  import; `model.mjs` and `plan.js` re-export it, so no import anywhere had to change, and
+  `derivePlacement` is now the same function object as `placement` rather than a copy of it.
+  Proven on both routes: `GET /floor-rule.js` serves 200, the live page imports it and answers,
+  and `GET /../src/core/model.mjs` still 404s. `docs/DEVIATIONS.md` §121.
+
 ### Fixed
 
+- **Thirty-two type defects the JSDoc had been hiding.** Every one was live and invisible to 1,520
+  tests: `Settings` was three keys short of `DEFAULT_SETTINGS`, `SessionSummary` never declared
+  the `archived` flag the adapter stamps onto it, `public/render/plan.js`'s `Room` was missing the
+  six fields the packer and the walk planner write and read, `agents.js` carried five stale copies
+  of `plan.js`'s types (so `scene.js` was handing one plan to two modules that disagreed about
+  what a plan is), `el.stage` was declared twice in `public/app.js`, a `@property` in
+  `src/core/actions.mjs` closed with a brace instead of a bracket, and one branch in
+  `roomFor()` looked for a room kind that has never existed. Every fix is a comment, a type
+  annotation, one duplicate object key and one provably dead line: the goldens moved **0 px** on
+  all four populations. `docs/DEVIATIONS.md` §121.
 - **SECURITY: on Windows, a session id containing `&` was split into two commands.** Opening a
   session in a console goes through `start`, which is an internal `cmd.exe` command rather than a
   program, so `cmd.exe` re-parses the whole command line after it — and Node's Windows argument

@@ -107,7 +107,13 @@ function visualState(agent) {
   return agent.activityState;
 }
 
-/** @type {{STATE_COLORS?: Record<string,string>}|null} set once render/palette.js loads */
+/**
+ * Set once `render/palette.js` loads. It was declared as carrying only
+ * `STATE_COLORS` while `rarityWordFor()` calls two more of its exports (WP-22).
+ * @type {{STATE_COLORS?: Record<string,string>,
+ *   appearanceFor?: (id: string) => {tier: string},
+ *   rarityWord?: (tier: string) => string|null}|null}
+ */
 let paletteModule = null;
 
 const ACTION_LABELS = {
@@ -892,7 +898,9 @@ export function createPanel(opts) {
     moreBtn.textContent = '⋯ more';
     moreBtn.setAttribute('aria-expanded', 'false');
     moreBtn.setAttribute('aria-haspopup', 'true');
-    moreBtn.addEventListener('click', () => setMoreOpen(moreMenu.hidden));
+    // `HTMLElement.hidden` is `boolean | 'until-found'` in the DOM types; this
+    // one is only ever assigned a boolean, four lines above and in `setMoreOpen`.
+    moreBtn.addEventListener('click', () => setMoreOpen(/** @type {boolean} */ (moreMenu.hidden)));
     actionsEl.appendChild(moreBtn);
 
     // Everything else, as plain buttons. Each ack action here is still an
@@ -946,6 +954,7 @@ export function createPanel(opts) {
     return btn;
   }
 
+  /** @param {boolean} open */
   /** @param {boolean} open */
   function setMoreOpen(open) {
     moreMenu.hidden = !open;
@@ -1836,7 +1845,10 @@ export function createPanel(opts) {
   function setComposerBusy(busy, label) {
     textarea.disabled = busy;
     sendBtn.disabled = busy;
-    for (const b of actionsEl.querySelectorAll('.btn--weighted')) b.disabled = busy;
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (
+      actionsEl.querySelectorAll('.btn--weighted')
+    ))
+      b.disabled = busy;
     hintEl.textContent = busy ? label || 'Sending…' : '';
     hintEl.classList.remove('is-warn');
   }

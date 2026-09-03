@@ -222,7 +222,8 @@ async function buildSessionSummary(filePath, mtimeMs) {
  * Every Codex session on disk, newest first, bounded by opts. A parse
  * failure on one session is logged and skipped; it never fails the scan
  * (docs/02-ARCHITECTURE.md §2.1, CONTRACTS.md rule 6).
- * @param {{maxAgeDays:number, limit:number}} opts
+ * @param {{maxAgeDays?:number, limit?:number}} [opts] optional at runtime: the
+ *   `= {}` default means a bare call is legal (WP-22).
  * @returns {Promise<import('../../core/model.mjs').SessionSummary[]>}
  */
 async function scanSessions({ maxAgeDays, limit } = {}) {
@@ -335,7 +336,8 @@ async function findSessionFile(sessionId) {
  * Full message list for one session, most recent last. Text only — no tool
  * calls, no reasoning/thinking items (see parse.mjs's extractMessage).
  * @param {string} id
- * @param {{maxMessages:number}} opts
+ * @param {{maxMessages?:number}} [opts] every field is optional at runtime:
+ *   the `= {}` default means a bare call is legal (WP-22).
  * @returns {Promise<import('../../core/model.mjs').Message[]>}
  */
 async function conversation(id, { maxMessages } = {}) {
@@ -532,7 +534,8 @@ export function codexNewSessionCommand(instructions) {
  * Send a turn into a Codex session via its non-interactive exec surface.
  * @param {string} id
  * @param {string} text
- * @param {{cwd:string, timeoutMs:number}} opts
+ * @param {{cwd?:string, timeoutMs?:number}} [opts] optional at runtime: the
+ *   `= {}` default means a bare call is legal (WP-22).
  * @returns {Promise<import('../../core/model.mjs').SendResult>}
  */
 async function send(id, text, { cwd, timeoutMs } = {}) {

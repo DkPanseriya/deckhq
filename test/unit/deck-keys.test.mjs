@@ -31,11 +31,15 @@ const PUBLIC = path.resolve(HERE, '../../public');
 const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
 const read = (name) => stripComments(fs.readFileSync(path.join(PUBLIC, name), 'utf8'));
 
-/** The `handleKeydown` body in app.js, comments stripped. */
+/**
+ * The `handleKeydown` body, comments stripped. WP-22 moved the map out of
+ * `app.js` into `app-keys.js`; the map itself is unchanged, so only the file
+ * this reads moved with it (`docs/DEVIATIONS.md` §121).
+ */
 function keyboardMap() {
-  const app = read('app.js');
+  const app = read('app-keys.js');
   const start = app.indexOf('function handleKeydown(');
-  assert.notEqual(start, -1, 'handleKeydown() not found in app.js');
+  assert.notEqual(start, -1, 'handleKeydown() not found in app-keys.js');
   const end = app.indexOf('\nfunction ', start + 1);
   return app.slice(start, end === -1 ? undefined : end);
 }
@@ -92,7 +96,7 @@ test('J and K clamp rather than wrap', () => {
 test('the strip, the deck and the floor walk one queue in one order', () => {
   // queueOrder is the only ordering exported, and it is what the floor's J/K
   // read as well: app.js's getNeedsYouQueue is a call to it and nothing else.
-  const app = read('app.js');
+  const app = read('app-header.js');
   const start = app.indexOf('function getNeedsYouQueue(');
   const body = app.slice(start, app.indexOf('\nfunction ', start + 1));
   assert.match(body, /return queueOrder\(snapshot\.agents, \{ projectFilter \}\);/);
@@ -106,7 +110,7 @@ test('J and K are one call in app.js, whichever level is on screen', () => {
   assert.match(map, /case 'j':\s*case 'J':\s*deckUI\?\.move\(1\);/);
   assert.match(map, /case 'k':\s*case 'K':\s*deckUI\?\.move\(-1\);/);
   // The pre-WP-10 floor-only mover is gone, not merely unused.
-  assert.doesNotMatch(read('app.js'), /function moveNeedsYouQueue\(/);
+  assert.doesNotMatch(read('app.js') + read('app-keys.js'), /function moveNeedsYouQueue\(/);
 });
 
 test('1, 2 and 3 reach the panel, and name the deck row when there is one', () => {
@@ -124,9 +128,9 @@ test('A and B act on the same row the number keys do', () => {
 });
 
 test('keyTarget is the deck cursor in the deck and the panel elsewhere', () => {
-  const app = read('app.js');
+  const app = read('app-keys.js');
   const start = app.indexOf('function keyTarget(');
-  assert.notEqual(start, -1, 'keyTarget() not found in app.js');
+  assert.notEqual(start, -1, 'keyTarget() not found in app-keys.js');
   const body = app.slice(start, app.indexOf('\n}', start) + 2);
   assert.match(body, /deckUI\?\.isOpen\(\) \? deckUI\.cursor\(\) : null/);
 });

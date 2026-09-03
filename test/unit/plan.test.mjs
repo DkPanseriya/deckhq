@@ -761,3 +761,41 @@ test('the directory strip packs, places and gets a door like any other room', ()
   );
   assert.deepEqual(directory.entries.map((e) => e.id).sort(), ['b', 'c']);
 });
+
+// ------------------------------------------------- WP-22: the split holds
+
+/**
+ * `plan.js` was 3,255 lines and is now an assembly step over six siblings
+ * (`docs/DEVIATIONS.md` §121). The split is only safe while two things stay
+ * true, and neither of them is visible to any other test in this file: the
+ * public surface has to be exactly what it was, and the pieces have to stay
+ * pieces. Both are asserted here rather than left to review.
+ */
+test('plan.js still exports every name it exported before the split', async () => {
+  const mod = await import('../../public/render/plan.js');
+  // The list the rest of the tree imports, verbatim from before WP-22 split
+  // the file. A name that leaves this module breaks `scene.js`, `minifloor.js`
+  // or one of six test files, none of which import a `plan-*.js` directly.
+  const expected = [
+    'DIRECTORY_MAX_H',
+    'GONE_HOME_DAYS',
+    'PLATE_BAND',
+    'U',
+    'buildPlan',
+    'floorPopulation',
+    'formatTokens',
+    'isActiveAgent',
+    'isDeskAgent',
+    'isGoneHome',
+    'payrollLine',
+    'resolveAnchors',
+    'shelfPack',
+    'squarify',
+    'tableSizesFor',
+    'tileRows',
+  ];
+  for (const name of expected) {
+    assert.ok(name in mod, `plan.js no longer exports ${name}`);
+    assert.notEqual(mod[name], undefined, `plan.js exports ${name} as undefined`);
+  }
+});

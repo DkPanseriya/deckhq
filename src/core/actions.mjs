@@ -33,7 +33,7 @@ import process from 'node:process';
  * @property {'reveal'|'run'|'open'} kind
  * @property {string} [file]      relative to the project root, for `run`
  * @property {string} [url]       opened after a `run`, or on its own for `open`
- * @property {string} [furniture} which prop surfaces it on the floor
+ * @property {string} [furniture] which prop surfaces it on the floor
  */
 
 /**

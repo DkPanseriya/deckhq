@@ -92,7 +92,7 @@ function isFiniteNumber(n) {
  * — on every poll, forever, with nothing on the floor to say why.
  *
  * `archived` is the desktop app's to answer, freshly, on every scan.
- * @param {object} summary
+ * @param {import('./model.mjs').SessionSummary} summary
  */
 function withoutArchived(summary) {
   const copy = { ...summary };
@@ -114,7 +114,7 @@ export class SummaryCache {
     this.minWriteIntervalMs = opts.minWriteIntervalMs ?? MIN_WRITE_INTERVAL_MS;
     this.schemaVersion = opts.schemaVersion ?? CACHE_SCHEMA_VERSION;
 
-    /** @type {Map<string, {mtimeMs:number, size:number, summary:object}>} */
+    /** @type {Map<string, {mtimeMs:number, size:number, summary:import('./model.mjs').SessionSummary}>} */
     this._entries = new Map();
     /** @type {Promise<void>|null} */
     this._loading = null;
@@ -230,7 +230,10 @@ export class SummaryCache {
    * @param {string} file
    * @param {number} mtimeMs
    * @param {number} size
-   * @returns {object|undefined}
+   * @returns {import('./model.mjs').SessionSummary|undefined} the only thing
+   *   this cache ever stores. It was declared as a bare `object`, which says
+   *   "no properties", so every field the adapter read off a cache hit was a
+   *   type error (WP-22).
    */
   get(file, mtimeMs, size) {
     const entry = this._entries.get(file);
@@ -254,7 +257,7 @@ export class SummaryCache {
    * @param {string} file
    * @param {number} mtimeMs
    * @param {number} size
-   * @param {object} summary
+   * @param {import('./model.mjs').SessionSummary} summary
    */
   set(file, mtimeMs, size, summary) {
     if (!isFiniteNumber(mtimeMs) || !isFiniteNumber(size) || !isPlainObject(summary)) return;

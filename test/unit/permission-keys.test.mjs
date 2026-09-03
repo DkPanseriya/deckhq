@@ -143,9 +143,10 @@ test('the panel’s listener asks the rule and does nothing else', () => {
 });
 
 test('app.js still owns S and Shift+S, and reads shift explicitly', () => {
-  const app = read('app.js');
+  // WP-22: the map moved to app-keys.js unchanged.
+  const app = read('app-keys.js');
   const start = app.indexOf('function handleKeydown(');
-  assert.notEqual(start, -1, 'handleKeydown() not found in app.js');
+  assert.notEqual(start, -1, 'handleKeydown() not found in app-keys.js');
   const map = app.slice(start, app.indexOf('\nfunction ', start + 1));
   assert.match(map, /case 's':\s*case 'S':/);
   // The shift key is read from the event rather than inferred from the case of
@@ -162,7 +163,7 @@ test('app.js still owns S and Shift+S, and reads shift explicitly', () => {
 });
 
 test('the keys WP-10, WP-19, WP-50 and WP-14 each brought all still have a home', () => {
-  const app = read('app.js');
+  const app = read('app-keys.js');
   const start = app.indexOf('function handleKeydown(');
   const map = app.slice(start, app.indexOf('\nfunction ', start + 1));
   // WP-10's deck and queue.

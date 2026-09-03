@@ -219,7 +219,12 @@ export class Ledger {
     /** @type {string[]} serialised lines waiting to be written */
     this._buffer = [];
     this._timer = null;
-    /** @type {Promise<void>|null} serialises overlapping flushes */
+    /**
+     * @type {Promise<boolean>|null} serialises overlapping flushes. It holds
+     * whatever `flush()` returns, which is `_flushNow()`'s "were bytes
+     * written" — it was annotated `Promise<void>` while `flush()` documented
+     * and stored a `Promise<boolean>` (WP-22).
+     */
     this._writing = null;
 
     /**

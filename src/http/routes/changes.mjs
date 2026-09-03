@@ -103,7 +103,11 @@ export function parseNumstat(out) {
   return files;
 }
 
-/** @param {FileChange[]} lists */
+/**
+ * A REST parameter's type is the type of each argument, not of the whole
+ * collected array: this takes any number of change lists (WP-22).
+ * @param {...FileChange[]} lists
+ */
 function totals(...lists) {
   let files = 0;
   let added = 0;

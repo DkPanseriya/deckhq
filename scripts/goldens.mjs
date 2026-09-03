@@ -170,6 +170,7 @@ function startDemo(population) {
     );
     let out = '';
     let settled = false;
+    /** @type {() => Promise<void>} */
     const stop = () =>
       new Promise((done) => {
         if (child.exitCode != null) return done();

@@ -434,7 +434,10 @@ test('no string literal in the records copy addresses the reader', () => {
 
 test('the hover card carries the record line, off the panel’s own stats cache', () => {
   const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
-  const app = stripComments(fs.readFileSync(path.resolve(HERE, '../../public/app.js'), 'utf8'));
+  // WP-22 moved the hover card into app-tooltip.js.
+  const app = stripComments(
+    fs.readFileSync(path.resolve(HERE, '../../public/app-tooltip.js'), 'utf8'),
+  );
   const panel = stripComments(fs.readFileSync(path.resolve(HERE, '../../public/panel.js'), 'utf8'));
 
   assert.match(app, /import \{ recordLineFor \} from '\.\/records\.js';/);

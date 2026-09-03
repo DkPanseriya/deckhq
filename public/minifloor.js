@@ -124,7 +124,8 @@ function corridorBeside(plan, office) {
  *   shot:{x:number,y:number,w:number,h:number}, scale:number, charScale:number,
  *   lod:0|1, offsetX:number, offsetY:number,
  *   people:{id:string,x:number,y:number,sx:number,sy:number,angle:number,clip:string,
- *     t:number,color:string,icon:string|null,projectMk:string|undefined,avatar:string|undefined,
+ *     t:number,color:string,icon:'hand'|'hourglass'|'check'|null,
+ *     projectMk:number|undefined,avatar:string|undefined,
  *     selected:boolean,inOffice:boolean}[],
  *   officeIds:string[], numeral:number, handsUp:number}}
  */

@@ -105,7 +105,9 @@ test('INVARIANT: performAction() is reached only from explicit clicks and explic
   // app.js reaches it from the keyboard map and, since WP-07, from the
   // command palette's action table — where an entry runs only on an explicit
   // Enter or click on a highlighted row. Three call sites, all explicit.
-  const app = read(path.join(PUBLIC, 'app.js'));
+  // WP-22 moved the keyboard map into app-keys.js; the palette wiring stayed
+  // in app.js. Both are read, so the count is still every call site there is.
+  const app = read(path.join(PUBLIC, 'app.js')) + read(path.join(PUBLIC, 'app-keys.js'));
   const appCalls = app.match(/panel\.performAction\(/g) || [];
   assert.equal(appCalls.length, 3, 'app.js: the A and B shortcuts and the palette, nothing else');
   const keydownStart = app.indexOf('function handleKeydown(');

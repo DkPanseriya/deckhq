@@ -8628,3 +8628,464 @@ have looked:
   machine — the home directory, the sessions on it, and therefore the floor — and then a fixture
   value collided with a value the code under test produces on its own. A fixture is an input too, and
   it had not been chosen so that it could only have come from the test.
+## 121. WP-22 — the JSDoc was thorough and unchecked, and thirty-two places had drifted
+
+`01-AUDIT.md` F21 said two things: the files are large, and the JSDoc is
+unchecked. This package does both halves. This part is the first — what
+`tsc --noEmit --checkJs` found the first time it was pointed at this
+repository, and what it cost to make it green.
+
+### The shape of the gate
+
+Two projects, not one, because the two sides of the static-file boundary do not
+share a platform:
+
+| | root `tsconfig.json` | `public/tsconfig.json` |
+|---|---|---|
+| covers | `src/`, `scripts/`, `plugin/`, `vscode/`, `bin/` | `public/` |
+| `lib` | `ES2023` | `ES2023`, `DOM`, `DOM.Iterable` |
+| ambient | `types/node.d.ts` | `types/browser.d.ts` |
+| `process`, `Buffer` | declared | **not declared** |
+
+That split is not tidiness. Under one config with both libraries loaded,
+`setTimeout()` came from `lib.dom` and returned a `number`, so every
+`setTimeout(...).unref()` in the daemon — four of them, all correct — was an
+error, and `window` was in scope inside `src/`. The browser project having no
+Node globals at all is the static-file boundary stated in the one place a tool
+can enforce it: `public/` reaching for `process` is a type error now rather than
+a code review.
+
+`public/tsconfig.json` lives in `public/` rather than at the root so an editor
+picks the right project for the file it has open. `npm run typecheck` runs both.
+
+### The one dependency, and the two it did not get
+
+`typescript` is the dev dependency this package was allowed — `^7.0.2`, which
+is what the registry serves today and is the native compiler rather than the
+JavaScript one. Worth knowing rather than discovering: it is a different
+implementation of the same checks, and the numbers below are its numbers.
+`@types/node` and `@types/vscode` are not in that budget, so `types/node.d.ts`
+declares the two host platforms by hand — every specifier and member the repository actually
+imports, and nothing else, all of it `any`.
+
+**Stated cost, so nobody discovers it later:** a wrong argument to
+`fs.readFileSync`, a misspelt `process.env` key, or a `vscode` API that does not
+exist is NOT caught. Only what this repository declares about itself is. That is
+the half F21 asked for. If the dependency budget ever opens, deleting
+`types/node.d.ts` and putting `"node"` back in `types` is the whole migration.
+
+`strict` is off. It was tried on: roughly 1,400 further findings, almost all of
+them "this `getElementById` could return null", which this code already answers
+with runtime guards. Turning it on is a different package with a different
+acceptance criterion. What IS on is every check that finds JSDoc disagreeing
+with the code beneath it.
+
+### `@ts-ignore` count: zero
+
+Not one, anywhere. The DOM names the Node project needs — `document`,
+`getComputedStyle`, `atob`, and the types `Document`, `HTMLCanvasElement`,
+`CanvasRenderingContext2D` — are declared in `types/node.d.ts` rather than
+suppressed, and the comment above them says why they are there: **three
+`public/` modules are reachable from the Node side.** `src/core/identity.mjs`
+imports `public/names.js` for the name pool, and `scripts/demo-floor.mjs`
+imports `public/postcard.js`, which imports `public/snapshot.js`. TypeScript
+checks whatever an import reaches, so those three are in the Node program
+whether or not they are in `include`. They are checked for real by the browser
+project; here they only need to resolve.
+
+That finding decides §121's fourth part. A pure module under `public/` is
+already imported from `src/core/` in shipped code, and has been since WP-20.
+
+### The thirty-two defects
+
+Every one of these was live on `main` and invisible to 1,520 tests.
+
+**Wrong by construction — the code could not have matched the doc**
+
+1. `src/core/actions.mjs` — `@property {string} [furniture}`. A brace for a
+   bracket, so `ProjectAction` silently lost the field that decides which prop
+   an action surfaces on. TS1005: a parse error inside a type annotation.
+2. `public/app.js` — `stage` appeared **twice** in the `el` object literal,
+   thirty lines apart, with the same value. The second silently won. TS1117.
+3. `public/render/agents.js` — the `NavLine` type was referenced in five JSDoc
+   annotations and defined nowhere in the file.
+
+**A doc comment separated from the function it documents**
+
+4. `public/render/agents.js` — `planWalk`'s original block (`from`, `to`,
+   `rooms`) sits directly above a *second* block, for `lineIntersection`, so it
+   documents nothing. The real `planWalk` a hundred lines below has its own.
+   Left in place: it is the only orphan of the three that is not misleading.
+5. `src/adapters/claude-code/adapter.mjs` — `scanSessions`'s block had been
+   pushed thirty lines up the file by the summary cache landing between the
+   two, so it documented `summaryCache` and `scanSessions` had no types at all.
+   Moved back onto its function.
+6. `src/core/store.mjs` — a bare `/** @returns {Settings} */` sat above the
+   `identity` getter, which returns the identity block. It belongs to
+   `get settings()` twelve lines below, which had nothing. Moved.
+
+**A type that said less than the code**
+
+7. `src/core/store.mjs` — the `Settings` typedef was **three fields short**:
+   `lightsOutHour` (WP-18), `postcardDay` (WP-18) and `wrappedShown` (WP-27)
+   were in `DEFAULT_SETTINGS`, in `sanitizeSettings()` and in
+   `settings-keys.test.mjs`, and not in the type. `DEFAULT_SETTINGS` carries
+   `@type {Readonly<Settings>}` now, which is what stops it recurring.
+8. `src/core/model.mjs` — `SessionSummary` had no `archived`, though the
+   claude-code adapter stamps exactly that field onto every summary it returns,
+   and §46's ordering rule turns on it.
+9. `src/core/model.mjs` — `placement()`'s parameter was
+   `Pick<Agent,'ackState'|'activityState'>`. WP-41 made it read `subagent` too
+   and did not widen the signature, so the function could not be called with
+   the very field it branches on. `public/render/agents.js`'s
+   `derivePlacement()` — the copy on the other side of the boundary — always
+   named all three. **This is the drift F21 predicted, found by the checker F21
+   asked for.**
+10. `src/core/state-machine.mjs` — `RuntimeAdapter.id` was `string` where every
+    `Agent.runtime` it produces is a `RuntimeId`, so `_degraded()` could not
+    compare an adapter against the runtimes in use.
+11. `src/core/state-machine.mjs` — the `Registry` constructor's `opts` declared
+    `store`, `adapters` and `log`. It destructures `identity` and `ledger` too,
+    and `src/daemon.mjs` has been passing `identity` since WP-20.
+12. `src/adapters/claude-code/adapter.mjs` — `listSessionFiles()` returns `size`
+    on every row and did not declare it. `size` is half the summary cache's
+    invalidation key (§78).
+13. `src/core/summary-cache.mjs` — `get()` returned `object`, which to this
+    checker means "no properties", so every field the adapter read off a cache
+    hit was an error. It only ever stores a `SessionSummary`.
+14. `src/core/rates.mjs` — `loadRateCard()` assigns `builtinFile`,
+    `overrideFile` and `overrideError` onto the merged card. None of the three
+    was declared anywhere; they are the provenance the cost line quotes.
+15. `src/core/identity.mjs` — the `names` record declared `name` and `avatar`.
+    `givenName()`, `_usedNames()` and `takenNames()` all read and write `given`.
+16. `src/core/ledger.mjs` — `_writing` was annotated `Promise<void>` while
+    `flush()` documents and stores a `Promise<boolean>`.
+17. `src/cli/doctor.mjs` — `collectReport`'s `opts` did not declare
+    `publishedPort`, which it reads to find a running daemon.
+18. `src/http/routes/actions.mjs` — the route context declared
+    `{registry, adapters, log}` and reads `store`, `sends` and `identity`.
+19. `src/http/routes/hooks.mjs` — the same context, reading `port` and writing
+    `refreshHookStatus`.
+20. `src/http/routes/state.mjs` — the same context, reading `sends`.
+21. `src/http/routes/changes.mjs` — `totals(...lists)` is a rest parameter
+    annotated `@param {FileChange[]} lists`. A rest parameter's type is the type
+    of each argument, not of the collected array, so the annotation said each
+    argument was one change rather than one list of them.
+22. `src/adapters/codex/parse.mjs` — six `@param {object} rec` on functions that
+    then read `rec.payload`, `rec.type`, `rec.session_id` and eleven more.
+    `object` means "no properties"; the honest type for a parsed JSONL record is
+    `Record<string, any>`, and saying so is the difference between a checkable
+    annotation and a decorative one.
+23. `public/render/plan.js` — `Room` was missing `plateBand`, `natural`,
+    `thoroughfare`, `door`, `navEntry` and `navLineId`. The last three are
+    written by `assignDoors` and read by `planWalk`; `natural` is the footprint
+    the whole of §106 turns on.
+24. `public/render/plan.js` — `Plan` was missing `letGoSpots`, which `buildPlan`
+    returns on every call.
+25. `public/render/plan.js` — `ProjectLike` was missing `archived`,
+    `lastActivityAt`, `todaySpend` and `todaySpendIsToday`. The last two are
+    what `payrollLine()` reads.
+26. `public/render/plan.js` — `tileRows()` was annotated as returning the cells.
+    It returns `{cells, corridors}`, which is what all of its callers read.
+27. `public/render/agents.js` — `AgentLike` was missing `subagent` and
+    `parentId`, though the whole WP-41 junior seating pass turns on both.
+28. `public/render/agents.js` — `AgentRecord` was missing `placement`, written
+    by `sync()` and read five times.
+29. `public/render/scene.js` — `iconForAgent()` had a comment saying its
+    vocabulary is exactly `'hand' | 'hourglass' | 'check' | null` and no
+    `@returns` saying it, so `minifloor.js` declared the field as `string|null`
+    and could not pass it to `drawCharacter`. `minifloor.js` also had
+    `projectMk: string|undefined` where it is a number.
+30. `public/app.js` — `normaliseHit()` returns `'shelf'` and `'screen'` and
+    declared neither, so the two `onSelect` branches that test for them were
+    unreachable as far as any checker was concerned.
+31. `public/sound.js` — the audio context was annotated `BaseAudioContext`,
+    which has no `resume()`. `resume()` is the one method the
+    suspended-context path calls.
+
+**One branch that could never run**
+
+32. `public/render/agents.js` — `roomFor()` ended with
+    `if (placement === 'let_go') return rooms.find((r) => r.kind === 'let_go') || null;`.
+    No room in this product has `kind: 'let_go'` and none ever has, so the
+    `find` could only return `undefined` and the `|| null` made the line
+    identical to the `return null` on the next one. Deleted; the goldens are
+    byte-identical, which is the proof it was dead.
+
+### The duplication the typedefs were hiding
+
+`public/render/agents.js` carried hand-written copies of `plan.js`'s `Seat`,
+`LoungeSpot`, `Door`, `Room` and `Plan`, and they had drifted far enough apart
+that `scene.js` — which builds ONE plan and hands it to both modules — was
+passing a value whose type did not match the parameter, five times over. The
+copies are gone: `agents.js` says `@typedef {import('./plan.js').Room} Room` and
+so on.
+
+A JSDoc `import()` is a comment. It compiles to nothing, so the rule in that
+file's header — never statically import `./plan.js`, stay loadable on its own
+under `node --test` — is untouched, and the tests that load `agents.js` alone
+still pass.
+
+`assignSeats` also writes five fields onto the seats it hands out (`id`, `kind`,
+`seatIndex`, `overflow`, `junior`) that nothing declared. They are a
+`PlacedSeat` now, which is the difference between a plan's chair and a chair
+somebody is sitting in.
+
+### What was NOT done
+
+- **`strict` stays off.** See above; it is a different package.
+- **No `@ts-ignore`, anywhere.** The two platforms are declared rather than
+  suppressed, and the declaration file says what that costs.
+- **The `= {}` defaults were not removed.** Four adapter functions destructure
+  `{maxMessages}`, `{maxAgeDays, limit}`, `{cwd, timeoutMs}` and `{onChange}`
+  from a parameter that defaults to `{}`. The type said those fields were
+  required; the default says they are not, and `watchConversation` even guards
+  with `typeof onChange === 'function'`. The types were made optional to match
+  the code rather than the code changed to match the types — a bare call is
+  legal today and something may rely on it.
+
+### The gate
+
+`npm run typecheck` runs both projects; CI runs it on Ubuntu, Node 22, once,
+after lint. Once, because unlike the suite the checker's answer cannot differ by
+platform or Node version: same source, same compiler, same hand-written ambient
+types. `prepublishOnly` runs it too. `public/tsconfig.json` is kept out of the
+published tarball (`"!public/tsconfig.json"` in `files`); `types/` was never
+in it.
+
+**Measurements.** 398 errors on the first run under one config; 311 after the
+Node/browser split; 0 after the fixes above. Suite unchanged at 1,520. Goldens
+**0 px moved at all** on all four populations — which is the whole point: every
+fix above is a comment, a type annotation, one duplicate object key and one
+provably dead line.
+
+### F21's other half, part one: `plan.js`, 3,255 lines → seven modules
+
+| file | lines | what it is |
+|---|---|---|
+| `plan.js` | 962 | `buildPlan`, the population rule, and the re-exports |
+| `plan-service.js` | 876 | the office and the lounge, plus `seatOffice` |
+| `plan-rooms.js` | 505 | a project's room, the idle strip, the two plate formatters |
+| `plan-units.js` | 482 | every shape and every dimension |
+| `plan-packing.js` | 302 | `flowBlocks`, `shelfPack`, `squarify`, `tileRows` |
+| `plan-nav.js` | 184 | walls, corridor centrelines, doors |
+| `plan-anchors.js` | 162 | `resolveAnchors`, `translateContents`, the table sizes |
+
+**Not one function body changed.** The split is a move: whole declarations,
+their doc comments with them, from one file to seven. Two things prove it
+rather than assert it:
+
+1. **91 of 91.** A verification pass took every top-level declaration in the
+   old file, normalised away whitespace and the added `export` keyword, and
+   looked for it in the new modules. All ninety-one appear, character for
+   character, in **exactly one** of them.
+2. **The goldens moved 0 px.** All four populations, `0 px moved at all` — not
+   "within tolerance", not one pixel different. That is also the proof that the
+   static server serves the six new files: had any of them 404'd, `scene.js`'s
+   import of `plan.js` would have failed and the floor would have been blank.
+
+**Nothing outside `plan.js` had to change.** Every name the old module exported
+is re-exported from the same path, so `scene.js`, `minifloor.js` and six test
+files import exactly what they imported before. `test/unit/plan.test.mjs` gains
+a test that lists those sixteen names, because a re-export is easy to drop by
+accident and nothing else in the suite would notice.
+
+The typedefs went to `plan-units.js` and are re-exported too, so
+`import('./plan.js').Room` — which `agents.js`, `scene.js` and `backdrop.js`
+all write — still resolves.
+
+**One comment moved as well as its code.** The `NavLine` typedef was declared
+*inside* `buildNavLines`'s own doc block. That is why §121 defect 3 was
+possible: `agents.js` referenced `NavLine` in five annotations with nothing
+defining it. It is a shape, so it is in `plan-units.js` with the other shapes,
+and the prose that surrounded it stayed on `buildNavLines`.
+
+**Why seven and not five.** `plan-units.js` exists because a dimension shared
+by four modules needs one definition, not four; without it the split would have
+duplicated constants, which is the class of bug this repository keeps having.
+`plan-service.js` is separate from `plan-rooms.js` because the office and the
+lounge are one column of the building, sized and stacked together, and putting
+them with the project rooms would have made a 1,300-line file — over the
+ceiling this package set itself.
+
+**`buildPlan` was not split, and that is deliberate.** It is 733 lines and
+thirteen of those lines are closures over its own locals — `measureService`,
+`bandsOf`, `layBand`, `layWorkingFloor`, `workingShape`, `envelopeFor`,
+`place`. Lifting any of them out means giving it an explicit parameter list,
+which means changing a function body, which is the one thing this package
+promised not to do. It is the assembly step; it reads top to bottom; it stays.
+
+### F21's other half, part two: `app.js`, 2,721 lines → eleven modules
+
+`plan.js` was arithmetic and could be cut anywhere. `app.js` is a browser entry
+point: mutable state, listener order, and one function calling another across
+what would become a file boundary. Three rules made the cut safe, and every one
+of them is visible in the result.
+
+**Rule 1 — every top-level side effect stayed where it was.** Not one
+`document.addEventListener` moved. That is not tidiness: `panel.js` registers
+its own `keydown` listener inside `createPanel()`, which `app.js` calls at line
+1,236, and the floor's map is registered at line 1,867. Listener order IS the
+rule that lets a permission card take `A`, `D` and `S` while it is up and lets
+them fall through when it is not (`docs/DEVIATIONS.md` §86,
+`test/unit/permission-keys.test.mjs`). An imported module is evaluated BEFORE
+the module that imports it, so moving one registration into a part would have
+silently inverted that order — with every test still green, because the tests
+read source rather than run a browser. The two exceptions are listeners on
+elements of their own (`el.newProjectGo`, the pickers), where nothing about
+order can matter, and they moved with the code they call.
+
+**Rule 2 — mutable state moved to one leaf module, with the writes staying in
+the root.** `app-state.js` exports `latestSnapshot`, `scene`, `panel`,
+`deckUI`, `palette`, `projectFilter`, `selectedId` and `openCard` as live
+bindings with a setter each. A part reads `latestSnapshot` by name, exactly as
+it did when it was a local of one big file, and **cannot** reassign it: an
+import binding is read-only, so "the parts see the state, the root owns it" is
+enforced by the language rather than by review. `app.js` is the only file that
+calls a setter.
+
+**Rule 3 — the dependency runs one way.** Nothing under `app-*.js` imports
+`app.js`. Where a part needed one of the root's actions the action was handed
+in, never imported back:
+
+- `app-floor.js` takes them as a destructured parameter — same identifiers, so
+  the `onSelect` and `onHover` closures inside are untouched by the move.
+- `app-keys.js` takes them through `wireKeyboard()`, into module-level `let`s
+  with the names the map already used. It cannot take a parameter (its two
+  functions are event handlers), and importing them from `app.js` would have
+  made a module and its own entry point mutually dependent for no gain.
+
+| file | lines | what it is |
+|---|---|---|
+| `app.js` | 748 | the composition root: boot, wiring, listeners |
+| `app-dialogs.js` | 346 | new project, new agent, rename — and the pickers all three share |
+| `app-state.js` | 336 | the DOM refs, the display vocabulary, the shared state, the selection |
+| `app-header.js` | 305 | the counts, the banners, the filter chip, WP-16's badge |
+| `app-cards.js` | 293 | WP-18's postcard and WP-27's Wrapped |
+| `app-keys.js` | 227 | the floor keyboard map |
+| `app-launchers.js` | 217 | the shelf, the screen and the whiteboard |
+| `app-snapshot.js` | 212 | WP-14's `S` and `Shift+S` |
+| `app-notify.js` | 209 | OS notifications, their sounds, the settings write |
+| `app-tooltip.js` | 153 | the hover card and the cursor both overlays share |
+| `app-floor.js` | 86 | the renderer modules and what a click on furniture means |
+
+The brief named four parts — keyboard, header, tooltip, floor wiring. Those
+four are here; the other six exist because four would have left `app.js` at
+1,935 lines, and this package set itself a 900-line ceiling.
+
+### The static scans, and what changed in them
+
+Seven test files read `app.js` as source rather than running it — the panel
+invariant, the permission keys, the deck keys, the mini-floor, the PWA, the
+records line, the sound window. All seven kept working the same way: **only the
+file list changed, not one assertion.** Where a rule spans two files now (the
+`performAction` call count is two in the map and one in the palette) the test
+reads both and concatenates them, so the count it asserts is still every call
+site there is.
+
+One block moved to keep a scan honest rather than to satisfy it. WP-16's client
+footprint is one delimited `// WP-16 · begin`/`· end` region whose own comment
+says it is "the badge call (renderHeader above), and the registration below".
+`renderHeader` went to `app-header.js`, so the block followed it; the comment is
+true again, and the test that counts the delimiters counts two.
+
+### What the goldens do not cover, and what was run instead
+
+The goldens moved **0 px** on all four populations, which proves the floor still
+draws — and, since `scene.js` reaches the renderer through `app.js`, that the
+whole boot path still works. It proves nothing about the keyboard, the dialogs
+or the cards.
+
+So those were run, on the demo floor in Chrome (`08` §1.1 rule 10):
+
+| | result |
+|---|---|
+| boot | floor drawn, header `6` needs you / `14` at desk, tab title `(6) DeckHQ` |
+| `Ctrl+K` | palette opens, and closes on the second press |
+| `j` | queue moves and the panel opens on `Backfill the events table` |
+| `Tab` | the deck opens |
+| `Shift+S` | the redaction toast appears, with its exact wording |
+| new-agent dialog | opens, 61 names and 9 glyphs in the pickers |
+| console | no uncaught error, no module-resolution error |
+
+`/api/postcard` is 404 on the demo server, so the day's card could not be shown
+on it — that is a property of the demo fixture, not of this change, and it is
+the one surface here with no runtime evidence behind it.
+
+### The rule that was stated twice is stated once
+
+`public/floor-rule.js`. `ON_THE_FLOOR`, `GONE_HOME_DAYS`, `isSubagent`,
+`placement`, `isActiveAgent`, `isDeskAgent`, `isGoneHome`, `floorPopulation` —
+152 lines, one copy, imported by both sides.
+
+**The boundary was never symmetrical, and that is the whole answer.**
+`docs/02-ARCHITECTURE.md` §9 confines static serving to `publicDir`, so a
+browser module genuinely cannot resolve `src/core/*.mjs`; that direction is
+impossible and stays impossible. The other direction was never impossible, only
+unused — Node resolves a path under `public/` like any other, and
+`src/core/identity.mjs` has imported `public/names.js` for the name pool since
+WP-20. The typecheck found that first (§121's `@ts-ignore` note: three
+`public/` modules are already reachable from the Node side). So the rule lives
+on the side both can see.
+
+Verified rather than assumed, on both routes:
+
+| | evidence |
+|---|---|
+| Node resolves it | `src/core/model.mjs` imports it; 1,524 tests pass, including every `INVARIANT:` case |
+| the static server serves it | `GET /floor-rule.js` → **200, `text/javascript`, 8,480 bytes** |
+| the browser executes it | `await import('/floor-rule.js')` in the live page returns all eight exports, and `placement({ackState:'active', activityState:'for_review', subagent:true})` answers `'desk'` |
+| `src/` is still unreachable | `GET /../src/core/model.mjs` → **404** |
+
+**What each side gave up.** `src/core/model.mjs` re-exports `placement`,
+`isSubagent`, `isGoneHome`, `isActiveAgent`, `isDeskAgent` and
+`GONE_HOME_DAYS`, so every `import { placement } from './model.mjs'` in the
+tree still works. `public/render/agents.js`'s `derivePlacement` is now
+`export const derivePlacement = placement` — the name is kept because six call
+sites and four test files use it, and `agents.js` still statically imports
+nothing but this one pure module, so it stays loadable on its own under
+`node --test`. `plan.js` re-exports the four predicates it used to define.
+Nothing outside those two files changed.
+
+**Three tests hold it there**, in `test/unit/model.test.mjs`:
+
+1. **The module is pure.** No `node:` import, no `process`, no `Buffer`, no
+   `document`, no `window`, no top-level call — and no `import` of its own at
+   all, so it can never pull either side into the other by accident.
+2. **`derivePlacement === placement === floorRule.placement`.** Not "they agree
+   on the reference fixture" — the same function object. Plus: neither
+   `src/core/model.mjs` nor `public/render/plan.js` may contain the literal
+   `['working', 'needs_input', 'stalled', 'for_review']` again.
+3. **No `plan*.js` or `app*.js` module is over 900 lines**, across all
+   eighteen of them.
+
+`floor-integrity.test.mjs`'s "the header floor counts equal the plan's drawn
+totals" stays exactly as it was. It used to be the thing standing between two
+copies of a rule; it is now a check that `counts()` and `buildPlan()` *wire* the
+one rule the same way, which is a smaller claim and still worth making — the
+§106 bug was in the wiring as much as in the duplication.
+
+### What is still over 900 lines, and why that is a different package
+
+`plan.js` is 871 and `app.js` is 748. Ten files in the repository are still
+over the line this package set for the two it was asked to split:
+
+| file | lines |
+|---|---|
+| `public/panel.js` | 2,422 |
+| `public/render/scene.js` | 1,953 |
+| `public/render/rig.js` | 1,716 |
+| `src/core/ledger.mjs` | 1,556 |
+| `public/render/backdrop.js` | 1,491 |
+| `src/core/state-machine.mjs` | 1,466 |
+| `src/adapters/claude-code/adapter.mjs` | 1,444 |
+| `src/cli/doctor.mjs` | 1,281 |
+| `public/render/agents.js` | 1,183 |
+| `src/core/terminals.mjs` | 990 |
+
+They are named here rather than left to be discovered. Splitting them is not
+this package: WP-22 asked for `plan.js` and `app.js`, and each of the ten above
+needs the same care those two got — a reading of what the file's parts share, a
+rule for the state between them, and a way to prove nothing moved. The ceiling
+test asserts the ceiling for the modules this package produced, and does not
+pretend to a ceiling the repository does not yet meet.

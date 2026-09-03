@@ -86,9 +86,22 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       `public/render/plan.js`'s `isGoneHome`.
  *                                       0 disables it.
  * @property {number} ledgerRetentionDays how many days of event ledger to keep (WP-17)
+ * @property {number} lightsOutHour      the hour the floor turns its lights off
+ *                                       and the day's card appears (WP-18)
+ * @property {string} postcardDay        the local day whose card has been shown,
+ *                                       `YYYY-MM-DD`, or empty (WP-18)
+ * @property {string} wrappedShown       which Wrapped has been shown — `2026-W36`
+ *                                       or `2026-annual`, or empty (WP-27)
  * @property {boolean} onboarded         first run is over
  */
 
+/**
+ * The three WP-18/WP-27 keys above were in this object, in
+ * `sanitizeSettings()` and in `settings-keys.test.mjs`, and missing from the
+ * `Settings` typedef, so every `Settings` in the tree was three fields short
+ * of the real one (WP-22). The annotation is what stops that recurring.
+ * @type {Readonly<Settings>}
+ */
 export const DEFAULT_SETTINGS = Object.freeze({
   stallWindowMs: 600000,
   pollIntervalMs: 5000,
@@ -515,7 +528,6 @@ export class Store {
     }
   }
 
-  /** @returns {Settings} */
   /**
    * The identity block, returned live rather than copied: `Identity` assigns
    * MK numbers into it and calls `touch()` to persist.
@@ -529,6 +541,7 @@ export class Store {
     this.save();
   }
 
+  /** @returns {Settings} */
   get settings() {
     return { ...this._data.settings };
   }

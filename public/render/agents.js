@@ -11,8 +11,12 @@
  * §9 — static serving is confined to `publicDir`, so `public/render/*.js` cannot
  * `import` from `src/core/*.mjs` at runtime even though Node can for tests):
  *
- *   - `derivePlacement()` mirrors `placement()` in `src/core/model.mjs` exactly.
- *     Do not let these drift; if `model.mjs`'s rule changes, update both.
+ *   - `derivePlacement()` USED TO mirror `placement()` in `src/core/model.mjs`,
+ *     and they had drifted. WP-22 made it an alias of the one copy in
+ *     `public/floor-rule.js`, which `model.mjs` imports too. That module is
+ *     pure — no DOM, no `node:` import, no top-level side effect — so it is
+ *     legal on both sides of the boundary and this file stays loadable on its
+ *     own under `node --test`.
  *   - `clipForActivity()` is a minimal stand-in for `clipForState()`, which is
  *     specified to live in `./clips.js` (docs/03-VISUAL-SPEC.md §5). `clips.js`
  *     did not exist at the time this file was written (it is owned by another
@@ -24,19 +28,46 @@
  *     integration point that imports those siblings once they exist.
  */
 
-/** @typedef {{x:number,y:number,angle:number}} Seat */
-/** @typedef {{id:string,kind:'pool'|'table_tennis'|'board_game'|'arcade'|'coffee'|'eat'|'chat'|'lounge_idle',x:number,y:number,angle:number,capacity:number,partnerOf?:string}} LoungeSpot */
-/** @typedef {{x:number,y:number,angle:number,width:number}} Door */
-/** @typedef {{kind:'office'|'project'|'lounge',id:string,name:string,x:number,y:number,w:number,h:number,walls:'full'|'partial',plateLines:[string,string]}} Room */
 /**
- * @typedef {object} Plan
- * @property {number} width
- * @property {number} height
- * @property {Room[]} rooms
- * @property {Map<string, Seat[]>} seats
- * @property {Seat[]} officeSeats
- * @property {LoungeSpot[]} loungeSpots
- * @property {Door[]} doors
+ * The plan's own shapes, by reference rather than by copy.
+ *
+ * These were hand-written duplicates of `plan.js`'s typedefs, and they had
+ * drifted: `Room` was missing `door`, `navEntry` and `navLineId` (every one of
+ * which `planWalk` reads), `Plan` was missing `hidden` (which `assignSeats`
+ * reads on its first line), and `Room.kind` did not know about corridors — so
+ * `scene.js`, which passes ONE plan to both modules, was passing a value of a
+ * type that did not match the parameter (WP-22).
+ *
+ * A JSDoc `import()` is a comment. It compiles to nothing, so the rule in the
+ * header above — this module never statically imports `./plan.js`, and stays
+ * loadable on its own under `node --test` — is untouched.
+ */
+import { placement } from '../floor-rule.js';
+
+/** @typedef {import('./plan.js').Seat} Seat */
+/** @typedef {import('./plan.js').LoungeSpot} LoungeSpot */
+/** @typedef {import('./plan.js').Door} Door */
+/** @typedef {import('./plan.js').Room} Room */
+/** @typedef {import('./plan.js').NavLine} NavLine */
+/** @typedef {import('./plan.js').Plan} Plan */
+
+/**
+ * A seat AFTER `assignSeats` has placed somebody in it.
+ *
+ * The plan hands out bare `Seat`s and identified `LoungeSpot`s; the seating
+ * pass adds which place along a bench somebody took, whether they overflowed
+ * past the last chair, and whether they are a junior standing beside a parent.
+ * Those five fields were being written and read with nothing declaring them.
+ *
+ * @typedef {((Seat|LoungeSpot) & {
+ *   id?: string,
+ *   kind?: string,
+ *   capacity?: number,
+ *   seatIndex?: number,
+ *   overflow?: boolean,
+ *   junior?: boolean,
+ *   partnerOf?: string,
+ * })} PlacedSeat
  */
 
 /**
@@ -47,6 +78,10 @@
  * @property {'working'|'needs_input'|'stalled'|'for_review'|'ended'} activityState
  * @property {'active'|'benched'|'let_go'} ackState
  * @property {number|null} reviewSince
+ * @property {boolean} [subagent]   WP-41: this is a junior. Read by
+ *   `derivePlacement`, and it was not declared here even though the whole
+ *   junior seating pass turns on it.
+ * @property {string|null} [parentId]  the senior it stands beside.
  */
 
 /**
@@ -73,7 +108,7 @@
  * @property {number} y                 plan units
  * @property {number} angle             radians
  * @property {string|null} roomId       id of the room the agent last settled in
- * @property {Seat|LoungeSpot|null} targetSeat
+ * @property {PlacedSeat|null} targetSeat
  * @property {{x:number,y:number}[]} path   remaining waypoints (plan units)
  * @property {string|null} clip
  * @property {number} clipStartedAt     ms epoch
@@ -83,6 +118,9 @@
  * @property {() => number} rng         seeded PRNG, [0,1)
  * @property {{activity:string|null, remaining:number, pairedWith:string|null}} rotation
  * @property {boolean} initialised
+ * @property {string} [placement] what `derivePlacement()` said when this
+ *   record was last synced. Written by `sync` and read by the rotation and
+ *   the walk planner; it was never declared (WP-22).
  */
 
 // ---------------------------------------------------------------- constants
@@ -171,7 +209,7 @@ export const JUNIOR_BACK = 2.8;
 /**
  * The `index`-th place on a seat, spread ALONG the furniture (perpendicular to
  * the way its occupants face). A single-capacity spot is its own only place.
- * @param {Seat|LoungeSpot} seat
+ * @param {PlacedSeat} seat
  * @param {number} index
  */
 function spotAt(seat, index) {
@@ -462,20 +500,15 @@ export function planWalk(from, to, rooms, plan) {
 // -------------------------------------------------------- seat assignment
 
 /**
- * Mirrors `placement()` in `src/core/model.mjs` exactly. See file header for
- * why this cannot simply import that function.
+ * Where an agent stands. WP-22: this WAS a hand-written copy of `placement()`
+ * in `src/core/model.mjs`, with a comment asking the next person not to let
+ * the two drift. There is one copy now — `public/floor-rule.js` — and
+ * `model.mjs` imports the same file. The name is kept because six call sites
+ * and four test files use it.
  * @param {AgentLike} agent
  * @returns {'desk'|'office'|'lounge'|'let_go'}
  */
-export function derivePlacement(agent) {
-  if (agent.ackState === 'let_go') return 'let_go';
-  // WP-41: a junior is only ever beside its parent — never in the office,
-  // never in the lounge. Mirrors `placement()`'s own subagent branch.
-  if (agent.subagent === true) return 'desk';
-  if (agent.ackState === 'benched') return 'lounge';
-  if (agent.activityState === 'for_review') return 'office';
-  return 'desk';
-}
+export const derivePlacement = placement;
 
 /**
  * Deterministic seat index for an id among `n` seats, with linear-probe
@@ -546,10 +579,10 @@ function assignHashed(agents, seats, result) {
  * docs/03-VISUAL-SPEC.md §2, work order for `agents.js`.
  * @param {Plan} plan
  * @param {AgentLike[]} agents
- * @returns {Map<string, Seat|LoungeSpot>}
+ * @returns {Map<string, PlacedSeat>}
  */
 export function assignSeats(plan, agents) {
-  /** @type {Map<string, Seat|LoungeSpot>} */
+  /** @type {Map<string, PlacedSeat>} */
   const result = new Map();
   /** @type {Map<string, AgentLike[]>} */
   const deskByProject = new Map();
@@ -849,7 +882,6 @@ export class AgentRuntime {
         return rooms.find((r) => r.kind === 'project' && r.id === agent.projectId) || null;
       if (placement === 'office') return rooms.find((r) => r.kind === 'office') || null;
       if (placement === 'lounge') return rooms.find((r) => r.kind === 'lounge') || null;
-      if (placement === 'let_go') return rooms.find((r) => r.kind === 'let_go') || null;
       return null;
     };
 
@@ -954,7 +986,10 @@ export class AgentRuntime {
    * simply not calling this while the tab is hidden is what pauses the whole
    * simulation, including activity rotation (VISUAL-SPEC §4.3, §10).
    * @param {number} dtSeconds
-   * @param {{reduced?: boolean, plan?: Plan, makeActivityRotation?: Function}} [opts]
+   * @param {{reduced?: boolean, plan?: Plan,
+   *   makeActivityRotation?: (rng: () => number) => {pick: (opts?: {partnerFree?: (activity:string)=>boolean}) => {activity:string, holdMs:number, degraded:boolean}}}} [opts]
+   *   `makeActivityRotation` was declared as a bare `Function`, which says
+   *   nothing about what `pickNextActivityFromClips` then calls it with (WP-22).
    *   `makeActivityRotation`: the real factory from `./clips.js`, if the caller
    *   has it (see `pickNextActivityFromClips`). Falls back to `pickNextActivity`'s
    *   built-in rule otherwise.

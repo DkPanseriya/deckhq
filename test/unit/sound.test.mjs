@@ -102,12 +102,14 @@ test('one sound per coalescing window, whatever fired it', () => {
 });
 
 test('the window matches the notification coalescing window', () => {
-  // Not a coincidence and not allowed to drift: `app.js`'s
+  // Not a coincidence and not allowed to drift: the client's
   // NOTIFY_COALESCE_MS is the same 10s, and the two are the same rule.
+  // WP-22 moved that constant, with the notifications it governs, out of
+  // `app.js` into `app-notify.js`; only the file this reads moved with it.
   assert.equal(SOUND_COALESCE_MS, 10_000);
-  const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
+  const app = fs.readFileSync(path.join(ROOT, 'public', 'app-notify.js'), 'utf8');
   const match = app.match(/NOTIFY_COALESCE_MS\s*=\s*([0-9_]+)/);
-  assert.ok(match, 'app.js no longer declares NOTIFY_COALESCE_MS');
+  assert.ok(match, 'app-notify.js no longer declares NOTIFY_COALESCE_MS');
   assert.equal(
     Number(match[1].replace(/_/g, '')),
     SOUND_COALESCE_MS,

@@ -220,7 +220,7 @@ function timestampToMs(ts) {
  * Heuristic: does this record look like the session meta record? Used only
  * for readability at call sites; extractSessionMeta() does the real work and
  * is safe to call unconditionally.
- * @param {object} rec
+ * @param {Record<string, any>} rec  one parsed JSONL record, shape unknown
  * @returns {boolean}
  */
 export function isSessionMeta(rec) {
@@ -235,7 +235,7 @@ export function isSessionMeta(rec) {
 /**
  * Extract {id, timestamp, cwd, instructions} from a session meta record.
  * Returns null if `rec` does not carry any recognisable meta fields at all.
- * @param {object} rec
+ * @param {Record<string, any>} rec  one parsed JSONL record, shape unknown
  * @returns {{id:string|null, timestamp:string|null, cwd:string|null, instructions:string|null}|null}
  */
 export function extractSessionMeta(rec) {
@@ -281,7 +281,7 @@ export function contentToText(content) {
   return '';
 }
 
-/** @param {object} body */
+/** @param {Record<string, any>} body */
 function pickRawContent(body) {
   if (body.content !== undefined) return body.content;
   if (typeof body.message === 'string') return body.message;
@@ -295,7 +295,7 @@ function pickRawContent(body) {
  * assistant message — tool calls, tool results, reasoning, and turn_context
  * records are deliberately excluded (the panel is a conversation, not a
  * trace; see docs/04-BUILD-PLAN.md WP1 acceptance criteria, reused for WP2).
- * @param {object} rec
+ * @param {Record<string, any>} rec  one parsed JSONL record, shape unknown
  * @returns {{role:'user'|'assistant', text:string, at:number|null}|null}
  */
 export function extractMessage(rec) {
@@ -339,7 +339,7 @@ export function extractMessage(rec) {
  * The last usage record found while scanning a file wins (assumed to be a
  * cumulative running total, per Codex's token_count events) — callers must
  * not sum multiple results together.
- * @param {object} rec
+ * @param {Record<string, any>} rec  one parsed JSONL record, shape unknown
  * @returns {{inputTokens:number, outputTokens:number, cachedInputTokens:number}|null}
  */
 export function extractUsage(rec) {
@@ -380,7 +380,7 @@ export function extractUsage(rec) {
 /**
  * Best-effort model name hint, from a turn_context record or any record
  * that happens to carry a `model` field.
- * @param {object} rec
+ * @param {Record<string, any>} rec  one parsed JSONL record, shape unknown
  * @returns {string|null}
  */
 export function extractModelHint(rec) {

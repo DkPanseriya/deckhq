@@ -252,7 +252,9 @@ function paintRoomAmbientOcclusion(ctx, x, y, w, h) {
  * partition is waist height — a subordinate line that divides the open plan
  * without closing it off.
  *
- * @param {CanvasRenderingContext2D} ctx
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+   `bakeBackdrop` paints into whichever of the two the browser gave it, and
+   has done since it was written; the parameter only named one (WP-22).
  * @param {{x1:number,y1:number,x2:number,y2:number,kind:string,door?:{at:number,width:number}}} wall
  * @param {number} u
  */
@@ -944,7 +946,7 @@ function paintProp(ctx, prop, u) {
         [0, 0.25, '#7C9A4A'],
         [-0.15, 0.05, '#C9A227'],
       ];
-      for (const [fx, fy, tone] of fruit) {
+      for (const [fx, fy, tone] of /** @type {Array<[number, number, string]>} */ (fruit)) {
         ctx.fillStyle = tone;
         ctx.beginPath();
         ctx.arc(fx * r, fy * r, r * 0.3, 0, Math.PI * 2);

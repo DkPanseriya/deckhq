@@ -14,7 +14,9 @@ import { DEFAULT_PORT } from '../../adapters/claude-code/hooks.mjs';
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{registry:any, adapters:any, log:any}} ctx
+ * @param {{registry:any, adapters:any, log:any, port:any, refreshHookStatus?:any}} ctx
+ *   `port` was read and `refreshHookStatus` written without either being
+ *   declared (WP-22).
  */
 export function register(router, ctx) {
   const { registry, adapters, log } = ctx;
@@ -203,7 +205,7 @@ export function register(router, ctx) {
   }
 
   // Expose it so the daemon can prime the status on boot.
-  register.refreshHookStatus = refreshHookStatus;
+  /** @type {any} */ (register).refreshHookStatus = refreshHookStatus;
   ctx.refreshHookStatus = refreshHookStatus;
 }
 

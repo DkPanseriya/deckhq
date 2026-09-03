@@ -306,6 +306,18 @@ function readJson(file) {
 }
 
 /**
+ * The card `loadRateCard` hands out: a merged table plus the provenance the
+ * cost line quotes. The three provenance fields were assigned onto the merge
+ * result and never declared anywhere (WP-22).
+ *
+ * @typedef {ReturnType<typeof mergeRateCards> & {
+ *   builtinFile: string,
+ *   overrideFile: string,
+ *   overrideError: string|null,
+ * }} RateCard
+ */
+
+/**
  * The rate card in force right now.
  *
  * Cached, and re-read when either file's mtime or size moves — which is what
@@ -318,6 +330,7 @@ function readJson(file) {
  * nothing and says "no rate" — the same honest answer an unknown model gets.
  *
  * @param {{builtinFile?:string, overrideFile?:string, maxAgeMs?:number, now?:number}} [opts]
+ * @returns {RateCard}
  */
 export function loadRateCard(opts = {}) {
   const builtinFile = opts.builtinFile || BUILTIN_RATES_FILE;
@@ -338,7 +351,7 @@ export function loadRateCard(opts = {}) {
   const base = parseRateCard(readJson(builtinFile));
   const rawOverride = readJson(overrideFile);
   const override = rawOverride == null ? null : parseRateCard(rawOverride);
-  const card = mergeRateCards(base, override);
+  const card = /** @type {RateCard} */ (mergeRateCards(base, override));
   card.builtinFile = builtinFile;
   card.overrideFile = overrideFile;
   // Say so rather than quietly pricing with half a table.

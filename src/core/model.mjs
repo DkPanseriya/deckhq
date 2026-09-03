@@ -3,7 +3,28 @@
  *
  * This file is the contract between every other module. It contains no I/O and
  * no runtime-specific knowledge. See docs/02-ARCHITECTURE.md §3.
+ *
+ * WHO IS ON THE FLOOR is not here. It is in `public/floor-rule.js`, imported
+ * below and re-exported so every existing `import { placement } from
+ * './model.mjs'` still works. That module used to be two modules — this file
+ * and `public/render/` each carried a copy, each with a comment asking the
+ * next person not to let them drift, and both had drifted (WP-22,
+ * `docs/DEVIATIONS.md` §121). Node can resolve a path under `public/`; a
+ * browser cannot resolve one under `src/`. So the rule lives on the side both
+ * can see, which is the same reason `identity.mjs` reads `public/names.js`.
  */
+
+import {
+  GONE_HOME_DAYS,
+  ON_THE_FLOOR,
+  isActiveAgent,
+  isDeskAgent,
+  isGoneHome,
+  isSubagent,
+  placement,
+} from '../../public/floor-rule.js';
+
+export { GONE_HOME_DAYS, isActiveAgent, isDeskAgent, isGoneHome, isSubagent, placement };
 
 /** @typedef {'working'|'needs_input'|'stalled'|'for_review'|'ended'} ActivityState */
 /** @typedef {'active'|'benched'|'let_go'} AckState */
@@ -97,6 +118,10 @@
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText
  * @property {boolean} [turnEnded]
+ * @property {boolean} [archived]              the desktop app's archive flag,
+ *   stamped on by the adapter AFTER the summary cache has handed the summary
+ *   out and never stored in it (docs/DEVIATIONS.md §46). It was being written
+ *   without ever being declared here (WP-22).
  * @property {boolean} [subagent]              WP-41; see `Agent`
  * @property {string} [parentSessionId]        the parent's RAW session id, as
  *   the adapter found it. The registry prefixes it into `Agent.parentId`.
@@ -196,40 +221,6 @@ export const MAX_PERMISSION_SUMMARY = 400;
  */
 
 /**
- * Placement is derived, never stored. docs/02-ARCHITECTURE.md §3.1.
- *
- * A session that is not running still sits at its project desk. Only an
- * explicit bench moves it to the lounge.
- *
- * @param {Pick<Agent,'ackState'|'activityState'>} agent
- * @returns {Placement}
- */
-export function placement(agent) {
-  if (agent.ackState === 'let_go') return 'let_go';
-  // WP-41. A junior is only ever beside its parent. It cannot be benched (the
-  // user is never offered the button) and it never stands in the office: its
-  // finished turn is handed to its parent, not to you, so putting it in the
-  // waiting area would queue work nobody can discharge.
-  if (isSubagent(agent)) return 'desk';
-  if (agent.ackState === 'benched') return 'lounge';
-  if (agent.activityState === 'for_review') return 'office';
-  return 'desk';
-}
-
-/**
- * Is this a junior — a subagent its parent spawned (WP-41)?
- *
- * Stated as a function rather than read as a field wherever the answer decides
- * behaviour, for the reason §96 decision 3 gives: two representations of the
- * same thing, allowed to disagree, is the bug this project keeps having.
- * @param {Pick<Agent,'subagent'>} agent
- * @returns {boolean}
- */
-export function isSubagent(agent) {
-  return !!agent && agent.subagent === true;
-}
-
-/**
  * Does this session need the user?
  *
  * **A junior is never in this count unless it raises its own hand** (`08` §9,
@@ -256,43 +247,6 @@ export function needsYou(agent) {
   if (agent.ackState !== 'active') return false;
   if (isSubagent(agent)) return agent.activityState === 'needs_input';
   return /** @type {readonly string[]} */ (NEEDS_YOU_STATES).includes(agent.activityState);
-}
-
-/**
- * Days of no activity after which a benched session is not drawn on the floor.
- * `settings.goneHomeDays`; the same default `store.mjs` and `plan.js` carry.
- */
-export const GONE_HOME_DAYS = 7;
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/**
- * The activity states that put a session on the floor at all — at a desk, hand
- * up, gone quiet, or standing in the office waiting to be seen.
- *
- * `08` B6's rule, and the same set `public/render/plan.js` calls `ON_THE_FLOOR`.
- * It is stated twice on purpose: `src/core/` and `public/render/` are either
- * side of the static-file boundary and neither may import the other
- * (docs/CONTRACTS.md). `test/unit/model.test.mjs` asserts the two agree on the
- * reference fixture, so the copy cannot drift in silence.
- */
-const ON_THE_FLOOR = ['working', 'needs_input', 'stalled', 'for_review'];
-
-/**
- * Has this benched session gone home? A DISPLAY FILTER AND NOTHING ELSE — it
- * reads `lastActivityAt` and writes nothing, which is why it can never touch
- * the invariant. Mirrors `plan.js`'s `isGoneHome`, including both refusals: a
- * window of zero draws everybody, and a session nobody can date is drawn.
- * @param {Pick<Agent,'ackState'|'lastActivityAt'>} agent
- * @param {number} now
- * @param {number} goneHomeDays
- */
-function isGoneHome(agent, now, goneHomeDays) {
-  if (agent.ackState !== 'benched') return false;
-  const days = Number(goneHomeDays);
-  if (!Number.isFinite(days) || days <= 0) return false;
-  const last = Number(agent.lastActivityAt);
-  if (!Number.isFinite(last) || last <= 0) return false;
-  return now - last > days * DAY_MS;
 }
 
 /**

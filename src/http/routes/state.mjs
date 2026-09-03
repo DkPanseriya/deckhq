@@ -11,7 +11,8 @@ const HEARTBEAT_MS = 15000;
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{registry:any, log:any}} ctx
+ * @param {{registry:any, log:any, sends:any}} ctx `sends` was read here and
+ *   not declared (WP-22).
  */
 export function register(router, ctx) {
   const { registry, log } = ctx;
