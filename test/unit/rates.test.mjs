@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import {
   BUILTIN_RATES_FILE,
@@ -36,7 +37,7 @@ import {
   parseRateCard,
   rateCardVersion,
 } from '../../src/core/rates.mjs';
-import { costLineParts } from '../../public/panel.js';
+import { boardCostParts, costLineParts } from '../../public/panel.js';
 import { payrollLine } from '../../public/render/plan.js';
 import { renderStats } from '../../src/cli/stats.mjs';
 import { todaySpendFor } from '../../src/core/state-machine.mjs';
@@ -350,12 +351,21 @@ test('a day cannot have cost more than the session ever has', () => {
 function everyCostDisplay() {
   const version = '2026-09-04';
   const line = (/** @type {any} */ agent) => costLineParts(agent, version).join(' · ');
+  // The project board's two lines that travel alone. Its `tile` is a figure
+  // under its own "Est. cost" label in a grid, not a line, and it is the same
+  // number `total` carries a sentence later.
+  const board = (/** @type {number|null} */ cost) => {
+    const parts = boardCostParts(cost, version);
+    return [parts.total, parts.note];
+  };
   return [
     line({ costEstimate: 7.8551 }),
     line({ costEstimate: null }),
     line({ costEstimate: 0 }),
     payrollLine({ todaySpend: 18.4, todaySpendIsToday: true }),
     payrollLine({ todaySpend: 18.4, todaySpendIsToday: false }),
+    ...board(18.4),
+    ...board(null),
     renderStats({ records: 0 }, { rateCard: version }),
     renderStats(
       {
@@ -406,6 +416,40 @@ test('the panel cost line names its rate card, and refuses to invent a figure', 
     'estimate unavailable',
   ]);
   assert.match(costLineParts({ costEstimate: 1 }, null).join(' · '), /rate card unknown/);
+});
+
+test('the project board names its rate card, and a room nobody can price says "no rate"', () => {
+  const priced = boardCostParts(18.4, '2026-09-04');
+  assert.equal(priced.tile, '≈ $18.40');
+  assert.equal(priced.total, '≈ $18.40 · list price');
+  assert.match(priced.note, /rate card 2026-09-04/);
+  assert.match(priced.note, /not a bill/);
+
+  // The bug this replaces: `reduce((a, x) => a + (x.costEstimate || 0), 0)`
+  // turned a room of unpriceable models into a confident $0.00.
+  const unpriced = boardCostParts(null, '2026-09-04');
+  assert.equal(unpriced.tile, 'no rate');
+  assert.doesNotMatch([unpriced.tile, unpriced.total, unpriced.note].join(' '), /\$/);
+  assert.match(unpriced.note, /rate card 2026-09-04/);
+  // A real zero is a rate that priced to nothing, and is not the same claim.
+  assert.equal(boardCostParts(0, '2026-09-04').tile, '≈ $0.00');
+  assert.match(boardCostParts(1, undefined).note, /rate card unknown/);
+});
+
+test('no client surface sums a cost estimate with "|| 0"', () => {
+  // A static scan, because the whiteboard needs a DOM and standing one up
+  // would test a stub. `costEstimate` is `number|null` and `|| 0` silently
+  // converts "we have no rate" into "it cost nothing" — the exact defect
+  // WP-26 removed everywhere else. Fails on the next surface that adds it.
+  const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../public');
+  for (const name of fs.readdirSync(dir).filter((f) => f.endsWith('.js'))) {
+    const src = fs.readFileSync(path.join(dir, name), 'utf8');
+    assert.doesNotMatch(
+      src,
+      /costEstimate\s*\|\|\s*0/,
+      `${name} treats an unrated session as costing $0.00`,
+    );
+  }
 });
 
 test('deckhq stats prints the rate card version, empty ledger or not', () => {

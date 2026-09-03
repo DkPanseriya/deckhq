@@ -1994,6 +1994,45 @@ export function costLineParts(agent, version) {
   return [formatCost(usd), `list price, ${card}`, 'not a bill'];
 }
 
+/**
+ * The same three obligations, for a whole room rather than one session: the
+ * project board's cost strings (WP-26).
+ *
+ * It lives beside {@link costLineParts} rather than in `app.js` because the
+ * copy rule is the thing being shared, not the DOM — one definition of "what a
+ * cost figure must say about itself", read by both surfaces and scanned as
+ * text by `test/unit/rates.test.mjs`. The board sums per-session estimates, so
+ * `cost` is `null` when NOTHING in the room could be priced: a room of unknown
+ * models sums to zero, and zero is a claim about the money nobody has.
+ *
+ * Three strings because the board reads them in three places, and two of them
+ * travel alone:
+ *
+ *   - `tile` sits under its own `Est. cost` label in the tile grid;
+ *   - `total` is the board's bottom line, beside the token total;
+ *   - `note` is the sentence under the whole board, and is the one that names
+ *     the dated table every figure above it came from.
+ *
+ * @param {number|null|undefined} cost the room's summed estimate, or null
+ * @param {string|null|undefined} version the snapshot's `rateCardVersion`
+ * @returns {{tile:string, total:string, note:string}}
+ */
+export function boardCostParts(cost, version) {
+  const card = `rate card ${version || 'unknown'}`;
+  if (cost == null || !Number.isFinite(Number(cost))) {
+    return {
+      tile: 'no rate',
+      total: 'no rate · estimate unavailable',
+      note: `No model in this room is in the ${card}, so there is no cost estimate here. Esc closes.`,
+    };
+  }
+  return {
+    tile: formatCost(cost),
+    total: `${formatCost(cost)} · list price`,
+    note: `Cost is an estimate at public list prices, not a bill · ${card}. Esc closes.`,
+  };
+}
+
 /** @param {number} ms */
 function formatElapsed(ms) {
   const minutes = Math.floor(ms / 60000);

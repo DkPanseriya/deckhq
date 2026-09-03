@@ -15,7 +15,7 @@
  * never breaks the header, panel, keyboard map or notifications.
  */
 
-import { createPanel } from './panel.js';
+import { boardCostParts, createPanel } from './panel.js';
 import { createHooksUI } from './hooks-ui.js';
 import { createPalette } from './palette.js';
 import { createDeckUI, queueOrder } from './deck.js';
@@ -1377,7 +1377,15 @@ function showWhiteboard(projectId) {
   const onFloor = all.filter((a) => a.ackState !== 'let_go');
   const tokens = onFloor.reduce((a, x) => a + (x.tokens || 0), 0);
   const cache = onFloor.reduce((a, x) => a + (x.cacheTokens || 0), 0);
-  const cost = onFloor.reduce((a, x) => a + (x.costEstimate || 0), 0);
+  // `costEstimate` is `number|null`, and null means "the rate card has no row
+  // for this model" (WP-26). Summing it with `|| 0` turned a room nobody can
+  // price into a confident `$0.00` — a claim about the money that nothing in
+  // the product had made. A room with no priceable session at all sums to
+  // null and says "no rate"; one with some says what it can price, which is
+  // the same rule `projects()` keeps with `costRated`.
+  const rated = onFloor.some((a) => a.costEstimate != null && Number.isFinite(a.costEstimate));
+  const cost = rated ? onFloor.reduce((a, x) => a + (x.costEstimate ?? 0), 0) : null;
+  const money = boardCostParts(cost, latestSnapshot.rateCardVersion);
   const models = [...new Set(onFloor.map((a) => a.model).filter(Boolean))];
 
   const board = document.createElement('div');
@@ -1420,7 +1428,7 @@ function showWhiteboard(projectId) {
   // the full figures.
   tile('Tokens', compactTokens(tokens));
   tile('Cache tokens', compactTokens(cache));
-  tile('Est. cost', `$${cost.toFixed(2)}`);
+  tile('Est. cost', money.tile);
   board.appendChild(tiles);
 
   const heading = document.createElement('p');
@@ -1454,13 +1462,16 @@ function showWhiteboard(projectId) {
   const totalLabel = document.createElement('span');
   totalLabel.textContent = 'Project total';
   const totalValue = document.createElement('span');
-  totalValue.textContent = `${formatNumber(tokens)} tok · $${cost.toFixed(2)}`;
+  totalValue.textContent = `${formatNumber(tokens)} tok · ${money.total}`;
   total.append(totalLabel, totalValue);
   board.appendChild(total);
 
   const hint = document.createElement('p');
   hint.className = 'whiteboard-hint';
-  hint.textContent = 'Cost is an estimate at public list prices, not a bill. Esc closes.';
+  // The board's figures are only checkable if the table they came from is
+  // named on the board. `rateCardVersion` rides in on every snapshot for
+  // exactly this, so no surface has to fetch `/api/about` for a string.
+  hint.textContent = money.note;
   board.appendChild(hint);
 
   el.whiteboardOverlay.textContent = '';
