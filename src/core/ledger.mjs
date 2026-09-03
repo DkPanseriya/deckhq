@@ -600,20 +600,40 @@ function isAck(s) {
 }
 
 /**
- * Fold a stream of records into "what did each session look like, when".
+ * Fold a stream of records into what each session looked like, and every
+ * stretch it spent waiting.
+ *
+ * **One fold, not two.** The queue at a timestamp and the list of `for_review`
+ * episodes are the same walk over the same records asked two questions, and
+ * `docs/DEVIATIONS.md` has five separate entries (§16, §35, §38, §52, §55)
+ * whose single root cause is two representations of one thing allowed to
+ * disagree. Two folds here would eventually answer "who was waiting" and "how
+ * long did they wait" from different rules, and the second number would be the
+ * one nobody checked.
+ *
+ * The state per session is the model's own pair — an observed `activity` and a
+ * user-owned `ack` — plus the timestamp each was entered. Nothing is inferred:
+ * a `first_seen` restates a standing state and is deliberately NOT a
+ * transition, so a stretch already open stays open with the start it had, which
+ * is what carries an episode across midnight.
  *
  * @param {any[]} records
- * @param {number} [until] stop at this timestamp, inclusive
- * @returns {Map<string, {sessionId:string, projectKey:string, activity:string,
- *                        ack:string, since:number, queueSince:number|null}>}
+ * @param {{until?:number, now?:number}} [opts]
+ * @returns {{state: Map<string, any>, episodes: any[]}}
  */
-function replay(records, until = Infinity) {
+function fold(records, opts = {}) {
+  const until = opts.until ?? Infinity;
+  const now = opts.now ?? Date.now();
   /** @type {Map<string, any>} */
   const state = new Map();
-  const inQueue = (s) =>
-    s.ack === 'active' && /** @type {readonly string[]} */ (NEEDS_YOU_STATES).includes(s.activity);
+  /** @type {any[]} */
+  const episodes = [];
 
-  for (const rec of records) {
+  const queued = (s) =>
+    s.ack === 'active' && /** @type {readonly string[]} */ (NEEDS_YOU_STATES).includes(s.activity);
+  const waiting = (s) => s.ack === 'active' && s.activity === 'for_review';
+
+  for (const rec of Array.isArray(records) ? records : []) {
     if (!(rec.t <= until)) continue;
     const id = String(rec.sessionId || '');
     if (!id) continue;
@@ -626,17 +646,16 @@ function replay(records, until = Infinity) {
         ack: 'active',
         since: rec.t,
         queueSince: null,
+        reviewStart: null,
       };
       state.set(id, s);
     }
     if (rec.projectKey && rec.projectKey !== 'unknown') s.projectKey = String(rec.projectKey);
 
-    const wasQueued = inQueue(s);
+    const wasQueued = queued(s);
+    const wasWaiting = waiting(s);
 
     if (rec.kind === 'session' && rec.event === 'first_seen') {
-      // The carry-over snapshot. It restates a session's standing state; it
-      // is not itself a transition, so an episode already open stays open
-      // with the start it already had.
       if (isActivity(rec.activity)) s.activity = rec.activity;
       if (isAck(rec.ack)) s.ack = rec.ack;
       s.since = finiteNumber(rec.since) ?? rec.t;
@@ -649,12 +668,43 @@ function replay(records, until = Infinity) {
       continue;
     }
 
-    const nowQueued = inQueue(s);
-    if (!wasQueued && nowQueued) s.queueSince = s.since;
-    else if (wasQueued && !nowQueued) s.queueSince = null;
-    else if (nowQueued && s.queueSince == null) s.queueSince = s.since;
+    // The needs-you queue: any of the three states, while on the payroll.
+    const isQueued = queued(s);
+    if (!wasQueued && isQueued) s.queueSince = s.since;
+    else if (wasQueued && !isQueued) s.queueSince = null;
+    else if (isQueued && s.queueSince == null) s.queueSince = s.since;
+
+    // The narrower one the §6 metrics are about: `for_review` specifically.
+    // Leaving it by ANY route is a discharge, benching and letting go
+    // included, because all three are the user acting.
+    const isWaiting = waiting(s);
+    if (!wasWaiting && isWaiting) s.reviewStart = s.since;
+    else if (wasWaiting && !isWaiting) {
+      if (s.reviewStart != null) {
+        episodes.push({
+          sessionId: id,
+          projectKey: s.projectKey,
+          start: s.reviewStart,
+          end: rec.t,
+          ms: Math.max(0, rec.t - s.reviewStart),
+        });
+      }
+      s.reviewStart = null;
+    } else if (isWaiting && s.reviewStart == null) s.reviewStart = s.since;
   }
-  return state;
+
+  for (const [id, s] of state) {
+    if (!waiting(s) || s.reviewStart == null) continue;
+    episodes.push({
+      sessionId: id,
+      projectKey: s.projectKey,
+      start: s.reviewStart,
+      end: null,
+      ms: Math.max(0, now - s.reviewStart),
+    });
+  }
+  episodes.sort((a, b) => a.start - b.start || a.sessionId.localeCompare(b.sessionId));
+  return { state, episodes };
 }
 
 /**
@@ -671,7 +721,7 @@ function replay(records, until = Infinity) {
  * @returns {Array<{sessionId:string, projectKey:string, activityState:string, since:number}>}
  */
 export function reconstructQueue(records, t) {
-  const state = replay(Array.isArray(records) ? records : [], t);
+  const { state } = fold(records, { until: t, now: t });
   /** @type {any[]} */
   const out = [];
   for (const s of state.values()) {
@@ -692,7 +742,8 @@ export function reconstructQueue(records, t) {
  * Every stretch a session spent in `for_review` while still on the payroll —
  * an "episode". Entering is `for_review` with `ackState` `active`; being
  * discharged is leaving that condition by any route, including being benched
- * or let go, because all three are the user acting.
+ * or let go, because all three are the user acting. An episode still open at
+ * `now` is returned with `end: null`.
  *
  * @param {any[]} records
  * @param {{now?:number}} [opts]
@@ -700,71 +751,7 @@ export function reconstructQueue(records, t) {
  *                  end:number|null, ms:number}>}
  */
 export function reviewEpisodes(records, opts = {}) {
-  const now = opts.now ?? Date.now();
-  const list = Array.isArray(records) ? records : [];
-  /** @type {Map<string, {activity:string, ack:string, since:number, start:number|null, projectKey:string}>} */
-  const state = new Map();
-  /** @type {any[]} */
-  const episodes = [];
-  const waiting = (s) => s.ack === 'active' && s.activity === 'for_review';
-
-  for (const rec of list) {
-    const id = String(rec.sessionId || '');
-    if (!id) continue;
-    let s = state.get(id);
-    if (!s) {
-      s = {
-        activity: 'ended',
-        ack: 'active',
-        since: rec.t,
-        start: null,
-        projectKey: String(rec.projectKey || 'unknown'),
-      };
-      state.set(id, s);
-    }
-    if (rec.projectKey && rec.projectKey !== 'unknown') s.projectKey = String(rec.projectKey);
-
-    const was = waiting(s);
-    if (rec.kind === 'session' && rec.event === 'first_seen') {
-      if (isActivity(rec.activity)) s.activity = rec.activity;
-      if (isAck(rec.ack)) s.ack = rec.ack;
-      s.since = finiteNumber(rec.since) ?? rec.t;
-    } else if (rec.kind === 'state' && rec.dim === 'activity' && isActivity(rec.to)) {
-      s.activity = rec.to;
-      s.since = rec.t;
-    } else if (rec.kind === 'state' && rec.dim === 'ack' && isAck(rec.to)) {
-      s.ack = rec.to;
-    } else {
-      continue;
-    }
-    const is = waiting(s);
-    if (!was && is) s.start = s.since;
-    else if (was && !is) {
-      if (s.start != null) {
-        episodes.push({
-          sessionId: id,
-          projectKey: s.projectKey,
-          start: s.start,
-          end: rec.t,
-          ms: Math.max(0, rec.t - s.start),
-        });
-      }
-      s.start = null;
-    } else if (is && s.start == null) s.start = s.since;
-  }
-
-  for (const [id, s] of state) {
-    if (!waiting(s) || s.start == null) continue;
-    episodes.push({
-      sessionId: id,
-      projectKey: s.projectKey,
-      start: s.start,
-      end: null,
-      ms: Math.max(0, now - s.start),
-    });
-  }
-  episodes.sort((a, b) => a.start - b.start || a.sessionId.localeCompare(b.sessionId));
-  return episodes;
+  return fold(records, { now: opts.now ?? Date.now() }).episodes;
 }
 
 /**
