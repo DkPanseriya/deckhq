@@ -161,32 +161,44 @@ If this fails, the fix is a `1.2.1`, not an unpublish.
 
 ## 12. GitHub release
 
+**Done for 1.2.0** — <https://github.com/DkPanseriya/deckhq/releases/tag/v1.2.0>, with
+`floor.png`, `panel-review-card.png` and `hero.gif` attached. `scripts/release/changelog-section.mjs`
+extracts the notes, so the fragile `sed` range this step used to carry is gone:
+
 ```sh
+node scripts/release/changelog-section.mjs 1.2.0 > notes.md
 gh release create v1.2.0 \
   --title "v1.2.0 — installable" \
-  --notes-file <(sed -n '/^## 1\.2\.0/,/^## 1\.1\.0/p' CHANGELOG.md | sed '$d') \
-  docs/media/floor.png docs/media/panel.png
+  --notes-file notes.md \
+  docs/media/floor.png docs/media/panel-review-card.png docs/media/hero.gif
 ```
 
-Attach the hero GIF too if WP-03 produced one. Check the rendered release page: the release notes
-are the first thing a visitor from Hacker News reads.
+`panel.png` is the panel before WP-08 and is not attached any more. Check the rendered release
+page: the release notes are the first thing a visitor from Hacker News reads.
 
 ## 13. Repository settings — owner only, in the GitHub UI
 
-None of these are in the repository, so none of them are done by a commit:
+None of these are in the repository, so none of them are done by a commit. **The description and
+topics are done** — `gh repo edit` can set both, so they were, and they are struck through below.
+The remaining four need the owner in the GitHub UI or an enrolment only the owner can make:
 
 - **Social preview image.** Settings → General → Social preview. Without it every link to this
   repo, in Slack, X, Discord and iMessage, renders as a grey box with a repo name, permanently.
-  This is WP-02's acceptance criterion.
-- **Repository description and topics**, matching `02-MARKET-AND-LAUNCH.md` §2. Keep the pitch and
-  the `package.json` description saying the same thing.
-- **Enable private vulnerability reporting.** Settings → Advanced Security. `SECURITY.md`,
+  This is WP-02's acceptance criterion. There is no API for it — it is an upload in the UI.
+- ~~**Repository description and topics**, matching `02-MARKET-AND-LAUNCH.md` §2.~~ Done
+  3 September. The description is the `package.json` description verbatim, so the two cannot drift
+  apart silently. Topics: `claude-code`, `ai-agents`, `developer-tools`, `local-first`, `privacy`,
+  `dashboard`, plus the `cli`, `nodejs`, `agent-management` and `multi-project` already there.
+- **Enable private vulnerability reporting.** Settings → Advanced Security. Confirmed still off
+  (`repos/:owner/:repo/private-vulnerability-reporting` reports `{"enabled": false}`). `SECURITY.md`,
   `CODE_OF_CONDUCT.md` and the issue template chooser all link to
   `/security/advisories/new`, which 404s until this is on.
-- **Enable Discussions.** The issue template chooser links to it.
+- **Enable Discussions.** The issue template chooser links to it. Confirmed still off
+  (`hasDiscussionsEnabled: false`).
 - **Enable GitHub Sponsors** for `DkPanseriya`, or remove `.github/FUNDING.yml` and the `funding`
   field in `package.json`. A Sponsor button pointing at a profile that is not enrolled is worse
-  than no button.
+  than no button. Confirmed not enrolled (`hasSponsorsListing: false`), and `.github/FUNDING.yml`
+  still reads `github: [DkPanseriya]`, so the button is live and pointing at nothing.
 - Confirm the issue forms render: open **New issue** and check both forms appear and that blank
   issues are disabled.
 

@@ -220,7 +220,8 @@ jobs:
         run: |
           ASSETS=(
             docs/media/floor.png
-            docs/media/panel.png
+            docs/media/panel-review-card.png
+            docs/media/hero.gif
             "dist/${ZIP_NAME}"
             dist/Formula/deckhq.rb
             dist/winget/DkPanseriya.DeckHQ.yaml

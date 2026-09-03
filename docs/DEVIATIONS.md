@@ -3233,3 +3233,90 @@ populations with a uniform speckle across every project room's floor and nothing
 person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
 tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
 floor (36 px) is unchanged.
+## 88. WP-03's hero GIF: the floor did not walk, and there was no encoder to record it with
+
+`02-MARKET-AND-LAUNCH.md` §3 A2 specifies the hero GIF as "an agent at a
+desk types → stands → walks down the corridor → through your office door →
+stands in the waiting area → a crimson badge appears and starts counting",
+generated from `scripts/demo-floor.mjs` so it is reproducible and carries no
+real project names. Shooting it turned up two things that had to be fixed
+before there was anything to shoot, and one that had to be built.
+
+**The floor did not walk. It teleported.** This is the important finding, and
+it is a product bug, not a capture problem. `Scene.setState` rebuilds the
+floor plan whenever the plan signature changes, and that signature counts who
+is waiting, benched and let go — so the single most important transition in
+the product, *a turn ends and the agent walks to your office*, was also a
+plan rebuild. On a rebuilt plan `AgentRuntime.sync` seats everybody at their
+new positions in one snap, because a rebuild normally means the geometry
+changed underneath it and interpolating across two different buildings would
+draw people walking through walls.
+
+Measured on the demo floor at 10 fps, 1200×750, by counting changed pixels
+per frame and tracking the bounding box of the change:
+
+| | Before | After |
+|---|---|---|
+| Frames in which anything moved after the turn ended | **1** | **42** |
+| Pixels changed in that frame | **431,956** | 887–1,544 per frame |
+| Bounding box of the motion | whole floor | marches x=483 → x=59 |
+| Walk visible to a viewer | none — one snap | **4.1 s** |
+
+The fix is eleven lines in `public/render/scene.js` and it is a bridge rather
+than a rewrite: before applying the new snapshot, seat the *previous* agent
+list in the *new* building and sync that as one snap, then apply the new
+snapshot. Every agent whose own state did not change is therefore already
+where it belongs when the new snapshot lands and does not move; the one agent
+whose state did change walks from its old seat to its new one. Nobody
+interpolates across two buildings, which is the property the original snap
+was protecting. All 443 tests pass unchanged.
+
+**The floor still reflows once, and the GIF starts one frame after it.** The
+office grows to fit a fifth agent in its waiting queue, which re-packs every
+room by a few pixels, which moves every parquet plank — 431,956 pixels, of
+which 152,009 change by more than 8 levels and 49,413 by more than 40. This
+is not a bug; the floor is generated from the people on it (`08` §3 B6) and a
+queue that grows has to be given room. But it is a one-frame jump, so the
+GIF's first frame is the first frame *after* the reflow. Nothing is faked by
+this: the agent is still at its desk in that frame, and dropping it also cut
+the file from 438 KB to 241 KB, because that one frame was the only
+full-frame update in the animation.
+
+**There was no encoder.** Neither `ffmpeg` nor ImageMagick is on the machine
+that cut this release (`convert.exe` on Windows is the filesystem tool, not
+ImageMagick's), and a dependency — runtime or dev — for one image in a
+README is a bad trade in a project whose pitch is that it has none. So
+`scripts/gif-encoder.mjs` does the three things a GIF needs: decode the
+captured PNGs, build one global 255-colour palette by median cut across every
+frame, and write each frame as only the rectangle that changed with the
+unchanged pixels transparent. It is a dev script; `scripts/` is not in the
+published package, so the shipped tarball is unchanged.
+
+Two choices inside it are worth recording because the textbook answer was
+wrong here. The palette is cut at the **midpoint** of a box's widest channel,
+not at its count-weighted median: the median is the standard median-cut rule,
+and on this floor a crimson waiting badge is a few hundred pixels sharing a
+box with acres of plant green, so a population split lands inside the green
+and averages the badge into olive. A midpoint cut isolates a distinct hue
+however rare it is — and the badge is the whole point of the image. And each
+palette entry is the **bucket centre** rather than the bucket floor, because
+6-bit quantisation otherwise biases every colour dark by up to 3/255.
+
+**Result.** `docs/media/hero.gif`, 1200×750, 59 frames at 10 fps, 5.9 s,
+**241 KB** against the 3 MB budget. Verified by parsing the encoded file
+back: 59 image descriptors, a uniform 10 cs delay, a trailer at the last
+byte, and sub-image origins that march x=483 → x=59 over frames 1–41 and
+then hold — which is the walk, in the file's own geometry. Rendered in
+Chrome to confirm the palette, the text and the frame disposal: no trail
+behind the walker, no flicker.
+
+**Capture is reproducible.** `scripts/capture-hero.mjs` drives it end to end:
+it points headless Chrome at the demo floor, hides the header so only the
+floor is in shot, and ends one agent's turn by posting a `Stop` event to the
+real `/api/hook` endpoint — the same path Claude Code's own hook takes, so
+the state change is produced by the real state machine and not staged.
+Recording is a `getImageData` copy on a timer inside the page, not a
+screenshot per frame over the DevTools protocol: `Page.captureScreenshot` at
+this size costs ~280 ms, which caps an external loop at 3–4 fps, and the
+frames are pulled out as PNGs only after the walk is over. Measured rate,
+10.0 fps against 10 requested.

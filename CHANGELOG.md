@@ -90,6 +90,14 @@
   requested port is used and the header's reinstall banner does the rest. An explicit `--port` or
   `DECKHQ_PORT` is honoured exactly as given — naming a port is a request to be on it.
   `docs/DEVIATIONS.md` §83.
+- **Agents teleport to your office instead of walking to it.** The floor plan's signature counts
+  who is waiting, benched and let go, so the product's most important transition — a turn ends and
+  the agent leaves its desk for your office — was also a plan rebuild, and a rebuilt plan seats
+  everybody in one snap. Measured on the demo floor at 10 fps: **one frame of movement, 431,956
+  pixels changed, no walk at all**. The new snapshot is now bridged onto the rebuilt plan by first
+  seating the previous roster where it already was, so agents whose state did not change stay put
+  and the one whose state did change walks — **42 frames, 4.1 seconds**, and nobody interpolates
+  across two different buildings. `docs/DEVIATIONS.md` §88.
 
 ### Performance
 
@@ -211,6 +219,30 @@
 - The Ubuntu runner's time for the job is the one unmeasured number: 26–29 s for all four
   populations on the Windows laptop over six runs, against the 90 s budget the work package asked
   for, plus roughly 5 s of checkout and Node setup with nothing to install.
+
+### Repository
+
+- **The README leads with the product instead of 450 words about it.** The pitch, `npx deckhq`,
+  the hero GIF, then `npx deckhq doctor` with a real run and one sentence on why its fourth line
+  is the number nobody else counts. Everything below the fold is the copy that was already there.
+- **A hero GIF that is generated, not drawn** — `docs/media/hero.gif`, 5.9 s, 1200×750, 241 KB. An
+  agent's turn ends, it leaves its desk, walks the corridor into your office and joins the queue
+  waiting on you. `scripts/capture-hero.mjs` records the demo floor while the turn is ended through
+  the real `/api/hook` endpoint, so the state change comes from the real state machine and the
+  image carries no real project names; `scripts/gif-encoder.mjs` encodes it with no dependency,
+  because neither ffmpeg nor ImageMagick can be assumed on the machine that cuts a release. Both
+  are dev scripts — `scripts/` is not in the published package. `docs/DEVIATIONS.md` §88.
+- The README's panel shot is the **review card** (`docs/media/panel-review-card.png`), and the
+  section above it describes three weighted actions rather than the seven-button row that shipped
+  before it.
+- **1.2.0 has a GitHub release**, with the floor, the review card and the hero GIF attached and the
+  changelog section as its notes — the package had been on the registry with no release page at
+  all. The repository description is now the `package.json` description verbatim, so the two cannot
+  drift apart, and `local-first` and `privacy` join the topics.
+- **The release workflow stops attaching a screenshot of a panel that no longer exists.**
+  `publish.yml` and `packaging/README.md` named `docs/media/panel.png`, which is the panel from
+  before WP-08, so every future release page would have shown the superseded surface. Both now name
+  the review card and the hero GIF, matching what v1.2.0 actually carries.
 
 ## 1.2.0
 

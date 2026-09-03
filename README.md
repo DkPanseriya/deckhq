@@ -1,12 +1,36 @@
 # DeckHQ
 
-**Every AI coding session on your machine, on one office floor.**
+**Every AI coding session on your machine, on one office floor.** It sees the ones your terminal
+forgot, and it remembers what's waiting on you even after you've read it. Local, private, MIT.
 
 ```bash
 npx deckhq
 ```
 
-![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](docs/media/floor.png)
+![An agent's turn ends: it leaves its project desk, walks the corridor into your office, and joins the queue of sessions waiting on you with a crimson waiting-time badge over its head](docs/media/hero.gif)
+
+```bash
+npx deckhq doctor
+```
+
+```
+  claude code     available
+  transcripts     77 sessions across 20 projects
+  running now     6   (claude code's own agent view reports 6)
+  on the floor    77  ← 71 sessions have already finished; the agent view no longer lists them
+  codex           not installed
+  waiting on you  0   (3 waiting, all still running)
+  hooks           installed, port 4400, 285 events, last 1m ago
+  state           ~/.deckhq/state.json, writable
+  egress          none. no outbound sockets.
+```
+
+The fourth line is the number nobody else counts: sessions that finished their turn, left the
+agent view when their process exited, and are still on the floor — because a session finishing is
+not the same as you having dealt with it.
+
+Real output from the development machine, 3 September 2026. Your numbers will differ, and that is
+the point: nobody knows this number about their own machine until they run the command.
 
 Node 18+. No build step, no runtime dependencies, no account, no network calls of any kind.
 
@@ -15,15 +39,17 @@ Node 18+. No build step, no runtime dependencies, no account, no network calls o
 ## What it is for
 
 If you are building more than one thing at a time, your agents are scattered across a dozen
-terminals in a dozen repositories. `claude agents` tells you what is **running**. It cannot tell
-you what is **owed** — the moment a session finishes its turn and exits, it leaves that list, and
-nothing records that it asked you a question twenty minutes ago.
+terminals in a dozen repositories. `claude agents` lists what is **running**. DeckHQ keeps what is
+**owed**: the moment a session finishes its turn and exits, it leaves that list, and nothing
+records that it asked you a question twenty minutes ago.
 
 DeckHQ reads every transcript on disk, so it has all of them. Every project is a room, every
 session is a person at a desk, and you run the floor the way you would run an actual office: take
 in the whole team at a glance, walk over to anyone and read what they are doing, reply, hand them
 the next task, send them to the lounge when there is nothing for them, let them go when the work
 is done.
+
+![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](docs/media/floor.png)
 
 **Read it in one glance.** The header counts what needs you. Your office, top left, holds the
 sessions that finished and are waiting on your reply — oldest first, with how long they have been
@@ -61,7 +87,7 @@ goes idle the item is "complete" and disappears. That is the bug this product ex
 | `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                         |
 | `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Standing in the waiting area with a waiting-time badge |
 | `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                     |
-| `let_go`      | Off the floor                                      | Hidden                   | Hidden unless "Show let go" is on                      |
+| `let_go`      | Off the floor                                      | Not drawn                | Not drawn unless "Show let go" is on                   |
 
 **The two "needs you" signals are deliberately different.** A raised hand at a desk means _I am
 mid-task and blocked_. A person standing in your office means _I finished; review this_. Those
@@ -72,44 +98,50 @@ yours. `for_review` is entered automatically and can only be _left_ by you.
 
 ## Run the floor, don't just watch it
 
-Click anyone and their real conversation opens beside the floor, with the token spend, a cost
-estimate that is labelled an estimate, and the buttons that move them: acknowledge, bench, let go,
-resume in a terminal or the app. Reply straight from the composer, or start a fresh agent in any
-room without leaving the page.
+Click anyone and the panel opens beside the floor with the review material already in front of
+you: how long they have been waiting, **what they said** — rendered as the markdown they actually
+wrote, headings and lists and fenced code included — and then **what changed in that project's
+working tree**, read straight from git as `+142  −18  3 files` over a row per file.
+
+Then three actions, weighted rather than equal. `1 Reply` focuses the composer. `2 Approve` sends
+an affirmative — `"Yes, go ahead."` by default, configurable — and is the only filled button on
+the screen, because it is the commonest reply in this workflow and one keystroke is the largest
+saving in the day. `3` benches. Everything rarer — mark for review, let go, rename, new agent,
+recall, rehire — sits behind `⋯ more`. The cost estimate is one quiet line at the bottom, which is
+where an estimate belongs.
+
+**`2 Approve` is a send, never an acknowledgement.** It posts the reply exactly as typing it would,
+and the review is discharged when the runtime records your turn — never by the client deciding it
+has been dealt with. The one rule above holds here too. Anything you leave unsent in the composer
+is kept per session and shows as a `draft` chip, because an unfinished reply is that agent's queue
+being held by you.
+
+The heading over the diff names the **project**, never the agent: where several agents share one
+repository a working-tree diff cannot be attributed to any one of them, and the panel will not
+imply otherwise. A clean repository says _nothing uncommitted_ rather than showing you an empty
+space, because "no changes" is itself review-relevant.
+
+![The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project's working tree at +142 −18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line](docs/media/panel-review-card.png)
 
 The furniture works too. A room's shelf opens that project's folder; its screen runs that
 project's dashboard script. The object is the verb, and it lives in the room the project lives in,
 so there is nothing to hunt for in a menu.
 
-![The side panel: a session's conversation, its token and cost figures, and the acknowledge, bench, let go and resume actions](docs/media/panel.png)
-
-## `deckhq doctor`
+## More on `deckhq doctor`
 
 One command that says what DeckHQ actually knows about this machine, and whether the parts that
-have to be working are working.
+have to be working are working. The sample at the top of this page is a real run.
 
-```
-$ deckhq doctor
-
-  claude code     available
-  transcripts     67 sessions across 16 projects
-  running now     5   (claude code's own agent view reports 5)
-  on the floor    67  ← 62 sessions have already finished; the agent view no longer lists them
-  codex           not installed
-  waiting on you  0   (2 waiting, all still running)
-  hooks           installed, port 4400, 39 events, last 1m ago
-  state           ~/.deckhq/state.json, writable
-  egress          none. no outbound sockets.
-```
-
-Note what the fifth and sixth rows are doing. Two sessions want something, and DeckHQ counts
-neither as work the runtime has forgotten — **because both are still running, so its own view
+Note what the `waiting on you` row is doing. Three sessions want something, and DeckHQ counts none
+of them as work the runtime has forgotten — **because all three are still running, so its own view
 lists them too**. It reports the number it can substantiate, which is the only kind worth
 reporting.
 
-`--json` gives the same data for scripting. `--share` prints the same report as a fenced block
-with no paths, project names or machine name in it, ready to paste. `--capture-proof` writes a PNG
-of the comparison.
+`--share` is the pasteable version: the same numbers as a fenced block with everything that
+belongs to you taken out — no paths, no project names, no machine name, no hook port — so you can
+drop it in a thread without reading it line by line first. `--json` gives the same data for
+scripting, and `--capture-proof` writes a PNG of the comparison.
+
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
 
@@ -144,8 +176,8 @@ quietly.
 
 Without hooks, DeckHQ infers state from transcripts: it can tell you a session is alive and
 whether the last word was yours or the agent's. It **cannot** tell `needs_input` from `stalled` —
-those two states are invisible from the outside. The header says so plainly rather than showing
-you a confidently wrong picture.
+a transcript alone does not distinguish those two states. The header says so plainly rather than
+showing you a confidently wrong picture.
 
 With hooks installed, state is exact and instant: a permission prompt raises a hand within
 milliseconds of it appearing in your terminal.
@@ -252,6 +284,11 @@ npm run demo    # a synthetic floor in a temp directory, for screenshots
 ```
 
 CI runs lint, format check and the full suite on Windows, macOS and Linux against Node 18, 20 and 22.
+
+The hero GIF above is generated, not drawn: `scripts/capture-hero.mjs` records the demo floor
+while one agent's turn ends through the real hook endpoint, and `scripts/gif-encoder.mjs` encodes
+the frames with no dependency, so it contains no real project names and can be regenerated after
+any change to the floor.
 
 Layout, contracts and the reasoning behind every decision are in [`docs/`](docs/README.md). Start
 with [`docs/01-PRODUCT.md`](docs/01-PRODUCT.md) for what this is and
