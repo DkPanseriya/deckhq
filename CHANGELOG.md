@@ -568,7 +568,7 @@
   where the documentation and the code had drifted apart, including the one
   `docs/plan/01-AUDIT.md` F21 named: `placement()` in `src/core/model.mjs` reads `subagent` and
   its signature did not say so, while `derivePlacement()` — its copy on the other side of the
-  boundary — always did. `docs/DEVIATIONS.md` §121.
+  boundary — always did. `docs/DEVIATIONS.md` §122.
 
 ### Changed
 
@@ -740,7 +740,7 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   all sixteen names it exported before, so nothing outside it had to change. Not one function body
   moved a character: a verification pass found all ninety-one top-level declarations verbatim in
   exactly one module each, and the goldens moved **0 px** on all four populations.
-  `docs/DEVIATIONS.md` §121.
+  `docs/DEVIATIONS.md` §122.
 
 - **`public/app.js` was 2,721 lines and is now a composition root over ten parts.** The keyboard
   map, the header, the hover card and the floor wiring — plus the notifications, the snapshot, the
@@ -750,7 +750,7 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   module as live bindings a part can read and cannot write; and no part imports the root back.
   `app.js` is 748 lines. Seven static-scan tests had their file lists updated and not one of their
   assertions. Goldens **0 px**, and the keyboard, the palette, the deck, the redaction toggle and
-  the new-agent dialog were each driven in a real browser. `docs/DEVIATIONS.md` §121.
+  the new-agent dialog were each driven in a real browser. `docs/DEVIATIONS.md` §122.
 
 - **"Who is on the floor" is one rule in one file.** It used to be two, either side of the
   static-file boundary — `placement()` and `isGoneHome()` in `src/core/model.mjs`,
@@ -761,7 +761,7 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   import; `model.mjs` and `plan.js` re-export it, so no import anywhere had to change, and
   `derivePlacement` is now the same function object as `placement` rather than a copy of it.
   Proven on both routes: `GET /floor-rule.js` serves 200, the live page imports it and answers,
-  and `GET /../src/core/model.mjs` still 404s. `docs/DEVIATIONS.md` §121.
+  and `GET /../src/core/model.mjs` still 404s. `docs/DEVIATIONS.md` §122.
 
 ### Fixed
 
@@ -774,7 +774,7 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   `src/core/actions.mjs` closed with a brace instead of a bracket, and one branch in
   `roomFor()` looked for a room kind that has never existed. Every fix is a comment, a type
   annotation, one duplicate object key and one provably dead line: the goldens moved **0 px** on
-  all four populations. `docs/DEVIATIONS.md` §121.
+  all four populations. `docs/DEVIATIONS.md` §122.
 - **SECURITY: on Windows, a session id containing `&` was split into two commands.** Opening a
   session in a console goes through `start`, which is an internal `cmd.exe` command rather than a
   program, so `cmd.exe` re-parses the whole command line after it — and Node's Windows argument

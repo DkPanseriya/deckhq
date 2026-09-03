@@ -8628,7 +8628,7 @@ have looked:
   machine — the home directory, the sessions on it, and therefore the floor — and then a fixture
   value collided with a value the code under test produces on its own. A fixture is an input too, and
   it had not been chosen so that it could only have come from the test.
-## 121. WP-22 — the JSDoc was thorough and unchecked, and thirty-two places had drifted
+## 122. WP-22 — the JSDoc was thorough and unchecked, and thirty-two places had drifted
 
 `01-AUDIT.md` F21 said two things: the files are large, and the JSDoc is
 unchecked. This package does both halves. This part is the first — what
@@ -8693,7 +8693,7 @@ checks whatever an import reaches, so those three are in the Node program
 whether or not they are in `include`. They are checked for real by the browser
 project; here they only need to resolve.
 
-That finding decides §121's fourth part. A pure module under `public/` is
+That finding decides §122's fourth part. A pure module under `public/` is
 already imported from `src/core/` in shipped code, and has been since WP-20.
 
 ### The thirty-two defects
@@ -8895,7 +8895,7 @@ The typedefs went to `plan-units.js` and are re-exported too, so
 all write — still resolves.
 
 **One comment moved as well as its code.** The `NavLine` typedef was declared
-*inside* `buildNavLines`'s own doc block. That is why §121 defect 3 was
+*inside* `buildNavLines`'s own doc block. That is why §122 defect 3 was
 possible: `agents.js` referenced `NavLine` in five annotations with nothing
 defining it. It is a shape, so it is in `plan-units.js` with the other shapes,
 and the prose that surrounded it stayed on `buildNavLines`.
@@ -9024,7 +9024,7 @@ browser module genuinely cannot resolve `src/core/*.mjs`; that direction is
 impossible and stays impossible. The other direction was never impossible, only
 unused — Node resolves a path under `public/` like any other, and
 `src/core/identity.mjs` has imported `public/names.js` for the name pool since
-WP-20. The typecheck found that first (§121's `@ts-ignore` note: three
+WP-20. The typecheck found that first (§122's `@ts-ignore` note: three
 `public/` modules are already reachable from the Node side). So the rule lives
 on the side both can see.
 

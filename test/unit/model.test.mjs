@@ -212,7 +212,7 @@ test('a project nobody could price is flagged unrated rather than zero', () => {
  * `public/floor-rule.js` is imported by `src/core/model.mjs` AND served to the
  * browser as a static file. That is only safe while it stays pure, and only
  * useful while it stays the only copy. Both are asserted here rather than left
- * to the comment at the top of it (`docs/DEVIATIONS.md` §121).
+ * to the comment at the top of it (`docs/DEVIATIONS.md` §122).
  */
 test('the shared floor rule is pure enough to live on both sides of the boundary', async () => {
   const { readFile } = await import('node:fs/promises');

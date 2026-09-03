@@ -34,7 +34,7 @@ const read = (name) => stripComments(fs.readFileSync(path.join(PUBLIC, name), 'u
 /**
  * The `handleKeydown` body, comments stripped. WP-22 moved the map out of
  * `app.js` into `app-keys.js`; the map itself is unchanged, so only the file
- * this reads moved with it (`docs/DEVIATIONS.md` §121).
+ * this reads moved with it (`docs/DEVIATIONS.md` §122).
  */
 function keyboardMap() {
   const app = read('app-keys.js');

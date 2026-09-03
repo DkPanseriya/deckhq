@@ -766,7 +766,7 @@ test('the directory strip packs, places and gets a door like any other room', ()
 
 /**
  * `plan.js` was 3,255 lines and is now an assembly step over six siblings
- * (`docs/DEVIATIONS.md` §121). The split is only safe while two things stay
+ * (`docs/DEVIATIONS.md` §122). The split is only safe while two things stay
  * true, and neither of them is visible to any other test in this file: the
  * public surface has to be exactly what it was, and the pieces have to stay
  * pieces. Both are asserted here rather than left to review.

@@ -6,7 +6,7 @@
  * `derivePlacement()` and `isGoneHome()` in `public/render/`. Both pairs
  * carried a comment telling the next person not to let them drift, and both
  * had drifted — `placement()`'s own signature stopped naming `subagent` when
- * WP-41 made it read that field (`docs/DEVIATIONS.md` §121 defect 9), and
+ * WP-41 made it read that field (`docs/DEVIATIONS.md` §122 defect 9), and
  * §106's whole rewrite exists because the header and the floor had two answers
  * to "who is drawn".
  *

@@ -158,7 +158,7 @@
  *
  * It used to be declared inside `buildNavLines`'s own doc comment, which is
  * why `agents.js` could reference `NavLine` in five annotations with nothing
- * defining it there (WP-22, `docs/DEVIATIONS.md` §121 defect 3). It is a shape,
+ * defining it there (WP-22, `docs/DEVIATIONS.md` §122 defect 3). It is a shape,
  * so it lives with the other shapes.
  *
  * @typedef {object} NavLine

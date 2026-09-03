@@ -9,7 +9,7 @@
  * './model.mjs'` still works. That module used to be two modules — this file
  * and `public/render/` each carried a copy, each with a comment asking the
  * next person not to let them drift, and both had drifted (WP-22,
- * `docs/DEVIATIONS.md` §121). Node can resolve a path under `public/`; a
+ * `docs/DEVIATIONS.md` §122). Node can resolve a path under `public/`; a
  * browser cannot resolve one under `src/`. So the rule lives on the side both
  * can see, which is the same reason `identity.mjs` reads `public/names.js`.
  */
