@@ -7,7 +7,6 @@
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import os from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import { agentId, splitAgentId } from '../../core/model.mjs';
 import { cacheFileFor } from '../../core/paths.mjs';
@@ -24,6 +23,7 @@ import {
 } from './parse.mjs';
 import * as hooksImpl from './hooks.mjs';
 import { readDesktopSessions } from './desktop.mjs';
+import { launchTerminal, trySpawnDetached } from './terminals.mjs';
 
 const RUNTIME_ID = 'claude-code';
 
@@ -618,94 +618,30 @@ function send(id, text, { cwd, timeoutMs = 120_000 } = {}) {
   });
 }
 
-/** POSIX single-quote escaping for embedding a value in a shell script file. */
-function shQuote(s) {
-  return `'${String(s).replace(/'/g, `'\\''`)}'`;
-}
-
 /**
- * Try to spawn a detached terminal command; resolve true only if the child
- * actually spawned (the binary was found), false otherwise. Never throws.
- * @param {string} cmd
- * @param {string[]} args
- * @param {string} cwd
- */
-function trySpawnDetached(cmd, args, cwd) {
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn(cmd, args, { cwd, detached: true, stdio: 'ignore' });
-    } catch {
-      resolve(false);
-      return;
-    }
-    let settled = false;
-    child.once('error', () => {
-      if (!settled) {
-        settled = true;
-        resolve(false);
-      }
-    });
-    child.once('spawn', () => {
-      if (!settled) {
-        settled = true;
-        child.unref();
-        resolve(true);
-      }
-    });
-  });
-}
-
-/**
- * Spawn an interactive terminal attached to this session. Platform-specific;
- * always an argv array, never a shell string with interpolated user data.
+ * Spawn an interactive terminal attached to this session.
+ *
+ * Which terminal, and the exact argv each one needs, is `./terminals.mjs`'s
+ * job — this function's is only to name the command. The rule it enforces is
+ * the one from `docs/DEVIATIONS.md` §28: the session id travels as one argv
+ * element of `command` and nothing here builds a shell string out of it.
+ *
  * @param {string} id
  * @param {string} cwd
+ * @param {{terminal?: string}} [opts] `terminal` is the user's pinned
+ *   emulator from settings (`auto` when they have not pinned one). The HTTP
+ *   route passes it; a caller that does not gets detection.
  * @returns {Promise<void>}
  */
-async function openInTerminal(id, cwd) {
+async function openInTerminal(id, cwd, opts = {}) {
   const { sessionId } = splitAgentId(id);
-
-  if (process.platform === 'win32') {
-    const child = spawn('cmd', ['/c', 'start', '', 'cmd', '/k', 'claude', '--resume', sessionId], {
-      cwd,
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-    return;
-  }
-
-  if (process.platform === 'darwin') {
-    // Write a small shell wrapper file rather than interpolating user data
-    // into a shell command string; only its path is ever passed as an argv
-    // element.
-    const scriptPath = path.join(os.tmpdir(), `deckhq-resume-${sessionId}-${Date.now()}.command`);
-    const script = `#!/bin/sh\ncd ${shQuote(cwd)}\nexec claude --resume ${shQuote(sessionId)}\n`;
-    await fsp.writeFile(scriptPath, script, { mode: 0o755 });
-    const child = spawn('open', ['-a', 'Terminal', scriptPath], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-    return;
-  }
-
-  // Linux and other POSIX desktops: try common terminal emulators in order.
-  const candidates = [
-    ['x-terminal-emulator', ['-e', 'claude', '--resume', sessionId]],
-    ['gnome-terminal', ['--', 'claude', '--resume', sessionId]],
-    ['konsole', ['-e', 'claude', '--resume', sessionId]],
-    ['xterm', ['-e', 'claude', '--resume', sessionId]],
-  ];
-  for (const [cmd, args] of candidates) {
-    // Tried in order, on purpose: stop at the first emulator that spawns.
-    const ok = await trySpawnDetached(cmd, args, cwd);
-    if (ok) return;
-  }
-  throw new Error(
-    'No supported terminal emulator found (tried x-terminal-emulator, gnome-terminal, konsole, xterm).',
-  );
+  await launchTerminal({
+    command: ['claude', '--resume', sessionId],
+    cwd,
+    sessionId,
+    prefix: 'resume',
+    pin: opts.terminal,
+  });
 }
 
 let appAvailableCache = null;
@@ -824,50 +760,24 @@ async function openInApp(sessionId, cwd, opts = {}) {
  * with user data interpolated into it.
  *
  * @param {string} cwd absolute path to an existing directory
- * @param {{instructions?: string}} [opts] an optional first prompt
+ * @param {{instructions?: string, terminal?: string}} [opts] an optional first
+ *   prompt, and the user's pinned emulator from settings
  * @returns {Promise<void>}
  */
 async function openNewSession(cwd, opts = {}) {
   // An initial prompt is passed as one argv element. It is user text and must
-  // never reach a shell as part of a command string.
+  // never reach a shell as part of a command string. The macOS wrapper script
+  // is the one place it becomes part of a shell line, and `shQuote` there
+  // quotes it whole — the old macOS path dropped the prompt entirely rather
+  // than face that, which was a silent difference in behaviour between
+  // platforms.
   const prompt = String(opts.instructions || '').trim();
-  const args = prompt ? ['claude', prompt] : ['claude'];
-
-  if (process.platform === 'win32') {
-    const child = spawn('cmd', ['/c', 'start', '', 'cmd', '/k', ...args], {
-      cwd,
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-    return;
-  }
-
-  if (process.platform === 'darwin') {
-    const scriptPath = path.join(os.tmpdir(), `deckhq-new-${Date.now()}.command`);
-    const script = `#!/bin/sh\ncd ${shQuote(cwd)}\nexec claude\n`;
-    await fsp.writeFile(scriptPath, script, { mode: 0o755 });
-    const child = spawn('open', ['-a', 'Terminal', scriptPath], {
-      detached: true,
-      stdio: 'ignore',
-    });
-    child.unref();
-    return;
-  }
-
-  const candidates = [
-    ['x-terminal-emulator', ['-e', ...args]],
-    ['gnome-terminal', ['--', ...args]],
-    ['konsole', ['-e', ...args]],
-    ['xterm', ['-e', ...args]],
-  ];
-  for (const [cmd, args] of candidates) {
-    const ok = await trySpawnDetached(cmd, args, cwd);
-    if (ok) return;
-  }
-  throw new Error(
-    'No supported terminal emulator found (tried x-terminal-emulator, gnome-terminal, konsole, xterm).',
-  );
+  await launchTerminal({
+    command: prompt ? ['claude', prompt] : ['claude'],
+    cwd,
+    prefix: 'new',
+    pin: opts.terminal,
+  });
 }
 
 export const adapter = {

@@ -40,6 +40,14 @@ import { createLog } from './log.mjs';
 export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
 
 /**
+ * The `terminal` setting's "work it out" value, and its default. Which
+ * emulators exist, and how each is launched, belongs to
+ * `src/adapters/claude-code/terminals.mjs`; the store deliberately does not
+ * know — see `sanitizeTerminal` below.
+ */
+export const TERMINAL_AUTO = 'auto';
+
+/**
  * @typedef {object} Settings
  * @property {number} stallWindowMs
  * @property {boolean} notifications
@@ -49,6 +57,7 @@ export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
  * @property {boolean} showLetGo
  * @property {ResumeTarget} resumeIn
  * @property {string} approveText   what the panel's `2 Approve` sends
+ * @property {string} terminal      pinned emulator id, or `auto` to detect
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -60,6 +69,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showLetGo: false,
   resumeIn: 'terminal',
   approveText: 'Yes, go ahead.',
+  terminal: TERMINAL_AUTO,
 });
 
 /** An approval is one line the user would have typed; anything longer is a reply. */
@@ -96,6 +106,32 @@ function sanitizeResumeIn(v) {
   return /** @type {readonly string[]} */ (RESUME_TARGETS).includes(/** @type {string} */ (v))
     ? /** @type {import('./store.mjs').ResumeTarget} */ (v)
     : DEFAULT_SETTINGS.resumeIn;
+}
+
+/**
+ * Which terminal emulator "open in terminal" should use.
+ *
+ * Validated by SHAPE, not by membership. The list of emulators lives in the
+ * adapter that launches them, and `core/` importing from `adapters/` would
+ * invert the layering the whole architecture rests on
+ * (`docs/02-ARCHITECTURE.md` §2). The three layers each check what they can
+ * actually know:
+ *
+ *   - The HTTP route rejects an id no platform has, so a bad request is
+ *     reported rather than quietly ignored (`src/http/routes/settings.mjs`).
+ *   - This function rejects anything that is not a plausible id, so a
+ *     hand-edited `state.json` cannot put a path, a flag or a shell fragment
+ *     into a value the launcher will read.
+ *   - Detection treats a pin it cannot resolve on this platform as absent and
+ *     carries on, so a state file carried between a Mac and a Linux box still
+ *     opens a terminal.
+ *
+ * @param {unknown} v
+ * @returns {string}
+ */
+function sanitizeTerminal(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return /^[a-z][a-z0-9-]{0,31}$/.test(s) ? s : DEFAULT_SETTINGS.terminal;
 }
 
 /**
@@ -141,6 +177,7 @@ function normalize(parsed) {
   settings.stallWindowMs = clampStallWindow(settings.stallWindowMs);
   settings.resumeIn = sanitizeResumeIn(settings.resumeIn);
   settings.approveText = sanitizeApproveText(settings.approveText);
+  settings.terminal = sanitizeTerminal(settings.terminal);
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -279,6 +316,9 @@ export class Store {
     }
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'approveText')) {
       next.approveText = sanitizeApproveText(patch.approveText);
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'terminal')) {
+      next.terminal = sanitizeTerminal(patch.terminal);
     }
     this._data.settings = next;
     this.save();
