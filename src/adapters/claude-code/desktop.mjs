@@ -24,9 +24,10 @@
  *
  * `scanSessions()` calls this once per poll, forever, and the store on the
  * reference machine is 61 files and 8.8 MB. Reading and parsing all of it
- * every 5 s cost 78–80 ms — on its own more than the whole < 50 ms warm-scan
- * budget in docs/02-ARCHITECTURE.md §8, and about 96% of what a warm scan
- * spent (docs/DEVIATIONS.md §77, which §68 measured and left alone).
+ * every 5 s cost 78 ms on a quiet machine and up to 170 ms on a busy one — on
+ * its own more than the whole < 50 ms warm-scan budget in
+ * docs/02-ARCHITECTURE.md §8, and about 96% of what a warm scan spent
+ * (docs/DEVIATIONS.md §78; §68 and §77 both measured it and left it).
  *
  * So each file's *parsed* result is kept, keyed by `(path, mtime, size)` —
  * the same invalidation rule `src/core/summary-cache.mjs` uses. Archiving a
@@ -143,7 +144,7 @@ export function desktopCacheSize() {
  * from a separate `statSync`, and that is a measured decision: on a cold
  * metadata cache a second path lookup per file cost 30–50 ms across the
  * store's 61 files, handing back on a process's first scan much of what the
- * cache saves on every later one (docs/DEVIATIONS.md §77). A miss has to open
+ * cache saves on every later one (docs/DEVIATIONS.md §78). A miss has to open
  * the file regardless, so it may as well ask the handle.
  *
  * Never throws. An unreadable, foreign or mid-write file yields an entry with

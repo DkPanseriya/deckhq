@@ -366,7 +366,7 @@ test('INVARIANT: a persisted cache entry cannot resurrect a stale archive state'
 });
 
 // --------------------------------------------------------------------------
-// docs/DEVIATIONS.md §77: the desktop store's own read is cached too, per file
+// docs/DEVIATIONS.md §78: the desktop store's own read is cached too, per file
 // and keyed by (path, mtime, size). The daemon polls in ONE long-lived
 // process, so these are the calls that actually happen in production — the
 // start-to-start tests above never exercise a warm desktop cache.

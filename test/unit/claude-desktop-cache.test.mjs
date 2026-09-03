@@ -3,7 +3,7 @@
  *
  * `readDesktopSessions()` runs on every poll, forever, so its result is cached
  * per file and keyed by `(path, mtime, size)` — the same invalidation rule as
- * `src/core/summary-cache.mjs` (docs/DEVIATIONS.md §77).
+ * `src/core/summary-cache.mjs` (docs/DEVIATIONS.md §78).
  *
  * The two properties that matter, and the reason the cache is here rather than
  * folded into the summary cache: a cache hit is indistinguishable from a fresh
