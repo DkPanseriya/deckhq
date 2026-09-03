@@ -170,7 +170,7 @@
   raised a hand"_. Off until you ask: `--notify` turns it on for one run and persists nothing,
   `settings.osNotify` turns it on for good, and the master notifications switch turns it off
   along with the browser's. A machine with no notifier, or one whose policy refuses ours, falls
-  back to the badge in silence. `docs/DEVIATIONS.md` §99.
+  back to the badge in silence. `docs/DEVIATIONS.md` §100.
 - **DeckHQ installs, and the dock icon carries the count.** A web app manifest, an icon, and a
   service worker that exists to make the floor installable and does nothing else — it caches
   nothing and intercepts nothing, because a cached floor is a floor that lies about who is
@@ -179,6 +179,25 @@
   from the stylesheet's own palette by `scripts/make-pwa-icons.mjs`, so no binary in this
   repository is one nobody can regenerate, and a test fails on any host in the manifest or the
   worker that is not this machine.
+- **A permission prompt can be answered from the panel — not yet proven against a live session.**
+  DeckHQ now installs a ninth hook, `PermissionRequest`, and it is the only one in the block the
+  runtime waits on: when a tool call is about to ask your permission in the terminal, the request
+  is held open on `POST /api/permission` for up to ten minutes while a card appears above WHAT IT
+  SAID with the tool, its literal input, and **Allow** / **Deny** / **Allow for session** on
+  `A` / `D` / `S`. "Allow for session" sends back the runtime's own rule with its destination
+  rewritten to `session`, so nothing is ever written into your settings files. DeckHQ never
+  allows anything by itself, never answers on a timer, never aborts a turn, and never touches
+  `ackState` — five named `INVARIANT:` tests, one per never. The terminal prompt stays live the
+  whole time: if nobody answers, if the daemon is closed, or if you answer in the terminal first,
+  the terminal is what decides, so a closed DeckHQ can never block a session. The consent screen
+  says all of that in its own paragraph before anything is written.
+  **The acceptance run is still owed.** No real `PermissionRequest` has ever reached this code:
+  the CLI's login on the reference machine is expired, so no tool call could be provoked. What
+  exists is 38 tests and a scripted stand-in for the runtime's hook client
+  (`scripts/fake-permission-client.mjs`) that sends the real payload to the real route and
+  asserts the exact bytes that come back. Until a live session raises a prompt, has it answered
+  from the panel, and carries on, this feature is not accepted and stays out of the README, the
+  tweet and the pricing page. `docs/DEVIATIONS.md` §86 and §97.
 
 ### Changed
 
@@ -207,7 +226,36 @@
   consulted; the client checked only the browser permission. It is now the master switch, with
   `notifyHandsUp` and `notifyForReview` under it, so the two states that reach you when the tab is
   closed can be chosen separately.
-
+- **The floor is generated from the people on it, not from the repositories on disk.** Rooms exist
+  only for projects with an agent at a desk, hand up, or waiting; a room's desks are the agents at
+  them, minimum one table, where they used to be the session count with every benched session
+  included. Projects nobody is in collapse into ONE directory strip along the bottom of the
+  working floor — one line each, carrying the name, the session count and how long ago anything
+  happened, and clicking a line scopes the panel exactly as clicking a room plate does. Archived
+  projects stay off the floor entirely. On the reference machine the working floor was one
+  furnished room and ten large empty cells; it is now one furnished room filling 59% of the floor,
+  3.3% of it bare, with seventeen idle repos in a strip taking 8.2%. `docs/DEVIATIONS.md` §96.
+- **Benched agents who have gone quiet go home.** A benched agent with no activity for longer than
+  `settings.goneHomeDays` (default 7, `0` to keep everybody) is not drawn, the lounge is sized to
+  the people who ARE drawn, and the door plate reads `12 benched · 35 went home`. Nothing about
+  their state changes — this reads an observed timestamp and writes nothing, so `ackState` and the
+  invariant are untouched, and any new activity brings them back on the next scan. They stay in
+  the header, in the panel, and one `g` away on the keyboard.
+- **People never shrink below legibility.** The character scale is decoupled from the world scale,
+  and `05-GUI-UX-SPEC.md` §6.2's floors are applied per element where each is drawn: 16 px of
+  body, 11 px of name label (was 9), 12 px of state icon (was 10), 13 px of waiting badge. At fit
+  on a 1600x1000 stage the reference floor now draws a 31 px body and an 11 px label.
+- **A re-plan is animated.** A room appearing when its first agent sits down, or folding into the
+  directory when its last one leaves, cross-fades over 260 ms rather than popping. Reduced motion
+  and a hidden tab get the cut.
+- **`2 Approve` gives up its accent fill while a permission card is up.** The panel's rule is one
+  filled button on the screen; Allow is also a primary action, and two crimson buttons is exactly
+  the "which one is the action?" problem that rule exists to prevent. Approve keeps its key, its
+  place and its label. `docs/DEVIATIONS.md` §97.3.
+- **The hooks consent screen reads as paragraphs.** An adapter's note is split on blank lines
+  instead of being set as one block, because the `PermissionRequest` paragraph is the one that
+  grants a runtime the ability to be answered rather than only watched, and it must not be the
+  tail of a wall of text. Still `textContent`, still no markup.
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
   runtime records the user turn — the documented `UserPromptSubmit` exception — never by the
@@ -230,6 +278,27 @@
 
 ### Fixed
 
+- **SECURITY: on Windows, a session id containing `&` was split into two commands.** Opening a
+  session in a console goes through `start`, which is an internal `cmd.exe` command rather than a
+  program, so `cmd.exe` re-parses the whole command line after it — and Node's Windows argument
+  quoting wraps a value only when it contains a space, a tab or a quote, leaving `&`, `|`, `^`,
+  `<` and `>` bare for `cmd.exe` to read as syntax. Measured on Windows 11: an argument of `x&y`
+  reached the launched program as `x`. The session id arrives in a request body, so this was the
+  same class of problem as the Codex one below, on the one platform whose launch form had
+  actually been run. DeckHQ now builds that command line itself, with every value double-quoted
+  and handed over with `windowsVerbatimArguments`, and the two characters that can escape a
+  double-quoted `cmd` argument — `"` and `%` — are refused with an error that says why rather
+  than escaped: a Claude Code session id is a UUID and a folder with a `%` in its name is rare.
+  The working directory is now named on the line too (`start /d`) instead of inherited through
+  two processes. The quoting rule is the one WP-47 already worked out for `code.cmd`, moved into
+  `src/core/cmdline.mjs` so there is one definition of it. Both the defect and the fix were
+  launched for real, with a working directory containing a space and an `&`.
+  `docs/DEVIATIONS.md` §98.
+- **"New Codex session" now runs `codex`, with your first prompt.** It used to open a terminal
+  running `codex resume new` — a resume of nothing — and drop the prompt the panel had asked
+  you for. The prompt is one argument, never part of a shell string, on every platform; and
+  if no terminal emulator can be found the panel now says so instead of reporting success.
+  (`docs/DEVIATIONS.md` §99)
 - **SECURITY: a Codex session id reached a shell.** Opening a Codex session in a terminal built
   its command as a shell string on both POSIX platforms — an AppleScript
   `do script "cd \"<cwd>\" && codex resume <id>"` on macOS, and `bash -lc "codex resume <id>"` on
@@ -254,6 +323,9 @@
   in the one wrapper file that has to exist — and there are now tests over every platform and
   every emulator asserting that an id made of shell metacharacters lands in exactly one argument
   and is equal to it. `docs/DEVIATIONS.md` §91.
+- **A prop's contact shadow no longer scales without bound.** Its depth is a property of how thick
+  a thing is, not of how big it is; unbounded, the room-sized rug a large project room now gets
+  cast a 380 px ellipse across half the room.
 - **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are
   written with the port the daemon had when they were installed, so a later start on the 4317
   default — or on 4318 after the in-use walk — left every hook event posting into a void while the
@@ -313,6 +385,13 @@
 
 ### Testing
 
+- **The permission feature's five "never"s are each a named `INVARIANT:` test.** Never auto-allow,
+  never answer on a timer, never set `interrupt`, never send a destination other than `session`,
+  never touch `ackState`. The route is driven through fake request and response objects so that
+  "nothing was written back" — the load-bearing state in this feature — can be asserted while the
+  socket is still open, which a real HTTP client cannot observe until the hold has already ended.
+  `test/integration/permission.test.mjs` then runs the scripted runtime against a real daemon and
+  asserts the exact JSON it receives for all three buttons and for both fall-through paths.
 - **Every (platform, emulator, launch form) pair has its exact argument list asserted** —
   twenty-one of them, byte for byte, in `test/unit/terminals.test.mjs`, plus detection order,
   `$TERMINAL` precedence, the pinned setting, and a hostile session id checked against every
@@ -350,7 +429,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   whole, and a title containing `"; & $(` has to reach every one of them as a single argument
   that equals it. The PowerShell script is read back and must contain neither value inside a
   double-quoted string. The service worker and the manifest are read for any host that is not
-  loopback, for a cache, and for a `respondWith`. `docs/DEVIATIONS.md` §99.
+  loopback, for a cache, and for a `respondWith`. `docs/DEVIATIONS.md` §100.
 
 ### Packaging
 
@@ -413,6 +492,17 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
 
 ### Known gaps
 
+- **The permission feature has never met a live session.** Everything downstream of the runtime is
+  tested and screenshotted; the runtime itself has not been in the loop once, because `claude`'s
+  stored login on the reference machine is expired and re-authenticating is an interactive browser
+  flow. The remaining step is one `claude login`, one session raising a real prompt, and one
+  press of Allow. Until then the response bytes are verified against a schema read out of the
+  installed binary rather than against the binary's behaviour. `docs/DEVIATIONS.md` §86.1, §97.5.
+- **Codex cannot answer a permission prompt yet.** It has the same hook and the same response
+  shape, but no `http` hook type at all, so it needs a `command` hook that reads the daemon's
+  port and relays on stdin/stdout. That same hook is also the fallback for the two managed-settings
+  switches that can turn HTTP hooks off over DeckHQ's head, neither of which is detected today.
+  §97.4.
 - **Goldens are committed for Windows only, so the Ubuntu CI job reports SKIPPED and proves
   nothing yet.** Text is rasterised by the operating system, so one set of goldens cannot serve
   three platforms and there was no linux or macOS machine in reach. The job captures anyway and
@@ -434,7 +524,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   claim, and the badge call resolves against a live daemon. Whether a browser offers **Install**,
   and whether the installed icon then takes the badge, has not been seen: the browsing context
   available for this work refuses to register any service worker at all, including one that does
-  not exist. `docs/DEVIATIONS.md` §99.6.
+  not exist. `docs/DEVIATIONS.md` §100.6.
 - **`settings.osNotify` ships off, and has no row in the settings sheet.** Whether a background
   process may raise toasts on this machine is a different consent from the one the browser asked
   for, and defaulting it on because the browser's is on would be deciding for the owner. Until

@@ -82,6 +82,22 @@ started with an explicit argument array through `spawn` or `execFile`. Session i
 and user-typed prompts are passed as arguments, never interpolated into a command line, so there is
 no shell metacharacter to escape and no quoting bug to get wrong.
 
+Windows has two places where that is not possible, and both are handled by one rule rather than by
+hope. Opening a console window means `start`, which is an internal `cmd.exe` command and not a
+program; opening VS Code means `code.cmd`, which Node refuses to spawn without a shell
+(CVE-2024-27980). `cmd.exe` does not parse a command line the way `CreateProcess` does — `&`, `|`,
+`^`, `<` and `>` are its metacharacters and Node's Windows quoting does not escape them — so for
+those two DeckHQ builds the command line itself, in `src/core/cmdline.mjs`, and passes it with
+`windowsVerbatimArguments`. Every value is double-quoted, where those metacharacters are literal;
+the two characters that can escape a double-quoted `cmd` argument, `"` and `%`, are **refused**
+rather than escaped, because nothing can make them safe and neither belongs in a session id or a
+project path. `docs/DEVIATIONS.md` §98 records the defect this replaced, measured on a real
+machine, and the tests that keep it out.
+
+On macOS, three applications (Terminal.app, iTerm2, Warp) accept only a shell line or a file. For
+those, DeckHQ writes a short `#!/bin/sh` wrapper with every value single-quoted and passes only its
+absolute path, so no user data is ever part of a command string.
+
 ### Conversation content is text, never markup
 
 Transcript content is untrusted input: it is whatever the model produced and whatever the tools it

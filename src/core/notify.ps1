@@ -10,7 +10,7 @@
 # <args...>` does NOT bind trailing arguments to `$args`: it APPENDS them to
 # the command text. A title of `Ada "; & $( ... )` became script source and
 # failed to parse. `-File` binds them as literal strings and the same title
-# arrived intact as one argument. See docs/DEVIATIONS.md §99.
+# arrived intact as one argument. See docs/DEVIATIONS.md §100.
 #
 # A failure here is not an error the user should see; the caller ignores the
 # exit code and the floor's badge carries the count regardless.

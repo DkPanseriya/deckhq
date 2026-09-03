@@ -24,7 +24,7 @@
  * about). `Registry.wasClosedCleanly()` reports that; on a machine with no
  * hooks installed it is always false, and the signal reduces to the only one
  * the degraded path has — a live session whose transcript's last turn had not
- * ended, now not live. See `docs/DEVIATIONS.md` §99 for what that costs.
+ * ended, now not live. See `docs/DEVIATIONS.md` §100 for what that costs.
  *
  * NOTHING IN HERE TOUCHES STATE. It reads snapshots and spawns a notifier.
  * The invariant (`docs/01-PRODUCT.md` §2) is not at risk from this file, and

@@ -19,11 +19,13 @@ import { register as registerHooks } from './http/routes/hooks.mjs';
 import { register as registerSettings } from './http/routes/settings.mjs';
 import { register as registerChanges } from './http/routes/changes.mjs';
 import { register as registerDiff } from './http/routes/diff.mjs';
+import { register as registerPermission } from './http/routes/permission.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { STATE_FILE, migrateLegacyState } from './core/paths.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
+import { Permissions } from './core/permissions.mjs';
 import { createNotificationWatcher } from './core/notify-watch.mjs';
 import * as adapters from './adapters/index.mjs';
 
@@ -169,13 +171,23 @@ async function adoptHooksPort(requested, log) {
 }
 
 /**
- * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string, publicDir?: string, notify?: boolean }} [opts]
+ * `DECKHQ_PERMISSION_HOLD_MS`, when it is a positive number. Undefined
+ * otherwise, so `Permissions` falls back to its own default.
+ * @returns {number|undefined}
+ */
+function envHoldMs() {
+  const raw = Number(process.env.DECKHQ_PERMISSION_HOLD_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : undefined;
+}
+
+/**
+ * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string, publicDir?: string, permissionHoldMs?: number, notify?: boolean }} [opts]
  *   `adoptHooksPort` is set by the CLI when the user named no port: the daemon
  *   may then prefer the port the installed hooks post to (see `adoptHooksPort`
  *   above). Tests and embedders that pass a port leave it unset.
  *   `notify` is `--notify`: OS notifications for this run, without writing
  *   `settings.osNotify` (WP-16).
- * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, close:() => Promise<void> }>}
+ * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, permissions:Permissions, close:() => Promise<void> }>}
  * @throws {DeckhqAlreadyRunningError} when adopting and the hooks' port is
  *   already a running DeckHQ daemon. Thrown before anything is opened or
  *   written, so there is nothing to close.
@@ -204,18 +216,30 @@ export async function startDaemon(opts = {}) {
     identity,
   });
 
+  // WP-19. The sockets a raised hand is waiting on. `holdMs` is configurable
+  // so a test can prove the fall-through in milliseconds instead of ten
+  // minutes, and so a machine whose runtime uses a shorter timeout can be
+  // brought back under it; the default is the runtime's own 600 s less a
+  // margin (src/core/permissions.mjs).
+  const permissions = new Permissions({
+    registry,
+    log: createLog('permissions'),
+    holdMs: opts.permissionHoldMs ?? envHoldMs(),
+  });
+
   const router = new Router();
   /** @type {any} */
   // `port` is filled in once the listener is bound. The hooks routes read it
   // so the hook command they write points at THIS daemon, not at 4317 by
   // assumption — see src/adapters/claude-code/hooks.mjs.
-  const ctx = { registry, store, adapters, identity, log, publicDir, port: null };
+  const ctx = { registry, store, adapters, identity, permissions, log, publicDir, port: null };
   registerState(router, ctx);
   registerActions(router, ctx);
   registerHooks(router, ctx);
   registerSettings(router, ctx);
   registerChanges(router, ctx);
   registerDiff(router, ctx);
+  registerPermission(router, ctx);
 
   const server = http.createServer((req, res) => {
     // A missing Host header, or one pointing anywhere but loopback, is not a
@@ -316,6 +340,10 @@ export async function startDaemon(opts = {}) {
   async function close() {
     if (closed) return;
     closed = true;
+    // Let go of every held permission request FIRST, answering each with
+    // nothing: a closing DeckHQ must never leave a session blocked, and must
+    // never spend its last act deciding something (docs/DEVIATIONS.md §97).
+    permissions.shutdown();
     notifier.stop();
     registry.stop();
     await store.flush?.();
@@ -323,7 +351,7 @@ export async function startDaemon(opts = {}) {
     server.closeAllConnections?.();
   }
 
-  return { url, port, server, registry, store, close };
+  return { url, port, server, registry, store, permissions, close };
 }
 
 /**

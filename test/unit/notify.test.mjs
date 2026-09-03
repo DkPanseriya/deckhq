@@ -14,7 +14,7 @@
  *   3. **One notification per coalescing window**, not one per session.
  *
  * Nothing in this file starts a process. The one real Windows toast this
- * package fired is recorded in `docs/DEVIATIONS.md` §99.
+ * package fired is recorded in `docs/DEVIATIONS.md` §100.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

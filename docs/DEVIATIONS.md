@@ -3077,10 +3077,11 @@ hook). **The end-to-end run on the reference machine is still owed, and until it
 happens this feature stays out of the README, the changelog and every tweet**,
 per WP-19 and `08` §1.1 rule 11.
 
-`scripts/spike-permission/` holds the throwaway prototype that reproduces all of
-this. It is not product code, it is excluded from the published tarball by the
-`files` whitelist in `package.json`, and it should be deleted when the build
-lands.
+`scripts/spike-permission/` held the throwaway prototype that reproduced all of
+this. It was not product code and was excluded from the published tarball by the
+`files` whitelist in `package.json`. **The build landed and it is gone** —
+`scripts/fake-permission-client.mjs` and `test/integration/permission.test.mjs`
+reproduce the same findings against the real route. See §94.
 ## 87. WP-21 — the goldens gate, and the numbers it was calibrated with
 
 WP-21 asks for three things: a deliberately reverted rig fix must fail the
@@ -3606,7 +3607,7 @@ argv, the wrapper script and the fallback walk.
 |          | 7 Xfce Terminal    | `xfce4-terminal --working-directory=<cwd> -x <argv>`                          |
 |          | 8 xterm            | `xterm -e <argv>` (cwd from the spawn; xterm has no flag)                     |
 |          | 9 x-terminal-emulator | `x-terminal-emulator -e <argv>`                                            |
-| Windows  | the console        | `cmd /c start "" cmd /k <argv>` — unchanged, and the only row ever run        |
+| Windows  | the console        | `cmd.exe /d /s /c start "" /d "<cwd>" cmd /d /s /k <program> "<arg>"…`, with `windowsVerbatimArguments` — the only row ever run, and the only one that is a command line rather than an argv. It was `cmd /c start "" cmd /k <argv>` until §96 rewrote its quoting. |
 
 Detection order, highest first: the `terminal` setting; `$TERMINAL` (Linux); the emulator DeckHQ
 is itself running inside (`$TERM_PROGRAM`, or `KITTY_WINDOW_ID`, `FOOT_PID`, `KONSOLE_VERSION`,
@@ -3695,6 +3696,12 @@ through the same grammar `sh` uses and asserts it equals the original, and separ
 that the line matches the grammar of nothing but single-quoted words. The AppleScript never sees
 user data: `osascript` gets the wrapper's path as `argv`, and the script quotes it with
 `quoted form of`, which is the same transformation `shQuote` performs.
+
+The Windows row is the third case, and it was the one this entry got wrong. `start` is an
+internal `cmd.exe` command rather than a program, so `cmd.exe` re-parses everything after it —
+and node's win32 argument quoting, which this row relied on, does not escape `&`, `|`, `^`, `<`
+or `>`. The claim above was therefore false on Windows for two months. §98 is the fix: the
+command line is built by this module and handed over with `windowsVerbatimArguments`.
 
 The wrapper files are not cleaned up. One ~150-byte file per resume accumulates in the temp
 directory, as it did before this package. Left alone deliberately: pruning by pattern in a
@@ -4118,18 +4125,19 @@ cannot silently go stale.
 
 ### Not fixed, and deliberately so
 
-1. **`openNewSession()` still runs `codex resume new`.** It delegates to
+1. ~~**`openNewSession()` still runs `codex resume new`.** It delegates to
    `openInTerminal('codex:new', cwd)`, so the literal argv is `['codex', 'resume', 'new']`. That is
    almost certainly not how Codex starts a fresh session, and `opts.instructions` is still dropped
    where the Claude Code adapter now carries it (§91 deviation 5). Both are behaviour, not the
    shell-string defect this change is for, and neither can be checked without Codex on the machine.
    WP-23's. The user's pinned emulator IS now forwarded, because the point of routing both adapters
-   through `launchTerminal()` is that they obey one setting.
+   through `launchTerminal()` is that they obey one setting.~~ **Closed by §99**: it now runs
+   `codex`, with the first prompt as one argv element.
 2. **The adapter remains unverified against real Codex.** §8 stands unchanged: Codex is not
    installed on the reference machine, `available()` returns false, and every method degrades
    rather than throwing. Nothing in this change was executed against Codex. What was proved is the
    argv arrays, which is a different claim (§1.1 rule 11).
-3. **The Windows console row still joins its argv into a `cmd.exe` command line.**
+3. ~~**The Windows console row still joins its argv into a `cmd.exe` command line.**
    `cmd /c start "" cmd /k <argv>` is WP-04's Windows form and is unchanged here, but `cmd.exe`
    does not parse its command line the way `CreateProcess` argv quoting assumes: `&`, `|`, `^`, `<`
    and `>` are its metacharacters and node's win32 argument quoting does not escape them. So on
@@ -4137,7 +4145,8 @@ cannot silently go stale.
    It is the same exposure before and after this change, it belongs to the terminal table rather
    than to either adapter, and rewriting the one launch form that has actually been run on real
    machines was not worth folding into a security fix for a different bug. Named here so it is not
-   mistaken for covered.
+   mistaken for covered.~~ **Closed by §98**, which rewrote the row's quoting and measured both
+   the defect and the fix on the reference Windows machine.
 
 ### Acceptance
 
@@ -4162,7 +4171,580 @@ cannot silently go stale.
 
 Plus one test in `terminals.test.mjs` for the re-export shim. 714 tests to 744.
 
-## 99. WP-16 — the notification the closed tab cannot send, and the PowerShell flag that had to change
+## 96. WP-50 — the floor is generated from the people on it
+
+`08` B6, delivered. The plan was a function of the repositories on disk:
+`buildProjectRoom(p, p.sessionCount)` sized desks by session count with the
+benched included, an idle project became a collapsed ROOM that still bid for
+area in the treemap, and the squarifier then stretched every cell to tile its
+band. The reference machine showed one furnished room and ten large empty
+cells with a plate each.
+
+It is now a function of two numbers and nothing else: **active projects** (at
+least one agent with `activityState` in `working | needs_input | stalled |
+for_review` and `ackState === 'active'`) and **active agents**.
+
+| | before | after |
+|---|---|---|
+| project rooms on the reference floor | 11 (1 furnished, 10 empty) | **1, furnished** |
+| that room's share of the floor | — | **59%** |
+| bare carpet in it | — | **3.3%** |
+| idle projects | 10 rooms, most of the working band | **17 lines in one strip, 8.2% of the floor** |
+| people drawn | 70 | **16** |
+| lounge | 47 benched | **12 benched · 35 went home** |
+| px per unit at fit, 1600x1000 | 10.5 | **12.3** |
+| character body / name label at fit | 26.4 px / 11 px | **31.1 px / 11 px** |
+
+On the demo floor: five rooms, every one with at least one occupant, **6.6% to
+7.4% bare carpet** in each, one idle repo in the strip.
+
+Before and after, both populations, from the goldens' own captures:
+`docs/media/floor-before-wp50.png` / `docs/media/floor-after-wp50.png`
+(reference) and `docs/media/demo-before-wp50.png` /
+`docs/media/demo-after-wp50.png`.
+
+### The eight decisions inside it
+
+**1. `ended` is not "on the floor".** The parenthetical in B6 is exact, and an
+`ended` session that is still `active` is not in the set. A project whose only
+sessions have finished is idle, so it gets a directory line — and the sessions
+themselves are not drawn either, because there is no room to draw them in. On
+the reference machine that is 19 of the 70. They are still counted in the
+header, still in the panel, still one click from the strip's own line, which
+carries their number. **This is the largest behavioural change in the package
+and it is a display filter: nothing writes to `ackState`, and every
+`INVARIANT:` test passes untouched.**
+
+**2. A project with an agent waiting in the office keeps its room.** The agent
+is drawn in the reception, not at its desk, but the room is its room: if it
+folded away while its owner queued and reappeared the moment you acknowledged
+it, the walls would move twice for one piece of work. So "no room without an
+active occupant" counts the project's active agents, not the seats filled in
+the room. The room gets its minimum one table.
+
+**3. The plan decides who is drawn, and everything else reads that.** `buildPlan`
+returns `plan.hidden` (gone home, plus desk agents in projects with no room)
+and `plan.goneHome`. `assignSeats` and `AgentRuntime#sync` filter on it instead
+of re-deriving the rule. §16, §35, §38, §52 and §55 are five bugs with one
+cause — two representations of the same thing, allowed to disagree — and "who
+is on the floor" was about to become the sixth.
+
+**4. A caller that supplies a project with no agents falls back to the project
+record.** `buildPlan(projects, [])` cannot invent people it was not given, so
+when the agent list mentions a project id at all, the counts come from the
+agents; when it mentions it not at all, `activeCount ?? sessionCount` is the
+only thing to go on. On a real snapshot every project comes from its own
+agents, so the fallback never fires there. It is what let 500-odd existing
+assertions keep testing geometry rather than being rewritten to carry
+populations they were never about.
+
+**5. The strip is one horizontal band, capped at three rows.** B6 asks for "one
+line per project ... it takes a plate's height, not a room". A line is
+`DIRECTORY_LINE_H` (1.6 U) — under half a plate band — and the whole strip is
+capped at `DIRECTORY_MAX_H` = a plate band plus three lines (9.2 U), flowing
+into as many columns as it needs. **The acceptance text says "a strip no taller
+than a room plate"; taken as the whole strip that is one row of seventeen
+columns across 84 units, four units and about a hundred pixels per repo, and a
+name is all that fits.** So the cap is on the LINE and on the strip's total,
+and both are asserted. A project is never dropped from the directory whatever
+the count — a repo you cannot see is a repo you cannot start an agent in — the
+columns narrow and the names ellipsise instead. Measured: 17 repos in 3 rows of
+6 columns, 13.9 U (172 px) per line at fit, every name legible.
+
+**6. Gone home is measured against `lastActivityAt`, with two refusals.** A
+window of `0` disables the filter rather than hiding everybody, and an agent
+whose last activity is unknown (`undefined`, `0`) is DRAWN. The floor does not
+hide what it cannot date. The boundary is exclusive: at exactly seven days you
+are still in the lounge. `settings.goneHomeDays` is clamped to [0, 365] in
+`store.mjs` the same way `stallWindowMs` is, and reaches the renderer through
+the snapshot — no new state, no new file, nothing persisted about who is away.
+
+**7. A large project room is furnished by its rug.** Desks now count agents, so
+a room's furniture is routinely far smaller than the cell the treemap gives it
+— on the reference floor, one two-seat table in an 88 x 67 room. A small rug in
+a large room is §64's defect one level up: a group of desks adrift in the
+middle of it. The rug therefore grows to the room, stopping 4 U clear of the
+walls so the corner planting and the wall fixtures keep floor of their own.
+That exposed a real bug in `backdrop.js`: a prop's contact shadow was
+`h * 0.22` deep with no ceiling, so the room-sized rug cast a 380 px ellipse
+across half the room. Depth says how THICK a thing is, not how big; capped at
+10 px. The rug's border inset also scales now, because 6 px is a border on a
+desk mat and invisible on a room. **Still open:** a room that large is honest
+and sparse — one table, a rug, three plants, a whiteboard and a shelf. Denser
+furnishing of a big room (a breakout group, planting along the long walls) is
+interior design, not layout, and is left to WP-12 / UI/UX.
+
+**8. The re-plan cross-fades. It does not slide.** B6 asks for walls that
+slide. Sliding them means interpolating between two buildings that differ in
+room count, band count, envelope width and envelope height — the plan has no
+representation for a half-state, and the floor is one baked bitmap by design
+(re-baking is ~190 ms, §68's own measurement). **Deviation, taken with the
+escape hatch B6's own text offers:** the old backdrop is kept and faded out
+over the new one across 260 ms. Reduced motion gets the cut, and so does a
+stopped render loop — a hidden tab has no frames to fade with, and the single
+`_draw` that a push makes would otherwise paint the old floor over the new at
+full opacity and leave it there until the tab came back.
+
+### People never shrink below legibility
+
+`05` §6.2 states its floors PER ELEMENT, and that is how they are applied:
+`rig.js` exports `LEGIBILITY_MIN_PX` (16 px body, 11 px label, 12 px icon,
+13 px badge) and each one is enforced where that element is measured and drawn.
+The label was floored at 9 px and the icon at 10; those are now 11 and 12. The
+badge's pill grows with its floored font, which it did not before — at a tight
+fit scale the glyphs stood proud of it.
+
+The body's floor is a floor on `u`, which is the caller's, so `scene.js` holds
+it: `characterScaleFor(worldScale) = max(worldScale, 16 / BODY_HEIGHT_U)`, and
+everything hanging off a character — label box, badge, icon, the collision pass
+— is measured in that frame rather than the world's. `BODY_HEIGHT_U` (2.52) is
+exported from `rig.js` rather than recomputed in the test, for the same reason
+as decision 3.
+
+**Measured, and worth stating plainly: the character-scale clamp never fires on
+any population this project has.** `CHAR_MIN_PX_PER_UNIT` is 6.35 and the
+floor's own `MIN_SCALE` is 7.5, so the world scale already clears it
+everywhere; at fit on 1600x1000 the reference floor draws people at 12.3 px per
+unit, a 31 px body. What actually binds is the label, and the label is floored
+where it is set. The decoupling is kept anyway: it is the structural half of
+§6.2, it costs one `Math.max`, and it is what stops a future `MIN_SCALE` change
+from silently taking the people with it.
+
+The badge's own visibility gate keeps reading the WORLD scale, not the
+character scale: the gate asks whether two office seats are far enough apart
+for two badges, and the pitch between two seats is a fact about the floor, not
+about how large the people standing on them are drawn.
+
+### The reference fixture is the machine §0 measured
+
+Two corrections to `scripts/demo-floor.mjs`'s `reference` population, both so
+the golden photographs `08` §0's floor rather than an approximation of it:
+
+- **Both office sessions belong to one project.** §0's floor is "one furnished
+  room"; the second `for_review` fell on index 14, which put it in
+  `web-console` and gave the fixture a second active repo the real machine did
+  not have. It is now index 2, in `platform-api`. Counts are unchanged: 70
+  sessions, 18 projects, 47 benched.
+- **Ages span a month, not five days.** The real machine's benched sessions had
+  been benched for weeks — that is what the gone-home window is FOR — and a
+  fixture whose oldest session is five days old cannot photograph it. The
+  fixture now spreads 2 h to 30 d, which sends 35 of the 47 home and puts
+  `12 benched · 35 went home` on the lounge door in the golden.
+
+### Goldens
+
+Regenerated as the last step of the package, as the workplan requires. Three
+of the four changed — `reference` and `demo` because the floor is a different
+building, `single` because of the room-sized rug and the 9 px to 11 px name
+label. **`empty` is byte-identical**, which is the control working: there is
+nobody on that floor and no repo in its directory, so nothing WP-50 touches is
+drawn on it.
+
+The check is green against fresh captures on all four, and the harness's own
+noise floor is unchanged from §87's measurement: 0 px over tolerance
+everywhere, 36 px moved at all on `empty` and 0 on the other three.
+## 97. WP-19 build — the panel can answer a permission prompt, and the run that proves it has not happened
+
+Built against the contract in §86, which was measured on Claude Code 2.1.231.
+**The acceptance criterion in WP-19 — _"a permission prompt raised by a session
+is answered from the panel and the session continues, verified end to end on
+the reference machine"_ — is still NOT met.** The CLI's stored OAuth token on
+this machine is still expired, so no tool call can be provoked and no real
+`PermissionRequest` has ever reached this code. Everything below is proved by
+tests and by a scripted stand-in for the runtime's hook client; the one thing
+neither can prove is that the installed runtime accepts the bytes DeckHQ puts
+on the wire. Per `08` §1.1 rule 11 and WP-19's own text, **this feature stays
+out of the README, out of a tweet and out of a pricing page until that run
+happens.** The changelog entry says so in its own words.
+
+### 97.1 What was built
+
+**The hook.** `PermissionRequest` joins the tagged block in
+`src/adapters/claude-code/hooks.mjs` as the ninth event and the only `http`
+entry:
+
+```json
+{
+  "type": "http",
+  "url": "http://127.0.0.1:<port>/api/permission",
+  "timeout": 600,
+  "statusMessage": "Waiting for DeckHQ…",
+  "_deckhq": true
+}
+```
+
+No `matcher` and no `if` — the product's claim is that every raised hand
+appears, so the hook narrows on nothing (§86.4). `timeout` is written
+explicitly rather than inherited, so a future change to the runtime's own
+default cannot silently shorten a hold under a card somebody is reading.
+Install, remove, the byte-exact backup, the port-mismatch-reads-as-not-installed
+rule and the one-click reinstall all inherit unchanged; `portOfEntry` now reads
+a port from either an entry's command line or its literal URL, so a settings
+file carrying only the `http` entry still reports its port correctly.
+
+**The route.** `POST /api/permission`, in its own module, deliberately NOT
+`/api/hook` — that one acknowledges in under 200 ms because the runtime is
+blocked on it, and this one is blocked on a person. It parses through the
+adapter (rule 8: the payload shape is Claude Code's), registers a
+`pendingPermission` on the session, and writes nothing.
+`POST /api/permission/decide` is the only thing in the product that can produce
+a decision.
+
+**The card.** `pendingPermission: {id, tool, summary, suggestions,
+requiresUserInteraction, since}` rides on the agent in the snapshot and over
+SSE, beside `currentTool` and with the same discipline: observed, transient, a
+copy rather than a handle, and never touching a user-owned field. The panel
+draws it above WHAT IT SAID with **Allow** / **Deny** / **Allow for session**
+on `A` / `D` / `S`.
+
+### 97.2 The five things it will never do, and where each is nailed down
+
+| Never | Where it is enforced | Test |
+| --- | --- | --- |
+| auto-allow, on any heuristic | only `decide()` builds a decision body, and only the panel's POST reaches it | `INVARIANT: the hold expires into no decision at all` |
+| answer on a timer | the one timer releases the socket with `{}` — no `hookSpecificOutput`, so not a decision | the same, plus the integration test's exit code 1 |
+| set `interrupt: true` | `permissionDecisionBody` has no branch that emits it | `INVARIANT: deny never sets interrupt` |
+| send a `destination` other than `"session"` | suggestions are echoed back with `destination` overwritten | `INVARIANT: Allow for this session sends destination:"session" and nothing else` |
+| touch `ackState` / `reviewSince` / `needsInputSince` | `Permissions` holds no store reference and calls only two write-only registry methods | `INVARIANT: holding, answering and expiring a request never touch ack state`, and the registry-side `INVARIANT: a pending permission changes no user-owned field` |
+
+The client half is guarded the same way: `answerPermission()` is its own funnel
+to its own endpoint and never reaches `performAction()` or `/api/ack`, asserted
+statically in `test/unit/panel-invariant.test.mjs` alongside the existing ack
+invariants. `A` is also app.js's acknowledge shortcut: the panel's listener
+runs first and claims the key **only** while a card is up, and a test asserts
+the claim happens after the card check, never before.
+
+### 97.3 Nine decisions this build took that §86 left open
+
+1. **The deny message is `"denied from DeckHQ"`**, lower case and without a
+   full stop — the package brief's literal wording. §86.3's table wrote
+   `"Denied from DeckHQ."`. The string lands in the session's own transcript as
+   the reason a tool did not run, so it is a user-visible piece of copy and the
+   difference is recorded rather than silently reconciled. If the sentence case
+   is wanted back, it is one literal in `permissionDecisionBody`.
+
+2. **The hold is the runtime's timeout minus a margin, not the timeout.**
+   `600_000 − 15_000 = 585_000 ms`, so the socket is released from our side
+   before the runtime gives up on it and the withdrawal is orderly rather than
+   a reset somebody has to explain. Configurable by
+   `DECKHQ_PERMISSION_HOLD_MS` and by `startDaemon({permissionHoldMs})`, which
+   is what lets the integration test prove the fall-through in 250 ms instead
+   of ten minutes.
+
+3. **A path outside the session's cwd is shown in full, not reduced to its
+   basename.** This is the exact opposite of WP-52's thought bubble, and
+   deliberately so. The bubble hangs over a floor that gets screenshotted, so
+   an outside path loses everything but its file name. The permission card is
+   the surface on which somebody decides whether to allow a write, and a write
+   landing outside the project is precisely the case where hiding where it goes
+   would be the dangerous choice. Both rules have their own `SECURITY:` test,
+   and the tests name the reason so the next person does not "fix" one to match
+   the other.
+
+4. **Only `addRules` suggestions are kept.** The runtime's update union also
+   carries `setMode`, `addDirectories`, `removeDirectories` and the `replace`/
+   `remove` rule forms. Retargeting a `setMode` at the session would change the
+   permission mode of a session from a web panel, which is a wider grant than
+   the button's words. Anything that is not `addRules` is dropped, and a
+   request that carried none is offered two buttons rather than three — absent,
+   not disabled-with-a-tooltip, per §86.5.
+
+5. **`2 Approve` gives up its fill while a card is up.** `05` §4.2 makes
+   Approve the only accent-filled button on the panel. Allow is also a primary
+   action, and two crimson-filled buttons is exactly the "which one is *the*
+   action?" problem the single-fill rule exists to prevent. So while a
+   permission card is showing, Allow is the filled button and Approve is plain;
+   it keeps its key, its place and its label. The screenshot shows the result.
+
+6. **The card carries no live clock.** `since` is in the snapshot and is part
+   of the contract, but the panel does not render "held for 42 s". The card is
+   already the most urgent thing on the screen and a second-by-second counter
+   on it is noise, not information — and it would need a one-second timer in a
+   panel that currently has one thirty-second one. The card simply vanishes
+   when the hold ends.
+
+7. **The `requires_user_interaction` set is a name list plus a payload flag.**
+   `AskUserQuestion` and `ExitPlanMode` are named; MCP tools carry the property
+   in metadata the hook payload does not currently include, so
+   `requires_user_interaction` is also read off the payload against the day the
+   runtime starts sending it. Those requests are still **held** — withdrawing
+   them would be a lie about what the runtime is doing — the card says to
+   answer in the terminal, offers no buttons, and the API refuses a decision
+   with a 409 rather than sending an allow the runtime would discard.
+
+8. **The held map is capped at 32 and sheds its oldest.** Held sockets are the
+   only new resource this feature introduces (§86.5). A shed entry is released
+   with `{}`, so shedding degrades into the terminal prompt like everything
+   else here. A repeated `tool_use_id` replaces the older socket rather than
+   orphaning it, and a payload with no `tool_use_id` still gets a card under a
+   key of our own instead of being dropped.
+
+9. **The consent screen's note is now paragraphs, not one block.** The
+   `PermissionRequest` paragraph grants a runtime the ability to be *answered*
+   rather than only watched, and it must not be the tail of a wall of text.
+   `public/hooks-ui.js` splits an adapter's note on blank lines; still
+   `textContent`, still no markup. The note names the button labels, says the
+   hold length, and says in so many words that DeckHQ never allows anything by
+   itself, never answers on a timer, never writes a permanent rule into a
+   settings file, and that the terminal prompt is live the whole time. A test
+   asserts each of those clauses is present.
+
+### 97.4 Codex is not built, and here is the route when it is
+
+§86.7 records, from documentation only, that Codex has `PermissionRequest` in
+`~/.codex/hooks.json` with the same object-shaped response and the same
+fall-through — **but its hook types are `command` and `mcp_tool` only, with no
+`http`.** So the Codex adapter cannot point at `/api/permission` and this
+package does not attempt it. `src/adapters/codex/hooks.mjs` is untouched and
+still reports `supported: false`.
+
+The follow-up, when it is picked up:
+
+1. Have the daemon write its bound port somewhere readable (§86.6 option 2;
+   that belongs in WP-36, not here).
+2. Ship a `command` hook — a Node one-liner that reads the port, POSTs the
+   payload it got on stdin to `/api/permission`, and prints the decision JSON
+   to stdout. The endpoint, the hold, the card, the three buttons and the
+   response body are all runtime-agnostic already; only the transport differs.
+   It costs one process spawn per raised hand, which is affordable at one per
+   prompt.
+3. The same command hook is the fallback for the two managed-settings kill
+   switches in §86.4, `allowedHttpHookUrls` and `allowManagedHooksOnly`, which
+   can switch the `http` route off over DeckHQ's head. Neither is detected
+   today: on a managed machine they look exactly like a hook that is installed
+   and never fires, which is what the hooks screen's delivery evidence already
+   reports. Making `doctor` name them by reading managed settings is a
+   separate, small package.
+
+None of this was run against Codex: it is not installed on this machine, and
+the claim that the hook shipped in 0.150.0 is still unverified.
+
+### 97.5 What proves what, and what is still owed
+
+**Proved by test** (38 new; the suite goes 714 → 752, and the four goldens still match):
+
+- The hook block: the `http` entry's type, URL, timeout and tag; that it
+  narrows on nothing; that install / remove / repoint / backup still behave;
+  that a port is readable from the `http` entry alone; that the consent screen
+  names the event and says what it does, clause by clause.
+- The payload parser: the tool, the literal input, the id, the suggestions and
+  their labels; the two path rules; one line of printable text at 400
+  characters; the `requiresUserInteraction` set.
+- The response bodies, byte for byte, for all three buttons, plus every "never"
+  in §97.2.
+- The route: the socket is not written to while it is held; a malformed body,
+  an unreadable payload and an unknown runtime all fall through; double
+  answers, unknown ids, unknown decisions and a `session` with no rule are all
+  refused without touching the held socket; the cap sheds; a closed socket
+  withdraws the card.
+- The registry: a card appearing, changing and vanishing moves no user-owned
+  field, no activity state and no count, and a stale clear cannot take a newer
+  card down.
+
+**Proved by the scripted runtime.** `scripts/fake-permission-client.mjs` sends
+§86.2's payload to the real route on a real daemon and waits on the socket the
+way the runtime waits. `test/integration/permission.test.mjs` drives it for all
+three buttons and for both fall-through paths (nobody answers; the daemon
+closes mid-hold), asserting the exact JSON the fake runtime receives. The
+prototype in `scripts/spike-permission/` is superseded by this and by the route
+itself; §86.9 said to delete it when the build lands, and it is deleted here.
+
+**Proved by screenshot** (`docs/media/permission-card.png`, rule 10). The demo
+floor with a `PermissionRequest` held open on _Migrate auth to short-lived
+tokens_: the card above WHAT IT SAID, the tool, the literal command, the three
+buttons on their keys, the note about the terminal, one filled button on the
+screen, and the raised hand still up on the floor beside it — the card came and
+will go without the runtime having moved on. Reproduce it with:
+
+```
+node scripts/demo-floor.mjs --port 4499
+node scripts/fake-permission-client.mjs --port 4499 \
+  --session <the needs_input session's id> --tool Bash \
+  --input "npx prisma migrate deploy --schema prisma/schema.prisma"
+node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ \
+  --width 1600 --height 1000 --settle 9000 --press jjjjj \
+  --out docs/media/permission-card.png
+```
+
+**Still owed, and it is the acceptance criterion itself:** `claude login` on the
+reference machine, then a real interactive session raising a real prompt,
+answered from the panel, and the session carrying on. Until that has been done
+and recorded here, WP-19 is not accepted and the feature is not spoken about
+outside this file and the changelog's own hedged entry.
+## 98. Windows launch quoting — the one row that had been run, and the metacharacter it let through
+
+**Spec:** `08-PLAN-V2-100X.md` §1.1 rule 8 and rule 11; `07-AGENT-HANDOVERS.md` Agent Backend's
+"argv arrays only, never shell strings with interpolated user data". §95's third residual named
+this and left it; this entry closes it.
+
+**The defect, measured.** WP-04's Windows row was
+
+```
+cmd /c start "" cmd /k <argv>
+```
+
+spawned as an argv array, on the assumption that argv arrays are safe. They are — for
+`CreateProcess`. `start` is not a program: it is an internal `cmd.exe` command, so `cmd.exe`
+re-parses the whole command line after it, and `cmd.exe`'s parser is not `CreateProcess`'s. Node's
+win32 argument quoting wraps a value in quotes only when it contains a space, a tab or a quote, so
+`&`, `|`, `^`, `<` and `>` arrived bare, where `cmd.exe` reads them as syntax.
+
+Run on the reference Windows 11 machine, old form:
+
+| Value passed as one argv element | What the launched program received                       |
+| -------------------------------- | -------------------------------------------------------- |
+| `a & b`                          | `a & b` — survived, because the spaces made node quote it |
+| `x&y`                            | **`x`** — `&y` was taken by `cmd.exe` as a second command |
+
+That is the whole bug in one row. A session id arrives in a request body (`POST /api/open`,
+`POST /api/resume`), so this is §28's failure with the target moved to the id, on the one platform
+whose launch form had actually been exercised.
+
+**Shipped.** The row builds its own command line and tells node not to touch it:
+
+```
+cmd.exe /d /s /c start "" /d "<cwd>" cmd /d /s /k <program> "<arg>" "<arg>"
+```
+
+with `windowsVerbatimArguments: true`. Every piece is load-bearing:
+
+- **`/d`, twice, meaning two different things.** On `cmd.exe` it suppresses the AutoRun registry
+  commands, so nothing a user's registry names runs inside a window DeckHQ opened. On `start` it
+  is the working directory.
+- **`/s` on both.** Documented as: if the first character after `/c` (or `/k`) is a quote, strip
+  it and the last quote on the line. Neither line starts with a quote — `start` and the program
+  name are bare words — so nothing is stripped and every argument keeps its quotes. This is why
+  the program name must be a bare word, and why this needs none of the doubled-quote trick
+  `editor.mjs` uses (there the first token is an absolute path and has to be quoted).
+- **`/d "<cwd>"`.** The working directory used to be inherited through two processes from
+  `spawn()`'s `cwd` alone. It is now also stated, which is the belt and braces every Linux row
+  already had — and it means the cwd is a value this module quotes rather than one it hopes about.
+- **The quotes, and the two characters refused rather than escaped.** `&`, `|`, `^`, `<`, `>` and
+  `()` are literal inside double quotes. `"` and `%` are not: `cmd.exe` has no escape for a quote
+  inside a quoted string, and `%VAR%` expands inside quotes. Both are refused.
+
+**The quoting helper is shared, not duplicated.** WP-47 solved the same problem for `code.cmd`
+(§90) and its rule lived inside `src/core/editor.mjs`. It moved to `src/core/cmdline.mjs` —
+`cmdUnsafe`, `assertCmdSafe`, `cmdQuote`, `cmdRefusal`, `isCmdBareWord` — and both callers use it.
+There is exactly one definition in the tree of what `cmd.exe` can be handed.
+
+### The refusal, and why it is a refusal
+
+An escaping scheme across three levels of re-parsing (node → `cmd.exe` → `start` → the inner
+`cmd.exe`) is a thing to get subtly wrong. Refusing is not.
+
+The error says why it is almost certainly not about the user: _"A Claude Code session id is a UUID
+and never contains them, and a project folder with a `%` in its name is rare — so this is worth
+looking at rather than working around."_ A `"` cannot appear in a Windows path at all.
+
+`launchTerminal()` normally swallows a candidate's failure and walks on to the next emulator. It
+re-throws this one, on `err.code === 'ERR_DECKHQ_CMD_UNSAFE'`: a value that cannot be quoted is a
+fact about the id or the folder, not about the emulator, and no other terminal can make a `%` safe.
+Swallowing it would have replaced a message that says what is wrong with "Could not open a
+terminal." Tested.
+
+### Deviations from §91 as written
+
+1. **The Windows row is no longer an argv array, and §91's "argv arrays end to end" claim was
+   false on Windows.** It is corrected in place there rather than quietly dropped. The security
+   claim for this row is now a different one: the id and the cwd are each **one double-quoted word
+   of a command line**, and no `cmd.exe` metacharacter is left outside a quoted region. That is
+   asserted by reading the generated line back through `cmd.exe`'s own quoting rule
+   (`unquoteCmdLine`) and by a scan that collects every metacharacter outside quotes
+   (`bareMetachars`) — which must come back empty.
+2. **`Launch` grew a `spawnOptions` field.** One launch form out of twenty-one needs a `spawn()`
+   option, so the option travels with the form rather than being special-cased at the call site.
+   A test asserts that `windowsVerbatimArguments` is set for exactly the Windows pair and for no
+   other, so nothing else can quietly take responsibility for its own quoting.
+3. **The program name is validated, though it is never user data.** DeckHQ's own adapters pass
+   `claude` and `codex`. It is the one token left unquoted, so it is checked against
+   `/^[A-Za-z0-9._+-]+$/` rather than trusted by convention — a guard against a future caller, not
+   against the browser.
+
+### Verified on a real machine
+
+This is the one launch form in `terminals.mjs` that can be run where it was written, and §1.1 rule
+11 says a documented claim is a hypothesis until it is. Both forms were launched on Windows 11
+(Home, 10.0.28000) from node, detached, with a working directory of `…\scratchpad\probe dir & co`
+— a space and an `&` — running `node probe.mjs "a & b" "x&y|z^w<v>u"`, where `probe.mjs` writes its
+own `process.cwd()`, `process.argv` and `process.ppid` to a file:
+
+- **Old form:** the window opened, and the probe received `["…\probe.mjs", "a & b", "x"]`. The
+  `&y` was gone — eaten by `cmd.exe` as a command separator. That is the defect, observed.
+- **New form:** the window opened; `process.cwd()` came back as `C:\…\scratchpad\probe dir & co`
+  exactly, and `process.argv` as `["…\probe dir & co\probe.mjs", "a & b", "x&y|z^w<v>u"]` — every
+  one of `&`, `|`, `^`, `<`, `>` intact. The console process's own command line, read back with
+  `Win32_Process`, was `cmd  /d /s /k node "…\probe dir & co\probe.mjs" "a & b" "x&y|z^w<v>u"`,
+  and it was still alive four seconds later, so `/k` holds the window open as intended.
+- The new form was then run again through the **shipped entry point** — `launchTerminal()` itself,
+  not a replica of the line — with the same result, and a second call with a cwd of `…\100%dir`
+  rejected with `ERR_DECKHQ_CMD_UNSAFE` and the refusal message in full. Every window opened for
+  these runs was closed afterwards.
+
+### Acceptance
+
+Nine new tests in `test/unit/terminals.test.mjs`, and the four Windows assertions across
+`terminals.test.mjs` and `codex-terminal.test.mjs` rewritten for a command line rather than an
+argv:
+
+- the exact command line for an ordinary id and cwd, byte for byte, plus its `spawnOptions`;
+- `windowsVerbatimArguments` is set for the Windows pair and for no other pair on any platform;
+- `SECURITY:` a cwd of `C:\Users\ada\R&D projects\deckhq` and an argument of `a&b c` — a space and
+  an `&`, the exact shape node's quoting got wrong — recovered as single words;
+- `SECURITY:` `x&y|z^w<v>u(t)` survives as text, and no metacharacter is outside quotes;
+- `SECURITY:` `"`, `%VAR%` and a control character in the id are refused, with `err.code` and the
+  message asserted, including the two sentences that tell the user this is not normal;
+- `SECURITY:` the same for the working directory;
+- `SECURITY:` a program name that is not a bare word is refused;
+- `SECURITY:` `launchTerminal()` surfaces a refusal rather than reporting "Could not open a
+  terminal", and starts nothing;
+- `launchTerminal()` forwards the form's `spawnOptions` to `spawn()`.
+
+777 tests to 786. `npm run lint`, `npm run format:check` and `npm test` clean.
+
+## 99. Codex `openNewSession()` — `codex`, not `codex resume new`, and the prompt it dropped
+
+**Spec:** `07-AGENT-HANDOVERS.md` Agent Backend, and §95's "not fixed" item 1, which named this and
+handed it to WP-23. It did not need to wait: the fix is one pure function and one call.
+
+**The defect.** `openNewSession(cwd, opts)` delegated to `openInTerminal('codex:new', cwd)`, so
+"new Codex session" opened a terminal running `codex resume new` — a resume of a session called
+`new`, which does not exist — and `opts.instructions`, the first prompt the panel collects, was
+dropped on the floor. The Claude Code adapter has carried that prompt since §91 (deviation 5);
+Codex silently did not, which is exactly the kind of cross-adapter difference §95 was removing.
+
+**Shipped.** A third pure builder beside `codexExecArgs` and `codexResumeCommand`:
+
+```js
+codexNewSessionCommand(instructions); // ['codex'] or ['codex', <prompt>]
+```
+
+and `openNewSession()` hands it to `launchTerminal()` itself, with `prefix: 'codex-new'` and the
+user's pinned emulator, instead of borrowing the resume path. The prompt is user text from a
+request body and travels the way a session id does: one argv element to `spawn()`, or one
+single-quoted word inside the wrapper script for the three macOS applications that take no argv,
+or one double-quoted word of the `cmd.exe` line on Windows (§98). Blank or whitespace-only
+instructions mean no prompt at all rather than an empty argument.
+
+**One deliberate change in behaviour.** `openNewSession()` no longer swallows a launcher failure.
+Before, through `openInTerminal`'s best-effort contract, "no terminal emulator found" was
+silently nothing and the route reported success; now the launcher's own message ("Could not open
+a terminal. Tried: …") reaches the panel. This is what the Claude Code adapter does. The
+best-effort contract on `openInTerminal()` itself is untouched, and `openNewSession()` still
+throws `Codex is not installed` first, as `test/unit/codex-terminal.test.mjs` asserts.
+
+**Still unverified against real Codex.** §8 and §95 item 2 stand. Whether plain `codex <prompt>`
+is the right invocation for the installed Codex version is now the same class of assumption as
+`codex resume <id>`, asserted as an array and run on nothing.
+
+**Acceptance.** Three additions to `test/unit/codex-terminal.test.mjs`: the builder in both its
+forms, including trimming and the absence of `resume` and `new`; `SECURITY:` a hostile first
+prompt over all 19 (platform, emulator, launch form) pairs — exactly one carrier element equal to
+it, none for the wrapper-script emulators, one quoted word with no bare metacharacters on Windows,
+and the wrapper's `exec` line read back through `sh`'s grammar to the exact argv; and the source
+scan now also asserts that `openNewSession` no longer resumes `'codex:new'` and does name
+`codexNewSessionCommand`.
+## 100. WP-16 — the notification the closed tab cannot send, and the PowerShell flag that had to change
 
 WP-16's premise is in `docs/plan/08-PLAN-V2-100X.md` §1.2: *the product's job is to let you stop
 watching*. Until this package every notification DeckHQ could raise came from `public/app.js`
@@ -4368,7 +4950,16 @@ process:
   the sizes the manifest claims, the `.webmanifest` MIME type, the two new CSP directives, and the
   client's WP-16 block still being one delimited region.
 
-777 tests to 826, lint and format clean.
+838 tests to 887, lint and format clean.
+
+This package was built on a branch taken before WP-50, WP-19, WP-54 and the Codex follow-up
+landed, and merged onto them at the end — which is why it is §100 and not §96, the number the
+brief named. Four files conflicted and all four resolutions are additive: `src/daemon.mjs` (the
+notifier is constructed beside `Permissions`, and `close()` releases held permission requests
+first — a session blocked on an answer outranks a toast); `test/unit/settings-keys.test.mjs` (the
+exempt set now has six entries, not five, and says why for each); `CHANGELOG.md` (both entries
+kept). `src/core/state-machine.mjs` merged clean beside WP-19's pending-permission map, which
+`closedCleanly` neither reads nor touches.
 
 `npm run goldens:check` is unaffected, and that is measured rather than reasoned: all four
 populations match, **0 pixels moved at all** — not "inside tolerance", zero — in 33.4 s. It could

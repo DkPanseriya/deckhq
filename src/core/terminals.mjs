@@ -9,7 +9,7 @@
  * table of emulators, each with its own documented launch form, a detection
  * order per platform, and a settings pin that overrides both.
  *
- * THREE RULES GOVERN EVERY ENTRY IN THE TABLE.
+ * FOUR RULES GOVERN EVERY ENTRY IN THE TABLE.
  *
  * 1. **Argv arrays, never shell strings.** A session id and a working
  *    directory are user data. They travel as individual argv elements from
@@ -23,7 +23,15 @@
  *    The id never reaches a shell unquoted, and never reaches AppleScript's
  *    script text at all — `osascript` gets the path as `argv`, and the
  *    AppleScript does its own quoting with `quoted form of`.
- * 3. **Every launch form is a pure function of its context**, so the exact
+ * 3. **Windows is the other place a line is unavoidable, and it is quoted
+ *    here rather than by Node.** Opening a console window means `start`,
+ *    which is an internal `cmd.exe` command and not a program, so `cmd.exe`
+ *    re-parses everything after it. Node's win32 argument quoting does not
+ *    escape `&`, `|`, `^`, `<` or `>`, which `cmd.exe` reads as syntax — so
+ *    the whole command line is built by `windowsConsoleLaunch()` with
+ *    `core/cmdline.mjs`'s rule and handed over with
+ *    `windowsVerbatimArguments`. `docs/DEVIATIONS.md` §98.
+ * 4. **Every launch form is a pure function of its context**, so the exact
  *    argv array for every (platform, emulator) pair is asserted in
  *    `test/unit/terminals.test.mjs` rather than reasoned about. That matters
  *    more here than usual: this file was written on Windows and, as of this
@@ -42,6 +50,8 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { execFile, spawn } from 'node:child_process';
+
+import { CMD_UNSAFE_CODE, assertCmdSafe, cmdQuote, cmdRefusal, isCmdBareWord } from './cmdline.mjs';
 
 /**
  * The value of the `terminal` setting that means "work it out". Anything else
@@ -191,6 +201,9 @@ export const ITERM_SCRIPT = [
  * @typedef {object} Launch
  * @property {string} cmd
  * @property {string[]} args
+ * @property {object} [spawnOptions] extra `spawn()` options this form needs.
+ *   Only the Windows console sets it, and only to `windowsVerbatimArguments`,
+ *   because it builds its own command line — see `windowsConsoleLaunch`.
  */
 
 /**
@@ -422,9 +435,77 @@ export const LINUX_TERMINALS = [
 ];
 
 /**
- * Windows. One entry, and it is the path that has actually been exercised on a
- * real machine — the empty string after `start` is the window title, without
- * which `start` reads the next quoted argument as one.
+ * What the user is told when a session id or a working directory cannot be put
+ * on a `cmd.exe` command line. The rule is in `core/cmdline.mjs`; this is the
+ * sentence, and it says why the refusal is almost certainly not about them.
+ */
+export const WINDOWS_CMD_REFUSAL =
+  'DeckHQ will not open a Windows console for this session: its id or its folder contains a ' +
+  'double quote or a percent sign, which cmd.exe reads as syntax rather than as text, and ' +
+  'there is no way to quote either one safely. A Claude Code session id is a UUID and never ' +
+  'contains them, and a project folder with a "%" in its name is rare — so this is worth ' +
+  'looking at rather than working around. Open the session from a terminal you start yourself.';
+
+/**
+ * The Windows console launch, as one command line.
+ *
+ * ```text
+ * cmd.exe /d /s /c start "" /d "<cwd>" cmd /d /s /k <program> "<arg>" "<arg>"
+ * ```
+ *
+ * Every piece of that is load-bearing, and every claim below was checked on
+ * Windows 11 (`docs/DEVIATIONS.md` §98), not read in documentation:
+ *
+ * - **`windowsVerbatimArguments`.** Node's win32 quoting wraps a value only
+ *   when it holds a space, a tab or a quote, so an id of `x&calc` reached
+ *   `cmd.exe` bare and became two commands. The line is built here instead.
+ * - **`/d`, twice, meaning two different things.** On `cmd.exe` it suppresses
+ *   the AutoRun registry commands, so nothing in the user's registry runs
+ *   inside a window DeckHQ opened. On `start` it is the working directory.
+ * - **`/s`.** Documented as: if the first character after `/c` (or `/k`) is a
+ *   quote, strip it and the last quote on the line. Neither of our two lines
+ *   starts with a quote — `start` and the program name are bare words — so
+ *   nothing is stripped and every argument keeps the quotes it was given.
+ *   That is why the program name must be a bare word (`isCmdBareWord`), and
+ *   it is why this needs none of the doubled-quote trick `editor.mjs` uses.
+ * - **The empty `""` after `start`.** It is the window title. Without it,
+ *   `start` reads the next quoted argument as one and opens nothing.
+ * - **`/d "<cwd>"`.** The working directory is also passed to `spawn()`, and
+ *   was previously inherited that way alone. Naming it is belt and braces, the
+ *   same as every Linux row, and it means the directory is stated rather than
+ *   depending on `start` inheriting it through two processes.
+ * - **The quotes.** `&`, `|`, `^`, `<`, `>` and `()` are literal inside them;
+ *   `"` and `%` are refused by `cmdQuote` because nothing can make them safe.
+ *
+ * @param {LaunchContext} ctx
+ * @returns {Launch}
+ */
+export function windowsConsoleLaunch({ command, cwd }) {
+  const argv = (command || []).map(String);
+  const program = argv[0] || '';
+  if (!isCmdBareWord(program)) {
+    // Never user data — DeckHQ's own adapters pass `claude` and `codex` — so
+    // this is a guard against a future caller, not against the browser.
+    throw cmdRefusal(
+      `The Windows console can only start a plain command name, and "${program}" is not one.`,
+    );
+  }
+  const args = argv.slice(1);
+  const dir = String(cwd || '');
+  assertCmdSafe([...args, dir], WINDOWS_CMD_REFUSAL);
+
+  const inner = [program, ...args.map((a) => cmdQuote(a, WINDOWS_CMD_REFUSAL))].join(' ');
+  const workdir = dir ? `/d ${cmdQuote(dir, WINDOWS_CMD_REFUSAL)} ` : '';
+  return {
+    cmd: 'cmd.exe',
+    args: ['/d', '/s', '/c', `start "" ${workdir}cmd /d /s /k ${inner}`],
+    spawnOptions: { windowsVerbatimArguments: true },
+  };
+}
+
+/**
+ * Windows. One entry, and it is the only row in this table that has actually
+ * been run on a real machine.
  * @type {Terminal[]}
  */
 export const WINDOWS_TERMINALS = [
@@ -432,9 +513,7 @@ export const WINDOWS_TERMINALS = [
     id: 'windows-console',
     label: 'the Windows console',
     always: true,
-    launch: {
-      bin: ({ command }) => ({ cmd: 'cmd', args: ['/c', 'start', '', 'cmd', '/k', ...command] }),
-    },
+    launch: { bin: windowsConsoleLaunch },
   },
 ];
 
@@ -790,13 +869,21 @@ export async function describeTerminal(opts = {}) {
  * @param {string} cmd
  * @param {string[]} args
  * @param {string} [cwd]
+ * @param {object} [options] a launch form's own `spawn()` options — in
+ *   practice only `windowsVerbatimArguments`, for the one form that builds its
+ *   command line itself.
  * @returns {Promise<boolean>}
  */
-export function trySpawnDetached(cmd, args, cwd) {
+export function trySpawnDetached(cmd, args, cwd, options) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(cmd, args, { cwd: cwd || undefined, detached: true, stdio: 'ignore' });
+      child = spawn(cmd, args, {
+        cwd: cwd || undefined,
+        detached: true,
+        stdio: 'ignore',
+        ...(options || {}),
+      });
     } catch {
       resolve(false);
       return;
@@ -829,7 +916,7 @@ export function trySpawnDetached(cmd, args, cwd) {
  *
  * @param {{command:string[], cwd:string, sessionId?:string, prefix?:string,
  *          pin?:string, platform?:string, env?:Record<string,string|undefined>,
- *          spawn?:(cmd:string, args:string[], cwd?:string) => Promise<boolean>,
+ *          spawn?:(cmd:string, args:string[], cwd?:string, options?:object) => Promise<boolean>,
  *          writeScript?:(opts:any) => Promise<string>,
  *          detect?:(opts:any) => Promise<TerminalChoice[]>}} opts the last
  *   three are test seams: `spawn` in place of a real process, `writeScript` in
@@ -876,13 +963,19 @@ export async function launchTerminal(opts) {
     let launch;
     try {
       launch = buildLaunch(terminal, { command: opts.command, cwd: opts.cwd, scriptPath, via });
-    } catch {
+    } catch (err) {
+      // A value that cannot be put on a `cmd.exe` command line is a fact about
+      // the id or the folder, not about this emulator: no other terminal can
+      // make a `%` safe, and swallowing it here would replace a message that
+      // says what is wrong with "Could not open a terminal". Everything else
+      // is this emulator's problem, so the walk continues.
+      if (err && err.code === CMD_UNSAFE_CODE) throw err;
       tried.push(terminal.label);
       continue;
     }
 
     tried.push(terminal.label);
-    if (await spawnOne(launch.cmd, launch.args, opts.cwd)) {
+    if (await spawnOne(launch.cmd, launch.args, opts.cwd, launch.spawnOptions)) {
       return {
         id: terminal.id,
         label: terminal.label,

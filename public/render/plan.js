@@ -32,8 +32,11 @@
 
 /**
  * @typedef {object} AgentLike
+ * @property {string} [id]
+ * @property {string} [projectId]
  * @property {AckState} [ackState]
  * @property {ActivityState} [activityState]
+ * @property {number} [lastActivityAt] ms epoch; drives the gone-home filter
  */
 
 /**
@@ -101,8 +104,22 @@
  */
 
 /**
+ * One idle project's line in the directory strip. Local to the strip's own
+ * frame until `place` translates it, exactly like a prop.
+ * @typedef {object} DirectoryEntry
+ * @property {string} id project id
+ * @property {string} name
+ * @property {number} sessionCount
+ * @property {number} lastActivityAt ms epoch, 0 when unknown
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ */
+
+/**
  * @typedef {object} Room
- * @property {'office'|'project'|'lounge'} kind
+ * @property {'office'|'project'|'lounge'|'corridor'|'directory'} kind
  * @property {string} id
  * @property {string} name
  * @property {number} x
@@ -115,6 +132,7 @@
  * @property {Zone[]} zones
  * @property {'wood'|'carpet'|'tile'|'circulation'} floor
  * @property {{x:number,y:number,w:number,h:number}} [kitchenZone]
+ * @property {DirectoryEntry[]} [entries] the directory strip only
  */
 
 /**
@@ -155,6 +173,9 @@
  * @property {Seat[]} officeSeats
  * @property {LoungeSpot[]} loungeSpots
  * @property {Door[]} doors
+ * @property {Set<string>} hidden agent ids the plan draws nobody for
+ * @property {Set<string>} goneHome the subset of `hidden` that went home
+ * @property {Room|null} directory the idle-projects strip, when there is one
  */
 
 /** Pixels per unit at scale 1. */
@@ -172,7 +193,7 @@ const MARGIN = 2.5;
  * sure: the room's interior simply starts below it, and every anchor —
  * including the wall anchors — measures from there.
  */
-const PLATE_BAND = 3.4;
+export const PLATE_BAND = 3.4;
 
 /** The building is the shape of the screen, within reason. */
 const ASPECT_MIN = 1.2;
@@ -201,9 +222,37 @@ const TABLE_SIZES = [8, 6, 4, 2];
 const PLANT_SIZE = 2;
 const PLANT_GAP = 0.4;
 
-/** Footprint of a collapsed project room, before its headcount scales it. */
-const COLLAPSED_W = 12;
-const COLLAPSED_H = 2.6;
+/**
+ * THE DIRECTORY STRIP — where a project with nobody in it goes.
+ *
+ * An idle project used to get a collapsed ROOM, which still bid for area in
+ * the treemap; on the reference machine that turned most of the working floor
+ * into large empty cells with a plate each (`08` B6). It now costs one LINE in
+ * a single strip along the bottom of the working floor: name, session count,
+ * last activity, and the same click target a room plate has.
+ *
+ * The lines flow into columns so the strip stays a strip. `DIRECTORY_MAX_ROWS`
+ * is the cap that keeps it one: past it the columns get narrower and the text
+ * ellipsises, but a project is never dropped from the directory — a repo you
+ * cannot see is a repo you cannot start an agent in.
+ */
+const DIRECTORY_LINE_H = 1.6;
+const DIRECTORY_COL_W = 15;
+const DIRECTORY_COL_MAX_W = 28;
+const DIRECTORY_MAX_ROWS = 3;
+const DIRECTORY_PAD = 1;
+
+/**
+ * The tallest the whole directory may ever be, however many idle repos there
+ * are: its own plate band plus `DIRECTORY_MAX_ROWS` lines. Exported so the
+ * integrity test asserts the cap the strip is actually built against rather
+ * than a second copy of the arithmetic.
+ */
+export const DIRECTORY_MAX_H = PLATE_BAND + DIRECTORY_MAX_ROWS * DIRECTORY_LINE_H + DIRECTORY_PAD;
+
+/** Days of no activity after which a benched agent is not drawn. */
+export const GONE_HOME_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Where the shelf and the dashboard screen start down a project room's east
@@ -216,6 +265,12 @@ const WHITEBOARD_H = 5.2;
 
 /** How far a corner plant sits from the two walls it stands between. */
 const CORNER_PLANT_INSET = 1.2;
+
+/**
+ * Floor a room-sized rug leaves clear of its walls, so the corner planting and
+ * the wall fixtures still stand on the room's own carpet rather than on it.
+ */
+const RUG_ROOM_INSET = 4;
 
 /** Shortest sofa run worth sitting on, in units. */
 const SOFA_MIN_RUN = 5.2;
@@ -341,6 +396,123 @@ export function formatTokens(n) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${Math.round(v / 1000)}k`;
   return `${Math.round(v)}`;
+}
+
+// ------------------------------------------------- who is on the floor at all
+
+/**
+ * The activity states that count as "on the floor": at a desk, hand up, or
+ * waiting in the office. `ended` is not one of them — a session that has
+ * finished and been acknowledged is history, not a person in the building.
+ */
+const ON_THE_FLOOR = new Set(['working', 'needs_input', 'stalled', 'for_review']);
+
+/**
+ * Does this agent put its project on the working floor?
+ *
+ * `08` B6, the rule this file is built around: the plan is a function of
+ * active projects and active agents and nothing else. An active agent is one
+ * the user has not benched or archived, doing something — working, hand up,
+ * gone quiet, or standing in the office waiting to be seen.
+ * @param {AgentLike} agent
+ */
+export function isActiveAgent(agent) {
+  return (
+    !!agent &&
+    agent.ackState === 'active' &&
+    ON_THE_FLOOR.has(/** @type {string} */ (agent.activityState))
+  );
+}
+
+/**
+ * Does this agent occupy a DESK in its project's room?
+ *
+ * Everything `placement()` (src/core/model.mjs) calls `desk`: active, and not
+ * standing in the office. That includes an `ended` session sitting at its own
+ * desk — it is drawn whenever its project has a room, and it is what "desks
+ * equal agents at desks" counts.
+ * @param {AgentLike} agent
+ */
+export function isDeskAgent(agent) {
+  return !!agent && agent.ackState === 'active' && agent.activityState !== 'for_review';
+}
+
+/**
+ * Has this benched agent gone home?
+ *
+ * A DISPLAY FILTER AND NOTHING ELSE. `ackState` is untouched, the agent is
+ * still counted, still in the panel, still one keystroke away, and any new
+ * activity brings it back on the next scan — which is why this reads
+ * `lastActivityAt` rather than storing a flag anywhere. The `INVARIANT:` tests
+ * must pass unchanged, and they do: nothing here writes.
+ *
+ * Two deliberate refusals. A window of zero disables the filter rather than
+ * hiding everybody, and an agent whose last activity is unknown is DRAWN — the
+ * floor does not hide what it cannot date.
+ *
+ * @param {AgentLike} agent
+ * @param {number} now ms epoch
+ * @param {number} [goneHomeDays] `settings.goneHomeDays`
+ */
+export function isGoneHome(agent, now, goneHomeDays = GONE_HOME_DAYS) {
+  if (!agent || agent.ackState !== 'benched') return false;
+  const days = Number(goneHomeDays);
+  if (!Number.isFinite(days) || days <= 0) return false;
+  const last = Number(agent.lastActivityAt);
+  if (!Number.isFinite(last) || last <= 0) return false;
+  return now - last > days * DAY_MS;
+}
+
+/**
+ * Everything the plan needs to know about a population, counted once.
+ *
+ * Exported because it is the whole of B6's rule in one place, and a test that
+ * checks the rule should read the same numbers the floor is built from rather
+ * than re-deriving them.
+ *
+ * @param {AgentLike[]} agents
+ * @param {{now?:number, goneHomeDays?:number}} [opts]
+ */
+export function floorPopulation(agents, opts = {}) {
+  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
+  const goneHomeDays = opts.goneHomeDays ?? GONE_HOME_DAYS;
+  const list = Array.isArray(agents) ? agents : [];
+
+  let waiting = 0;
+  let benchedDrawn = 0;
+  /** @type {Map<string, number>} */
+  const active = new Map();
+  /** @type {Map<string, number>} */
+  const desks = new Map();
+  /** Project ids the agent list actually mentions. See `buildPlan`. */
+  const known = new Set();
+  /** @type {Set<string>} */
+  const goneHome = new Set();
+  /** Newest activity per project — the directory strip's third column. */
+  const lastActivity = new Map();
+
+  const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
+
+  for (const a of list) {
+    if (!a || a.ackState === 'let_go') continue;
+    const pid = a.projectId == null ? '' : String(a.projectId);
+    if (pid) {
+      known.add(pid);
+      const at = Number(a.lastActivityAt) || 0;
+      if (at > (lastActivity.get(pid) || 0)) lastActivity.set(pid, at);
+    }
+    if (a.ackState === 'benched') {
+      if (isGoneHome(a, now, goneHomeDays)) goneHome.add(String(a.id));
+      else benchedDrawn++;
+      continue;
+    }
+    if (a.ackState !== 'active') continue;
+    if (a.activityState === 'for_review') waiting++;
+    if (pid && isActiveAgent(a)) bump(active, pid);
+    if (pid && isDeskAgent(a)) bump(desks, pid);
+  }
+
+  return { now, goneHomeDays, waiting, benchedDrawn, goneHome, active, desks, known, lastActivity };
 }
 
 /**
@@ -690,63 +862,110 @@ export function squarify(items, rect) {
 // ------------------------------------------------------------ project zones
 
 /**
- * Lay out one project's tables, chairs and plant in local coordinates.
- *
- * @param {ProjectLike} project
- * @param {number} sessionCount
- * @param {number} [targetAspect] shape the tables should aim to fill
- * @returns {{ room: Room, seats: Seat[], size: {w:number,h:number} }}
+ * How many rows of lines a directory of `count` projects needs in `width`.
+ * Pulled out because the envelope search has to know the strip's height
+ * before the strip itself can be built.
+ * @param {number} count
+ * @param {number} width the strip's outer width, in units
  */
+function directoryRows(count, width) {
+  if (count <= 0) return 0;
+  const inner = Math.max(0, width - MARGIN * 2);
+  const cols = Math.max(1, Math.floor(inner / DIRECTORY_COL_W));
+  return Math.min(DIRECTORY_MAX_ROWS, Math.ceil(count / cols));
+}
+
+/** The height a directory of `count` projects takes in `width`. */
+function directoryHeight(count, width) {
+  const rows = directoryRows(count, width);
+  return rows === 0 ? 0 : PLATE_BAND + rows * DIRECTORY_LINE_H + DIRECTORY_PAD;
+}
+
 /**
- * A collapsed project room: the repo is there, but nobody is working in it.
+ * The idle-projects directory: one strip, one line per repo nobody is in.
  *
- * A project whose agents are all benched or let go has an empty room — desks,
- * chairs, a plant and no people. On a real machine that was eleven of
- * thirteen rooms, which is a lot of floor spent on nothing. Collapsed rooms
- * keep their name, their MK tag and their click target, and cost a strip.
+ * A project whose agents are all benched, archived or finished used to get a
+ * collapsed ROOM — a plate with a footprint, which still bid for area in the
+ * treemap. On the reference machine that spent most of the working floor on
+ * rooms with nobody in them (`08` B6). It is a DIRECTORY now: a strip along
+ * the bottom of the working floor carrying, per project, its name, its session
+ * count and how long ago anything happened in it, each line a click target
+ * that opens the panel exactly as a room plate does.
  *
  * Deliberately still ON the floor rather than hidden: the repo exists, and
- * being able to see it (and start an agent in it) is the point. Only an
- * explicit archive removes a room from view altogether.
+ * being able to see it — and start an agent in it — is the point. Only an
+ * explicit archive removes a project from view altogether.
  *
- * @param {ProjectLike} project
- * @param {number} sessionCount
+ * The lines are laid out here, in the room's own frame, and drawn live by
+ * `scene.js`: their text is session counts and elapsed times, which change on
+ * every push, and re-baking the backdrop for that would cost ~190 ms a frame.
+ *
+ * @param {{id:string,name:string,sessionCount:number,lastActivityAt:number}[]} projects
+ * @param {{w:number,h:number}} fit the strip the packer has reserved
+ * @returns {Room}
  */
-function buildCollapsedRoom(project, sessionCount) {
-  const id = String(project.id ?? project.projectId ?? 'unknown');
-  const name = String(project.name ?? project.projectName ?? id);
+function buildDirectory(projects, fit) {
+  const rows = Math.max(1, directoryRows(projects.length, fit.w));
+  const cols = Math.max(1, Math.ceil(projects.length / rows));
+  const inner = Math.max(1, fit.w - MARGIN * 2);
+  // Columns share the strip evenly, but a column wider than a line needs is a
+  // line with its name at one end of the building and its numbers at the
+  // other. One idle repo gets a readable line, not a full-width one.
+  const colW = Math.min(inner / cols, DIRECTORY_COL_MAX_W);
+
+  // Local frame, exactly like a prop: (0, 0) is the room's top-left and the
+  // interior starts below the plate band, which `place` adds. Writing the
+  // band in here as well would be the two-frames defect in miniature.
+  /** @type {DirectoryEntry[]} */
+  const entries = projects.map((p, i) => ({
+    ...p,
+    // Column-major: reading down a column then across is how a directory
+    // board is read, and it keeps a project in the same place when the strip
+    // gains a row rather than reshuffling every line.
+    x: MARGIN + Math.floor(i / rows) * colW,
+    y: (i % rows) * DIRECTORY_LINE_H,
+    w: colW,
+    h: DIRECTORY_LINE_H,
+  }));
+
   /** @type {Room} */
   return {
-    kind: 'project',
-    id,
-    name,
-    collapsed: true,
+    kind: 'directory',
+    id: '__directory__',
+    name: 'Idle projects',
     x: 0,
     y: 0,
-    // Sized to the repo it stands for, not to a fixed strip. A project with
-    // fifteen idle sessions is not the same thing as one with one, and drawing
-    // both as the same 13 x 5 card made the working floor a stack of identical
-    // slivers beside a reception and a lounge many times their size.
-    w: COLLAPSED_W + Math.min(5, Math.sqrt(Math.max(1, sessionCount)) * 1.1),
-    h: COLLAPSED_H + PLATE_BAND + Math.min(2.5, Math.sqrt(Math.max(1, sessionCount)) * 0.6),
+    w: fit.w,
+    h: fit.h,
     walls: 'partial',
-    // The same carpet as an open project room, not tile: a collapsed room is
-    // the SAME room with nobody in it, and giving it a different material made
-    // a column of them read as a stack of blank cards rather than as part of
-    // the building. `backdrop.js` dims it instead, which is what "the lights
-    // are off in here" actually looks like from above.
-    floor: 'carpet',
-    plateLines: [name, `${sessionCount} idle`],
+    // Circulation, not carpet: nobody works here, and painting it as a room
+    // material made a strip with no furniture in it read as one more empty
+    // room — which is the exact defect this strip exists to remove.
+    floor: 'circulation',
+    plateLines: [
+      'Idle projects',
+      `${projects.length} repo${projects.length === 1 ? '' : 's'} · nobody in`,
+    ],
     props: [],
     zones: [],
     plateBand: PLATE_BAND,
-    natural: { w: COLLAPSED_W, h: COLLAPSED_H },
+    entries,
   };
 }
 
-function buildProjectRoom(project, sessionCount, targetAspect = 1) {
+/**
+ * Lay out one project's tables, chairs and plant in local coordinates.
+ *
+ * @param {ProjectLike} project
+ * @param {number} deskCount agents at desks in this project, minimum one table
+ * @param {number} [targetAspect] shape the tables should aim to fill
+ * @param {{w:number,h:number}} [fit] the cell the tiler has given this room
+ * @returns {{ room: Room, seats: Seat[], size: {w:number,h:number} }}
+ */
+function buildProjectRoom(project, deskCount, targetAspect = 1, fit = undefined) {
   const id = String(project.id ?? project.projectId ?? 'unknown');
   const name = String(project.name ?? project.projectName ?? id);
+  const sessionCount = project.sessionCount ?? deskCount;
 
   /** @type {Prop[]} */
   const props = [];
@@ -755,11 +974,14 @@ function buildProjectRoom(project, sessionCount, targetAspect = 1) {
   /** @type {Seat[]} */
   const seats = [];
 
-  const sizes = tableSizesFor(Math.max(1, sessionCount));
+  // DESKS EQUAL AGENTS AT DESKS, minimum one table (`08` B6). This used to be
+  // `sessionCount`, benched sessions included, so a repo with twenty benched
+  // agents and one working one got three benches and one occupant.
+  const sizes = tableSizesFor(Math.max(1, deskCount));
   const blocks = sizes.map((s) => tableBlockSize(s));
   const flow = flowBlocks(blocks, TABLE_GAP, targetAspect);
 
-  let remaining = Math.max(1, sessionCount);
+  let remaining = Math.max(1, deskCount);
   sizes.forEach((seatCount, i) => {
     const at = flow.out[i];
     const t = tableSize(seatCount);
@@ -918,13 +1140,26 @@ function buildProjectRoom(project, sessionCount, targetAspect = 1) {
       w: deskBlock.w + (CHAIR + CHAIR_GAP) * 2,
       h: deskBlock.h + (CHAIR + CHAIR_GAP) * 2,
     });
+    // THE RUG IS SIZED TO THE ROOM ONCE THE ROOM IS BIGGER THAN THE CLUSTER.
+    //
+    // Desks now count agents rather than sessions, so a room that used to hold
+    // three benches holds one table — and the cell the treemap gives it is
+    // sized by the floor, not by the furniture. A small rug in a large cell is
+    // §64's defect one level up: a group of desks adrift in the middle of a
+    // room. The rug therefore grows to the room, stopping `RUG_ROOM_INSET`
+    // clear of the walls so the corner planting and the wall fixtures still
+    // have floor of their own to stand on.
+    const clusterW = deskBlock.w + (CHAIR + CHAIR_GAP) * 2 + 1.6;
+    const clusterH = deskBlock.h + (CHAIR + CHAIR_GAP) * 2 + 1.6;
+    const rugW = fit && fit.w > 0 ? Math.max(clusterW, fit.w - RUG_ROOM_INSET * 2) : clusterW;
+    const rugH = fit && fit.h > 0 ? Math.max(clusterH, fit.h - RUG_ROOM_INSET * 2) : clusterH;
     props.unshift({
       kind: 'rug',
-      w: deskBlock.w + (CHAIR + CHAIR_GAP) * 2 + 1.6,
-      h: deskBlock.h + (CHAIR + CHAIR_GAP) * 2 + 1.6,
+      w: rugW,
+      h: rugH,
       angle: 0,
-      x: deskBlock.x - CHAIR - CHAIR_GAP - 0.8,
-      y: deskBlock.y - CHAIR - CHAIR_GAP - 0.8,
+      x: deskBlock.x + deskBlock.w / 2 - rugW / 2,
+      y: deskBlock.y + deskBlock.h / 2 - rugH / 2,
       anchor: { type: 'centered', of: 'desk-group' },
     });
   }
@@ -1333,10 +1568,16 @@ function buildOffice(waitingCount, fit) {
  * are enough people to use it, so a busy lounge fills up rather than starting
  * out sparse.
  *
- * @param {number} benchedCount
+ * THE LOUNGE IS SIZED BY WHO IS DRAWN, not by who is benched (`08` B6).
+ * `benchedCount` is the DRAWN count — benched agents with no activity for
+ * longer than the gone-home window are not in this room and do not size it.
+ * `goneHomeCount` only reaches the door plate.
+ *
+ * @param {number} benchedCount agents actually drawn in here
  * @param {{w:number,h:number}} [fit] the interior this room has been given
+ * @param {number} [goneHomeCount] benched, not drawn; carried on the plate
  */
-function buildLounge(benchedCount, fit) {
+function buildLounge(benchedCount, fit, goneHomeCount = 0) {
   /** @type {Prop[]} */
   const props = [];
   /** @type {Zone[]} */
@@ -1707,7 +1948,14 @@ function buildLounge(benchedCount, fit) {
     natural: { w: box.w + MARGIN * 2, h: box.h + MARGIN * 2 + PLATE_BAND },
     walls: 'partial',
     floor: 'wood',
-    plateLines: ['Lounge', `${benchedCount} benched`],
+    // The door plate carries the people who are not in the room, which is the
+    // only place that number is visible on the floor at all.
+    plateLines: [
+      'Lounge',
+      goneHomeCount > 0
+        ? `${benchedCount} benched · ${goneHomeCount} went home`
+        : `${benchedCount} benched`,
+    ],
     props,
     zones,
     kitchenZone: kitchen ? { x: kitchen.x, y: kitchen.y, w: kitchen.w, h: kitchen.h } : undefined,
@@ -2055,49 +2303,101 @@ function assignDoors(rooms, lines) {
 /**
  * Build the whole floor.
  *
+ * THE PLAN IS A FUNCTION OF ACTIVE PROJECTS AND ACTIVE AGENTS (`08` B6). It
+ * used to be a function of the repositories on disk: `buildProjectRoom` sized
+ * desks by session count, benched sessions included, and a project with nobody
+ * in it still bid for area in the treemap. On the reference machine that drew
+ * one furnished room and ten large empty cells.
+ *
  * @param {ProjectLike[]} projects
  * @param {AgentLike[]} agents
- * @param {{ targetAspect?: number }} [opts]
+ * @param {{ targetAspect?: number, goneHomeDays?: number, now?: number }} [opts]
+ *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test
+ *   and a golden can both be a pure function of their fixture.
  * @returns {Plan}
  */
 export function buildPlan(projects, agents, opts = {}) {
   const targetAspect = clamp(Number(opts.targetAspect) || DEFAULT_ASPECT, ASPECT_MIN, ASPECT_MAX);
   const list = Array.isArray(agents) ? agents : [];
-  const waitingCount = list.filter(
-    (a) => a && a.ackState === 'active' && a.activityState === 'for_review',
-  ).length;
-  const benchedCount = list.filter((a) => a && a.ackState === 'benched').length;
+  const pop = floorPopulation(list, { now: opts.now, goneHomeDays: opts.goneHomeDays });
+  const waitingCount = pop.waiting;
+  // The lounge is sized by how many are DRAWN. Agents who went home are on the
+  // door plate and nowhere else.
+  const benchedCount = pop.benchedDrawn;
+  const goneHomeCount = pop.goneHome.size;
+
+  const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
+  /**
+   * The counts a project is planned from.
+   *
+   * Read off the AGENTS, which is the whole point of B6. The fallback matters
+   * only for a caller that hands `buildPlan` a project it gave no agents for:
+   * the plan cannot invent people it was not given, so the project record's
+   * own counts are then the only thing to go on.
+   */
+  const activeIn = (p) =>
+    pop.known.has(idOf(p))
+      ? (pop.active.get(idOf(p)) ?? 0)
+      : (p.activeCount ?? p.sessionCount ?? 0);
+  const desksIn = (p) =>
+    Math.max(
+      1,
+      pop.known.has(idOf(p))
+        ? (pop.desks.get(idOf(p)) ?? 0)
+        : (p.activeCount ?? p.sessionCount ?? 0),
+    );
+
   // Which repos are worth floor space.
   //
-  //   active agents        -> open room, with desks and people
-  //   none, not archived   -> collapsed to a strip
-  //   none, archived       -> off the floor entirely
+  //   an active agent      -> a room, with desks for the agents at them
+  //   nobody, not archived -> one line in the directory strip
+  //   nobody, archived     -> off the floor entirely
   //
-  // An active agent always wins, which is what makes archiving a room safe: a
-  // room the user collapsed pops back open by itself the moment somebody
-  // starts working in that repo, rather than hiding them.
-  const isIdle = (p) => (p.activeCount ?? p.sessionCount ?? 0) === 0;
+  // An active agent always wins, which is what makes archiving safe: a project
+  // the user archived comes back by itself the moment somebody starts working
+  // in that repo, rather than hiding them.
+  const isIdle = (p) => activeIn(p) === 0;
   const visible = (Array.isArray(projects) ? projects : []).filter(
     (p) => (p.sessionCount ?? 0) > 0 && !(isIdle(p) && p.archived),
   );
+  const activeProjects = visible.filter((p) => !isIdle(p));
+  const idleProjects = visible.filter(isIdle);
+
+  // ---- who the floor draws nobody for.
+  //
+  // Two display filters, both of which leave `ackState` exactly as the user
+  // set it: an agent who went home, and an agent sitting at a desk in a
+  // project that has no room. The strip's line — name, sessions, last
+  // activity — is what stands for the second group, and the door plate for the
+  // first. `assignSeats` and `AgentRuntime#sync` read this set rather than
+  // re-deriving it, so there is one answer to "is this person on the floor"
+  // and not two that can disagree.
+  const idleIds = new Set(idleProjects.map(idOf));
+  /** @type {Set<string>} */
+  const hidden = new Set(pop.goneHome);
+  for (const a of list) {
+    if (!a || !isDeskAgent(a)) continue;
+    if (idleIds.has(String(a.projectId))) hidden.add(String(a.id));
+  }
 
   // ---- pass 1: everything at its natural size, purely to bid for space.
   let office = buildOffice(waitingCount);
-  let lounge = buildLounge(benchedCount);
+  let lounge = buildLounge(benchedCount, undefined, goneHomeCount);
   // ARCHIVED SESSIONS ARE OFF THE FLOOR. They get no room, no street and no
   // strip: an archived session is one the user has explicitly put away, and
   // the floor is for the ones that are still in play. They are still counted
   // in the header and still listed in the panel — they simply do not take
   // screen space away from the rooms where work happens.
   /** @type {{room: Room, seats: Seat[]}[]} */
-  // A collapsed room is just a project room with a small fixed footprint and
-  // no furniture, so it rides the same packing, placement and hit-testing as
-  // every other room rather than needing a parallel path through the layout.
-  const projectRooms = visible.map((p) =>
-    isIdle(p)
-      ? { room: buildCollapsedRoom(p, p.sessionCount ?? 0), seats: /** @type {Seat[]} */ ([]) }
-      : buildProjectRoom(p, p.sessionCount ?? 0),
-  );
+  const projectRooms = activeProjects.map((p) => buildProjectRoom(p, desksIn(p)));
+
+  /** One directory line per idle project. */
+  const directoryProjects = idleProjects.map((p) => ({
+    id: idOf(p),
+    name: String(p.name ?? p.projectName ?? idOf(p)),
+    sessionCount: p.sessionCount ?? 0,
+    lastActivityAt: pop.lastActivity.get(idOf(p)) ?? Number(p.lastActivityAt) ?? 0,
+  }));
 
   // ---- THE FLOOR IS THREE BANDS, and their shares are the design.
   //
@@ -2129,7 +2429,7 @@ export function buildPlan(projects, agents, opts = {}) {
     // and it was taking width the working floor could have had.
     const o = buildOffice(waitingCount, { w: Math.min(key, OFFICE_MAX_W), h: 0 });
     const colW = o.room.w;
-    const l = buildLounge(benchedCount, { w: colW, h: 0 });
+    const l = buildLounge(benchedCount, { w: colW, h: 0 }, goneHomeCount);
     // The lounge takes the column's width whatever its blocks packed to: open
     // floor in a lounge is a lounge, and the alternative is a strip of
     // circulation beside it doing the same job less honestly.
@@ -2257,8 +2557,18 @@ export function buildPlan(projects, agents, opts = {}) {
     for (let pass = 0; pass < 40; pass++) {
       const W = targetAspect * H;
       const workingW = W - measured.w - CORRIDOR;
-      const workingH = H - CORRIDOR * (rowCount - 1);
-      if (workingW > MARGIN * 2 && workingW * workingH >= needed * (1 + WORKING_HEADROOM)) break;
+      // The directory strip is taken off the top of the working side's height
+      // before the rooms bid for what is left, so a floor with many idle
+      // projects grows to keep its rooms rather than squeezing them.
+      const workingH =
+        H - CORRIDOR * (rowCount - 1) - directoryHeight(directoryProjects.length, workingW);
+      if (
+        workingW > MARGIN * 2 &&
+        workingH > MARGIN * 2 &&
+        workingW * workingH >= needed * (1 + WORKING_HEADROOM)
+      ) {
+        break;
+      }
       H *= 1.04;
     }
     const W = targetAspect * H;
@@ -2293,17 +2603,21 @@ export function buildPlan(projects, agents, opts = {}) {
   let H = chosen.H;
   let W = chosen.W;
   let laid = { cells: [], corridors: [] };
+  /** Height the directory strip takes off the bottom of the working side. */
+  let dirH = 0;
   for (let pass = 0; pass < 8; pass++) {
     W = targetAspect * H;
-    laid = layWorkingFloor({ x: workingX, y: 0, w: W - workingX, h: H }, chosen.rowCount);
+    dirH = directoryHeight(directoryProjects.length, W - workingX);
+    laid = layWorkingFloor(
+      { x: workingX, y: 0, w: W - workingX, h: Math.max(1, H - dirH) },
+      chosen.rowCount,
+    );
     let worst = 1;
     projectRooms.forEach((pr, i) => {
       const cell = laid.cells[i];
       if (!cell) return;
-      if (!pr.room.collapsed) {
-        const rebuilt = buildProjectRoom(visible[i], visible[i].sessionCount ?? 0, cell.w / cell.h);
-        projectRooms[i] = rebuilt;
-      }
+      const project = activeProjects[i];
+      projectRooms[i] = buildProjectRoom(project, desksIn(project), cell.w / cell.h, cell);
       const natural = projectRooms[i].room.natural || {
         w: projectRooms[i].room.w,
         h: projectRooms[i].room.h,
@@ -2355,7 +2669,11 @@ export function buildPlan(projects, agents, opts = {}) {
   if (columnH > H + 0.01) {
     H = columnH;
     W = targetAspect * H;
-    laid = layWorkingFloor({ x: workingX, y: 0, w: W - workingX, h: H }, chosen.rowCount);
+    dirH = directoryHeight(directoryProjects.length, W - workingX);
+    laid = layWorkingFloor(
+      { x: workingX, y: 0, w: W - workingX, h: Math.max(1, H - dirH) },
+      chosen.rowCount,
+    );
   }
 
   const workingWidth = Math.max(0, W - workingX);
@@ -2411,10 +2729,25 @@ export function buildPlan(projects, agents, opts = {}) {
     zones: [],
   }));
 
-  // A floor with no projects at all still needs the working side to be
-  // something rather than a hole: it becomes open circulation.
+  // THE DIRECTORY STRIP, along the bottom edge of the working floor.
+  //
+  // It shares its walls with the rooms above it: a strip of corridor between a
+  // room and a board on the wall below it would be a gap in the floor, and the
+  // working side already has exactly one piece of circulation in it by design.
+  const directory =
+    directoryProjects.length > 0 && workingWidth > 1 && dirH > 0
+      ? buildDirectory(directoryProjects, { w: workingWidth, h: dirH })
+      : null;
+  if (directory) {
+    directory.x = workingX;
+    directory.y = H - dirH;
+  }
+
+  // A floor with no rooms on the working side still needs it to be something
+  // rather than a hole: it becomes open circulation above whatever directory
+  // there is.
   const emptyBand =
-    projectRooms.length === 0 && workingWidth > 1
+    projectRooms.length === 0 && workingWidth > 1 && H - dirH > 0.01
       ? [
           {
             kind: /** @type {'corridor'} */ ('corridor'),
@@ -2427,7 +2760,7 @@ export function buildPlan(projects, agents, opts = {}) {
             x: workingX,
             y: 0,
             w: workingWidth,
-            h: H,
+            h: H - dirH,
             walls: /** @type {'partial'} */ ('partial'),
             floor: /** @type {'circulation'} */ ('circulation'),
             plateLines: /** @type {[string, string]} */ (['', '']),
@@ -2443,6 +2776,7 @@ export function buildPlan(projects, agents, opts = {}) {
     ...crossCorridors,
     ...emptyBand,
     ...projectRooms.map((pr) => pr.room),
+    ...(directory ? [directory] : []),
     lounge.room,
   ];
 
@@ -2487,6 +2821,10 @@ export function buildPlan(projects, agents, opts = {}) {
     place(pr.room, pr.seats);
     seats.set(pr.room.id, pr.seats);
   }
+  // The strip's lines ride `place`'s translation like any other movable, so
+  // they land under the strip's own plate band rather than in a frame of their
+  // own that could drift from it.
+  if (directory) place(directory, directory.entries);
 
   const walls = deriveWalls(rooms, W, H);
 
@@ -2529,5 +2867,10 @@ export function buildPlan(projects, agents, opts = {}) {
     // Archived sessions have no place on the floor at all.
     letGoSpots: [],
     doors,
+    // Who the floor draws nobody for, decided once, here. `assignSeats` and
+    // `AgentRuntime#sync` read it rather than deciding again.
+    hidden,
+    goneHome: pop.goneHome,
+    directory,
   };
 }

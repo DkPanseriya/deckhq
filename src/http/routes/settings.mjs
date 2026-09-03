@@ -84,6 +84,10 @@ export function register(router, ctx) {
       // that travels between a Mac and a Linux box is not a bad request, and
       // detection ignores a pin it cannot resolve.
       if (k === 'terminal' && !(typeof v === 'string' && TERMINAL_IDS.has(v))) continue;
+      // And `goneHomeDays` (WP-50): only a finite number is a candidate. The
+      // store clamps it to [0, 365] and falls back to the default for
+      // anything else.
+      if (k === 'goneHomeDays' && !Number.isFinite(Number(v))) continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

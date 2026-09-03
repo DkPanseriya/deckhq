@@ -896,6 +896,87 @@ test('INVARIANT: a PreToolUse/PostToolUse event changes no user-owned field', as
   for (const a of registry.snapshot().agents) assert.equal(a.currentTool, null);
 });
 
+test('INVARIANT: a pending permission changes no user-owned field and no activity state', async () => {
+  // WP-19. A permission card sits BESIDE an agent, with its own lifetime. It
+  // says the runtime is asking a question about one tool call; it says nothing
+  // about whether the user is done with the session, and it must not move the
+  // raised hand on the floor either — that is `Notification`'s to put up and
+  // the runtime's to take down.
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'user' }), makeSummary('b', { lastRole: 'user' })],
+    live: [makeLive('a'), makeLive('b')],
+  });
+  const store = fakeStore();
+  const registry = new Registry({ store, adapters: [adapter] });
+  registry.setHookStatus({ 'claude-code': { supported: true, installed: true } });
+  await registry.refresh();
+
+  registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'Stop', at: 1000 });
+  registry.applyHook({
+    runtime: 'claude-code',
+    sessionId: 'b',
+    hookEvent: 'Notification',
+    at: 900,
+  });
+
+  const observable = () => {
+    const snapshot = registry.snapshot();
+    return {
+      counts: snapshot.counts,
+      agents: snapshot.agents.map((x) => ({
+        id: x.id,
+        ackState: x.ackState,
+        reviewSince: x.reviewSince,
+        needsInputSince: x.needsInputSince,
+        activityState: x.activityState,
+      })),
+      ack: store.allAck(),
+    };
+  };
+
+  const before = observable();
+  const id = agentId('claude-code', 'b');
+  registry.setPendingPermission(id, {
+    id: 'toolu_1',
+    tool: 'Bash',
+    summary: 'npm run deploy',
+    suggestions: [],
+    requiresUserInteraction: false,
+    since: 1234,
+  });
+  assert.deepEqual(observable(), before, 'a permission request moved something it does not own');
+
+  const withCard = registry.snapshot().agents.find((x) => x.id === id);
+  assert.equal(withCard.pendingPermission.tool, 'Bash');
+  assert.equal(withCard.pendingPermission.since, 1234);
+  // The hand stays up: the card appearing and vanishing is not the runtime
+  // moving on.
+  assert.equal(withCard.activityState, 'needs_input');
+
+  registry.clearPendingPermission(id, 'toolu_1');
+  assert.deepEqual(observable(), before);
+  assert.equal(
+    registry.snapshot().agents.find((x) => x.id === id).pendingPermission,
+    null,
+    'the card outlived its hold',
+  );
+  // A stale clear for a request that is no longer the one showing is ignored.
+  registry.setPendingPermission(id, {
+    id: 'toolu_2',
+    tool: 'Write',
+    summary: 'src/a.ts',
+    suggestions: [],
+    requiresUserInteraction: false,
+    since: 2000,
+  });
+  registry.clearPendingPermission(id, 'toolu_1');
+  assert.equal(
+    registry.snapshot().agents.find((x) => x.id === id).pendingPermission.id,
+    'toolu_2',
+    'an expiring older request took a newer card down with it',
+  );
+});
+
 test('INVARIANT: UserPromptSubmit is the one documented exception and DOES clear reviewSince/needsInputSince', async () => {
   const { registry } = await setupHookRegistry();
   registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'Stop', at: 1000 });

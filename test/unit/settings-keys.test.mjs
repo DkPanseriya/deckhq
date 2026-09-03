@@ -88,7 +88,7 @@ test('the client only writes settings the store knows about', () => {
 });
 
 test('the settings sheet offers every setting a person can meaningfully change', () => {
-  // The five it does not: `approveText` belongs to the panel's `2 Approve`
+  // The six it does not: `approveText` belongs to the panel's `2 Approve`
   // and is edited there; `onboarded` is a fact, not a preference; and
   // `editor` (WP-47) and `terminal` (WP-04) both default to "work it out",
   // which is the right answer on nearly every machine — the sheet's own rule
@@ -97,14 +97,27 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // (docs/DEVIATIONS.md §94.3). They are exempt from HAVING a control, not
   // from being real settings: both are persisted, sanitized and validated.
   //
-  // `osNotify` (WP-16) is the same shape and for a sharper reason: it decides
-  // whether a background process may interrupt this machine's user, it ships
-  // OFF, and who gets to turn it on — and what the row says when they do — is
-  // an open decision for the owner (docs/DEVIATIONS.md §99). Until that is
+  // `goneHomeDays` (WP-50, docs/DEVIATIONS.md §96) is the fifth, and it is
+  // exempt for the same reason and only for now: the gone-home window arrived
+  // with the dynamic floor, is read by the renderer's filter in
+  // `public/render/plan.js`, and is pinned by POSTing to /api/settings until
+  // the sheet's floor section grows a row for it.
+  //
+  // `osNotify` (WP-16, §100) is the sixth, and it is exempt for a sharper
+  // reason: it decides whether a background process may interrupt this
+  // machine's user, it ships OFF, and who gets to turn it on — and what the
+  // row says when they do — is an open decision for the owner. Until that is
   // answered it is `deckhq --notify` and a POST to /api/settings, not a
   // toggle somebody flips without reading it.
   const sheetOwned = new Set(SETTINGS_KEYS);
-  const exempt = new Set(['approveText', 'onboarded', 'editor', 'terminal', 'osNotify']);
+  const exempt = new Set([
+    'approveText',
+    'onboarded',
+    'editor',
+    'terminal',
+    'goneHomeDays',
+    'osNotify',
+  ]);
   const missing = Object.keys(DEFAULT_SETTINGS).filter((k) => !sheetOwned.has(k) && !exempt.has(k));
   assert.deepEqual(
     missing,

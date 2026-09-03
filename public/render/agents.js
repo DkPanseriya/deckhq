@@ -518,7 +518,16 @@ export function assignSeats(plan, agents) {
   const loungeAgents = [];
   const letGoAgents = [];
 
+  // Who the floor draws nobody for, decided by `buildPlan` and read here
+  // rather than re-derived: an agent who went home (benched, quiet for longer
+  // than `settings.goneHomeDays`) and an agent at a desk in a project that has
+  // no room. Both are display filters — `ackState` is exactly as the user left
+  // it — and both are the plan's call, so there is one answer to "is this
+  // person on the floor" instead of two that can disagree.
+  const hidden = (plan && plan.hidden) || null;
+
   for (const agent of agents) {
+    if (hidden && hidden.has(agent.id)) continue;
     const p = derivePlacement(agent);
     if (p === 'let_go') {
       letGoAgents.push(agent);
@@ -754,6 +763,7 @@ export class AgentRuntime {
       return null;
     };
 
+    const hidden = (plan && plan.hidden) || null;
     const seen = new Set();
     for (const agent of agents) {
       const placement = derivePlacement(agent);
@@ -762,7 +772,11 @@ export class AgentRuntime {
       // through to the no-seat fallback and park every one of them on the
       // floor's origin — which on a real machine stacked seventeen bodies and
       // their labels into one illegible smear in the top-left corner.
+      //
+      // The same is true of anyone the plan hides (`plan.hidden`): an agent
+      // who went home, and an agent at a desk in a project with no room.
       if (placement === 'let_go') continue;
+      if (hidden && hidden.has(agent.id)) continue;
       seen.add(agent.id);
       const rec = this._ensure(agent.id);
       const seat = seatMap ? seatMap.get(agent.id) || null : null;

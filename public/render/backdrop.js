@@ -31,6 +31,13 @@ const LAMP_GLOW = 'rgba(255, 214, 140, 0.4)';
 const U_DEFAULT = 14;
 
 /**
+ * Deepest a prop's contact shadow may fall, in baked pixels. Depth says how
+ * thick a thing is; without a ceiling, a very large flat prop cast a shadow
+ * the size of a room. Roughly a rug's thickness at `U_DEFAULT`.
+ */
+const CONTACT_SHADOW_MAX_PX = 10;
+
+/**
  * How far past its own rect a prop's paint may reach, in plan units — foliage,
  * a lamp's glow, the soft edge of a shadow. Everything else is clipped.
  */
@@ -337,7 +344,11 @@ function drawContactShadow(ctx, x, y, w, h) {
     x + w / 2 + 2,
     y + h + 2,
     Math.max(w / 2, 4),
-    Math.max(h * 0.22, 3),
+    // A contact shadow is the dark line where a thing meets the floor, and its
+    // depth is a property of how THICK the thing is, not of how big it is.
+    // Unbounded, a room-sized rug (WP-50 gives one to a room much larger than
+    // its desk cluster) cast a 380 px ellipse across half the room.
+    Math.min(CONTACT_SHADOW_MAX_PX, Math.max(h * 0.22, 3)),
     0,
     0,
     Math.PI * 2,
@@ -789,9 +800,20 @@ function paintProp(ctx, prop, u) {
       ctx.fillStyle = pile;
       roundRect(ctx, -w / 2, -h / 2, w, h, 5);
       ctx.fill();
+      // The border inset is what makes a rectangle read as a RUG, so it scales
+      // with the rug: a fixed 6 px inset is right on a desk cluster's mat and
+      // invisible on the room-sized rug a large project room now gets.
+      const inset = Math.min(Math.max(6, Math.min(w, h) * 0.05), 26);
       ctx.strokeStyle = PALETTE.rugBorder;
-      ctx.lineWidth = 2.5;
-      roundRect(ctx, -w / 2 + 6, -h / 2 + 6, w - 12, Math.max(0, h - 12), 3);
+      ctx.lineWidth = Math.min(6, Math.max(2.5, inset * 0.22));
+      roundRect(
+        ctx,
+        -w / 2 + inset,
+        -h / 2 + inset,
+        Math.max(0, w - inset * 2),
+        Math.max(0, h - inset * 2),
+        3,
+      );
       ctx.stroke();
       ctx.strokeStyle = PALETTE.rugEdge;
       ctx.lineWidth = 1.2;
@@ -1422,6 +1444,7 @@ export function bakeBackdrop(plan, dpr = 1) {
 
     if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng);
     else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh);
+    else if (room.floor === 'circulation') paintCirculation(ctx, rx, ry, rw, rh);
     else paintCarpet(ctx, rx, ry, rw, rh, rng);
 
     if (room.kitchenZone) {
@@ -1431,10 +1454,10 @@ export function bakeBackdrop(plan, dpr = 1) {
 
     paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh);
 
-    // A collapsed room is a real room with nobody working in it. Dimming it
-    // says that at a glance without giving it a different material, which
-    // would make it read as a different KIND of space.
-    if (room.collapsed) {
+    // The idle-projects directory is a board on the floor, not a room with the
+    // lights off: nobody is in any of the repos it lists, so it is dimmed as a
+    // whole rather than given the ambient light a room in use gets.
+    if (room.kind === 'directory') {
       ctx.save();
       ctx.fillStyle = PALETTE.roomDimmed;
       ctx.fillRect(rx, ry, rw, rh);
