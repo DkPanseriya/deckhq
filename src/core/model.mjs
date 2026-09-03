@@ -11,6 +11,21 @@
 /** @typedef {'claude-code'|'codex'} RuntimeId */
 
 /**
+ * What a session is doing right now, from `PreToolUse` (WP-52).
+ *
+ * Observed, transient and never user-owned: it is set by a tool starting,
+ * cleared by the same tool finishing (or by the session stopping, or by the
+ * stall window passing), and no part of it may reach `ackState`,
+ * `reviewSince` or `needsInputSince`.
+ *
+ * @typedef {object} CurrentTool
+ * @property {string} name       the runtime's own tool name, e.g. `Bash`
+ * @property {string} summary    <= MAX_TOOL_SUMMARY chars, one line, no paths
+ *                               from outside the session's cwd
+ * @property {number} since      ms epoch the tool started
+ */
+
+/**
  * @typedef {object} Agent
  * @property {string} id                 runtime session id, prefixed with the runtime
  * @property {RuntimeId} runtime
@@ -33,6 +48,9 @@
  * @property {number} costEstimate       list-price equivalent. NEVER a bill.
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText           <= 400 chars
+ * @property {CurrentTool|null} [currentTool]  observed; null when no tool is
+ *                                      running, or when the runtime does not
+ *                                      report tool events at all
  * @property {boolean} [turnEnded]       the last record is an assistant message
  *                                      with no tool call: idle, up for review
  * @property {boolean} [archived]        the user archived this session in the
@@ -115,6 +133,13 @@ export const ACK_ACTIONS = /** @type {const} */ ([
 export const NEEDS_YOU_STATES = /** @type {const} */ (['needs_input', 'stalled', 'for_review']);
 
 export const MAX_LAST_TEXT = 400;
+
+/**
+ * The longest tool summary the floor and the panel will carry (WP-52,
+ * `docs/plan/08-PLAN-V2-100X.md` §9: "a <= 120-character action summary").
+ * The adapter that parses a hook payload is what enforces it.
+ */
+export const MAX_TOOL_SUMMARY = 120;
 
 /**
  * Placement is derived, never stored. docs/02-ARCHITECTURE.md §3.1.

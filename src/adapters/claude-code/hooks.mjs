@@ -12,6 +12,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { CLAUDE_DIR } from './parse.mjs';
 import { BACKUP_DIR } from '../../core/paths.mjs';
+import { MAX_TOOL_SUMMARY } from '../../core/model.mjs';
 
 /** `true` — Claude Code supports the hook mechanism this module implements. */
 export const supported = true;
@@ -34,6 +35,12 @@ const HOOK_EVENTS = [
   'SubagentStop',
   'SessionStart',
   'SessionEnd',
+  // WP-52. These two carry no lifecycle meaning at all: they only say which
+  // tool is running right now, so the floor can show what an agent is doing
+  // rather than only that it is busy. Neither may move a user-owned field —
+  // see `applyHook` in src/core/state-machine.mjs.
+  'PreToolUse',
+  'PostToolUse',
 ];
 
 /**
@@ -111,7 +118,107 @@ function buildHooksBlock(port) {
     SubagentStop: [{ hooks: [hookEntry(port)] }],
     SessionStart: [{ hooks: [hookEntry(port)] }],
     SessionEnd: [{ hooks: [hookEntry(port)] }],
+    // No matcher: every tool, because "which tool" is the whole point.
+    PreToolUse: [{ hooks: [hookEntry(port)] }],
+    PostToolUse: [{ hooks: [hookEntry(port)] }],
   };
+}
+
+// ------------------------------------------------------- the tool summary
+
+/** The most of a `Bash` command line the floor will ever carry (WP-52). */
+const MAX_COMMAND = 80;
+
+/**
+ * One line of plain text, at most `max` characters.
+ *
+ * Hook payloads are text this project did not write: a command can contain
+ * newlines, tabs, ANSI escapes or a lone control byte, and all of it ends up
+ * on a canvas and in the panel header. Everything outside the printable range
+ * becomes a space, runs of whitespace collapse, and the result is cut to
+ * length. (The renderer draws it with `fillText`/`textContent` and never as
+ * markup — see `docs/DEVIATIONS.md` §88.)
+ * @param {string} value
+ * @param {number} max
+ */
+function oneLine(value, max) {
+  const flat = String(value ?? '')
+    // `\p{C}` is every control, format and surrogate code point: a raw ESC
+    // from a shell command, an embedded newline, a bidi override that would
+    // reorder the rest of the line. None of it may reach a canvas.
+    .replace(/\p{C}+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return flat.length > max ? flat.slice(0, max - 1) + '…' : flat;
+}
+
+/**
+ * A file path as the floor should show it: relative to the session's own
+ * working directory, or — for anything outside it — its basename alone.
+ *
+ * The bubble hangs over a floor that gets screenshotted and pasted into
+ * issues; "never contains project paths outside the session's cwd" is the
+ * WP-52 acceptance criterion, so a path that escapes the cwd loses everything
+ * but its last segment rather than being shown or dropped.
+ * @param {string} file
+ * @param {string} cwd
+ */
+function relativePath(file, cwd) {
+  const raw = String(file ?? '').trim();
+  if (!raw) return '';
+  const basename = path.basename(raw.replace(/[\\/]+$/, '')) || raw;
+  if (!cwd) return oneLine(basename, MAX_TOOL_SUMMARY);
+  try {
+    const abs = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
+    const rel = path.relative(cwd, abs);
+    if (!rel || rel === '.' || rel.startsWith('..') || path.isAbsolute(rel)) {
+      return oneLine(basename, MAX_TOOL_SUMMARY);
+    }
+    return oneLine(rel.replace(/\\/g, '/'), MAX_TOOL_SUMMARY);
+  } catch {
+    return oneLine(basename, MAX_TOOL_SUMMARY);
+  }
+}
+
+/**
+ * What a `PreToolUse` payload says the session is doing, as a name plus a
+ * summary of at most {@link MAX_TOOL_SUMMARY} characters (WP-52,
+ * `docs/plan/08-PLAN-V2-100X.md` §9).
+ *
+ * Parsing lives here rather than in the HTTP route because the payload shape
+ * is Claude Code's, and nothing outside `src/adapters/` may know a runtime's
+ * format (`docs/02-ARCHITECTURE.md` §2).
+ *
+ *   Bash  -> `Bash npm test` (first 80 characters of the command line)
+ *   Edit  -> `Edit src/foo.ts` (relative to cwd; basename if outside it)
+ *   Read  -> `Read src/foo.ts`
+ *   other -> the tool name on its own
+ *
+ * @param {Record<string, any>} payload
+ * @returns {{name:string, summary:string}|null} null when the payload names
+ *   no tool at all — there is then nothing honest to draw.
+ */
+export function toolSummary(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const name = oneLine(payload.tool_name ?? payload.toolName ?? '', 40);
+  if (!name) return null;
+  const input =
+    payload.tool_input && typeof payload.tool_input === 'object'
+      ? payload.tool_input
+      : payload.toolInput && typeof payload.toolInput === 'object'
+        ? payload.toolInput
+        : {};
+  const cwd = String(payload.cwd || payload.workspace || '');
+
+  let summary = name;
+  if (name === 'Bash') {
+    const command = oneLine(input.command ?? '', MAX_COMMAND);
+    if (command) summary = `${name} ${command}`;
+  } else if (name === 'Edit' || name === 'Read') {
+    const file = relativePath(input.file_path ?? input.filePath ?? '', cwd);
+    if (file) summary = `${name} ${file}`;
+  }
+  return { name, summary: oneLine(summary, MAX_TOOL_SUMMARY) };
 }
 
 /**
