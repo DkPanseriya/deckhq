@@ -1007,6 +1007,38 @@ changes no user-owned field on the parent` — a parent standing in the office w
   populations. CI also gains a `concurrency` group that cancels superseded **pull request** runs
   only — a push to `main` is keyed on its own commit, so every merge runs to completion instead of
   being recorded as cancelled — and `timeout-minutes` on both jobs. §114.
+- **Wrapped's `PRIVACY:` test stopped asking the runner what the floor is.** It seeded a ledger for
+  `/code/orbital-api` and asserted that word never reaches `GET /api/wrapped` — and `orbital-api` is
+  also one of the three rooms on the actor floor, which is what a machine with no sessions is served.
+  Every CI runner is such a machine, so the response carried the word from the daemon's own fiction
+  and the test read it as a leak; the developer's laptop has real sessions, never saw the actors, and
+  passed. The test now pins `CLAUDE_CONFIG_DIR`, `HOME` and `USERPROFILE` to a sandbox before
+  importing `src/`, so the floor is decided by the test rather than by the machine, and the fixture
+  project is named `wrapped-fixture-only` with a guard that fails loudly if the floor ever produces
+  that name itself. The assertion also got stronger: instead of searching the response for one word,
+  it now states the rule the route actually follows — every name in the card's `projects` map is a
+  live floor project's name, keyed by the hash of a cwd the floor holds, and a project only the
+  ledger knows gets no entry at all. `docs/DEVIATIONS.md` §121.
+- **The VS Code extension's Windows launch resolves the same way on all nine matrix jobs.**
+  `resolveWindowsExecutable()` — the function that names `npx.cmd` outright so `cmd.exe` cannot pick
+  up the extensionless shell script beside it — was splitting an injected Windows `PATH` on the
+  _host's_ `path.delimiter` and joining with the host's separator, so on Linux and macOS it found
+  nothing and returned the bare name: the exact failure it exists to prevent, and four red jobs. It
+  uses `path.win32` unconditionally now, and `spawnPlan()` takes the same `env` seam its sibling in
+  `plugin/lib/start.mjs` was given in §114, `ComSpec` included. Three assertions that had been true
+  only where they were least likely to be wrong are now exact and platform-free — the interpreter
+  path, the full `cmd` command line, and the extension preference order — and a new test pins
+  `PATHEXT`, which does not exist at all on six of the nine jobs. §121.
+- **A closing daemon lets go of idle sockets instead of waiting out their timeouts.** `close()`
+  awaited `server.close()`, which waits for every connection to end — and a pooled keep-alive
+  connection with no request on it does not end — then called `closeAllConnections()` after the
+  promise it was meant to unblock had already resolved. On Node 19 and later `server.close()` handles
+  this itself; on Node 18 it does not, and every daemon test on those three matrix jobs spent 64–65
+  seconds (`headersTimeout` plus `keepAliveTimeout`) in shutdown, eighteen of them, until the runner
+  killed the job at its ten-minute guard. **A job killed by its timeout is recorded as `cancelled`,
+  and one cancelled job makes the whole run `cancelled`** — which is why a run holding six genuine
+  assertion failures reported as though something had superseded it. The concurrency group was never
+  involved; `ci.yml` now says so where the timeout is set. §121.
 
 ### Packaging
 

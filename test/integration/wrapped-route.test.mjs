@@ -6,23 +6,44 @@
  *   1. **The numbers on the wire are the numbers in the ledger directory.** A
  *      day file is written by hand, the daemon reads it back through its own
  *      `readAll`, and the response is compared against what the file says.
- *   2. **No path and no project name reaches the response by accident.** The
- *      ledger holds hashes by design (`docs/DEVIATIONS.md` §100 decision 5)
- *      and a card is a thing people post, so the `PRIVACY:` assertion here is
- *      the same one the ledger's own suite makes, applied to the surface that
- *      actually leaves the machine.
+ *   2. **Nothing the ledger holds reaches the response as a word.** The ledger
+ *      holds hashes by design (`docs/DEVIATIONS.md` §100 decision 5) and a card
+ *      is a thing people post, so the `PRIVACY:` assertion here is the same one
+ *      the ledger's own suite makes, applied to the surface that actually
+ *      leaves the machine. The one place names are allowed is the route's
+ *      `projects` lookup, and §119.6 is precise about where those come from:
+ *      the **live floor**, hashed, never the ledger. That is the invariant
+ *      below, stated rather than assumed.
  *
  * The daemon is started against a scratch state directory, so nothing touches
  * the real `~/.deckhq`.
+ *
+ * **The machine is pinned before `src/` is imported**, exactly as
+ * `test/integration/demo-floor.test.mjs` pins it and for the same reason: the
+ * registry scans the host, and whether the floor comes back with the
+ * developer's own projects on it, or with the actor floor an empty machine
+ * gets, decided what this file asserted. `node --test` gives every file its own
+ * process, so this cannot leak into another suite. §121.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 
-import { startDaemon } from '../../src/daemon.mjs';
-import { dayKey, projectKeyFor } from '../../src/core/ledger.mjs';
+// ---------------------------------------------------------- an empty machine
+const SANDBOX = fsSync.mkdtempSync(path.join(os.tmpdir(), 'deckhq-wrapped-home-'));
+fsSync.mkdirSync(path.join(SANDBOX, 'claude', 'projects'), { recursive: true });
+// The Claude adapter resolves `CLAUDE_CONFIG_DIR` at module load; Codex has no
+// override and reads the home itself, and finds no `~/.codex` under this one.
+process.env.CLAUDE_CONFIG_DIR = path.join(SANDBOX, 'claude');
+process.env.HOME = SANDBOX;
+process.env.USERPROFILE = SANDBOX;
+
+const { startDaemon } = await import('../../src/daemon.mjs');
+const { dayKey, projectKeyFor } = await import('../../src/core/ledger.mjs');
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -58,6 +79,21 @@ async function withDaemon(seed, fn) {
   }
 }
 
+/**
+ * The project the ledger fixture is about — a directory, and the word at the
+ * end of it.
+ *
+ * The word has to be one **the daemon cannot produce on its own**. It was
+ * `orbital-api`, and `orbital-api` is one of the actor floor's three rooms
+ * (`src/core/demo-fixture.mjs`). Every CI runner is a machine with no sessions,
+ * an empty scan serves the actors, and the route's live-project lookup then put
+ * that exact word in the response — so the `PRIVACY:` assertion below failed on
+ * the daemon's own fiction rather than on anything the ledger leaked. The
+ * fixture guard in that test is what keeps this from being re-learned. §121.
+ */
+const LEDGER_PROJECT_NAME = 'wrapped-fixture-only';
+const LEDGER_PROJECT_CWD = `/code/${LEDGER_PROJECT_NAME}`;
+
 /** One week of records ending at the Monday the card is about. */
 async function seedWeek(ledgerDir) {
   const monday = mondayAt();
@@ -65,7 +101,7 @@ async function seedWeek(ledgerDir) {
   // "+ 10 hours" is 10:00 and the busiest-hour assertion means what it says.
   const m = new Date(monday);
   const start = new Date(m.getFullYear(), m.getMonth(), m.getDate() - 7).getTime();
-  const key = projectKeyFor('/code/orbital-api');
+  const key = projectKeyFor(LEDGER_PROJECT_CWD);
   /** @type {Map<string, string[]>} */
   const byDay = new Map();
   const push = (t, body) => {
@@ -125,11 +161,27 @@ test('the week card reports what the day files say', async () => {
   });
 });
 
-test('PRIVACY: no path and no project name is in the response', async () => {
+test('PRIVACY: nothing the ledger holds reaches the response as a word', async () => {
   await withDaemon(seedWeek, async (d) => {
+    const floor = await fetch(`${d.url}api/state`).then((r) => r.json());
+    const onTheFloor = floor.projects || [];
+
+    // FIXTURE GUARD, first, because the assertions below are only worth
+    // anything if the word being looked for could not have come from the
+    // daemon. A floor that already says `wrapped-fixture-only` would make
+    // every needle check below pass or fail for the wrong reason.
+    for (const p of onTheFloor) {
+      assert.notEqual(
+        p.name,
+        LEDGER_PROJECT_NAME,
+        `the floor names a project ${LEDGER_PROJECT_NAME}; pick a fixture name the daemon cannot produce`,
+      );
+      assert.notEqual(p.cwd, LEDGER_PROJECT_CWD);
+    }
+
     const res = await fetch(`${d.url}api/wrapped?kind=week&at=${mondayAt()}`);
     const text = await res.text();
-    for (const needle of ['orbital-api', '/code', 'code\\\\', os.homedir()]) {
+    for (const needle of [LEDGER_PROJECT_NAME, '/code', 'code\\\\', os.homedir(), SANDBOX]) {
       assert.equal(
         text.includes(needle),
         false,
@@ -137,7 +189,30 @@ test('PRIVACY: no path and no project name is in the response', async () => {
       );
     }
     // What it does carry is the hash, which spells nothing.
-    assert.ok(text.includes(projectKeyFor('/code/orbital-api')));
+    const key = projectKeyFor(LEDGER_PROJECT_CWD);
+    assert.ok(text.includes(key));
+
+    // And the invariant §119.6 states, rather than the coincidence that used to
+    // stand in for it: every name in the card's `projects` lookup was already
+    // on the floor, hashed from a cwd the floor holds. A project the ledger
+    // knows and the floor does not — which is what the fixture is — gets no
+    // entry at all, and so no name is invented for it.
+    const body = JSON.parse(text);
+    const fromTheFloor = new Map(
+      onTheFloor.filter((p) => p.cwd).map((p) => [projectKeyFor(p.cwd), p.name || p.id]),
+    );
+    for (const [hash, name] of Object.entries(body.projects)) {
+      assert.equal(
+        fromTheFloor.get(hash),
+        name,
+        `${hash} is named ${name} by nothing on the floor`,
+      );
+    }
+    assert.equal(
+      Object.hasOwn(body.projects, key),
+      false,
+      'a project only the ledger knows was given a name',
+    );
   });
 });
 

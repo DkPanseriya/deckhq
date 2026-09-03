@@ -85,23 +85,32 @@ const WINDOWS_EXECUTABLE_EXTENSIONS = ['.cmd', '.exe', '.bat', '.com'];
  * Falls back to the name unchanged: a program that cannot be found here is
  * `spawn`'s problem to report, not this function's to invent an error for.
  *
+ * **`path.win32`, never the host's `path`** — §114's rule, applied to a module
+ * that had not been swept for it. This answers "what will Windows run", so a
+ * `PATH` of `C:\tools;C:\bin` must be split on `;` and joined with `\` whether
+ * the process asking is on Windows or on the Linux runner that has to prove
+ * the answer. The host's `path` would split that on `:` into three directories
+ * that do not exist and then join with `/`, and the function would silently
+ * return the bare name — which is exactly the outcome it exists to prevent.
+ *
  * @param {string} name
  * @param {{path?:string, pathext?:string, exists?:(p:string) => boolean}} [env]
  * @returns {string}
  */
 function resolveWindowsExecutable(name, env = {}) {
-  if (path.extname(name)) return name;
+  const win = path.win32;
+  if (win.extname(name)) return name;
   const exists = env.exists || ((p) => fs.existsSync(p));
   const extensions = env.pathext
     ? env.pathext.split(';').filter(Boolean)
     : WINDOWS_EXECUTABLE_EXTENSIONS;
-  const dirs = path.isAbsolute(name)
-    ? [path.dirname(name)]
-    : (env.path == null ? process.env.PATH || '' : env.path).split(path.delimiter).filter(Boolean);
-  const base = path.isAbsolute(name) ? path.basename(name) : name;
+  const dirs = win.isAbsolute(name)
+    ? [win.dirname(name)]
+    : (env.path == null ? process.env.PATH || '' : env.path).split(win.delimiter).filter(Boolean);
+  const base = win.isAbsolute(name) ? win.basename(name) : name;
   for (const dir of dirs) {
     for (const ext of extensions) {
-      const candidate = path.join(dir, base + ext);
+      const candidate = win.join(dir, base + ext);
       if (exists(candidate)) return candidate;
     }
   }
@@ -113,11 +122,18 @@ function resolveWindowsExecutable(name, env = {}) {
  * with. `shell` is `false` on every platform; on Windows the shell is named
  * explicitly as the program being run, with a command line this module built.
  *
+ * `env` exists so a test on any host can decide every input this reads: the
+ * `PATH` the resolver walks, whether a candidate exists, and the exact
+ * interpreter. §114's rule — the Windows argv is the one worth asserting
+ * hardest, so it must not be assertable only on Windows.
+ *
  * @param {string[]} argv
  * @param {string} [platform]
+ * @param {{path?:string, pathext?:string, comspec?:string,
+ *          exists?:(p:string) => boolean}} [env]
  * @returns {{file:string, args:string[], options:object}}
  */
-function spawnPlan(argv, platform = process.platform) {
+function spawnPlan(argv, platform = process.platform, env = {}) {
   if (!Array.isArray(argv) || argv.length === 0) throw new Error('empty command');
   if (platform !== 'win32') {
     for (const token of argv) {
@@ -127,9 +143,9 @@ function spawnPlan(argv, platform = process.platform) {
     }
     return { file: argv[0], args: argv.slice(1), options: { shell: false } };
   }
-  const resolved = [resolveWindowsExecutable(argv[0]), ...argv.slice(1)];
+  const resolved = [resolveWindowsExecutable(argv[0], env), ...argv.slice(1)];
   return {
-    file: process.env.ComSpec || 'cmd.exe',
+    file: env.comspec || process.env.ComSpec || 'cmd.exe',
     args: ['/d', '/s', '/c', windowsCommandLine(resolved)],
     options: { shell: false, windowsVerbatimArguments: true, windowsHide: true },
   };
