@@ -89,11 +89,13 @@ async function computeAvailable() {
 }
 
 /**
- * Sessions Claude Code reports as currently alive, via its supported CLI
- * surface. Never throws — a missing/failing CLI resolves to [].
+ * Ask Claude Code itself, via its supported CLI surface, which sessions are
+ * alive right now. This spawns the whole CLI, so it is the expensive half of
+ * `liveSessions()` below and is called only when that decides a fresh answer
+ * is actually needed. Never throws — a missing/failing CLI resolves to [].
  * @returns {Promise<import('../../core/model.mjs').LiveSession[]>}
  */
-function liveSessions() {
+function probeLiveSessions() {
   return new Promise((resolve) => {
     execFile(
       'claude',
@@ -131,6 +133,168 @@ function liveSessions() {
       },
     );
   });
+}
+
+/**
+ * How stale the cached live roster is allowed to get before the CLI is asked
+ * again. See `liveSessions` for why this is not the poll interval.
+ *
+ * Chosen against the budget rather than by taste. One probe costs 406-984 ms
+ * of child CPU (609 ms median), so a probe every 30 s would still spend ~2%
+ * of a core at idle — the whole of docs/02-ARCHITECTURE.md §8's allowance,
+ * on one question. At 60 s it is ~1%, and the extra 30 s of staleness lands
+ * only on the case `noteScanEvidence` cannot see anyway: a session that is
+ * alive and writing nothing.
+ */
+const LIVE_PROBE_TTL_MS = 60_000;
+
+/**
+ * Floor on how often disk evidence may drag a probe forward (below). Without
+ * it, a transcript that is being appended to by something the roster never
+ * lists — a `claude -p` run, a subagent, an editor touching the file — would
+ * force a spawn on every single poll, which is the behaviour this cache
+ * exists to remove.
+ */
+const LIVE_PROBE_MIN_INTERVAL_MS = 10_000;
+
+/**
+ * The last answer `probeLiveSessions()` gave, and when. `ids` is the same
+ * roster as a set, kept alongside so the scan can test membership without
+ * rebuilding it every poll.
+ * @type {{at:number, sessions:import('../../core/model.mjs').LiveSession[], ids:Set<string>}}
+ */
+let liveProbe = { at: 0, sessions: [], ids: new Set() };
+
+/** Set by `scanSessions` when the transcripts disagree with `liveProbe`. */
+let liveProbeForced = false;
+
+/**
+ * Is this pid still a running process? `signal 0` delivers nothing; it only
+ * runs the permission and existence checks, so this is a syscall and no more
+ * — measured at 0.055 ms for a whole roster, against 400-1000 ms of child CPU
+ * for one CLI spawn.
+ *
+ * `EPERM` means the process exists but is not ours to signal, which is alive,
+ * not dead. Only `ESRCH` (and anything else unexpected) is treated as gone.
+ * A non-positive pid is never passed through: on POSIX `kill(0, sig)` signals
+ * the entire process group.
+ * @param {number} pid
+ * @returns {boolean}
+ */
+function pidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return !!err && err.code === 'EPERM';
+  }
+}
+
+/** Copy out, so a caller holding a roster can never write into the cache. */
+function copyRoster(sessions) {
+  return sessions.map((s) => ({ ...s }));
+}
+
+/**
+ * Sessions Claude Code reports as currently alive. Never throws.
+ *
+ * `probeLiveSessions()` above boots the entire Claude Code CLI to answer
+ * this. Measured on this machine, per call: 521-721 ms median wall, and
+ * 406-984 ms of the child's OWN processor time (609 ms median). The daemon
+ * polls every 5 s forever, so calling it per poll spent ~12% of a core on a
+ * question whose answer almost never changes — six times the idle budget in
+ * docs/02-ARCHITECTURE.md §8, and out of process, so nothing measuring this
+ * daemon's own CPU could see it. See docs/DEVIATIONS.md §77.
+ *
+ * So the probe is cached, and the cache is corrected between probes by the
+ * two things that are cheap:
+ *
+ *   - **A session that exits** is caught by a pid check on every call, so a
+ *     dead session still leaves the roster within one poll, exactly as
+ *     before. This is the common transition and it costs nothing.
+ *   - **A session that comes alive** is caught by `scanSessions`: a
+ *     transcript with activity newer than the last probe, belonging to a
+ *     session the roster does not list, drags the next probe forward instead
+ *     of waiting out the TTL. This matters on the degraded path, where the
+ *     poll is the only liveness signal there is (§4.2); with hooks installed
+ *     `SessionStart` already reports it directly and authoritatively.
+ *
+ * What is left stale is the one case neither covers: a session that starts
+ * or resumes and then writes nothing at all — a terminal opened and left
+ * sitting at the prompt. It reads as `ended` for up to `LIVE_PROBE_TTL_MS`.
+ * That is the price, and it is bounded, self-correcting, and cannot move any
+ * user-owned state: `live` is observed, and `for_review` is sticky through a
+ * liveness loss either way (see the Registry's invariant).
+ *
+ * An entry with no pid is kept until the next probe. Nothing cheap can say
+ * otherwise, and the probe is what is authoritative for it.
+ *
+ * @param {{probe?: () => Promise<import('../../core/model.mjs').LiveSession[]>,
+ *          now?: number}} [opts] test seams, in the same shape as
+ *   `openInApp`'s: `probe` stands in for the CLI spawn so a test can count
+ *   how many times it actually happened, and `now` stands in for the clock so
+ *   the TTL can be crossed without sleeping through it. The daemon passes
+ *   neither.
+ * @returns {Promise<import('../../core/model.mjs').LiveSession[]>}
+ */
+async function liveSessions(opts = {}) {
+  const probe = opts.probe || probeLiveSessions;
+  const now = typeof opts.now === 'number' ? opts.now : Date.now();
+  const age = now - liveProbe.at;
+  const due =
+    liveProbe.at === 0 ||
+    age >= LIVE_PROBE_TTL_MS ||
+    (liveProbeForced && age >= LIVE_PROBE_MIN_INTERVAL_MS);
+
+  if (due) {
+    liveProbeForced = false;
+    const sessions = await probe();
+    // Stamped after the probe returns, not before it: the roster describes
+    // the moment the CLI answered, and `scanSessions` compares transcript
+    // timestamps against exactly that moment.
+    const at = typeof opts.now === 'number' ? opts.now : Date.now();
+    liveProbe = { at, sessions, ids: new Set(sessions.map((s) => s.id)) };
+    return copyRoster(sessions);
+  }
+
+  const alive = liveProbe.sessions.filter((s) => s.pid == null || pidAlive(s.pid));
+  if (alive.length !== liveProbe.sessions.length) {
+    liveProbe.sessions = alive;
+    liveProbe.ids = new Set(alive.map((s) => s.id));
+  }
+  return copyRoster(alive);
+}
+
+/**
+ * Does this scan's evidence contradict the cached roster? A session whose
+ * transcript has moved since the last probe, and which that probe did not
+ * list, is either newly alive or newly resumed — either way the roster is
+ * out of date and the next `liveSessions()` should pay for a fresh one.
+ *
+ * Only ever sets the flag. Clearing it is `liveSessions`' job, so a forced
+ * probe that the minimum interval defers is not lost.
+ * @param {import('../../core/model.mjs').SessionSummary[]} summaries sorted
+ *   newest-first, so the common case exits on the first entry.
+ */
+function noteScanEvidence(summaries) {
+  if (!liveProbe.at || liveProbeForced) return;
+  for (const s of summaries) {
+    if ((s.lastActivityAt || 0) <= liveProbe.at) break; // sorted: nothing newer follows
+    if (!liveProbe.ids.has(s.id)) {
+      liveProbeForced = true;
+      return;
+    }
+  }
+}
+
+/**
+ * Drop the cached live roster. Test seam only — the daemon never needs this,
+ * because the cache is keyed on time and self-corrects.
+ */
+export function _resetLiveProbeCache() {
+  liveProbe = { at: 0, sessions: [], ids: new Set() };
+  liveProbeForced = false;
 }
 
 /**
@@ -319,7 +483,16 @@ async function scanSessions({ maxAgeDays, limit }) {
   // tool or sync client). Once parsed, we know the real answer, so the
   // result is re-sorted by the content-derived `lastActivityAt` before
   // returning — this is what "newest first" should mean to a caller.
-  return out.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+  out.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+
+  // Cheap by-product of a scan we were doing anyway: if a transcript has
+  // moved since the cached live roster was taken and that roster does not
+  // list its session, the roster is stale and the next `liveSessions()`
+  // should re-probe rather than wait out its TTL. Reads the sorted list, so
+  // it must come after the sort.
+  noteScanEvidence(out);
+
+  return out;
 }
 
 /**

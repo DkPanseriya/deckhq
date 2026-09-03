@@ -4,6 +4,32 @@
      rather than starting a parallel list, and move an item out of "Known gaps" the moment it
      stops being true. -->
 
+## Unreleased
+
+### Performance
+
+- **The daemon no longer boots the Claude Code CLI every five seconds.** `liveSessions()` shelled
+  out to `claude agents --json` on every poll, forever. Measured on this machine: **406–984 ms of
+  the child's own processor time** per call (median 609 ms), which at one call per 5 s is ~12% of
+  a core against a 2% budget — and spent out of process, so no measurement of the daemon's own CPU
+  could ever see it. The roster is now cached for 60 s and corrected between probes by the two
+  signals that are cheap: a `kill(pid, 0)` check retires a session that exited (0.055 ms for a
+  whole roster, so death is still noticed within one poll), and the scan drags a probe forward
+  when a transcript moves for a session the roster does not list. Over three interleaved rounds of
+  24 polls: **24 spawns down to 2–3**, and 14.0–18.3 s of waiting down to 1.0–1.5 s. Verified
+  against a forced probe in the same poll — 12 polls, 12 exact agreements.
+- What that deliberately leaves stale: a session that starts and then writes nothing at all reads
+  as not-live for up to 60 s. It cannot touch user-owned state — `live` is an observation, and
+  `for_review` is sticky through a liveness loss either way. `docs/DEVIATIONS.md` §77 has the
+  reasoning, including why hook-awareness was weighed and not added.
+
+### Known gaps
+
+- **The warm scan is over its 50 ms budget**, at 99–220 ms. `readDesktopSessions()` — the desktop
+  app's archive join added in `docs/DEVIATIONS.md` §46 — re-reads and re-parses all 58 files in
+  its store on every poll with no cache of any kind, and is 65–140 ms of that. Measured here, not
+  fixed here: it needs its own cache and its own before/after.
+
 ## 1.2.0
 
 The release that can actually be installed. 1.1.0 called itself the first public release and was
