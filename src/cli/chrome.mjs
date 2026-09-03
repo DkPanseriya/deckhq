@@ -28,11 +28,14 @@ import { spawn } from 'node:child_process';
 
 /**
  * Where a Chromium-family browser is likely to be, most-preferred first.
- * `CHROME_PATH` wins so a user with an unusual install can always say where.
+ * `CHROME_PATH` wins so a user with an unusual install can always say where;
+ * `CHROME_BIN` is the same escape hatch under the name CI images and Puppeteer
+ * already set, and the GitHub Ubuntu runner is the machine that matters here.
  * @type {string[]}
  */
 export const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
+  process.env.CHROME_BIN,
   'C:/Program Files/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
@@ -49,6 +52,21 @@ export const CHROME_CANDIDATES = [
 ].filter(Boolean);
 
 /**
+ * Bare names to look for on PATH when no absolute candidate exists. Last
+ * resort, on purpose: an absolute path is a browser we can name in an error
+ * message, and this pass only ever adds machines that would otherwise have
+ * been reported as having no browser at all.
+ * @type {string[]}
+ */
+export const CHROME_PATH_NAMES = [
+  'google-chrome',
+  'google-chrome-stable',
+  'chromium',
+  'chromium-browser',
+  'microsoft-edge',
+];
+
+/**
  * The first candidate that exists on this machine, or null.
  *
  * Returns null rather than throwing: a missing browser is a normal outcome for
@@ -62,6 +80,25 @@ export function findChrome() {
       if (fs.existsSync(candidate)) return candidate;
     } catch {
       // an unreadable path is simply not the one
+    }
+  }
+  // Nothing at a known absolute path. Some images (containers, self-hosted
+  // runners) only put the browser on PATH, so walk that before giving up.
+  const dirs = String(process.env.PATH || process.env.Path || '')
+    .split(path.delimiter)
+    .map((d) => d.trim())
+    .filter(Boolean);
+  const exts = process.platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
+  for (const dir of dirs) {
+    for (const name of CHROME_PATH_NAMES) {
+      for (const ext of exts) {
+        try {
+          const file = path.join(dir, name + ext);
+          if (fs.existsSync(file) && fs.statSync(file).isFile()) return file;
+        } catch {
+          // an unreadable path is simply not the one
+        }
+      }
     }
   }
   return null;
@@ -93,14 +130,52 @@ export function freePort() {
 }
 
 /**
+ * The `code` on every error that means "this machine could not give us a
+ * working browser". Callers that are allowed to degrade — the goldens gate,
+ * `doctor --capture-proof` — match on it so they skip a tooling gap without
+ * also swallowing a real failure from the work they came to do.
+ */
+export const CHROME_UNAVAILABLE = 'CHROME_UNAVAILABLE';
+
+/**
+ * @param {string} message
+ * @returns {Error & {code:string}}
+ */
+export function chromeUnavailable(message) {
+  const err = /** @type {Error & {code:string}} */ (new Error(message));
+  err.code = CHROME_UNAVAILABLE;
+  return err;
+}
+
+/**
+ * How long to wait for a freshly spawned Chrome to expose a page target.
+ * Chrome on a shared CI runner is an order of magnitude slower to start than
+ * Chrome on a laptop — cold page cache, no warm profile, a CPU it is sharing —
+ * so the budget is not the same number in both places. It is a hang guard
+ * either way; a healthy Chrome answers in about a second.
+ */
+export const TARGET_TIMEOUT_MS = 20_000;
+export const TARGET_TIMEOUT_MS_CI = 60_000;
+
+/** How many times a launch that never produced a page target is tried again. */
+export const LAUNCH_ATTEMPTS = 3;
+
+/**
  * Poll Chrome's DevTools HTTP endpoint until it exposes a page target, and
  * return that page's own socket URL. Connecting straight to the page avoids
  * attaching to a target and threading a session id through every command.
+ *
+ * `died` lets the caller report a Chrome that exited instead of listening, so
+ * a browser that refuses to start (no sandbox, no /dev/shm, a bad flag) fails
+ * in a second with its own reason rather than after the whole budget with
+ * none.
+ *
  * @param {number} port
  * @param {number} [timeoutMs]
+ * @param {() => string|null} [died] why the process is already gone, or null
  * @returns {Promise<string>}
  */
-export async function waitForPageTarget(port, timeoutMs = 20000) {
+export async function waitForPageTarget(port, timeoutMs = TARGET_TIMEOUT_MS, died = () => null) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
@@ -113,7 +188,13 @@ export async function waitForPageTarget(port, timeoutMs = 20000) {
     } catch {
       /* not up yet */
     }
-    if (Date.now() > deadline) throw new Error('Chrome did not expose a page target in time');
+    const gone = died();
+    if (gone) throw chromeUnavailable(`Chrome ${gone} before it exposed a page target`);
+    if (Date.now() > deadline) {
+      throw chromeUnavailable(
+        `Chrome did not expose a page target on 127.0.0.1:${port} within ${Math.round(timeoutMs / 1000)}s`,
+      );
+    }
     await new Promise((r) => setTimeout(r, 150));
   }
 }
@@ -166,6 +247,102 @@ export function connect(wsUrl) {
 }
 
 /**
+ * The flags a headless Chrome needs on this platform and nowhere else.
+ *
+ * All three are Linux-only, and deliberately so: the argv on Windows and macOS
+ * is byte-for-byte what it has always been, so the goldens committed against
+ * it stay valid.
+ *
+ *   --no-sandbox / --disable-setuid-sandbox
+ *     Container and CI kernels routinely have user namespaces off, and the
+ *     zygote then dies at startup with no page target ever appearing. The page
+ *     being rendered is our own loopback demo floor, so there is nothing here
+ *     for the sandbox to contain.
+ *   --disable-dev-shm-usage
+ *     /dev/shm is 64 MB in most containers; Chrome's default shared-memory
+ *     backing overruns it and the renderer is killed mid-capture.
+ *
+ * @param {string} platform
+ * @returns {string[]}
+ */
+export function platformLaunchArgs(platform = process.platform) {
+  if (platform !== 'linux') return [];
+  return ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'];
+}
+
+/**
+ * Spawn one Chrome and connect to its first page target, or throw a
+ * {@link CHROME_UNAVAILABLE} error saying why it could not be done.
+ * @param {{chromePath:string, width:number, height:number, debugPort:number,
+ *          extraArgs:string[], targetTimeoutMs:number}} opts
+ */
+async function launchChrome(opts) {
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-shot-'));
+  /** @type {string[]} */
+  const noise = [];
+  /** @type {string|null} */
+  let died = null;
+
+  const child = spawn(
+    opts.chromePath,
+    [
+      '--headless=new',
+      '--disable-gpu',
+      '--hide-scrollbars',
+      '--no-first-run',
+      '--no-default-browser-check',
+      ...platformLaunchArgs(),
+      `--user-data-dir=${profile}`,
+      `--remote-debugging-port=${opts.debugPort}`,
+      `--window-size=${opts.width},${opts.height}`,
+      ...opts.extraArgs,
+      'about:blank',
+    ],
+    // stderr is read rather than dropped: when Chrome refuses to start it says
+    // exactly why on it, and that sentence is the whole value of the SKIPPED
+    // line this failure now produces instead of a stack trace.
+    { stdio: ['ignore', 'ignore', 'pipe'] },
+  );
+  child.stderr?.on('data', (d) => {
+    if (noise.length < 20) noise.push(String(d).trim());
+  });
+  child.once('error', (err) => {
+    died = `could not be spawned (${err.message})`;
+  });
+  child.once('exit', (code, signal) => {
+    died = signal ? `was killed by ${signal}` : `exited with ${code}`;
+  });
+
+  const dispose = async () => {
+    try {
+      child.kill();
+    } catch {
+      /* already gone */
+    }
+    // Chrome holds the profile directory open for a moment after SIGTERM; on
+    // Windows removing it too early throws EBUSY. It is a temp directory
+    // either way, so a failure here is never worth failing the capture over.
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    } catch {
+      /* the OS will reap it */
+    }
+  };
+
+  try {
+    const wsUrl = await waitForPageTarget(opts.debugPort, opts.targetTimeoutMs, () => died);
+    const client = connect(wsUrl);
+    await client.ready;
+    return { client, dispose };
+  } catch (err) {
+    await dispose();
+    const said = noise.join(' ').slice(0, 400);
+    throw chromeUnavailable(`${err.message}${said ? ` — Chrome said: ${said}` : ''}`);
+  }
+}
+
+/**
  * Launch a headless Chrome, hand a connected CDP client to `fn`, and tear
  * everything down afterwards whatever happens.
  *
@@ -176,39 +353,57 @@ export function connect(wsUrl) {
  * `extraArgs` are appended to Chrome's command line; the goldens harness uses
  * them for the rendering-determinism flags a README capture has no need of.
  *
+ * A launch that never produces a page target is retried on a **fresh debugging
+ * port**. The port is picked by asking the OS for a free one and then handing
+ * it to Chrome, so there is an unavoidable window in which something else can
+ * take it; on a CI runner opening and closing sockets constantly that window
+ * is not theoretical, and the symptom is indistinguishable from a slow Chrome.
+ * An explicitly requested `debugPort` is kept across attempts — the caller
+ * asked for that port and retrying elsewhere would surprise it.
+ *
  * @template T
- * @param {{chromePath:string, width:number, height:number, scale?:number, debugPort?:number, extraArgs?:string[]}} opts
+ * @param {{chromePath:string, width:number, height:number, scale?:number,
+ *          debugPort?:number, extraArgs?:string[], attempts?:number,
+ *          targetTimeoutMs?:number}} opts
  * @param {(client: ReturnType<typeof connect>) => Promise<T>} fn
  * @returns {Promise<T>}
+ * @throws an error with `code === CHROME_UNAVAILABLE` when no attempt produced
+ *   a usable browser. Errors from `fn` itself are never retried and never
+ *   retagged.
  */
 export async function withChrome(opts, fn) {
   const { chromePath, width, height, scale = 1, extraArgs = [] } = opts;
-  const debugPort = opts.debugPort || (await freePort());
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-shot-'));
+  const attempts = Math.max(1, opts.attempts ?? LAUNCH_ATTEMPTS);
+  const targetTimeoutMs =
+    opts.targetTimeoutMs ?? (process.env.CI ? TARGET_TIMEOUT_MS_CI : TARGET_TIMEOUT_MS);
 
-  const child = spawn(
-    chromePath,
-    [
-      '--headless=new',
-      '--disable-gpu',
-      '--hide-scrollbars',
-      '--no-first-run',
-      '--no-default-browser-check',
-      `--user-data-dir=${profile}`,
-      `--remote-debugging-port=${debugPort}`,
-      `--window-size=${width},${height}`,
-      ...extraArgs,
-      'about:blank',
-    ],
-    { stdio: 'ignore' },
-  );
+  /** @type {{client: ReturnType<typeof connect>, dispose: () => Promise<void>}|null} */
+  let launched = null;
+  /** @type {Error|null} */
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts && !launched; attempt++) {
+    const debugPort = opts.debugPort || (await freePort());
+    try {
+      launched = await launchChrome({
+        chromePath,
+        width,
+        height,
+        debugPort,
+        extraArgs,
+        targetTimeoutMs,
+      });
+    } catch (err) {
+      lastError = /** @type {Error} */ (err);
+    }
+  }
+  if (!launched) {
+    throw chromeUnavailable(
+      `Chrome at ${chromePath} could not be started in ${attempts} attempt(s): ${lastError?.message}`,
+    );
+  }
 
-  /** @type {ReturnType<typeof connect>|undefined} */
-  let client;
+  const { client, dispose } = launched;
   try {
-    const wsUrl = await waitForPageTarget(debugPort);
-    client = connect(wsUrl);
-    await client.ready;
     await client.send('Page.enable');
     await client.send('Emulation.setDeviceMetricsOverride', {
       width,
@@ -218,17 +413,8 @@ export async function withChrome(opts, fn) {
     });
     return await fn(client);
   } finally {
-    client?.close();
-    child.kill();
-    // Chrome holds the profile directory open for a moment after SIGTERM; on
-    // Windows removing it too early throws EBUSY. It is a temp directory
-    // either way, so a failure here is never worth failing the capture over.
-    await new Promise((r) => setTimeout(r, 1500));
-    try {
-      fs.rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
-    } catch {
-      /* the OS will reap it */
-    }
+    client.close();
+    await dispose();
   }
 }
 
