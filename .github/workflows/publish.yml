@@ -1,27 +1,35 @@
 name: Publish
 
-# Publishes to npm when a v* tag is pushed.
+# Publishes to npm when a v* tag is pushed, using trusted publishing (OIDC).
 #
-# Why this exists rather than publishing by hand: npm requires a second factor
-# to publish, so a manual release means finding an authenticator app at exactly
-# the wrong moment, and 1.1.0 was never published at all because the steps
-# lived in somebody's head. An automation token is exempt from the 2FA prompt,
-# which is the whole point — the secret is scoped to publishing this package
-# and nothing else.
+# There is no npm token here, and there is no NPM_TOKEN secret. GitHub mints a
+# short-lived OIDC credential for this specific repository and this specific
+# workflow file, and npm verifies it against the trusted publisher configured
+# on the package. Nothing long-lived exists to leak, and npm is restricting
+# 2FA-bypass tokens anyway: account changes from August 2026, direct publishing
+# from January 2027.
 #
-# It also publishes with provenance, so the registry records which workflow,
-# which commit and which tag produced the tarball. For a tool whose pitch is
-# "zero dependencies, read it in an afternoon", a verifiable link from the
-# published bytes back to the source is worth having.
+# Provenance is automatic under trusted publishing — do not add --provenance,
+# it is implied.
 #
-# Setup, once, by the repository owner:
-#   1. npmjs.com -> Access Tokens -> Generate -> Automation
-#   2. Repository Settings -> Secrets and variables -> Actions -> New secret
-#      Name: NPM_TOKEN
-#   3. Push a tag: git push origin v1.2.0
+# Two prerequisites, both one-time, both done by the repository owner:
 #
-# The publish is gated on the full test matrix in ci.yml passing first, so a
-# tag on a broken commit cannot reach the registry.
+#   1. The FIRST version must be published from a terminal. npm requires a
+#      package to exist before a trusted publisher can be added to it, so OIDC
+#      cannot bootstrap a brand new name. Run `npm publish --access public`
+#      once, locally, and authenticate in the browser when prompted.
+#
+#   2. Then, on npmjs.com: the package -> Settings -> Trusted publisher.
+#        Organization or user:  DkPanseriya
+#        Repository:            deckhq
+#        Workflow filename:     publish.yml
+#        Environment:           (leave empty)
+#        Allowed actions:       npm publish
+#
+# After that, every release is `git push origin vX.Y.Z` and nothing else.
+#
+# The publish is gated on the full test matrix passing first, so a tag on a
+# broken commit cannot reach the registry.
 
 on:
   push:
@@ -54,31 +62,37 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # Required for npm provenance. Without it the publish still works but
-      # the registry records no attestation.
+      # Mints the OIDC token npm exchanges for a short-lived publish
+      # credential. Without it the publish falls back to looking for a token
+      # that does not exist, and fails.
       id-token: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
+          # Trusted publishing needs Node >= 22.14.0.
           node-version: 22
           registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm
+        # Trusted publishing needs npm >= 11.5.1, and Node 22 still ships 10.x.
+        run: npm install -g npm@latest
 
       - name: Install dev tooling
         run: npm install --no-audit --no-fund
 
       - name: Refuse to publish if the tag and package.json disagree
-        # A tag that says v1.3.0 on a commit whose package.json says 1.2.0
-        # would publish the wrong version under the right name, which is not
-        # something the registry lets you take back.
+        # A tag reading v1.3.0 on a commit whose package.json says 1.2.0 would
+        # publish the wrong bytes under the right name, and the registry does
+        # not let you take that back.
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           PKG="$(node -p "require('./package.json').version")"
-          echo "tag=$TAG package.json=$PKG"
+          echo "tag=$TAG package.json=$PKG npm=$(npm --version)"
           test "$TAG" = "$PKG"
 
       - name: Publish
+        # No token, and no --provenance: trusted publishing supplies both.
         # prepublishOnly runs lint and the full suite again here.
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
