@@ -76,14 +76,12 @@ Paste this block at the top of every brief.
 >
 > **Your packages, in order.**
 >
-> - **The red on Ubuntu and macOS, first.** `test/unit/plugin-hook.test.mjs`'s "a .cmd shim is run
->   as an argument to the interpreter" asserts a `cmd.exe` resolution that only happens on `win32`
->   and is not platform-guarded, so `main` fails on two of three platforms and the P0 gate cannot
->   pass. A red `main` blocks the tag-triggered publish and is not an acceptable resting state —
->   that was WP-51's sentence and it is still true of a different test. While you are there: the
->   `goldens` job throws on the Ubuntu runner (Chrome never exposes a page target) instead of
->   printing the "no goldens for linux" line it was designed to print, so the job is red rather
->   than honest about being decorative.
+> - **Watch the CI run, first.** `main` went red on Ubuntu and macOS after WP-51 fixed the flaky
+>   Windows test — a `plugin-hook` assertion that only held on `win32`, and a `goldens` job whose
+>   Chrome would not start — and both are fixed in the tree (§114). **No run has completed for
+>   `HEAD`**, because each merge cancelled the last one's, so the last verdict on record is the red
+>   one. A red `main` blocks the tag-triggered publish and is not an acceptable resting state; that
+>   was WP-51's sentence and it stays true until a run finishes and says otherwise.
 > - **WP-09** (with Agent Backend) streaming send and transcript tail. **The last piece of F8**,
 >   and the one a user feels every single turn: `send()` still runs to completion with the composer
 >   disabled. `--output-format stream-json`, parsed incrementally, deltas over SSE, plus tailing
@@ -128,18 +126,17 @@ Paste this block at the top of every brief.
 > **Landed.** WP-06 the cold chrome, 2 September, without the font (§69–§71). Then, on
 > 3 September: WP-07 the header, palette and settings sheet (§94), WP-10 with PE (§103), WP-13 the
 > coach marks and the actor floor (§108), WP-14 the snapshot and its redaction (§109), WP-15 three
-> measured sounds and the office-cleared moment (§110), WP-20 identity and rarity with AR (§105).
-> Read §94 and §108 before touching the palette or onboarding.
+> measured sounds and the office-cleared moment (§110), WP-20 identity and rarity with AR (§105),
+> and WP-39 the floating mini-floor with AR (§113). Read §94 and §108 before touching the palette
+> or onboarding.
 >
 > **Your packages, in order.**
 >
-> - **WP-39** (with Architect) the floating mini-floor: office, corridor and the numeral in a
->   Document Picture-in-Picture window, always on top. In flight. It is the only presence feature
->   in the plan that is neither shipped nor started, and `08` §14's rule — no feature that needs
->   the tab open — is what it exists to satisfy.
-> - **WP-57's two visible halves** (`08` §9): coach marks 2 and 3 stop pointing at the whole canvas
->   once the renderer gives you `Scene.anchorFor()` (§108.1 states the request; `coachAnchorFor()`
->   already asks for it and falls back), and the room whiteboard carries the rate-card version.
+> - **WP-57's whiteboard item** (`08` §9): the room whiteboard carries the rate-card version, the
+>   way the panel and `deckhq stats` already name the dated table. Its other half — coach marks 2
+>   and 3 pointing at the office and at a real agent instead of at the whole canvas — closed when
+>   WP-39 shipped `Scene.anchorFor`, and `coach-marks.js` was untouched exactly as §108.1
+>   predicted (§113.8).
 > - **The condensed font.** Decided, and still not done: vendor IBM Plex Sans Condensed, two
 >   weights, self-hosted, floor labels only, per `docs/DEVIATIONS.md` §71. Label collision is a
 >   logged, fixed-then-regressed defect and this is the fix that was chosen for it.
@@ -178,21 +175,20 @@ Paste this block at the top of every brief.
 > — §68 deliberately does not paint stale; read it before touching it. Then WP-50 the dynamic
 > floor (§96), WP-55 the content-sized building (§106), WP-12's character-scale floor inside them,
 > WP-17 + WP-48 the ledger (§100), and WP-20 identity with UX (§105). **Read §96 and §106 before
-> touching the plan, and run the goldens before you push.**
+> touching the plan, and run the goldens before you push.** WP-39 landed too (§113): the
+> mini-floor is a second render target of the same `Scene`, not a second scene, so nothing about it
+> can disagree with the floor about where anybody is standing.
 >
 > **Your packages, in order.**
 >
-> - **WP-57's renderer half, first** (`08` §9), because two other roles are blocked behind it and
->   both changes are small. (a) `Scene.anchorFor(target, id)` returning a viewport-relative rect —
->   the arithmetic `_hitTest` already does in reverse — so onboarding's two floor coach marks stop
->   pointing at the whole canvas (§108.1 spells out the signature). (b) `_drawRoomPlate` draws
->   `lines[2]` and `_plateLinesFor` returns the payroll line WP-26 already computes and tests
->   (§111's RAISE spells out the change). That one is **the first thing in months to change what
->   the floor looks like without changing what is on it**, so the goldens regenerate in the same
->   commit.
+> - **WP-57's remaining renderer item, first**, because it is small and it is the last thing
+>   holding a shipped feature off the screen: `_drawRoomPlate` draws `lines[2]` and `_plateLinesFor`
+>   returns the payroll line WP-26 already computes and tests (§111's RAISE spells out the change).
+>   It is **the first thing in months to change what the floor looks like without changing what is
+>   on it**, so the goldens regenerate in the same commit. Its sibling — `Scene.anchorFor` for the
+>   coach marks — closed with WP-39, which needed the same world-to-screen conversion (§113.8).
 > - **WP-12's remainder:** the `F` focus camera (`05` §6.4). Its scale floor and its room-weighting
 >   are both gone into WP-50 and WP-55; the camera is what is left.
-> - **WP-39** (with UI/UX) the floating mini-floor as a second render target of the same scene.
 > - **WP-41** (with Agent Backend) subagents drawn as juniors beside their parent.
 > - **WP-22** Type checking (`tsc --noEmit --checkJs`) and decomposition, plus the documented
 >   duplication between `derivePlacement()` in `agents.js` and `placement()` in `model.mjs` — the

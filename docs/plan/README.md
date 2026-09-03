@@ -36,14 +36,15 @@ The floor earns the screenshot. The deck does the job. The number does the sprea
 
 ## What to do first
 
-**Updated 4 September.** Thirty packages landed on 3 September, and none of them are installable:
+**Updated 4 September.** More than thirty packages landed on 3 September, and none of them are
+installable:
 `npm view deckhq` still returns `1.2.0`, because no tag has been cut since. What is left of P0, in
 order:
 
-1. **Make `main` green.** It is red on Ubuntu and macOS — one Windows-only assertion in
-   `test/unit/plugin-hook.test.mjs` that is not platform-guarded, plus a `goldens` job that throws
-   on the Ubuntu runner instead of reporting SKIPPED. And no CI run has completed for `HEAD` at
-   all: every push in the merge train cancelled the last one's.
+1. **Get a completed CI run.** The two failures that made `main` red on Ubuntu and macOS are
+   fixed in the tree (`DEVIATIONS.md` §114), and **no run has finished for `HEAD`** — every push in
+   the merge train cancelled the last one's, so the last completed verdict is the red one from the
+   WP-10 merge. Green is a hypothesis until a run says otherwise.
 2. **The trusted publisher on npmjs.com**, one time, so a tag publishes itself (`08` §13.1).
 3. **One tag**, which is the only proof `publish.yml` and its release job have ever had.
 4. **The repository settings** — social preview, Sponsors, Discussions, private vulnerability

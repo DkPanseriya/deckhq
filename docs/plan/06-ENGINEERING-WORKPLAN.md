@@ -26,16 +26,19 @@ platforms, and someone other than its author has reviewed it.
 > WP-14, WP-15, WP-16 (`--notify` run for real on Windows only), WP-17+48, WP-19 (build; **the live
 > run is still owed**, §97.5), WP-20, WP-21 (Windows goldens only), WP-26 (its plate line is
 > computed, not painted), WP-29 (built; **not deployed**), WP-31 (not published to the
-> Marketplace), WP-35, WP-36, WP-37, WP-38, WP-42, WP-43 (the workflow and the release job; **never
-> run**), WP-44, WP-46, WP-47, WP-50, WP-51, WP-52, WP-53, WP-54, WP-55.
+> Marketplace), WP-35, WP-36, WP-37, WP-38, WP-39 (§113), WP-42, WP-43 (the workflow and the
+> release job; **never run**), WP-44, WP-46, WP-47, WP-50, WP-51, WP-52, WP-53, WP-54, WP-55.
 >
 > **Not landed:** WP-09 (nothing of it exists — a send still blocks), WP-12's focus camera (its
 > character-scale floor landed inside WP-50/WP-55), WP-18, WP-22, WP-23, WP-24, WP-25, WP-27,
-> WP-28, WP-30, WP-32, WP-33, WP-34, WP-39 (in flight), WP-41, WP-45, WP-49, WP-56, WP-57, WP-58.
+> WP-28, WP-30, WP-32, WP-33, WP-34, WP-41, WP-45, WP-49, WP-56, WP-57 (its first item shipped with
+> WP-39), WP-58.
 >
-> **`main` is red on Ubuntu and macOS** — not the flaky test WP-51 fixed, but one unguarded
-> Windows-only assertion in `test/unit/plugin-hook.test.mjs`, plus a `goldens` job that throws on
-> the Ubuntu runner instead of reporting SKIPPED. `08` §0's CI row has the measurements.
+> **`main` went red on Ubuntu and macOS** after WP-51 fixed the flaky Windows test — an unguarded
+> Windows-only assertion in `test/unit/plugin-hook.test.mjs`, and a `goldens` job that threw on the
+> Ubuntu runner instead of reporting SKIPPED. Both are fixed in the tree (§114) and **no CI run has
+> completed for `HEAD` yet**, because each merge cancelled the last one's run. `08` §0's CI row has
+> the measurements.
 
 ---
 
@@ -450,7 +453,7 @@ against `main` on 4 September:
 | WP-44 | `doctor --share` | AB | 0.5d | P0 | WP-05 | landed, §84 |
 | WP-37 | Claude Code plugin, spike then ship | AB | 1d + 3d | P1 | WP-36 | landed, §102; no marketplace listing |
 | WP-38 | Status-line segment | AB | 1d | P1 | — | landed, §92 |
-| WP-39 | Floating mini-floor (Document PiP) | AR + UX | 3d | P1 | WP-12 | in flight |
+| WP-39 | Floating mini-floor (Document PiP) | AR + UX | 3d | P1 | WP-12 | landed, §113; it also shipped `Scene.anchorFor` and closed §108.1 |
 | WP-40 | Gone home | AR + PE | 1.5d | P1 | WP-12 | landed inside WP-50, §96 |
 | WP-42 | Terminal deck | PE | 2d | P1 | — | landed, §93 |
 | WP-47 | In-panel diff, open in editor | PE | 2d | P1 | WP-08 | landed, §90 |
@@ -470,7 +473,7 @@ Each was opened by a package that hit something the plan had not named. Full tex
 | WP-54 | The Windows console launch is quoted for `cmd.exe`, not for `CreateProcess` — `&` in a session id split one command into two | AB | 0.5d | P0 | — | landed, §98 |
 | WP-55 | The building is the size of what is in it; the header counts what the floor draws | AR | 2d | P1 | WP-50 | landed, §106 |
 | WP-56 | `doctor` names the two managed-settings kill switches that can turn DeckHQ's `http` hooks off over its head, neither of which it detects today | AB | 0.5d | P1 | WP-19 build | open, from §97.4 |
-| WP-57 | The integration cleanup: `Scene.anchorFor()` for coach marks 2 and 3, the room plate's payroll line painted, the whiteboard's rate-card version, "no rate" on every cost surface, the hover card's record line, the deny copy's case | AR + PE + UX | 2d | P1 | — | open, from §107, §108.1, §111, §97.3 |
+| WP-57 | The integration cleanup: ~~`Scene.anchorFor()` for coach marks 2 and 3~~ (closed by WP-39, §113.8), the room plate's payroll line painted, the whiteboard's rate-card version, "no rate" on every cost surface, the hover card's record line, the deny copy's case | AR + PE + UX | 1.5d | P1 | — | open, from §107, §111, §97.3 |
 | WP-58 | Codex answers a permission prompt through a `command` hook — it has `PermissionRequest` but no `http` type | AB | 1.5d | P3 | with WP-23 | open, from §97.4 |
 
 ## Dependency graph
