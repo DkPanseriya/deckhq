@@ -3607,7 +3607,7 @@ argv, the wrapper script and the fallback walk.
 |          | 7 Xfce Terminal    | `xfce4-terminal --working-directory=<cwd> -x <argv>`                          |
 |          | 8 xterm            | `xterm -e <argv>` (cwd from the spawn; xterm has no flag)                     |
 |          | 9 x-terminal-emulator | `x-terminal-emulator -e <argv>`                                            |
-| Windows  | the console        | `cmd /c start "" cmd /k <argv>` — unchanged, and the only row ever run        |
+| Windows  | the console        | `cmd.exe /d /s /c start "" /d "<cwd>" cmd /d /s /k <program> "<arg>"…`, with `windowsVerbatimArguments` — the only row ever run, and the only one that is a command line rather than an argv. It was `cmd /c start "" cmd /k <argv>` until §96 rewrote its quoting. |
 
 Detection order, highest first: the `terminal` setting; `$TERMINAL` (Linux); the emulator DeckHQ
 is itself running inside (`$TERM_PROGRAM`, or `KITTY_WINDOW_ID`, `FOOT_PID`, `KONSOLE_VERSION`,
@@ -3696,6 +3696,12 @@ through the same grammar `sh` uses and asserts it equals the original, and separ
 that the line matches the grammar of nothing but single-quoted words. The AppleScript never sees
 user data: `osascript` gets the wrapper's path as `argv`, and the script quotes it with
 `quoted form of`, which is the same transformation `shQuote` performs.
+
+The Windows row is the third case, and it was the one this entry got wrong. `start` is an
+internal `cmd.exe` command rather than a program, so `cmd.exe` re-parses everything after it —
+and node's win32 argument quoting, which this row relied on, does not escape `&`, `|`, `^`, `<`
+or `>`. The claim above was therefore false on Windows for two months. §96 is the fix: the
+command line is built by this module and handed over with `windowsVerbatimArguments`.
 
 The wrapper files are not cleaned up. One ~150-byte file per resume accumulates in the temp
 directory, as it did before this package. Left alone deliberately: pruning by pattern in a
@@ -4130,7 +4136,7 @@ cannot silently go stale.
    installed on the reference machine, `available()` returns false, and every method degrades
    rather than throwing. Nothing in this change was executed against Codex. What was proved is the
    argv arrays, which is a different claim (§1.1 rule 11).
-3. **The Windows console row still joins its argv into a `cmd.exe` command line.**
+3. ~~**The Windows console row still joins its argv into a `cmd.exe` command line.**
    `cmd /c start "" cmd /k <argv>` is WP-04's Windows form and is unchanged here, but `cmd.exe`
    does not parse its command line the way `CreateProcess` argv quoting assumes: `&`, `|`, `^`, `<`
    and `>` are its metacharacters and node's win32 argument quoting does not escape them. So on
@@ -4138,7 +4144,8 @@ cannot silently go stale.
    It is the same exposure before and after this change, it belongs to the terminal table rather
    than to either adapter, and rewriting the one launch form that has actually been run on real
    machines was not worth folding into a security fix for a different bug. Named here so it is not
-   mistaken for covered.
+   mistaken for covered.~~ **Closed by §96**, which rewrote the row's quoting and measured both
+   the defect and the fix on the reference Windows machine.
 
 ### Acceptance
 
@@ -4563,3 +4570,133 @@ reference machine, then a real interactive session raising a real prompt,
 answered from the panel, and the session carrying on. Until that has been done
 and recorded here, WP-19 is not accepted and the feature is not spoken about
 outside this file and the changelog's own hedged entry.
+## 96. Windows launch quoting — the one row that had been run, and the metacharacter it let through
+
+**Spec:** `08-PLAN-V2-100X.md` §1.1 rule 8 and rule 11; `07-AGENT-HANDOVERS.md` Agent Backend's
+"argv arrays only, never shell strings with interpolated user data". §95's third residual named
+this and left it; this entry closes it.
+
+**The defect, measured.** WP-04's Windows row was
+
+```
+cmd /c start "" cmd /k <argv>
+```
+
+spawned as an argv array, on the assumption that argv arrays are safe. They are — for
+`CreateProcess`. `start` is not a program: it is an internal `cmd.exe` command, so `cmd.exe`
+re-parses the whole command line after it, and `cmd.exe`'s parser is not `CreateProcess`'s. Node's
+win32 argument quoting wraps a value in quotes only when it contains a space, a tab or a quote, so
+`&`, `|`, `^`, `<` and `>` arrived bare, where `cmd.exe` reads them as syntax.
+
+Run on the reference Windows 11 machine, old form:
+
+| Value passed as one argv element | What the launched program received                       |
+| -------------------------------- | -------------------------------------------------------- |
+| `a & b`                          | `a & b` — survived, because the spaces made node quote it |
+| `x&y`                            | **`x`** — `&y` was taken by `cmd.exe` as a second command |
+
+That is the whole bug in one row. A session id arrives in a request body (`POST /api/open`,
+`POST /api/resume`), so this is §28's failure with the target moved to the id, on the one platform
+whose launch form had actually been exercised.
+
+**Shipped.** The row builds its own command line and tells node not to touch it:
+
+```
+cmd.exe /d /s /c start "" /d "<cwd>" cmd /d /s /k <program> "<arg>" "<arg>"
+```
+
+with `windowsVerbatimArguments: true`. Every piece is load-bearing:
+
+- **`/d`, twice, meaning two different things.** On `cmd.exe` it suppresses the AutoRun registry
+  commands, so nothing a user's registry names runs inside a window DeckHQ opened. On `start` it
+  is the working directory.
+- **`/s` on both.** Documented as: if the first character after `/c` (or `/k`) is a quote, strip
+  it and the last quote on the line. Neither line starts with a quote — `start` and the program
+  name are bare words — so nothing is stripped and every argument keeps its quotes. This is why
+  the program name must be a bare word, and why this needs none of the doubled-quote trick
+  `editor.mjs` uses (there the first token is an absolute path and has to be quoted).
+- **`/d "<cwd>"`.** The working directory used to be inherited through two processes from
+  `spawn()`'s `cwd` alone. It is now also stated, which is the belt and braces every Linux row
+  already had — and it means the cwd is a value this module quotes rather than one it hopes about.
+- **The quotes, and the two characters refused rather than escaped.** `&`, `|`, `^`, `<`, `>` and
+  `()` are literal inside double quotes. `"` and `%` are not: `cmd.exe` has no escape for a quote
+  inside a quoted string, and `%VAR%` expands inside quotes. Both are refused.
+
+**The quoting helper is shared, not duplicated.** WP-47 solved the same problem for `code.cmd`
+(§90) and its rule lived inside `src/core/editor.mjs`. It moved to `src/core/cmdline.mjs` —
+`cmdUnsafe`, `assertCmdSafe`, `cmdQuote`, `cmdRefusal`, `isCmdBareWord` — and both callers use it.
+There is exactly one definition in the tree of what `cmd.exe` can be handed.
+
+### The refusal, and why it is a refusal
+
+An escaping scheme across three levels of re-parsing (node → `cmd.exe` → `start` → the inner
+`cmd.exe`) is a thing to get subtly wrong. Refusing is not.
+
+The error says why it is almost certainly not about the user: _"A Claude Code session id is a UUID
+and never contains them, and a project folder with a `%` in its name is rare — so this is worth
+looking at rather than working around."_ A `"` cannot appear in a Windows path at all.
+
+`launchTerminal()` normally swallows a candidate's failure and walks on to the next emulator. It
+re-throws this one, on `err.code === 'ERR_DECKHQ_CMD_UNSAFE'`: a value that cannot be quoted is a
+fact about the id or the folder, not about the emulator, and no other terminal can make a `%` safe.
+Swallowing it would have replaced a message that says what is wrong with "Could not open a
+terminal." Tested.
+
+### Deviations from §91 as written
+
+1. **The Windows row is no longer an argv array, and §91's "argv arrays end to end" claim was
+   false on Windows.** It is corrected in place there rather than quietly dropped. The security
+   claim for this row is now a different one: the id and the cwd are each **one double-quoted word
+   of a command line**, and no `cmd.exe` metacharacter is left outside a quoted region. That is
+   asserted by reading the generated line back through `cmd.exe`'s own quoting rule
+   (`unquoteCmdLine`) and by a scan that collects every metacharacter outside quotes
+   (`bareMetachars`) — which must come back empty.
+2. **`Launch` grew a `spawnOptions` field.** One launch form out of twenty-one needs a `spawn()`
+   option, so the option travels with the form rather than being special-cased at the call site.
+   A test asserts that `windowsVerbatimArguments` is set for exactly the Windows pair and for no
+   other, so nothing else can quietly take responsibility for its own quoting.
+3. **The program name is validated, though it is never user data.** DeckHQ's own adapters pass
+   `claude` and `codex`. It is the one token left unquoted, so it is checked against
+   `/^[A-Za-z0-9._+-]+$/` rather than trusted by convention — a guard against a future caller, not
+   against the browser.
+
+### Verified on a real machine
+
+This is the one launch form in `terminals.mjs` that can be run where it was written, and §1.1 rule
+11 says a documented claim is a hypothesis until it is. Both forms were launched on Windows 11
+(Home, 10.0.28000) from node, detached, with a working directory of `…\scratchpad\probe dir & co`
+— a space and an `&` — running `node probe.mjs "a & b" "x&y|z^w<v>u"`, where `probe.mjs` writes its
+own `process.cwd()`, `process.argv` and `process.ppid` to a file:
+
+- **Old form:** the window opened, and the probe received `["…\probe.mjs", "a & b", "x"]`. The
+  `&y` was gone — eaten by `cmd.exe` as a command separator. That is the defect, observed.
+- **New form:** the window opened; `process.cwd()` came back as `C:\…\scratchpad\probe dir & co`
+  exactly, and `process.argv` as `["…\probe dir & co\probe.mjs", "a & b", "x&y|z^w<v>u"]` — every
+  one of `&`, `|`, `^`, `<`, `>` intact. The console process's own command line, read back with
+  `Win32_Process`, was `cmd  /d /s /k node "…\probe dir & co\probe.mjs" "a & b" "x&y|z^w<v>u"`,
+  and it was still alive four seconds later, so `/k` holds the window open as intended.
+- The new form was then run again through the **shipped entry point** — `launchTerminal()` itself,
+  not a replica of the line — with the same result, and a second call with a cwd of `…\100%dir`
+  rejected with `ERR_DECKHQ_CMD_UNSAFE` and the refusal message in full. Every window opened for
+  these runs was closed afterwards.
+
+### Acceptance
+
+Nine new tests in `test/unit/terminals.test.mjs`, and the four Windows assertions across
+`terminals.test.mjs` and `codex-terminal.test.mjs` rewritten for a command line rather than an
+argv:
+
+- the exact command line for an ordinary id and cwd, byte for byte, plus its `spawnOptions`;
+- `windowsVerbatimArguments` is set for the Windows pair and for no other pair on any platform;
+- `SECURITY:` a cwd of `C:\Users\ada\R&D projects\deckhq` and an argument of `a&b c` — a space and
+  an `&`, the exact shape node's quoting got wrong — recovered as single words;
+- `SECURITY:` `x&y|z^w<v>u(t)` survives as text, and no metacharacter is outside quotes;
+- `SECURITY:` `"`, `%VAR%` and a control character in the id are refused, with `err.code` and the
+  message asserted, including the two sentences that tell the user this is not normal;
+- `SECURITY:` the same for the working directory;
+- `SECURITY:` a program name that is not a bare word is refused;
+- `SECURITY:` `launchTerminal()` surfaces a refusal rather than reporting "Could not open a
+  terminal", and starts nothing;
+- `launchTerminal()` forwards the form's `spawnOptions` to `spawn()`.
+
+777 tests to 786. `npm run lint`, `npm run format:check` and `npm test` clean.

@@ -256,6 +256,22 @@
 
 ### Fixed
 
+- **SECURITY: on Windows, a session id containing `&` was split into two commands.** Opening a
+  session in a console goes through `start`, which is an internal `cmd.exe` command rather than a
+  program, so `cmd.exe` re-parses the whole command line after it — and Node's Windows argument
+  quoting wraps a value only when it contains a space, a tab or a quote, leaving `&`, `|`, `^`,
+  `<` and `>` bare for `cmd.exe` to read as syntax. Measured on Windows 11: an argument of `x&y`
+  reached the launched program as `x`. The session id arrives in a request body, so this was the
+  same class of problem as the Codex one below, on the one platform whose launch form had
+  actually been run. DeckHQ now builds that command line itself, with every value double-quoted
+  and handed over with `windowsVerbatimArguments`, and the two characters that can escape a
+  double-quoted `cmd` argument — `"` and `%` — are refused with an error that says why rather
+  than escaped: a Claude Code session id is a UUID and a folder with a `%` in its name is rare.
+  The working directory is now named on the line too (`start /d`) instead of inherited through
+  two processes. The quoting rule is the one WP-47 already worked out for `code.cmd`, moved into
+  `src/core/cmdline.mjs` so there is one definition of it. Both the defect and the fix were
+  launched for real, with a working directory containing a space and an `&`.
+  `docs/DEVIATIONS.md` §96.
 - **SECURITY: a Codex session id reached a shell.** Opening a Codex session in a terminal built
   its command as a shell string on both POSIX platforms — an AppleScript
   `do script "cd \"<cwd>\" && codex resume <id>"` on macOS, and `bash -lc "codex resume <id>"` on
