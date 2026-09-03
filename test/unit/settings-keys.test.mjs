@@ -114,6 +114,13 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // row says when they do — is an open decision for the owner. Until that is
   // answered it is `deckhq --notify` and a POST to /api/settings, not a
   // toggle somebody flips without reading it.
+  //
+  // `postcardDay` (WP-18) and `wrappedShown` (WP-27) are the eighth and ninth,
+  // and they are exempt for `onboarded`'s reason exactly: they are facts, not
+  // preferences. They record which day's card and which week's Wrapped have
+  // already been shown, so the card cannot be earned twice by two tabs. The
+  // preference beside them — `lightsOutHour`, WHEN the card arrives — does
+  // have a row, in the Floor section.
   const sheetOwned = new Set(SETTINGS_KEYS);
   const exempt = new Set([
     'approveText',
@@ -123,6 +130,8 @@ test('the settings sheet offers every setting a person can meaningfully change',
     'goneHomeDays',
     'ledgerRetentionDays',
     'osNotify',
+    'postcardDay',
+    'wrappedShown',
   ]);
   const missing = Object.keys(DEFAULT_SETTINGS).filter((k) => !sheetOwned.has(k) && !exempt.has(k));
   assert.deepEqual(

@@ -1785,6 +1785,121 @@ button {
 }
 /* ==================================================== end WP-15 block */
 
+/* ======================================================================
+   WP-18 / WP-27 · LIGHTS OUT — the daily postcard and Wrapped
+   docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md §3.3, §3.4.
+
+   The night overlay is WP-15's warm run backwards. The office-cleared
+   moment lifts the light 6% towards tungsten for 1.2 s and lets it fall;
+   this one takes it DOWN, towards the cold end of the same palette, and
+   leaves it there until the card is dismissed. Same idea, opposite
+   direction, same restraint: it is one translucent layer over the floor
+   with `pointer-events: none`, and nothing in the renderer knows it
+   exists.
+
+   `prefers-reduced-motion` removes the fade and keeps the dim — the same
+   split §9 makes for the warm: the state is the information, the
+   transition is the decoration. The card appears either way.
+   ====================================================================== */
+.night-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  opacity: 0;
+  /* Cold, deep, and toward --bg rather than to black: the floor should read
+     as an office after hours, not as a switched-off screen. */
+  background: radial-gradient(
+    140% 110% at 50% 30%,
+    rgba(19, 20, 25, 0.46) 0%,
+    rgba(9, 10, 14, 0.82) 100%
+  );
+  transition: opacity 1200ms ease;
+}
+.night-overlay.is-shown {
+  opacity: 1;
+}
+
+.nightcard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: min(34rem, calc(100% - 2.5rem));
+  max-height: calc(100% - 3rem);
+  overflow-y: auto;
+  margin: 0;
+  padding: 1.4rem 1.5rem 1.15rem;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+  /* One click anywhere on it dismisses it, so it must take the pointer —
+     unlike the office-cleared line, which is a caption and never a target. */
+  cursor: pointer;
+}
+.nightcard-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.nightcard-sub {
+  margin: 0.3rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.nightcard-rows {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.5rem;
+}
+/* The postcard's rows are prose — one sentence each, no label. Wrapped's
+   carry a label in the quiet mono face, in a column of its own. */
+.nightcard-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.nightcard-row.has-label {
+  grid-template-columns: 8.5rem 1fr;
+  gap: 0.6rem;
+}
+.nightcard-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  padding-top: 0.18rem;
+  overflow-wrap: anywhere;
+}
+.nightcard-foot {
+  margin: 0.95rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.nightcard-hint {
+  margin: 0.75rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .night-overlay {
+    transition: none;
+  }
+}
+[data-motion='reduce'] .night-overlay {
+  transition: none;
+}
+/* WP-18 / WP-27 · lights out — end ---------------------------------------- */
+
 /* ---------------------------------------------------------- hooks dialog
    Restraint pass: each runtime's section is separated from the next by a
    hairline rule instead of a bordered card. */

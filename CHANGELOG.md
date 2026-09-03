@@ -8,6 +8,17 @@
 
 ### Added
 
+- **Lights out: one card at the end of the day.** At 22:00 — or as soon as the last live session
+  ends, if the evening is already under way — the floor dims to night and a single card appears:
+  _"Friday. 40 turns across 6 rooms. `orbital-api` shipped 6, `checkout-flow` waited 4h 3m. 6
+  agents still up. ≈ $39.46 list price, rate card 2026-09-04. Longest wait today: 1d 2h → still
+  standing."_ Every number is a replay of the event ledger. It appears **once per local day**,
+  Escape or a click dismisses it, `S` saves it as a PNG with a small photograph of the floor it is
+  about, and it never comes back on its own — Stardew Valley's day-end save, not a summons. The
+  hour is `settings.lightsOutHour` in the settings sheet's Floor section, and `⌘K` → "Today's
+  card" shows it again without spending the day's. Nothing in it addresses you, and that is a test
+  rather than a convention: the copy generator is driven over synthetic ledgers and every string
+  literal in the file is scanned for a second person. `docs/DEVIATIONS.md` §117.
 - **`deckhq doctor --share` prints the report as a fenced block you can paste anywhere.** The same
   numbers as the report — transcripts, running now, on the floor, waiting on you, hooks, egress —
   with everything that belongs to you taken out: no paths, no project names, no machine name, no

@@ -20,8 +20,12 @@ import {
   STRIP,
   WORDMARK,
   compactTokens,
+  CARD,
   composite,
+  compositeCard,
   drawStrip,
+  layoutCard,
+  wrapText,
   formatMoney,
   formatWait,
   nextScaleDown,
@@ -364,4 +368,109 @@ test('the daemon names the file from its own clock, in local time', () => {
     snapshotFilename(new Date('2026-09-04T14:22:34')),
   );
   assert.match(snapshotFilename(new Date('2026-01-02T03:04:05')), /^deckhq-20260102-030405\.png$/);
+});
+
+// ---------------------------------------------------- WP-18 / WP-27 · the card
+
+/**
+ * The card image goes through the same compositor, the same size budget and
+ * the same resampling rule as the floor snapshot — deliberately, because
+ * §3.2's acceptance was measured against those and a second implementation
+ * would have to be measured again. What differs is the shape: the floor is a
+ * band at the top rather than the picture, and the words are the subject.
+ */
+const CARD_MODEL = {
+  title: 'Tuesday.',
+  subtitle: '1 Sep – 8 Sep',
+  rows: [
+    { label: null, value: '14 turns across 4 rooms.' },
+    { label: 'Longest wait', value: 'Longest wait today: 1d 2h → cleared.' },
+  ],
+  footer: 'Generated on this machine, from this machine. Nothing left it.',
+};
+
+test('the card wraps its own text, and never breaks a word to do it', () => {
+  const ctx = { measureText: (t) => ({ width: String(t).length * 10 }) };
+  assert.deepEqual(wrapText(ctx, 'one two three four', 100), ['one two', 'three four']);
+  assert.deepEqual(wrapText(ctx, '', 100), []);
+  // A word wider than the box is left long: a truncated project name is worse
+  // than a line that overhangs.
+  assert.deepEqual(wrapText(ctx, 'supercalifragilistic', 50), ['supercalifragilistic']);
+});
+
+test('the card is measured before it is drawn, and its height follows its copy', () => {
+  const ctx = { measureText: (t) => ({ width: String(t).length * 8 }), font: '' };
+  const opts = { fontSans: 'x', fontMono: 'y', thumb: false };
+  const short = layoutCard(ctx, { title: 'Tuesday.', rows: [] }, opts);
+  const long = layoutCard(ctx, CARD_MODEL, opts);
+  assert.equal(short.width, CARD.width);
+  assert.ok(long.height > short.height, 'more copy did not make a taller card');
+  // The thumbnail band is added to the height, not overlaid on the text.
+  const withThumb = layoutCard(ctx, CARD_MODEL, { ...opts, thumb: true });
+  assert.equal(withThumb.height - long.height, CARD.thumbHeight);
+});
+
+test('the card composite draws the floor as a band and the words under it', () => {
+  const calls = [];
+  const ctx = new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        if (prop === 'measureText') return (t) => ({ width: String(t).length * 6 });
+        return (...args) => calls.push([String(prop), ...args]);
+      },
+      set() {
+        return true;
+      },
+    },
+  );
+  const made = [];
+  const out = compositeCard({
+    floor: { width: 2400, height: 1400 },
+    dpr: 2,
+    model: CARD_MODEL,
+    scale: 2,
+    colors: { bg: '#000', surface: '#111', line: '#222', ink: '#fff', ink2: '#eee', muted: '#999' },
+    makeCanvas: (w, h) => {
+      made.push([w, h]);
+      return { width: w, height: h, getContext: () => ctx };
+    },
+  });
+  // A 1x1 scratch canvas to measure with, then the real one at CARD.width x 2.
+  assert.deepEqual(made[0], [1, 1]);
+  assert.equal(out.width, CARD.width * 2);
+  const drawn = calls.find((c) => c[0] === 'drawImage');
+  assert.ok(drawn, 'the floor was never drawn into the card');
+  const texts = calls.filter((c) => c[0] === 'fillText').map((c) => c[1]);
+  assert.ok(texts.includes('Tuesday.'));
+  assert.ok(texts.includes('Longest wait'), 'a labelled row lost its label');
+  assert.ok(texts.includes(WORDMARK), 'the card lost the wordmark');
+});
+
+test('a card with no floor to photograph is still a card', () => {
+  // `S` from a tab whose canvas is hidden — the empty machine, or a renderer
+  // that failed to load. The words are the point; the picture is evidence.
+  const made = [];
+  const out = compositeCard({
+    floor: null,
+    model: CARD_MODEL,
+    scale: 2,
+    colors: {},
+    makeCanvas: nullCanvas(made),
+  });
+  assert.equal(out.width, CARD.width * 2);
+  assert.ok(out.height > 0);
+});
+
+test('the card honours the same resolution floor as the office snapshot', () => {
+  const made = [];
+  compositeCard({
+    floor: null,
+    model: CARD_MODEL,
+    scale: 1,
+    colors: {},
+    makeCanvas: nullCanvas(made),
+  });
+  // made[0] is the 1x1 scratch canvas; made[1] is the image.
+  assert.equal(made[1][0], CARD.width * MIN_SCALE, 'a 1x request produced a 1x card');
 });

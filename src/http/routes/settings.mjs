@@ -106,6 +106,13 @@ export function register(router, ctx) {
       // non-number would silently become the default, so it is rejected here
       // where the caller can be told.
       if (k === 'ledgerRetentionDays' && !(typeof v === 'number' && Number.isFinite(v))) continue;
+      // WP-18. `lightsOutHour` is a number the store clamps to 0..23; anything
+      // else would silently become 22 and the user would be told nothing.
+      if (k === 'lightsOutHour' && !Number.isFinite(Number(v))) continue;
+      // WP-18 / WP-27. The two "which card has been seen" markers are short
+      // opaque keys the client writes and reads back. Only a string is a
+      // candidate; the store drops anything that is not a short token.
+      if ((k === 'postcardDay' || k === 'wrappedShown') && typeof v !== 'string') continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

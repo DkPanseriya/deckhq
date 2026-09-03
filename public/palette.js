@@ -302,6 +302,30 @@ export function buildCommandEntries(ctx) {
       run: () => actions.toggleRedaction(),
     },
     {
+      // WP-18. The card arrives once a day on its own; this is how you get it
+      // back, and how somebody who has never seen it finds out it exists. It
+      // carries no accelerator — `t` is not spent on it because showing a card
+      // again is not a two-keystroke everyday action, and a wrong `t` would be
+      // a modal appearing over the floor.
+      id: 'cmd:postcard',
+      group: 'command',
+      label: "Today's card",
+      hint: 'the day so far, from the ledger',
+      keywords: ['postcard', 'day', 'lights out', 'night', 'daily', 'summary', 'recap'],
+      run: () => actions.showPostcard(),
+    },
+    {
+      // WP-27. Monday's card, on demand. On or after 1 December this is the
+      // annual one, which is the same rule the automatic card follows — there
+      // is one definition of "which Wrapped is this", in `public/wrapped.js`.
+      id: 'cmd:wrapped',
+      group: 'command',
+      label: 'Wrapped',
+      hint: 'the week, or the year from 1 December',
+      keywords: ['week', 'weekly', 'annual', 'year', 'review', 'recap', 'stats'],
+      run: () => actions.showWrapped(),
+    },
+    {
       id: 'cmd:settings',
       group: 'command',
       label: 'Settings',
