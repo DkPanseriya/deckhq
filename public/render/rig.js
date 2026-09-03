@@ -345,12 +345,19 @@ function drawContactShadow(ctx, ox, oy, u) {
   ctx.fill();
 }
 
-function drawSimpleBody(ctx, ox, oy, u, color) {
+/**
+ * L0: two shapes, and the state colour is one of them. `skin` and `build` are
+ * the only parts of an agent's appearance that survive down here — a hat is
+ * three pixels of noise at this scale, so nothing else is drawn (WP-20).
+ * @param {string} [skin] @param {number} [build]
+ */
+function drawSimpleBody(ctx, ox, oy, u, color, skin, build) {
+  const b = build || 1;
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(ox, oy, TORSO_RX * u, TORSO_RY * u, 0, 0, TAU);
+  ctx.ellipse(ox, oy, TORSO_RX * u * b, TORSO_RY * u * b, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = SKIN;
+  ctx.fillStyle = skin || SKIN;
   ctx.beginPath();
   ctx.arc(ox, oy + HEAD_OFFSET_Y * u, HEAD_R * u, 0, TAU);
   ctx.fill();
@@ -394,17 +401,25 @@ function drawLegs(ctx, pose, ox, oy, cosA, sinA, u, color) {
 // `facingRot` (not raw `pose.bodyAngle` — see the FACING CONVENTION comment
 // above `drawCharacter`) so the ellipse's wide axis (TORSO_RX > TORSO_RY)
 // tilts to lie across the character's true lateral direction.
-function drawTorso(ctx, ox, oy, facingRot, u, color) {
+/**
+ * @param {number} [build] per-agent torso scale (WP-20, `AGENT_BUILDS`). It
+ *   scales the ellipse and nothing else: the fill is still `color` — the state
+ *   colour — at full strength, so the one thing the torso has to say is said
+ *   at exactly the contrast it was before.
+ */
+function drawTorso(ctx, ox, oy, facingRot, u, color, build) {
+  const b = build || 1;
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(ox, oy, TORSO_RX * u, TORSO_RY * u, facingRot, 0, TAU);
+  ctx.ellipse(ox, oy, TORSO_RX * u * b, TORSO_RY * u * b, facingRot, 0, TAU);
   ctx.fill();
   ctx.strokeStyle = PALETTE.inkCool;
   ctx.lineWidth = Math.max(0.6, u * 0.035);
   ctx.stroke();
 }
 
-function drawArmStroke(ctx, side, u, color) {
+/** @param {string} [skin] per-agent skin tone (WP-20); defaults to the constant. */
+function drawArmStroke(ctx, side, u, color, skin) {
   const sx = side > 0 ? _rSx : _lSx,
     sy = side > 0 ? _rSy : _lSy;
   const ex = side > 0 ? _rEx : _lEx,
@@ -422,7 +437,7 @@ function drawArmStroke(ctx, side, u, color) {
   ctx.moveTo(ex, ey);
   ctx.lineTo(hx, hy);
   ctx.stroke();
-  ctx.fillStyle = SKIN;
+  ctx.fillStyle = skin || SKIN;
   ctx.beginPath();
   ctx.arc(hx, hy, HAND_R * u, 0, TAU);
   ctx.fill();
@@ -443,11 +458,12 @@ function drawFingerTicks(ctx, side, u, fingerPhase) {
   ctx.stroke();
 }
 
-function drawHead(ctx, ox, oy, cosA, sinA, u) {
+/** @param {string} [skin] per-agent skin tone (WP-20); defaults to the constant. */
+function drawHead(ctx, ox, oy, cosA, sinA, u, skin) {
   rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
   const hx = ox + _rx * u,
     hy = oy + _ry * u;
-  ctx.fillStyle = SKIN;
+  ctx.fillStyle = skin || SKIN;
   ctx.beginPath();
   ctx.arc(hx, hy, HEAD_R * u, 0, TAU);
   ctx.fill();
@@ -461,17 +477,290 @@ function drawHead(ctx, ox, oy, cosA, sinA, u) {
  *   (CONTRACTS-WP15.md §2); defaults to the constant `HAIR` when omitted, so
  *   every existing call site (and the manager — see `drawManagerFigure`,
  *   which always wants the default) is unaffected.
+ * @param {string} [style] one of `palette.js`'s `AGENT_HAIR_STYLES` (WP-20).
+ *   Every style is the same back-of-the-head cap plus at most one extra shape,
+ *   because outline is the only thing that survives at 16 px — a fringe drawn
+ *   in three pixels is noise, a bun that changes the head's silhouette is not.
+ *   Omitted (or unrecognised) draws `crop`, exactly what this rig drew before.
  */
-function drawHair(ctx, ox, oy, cosA, sinA, u, facingRot, hairColor) {
+function drawHair(ctx, ox, oy, cosA, sinA, u, facingRot, hairColor, style) {
   rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
   const hx = ox + _rx * u,
     hy = oy + _ry * u;
   const backAngle = facingRot + Math.PI / 2;
+  const r = HEAD_R * u;
+  // Unit vectors: `b` points out of the back of the head, `s` across it.
+  const bx = Math.cos(backAngle),
+    by = Math.sin(backAngle);
+  const sx = -by,
+    sy = bx;
   ctx.fillStyle = hairColor || HAIR;
+
+  if (style === 'bun') {
+    // Drawn first so the cap overlaps it — a bun sits behind the head.
+    ctx.beginPath();
+    ctx.arc(hx + bx * r * 0.92, hy + by * r * 0.92, r * 0.42, 0, TAU);
+    ctx.fill();
+  } else if (style === 'long') {
+    // A fall of hair down the back, past the shoulder line.
+    ctx.beginPath();
+    ctx.moveTo(hx + sx * r * 0.9, hy + sy * r * 0.9);
+    ctx.lineTo(hx + sx * r * 0.72 + bx * r * 2.0, hy + sy * r * 0.72 + by * r * 2.0);
+    ctx.lineTo(hx - sx * r * 0.72 + bx * r * 2.0, hy - sy * r * 0.72 + by * r * 2.0);
+    ctx.lineTo(hx - sx * r * 0.9, hy - sy * r * 0.9);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // The cap itself. `short` sits tighter to the skull, everything else keeps
+  // the 0.96 the rig has always used.
+  const capR = style === 'short' ? r * 0.86 : r * 0.96;
   ctx.beginPath();
-  ctx.arc(hx, hy, HEAD_R * u * 0.96, backAngle - Math.PI / 2, backAngle + Math.PI / 2);
+  ctx.arc(hx, hy, capR, backAngle - Math.PI / 2, backAngle + Math.PI / 2);
   ctx.closePath();
   ctx.fill();
+
+  if (style === 'bob') {
+    // Two blunt side tabs level with the jaw: the outline change that reads
+    // as a bob rather than as a crop.
+    for (const side of SIDES) {
+      ctx.beginPath();
+      ctx.ellipse(
+        hx + sx * side * r * 0.82 + bx * r * 0.18,
+        hy + sy * side * r * 0.82 + by * r * 0.18,
+        r * 0.3,
+        r * 0.52,
+        backAngle,
+        0,
+        TAU,
+      );
+      ctx.fill();
+    }
+  } else if (style === 'tuft') {
+    // A single spike off the crown, forward of the cap.
+    ctx.beginPath();
+    ctx.moveTo(hx - bx * r * 0.5 + sx * r * 0.34, hy - by * r * 0.5 + sy * r * 0.34);
+    ctx.lineTo(hx - bx * r * 1.3 + sx * r * 0.1, hy - by * r * 1.3 + sy * r * 0.1);
+    ctx.lineTo(hx - bx * r * 0.45 - sx * r * 0.2, hy - by * r * 0.45 - sy * r * 0.2);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ------------------------------------------------ per-agent appearance (WP-20)
+
+/**
+ * The outfit accent: the back hem of a shirt, a short band across the rear of
+ * the torso.
+ *
+ * Two decisions, both from looking at it at magnification. It is a STROKE on a
+ * chord rather than a fill over the body, because the torso's colour is the
+ * state and must keep its area and its contrast (VISUAL-SPEC §3/§5). And it is
+ * SHORT and set well back — a first pass spanned nearly the full width at the
+ * midline, and from directly above that reads as a stripe bisecting the body
+ * rather than as a garment, which took the eye off the state colour it was
+ * supposed to sit quietly inside. Half the width, further back, and it reads
+ * as a hem.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} ox @param {number} oy @param {number} cosA @param {number} sinA
+ * @param {number} u @param {number} build @param {string} accent
+ */
+function drawWaistband(ctx, ox, oy, cosA, sinA, u, build, accent) {
+  const halfW = TORSO_RX * build * 0.46;
+  const y = TORSO_RY * build * 0.62;
+  rotateLocal(-halfW, y, cosA, sinA);
+  const ax = ox + _rx * u,
+    ay = oy + _ry * u;
+  rotateLocal(halfW, y, cosA, sinA);
+  const bx = ox + _rx * u,
+    by = oy + _ry * u;
+  ctx.strokeStyle = accent;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(1, u * 0.1);
+  ctx.beginPath();
+  ctx.moveTo(ax, ay);
+  ctx.lineTo(bx, by);
+  ctx.stroke();
+}
+
+/**
+ * Glasses: two lens rings on the forward face of the head. The head carries no
+ * features at all, so these are the only thing on it that says which way it is
+ * looking — which is why they are drawn forward of centre rather than centred.
+ *
+ * L2 only. At L1 a lens is under a pixel across and becomes a smudge on the
+ * face, which reads as dirt rather than as a person who wears glasses.
+ */
+function drawGlasses(ctx, ox, oy, cosA, sinA, u, facingRot) {
+  rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
+  const hx = ox + _rx * u,
+    hy = oy + _ry * u;
+  const r = HEAD_R * u;
+  const fx = -Math.cos(facingRot + Math.PI / 2),
+    fy = -Math.sin(facingRot + Math.PI / 2);
+  const sx = -fy,
+    sy = fx;
+  const cx = hx + fx * r * 0.34,
+    cy = hy + fy * r * 0.34;
+  const lensR = r * 0.23;
+  const gap = r * 0.32;
+  ctx.strokeStyle = PALETTE.inkCool;
+  ctx.lineWidth = Math.max(0.6, u * 0.045);
+  ctx.beginPath();
+  ctx.arc(cx + sx * gap, cy + sy * gap, lensR, 0, TAU);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(cx - sx * gap, cy - sy * gap, lensR, 0, TAU);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx + sx * (gap - lensR), cy + sy * (gap - lensR));
+  ctx.lineTo(cx - sx * (gap - lensR), cy - sy * (gap - lensR));
+  ctx.stroke();
+}
+
+/**
+ * The rarity traits (WP-20; docs/plan/08 §7). One per agent, drawn after the
+ * hair so nothing occludes it, and every one of them off the torso: the state
+ * colour keeps its area and the state icon keeps the slot above the head.
+ *
+ * `glow` is the exception to "after the hair" — it goes behind the body, and
+ * `drawCharacter` calls it separately, early.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} ox @param {number} oy @param {number} cosA @param {number} sinA
+ * @param {number} u @param {number} facingRot @param {number} build
+ * @param {string} trait @param {string} colour
+ */
+function drawRarityTrait(ctx, ox, oy, cosA, sinA, u, facingRot, build, trait, colour) {
+  rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
+  const hx = ox + _rx * u,
+    hy = oy + _ry * u;
+  const r = HEAD_R * u;
+  const backAngle = facingRot + Math.PI / 2;
+  const bx = Math.cos(backAngle),
+    by = Math.sin(backAngle);
+  const sx = -by,
+    sy = bx;
+  // On a plan view the crown of the head is its far side from the body, which
+  // is the direction the character faces — the exact opposite of `backAngle`,
+  // the direction the hair cap is drawn in.
+  const ux = -bx,
+    uy = -by;
+
+  switch (trait) {
+    case 'hat': {
+      // A cap seen from above: a brim, a darker crown inside it, and a rim
+      // line so it reads as an object on the head rather than as a coloured
+      // disc where a head used to be — which is what the first pass, an
+      // unlined ellipse a fifth wider than the skull, actually looked like.
+      // It is set back so the brow still shows in front of it.
+      ctx.fillStyle = colour;
+      ctx.beginPath();
+      ctx.ellipse(hx + bx * r * 0.14, hy + by * r * 0.14, r * 1.0, r * 0.9, backAngle, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = PALETTE.inkWarm;
+      ctx.lineWidth = Math.max(0.6, u * 0.035);
+      ctx.stroke();
+      ctx.fillStyle = PALETTE.inkWarm;
+      ctx.globalAlpha = 0.26;
+      ctx.beginPath();
+      ctx.ellipse(hx + bx * r * 0.05, hy + by * r * 0.05, r * 0.58, r * 0.5, backAngle, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case 'scarf': {
+      // A band around the neck plus one short tail trailing off a shoulder.
+      rotateLocal(0, COLLAR_OFFSET_Y, cosA, sinA);
+      const nx = ox + _rx * u,
+        ny = oy + _ry * u;
+      ctx.strokeStyle = colour;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1, u * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(nx - sx * r * 0.7, ny - sy * r * 0.7);
+      ctx.lineTo(nx + sx * r * 0.7, ny + sy * r * 0.7);
+      ctx.stroke();
+      ctx.lineWidth = Math.max(0.8, u * 0.11);
+      ctx.beginPath();
+      ctx.moveTo(nx + sx * r * 0.6, ny + sy * r * 0.6);
+      ctx.lineTo(nx + sx * r * 0.86 + bx * r * 0.9, ny + sy * r * 0.86 + by * r * 0.9);
+      ctx.stroke();
+      break;
+    }
+    case 'jacket': {
+      // A yoke across the shoulders and two lapels: tailoring drawn as an
+      // edge, so the torso's fill — the state — is untouched underneath.
+      const halfW = TORSO_RX * build * 0.9;
+      rotateLocal(-halfW, SHOULDER_OFFSET_Y + 0.06, cosA, sinA);
+      const ax = ox + _rx * u,
+        ay = oy + _ry * u;
+      rotateLocal(halfW, SHOULDER_OFFSET_Y + 0.06, cosA, sinA);
+      const bx2 = ox + _rx * u,
+        by2 = oy + _ry * u;
+      ctx.strokeStyle = colour;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(1, u * 0.17);
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx2, by2);
+      ctx.stroke();
+      rotateLocal(0, COLLAR_OFFSET_Y + 0.1, cosA, sinA);
+      const cx = ox + _rx * u,
+        cy = oy + _ry * u;
+      ctx.lineWidth = Math.max(0.8, u * 0.1);
+      for (const side of SIDES) {
+        ctx.beginPath();
+        ctx.moveTo(cx + sx * side * r * 0.18, cy + sy * side * r * 0.18);
+        ctx.lineTo(
+          cx + sx * side * r * 0.72 + bx * r * 0.7,
+          cy + sy * side * r * 0.72 + by * r * 0.7,
+        );
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'crown': {
+      // Three points on a band, sitting on the crown of the head — outside the
+      // head circle so it is a silhouette, not a decal.
+      ctx.fillStyle = colour;
+      ctx.beginPath();
+      ctx.moveTo(hx + ux * r * 1.0 - sx * r * 0.72, hy + uy * r * 1.0 - sy * r * 0.72);
+      ctx.lineTo(hx + ux * r * 1.0 + sx * r * 0.72, hy + uy * r * 1.0 + sy * r * 0.72);
+      ctx.lineTo(hx + ux * r * 1.62 + sx * r * 0.5, hy + uy * r * 1.62 + sy * r * 0.5);
+      ctx.lineTo(hx + ux * r * 1.22 + sx * r * 0.24, hy + uy * r * 1.22 + sy * r * 0.24);
+      ctx.lineTo(hx + ux * r * 1.7, hy + uy * r * 1.7);
+      ctx.lineTo(hx + ux * r * 1.22 - sx * r * 0.24, hy + uy * r * 1.22 - sy * r * 0.24);
+      ctx.lineTo(hx + ux * r * 1.62 - sx * r * 0.5, hy + uy * r * 1.62 - sy * r * 0.5);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+/**
+ * The legendary `glow`: a soft aura behind the whole figure.
+ *
+ * Deliberately STATIC and deliberately not a floor ring. The two rings this
+ * rig already draws on the floor mean specific things — a pulsing one is a
+ * raised hand, a still one is the current selection — and a third would
+ * dilute both. An aura sits behind the body instead, reads at a glance, and
+ * says nothing about state.
+ */
+function drawGlow(ctx, ox, oy, u, colour) {
+  const prevAlpha = ctx.globalAlpha;
+  ctx.fillStyle = colour;
+  ctx.globalAlpha = 0.16;
+  ctx.beginPath();
+  ctx.ellipse(ox, oy - 0.3 * u, 1.25 * u, 1.5 * u, 0, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 0.12;
+  ctx.beginPath();
+  ctx.ellipse(ox, oy - 0.3 * u, 0.95 * u, 1.15 * u, 0, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = prevAlpha;
 }
 
 // -------------------------------------------------------- identity + suit
@@ -1217,7 +1506,8 @@ function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
  *   label?:string, labelOffsetY?:number, icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean,
  *   tool?:{name:string, summary:string}|null,
- *   identity?:{hair:string, accent:string, glyph:string}|null }} opts
+ *   identity?:{hair:string, accent:string, glyph:string}|null,
+ *   appearance?:import('./palette.js').Appearance|null }} opts
  *   `tool` (WP-52): the agent's `currentTool` from the snapshot, or null. Drawn
  *   as a bubble with the summary at `lod >= 1`, as a tool-class icon at L0 and
  *   under reduced motion, and not at all when a state icon or a waiting badge
@@ -1229,6 +1519,13 @@ function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
  *   colour — regardless; identity rides on hair, a small clothing accent and
  *   a shoulder/back glyph only, and only at `lod >= 1` (L0's `drawSimpleBody`
  *   has no hair or accent layer to carry it).
+ *   `appearance` (WP-20): who this particular session is, from `palette.js`'s
+ *   `appearanceFor(sessionId)` — hair style, skin, an outfit accent, glasses,
+ *   build, and a rarity trait on a minority of agents. Optional and additive:
+ *   omit it and this function draws exactly what it drew before. Nothing here
+ *   touches the torso fill, the state icon or the badge, so the two things the
+ *   floor has to say — what state this session is in and whether it is waiting
+ *   on you — read identically with or without it, at every LOD.
  */
 export function drawCharacter(ctx, pose, opts) {
   const ox = opts.x,
@@ -1238,6 +1535,10 @@ export function drawCharacter(ctx, pose, opts) {
     color = opts.color;
   const reduced = !!opts.reduced;
   const identity = opts.identity || null;
+  const appearance = opts.appearance || null;
+  const skin = appearance ? appearance.skin : undefined;
+  const build = appearance ? appearance.build : 1;
+  const trait = appearance ? appearance.trait : null;
   // See the FACING CONVENTION comment above — rotating by pose.bodyAngle
   // directly (instead of facingRot) is the bug this file used to have.
   const facingRot = pose.bodyAngle + Math.PI / 2;
@@ -1246,29 +1547,73 @@ export function drawCharacter(ctx, pose, opts) {
 
   if (pose.ring) drawFloorRing(ctx, ox, oy, u, pose.ringPhase, color, reduced);
   if (opts.selected) drawSelectionRing(ctx, ox, oy, u);
+  // Behind everything, including the contact shadow: an aura the body stands
+  // in, not a mark on the body (WP-20's legendary `glow`).
+  if (trait === 'glow' && lod >= 1) drawGlow(ctx, ox, oy, u, appearance.traitColor);
 
   drawContactShadow(ctx, ox, oy, u);
 
   if (lod === 0) {
-    drawSimpleBody(ctx, ox, oy, u, color);
+    drawSimpleBody(ctx, ox, oy, u, color, skin, build);
   } else {
     const by = oy + pose.bob * (u / BASE_U);
     drawLegs(ctx, pose, ox, by, cosA, sinA, u, color);
-    drawTorso(ctx, ox, by, facingRot, u, color);
+    drawTorso(ctx, ox, by, facingRot, u, color, build);
+    // The outfit accent goes on before the arms, so a sleeve crosses it.
+    if (appearance) drawWaistband(ctx, ox, by, cosA, sinA, u, build, appearance.accent);
+    if (trait === 'jacket') {
+      drawRarityTrait(
+        ctx,
+        ox,
+        by,
+        cosA,
+        sinA,
+        u,
+        facingRot,
+        build,
+        'jacket',
+        appearance.traitColor,
+      );
+    }
 
     computeArmGeometry(ox, by, cosA, sinA, u, 1, pose.armR.shoulder, pose.armR.elbow);
     computeArmGeometry(ox, by, cosA, sinA, u, -1, pose.armL.shoulder, pose.armL.elbow);
 
     if (pose.prop === 'cue') drawCueBehind(ctx, u);
 
-    drawArmStroke(ctx, 1, u, color);
-    drawArmStroke(ctx, -1, u, color);
+    drawArmStroke(ctx, 1, u, color, skin);
+    drawArmStroke(ctx, -1, u, color, skin);
     if (lod >= 2 && pose.armR.hand === 'key') drawFingerTicks(ctx, 1, u, pose.fingerPhase);
     if (lod >= 2 && pose.armL.hand === 'key') drawFingerTicks(ctx, -1, u, pose.fingerPhase);
 
-    drawHead(ctx, ox, by, cosA, sinA, u);
-    drawHair(ctx, ox, by, cosA, sinA, u, facingRot, identity ? identity.hair : undefined);
+    drawHead(ctx, ox, by, cosA, sinA, u, skin);
+    // A rare hair colour is the one place the per-agent channel overrules the
+    // project channel (~2.5% of agents — see DEVIATIONS and palette.js).
+    const hairColor =
+      (appearance && appearance.hairColor) || (identity ? identity.hair : undefined);
+    drawHair(
+      ctx,
+      ox,
+      by,
+      cosA,
+      sinA,
+      u,
+      facingRot,
+      hairColor,
+      appearance ? appearance.hairStyle : undefined,
+    );
     if (identity) drawIdentityMarks(ctx, ox, by, cosA, sinA, u, identity);
+    // A hat covers the hair, so it is drawn over it; the same is true of a
+    // scarf over the collar and a crown over the crown of the head.
+    if (trait === 'hat' || trait === 'scarf' || trait === 'crown') {
+      drawRarityTrait(ctx, ox, by, cosA, sinA, u, facingRot, build, trait, appearance.traitColor);
+    }
+    // Glasses last on the face, and L2 only — see `drawGlasses`. A hat sits
+    // back on the crown, so the brow it would cover is still there to wear
+    // them.
+    if (appearance && appearance.glasses && lod >= 2) {
+      drawGlasses(ctx, ox, by, cosA, sinA, u, facingRot);
+    }
 
     if (pose.prop) drawPropFront(ctx, pose.prop, u);
   }
