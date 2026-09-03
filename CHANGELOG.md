@@ -55,6 +55,21 @@
   `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
   a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
   client-side: the daemon never sees a draft and a draft never touches ack state.
+- **You can see what each agent is doing, from across the room.** DeckHQ now installs
+  `PreToolUse` and `PostToolUse` alongside its other hooks — same tagged block, same consent
+  screen, same exact removal — and keeps the current tool per session: `Bash npm test`,
+  `Edit src/events/backfill.ts`, `Read README.md`, or the tool's own name for everything else,
+  120 characters at most. It shows as a small bubble above the head while the tool runs, as a
+  tool-class icon (file, shell, web) when the floor is zoomed out or reduced motion is on, and as
+  one quiet `doing:` line on the panel header. The bubble yields: an agent with its hand up, an
+  hourglass, a review tick or a waiting badge keeps that, because what needs you outranks what is
+  merely happening. A path outside the session's own working directory is reduced to its file
+  name, so a screenshot of your floor cannot carry someone else's directory tree, and every
+  payload string is flattened to one line of printable text before it is drawn — on canvas with
+  `fillText`, in the panel with `textContent`, never as markup. Nothing about a tool event
+  touches `ackState`, the needs-you count, or the stall clock; there is a named `INVARIANT:` test
+  for exactly that. A tool nobody reported finishing expires with the stall window rather than
+  hanging over a head forever. `docs/DEVIATIONS.md` §88.
 
 ### Changed
 

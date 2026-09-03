@@ -3233,3 +3233,99 @@ populations with a uniform speckle across every project room's floor and nothing
 person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
 tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
 floor (36 px) is unchanged.
+
+## 88. WP-52 — thought bubbles: what the two new hook events are allowed to touch, and what they are not
+
+`08-PLAN-V2-100X.md` §3.5 and §9. `PreToolUse` and `PostToolUse` join the
+tagged hook block; the daemon keeps a `currentTool` per session; the floor
+draws it above the head and the panel header says it in words. Shipped as
+specified. Six decisions the package description did not settle.
+
+**Decision 1 — the two events touch `currentTool` and nothing else.** Not
+`activityState`, not `lastOutputAt`, not `lastActivityAt`, not one field the
+user owns. Two of those are worth spelling out, because both were tempting:
+
+- _Not `activityState`._ A session with its hand up that runs a tool is still a
+  session with its hand up. Moving it to `working` would take a raised hand off
+  the floor without the user ever answering it — an observed event changing the
+  needs-you count, which is the exact shape of the bug `docs/01-PRODUCT.md` §2
+  exists to forbid.
+- _Not `lastOutputAt`._ That field is the stall clock (§4.3), and `stalled` is
+  one of the three states the needs-you count is made of. Letting tool traffic
+  reset it would silently redefine "stalled" from "no turn boundary in ten
+  minutes" to "no tool call in ten minutes" — a real product change, smuggled in
+  as an implementation detail. The consequence is honest and intended: an agent
+  grinding through a twenty-minute build still goes to `stalled`, and its bubble
+  expires with it (decision 3).
+
+`hookLive` IS set, for the same reason every other hook event sets it: a tool
+call is proof the process is running. It cannot move a `for_review` session —
+`endedOr` and `_computeAgents` already guarantee that.
+`INVARIANT: a PreToolUse/PostToolUse event changes no user-owned field` in
+`test/unit/state-machine.test.mjs` drives a two-agent floor — one waiting in the
+office, one benched with its hand up — through six tool events and
+deep-compares every user-owned field plus all six counts.
+
+**Decision 2 — the summary is parsed in the adapter, not the route.**
+`toolSummary()` lives in `src/adapters/claude-code/hooks.mjs` and is exposed as
+`adapter.hooks.toolSummary`; `POST /api/hook` asks the runtime's own adapter
+what its payload says. `tool_input.command`/`file_path` is Claude Code's shape,
+and nothing outside `src/adapters/` may know a runtime's format
+(`02-ARCHITECTURE.md` §2). A runtime with no `toolSummary` — Codex today —
+simply has no bubble, and that costs it nothing else.
+
+**Decision 3 — a bubble expires with the stall window.** `PostToolUse` is not
+guaranteed: kill the runtime mid-tool, block the hook, sleep the machine, and
+"Bash npm test" hangs over a head forever. `tick()` drops any `currentTool`
+older than `stallWindowMs`, before its hook and liveness guards, so the expiry
+also runs on the degraded path. The floor may say nothing; it may not say
+something stale.
+
+**Decision 4 — the bubble yields; it never negotiates.** Above the head is one
+slot. Precedence is state icon, then bubble, then the abstract thought cloud —
+so an agent with a raised hand, an hourglass, a review tick or a waiting badge
+draws no bubble at all, and one that is merely working replaces its cloud with
+the bubble rather than wearing both. A collision-avoidance nudge was considered
+and rejected: "what it is doing" is context, and context that pushes a call to
+action around the screen has been promoted past its station. At L0, and under
+reduced motion at any LOD, the tool CLASS is drawn instead — a file, a shell, a
+globe or a beat — which is `08` §3.5's "station per tool class, as a state icon
+first". Colours stay in the cloud's neutral ink: no state colour, and above all
+no crimson, which means "in your office" and nothing else.
+
+**Decision 5 — a path outside the session's cwd keeps only its basename.** The
+acceptance criterion is that the bubble "never contains project paths outside
+the session's cwd". Dropping such a tool entirely would make the floor go quiet
+exactly when an agent reaches out of its project, which is the moment worth
+seeing; showing the path would put someone else's directory tree in a
+screenshot. So `/home/me/other-client/secret/notes.md` reads `Read notes.md`. A
+relative `file_path` is resolved against the SESSION's cwd, never the daemon's.
+Two `SECURITY:` tests in `test/unit/hooks.test.mjs` hold this, including a
+different Windows drive and a `..` escape.
+
+**Decision 6 — every payload string is flattened before it is anything else.** A
+command line is text this project did not write: it can carry newlines, ANSI
+escapes, a bidi override that reverses the rest of the line, or 4 KB of one
+word. `oneLine()` replaces every `\p{C}` code point with a space, collapses
+whitespace, and cuts to length — 80 characters for a command, 120 for the whole
+summary (`MAX_TOOL_SUMMARY`, in `model.mjs` beside `MAX_LAST_TEXT`). It reaches
+the screen only through `fillText` on canvas and `textContent` in the panel;
+there is no markup path, and the client still has no `innerHTML` at all.
+
+**What did not change.** The demo floor emits no tool events, so the four
+goldens are byte-identical and were not regenerated — a bubble needs a live
+`PreToolUse`, which is what `docs/media/thought-bubble.png` is: `npm run demo`,
+three real `POST /api/hook` calls (a `Bash`, an `Edit`, a `Read`) against three
+working sessions, then `scripts/capture-floor.mjs`. `public/render/plan.js`,
+`public/app.js` and the WP-08 panel layout are untouched; the panel gained one
+line under the header and nothing was restructured.
+
+**Accepted limits.** `Write`, `MultiEdit` and `Grep` show as their bare names:
+the package specifies four rules (`Bash`, `Edit`, `Read`, otherwise the name)
+and inventing more argument shapes is a spec change, not an implementation
+detail — worth revisiting once the bubble has been watched on a real machine for
+a week. A subagent's tools are attributed to whichever session id the hook
+carries, which is the parent until WP-41 gives subagents their own bodies. And a
+bubble can hang over a neighbouring desk in a crowded room at a tight fit scale;
+it is drawn above every head, so it never covers a face, and it yields entirely
+wherever it would compete with something the user has to act on.

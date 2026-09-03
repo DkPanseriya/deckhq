@@ -152,6 +152,11 @@ The header shows the total plus a breakdown: *hands up* (`needs_input`), *stalle
 | `SubagentStop` | update `lastOutputAt` only; does not change parent state |
 | `SessionEnd` | `live = false`. **`activityState` becomes `ended` only if it is not `for_review`; `reviewSince` is never touched.** A session that finished a turn and then exited still owes you a review. |
 | `SessionStart` | register the session, `live = true`. **`activityState` becomes `working` only if it is not `for_review`; `reviewSince` is never touched.** |
+| `PreToolUse` | set `currentTool = {name, summary, since}` from the adapter's reading of the payload. **Nothing else** — not `activityState`, not `lastOutputAt`, not one user-owned field (WP-52, `docs/DEVIATIONS.md` §88). |
+| `PostToolUse` | clear `currentTool`. Nothing else. |
+
+`currentTool` is also cleared by `Stop`, by `SessionEnd`, and by the tick once it is older than
+`stallWindowMs` — a `PostToolUse` that never arrives must not leave a stale claim on the floor.
 
 Hooks POST to `http://127.0.0.1:<port>/api/hook` with the payload the runtime provides, where
 `<port>` is the port the daemon was actually listening on when the hooks were installed — never a
