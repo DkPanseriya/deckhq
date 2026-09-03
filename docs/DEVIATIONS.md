@@ -8486,9 +8486,12 @@ picks the right project for the file it has open. `npm run typecheck` runs both.
 
 ### The one dependency, and the two it did not get
 
-`typescript` is the dev dependency this package was allowed. `@types/node` and
-`@types/vscode` are not in that budget, so `types/node.d.ts` declares the two
-host platforms by hand — every specifier and member the repository actually
+`typescript` is the dev dependency this package was allowed — `^7.0.2`, which
+is what the registry serves today and is the native compiler rather than the
+JavaScript one. Worth knowing rather than discovering: it is a different
+implementation of the same checks, and the numbers below are its numbers.
+`@types/node` and `@types/vscode` are not in that budget, so `types/node.d.ts`
+declares the two host platforms by hand — every specifier and member the repository actually
 imports, and nothing else, all of it `any`.
 
 **Stated cost, so nobody discovers it later:** a wrong argument to
