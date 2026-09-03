@@ -44,6 +44,7 @@
 import { renderMarkdown } from './markdown.js';
 import { renderDiff } from './diff-view.js';
 import { drafts } from './drafts.js';
+import { recordLineFor } from './records.js';
 
 const STATE_LABELS = {
   working: 'Working',
@@ -79,6 +80,8 @@ const DEFAULT_APPROVE_TEXT = 'Yes, go ahead.';
 const CLOSEUP_PX = 44;
 /** How often the "waiting …" line re-reads the clock while the panel is open. */
 const WAITING_TICK_MS = 30_000;
+/** How long a `GET /api/stats` body is reused for the records line (WP-46). */
+const RECORDS_TTL_MS = 5 * 60_000;
 
 /**
  * The state an agent should LOOK like, which is not always its
@@ -231,6 +234,16 @@ export function createPanel(opts) {
   /** @type {any} */
   let palette = null;
   let renderModulesLoaded = false;
+  /**
+   * WP-46 · the last `GET /api/stats` body, for the records line. Read-only,
+   * refreshed at most every RECORDS_TTL_MS, and never awaited by anything the
+   * user is waiting on: a record is a grace note, and the panel opens at the
+   * same speed whether or not this has ever resolved.
+   * @type {any}
+   */
+  let teamStats = null;
+  let teamStatsAt = 0;
+  let teamStatsInFlight = false;
 
   // ---------------------------------------------------------------- build
   root.textContent = '';
@@ -300,7 +313,16 @@ export function createPanel(opts) {
   doingEl.className = 'panel-doing';
   doingEl.hidden = true;
 
-  top.append(identityRow, titleEl, metaEl, waitingEl, doingEl);
+  // WP-46 · one quiet line, and only when one of the team's records has this
+  // session or its room as its subject: "longest wait ever was here: 2d 12h,
+  // 1 Sep". A record of the team's work, in the third person, never a score
+  // on the person reading it (docs/plan/08 §1.1 rule 6). Absent the whole
+  // time no record involves this agent, which is most of the time.
+  const recordEl = document.createElement('div');
+  recordEl.className = 'panel-record';
+  recordEl.hidden = true;
+
+  top.append(identityRow, titleEl, metaEl, waitingEl, doingEl, recordEl);
 
   // The scrolling body: WHAT IT SAID, the rest of the thread folded beneath
   // it, then WHAT CHANGED.
@@ -491,6 +513,7 @@ export function createPanel(opts) {
       mkChip.append(' ', rarityEl);
     }
     renderDraftChip();
+    renderRecordLine();
 
     // The state line: "✓ FOR REVIEW · orbital-api · main · opus-5".
     metaEl.textContent = '';
@@ -1588,6 +1611,45 @@ export function createPanel(opts) {
     if (currentId && displayedAgent) renderResume();
   }
 
+  /**
+   * WP-46 · fetch the team's records, at most every five minutes.
+   *
+   * A GET, of a replay of a directory of text files. It reads no ack state
+   * and writes nothing at all — see the INVARIANT note at the top of this
+   * file — and it is deliberately not awaited: a failed or slow stats call
+   * costs the records line and nothing else. The records themselves move on
+   * the scale of hours, so five minutes is already far more often than the
+   * answer can change.
+   */
+  function loadTeamRecords() {
+    const age = Date.now() - teamStatsAt;
+    if (teamStatsInFlight || (teamStats && age < RECORDS_TTL_MS)) return;
+    teamStatsInFlight = true;
+    fetch('/api/stats')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        teamStatsInFlight = false;
+        if (!body || typeof body !== 'object') return;
+        teamStats = body;
+        teamStatsAt = Date.now();
+        if (currentId && displayedAgent) renderRecordLine();
+      })
+      .catch(() => {
+        teamStatsInFlight = false;
+      });
+  }
+
+  /**
+   * The records line, or nothing. `textContent` only — the strings come from
+   * `records.js`, and the project name inside one came off the daemon's own
+   * registry, but neither is markup and neither is treated as markup.
+   */
+  function renderRecordLine() {
+    const line = displayedAgent ? recordLineFor(displayedAgent, teamStats) : null;
+    recordEl.textContent = line || '';
+    recordEl.hidden = !line;
+  }
+
   /** @param {boolean} busy @param {string} [label] */
   function setComposerBusy(busy, label) {
     textarea.disabled = busy;
@@ -1721,6 +1783,7 @@ export function createPanel(opts) {
     loadConversation(id);
     loadChanges(id, snapshot?.scannedAt ?? null);
     loadResumeTargets(id);
+    loadTeamRecords();
     if (waitingTimer) clearInterval(waitingTimer);
     waitingTimer = setInterval(renderWaiting, WAITING_TICK_MS);
   }
