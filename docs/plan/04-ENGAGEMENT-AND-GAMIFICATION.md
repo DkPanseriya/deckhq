@@ -50,6 +50,11 @@ The reward is **an empty office**, not points. Zeigarnik: the badge counting up 
 and clearing it is the close. This is why the counter must be honest — an inflated needs-you
 number destroys the loop's value permanently.
 
+**Two rules borrowed from Munder Difflin (`08` §3.5), 3 September.** A celebration animation
+fires only after an agent has been busy for at least 60 seconds, so a two-second tool call does
+not earn a cheer; and every idle or lounge animation is run by a "director" that any real state
+change cancels on the same frame, so a pool shot never delays a hand going up.
+
 **The "office cleared" moment (WP-15)** is the one deliberate celebration in the product: when
 the last waiting agent is discharged, the lights warm slightly, a two-note chime plays, and a
 single line appears — *"Office clear. 7 discharged today, longest wait 26h."* It happens at a
@@ -102,7 +107,7 @@ emits a card:
 
 Stardew Valley's day-end save is the model: an ending, not a demand. It appears once, it does
 not nag, and dismissing it costs nothing. Critically it makes *not looking* safe, which is the
-requirement from [`00-ORCHESTRATOR-BRIEF.md`](00-ORCHESTRATOR-BRIEF.md) §4.
+requirement from [`08-PLAN-V2-100X.md`](08-PLAN-V2-100X.md) §1.2.
 
 ### 3.4 Wrapped — weekly and annual (WP-27, P3)
 
@@ -130,6 +135,25 @@ in the hover card.
 
 *"Ada has been waiting since yesterday"* is a sentence that makes someone open a tab. *"MK3.2 has
 been waiting since yesterday"* is not.
+
+**Rarity (added 3 Sep, part of WP-20).** Claude Buddy's sharing was driven by a deterministic
+per-account hash with 18 species and five rarity tiers (Legendary 1%, Shiny 1 in 10,000); the top
+post drew 4k likes in 48 hours "like a gacha game". Apply the mechanic to the agent, never the
+human: a hat, glasses, a jacket, a rare hair colour sit on tiers (common, uncommon, rare 5%,
+legendary 1%), derived from the session id. State colour stays on the torso and the icon above
+the head. No state changes, nothing is earned, nothing decays.
+
+**Subagents as juniors (WP-41).** Claude Code subagents write their own transcripts. Draw them as
+smaller figures beside the parent for the life of the subagent. It is true, it is the runtime's
+own behaviour, and it is the strongest attachment mechanic available because it is real work.
+
+**Team records (WP-46).** Records of the team's work, never a score on the human: longest wait
+ever and whether it has fallen, busiest day, most turns in a week, the room that never slept.
+Hover card and Wrapped. A falling "longest wait" is the most satisfying number in the product.
+
+**Gone home (WP-40, delivered inside WP-50, the dynamic floor).** 47 of 52 sessions on the reference machine are benched, so the lounge reads
+as a party. Agents benched more than 7 days are not drawn; the lounge door carries the count; any
+activity brings them back. `ackState` is untouched — this is a display filter.
 
 **Traits (WP-28, P3, optional).** Read-only, inferred from real behaviour, never trained and
 never affecting anything: how often it raises its hand, its tool mix, its verbosity, its model.
@@ -222,6 +246,12 @@ it is worth engineering (WP-13).
 | 10 | Cosmetic packs, layout import/export | Medium | High | WP-30 | **P3, ungated** |
 | 11 | Inferred agent traits | Medium | Medium | WP-28 | **P3, optional** |
 | 12 | Named lounge events ("pool tournament") | Low | Medium | — | Cheap, do it as flavour text in P3 |
+| 13 | Agent rarity tiers, deterministic from the session id | Medium | **High** | WP-20 | **Build P1** (added 3 Sep) |
+| 14 | Subagents as juniors beside the parent | High | High | WP-41 | **Build P2** (added 3 Sep) |
+| 15 | Team records | Medium | Medium | WP-46 | **Build P2** (added 3 Sep) |
+| 16 | Gone home: benched > 7 days leave the floor | High (calm floor) | Low | WP-40 | **Build P1** (added 3 Sep) |
+| 17 | Status-line segment in every terminal | **High** | Low | WP-38 | **Build P1** (added 3 Sep) |
+| 18 | Floating mini-floor, always on top | High | Medium | WP-39 | **Build P1** (added 3 Sep) |
 | — | Human streaks | — | — | — | **Never** |
 | — | Global leaderboards / XP / badges | — | — | — | **Never** — export instead |
 | — | Tamagotchi guilt | — | — | — | **Never** |

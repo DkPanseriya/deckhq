@@ -1,7 +1,11 @@
 # 02 — Market, positioning and launch
 
-**Owner:** Growth (with orchestrator sign-off on positioning) · **Depends on:** P0 complete
-**Evidence:** competitive research, 2 Sep 2026. Star counts fetched that day.
+**Owner:** Product Manager (with orchestrator sign-off on positioning) · **Depends on:** P0 complete
+**Evidence:** competitive research, 2 Sep 2026, re-checked 3 Sep. Star counts as of 3 Sep.
+
+> **Updated 3 September for plan v2.** The launch sequence (§4) is superseded by
+> [`08`](08-PLAN-V2-100X.md) §4.3, which leads with `npx deckhq doctor` rather than the GIF.
+> Four market facts changed; they are recorded in `08` §3.0 and reflected in §1 below.
 
 ---
 
@@ -19,12 +23,15 @@
 | Emdash (YC W26) | 5.5k | Apache-2.0 | — | No coordination between agents |
 | Claude Squad | 8.4k | AGPL-3.0 | None | tmux dependency, no native Windows |
 | Terragon | 259 | Apache snapshot | Cloud compute | **Shut down 9 Feb 2026** |
+| **Munder Difflin** (added 3 Sep) | **6.2k** in 3 months | MIT + LimeZu assets | PRO $20/mo, Teams $39/seat | Electron orchestrator with a pixel *Office* floor. Spawns its own agents, cannot see any other; "blocked" is runtime-derived; one fixed 16-seat map; opt-out telemetry; GOD-agent token burn is the top complaint. HN 311 pts. See `08` §3.5. |
 
 ### 1.2 Visualisers — they make agents pretty
 
 | Tool | Stars | Reach | Verdict |
 |---|---|---|---|
-| Pixel Agents | 9.0k | **83k VS Code installs** | The breakout. Pure X virality. No actions. |
+| Pixel Agents | 9.2k | **~82k VS Code installs** | The breakout. Pure X virality. No actions. **Added Codex and Hermes providers 10 Aug 2026** — multi-runtime is no longer ours alone. |
+| Happy | 23.6k | MIT, free | End-to-end encrypted phone client for Claude Code and Codex. Phone approval, free. |
+| Paseo | 15.9k | Apache-2.0 | Phone pairing built in; Claude Code, Codex, Copilot, OpenCode, Pi. |
 | Claw3D | 2.2k | — | Wrong runtime (OpenClaw). Hosted tier never shipped. |
 | claude-office | 507 | — | Hooks-driven pixel office |
 | agent-office / agent-virtual-office | 15 / 13 | — | The 13-star one has the feature the 9,000-star one lacks: **one-click shareable postcard** |
@@ -37,8 +44,10 @@
 | 25 Feb 2026 | Claude Code Remote Control | Phone as a viewport on **one local session** |
 | 2 Apr 2026 | Cursor 3 Agents Window | 8 parallel agents, Cursor only |
 | 14 Apr 2026 | Claude Code Desktop redesign | Sidebar shows **only sessions the app launched** |
-| 11 May 2026 | `claude agents` agent view | Six states — *"Interactive sessions you have open in other terminals don't appear until you background them."* Subagents not listed. |
+| 11 May 2026 | `claude agents` agent view | Groups: Pinned, Ready for review, Needs input, Working, **Completed** (finished, failed and stopped sessions). Covers background sessions and sessions with PRs, not transcripts on disk. On the reference machine on 3 Sep it listed 7 of 69. **Measured, not quoted** — see `01-AUDIT.md` §6 C1 for the retracted version of this row. |
 | May 2026 | `/usage` | Per-session and per-plan. **No cross-repo spend view exists.** |
+| Jul 2026 | Remote Control (`/rc`, `--bg`) | Mirrors one local session to claude.ai and the mobile app; approve tool calls from the phone. **Free on all plans.** |
+| 26 Aug 2026 | Codex `PermissionRequest` hook (0.150.0) | Allow or deny a tool call from a hook; silence falls through to the prompt. Same shape as Claude Code's. |
 
 Anthropic closed the "tell me which session is blocked" request (#36885) as **not planned** on
 26 May 2026.
@@ -84,9 +93,17 @@ rather than a migration.
 
 ## 3. The launch assets
 
-Ranked by expected return. Growth owns these; none of them ships before P0.
+Ranked by expected return. The Product Manager owns these; none of them ships before P0.
 
-### A1 — The capture-proof screenshot (highest value)
+### A0 — `npx deckhq doctor --share` (highest value, added 3 Sep)
+
+A one-line command that prints a personal, true, slightly alarming fact about the reader's own
+machine, as text. It works where images do not — Hacker News, Reddit, Discord, Slack — and it is
+the mechanic ccusage used to reach 18k stars. The launch headline is *"Run `npx deckhq doctor`.
+Post your fourth line."* The floor is what they see when they run the command without `doctor`.
+Wording is governed by the honesty tests in `docs/DEVIATIONS.md` §74. WP-44.
+
+### A1 — The capture-proof screenshot
 
 A single image, split down the middle. Left: `claude agents`, **5 running right now**. Right:
 DeckHQ, **66 on the floor**. Caption: *"Same machine. Same moment."*
@@ -140,6 +157,10 @@ and survived five review passes; the packer that grew the building 2.3× per ite
 year of build-in-public writing that already exists. Post one a week.
 
 ## 4. The launch sequence
+
+> **Superseded 3 September by [`08`](08-PLAN-V2-100X.md) §4.3**, which adds a Wave 3 "inside the
+> runtime" (Claude Code plugin, status line, VS Code) and leads Wave 1 with the doctor output.
+> The reasoning below still holds and is kept for the evidence.
 
 **Do not do a single big-bang launch.** Every tool in §1.1 that spiked and died did one launch
 into one channel. Sequence instead, and let each wave feed the next.
@@ -219,14 +240,17 @@ one click to PNG. Ship it 1 December.
 
 | Risk | Likelihood | Response |
 |---|---|---|
-| Anthropic ships cross-terminal capture in agent view | Medium | They closed #36885 not-planned and their architecture reads their own process list, not the disk. Even then, M2 (the invariant) and M3 (cross-runtime) survive. Diversify to 3+ runtimes in P3 — that is the hedge, and it is already the plan. |
+| Anthropic's agent view lists exited sessions | **Happening.** It has a Completed group for background sessions since v2.1.139; on 3 Sep it still listed 7 of 69 on the reference machine | The PM re-measures `doctor`'s fourth line on the newest build before every launch wave and rewords it the day it stops being true. The invariant (M2) and breadth of capture survive regardless. Diversify to 3+ runtimes in P3. |
 | Anthropic restricts third-party tooling again | Medium | Jan 2026's block on subscription credentials **doubled OpenCode's stars**. DeckHQ reads local files and never proxies auth, so it is not in the blast radius — and the backlash is a tailwind. Say nothing; ship. |
-| "Observational theater" review | **High** | The single most likely negative framing. Pre-empt it: never demo the floor without demoing the Deck and a one-keystroke discharge in the same clip. See [`00`](00-ORCHESTRATOR-BRIEF.md) §4. |
-| Pixel Agents ships the same thing | Medium | They cannot: no ack model, no daemon, no cross-runtime capture, and their state detection is heuristic. Our answer is speed on the invariant, not on the pixels. |
+| "Observational theater" review | **High** | The single most likely negative framing. Pre-empt it: never demo the floor without demoing the Deck and a one-keystroke discharge in the same clip. See [`08`](08-PLAN-V2-100X.md) §1.2. |
+| Pixel Agents ships the same thing | Medium | They now have multiple providers (Codex, Hermes since 10 Aug). They still have no ack model, no daemon and heuristic state detection. Our answer is speed on the invariant and on presence, not on the pixels. |
+| Phone approval is free elsewhere | **Certain** | Remote Control, Happy and Paseo already do it for free. Relay never sells "a phone window"; it sells every session on every machine with history. `08` §3.0.3. |
+| Munder Difflin adds transcript discovery | Medium | It already tail-reads transcripts for cost. If it reads them for state, its floor sees unspawned sessions too. Our answer: the invariant, presence without a tab (status line, mini-floor), per-project dynamic rooms against its fixed map, zero telemetry, and speed. `08` §3.5. |
+| "Another office floor" fatigue | Medium | It got there first with the joke. DeckHQ never leads with the floor: it leads with the number (`doctor`), and the floor is what you see when you run the command. |
 | We spike and die like vibe-kanban | Medium | That is what [`03-BUSINESS-MODEL.md`](03-BUSINESS-MODEL.md) exists to prevent. Note the timing: they launched a paid tier on 3 Feb and shut down on 10 Apr — **two months of selling**. Start the relay in P4, not in month 11. |
 | Windows-first reads as unserious to a Mac audience | Low | Invert it. "Built on Windows, tested on three." The Mac tools ignore half the market; we ignore nobody. Verify macOS in P0 so the claim is true. |
 
-## 7. What Growth must not do
+## 7. What the Product Manager must not do
 
 - No paid ads before the paid tier exists.
 - No "we're better than X" posts. Every competitor's users are our future users; four of them

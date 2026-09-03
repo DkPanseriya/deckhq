@@ -1,15 +1,24 @@
 # 06 — Engineering work plan
 
-**Owner:** orchestrator · 34 work packages across 5 phases
-**Roles:** `PE` Product Engineer · `UX` UI/UX · `AR` Architect · `AB` Agent Backend · `GR` Growth
+**Owner:** orchestrator · 52 work packages across 6 phases
+**Roles:** `PE` Product Engineer · `UX` UI/UX · `AR` Architect · `AB` Agent Backend · `PM` Product
+Manager (formerly `GR` Growth; every `GR` below now reads `PM`)
 
-Rules for every package, from [`00-ORCHESTRATOR-BRIEF.md`](00-ORCHESTRATOR-BRIEF.md) §7. The
-short version: the invariant is inviolable, the core stays MIT/local/egress-free, no runtime
-dependencies, every deviation gets a numbered entry in `docs/DEVIATIONS.md`, and nothing ships
-without a screenshot.
+Rules for every package, from [`08-PLAN-V2-100X.md`](08-PLAN-V2-100X.md) §1.1. The short
+version: the invariant is inviolable, the core stays MIT/local/egress-free, no runtime
+dependencies, every deviation gets a numbered entry in `docs/DEVIATIONS.md`, nothing ships without
+a screenshot, and a claim is a hypothesis until measured on a machine.
 
 A package is **done** when its acceptance criteria pass, its tests are green in CI on all three
 platforms, and someone other than its author has reviewed it.
+
+> **Updated 3 September for plan v2.** Phases and priorities are now those in `08` §10; the
+> per-phase headings below are v1's and are kept for the package text. Status of v1 packages on
+> 3 Sep evening: **landed** WP-01 (published by hand, 12:25 UTC), WP-02 (repo files only), WP-05,
+> WP-06 (without the condensed font), WP-11, WP-35 (§78–79), and `publish.yml` from WP-43;
+> **not landed** everything else. `main` is red on Windows from a flaky test (WP-51). Reprioritised to P1: WP-16, WP-17, WP-19 (day 1),
+> WP-20, WP-21 (first), WP-31. New packages WP-36 to WP-53 are specified in `08` §9 and summarised
+> at the end of this document. WP-19's route changed: see its entry.
 
 ---
 
@@ -75,14 +84,18 @@ the emulator list recorded in `docs/DEVIATIONS.md` §9, which currently lists th
 
 ### WP-05 · `deckhq doctor` and the capture proof · `AB` · 1d · after WP-01
 
-A CLI command that prints an environment report **and** the launch asset.
+A CLI command that prints an environment report **and** the launch asset. **Landed 2 September.**
+The sample below is the v1 specification; the shipped wording differs deliberately and is
+governed by an honesty test — see `docs/DEVIATIONS.md` §72–§76. In particular the fourth line
+never says "cannot see"; it says the agent view *no longer lists* finished sessions, and the
+proof card leads with the debt count.
 
 ```
-$ deckhq doctor
+$ deckhq doctor                      # v1 sample — superseded by the shipped wording
   claude          2.1.184 on PATH
   transcripts     51 sessions across 15 projects
   live now        3   (claude agents reports 3)
-  on the floor    51  ← DeckHQ sees 48 sessions the agent view cannot
+  on the floor    51  ← [retracted phrasing; see DEVIATIONS §74]
   codex           not installed
   hooks           installed, port 4317, 1,204 events, last 2m ago
   state           ~/.deckhq/state.json, writable
@@ -247,15 +260,21 @@ reconcile exactly with the ledger; the copy contains no second-person fault.
 The feature that makes a raised hand answerable from DeckHQ, and the one that justifies the paid
 tier.
 
-**Spike first (2 days, blocking).** Verify against the current Claude Code release: the exact
-`--permission-prompt-tool` contract, whether a daemon-hosted MCP server can serve it, what the
-request and response payloads are, and what the Codex equivalent is. Write the findings into
-`docs/DEVIATIONS.md` **whatever the result.**
+> **Route corrected 3 September** (`08` §3.0.2). `--permission-prompt-tool` is print-mode only.
+> The `PermissionRequest` hook (command, HTTP or MCP-tool types) allows or denies a tool call in
+> a normal interactive session, and Codex has the same hook since 0.150.0. This package therefore
+> covers **every** session, not only ones DeckHQ spawns, and it moves to **P1, day 1**.
 
-If the spike passes: sessions DeckHQ starts are spawned pointed at an MCP server inside the
-daemon; permission requests render in the panel with **Allow / Deny / Allow for this session**;
-the decision returns to the runtime. Sessions started elsewhere keep the "resume in terminal"
-escape hatch.
+**Spike first (2 days, blocking).** Verify against the current Claude Code and Codex releases:
+the `PermissionRequest` hook's request and response payloads for the `http` type, its timeout,
+what happens on silence (documented: falls through to the terminal prompt), and how the hook
+locates the daemon without a hard-coded port. Write the findings into `docs/DEVIATIONS.md`
+**whatever the result.**
+
+If the spike passes: the hook is installed with the same tagged, consented, port-aware discipline
+as the existing hooks; the daemon holds the request open; the panel renders **Allow / Deny /
+Allow for this session**; the decision returns through the hook. `--permission-prompt-tool` is the
+fallback for headless sessions DeckHQ spawns. A closed DeckHQ never blocks a session.
 
 **Accepted when:** a permission prompt raised by a DeckHQ-started session is answered from the
 panel and the session continues, verified end to end on the reference machine. **Nothing about
@@ -398,52 +417,90 @@ Phase 5 (Teams, SSO, audit, shared floor) is scoped after the P4 gate in
 
 ---
 
+## Packages added by plan v2 (3 September)
+
+Full text and acceptance criteria in [`08`](08-PLAN-V2-100X.md) §9. Summary:
+
+| WP | Title | Owner | Effort | Phase | After |
+|---|---|---|---|---|---|
+| WP-51 | Flaky `save() debounces` test turns Windows CI red | PE | 0.5d | P0 | — |
+| WP-53 | Five review follow-ups on PRs #1–#4: pid reuse inside the roster TTL, scanner truncation fallback tests, npm version floor in `publish.yml`, mtime precision, trailing-escape bound | AB | 0.5d | P0 | — |
+| WP-36 | Hooks port adoption | AB | 0.5d | P0 | — |
+| WP-43 | Release automation: tag → CI → npm (OIDC) → GitHub Release → Homebrew/winget/scoop. `publish.yml` landed 3 Sep; release job, manifests and one green tag remain | PE | 1d | P0 | WP-01 (done) |
+| WP-50 | The dynamic floor: rooms only for active projects, desks equal occupants, idle projects as a directory strip, lounge sized to the drawn count. Supersedes `05` §6.1/§6.3, absorbs WP-40 | AR | 5d | P1 | WP-21 |
+| WP-52 | Thought bubbles from `PreToolUse`/`PostToolUse`: current tool and action above the head | AB + AR | 2d | P1 | WP-36 |
+| WP-44 | `doctor --share` | AB | 0.5d | P0 | WP-05 |
+| WP-37 | Claude Code plugin, spike then ship | AB | 1d + 3d | P1 | WP-36 |
+| WP-38 | Status-line segment | AB | 1d | P1 | — |
+| WP-39 | Floating mini-floor (Document PiP) | AR + UX | 3d | P1 | WP-12 |
+| WP-40 | Gone home | AR + PE | 1.5d | P1 | WP-12 |
+| WP-42 | Terminal deck | PE | 2d | P1 | — |
+| WP-47 | In-panel diff, open in editor | PE | 2d | P1 | WP-08 |
+| WP-48 | Ledger designed for merging (machine id, signed export) | AR | +0.5d | P1 | with WP-17 |
+| WP-41 | Subagents as people | AB + AR | 3d | P2 | WP-12 |
+| WP-45 | Supporter pack | UX | 3d | P2 | WP-30 |
+| WP-46 | Team records | PE | 1d | P2 | WP-17 |
+| WP-49 | Teams BYOS | AR + PE | 15d | P4 | WP-48, WP-32 |
+
 ## Dependency graph
 
 ```
-P0   WP-01 ─┬─ WP-05
+P0   WP-01 ─┬─ WP-43
+            ├─ WP-05 ── WP-44
+            └─ WP-36
      WP-02 ─── WP-03
      WP-04
 
-P1   WP-06 ─┬─ WP-07 ─┬─ WP-10 ─┬─ WP-15
-            │         └─ WP-13  └─ WP-16 (P2)
+P1   WP-21 (first: goldens before any renderer package) ── WP-50 (dynamic floor; absorbs WP-40) ── WP-52
+     WP-19 spike (day 1, independent) ── WP-19 build (after WP-08)
+     WP-06 ─┬─ WP-07 ─┬─ WP-10 ─┬─ WP-15
+            │         │         └─ WP-16
+            │         └─ WP-13
             ├─ WP-08 ─┬─ WP-09
-            │         └─ WP-19 (P2)
+            │         └─ WP-47
             └─ WP-12 ─┬─ WP-14
-                      └─ WP-20 (P2)
-     WP-11 (independent)
-     WP-21, WP-22 (independent, any time)
+                      ├─ WP-20
+                      └─ WP-39
+     WP-17 + WP-48 (independent) ── WP-18 (P2), WP-26, WP-27, WP-46
+     WP-36 ── WP-37
+     WP-38, WP-42, WP-31, WP-22 (independent)
 
-P2   WP-17 ─┬─ WP-18
-            ├─ WP-26 (P3)
-            └─ WP-27 (P3)
+P2   WP-41 (after WP-12)
+     WP-45 (after WP-30)
+     WP-35 (after WP-11, landed)
 
 P3   WP-23 ─┬─ WP-24
-            └─ WP-25
-     WP-29, WP-30, WP-31 (independent)
+            ├─ WP-25
+            └─ Cursor CLI, Copilot CLI adapters, ADAPTERS.md
+     WP-29, WP-30
 
 P4   WP-32 ── WP-33 ── WP-34
+     WP-48 ── WP-49 (P5)
 ```
 
-**Critical path:** WP-01 → WP-06 → WP-08 → WP-19 → WP-32.
-WP-08 is the long pole in P1 and WP-19's spike is the long pole in P2; start each the day its
-dependency is accepted.
+**Critical path:** WP-01 → WP-43 → WP-08 → WP-19 build → WP-32 → WP-49.
+The WP-19 spike runs on day 1 of P1 regardless; its result sets the README's second sentence and
+the relay's price.
 
-**Parallelism:** after WP-06, `PE` (panel), `AR` (renderer, cache) and `AB` (adapters, terminals,
-notifications) run concurrently. `UX` leads WP-06/07/10/13 then supports. `GR` runs P0 and P3
-independently of everything.
+**Parallelism:** after WP-06, `PE` (panel, CLI, release), `AR` (renderer, ledger, mini-floor) and
+`AB` (hooks, plugin, status line, notifications, adapters) run concurrently. `UX` leads
+WP-06/07/10/13 then supports. `PM` runs P0 and the launch waves independently of everything.
 
 ## Effort
 
 | Phase | Days | Calendar with 4 working in parallel |
 |---|---|---|
-| P0 | 4.5 | 1 week |
-| P1 | 24.5 | 3 weeks |
-| P2 | 21 | 4 weeks |
-| P3 | 23 | 4 weeks |
+| P0 | 6.5 | 1 week |
+| P1 | 47 | 4 weeks |
+| P2 | 20 | 4 weeks |
+| P3 | 26 | 4 weeks |
 | P4 | 23 | 6 weeks |
+| P5 | 15+ | scoped after the P4 gate |
 
-~96 person-days to the end of P4.
+~123 person-days to the end of P4. P1 is heavier than v1's because presence (WP-16, 38, 39),
+approval (WP-19), identity (WP-20), the ledger (WP-17) and distribution (WP-31, 37) all moved
+into it: they are what make the wedge a habit, and shipping them after launch means launching
+without them.
 
 ## The acceptance script, extended
 
@@ -460,3 +517,20 @@ independently of everything.
 28. Reduced motion: the floor, the strip and the deck are all fully legible and operable.
 29. Three runtimes on one floor with correct attribution.
 30. `deckhq doctor` reports zero outbound sockets after four hours of use.
+31. Push a `vX.Y.Z` tag. The package appears on npm with the provenance badge and a GitHub Release
+    exists, with no human step after the tag. *(WP-43)*
+32. Install hooks, restart on the default port. The header shows exact state with no banner. *(WP-36)*
+33. `/plugin install deckhq` on a fresh machine. The floor opens with exact state and no other
+    command. *(WP-37)*
+34. Open three Claude Code sessions. Each status line shows the same needs-you count as the
+    header. *(WP-38)*
+35. Open the mini-floor, switch to a terminal. It stays on top and its count matches. *(WP-39)*
+36. Bench an agent, set the gone-home window to 0 days. It leaves the floor, the door plate counts
+    it, and it is reachable from the palette. `ackState` is unchanged in `state.json`. *(WP-50)*
+40. On the reference machine, the working floor at fit is one furnished room; idle projects are a
+    strip no taller than a room plate; no cell anywhere is empty. *(WP-50)*
+41. Run a shell command in any session. Its bubble on the floor names the command within one hook
+    delivery. *(WP-52)*
+37. `deckhq ls` prints the deck in the same order as `Tab`; `deckhq ack <id>` discharges it. *(WP-42)*
+38. Spawn three subagents from one session. Three juniors sit down beside it and leave when done. *(WP-41)*
+39. Run the acceptance script with and without the Supporter pack. The API responses are identical. *(WP-45)*

@@ -25,6 +25,29 @@ supposed to make people screenshot it — is 70% empty carpet with 10-pixel peop
 
 The product is a 9/10 engine in a 2/10 car. The plan is to build the car.
 
+### Status on 3 September 2026
+
+Re-measured for plan v2 (`08-PLAN-V2-100X.md` §0). The findings below are kept as written, as
+the evidence the plan was built on; this block says which have closed.
+
+| Finding | Status |
+|---|---|
+| F1 package not published | **Closed 3 Sep 12:25 UTC.** `deckhq@1.2.0` on npm, published by hand; `npx deckhq@latest` verified from a clean directory. |
+| F2 no release, social card, GIF | Open. Repo files landed (WP-02); GitHub Release, social preview, GIF not done. |
+| F3 macOS terminal | Open. WP-04. |
+| F4 package description | **Closed.** DEVIATIONS §66. |
+| F5–F12 (daily habit) | Open. P1 in `08` §10. |
+| F13 one runtime | Open. |
+| F14 hard-coded rates | Open. WP-26. |
+| F15 cold scan | **Closed.** Persistent cache §68; desktop store cached and bounded §78–79; live roster cached §77. Warm scan 8 ms. |
+| F16, F17, F18 | Open. F6 and F17 are now one fix: the dynamic floor, `08` B6 (WP-50). |
+| New: flaky `save() debounces` test | Fails intermittently on Windows CI; `main` red. `08` WP-51. |
+| F19 repo hygiene | Mostly closed (WP-02). Stray files deliberately left, DEVIATIONS §67. |
+| F20, F21, F22 | Open. |
+| New: hooks port drift | Hooks on 4400, default daemon on 4317, header degrades silently. `08` WP-36. |
+
+Test count is now 413, lint clean.
+
 ## 2. Scorecard
 
 | Dimension | Score | Why |
@@ -271,7 +294,7 @@ literally true, since 66 − 5 = 61, and rhetorically dishonest, because it comp
 against live-now and invites the reader to picture 61 hidden agents. On our single most important
 launch asset. Rejected and reworked to lead with the debt count.
 
-Corrected in [`00`](00-ORCHESTRATOR-BRIEF.md) §3 M1, [`02`](02-MARKET-AND-LAUNCH.md) §1.4 and
+Corrected in [`08`](08-PLAN-V2-100X.md) §3.0, [`02`](02-MARKET-AND-LAUNCH.md) §1.4 and
 §3 A1. **The general lesson, which is now a standing rule: a claim in a competitor's
 documentation is a hypothesis, not a fact. Measure it before it reaches a headline.**
 

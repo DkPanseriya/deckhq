@@ -105,7 +105,11 @@ plates, name labels, badges. The reasons are specific rather than decorative:
 
 Floor labels are set in Condensed, uppercase, `letter-spacing: 0.06em`, at the sizes in §6.2.
 Fonts are self-hosted in `public/fonts/` as woff2 — **no CDN, no Google Fonts request**, because
-rule 2 of the brief forbids network egress and the CSP forbids it anyway.
+rule 2 of the plan forbids network egress and the CSP forbids it anyway.
+
+> **Decided 3 September** (`08` §8.2): vendor the font. Two weights, SemiBold for agent labels
+> and Bold for room plates, per `docs/DEVIATIONS.md` §71, which also names the two renderer
+> constants that must change. About 50 KB total.
 
 ### 2.4 The needs-you numeral
 
@@ -323,6 +327,11 @@ Hooks · the existing consent screen, embedded rather than a separate dialog.
 
 Four fixes, in order of impact. Renderer owns all of them.
 
+> **§6.1 and §6.3 are superseded by the dynamic floor, `08` B6 / WP-50 (3 September).** Rooms
+> exist only for active projects, desks equal the agents at them, idle projects are a directory
+> strip, and the lounge is sized to the agents actually drawn. The text below is kept as the
+> reasoning that led there; §6.2 and §6.4 still apply.
+
 ### 6.1 Rooms are weighted by activity, not by headcount
 
 The treemap currently weights a room by `sessionCount`. On the reference machine that gives a
@@ -458,3 +467,25 @@ the rules that keep it there:
   start it again."* — this one is already right; match it.
 - **Never imply fault.** Ever. See §10.
 - **Cost is always "estimate" or "list price", never a bill.** Already enforced; keep it.
+
+## 12. Additions in plan v2 (3 September)
+
+Specified in [`08`](08-PLAN-V2-100X.md) §8.1 and §9; listed here so this document stays the
+single index of the interface.
+
+| Surface | What | Package |
+|---|---|---|
+| Floating mini-floor | Office, corridor and the numeral in a Document Picture-in-Picture window, always on top; click opens the full floor at that agent; PWA badge fallback | WP-39 |
+| Terminal deck | `deckhq ls`, `waiting`, `ack`, `bench`, `open` — the deck in ANSI, same order, same ids | WP-42 |
+| Gone home | Benched > 7 days not drawn; lounge door carries the count; reachable in ≤ 2 keystrokes | WP-40 |
+| In-panel diff | Unified diff per file as coloured `textContent`, collapsed; "open in editor" from an allowlist | WP-47 |
+| Batch actions | Acknowledge a room; multi-select in the deck | with WP-10 |
+| Status line | `▣ 3 waiting · 1 hand up` in every Claude Code session | WP-38 |
+| Permission request in the panel | Allow / Deny / Allow for this session, for every interactive session via the `PermissionRequest` hook | WP-19 |
+| Identity rarity | Deterministic traits on tiers, on the agent, state colour untouched | WP-20 |
+| Thought bubble | Current tool and a ≤ 120-char action above the head at L1+, a tool icon at L0, live in the panel header; from `PreToolUse`/`PostToolUse` | WP-52 |
+| Dynamic floor | Rooms only for active projects, desks equal occupants, idle projects as a directory strip, lounge sized to the drawn count | WP-50 |
+| Rate card version | On the whiteboard beside every cost | WP-26 |
+
+The refusals stand: no hover lifts, no chrome animation, no light theme, no second-person fault.
+And one added: **no feature that requires the tab to be open to be useful** (`08` §14).

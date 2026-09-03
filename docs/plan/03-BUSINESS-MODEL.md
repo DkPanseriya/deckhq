@@ -1,7 +1,15 @@
 # 03 — Business model
 
-**Owner:** orchestrator, with Architect on the relay design · **Starts:** P4 (month 4)
-**Evidence:** monetisation research, 2 Sep 2026. Figures marked *est.* are third-party models.
+**Owner:** orchestrator, with Architect on the relay design · **Starts:** month 1 (Sponsors and
+the Supporter pack), relay alpha month 3
+**Evidence:** monetisation research, 2 Sep 2026, re-checked 3 Sep. Figures marked *est.* are
+third-party models.
+
+> **Updated 3 September for plan v2.** Three changes, all in [`08`](08-PLAN-V2-100X.md) §5:
+> (1) something is on sale in month 1, not month 4; (2) the relay's pitch is *every session on
+> every machine with history*, because a phone window on one session is now free from Remote
+> Control, Happy and Paseo; (3) a bring-your-own-storage Teams tier is added, and the ledger is
+> designed for merging from day one (WP-48). The sections below are kept as the reasoning.
 
 ---
 
@@ -60,7 +68,7 @@ ability to actually approve a permission* is.
 
 ## 3. The architecture: DeckHQ Relay
 
-**$9/month, or $84/year. Launches P4.**
+**$9/month, or $84/year. Alpha in month 3, paid in month 4.**
 
 ### 3.1 What it is
 
@@ -95,10 +103,13 @@ An opt-in, end-to-end encrypted relay that carries your floor off your machine.
 Right now a raised hand can only be answered by finding the terminal. DeckHQ has the hook, the
 UI and the metaphor, and stops one step short.
 
-For sessions **DeckHQ starts**, spawn them with a permission-prompt tool pointed at an MCP
-server hosted inside the daemon. The permission decision then belongs to DeckHQ: the request
-renders in the panel with **Allow / Deny / Allow for this session**, and — with the relay — on
-your phone, with a push notification.
+A `PermissionRequest` hook of type HTTP, pointed at the daemon and installed with the same tagged
+consent as the existing hooks, lets DeckHQ answer the prompt for **every** interactive session,
+not only ones it started; Codex has the same hook since 0.150.0. The request renders in the panel
+with **Allow / Deny / Allow for this session**, and — with the relay — on your phone, with a push
+notification. Silence falls through to the terminal prompt, so a closed DeckHQ never blocks a
+session. (`--permission-prompt-tool` is print-mode only and stays as the fallback for headless
+sessions DeckHQ spawns.) Verified route recorded in `08` §3.0.2.
 
 That is: *your agent asks to run a migration at 11pm, your phone buzzes, you read the command,
 you tap Allow, it continues.* Nothing else in the category does this across machines and
@@ -144,9 +155,20 @@ Expect **1–2% of individual users to pull a workspace**, 3–8 seats each, $21
 
 Built on the relay from P4, so it is an increment rather than a second product.
 
-## 5. Third line: the Studio pack (optional, cheap to test)
+### 4.1 Teams BYOS — bring your own storage (added 3 Sep)
 
-**$29 one-time.** Cosmetic and personal-power extras shipped as a signed asset pack *outside*
+**$25/seat/month, month 8.** The enterprise objection to any agent-monitoring tool is "where does
+the data go". Answer: nowhere of ours. A team floor is assembled from signed ledgers each machine
+writes to *the customer's* storage — S3, R2, a shared drive. DeckHQ sells the software that merges
+and renders them and never holds a byte. This is the tier that survives a procurement review, it
+keeps the zero-egress promise literal for paying customers, and it is why WP-48 puts a machine id
+and an Ed25519 signature on the ledger from day one. SSO and audit export in the enterprise
+increment. WP-49.
+
+## 5. Third line: the Supporter pack (month 1, the price probe)
+
+**$29 one-time, on sale in month 1** so that something exists to buy before the December Wrapped
+moment. WP-45. Cosmetic and personal-power extras shipped as a signed asset pack *outside*
 the MIT core: floor themes (night shift, blueprint, warehouse), custom avatars and rooms,
 floor replay ("watch yesterday"), a rate-card editor.
 
@@ -168,11 +190,11 @@ or any action.
 
 | When | Do | Gate to proceed |
 |---|---|---|
-| P0–P3 | Nothing commercial. GitHub Sponsors button only | 10k+ MAU, D7 ≥ 25% |
-| End P3 | Ship Studio pack as a price probe | Measure take rate; ≥1% means the audience will pay |
-| P4 | Relay alpha, invite-only, free for 60 days | 1.5% of invitees convert at $9 |
-| P4 end | Public paid launch | 500 paying users |
-| P5 | Teams | 10 paying teams |
+| Month 1 | GitHub Sponsors tiers; Supporter pack on sale | Take rate ≥ 1% means the audience will pay |
+| Month 3 | Relay alpha, invite-only, free for 60 days | 1.5% of invitees convert at $9 |
+| Month 4 | Public paid launch — **only if approve-from-here (WP-19) is verified end to end**; otherwise relay at $6 on multi-machine, push and history | 500 paying users |
+| Month 6 | Teams | 10 paying teams |
+| Month 8 | Teams BYOS | First procurement-reviewed customer |
 
 If the P4 gate fails, we do not chase it with discounts. We go back to §5, keep the tool free,
 and treat it as a portfolio and reputation asset — which was `docs/01-PRODUCT.md` §7's original

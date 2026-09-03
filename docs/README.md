@@ -13,8 +13,9 @@ Hand this directory to the delivery orchestrator. It is complete. Read in order.
 | [04-BUILD-PLAN.md](04-BUILD-PLAN.md) | Team roles, 13 work packages with acceptance criteria, dependency graph, critical path, the acceptance script, standing rules | Assigning work |
 | [DEVIATIONS.md](DEVIATIONS.md) | Every departure from the blueprint, with its reason and measured numbers, plus the tech lead's decisions closing each one | Reviewing the build, or reading a spec that the code appears to contradict |
 
-Overview for review and sharing:
-<https://claude.ai/code/artifact/bfdd12b9-538b-47ea-b985-ffb8a6eb9da1>
+What happens **next** — distribution, the interface redesign, retention, the business — is in
+[`plan/`](plan/README.md), starting with [`plan/08-PLAN-V2-100X.md`](plan/08-PLAN-V2-100X.md).
+This directory covers what DeckHQ **is**; that one covers what it becomes.
 
 ## The one rule
 

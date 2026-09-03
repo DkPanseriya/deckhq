@@ -192,8 +192,10 @@ None of these are in the repository, so none of them are done by a commit:
 
 ## 14. After
 
-- Watch `npm view deckhq` downloads for the first week — that is the first row of the north-star
-  table in `00-ORCHESTRATOR-BRIEF.md` §5 moving off zero.
+- Watch `npm view deckhq` downloads for the first week — that is the first row of the metrics
+  table in `08-PLAN-V2-100X.md` §11 moving off zero.
+- **WP-43** replaces steps 7–12 with a tag push. This checklist stays the reference for what the
+  workflow must do, and for the owner-only settings in step 13, which no workflow can do.
 - Open the `1.3.0` heading in `CHANGELOG.md` when the next package lands, so nobody has to
   remember to.
 - Consider publishing from CI with `--provenance` for the next release. It needs a GitHub Actions
