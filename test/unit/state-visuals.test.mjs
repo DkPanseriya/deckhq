@@ -303,27 +303,162 @@ test('COLOUR DISCIPLINE: state colours never set small text', () => {
   );
 });
 
-test('COLOUR DISCIPLINE: the accent sets text in exactly one place, and it is large', () => {
-  // Crimson is 3.38:1 on --bg and 2.39:1 on --surface-3 — under the text floor
-  // everywhere. The single exception is the needs-you numeral, which survives
-  // only because 1.3rem at weight 700 is WCAG "large text" (3:1), and which is
-  // always paired with its "NEEDS YOU" label so colour is never the carrier.
+test('COLOUR DISCIPLINE: the accent sets no text anywhere', () => {
+  // Crimson is 3.38:1 on --bg and 2.39:1 on --surface-3 — under the 4.5:1 text
+  // floor on every ground in this product. It used to have one licensed
+  // exception, the needs-you numeral, which cleared the bar only by being
+  // WCAG "large text". WP-07 took that exception away rather than widening it:
+  // the numeral is 44px of --ink (GUI/UX spec §2.4), because a headline that
+  // turns crimson whenever it is non-zero spends the reserved colour on the
+  // SUM of three states — one of which is a stall — instead of on the one
+  // thing crimson means. The breakdown's for_review dot still carries it.
   const accentText = readRules().filter((r) => /(^|[^-])color:\s*var\(--accent\)\s*;/.test(r.body));
   assert.deepEqual(
     accentText.map((r) => r.selector),
-    ['.needs-you-total .stat-v'],
-    'a new rule sets text in the reserved accent. Errors and warnings carry ' +
-      'crimson on a rule, a border or a dot, with the message itself in --ink.',
+    [],
+    'a rule sets text in the reserved accent. Errors, warnings and the ' +
+      'waiting clock carry crimson on a rule, a border or a dot, with the ' +
+      'words themselves in --ink.',
   );
+});
+
+test('the needs-you numeral is the display element, and calm at zero', () => {
+  // GUI/UX spec §2.4, the one measurement this package is judged on: 44px of
+  // JetBrains Mono in --ink, dropping to --muted and losing its weight at
+  // zero, because a cleared queue should not read like a scoreboard.
+  const rules = readRules();
+  const numeral = rules.find((r) => r.selector === '.numeral-v');
+  assert.ok(numeral, '.numeral-v is gone; the display numeral is the product');
+  assert.equal(fontSizePx(numeral.body), 44);
+  assert.match(numeral.body, /font-family:\s*var\(--font-mono\)/);
+  assert.match(numeral.body, /font-variant-numeric:\s*tabular-nums/);
+  assert.match(numeral.body, /color:\s*var\(--ink\)/);
+
+  const zero = rules.find((r) => r.selector === '.numeral.is-zero .numeral-v');
+  assert.ok(zero, 'the zero state is gone; a cleared queue must look calm');
+  assert.match(zero.body, /color:\s*var\(--muted\)/);
+  assert.match(zero.body, /font-weight:\s*400/);
 
   const t = readTokens();
-  const px = fontSizePx(accentText[0].body);
-  assert.ok(isLargeText(px, true), `the needs-you numeral is ${px}px, no longer WCAG large text`);
-  const ratio = contrastRatio(t.accent, t.surface);
-  assert.ok(
-    ratio >= 3,
-    `--accent (${t.accent}) is ${ratio.toFixed(2)}:1 on the topbar --surface (${t.surface})`,
+  for (const [ink, floor] of [
+    ['ink', 4.5],
+    ['muted', 4.5],
+  ]) {
+    const ratio = contrastRatio(t[ink], t.surface);
+    assert.ok(
+      ratio >= floor,
+      `the numeral in --${ink} is ${ratio.toFixed(2)}:1 on the topbar --surface`,
+    );
+  }
+});
+
+test('CONTRAST: the palette and the settings sheet stay inside the ink and ground sets', () => {
+  // WP-07 added two whole surfaces. Rather than re-measuring each rule by
+  // hand, hold them to the palette this stylesheet already proves: text is
+  // only ever --ink, --ink-2 or --muted, and a ground is only ever --surface
+  // or --surface-2 — the exact pairs measured above. Anything else on these
+  // surfaces has to be argued for here, deliberately, rather than slipped in.
+  const INKS = new Set(['--ink', '--ink-2', '--muted', '--accent-ink', 'inherit', 'currentColor']);
+  const GROUNDS = new Set(['--surface', '--surface-2', 'none', 'transparent']);
+  // ::backdrop is the scrim over the rest of the window, not a ground any
+  // text sits on, so it keeps the same near-black wash as every other overlay.
+  const isNew = (sel) =>
+    /(^|[\s,>])\.(palette|settings)[\w-]*/.test(sel) && !sel.includes('::backdrop');
+
+  const badInk = [];
+  const badGround = [];
+  for (const rule of readRules()) {
+    if (!isNew(rule.selector)) continue;
+    for (const [, value] of rule.body.matchAll(/(?:^|[^-])color:\s*([^;]+);/g)) {
+      const token = /var\((--[\w-]+)\)/.exec(value)?.[1] || value.trim();
+      if (!INKS.has(token)) badInk.push(`${rule.selector} { color: ${value.trim()} }`);
+    }
+    for (const [, value] of rule.body.matchAll(/background:\s*([^;]+);/g)) {
+      const token = /var\((--[\w-]+)\)/.exec(value)?.[1] || value.trim();
+      if (!GROUNDS.has(token)) badGround.push(`${rule.selector} { background: ${value.trim()} }`);
+    }
+  }
+  assert.deepEqual(badInk, [], 'palette/settings text outside the measured ink set');
+  assert.deepEqual(badGround, [], 'palette/settings ground outside the measured ground set');
+
+  // And the pairs themselves clear the floors, on both grounds those surfaces
+  // actually use.
+  const t = readTokens();
+  for (const ground of ['surface', 'surface-2']) {
+    for (const ink of ['ink', 'ink-2', 'muted']) {
+      const ratio = contrastRatio(t[ink], t[ground]);
+      assert.ok(
+        ratio >= 4.5,
+        `--${ink} is ${ratio.toFixed(2)}:1 on --${ground}; the palette and the sheet set text there`,
+      );
+    }
+  }
+});
+
+test('the palette and the settings sheet are keyboard and screen-reader shaped', () => {
+  // GUI/UX spec §10. The markup half of "fully keyboard-operable and
+  // screen-reader-labelled": the palette is a dialog with a combobox over a
+  // labelled listbox, and its rows are options. The behaviour half is in
+  // test/unit/palette.test.mjs.
+  const html = fs.readFileSync(path.join(HERE, '..', '..', 'public', 'index.html'), 'utf8');
+  const palette = /<dialog id="palette"[\s\S]*?<\/dialog>/.exec(html);
+  assert.ok(palette, 'the palette shell is gone from index.html');
+  assert.match(palette[0], /role="dialog"/);
+  assert.match(palette[0], /aria-label="Command palette"/);
+  assert.match(palette[0], /role="combobox"/);
+  assert.match(palette[0], /aria-controls="palette-list"/);
+  assert.match(palette[0], /role="listbox"/);
+  assert.match(palette[0], /<label class="sr-only" for="palette-input">/);
+
+  const sheet = /<dialog id="settings-dialog"[\s\S]*?<\/dialog>/.exec(html);
+  assert.ok(sheet, 'the settings sheet shell is gone from index.html');
+  assert.match(sheet[0], /aria-labelledby="settings-title"/);
+  assert.match(sheet[0], /id="settings-close"[^>]*aria-label="Close"/);
+});
+
+test('no author rule can force a closed <dialog> on screen', () => {
+  // A <dialog> is hidden by the UA rule `dialog:not([open]) { display: none }`,
+  // and ANY author rule that sets `display` on the element beats a UA rule
+  // whatever its specificity. `.palette { display: flex }` therefore left the
+  // command palette permanently drawn over the floor, in the page flow — a
+  // defect no unit test could see and the goldens caught in one screenshot
+  // (docs/DEVIATIONS.md §94.11). Every dialog class must gate `display` on
+  // [open].
+  const dialogClasses = ['.palette', '.dialog'];
+  const offenders = [];
+  for (const rule of readRules()) {
+    if (!/(^|[^-\w])display\s*:/.test(rule.body)) continue;
+    for (const cls of dialogClasses) {
+      const bare = new RegExp(`(^|[\\s,>])\\${cls}\\s*(,|$)`);
+      if (bare.test(rule.selector)) offenders.push(rule.selector);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'these rules set display on a <dialog> without [open], so it is drawn while closed',
   );
+});
+
+test('the header is a headline, not a toolbar', () => {
+  // GUI/UX spec §5.2. Six buttons left the header; only the palette hint and
+  // one primary action remain. A regression here is someone quietly putting
+  // a button back "just this once".
+  const html = fs.readFileSync(path.join(HERE, '..', '..', 'public', 'index.html'), 'utf8');
+  const header = /<header class="topbar"[\s\S]*?<\/header>/.exec(html);
+  assert.ok(header, 'the header is gone');
+  const buttons = header[0].match(/<button\b/g) || [];
+  assert.equal(
+    buttons.length,
+    3,
+    'the header carries the palette hint, one primary action and the degraded ' +
+      "banner's link, and nothing else. Everything else belongs in ⌘K.",
+  );
+  assert.match(header[0], /id="new-agent-btn"[^>]*>\s*\+ New agent/);
+  assert.match(header[0], /id="palette-btn"/);
+  for (const gone of ['show-letgo-toggle', 'settle-btn', 'hook-status-btn', 'refresh-btn']) {
+    assert.doesNotMatch(header[0], new RegExp(gone), `${gone} is back in the header`);
+  }
 });
 
 test('the chrome ground is cold, and colder than every state colour', () => {

@@ -16,39 +16,34 @@
       </div>
 
       <div class="needs-you" id="needs-you" role="group" aria-label="Sessions that need you">
-        <div class="stat needs-you-total is-zero" id="needs-you-total">
-          <span class="stat-v num" id="stat-needs-you">0</span>
-          <span class="stat-k">needs you</span>
+        <div class="numeral is-zero" id="needs-you-total">
+          <span class="numeral-v num" id="stat-needs-you">0</span>
+          <span class="numeral-k">needs you</span>
         </div>
         <ul class="needs-you-breakdown" id="needs-you-breakdown">
           <li class="breakdown-item" data-state="needs_input">
             <span class="state-dot dot--needs_input" aria-hidden="true"></span>
-            <span class="stat-v num" id="stat-hands-up">0</span>
-            <span class="stat-k">hands up</span>
+            <span class="breakdown-v num" id="stat-hands-up">0</span>
+            <span class="breakdown-k">hands up</span>
           </li>
           <li class="breakdown-item" data-state="stalled">
             <span class="state-dot dot--stalled" aria-hidden="true"></span>
-            <span class="stat-v num" id="stat-stalled">0</span>
-            <span class="stat-k">stalled</span>
+            <span class="breakdown-v num" id="stat-stalled">0</span>
+            <span class="breakdown-k">stalled</span>
           </li>
           <li class="breakdown-item" data-state="for_review">
             <span class="state-dot dot--for_review" aria-hidden="true"></span>
-            <span class="stat-v num" id="stat-for-review">0</span>
-            <span class="stat-k">for review</span>
+            <span class="breakdown-v num" id="stat-for-review">0</span>
+            <span class="breakdown-k">for review</span>
           </li>
         </ul>
       </div>
 
-      <div class="floor-counts">
-        <div class="stat">
-          <span class="stat-v num" id="stat-at-desk">0</span>
-          <span class="stat-k">at desk</span>
-        </div>
-        <div class="stat">
-          <span class="stat-v num" id="stat-benched">0</span>
-          <span class="stat-k">benched</span>
-        </div>
-      </div>
+      <p class="floor-counts" id="floor-counts">
+        <span class="num" id="stat-at-desk">0</span> at desk
+        <span class="sep" aria-hidden="true">·</span>
+        <span class="num" id="stat-benched">0</span> benched
+      </p>
 
       <div class="project-filter" id="project-filter" hidden></div>
 
@@ -64,21 +59,11 @@
       <div class="connection-status" id="connection-status" hidden>Reconnecting…</div>
 
       <div class="tools">
-        <button type="button" class="btn" id="show-letgo-toggle" aria-pressed="false">
-          Show let go
+        <button type="button" class="palette-hint" id="palette-btn">
+          <kbd id="palette-hint-key">Ctrl K</kbd>
+          <span class="palette-hint-label">everything else</span>
         </button>
-        <button
-          type="button"
-          class="btn"
-          id="settle-btn"
-          title="Send every idle (not running) agent to the lounge"
-        >
-          Settle floor
-        </button>
-        <button type="button" class="btn btn--primary" id="new-project-btn">New project</button>
-        <button type="button" class="btn" id="hook-status-btn">Hooks</button>
-        <button type="button" class="btn" id="refresh-btn">Refresh</button>
-        <button type="button" class="btn" id="notif-btn" hidden>Enable notifications</button>
+        <button type="button" class="btn btn--primary" id="new-agent-btn">+ New agent</button>
       </div>
     </header>
 
@@ -312,14 +297,42 @@
       </div>
     </dialog>
 
-    <dialog id="hooks-dialog" class="dialog dialog--wide" aria-labelledby="hooks-title">
+    <!-- The settings sheet (docs/plan/05-GUI-UX-SPEC.md §5.4). Opened from the
+         palette; the hook consent screen is a section inside it rather than a
+         dialog of its own. -->
+    <dialog id="settings-dialog" class="dialog dialog--wide" aria-labelledby="settings-title">
       <div class="dialog-head">
-        <h2 id="hooks-title">Hook installation</h2>
-        <button type="button" class="icon-btn" id="hooks-close" aria-label="Close">✕</button>
+        <h2 id="settings-title">Settings</h2>
+        <button type="button" class="icon-btn" id="settings-close" aria-label="Close">✕</button>
       </div>
-      <div class="dialog-body" id="hooks-body">
-        <p>Loading…</p>
+      <div class="dialog-body" id="settings-body"></div>
+    </dialog>
+
+    <!-- The command palette (§5.3). One list over agents, projects, the
+         actions legal on the selection, and every command that used to be a
+         header button. Built by public/palette.js; this is only its shell. -->
+    <dialog id="palette" class="palette" role="dialog" aria-label="Command palette">
+      <div class="palette-field">
+        <label class="sr-only" for="palette-input">Search agents, projects and commands</label>
+        <input
+          type="text"
+          id="palette-input"
+          class="palette-input"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-list"
+          aria-autocomplete="list"
+          aria-describedby="palette-foot"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Search agents, projects and commands…"
+        />
       </div>
+      <ul id="palette-list" class="palette-list" role="listbox" aria-label="Results"></ul>
+      <p class="palette-empty" id="palette-empty" hidden>Nothing matches that.</p>
+      <p class="palette-foot" id="palette-foot">
+        Up and down to move · Enter to run · Esc to close
+      </p>
     </dialog>
 
     <div id="live-region" class="sr-only" aria-live="polite" aria-atomic="true"></div>

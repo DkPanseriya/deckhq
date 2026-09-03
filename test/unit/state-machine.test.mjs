@@ -16,9 +16,7 @@ function fakeStore(initialSettings = {}) {
     stallWindowMs: 600000,
     notifications: true,
     sound: false,
-    zoom: 0,
     pollIntervalMs: 5000,
-    showLetGo: false,
     ...initialSettings,
   };
   let seededAt = null;

@@ -162,7 +162,7 @@ async function adoptHooksPort(requested, log) {
   if (await isDeckhqDaemon(hookPort)) throw new DeckhqAlreadyRunningError(hookPort, label);
   log.warn(
     `port ${hookPort}, where the installed ${label} hooks post, is held by something that is ` +
-      `not DeckHQ; starting from ${requested} instead. Reinstall the hooks from the header once up.`,
+      `not DeckHQ; starting from ${requested} instead. Reinstall the hooks from the settings sheet once up.`,
   );
   return requested;
 }

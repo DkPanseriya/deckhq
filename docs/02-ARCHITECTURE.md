@@ -271,7 +271,7 @@ at the next restart.
 {
   "version": 1,
   "seededAt": 1788000000000,
-  "settings": { "stallWindowMs": 600000, "notifications": true, "sound": false, "zoom": 0 },
+  "settings": { "stallWindowMs": 600000, "notifications": true, "sound": false },
   "ack": {
     "<agentId>": { "state": "benched", "reviewSince": null, "updatedAt": 1788000000000 }
   }

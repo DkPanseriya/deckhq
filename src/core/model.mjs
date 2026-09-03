@@ -292,6 +292,14 @@ export function clampText(s) {
 }
 
 /**
+ * The date the rate table below was last checked against published list
+ * prices. Shown beside the cost estimate in the settings sheet so a figure
+ * nobody can check is at least a figure whose source is dated. It is not a
+ * bill and it is not a promise; it is a table with a date on it.
+ */
+export const RATE_CARD_VERSION = '2026-09-03';
+
+/**
  * List-price estimate, in USD, for comparing projects. Never a bill.
  * Rates are per million tokens and deliberately coarse.
  * @param {{input?:number,output?:number,cacheRead?:number,cacheWrite?:number,model?:string|null}} usage

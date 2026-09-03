@@ -17,6 +17,8 @@
 
 import { createPanel } from './panel.js';
 import { createHooksUI } from './hooks-ui.js';
+import { createPalette } from './palette.js';
+import { applyMotionPreference, createSettingsUI } from './settings-ui.js';
 import { availableNames } from './names.js';
 
 /**
@@ -63,8 +65,15 @@ const STATE_LABELS = {
   ended: 'Ended',
 };
 
-/** States that fire a notification on *entry*. docs/03-VISUAL-SPEC.md §9. */
-const NOTIFY_ON_ENTRY = new Set(['needs_input', 'for_review']);
+/**
+ * States that fire a notification on *entry*, and the setting that governs
+ * each. docs/03-VISUAL-SPEC.md §9; the per-state switches are the settings
+ * sheet's Notifications section (docs/plan/05-GUI-UX-SPEC.md §5.4).
+ */
+const NOTIFY_ON_ENTRY = {
+  needs_input: 'notifyHandsUp',
+  for_review: 'notifyForReview',
+};
 const NOTIFY_COALESCE_MS = 10_000;
 
 // ---------------------------------------------------------------- DOM refs
@@ -82,10 +91,16 @@ const el = {
   degradedText: document.getElementById('degraded-text'),
   degradedLink: document.getElementById('degraded-link'),
   connectionStatus: document.getElementById('connection-status'),
-  showLetGoToggle: document.getElementById('show-letgo-toggle'),
-  settleBtn: document.getElementById('settle-btn'),
-  hookStatusBtn: document.getElementById('hook-status-btn'),
-  newProjectBtn: document.getElementById('new-project-btn'),
+  paletteBtn: document.getElementById('palette-btn'),
+  paletteHintKey: document.getElementById('palette-hint-key'),
+  newAgentBtn: document.getElementById('new-agent-btn'),
+  paletteDialog: document.getElementById('palette'),
+  paletteInput: document.getElementById('palette-input'),
+  paletteList: document.getElementById('palette-list'),
+  paletteEmpty: document.getElementById('palette-empty'),
+  settingsDialog: document.getElementById('settings-dialog'),
+  settingsBody: document.getElementById('settings-body'),
+  settingsClose: document.getElementById('settings-close'),
   newProjectDialog: document.getElementById('new-project-dialog'),
   newProjectPath: document.getElementById('new-project-path'),
   newProjectCreateToggle: document.getElementById('new-project-create-toggle'),
@@ -107,8 +122,6 @@ const el = {
   identityAvatarPicker: document.getElementById('identity-avatar-picker'),
   identityGo: document.getElementById('identity-go'),
   identityError: document.getElementById('identity-error'),
-  refreshBtn: document.getElementById('refresh-btn'),
-  notifBtn: document.getElementById('notif-btn'),
   canvas: document.getElementById('floor-canvas'),
   tooltip: document.getElementById('tooltip'),
   whiteboardOverlay: document.getElementById('whiteboard-overlay'),
@@ -120,9 +133,6 @@ const el = {
   panelRoot: document.getElementById('panel'),
   onboardingDialog: document.getElementById('onboarding-dialog'),
   onboardingDismiss: document.getElementById('onboarding-dismiss'),
-  hooksDialog: document.getElementById('hooks-dialog'),
-  hooksClose: document.getElementById('hooks-close'),
-  hooksBody: document.getElementById('hooks-body'),
   liveRegion: document.getElementById('live-region'),
   toast: document.getElementById('toast'),
 };
@@ -134,6 +144,14 @@ let latestSnapshot = null;
 let prevActivityStates = new Map();
 /** @type {string|null} currently selected agent id (floor ring + panel) */
 let selectedId = null;
+/**
+ * Whether let-go agents are reachable right now. A VIEW toggle, not a stored
+ * setting: the header used to write `settings.showLetGo` and nothing ever
+ * read it (docs/DEVIATIONS.md §58). "Am I looking at removed sessions" is a
+ * property of this tab, so it lives here and resets on reload. Flipped from
+ * the palette (`⌘K` → `l`).
+ */
+let letGoVisible = false;
 /** How much one press of `+` / `-` changes the magnification. */
 const ZOOM_KEY_STEP = 1.25;
 
@@ -409,9 +427,10 @@ function renderHeader(snapshot) {
       'Set DECKHQ_STATE_DIR to a writable directory and start it again.';
   }
 
-  if (snapshot.settings) {
-    el.showLetGoToggle.setAttribute('aria-pressed', String(Boolean(snapshot.settings.showLetGo)));
-  }
+  // The motion override is a setting the stylesheet reads off the root
+  // element, so it has to be re-applied whenever settings arrive — including
+  // from another tab.
+  applyMotionPreference(snapshot.settings?.reducedMotion);
 
   const summary = describeFloor(snapshot);
   el.canvas.setAttribute('aria-label', `Office floor. ${summary}`);
@@ -444,11 +463,16 @@ function renderFloorState(snapshot) {
  * @param {any} snapshot
  */
 function diffAndNotify(snapshot) {
+  const settings = snapshot.settings || {};
   const entered = [];
   for (const agent of snapshot.agents) {
     if (agent.ackState !== 'active') continue;
     const prev = prevActivityStates.get(agent.id);
-    const isAttentionState = NOTIFY_ON_ENTRY.has(agent.activityState);
+    // Both the state's own switch and the master switch have to be on. A
+    // state whose switch is off is still tracked below, so turning it back on
+    // does not then fire for everything that entered while it was off.
+    const stateSetting = NOTIFY_ON_ENTRY[agent.activityState];
+    const isAttentionState = Boolean(stateSetting) && settings[stateSetting] !== false;
     const justEntered = isAttentionState && prev !== agent.activityState;
     if (justEntered) {
       // A notification title is a compact place, so it carries the label
@@ -494,6 +518,9 @@ function flushNotification() {
  */
 function showNotification(batch) {
   if (!('Notification' in window)) return;
+  // The master switch in the settings sheet. Off means the tab badge and the
+  // floor carry the signal and the OS is left alone.
+  if (latestSnapshot?.settings?.notifications === false) return;
   if (Notification.permission !== 'granted') return;
   try {
     let notification;
@@ -519,15 +546,55 @@ function showNotification(batch) {
   }
 }
 
-function updateNotifyButton() {
-  if (!('Notification' in window)) {
-    el.notifBtn.hidden = true;
-    return;
+/**
+ * Turn OS notifications on or off. Turning them on while the browser has
+ * never been asked also requests permission — from the palette, which is an
+ * explicit user gesture, never unprompted on load. Denied permission is not
+ * an error to shout about: the tab badge and the floor still carry the count,
+ * so the setting is saved either way and the toast says what happened.
+ * @param {boolean} next
+ */
+async function setNotifications(next) {
+  if (next && 'Notification' in window && Notification.permission === 'default') {
+    try {
+      await Notification.requestPermission();
+    } catch (err) {
+      console.debug('[deckhq] notification permission request failed', err);
+    }
   }
-  // Requested once, from a visible button — never an unprompted permission
-  // prompt on load. The button only appears while permission is undecided;
-  // once granted or denied we stop asking.
-  el.notifBtn.hidden = Notification.permission !== 'default';
+  await saveSetting({ notifications: next });
+  if (!next) {
+    toast('Notifications off. The tab badge and the floor still show the count.');
+  } else if (!('Notification' in window)) {
+    toast('This browser has no notifications. The tab badge still shows the count.');
+  } else if (Notification.permission === 'granted') {
+    toast('Notifications on.');
+  } else {
+    toast('Notifications on, but this browser has them blocked for DeckHQ.');
+  }
+}
+
+/**
+ * The one place the client writes settings outside the settings sheet: the
+ * palette's toggles.
+ * @param {Record<string, unknown>} patch
+ */
+async function saveSetting(patch) {
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const settings = await res.json();
+    if (latestSnapshot) latestSnapshot.settings = settings;
+    applyMotionPreference(settings.reducedMotion);
+    return settings;
+  } catch (err) {
+    toast(`Could not save that setting: ${err.message}`, { isError: true });
+    return null;
+  }
 }
 
 // --------------------------------------------------------------- actions
@@ -1016,6 +1083,12 @@ function connectEvents() {
  */
 function maybeShowOnboarding(settings) {
   if (settings && settings.onboarded) return;
+  showOnboarding();
+}
+
+/** Open it on purpose — the palette's "Onboarding again". */
+function showOnboarding() {
+  if (el.onboardingDialog.open) return;
   if (typeof el.onboardingDialog.showModal === 'function') {
     el.onboardingDialog.showModal();
   } else {
@@ -1071,14 +1144,9 @@ const panel = createPanel({
   },
 });
 
-const hooksUI = createHooksUI({
-  dialogEl: el.hooksDialog,
-  bodyEl: el.hooksBody,
-  toast,
-});
-
-el.hooksClose.addEventListener('click', () => el.hooksDialog.close());
-el.hookStatusBtn.addEventListener('click', () => hooksUI.open());
+// The hook consent screen. It has no dialog of its own any more — it renders
+// into the settings sheet's Hooks section (WP-07, GUI/UX spec §5.4).
+const hooksUI = createHooksUI({ toast });
 
 // -------------------------------------------------------- creation flows
 //
@@ -1153,7 +1221,6 @@ async function submitNewProject() {
   }
 }
 
-el.newProjectBtn.addEventListener('click', openNewProject);
 el.newProjectGo.addEventListener('click', submitNewProject);
 el.newProjectPath.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -1161,7 +1228,6 @@ el.newProjectPath.addEventListener('keydown', (e) => {
     submitNewProject();
   }
 });
-el.degradedLink.addEventListener('click', () => hooksUI.open());
 
 // -------------------------------------------------------- name/avatar pickers
 //
@@ -1414,69 +1480,177 @@ el.identityGo.addEventListener('click', submitIdentity);
 
 // ---------------------------------------------------------------- header
 
-el.settleBtn.addEventListener('click', async () => {
-  // Bench every idle agent at once. The first run on a real machine inherits
-  // a long backlog of finished sessions; benching them one at a time is not a
-  // reasonable ask.
-  el.settleBtn.disabled = true;
-  const label = el.settleBtn.textContent;
+/**
+ * Bench every idle agent at once. The first run on a real machine inherits a
+ * long backlog of finished sessions; benching them one at a time is not a
+ * reasonable ask. It touches only sessions that are not running.
+ */
+async function settleFloor() {
   try {
     const res = await fetch('/api/settle', { method: 'POST' });
     const data = await res.json().catch(() => ({}));
-    el.settleBtn.textContent = res.ok ? `Benched ${data.benched ?? 0}` : 'Failed';
-  } catch {
-    el.settleBtn.textContent = 'Failed';
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    const n = data.benched ?? 0;
+    toast(
+      n === 1 ? 'Benched 1 agent. They are in the lounge.' : `Benched ${n}. All in the lounge.`,
+    );
+  } catch (err) {
+    toast(`Could not settle the floor: ${err.message}`, { isError: true });
   }
-  setTimeout(() => {
-    el.settleBtn.textContent = label;
-    el.settleBtn.disabled = false;
-  }, 1800);
-});
+}
+
+async function refreshNow() {
+  try {
+    const res = await fetch('/api/refresh', { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    toast('Rescanned.');
+  } catch {
+    toast('Refresh failed', { isError: true });
+  }
+}
+
+/** @param {string} projectId @param {boolean} archived */
+async function setProjectArchived(projectId, archived) {
+  try {
+    const res = await fetch('/api/project-archive', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: projectId, archived }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  } catch (err) {
+    toast(`Could not change that room: ${err.message}`, { isError: true });
+  }
+}
+
+/**
+ * Resume the selected session. The panel owns the footer links and the
+ * preference they save; this is the palette's route to the same endpoint, for
+ * a keyboard user who never opened the footer.
+ * @param {'app'|'terminal'} target
+ */
+async function resumeSelected(target) {
+  if (!selectedId) return;
+  try {
+    const res = await fetch('/api/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: selectedId, target }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    toast(target === 'app' ? 'Resuming in the desktop app' : 'Resuming in a terminal');
+  } catch (err) {
+    toast(`Could not resume: ${err.message}`, { isError: true });
+  }
+  saveSetting({ resumeIn: target });
+}
+
+/**
+ * "Jump to" a project: look at that room without scoping the queue to it.
+ * "Filter to" is the other half and is what the room plate does.
+ * @param {string} projectId
+ */
+function jumpToProject(projectId) {
+  const agents = (latestSnapshot?.agents || []).filter(
+    (a) => a.projectId === projectId && (letGoVisible || a.ackState !== 'let_go'),
+  );
+  if (agents.length === 0) {
+    toast('Nobody is in that room right now');
+    return;
+  }
+  selectAgent(agents[0].id);
+}
+
+/**
+ * The header's one primary action. A new agent needs a project, so: use the
+ * project already in view if there is one, otherwise hand the choice to the
+ * palette rather than guessing, and on a machine with no projects at all fall
+ * back to creating one.
+ */
+function startNewAgent(projectId) {
+  const inView = projectId || projectFilter || findAgent(selectedId)?.projectId;
+  if (inView) return openNewAgentDialog(inView);
+  if ((latestSnapshot?.projects || []).length === 0) return openNewProject();
+  paletteUI.open('new agent in ');
+}
 
 // Clicking the scrim — anywhere but the board itself — closes the board.
 el.whiteboardOverlay.addEventListener('click', (e) => {
   if (e.target === el.whiteboardOverlay) hideWhiteboard();
 });
 
-el.showLetGoToggle.addEventListener('click', async () => {
-  const next = el.showLetGoToggle.getAttribute('aria-pressed') !== 'true';
-  el.showLetGoToggle.setAttribute('aria-pressed', String(next));
-  try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ showLetGo: next }),
-    });
-  } catch {
-    toast('Could not save that setting', { isError: true });
-    el.showLetGoToggle.setAttribute('aria-pressed', String(!next));
-  }
+// ---------------------------------------------------------- palette + sheet
+
+const settingsUI = createSettingsUI({
+  dialogEl: el.settingsDialog,
+  bodyEl: el.settingsBody,
+  getSnapshot: () => latestSnapshot,
+  toast,
+  hooks: hooksUI,
 });
 
-el.refreshBtn.addEventListener('click', async () => {
-  el.refreshBtn.disabled = true;
-  el.refreshBtn.classList.add('is-busy');
-  try {
-    const res = await fetch('/api/refresh', { method: 'POST' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  } catch {
-    toast('Refresh failed', { isError: true });
-  } finally {
-    el.refreshBtn.disabled = false;
-    el.refreshBtn.classList.remove('is-busy');
-  }
+el.settingsClose.addEventListener('click', () => el.settingsDialog.close());
+
+const paletteUI = createPalette({
+  dialogEl: el.paletteDialog,
+  inputEl: el.paletteInput,
+  listEl: el.paletteList,
+  emptyEl: el.paletteEmpty,
+  getSnapshot: () => latestSnapshot,
+  getSelectedId: () => selectedId,
+  getLetGoVisible: () => letGoVisible,
+  actions: {
+    selectAgent,
+    filterToProject,
+    jumpToProject,
+    showWhiteboard,
+    revealFolder: revealProjectFolder,
+    runDashboard: runProjectDashboard,
+    archiveProject: setProjectArchived,
+    newAgent: startNewAgent,
+    newProject: openNewProject,
+    rename: openIdentityDialog,
+    // The palette never calls /api/ack itself: it hands the action to the
+    // panel's performAction(), the single funnel in the client. THE
+    // INVARIANT, docs/01-PRODUCT.md §2.
+    ack: (action) => panel.performAction(action),
+    resume: resumeSelected,
+    settleFloor,
+    refresh: refreshNow,
+    openSettings: () => settingsUI.open(),
+    openHooks: () => settingsUI.open('hooks'),
+    openOnboarding: showOnboarding,
+    setNotifications,
+    setSound: (next) => saveSetting({ sound: next }),
+    toggleLetGoVisible: () => {
+      letGoVisible = !letGoVisible;
+      toast(letGoVisible ? 'Let-go agents are reachable from ⌘K' : 'Let-go agents hidden again');
+    },
+  },
 });
 
-el.notifBtn.addEventListener('click', async () => {
-  if (!('Notification' in window)) return;
-  try {
-    await Notification.requestPermission();
-  } catch (err) {
-    console.debug('[deckhq] notification permission request failed', err);
-  }
-  updateNotifyButton();
-});
+el.paletteBtn.addEventListener('click', () => paletteUI.open());
+el.newAgentBtn.addEventListener('click', () => startNewAgent());
+el.degradedLink.addEventListener('click', () => settingsUI.open('hooks'));
 
+/**
+ * The palette's own accelerator, handled before the floor map because that
+ * map deliberately ignores anything with a modifier held. `⌘K` on a Mac,
+ * `Ctrl+K` everywhere else — and both are accepted on both, because a person
+ * on a Mac with an external PC keyboard should not have to care.
+ * @param {KeyboardEvent} e
+ */
+function handlePaletteKey(e) {
+  if (e.key !== 'k' && e.key !== 'K') return;
+  if (!e.ctrlKey && !e.metaKey) return;
+  if (e.altKey) return;
+  e.preventDefault();
+  if (paletteUI.isOpen()) paletteUI.close();
+  else paletteUI.open();
+}
+
+document.addEventListener('keydown', handlePaletteKey);
 document.addEventListener('keydown', handleKeydown);
 
 document.addEventListener('visibilitychange', () => {
@@ -1541,8 +1715,22 @@ export function stateColor(state) {
   return palette?.STATE_COLORS?.[state] || FALLBACK_STATE_COLORS[state] || '#888888';
 }
 
+/**
+ * The palette hint in the header names the key this machine actually uses.
+ * Both accelerators work everywhere (see handlePaletteKey); this is only
+ * about which one to advertise.
+ */
+function paintPaletteHint() {
+  const mac = /mac|iphone|ipad/i.test(navigator.userAgent || '');
+  el.paletteHintKey.textContent = mac ? '⌘ K' : 'Ctrl K';
+  el.paletteBtn.setAttribute(
+    'aria-label',
+    `Open the command palette. ${mac ? 'Command' : 'Control'} K.`,
+  );
+}
+
 async function main() {
-  updateNotifyButton();
+  paintPaletteHint();
   await Promise.all([loadInitialState(), loadRenderModules()]);
   connectEvents();
 }

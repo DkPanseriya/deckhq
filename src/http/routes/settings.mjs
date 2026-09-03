@@ -1,28 +1,25 @@
 /**
  * GET  /api/settings
  * POST /api/settings
+ * GET  /api/about     read-only facts the settings sheet shows and cannot change
  * POST /api/refresh   force a scan now
  *
- * docs/02-ARCHITECTURE.md §5.
+ * docs/02-ARCHITECTURE.md §5; docs/plan/05-GUI-UX-SPEC.md §5.4 for the sheet
+ * these routes serve.
  */
 import { readJson, sendError, sendJson } from '../server.mjs';
-import { RESUME_TARGETS } from '../../core/store.mjs';
+import { DEFAULT_SETTINGS, MOTION_MODES, RESUME_TARGETS } from '../../core/store.mjs';
+import { RATE_CARD_VERSION } from '../../core/model.mjs';
 import { EDITOR_NAMES } from '../../core/editor.mjs';
 import { terminalIds } from '../../adapters/claude-code/terminals.mjs';
 
-const ALLOWED = new Set([
-  'stallWindowMs',
-  'notifications',
-  'sound',
-  'zoom',
-  'pollIntervalMs',
-  'showLetGo',
-  'onboarded',
-  'resumeIn',
-  'approveText',
-  'editor',
-  'terminal',
-]);
+/**
+ * Exactly the persisted settings, derived rather than restated. The two lists
+ * drifting apart is how `showLetGo` survived for four months: the route
+ * accepted it, the store persisted it, and nothing read it.
+ * `test/unit/settings-keys.test.mjs` asserts this identity.
+ */
+const ALLOWED = new Set(Object.keys(DEFAULT_SETTINGS));
 
 /**
  * Every id `terminal` may name, across every platform — `auto` plus the
@@ -63,6 +60,11 @@ export function register(router, ctx) {
       // Same for `approveText`: only a string is a candidate. The store trims,
       // caps and falls back to the default for a blank one.
       if (k === 'approveText' && typeof v !== 'string') continue;
+      // And for `reducedMotion`: an unknown mode would be stored as the
+      // default, which is not what the caller asked for.
+      if (k === 'reducedMotion' && !(/** @type {readonly string[]} */ (MOTION_MODES).includes(v))) {
+        continue;
+      }
       // `editor` is the one setting whose value becomes a program (WP-47), so
       // it is checked here rather than trusted: the empty string means
       // "decide for me", and anything else must be a name on the allowlist in
@@ -89,6 +91,18 @@ export function register(router, ctx) {
     await store.save();
     registry.onSettingsChanged?.();
     sendJson(res, 200, store.settings);
+  });
+
+  // The settings sheet's "Data" section. Two facts the user can read and
+  // cannot change: where their acknowledgements live, and which dated rate
+  // table every cost estimate on the floor came from. A cost with no
+  // traceable rate card is a number nobody can check.
+  router.get('/api/about', (_req, res) => {
+    sendJson(res, 200, {
+      statePath: store.file,
+      rateCardVersion: RATE_CARD_VERSION,
+      writeError: store.writeError,
+    });
   });
 
   router.post('/api/refresh', async (_req, res) => {

@@ -238,7 +238,7 @@ export function describe(port = DEFAULT_PORT) {
       'DeckHQ adds one command hook per event below to your Claude Code settings so it can ' +
       'show exact, real-time state instead of polling. Each hook POSTs the event payload to ' +
       `DeckHQ on your own machine (127.0.0.1:${port}) and nothing else. Nothing leaves this ` +
-      'computer. Remove it any time from the header — removal deletes only what was added here.',
+      'computer. Remove it any time from this screen — removal deletes only what was added here.',
   };
 }
 

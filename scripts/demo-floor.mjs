@@ -516,8 +516,6 @@ fs.writeFileSync(
       settings: {
         stallWindowMs: 2 * MINUTE,
         notifications: false,
-        showLetGo: false,
-        zoom: 0,
         onboarded: true,
       },
       ack,

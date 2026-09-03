@@ -87,7 +87,7 @@ goes idle the item is "complete" and disappears. That is the bug this product ex
 | `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                         |
 | `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Standing in the waiting area with a waiting-time badge |
 | `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                     |
-| `let_go`      | Off the floor                                      | Not drawn                | Not drawn unless "Show let go" is on                   |
+| `let_go`      | Off the floor                                      | Hidden                   | Hidden; reachable from `⌘K` → "Show let-go agents"     |
 
 **The two "needs you" signals are deliberately different.** A raised hand at a desk means _I am
 mid-task and blocked_. A person standing in your office means _I finished; review this_. Those
@@ -304,6 +304,8 @@ These are real, and listed here rather than discovered later.
 
 | Key                 | Action                                            |
 | ------------------- | ------------------------------------------------- |
+| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings   |
+| `1` / `2` / `3`     | Reply, approve, bench — on the open review card   |
 | `J` / `K`           | Move through the needs-you queue, oldest first    |
 | `A`                 | Acknowledge the selected agent                    |
 | `B`                 | Bench the selected agent                          |

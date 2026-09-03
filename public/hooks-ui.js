@@ -3,6 +3,15 @@
  *
  * docs/02-ARCHITECTURE.md §4.1, §6; docs/04-BUILD-PLAN.md WP5 copy, WP11.
  *
+ * WP-07 moved this out of a dialog of its own and into a section of the
+ * settings sheet (docs/plan/05-GUI-UX-SPEC.md §5.4): "do I let DeckHQ write
+ * to my Claude settings file" is a setting, and it was the third-last button
+ * left in a header that is now a headline. Nothing about the consent contract
+ * changed — the literal file path and the literal JSON block are still shown
+ * before anything is written, and the install call still carries an explicit
+ * `{ consent: true }` that only a click on that button can produce. This
+ * component now renders into whatever element it is handed.
+ *
  * Shows, per runtime, the literal JSON that would be written and the exact
  * absolute file it would land in — verbatim from `plan.file` and
  * `plan.json` — before any install. No installation happens without an
@@ -65,17 +74,17 @@ function deliveryNote(adapter) {
 
 /**
  * @param {object} opts
- * @param {HTMLDialogElement} opts.dialogEl
- * @param {HTMLElement} opts.bodyEl
  * @param {(message:string, opts?:{isError?:boolean}) => void} opts.toast
  */
 export function createHooksUI(opts) {
-  const { dialogEl, bodyEl, toast } = opts;
+  const { toast } = opts;
+  /** @type {HTMLElement|null} where this screen currently draws itself */
+  let bodyEl = null;
   let loading = false;
 
-  /** Fetch GET /api/hooks and render the whole dialog body from scratch. */
+  /** Fetch GET /api/hooks and render the whole section from scratch. */
   async function load() {
-    if (loading) return;
+    if (loading || !bodyEl) return;
     loading = true;
     bodyEl.textContent = '';
     const loadingMsg = document.createElement('p');
@@ -300,18 +309,21 @@ export function createHooksUI(opts) {
     }
   }
 
-  function open() {
+  /**
+   * Draw into `host` and keep drawing there. Called by the settings sheet
+   * when it builds its Hooks section.
+   * @param {HTMLElement} host
+   */
+  function renderInto(host) {
+    bodyEl = host;
     load();
-    if (typeof dialogEl.showModal === 'function') {
-      dialogEl.showModal();
-    } else {
-      dialogEl.setAttribute('open', '');
-    }
   }
 
-  function close() {
-    dialogEl.close();
+  /** Re-read `/api/hooks`. Installed, wrong port and "events arriving" are
+   * live facts, so the sheet asks for them again every time it opens. */
+  function refresh() {
+    if (bodyEl) load();
   }
 
-  return { open, close };
+  return { renderInto, refresh };
 }
