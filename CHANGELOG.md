@@ -55,8 +55,56 @@
   `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
   a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
   client-side: the daemon never sees a draft and a draft never touches ack state.
+- **`⌘K` — one palette over everything.** Fuzzy search across every agent (by name, MK tag,
+  session title, project, branch or model), every project (jump to it, filter the queue to it,
+  open its whiteboard, reveal its folder, run its dashboard, archive or restore the room, start
+  another agent in it), every acknowledgement action that is legal on whatever is selected right
+  now, resume, rename, and every command that used to be a header button. Arrow keys move, Enter
+  runs, Escape closes and gives focus back to whatever opened it; it is a real dialog with a
+  combobox over a labelled listbox, so a screen reader reads each row as "Command: Refresh,
+  rescan every session now". Each of the six actions that left the header answers to one
+  character — `s` settle, `p` new project, `h` hooks, `r` refresh, `n` notifications, `l` show
+  let-go — so every one of them is still one keystroke and Enter away. That is asserted against a
+  populated floor whose agent names collide with the command words on purpose, because a ranking
+  test on an empty list proves nothing.
+- **A settings sheet, for the first time.** Until now the stall window, the poll interval,
+  notifications and sound were reachable only by POSTing to `/api/settings` by hand. `⌘K` → `,`
+  opens six sections: state (stall window 2–120 minutes, poll interval), notifications (a master
+  switch, per-state switches for hands up and for finished-and-waiting, sounds, volume), resume
+  (default target), floor (a motion override that can hold the window still, or keep it animating,
+  whatever the system asks for), data (the state file path and the dated rate card every cost
+  estimate is computed from, both read-only), and hooks — the existing consent screen, embedded
+  as a section rather than opened as a dialog of its own. Nothing about the consent contract
+  changed: the literal file path and the literal JSON block are still shown before anything is
+  written.
 
 ### Changed
+
+- **The header is a headline, not a toolbar.** It was brand, five small numbers and six buttons of
+  equal weight, three of them maintenance and one wired to nothing. It is now the brand, the
+  needs-you numeral at 44 px of JetBrains Mono with its three-way breakdown beside it, the floor
+  counts as one quiet line, the `⌘K` hint, and exactly one primary action — `+ New agent`.
+  Everything else is in the palette. The degraded and write-error banners are untouched; they are
+  the honest-limits machinery and they were already right.
+- **The needs-you numeral is the display element of the interface.** It was 13 px in a corner —
+  five millimetres for the single most important fact in the product. It is 44 px now, and at zero
+  it drops to the quietest ink in the set and loses its weight, because a cleared queue should
+  look calm rather than like a scoreboard reading nought. It also stopped being crimson: that
+  colour is reserved for a session standing in your office, and the total is the sum of three
+  states, one of which is a session that has merely gone quiet. The stylesheet now sets no text
+  anywhere in the accent colour at all, which is one fewer exception than before.
+- **The dead "Show let go" toggle is gone, and so is the setting it wrote.** It had been in the
+  header for four months writing `settings.showLetGo`, which no code has ever read
+  (`docs/DEVIATIONS.md` §58). `zoom` went with it — same defect, never reported. "Show let-go
+  agents" survives as a view toggle in the palette, held in the tab rather than on disk, because
+  what you are currently looking at is not a property of the machine. The route's allowlist is now
+  derived from the store's defaults instead of hand-maintained — the two lists drifting apart is
+  exactly how a setting nobody reads stays alive — and a new test fails on the next settings key
+  that changes nothing.
+- **`settings.notifications` finally does something.** It was declared, defaulted to on, and never
+  consulted; the client checked only the browser permission. It is now the master switch, with
+  `notifyHandsUp` and `notifyForReview` under it, so the two states that reach you when the tab is
+  closed can be chosen separately.
 
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
@@ -74,7 +122,9 @@
   machine without `git` still gets a floor. Its `for_review` sessions also end on a message
   written the way an agent actually writes one, in markdown.
 - `scripts/capture-floor.mjs --press` takes a sequence of keys rather than a single one, so a
-  screenshot can be aimed at a chosen place in the needs-you queue.
+  screenshot can be aimed at a chosen place in the needs-you queue. It also understands two
+  escapes — `^` holds Ctrl for the next key and `~` is Enter — so a shot can be aimed through the
+  command palette.
 
 ### Fixed
 

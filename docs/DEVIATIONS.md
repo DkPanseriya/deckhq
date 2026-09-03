@@ -3233,3 +3233,191 @@ populations with a uniform speckle across every project room's floor and nothing
 person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
 tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
 floor (36 px) is unchanged.
+
+---
+
+## 88. WP-07 — the header, the palette and the settings sheet: what shipped, and the four controls that did not
+
+WP-07 is accepted against three sentences in
+[`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md): every action previously in the
+header is reachable in ≤ 2 keystrokes from `⌘K`, the palette is fully keyboard-operable and
+screen-reader-labelled, and **no orphaned settings keys remain**. All three hold. What follows is
+where the implementation departed from [`05`](plan/05-GUI-UX-SPEC.md) §5 and why.
+
+### 88.1 The numeral left the accent colour behind
+
+`05` §2.4 asks for **JetBrains Mono, 44 px, `--ink`**, dropping to `--muted` and losing its weight
+at zero. That is what shipped, and it is a change of colour as well as of size: the 13 px numeral
+it replaces was `--accent` whenever it was non-zero.
+
+Crimson is reserved for `for_review` and for primary actions (`03-VISUAL-SPEC.md` §5). The
+needs-you total is the **sum of three states** — hands up, stalled, and for review — one of which
+is a session that has gone quiet and is not standing in anyone's office. Painting that sum crimson
+spends the reserved colour on a number that is crimson most of the time, which is exactly the "cry
+wolf" the reservation exists to prevent. The breakdown's `for_review` dot still carries it, where
+it means one thing.
+
+The consequence is a test rewrite. `state-visuals.test.mjs` used to assert "the accent sets text in
+exactly one place, and it is large" — the numeral was the single licensed exception, surviving only
+by being WCAG large text. That test now asserts **the accent sets no text anywhere**, which is a
+stronger rule and one less exception to explain. Measured: `--ink` 14.66:1 and `--muted` 5.45:1 on
+the topbar's `--surface`.
+
+### 88.2 The breakdown stacks instead of running along the line
+
+`05` §5.2's sketch puts the three-way breakdown horizontally beside the numeral. It ships as a
+three-row column instead. A 44 px numeral is 60 px tall with its label; three rows of 18 px fit
+inside that height exactly, so the column costs no header height at all, while the horizontal
+version would have pushed the counts and the primary action off a 1280 px window. Same three items,
+same dot-plus-number-plus-word pairing, same order.
+
+### 88.3 Four controls `05` §5.4 lists were not built
+
+The package exists partly to delete a header toggle that wrote a setting nobody read for four
+months (§58). Shipping four more of those in the sheet that replaces it would have been absurd, so
+the rule applied throughout was: **a control ships only if moving it changes something today.**
+These did not qualify, and each is named here with the package that owns its reader.
+
+| §5.4 asks for | Not shipped because | Owner |
+| --- | --- | --- |
+| Preferred terminal | The terminal is chosen inside the adapter, per platform, from a fixed try-list (`x-terminal-emulator`, `gnome-terminal`, `konsole`, `xterm`). There is no setting to read. | WP-04 |
+| Lounge crowd threshold | The crowd rendering it would tune does not exist; the renderer has no such input. | WP-12 |
+| Ledger retention, export | There is no ledger. | WP-17 + WP-48 |
+| "Show let go" as a stored setting | It is a property of the tab you are looking at, not of the machine. It ships as a **view toggle** in the palette (`⌘K` → `l`), held in memory and reset on reload. | — |
+
+Two more are absent for a different reason: `approveText` belongs to the panel's `2 Approve` and is
+edited there, and `onboarded` is a fact rather than a preference.
+`test/unit/settings-keys.test.mjs` names both as the only exemptions, so a third cannot be added
+silently.
+
+**Two controls shipped that nothing acts on yet, and they say so.** The Sounds toggle and the
+volume slider write real settings that WP-15 will read; the sheet says in as many words that no
+sound plays yet. That is a stored preference with an honest label, which is a different thing from
+a control that claims to work. If WP-15 slips, delete them.
+
+### 88.4 `zoom` went with `showLetGo`
+
+`showLetGo` was the flagged one (§58). `zoom` was the same defect and nobody had flagged it:
+written into `DEFAULT_SETTINGS` since v1, accepted by the route, persisted to `state.json`, and
+read by nothing — the floor's magnification is client state that `Scene` owns and has never been
+saved. "No orphaned settings keys remain" is not satisfied by deleting the one that had a bug
+report, so both are gone. `docs/02-ARCHITECTURE.md` §7's sample `state.json` was updated to match.
+
+The route's allowlist is now `new Set(Object.keys(DEFAULT_SETTINGS))` rather than a hand-written
+list. Those two lists drifting apart is the whole mechanism by which `showLetGo` survived: the
+route accepted it, the store persisted it, and no one comparing the two would have noticed. The
+store also now **drops** any key outside `DEFAULT_SETTINGS` when it normalises, so a `state.json`
+written by an older build loses `showLetGo` and `zoom` on its first load instead of carrying them
+for ever.
+
+`onboarded` moved into `DEFAULT_SETTINGS`. It had been accepted by the route and written by the
+client without ever being declared — a real setting that the store's own type did not know about.
+
+### 88.5 Two settings the sheet needed had no reader, so they got one
+
+`notifications` and `sound` were both dead on arrival: `sound` has never been wired to anything
+(`05` §8 says so), and `notifications` was declared, defaulted to `true`, and never consulted — the
+client checked only the browser's permission. `notifications` is now the master switch it always
+claimed to be, and `notifyHandsUp` / `notifyForReview` are the per-state switches under it.
+
+`notifyForReview` is where §5.4's "crashes" landed. There is no crash state in the model — nothing
+anywhere in `src/` detects one — so rather than ship a switch over a signal that does not exist,
+the two states that actually fire a notification each got their own. If a crash state arrives, it
+gets a third.
+
+### 88.6 `reducedMotion` is a real override, and the media query moved to make room
+
+`settings.reducedMotion` is `system` (the default, deferring to `prefers-reduced-motion`),
+`reduce`, or `no-preference`. It is stamped on `<html>` as `data-motion` and read by `style.css`,
+which means the `@media (prefers-reduced-motion: reduce)` block had to become
+`:root:not([data-motion='no-preference']) *` — otherwise an explicit "always animate" could not win
+against it. A machine that never opens the sheet carries no attribute and behaves exactly as
+before, which is what keeps the goldens harness (which emulates reduced motion) working unchanged.
+
+The renderer does not read it yet: `public/render/**` belongs to another engineer and this package
+does not touch it. The chrome honours it today; the floor honours the OS setting as it always has.
+
+### 88.7 The hook consent screen is a section, not a dialog
+
+`05` §5.4 asks for it embedded, and it is: `createHooksUI` no longer owns a `<dialog>` and renders
+into whatever element it is handed. The consent contract is untouched — the literal absolute path
+and the literal JSON block are still shown before anything is written, and the install call still
+carries a `{ consent: true }` that only a click on that button can produce. Two copy strings that
+said "remove it from the header" were corrected; there is no header button any more.
+
+### 88.8 What "≤ 2 keystrokes" actually means, and how it is measured
+
+One character, then Enter. Each former header action carries a unique single-character
+accelerator — `s` settle, `p` new project, `h` hooks, `r` refresh, `n` notifications, `l` show
+let-go — worth a flat 1,000,000 in the ranking, which is three orders of magnitude above the best
+fuzzy score any entry can reach. `test/unit/palette.test.mjs` asserts the accelerators are unique
+**and** that each one ranks its command first against a populated floor whose agent names and
+titles are chosen to collide with the command words ("Settle the migration", "Refresh the token
+cache", "Refactor the notifier"). An empty list would have made the test meaningless.
+
+The matcher itself needed one non-obvious thing. Greedy leftmost subsequence matching scores
+"notifier" against "Rune · MK5.1 · orbital-api · Refactor the notifier" by eating the `n` in "Rune"
+and scattering the rest — the contiguous hit at the end never gets looked at. The scan is therefore
+re-run from every occurrence of the query's first character and the best result wins, capped at 24
+starts.
+
+### 88.9 The palette does not call `/api/ack`, and is tested for it
+
+The six acknowledgement actions appear in the palette, but running one calls back into
+`panel.performAction()` — still the only place in the client that posts to `/api/ack`.
+`panel-invariant.test.mjs` was extended rather than relaxed: `app.js` now has exactly three call
+sites (the `A` and `B` keys, and the palette's `ack` action, which the test matches by shape inside
+`createPalette({…})`), and a new test asserts `public/palette.js` contains no `fetch(` at all.
+
+`legalAckActions()` is duplicated in `palette.js` rather than imported from `panel.js`, which
+reaches `localStorage` through `./drafts.js` at module scope and cannot be loaded in a Node test.
+The table is pinned by a test so the two copies cannot drift in silence — the same trade `app.js`
+already makes with `STATE_LABELS` and the state colours.
+
+### 88.10 `/api/about`, and a rate card that now has a date
+
+§5.4's Data section wants the state file path and the rate card version, both read-only. The path
+was reachable only through `writeError`, which exists only when writing has failed, and the rate
+card had no version at all — just a table of per-million-token rates inside `estimateCost()`. So:
+`GET /api/about` returns `{ statePath, rateCardVersion, writeError }`, and `model.mjs` exports
+`RATE_CARD_VERSION`. A cost estimate nobody can trace to a dated table is a number nobody can
+check, and this product says "estimate, never a bill" everywhere else.
+
+### 88.11 Screenshots and goldens
+
+`docs/media/header-palette.png` and `docs/media/settings-sheet.png`, both captured from the demo
+floor at 1600x1000. `scripts/capture-floor.mjs`'s `--press` gained two escapes to drive them: `^`
+holds Ctrl for the next key (`^k` is the palette) and `~` is Enter, so `^k,~` opens the palette,
+types the Settings accelerator and runs it.
+
+**The goldens were regenerated, and they had to be.** The header changed shape and, being taller,
+moved the floor's fit — 50% of pixels differ on the populated fixtures. All four were regenerated
+and the check then passes at **0 px moved at all** on every population.
+
+That zero is worth recording. §87 measured a 36-pixel noise floor: a 592x2 strip in the header,
+one count on one channel, flipping direction between runs — "a bistable rounding in a single
+blend". That blend was in the header this package replaced. It is gone, and the harness is now
+bit-exact across Chrome sessions on all four populations. §87's tolerances are unchanged; there is
+simply nothing left for them to absorb.
+
+**And the goldens caught a real defect before anyone saw the product.** The first check came back
+with the command palette drawn over the floor, closed, in every population. A `<dialog>` is hidden
+by the UA rule `dialog:not([open]) { display: none }`, and any author rule that sets `display` on
+the element beats a UA rule regardless of specificity — so `.palette { display: flex }` left it
+permanently on screen. Two unit suites, a lint pass and two hand-driven screenshots had all gone
+green on it, because in every one of those the palette was open. `display` now lives on
+`.palette[open]`, and `state-visuals.test.mjs` fails on any rule that sets `display` on a bare
+dialog class. This is the third entry in this log (§26, §52, §55) whose defect was invisible to
+every test and obvious in one screenshot, and the first one the gate caught by itself.
+
+### 88.12 Loose ends for whoever takes WP-10 and WP-12
+
+- **"Jump to `<project>`" selects; it does not move the camera.** There is no camera-framing API to
+  call — `05` §6.4's focus camera is WP-12. When it lands, `jumpToProject()` in `app.js` is the one
+  line to change.
+- **The palette's agent list is the whole roster, unranked by urgency.** When the queue strip and
+  the deck land (WP-10) the palette should probably float waiting agents to the top of their group.
+  It deliberately does not guess at that ordering now.
+- **The view toggle does not put let-go agents on the floor.** It makes them reachable — palette,
+  panel, selection — which is everything the dead setting ever promised minus the drawing, and the
+  drawing is `public/render/**`.
