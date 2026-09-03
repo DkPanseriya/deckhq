@@ -630,6 +630,15 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   to find a daemon on an OS-assigned port discoverable only through `daemon.json`; the MCP server
   is driven over its real stdio transport; eight concurrent `SessionStart` starts produce exactly
   one spawn. `docs/DEVIATIONS.md` §102.
+- **12 tests for the documentation site, and four of them are the egress promise.** The suite builds
+  `site/` into a temporary directory and reads what came out: no page fetches anything
+  cross-origin, no page carries a `<script>` or an `<iframe>` at all, the stylesheet has no
+  `@import`, no `@font-face` and no remote `url()`, and the only hosts named anywhere in the
+  sources are the two a reader is meant to be sent to. It also asserts that every internal link
+  resolves to a file that was built, that a `<script>` inside a deviation entry renders as the six
+  visible characters it is, and that the copy contains none of the phrasings `docs/plan/08` §4.2
+  retires. A site that quietly grew a font from a CDN would fail the build the same way a daemon
+  that grew a socket does. §107.
 
 ### Packaging
 
@@ -759,6 +768,32 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   `publish.yml` and `packaging/README.md` named `docs/media/panel.png`, which is the panel from
   before WP-08, so every future release page would have shown the superseded surface. Both now name
   the review card and the hero GIF, matching what v1.2.0 actually carries.
+- **DeckHQ has a documentation site.** `site/` — the pitch and `npx deckhq` over the hero GIF, a
+  real `doctor` run, the floor, the review card and the deck; "the model in 60 seconds" for the six
+  states and the one rule; install for `npx`, a global install, the Claude Code plugin and the VS
+  Code extension, with Homebrew, winget and scoop marked _on the next release_ because no tag has
+  run that job yet; hooks and privacy for every path read and written and the consent in front of
+  both; adapters for what is verified, what is not, and how to contribute one; an FAQ whose first
+  entry answers "why not just use `claude agents`" with the measured persistence argument and this
+  machine's own four lines; and `docs/DEVIATIONS.md` rendered as an engineering log, an index plus
+  one page per entry. **No site generator and no dependency**: hand-written HTML bodies, a shared
+  shell, and a 250-line markdown converter that escapes before it adds a tag. `node site/build.mjs`
+  renders `site/dist/`; `--serve` puts it on a loopback port to look at.
+  `docs/media/site-index.png` is the home page. §107.
+- **The site keeps the product's promise, and a test says so.** No analytics, no CDN, no web font,
+  no script of any kind on any page. `JetBrains Mono` and `IBM Plex Sans` are named first in their
+  stacks and fall back to the system's own faces, because there is no `.woff2` in this repository
+  and fetching one would be exactly the thing being refused. The palette is `public/style.css`'s
+  own tokens, so a screenshot and the page around it are the same colours.
+- **`.github/workflows/pages.yml` publishes it on every push to `main`.** Checkout, `node
+site/build.mjs`, the site suite again against the bytes about to be published, then
+  `upload-pages-artifact` and `deploy-pages`. Read-only by default, with only the deploy job
+  raising itself to what Pages needs; one deployment at a time, and a newer push waits rather than
+  cancelling a running one. There is no `npm install` step because there is nothing to install.
+  **The owner must enable Pages once** — Settings → Pages → Build and deployment → Source: GitHub
+  Actions — because no workflow can turn it on for its own repository, and until that is done the
+  deploy step fails while nothing else in the repository notices. **Unproven until a push runs
+  it.**
 
 ## 1.2.0
 

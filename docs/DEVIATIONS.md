@@ -6095,3 +6095,126 @@ and **0 px moved at all** — a quieter noise floor than §87 measured, whose
 `docs/media/` carries the pair for both populations:
 `floor-before-wp55.png` / `floor-after-wp55.png` and `demo-before-wp55.png` /
 `demo-after-wp55.png`, each taken from the golden itself.
+
+## 107. WP-29 — the documentation site: hand-written HTML, and the promise it has to keep
+
+**Spec:** [`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md) WP-29 asks for a
+user-facing site — install, the model in 60 seconds, hooks, adapters, privacy, an FAQ whose first
+entry is "why not just use `claude agents`", and the deviations log as an engineering blog. Static,
+no tracking.
+
+**Shipped:** `site/`, deployed to GitHub Pages by `.github/workflows/pages.yml` on every push to
+`main`. Six hand-written pages, one generated log page per entry in this file, one stylesheet, one favicon, five images
+copied from `docs/media/`. `node site/build.mjs` renders it into `site/dist/`, which is generated
+and gitignored — the root `dist/` rule already covered it — and `.prettierignore`d; `site/` itself
+is formatted with everything else.
+
+### 1. No site generator, and no dependency to add one
+
+The obvious build for this is Astro, Eleventy or a markdown pipeline. All three are dependencies,
+and [`08`](plan/08-PLAN-V2-100X.md) §1.1 rule 3 is about the product rather than the repository —
+but a documentation site that needs 300 packages to render seven pages would sit oddly beside a
+product that reads its own source in an afternoon. So the pages are hand-written HTML bodies, the
+shell around them is a template literal, and the only moving part is a small markdown converter for
+the log.
+
+**What that costs, honestly:** no live reload, no incremental build, and a converter that
+implements a subset of markdown rather than CommonMark. **What it buys:** the site builds on a
+fresh checkout with `node site/build.mjs` and nothing installed, which is also why the Pages
+workflow has no `npm install` step.
+
+### 2. The zero-egress promise, extended to the site and asserted
+
+The product makes no outbound network calls of any kind. Its site is held to the same rule, and the
+rule is a test rather than a habit. `test/unit/site.test.mjs` builds the site into a temporary
+directory and asserts that no page fetches anything cross-origin — no `src`, `srcset`, `poster` or
+`<link href>` with a scheme or a leading `//` — that no page carries a `<script>` or an `<iframe>`
+at all, that the stylesheet has no `@import`, no `@font-face` and no remote `url()`, and that the
+only hosts named anywhere in the sources are `github.com` and `www.npmjs.com`: links a reader
+clicks, never requests the page makes on their behalf.
+
+**JetBrains Mono is named and not shipped.** The package asks for it on numbers. There is no
+`.woff2` in this repository and fetching one from a CDN is exactly the thing being refused, so the
+stack is `'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace` — the face
+if the reader's machine has it, the system's mono if not. Same for `IBM Plex Sans`. If those files
+are ever licensed and committed, one `@font-face` and one line of the test change together.
+
+### 3. The log is a page per entry, addressed by position rather than by number
+
+This file is 6,000 lines and 110 `##` entries, this one included. It renders as an index plus one
+page per entry with prev/next, because a 6,000-line single page is not a blog.
+
+**The file name is the entry's position, not the number it carries.** Entry numbers repeat — there
+are two §48s and two §49s, from parallel packages that both numbered from the same point — so the
+number is not a key. Position is stable in an append-only log, and the number each entry carries is
+displayed exactly as written. The test records both the collision and the reason, so the day the
+numbers are made unique the log can move to numbered URLs on purpose rather than by accident.
+
+**One entry has no number at all** — "Findings from review, not previously reported" — and it
+renders with an em dash where the number goes rather than being given one it never had.
+
+### 4. The converter escapes first and adds tags second
+
+Everything goes through `esc()` before a single rule runs, so the only markup in the output is what
+the five inline rules and the seven block rules put there. A `<script>` in a deviation entry
+renders as the visible characters it is; that is a `SECURITY:` test, in the same shape as the ones
+guarding `public/markdown.js`. `safeUrl()` refuses `javascript:`, `data:` and protocol-relative
+URLs, leaving them as the plain text they were written as.
+
+Two things the converter had to learn from this file rather than from a specification:
+
+- **Code spans are lifted out before anything else and put back last**, so a `*` or a `[` inside
+  one is never read as emphasis or a link. The placeholder is a NUL pair, which cannot occur in the
+  source and which the escaper leaves alone.
+- **Lazy continuation.** §86 wraps a code span across a line break back to column 0 inside a list
+  item. Without lazy continuation that line became its own paragraph and split the span in half,
+  leaving a stray backtick in the page. There is a test with that exact shape in it.
+
+Relative links here point at files on disk — `plan/06-ENGINEERING-WORKPLAN.md` and its neighbours —
+which the site does not publish, so they are rewritten to the repository at the path they meant.
+Images are rewritten to the copy under `dist/media/`, and the build fails rather than shipping a
+broken one when a referenced image is missing.
+
+### 5. What the copy is not allowed to say
+
+[`08`](plan/08-PLAN-V2-100X.md) §4.2 forbids "cannot see", "invisible" and "hidden" about another
+tool, and §3.5 forbids comparing in public at all. The FAQ's first entry is therefore the measured
+persistence argument — _`claude agents` lists what is running; DeckHQ keeps what is owed_ — with
+the reference machine's own four lines under it, the note that the agent view now groups a
+`Completed` set for background sessions and sessions with pull requests, and a commitment to
+rewrite the answer the day the numbers stop differing rather than repeat it. No competitor is named
+anywhere on the site. A test greps the built pages for the banned phrasings; the log pages are
+excluded from it, because the log is a record of what was written at the time rather than copy.
+
+**WP-19 is absent by construction.** The permission card has never met a live session (§97.5), so
+it is not on the install page, the FAQ or the home page. The site describes what is on `main` and
+has been run, and nothing else.
+
+### 6. Design
+
+Dark only, from `public/style.css`'s own tokens, so a screenshot of the product and the page around
+it are the same palette. There is no light theme because the product has none, and a light site
+would frame every screenshot in a colour the product never appears in.
+
+Prose sits at a 36 rem measure; the `doctor` report and every table step out to 48 rem, because the
+report's longest line is the point of the home page and reading the number the launch is built on
+through a horizontal scrollbar would be a strange way to present it. Inline code carries a ground
+and no border: the log runs eight or ten spans to a paragraph, and outlining each one turns a
+sentence into a row of chips.
+
+### 7. What the owner has to do, and what is unproven
+
+**GitHub Pages must be enabled by hand**, once: Settings → Pages → Build and deployment → Source:
+**GitHub Actions**. No workflow can turn Pages on for its own repository. Until it is set, the
+`build` job succeeds, uploads the artifact, and `deploy` fails with "Get Pages site failed".
+Nothing else in the repository depends on it.
+
+**The workflow has never run.** It is asserted from `test/unit/site.test.mjs` — that it builds what
+it deploys, that it deploys from `main`, and that it uploads `site/dist` — which is YAML review
+with a test around it, not a green run. The site itself was built, served locally over Node's own
+`http` and photographed: `docs/media/site-index.png`.
+
+**The one number on the site is a real run, and it is dated.** The `doctor` block on the home page
+and in the FAQ is the reference machine on 3 September 2026, labelled as such, with "your numbers
+will differ" beside it. [`08`](plan/08-PLAN-V2-100X.md) §3.0.1 requires it to be re-measured before
+every launch wave and reworded the day it stops being true.
