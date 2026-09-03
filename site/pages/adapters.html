@@ -1,0 +1,158 @@
+<article class="prose">
+  <h1>Adapters</h1>
+  <p class="lede">
+    Every runtime DeckHQ reads sits behind one interface. Nothing outside
+    <code>src/adapters/</code> reads a transcript or shells out to a runtime CLI, which is what
+    makes a third runtime an addition rather than a rewrite.
+  </p>
+
+  <h2>What ships today</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Runtime</th>
+          <th>Status</th>
+          <th>What it gives you</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Claude Code</strong></td>
+          <td>Verified, and the runtime the product is developed against</td>
+          <td>
+            Transcripts on disk, live sessions from <code>claude agents --json</code>, hooks for
+            exact state, sending a turn, opening a session in a terminal, and the plugin route.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Codex</strong></td>
+          <td><strong>Unverified</strong></td>
+          <td>
+            Rollout files, sessions, and the same hook shape. Implemented, tested against fixtures,
+            never run against real Codex data.
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <p>
+      <strong
+        >Treat DeckHQ as a Claude Code tool until the Codex adapter has been exercised end to
+        end.</strong
+      >
+      It is written against documented rollout-file conventions, but Codex is not installed on the
+      development machine, so no line of it has met real data. It reports itself unavailable cleanly
+      and degrades without throwing rather than guessing. When it runs on a machine with Codex on
+      it, this page says so instead.
+    </p>
+  </div>
+
+  <h2>The interface</h2>
+  <p>
+    An adapter answers six questions and owns a hook block. This is the whole contract, from
+    <code>docs/02-ARCHITECTURE.md</code> &#167;2:
+  </p>
+  <pre><code>interface RuntimeAdapter {
+  readonly id: string;
+  readonly label: string;
+
+  /** Is this runtime present on the machine? Cheap, cached for the process lifetime. */
+  available(): Promise&lt;boolean&gt;;
+
+  /** Sessions the runtime reports as currently alive. */
+  liveSessions(): Promise&lt;LiveSession[]&gt;;
+
+  /** Every session on disk, newest first, bounded by opts. */
+  scanSessions(opts: { maxAgeDays: number; limit: number }): Promise&lt;SessionSummary[]&gt;;
+
+  /** Full message list for one session, most recent last. */
+  conversation(id: string, opts: { maxMessages: number }): Promise&lt;Message[]&gt;;
+
+  /** Send a turn into a session. Resolves when the runtime returns. */
+  send(id: string, text: string, opts: { cwd: string; timeoutMs: number }): Promise&lt;SendResult&gt;;
+
+  /** Spawn an interactive terminal attached to this session. */
+  openInTerminal(id: string, cwd: string): Promise&lt;void&gt;;
+
+  /** Adapters without hooks return supported: false and the daemon degrades. */
+  hooks: {
+    supported: boolean;
+    describe(port: number): HookPlan;   // exactly what would be written, for the consent screen
+    install(port: number): Promise&lt;void&gt;;
+    remove(): Promise&lt;void&gt;;
+    installed(port?: number): Promise&lt;boolean&gt;;
+    installedPort(): Promise&lt;number | null&gt;;
+  };
+}</code></pre>
+  <p>
+    Adding a runtime means adding one entry to the registry in
+    <code>src/adapters/index.mjs</code>. Nothing else in that file changes, and nothing outside
+    <code>src/adapters/</code> changes at all.
+  </p>
+
+  <h2>The rules a new adapter has to keep</h2>
+  <ul>
+    <li>
+      <strong>All parsing lives in one file per adapter.</strong> On-disk formats are undocumented
+      and they break; a format break should be a single-file fix.
+    </li>
+    <li>
+      <strong>A parse failure on one session must never fail the scan.</strong> Log it, skip that
+      session, carry on.
+    </li>
+    <li>
+      <strong>Prefer a supported CLI surface over file parsing</strong> wherever both exist &#8212;
+      that is what <code>liveSessions</code> is for.
+    </li>
+    <li>
+      <strong>An unavailable runtime degrades, it does not throw.</strong> A machine without your
+      runtime should not know your adapter is there.
+    </li>
+    <li>
+      <strong>No network egress, and no runtime dependency.</strong> Both are rejection criteria
+      regardless of how good the rest of the change is.
+    </li>
+    <li>
+      <strong>The invariant holds.</strong> No observed event an adapter reports may clear a state
+      the user owns.
+    </li>
+  </ul>
+
+  <h2>Contributing one</h2>
+  <p>
+    An adapter is the most useful thing an outside contributor can add, because the person who runs
+    the runtime is the only one who can verify it. The route:
+  </p>
+  <ol>
+    <li>
+      Read
+      <a href="https://github.com/DkPanseriya/deckhq/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>
+      first. It leads with the two things that get a change rejected regardless of quality: the
+      invariant, and network egress of any kind.
+    </li>
+    <li>
+      Copy the shape of <code>src/adapters/codex/</code> &#8212; it is the smaller of the two and
+      shows the minimum an adapter has to answer.
+    </li>
+    <li>
+      Put your fixtures in <code>test/fixtures/</code> and your parse tests beside the existing
+      ones. The suite is <code>node --test</code>; there is no framework to learn.
+    </li>
+    <li>
+      Say in the pull request whether you have run it against real data on your own machine. An
+      adapter that has is marked verified here; one that has not is marked unverified, in the same
+      words as Codex above.
+    </li>
+  </ol>
+
+  <div class="callout">
+    <p>
+      A claim in anyone&#8217;s documentation is a hypothesis until it has been measured on a
+      machine. That rule applies to this project&#8217;s own claims first, which is why the row
+      above says <em>unverified</em> rather than <em>supported</em>.
+    </p>
+  </div>
+</article>

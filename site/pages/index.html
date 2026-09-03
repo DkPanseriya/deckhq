@@ -1,0 +1,174 @@
+<section class="hero">
+  <h1>Every AI coding session on your machine, on one office floor.</h1>
+  <p class="hero-sub">
+    It sees the ones your terminal forgot, and it remembers what&#8217;s waiting on you even after
+    you&#8217;ve read it. Local, private, MIT.
+  </p>
+  <p class="command">npx deckhq</p>
+  <p class="hero-meta">
+    Node 18 or newer. No build step, no runtime dependencies, no account, and no network calls of
+    any kind.
+  </p>
+</section>
+
+<figure>
+  <img
+    src="media/hero.gif"
+    alt="An agent&#8217;s turn ends: it leaves its project desk, walks the corridor into your office, and joins the queue of sessions waiting on you with a crimson waiting-time badge over its head"
+  />
+  <figcaption>
+    A turn ends. The agent stands up, walks to your office, and waits there with how long it has
+    been waiting over its head. It is still there tomorrow if you do not deal with it.
+  </figcaption>
+</figure>
+
+<section class="band">
+  <h2>Start with the number</h2>
+  <p>
+    Before you install anything, run the report. It takes about ten seconds, downloads a few hundred
+    kilobytes, sends nothing, and writes nothing.
+  </p>
+  <p class="command">npx deckhq doctor</p>
+  <pre class="report"><code>  claude code     available
+  transcripts     77 sessions across 20 projects
+  running now     6   (claude code's own agent view reports 6)
+  on the floor    77  &#8592; 71 sessions have already finished; the agent view no longer lists them
+  codex           not installed
+  waiting on you  0   (3 waiting, all still running)
+  hooks           installed, port 4400, 285 events, last 1m ago
+  state           ~/.deckhq/state.json, writable
+  egress          none. no outbound sockets.</code></pre>
+  <p>
+    The fourth line is the number nobody else counts: sessions that finished their turn, left the
+    agent view when their process exited, and are still on the floor &#8212; because a session
+    finishing is not the same as you having dealt with it.
+  </p>
+  <p class="hero-meta">
+    A real run on the development machine, 3 September 2026. Your numbers will differ, and that is
+    the point: nobody knows this number about their own machine until they run the command.
+  </p>
+</section>
+
+<section class="band">
+  <h2>What you get</h2>
+</section>
+
+<ul class="cards">
+  <li>
+    <h3>Every session, not only the live ones</h3>
+    <p>
+      DeckHQ reads every transcript on disk, so a session that finished an hour ago is still on the
+      floor with what it last said.
+    </p>
+  </li>
+  <li>
+    <h3>A queue only you can clear</h3>
+    <p>
+      What you owe is decided by you, never by the runtime. Reading an item does not discharge it;
+      an explicit action does.
+    </p>
+  </li>
+  <li>
+    <h3>One keystroke to answer</h3>
+    <p>
+      The review card puts what it said and what changed on disk in front of you.
+      <code>2</code> sends your affirmative and gets on with it.
+    </p>
+  </li>
+  <li>
+    <h3>Nothing leaves the machine</h3>
+    <p>
+      No analytics, no update check, no CDN, no account. The only sockets are loopback and the
+      runtimes you start yourself.
+    </p>
+  </li>
+</ul>
+
+<figure>
+  <img
+    src="media/floor.png"
+    alt="The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review"
+  />
+  <figcaption>
+    The floor. Your office is top left and holds the sessions waiting on your reply, oldest first.
+    Each project is a room with its own session count and token spend on the plate. The lounge holds
+    the agents you have reviewed and benched &#8212; available capacity, resting.
+  </figcaption>
+</figure>
+
+<figure>
+  <img
+    src="media/panel-review-card.png"
+    alt="The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project&#8217;s working tree at plus 142 minus 18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line"
+  />
+  <figcaption>
+    Click anyone and the review material is already there: what they said as the markdown they
+    actually wrote, then what changed in that project&#8217;s working tree, read straight from git.
+    Three weighted actions, and the cost estimate as one quiet line at the bottom &#8212; it is an
+    estimate, never a bill.
+  </figcaption>
+</figure>
+
+<figure>
+  <img
+    src="media/deck-view.png"
+    alt="The deck: the needs-you queue as a dense table of waiting time, agent, project and last word, with the review card open beside it"
+  />
+  <figcaption>
+    <code>Tab</code> swaps the floor for the deck &#8212; the same queue, the same order, the same
+    actions, as a table. The floor earns the screenshot; the deck does the job. A screen reader
+    reaches everything either one shows.
+  </figcaption>
+</figure>
+
+<section class="band">
+  <h2>The one rule</h2>
+  <blockquote>
+    <p><strong>What you owe is decided by you, never by the runtime.</strong></p>
+  </blockquote>
+  <p>
+    <code>activityState</code> is observed &#8212; it changes on its own as a session starts,
+    produces output, blocks, goes quiet, exits. <code>ackState</code> is yours, and it changes only
+    when you press a button. The waiting area renders your acknowledgement.
+    <a href="model.html">The model in 60 seconds</a> is the whole of it.
+  </p>
+</section>
+
+<section class="band">
+  <h2>Also in the terminal</h2>
+  <pre><code>$ deckhq waiting
+
+    WAITING    WHO         ID        PROJECT           LAST WORD                     TOKENS
+     1d 2h  &#10003;  Ada         MK1.1     orbital-api       Done. Tests pass and the c&#8230;  160,000
+     4h 12m &#9995;  Rune        MK5.1     mobile-app        May I run the migration on&#8230;  412,000
+     40m    &#10003;  Wren        MK2.3     checkout-flow     Refund path fixed; orphane&#8230;   88,400
+  &#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;&#8212;
+     3h 02m &#8987;  Sable       MK3.2     data-pipeline     (silent since 14:12)         220,100
+
+$ deckhq ack MK1.1
+  acknowledged MK1.1 (Ada)</code></pre>
+  <p>
+    <code>deckhq statusline</code> prints <code>&#9635; 3 waiting &#183; 1 hand up</code> for a
+    status bar, which turns every terminal you have open into a live badge for the queue with none
+    of our interface on the screen. Reading works with or without a daemon; acting needs one.
+  </p>
+</section>
+
+<section class="band">
+  <h2>Where to go next</h2>
+  <ul>
+    <li><a href="model.html">The model in 60 seconds</a> &#8212; six states, one rule.</li>
+    <li>
+      <a href="install.html">Install</a> &#8212; <code>npx</code>, a global install, the Claude Code
+      plugin, the VS Code extension.
+    </li>
+    <li>
+      <a href="hooks-and-privacy.html">Hooks and privacy</a> &#8212; what is read, what is written,
+      what you are asked first.
+    </li>
+    <li>
+      <a href="adapters.html">Adapters</a> &#8212; which runtimes, how verified, how to add one.
+    </li>
+    <li><a href="faq.html">FAQ</a>, and the <a href="log/index.html">engineering log</a>.</li>
+  </ul>
+</section>

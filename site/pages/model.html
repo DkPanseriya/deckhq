@@ -1,0 +1,142 @@
+<article class="prose">
+  <h1>The model in 60 seconds</h1>
+  <p class="lede">
+    An office is only worth having if it tells the truth about who is waiting on you. Everything
+    below follows from that.
+  </p>
+
+  <h2>The one rule</h2>
+  <blockquote>
+    <p><strong>What you owe is decided by you, never by the runtime.</strong></p>
+  </blockquote>
+  <p>
+    A session has two kinds of state, and DeckHQ never lets one overwrite the other.
+    <code>activityState</code> is <em>observed</em>: it changes on its own as the session starts,
+    produces output, blocks on a question, goes quiet, exits. <code>ackState</code> is
+    <em>yours</em>: it changes only when you act.
+  </p>
+  <p>
+    The waiting area in your office renders your acknowledgement, not the runtime&#8217;s opinion.
+    <strong
+      >Opening a conversation does not clear it. Scrolling past it does not clear it. Reading it
+      does not clear it.</strong
+    >
+    Only an explicit action does.
+  </p>
+  <div class="callout">
+    <p>
+      There are named <code>INVARIANT:</code> tests for this. No observed event may clear a
+      user-owned state, and a change that needs those tests relaxed is the wrong change.
+    </p>
+  </div>
+
+  <h2>The six states</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>State</th>
+          <th>What it means</th>
+          <th>Where the agent is</th>
+          <th>What you see</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="state-cell">
+            <span class="state-dot dot--working"></span><code>working</code>
+          </td>
+          <td>Live and producing output</td>
+          <td>Its project desk</td>
+          <td>Typing, occasional coffee</td>
+        </tr>
+        <tr>
+          <td class="state-cell">
+            <span class="state-dot dot--needs_input"></span><code>needs_input</code>
+          </td>
+          <td>Live, blocked on a question or a permission prompt</td>
+          <td><strong>Stays at its desk</strong></td>
+          <td><strong>Raises a hand</strong>, pulsing ring</td>
+        </tr>
+        <tr>
+          <td class="state-cell">
+            <span class="state-dot dot--stalled"></span><code>stalled</code>
+          </td>
+          <td>Live but silent longer than the stall window</td>
+          <td>Its desk</td>
+          <td>Slumped, amber</td>
+        </tr>
+        <tr>
+          <td class="state-cell">
+            <span class="state-dot dot--for_review"></span><code>for_review</code>
+          </td>
+          <td>Finished a turn, waiting on you</td>
+          <td><strong>Walks to your office</strong></td>
+          <td>Standing in the waiting area with a waiting-time badge</td>
+        </tr>
+        <tr>
+          <td class="state-cell">
+            <span class="state-dot dot--benched"></span><code>benched</code>
+          </td>
+          <td>Reviewed, no work assigned, available</td>
+          <td>The lounge</td>
+          <td>Pool, table tennis, arcade, coffee</td>
+        </tr>
+        <tr>
+          <td class="state-cell"><span class="state-dot dot--let_go"></span><code>let_go</code></td>
+          <td>Off the floor</td>
+          <td>Hidden</td>
+          <td>Reachable from <code>&#8984;K</code> &#8594; &#8220;Show let-go agents&#8221;</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <code>working</code>, <code>needs_input</code>, <code>stalled</code> and
+    <code>for_review</code> are observed. <code>benched</code> and <code>let_go</code> are yours.
+    <code>for_review</code> is entered automatically and can only be <em>left</em> by you &#8212;
+    that last sentence is the invariant, in one line.
+  </p>
+
+  <h2>Why two &#8220;needs you&#8221; signals</h2>
+  <p>
+    A raised hand at a desk means <em>I am mid-task and blocked</em>. A person standing in your
+    office means <em>I finished; review this</em>. Those need different responses from you, so they
+    look different and are counted separately. The header carries both numbers rather than one total
+    that hides which is which.
+  </p>
+
+  <h2>Where an agent lives</h2>
+  <p>
+    A session belongs to a project, decided by its working directory, and every session in a project
+    sits at that project&#8217;s tables whether or not it is running. An agent leaves its room in
+    exactly two ways: it finishes a turn and walks to your office, or you bench it and it goes to
+    the lounge to rest until you recall it.
+  </p>
+  <p>
+    Rooms exist because people are in them. A project with no sessions has no room, and one appears
+    the moment work starts there &#8212; the floor is generated from the people on it, not from the
+    repositories on your disk.
+  </p>
+
+  <h2>The lounge is not filler</h2>
+  <p>
+    A benched agent is available capacity, and the product makes that read as a good thing rather
+    than as waste. Watching them enjoy themselves is what a cleared queue looks like.
+  </p>
+
+  <h2>What is never scored</h2>
+  <p>
+    The agents are the characters. You are the manager, and the manager is never scored: no streaks,
+    no levels, no badges, no guilt message about a queue you have not cleared. Agents have names,
+    faces and histories; you have a queue and a way to empty it.
+  </p>
+
+  <div class="note">
+    <p>
+      <strong>Cost is an estimate, never a bill.</strong> DeckHQ multiplies observed token counts by
+      public list prices so you can compare projects against each other. It has no idea what your
+      plan actually charges you, and it says so everywhere the number appears.
+    </p>
+  </div>
+</article>

@@ -3,3 +3,8 @@ node_modules/
 docs/
 *.log
 vscode/.vscodeignore
+
+# The documentation site's build output. `site/` itself is formatted; what
+# `node site/build.mjs` renders into `site/dist/` is generated, gitignored, and
+# not a file anybody edits.
+site/dist/
