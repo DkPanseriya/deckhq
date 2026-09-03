@@ -43,6 +43,19 @@
   and the one whose state did change walks — **41 frames, 4.1 seconds**, and nobody interpolates
   across two different buildings. `docs/DEVIATIONS.md` §80.
 
+### Repository
+
+- **The README leads with the product instead of 450 words about it.** The pitch, `npx deckhq`,
+  the hero GIF, then `npx deckhq doctor` with a real run and one sentence on why its fourth line
+  is the number nobody else counts. Everything below the fold is the copy that was already there.
+- **A hero GIF that is generated, not drawn** — `docs/media/hero.gif`, 6.0 s, 1200×750, 240 KB. An
+  agent's turn ends, it leaves its desk, walks the corridor into your office and joins the queue
+  waiting on you. `scripts/capture-hero.mjs` records the demo floor while the turn is ended through
+  the real `/api/hook` endpoint, so the state change comes from the real state machine and the
+  image carries no real project names; `scripts/gif-encoder.mjs` encodes it with no dependency,
+  because neither ffmpeg nor ImageMagick can be assumed on the machine that cuts a release. Both
+  are dev scripts — `scripts/` is not in the published package. `docs/DEVIATIONS.md` §80.
+
 ## 1.2.0
 
 The release that can actually be installed. 1.1.0 called itself the first public release and was
