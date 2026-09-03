@@ -17,6 +17,7 @@ const ALLOWED = new Set([
   'showLetGo',
   'onboarded',
   'resumeIn',
+  'approveText',
 ]);
 
 /**
@@ -49,6 +50,9 @@ export function register(router, ctx) {
       if (k === 'resumeIn' && !(/** @type {readonly string[]} */ (RESUME_TARGETS).includes(v))) {
         continue;
       }
+      // Same for `approveText`: only a string is a candidate. The store trims,
+      // caps and falls back to the default for a blank one.
+      if (k === 'approveText' && typeof v !== 'string') continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

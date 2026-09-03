@@ -178,6 +178,18 @@ let liveProbeForced = false;
  * not dead. Only `ESRCH` (and anything else unexpected) is treated as gone.
  * A non-positive pid is never passed through: on POSIX `kill(0, sig)` signals
  * the entire process group.
+ *
+ * Verified on Windows, where libuv answers signal 0 with `OpenProcess` plus
+ * `GetExitCodeProcess` rather than a real signal (docs/DEVIATIONS.md §82): a
+ * pid that has exited, a pid that never existed, and a child that has exited
+ * while this process still holds its handle all throw `ESRCH`; the protected
+ * System process (pid 4) throws `EPERM`. So the same two-way reading holds on
+ * every platform this runs on.
+ *
+ * What this cannot tell is WHICH process holds the pid. A session that exits
+ * and whose pid the OS hands to some other process inside one poll interval
+ * reads alive until the next probe replaces the roster — see `liveSessions`
+ * for the size of that window and why it is accepted rather than closed.
  * @param {number} pid
  * @returns {boolean}
  */
@@ -230,16 +242,33 @@ function copyRoster(sessions) {
  * An entry with no pid is kept until the next probe. Nothing cheap can say
  * otherwise, and the probe is what is authoritative for it.
  *
+ * A pid the check has once called dead is retired for good: it leaves the
+ * cached roster and nothing short of the next probe can bring that session
+ * back, so a pid the OS later hands to some other process cannot revive it.
+ * The one exposure that leaves is a session that exits AND has its pid reused
+ * inside a single poll interval, before any check saw it dead — that impostor
+ * reads alive until the TTL probe. Measured on the reference machine (Windows
+ * 11), a pid recurs only after 123–155 further process creations, so it takes
+ * ~25 spawns a second during the 5 s the check is blind; and `live` is an
+ * observation, never a user-owned state, so the worst outcome is a desk drawn
+ * occupied for up to 60 s. No cheap cross-platform identity for a pid exists
+ * without spawning — the exact cost this cache removes — so the window is
+ * accepted and recorded (docs/DEVIATIONS.md §82) rather than closed. With
+ * hooks installed it does not arise at all: `SessionEnd` is authoritative and
+ * the registry prefers it over this roster.
+ *
  * @param {{probe?: () => Promise<import('../../core/model.mjs').LiveSession[]>,
- *          now?: number}} [opts] test seams, in the same shape as
- *   `openInApp`'s: `probe` stands in for the CLI spawn so a test can count
- *   how many times it actually happened, and `now` stands in for the clock so
- *   the TTL can be crossed without sleeping through it. The daemon passes
- *   neither.
+ *          now?: number, alive?: (pid:number) => boolean}} [opts] test seams,
+ *   in the same shape as `openInApp`'s: `probe` stands in for the CLI spawn so
+ *   a test can count how many times it actually happened, `now` stands in for
+ *   the clock so the TTL can be crossed without sleeping through it, and
+ *   `alive` stands in for the pid check so a pid can be made to die and come
+ *   back on cue. The daemon passes none of them.
  * @returns {Promise<import('../../core/model.mjs').LiveSession[]>}
  */
 async function liveSessions(opts = {}) {
   const probe = opts.probe || probeLiveSessions;
+  const isAlive = opts.alive || pidAlive;
   const now = typeof opts.now === 'number' ? opts.now : Date.now();
   const age = now - liveProbe.at;
   const due =
@@ -258,7 +287,7 @@ async function liveSessions(opts = {}) {
     return copyRoster(sessions);
   }
 
-  const alive = liveProbe.sessions.filter((s) => s.pid == null || pidAlive(s.pid));
+  const alive = liveProbe.sessions.filter((s) => s.pid == null || isAlive(s.pid));
   if (alive.length !== liveProbe.sessions.length) {
     liveProbe.sessions = alive;
     liveProbe.ids = new Set(alive.map((s) => s.id));

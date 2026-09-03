@@ -35,6 +35,12 @@ on:
   push:
     tags: ['v*']
 
+# Read-only by default, so a job that names no permissions of its own cannot
+# write to the repository whatever the organisation's default token scope is.
+# `release` raises itself to `contents: write`, and it is the only one.
+permissions:
+  contents: read
+
 jobs:
   verify:
     strategy:
@@ -77,7 +83,26 @@ jobs:
 
       - name: Upgrade npm
         # Trusted publishing needs npm >= 11.5.1, and Node 22 still ships 10.x.
-        run: npm install -g npm@latest
+        # Pinned to the 11 line rather than @latest, so a future npm major
+        # cannot change what `npm publish` does underneath a tag push. The
+        # floor is asserted in the next step rather than assumed.
+        run: npm install -g 'npm@^11.5.1'
+
+      - name: Assert the npm floor for trusted publishing
+        run: |
+          HAVE="$(npm --version)"
+          node -e '
+            const [have, floor] = process.argv.slice(1).map((v) => v.split(".").map(Number));
+            const ok =
+              have[0] !== floor[0] ? have[0] > floor[0]
+              : have[1] !== floor[1] ? have[1] > floor[1]
+              : have[2] >= floor[2];
+            if (!ok) {
+              console.error(`npm ${process.argv[1]} is below the trusted-publishing floor ${process.argv[2]}`);
+              process.exit(1);
+            }
+            console.log(`npm ${process.argv[1]} satisfies >= ${process.argv[2]}`);
+          ' "$HAVE" 11.5.1
 
       - name: Install dev tooling
         run: npm install --no-audit --no-fund
@@ -92,7 +117,123 @@ jobs:
           echo "tag=$TAG package.json=$PKG npm=$(npm --version)"
           test "$TAG" = "$PKG"
 
+      - name: Refuse to publish a version with no changelog section
+        # The release job turns `## X.Y.Z` in CHANGELOG.md into the release
+        # notes. Finding it missing after the publish would leave a version on
+        # the registry with no release page and no way back; find it now.
+        run: node scripts/release/changelog-section.mjs "${GITHUB_REF_NAME#v}" > /dev/null
+
       - name: Publish
         # No token, and no --provenance: trusted publishing supplies both.
         # prepublishOnly runs lint and the full suite again here.
         run: npm publish --access public
+
+  release:
+    # The GitHub Release for the tag, once the package is on the registry:
+    # notes from the matching CHANGELOG.md section, the two screenshots, a
+    # Windows zip built from the published tarball, and the Homebrew, winget
+    # and scoop manifests rendered against the sha256 of the bytes the
+    # registry serves. packaging/README.md says what a user does with each.
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      # The only job in this file that writes to the repository, and only to
+      # create the release and upload its assets.
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Fetch the tarball the registry serves
+        id: tarball
+        # The registry can lag the publish by a few seconds, so the lookup
+        # retries before declaring the version missing. The download is
+        # checked against the registry's own sha512 (dist.integrity), so the
+        # sha256 handed to Homebrew is of the bytes users will receive.
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL=""
+          for attempt in $(seq 1 20); do
+            URL="$(npm view "deckhq@${VERSION}" dist.tarball 2>/dev/null || true)"
+            if [ -n "$URL" ]; then break; fi
+            echo "registry does not list deckhq@${VERSION} yet (attempt ${attempt}/20); waiting 15s"
+            sleep 15
+          done
+          test -n "$URL"
+          curl -fsSL --retry 5 --retry-delay 5 -o deckhq.tgz "$URL"
+          EXPECTED="$(npm view "deckhq@${VERSION}" dist.integrity)"
+          ACTUAL="sha512-$(openssl dgst -sha512 -binary deckhq.tgz | base64 -w0)"
+          echo "integrity registry=${EXPECTED} download=${ACTUAL}"
+          test "$EXPECTED" = "$ACTUAL"
+          SHA256="$(sha256sum deckhq.tgz | cut -d' ' -f1)"
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Windows zip
+        id: zip
+        # The tarball's contents plus packaging/deckhq.cmd, which runs
+        # package/bin/deckhq.mjs with the Node that winget or scoop installed
+        # as a dependency. The zip's release URL is known before the release
+        # exists, so the manifests can point at it.
+        run: |
+          NAME="deckhq-${GITHUB_REF_NAME#v}-win.zip"
+          mkdir -p stage dist
+          tar -xzf deckhq.tgz -C stage
+          test -f stage/package/bin/deckhq.mjs
+          cp packaging/deckhq.cmd stage/
+          (cd stage && zip -qr "../dist/${NAME}" .)
+          SHA256="$(sha256sum "dist/${NAME}" | cut -d' ' -f1)"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "url=https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}" >> "$GITHUB_OUTPUT"
+
+      - name: Render the Homebrew, winget and scoop manifests
+        # Step outputs reach the script through the environment rather than
+        # by interpolation into the shell text.
+        env:
+          TARBALL_URL: ${{ steps.tarball.outputs.url }}
+          TARBALL_SHA256: ${{ steps.tarball.outputs.sha256 }}
+          ZIP_URL: ${{ steps.zip.outputs.url }}
+          ZIP_SHA256: ${{ steps.zip.outputs.sha256 }}
+        run: |
+          node scripts/release/manifests.mjs \
+            --version "${GITHUB_REF_NAME#v}" \
+            --tarball-url "$TARBALL_URL" \
+            --tarball-sha256 "$TARBALL_SHA256" \
+            --zip-url "$ZIP_URL" \
+            --zip-sha256 "$ZIP_SHA256" \
+            --out dist
+
+      - name: Release notes from CHANGELOG.md
+        run: node scripts/release/changelog-section.mjs "${GITHUB_REF_NAME#v}" > dist/notes.md
+
+      - name: Create the GitHub Release
+        # A re-run after a partial failure meets a release that already
+        # exists; then the assets are re-uploaded onto it instead of failing.
+        env:
+          ZIP_NAME: ${{ steps.zip.outputs.name }}
+        run: |
+          ASSETS=(
+            docs/media/floor.png
+            docs/media/panel.png
+            "dist/${ZIP_NAME}"
+            dist/Formula/deckhq.rb
+            dist/winget/DkPanseriya.DeckHQ.yaml
+            dist/winget/DkPanseriya.DeckHQ.installer.yaml
+            dist/winget/DkPanseriya.DeckHQ.locale.en-US.yaml
+            dist/scoop/deckhq.json
+          )
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber "${ASSETS[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --verify-tag \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file dist/notes.md \
+              "${ASSETS[@]}"
+          fi

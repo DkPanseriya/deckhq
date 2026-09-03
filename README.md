@@ -119,7 +119,9 @@ of them as work the runtime has forgotten — **because all three are still runn
 lists them too**. It reports the number it can substantiate, which is the only kind worth
 reporting.
 
-`--json` gives the same data for scripting. `--capture-proof` writes a PNG of the comparison.
+`--json` gives the same data for scripting. `--share` prints the same report as a fenced block
+with no paths, project names or machine name in it, ready to paste. `--capture-proof` writes a PNG
+of the comparison.
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
 

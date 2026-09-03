@@ -30,6 +30,7 @@ import {
   clearDesktopCache,
   desktopCacheStats,
   desktopCacheSize,
+  _scanTopLevelFields,
 } from '../../src/adapters/claude-code/desktop.mjs';
 
 const CLI_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -66,10 +67,21 @@ function write(store, name, record) {
   return file;
 }
 
-/** Pin a file's mtime, so (mtime, size) can be varied one at a time. */
-function setMtime(file, seconds) {
-  const when = new Date(seconds * 1000);
+/**
+ * Pin a file's mtime, so (mtime, size) can be varied one at a time — and
+ * prove the pin took. The cache compares `mtimeMs` to the millisecond, so the
+ * value is given in milliseconds with a non-zero fraction of a second, and the
+ * stat is read straight back: a filesystem that rounded it would make the
+ * "size moved, mtime did not" test below pass for the wrong reason, with the
+ * re-read caused by the timestamp rather than by the size.
+ * @returns {number} the `mtimeMs` the filesystem actually holds
+ */
+function setMtimeMs(file, ms) {
+  const when = new Date(ms);
   fs.utimesSync(file, when, when);
+  const held = fs.statSync(file).mtimeMs;
+  assert.equal(held, ms, `mtimeMs did not round-trip on this filesystem: asked ${ms}, got ${held}`);
+  return held;
 }
 
 /** Reads performed by the call `fn` makes. */
@@ -148,11 +160,12 @@ test('a file whose mtime moved but whose size did not is re-read', async () => {
   try {
     // Same length, different content, so size alone cannot notice.
     const file = write(store, 'local_a.json', { cliSessionId: CLI_A, title: 'aaa' });
-    setMtime(file, 1_700_000_000);
+    const first = setMtimeMs(file, 1_700_000_000_250);
     assert.equal((await readDesktopSessions()).get(CLI_A).title, 'aaa');
 
     write(store, 'local_a.json', { cliSessionId: CLI_A, title: 'bbb' });
-    setMtime(file, 1_700_000_060);
+    const second = setMtimeMs(file, 1_700_000_000_750);
+    assert.notEqual(second, first);
     assert.equal(
       fs.statSync(file).size,
       JSON.stringify({ cliSessionId: CLI_A, title: 'aaa' }).length,
@@ -170,13 +183,15 @@ test('a file whose size moved but whose mtime did not is re-read', async () => {
   const store = await makeStore();
   try {
     const file = write(store, 'local_a.json', { cliSessionId: CLI_A, title: 'aaa' });
-    setMtime(file, 1_700_000_000);
+    const pinned = setMtimeMs(file, 1_700_000_000_250);
     assert.equal((await readDesktopSessions()).get(CLI_A).title, 'aaa');
 
     // A longer title, then the mtime pinned back to where it was — the case a
-    // coarse filesystem timestamp would otherwise hide.
+    // coarse filesystem timestamp would otherwise hide. The premise is
+    // asserted: if the timestamp had moved, the re-read below would prove
+    // nothing about the size half of the key.
     write(store, 'local_a.json', { cliSessionId: CLI_A, title: 'aaaa' });
-    setMtime(file, 1_700_000_000);
+    assert.equal(setMtimeMs(file, 1_700_000_000_250), pinned);
 
     const after = await readsDuring(readDesktopSessions);
     assert.equal(after.reads, 1);
@@ -418,6 +433,135 @@ test('a multi-byte character split by the window boundary does not corrupt the a
     // And the value that straddled the boundary is intact, not a replacement
     // character — the full read starts from byte 0, not from the window.
     assert.equal(JSON.parse(raw).filler.endsWith(emoji + 'y'), true);
+  } finally {
+    await cleanup(store);
+  }
+});
+
+// --- A window that ends mid-value (docs/DEVIATIONS.md §82) -----------------
+//
+// The scanner's contract is "null means read more, never a guess". The three
+// ways an 8 KB prefix can cut a JSON value — inside a string, inside a number,
+// on the backslash of an escape — are pinned first against the scanner itself
+// and then end to end, where `fullReads` shows the fallback actually ran.
+
+const HEAD = 8 * 1024;
+
+/** The scanner's answer as a plain object — it builds on a null prototype. */
+function scan(text) {
+  const out = _scanTopLevelFields(text);
+  return out === null ? null : { ...out };
+}
+
+/**
+ * A file whose head window ends exactly on `cutAt` bytes of `prefix`, with
+ * the wanted fields after the cut. `prefix` is everything up to and including
+ * the byte that straddles the boundary; `rest` completes the document.
+ */
+function straddling(store, prefix, rest) {
+  assert.ok(prefix.length >= HEAD, 'the prefix must reach the window boundary');
+  const raw = prefix + rest;
+  fs.writeFileSync(path.join(store.dir, 'local_a.json'), raw, 'utf8');
+  return raw;
+}
+
+test('the scanner answers null, not a guess, when the text ends inside a string', () => {
+  const whole = `{"filler":"abc","cliSessionId":"${CLI_A}","isArchived":true}`;
+  assert.deepEqual(scan(whole), { cliSessionId: CLI_A, isArchived: true });
+  // Cut inside the filler string, inside the key, and inside the wanted value.
+  assert.equal(scan('{"filler":"ab'), null);
+  assert.equal(scan('{"filler":"abc","cliSess'), null);
+  assert.equal(scan(`{"filler":"abc","cliSessionId":"${CLI_A.slice(0, 8)}`), null);
+});
+
+test('the scanner answers null when the text ends inside a number or a bare literal', () => {
+  // A number that runs off the end may be cut short: `12` could be `12345`.
+  assert.equal(scan('{"n":12'), null);
+  assert.equal(scan('{"n":1.5e'), null);
+  assert.equal(scan('{"isArchived":tru'), null);
+  // The same number with its terminator present is skipped cleanly.
+  assert.deepEqual(scan(`{"n":12,"cliSessionId":"${CLI_A}"}`), {
+    cliSessionId: CLI_A,
+  });
+  // And a literal that is complete but has nothing after it is still "cut":
+  // the scanner cannot know the object closed.
+  assert.equal(scan('{"isArchived":true'), null);
+});
+
+test('endOfString on an unclosed trailing escape stays in bounds and answers null', () => {
+  // The backslash is the last character, so the escape it opens has no
+  // second half. Skipping past it lands beyond the text; that must read as
+  // "unclosed", not throw and not run past the end.
+  assert.equal(scan('{"title":"abc\\'), null);
+  assert.equal(scan('{"title":"abc\\"'), null); // the escaped quote is not a close
+  assert.equal(scan('{"title":"abc\\u00'), null);
+  assert.equal(scan('{"title":"abc\\\\'), null); // escaped backslash, then EOF
+  assert.equal(scan('{"title":"abc\\\\"'), null); // ...closed, but the object is not
+  assert.deepEqual(scan('{"title":"abc\\\\"}'), { title: 'abc\\' });
+  assert.deepEqual(scan('{"title":"abc\\""}'), { title: 'abc"' });
+});
+
+test('a window cut mid-string costs a full read, and the full read answers', async () => {
+  const store = await makeStore();
+  try {
+    const head = '{"filler":"';
+    const raw = straddling(
+      store,
+      head + 'x'.repeat(HEAD - head.length + 40), // the string closes 40 bytes past the window
+      `","cliSessionId":"${CLI_A}","isArchived":true,"title":"Cut"}`,
+    );
+    assert.equal(JSON.parse(raw).cliSessionId, CLI_A, 'the whole file is valid JSON');
+
+    const cold = await readsDuring(readDesktopSessions);
+    assert.equal(cold.reads, 1);
+    assert.equal(desktopCacheStats.fullReads, 1, 'the window could not answer');
+    assert.deepEqual(cold.value.get(CLI_A), { archived: true, title: 'Cut' });
+  } finally {
+    await cleanup(store);
+  }
+});
+
+test('a window cut mid-number costs a full read, and the full read answers', async () => {
+  const store = await makeStore();
+  try {
+    // Pad so the digits of `n` straddle byte 8192: five digits inside the
+    // window, five outside. A scanner that took `12345` as the whole number
+    // would then find the window ending where a comma should be.
+    const lead = '{"filler":"';
+    const pad = 'x'.repeat(HEAD - lead.length - '","n":'.length - 5);
+    const prefix = lead + pad + '","n":' + '12345';
+    assert.equal(Buffer.byteLength(prefix), HEAD);
+    const raw = straddling(store, prefix, `67890,"cliSessionId":"${CLI_A}","isArchived":false}`);
+    assert.equal(JSON.parse(raw).n, 1234567890);
+
+    const cold = await readsDuring(readDesktopSessions);
+    assert.equal(cold.reads, 1);
+    assert.equal(desktopCacheStats.fullReads, 1, 'the window could not answer');
+    assert.deepEqual(cold.value.get(CLI_A), { archived: false, title: undefined });
+  } finally {
+    await cleanup(store);
+  }
+});
+
+test('a window ending on the backslash of an escape costs a full read, and the title survives', async () => {
+  const store = await makeStore();
+  try {
+    // The title holds an escaped quote whose backslash is the window's last
+    // byte and whose quote is the first byte outside it. Read only the head,
+    // the string is unclosed; read naively past the backslash, the quote
+    // looks like a close. The answer has to come from the whole file.
+    const lead = '{"title":"';
+    const pad = 'x'.repeat(HEAD - lead.length - 1);
+    const prefix = lead + pad + '\\';
+    assert.equal(Buffer.byteLength(prefix), HEAD);
+    const raw = straddling(store, prefix, `"tail","cliSessionId":"${CLI_A}","isArchived":true}`);
+    const expected = JSON.parse(raw).title;
+    assert.ok(expected.endsWith('x"tail'));
+
+    const cold = await readsDuring(readDesktopSessions);
+    assert.equal(cold.reads, 1);
+    assert.equal(desktopCacheStats.fullReads, 1, 'the window could not answer');
+    assert.deepEqual(cold.value.get(CLI_A), { archived: true, title: expected });
   } finally {
     await cleanup(store);
   }

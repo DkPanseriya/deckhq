@@ -25,6 +25,14 @@ import { createLog } from './log.mjs';
  */
 
 /**
+ * The two timer functions `save()` and `flush()` use, in the shape of the
+ * globals. Anything that returns a handle `clearTimeout` accepts back will do.
+ * @typedef {object} Timers
+ * @property {(fn: () => void, ms: number) => any} setTimeout
+ * @property {(handle: any) => void} clearTimeout
+ */
+
+/**
  * Where "resume this session" opens by default. `'app'` may not be
  * installed on every machine; `'terminal'` always works, which is why it is
  * the default rather than a guess at what the user has.
@@ -40,6 +48,7 @@ export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
  * @property {number} pollIntervalMs
  * @property {boolean} showLetGo
  * @property {ResumeTarget} resumeIn
+ * @property {string} approveText   what the panel's `2 Approve` sends
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -50,9 +59,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   pollIntervalMs: 5000,
   showLetGo: false,
   resumeIn: 'terminal',
+  approveText: 'Yes, go ahead.',
 });
 
-const SAVE_DEBOUNCE_MS = 250;
+/** An approval is one line the user would have typed; anything longer is a reply. */
+const MAX_APPROVE_TEXT = 500;
+
+/**
+ * How long `save()` waits for further mutations before it writes. Exported so
+ * the test suite can assert the window it schedules rather than sleep past it.
+ */
+export const SAVE_DEBOUNCE_MS = 250;
 const MIN_STALL_WINDOW_MS = 2 * 60 * 1000;
 const MAX_STALL_WINDOW_MS = 120 * 60 * 1000;
 
@@ -79,6 +96,19 @@ function sanitizeResumeIn(v) {
   return /** @type {readonly string[]} */ (RESUME_TARGETS).includes(/** @type {string} */ (v))
     ? /** @type {import('./store.mjs').ResumeTarget} */ (v)
     : DEFAULT_SETTINGS.resumeIn;
+}
+
+/**
+ * The affirmative `2 Approve` sends. A blank or non-string value falls back
+ * to the default — an approve key that sent nothing would be a silent no-op —
+ * and it is trimmed and capped so a stray paste cannot turn the key into a
+ * prompt injector.
+ * @param {unknown} v
+ * @returns {string}
+ */
+function sanitizeApproveText(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  return s ? s.slice(0, MAX_APPROVE_TEXT) : DEFAULT_SETTINGS.approveText;
 }
 
 function defaultData() {
@@ -110,6 +140,7 @@ function normalize(parsed) {
   };
   settings.stallWindowMs = clampStallWindow(settings.stallWindowMs);
   settings.resumeIn = sanitizeResumeIn(settings.resumeIn);
+  settings.approveText = sanitizeApproveText(settings.approveText);
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -135,12 +166,20 @@ function normalize(parsed) {
 export class Store {
   /**
    * @param {string} file absolute path to state.json
-   * @param {{log?: import('./log.mjs').Log}} [opts]
+   * @param {{log?: import('./log.mjs').Log, timers?: Timers}} [opts]
    */
   constructor(file, opts = {}) {
     this.file = file;
     this._log = opts.log || createLog('store');
     this._data = defaultData();
+    /**
+     * The clock the debounce is scheduled on. Production uses the real timer
+     * wheel; the test suite hands in one it cranks by hand, so proving the
+     * debounce never depends on how promptly a loaded CI runner services a
+     * 250 ms setTimeout.
+     * @type {Timers}
+     */
+    this._timers = opts.timers || { setTimeout, clearTimeout };
     this._saveTimer = null;
     /** @type {Promise<void>|null} chain of in-flight/queued disk writes, serialized */
     this._writing = null;
@@ -238,6 +277,9 @@ export class Store {
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'resumeIn')) {
       next.resumeIn = sanitizeResumeIn(patch.resumeIn);
     }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'approveText')) {
+      next.approveText = sanitizeApproveText(patch.approveText);
+    }
     this._data.settings = next;
     this.save();
     return this.settings;
@@ -325,7 +367,7 @@ export class Store {
    */
   save() {
     if (this._saveTimer) return;
-    this._saveTimer = setTimeout(() => {
+    this._saveTimer = this._timers.setTimeout(() => {
       this._saveTimer = null;
       this._triggerWrite();
     }, SAVE_DEBOUNCE_MS);
@@ -374,7 +416,7 @@ export class Store {
    */
   async flush() {
     if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
+      this._timers.clearTimeout(this._saveTimer);
       this._saveTimer = null;
       this._triggerWrite();
     }

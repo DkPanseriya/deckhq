@@ -35,7 +35,10 @@ import {
   collectReport,
   deckFrom,
   group,
+  PITCH,
+  redact,
   renderReport,
+  renderShare,
   runDoctor,
   tildify,
 } from '../../src/cli/doctor.mjs';
@@ -228,7 +231,13 @@ test('INVARIANT OF HONESTY: nothing ever claims the agent view cannot SEE a sess
       }),
     },
   );
-  const surfaces = [renderReport(report), buildProofHtml(report, { host: 'testbox' })];
+  // Every surface the claim can reach a stranger through, including the share
+  // block, which is the one written to be pasted somewhere public.
+  const surfaces = [
+    renderReport(report),
+    buildProofHtml(report, { host: 'testbox' }),
+    renderShare(report, { home: '/home/ada', host: 'testbox' }),
+  ];
   for (const text of surfaces) {
     assert.doesNotMatch(text, /cannot see/i);
     assert.doesNotMatch(text, /the agent view cannot/i);
@@ -575,8 +584,12 @@ test('--json emits one JSON document with a stable shape', async () => {
     'problems',
     'proof',
     'runtimes',
+    'share',
     'state',
   ]);
+  // Null rather than absent when the flag was not given: the shape is stable
+  // whatever the flags, which is the whole contract of this mode.
+  assert.equal(parsed.share, null);
   assert.deepEqual(Object.keys(parsed.runtimes[0]).sort(), [
     'available',
     'error',
@@ -781,6 +794,238 @@ test('the proof card escapes anything it interpolates', async () => {
   const html = buildProofHtml(report, { host: '<script>alert(1)</script>' });
   assert.doesNotMatch(html, /<script>alert/);
   assert.match(html, /&lt;script&gt;/);
+});
+
+// ---------------------------------------------------------------------------
+// The share block (WP-44)
+// ---------------------------------------------------------------------------
+
+/** A report with something in every field the share block can draw from. */
+async function fullReport(extra = {}) {
+  return collect(
+    registry(
+      fakeAdapter({
+        sessions: [
+          ...sessionsIn(52, '/Users/ada/skunkworks-alpha'),
+          ...sessionsIn(18, 'C:/Dk/Projects/ClientAcme'),
+        ],
+        live: sessionsIn(1, '/Users/ada/skunkworks-alpha'),
+        installed: true,
+        port: 4317,
+      }),
+      fakeAdapter({ id: 'codex', label: 'Codex', available: false, hooksSupported: false }),
+    ),
+    {
+      machine: daemonOn(4317, {
+        hookHealth: new Map([['claude-code', { eventsSeen: 1204, lastEventAt: NOW - 120_000 }]]),
+        deck: {
+          found: true,
+          waiting: 49,
+          waitingNotRunning: 47,
+          oldestWaitAt: NOW - 26 * 3600_000,
+          total: 70,
+        },
+      }),
+      ...extra,
+    },
+  );
+}
+
+test('the share block is fenced, and the pitch is its last line', async () => {
+  const report = await fullReport();
+  const block = renderShare(report, { home: '/Users/ada', host: 'ada-mbp' });
+
+  const lines = block.split('\n');
+  assert.equal(lines[0], '```', 'the first line opens the fence and nothing else');
+  assert.equal(lines.at(-1), '', 'the block ends with a newline');
+  assert.equal(lines.at(-2), '```', 'the last line closes the fence');
+  assert.equal(lines.at(-3), PITCH, 'the pitch is the last line inside it');
+  assert.equal(block.split('```').length - 1, 2, 'exactly one fence, opened and closed');
+
+  // And the numbers a reader would check are all there.
+  assert.match(block, /transcripts +70 sessions across 2 projects/);
+  assert.match(block, /running now +1 {3}\(claude code's own agent view reports 1\)/);
+  assert.match(block, /on the floor +70 {2}← 69 sessions have already finished/);
+  assert.match(block, /waiting on you +47 {2}← none of these are running; oldest 26h/);
+  assert.match(block, /hooks +installed, 1,204 events, last 2m ago/);
+  assert.match(block, /egress +none\. no outbound sockets\./);
+  assert.match(block, /codex +not installed/);
+  // Dated to the day, never to the hour: the hour is a fact about the person.
+  assert.match(block, /^deckhq doctor · \d{4}-\d{2}-\d{2}$/m);
+  assert.doesNotMatch(block, /\d{2}:\d{2}/);
+});
+
+test('WP-44: no scanned project directory name reaches the share block', async () => {
+  const report = await fullReport();
+  const block = renderShare(report, { home: '/Users/ada', host: 'ada-mbp' });
+
+  // The two working directories the fixture scanned, whole and in pieces.
+  for (const leak of [
+    '/Users/ada/skunkworks-alpha',
+    'C:/Dk/Projects/ClientAcme',
+    'skunkworks-alpha',
+    'ClientAcme',
+    'skunkworks',
+    'Dk',
+    'ada',
+  ]) {
+    assert.ok(!block.includes(leak), `the share block leaks "${leak}":\n${block}`);
+  }
+  // The count survives; only the names are gone.
+  assert.match(block, /2 projects/);
+});
+
+test('the share block carries no path, no machine name and no state location', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  const report = await fullReport({ state: { dataDir, stateFile } });
+  const block = renderShare(report, { home: '/Users/ada', host: 'ada-mbp' });
+
+  // The real state path of this test run is in the report and must not be in
+  // the block; its verdict must be.
+  assert.ok(report.state.path.length > 0);
+  assert.ok(!block.includes(report.state.path));
+  assert.ok(!block.includes(path.basename(dataDir)));
+  assert.match(block, /state +writable/);
+
+  // Nothing that looks like a path at all: no drive letter, no ~, no absolute
+  // POSIX path, no UNC share, no home directory.
+  assert.doesNotMatch(block, /[A-Za-z]:[\\/]/);
+  assert.doesNotMatch(block, /(?:^|\s)~[\\/]/);
+  assert.doesNotMatch(block, /\\\\/);
+  assert.doesNotMatch(block, /(?:\/[A-Za-z0-9._@%+-]+){2}/);
+  assert.ok(!block.includes('ada-mbp'));
+  // A port is not a secret, but it is not information either.
+  assert.doesNotMatch(block, /4317/);
+});
+
+test('a problem is counted in the share block, never quoted into it', async () => {
+  // The two free-text fields in the report both carry paths in practice: an
+  // adapter's error message (a filesystem error names the file) and the state
+  // check's own message.
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        scanThrows: "ENOENT: no such file or directory, open '/Users/ada/secret-client/.claude'",
+        installed: true,
+        port: 4400,
+      }),
+    ),
+    { machine: daemonOn(4317) },
+  );
+  assert.equal(report.ok, false);
+  assert.equal(report.problems.length, 2, 'the scan error and the hook-port mismatch');
+
+  const block = renderShare(report, { home: '/Users/ada', host: 'ada-mbp' });
+  assert.match(block, /! 2 problems — run `deckhq doctor` here for the detail/);
+  assert.ok(!block.includes('secret-client'));
+  assert.ok(!block.includes('ENOENT'));
+  assert.doesNotMatch(block, /4400|4317/);
+  // The row still says the hooks could not be read, without saying what it read.
+  assert.match(block, /hooks +installed/);
+});
+
+test('redact removes the machine from anything that reached the block by another route', () => {
+  const opts = { home: '/Users/ada', host: 'ada-mbp.local' };
+  assert.equal(
+    redact('state at /Users/ada/.deckhq/state.json, writable', opts),
+    'state at [path], writable',
+  );
+  assert.equal(redact('open C:\\Users\\ada\\work\\api', opts), 'open [path]');
+  assert.equal(redact('open C:/Users/ada/work/api', opts), 'open [path]');
+  assert.equal(redact('~/.deckhq/state.json', opts), '[path]');
+  assert.equal(redact('\\\\build01\\share\\out', opts), '[path]');
+  assert.equal(redact('/home/other/project', opts), '[path]');
+  assert.equal(redact('running on ada-mbp.local now', opts), 'running on [host] now');
+  assert.equal(redact('running on ADA-MBP now', opts), 'running on [host] now');
+  // Windows home written with the other separator is still home.
+  assert.equal(redact('C:/Users/ada/x', { home: 'C:\\Users\\ada', host: 'pc' }), '[path]');
+  // What it must NOT touch: the report's own vocabulary.
+  const clean = '70 sessions across 18 projects · 127.0.0.1 · none. no outbound sockets.';
+  assert.equal(redact(clean, opts), clean);
+  // A two-letter hostname is indistinguishable from a word, so it is left alone
+  // rather than shredding the text it is supposed to protect.
+  assert.equal(redact('on the floor 70', { home: '/h', host: 'on' }), 'on the floor 70');
+});
+
+test('--share prints the block and nothing else, and keeps the exit code', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  const build = () =>
+    collectReport({
+      adapters: registry(
+        fakeAdapter({ sessions: sessionsIn(51, '/p'), live: sessionsIn(3, '/p') }),
+      ),
+      dataDir,
+      stateFile,
+      now: NOW,
+      ...noDaemon,
+    });
+
+  let out = '';
+  const code = await runDoctor(['--share'], {
+    write: (s) => {
+      out += s;
+    },
+    collect: build,
+  });
+
+  assert.equal(code, 0);
+  assert.equal(out.split('```').length - 1, 2);
+  assert.match(out, /48 sessions have already finished/);
+  // The plain report is not printed above it: the block is meant to be
+  // selected whole or piped straight into a clipboard command.
+  assert.equal(out.match(/on the floor/g).length, 1);
+  assert.ok(!out.includes(stateFile));
+  assert.ok(out.trimEnd().endsWith('```'));
+});
+
+test('--share --json stays exactly one JSON document, with the block as a field', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  let out = '';
+  const code = await runDoctor(['--json', '--share'], {
+    write: (s) => {
+      out += s;
+    },
+    collect: () =>
+      collectReport({
+        adapters: registry(
+          fakeAdapter({ sessions: sessionsIn(51, '/p'), live: sessionsIn(3, '/p') }),
+        ),
+        dataDir,
+        stateFile,
+        now: NOW,
+        ...noDaemon,
+      }),
+  });
+
+  assert.equal(code, 0);
+  const parsed = JSON.parse(out);
+  assert.equal(typeof parsed.share, 'string');
+  assert.ok(parsed.share.startsWith('```\n'));
+  assert.ok(parsed.share.trimEnd().endsWith('```'));
+  assert.ok(parsed.share.includes(PITCH));
+});
+
+test('--help lists --share', async () => {
+  let out = '';
+  await runDoctor(['--help'], {
+    write: (s) => {
+      out += s;
+    },
+    collect: () => {
+      throw new Error('doctor --help must not collect a report');
+    },
+  });
+  assert.match(out, /--share/);
+});
+
+test('the share block still renders when there is nothing to boast about', async () => {
+  // No runtime, no daemon: the block must be honest and printable, not empty
+  // and not an exception.
+  const report = await collect(registry(fakeAdapter({ available: false })));
+  const block = renderShare(report, { home: '/Users/ada', host: 'ada-mbp' });
+  assert.match(block, /claude code +not installed/);
+  assert.match(block, /waiting on you +needs a running DeckHQ to count/);
+  assert.equal(block.split('\n').at(-3), PITCH);
 });
 
 // ---------------------------------------------------------------------------

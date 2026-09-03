@@ -38,7 +38,12 @@ const HEIGHT = Number(opt('--height', 900));
 const SCALE = Number(opt('--scale', 1));
 const SETTLE_MS = Number(opt('--settle', 6000));
 const DEBUG_PORT = Number(opt('--debug-port', 9222));
-/** A key to press before capturing, e.g. `j` to open the review queue panel. */
+/**
+ * Keys to press before capturing, one character each, in order — e.g. `j` to
+ * open the review queue panel, or `jjj` to walk three deep into it. The queue
+ * is oldest-first and deterministic on the demo fixture, so a sequence is how
+ * you aim the shot at one particular agent.
+ */
 const PRESS = opt('--press', '');
 
 if (!hasWebSocket()) {
@@ -72,16 +77,18 @@ await withChrome(
     });
     await new Promise((r) => setTimeout(r, 1500));
 
-    // Optionally drive one keyboard shortcut before the shot — `j` walks the
-    // needs-you queue and opens the side panel, which is what shows that the
-    // floor is a work surface and not just a picture.
-    if (PRESS) {
+    // Optionally drive the keyboard before the shot — `j` walks the needs-you
+    // queue and opens the side panel, which is what shows that the floor is a
+    // work surface and not just a picture. Each character is pressed in turn,
+    // with a pause between so the panel's own fetches (the conversation, the
+    // "what changed" summary) land before the next key moves the selection.
+    for (const key of PRESS) {
       for (const type of ['keyDown', 'keyUp']) {
         await client.send('Input.dispatchKeyEvent', {
           type,
-          key: PRESS,
-          text: type === 'keyDown' ? PRESS : undefined,
-          windowsVirtualKeyCode: PRESS.toUpperCase().charCodeAt(0),
+          key,
+          text: type === 'keyDown' ? key : undefined,
+          windowsVirtualKeyCode: key.toUpperCase().charCodeAt(0),
         });
       }
       await new Promise((r) => setTimeout(r, 2500));

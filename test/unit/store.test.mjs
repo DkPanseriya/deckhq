@@ -5,7 +5,7 @@ import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { Store, DEFAULT_SETTINGS } from '../../src/core/store.mjs';
+import { Store, DEFAULT_SETTINGS, SAVE_DEBOUNCE_MS } from '../../src/core/store.mjs';
 
 /** A log that records calls instead of writing to stderr, for assertions. */
 function fakeLog() {
@@ -28,8 +28,37 @@ async function cleanup(dir) {
   await fsp.rm(dir, { recursive: true, force: true });
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * A clock the test cranks by hand. `Store` schedules its debounce through
+ * this instead of the real timer wheel, so a callback runs when the test says
+ * so and never because a slow CI runner serviced a setTimeout late or early.
+ * Windows CI (run 33756126370) failed the debounce test on nothing but that.
+ */
+function fakeTimers() {
+  /** @type {Set<{fn: () => void, ms: number}>} */
+  const pending = new Set();
+  return {
+    pending,
+    setTimeout(fn, ms) {
+      const handle = { fn, ms };
+      pending.add(handle);
+      return handle;
+    },
+    clearTimeout(handle) {
+      pending.delete(handle);
+    },
+    /** Elapse every scheduled window at once and run what was waiting on it. */
+    fire() {
+      const due = [...pending];
+      pending.clear();
+      for (const { fn } of due) fn();
+    },
+  };
+}
+
+/** Let any I/O that was already started reach the disk before we look at it. */
+function settle() {
+  return new Promise((resolve) => setImmediate(resolve));
 }
 
 test('load() with no file on disk starts from defaults', async () => {
@@ -116,16 +145,26 @@ test('getAck/setAck/allAck round-trip and merge patches', async () => {
 test('save() debounces: no write appears before ~250ms, one appears after', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const timers = fakeTimers();
+    const store = new Store(file, { timers });
     await store.load();
 
     store.setAck('claude-code:a', { state: 'benched' });
     assert.equal(fs.existsSync(file), false, 'must not write synchronously');
 
-    await sleep(100);
+    // The only route to disk is the one timer save() scheduled, and it is for
+    // the documented window. Until this test fires it, no amount of waiting
+    // can produce a file — which is the property the old sleep(100) tried to
+    // observe and could not guarantee on a loaded runner.
+    assert.equal(timers.pending.size, 1, 'exactly one debounced write is scheduled');
+    const [scheduled] = timers.pending;
+    assert.equal(scheduled.ms, SAVE_DEBOUNCE_MS, 'the debounce window is the documented one');
+    await settle();
     assert.equal(fs.existsSync(file), false, 'must not write before the debounce window elapses');
 
-    await sleep(300);
+    timers.fire();
+    await store.flush(); // nothing left to schedule; this only awaits the write in flight
+    assert.equal(timers.pending.size, 0, 'firing the window does not reschedule');
     assert.equal(fs.existsSync(file), true, 'must have written after the debounce window');
     const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.equal(onDisk.ack['claude-code:a'].state, 'benched');
@@ -137,14 +176,17 @@ test('save() debounces: no write appears before ~250ms, one appears after', asyn
 test('rapid successive writes coalesce into the latest state', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const timers = fakeTimers();
+    const store = new Store(file, { timers });
     await store.load();
 
     store.setAck('claude-code:a', { state: 'active' });
     store.setAck('claude-code:a', { state: 'benched' });
     store.setAck('claude-code:a', { state: 'let_go' });
+    assert.equal(timers.pending.size, 1, 'three mutations inside one window share one timer');
 
-    await sleep(350);
+    timers.fire();
+    await store.flush();
     const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.equal(onDisk.ack['claude-code:a'].state, 'let_go');
   } finally {
@@ -294,6 +336,30 @@ test('load() clamps an out-of-range stallWindowMs found on disk', async () => {
     const store = new Store(file);
     await store.load();
     assert.equal(store.settings.stallWindowMs, 2 * 60 * 1000);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('approveText: what `2 Approve` sends is configurable, trimmed, capped, and never blank', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    assert.equal(store.settings.approveText, 'Yes, go ahead.');
+
+    store.setSettings({ approveText: '  Approved, carry on.  ' });
+    assert.equal(store.settings.approveText, 'Approved, carry on.');
+
+    // Blank, or not a string: back to the default rather than an approve key
+    // that sends nothing.
+    store.setSettings({ approveText: '   ' });
+    assert.equal(store.settings.approveText, DEFAULT_SETTINGS.approveText);
+    store.setSettings({ approveText: 42 });
+    assert.equal(store.settings.approveText, DEFAULT_SETTINGS.approveText);
+
+    store.setSettings({ approveText: 'x'.repeat(2000) });
+    assert.equal(store.settings.approveText.length, 500);
   } finally {
     await cleanup(dir);
   }

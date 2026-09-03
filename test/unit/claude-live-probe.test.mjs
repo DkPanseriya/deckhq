@@ -8,10 +8,11 @@
  * exited, and the scan drags a probe forward when a transcript moves for a
  * session the roster does not list. See docs/DEVIATIONS.md §77.
  *
- * Every test drives `liveSessions` through its two seams — `probe` in place
- * of the spawn, so probes can be counted exactly, and `now` in place of the
- * clock, so a TTL can be crossed without sleeping through it. Nothing here
- * spawns a CLI.
+ * Every test drives `liveSessions` through its three seams — `probe` in place
+ * of the spawn, so probes can be counted exactly; `now` in place of the clock,
+ * so a TTL can be crossed without sleeping through it; and `alive` in place of
+ * the pid check, so a pid can die and be handed to another process on cue.
+ * Nothing here spawns a CLI.
  */
 
 import { test } from 'node:test';
@@ -19,7 +20,7 @@ import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { adapter, _resetLiveProbeCache } from '../../src/adapters/claude-code/adapter.mjs';
@@ -136,6 +137,83 @@ test('an entry with no pid survives until the next probe', async () => {
     out.map((s) => s.id),
     ['claude-code:nopid'],
     'nothing cheap can call this dead, so the probe stays authoritative',
+  );
+});
+
+// --- The pid check, and what it cannot know (docs/DEVIATIONS.md §82) -------
+
+test('a pid that has really exited reads dead on this platform, not just a pid that never existed', async () => {
+  // DEAD_PID above never existed. The case the roster actually meets is a
+  // process that ran and exited, and on Windows those are different code
+  // paths inside libuv (`OpenProcess` failing vs `GetExitCodeProcess`
+  // reporting an exit). Both must come back ESRCH, never EPERM, or a finished
+  // session would sit at its desk until the TTL.
+  const child = spawn(process.execPath, ['-e', '0'], { stdio: 'ignore' });
+  await new Promise((resolve) => child.once('exit', resolve));
+
+  _resetLiveProbeCache();
+  const probe = countingProbe([session('alive', LIVE_PID), session('exited', child.pid)]);
+  await adapter.liveSessions({ probe, now: T0 });
+  const out = await adapter.liveSessions({ probe, now: T0 + 5000 });
+  assert.equal(probe.calls, 1);
+  assert.deepEqual(
+    out.map((s) => s.id),
+    ['claude-code:alive'],
+  );
+});
+
+test('pid reuse: a pid once seen dead cannot bring its session back before the next probe', async () => {
+  // The session exits, the check sees it (poll 2), and by poll 3 the OS has
+  // handed the same pid to something else. The roster is corrected by
+  // removal, not by re-evaluation, so the impostor cannot revive the entry.
+  _resetLiveProbeCache();
+  const REUSED = 4242;
+  let pidIsAlive = true;
+  const alive = (pid) => (pid === REUSED ? pidIsAlive : pid === LIVE_PID);
+  const probe = countingProbe([session('kept', LIVE_PID), session('reused', REUSED)]);
+
+  await adapter.liveSessions({ probe, now: T0, alive });
+  pidIsAlive = false; // the session's process exits
+  const retired = await adapter.liveSessions({ probe, now: T0 + 5000, alive });
+  assert.deepEqual(
+    retired.map((s) => s.id),
+    ['claude-code:kept'],
+  );
+
+  pidIsAlive = true; // some other process now holds the pid
+  for (let i = 2; i * 5000 < TTL_MS; i++) {
+    const out = await adapter.liveSessions({ probe, now: T0 + i * 5000, alive });
+    assert.deepEqual(
+      out.map((s) => s.id),
+      ['claude-code:kept'],
+      `poll ${i}: a reused pid must not resurrect a retired session`,
+    );
+  }
+  assert.equal(probe.calls, 1, 'and none of that may cost a spawn');
+});
+
+test('pid reuse the check never saw reads live until the next probe, and not past it', async () => {
+  // The accepted exposure, pinned so its size is a fact and not a guess: the
+  // session exits AND its pid is reused inside one poll interval, so no check
+  // ever sees it dead. This process's own pid stands in for the impostor.
+  // Measured on the reference machine a pid recurs after 123–155 further
+  // process creations, so this needs ~25 spawns a second during the 5 s the
+  // check is blind. The roster may be wrong for the rest of the TTL and must
+  // be right the moment the probe answers again.
+  _resetLiveProbeCache();
+  const probe = countingProbe([session('reused', LIVE_PID)], []);
+  await adapter.liveSessions({ probe, now: T0 });
+
+  const inside = await adapter.liveSessions({ probe, now: T0 + TTL_MS - 5000 });
+  assert.equal(inside.length, 1, 'inside the TTL the impostor reads live — the documented price');
+  assert.equal(probe.calls, 1);
+
+  const after = await adapter.liveSessions({ probe, now: T0 + TTL_MS });
+  assert.equal(probe.calls, 2, 'the TTL probe is what corrects it');
+  assert.deepEqual(
+    after,
+    [],
+    'and the correction is complete: nothing survives a probe that omits it',
   );
 });
 

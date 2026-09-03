@@ -6,6 +6,91 @@
 
 ## Unreleased
 
+### Added
+
+- **`deckhq doctor --share` prints the report as a fenced block you can paste anywhere.** The same
+  numbers as the report — transcripts, running now, on the floor, waiting on you, hooks, egress —
+  with everything that belongs to you taken out: no paths, no project names, no machine name, no
+  hook port, no free-text error message, and a date to the day rather than the hour. A problem is
+  reported as a count with a pointer back to `deckhq doctor`, so the block says a check failed
+  without saying what it read. Project names cannot leak by construction — the report counts
+  distinct working directories and never keeps the strings — and a redaction pass runs over the
+  assembled block anyway, because a runtime's version string and an adapter's error message are
+  text this project did not write. The pitch is its last line. `--share --json` keeps stdout to
+  exactly one JSON document and carries the block as a `share` field. The honesty tests of
+  `docs/DEVIATIONS.md` §74 now run against this block as well as the report and the proof card:
+  the retired overclaim cannot come back through the launch asset. §84.
+- **The panel is a review surface, not a viewer.** It used to show a state chip, three big number
+  tiles, an animated close-up and the conversation as one wall of unstyled plain text, under seven
+  identical grey buttons. You were being asked to review work with none of the review material in
+  front of you. Top to bottom it is now the identity line with the close-up shrunk to 44 px
+  inline, the session's own title, its state and branch, how long it has been waiting, **what it
+  said**, **what changed on disk**, three weighted actions, the composer, and the cost estimate as
+  one quiet line at the bottom. `docs/plan/05-GUI-UX-SPEC.md` §4.
+- **The last message renders as markdown.** Headings, paragraphs, bullet and numbered lists nested
+  by indentation, block quotes, fenced code with a mono face and a ground of its own, inline code,
+  bold, italic, and links as their text with the URL visible beside them. The agent wrote
+  markdown; showing it as plain text was throwing away the structure the reader needs. Own
+  renderer, `public/markdown.js`, no new dependency — and it is two stages on purpose:
+  `parseMarkdown()` produces a token tree and touches no DOM, `renderMarkdown()` builds elements
+  with `createElement` and `textContent`. There is no `innerHTML` in the client at all, and a
+  `<script>` tag inside a fenced block renders as the visible characters it is and executes
+  nothing. Both are asserted as `SECURITY:` tests.
+- **"What changed in `<project>`", from the working tree.** New endpoint `GET /api/changes?id=`
+  runs three read-only git commands in the session's cwd — the unstaged diff, the staged diff, and
+  how far the branch is ahead of the default branch — and reports `+142  −18  3 files` over
+  per-file rows. Cached per scan, so a panel left open costs three spawns per scan per project at
+  most, not three per poll. It turns "want me to open the PR?" from a question you must go
+  somewhere else to answer into one you can answer here. The heading names the **project**, never
+  the agent: with several agents in one repository a working-tree diff is not attributable to one
+  of them, and the section will not imply otherwise. A clean repository says _"nothing
+  uncommitted"_ rather than disappearing, because "no changes" is itself review-relevant.
+- **Three weighted actions on `1`, `2`, `3`.** `1 Reply` focuses the composer. `2 Approve` sends a
+  configurable affirmative — `"Yes, go ahead."` by default, `approveText` in settings — and is the
+  only accent-filled button on the screen, because it is the commonest reply in this workflow and
+  making it one keystroke is the largest per-day saving in the redesign. `3` benches. Everything
+  else — mark for review, let go, rename, new agent, recall, rehire — moved behind `⋯ more`.
+  Seven equal buttons was not a choice architecture, it was an inventory.
+- **An unsent reply is a visible state.** Text left in the composer is kept per session in
+  `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
+  a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
+  client-side: the daemon never sees a draft and a draft never touches ack state.
+
+### Changed
+
+- **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
+  `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
+  runtime records the user turn — the documented `UserPromptSubmit` exception — never by the
+  client deciding it has been dealt with. THE INVARIANT is now also checked statically:
+  `test/unit/panel-invariant.test.mjs` reads the client source and fails if `/api/ack` appears
+  anywhere under `public/` outside the one call inside `performAction()`, or if any render, open,
+  refresh, load or send path can reach it. The worst version of this bug is a well-meaning ack
+  wired into a render path, and no behavioural test can see it.
+- **The demo floor builds real repositories.** Its project directories used to be `C:\code` or
+  `~/code` — paths it named and never created. The review card reads the working tree, so the
+  fixture now creates one of each shape the panel draws: a dirty repository carrying the diff the
+  spec uses as its example, a clean one, plain directories with no git, and one project whose
+  directory does not exist. All of it inside the temp root the demo already removes on exit, and a
+  machine without `git` still gets a floor. Its `for_review` sessions also end on a message
+  written the way an agent actually writes one, in markdown.
+- `scripts/capture-floor.mjs --press` takes a sequence of keys rather than a single one, so a
+  screenshot can be aimed at a chosen place in the needs-you queue.
+
+### Fixed
+
+- **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are
+  written with the port the daemon had when they were installed, so a later start on the 4317
+  default — or on 4318 after the in-use walk — left every hook event posting into a void while the
+  settings file stayed valid and the header went on claiming exact state. It is the only broken
+  state in the product that looks healthy from every surface at once. `deckhq doctor` reports it
+  (§75); now `deckhq` does not create it. With no `--port` given, the daemon listens where the
+  installed hooks post if that port is free, and says so in one log line. If a DeckHQ daemon
+  already holds it, `deckhq` prints one line naming its URL and starts nothing rather than binding
+  the next port along and running degraded beside it. If something that is not DeckHQ holds it, the
+  requested port is used and the header's reinstall banner does the rest. An explicit `--port` or
+  `DECKHQ_PORT` is honoured exactly as given — naming a port is a request to be on it.
+  `docs/DEVIATIONS.md` §83.
+
 ### Performance
 
 - **The daemon no longer boots the Claude Code CLI every five seconds.** `liveSessions()` shelled
@@ -31,6 +116,54 @@
   while a first scan is unchanged. The archive flag is cached against the file that carries it,
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
+- **The review of that work is closed out.** The pid check behind the roster cache was verified on
+  Windows against a process that really exited, not just a pid that never existed (both `ESRCH`;
+  only the protected System process is `EPERM`). Pid reuse inside the 60 s roster window is now a
+  measured, tested exposure rather than an open question: a pid the check has once seen dead can
+  never bring its session back, so the only way to be wrong is for a session to exit **and** have
+  its pid reused inside one 5 s poll — which here needs ~25 process creations a second — and even
+  then the desk is drawn occupied for at most 60 s and nothing user-owned moves. The head-window
+  JSON scanner has tests for a window cut mid-string, mid-number and on the backslash of an
+  escape, and the desktop-cache tests prove their mtime pins round-trip on the filesystem they run
+  on instead of assuming it. `docs/DEVIATIONS.md` §82.
+
+### Testing
+
+- **The debounce test no longer races the wall clock.** "save() debounces" in
+  `test/unit/store.test.mjs` slept 100 ms and looked for the file, slept 300 ms and looked again.
+  On Windows CI (Node 18 and 20, run 33756126370) that turned `main` red while the same test
+  passed everywhere else: a runner that services a timer late puts the write on the wrong side
+  of the look, and no choice of sleep length can rule that out. The store's debounce clock is now
+  injectable — `new Store(file, { timers })`, defaulting to the real one — and the test cranks it
+  by hand: exactly one timer is scheduled, for exactly `SAVE_DEBOUNCE_MS`; nothing reaches the
+  disk until it is fired; one write with the right contents lands when it is. Same proof, no
+  timing. The sibling "rapid successive writes coalesce" test, which slept 350 ms for the same
+  reason, is on the same clock. `docs/DEVIATIONS.md` §80.
+
+### Packaging
+
+- **A tag now produces the release page, not only the package.** `publish.yml` gains a `release`
+  job that runs once the OIDC publish has succeeded. It downloads the tarball the registry
+  actually serves and checks it against the registry's own `dist.integrity`; builds
+  `deckhq-X.Y.Z-win.zip` from it plus a two-line `packaging/deckhq.cmd` launcher; renders a
+  Homebrew formula, a three-file winget manifest and a scoop manifest against those two digests
+  (`scripts/release/manifests.mjs`); takes the matching `## X.Y.Z` section of this file as the
+  notes (`scripts/release/changelog-section.mjs`); and creates the GitHub Release with the two
+  screenshots and all of it attached. The workflow now defaults to `contents: read` and that job
+  raises itself, so it is the only one in the file that can write to the repository whatever the
+  account's default token scope is. `packaging/README.md` says what a user does with each asset.
+  **Unproven until a tag runs it.** That run is WP-43's acceptance criterion and nothing here
+  claims it.
+- The publish job's npm upgrade is pinned to `npm@^11.5.1` instead of `@latest`, and the floor is
+  asserted before anything else runs. The job also refuses to publish a version that has no
+  changelog section, so the release page can never come up empty after the irreversible step.
+- Ten tests cover the two release scripts, including one that fails the suite when
+  `package.json`'s version has no section here — the same refusal, made locally. The zip step was
+  also rehearsed by hand: the launcher was run out of a staging directory unpacked from a real
+  `npm pack` tarball, so the one path that YAML review cannot check — launcher to `bin` — is
+  proved. `docs/DEVIATIONS.md` §81.
+- `packaging/deckhq.cmd` is checked out with CRLF endings (`.gitattributes`). The repository is
+  otherwise LF-only, and the release job zips this file on a Linux runner for `cmd.exe` to run.
 
 ### Fixed
 

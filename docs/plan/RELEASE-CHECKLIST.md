@@ -197,8 +197,12 @@ None of these are in the repository, so none of them are done by a commit:
 - **WP-43** replaces steps 7–12 with a tag push. This checklist stays the reference for what the
   workflow must do, and for the owner-only settings in step 13, which no workflow can do.
 - Open the `1.3.0` heading in `CHANGELOG.md` when the next package lands, so nobody has to
-  remember to.
-- Consider publishing from CI with `--provenance` for the next release. It needs a GitHub Actions
-  workflow with `id-token: write` and an npm automation token, and it puts a verified-provenance
-  badge on the npm page — which is worth having for a tool whose whole pitch is that you can trust
-  what it does on your machine.
+  remember to. `.github/workflows/publish.yml` refuses to publish a version that has no `## X.Y.Z`
+  section in `CHANGELOG.md`, and `npm test` fails on a version bump without one, so a forgotten
+  heading is caught before the irreversible step rather than after it.
+- **Provenance needs no flag and no token.** `publish.yml` publishes through trusted publishing
+  (OIDC), which attaches the provenance attestation on its own; `--provenance` must **not** be
+  added, and an npm automation token must not be created — the point of the OIDC design is that no
+  long-lived credential exists in the repository to leak. The workflow header lists the owner's
+  one-time trusted-publisher setup on npmjs.com, which is the only remaining manual step and the
+  reason the badge is not on the 1.2.0 page.
