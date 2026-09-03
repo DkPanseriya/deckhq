@@ -55,14 +55,14 @@ been able to make, and each says so.
 | F18 no mobile, no second machine | **Open.** P4. The ledger is already designed for the merge (WP-48). The half of F18 that did not need a network — seeing the count without the tab in front of you — is answered by the status line, the PWA badge, the VS Code status bar and now WP-39's floating mini-floor (§113). |
 | F19 repo hygiene | Mostly closed (WP-02). Stray files deliberately left, DEVIATIONS §67. |
 | F20 no browser-level tests | **Closed as a harness, half-biting as a gate.** `npm run goldens` captures four fixture populations at 1600×1000 and compares them pixel for pixel with a zero-dependency PNG codec, calibrated against a measured 36-pixel noise floor against a 1,181-pixel smallest real defect, and proved load-bearing by reverting the rig fix (§87). Goldens are committed for Windows only; the Ubuntu job went red rather than skipping, and now starts Chrome or skips it by name (§114). |
-| F21 files are large and untyped | **Open.** WP-22. |
+| F21 files are large and untyped | **Closed for the two files it named, and gating.** `npm run typecheck` runs `tsc --noEmit --checkJs` over `src/`, `scripts/`, `plugin/`, `vscode/`, `bin/` and `public/` as two projects — the two sides of the static-file boundary do not share a platform — with CI running it on Ubuntu after lint and `prepublishOnly` running it too. It found **thirty-two** places where the documentation and the code had drifted apart, including the one this row predicted. `plan.js` 3,255 → 871 over seven modules, `app.js` 2,721 → 748 over eleven, and `derivePlacement()`/`placement()` are the same function object now rather than two copies with a warning between them (`public/floor-rule.js`, which both sides import). Goldens 0 px throughout. Ten other files are still over 900 lines and are named in `docs/DEVIATIONS.md` §121. |
 | F22 docs address the wrong reader | **Closed in the tree, not in the world.** WP-29 shipped a hand-written site — install, the model in 60 seconds, hooks and privacy, adapters, an FAQ leading with "why not just use `claude agents`", and the deviations log as an engineering blog — with no generator, no dependency, no script on any page and four egress tests over the built bytes (§112). **It is deployed nowhere:** `pages.yml` fails on every push because Pages has not been enabled. |
 | New (3 Sep): flaky `save() debounces` test | **Closed.** The store's debounce clock is injectable and the test cranks it by hand; the sibling coalescing test is on the same clock (§80). |
 | New (3 Sep): hooks port drift | **Closed.** With no `--port` the daemon listens where the installed hooks post if that port is free, and refuses to start beside a DeckHQ that already holds it (§83). On the plugin route the class of bug is gone entirely: the hooks carry no port and read `~/.deckhq/daemon.json` (§102). |
 | New (4 Sep): `main` went red on Ubuntu and macOS | **Fixed in the tree, unproven.** Two faults with one shape — something the developer's machine happened to be, relied on as though it had been stated: a `plugin-hook` test asserting a `cmd.exe` resolution only reachable on `win32`, and a `goldens` job whose Chrome never exposed a page target. The launcher's platform is injected now, so every platform's argv is asserted on every platform, and the goldens job starts Chrome or skips it by name (§114). |
 | New (4 Sep): no completed CI run for `HEAD` | **Open.** Every push since the WP-10 merge was cancelled by the next merge, and that last completed run was red on Ubuntu, macOS and the goldens job. Nothing merged after it has been through CI at all, including the fix. Until a run finishes, "green" is a hypothesis (rule 11). |
 
-Test count is now **1312**, lint and format clean on this machine.
+Test count is now **1524**, lint, format and typecheck clean on this machine.
 
 ## 2. Scorecard
 
@@ -249,6 +249,10 @@ were all invisible to unit tests and visible to a screenshot.
 1532, `public/render/scene.js` 1432. JSDoc is thorough but unchecked. `tsc --noEmit --checkJs`
 as a dev dependency would catch the drift between `derivePlacement()` in `agents.js` and
 `placement()` in `model.mjs` that the comments warn about.
+
+*WP-22 did exactly that, and the prediction was right: the checker's ninth finding is
+`placement()` reading `subagent` with a signature that did not name it, while the copy in
+`agents.js` did. There is one copy now. `docs/DEVIATIONS.md` §121.*
 
 **F22. Docs address the wrong reader.** `docs/README.md` opens "Hand this directory to the
 delivery orchestrator." The best writing in the repo (DEVIATIONS) is invisible to anyone who
