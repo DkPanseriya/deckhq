@@ -114,6 +114,27 @@
   and never claims the launch works — outside Windows, it has not been tried on a real desktop.
   It is in the local report only, never in `--share`: which emulator you run is a fact about
   you, not a number anyone can check.
+- **`deckhq statusline` — the queue as one line, for a status bar.** `▣ 3 waiting · 1 hand up`,
+  with the zero half omitted and `▣ clear` when nothing is waiting. `waiting` is the header's own
+  numeral and `hands up` is the subset that is blocked on an answer, both from the same `counts()`
+  the interface uses, so the two can never disagree. It reads a running DeckHQ if one answers on
+  127.0.0.1 within 150 ms and `~/.deckhq/state.json` plus the scan cache if none does — 3 ms median
+  on 77 sessions, 5.6 ms on a synthetic 400, against a 20 ms budget asserted in the test.
+  `--json` for scripts. `deckhq statusline --install` writes it into your Claude Code status line
+  under the same consent discipline as hooks: the literal JSON and the file path are printed, and
+  nothing is written without `--yes`. The entry is tagged, your settings file is copied to
+  `~/.deckhq/backups/` first, `--remove` takes out only what DeckHQ wrote, and a status line
+  somebody else configured is reported and left alone. No outbound network calls. §92.
+- **The terminal deck: `deckhq ls`, `waiting`, `ack`, `bench`, `open`.** The deck of
+  `docs/plan/05-GUI-UX-SPEC.md` §3.2 as a table — oldest first, finished turns and raised hands
+  above stalls, separated by a rule — in raw ANSI with no dependency. `waiting` is that queue
+  alone; `ls` also lists everyone else on the payroll, and `--all` adds the benched and the let go.
+  `NO_COLOR`, a pipe, `TERM=dumb` and `--no-color` all turn the colour off; `--json` on both reads.
+  `<id>` is the MK tag the table prints, a name you gave, or any prefix of the session id, and an
+  ambiguous one is refused rather than guessed. Reads work with or without a daemon; `ack` and
+  `bench` go through the running daemon's `/api/ack` and nothing else, because `act()` is the only
+  code path allowed to clear a user-owned state — with no daemon they print `start deckhq to act`
+  and exit 2. §93.
 
 ### Changed
 
