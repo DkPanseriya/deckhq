@@ -3396,7 +3396,13 @@ the golden photographs `08` §0's floor rather than an approximation of it:
 
 ### Goldens
 
-Regenerated as the last step of the package, as the workplan requires. The
-floor legitimately changed on all four populations — `empty` too, because its
-lounge plate line is now built by the same code path. The harness's noise floor
-(36 px, §87) is unchanged.
+Regenerated as the last step of the package, as the workplan requires. Three
+of the four changed — `reference` and `demo` because the floor is a different
+building, `single` because of the room-sized rug and the 9 px to 11 px name
+label. **`empty` is byte-identical**, which is the control working: there is
+nobody on that floor and no repo in its directory, so nothing WP-50 touches is
+drawn on it.
+
+The check is green against fresh captures on all four, and the harness's own
+noise floor is unchanged from §87's measurement: 0 px over tolerance
+everywhere, 36 px moved at all on `empty` and 0 on the other three.
