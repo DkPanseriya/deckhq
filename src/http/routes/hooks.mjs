@@ -39,7 +39,7 @@ export function register(router, ctx) {
         // WP-56. A managed policy can switch these hooks off over DeckHQ's
         // head, and the result is indistinguishable from a broken install
         // everywhere else: the file is right, the port is right, nothing
-        // arrives (`docs/DEVIATIONS.md` §86.4, §114). Never fails the status.
+        // arrives (`docs/DEVIATIONS.md` §86.4, §115). Never fails the status.
         if (installed || viaPlugin) {
           try {
             const found = await adapter.hooks.blockedByPolicy?.({

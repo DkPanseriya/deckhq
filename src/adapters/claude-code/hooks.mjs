@@ -719,7 +719,7 @@ export async function managedSettingsFiles(dir = managedSettingsDir()) {
  * Only the *file* delivery mechanism is read. MDM profiles, the Windows
  * registry and server-managed settings from the claude.ai console deliver the
  * same keys through channels that are not files on disk, and none of them is
- * visible to this process — see `docs/DEVIATIONS.md` §114.
+ * visible to this process — see `docs/DEVIATIONS.md` §115.
  *
  * @param {{dir?:string}} [opts]
  * @returns {Promise<{dir:string, files:string[], unreadable:string[],
@@ -790,7 +790,7 @@ export async function managedSettings({ dir = managedSettingsDir() } = {}) {
  * notice a block leaves the report saying exactly what it says today. Claiming
  * a block that is not there would put `doctor` at exit 1 and a banner in the
  * header of a machine whose policy is fine, over a matching rule this project
- * guessed at. See `docs/DEVIATIONS.md` §114.
+ * guessed at. See `docs/DEVIATIONS.md` §115.
  *
  * @param {unknown} entry
  * @param {string} url

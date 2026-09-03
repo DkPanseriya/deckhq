@@ -442,7 +442,7 @@
   in one line above the Install button, including that pressing it again will not help. Read-only
   throughout, generous about what counts as being on the allowlist, and the user's own
   `allowedHttpHookUrls` can only ever widen the merged list — never fail a machine whose policy is
-  fine. `docs/DEVIATIONS.md` §114.
+  fine. `docs/DEVIATIONS.md` §115.
 
 - **The floor is photographed on every change, and a pixel that moves without permission fails the
   build.** The three worst bugs in this project's history — the rig a quarter-turn out of true, a
@@ -977,7 +977,7 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   shape, but no `http` hook type at all, so it needs a `command` hook that reads the daemon's
   port and relays on stdin/stdout. That same hook is also the fallback for the two managed-settings
   switches that can turn HTTP hooks off over DeckHQ's head — now detected and named by `doctor`
-  and the hooks screen, but still without a route around them. §97.4, §114.
+  and the hooks screen, but still without a route around them. §97.4, §115.
 - **No machine with a managed policy in force has been run against.** `doctor` reads the
   `managed-settings.json` for the platform and the `managed-settings.d/` drop-ins beside it, and
   every part of DeckHQ's own side is proved against injected directories — but no Claude Code has
@@ -985,8 +985,8 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   means writing into a managed settings location and this project will not. The same read cannot
   reach the other delivery mechanisms at all: MDM profiles, the Windows registry and
   server-managed settings from the claude.ai console are not files on disk, so a fleet policed
-  that way still reports "installed, 0 events" with no explanation. `docs/DEVIATIONS.md` §114.1,
-  §114.5.
+  that way still reports "installed, 0 events" with no explanation. `docs/DEVIATIONS.md` §115.1,
+  §115.5.
 - **Goldens are committed for Windows only, so the Ubuntu CI job reports SKIPPED and proves
   nothing yet.** Text is rasterised by the operating system, so one set of goldens cannot serve
   three platforms and there was no linux or macOS machine in reach. The job captures anyway and

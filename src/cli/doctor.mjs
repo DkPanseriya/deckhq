@@ -350,7 +350,7 @@ async function collectHooks(adapter, deps) {
      * `{key, file}`, or null. Two settings keys can switch DeckHQ's hooks off
      * over its head, and from every other surface the result is identical to a
      * broken install: the settings file is exactly right and nothing arrives
-     * (`docs/DEVIATIONS.md` §86.4, §97.4, §114). Read through an optional
+     * (`docs/DEVIATIONS.md` §86.4, §97.4, §115). Read through an optional
      * adapter method, so a runtime with no such policy simply has none.
      */
     blockedByPolicy: null,

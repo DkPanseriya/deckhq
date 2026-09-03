@@ -664,7 +664,7 @@ test('an adapter that throws is reported rather than swallowed', async () => {
 //
 // Two managed settings keys can stop DeckHQ's hooks from running over its head
 // — `allowManagedHooksOnly` and `allowedHttpHookUrls` (docs/DEVIATIONS.md
-// §86.4, §97.4, §114). From every other surface the result is identical to a
+// §86.4, §97.4, §115). From every other surface the result is identical to a
 // broken install: the settings file is exactly right, the port is exactly
 // right, the daemon is up, and no event ever arrives. This is the "looks
 // healthy, delivers nothing" class §75 reserved exit 1 for.

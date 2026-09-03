@@ -7255,7 +7255,7 @@ seams were already in this codebase (`editor.mjs`, `terminals.mjs`, `notify.mjs`
 `platform`); one module had not been given one, and one line of a workflow comment had promised a
 skip that the code did not implement.
 
-## 114. WP-56 — the managed policy that switches the hooks off, and the row that names it
+## 115. WP-56 — the managed policy that switches the hooks off, and the row that names it
 
 The WP-19 spike found two Claude Code settings keys that stop DeckHQ's hooks from running
 (§86.4), and the WP-19 build left detecting them as a follow-up (§97.4): _"on a managed machine
@@ -7269,7 +7269,7 @@ moves, which is the same observable as a firewall, a missing `node` on `PATH`, o
 project. §75 reserved exit 1 for exactly this class — _"the failure this check is actually for,
 and it is invisible in every other surface"_ — and this is the second member of it.
 
-### 114.1 Where the files are, and how much of that is verified
+### 115.1 Where the files are, and how much of that is verified
 
 Read from the Claude Code documentation (_Deploy managed settings_ at
 `code.claude.com/docs/en/managed-settings`, _Settings_ at `/docs/en/settings`, and the settings
@@ -7305,7 +7305,7 @@ console. None of those is a file this process can open, and three of them are no
 So a machine policed by MDM or by the console reports exactly what it reported before this
 package: hooks installed, events zero. That is a real gap and it is not closeable from here.
 
-### 114.2 The two keys are not the same size, and the report does not pretend they are
+### 115.2 The two keys are not the same size, and the report does not pretend they are
 
 `allowManagedHooksOnly` ignores every hook DeckHQ installs, by either route — the eight `command`
 entries and WP-19's `http` one. `allowedHttpHookUrls` reaches **only** the `http` entry, because
@@ -7325,7 +7325,7 @@ be overstating `allowedHttpHookUrls` by eight events. The share block (§84) car
 without the file, because a managed settings path is a path like any other and that block carries
 none.
 
-### 114.3 Four decisions the package had to make
+### 115.3 Four decisions the package had to make
 
 1. **A generous match, on purpose.** The documentation names `allowedHttpHookUrls` and says a
    handler runs only if its URL "matches the merged allowlist". It does not say what matching
@@ -7357,7 +7357,7 @@ Everything is read-only. Nothing here opens a managed settings file for writing,
 never could: it is the command that must not be able to change the thing it reports on — the same
 rule that makes `readTerminalPin` a plain read rather than a `Store`.
 
-### 114.4 What was measured
+### 115.4 What was measured
 
 `deckhq doctor` on the reference machine, unchanged and exit 0 — Windows 11, no
 `C:\Program Files\ClaudeCode` at all, hooks installed on 4400 with 424 events delivered, the last
@@ -7396,7 +7396,7 @@ The §74 honesty tests still pass, and a new one runs the same assertions over t
 share block or the header banner. What is blocked is a hook, and what the report says is that it
 does not run.
 
-### 114.5 What is still owed
+### 115.5 What is still owed
 
 A run on a machine with a real managed policy in force. Until that has happened the claim is
 _"DeckHQ reads the managed settings file and reports what it finds there"_, which is proved, and
