@@ -514,7 +514,13 @@ test('the reception sofas form one continuous C, corner to corner', () => {
   }
 });
 
-test('the working floor is two rows with one corridor between them', () => {
+test('the working floor is bands of rooms with one shared corridor between each', () => {
+  // WP-55 made the band count a CHOICE rather than a constant: the envelope is
+  // summed from its contents now, so the number of bands is one of the two
+  // things (with the service-column width) the plan still uses to take the
+  // shape of the screen. What must hold whatever it picks is the structure —
+  // rooms in bands, one corridor spanning the working floor between each pair,
+  // and no room straddling one.
   const { projects, agents } = floor({
     projects: [15, 7, 4, 3, 2, 2, 2, 1, 1, 1, 1, 1],
     benched: 37,
@@ -526,18 +532,37 @@ test('the working floor is two rows with one corridor between them', () => {
   const workingX = spine.x + spine.w;
   const workingW = plan.width - workingX;
 
-  // Exactly one corridor spans the working floor.
-  const fullWidth = plan.rooms.filter(
-    (r) => r.kind === 'corridor' && r.id !== '__spine__' && r.w >= workingW - 0.01,
-  );
-  assert.equal(fullWidth.length, 1, 'the working floor takes one shared corridor, not one per row');
+  const crossing = plan.rooms
+    .filter(
+      (r) =>
+        r.kind === 'corridor' &&
+        r.id !== '__spine__' &&
+        r.id !== '__open__' &&
+        r.w >= workingW - 0.01,
+    )
+    .sort((a, b) => a.y - b.y);
+  assert.ok(crossing.length >= 1, 'the working floor takes at least one shared corridor');
+  assert.ok(crossing.length <= 3, `${crossing.length} cross corridors is a plan made of aisles`);
 
-  // And the rooms sit in two bands, one either side of it.
-  const split = fullWidth[0].y;
-  const above = rooms.filter((r) => r.y + r.h <= split + 0.01);
-  const below = rooms.filter((r) => r.y >= split + fullWidth[0].h - 0.01);
-  assert.equal(above.length + below.length, rooms.length, 'every room is in one band or the other');
-  assert.ok(above.length > 0 && below.length > 0, 'both bands hold rooms');
+  // Every room sits wholly in one band: none of them straddles a corridor.
+  for (const room of rooms) {
+    for (const c of crossing) {
+      assert.ok(
+        room.y + room.h <= c.y + 0.01 || room.y >= c.y + c.h - 0.01,
+        `${room.id} straddles the corridor at y=${c.y.toFixed(1)}`,
+      );
+    }
+  }
+  // And every band the corridors define actually holds rooms.
+  const edges = [0, ...crossing.flatMap((c) => [c.y, c.y + c.h]), plan.height];
+  for (let i = 0; i < edges.length - 1; i += 2) {
+    const top = edges[i];
+    const bottom = edges[i + 1];
+    assert.ok(
+      rooms.some((r) => r.y >= top - 0.01 && r.y + r.h <= bottom + 0.01),
+      `the band between ${top.toFixed(1)} and ${bottom.toFixed(1)} holds no rooms`,
+    );
+  }
 });
 
 test('a project room is a room, not a splinter', () => {
@@ -561,7 +586,7 @@ test('a project room is a room, not a splinter', () => {
   }
 });
 
-test('the working floor has one corridor and no other circulation in it', () => {
+test('the working floor is circulation and rooms, and mostly rooms', () => {
   const { projects, agents } = floor({
     projects: [15, 7, 4, 3, 2, 2, 2, 1, 1, 1, 1, 1],
     benched: 37,
@@ -569,19 +594,28 @@ test('the working floor has one corridor and no other circulation in it', () => 
   });
   const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const corridors = plan.rooms.filter((r) => r.kind === 'corridor');
-  // Exactly two pieces of circulation on the whole floor: the spine, and the
-  // one cross corridor. Everything else is a room.
-  assert.equal(
-    corridors.length,
-    2,
-    `expected a spine and one cross corridor, got ${corridors.map((c) => c.id).join(', ')}`,
-  );
   assert.ok(corridors.some((c) => c.id === '__spine__'));
 
-  // And the rooms either side of the cross corridor share their walls: every
-  // project room's left edge meets either the spine or another room's right.
+  // WP-50 asserted exactly two pieces of circulation, because the treemap
+  // stretched the rooms to tile whatever rectangle was left over and there was
+  // nothing else it COULD be. WP-55 sizes the rooms to their contents instead,
+  // so a floor whose service column is taller than its rooms need, or whose
+  // bands are not the same width, has floor left over — and open floor is what
+  // that honestly is. What must still hold is that it stays a minority.
   const spine = plan.rooms.find((r) => r.id === '__spine__');
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
+  const total = plan.width * plan.height;
+  // The spine and the cross corridors are structure — the routes people walk.
+  // What is measured here is the leftover: the bays at the end of a short band
+  // and the open band under the rooms, both `thoroughfare: false`.
+  const open = corridors.filter((c) => c.thoroughfare === false).reduce((a, c) => a + c.w * c.h, 0);
+  assert.ok(
+    open / total < 0.2,
+    `${((open / total) * 100).toFixed(0)}% of the floor is open floor nobody walks on`,
+  );
+
+  // And the rooms in a band share their walls: every project room's left edge
+  // meets either the spine or another room's right.
   for (const r of rooms) {
     const meets =
       Math.abs(r.x - (spine.x + spine.w)) < 0.01 ||
@@ -723,13 +757,19 @@ test('the idle-projects strip costs a plate per repo, and is capped whatever the
         `the strip is ${strip.h.toFixed(1)} U tall, past the ${DIRECTORY_MAX_H} U cap`,
       );
       // And it never crowds out the rooms it stands beside.
-      for (const room of plan.rooms) {
-        if (room.kind !== 'project') continue;
-        assert.ok(
-          strip.h < room.h + EPS,
-          `the strip (${strip.h.toFixed(1)} U) is taller than room ${room.id} (${room.h.toFixed(1)} U)`,
-        );
-      }
+      //
+      // WP-50 stated that as "shorter than every room", which held while the
+      // working floor was the width of the building and the strip could always
+      // flow into columns. WP-55 makes the working floor the width of its
+      // ROOMS, so one active project beside seventeen idle repos leaves the
+      // strip one column wide and seventeen lines deep — genuinely taller than
+      // the one room, and the honest picture of that machine. What must hold is
+      // that it stays a strip: a line per repo, and a corner of the floor.
+      const share = (strip.w * strip.h) / (plan.width * plan.height);
+      assert.ok(
+        share < 0.25,
+        `the strip takes ${(share * 100).toFixed(0)}% of the floor at ${targetAspect}:1`,
+      );
     }
   }
 });
@@ -761,6 +801,84 @@ test('every room is furnished, not just occupied: no cell is mostly bare carpet'
         );
       }
     }
+  }
+});
+
+// ------------------------------------------- WP-55: the room is its contents
+
+/**
+ * How much of a room is floor its furniture has no use for.
+ *
+ * `room.natural` is the footprint the room's own contents need — the desk
+ * cluster, the clearance the corner planting and the wall fixtures stand in,
+ * and the plate band — computed by `buildProjectRoom` before the packer has
+ * given the room a cell. Everything past it is bare carpet, whether or not a
+ * rug has been painted over it.
+ *
+ * This is deliberately NOT the bounding box of the room's props, which is what
+ * WP-50's fill test measured. A room with a plant in each corner and a rug
+ * stretched to the walls has a prop bounding box covering 97% of it and reads,
+ * correctly, as an empty room: on the reference floor that measured 3.3% bare
+ * by the bounding box and 55% of the screen by eye.
+ * @param {{w:number,h:number,natural?:{w:number,h:number}}} room
+ */
+function bareCarpet(room) {
+  const natural = room.natural || { w: room.w, h: room.h };
+  return 1 - (natural.w * natural.h) / (room.w * room.h);
+}
+
+test('no room is more than 35% bare carpet, at every population and aspect', () => {
+  // WP-55's acceptance, as a property. Before it, one active project was given
+  // the whole working band — an 88 x 67 room holding a two-seat table, 97% of it
+  // floor covering — because the envelope was built to the window's shape and
+  // the treemap stretched whatever rooms there were to tile the remainder.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const targetAspect of ASPECTS) {
+      const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
+      for (const room of plan.rooms) {
+        if (room.kind !== 'project') continue;
+        const bare = bareCarpet(room);
+        assert.ok(
+          bare <= 0.35 + EPS,
+          `${room.id} is ${(bare * 100).toFixed(0)}% bare carpet at ${targetAspect}:1 — ` +
+            `${room.w.toFixed(1)}x${room.h.toFixed(1)} for furniture needing ` +
+            `${room.natural.w.toFixed(1)}x${room.natural.h.toFixed(1)}`,
+        );
+      }
+    }
+  }
+});
+
+test('the building is the sum of its parts, not the shape of the window', () => {
+  // The envelope is the service column, the spine and the working floor its
+  // rooms need, side by side — so a floor with one small project comes out
+  // SMALL, and `fitToWindow` draws it larger rather than the plan inventing
+  // carpet to fill a 1600 x 900 stage.
+  const planFor = (spec) => {
+    const { projects, agents } = floor(spec);
+    return buildPlan(projects, agents, { targetAspect: 1.78, now: NOW });
+  };
+  const one = planFor({ projects: [2], benched: 2 });
+  const many = planFor({ projects: [4, 4, 4, 4, 4, 4], benched: 2 });
+  assert.ok(
+    many.width > one.width * 1.4,
+    `six projects (${many.width.toFixed(0)} U) should make a much wider building than one (${one.width.toFixed(0)} U)`,
+  );
+
+  // And the envelope really is the sum: the working side is exactly what is
+  // left after the service column and the spine.
+  for (const plan of [one, many]) {
+    const office = plan.rooms.find((r) => r.kind === 'office');
+    const spine = plan.rooms.find((r) => r.id === '__spine__');
+    const right = plan.rooms
+      .filter((r) => r.x >= spine.x + spine.w - 0.01)
+      .reduce((a, r) => Math.max(a, r.x + r.w), spine.x + spine.w);
+    assert.ok(Math.abs(spine.x - office.w) < 0.01, 'the spine sits against the service column');
+    assert.ok(
+      Math.abs(right - plan.width) < 0.01,
+      'the working side reaches the building line exactly',
+    );
   }
 });
 

@@ -4334,3 +4334,119 @@ drawn on it.
 The check is green against fresh captures on all four, and the harness's own
 noise floor is unchanged from §87's measurement: 0 px over tolerance
 everywhere, 36 px moved at all on `empty` and 0 on the other three.
+
+## 97. WP-55 — the building is the size of what is in it
+
+`08` WP-50 fixed what the floor DRAWS: rooms only for active projects, desks
+equal to the agents at them, idle repos as a strip. It did not fix what the
+floor MEASURES. The envelope was still built to the window — `W = targetAspect
+* H`, with `H` pinned to the service column — and the squarifier then stretched
+whatever rooms there were to tile the remainder. With one active project that
+came out as an 88 x 67 room holding a two-seat table and two people, about 55%
+of the screen drawn as pale carpet with nothing on it. §96's own decision 7
+called that "honest but sparse" and left denser furnishing to interior design.
+It was not a furnishing problem. It was a measuring problem.
+
+**The rule that replaces it:** a room's footprint is derived from its occupants
+and their furniture, and the floor's extent is the sum of its rooms, its
+service column and its corridors. Nothing is sized by a share of anything.
+
+| reference machine (1600 x 1000) | after WP-50 | after WP-55 |
+|---|---|---|
+| envelope | 132.4 x 76.3 U | **56.8 x 54.5 U** |
+| the one project room | 90.4 x 67.1 U | **16.7 x 22.9 U** |
+| bare carpet in it | 93% | **30%** |
+| px per unit at fit | 12.1 | **16.9** |
+| character body | 30.4 px | **42.6 px** |
+| idle-projects strip | 3 rows of 6 crammed columns | **17 readable lines in one column** |
+| service column | 38 x 76 U | **34 x 54.5 U** |
+| open floor nobody walks on | 0% (it was inside the rooms) | **2%** |
+
+Demo floor: five rooms, every one with an occupant, **24-30% bare carpet** in
+each (WP-50: 34-53% by the same measure), character body 41.8 px.
+
+Before and after, both populations: `docs/media/floor-before-wp55.png` /
+`docs/media/floor-after-wp55.png` and `docs/media/demo-before-wp55.png` /
+`docs/media/demo-after-wp55.png`.
+
+### How bare carpet is measured, and why the old number said 3.3%
+
+§96 reported 3.3% bare on that 88 x 67 room, from the bounding box of its props.
+Both numbers are correct and the old one is useless: the room has a plant in
+each of three corners at an inset of 1.2 U and a rug stretched to within 4 U of
+the walls, so the box covers 97% of a room that is, to the eye, empty.
+
+`floor-integrity.test.mjs` measures `1 - natural / cell` instead —
+`room.natural` being the footprint `buildProjectRoom` computes for the room's
+own contents before the packer has given it a cell — and asserts it stays at or
+under 35% for every project room, at every population and every aspect. That is
+the acceptance criterion with nowhere to hide.
+
+### The seven decisions inside it
+
+**1. `natural` no longer includes the rug, and the rug no longer becomes the
+room.** WP-50 grew the rug to the cell so a small desk group would not read as
+adrift, then measured `natural` from a bounding box that included it — so
+`natural` reported the cell straight back to the packer, and every room was a
+self-fulfilling prophecy. The cluster is measured on its own now (the wall- and
+corner-anchored furniture carries placeholder coordinates until
+`resolveAnchors` runs, so it cannot be in that box), and the rug is capped at
+1.6x the desk group. A rug defines a group; past that it is floor covering.
+
+**2. A project room carries a plate band, like every other room.** It did not,
+so its plate was drawn over the top of whatever the packer's slack happened to
+put there. `natural.h` includes it, `place` adds it, and the corner planting
+now resolves below it rather than under the room's own name.
+
+**3. The envelope is summed, and the stage's shape is spent on ARRANGEMENT.**
+`W = serviceW + CORRIDOR + workingW`, `H = max(serviceColumn, rooms + strip)`.
+The target aspect is still honoured — the envelope search picks the
+service-column width AND the number of working bands to minimise
+`max(W / targetAspect, H)`, which is exactly "draw largest on this stage" — but
+it is now choosing between honest layouts instead of stretching one. A floor
+with one room has nothing to choose and comes out the shape its contents are;
+`plan.test.mjs`'s aspect-monotonicity test therefore asks six projects rather
+than one. **Deviation from `05` §3.1's "no letterbox band wider than 8 px":**
+there is deliberately ground around the building now, which is `05` §2.2's own
+metaphor (a lit plan on a dark studio ground) and is what the drop shadow under
+the envelope has always been drawing.
+
+**4. The fit has a ceiling as well as a floor.** `scene.js` clamps the fit scale
+so a character body is never over 44 px and never under WP-50's 16 px. Without
+the ceiling a quiet machine's small floor was blown up like a poster on a large
+display. The leftover viewport is ground, and the camera already centres the
+building in it.
+
+**5. A row of rooms is a row of rooms of similar depth.** Cells in a band are
+all the band's depth, so a one-table room sharing a band with a fifteen-desk
+project starts at twice its own footprint before any width is shared out.
+`bandsOf` deals by depth first (`HEIGHT_BAND_RATIO`) and balances width second;
+a band is then laid as one row with the widths shared by natural width, and the
+squarified treemap is kept for the case a band is carrying more rooms than one
+row can hold. Pass one also asks `flowBlocks` for a room-shaped desk cluster
+rather than a square one, which is what keeps a two-table project the same depth
+as its neighbours instead of standing its benches one above the other.
+
+**6. What the rooms do not need is open floor, and it is drawn as open floor.**
+Two places it appears: a bay at the end of a band whose rooms did not need the
+whole working width, and a band under the rooms where the service column is
+taller than they are. Both are `circulation`, both are `thoroughfare: false`
+(a dead-end bay beside the rooms is not a route, and treating it as one puts a
+second vertical line beside the spine that the nav graph can never reach), and
+together they are held under 20% of the floor by `floor-integrity.test.mjs`.
+**This supersedes WP-50's "exactly two pieces of circulation on the whole
+floor"**, which was only ever true because the rooms were absorbing the
+difference.
+
+**7. The lounge and the strip are sized by their contents too.** A games table
+appears when the lounge has more people in it than places to put them, keeping
+one whenever anybody is in at all — WP-50's fixed thresholds dealt twelve
+benched agents an arcade and made the service column 76 U tall beside a working
+floor that needed 20. And the idle-projects strip gives way in ROWS rather than
+in columns: with the working floor now the width of its rooms there is one
+readable column, and WP-50's three-row cap put seventeen repos on top of each
+other in it. `DIRECTORY_MAX_ROWS` is 18; the line height, the per-repo cost and
+`DIRECTORY_MAX_H` are unchanged, and the strip is asserted to stay under a
+quarter of the floor. Its "shorter than every room" assertion is gone: one
+active repo beside seventeen idle ones makes a strip taller than the one room,
+and that is the honest picture of that machine.

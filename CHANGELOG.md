@@ -160,6 +160,27 @@
 
 ### Changed
 
+- **The building is the size of what is in it.** The floor drew the right rooms and then measured
+  them wrong: the envelope was built to the window's shape and the treemap stretched whatever
+  rooms there were to tile it, so one active project got an 88 x 67 room for a two-seat table —
+  about 55% of the screen as pale carpet with nothing on it. A room's footprint now comes from its
+  occupants and their furniture (a table for N seats, the circulation round it, the clearance the
+  planting and the wall fixtures stand in, and the plate band), and the floor's extent is the sum
+  of its rooms, the service column and the corridors. On the reference machine that is a 56.8 x
+  54.5 unit building instead of 132.4 x 76.3, a 16.7 x 22.9 room instead of 90.4 x 67.1, and
+  people drawn at 42.6 px instead of 30.4. The office and the lounge follow the same rule — a
+  games table appears when the lounge has more people in it than places to put them, rather than
+  on a fixed headcount, so a dozen benched agents no longer get an arcade. What the rooms do not
+  need is drawn as open floor rather than as more carpet, and what the building does not need is
+  the dark studio ground it stands on. Many active projects still pack as they did. §97.
+- **The idle-projects strip gives way in rows, not in columns.** With the working floor now the
+  width of its rooms there is often one readable column, and the old three-row cap put seventeen
+  repos on top of each other inside it. Rows grow instead and the columns hold their width, so the
+  strip on the reference machine is seventeen legible lines. A line still costs a line, and the
+  strip is still a corner of the floor rather than a room. §97.
+- **The floor stops growing as well as shrinking.** The fit scale is now clamped at both ends — a
+  character body is never under 16 px and never over 44 px. A quiet machine's floor is genuinely
+  small, and on a large display it was being blown up like a poster. §97.
 - **The header is a headline, not a toolbar.** It was brand, five small numbers and six buttons of
   equal weight, three of them maintenance and one wired to nothing. It is now the brand, the
   needs-you numeral at 44 px of JetBrains Mono with its three-way breakdown beside it, the floor
