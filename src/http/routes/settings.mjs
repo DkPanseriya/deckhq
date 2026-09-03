@@ -7,6 +7,7 @@
  */
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { RESUME_TARGETS } from '../../core/store.mjs';
+import { EDITOR_NAMES } from '../../core/editor.mjs';
 
 const ALLOWED = new Set([
   'stallWindowMs',
@@ -18,6 +19,7 @@ const ALLOWED = new Set([
   'onboarded',
   'resumeIn',
   'approveText',
+  'editor',
 ]);
 
 /**
@@ -53,6 +55,19 @@ export function register(router, ctx) {
       // Same for `approveText`: only a string is a candidate. The store trims,
       // caps and falls back to the default for a blank one.
       if (k === 'approveText' && typeof v !== 'string') continue;
+      // `editor` is the one setting whose value becomes a program (WP-47), so
+      // it is checked here rather than trusted: the empty string means
+      // "decide for me", and anything else must be a name on the allowlist in
+      // core/editor.mjs. A rejected value is reported, not silently defaulted.
+      if (k === 'editor') {
+        const name = typeof v === 'string' ? v.trim().toLowerCase() : null;
+        if (name === null) continue;
+        if (name && !(/** @type {readonly string[]} */ (EDITOR_NAMES).includes(name))) {
+          return sendError(res, 400, `editor must be one of ${EDITOR_NAMES.join(', ')}, or ""`);
+        }
+        patch[k] = name;
+        continue;
+      }
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

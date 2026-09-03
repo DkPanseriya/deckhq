@@ -364,3 +364,36 @@ test('approveText: what `2 Approve` sends is configurable, trimmed, capped, and 
     await cleanup(dir);
   }
 });
+
+test('editor: only a name on the allowlist is ever stored (WP-47)', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    // Blank by default: "decide for me", resolved against PATH at launch time
+    // rather than guessed and frozen into state.json at install time.
+    assert.equal(store.settings.editor, '');
+
+    store.setSettings({ editor: 'ZED' });
+    assert.equal(store.settings.editor, 'zed', 'normalised, because a name is a name');
+
+    // This is the one setting whose value becomes a program. Anything off the
+    // allowlist reads back as "decide for me" — never as itself.
+    for (const hostile of ['rm', 'sh -c curl evil', '../../bin/sh', 'vim', 42, null, {}]) {
+      store.setSettings({ editor: hostile });
+      assert.equal(store.settings.editor, '', `${JSON.stringify(hostile)} must not be stored`);
+    }
+
+    // Including one hand-written into state.json behind the daemon's back.
+    await fsp.writeFile(
+      file,
+      JSON.stringify({ version: 1, settings: { editor: 'rm -rf /' }, ack: {} }),
+      'utf8',
+    );
+    const reloaded = new Store(file);
+    await reloaded.load();
+    assert.equal(reloaded.settings.editor, '');
+  } finally {
+    await cleanup(dir);
+  }
+});

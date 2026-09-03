@@ -34,6 +34,7 @@
  */
 
 import { renderMarkdown } from './markdown.js';
+import { renderDiff } from './diff-view.js';
 import { drafts } from './drafts.js';
 
 const STATE_LABELS = {
@@ -192,6 +193,16 @@ export function createPanel(opts) {
   let changesToken = 0;
   /** @type {number|null|undefined} the scan the rendered diff belongs to */
   let changesScannedAt = undefined;
+  /**
+   * Which file rows are open, by `U:`/`S:` plus path (WP-47). A new scan
+   * rebuilds the whole table, and a diff the user opened must not close
+   * itself every few seconds because the daemon looked at the disk again —
+   * so expansion is state about the session, not about the rendered nodes.
+   * @type {Set<string>}
+   */
+  const expandedFiles = new Set();
+  /** @type {{key:string, path:string, staged:boolean, head:any, diffEl:any, loaded:boolean, line:number}[]} */
+  let fileRows = [];
   // Whether the daemon has confirmed a claude:// handler exists, for the
   // agent currently open — set only from loadResumeTargets(), never guessed
   // client-side. Starts false so "resume in app" never flashes on before
@@ -315,6 +326,19 @@ export function createPanel(opts) {
   changedHeadRow.append(changedHeading, changedTotals);
   const changedEl = document.createElement('div');
   changedEl.className = 'review-changes';
+  // `[ expand all ]`, where `05` §4.1's mockup drew `[ open the diff ]`.
+  // Appended by renderChanges() only when there are rows to expand.
+  const changedFoot = document.createElement('div');
+  changedFoot.className = 'review-changes-foot';
+  const expandAllBtn = document.createElement('button');
+  expandAllBtn.type = 'button';
+  expandAllBtn.className = 'review-expand-all';
+  expandAllBtn.textContent = '[ expand all ]';
+  expandAllBtn.addEventListener('click', () => {
+    const open = fileRows.some((r) => r.head.getAttribute('aria-expanded') !== 'true');
+    for (const row of fileRows) setFileExpanded(row, open);
+  });
+  changedFoot.appendChild(expandAllBtn);
   changedSection.append(changedHeadRow, changedEl);
 
   body.append(saidSection, threadDetails, changedSection);
@@ -793,6 +817,7 @@ export function createPanel(opts) {
   function renderChanges(c) {
     changedEl.textContent = '';
     changedTotals.textContent = '';
+    fileRows = [];
     const note = (text) => {
       const n = document.createElement('div');
       n.className = 'review-note';
@@ -832,12 +857,17 @@ export function createPanel(opts) {
       [c.staged || [], true],
     ]) {
       for (const f of list) {
-        const row = document.createElement('div');
-        row.className = 'review-file';
+        // The row is a button so that "click or Enter" is the platform's own
+        // behaviour rather than a keydown handler that would also have to
+        // reimplement Space, focus and the disclosure's ARIA.
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'review-file-head';
+        head.setAttribute('aria-expanded', 'false');
         const p = document.createElement('span');
         p.className = 'review-file-path';
         p.textContent = f.path;
-        p.title = staged ? `${f.path} (staged)` : f.path;
+        head.title = staged ? `${f.path} (staged)` : f.path;
         const add = document.createElement('span');
         add.className = 'review-file-num num';
         add.textContent = f.binary ? 'bin' : `+${f.added}`;
@@ -850,13 +880,152 @@ export function createPanel(opts) {
           s.textContent = 'staged';
           p.appendChild(s);
         }
-        row.append(p, add, rem);
+        head.append(p, add, rem);
+
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'review-file-open';
+        openBtn.textContent = '↗';
+        openBtn.title = 'Open in editor';
+        openBtn.setAttribute('aria-label', `Open ${f.path} in your editor`);
+
+        const diffEl = document.createElement('div');
+        diffEl.className = 'review-file-diff';
+        diffEl.id = `review-diff-${fileRows.length}`;
+        diffEl.hidden = true;
+        head.setAttribute('aria-controls', diffEl.id);
+
+        const row = document.createElement('div');
+        row.className = 'review-file';
+        const rowTop = document.createElement('div');
+        rowTop.className = 'review-file-row';
+        rowTop.append(head, openBtn);
+        row.append(rowTop, diffEl);
         table.appendChild(row);
+
+        const entry = {
+          key: (staged ? 'S:' : 'U:') + f.path,
+          path: f.path,
+          staged,
+          head,
+          diffEl,
+          loaded: false,
+          line: 1,
+        };
+        fileRows.push(entry);
+        head.addEventListener('click', () => setFileExpanded(entry, !isFileExpanded(entry)));
+        openBtn.addEventListener('click', () => openFileInEditor(entry));
+        if (expandedFiles.has(entry.key)) setFileExpanded(entry, true);
       }
     }
     changedEl.appendChild(table);
+    if (fileRows.length) {
+      changedEl.appendChild(changedFoot);
+      syncExpandAll();
+    }
     if (ahead) {
       note(`${ahead.count} ${ahead.count === 1 ? 'commit' : 'commits'} ahead of ${ahead.base}`);
+    }
+  }
+
+  /** @param {any} entry */
+  function isFileExpanded(entry) {
+    return entry.head.getAttribute('aria-expanded') === 'true';
+  }
+
+  /** `[ expand all ]` becomes `[ collapse all ]` once everything is open. */
+  function syncExpandAll() {
+    const allOpen = fileRows.length > 0 && fileRows.every(isFileExpanded);
+    expandAllBtn.textContent = allOpen ? '[ collapse all ]' : '[ expand all ]';
+  }
+
+  /**
+   * Open or close one file's diff. Collapsed by default (`08` §8.1): a review
+   * card that opened six diffs at once would bury the message the section
+   * exists to support.
+   * @param {any} entry @param {boolean} on
+   */
+  function setFileExpanded(entry, on) {
+    entry.head.setAttribute('aria-expanded', String(on));
+    entry.diffEl.hidden = !on;
+    if (on) {
+      expandedFiles.add(entry.key);
+      loadDiff(entry);
+    } else {
+      expandedFiles.delete(entry.key);
+    }
+    syncExpandAll();
+  }
+
+  /**
+   * GET /api/diff for one file. Passive, like loadChanges(): a read of the
+   * disk that never touches ack state. Cached per scan by the daemon, and
+   * fetched at most once per rendered row here.
+   * @param {any} entry
+   */
+  async function loadDiff(entry) {
+    if (entry.loaded) return;
+    entry.loaded = true;
+    const id = currentId;
+    const note = (text) => {
+      entry.diffEl.textContent = '';
+      const n = document.createElement('div');
+      n.className = 'review-note';
+      n.textContent = text;
+      entry.diffEl.appendChild(n);
+    };
+    note('reading the diff…');
+    try {
+      const res = await fetch(
+        `/api/diff?id=${encodeURIComponent(id)}&file=${encodeURIComponent(entry.path)}`,
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      if (id !== currentId) return;
+      const part = (entry.staged ? body.staged : body.unstaged) || {};
+      const text = String(part.text || '');
+      if (!text) {
+        note('no textual diff — a binary file, or the change is no longer there');
+        return;
+      }
+      // Aim "open in editor" at the first changed line rather than line 1.
+      const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/m.exec(text);
+      if (hunk) entry.line = Number(hunk[1]) || 1;
+      entry.diffEl.textContent = '';
+      entry.diffEl.appendChild(renderDiff(text, document));
+      if (part.truncated) {
+        const n = document.createElement('div');
+        n.className = 'review-note';
+        n.textContent = 'the rest of this diff is too large to show here';
+        entry.diffEl.appendChild(n);
+      }
+    } catch (err) {
+      if (id !== currentId) return;
+      entry.loaded = false; // so closing and reopening the row tries again
+      note(`could not read the diff: ${err.message}`);
+    }
+  }
+
+  /**
+   * POST /api/open-in-editor. The client sends a path and a line, never a
+   * command: which program that means is the daemon's decision, taken from an
+   * allowlist (src/core/editor.mjs).
+   * @param {any} entry
+   */
+  async function openFileInEditor(entry) {
+    const id = currentId;
+    if (!id) return;
+    try {
+      const res = await fetch('/api/open-in-editor', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, file: entry.path, line: entry.line }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      toast(`Opened ${entry.path} in ${body.label || 'your editor'}`);
+    } catch (err) {
+      toast(`Could not open in editor: ${err.message}`, { isError: true });
     }
   }
 
@@ -1231,6 +1400,10 @@ export function createPanel(opts) {
       changesScannedAt = undefined;
       changedEl.textContent = '';
       changedTotals.textContent = '';
+      // Which diffs are open belongs to the session being reviewed, not to
+      // the panel: another agent's expanded rows are not this one's.
+      expandedFiles.clear();
+      fileRows = [];
     }
     renderChrome();
     loadConversation(id);
@@ -1245,6 +1418,8 @@ export function createPanel(opts) {
     displayedAgent = null;
     messages = null;
     changesScannedAt = undefined;
+    expandedFiles.clear();
+    fileRows = [];
     stopCloseUp();
     if (waitingTimer) clearInterval(waitingTimer);
     waitingTimer = null;
