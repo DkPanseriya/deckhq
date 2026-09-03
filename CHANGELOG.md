@@ -32,6 +32,44 @@
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
 
+### Testing
+
+- **The debounce test no longer races the wall clock.** "save() debounces" in
+  `test/unit/store.test.mjs` slept 100 ms and looked for the file, slept 300 ms and looked again.
+  On Windows CI (Node 18 and 20, run 33756126370) that turned `main` red while the same test
+  passed everywhere else: a runner that services a timer late puts the write on the wrong side
+  of the look, and no choice of sleep length can rule that out. The store's debounce clock is now
+  injectable — `new Store(file, { timers })`, defaulting to the real one — and the test cranks it
+  by hand: exactly one timer is scheduled, for exactly `SAVE_DEBOUNCE_MS`; nothing reaches the
+  disk until it is fired; one write with the right contents lands when it is. Same proof, no
+  timing. The sibling "rapid successive writes coalesce" test, which slept 350 ms for the same
+  reason, is on the same clock. `docs/DEVIATIONS.md` §80.
+
+### Packaging
+
+- **A tag now produces the release page, not only the package.** `publish.yml` gains a `release`
+  job that runs once the OIDC publish has succeeded. It downloads the tarball the registry
+  actually serves and checks it against the registry's own `dist.integrity`; builds
+  `deckhq-X.Y.Z-win.zip` from it plus a two-line `packaging/deckhq.cmd` launcher; renders a
+  Homebrew formula, a three-file winget manifest and a scoop manifest against those two digests
+  (`scripts/release/manifests.mjs`); takes the matching `## X.Y.Z` section of this file as the
+  notes (`scripts/release/changelog-section.mjs`); and creates the GitHub Release with the two
+  screenshots and all of it attached. The workflow now defaults to `contents: read` and that job
+  raises itself, so it is the only one in the file that can write to the repository whatever the
+  account's default token scope is. `packaging/README.md` says what a user does with each asset.
+  **Unproven until a tag runs it.** That run is WP-43's acceptance criterion and nothing here
+  claims it.
+- The publish job's npm upgrade is pinned to `npm@^11.5.1` instead of `@latest`, and the floor is
+  asserted before anything else runs. The job also refuses to publish a version that has no
+  changelog section, so the release page can never come up empty after the irreversible step.
+- Ten tests cover the two release scripts, including one that fails the suite when
+  `package.json`'s version has no section here — the same refusal, made locally. The zip step was
+  also rehearsed by hand: the launcher was run out of a staging directory unpacked from a real
+  `npm pack` tarball, so the one path that YAML review cannot check — launcher to `bin` — is
+  proved. `docs/DEVIATIONS.md` §81.
+- `packaging/deckhq.cmd` is checked out with CRLF endings (`.gitattributes`). The repository is
+  otherwise LF-only, and the release job zips this file on a Linux runner for `cmd.exe` to run.
+
 ## 1.2.0
 
 The release that can actually be installed. 1.1.0 called itself the first public release and was

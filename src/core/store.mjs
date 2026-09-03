@@ -25,6 +25,14 @@ import { createLog } from './log.mjs';
  */
 
 /**
+ * The two timer functions `save()` and `flush()` use, in the shape of the
+ * globals. Anything that returns a handle `clearTimeout` accepts back will do.
+ * @typedef {object} Timers
+ * @property {(fn: () => void, ms: number) => any} setTimeout
+ * @property {(handle: any) => void} clearTimeout
+ */
+
+/**
  * Where "resume this session" opens by default. `'app'` may not be
  * installed on every machine; `'terminal'` always works, which is why it is
  * the default rather than a guess at what the user has.
@@ -52,7 +60,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   resumeIn: 'terminal',
 });
 
-const SAVE_DEBOUNCE_MS = 250;
+/**
+ * How long `save()` waits for further mutations before it writes. Exported so
+ * the test suite can assert the window it schedules rather than sleep past it.
+ */
+export const SAVE_DEBOUNCE_MS = 250;
 const MIN_STALL_WINDOW_MS = 2 * 60 * 1000;
 const MAX_STALL_WINDOW_MS = 120 * 60 * 1000;
 
@@ -135,12 +147,20 @@ function normalize(parsed) {
 export class Store {
   /**
    * @param {string} file absolute path to state.json
-   * @param {{log?: import('./log.mjs').Log}} [opts]
+   * @param {{log?: import('./log.mjs').Log, timers?: Timers}} [opts]
    */
   constructor(file, opts = {}) {
     this.file = file;
     this._log = opts.log || createLog('store');
     this._data = defaultData();
+    /**
+     * The clock the debounce is scheduled on. Production uses the real timer
+     * wheel; the test suite hands in one it cranks by hand, so proving the
+     * debounce never depends on how promptly a loaded CI runner services a
+     * 250 ms setTimeout.
+     * @type {Timers}
+     */
+    this._timers = opts.timers || { setTimeout, clearTimeout };
     this._saveTimer = null;
     /** @type {Promise<void>|null} chain of in-flight/queued disk writes, serialized */
     this._writing = null;
@@ -325,7 +345,7 @@ export class Store {
    */
   save() {
     if (this._saveTimer) return;
-    this._saveTimer = setTimeout(() => {
+    this._saveTimer = this._timers.setTimeout(() => {
       this._saveTimer = null;
       this._triggerWrite();
     }, SAVE_DEBOUNCE_MS);
@@ -374,7 +394,7 @@ export class Store {
    */
   async flush() {
     if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
+      this._timers.clearTimeout(this._saveTimer);
       this._saveTimer = null;
       this._triggerWrite();
     }
