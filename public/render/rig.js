@@ -88,7 +88,17 @@ const ARM_LEN1 = 0.55,
 const LEG_LEN_STAND = 0.55,
   LEG_LEN_SEATED = 0.28,
   LEG_WIDTH = 0.24;
-const SELECTION_RING_R = 1.35;
+/**
+ * The radius, in plan units, of the ring drawn around the selected character.
+ *
+ * Exported because it is also the product's own answer to "how wide is a
+ * person" — it is sized to clear the widest pose the rig can reach, and it is
+ * the shape the interface already draws to mean *this one*. `scene.js`'s
+ * `anchorFor('agent', id)` uses it as the half-width of a character's box
+ * rather than inventing a second estimate (docs/DEVIATIONS.md §16, §35, §38:
+ * two representations of the same thing, allowed to disagree).
+ */
+export const SELECTION_RING_R = 1.35;
 const RING_BASE_R = 1.15;
 
 /**

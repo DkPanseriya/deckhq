@@ -413,6 +413,18 @@
   its session totals and says `to date` instead — the plate never says "today" about a number that
   is not today's. Produced and tested; not yet painted, because the one function that draws a room
   plate was outside this package's scope. §111.
+- **Float your office over the terminal.** `P`, or `⌘K` → "Float the office", opens a 320×200
+  always-on-top window holding your office, the corridor beside it, the needs-you numeral and the
+  hands-up count. It survives tab switches and app switches, it updates on every event the floor
+  does, it flashes once when somebody walks in, and clicking a person opens the main window's panel
+  on them. It answers "I closed the tab and forgot" without a tray app, a shell, or a permission
+  prompt — Chromium's Document Picture-in-Picture is a plain web API. Firefox and Safari have no
+  such window: there the count goes to the app badge WP-16 already wires, and one line says so.
+  It is **a second render target of the same floor**, never a second floor: it draws the live plan,
+  the live baked bitmap and the live agent records the main canvas is using, so there is one
+  building and one answer to where each session is standing. It also keeps the people moving while
+  the tab is hidden, which is the only time it is the thing you are looking at.
+  `public/minifloor.js`, `docs/DEVIATIONS.md` §113, `docs/media/mini-floor.png`.
 
 - **The floor is photographed on every change, and a pixel that moves without permission fails the
   build.** The three worst bugs in this project's history — the rig a quarter-turn out of true, a
@@ -806,6 +818,42 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   visible characters it is, and that the copy contains none of the phrasings `docs/plan/08` §4.2
   retires. A site that quietly grew a font from a CDN would fail the build the same way a daemon
   that grew a socket does. §112.
+- **The Windows launch argv is now asserted on every platform, not only on Windows.** One test held
+  the SECURITY property that a `.cmd` shim is run as `cmd.exe /d /s /c <shim>` and never as a shell
+  string — and it read `process.platform` off the host, so the six Ubuntu and macOS jobs resolved
+  nothing, dereferenced `null` and went red on `main` while all three Windows jobs passed.
+  `resolveLauncher()` takes an injected `platform` now, exactly as `src/core/editor.mjs` already
+  did, and reads `path.win32` or `path.posix` from it so a PATH of `C:\tools` is not split on `:`
+  just because the host is Linux. The assertion got stronger rather than weaker: one test became
+  five, each naming the platform it is about — the exact `ComSpec`, the fallback when there is
+  none, the `.exe` that wins over the `.cmd` beside it, the extensionless posix answer, and the
+  negative that a stray `deckhq.cmd` on a posix PATH resolves to nothing. All five run on all nine
+  matrix jobs. The rest of the suite was swept for the same defect by forcing `process.platform` to
+  `linux`; the three other tests that read it are testing host behaviour and are correct as they
+  are. §114.
+- **8 tests for how the CDP driver starts a browser, and what it does when it cannot.** That the
+  Linux sandbox and `/dev/shm` flags are added on Linux and **nowhere else** — the committed
+  `win32` goldens were captured against an exact command line — that a launch failure is labelled
+  `CHROME_UNAVAILABLE` so a caller can forgive it by kind rather than by message, that a browser
+  which has already died is reported at once instead of at the deadline, and that a browser which
+  is not there at all ends as that label rather than as a stack trace. None of them launches a
+  real Chrome; the test that would is the goldens gate, which is a separate npm script for exactly
+  that reason. §114.
+- **The goldens job skips a browser it cannot start, as §87 said it would.** It named two tooling
+  gaps — no WebSocket, no Chrome — and missed the third and likeliest: a Chrome that is present and
+  will not start. The Ubuntu runner has one, both guards passed, and the job then failed a merge
+  over a gate that has no linux goldens to compare against and could not have proved anything
+  anyway. The launch now adds `--no-sandbox`, `--disable-setuid-sandbox` and
+  `--disable-dev-shm-usage` on Linux only, waits 60 s under `CI` instead of 20, retries three times
+  on a fresh debugging port, reads Chrome's stderr so the reason survives, reports a process that
+  has already exited at once rather than at the deadline, and finds the browser by `CHROME_BIN` and
+  by name on PATH as well as at the absolute paths it already knew. If none of that works the job
+  prints `SKIPPED (nothing checked)` with Chrome's own complaint and exits 0. Only a launch failure
+  is forgiven; a capture that fails, a floor that will not settle and a golden that does not match
+  all still fail loudly. Windows is byte-identical and still passes at 0 px on all four
+  populations. CI also gains a `concurrency` group that cancels superseded **pull request** runs
+  only — a push to `main` is keyed on its own commit, so every merge runs to completion instead of
+  being recorded as cancelled — and `timeout-minutes` on both jobs. §114.
 
 ### Packaging
 

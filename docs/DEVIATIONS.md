@@ -6878,3 +6878,379 @@ with a test around it, not a green run. The site itself was built, served locall
 and in the FAQ is the reference machine on 3 September 2026, labelled as such, with "your numbers
 will differ" beside it. [`08`](plan/08-PLAN-V2-100X.md) §3.0.1 requires it to be re-measured before
 every launch wave and reworded the day it stops being true.
+
+## 113. WP-39 — the floating mini-floor: one scene, two render targets
+
+`08` B3 asks for a 320×200 always-on-top window carrying the office, the corridor beside it and
+the count, over the terminal, with no shell and no permission. It is the plan's answer to §1.2's
+fatal risk — the product's job is to let you stop watching — and to §14's added refusal: no
+feature that needs the browser tab open to be useful.
+
+`public/minifloor.js` is that window. `docs/media/mini-floor.png` is it at the size it ships,
+photographed from the real thing.
+
+### 1. It is a second render target of the same scene, not a second scene
+
+The tempting build is a second `Scene`: a second `buildPlan`, a second `bakeBackdrop`, a second
+`AgentRuntime`. That gives two buildings and two answers to "where is this session standing", and
+they come apart the first time either window misses a frame — which is guaranteed, because the two
+windows are throttled independently by the browser.
+
+So the mini-floor owns nothing. `Scene` grew exactly two public methods and one export pair:
+
+| added to `scene.js` | what it is |
+|---|---|
+| `frame()` | the live plan, the live baked bitmap, the live agent records, the snapshot, the selection and the reduced-motion flag. Deliberately the live objects, not copies — records are stepped 60 times a second and cloning them per frame would cost more than the mini-floor's whole draw |
+| `stepIfPaused(dt)` | advances the people **only while the main canvas's loop is stopped**, and returns whether it did |
+| `colorForAgent` / `iconForAgent` | were private; now exported, so the state colour and the state icon have one definition and not two |
+
+`stepIfPaused` is the non-obvious one and it is the feature working at all. The main loop stops
+when the tab is hidden (`_onVisibilityChange`), which is precisely when the floating window is the
+only thing on screen. With the runtime stopped, a session whose turn ends is *given* a path into
+your office and never walks it: the floating window would show a stale office for as long as the
+tab stayed in the background — the exact failure the package exists to prevent. The `_running`
+guard is what makes it safe to call every mini-floor frame: while the main floor runs it is a
+no-op, so nobody is ever stepped twice.
+
+The paint reuses the main floor's **already-baked** bitmap, blitting the sub-rectangle the shot
+covers. A bake is ~190 ms and this window repaints every frame, so re-baking was never an option;
+blitting also means the herringbone, the walls, the door swing and every piece of furniture are
+literally the same pixels as the floor behind it. The flat-fill path exists only for the frame or
+two before the first bake lands.
+
+### 2. What is in the shot, and the margin that had to be added
+
+The office plus the stretch of the spine that runs past its door, and nothing else — no lounge, no
+project rooms, no directory strip. The corridor is found by geometry (a corridor room that overlaps
+the office's band and starts at one of its vertical edges), with `__spine__` only breaking a tie,
+so a plan that renames it still works.
+
+The spine is the full height of the building; including all of it would have halved the scale
+everything else is drawn at, so it is clipped to the office's own band.
+
+**The margin is a fix, not a taste call.** The viewport was first the exact union of those two
+rooms. On the demo floor at 320×200 that cut the three waiting sessions nearest the west wall in
+half against the edge of the canvas: they stand *against* the wall, and a body is wider than the
+wall it stands against. `SHOT_PAD_U = 1.2` units of floor around the shot fixes it. The blit's
+source rectangle is then clamped back to the bitmap, because the office sits in the building's own
+top-left corner and that margin is off the edge of the bake.
+
+### 3. LOD keys off the character scale, not the world scale
+
+`scene.js` asks `lodForZoom(worldScale / U)`. The mini-floor asks
+`lodForZoom(characterScale / U)`, capped at L1.
+
+LOD decides how much of a *body* to draw, so the scale it must key off is the one the body is drawn
+at. On the main floor those are the same number whenever the fit is not clamped, so nothing changes
+there. In a 320×200 window they are never the same number: the shot is ~43 units across in ~214 px,
+which is 5 px per unit, and `characterScaleFor` floors a person at 16 px of body — 27% larger than
+the plan around them, exactly as `05` §6.2 intends. The window therefore lands at **L0** on any
+real population, which is the right level for a 16 px body: L1's separately-drawn limbs would be
+mush at that size. The state colour and the state icon are drawn at *every* level, and they are the
+whole message here. There is no name label and no waiting badge — no room for either, and the
+numeral beside the canvas already says how many are waiting.
+
+**Accepted consequence:** project identity (hair, accent, glyph) does not show at L0, because L0's
+`drawSimpleBody` has no hair or accent layer. Per-session appearance still does, through the skin
+and build `drawSimpleBody` takes. The identity channels are computed and passed regardless, so the
+moment somebody resizes the window past the L1 threshold they appear, with no second code path.
+
+**Also accepted:** four sessions waiting along the office's west wall crowd at 320×200 — their
+crimson bodies and check icons touch. It is the same crowding `BADGE_MIN_PX_PER_UNIT` exists for on
+the main floor, and the answer is the same: the count beside the canvas carries the number, the
+floor carries "somebody is there". Visible in `docs/media/mini-floor.png`.
+
+### 4. The chrome is the product's chrome, by linking the same stylesheet
+
+The PiP document gets a copy of the page's own `<link rel=stylesheet>`, so the numeral in it is
+literally `.numeral` / `.numeral-v` / `.numeral-k` from `style.css` — the same tokens,
+`is-zero` behaviour and contrast that `state-visuals.test.mjs` already measures. Measured in the
+live window: `--ink` `#ECEEF3` on `--bg` `#131419`, 15.8:1, at 34 px. The hands-up line is a state
+dot **plus** a mono count **plus** a neutral-ink word, per `05` §10 — state is never colour alone.
+Only the layout of that one window is new CSS, and it is one delimited block.
+
+**Reduced motion had one non-obvious hole.** `settings-ui.js` stamps an explicit motion choice on
+the *main* document's root as `data-motion`, and the stylesheet's reduce rules read it as well as
+the OS query. The floating window is a document of its own, so that attribute has to be carried
+across or every `[data-motion='reduce']` rule would silently stop applying the moment the page was
+floated — an accessibility regression visible only to the person who had turned motion off. The
+window mirrors the attribute each frame, and the JS side asks the same two-input question before it
+pulses, so the arrival flash and the CSS animation cannot disagree. Under reduced motion nothing
+flashes at all: the numeral has already changed, and that is the information.
+
+The document is built with `createElement` and `textContent` throughout. The client-wide
+`SECURITY:` test in `panel-invariant.test.mjs` reads this file like every other, and
+`minifloor.test.mjs` asserts it again locally along with an `EGRESS:` test — no request API of any
+kind and no second SSE subscription, because the window reads the scene and never the network —
+and the invariant: no `/api/` path anywhere in it, so a click selects and can never acknowledge.
+
+### 5. No header control, and `P` registered outside the key map
+
+`05` §5.2's header is a headline, so no button was added to it. The routes in are the palette —
+**"Float the office"**, accelerator `f` — and the `P` key.
+
+`P` is registered as its own listener inside one delimited block in `app.js` rather than as a case
+in `handleKeydown`'s switch, because two other packages were editing that file at the same time and
+that switch is the part of it they were most likely to touch. The guards are copied from that map
+in the same order: inert while text has focus, inert while a modal `<dialog>` is open, and a
+modifier means the browser's shortcut. **This is a duplication and it should be folded back into
+`handleKeydown` once the three branches have merged.**
+
+The module is `import()`ed at load and never awaited at load, for two separate reasons. A static
+import would make `./render/*` a hard dependency of the shell, which `app.js`'s own file header
+forbids — a broken renderer must cost the floor and nothing else. And `requestWindow()` needs
+*transient user activation*, so the import has to be settled before the key is pressed rather than
+fetched inside the handler.
+
+### 6. The fallback, and what the plan asked for
+
+`08` B3 says "Firefox/Safari degrade to the PWA badge". They do: `canFloat()` is false, WP-16's
+`setAppBadge` gets the real count, and one line of toast says *"This browser cannot float a window.
+The count stays on the app badge and the tab."* — no fault, nothing asked of the reader (`04` §5).
+That whole path is unit-tested against a fake `window`, because it is the only thing a Firefox or
+Safari user ever sees and it must not be the thing nobody ran.
+
+### 7. What was measured, and the one acceptance criterion that was not
+
+Verified live against the demo floor in Chrome 1600×1000, headless, over CDP:
+
+| | |
+|---|---|
+| `'documentPictureInPicture' in window` | true; **the PiP window is its own CDP page target**, titled `DeckHQ — your office` |
+| `P` | opens it; a second `P` closes it (the target is gone) |
+| the document | one stylesheet, `#131419` ground, numeral `#ECEEF3` at 34 px, `aria-label` "7 sessions need you" |
+| state | numeral 6 → 7 across two runs against a live floor; the window reads the same snapshot the header does |
+| clicking a person | main window's panel opened on **that** session ("Backfill the events table") and the floor's selection moved to its id |
+| at 320×200 | canvas 214 px, layout holds, `docs/media/mini-floor.png` |
+| goldens | all four match, 0 px moved — the floating window is not open in a goldens run |
+
+**Not measured: "stays on top across tab and app switches".** Always-on-top is what Document
+Picture-in-Picture *is* — the page cannot ask for anything else and cannot turn it off — but no
+automated check on this machine can observe window stacking, and a headful run could not be driven
+either: `Input.dispatchKeyEvent` into a Chrome window that is not the foreground window leaves
+`document.visibilityState` at `hidden`, and Chrome then refuses `requestWindow` for want of user
+activation (`NotAllowedError`). That is an artifact of driving a browser nobody is looking at, not
+a product defect — a person pressing `P` has a visible, focused tab. **It needs one human minute
+on a real desktop to confirm.**
+
+Chrome's headless PiP window is also not the size that was asked for: `requestWindow({width: 320,
+height: 200})` produced a 666×459 window. The screenshot is therefore taken with the PiP target's
+viewport forced to 320×200 (`scripts/capture-floor.mjs --pip`), because a photograph at a size no
+user will ever see is not evidence of anything. The layout is size-independent by construction —
+flex chrome, a fit camera — and was checked at both.
+
+### 8. `Scene.anchorFor(target, id)` (orchestrator addition) — this closes §108.1
+
+Added in the same pass, at the orchestrator's request, because this package was the only one in
+`public/render/scene.js` at the time. §108.1 states the gap: WP-13's coach marks 2 and 3 anchor to
+"the user's office" and "one waiting agent", both regions of a single canvas, and the renderer
+exposed no geometry — so both marks fall back to the canvas's whole bounding box with
+`arrow: false`, because an arrow pointing at a guess is a claim the product cannot support.
+
+It is now the screen-space rect of the office, the lounge, one agent (its drawn body box), or a
+project room, and `null` when the floor is not drawing that thing. It is the inverse of `_hitTest`
+and exists so nothing else ever needs a second copy of the camera arithmetic — the class of
+duplication that has produced three separate defects in this renderer.
+
+**Two names, and one frame that had to be reconciled.** §108.1's request says
+`'office' | 'lounge' | 'agent' | 'project'`; the orchestrator's says `'office' | 'agent' | 'room'`.
+Both are accepted — `'project'` and `'room'` are synonyms and `'lounge'` works — because a caller
+that guesses wrong should get the room rather than a silent `null`.
+
+The frame was a real disagreement, not a naming one. §108.1 asked for viewport-relative;
+the orchestrator asked for canvas-relative. **Canvas-relative is what shipped**, because that is
+the frame the renderer works in everywhere else (`_hitTest` reads `clientX - rect.left`) and
+because viewport coordinates bake a page-layout concern into a canvas geometry accessor. The
+conversion is therefore three lines in `app.js`'s `coachAnchorFor()`, at the one boundary between
+the two frames, right beside the `element` branch that reads `getBoundingClientRect()` for the
+same purpose. `coach-marks.js` is untouched, exactly as §108.1 predicted, and its fallback path is
+still covered by its own tests.
+
+The arithmetic is `computeAnchor()`, a plain named export beside `computeFitScale` and friends,
+with `anchorFor` as a five-line adapter over it. That split is this file's own convention and the
+reason for it is at the bottom of `scene.js`: `new Scene(...)` needs a canvas, a document and a
+window, so anything that must be unit-tested lives outside the class where a stub plan is enough.
+
+An agent's box is `BODY_HEIGHT_U` tall by twice `SELECTION_RING_R` wide, at the **character**
+scale, with its bottom edge at the feet. `SELECTION_RING_R` is newly exported from `rig.js` for it:
+it is already the product's own answer to "how wide is a person", sized to clear the widest pose
+the rig can reach, and it is the shape the interface already draws to mean *this one*. Inventing a
+second width estimate is the mistake §16, §35 and §38 all are.
+
+`null` is returned, rather than a rect, for: no plan yet, no room by that id, a room of the wrong
+kind, an agent with no record or one not yet initialised, an agent in `plan.hidden` (went home, or
+at a desk in a project with no room), and any target name it does not know. The rect is a snapshot
+and not a subscription — the floor moves, and a caller holding one across frames is holding a stale
+one.
+
+### Acceptance
+
+31 new tests in `test/unit/minifloor.test.mjs` (composition, drawing against a stub canvas, the
+fallback, and the six source-reading guards above) and 5 in `scene-math.test.mjs` for
+`computeAnchor`. 1265 → 1301. Lint, format and all four goldens green.
+## 114. CI — a Windows-shaped assertion, a Chrome that would not start, and a cancellation that ate the verdict
+
+The `merge: WP-10` run on `main` (3 September 2026, 17:45 UTC) was red on every Ubuntu and macOS
+job and green on all three Windows ones. Two independent failures with the same underlying shape:
+**something the developer's machine happened to be was being relied on as though it had been
+stated.**
+
+### 1. One test asserted the host's platform rather than the code's answer for a platform
+
+```
+not ok 659 - a .cmd shim is run as an argument to the interpreter, never as a shell string
+  location: 'test/unit/plugin-hook.test.mjs:420:1'
+  error: "Cannot read properties of null (reading 'command')"
+```
+
+`resolveLauncher()` in `plugin/lib/start.mjs` answers "how would DeckHQ be launched on this
+machine". The test handed it a fabricated `C:\tools` PATH and a fabricated `deckhq.cmd`, then
+asserted the argv is `cmd.exe /d /s /c <shim>` — the SECURITY property that Node has refused to
+spawn a batch file directly since 18.20.2 and that this project will not reach for a shell string
+instead. Every input was injected except the one that decided the outcome. On a non-Windows host
+the resolver read `process.platform` and never looked for a `.cmd` at all, and `path.delimiter`
+split `C:\tools` on the `:` into two directories that do not exist. It returned `null` and the
+assertion dereferenced it.
+
+**This is the failure mode the property exists to guard against, inverted.** The argv for Windows
+is the one worth asserting hardest, and it was being asserted only where it was least likely to be
+wrong — on the machine that had run it by hand. Six of the nine matrix jobs proved nothing about
+it; the seventh through ninth were the only ones that did, and it took a merge to `main` to find
+out.
+
+**Fixed by injecting the platform, not by weakening the assertion.** `resolveLauncher` takes
+`platform` alongside `env` and `exists`, exactly as `src/core/editor.mjs` `findOnPath()` and
+`editorArgv()` already did — the sibling precedent, followed rather than reinvented. Everything
+downstream of it reads that value: the extension list, and `path.win32` vs `path.posix` for
+`delimiter`, `join` and `extname`, because a PATH of `C:\tools` must not be split on `:` merely
+because the host is Linux. `ComSpec` now comes from the injected `env` first (falling back to the
+real one, then `cmd.exe`), so the exact interpreter path is an input too. `ensureDaemon` threads
+`platform` through for the same reason.
+
+The assertion got **stronger**, not weaker. It was one test; it is now five, and each names the
+platform it is about:
+
+| Test | Proves |
+|---|---|
+| a `.cmd` shim is run as an argument to the interpreter | `cmd.exe /d /s /c <shim>`, with the exact `ComSpec` asserted, not a regex |
+| a machine with no `ComSpec` still goes through `cmd.exe` | the fallback is still an interpreter, still an argv array |
+| the `.exe` beside a `.cmd` wins | preference order, and that the winner needs no interpreter |
+| a posix machine never looks for a `.cmd` | the negative — a stray `deckhq.cmd` on a Linux PATH resolves to nothing |
+| an extensionless executable is spawned directly | the posix answer, on an injected posix |
+
+All five now run on all nine matrix jobs and prove the same thing on each.
+
+**The rest of the suite was swept for the same defect, and it does not have it.** Three tests read
+`process.platform`, and all three are correct: `ledger.test.mjs` declines to assert `0600` on a
+filesystem that does not enforce a mode (§100), `actions.test.mjs` writes the script extension the
+host will actually run, and `hooks.test.mjs` picks a path shape the host's `path` will parse.
+Those adapt to the host because what they test *is* host behaviour; test 659 was asserting what
+the code **builds**, which is a different thing and must not vary. Verified by running the whole
+suite with `process.platform` forced to `linux` on the Windows host: 1275 of 1276 pass, and the
+one that does not is the `0600` line, which cannot pass on NTFS whatever `process.platform` says
+— the CI log agrees, test 659 was the only failure across all six Linux and macOS jobs.
+
+### 2. The goldens job failed instead of skipping, which §87 had promised it would not
+
+```
+Error: Chrome did not expose a page target in time
+    at waitForPageTarget (src/cli/chrome.mjs:116:38)
+```
+
+[§87](#87-wp-21--the-goldens-gate-and-the-numbers-it-was-calibrated-with) says both tooling gaps
+"degrade to a skip with exit 0 rather than a red build — because a gate that goes red over a
+missing browser is a gate people learn to ignore". It named two gaps: no WebSocket, and no Chrome
+on the machine. **It missed the third and most likely one: a Chrome that is present and will not
+start.** The Ubuntu runner has `/usr/bin/google-chrome`, so both guards passed, and then the
+launch failed 21 s later with an unhandled rejection. Linux has no committed goldens, so this job
+could not have proved anything even had it worked — it failed a merge over a gate that was
+explicitly documented as proving nothing yet.
+
+**The launch.** `src/cli/chrome.mjs`:
+
+- **`--no-sandbox`, `--disable-setuid-sandbox`, `--disable-dev-shm-usage`, on Linux only.** CI and
+  container kernels commonly have user namespaces off and the zygote dies at startup; `/dev/shm`
+  is 64 MB in most containers and Chrome's default shared-memory backing overruns it. The page
+  being rendered is our own loopback demo floor, so there is nothing here for the sandbox to
+  contain. `platformLaunchArgs()` returns `[]` on every other platform and a test asserts that it
+  does — **the committed `win32` goldens were captured against an exact command line, so a flag
+  added to it is a regeneration, not a fix.**
+- **A longer wait, and a shorter one where it is not needed.** 20 s locally, 60 s under `CI`.
+  Chrome on a shared runner with a cold page cache is an order of magnitude slower to start than
+  Chrome on a laptop; a healthy one answers in about a second either way, so this is a hang guard
+  and not a budget.
+- **Three attempts, on a fresh debugging port each time.** The port is obtained by asking the OS
+  for a free one and then handing it to Chrome, which leaves a window in which something else can
+  take it — on a runner opening and closing sockets constantly that window is not theoretical, and
+  the symptom is indistinguishable from a slow Chrome. An explicitly requested `debugPort` is kept
+  across attempts, because the caller asked for that port.
+- **Chrome's stderr is read rather than dropped.** When it refuses to start it says exactly why,
+  and that sentence is the entire value of the skip line. `stdio` went from `ignore` to a drained
+  pipe, capped at 20 chunks.
+- **A dead process is reported at once.** `waitForPageTarget` takes a `died` probe, so a browser
+  that exited fails in under a second with its own reason instead of after the full budget with
+  none. This is what keeps the three attempts inside the job timeout.
+- **`CHROME_BIN` beside `CHROME_PATH`, and a PATH pass.** `CHROME_BIN` is the name CI images and
+  Puppeteer already set. The PATH pass (`google-chrome`, `google-chrome-stable`, `chromium`,
+  `chromium-browser`, `microsoft-edge`) is last, after every absolute candidate, so it can only
+  ever add a machine that would otherwise have been reported as having no browser at all — the
+  Windows and macOS outcomes are unchanged.
+
+**The skip is labelled, so it cannot swallow a real failure.** Every launch error carries
+`code === CHROME_UNAVAILABLE`; `goldens.mjs` forgives that code and rethrows everything else. A
+capture that fails, a floor that will not settle, a golden that does not match — all still fail,
+loudly. What is forgiven is precisely "this machine could not give us a browser":
+
+```
+goldens: could not start a browser: Chrome at /usr/bin/google-chrome could not be started in
+  3 attempt(s): Chrome exited with 1 before it exposed a page target — Chrome said: ...
+goldens: SKIPPED (nothing checked) — this run proves nothing about the floor.
+```
+
+Exit 0. The wording is deliberate and matches §87's existing skip: a green line over an empty
+comparison is the failure mode that would actually hurt.
+
+**`timeout-minutes: 4` became 8** on the goldens job. Three attempts against a 60 s wait is up to
+3 minutes before the skip line is even reached, and a job the runner kills at the timeout has
+*failed* — which is the exact outcome this change exists to prevent. The `test` job had no
+`timeout-minutes` at all and now has 10, against a suite that takes 5 seconds; it is a guard on a
+socket that never answers, not a budget.
+
+**Verified on Windows: the goldens still pass at 0 px on all four populations, 27.6 s** — inside
+§87's measured 26–28 s band, and the argv on this platform is byte-identical to what produced the
+committed set. The skip path was exercised by pointing `CHROME_PATH` at `node.exe`: it reports
+Node's own complaint about `--headless=new` and exits 0.
+
+**Unproven until this runs on Linux — RAISE.** Whether the Ubuntu runner's Chrome now starts is
+not something a Windows host can demonstrate. The flags are the standard set for exactly this
+failure and the retry loop is defensive, but the honest statement is that the *skip* is proven and
+the *capture* is not. If it still cannot start, the job now says so in one sentence and exits 0
+instead of failing the merge, which is what §87 promised; the linux goldens set remains
+uncommitted either way, and the artifact upload is still how it gets made.
+
+### 3. Concurrency: pushes to `main` were being cancelled by later pushes
+
+The workflow had no `concurrency` block, and the default GitHub behaviour left most `main` runs
+recorded as *cancelled* — a history of merges with no verdict on them, which is how two failures
+this size survived to be found in one sitting.
+
+```yaml
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+Superseding a run is only ever right on a branch somebody is iterating on. A pull request groups
+by ref and cancels in progress; a push to `main` groups by **commit**, so every merge gets a group
+of its own and runs to completion. Grouping `main` by ref with cancellation off would have been
+worse than the problem: back-to-back merges would queue behind each other, and the history would
+still contain runs that never reported.
+
+### What this cost, and the rule it earns
+
+Nine matrix jobs existed and six of them were proving less than they appeared to. The rule is not
+"add more platforms" — they were already there. It is: **a test that asserts what the code builds
+must be handed every input that decides it, the host's own platform included.** The injection
+seams were already in this codebase (`editor.mjs`, `terminals.mjs`, `notify.mjs` all take a
+`platform`); one module had not been given one, and one line of a workflow comment had promised a
+skip that the code did not implement.

@@ -15,7 +15,14 @@
 
 import { buildPlan, floorPopulation, U, formatTokens } from './plan.js';
 import { bakeBackdrop } from './backdrop.js';
-import { drawCharacter, formatElapsed, labelBox, BODY_HEIGHT_U, LEGIBILITY_MIN_PX } from './rig.js';
+import {
+  drawCharacter,
+  formatElapsed,
+  labelBox,
+  BODY_HEIGHT_U,
+  LEGIBILITY_MIN_PX,
+  SELECTION_RING_R,
+} from './rig.js';
 import { sampleClip, makeActivityRotation } from './clips.js';
 import { STATE_COLORS, PALETTE, identityFor, appearanceFor } from './palette.js';
 import { AgentRuntime, assignSeats, lodForZoom, worldToScreen, screenToWorld } from './agents.js';
@@ -255,6 +262,65 @@ export function ellipsise(ctx, text, maxW) {
   return lo > 0 ? text.slice(0, lo) + '…' : '';
 }
 
+/**
+ * The screen-space box a thing on the floor occupies, given the floor's plan
+ * and camera. The arithmetic behind `Scene#anchorFor` — see that method for
+ * what it is for and what the coordinates mean.
+ *
+ * A plain named export rather than only a method, for the reason the note at
+ * the bottom of this file gives: `new Scene(...)` needs a canvas, a document
+ * and a window, so anything that must be unit-tested lives out here where a
+ * stub plan is enough.
+ *
+ * `'project'` is accepted as a synonym for `'room'`: `docs/DEVIATIONS.md` §108.1
+ * states the request in those words and the orchestrator's in the other, and a
+ * caller that guesses wrong should get the room rather than a null.
+ *
+ * @param {'office'|'agent'|'room'|'project'|'lounge'} target
+ * @param {string|undefined|null} id agent id for `'agent'`, project id for `'room'`
+ * @param {{plan:any, camera:{zoom:number,panX:number,panY:number,U:number},
+ *   scale:number, charScale:number, record?:any}} view
+ * @returns {{x:number, y:number, w:number, h:number}|null}
+ */
+export function computeAnchor(target, id, view) {
+  const plan = view && view.plan;
+  if (!plan || !view.camera) return null;
+  const rooms = plan.rooms || [];
+
+  if (target === 'office' || target === 'lounge' || target === 'room' || target === 'project') {
+    const room =
+      target === 'office' || target === 'lounge'
+        ? rooms.find((r) => r && r.kind === target)
+        : rooms.find((r) => r && r.kind === 'project' && String(r.id) === String(id));
+    if (!room) return null;
+    // The room's whole footprint as it is drawn, plate band included — the
+    // plate is part of the room a person sees, and a mark that pointed at the
+    // carpet alone would sit under the room's own name.
+    const topLeft = worldToScreen({ x: room.x, y: room.y }, view.camera);
+    return { x: topLeft.x, y: topLeft.y, w: room.w * view.scale, h: room.h * view.scale };
+  }
+
+  if (target === 'agent') {
+    if (!id) return null;
+    // An agent the plan is deliberately not drawing — went home, or at a desk
+    // in a project with no room — has a position and no presence. There is
+    // nothing on screen to point at.
+    if (plan.hidden && plan.hidden.has(String(id))) return null;
+    const rec = view.record;
+    if (!rec || !rec.initialised) return null;
+    // A character is drawn at the CHARACTER scale, not the world scale, and
+    // its `x,y` is where its feet touch the floor: the box runs up from there
+    // by a body's height, and out either side by the radius of the ring the
+    // interface already draws to mean "this one".
+    const feet = worldToScreen(rec, view.camera);
+    const w = 2 * SELECTION_RING_R * view.charScale;
+    const h = BODY_HEIGHT_U * view.charScale;
+    return { x: feet.x - w / 2, y: feet.y - h, w, h };
+  }
+
+  return null;
+}
+
 export function resolveLabelCollisions(items) {
   /** @type {{x:number,y:number,w:number,h:number}[]} */
   const placed = [];
@@ -313,7 +379,16 @@ function nowMs() {
   return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 }
 
-function colorForAgent(agent) {
+/**
+ * The state colour a character's torso is filled with (VISUAL-SPEC §5).
+ *
+ * Exported because the mini-floor (WP-39, `public/minifloor.js`) is a SECOND
+ * RENDER TARGET OF THIS SCENE, not a second scene: it draws the same records
+ * with the same rig, so it must ask the same function what colour a session
+ * is rather than carry a second copy of the rule that could disagree.
+ * @param {{ackState?:string, activityState?:string}} agent
+ */
+export function colorForAgent(agent) {
   if (agent.ackState === 'let_go') return STATE_COLORS.let_go;
   if (agent.ackState === 'benched') return STATE_COLORS.benched;
   return STATE_COLORS[agent.activityState] || STATE_COLORS.working;
@@ -334,7 +409,8 @@ function agentLabelFor(agent) {
 }
 
 // Icon names are rig.js's vocabulary exactly: 'hand' | 'hourglass' | 'check' | null.
-function iconForAgent(agent) {
+/** @see colorForAgent for why this is exported. @param {{ackState?:string, activityState?:string}} agent */
+export function iconForAgent(agent) {
   if (agent.ackState !== 'active') return null;
   if (agent.activityState === 'needs_input') return 'hand';
   if (agent.activityState === 'stalled') return 'hourglass';
@@ -600,6 +676,99 @@ export class Scene {
   /** Programmatic selection (e.g. keyboard queue navigation in app.js). */
   select(agentId) {
     this._selectedId = agentId || null;
+  }
+
+  // ------------------------------------------------- a second render target
+  //
+  // WP-39's mini-floor is not a second scene. A second scene would mean a
+  // second `buildPlan`, a second backdrop bake, a second AgentRuntime and
+  // therefore a second set of positions — two buildings that would drift
+  // apart the moment one of them missed a frame, and two answers to "where is
+  // Ada standing". These two methods let another canvas paint THIS scene's
+  // state instead: `frame()` hands out what it is drawing right now, and
+  // `stepIfPaused()` keeps it moving while this canvas's own loop is stopped.
+
+  /**
+   * Everything a second canvas needs to draw this scene's current frame.
+   *
+   * Read-only by contract, and deliberately the live objects rather than
+   * copies: the records are stepped 60 times a second and cloning them per
+   * frame would cost more than the mini-floor's whole draw.
+   * @returns {{plan:any, backdrop:{canvas:any,wpx:number,hpx:number}|null,
+   *   records:any[], agentsById:Map<string,any>, snapshot:any,
+   *   selectedId:string|null, reduced:boolean}}
+   */
+  frame() {
+    return {
+      plan: this._plan,
+      backdrop: this._backdrop,
+      records: [...this._runtime.all()],
+      agentsById: this._agentsById,
+      snapshot: this._snapshot,
+      selectedId: this._selectedId,
+      reduced: this._reduced,
+    };
+  }
+
+  /**
+   * Where something on the floor is, in screen pixels, right now.
+   *
+   * The inverse of `_hitTest`: that turns a point into a thing, this turns a
+   * thing into the box it occupies. It exists so a caller that has to place
+   * chrome OVER the floor — WP-13's coach marks, and anything after them —
+   * can point at the office or at one person without a second copy of the
+   * camera arithmetic, which is the class of duplication that has produced
+   * three separate defects in this renderer already.
+   *
+   * Coordinates are CSS pixels **relative to the canvas's own top-left**,
+   * which is the frame `getBoundingClientRect()` puts the canvas in — add the
+   * canvas's own rect to place something in the page.
+   *
+   * A pure read: it computes from the current plan, camera and runtime and
+   * changes nothing. It is also a snapshot, not a subscription — the floor
+   * moves, so a caller holding a rect across frames is holding a stale one.
+   *
+   * Returns `null` whenever the thing is not on the floor to be pointed at: no
+   * plan yet, no room by that id, no record for that agent, or an agent the
+   * plan is deliberately not drawing (`plan.hidden` — went home, or at a desk
+   * in a project with no room). A rect is never invented for something that
+   * is not there.
+   *
+   * @param {'office'|'agent'|'room'|'project'|'lounge'} target
+   * @param {string} [id] the agent id for `'agent'`, the project id for `'room'`
+   * @returns {{x:number, y:number, w:number, h:number}|null}
+   */
+  anchorFor(target, id) {
+    if (!this._plan) return null;
+    return computeAnchor(target, id, {
+      plan: this._plan,
+      camera: this._cameraParams(),
+      scale: this._scale(),
+      charScale: this._characterScale(),
+      record: target === 'agent' && id ? this._runtime.get(String(id)) : null,
+    });
+  }
+
+  /**
+   * Advance the floor's people by `dt` seconds WITHOUT drawing them, but only
+   * while this canvas's own loop is stopped.
+   *
+   * The loop stops when the tab is hidden, which is exactly when the
+   * mini-floor is the only thing on screen — and a stopped runtime means an
+   * agent whose turn just ended is given a path to your office and never walks
+   * it, so the floating window would show a stale office for as long as the
+   * tab stayed in the background. The guard is what makes this safe to call
+   * every mini-floor frame: while the main floor is running it does nothing,
+   * so nobody is ever stepped twice.
+   * @param {number} dtSeconds
+   * @returns {boolean} whether this call actually stepped anything
+   */
+  stepIfPaused(dtSeconds) {
+    if (this._running) return false;
+    const dt = Math.min(0.25, Math.max(0, Number(dtSeconds) || 0));
+    if (dt === 0) return false;
+    this._runtime.step(dt, { reduced: this._reduced, plan: this._plan, makeActivityRotation });
+    return true;
   }
 
   start() {

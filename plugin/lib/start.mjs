@@ -42,36 +42,43 @@ export const START_TIMEOUT_MS = 15_000;
  * `node bin/deckhq.mjs` skips that whole class of quoting problem. The shim is
  * the last resort, not the first.
  *
- * @param {{env?:any, exists?:(p:string) => boolean}} [opts]
+ * `platform` is injectable, and everything below reads it rather than
+ * `process.platform` — the Windows answer (a `.cmd` shim behind `cmd.exe`) is
+ * the one worth asserting hardest, and a test that can only run it on a
+ * Windows host is a test two thirds of CI silently skips. Path rules follow
+ * the *target* platform too, for the same reason: a PATH of `C:\tools` is not
+ * split on `:` just because the host happens to be Linux.
+ *
+ * @param {{env?:any, platform?:string, exists?:(p:string) => boolean}} [opts]
  * @returns {{command:string, args:string[], via:string}|null}
  */
 export function resolveLauncher(opts = {}) {
   const env = opts.env || process.env;
+  const platform = opts.platform || process.platform;
   const exists = opts.exists || ((p) => fs.existsSync(p));
+  const win = platform === 'win32';
+  const p = win ? path.win32 : path.posix;
 
   const named = String(env.DECKHQ_BIN || '').trim();
-  if (named) return launcherFor(named, 'DECKHQ_BIN');
+  if (named) return launcherFor(named, 'DECKHQ_BIN', platform, env);
 
   const dirs = String(env.PATH || env.Path || '')
-    .split(path.delimiter)
+    .split(p.delimiter)
     .map((d) => d.trim())
     .filter(Boolean);
 
   // Pass one: the package entry point npm installs beside its shim.
   for (const dir of dirs) {
-    const entry = path.join(dir, 'node_modules', 'deckhq', 'bin', 'deckhq.mjs');
+    const entry = p.join(dir, 'node_modules', 'deckhq', 'bin', 'deckhq.mjs');
     if (exists(entry)) return { command: process.execPath, args: [entry], via: 'package' };
   }
 
   // Pass two: whatever `deckhq` on the PATH actually is.
-  const names =
-    process.platform === 'win32'
-      ? ['deckhq.exe', 'deckhq.cmd', 'deckhq.bat', 'deckhq']
-      : ['deckhq'];
+  const names = win ? ['deckhq.exe', 'deckhq.cmd', 'deckhq.bat', 'deckhq'] : ['deckhq'];
   for (const dir of dirs) {
     for (const name of names) {
-      const file = path.join(dir, name);
-      if (exists(file)) return launcherFor(file, 'path');
+      const file = p.join(dir, name);
+      if (exists(file)) return launcherFor(file, 'path', platform, env);
     }
   }
   return null;
@@ -81,9 +88,11 @@ export function resolveLauncher(opts = {}) {
  * One resolved file, as something `spawn` can run without a shell.
  * @param {string} file
  * @param {string} via
+ * @param {string} platform
+ * @param {any} env
  */
-function launcherFor(file, via) {
-  const ext = path.extname(file).toLowerCase();
+function launcherFor(file, via, platform, env) {
+  const ext = (platform === 'win32' ? path.win32 : path.posix).extname(file).toLowerCase();
   if (ext === '.mjs' || ext === '.js' || ext === '.cjs') {
     return { command: process.execPath, args: [file], via };
   }
@@ -91,7 +100,7 @@ function launcherFor(file, via) {
     // Node refuses to spawn a batch file directly since 18.20.2. Running it as
     // an argument to the interpreter is the supported route, and every
     // argument here is a literal this file wrote.
-    const comspec = process.env.ComSpec || 'cmd.exe';
+    const comspec = env.ComSpec || env.COMSPEC || process.env.ComSpec || 'cmd.exe';
     return { command: comspec, args: ['/d', '/s', '/c', file], via };
   }
   return { command: file, args: [], via };
@@ -142,7 +151,7 @@ export function releaseLock(file) {
 /**
  * Make sure a DeckHQ daemon is running, and say what happened.
  *
- * @param {{env?:any, timeoutMs?:number, startTimeoutMs?:number,
+ * @param {{env?:any, platform?:string, timeoutMs?:number, startTimeoutMs?:number,
  *          pollMs?:number, lockFile?:string, find?:typeof findDaemon,
  *          resolve?:typeof resolveLauncher, spawn?:typeof spawn,
  *          sleep?:(ms:number) => Promise<void>}} [opts]
@@ -178,7 +187,10 @@ export async function ensureDaemon(opts = {}) {
     const raced = await find(findOpts);
     if (raced) return { port: raced.port, started: false, reason: 'running' };
 
-    const launcher = (opts.resolve || resolveLauncher)({ env: opts.env });
+    const launcher = (opts.resolve || resolveLauncher)({
+      env: opts.env,
+      platform: opts.platform,
+    });
     if (!launcher) return { port: null, started: false, reason: 'no-deckhq' };
 
     const child = spawnFn(launcher.command, [...launcher.args, '--no-open'], {

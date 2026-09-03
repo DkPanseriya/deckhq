@@ -393,6 +393,7 @@ These are real, and listed here rather than discovered later.
 | `1` / `2` / `3`     | Reply, approve, bench — on the selected session                         |
 | `A`                 | Acknowledge the selected agent                                          |
 | `B`                 | Bench the selected agent                                                |
+| `P`                 | Float the office — a small always-on-top window over your terminal      |
 | `G`                 | Step through the agents who went home, newest activity first            |
 | `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk |
 | `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot    |

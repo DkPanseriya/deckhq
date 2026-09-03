@@ -2968,3 +2968,102 @@ textarea.field-input {
     text-align: left;
   }
 }
+
+/* WP-39 · the floating mini-floor — begin ----------------------------------
+   The Document Picture-in-Picture window links THIS stylesheet, so everything
+   in that 320x200 document is the product's own chrome: the same cold ground,
+   the same numeral (`.numeral` / `.numeral-v` / `.numeral-k` above, unchanged
+   and therefore already measured for contrast by state-visuals.test.mjs), the
+   same state dot. Only the layout of that one window lives here.
+   `public/minifloor.js`, docs/DEVIATIONS.md §113. */
+
+/* Tight on purpose. The window is 320x200 and every pixel the chrome takes
+   comes off the office: the canvas is width-bound at that size, so padding
+   here is measured in how small it makes the people. */
+.minifloor {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  background: var(--bg);
+}
+
+.minifloor-canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: block;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.minifloor-side {
+  flex: 0 0 auto;
+  /* Exactly what "NEEDS YOU" needs at 10px with its 0.14em tracking, and not
+     a millimetre more — the rest belongs to the floor. */
+  width: 5.4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+/* The numeral is the display element of the product (05-GUI-UX-SPEC §2.4). At
+   this window size it is one step down from the header's 44px so the word
+   under it still fits on one line, and no smaller: it is the one number that
+   has to read from across a desk. */
+.minifloor .numeral-v {
+  font-size: 34px;
+}
+
+.minifloor-hands {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  /* State is never carried by colour alone: the dot, the count and a
+     neutral-ink word (05-GUI-UX-SPEC §10). */
+  color: var(--ink-2);
+}
+.minifloor-hands .state-dot {
+  align-self: center;
+}
+.minifloor-hands-v {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.minifloor-hands-k {
+  color: var(--muted);
+}
+
+/* Someone walked into your office. One flash of the window's own edge, at most
+   once every 900ms — the product's signature moment (05-GUI-UX-SPEC §9) at
+   desk-widget size. Reduced motion gets nothing: the numeral has already
+   changed, and that is the information. */
+@keyframes minifloor-arrive {
+  0% {
+    box-shadow: inset 0 0 0 0 var(--accent);
+  }
+  35% {
+    box-shadow: inset 0 0 0 3px var(--accent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 var(--accent);
+  }
+}
+.minifloor.is-arriving {
+  animation: minifloor-arrive 900ms ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .minifloor.is-arriving {
+    animation: none;
+  }
+}
+[data-motion='reduce'] .minifloor.is-arriving {
+  animation: none;
+}
+/* WP-39 · the floating mini-floor — end ------------------------------------ */

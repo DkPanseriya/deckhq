@@ -74,7 +74,7 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
+import { CHROME_UNAVAILABLE, findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
 import { decodePng, diffImages, encodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -353,21 +353,18 @@ say(
 
 const failures = [];
 let compared = 0;
-await withChrome(
+const run = withChrome(
   {
     chromePath,
     width: WIDTH,
     height: HEIGHT,
     scale: 1,
     // Take the machine out of the picture as far as Chrome allows: one colour
-    // profile, greyscale text anti-aliasing, no hinting. The last one is the
-    // CI runner: a sandbox-less Chrome rendering our own loopback page is fine.
-    extraArgs: [
-      '--force-color-profile=srgb',
-      '--disable-lcd-text',
-      '--font-render-hinting=none',
-      ...(process.env.CI && process.platform === 'linux' ? ['--no-sandbox'] : []),
-    ],
+    // profile, greyscale text anti-aliasing, no hinting. The sandbox and
+    // shared-memory flags a CI runner needs are not here — `withChrome` adds
+    // those on linux for every caller, so there is one answer to "how does
+    // this Chrome start" rather than one per script.
+    extraArgs: ['--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'],
   },
   async (client) => {
     await client.send('Emulation.setEmulatedMedia', {
@@ -418,6 +415,25 @@ await withChrome(
     }
   },
 );
+
+// A browser that will not start is the third tooling gap, beside "no
+// WebSocket" and "no Chrome on this machine", and it is treated the same way:
+// say so plainly and exit 0 rather than paint the build red over something
+// nobody's commit broke (DEVIATIONS §87, §114). Only a launch failure is
+// forgiven — `CHROME_UNAVAILABLE` is set by `src/cli/chrome.mjs` and nothing
+// else — so a real capture failure still fails, loudly, as it must.
+try {
+  await run;
+} catch (err) {
+  if (err?.code !== CHROME_UNAVAILABLE) throw err;
+  say(`goldens: could not start a browser: ${err.message}`);
+  say(
+    CHECK
+      ? 'goldens: SKIPPED (nothing checked) — this run proves nothing about the floor.'
+      : 'goldens: cannot regenerate.',
+  );
+  process.exit(CHECK ? 0 : 1);
+}
 
 const total = ((Date.now() - started) / 1000).toFixed(1);
 if (failures.length) {
