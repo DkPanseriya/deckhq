@@ -239,6 +239,18 @@ export function buildCommandEntries(ctx) {
       run: () => actions.newProject(),
     },
     {
+      // WP-39. Not a header control: `05` §5.2's header is a headline, and a
+      // button for this would be a fourth thing competing with the numeral.
+      // The `P` key is the everyday route; this is how it is discovered.
+      id: 'cmd:float-office',
+      group: 'command',
+      label: 'Float the office',
+      hint: 'a small always-on-top window, over your terminal',
+      accel: 'f',
+      keywords: ['pip', 'picture', 'mini', 'floor', 'window', 'widget', 'always on top'],
+      run: () => actions.floatOffice(),
+    },
+    {
       id: 'cmd:settle',
       group: 'command',
       label: 'Settle floor',
