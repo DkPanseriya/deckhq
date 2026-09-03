@@ -26,6 +26,16 @@ export const STATE_FILE = path.join(DATA_DIR, 'state.json');
 export const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
 /**
+ * Where a running daemon publishes the port it actually bound (WP-37).
+ *
+ * Deliberately not inside `state.json`: nothing about a listening socket is
+ * user-owned, and the file the acknowledgements live in gets exactly one
+ * writer. See `src/core/daemon-file.mjs` for what is in it and why every
+ * reader confirms it with a probe.
+ */
+export const DAEMON_FILE = path.join(DATA_DIR, 'daemon.json');
+
+/**
  * Derived scan caches, one file per runtime. Nothing user-owned lives here:
  * every byte is re-derivable from the transcripts on disk, so this directory
  * can be deleted at any time and the only cost is one slow scan. That is why

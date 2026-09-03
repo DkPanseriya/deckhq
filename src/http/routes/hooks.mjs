@@ -27,11 +27,13 @@ export function register(router, ctx) {
     let plan = null;
     let error = null;
     let installedAtPort = null;
+    let viaPlugin = false;
     try {
       plan = adapter.hooks.describe(port());
       if (adapter.hooks.supported) {
         installed = await adapter.hooks.installed(port());
         installedAtPort = (await adapter.hooks.installedPort?.()) ?? null;
+        viaPlugin = Boolean(await adapter.hooks.pluginInstalled?.());
       }
     } catch (err) {
       error = err.message;
@@ -40,13 +42,24 @@ export function register(router, ctx) {
       runtime: adapter.id,
       label: adapter.label,
       supported: Boolean(adapter.hooks.supported),
-      installed,
+      // WP-37. The plugin carries the same hook block and writes nothing into
+      // the settings file, so a machine that installed it that way is
+      // delivering exact events while `installed()` — which reads settings.json
+      // — says no. Either route counts as installed.
+      installed: installed || viaPlugin,
+      viaPlugin,
       plan,
       error,
       port: port(),
       // Set only when hooks are present but aimed somewhere else — the one
-      // failure mode that otherwise looks exactly like a working install.
-      staleAtPort: installedAtPort != null && installedAtPort !== port() ? installedAtPort : null,
+      // failure mode that otherwise looks exactly like a working install. The
+      // plugin's hook command discovers the port at run time, so it cannot
+      // drift, and a stale settings-file entry beside a working plugin is not
+      // a fault worth a banner.
+      staleAtPort:
+        !viaPlugin && installedAtPort != null && installedAtPort !== port()
+          ? installedAtPort
+          : null,
       ...registry.hookHealthFor(adapter.id),
     };
   }
@@ -151,7 +164,10 @@ export function register(router, ctx) {
     for (const adapter of adapters.getAdapters()) {
       let installed = false;
       try {
-        installed = adapter.hooks.supported ? await adapter.hooks.installed(port()) : false;
+        installed = adapter.hooks.supported
+          ? (await adapter.hooks.installed(port())) ||
+            Boolean(await adapter.hooks.pluginInstalled?.())
+          : false;
       } catch {
         installed = false;
       }

@@ -231,6 +231,21 @@
 - **`settings.ledgerRetentionDays`, 90 by default**, clamped to 1–3650 and pruned once at every
   daemon start. Deleting the ledger costs you history and nothing else — no acknowledgement lives
   in it.
+- **DeckHQ installs as a Claude Code plugin.** `/plugin marketplace add DkPanseriya/deckhq` then
+  `/plugin install deckhq@deckhq`, and that is the whole setup: the plugin carries the same eight
+  hooks the settings screen writes, starts the daemon on your first session if none is running,
+  adds `/deckhq:deck` (opens the floor) and `/deckhq:waiting` (prints the queue), and exposes one
+  MCP tool, `deckhq_waiting`, so Claude itself can answer "what is waiting on me across all my
+  projects". The plugin's hooks carry **no port**: the daemon now publishes the one it bound to
+  `~/.deckhq/daemon.json` and the hook command looks it up, which is what makes the same copied
+  configuration work on a machine that installs DeckHQ tomorrow — and removes the port-drift class
+  of bug from this route entirely, so there is no reinstall banner to show. `SessionStart` is
+  `async`, so a cold start never blocks a session, and it starts **exactly one** daemon however
+  many terminals you open at once: a probe, an exclusive lock, a second probe. The MCP tool is
+  read-only by construction — there is no `deckhq_ack` and there will not be one, because a model
+  that can clear the needs-you count can clear it by accident. `plugin/` imports nothing outside
+  itself, has no `package.json`, and every URL in every file it ships is loopback; three
+  `SECURITY:` tests hold that. **No egress added.** §102.
 
 ### Changed
 
@@ -473,6 +488,17 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   that equals it. The PowerShell script is read back and must contain neither value inside a
   double-quoted string. The service worker and the manifest are read for any host that is not
   loopback, for a cache, and for a `respondWith`. `docs/DEVIATIONS.md` §101.
+- **64 tests for the plugin, and one of them is the reason it will work on somebody else's
+  machine.** `claude plugin install` copies `plugin/` and nothing else, so a single import
+  reaching for a sibling `src/` would resolve for the author and for no user; the test walks every
+  import specifier in every file the installer copies and fails any that leaves the directory.
+  Three `SECURITY:` tests hold the no-egress promise: every URL in every shipped file must be
+  loopback, the manifest's two inert metadata URLs are pinned by key so a third cannot appear
+  quietly, and the host is one constant nothing — not an environment variable, not a payload — can
+  move. The hook command is spawned as a real child process with a real payload on stdin and made
+  to find a daemon on an OS-assigned port discoverable only through `daemon.json`; the MCP server
+  is driven over its real stdio transport; eight concurrent `SessionStart` starts produce exactly
+  one spawn. `docs/DEVIATIONS.md` §102.
 
 ### Packaging
 

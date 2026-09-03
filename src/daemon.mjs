@@ -24,7 +24,8 @@ import { register as registerStats } from './http/routes/stats.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { Ledger } from './core/ledger.mjs';
-import { LEDGER_DIR, STATE_FILE, migrateLegacyState } from './core/paths.mjs';
+import { DAEMON_FILE, LEDGER_DIR, STATE_FILE, migrateLegacyState } from './core/paths.mjs';
+import { clearDaemonFile, writeDaemonFile } from './core/daemon-file.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
 import { Permissions } from './core/permissions.mjs';
@@ -185,7 +186,10 @@ function envHoldMs() {
 /**
  * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string,
  *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
- *           notify?: boolean }} [opts]
+ *           notify?: boolean, daemonFile?: string }} [opts]
+ *   `daemonFile` overrides where the bound port is published; it defaults to
+ *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
+ *   caller named no state file.
  *   `adoptHooksPort` is set by the CLI when the user named no port: the daemon
  *   may then prefer the port the installed hooks post to (see `adoptHooksPort`
  *   above). Tests and embedders that pass a port leave it unset.
@@ -375,6 +379,17 @@ export async function startDaemon(opts = {}) {
   });
 
   const url = `http://${HOST}:${port}/`;
+
+  // Publish where we are, so a hook command that was written before this port
+  // was chosen can still find us (WP-37). An embedder that named its own state
+  // file gets the record beside that file rather than in the user's home
+  // directory: 400-odd tests start daemons, and none of them may overwrite the
+  // record the real one on this machine wrote.
+  const daemonFile =
+    opts.daemonFile ??
+    (opts.stateFile ? path.join(path.dirname(opts.stateFile), 'daemon.json') : DAEMON_FILE);
+  writeDaemonFile({ file: daemonFile, port, url });
+
   log.info(`listening on ${url}`);
 
   let closed = false;
@@ -386,6 +401,7 @@ export async function startDaemon(opts = {}) {
     // never spend its last act deciding something (docs/DEVIATIONS.md §97).
     permissions.shutdown();
     notifier.stop();
+    clearDaemonFile({ file: daemonFile });
     registry.stop();
     await store.flush?.();
     // Never allowed to fail the shutdown: a measurement is not worth an
