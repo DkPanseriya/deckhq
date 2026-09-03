@@ -178,12 +178,40 @@ Two agents matching one prefix is an error, not a guess.
 | `deckhq ack <id>`   | This one is dealt with; it goes back to its desk |
 | `deckhq bench <id>` | Park it in the lounge until you recall it        |
 | `deckhq open <id>`  | Open the floor at that agent                     |
+| `deckhq stats`      | What the floor actually did, from the ledger     |
+| `deckhq ledger`     | `days`, `export [--signed]`, `verify`            |
 
 Reading works whether or not DeckHQ is running: with the daemon the numbers are exact, without it
 they come from `~/.deckhq/state.json` and the scan cache, and the table says which. **Acting needs
 the daemon.** Every change to a state you own goes through one code path and that path lives in
 the daemon, so with nothing running `ack` and `bench` print `start deckhq to act` and change
 nothing.
+
+## `deckhq stats`
+
+DeckHQ keeps a local event ledger — `~/.deckhq/ledger/YYYY-MM-DD.jsonl`, one JSON object per line —
+and this reads it back:
+
+```
+  the last 30 days
+
+  median time in review     1h 12m
+  p90 time in review        9h
+  discharged                84  (2.8/day)
+  waiting over 24h          0
+
+  longest wait ever         2d 11h  2026-09-01
+```
+
+Median and p90 time from a turn finishing to you dealing with it, what is still sitting there over
+a day, discharges and sends per day, tokens per project, and the longest wait ever. It needs no
+daemon and **opens no socket at all** — it reads files. `--json` for a script, `--days N` for the
+window, `settings.ledgerRetentionDays` (90) for how long the ledger is kept.
+
+`deckhq ledger days` lists what is there. `deckhq ledger export --signed` writes one day out with
+an Ed25519 signature so somebody else can check it has not been altered, and `deckhq ledger verify`
+does the checking. The ledger holds no paths and no project names — a project is a hash — and the
+signing key is generated on your machine and never leaves it.
 
 ## `deckhq statusline`
 
@@ -324,15 +352,16 @@ npx deckhq --no-open      # start the daemon without opening a browser
 npx deckhq doctor         # the environment report above
 npx deckhq waiting        # the queue, in the terminal
 npx deckhq statusline     # the queue, as one line
+npx deckhq stats          # what the floor did, from the local ledger
 npx deckhq --version
 ```
 
-| Environment variable | Effect                                                   |
-| -------------------- | -------------------------------------------------------- |
-| `DECKHQ_STATE_DIR`   | Where state, cache and backups live. Default `~/.deckhq` |
-| `DECKHQ_PORT`        | Default port, if `--port` is not given                   |
-| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`       |
-| `DECKHQ_DEBUG`       | Verbose logging                                          |
+| Environment variable | Effect                                                           |
+| -------------------- | ---------------------------------------------------------------- |
+| `DECKHQ_STATE_DIR`   | Where state, cache, ledger and backups live. Default `~/.deckhq` |
+| `DECKHQ_PORT`        | Default port, if `--port` is not given                           |
+| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`               |
+| `DECKHQ_DEBUG`       | Verbose logging                                                  |
 
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —
 the whole point is that debts accumulate while you are not looking.
