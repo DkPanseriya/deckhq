@@ -176,6 +176,39 @@
   asserts the exact bytes that come back. Until a live session raises a prompt, has it answered
   from the panel, and carries on, this feature is not accepted and stays out of the README, the
   tweet and the pricing page. `docs/DEVIATIONS.md` §86 and §97.
+- **DeckHQ now measures itself.** An append-only event ledger,
+  `~/.deckhq/ledger/YYYY-MM-DD.jsonl`, one JSON object per line, written by the state machine as
+  the floor moves: a session first seen, every activity and ack transition with its `from` and
+  `to`, every action you took by name, every send, every token total that moved, and the desktop
+  app archiving a session. `docs/01-PRODUCT.md` §6 has said since the first day that this product
+  fails if sessions sit in `for_review` longer than 24h — and until now there was no way on earth
+  to know whether that was true. There is now. It is also the substrate the daily postcard, the
+  rate card, team records and Wrapped are built on. §100.
+- **`GET /api/stats?since=` and `deckhq stats`** compute those numbers from that ledger and from
+  nothing else: median and p90 time from entering `for_review` to being discharged, how many
+  items are sitting there over 24h, discharges and sends per day, tokens per project per day, and
+  the longest wait ever with the day it started. Both surfaces call one function, and a test runs
+  them over one directory and diffs the answers, so the terminal and the API can never end up with
+  two definitions of a median. `deckhq stats` needs no daemon and opens no socket at all.
+- **A day's ledger reconstructs the needs-you queue at any past timestamp.** That is WP-17's
+  acceptance criterion and it is a test: the same scripted session is driven through the live
+  state machine, the floor is photographed at five moments, and each one is compared against
+  `reconstructQueue()` replaying the file. It works across midnight because each day file opens
+  with a carry-over snapshot carrying the real timestamp each waiting session started waiting.
+- **`deckhq ledger export --signed` and `deckhq ledger verify`.** A day, byte-for-byte, plus an
+  Ed25519 signature (`node:crypto`, no dependency) carrying the public half of a key generated
+  once into your state directory and never sent anywhere. It proves the file has not changed and
+  that one key signed it; `verify` prints the key fingerprint and says plainly that this is not
+  proof of who that is. This is what lets a team assemble a floor from ledgers in storage they own
+  rather than from a server we run.
+- **Every record carries a `machineId` and a `projectKey`.** The machine id is 32 random hex
+  characters minted once into `state.json` — derived from nothing about your machine, sent
+  nowhere — so two of your own ledgers can be merged later without a migration. The project key is
+  a hash of the project's directory, never the directory: two tests assert that no record and no
+  exported file contains a path, a path segment, or a project name.
+- **`settings.ledgerRetentionDays`, 90 by default**, clamped to 1–3650 and pruned once at every
+  daemon start. Deleting the ledger costs you history and nothing else — no acknowledgement lives
+  in it.
 
 ### Changed
 
@@ -397,6 +430,16 @@
   the exact argv — including the doubled quotes Windows needs — is asserted without any program
   starting. Three of the tests recompute the new colour tokens' WCAG contrast from the stylesheet
   itself. `docs/DEVIATIONS.md` §90.
+- **52 tests for the ledger, and one of them is the whole point.** `INVARIANT: a failing ledger
+changes neither the agents nor one byte of ack state` drives one scripted session — a scan,
+  three hook events, a tick, three legal actions, one illegal one, a desktop archive, a send and a
+  second scan — through three registries: one with no ledger, one with a working ledger, and one
+  whose every ledger call throws. The resulting agents and the entire ack map are deep-compared,
+  and so is the error the illegal action produced. A second `INVARIANT:` test greps `ledger.mjs`
+  for `store.mjs`, `setAck` and `reviewSince`, because the real guarantee is the direction of the
+  imports and it should fail loudly if anyone reaches past it. The 2-second flush is proved on an
+  injected clock, never by sleeping (§80's lesson), and the append is proved by flushing two
+  ledgers at one directory and counting both files' worth of records. `docs/DEVIATIONS.md` §100.
 
 ### Packaging
 

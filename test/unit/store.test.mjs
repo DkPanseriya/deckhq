@@ -445,3 +445,90 @@ test('load() clamps an out-of-range goneHomeDays found on disk', async () => {
     await cleanup(dir);
   }
 });
+
+// ---------------------------------------------------------------------------
+// WP-48 — the machine id
+// ---------------------------------------------------------------------------
+
+test('the machine id is minted once, persisted, and stable across a restart', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    const id = store.machineId;
+    assert.match(id, /^[0-9a-f]{32}$/);
+    assert.equal(store.machineId, id, 'reading it twice must not mint twice');
+    await store.flush();
+
+    const again = new Store(file);
+    await again.load();
+    assert.equal(again.machineId, id);
+
+    // Two machines are two ids: it is random, not derived from this machine.
+    const other = new Store(path.join(dir, 'other.json'));
+    await other.load();
+    assert.notEqual(other.machineId, id);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('an id minted in this process survives the second load() a daemon start performs', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    // Exactly the daemon's sequence: load, mint (which only SCHEDULES a
+    // write), then load again from `Registry.start()` before the debounce has
+    // fired. Without the guard in `load()` the id is minted fresh on every
+    // start — the one field whose whole value is being stable.
+    const store = new Store(file);
+    await store.load();
+    const id = store.machineId;
+    await store.load();
+    assert.equal(store.machineId, id);
+    await store.flush();
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).machineId, id);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('a hand-edited machine id that is not 32 hex characters is replaced, not stored', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    for (const hostile of ['../../etc/passwd', 'ABC', 42, null, {}, 'g'.repeat(32)]) {
+      await fsp.writeFile(file, JSON.stringify({ version: 1, machineId: hostile }), 'utf8');
+      const store = new Store(file);
+      await store.load();
+      assert.match(store.machineId, /^[0-9a-f]{32}$/);
+      assert.notEqual(store.machineId, hostile);
+    }
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('ledgerRetentionDays defaults to 90 and is clamped on the way in and on the way back', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    assert.equal(store.settings.ledgerRetentionDays, 90);
+    store.setSettings({ ledgerRetentionDays: 7 });
+    assert.equal(store.settings.ledgerRetentionDays, 7);
+    store.setSettings({ ledgerRetentionDays: 0 });
+    assert.equal(store.settings.ledgerRetentionDays, 1);
+    store.setSettings({ ledgerRetentionDays: 'forever' });
+    assert.equal(store.settings.ledgerRetentionDays, 90);
+
+    await fsp.writeFile(
+      file,
+      JSON.stringify({ version: 1, settings: { ledgerRetentionDays: -3 } }),
+      'utf8',
+    );
+    const reloaded = new Store(file);
+    await reloaded.load();
+    assert.equal(reloaded.settings.ledgerRetentionDays, 1);
+  } finally {
+    await cleanup(dir);
+  }
+});

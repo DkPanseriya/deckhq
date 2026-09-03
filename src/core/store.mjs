@@ -7,9 +7,11 @@
  */
 
 import { promises as fsp } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { createLog } from './log.mjs';
 import { EDITOR_NAMES } from './editor.mjs';
+import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -82,6 +84,7 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       display filter only — see
  *                                       `public/render/plan.js`'s `isGoneHome`.
  *                                       0 disables it.
+ * @property {number} ledgerRetentionDays how many days of event ledger to keep (WP-17)
  * @property {boolean} onboarded         first run is over
  */
 
@@ -102,6 +105,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   editor: '',
   terminal: TERMINAL_AUTO,
   goneHomeDays: 7,
+  // WP-17. Ninety days is a quarter: long enough for "falling week over week"
+  // to mean something and for an annual Wrapped to have most of its material,
+  // short enough that the directory stays a few megabytes on a busy machine.
+  ledgerRetentionDays: DEFAULT_RETENTION_DAYS,
   onboarded: false,
 });
 
@@ -279,6 +286,7 @@ function sanitizeSettings(raw) {
   s.editor = sanitizeEditor(s.editor);
   s.terminal = sanitizeTerminal(s.terminal);
   s.goneHomeDays = clampGoneHomeDays(s.goneHomeDays);
+  s.ledgerRetentionDays = clampRetentionDays(s.ledgerRetentionDays);
   for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);
   // Anything not in DEFAULT_SETTINGS is dropped rather than carried: a key
   // from an older build (`showLetGo`, `zoom`) must not survive a round-trip
@@ -289,10 +297,24 @@ function sanitizeSettings(raw) {
   return /** @type {Settings} */ (s);
 }
 
+/**
+ * A hand-edited or absent machine id reads back as absent, and the getter
+ * mints a new one. WP-48: 32 hex characters of `randomBytes`, nothing derived
+ * from the machine — not its name, not its MAC, not its user. A random id is
+ * a join key for two of the user's OWN ledgers; anything derived would be a
+ * fingerprint, which is a different thing entirely.
+ * @param {unknown} v
+ */
+function sanitizeMachineId(v) {
+  return typeof v === 'string' && /^[0-9a-f]{32}$/.test(v) ? v : null;
+}
+
 function defaultData() {
   return {
     version: 1,
     seededAt: null,
+    // WP-48. Minted on first use, never sent anywhere. See `get machineId`.
+    machineId: null,
     settings: { ...DEFAULT_SETTINGS },
     ack: {},
     // MK numbering and user-chosen names. Assigned once and kept forever, so
@@ -328,6 +350,7 @@ function normalize(parsed) {
   return {
     version: 1,
     seededAt: typeof parsed.seededAt === 'number' ? parsed.seededAt : null,
+    machineId: sanitizeMachineId(parsed.machineId),
     settings,
     ack,
     identity,
@@ -368,19 +391,38 @@ export class Store {
   /**
    * Load state.json. A corrupt or unparseable file never prevents startup:
    * it is backed up alongside itself and the store starts from defaults.
+   *
+   * An id already minted in this process survives the re-read. `load()` is
+   * called more than once on a normal start — `startDaemon()` calls it, and
+   * `Registry.start()` calls it again — and the machine id is minted between
+   * those two, before the 250 ms debounce has put it on disk. Without this
+   * the second read would parse a file with no id, hand back `null`, and the
+   * daemon would mint a *different* id on every start: the one field in the
+   * file whose entire value is being stable would be the one field that
+   * never was. See `docs/DEVIATIONS.md` §100.
+   *
    * @returns {Promise<void>}
    */
   async load() {
+    const minted = this._data?.machineId || null;
+    const restore = () => {
+      if (minted && !this._data.machineId) {
+        this._data.machineId = minted;
+        this.save();
+      }
+    };
     let raw;
     try {
       raw = await fsp.readFile(this.file, 'utf8');
     } catch (err) {
       if (err && err.code === 'ENOENT') {
         this._data = defaultData();
+        restore();
         return;
       }
       this._log.warn(`could not read ${this.file}; starting from defaults`, err);
       this._data = defaultData();
+      restore();
       return;
     }
 
@@ -394,6 +436,7 @@ export class Store {
         err,
       );
       this._data = defaultData();
+      restore();
       return;
     }
 
@@ -403,10 +446,12 @@ export class Store {
         `state file at ${this.file} has an invalid shape; backed up and starting from defaults`,
       );
       this._data = defaultData();
+      restore();
       return;
     }
 
     this._data = normalize(parsed);
+    restore();
   }
 
   /** @param {string} raw */
@@ -445,6 +490,26 @@ export class Store {
     this._data.settings = sanitizeSettings({ ...this._data.settings, ...(patch || {}) });
     this.save();
     return this.settings;
+  }
+
+  /**
+   * This machine's random id, minted on first read and kept forever.
+   *
+   * WP-48. It exists so that two ledgers the same person's two machines
+   * wrote can be merged into one team floor without either of them holding a
+   * name, a path or an account. It is written to `state.json` and read by
+   * `src/core/ledger.mjs`; **nothing in this repository sends it anywhere**,
+   * and there is a test that asserts the string never appears in any
+   * outbound-facing surface (`doctor --share`).
+   *
+   * @returns {string}
+   */
+  get machineId() {
+    if (!this._data.machineId) {
+      this._data.machineId = randomBytes(16).toString('hex');
+      this.save();
+    }
+    return this._data.machineId;
   }
 
   /** @returns {number|null} */

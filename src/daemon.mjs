@@ -20,9 +20,11 @@ import { register as registerSettings } from './http/routes/settings.mjs';
 import { register as registerChanges } from './http/routes/changes.mjs';
 import { register as registerDiff } from './http/routes/diff.mjs';
 import { register as registerPermission } from './http/routes/permission.mjs';
+import { register as registerStats } from './http/routes/stats.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
-import { STATE_FILE, migrateLegacyState } from './core/paths.mjs';
+import { Ledger } from './core/ledger.mjs';
+import { LEDGER_DIR, STATE_FILE, migrateLegacyState } from './core/paths.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
 import { Permissions } from './core/permissions.mjs';
@@ -180,11 +182,12 @@ function envHoldMs() {
 }
 
 /**
- * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string, publicDir?: string, permissionHoldMs?: number }} [opts]
+ * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string,
+ *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number }} [opts]
  *   `adoptHooksPort` is set by the CLI when the user named no port: the daemon
  *   may then prefer the port the installed hooks post to (see `adoptHooksPort`
  *   above). Tests and embedders that pass a port leave it unset.
- * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, permissions:Permissions, close:() => Promise<void> }>}
+ * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, ledger:Ledger, permissions:Permissions, close:() => Promise<void> }>}
  * @throws {DeckhqAlreadyRunningError} when adopting and the hooks' port is
  *   already a running DeckHQ daemon. Thrown before anything is opened or
  *   written, so there is nothing to close.
@@ -203,6 +206,31 @@ export async function startDaemon(opts = {}) {
   const store = new Store(opts.stateFile || STATE_FILE);
   await store.load();
 
+  // WP-17. The ledger is opened before the registry so the registry's first
+  // rebuild is already being written down, and primed from today's file so a
+  // restart inside one day does not re-announce the whole floor. Retention is
+  // enforced here, at start, and nowhere else: a prune on a timer would be a
+  // background process deleting files in the user's home for the life of the
+  // daemon, and one pass a start is enough for a 90-day window.
+  // A caller that named its own `stateFile` — the integration suite, an
+  // embedder — gets its ledger beside that file rather than in the real
+  // `~/.deckhq`. A test daemon writing into the developer's own ledger would
+  // corrupt the very measurement this package exists to make.
+  const ledgerDir =
+    opts.ledgerDir ||
+    (opts.stateFile ? path.join(path.dirname(opts.stateFile), 'ledger') : LEDGER_DIR);
+  const ledger = new Ledger(ledgerDir, {
+    machineId: store.machineId,
+    log: createLog('ledger'),
+  });
+  await ledger.prime();
+  ledger.prune(store.settings.ledgerRetentionDays).then(
+    ({ removed }) => {
+      if (removed.length) log.info(`pruned ${removed.length} ledger day(s) past retention`);
+    },
+    () => {},
+  );
+
   // The Registry takes the adapter list; the HTTP layer takes the registry
   // module (it needs getAdapter/getAdapters for routing and hook status).
   const identity = new Identity(store);
@@ -211,6 +239,7 @@ export async function startDaemon(opts = {}) {
     adapters: adapters.getAdapters(),
     log: createLog('registry'),
     identity,
+    ledger,
   });
 
   // WP-19. The sockets a raised hand is waiting on. `holdMs` is configurable
@@ -229,8 +258,19 @@ export async function startDaemon(opts = {}) {
   // `port` is filled in once the listener is bound. The hooks routes read it
   // so the hook command they write points at THIS daemon, not at 4317 by
   // assumption — see src/adapters/claude-code/hooks.mjs.
-  const ctx = { registry, store, adapters, identity, permissions, log, publicDir, port: null };
+  const ctx = {
+    registry,
+    store,
+    adapters,
+    identity,
+    ledger,
+    permissions,
+    log,
+    publicDir,
+    port: null,
+  };
   registerState(router, ctx);
+  registerStats(router, ctx);
   registerActions(router, ctx);
   registerHooks(router, ctx);
   registerSettings(router, ctx);
@@ -331,11 +371,14 @@ export async function startDaemon(opts = {}) {
     permissions.shutdown();
     registry.stop();
     await store.flush?.();
+    // Never allowed to fail the shutdown: a measurement is not worth an
+    // unclean exit, and `close()` already swallows its own write errors.
+    await ledger.close().catch(() => {});
     await new Promise((resolve) => server.close(() => resolve(undefined)));
     server.closeAllConnections?.();
   }
 
-  return { url, port, server, registry, store, permissions, close };
+  return { url, port, server, registry, store, ledger, permissions, close };
 }
 
 /**

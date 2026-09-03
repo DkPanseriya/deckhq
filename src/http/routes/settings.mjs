@@ -88,6 +88,10 @@ export function register(router, ctx) {
       // store clamps it to [0, 365] and falls back to the default for
       // anything else.
       if (k === 'goneHomeDays' && !Number.isFinite(Number(v))) continue;
+      // And `ledgerRetentionDays` (WP-17). The store clamps this to 1..3650; a
+      // non-number would silently become the default, so it is rejected here
+      // where the caller can be told.
+      if (k === 'ledgerRetentionDays' && !(typeof v === 'number' && Number.isFinite(v))) continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

@@ -102,8 +102,21 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // with the dynamic floor, is read by the renderer's filter in
   // `public/render/plan.js`, and is pinned by POSTing to /api/settings until
   // the sheet's floor section grows a row for it.
+  //
+  // `ledgerRetentionDays` (WP-17, docs/DEVIATIONS.md §100) is the sixth, and
+  // exempt on the same terms: the ledger's retention window is read at daemon
+  // start by `ledger.prune()`, ninety days is right on nearly every machine,
+  // and it is pinned by POSTing to /api/settings until the sheet's data
+  // section grows a row for it.
   const sheetOwned = new Set(SETTINGS_KEYS);
-  const exempt = new Set(['approveText', 'onboarded', 'editor', 'terminal', 'goneHomeDays']);
+  const exempt = new Set([
+    'approveText',
+    'onboarded',
+    'editor',
+    'terminal',
+    'goneHomeDays',
+    'ledgerRetentionDays',
+  ]);
   const missing = Object.keys(DEFAULT_SETTINGS).filter((k) => !sheetOwned.has(k) && !exempt.has(k));
   assert.deepEqual(
     missing,

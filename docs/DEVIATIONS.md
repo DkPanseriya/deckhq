@@ -4744,3 +4744,119 @@ it, none for the wrapper-script emulators, one quoted word with no bare metachar
 and the wrapper's `exec` line read back through `sh`'s grammar to the exact argv; and the source
 scan now also asserts that `openNewSession` no longer resumes `'codex:new'` and does name
 `codexNewSessionCommand`.
+## 100. WP-17/48 — the event ledger: what it writes, what it refuses to touch, and the six decisions the package had to make
+
+`06-ENGINEERING-WORKPLAN.md` WP-17 and `08-PLAN-V2-100X.md` §9 WP-48. Shipped as
+`src/core/ledger.mjs`, a `GET /api/stats` route, `deckhq stats`, and
+`deckhq ledger days | export [--signed] | verify`.
+
+**The acceptance line that shaped every other decision:** *nothing in the ledger path may read or
+mutate ack state*, and *a write failure must never block the state machine*. Those are not comments
+here, they are the direction of the imports. `ledger.mjs` imports `log.mjs` and `model.mjs` and
+nothing else — it cannot reach `Store`, so it cannot read `reviewSince` and cannot write `ackState`
+even by accident. The state machine's `_noteLedger()` runs at the very end of `_rebuild()`, after
+the agents are computed and assigned, and is handed two plain arrays. Every call site is inside a
+`try` that swallows. `test/unit/ledger-invariant.test.mjs` drives one scripted session — a scan,
+three hook events, a tick, three legal actions, one illegal one, a desktop archive, a send, and a
+second scan with the token totals moved — through three registries: no ledger, a working ledger,
+and a ledger whose `record()` and `markSeen()` both throw. The resulting `Agent[]` and the entire
+ack map are deep-compared, along with the error the illegal action produced. A fourth assertion
+greps the module for `store.mjs`, `setAck` and `reviewSince`, because the structural guarantee
+should fail loudly if somebody later reaches for the shortcut.
+
+**Decision 1 — `first_seen` is per day, and it carries `since`.** WP-17 asks that *a day's ledger*
+reconstruct the needs-you queue at any past timestamp. A file holding only that day's transitions
+cannot: a session that went `for_review` on Tuesday and is still waiting on Friday has no Friday
+transition, so Friday would replay as an empty office. So the first time each local day that the
+daemon sees a session it writes one `session/first_seen` carrying that session's `activity`, `ack`
+and **the timestamp it entered that state**. Each day file is then self-contained, and an episode
+that spans midnight is still measured from where it actually started — which is what makes
+"longest wait ever" a real number rather than an artifact of when the file rolled over. A restart
+inside one day re-reads the day file first (`prime()`), so a daemon bounced ten times does not look
+like ten new floors. The cost is one extra record per session per day; on the reference machine's
+93 sessions that is about 18 KB a day, and it is the entire reason the acceptance criterion is met
+rather than approximated.
+
+**Decision 2 — the day boundary is local, not UTC.** "Discharges per day" and "the office cleared"
+are facts about the user's day. A ledger that rolled over at 01:00 local would split one evening's
+work across two cards and make the daily postcard (WP-18) wrong on exactly the days it matters.
+
+**Decision 3 — append with `O_APPEND`, and no `fsync`.** `store.mjs` writes atomically by
+temp-then-rename because it rewrites a whole document; a ledger appends, and a rename-based append
+would have to read the whole day back and would silently lose a second writer's records. The flush
+opens the day file `a` and issues one `write()` for the batch, so two DeckHQ processes sharing a
+state directory interleave whole batches rather than corrupting each other — asserted by a test
+that flushes two `Ledger` instances at one directory and counts both. **Nothing is fsynced.** A
+power cut costs up to 2 s of buffered records and, at worst, a torn final line, which
+`parseRecords` skips. That is the deliberate difference from `state.json`: an acknowledgement is
+the user's and must survive; a missing measurement is a slightly wrong median, and paying an
+`fsync` every two seconds for the life of the daemon to protect a statistic is the wrong bill.
+
+**Decision 4 — a failed write drops its batch and warns exactly once.** Retrying would grow a
+buffer against a disk that has already said no. The buffer is capped at 10,000 records and drops
+the *oldest* when it overflows, because the recent half is the useful half and a daemon that dies
+of heap exhaustion takes the acknowledgements with it. `writeError` is exposed so `/api/stats` can
+report `incomplete: true` rather than quietly returning a short answer.
+
+**Decision 5 — `projectKey` is a hash, and it is the only project identity a record carries.**
+Sixteen hex characters of SHA-256 over the directory, normalised for case and separators so Windows
+and POSIX agree. `projectIdFromCwd` was deliberately not reused: its slug still contains the path
+segments, so writing it down would put the user's directory layout into a file designed to be
+handed to a team (WP-48/WP-49). Two `PRIVACY:` tests assert that no written record and no exported
+day contains a path, a segment of one, or a project name. `/api/stats` and `deckhq stats` re-attach
+names by hashing the cwds they already hold; a project the ledger knows and the floor does not
+stays a hash, shortened, which is honest about not knowing.
+
+**Decision 6 — `machineId` is random, not derived.** 32 hex characters of `randomBytes`, minted on
+the first read of `store.machineId` and kept forever. Nothing in this repository sends it anywhere.
+This is the first identifier the product has ever created and `08` §13.8 flags it for the owner's
+confirmation; the mitigation is that it is derived from nothing — not the machine name, not a MAC,
+not the user — so it is a join key for two of the user's own ledgers and not a fingerprint.
+
+**What the signature proves, and what it does not.** `deckhq ledger export --signed` writes the day
+file byte-for-byte plus a `.sig` document carrying an Ed25519 signature and **the public half of
+the key**, so verification needs the two files and nothing else. That proves integrity and one
+consistent signer. It does not prove identity — anybody can generate a key — so `verify` prints the
+key fingerprint and says so in as many words, and a BYOS team floor pins the fingerprint per
+machine. The private key is written with mode `0600`; **on Windows that mode is not enforced**, and
+the file's protection is whatever the user's profile directory provides. The test asserts the mode
+only on POSIX rather than asserting a fiction, and the command says so on the run that generates
+the key.
+
+**Retention.** `settings.ledgerRetentionDays`, default 90, clamped to 1–3650 in the store and
+rejected rather than silently defaulted at the route. Pruned once at daemon start and nowhere else:
+a prune on a timer would be a background process deleting files in the user's home for the life of
+the daemon, and one pass per start is enough for a 90-day window. `prune` touches only
+`YYYY-MM-DD.jsonl` and its `.sig` sidecar — a test drops a `ledger-key.pem` and a `notes.txt` into
+the directory and asserts both survive.
+
+**`deckhq stats` does not look for a daemon**, and that is a departure from every other read command
+in this CLI (§92, `src/cli/source.mjs`). Those prefer a daemon because it holds liveness and the
+stall clock, which the files do not. Stats hold neither: they are a replay of a directory of text
+files that both processes read identically, so a port scan and an HTTP client would add ~90 ms and
+nothing else. Both surfaces call the same `computeStats`, and a test runs the route and the command
+over one directory and diffs the numbers, so they cannot drift into two definitions of a median.
+
+**Two numbers rather than one for "over 24h".** `docs/01-PRODUCT.md` §6's first criterion is
+"sessions sitting in `for_review` longer than 24h: 0, sustained", which is a question about *now*.
+That is `over24h`. `everOver24h` is the same question asked of history, and it is what tells you
+whether it used to happen — a product that has just reached zero and one that has always been at
+zero are not the same product, and one number cannot say which you are.
+
+**The measured cost, reference machine, 4 September.** A 10.7-minute run of the real daemon
+against the machine's real transcripts, into a scratch `DECKHQ_STATE_DIR`: **190 records, 47,039
+bytes — 46 KB for the day, 248 bytes a record.** The shape is one cold-start burst and then almost
+nothing. 78 of those records are the per-day `first_seen` carry-over, one per session on the
+machine; 86 are the first token totals; 20 are the desktop app's archive flags being reconciled
+against a fresh seed on a first run; and **6 are actual state transitions in ten minutes.** A day
+of ordinary use is therefore roughly the burst plus a few hundred bytes an hour, and 90 days of
+retention on this machine is single-digit megabytes. Nothing about the daemon changed measurably:
+the poll is unchanged, and `record()` is an array push.
+
+That run also produced the first real numbers this product has ever had about itself: 23 sessions
+in `for_review`, **13 of them waiting more than 24 hours**, and a longest wait of 2 d 12 h standing
+since 1 September. §6's first criterion is not met on the reference machine, which is precisely
+what a measurement is for.
+
+**Acceptance.** 52 tests, 714 to 766. `npm run goldens:check` is unaffected and was run: 4 of 4
+match, 0 px over tolerance — nothing in this package touches `public/`.
