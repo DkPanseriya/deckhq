@@ -1,0 +1,21 @@
+{
+  "name": "deckhq",
+  "description": "DeckHQ — every AI coding session on your machine, on one office floor. Local, private, MIT.",
+  "owner": {
+    "name": "Darshak Panseriya",
+    "url": "https://github.com/DkPanseriya"
+  },
+  "plugins": [
+    {
+      "name": "deckhq",
+      "source": "./plugin",
+      "description": "Every AI coding session on your machine, on one office floor. Local, private, zero dependencies.",
+      "version": "1.2.0",
+      "author": { "name": "Darshak Panseriya" },
+      "homepage": "https://github.com/DkPanseriya/deckhq#readme",
+      "repository": "https://github.com/DkPanseriya/deckhq",
+      "license": "MIT",
+      "keywords": ["sessions", "dashboard", "local-first", "privacy", "agent-management"]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "name": "deckhq",
+  "displayName": "DeckHQ",
+  "version": "1.2.0",
+  "description": "Every AI coding session on your machine, on one office floor. Installs DeckHQ's hooks, starts the daemon with your first session, and answers what is waiting on you.",
+  "author": {
+    "name": "Darshak Panseriya"
+  },
+  "homepage": "https://github.com/DkPanseriya/deckhq#readme",
+  "repository": "https://github.com/DkPanseriya/deckhq",
+  "license": "MIT",
+  "keywords": ["sessions", "dashboard", "local-first", "privacy", "agent-management"]
+}
