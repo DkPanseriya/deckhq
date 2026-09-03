@@ -66,6 +66,16 @@
   nothing is written without `--yes`. The entry is tagged, your settings file is copied to
   `~/.deckhq/backups/` first, `--remove` takes out only what DeckHQ wrote, and a status line
   somebody else configured is reported and left alone. No outbound network calls. §88.
+- **The terminal deck: `deckhq ls`, `waiting`, `ack`, `bench`, `open`.** The deck of
+  `docs/plan/05-GUI-UX-SPEC.md` §3.2 as a table — oldest first, finished turns and raised hands
+  above stalls, separated by a rule — in raw ANSI with no dependency. `waiting` is that queue
+  alone; `ls` also lists everyone else on the payroll, and `--all` adds the benched and the let go.
+  `NO_COLOR`, a pipe, `TERM=dumb` and `--no-color` all turn the colour off; `--json` on both reads.
+  `<id>` is the MK tag the table prints, a name you gave, or any prefix of the session id, and an
+  ambiguous one is refused rather than guessed. Reads work with or without a daemon; `ack` and
+  `bench` go through the running daemon's `/api/ack` and nothing else, because `act()` is the only
+  code path allowed to clear a user-owned state — with no daemon they print `start deckhq to act`
+  and exit 2. §89.
 
 ### Changed
 

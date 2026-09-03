@@ -113,6 +113,46 @@ of the comparison.
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
 
+## The deck, in your terminal
+
+The floor earns the screenshot; the deck does the job. If you are never going to leave the
+terminal, the whole queue is there.
+
+```
+$ deckhq waiting
+
+    WAITING    WHO         ID        PROJECT           LAST WORD                     TOKENS
+     1d 2h  ✓  Ada         MK1.1     orbital-api       Done. Tests pass and the c…  160,000
+     4h 12m ✋  Rune        MK5.1     mobile-app        May I run the migration on…  412,000
+     40m    ✓  Wren        MK2.3     checkout-flow     Refund path fixed; orphane…   88,400
+  ─────────────────────────────────────────────────────────────────────────────────────────
+     3h 02m ⏳  Sable       MK3.2     data-pipeline     (silent since 14:12)         220,100
+
+$ deckhq ack MK1.1
+  acknowledged MK1.1 (Ada)
+```
+
+Oldest first, finished turns and raised hands above stalls. `deckhq ls` shows the same table plus
+everyone else who is working, `--all` adds the benched and the let go, and `--json` gives either as
+data. `NO_COLOR`, a pipe or `--no-color` turns the ANSI off.
+
+`<id>` is the tag in the `ID` column, a name you gave an agent, or any prefix of the session id.
+Two agents matching one prefix is an error, not a guess.
+
+| Command             | What it does                                     |
+| ------------------- | ------------------------------------------------ |
+| `deckhq ls`         | Everyone on the payroll, the waiting ones first  |
+| `deckhq waiting`    | Only what needs you                              |
+| `deckhq ack <id>`   | This one is dealt with; it goes back to its desk |
+| `deckhq bench <id>` | Park it in the lounge until you recall it        |
+| `deckhq open <id>`  | Open the floor at that agent                     |
+
+Reading works whether or not DeckHQ is running: with the daemon the numbers are exact, without it
+they come from `~/.deckhq/state.json` and the scan cache, and the table says which. **Acting needs
+the daemon.** Every change to a state you own goes through one code path and that path lives in
+the daemon, so with nothing running `ack` and `bench` print `start deckhq to act` and change
+nothing.
+
 ## `deckhq statusline`
 
 One line, for a status bar:
@@ -246,6 +286,7 @@ instead of walking, clips hold a representative pose, and the floor stays fully 
 npx deckhq --port 4400    # a different loopback port
 npx deckhq --no-open      # start the daemon without opening a browser
 npx deckhq doctor         # the environment report above
+npx deckhq waiting        # the queue, in the terminal
 npx deckhq statusline     # the queue, as one line
 npx deckhq --version
 ```

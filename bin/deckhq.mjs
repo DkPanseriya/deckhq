@@ -6,6 +6,11 @@
  *   npx deckhq --no-open  start the daemon only
  *   npx deckhq --port N   listen on a different loopback port
  *   npx deckhq doctor     print what DeckHQ can see here, and start nothing
+ *   npx deckhq ls         the deck, as a table
+ *   npx deckhq waiting    only what needs you
+ *   npx deckhq ack ID     this one is dealt with
+ *   npx deckhq bench ID   park it in the lounge
+ *   npx deckhq open ID    open the floor at that agent
  *   npx deckhq statusline one line for a status bar
  *
  * With no --port, the daemon prefers the port the installed hooks already
@@ -38,6 +43,11 @@ const argv = process.argv.slice(2);
 const SUBCOMMANDS = {
   doctor: async (rest) => (await import('../src/cli/doctor.mjs')).runDoctor(rest),
   statusline: async (rest) => (await import('../src/cli/statusline.mjs')).runStatusline(rest),
+  ls: async (rest) => (await import('../src/cli/deck.mjs')).runLs(rest),
+  waiting: async (rest) => (await import('../src/cli/deck.mjs')).runWaiting(rest),
+  ack: async (rest) => (await import('../src/cli/deck.mjs')).runAct('acknowledge', rest),
+  bench: async (rest) => (await import('../src/cli/deck.mjs')).runAct('bench', rest),
+  open: async (rest) => (await import('../src/cli/deck.mjs')).runOpen(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
@@ -72,6 +82,8 @@ async function main() {
         '',
         'Usage: deckhq [options]',
         '       deckhq doctor [--json] [--share] [--capture-proof]',
+        '       deckhq ls | waiting [--json] [--all]',
+        '       deckhq ack | bench | open <id>',
         '       deckhq statusline [--json] [--install] [--remove]',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
@@ -82,8 +94,16 @@ async function main() {
         'Commands:',
         '  doctor        what DeckHQ can see here, and what it cannot.',
         '                Starts nothing. `deckhq doctor --help` for its options.',
+        '  ls            the deck as a table: who is waiting, on what, for how long.',
+        '  waiting       the same table, only what needs you.',
+        '  ack <id>      this one is dealt with. Needs a running DeckHQ.',
+        '  bench <id>    park it in the lounge. Needs a running DeckHQ.',
+        '  open <id>     open the floor at that agent.',
         '  statusline    one line — "▣ 3 waiting · 1 hand up" — for a status bar.',
         '                --install writes it into your Claude Code settings.',
+        '',
+        'Every command takes an id: the MK tag the deck prints, a name you gave,',
+        'or any prefix of the session id.',
         '',
         'The daemon binds 127.0.0.1 only and makes no outbound network calls.',
         '',

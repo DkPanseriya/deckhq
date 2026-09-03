@@ -3323,3 +3323,62 @@ empty machine, the 20 ms budget, the loopback-only host, TCP-probe-before-HTTP, 
 (printing the line leaves `state.json` byte-identical, and a read never assigns an MK number), and
 eight install/remove tests.
 
+## 89. WP-42 · The terminal deck: three departures from the deck spec, and the one thing `open` cannot do yet
+
+`08-PLAN-V2-100X.md` WP-42 and B8; the table is `05-GUI-UX-SPEC.md` §3.2. Shipped as `deckhq ls`,
+`waiting`, `ack`, `bench`, `open`, with `--json` on the reads.
+
+**Departure 1 — the id column is labelled `ID`.** §3.2's header row is `WAITING WHO PROJECT LAST
+WORD TOKENS`, with the MK tag in an unlabelled column. That is right for a surface where you never
+type an id: in the GUI deck you press `J`/`K` and `1`/`2`/`3`. In a terminal the id _is_ the
+interface — `deckhq ack MK1.1` — so the column that carries it is named. Column order is otherwise
+the spec's exactly, and a test asserts the order.
+
+**Departure 2 — `WHO` falls back to the session's own title.** The spec's WHO is "Ada", a name the
+user gave. Almost nobody has named an agent yet, and filling WHO with the MK tag would print the
+same string twice in adjacent columns. It falls back to the session title — the sentence the
+runtime already shows the user — and to nothing when there is no title.
+
+**Departure 3 — `ls` is wider than the deck; `waiting` is the deck.** WP-42 names both commands and
+B8 describes one table. `deckhq waiting` is §3.2 exactly: the needs-you queue, oldest first,
+`for_review` and `needs_input` above `stalled` and separated by a rule. `deckhq ls` prints that
+table and then, under another rule, everybody else on the payroll ordered by most recent activity —
+because an `ls` that hides two thirds of the floor is a surprising `ls`. Benched and let-go agents
+are behind `--all` for the same reason in the other direction.
+
+**The asymmetry between reads and writes is deliberate.** Reads work with or without a daemon.
+Writes do not exist without one: `ack` and `bench` are `POST /api/ack`, which is `act()`, which is
+the only function in this product allowed to clear `reviewSince` or `needsInputSince`. A CLI that
+edited `state.json` directly would be a second writer against a file a running daemon holds in
+memory and rewrites on a 250 ms debounce — the CLI's edit would be silently reverted — and, worse,
+a second implementation of the one rule the product is built on. With no daemon these commands
+print `start deckhq to act` and exit 2. Two tests pin it, one of them asserting `state.json` is
+byte-identical afterwards and the debt still standing.
+
+**Id resolution refuses rather than guesses.** The MK tag (case-insensitively, with or without the
+`MK`), a display name, the full prefixed agent id, or any prefix of the session id. An ambiguous
+token prints every candidate and exits 2 without posting anything. These ids address the two
+commands that clear a user-owned state; a near-miss that silently picks the first match is exactly
+how the wrong agent gets acknowledged.
+
+**Colour.** Raw ANSI, no dependency. Off when `NO_COLOR` is present at all (the convention's own
+rule: any value, including empty), when stdout is not a TTY, when `TERM=dumb`, and with
+`--no-color`. A test asserts that the uncoloured render is byte-identical to the coloured one with
+the escapes stripped, so the two can never drift into being different tables. The state glyphs are
+padded to two terminal columns each, because `✋` and `⏳` are double-width and `✓` is not, and a
+table whose columns move with the state of a row is a table nobody can `awk`.
+
+**What `open` cannot do yet.** WP-42 says `deckhq open <id>` opens the floor at that agent. It
+opens `http://127.0.0.1:<port>/#agent=<id>` through the existing `openUrl()` helper — the fragment
+never reaches the server, so it costs the daemon nothing — but **no client code reads that fragment
+today**, and `public/` belongs to WP-10's deep-link work and is outside this package's scope. So
+today the command opens the floor and names the agent in the URL; the selection lands when the
+client honours it. Stated here rather than quietly shipped as if it worked.
+
+**Acceptance.** 28 tests: ordering and grouping against the spec's own example, `waiting` versus
+`ls` versus `--all`, the column order, the elapsed-time and truncation formats, six id-resolution
+cases plus ambiguity and no-match, four `NO_COLOR`/TTY cases plus the escapes-stripped equality,
+the `--json` shape and its agreement with the printed rows, the no-daemon refusal for both writes,
+an INVARIANT test that the CLI writes nothing to `state.json`, exactly one POST per action, a
+daemon refusal reported rather than retried, and the three `open` cases. 514 tests to 570 across
+both packages.
