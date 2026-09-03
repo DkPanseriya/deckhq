@@ -391,6 +391,112 @@ test('stall: never applies without hooks installed, regardless of elapsed time',
 });
 
 // ---------------------------------------------------------------------------
+// C2. Thought bubbles — WP-52, docs/plan/08-PLAN-V2-100X.md §3.5/§9.
+//
+// `currentTool` is observed, transient and entirely cosmetic. The tests that
+// matter are the ones proving it CANNOT reach anything else.
+// ---------------------------------------------------------------------------
+
+/** A PreToolUse as the HTTP route hands it over, adapter parsing already done. */
+function preToolUse(name, summary, at) {
+  return {
+    runtime: 'claude-code',
+    sessionId: 'a',
+    hookEvent: 'PreToolUse',
+    tool: { name, summary },
+    at,
+  };
+}
+
+test('WP-52: PreToolUse sets currentTool with the time it started; PostToolUse clears it', async () => {
+  const { registry } = await setupHookRegistry();
+  assert.equal(find(registry, 'a').currentTool, null, 'nothing is running yet');
+
+  registry.applyHook(preToolUse('Bash', 'Bash npm test', 1000));
+  assert.deepEqual(find(registry, 'a').currentTool, {
+    name: 'Bash',
+    summary: 'Bash npm test',
+    since: 1000,
+  });
+
+  registry.applyHook({
+    runtime: 'claude-code',
+    sessionId: 'a',
+    hookEvent: 'PostToolUse',
+    at: 1500,
+  });
+  assert.equal(find(registry, 'a').currentTool, null);
+});
+
+test('WP-52: Stop and SessionEnd clear the bubble too', async () => {
+  for (const event of ['Stop', 'SessionEnd']) {
+    const { registry } = await setupHookRegistry();
+    registry.applyHook(preToolUse('Bash', 'Bash npm test', 1000));
+    assert.notEqual(find(registry, 'a').currentTool, null);
+    registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: event, at: 2000 });
+    assert.equal(find(registry, 'a').currentTool, null, `${event} left a stale bubble behind`);
+  }
+});
+
+test('WP-52: a PostToolUse that never arrives expires with the stall window', async () => {
+  const { registry } = await setupHookRegistry();
+  registry.applyHook(preToolUse('Bash', 'Bash npm run build', 1000));
+
+  registry.tick(1000 + 600000); // exactly the window: still current
+  assert.notEqual(find(registry, 'a').currentTool, null);
+
+  registry.tick(1000 + 600001);
+  assert.equal(
+    find(registry, 'a').currentTool,
+    null,
+    'a tool nobody reported finishing must not hang over a head forever',
+  );
+});
+
+test('WP-52: PreToolUse is not output — it never resets the stall clock', async () => {
+  const { registry } = await setupHookRegistry();
+  registry.applyHook({
+    runtime: 'claude-code',
+    sessionId: 'a',
+    hookEvent: 'UserPromptSubmit',
+    at: 0,
+  });
+  registry.applyHook(preToolUse('Bash', 'Bash sleep 999', 1000));
+  assert.equal(
+    find(registry, 'a').lastOutputAt,
+    0,
+    'lastOutputAt is the stall clock, not activity',
+  );
+  registry.tick(600001);
+  assert.equal(find(registry, 'a').activityState, 'stalled');
+});
+
+test('WP-52: a tool event never takes a raised hand off the floor', async () => {
+  const { registry } = await setupHookRegistry();
+  registry.applyHook({
+    runtime: 'claude-code',
+    sessionId: 'a',
+    hookEvent: 'Notification',
+    at: 100,
+  });
+  registry.applyHook(preToolUse('Read', 'Read src/foo.ts', 200));
+  assert.equal(find(registry, 'a').activityState, 'needs_input');
+  registry.applyHook({
+    runtime: 'claude-code',
+    sessionId: 'a',
+    hookEvent: 'PostToolUse',
+    at: 300,
+  });
+  assert.equal(find(registry, 'a').activityState, 'needs_input');
+});
+
+test('WP-52: a PreToolUse carrying no tool leaves nothing to draw', async () => {
+  const { registry } = await setupHookRegistry();
+  registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'PreToolUse', at: 10 });
+  assert.equal(find(registry, 'a').currentTool, null);
+});
+
+// ---------------------------------------------------------------------------
 // D. act() — docs/02-ARCHITECTURE.md §5.1
 // ---------------------------------------------------------------------------
 
@@ -716,6 +822,80 @@ test('INVARIANT (poll-only companion): a pure poll-observed liveness loss keeps 
   assert.equal(after.live, false);
   assert.equal(after.activityState, 'for_review');
   assert.equal(after.reviewSince, reviewSince);
+});
+
+test('INVARIANT: a PreToolUse/PostToolUse event changes no user-owned field', async () => {
+  // WP-52 adds two hook events that fire many times a minute on a busy
+  // session. They exist to say what an agent is DOING; nothing about them may
+  // reach what the USER owns — `ackState`, `reviewSince`, `needsInputSince` —
+  // nor the needs-you count those three produce. This is the guard on that.
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'user' }), makeSummary('b', { lastRole: 'user' })],
+    live: [makeLive('a'), makeLive('b')],
+  });
+  const store = fakeStore();
+  const registry = new Registry({ store, adapters: [adapter] });
+  registry.setHookStatus({ 'claude-code': { supported: true, installed: true } });
+  await registry.refresh();
+
+  // One waiting in the office, one with its hand up: between them they cover
+  // every state the needs-you count is made of that a hook can produce.
+  registry.applyHook({ runtime: 'claude-code', sessionId: 'a', hookEvent: 'Stop', at: 1000 });
+  registry.applyHook({
+    runtime: 'claude-code',
+    sessionId: 'b',
+    hookEvent: 'Notification',
+    at: 900,
+  });
+  await registry.act(agentId('claude-code', 'b'), 'bench');
+
+  /** Everything the user owns, plus the count derived from it. */
+  const userOwned = () => {
+    const snapshot = registry.snapshot();
+    return {
+      needsYou: snapshot.counts.needsYou,
+      handsUp: snapshot.counts.handsUp,
+      stalled: snapshot.counts.stalled,
+      forReview: snapshot.counts.forReview,
+      benched: snapshot.counts.benched,
+      letGo: snapshot.counts.letGo,
+      agents: snapshot.agents.map((x) => ({
+        id: x.id,
+        ackState: x.ackState,
+        reviewSince: x.reviewSince,
+        needsInputSince: x.needsInputSince,
+        activityState: x.activityState,
+      })),
+      ack: store.allAck(),
+    };
+  };
+
+  const before = userOwned();
+  for (const sessionId of ['a', 'b']) {
+    for (const tool of [
+      { name: 'Bash', summary: 'Bash npm test' },
+      { name: 'Edit', summary: 'Edit src/foo.ts' },
+      { name: 'WebFetch', summary: 'WebFetch' },
+    ]) {
+      registry.applyHook({
+        runtime: 'claude-code',
+        sessionId,
+        hookEvent: 'PreToolUse',
+        tool,
+        at: 2000,
+      });
+      registry.applyHook({
+        runtime: 'claude-code',
+        sessionId,
+        hookEvent: 'PostToolUse',
+        at: 2100,
+      });
+    }
+  }
+
+  assert.deepEqual(userOwned(), before, 'a tool event moved something the user owns');
+  // And the one thing it IS allowed to move came back to rest.
+  for (const a of registry.snapshot().agents) assert.equal(a.currentTool, null);
 });
 
 test('INVARIANT: UserPromptSubmit is the one documented exception and DOES clear reviewSince/needsInputSince', async () => {

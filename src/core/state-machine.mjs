@@ -81,6 +81,8 @@ import { discoverActions } from './actions.mjs';
  * @property {string} hookEvent
  * @property {string} [cwd]
  * @property {any} [payload]
+ * @property {{name:string, summary:string}|null} [tool] parsed by the runtime's
+ *   own adapter from a `PreToolUse` payload (WP-52); absent for every other event
  * @property {number} [at] ms epoch; defaults to Date.now() — override in tests
  */
 
@@ -126,6 +128,14 @@ function freshObserved(runtime) {
     lastActivityAt: 0,
     lastRole: /** @type {'user'|'assistant'|null} */ (null),
     lastText: '',
+    /**
+     * WP-52. What this session is doing right now, or null. Observed and
+     * transient: it is set by `PreToolUse`, cleared by `PostToolUse`, `Stop`,
+     * `SessionEnd` and by the stall window passing, and it never reaches a
+     * user-owned field.
+     * @type {import('./model.mjs').CurrentTool|null}
+     */
+    currentTool: null,
     title: '',
     hasCustomTitle: false,
     cwd: '',
@@ -531,7 +541,34 @@ export class Registry {
       case 'Stop':
         obs.hookLive = true;
         obs.activityState = 'for_review';
+        obs.currentTool = null;
         this._markForReview(id, now);
+        break;
+
+      // WP-52. The two tool events say what a session is doing and nothing
+      // else. They deliberately do NOT touch `activityState`, `lastOutputAt`
+      // or `lastActivityAt`:
+      //   - `activityState`, because moving a needs_input session to working
+      //     because it ran a tool would take a raised hand off the floor
+      //     without the user ever answering it, and would change the
+      //     needs-you count from an observation.
+      //   - `lastOutputAt`, because that is the stall clock (§4.3), and a
+      //     tool starting is not a turn boundary. Letting tool traffic reset
+      //     it would silently redefine "stalled" — and stalled is one of the
+      //     three states the needs-you count is made of.
+      // `hookLive` is set for the same reason every other hook event sets it:
+      // a tool call is proof the process is running. It cannot move a
+      // for_review session (see `endedOr` and `_computeAgents`).
+      case 'PreToolUse':
+        obs.hookLive = true;
+        obs.currentTool = event.tool
+          ? { name: event.tool.name, summary: event.tool.summary, since: now }
+          : null;
+        break;
+
+      case 'PostToolUse':
+        obs.hookLive = true;
+        obs.currentTool = null;
         break;
 
       case 'SubagentStop':
@@ -544,6 +581,7 @@ export class Registry {
       case 'SessionEnd':
         obs.hookLive = false;
         obs.activityState = endedOr(obs.activityState);
+        obs.currentTool = null;
         break;
 
       default:
@@ -567,6 +605,17 @@ export class Registry {
     const windowMs = this.store.settings.stallWindowMs;
     let changed = false;
     for (const [, obs] of this._observed) {
+      // WP-52. A `PostToolUse` that never arrives — the runtime was killed
+      // mid-tool, the hook was blocked, the machine slept — would otherwise
+      // leave "Bash npm test" hanging over a head forever. Past the stall
+      // window the bubble is no longer evidence of anything, so it goes.
+      // This runs before the hook/liveness guards below on purpose: a stale
+      // claim about what a session is doing must expire on the degraded path
+      // too, not only where the accurate path is still delivering.
+      if (obs.currentTool && now - obs.currentTool.since > windowMs) {
+        obs.currentTool = null;
+        changed = true;
+      }
       if (!this._hooksInstalled(obs.runtime)) continue;
       if (!obs.live) continue;
       if (obs.lastOutputAt == null) continue;
@@ -824,6 +873,9 @@ export class Registry {
         costEstimate: obs.costEstimate,
         lastRole: obs.lastRole,
         lastText: obs.lastText,
+        // WP-52. A copy, not the live record: a snapshot handed to a
+        // subscriber must not be a handle on registry state.
+        currentTool: obs.currentTool ? { ...obs.currentTool } : null,
       };
       agents.push(agent);
     }
