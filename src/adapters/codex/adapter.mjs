@@ -12,6 +12,16 @@
  * All Codex-specific file-format knowledge lives in ./parse.mjs. This file
  * only does I/O (directory walking, bounded reads, child-process spawning)
  * and shapes the results into the contracts from src/core/model.mjs.
+ *
+ * EVERY PROCESS THIS FILE STARTS TAKES AN ARGV ARRAY. There is no shell
+ * anywhere in it: no `bash -lc`, no `sh -c`, no AppleScript with a session id
+ * in its text, no `shell: true`. A session id and a working directory arrive
+ * from a request body (`docs/DEVIATIONS.md` §28), and `08-PLAN-V2-100X.md`
+ * §1.1 rule 8 keeps runtime CLI knowledge in here — so the argv discipline has
+ * to be kept in here too. Opening a terminal is delegated whole to
+ * `src/core/terminals.mjs`, which owns the per-emulator argv and is the only
+ * place a shell line can exist at all (a quoted `#!/bin/sh` wrapper file, for
+ * the three macOS applications that accept nothing else). §94.
  */
 
 import { spawn } from 'node:child_process';
@@ -20,6 +30,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { agentId, clampText, estimateCost, splitAgentId } from '../../core/model.mjs';
+import { launchTerminal } from '../../core/terminals.mjs';
 import { hooks } from './hooks.mjs';
 import {
   HEAD_BYTES,
@@ -475,6 +486,34 @@ async function detectResumeSupport() {
 }
 
 /**
+ * The argv for one non-interactive turn. Pure — same inputs, same array, no
+ * I/O — so the test suite can assert the exact array rather than reason about
+ * it, exactly as `buildLaunch` is asserted in `terminals.test.mjs`.
+ *
+ * The session id and the turn text are user data. Each is ONE element of the
+ * returned array and is never concatenated into a longer one, so the only
+ * thing that ever parses them is `codex`'s own argument parser.
+ * @param {{sessionId?:string, text:string, canResume?:boolean}} opts
+ * @returns {string[]}
+ */
+export function codexExecArgs({ sessionId, text, canResume }) {
+  return canResume
+    ? ['exec', 'resume', String(sessionId), '--json', String(text)]
+    : ['exec', '--json', String(text)];
+}
+
+/**
+ * The argv for resuming one session in an interactive terminal. Pure, for the
+ * same reason as `codexExecArgs`. Handed to `launchTerminal()` as `command`,
+ * which distributes it into whichever emulator's own argv the machine has.
+ * @param {string} sessionId
+ * @returns {string[]}
+ */
+export function codexResumeCommand(sessionId) {
+  return ['codex', 'resume', String(sessionId)];
+}
+
+/**
  * Send a turn into a Codex session via its non-interactive exec surface.
  * @param {string} id
  * @param {string} text
@@ -492,7 +531,7 @@ async function send(id, text, { cwd, timeoutMs } = {}) {
     canResume = false;
   }
 
-  const args = canResume ? ['exec', 'resume', sessionId, '--json', text] : ['exec', '--json', text];
+  const args = codexExecArgs({ sessionId, text, canResume });
 
   try {
     return await runCodex(args, { cwd, timeoutMs });
@@ -502,56 +541,46 @@ async function send(id, text, { cwd, timeoutMs } = {}) {
 }
 
 /**
- * Spawn an interactive terminal attached to `codex resume <id>`. Best
- * effort: any failure is swallowed rather than thrown, since there is no
- * result channel for this method and a silently-missing terminal is
- * preferable to crashing the caller.
+ * Spawn an interactive terminal attached to `codex resume <id>`.
+ *
+ * SECURITY: this used to build the command as a shell string on both POSIX
+ * platforms — an AppleScript `do script "cd \"<cwd>\" && codex resume <id>"`
+ * on macOS, and `bash -lc "codex resume <id>"` on Linux — with the session id
+ * and the working directory interpolated straight in. The id arrives in a
+ * request body, so `x'; rm -rf ~ #` reached a shell that would run it. That is
+ * `docs/DEVIATIONS.md` §28's failure with the target moved from the network to
+ * the id, and §91 named it as the one shell-string spawn left in the tree.
+ *
+ * It is now the same three lines as the Claude Code adapter: name the command
+ * as an argv array and hand it to `launchTerminal()`, which owns detection,
+ * the per-emulator argv, and the one quoted wrapper file the three macOS
+ * applications with no argv surface require. Nothing here builds a string.
+ * §94, and `test/unit/codex-terminal.test.mjs`.
+ *
+ * Best effort, unchanged: any failure is swallowed rather than thrown, since
+ * there is no result channel for this method and a silently-missing terminal
+ * is preferable to crashing the caller. Note that this also means the caller
+ * cannot tell "Codex is not installed" from "no terminal would open" — see
+ * `openNewSession` below, which does throw.
  * @param {string} id
  * @param {string} cwd
+ * @param {{terminal?: string}} [opts] `terminal` is the user's pinned
+ *   emulator from settings (`auto` when they have not pinned one). The HTTP
+ *   route passes it; a caller that does not gets detection.
  * @returns {Promise<void>}
  */
-async function openInTerminal(id, cwd) {
+async function openInTerminal(id, cwd, opts = {}) {
   if (!(await available())) return;
   const { sessionId } = splitAgentId(id);
 
   try {
-    if (process.platform === 'win32') {
-      spawn('cmd.exe', ['/c', 'start', '""', 'cmd.exe', '/k', 'codex', 'resume', sessionId], {
-        cwd: cwd || undefined,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: false,
-      }).unref();
-    } else if (process.platform === 'darwin') {
-      const escapedCwd = String(cwd || '').replace(/(["\\])/g, '\\$1');
-      const escapedId = String(sessionId).replace(/(["\\])/g, '\\$1');
-      const script =
-        `tell application "Terminal" to do script ` +
-        `"cd \\"${escapedCwd}\\" && codex resume ${escapedId}"`;
-      spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' }).unref();
-    } else {
-      const shellCmd = `codex resume ${sessionId}`;
-      const candidates = [
-        ['x-terminal-emulator', ['-e', 'bash', '-lc', shellCmd]],
-        ['gnome-terminal', ['--', 'bash', '-lc', shellCmd]],
-        ['konsole', ['-e', 'bash', '-lc', shellCmd]],
-        ['xterm', ['-e', 'bash', '-lc', shellCmd]],
-      ];
-      for (const [cmd, args] of candidates) {
-        try {
-          const child = spawn(cmd, args, {
-            cwd: cwd || undefined,
-            detached: true,
-            stdio: 'ignore',
-          });
-          child.on('error', () => {});
-          child.unref();
-          break;
-        } catch {
-          // try the next terminal emulator
-        }
-      }
-    }
+    await launchTerminal({
+      command: codexResumeCommand(sessionId),
+      cwd,
+      sessionId,
+      prefix: 'codex-resume',
+      pin: opts.terminal,
+    });
   } catch {
     // Best-effort only — see JSDoc above.
   }
@@ -565,12 +594,23 @@ async function openInTerminal(id, cwd) {
 /**
  * Open a terminal running a new Codex session in `cwd`. Unavailable on a
  * machine without Codex, like every other method here.
+ *
+ * The delegation to `openInTerminal('codex:new', …)` is deliberately left as
+ * it was, which means the command is literally `codex resume new`. That is
+ * almost certainly not how Codex starts a fresh session, and `opts
+ * .instructions` is still dropped where the Claude Code adapter now carries
+ * it — but both are behaviour, not the shell-string defect this change is
+ * for, and neither can be checked without Codex on the machine (§8). WP-23
+ * owns them; `docs/DEVIATIONS.md` §94 records them so they are not forgotten.
+ *
+ * The user's pinned emulator IS forwarded, because the whole point of routing
+ * through `launchTerminal()` is that both adapters obey the same setting.
  * @param {string} cwd
+ * @param {{instructions?: string, terminal?: string}} [opts]
  */
 async function openNewSession(cwd, opts = {}) {
   if (!(await available())) throw new Error('Codex is not installed');
-  void opts;
-  return openInTerminal('codex:new', cwd);
+  return openInTerminal('codex:new', cwd, { terminal: opts.terminal });
 }
 
 export const adapter = {

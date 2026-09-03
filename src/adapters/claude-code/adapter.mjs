@@ -23,7 +23,7 @@ import {
 } from './parse.mjs';
 import * as hooksImpl from './hooks.mjs';
 import { readDesktopSessions } from './desktop.mjs';
-import { launchTerminal, trySpawnDetached } from './terminals.mjs';
+import { launchTerminal, trySpawnDetached } from '../../core/terminals.mjs';
 
 const RUNTIME_ID = 'claude-code';
 
@@ -621,7 +621,8 @@ function send(id, text, { cwd, timeoutMs = 120_000 } = {}) {
 /**
  * Spawn an interactive terminal attached to this session.
  *
- * Which terminal, and the exact argv each one needs, is `./terminals.mjs`'s
+ * Which terminal, and the exact argv each one needs, is
+ * `../../core/terminals.mjs`'s
  * job — this function's is only to name the command. The rule it enforces is
  * the one from `docs/DEVIATIONS.md` §28: the session id travels as one argv
  * element of `command` and nothing here builds a shell string out of it.
