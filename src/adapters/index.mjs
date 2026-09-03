@@ -25,7 +25,7 @@ const REGISTRY = [claudeCodeAdapter, codexAdapter];
  * **It belongs on the adapter object itself**, beside `hooks.toolSummary` and
  * the rest, and it is here instead because `claude-code/adapter.mjs` was held
  * by another package (WP-09) while this one was written. Moving it is one line
- * in each file and no behaviour; `docs/DEVIATIONS.md` §118 records the debt so
+ * in each file and no behaviour; `docs/DEVIATIONS.md` §119 records the debt so
  * it is a decision somebody made rather than a shape somebody found.
  *
  * A runtime with no entry simply contributes nothing, which is what Codex does

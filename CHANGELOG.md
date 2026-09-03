@@ -18,7 +18,7 @@
   hour is `settings.lightsOutHour` in the settings sheet's Floor section, and `⌘K` → "Today's
   card" shows it again without spending the day's. Nothing in it addresses you, and that is a test
   rather than a convention: the copy generator is driven over synthetic ledgers and every string
-  literal in the file is scanned for a second person. `docs/DEVIATIONS.md` §117.
+  literal in the file is scanned for a second person. `docs/DEVIATIONS.md` §118.
 - **Wrapped, weekly and annual.** Monday morning, and from 1 December the year so far. Turns per
   room, tokens, an estimated spend that names its dated rate card, the longest wait and whether it
   fell against the week before, the room that never slept, the session sent the most messages, the
@@ -27,7 +27,7 @@
   where it actually starts instead of claiming a week it did not live through. Generated on the
   machine, from the machine: no email, no server, no account, no request of any kind leaves the
   box. One key puts it on the clipboard as a PNG, and `Shift+S` swaps every project name for its
-  MK tag first. `⌘K` → "Wrapped". `docs/DEVIATIONS.md` §118.
+  MK tag first. `⌘K` → "Wrapped". `docs/DEVIATIONS.md` §119.
 - **`GET /api/wrapped?kind=week|annual`**, and a `window` field on `GET /api/stats` — what
   happened between two timestamps, room by room, from one walk over the ledger. Both cards read the
   same function, so a day and a week cannot disagree about what a turn is.
