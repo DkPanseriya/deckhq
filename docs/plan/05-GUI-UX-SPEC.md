@@ -331,6 +331,14 @@ Four fixes, in order of impact. Renderer owns all of them.
 > exist only for active projects, desks equal the agents at them, idle projects are a directory
 > strip, and the lounge is sized to the agents actually drawn. The text below is kept as the
 > reasoning that led there; §6.2 and §6.4 still apply.
+>
+> **And by WP-55 after it (`08` §9, `docs/DEVIATIONS.md` §106):** a room's footprint comes from its
+> occupants and their furniture, and the building's extent is the sum of its rooms rather than the
+> shape of the window. `05-LAYOUT-REWORK.md` §3's first two acceptance items go with it — the floor
+> deliberately no longer fills the stage. §6.2's minimum sizes all landed and are now enforced per
+> element; they gained a **ceiling** as well, 44 px of body, because a quiet machine's small floor
+> was being blown up like a poster on a large display. §6.4's focus camera is the one part of this
+> section still unbuilt.
 
 ### 6.1 Rooms are weighted by activity, not by headcount
 

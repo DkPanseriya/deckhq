@@ -1,6 +1,6 @@
 # 06 — Engineering work plan
 
-**Owner:** orchestrator · 52 work packages across 6 phases
+**Owner:** orchestrator · 58 work packages across 6 phases
 **Roles:** `PE` Product Engineer · `UX` UI/UX · `AR` Architect · `AB` Agent Backend · `PM` Product
 Manager (formerly `GR` Growth; every `GR` below now reads `PM`)
 
@@ -13,12 +13,32 @@ A package is **done** when its acceptance criteria pass, its tests are green in 
 platforms, and someone other than its author has reviewed it.
 
 > **Updated 3 September for plan v2.** Phases and priorities are now those in `08` §10; the
-> per-phase headings below are v1's and are kept for the package text. Status of v1 packages on
-> 3 Sep evening: **landed** WP-01 (published by hand, 12:25 UTC), WP-02 (repo files only), WP-05,
-> WP-06 (without the condensed font), WP-11, WP-35 (§78–79), and `publish.yml` from WP-43;
-> **not landed** everything else. `main` is red on Windows from a flaky test (WP-51). Reprioritised to P1: WP-16, WP-17, WP-19 (day 1),
-> WP-20, WP-21 (first), WP-31. New packages WP-36 to WP-53 are specified in `08` §9 and summarised
-> at the end of this document. WP-19's route changed: see its entry.
+> per-phase headings below are v1's and are kept for the package text. Reprioritised to P1: WP-16,
+> WP-17, WP-19 (day 1), WP-20, WP-21 (first), WP-31. New packages WP-36 to WP-53 are specified in
+> `08` §9 and summarised at the end of this document. WP-19's route changed: see its entry.
+>
+> **Status re-read against `main` on 4 September.** A package is marked landed here when its code
+> is on `main`; three of them are landed and **not accepted**, because their acceptance criteria
+> name a run this project has not been able to make.
+>
+> **Landed:** WP-01, WP-02 (repository half), WP-03, WP-04 (code only — no Mac or Linux desktop has
+> run it, §91), WP-05, WP-06 (without the condensed font), WP-07, WP-08, WP-10, WP-11, WP-13,
+> WP-14, WP-15, WP-16 (`--notify` run for real on Windows only), WP-17+48, WP-19 (build; **the live
+> run is still owed**, §97.5), WP-20, WP-21 (Windows goldens only), WP-26 (its plate line is
+> computed, not painted), WP-29 (built; **not deployed**), WP-31 (not published to the
+> Marketplace), WP-35, WP-36, WP-37, WP-38, WP-39 (§113), WP-42, WP-43 (the workflow and the
+> release job; **never run**), WP-44, WP-46, WP-47, WP-50, WP-51, WP-52, WP-53, WP-54, WP-55.
+>
+> **Not landed:** WP-09 (nothing of it exists — a send still blocks), WP-12's focus camera (its
+> character-scale floor landed inside WP-50/WP-55), WP-18, WP-22, WP-23, WP-24, WP-25, WP-27,
+> WP-28, WP-30, WP-32, WP-33, WP-34, WP-41, WP-45, WP-49, WP-56, WP-57 (its first item shipped with
+> WP-39), WP-58.
+>
+> **`main` went red on Ubuntu and macOS** after WP-51 fixed the flaky Windows test — an unguarded
+> Windows-only assertion in `test/unit/plugin-hook.test.mjs`, and a `goldens` job that threw on the
+> Ubuntu runner instead of reporting SKIPPED. Both are fixed in the tree (§114) and **no CI run has
+> completed for `HEAD` yet**, because each merge cancelled the last one's run. `08` §0's CI row has
+> the measurements.
 
 ---
 
@@ -419,28 +439,42 @@ Phase 5 (Teams, SSO, audit, shared floor) is scoped after the P4 gate in
 
 ## Packages added by plan v2 (3 September)
 
-Full text and acceptance criteria in [`08`](08-PLAN-V2-100X.md) §9. Summary:
+Full text and acceptance criteria in [`08`](08-PLAN-V2-100X.md) §9. Summary, with status read
+against `main` on 4 September:
 
-| WP | Title | Owner | Effort | Phase | After |
-|---|---|---|---|---|---|
-| WP-51 | Flaky `save() debounces` test turns Windows CI red | PE | 0.5d | P0 | — |
-| WP-53 | Five review follow-ups on PRs #1–#4: pid reuse inside the roster TTL, scanner truncation fallback tests, npm version floor in `publish.yml`, mtime precision, trailing-escape bound | AB | 0.5d | P0 | — |
-| WP-36 | Hooks port adoption | AB | 0.5d | P0 | — |
-| WP-43 | Release automation: tag → CI → npm (OIDC) → GitHub Release → Homebrew/winget/scoop. `publish.yml` landed 3 Sep; release job, manifests and one green tag remain | PE | 1d | P0 | WP-01 (done) |
-| WP-50 | The dynamic floor: rooms only for active projects, desks equal occupants, idle projects as a directory strip, lounge sized to the drawn count. Supersedes `05` §6.1/§6.3, absorbs WP-40 | AR | 5d | P1 | WP-21 |
-| WP-52 | Thought bubbles from `PreToolUse`/`PostToolUse`: current tool and action above the head | AB + AR | 2d | P1 | WP-36 |
-| WP-44 | `doctor --share` | AB | 0.5d | P0 | WP-05 |
-| WP-37 | Claude Code plugin, spike then ship | AB | 1d + 3d | P1 | WP-36 |
-| WP-38 | Status-line segment | AB | 1d | P1 | — |
-| WP-39 | Floating mini-floor (Document PiP) | AR + UX | 3d | P1 | WP-12 |
-| WP-40 | Gone home | AR + PE | 1.5d | P1 | WP-12 |
-| WP-42 | Terminal deck | PE | 2d | P1 | — |
-| WP-47 | In-panel diff, open in editor | PE | 2d | P1 | WP-08 |
-| WP-48 | Ledger designed for merging (machine id, signed export) | AR | +0.5d | P1 | with WP-17 |
-| WP-41 | Subagents as people | AB + AR | 3d | P2 | WP-12 |
-| WP-45 | Supporter pack | UX | 3d | P2 | WP-30 |
-| WP-46 | Team records | PE | 1d | P2 | WP-17 |
-| WP-49 | Teams BYOS | AR + PE | 15d | P4 | WP-48, WP-32 |
+| WP | Title | Owner | Effort | Phase | After | Status |
+|---|---|---|---|---|---|---|
+| WP-51 | Flaky `save() debounces` test turns Windows CI red | PE | 0.5d | P0 | — | landed, §80 |
+| WP-53 | Five review follow-ups on PRs #1–#4: pid reuse inside the roster TTL, scanner truncation fallback tests, npm version floor in `publish.yml`, mtime precision, trailing-escape bound | AB | 0.5d | P0 | — | landed, §82 |
+| WP-36 | Hooks port adoption | AB | 0.5d | P0 | — | landed, §83 |
+| WP-43 | Release automation: tag → CI → npm (OIDC) → GitHub Release → Homebrew/winget/scoop | PE | 1d | P0 | WP-01 (done) | workflow and release job landed (§81); **never run** — no trusted publisher, no tag |
+| WP-50 | The dynamic floor: rooms only for active projects, desks equal occupants, idle projects as a directory strip, lounge sized to the drawn count. Supersedes `05` §6.1/§6.3, absorbs WP-40 | AR | 5d | P1 | WP-21 | landed, §96 |
+| WP-52 | Thought bubbles from `PreToolUse`/`PostToolUse`: current tool and action above the head | AB + AR | 2d | P1 | WP-36 | landed, §89 |
+| WP-44 | `doctor --share` | AB | 0.5d | P0 | WP-05 | landed, §84 |
+| WP-37 | Claude Code plugin, spike then ship | AB | 1d + 3d | P1 | WP-36 | landed, §102; no marketplace listing |
+| WP-38 | Status-line segment | AB | 1d | P1 | — | landed, §92 |
+| WP-39 | Floating mini-floor (Document PiP) | AR + UX | 3d | P1 | WP-12 | landed, §113; it also shipped `Scene.anchorFor` and closed §108.1 |
+| WP-40 | Gone home | AR + PE | 1.5d | P1 | WP-12 | landed inside WP-50, §96 |
+| WP-42 | Terminal deck | PE | 2d | P1 | — | landed, §93 |
+| WP-47 | In-panel diff, open in editor | PE | 2d | P1 | WP-08 | landed, §90 |
+| WP-48 | Ledger designed for merging (machine id, signed export) | AR | +0.5d | P1 | with WP-17 | landed, §100 |
+| WP-41 | Subagents as people | AB + AR | 3d | P2 | WP-12 | open |
+| WP-45 | Supporter pack | UX | 3d | P2 | WP-30 | open |
+| WP-46 | Team records | PE | 1d | P2 | WP-17 | landed, §107; the hover card is WP-57 |
+| WP-49 | Teams BYOS | AR + PE | 15d | P4 | WP-48, WP-32 | open |
+
+## Packages opened during execution (3–4 September)
+
+Each was opened by a package that hit something the plan had not named. Full text in
+[`08`](08-PLAN-V2-100X.md) §9.
+
+| WP | Title | Owner | Effort | Phase | After | Status |
+|---|---|---|---|---|---|---|
+| WP-54 | The Windows console launch is quoted for `cmd.exe`, not for `CreateProcess` — `&` in a session id split one command into two | AB | 0.5d | P0 | — | landed, §98 |
+| WP-55 | The building is the size of what is in it; the header counts what the floor draws | AR | 2d | P1 | WP-50 | landed, §106 |
+| WP-56 | `doctor` names the two managed-settings kill switches that can turn DeckHQ's `http` hooks off over its head, neither of which it detects today | AB | 0.5d | P1 | WP-19 build | open, from §97.4 |
+| WP-57 | The integration cleanup: ~~`Scene.anchorFor()` for coach marks 2 and 3~~ (closed by WP-39, §113.8), the room plate's payroll line painted, the whiteboard's rate-card version, "no rate" on every cost surface, the hover card's record line, the deny copy's case | AR + PE + UX | 1.5d | P1 | — | open, from §107, §111, §97.3 |
+| WP-58 | Codex answers a permission prompt through a `command` hook — it has `PermissionRequest` but no `http` type | AB | 1.5d | P3 | with WP-23 | open, from §97.4 |
 
 ## Dependency graph
 
@@ -450,9 +484,12 @@ P0   WP-01 ─┬─ WP-43
             └─ WP-36
      WP-02 ─── WP-03
      WP-04
+     WP-54 (opened by WP-47's review; landed the same day)
 
-P1   WP-21 (first: goldens before any renderer package) ── WP-50 (dynamic floor; absorbs WP-40) ── WP-52
-     WP-19 spike (day 1, independent) ── WP-19 build (after WP-08)
+P1   WP-21 (first: goldens before any renderer package) ── WP-50 (dynamic floor; absorbs WP-40) ─┬─ WP-52
+                                                                                                └─ WP-55 ── WP-57
+     WP-19 spike (day 1, independent) ── WP-19 build (after WP-08) ─┬─ WP-56
+                                                                    └─ WP-58 (P3, with WP-23)
      WP-06 ─┬─ WP-07 ─┬─ WP-10 ─┬─ WP-15
             │         │         └─ WP-16
             │         └─ WP-13

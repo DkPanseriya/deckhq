@@ -25,28 +25,44 @@ supposed to make people screenshot it — is 70% empty carpet with 10-pixel peop
 
 The product is a 9/10 engine in a 2/10 car. The plan is to build the car.
 
-### Status on 3 September 2026
+### Status on 4 September 2026
 
-Re-measured for plan v2 (`08-PLAN-V2-100X.md` §0). The findings below are kept as written, as
-the evidence the plan was built on; this block says which have closed.
+Re-measured against `main`, finding by finding (`08-PLAN-V2-100X.md` §0 has the numbers). The
+findings below are kept as written, as the evidence the plan was built on; this block says where
+each one now stands. **Closed means the defect is gone from `main`, not that the package is
+accepted** — three of these were closed by code whose acceptance criterion names a run nobody has
+been able to make, and each says so.
 
 | Finding | Status |
 |---|---|
-| F1 package not published | **Closed 3 Sep 12:25 UTC.** `deckhq@1.2.0` on npm, published by hand; `npx deckhq@latest` verified from a clean directory. |
-| F2 no release, social card, GIF | Open. Repo files landed (WP-02); GitHub Release, social preview, GIF not done. |
-| F3 macOS terminal | Open. WP-04. |
+| F1 package not published | **Closed 3 Sep 12:25 UTC.** `deckhq@1.2.0` on npm, published by hand; `npx deckhq@latest` verified from a clean directory. Nothing since 1.2.0 has been published, so none of the work below is installable yet. |
+| F2 no release, social card, GIF | **Mostly closed.** 1.2.0 has a Release page with the floor, the review card and the hero GIF attached (WP-02); the hero GIF is generated rather than drawn, 5.9 s / 241 KB, encoded with no dependency (§88); the README leads with the pitch, `npx deckhq` and the GIF (WP-03). **The social preview is still the default grey box** — the owner's, §13.4. |
+| F3 macOS terminal | **Code closed, finding open.** WP-04 replaced one emulator with ten, each launched through its own documented interface, with twenty-one (platform, emulator, launch form) argv arrays asserted byte for byte. **Not one of them has been run on a real Mac or Linux desktop** (§91), which is exactly what F3 said was wrong. The row stays open until WP-04's own acceptance criterion is met. |
 | F4 package description | **Closed.** DEVIATIONS §66. |
-| F5–F12 (daily habit) | Open. P1 in `08` §10. |
-| F13 one runtime | Open. |
-| F14 hard-coded rates | Open. WP-26. |
+| F5 first run is a modal | **Closed.** WP-13 deleted the modal for three coach marks on real elements, reading in 10.2 s against a 15 s budget, `Escape` skipping permanently, and demo actors for an empty machine who leave within one poll of a real session arriving (§108). Marks 2 and 3 spent a day pointing at the whole canvas because the renderer exposed no geometry; WP-39 needed the same world-to-screen conversion for the mini-floor and shipped `Scene.anchorFor` with it, so they point at the office and at a real agent now (§108.1, §113.8). |
+| F6 characters are the smallest thing on screen | **Closed.** The character scale is decoupled from the world scale and floored per element (16 px body, 11 px label, 12 px icon, 13 px badge), the floor is generated from the people on it (§96) and the building is sized by its contents (§106). On the reference machine a body is **42.6 px** where it was 30.4, in a 16.7 × 22.9 room where it was 90.4 × 67.1. |
+| F7 the header is a toolbar | **Closed.** WP-07: brand, a 44 px needs-you numeral with its three-way breakdown, one quiet floor line, `⌘K`, one primary action. Everything else is in the palette, the settings sheet exists for the first time, and the dead "Show let go" toggle and its setting are deleted along with `zoom` (§94). WP-55 then made the floor counts describe the picture rather than the deck. |
+| F8 the review loop is text in, text out, and blocks | **Half closed, and the open half is the one the user feels.** WP-08's review card, own markdown renderer, "what changed in `<project>`" and three weighted actions on `1`/`2`/`3` all landed (§85), plus WP-47's per-file unified diff and open-in-editor (§90). **WP-09 did not land**: there is no `stream-json` anywhere in `src/`, so a send still blocks the composer for the whole turn and a reply typed in a terminal still does not appear live. |
+| F9 a raised hand cannot be answered from DeckHQ | **Built, not closed.** The `PermissionRequest` route, the ten-minute hold, the card and its three buttons all exist with 38 tests and five named `INVARIANT:` tests (§86, §97). **No real prompt has ever reached the code** — the reference machine's `claude` login is expired. Until one `claude login`, one real prompt and one Allow, F9 stands and the feature stays out of every public surface. |
+| F10 the product forgets every day | **Closed as a substrate.** The append-only ledger, `GET /api/stats`, `deckhq stats`, a day reconstructing the queue at any past timestamp, signed export, `machineId` and `projectKey` on every record (§100), and five team records computed from it (§107). `docs/01-PRODUCT.md` §6's success criterion is computable for the first time. The surfaces built on it — the daily postcard (WP-18) and Wrapped (WP-27) — are still open. |
+| F11 notifications need the tab open | **Closed.** `deckhq --notify` gives the daemon its own toasts on all three platforms with no dependency, the interruption budget is asserted as a table, and an installed DeckHQ badges the dock through the Badging API (§101). Run for real on Windows only; whether a browser offers **Install** has not been seen. |
+| F12 no sound | **Closed.** Three sounds synthesised in the browser, no asset files, envelopes measured through a real `OfflineAudioContext` rather than described, rate-limited and silent behind a fired OS notification, one keystroke to mute for good (§110). They default to off, against `05` §8 — the owner's call, §13.9. |
+| F13 one runtime | **Open.** WP-23. The Codex adapter picked up argv arrays throughout, ten emulators and the `terminal` setting in passing (§95, §99), and is still unverified against a real Codex install (§8). WP-58 is queued behind the same install. |
+| F14 hard-coded rates | **Closed.** `src/data/rates.json`, versioned `2026-09-04` and carrying the page it was read from, longest-prefix matching, `~/.deckhq/rates.json` merging over it with no restart, and — the part that mattered — **a model the table has never heard of now has no price instead of Opus's** (§111). The Codex rows are flagged `unverified` in the file; the room plate's daily spend is computed and not yet painted (WP-57 item 2). |
 | F15 cold scan | **Closed.** Persistent cache §68; desktop store cached and bounded §78–79; live roster cached §77. Warm scan 8 ms. |
-| F16, F17, F18 | Open. F6 and F17 are now one fix: the dynamic floor, `08` B6 (WP-50). |
-| New: flaky `save() debounces` test | Fails intermittently on Windows CI; `main` red. `08` WP-51. |
+| F16 identity is cold | **Closed.** Appearance is a deterministic hash of the session id, a name is assigned on first sight rather than on request and never reassigned, and rarity tiers measured over 10,000 ids sit on top (73.6/20.3/5.3/0.9%). The torso keeps the state colour at full strength and every appearance colour is ≥ 70 in sRGB from every state colour, computed rather than eyeballed (§105). |
+| F17 the lounge inverts the message | **Closed with F6.** The lounge is sized to the agents actually drawn, benched agents quiet for longer than `settings.goneHomeDays` (7) are not drawn at all, and the door plate reads `12 benched · 35 went home`. A display filter only: `ackState` is untouched and any activity brings them back on the next scan (§96). |
+| F18 no mobile, no second machine | **Open.** P4. The ledger is already designed for the merge (WP-48). The half of F18 that did not need a network — seeing the count without the tab in front of you — is answered by the status line, the PWA badge, the VS Code status bar and now WP-39's floating mini-floor (§113). |
 | F19 repo hygiene | Mostly closed (WP-02). Stray files deliberately left, DEVIATIONS §67. |
-| F20, F21, F22 | Open. |
-| New: hooks port drift | Hooks on 4400, default daemon on 4317, header degrades silently. `08` WP-36. |
+| F20 no browser-level tests | **Closed as a harness, half-biting as a gate.** `npm run goldens` captures four fixture populations at 1600×1000 and compares them pixel for pixel with a zero-dependency PNG codec, calibrated against a measured 36-pixel noise floor against a 1,181-pixel smallest real defect, and proved load-bearing by reverting the rig fix (§87). Goldens are committed for Windows only; the Ubuntu job went red rather than skipping, and now starts Chrome or skips it by name (§114). |
+| F21 files are large and untyped | **Open.** WP-22. |
+| F22 docs address the wrong reader | **Closed in the tree, not in the world.** WP-29 shipped a hand-written site — install, the model in 60 seconds, hooks and privacy, adapters, an FAQ leading with "why not just use `claude agents`", and the deviations log as an engineering blog — with no generator, no dependency, no script on any page and four egress tests over the built bytes (§112). **It is deployed nowhere:** `pages.yml` fails on every push because Pages has not been enabled. |
+| New (3 Sep): flaky `save() debounces` test | **Closed.** The store's debounce clock is injectable and the test cranks it by hand; the sibling coalescing test is on the same clock (§80). |
+| New (3 Sep): hooks port drift | **Closed.** With no `--port` the daemon listens where the installed hooks post if that port is free, and refuses to start beside a DeckHQ that already holds it (§83). On the plugin route the class of bug is gone entirely: the hooks carry no port and read `~/.deckhq/daemon.json` (§102). |
+| New (4 Sep): `main` went red on Ubuntu and macOS | **Fixed in the tree, unproven.** Two faults with one shape — something the developer's machine happened to be, relied on as though it had been stated: a `plugin-hook` test asserting a `cmd.exe` resolution only reachable on `win32`, and a `goldens` job whose Chrome never exposed a page target. The launcher's platform is injected now, so every platform's argv is asserted on every platform, and the goldens job starts Chrome or skips it by name (§114). |
+| New (4 Sep): no completed CI run for `HEAD` | **Open.** Every push since the WP-10 merge was cancelled by the next merge, and that last completed run was red on Ubuntu, macOS and the goldens job. Nothing merged after it has been through CI at all, including the fix. Until a run finishes, "green" is a hypothesis (rule 11). |
 
-Test count is now 413, lint clean.
+Test count is now **1312**, lint and format clean on this machine.
 
 ## 2. Scorecard
 

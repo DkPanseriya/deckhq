@@ -12,14 +12,14 @@ of it.
 
 | Doc | Answers | Owner |
 |---|---|---|
-| [08 · Plan v2, the 100× plan](08-PLAN-V2-100X.md) | Where the product is, the thesis, standing rules, the fatal risk, the bets, marketing, money, distribution, dopamine, GUI, WP-36 to WP-49, phases, metrics, handovers, owner decisions | orchestrator |
-| [01 · Audit](01-AUDIT.md) | What was wrong on 2 September, ranked, with file references; a status block says what has closed since | orchestrator |
+| [08 · Plan v2, the 100× plan](08-PLAN-V2-100X.md) | Where the product is, the thesis, standing rules, the fatal risk, the bets, marketing, money, distribution, dopamine, GUI, WP-36 to WP-58, phases, metrics, handovers, owner decisions. §0 carries a status column measured against `main` on 4 September | orchestrator |
+| [01 · Audit](01-AUDIT.md) | What was wrong on 2 September, ranked, with file references; a status block gives F1–F22 one row each, read against `main` on 4 September | orchestrator |
 | [02 · Market and launch](02-MARKET-AND-LAUNCH.md) | Who else exists, the gaps, positioning, launch assets, risks. Launch waves now live in `08` §4.3 | Product Manager |
 | [03 · Business model](03-BUSINESS-MODEL.md) | How this earns money without ever gating the local product; timing and the BYOS tier per `08` §5 | orchestrator + Architect |
 | [04 · Engagement and gamification](04-ENGAGEMENT-AND-GAMIFICATION.md) | The core loop, shareable artifacts, attachment, the interruption budget, the three mechanics we refuse to build | UI/UX |
 | [05 · GUI and UX spec](05-GUI-UX-SPEC.md) | Visual identity, the three-level hierarchy, the review card, floor fixes, sound, motion, accessibility, copy | UI/UX |
-| [06 · Engineering work plan](06-ENGINEERING-WORKPLAN.md) | 48 work packages with owners, dependencies, effort and acceptance criteria | orchestrator |
-| [07 · Agent handovers](07-AGENT-HANDOVERS.md) | A copy-paste brief per agent, with its packages and the rules that reject a PR | orchestrator |
+| [06 · Engineering work plan](06-ENGINEERING-WORKPLAN.md) | 58 work packages with owners, dependencies, effort, acceptance criteria and what has landed | orchestrator |
+| [07 · Agent handovers](07-AGENT-HANDOVERS.md) | A copy-paste brief per agent, with what remains of its packages and the rules that reject a PR | orchestrator |
 | [Release checklist](RELEASE-CHECKLIST.md) | The by-hand steps for cutting a release, until WP-43 automates them | Product Manager |
 
 ## The thesis in five lines
@@ -36,10 +36,27 @@ The floor earns the screenshot. The deck does the job. The number does the sprea
 
 ## What to do first
 
-`npm view deckhq` returns `1.2.0` as of 3 September. What is left of P0, in order: make `main`
-green (WP-51), the GitHub Release and repository settings (`RELEASE-CHECKLIST.md` steps 12–13),
-the trusted publisher on npmjs.com so the next tag publishes itself, then WP-36, WP-44, WP-03,
-WP-04. No performance or refactoring work until those are accepted (`08` §0.1).
+**Updated 4 September.** More than thirty packages landed on 3 September, and none of them are
+installable:
+`npm view deckhq` still returns `1.2.0`, because no tag has been cut since. What is left of P0, in
+order:
+
+1. **Get a completed CI run.** The two failures that made `main` red on Ubuntu and macOS are
+   fixed in the tree (`DEVIATIONS.md` §114), and **no run has finished for `HEAD`** — every push in
+   the merge train cancelled the last one's, so the last completed verdict is the red one from the
+   WP-10 merge. Green is a hypothesis until a run says otherwise.
+2. **The trusted publisher on npmjs.com**, one time, so a tag publishes itself (`08` §13.1).
+3. **One tag**, which is the only proof `publish.yml` and its release job have ever had.
+4. **The repository settings** — social preview, Sponsors, Discussions, private vulnerability
+   reporting (`RELEASE-CHECKLIST.md` step 13) — and **Pages → Source: GitHub Actions**, without
+   which the documentation site is built, tested and reachable by nobody.
+
+Performance work now needs a named budget in `docs/02-ARCHITECTURE.md` §8 and the measurement
+showing it is breached (`08` §0.1 as amended); refactoring for its own sake is still refused.
+
+Two things are built and must not be spoken about until they have been run: **WP-19**, answering a
+permission prompt from the panel, which has never met a live session, and **WP-04**'s ten
+terminals, which no Mac or Linux desktop has launched.
 
 ## Relationship to the blueprint
 

@@ -148,9 +148,22 @@ in which the user can lose the floor.
 
 Each item is pass/fail on the reference machine and on a 1920×1080 external display.
 
-1. At every viewport size from 1280×720 to 2560×1440, the floor **exactly fills** the stage: no
-   scrollbar in either axis, no letterbox band wider than 8 px.
-2. Floor aspect is within 0.02 of `clamp(viewport aspect, 1.60, 1.78)`.
+> **§3.1 and §3.2 are superseded by the content-sized building, `08` WP-55 (3 September 2026).**
+> The floor no longer fills the stage and no longer takes the window's aspect: a room's footprint
+> comes from its occupants and their furniture, and the building's extent is the sum of its rooms,
+> the service column and the corridors. There is ground around it on purpose — which is §2.2's own
+> metaphor, a lit plan on a dark studio ground, and is what the drop shadow under the envelope has
+> always been drawing. Filling the stage is what put 55% of the screen under pale carpet for one
+> two-seat table. The fit scale is clamped at both ends instead (16–44 px of character body), which
+> is the rule that now decides how much of the stage the building occupies. `docs/DEVIATIONS.md`
+> §106. Items 3–9 below still apply.
+
+1. ~~At every viewport size from 1280×720 to 2560×1440, the floor **exactly fills** the stage: no
+   scrollbar in either axis, no letterbox band wider than 8 px.~~ Superseded — see above. What
+   survives: no scrollbar in either axis, ever, at any viewport size.
+2. ~~Floor aspect is within 0.02 of `clamp(viewport aspect, 1.60, 1.78)`.~~ Superseded — the
+   envelope search now picks between honest layouts rather than stretching one, so a floor with a
+   single room comes out the shape its contents are.
 3. **No prop is more than 2.0 U from the nearest wall or the object it is attached to.** Assert
    this over the whole plan in a unit test — it is the objective form of "nothing floats".
 4. Chair-to-desk gap is 0.15 U ± 0.05 for every chair on the floor, in every room.

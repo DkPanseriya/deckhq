@@ -426,6 +426,38 @@
   the tab is hidden, which is the only time it is the thing you are looking at.
   `public/minifloor.js`, `docs/DEVIATIONS.md` §113, `docs/media/mini-floor.png`.
 
+- **The floor is photographed on every change, and a pixel that moves without permission fails the
+  build.** The three worst bugs in this project's history — the rig a quarter-turn out of true, a
+  sofa drawn through a wall, chair backrests ninety degrees off — were invisible to hundreds of
+  passing unit tests and obvious in one screenshot. `npm run goldens` captures the demo floor at
+  1600x1000 for four fixture populations (25 agents, nobody, one agent, and the 70-session
+  reference machine) and commits them; `npm run goldens:check` recaptures and compares pixel for
+  pixel. Zero dependencies: the PNG codec and the diff are 300 lines over `node:zlib`, because
+  8-bit non-interlaced PNG is a chunk walk, one `inflate` and five scanline filters. A failure
+  writes the actual capture and a diff image — the expected floor at quarter contrast with every
+  changed pixel painted red.
+- **The gate is calibrated against a measured noise floor, not a guess.** Two captures of the same
+  floor differ by exactly 36 pixels of 1,600,000 — one count on one channel, in the same 592x2
+  strip of the header, flipping direction between runs. The smallest real defect it has to catch
+  moves 1,181. So a pixel counts as changed at a channel delta over 8, and a capture fails past
+  160 changed pixels: 4.4x above the noise, 7.4x below the weakest signal. The check prints the
+  noise it is seeing on every run, so the day that number starts creeping is the day it is visible
+  rather than the day the tolerance gets quietly widened. Both numbers replace an earlier
+  eyeballed pair that measurement showed sat _under_ the defect they existed to catch;
+  `docs/DEVIATIONS.md` §87 has both tables and the arithmetic.
+- **Proved load-bearing the only way that counts:** the one line of the rig facing fix was
+  reverted, and the check failed three of four populations by 24,449, 12,602 and 1,181 pixels.
+  The fourth is the population with nobody on the floor, so it correctly still passed. The line
+  was then restored.
+- Captures are made repeatable rather than hoped to be: every fixture value is a pure function of
+  the population name, `prefers-reduced-motion` is emulated so the renderer draws one static pose
+  per state, Chrome is pinned to sRGB with greyscale anti-aliasing and no hinting — and two
+  screenshots half a second apart must be byte-identical before either is used, so a floor that is
+  still moving fails loudly instead of quietly becoming a golden that can never match again.
+- `scripts/demo-floor.mjs` takes `--population NAME`, each with its own fixture directory, so a
+  goldens run cannot tear down the floor you are looking at in `npm run demo`. Its seeded settings
+  mark the tour as done, which every capture script previously had to dismiss by hand.
+
 ### Changed
 
 - **The building is the size of what is in it.** The floor drew the right rooms and then measured
@@ -552,9 +584,6 @@
   screenshot can be aimed at a chosen place in the needs-you queue. It also understands three
   escapes — `^` holds Ctrl for the next key, `~` is Enter and `>` is Tab — so a shot can be aimed
   through the command palette or into the deck.
-  screenshot can be aimed at a chosen place in the needs-you queue. It also understands two
-  escapes — `^` holds Ctrl for the next key and `~` is Enter — so a shot can be aimed through the
-  command palette.
 - **The WHO column, the deck's JSON and `deckhq deck open <name>` all know an agent's given name.**
   The column used to fall through to the session title because almost nobody had ever named an
   agent; now everybody has a name and it says what it was always meant to say. A given name also
@@ -563,7 +592,7 @@
   ledger records it used to hold is `recordCount` now, and `computeStats()` publishes both names,
   so anything reading the count has somewhere to move to that is already there. `deckhq stats`
   reads the computation directly and is unaffected. One field, one local endpoint, recorded in
-  `docs/DEVIATIONS.md` §111 as the breaking change it is.
+  `docs/DEVIATIONS.md` §107 as the breaking change it is.
 - **A model the rate card has never heard of now has no price, instead of Opus's.** The old tier
   test matched `haiku`, then `sonnet`, then `gpt|codex|o3|o4`, and priced everything else at
   $15/$75 per million — a local model, a Codex id the tests never saw, an unrecognised Bedrock
@@ -857,39 +886,55 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
 - `packaging/deckhq.cmd` is checked out with CRLF endings (`.gitattributes`). The repository is
   otherwise LF-only, and the release job zips this file on a Linux runner for `cmd.exe` to run.
 
-### Added
+### Repository
 
-- **The floor is photographed on every change, and a pixel that moves without permission fails the
-  build.** The three worst bugs in this project's history — the rig a quarter-turn out of true, a
-  sofa drawn through a wall, chair backrests ninety degrees off — were invisible to hundreds of
-  passing unit tests and obvious in one screenshot. `npm run goldens` captures the demo floor at
-  1600x1000 for four fixture populations (25 agents, nobody, one agent, and the 70-session
-  reference machine) and commits them; `npm run goldens:check` recaptures and compares pixel for
-  pixel. Zero dependencies: the PNG codec and the diff are 300 lines over `node:zlib`, because
-  8-bit non-interlaced PNG is a chunk walk, one `inflate` and five scanline filters. A failure
-  writes the actual capture and a diff image — the expected floor at quarter contrast with every
-  changed pixel painted red.
-- **The gate is calibrated against a measured noise floor, not a guess.** Two captures of the same
-  floor differ by exactly 36 pixels of 1,600,000 — one count on one channel, in the same 592x2
-  strip of the header, flipping direction between runs. The smallest real defect it has to catch
-  moves 1,181. So a pixel counts as changed at a channel delta over 8, and a capture fails past
-  160 changed pixels: 4.4x above the noise, 7.4x below the weakest signal. The check prints the
-  noise it is seeing on every run, so the day that number starts creeping is the day it is visible
-  rather than the day the tolerance gets quietly widened. Both numbers replace an earlier
-  eyeballed pair that measurement showed sat _under_ the defect they existed to catch;
-  `docs/DEVIATIONS.md` §87 has both tables and the arithmetic.
-- **Proved load-bearing the only way that counts:** the one line of the rig facing fix was
-  reverted, and the check failed three of four populations by 24,449, 12,602 and 1,181 pixels.
-  The fourth is the population with nobody on the floor, so it correctly still passed. The line
-  was then restored.
-- Captures are made repeatable rather than hoped to be: every fixture value is a pure function of
-  the population name, `prefers-reduced-motion` is emulated so the renderer draws one static pose
-  per state, Chrome is pinned to sRGB with greyscale anti-aliasing and no hinting — and two
-  screenshots half a second apart must be byte-identical before either is used, so a floor that is
-  still moving fails loudly instead of quietly becoming a golden that can never match again.
-- `scripts/demo-floor.mjs` takes `--population NAME`, each with its own fixture directory, so a
-  goldens run cannot tear down the floor you are looking at in `npm run demo`. Its seeded settings
-  mark the tour as done, which every capture script previously had to dismiss by hand.
+- **The README leads with the product instead of 450 words about it.** The pitch, `npx deckhq`,
+  the hero GIF, then `npx deckhq doctor` with a real run and one sentence on why its fourth line
+  is the number nobody else counts. Everything below the fold is the copy that was already there.
+- **A hero GIF that is generated, not drawn** — `docs/media/hero.gif`, 5.9 s, 1200×750, 241 KB. An
+  agent's turn ends, it leaves its desk, walks the corridor into your office and joins the queue
+  waiting on you. `scripts/capture-hero.mjs` records the demo floor while the turn is ended through
+  the real `/api/hook` endpoint, so the state change comes from the real state machine and the
+  image carries no real project names; `scripts/gif-encoder.mjs` encodes it with no dependency,
+  because neither ffmpeg nor ImageMagick can be assumed on the machine that cuts a release. Both
+  are dev scripts — `scripts/` is not in the published package. `docs/DEVIATIONS.md` §88.
+- The README's panel shot is the **review card** (`docs/media/panel-review-card.png`), and the
+  section above it describes three weighted actions rather than the seven-button row that shipped
+  before it.
+- **1.2.0 has a GitHub release**, with the floor, the review card and the hero GIF attached and the
+  changelog section as its notes — the package had been on the registry with no release page at
+  all. The repository description is now the `package.json` description verbatim, so the two cannot
+  drift apart, and `local-first` and `privacy` join the topics.
+- **The release workflow stops attaching a screenshot of a panel that no longer exists.**
+  `publish.yml` and `packaging/README.md` named `docs/media/panel.png`, which is the panel from
+  before WP-08, so every future release page would have shown the superseded surface. Both now name
+  the review card and the hero GIF, matching what v1.2.0 actually carries.
+- **DeckHQ has a documentation site.** `site/` — the pitch and `npx deckhq` over the hero GIF, a
+  real `doctor` run, the floor, the review card and the deck; "the model in 60 seconds" for the six
+  states and the one rule; install for `npx`, a global install, the Claude Code plugin and the VS
+  Code extension, with Homebrew, winget and scoop marked _on the next release_ because no tag has
+  run that job yet; hooks and privacy for every path read and written and the consent in front of
+  both; adapters for what is verified, what is not, and how to contribute one; an FAQ whose first
+  entry answers "why not just use `claude agents`" with the measured persistence argument and this
+  machine's own four lines; and `docs/DEVIATIONS.md` rendered as an engineering log, an index plus
+  one page per entry. **No site generator and no dependency**: hand-written HTML bodies, a shared
+  shell, and a 250-line markdown converter that escapes before it adds a tag. `node site/build.mjs`
+  renders `site/dist/`; `--serve` puts it on a loopback port to look at.
+  `docs/media/site-index.png` is the home page. §112.
+- **The site keeps the product's promise, and a test says so.** No analytics, no CDN, no web font,
+  no script of any kind on any page. `JetBrains Mono` and `IBM Plex Sans` are named first in their
+  stacks and fall back to the system's own faces, because there is no `.woff2` in this repository
+  and fetching one would be exactly the thing being refused. The palette is `public/style.css`'s
+  own tokens, so a screenshot and the page around it are the same colours.
+- **`.github/workflows/pages.yml` publishes it on every push to `main`.** Checkout, `node
+site/build.mjs`, the site suite again against the bytes about to be published, then
+  `upload-pages-artifact` and `deploy-pages`. Read-only by default, with only the deploy job
+  raising itself to what Pages needs; one deployment at a time, and a newer push waits rather than
+  cancelling a running one. There is no `npm install` step because there is nothing to install.
+  **The owner must enable Pages once** — Settings → Pages → Build and deployment → Source: GitHub
+  Actions — because no workflow can turn it on for its own repository, and until that is done the
+  deploy step fails while nothing else in the repository notices. **Unproven until a push runs
+  it.**
 
 ### Known gaps
 
@@ -941,56 +986,6 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   process may raise toasts on this machine is a different consent from the one the browser asked
   for, and defaulting it on because the browser's is on would be deciding for the owner. Until
   that decision is made, `deckhq --notify` and a POST to `/api/settings` are the interface.
-
-### Repository
-
-- **The README leads with the product instead of 450 words about it.** The pitch, `npx deckhq`,
-  the hero GIF, then `npx deckhq doctor` with a real run and one sentence on why its fourth line
-  is the number nobody else counts. Everything below the fold is the copy that was already there.
-- **A hero GIF that is generated, not drawn** — `docs/media/hero.gif`, 5.9 s, 1200×750, 241 KB. An
-  agent's turn ends, it leaves its desk, walks the corridor into your office and joins the queue
-  waiting on you. `scripts/capture-hero.mjs` records the demo floor while the turn is ended through
-  the real `/api/hook` endpoint, so the state change comes from the real state machine and the
-  image carries no real project names; `scripts/gif-encoder.mjs` encodes it with no dependency,
-  because neither ffmpeg nor ImageMagick can be assumed on the machine that cuts a release. Both
-  are dev scripts — `scripts/` is not in the published package. `docs/DEVIATIONS.md` §88.
-- The README's panel shot is the **review card** (`docs/media/panel-review-card.png`), and the
-  section above it describes three weighted actions rather than the seven-button row that shipped
-  before it.
-- **1.2.0 has a GitHub release**, with the floor, the review card and the hero GIF attached and the
-  changelog section as its notes — the package had been on the registry with no release page at
-  all. The repository description is now the `package.json` description verbatim, so the two cannot
-  drift apart, and `local-first` and `privacy` join the topics.
-- **The release workflow stops attaching a screenshot of a panel that no longer exists.**
-  `publish.yml` and `packaging/README.md` named `docs/media/panel.png`, which is the panel from
-  before WP-08, so every future release page would have shown the superseded surface. Both now name
-  the review card and the hero GIF, matching what v1.2.0 actually carries.
-- **DeckHQ has a documentation site.** `site/` — the pitch and `npx deckhq` over the hero GIF, a
-  real `doctor` run, the floor, the review card and the deck; "the model in 60 seconds" for the six
-  states and the one rule; install for `npx`, a global install, the Claude Code plugin and the VS
-  Code extension, with Homebrew, winget and scoop marked _on the next release_ because no tag has
-  run that job yet; hooks and privacy for every path read and written and the consent in front of
-  both; adapters for what is verified, what is not, and how to contribute one; an FAQ whose first
-  entry answers "why not just use `claude agents`" with the measured persistence argument and this
-  machine's own four lines; and `docs/DEVIATIONS.md` rendered as an engineering log, an index plus
-  one page per entry. **No site generator and no dependency**: hand-written HTML bodies, a shared
-  shell, and a 250-line markdown converter that escapes before it adds a tag. `node site/build.mjs`
-  renders `site/dist/`; `--serve` puts it on a loopback port to look at.
-  `docs/media/site-index.png` is the home page. §112.
-- **The site keeps the product's promise, and a test says so.** No analytics, no CDN, no web font,
-  no script of any kind on any page. `JetBrains Mono` and `IBM Plex Sans` are named first in their
-  stacks and fall back to the system's own faces, because there is no `.woff2` in this repository
-  and fetching one would be exactly the thing being refused. The palette is `public/style.css`'s
-  own tokens, so a screenshot and the page around it are the same colours.
-- **`.github/workflows/pages.yml` publishes it on every push to `main`.** Checkout, `node
-site/build.mjs`, the site suite again against the bytes about to be published, then
-  `upload-pages-artifact` and `deploy-pages`. Read-only by default, with only the deploy job
-  raising itself to what Pages needs; one deployment at a time, and a newer push waits rather than
-  cancelling a running one. There is no `npm install` step because there is nothing to install.
-  **The owner must enable Pages once** — Settings → Pages → Build and deployment → Source: GitHub
-  Actions — because no workflow can turn it on for its own repository, and until that is done the
-  deploy step fails while nothing else in the repository notices. **Unproven until a push runs
-  it.**
 
 ## 1.2.0
 
