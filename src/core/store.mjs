@@ -9,6 +9,7 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { createLog } from './log.mjs';
+import { EDITOR_NAMES } from './editor.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -49,6 +50,7 @@ export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
  * @property {boolean} showLetGo
  * @property {ResumeTarget} resumeIn
  * @property {string} approveText   what the panel's `2 Approve` sends
+ * @property {string} editor        which editor "open in editor" launches
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -60,6 +62,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   showLetGo: false,
   resumeIn: 'terminal',
   approveText: 'Yes, go ahead.',
+  // Blank means "decide for me": `$EDITOR` when it names an allowlisted
+  // editor, else the first one found on PATH. A guess at install time would
+  // be wrong on any machine that later installs a different editor.
+  editor: '',
 });
 
 /** An approval is one line the user would have typed; anything longer is a reply. */
@@ -111,6 +117,20 @@ function sanitizeApproveText(v) {
   return s ? s.slice(0, MAX_APPROVE_TEXT) : DEFAULT_SETTINGS.approveText;
 }
 
+/**
+ * Which editor `open in editor` launches (WP-47). This is the one setting
+ * whose value becomes a program, so it is validated here as well as at the
+ * route and again in `core/editor.mjs`: only a name on the allowlist, or the
+ * empty string for "decide for me", is ever stored. A hand-edited
+ * `state.json` asking for `rm` reads back as `''`.
+ * @param {unknown} v
+ * @returns {string}
+ */
+function sanitizeEditor(v) {
+  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  return /** @type {readonly string[]} */ (EDITOR_NAMES).includes(s) ? s : DEFAULT_SETTINGS.editor;
+}
+
 function defaultData() {
   return {
     version: 1,
@@ -141,6 +161,7 @@ function normalize(parsed) {
   settings.stallWindowMs = clampStallWindow(settings.stallWindowMs);
   settings.resumeIn = sanitizeResumeIn(settings.resumeIn);
   settings.approveText = sanitizeApproveText(settings.approveText);
+  settings.editor = sanitizeEditor(settings.editor);
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -279,6 +300,9 @@ export class Store {
     }
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'approveText')) {
       next.approveText = sanitizeApproveText(patch.approveText);
+    }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'editor')) {
+      next.editor = sanitizeEditor(patch.editor);
     }
     this._data.settings = next;
     this.save();
