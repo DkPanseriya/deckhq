@@ -302,18 +302,20 @@ These are real, and listed here rather than discovered later.
 
 ## Keyboard
 
-| Key                 | Action                                            |
-| ------------------- | ------------------------------------------------- |
-| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings   |
-| `1` / `2` / `3`     | Reply, approve, bench — on the open review card   |
-| `J` / `K`           | Move through the needs-you queue, oldest first    |
-| `A`                 | Acknowledge the selected agent                    |
-| `B`                 | Bench the selected agent                          |
-| `Esc`               | Close the panel                                   |
-| `+` / `-`           | Magnify, 1x to 2.5x                               |
-| `0`                 | Back to fit — which is also the minimum           |
-| `Ctrl`/`⌘` + scroll | Zoom about the cursor                             |
-| Drag / scroll       | Pan, whenever the floor is bigger than the window |
+| Key                 | Action                                                                  |
+| ------------------- | ----------------------------------------------------------------------- |
+| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings                         |
+| `1` / `2` / `3`     | Reply, approve, bench — on the open review card                         |
+| `J` / `K`           | Move through the needs-you queue, oldest first                          |
+| `A`                 | Acknowledge the selected agent                                          |
+| `B`                 | Bench the selected agent                                                |
+| `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk |
+| `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot    |
+| `Esc`               | Close the panel                                                         |
+| `+` / `-`           | Magnify, 1x to 2.5x                                                     |
+| `0`                 | Back to fit — which is also the minimum                                 |
+| `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                   |
+| Drag / scroll       | Pan, whenever the floor is bigger than the window                       |
 
 Everything is reachable without a mouse. `prefers-reduced-motion` is honoured: characters snap
 instead of walking, clips hold a representative pose, and the floor stays fully legible.
@@ -329,12 +331,13 @@ npx deckhq statusline     # the queue, as one line
 npx deckhq --version
 ```
 
-| Environment variable | Effect                                                   |
-| -------------------- | -------------------------------------------------------- |
-| `DECKHQ_STATE_DIR`   | Where state, cache and backups live. Default `~/.deckhq` |
-| `DECKHQ_PORT`        | Default port, if `--port` is not given                   |
-| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`       |
-| `DECKHQ_DEBUG`       | Verbose logging                                          |
+| Environment variable | Effect                                                                   |
+| -------------------- | ------------------------------------------------------------------------ |
+| `DECKHQ_STATE_DIR`   | Where state, cache, snapshots and backups live. Default `~/.deckhq`      |
+| `DECKHQ_PORT`        | Default port, if `--port` is not given                                   |
+| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`                       |
+| `DECKHQ_HOSTNAME`    | What the office is called in a snapshot. Default: the machine's own name |
+| `DECKHQ_DEBUG`       | Verbose logging                                                          |
 
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —
 the whole point is that debts accumulate while you are not looking.

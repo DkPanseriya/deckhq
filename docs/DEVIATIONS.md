@@ -4277,3 +4277,161 @@ cast within one `/api/refresh`, and the terminal surfaces report zero.
 **Screenshot:** `docs/media/coach-marks.png` — the first mark on the needs-you numeral, over the
 actor floor, with the actors' line underneath. Regenerable:
 `node scripts/capture-floor.mjs --url <daemon> --onboarding`, a flag added for exactly this shot.
+
+## 97. WP-14 — the office snapshot: how redaction reaches the room plates, and the two numbers that had to be measured before they could be believed
+
+**Spec:** `04-ENGAGEMENT-AND-GAMIFICATION.md` §3.2 and WP-14's acceptance: `S` composites the
+floor plus a stat strip into a PNG, on the clipboard and saved to `~/.deckhq/snapshots/`,
+hostname as the office name, one-key redact swapping project names for MK tags. Accepted when the
+PNG is ≥ 2× device pixel ratio and under 2 MB, redaction leaves no project name anywhere in the
+image **including room plates**, and it works with the tab backgrounded.
+
+All three of those turned out to have a sharp edge on them.
+
+### 97.1 Redaction reaches the room plates through `setState`, not through a new render export
+
+The brief anticipated this: "the compositor re-draws plates itself or asks the renderer for a
+redacted frame — if the latter needs a render export that does not exist, draw the strip and
+composite the existing canvas, redact only the strip, and record the gap."
+
+Neither was necessary, because a third route exists using only what `Scene` already exports.
+The room plates are painted from the snapshot the renderer was last given, and `setState` is
+public and means exactly "draw this". So `takeSnapshot()`:
+
+```
+scene.stop()                      // a stopped Scene draws on setState, synchronously
+scene.setState(redactedSnapshot)  // plates repaint with MK tags
+… capture …
+scene.setState(latestSnapshot)    // the floor goes back to the truth
+scene.start()                     // if it was running
+```
+
+Redaction is therefore total across the image rather than confined to the strip, and no file
+under `public/render/**` was touched. Shipping the fallback the brief allowed would have meant a
+control labelled "redact" that leaves every project name legible on the floor above the strip,
+which is worse than having no control at all.
+
+`redactSnapshot()` covers three fields, not one:
+
+| Field | Why |
+|---|---|
+| `projects[].name`, `agents[].projectName` | what the plates draw — the spec's requirement |
+| `cwd` | the one field carrying a directory tree; not drawn today |
+| `projects[].id`, `agents[].projectId` | a slug **of the directory name**, so it spells the project out verbatim |
+
+Substituting the id is safe because it is a key, not a seed: the floor plan derives geometry from
+counts and the array's order, and the only string the renderer hashes is the *agent* id
+(`agents.js` `hashString(agent.id)`), which is untouched. Verified by inspection of `plan.js` and
+`agents.js`, and the redacted capture in `docs/media/` has the same room layout as the
+unredacted one taken seconds earlier.
+
+**Not redacted, and deliberately:** the hostname. §3.2 is explicit that the office is named after
+the machine "because people share things with their name on them", and redaction is defined there
+as a project-name control. `DECKHQ_HOSTNAME` overrides it for anyone who wants a different name —
+added because `scripts/demo-floor.mjs` exists so that nothing real reaches a committed
+screenshot, and a machine name is somebody's real something.
+
+**Also not redacted, and flagged rather than solved:** a thought bubble (WP-52) draws a tool
+summary such as `Edit src/refunds/reconcile.ts`. Those are paths relative to the session's own
+working directory, so they do not normally carry a project name, and a path from outside the cwd
+is already reduced to its file name by WP-52 itself. It is a narrower surface than the plates
+were, it is not what §3.2's control is about, and it is recorded here rather than silently
+assumed safe.
+
+### 97.2 "≥ 2× and under 2 MB" is reachable, but only by resampling the opposite way to the obvious one
+
+Measured on the demo floor, a 1600×1000 window, device pixel ratio 1:
+
+| How the floor is scaled to 2× | PNG |
+|---|---|
+| Smooth (bilinear, `imageSmoothingQuality: 'high'`) | **4.05 MB** |
+| Nearest-neighbour | **1.96 MB** |
+| For reference, the same floor captured at 1× | 900 KB |
+
+The floor's materials are deliberately high-entropy — herringbone, woven carpet, poured screed,
+ambient-occlusion bands — so smooth interpolation invents a new intermediate colour at nearly
+every output pixel and destroys PNG's row prediction. Nearest-neighbour emits four identical
+pixels per source pixel, which compresses close to the 1× original. It is also the *sharper*
+result: a pixel-doubled screenshot viewed at 1× on a dense display is crisp, where a blurred one
+is permanently blurred.
+
+So the compositor smooths only when it is genuinely downsampling (`scale > dpr` disables
+smoothing), and the acceptance criterion is met at the reference window rather than missed by
+2×. `alpha: false` on the output context is asked for as well; Chrome ignores it for PNG (3.7 KB
+of 2.27 MB, measured) and it costs nothing.
+
+**Where the two requirements still disagree**, on a floor large enough, the resolution floor
+wins: `nextScaleDown()` steps the scale down towards 2× and stops there, and the toast names the
+size rather than silently shipping a blurry office. A 2.3 MB snapshot at 2× is a snapshot; a
+1.9 MB one at 1.4× is a blurry picture of an office, which is the thing this feature exists to
+stop.
+
+### 97.3 A backgrounded tab reports no layout, and the first version of this shipped a 6400×672 sliver
+
+"Works with the tab backgrounded" was tested by backgrounding a tab and dispatching the key into
+it, which is how the defect was found. Measured in Chrome with `document.hidden === true`:
+
+```
+clientWidth  0        clientHeight 240 (stale)
+innerWidth   0        innerHeight  0
+getBoundingClientRect().width 0
+canvas.width 3200     canvas.height 480     devicePixelRatio 2
+```
+
+The compositor's first version read `floor.clientWidth || floor.width` — a CSS-pixel field with a
+**device-pixel** fallback, two different units in one slot. Hidden, that produced a 6400×672
+image of a sliver of floor. The fix is to stop reading layout at all: the CSS size is derived
+from the backing store and the device pixel ratio (`floor.width / dpr`), which is the one
+description that is always right because it is what the renderer actually drew into. The
+capture is otherwise already frame-independent — a stopped `Scene` draws inside `setState`, and
+`toDataURL` is synchronous, so nothing waits for a `requestAnimationFrame` a hidden tab will
+never fire.
+
+Both the hidden-tab geometry and the no-backing-store fallback are now unit tests, with the
+measured numbers in them.
+
+### 97.4 The route names the file, and takes nothing else from the request
+
+`POST /api/snapshot` is the only endpoint in the product whose entire purpose is to put a file on
+the user's disk, so what it accepts is the whole of its security surface:
+
+- **The daemon names the file**, from its own clock (`deckhq-20260904-142233.png`). There is no
+  filename field, no fragment of one, and no header that reaches a path. A route that takes a
+  name from a request body is a route that eventually writes outside its directory.
+- **The body must be a PNG**, checked by magic bytes before anything is written. The
+  `content-type` header is a claim, not evidence.
+- **Its own 8 MB ceiling**, because `server.mjs`'s `readJson` caps every other route at 1 MB —
+  right for JSON, wrong for the one route that carries an image. Over the ceiling the socket is
+  destroyed rather than the file truncated.
+- It touches no ack state, no settings and no identity.
+
+### 97.5 "Today's spend" is today's *sessions*, summed over their whole lives
+
+§3.2's strip line is `today ≈ $18.40 · 2.4M tokens`. There is no per-day token record until the
+ledger lands (WP-17), so what the strip can honestly compute is: the sessions whose last activity
+falls after local midnight, summed over their entire history. That over-counts a session that
+started yesterday and got one more turn today. It is labelled `estimate` in the line itself —
+standing rule 7, and the word is in the image rather than in a tooltip nobody screenshots — and
+it becomes exact for free when WP-17 lands.
+
+### What is tested
+
+`test/unit/snapshot.test.mjs` (18) — redaction over a floor of three deliberately
+unshowable project names, asserting none survives anywhere in the model the image is drawn from,
+that the MK tag takes the name's place so plates still say something, that cwd and id go too,
+and that the live snapshot is not mutated (it is handed straight back to the renderer); the
+strip's four lines against §3.2's mock; that the money line says "estimate" and never "bill";
+that only today counts towards today; the formatters; the resolution floor beating the size
+budget; the composite's geometry visible, backgrounded, and with no backing store; and that
+`drawStrip` needs nothing but a 2d context.
+
+`test/integration/snapshot-route.test.mjs` (8) — a real daemon: a PNG is written byte for byte
+under a daemon-chosen name inside the directory it was given; the directory is created on demand;
+`SECURITY:` five non-PNG bodies including a shell script announced as `image/png`, none of which
+reaches disk; `SECURITY:` a filename smuggled through two headers, ignored; an oversized body
+refused rather than truncated; a 2 MB body accepted; and the hostname, including
+`DECKHQ_HOSTNAME` and the six malformed values that fall back to the machine's own name.
+
+**Screenshot:** `docs/media/snapshot-sample.png` — an actual `S` output from the demo floor at a
+1200×760 window: the floor, then `DECKHQ-DEMO · 6 rooms · 25 people`, the four tallies with their
+state dots, the estimate line and the wordmark.

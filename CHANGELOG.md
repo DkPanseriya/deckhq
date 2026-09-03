@@ -169,6 +169,33 @@
   the identity file or the cache. `deckhq waiting`, `deckhq statusline` and `deckhq doctor` all
   report zero on that machine, because a fake count in a shell prompt is the one lie this product
   cannot afford. `docs/DEVIATIONS.md` §96.
+- **`S` puts your office on the clipboard.** One key composites the floor and a stat strip into a
+  PNG — `SAMCO-DESK · 6 rooms · 25 people`, the four tallies with their state dots, today's
+  estimate, the longest wait, and a small wordmark — copies it, and saves it to
+  `~/.deckhq/snapshots/`. No "share to X" button that opens a compose window; the PNG is on the
+  clipboard and the product gets out of the way. It works with the tab in the background, which
+  is the case that found a real bug: a hidden tab reports `clientWidth` of 0 and a stale
+  `clientHeight`, so the image is sized from the canvas's backing store and the device pixel
+  ratio and never from layout. Two-times resolution and under 2 MB turned out to disagree until
+  the floor was resampled the unobvious way: nearest-neighbour rather than smooth, which took the
+  same 1600×1000 floor from **4.05 MB to 1.96 MB** and is also sharper, because the floor's
+  materials are deliberately high-entropy and bilinear interpolation invents a new colour at
+  nearly every pixel. Where they still disagree on a very large floor, resolution wins and the
+  toast says the size. `docs/DEVIATIONS.md` §97.
+- **`Shift+S` redacts, and it means the whole image.** Every project name becomes its MK tag —
+  on the room plates as well as in the strip, because the plates are what a screenshot actually
+  shows. The floor is handed a redacted snapshot to draw and handed the truth back immediately
+  afterwards, so redaction needed no new renderer entry point and no second copy of the floor.
+  The working directory and the project id go too: the id is a slug of the directory name, so it
+  spells the project out. The hostname stays, deliberately — the office is named after the
+  machine because people share things with their name on them, and `DECKHQ_HOSTNAME` is there for
+  anyone who wants it called something else.
+- **`POST /api/snapshot` writes the PNG, and takes nothing from the request but the pixels.** The
+  daemon names the file from its own clock, checks the PNG magic bytes before writing anything,
+  and has its own 8 MB body ceiling — the shared 1 MB JSON cap is right for JSON and wrong for
+  the one route that carries an image. Five non-PNG bodies, including a shell script announced as
+  `image/png`, and a filename smuggled through two headers, are all covered by named `SECURITY:`
+  tests.
 
 ### Changed
 

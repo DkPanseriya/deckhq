@@ -26,6 +26,18 @@ export const STATE_FILE = path.join(DATA_DIR, 'state.json');
 export const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
 /**
+ * Office snapshots — the PNGs `S` writes (WP-14,
+ * `docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §3.2).
+ *
+ * Beside the state rather than in it: a snapshot is a picture the user asked
+ * for, so it is theirs and it outlives an upgrade, but it is not part of the
+ * model and deleting the whole directory costs nothing but the pictures. The
+ * filename is chosen by the daemon from its own clock; nothing a browser
+ * sends ever becomes part of a path here.
+ */
+export const SNAPSHOT_DIR = path.join(DATA_DIR, 'snapshots');
+
+/**
  * Derived scan caches, one file per runtime. Nothing user-owned lives here:
  * every byte is re-derivable from the transcripts on disk, so this directory
  * can be deleted at any time and the only cost is one slow scan. That is why
