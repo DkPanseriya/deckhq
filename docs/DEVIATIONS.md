@@ -4320,3 +4320,24 @@ Not covered by a test, and named here rather than left implied:
   reduced-motion path removes the node immediately and is the branch that matters.
 - **`ResizeObserver`.** Absent in older embedders; the strip then keeps whatever fit at first paint
   rather than throwing.
+
+### 96.11 The goldens now carry minute-precision clocks, and stay stable anyway
+
+`demo` and `reference` were regenerated: the strip appears on both, and it pushes the floor down by
+its own height, so every pixel below the header moved. That was expected and is the last thing this
+package did.
+
+What was not obvious is that the strip puts **minute-precision elapsed times into a golden** for
+the first time. The floor's own clocks are coarser at fit scale — the office plate reads
+`oldest 1d 2h` and the per-agent badges are suppressed — so until now a golden could go a whole
+hour without changing. A chip reading `40m`, `7m` or `just now` changes every minute.
+
+It is stable regardless, and the reason is worth writing down because it is not luck: every capture
+starts its **own** daemon, and `demo-floor.mjs` derives every fixture timestamp from `Date.now()` at
+that start. An elapsed time in a golden is therefore a function of how long boot plus settle takes
+(about seven seconds), not of the wall clock. The margin to the next minute boundary is the
+remaining ~50 seconds. Checked three times at different times of day after regenerating: 0 pixels
+moved on all four populations, every time.
+
+The thing that would break it is a fixture age that is not a whole number of minutes, which would
+put a boundary anywhere in the window. There is not one today.
