@@ -606,6 +606,15 @@ function handleKeydown(e) {
     case 'B':
       panel.performAction('bench');
       break;
+    // The review card's weighted actions (docs/plan/05-GUI-UX-SPEC.md §4.2):
+    // 1 focuses the composer, 2 approves (a send), 3 benches. The panel
+    // ignores them while it is closed, and the `isTyping` guard above keeps
+    // them inert while the composer has focus.
+    case '1':
+    case '2':
+    case '3':
+      panel.pressNumberKey(e.key);
+      break;
     // Magnification (VISUAL-SPEC §1, 05-LAYOUT-REWORK.md §2.4). `0` returns
     // to fit, which is also the minimum — there is no zooming out past the
     // whole floor.
@@ -913,6 +922,10 @@ function hideWhiteboard() {
 /** @param {any} snapshot */
 function handleSnapshot(snapshot) {
   const first = latestSnapshot === null;
+  // "Your draft" (docs/plan/08 §3.5): an unsent reply held in the composer is
+  // client state, so it is stamped onto each agent here for the renderer and
+  // the deck to read. The daemon never sees drafts.
+  for (const a of snapshot.agents || []) a.hasDraft = panel.hasDraft(a.id);
   latestSnapshot = snapshot;
   renderHeader(snapshot);
   renderFloorState(snapshot);
@@ -1051,6 +1064,11 @@ const panel = createPanel({
   onNewAgent: (projectId) => openNewAgentDialog(projectId),
   // WP15 task C.3: rename / re-avatar an existing agent.
   onRename: (agent) => openIdentityDialog(agent),
+  // Keep `hasDraft` on client state current between snapshots.
+  onDraftChange: (id, hasDraft) => {
+    const a = latestSnapshot?.agents?.find((x) => x.id === id);
+    if (a) a.hasDraft = hasDraft;
+  },
 });
 
 const hooksUI = createHooksUI({
