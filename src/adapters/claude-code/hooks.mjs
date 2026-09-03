@@ -179,6 +179,21 @@ function buildHooksBlock(port) {
 const MAX_COMMAND = 80;
 
 /**
+ * How much of a search pattern or a host the bubble carries. Shorter than a
+ * command line because neither is prose: a regular expression past forty
+ * characters is not read at a glance over somebody's head, it is recognised
+ * by its beginning.
+ */
+const MAX_PATTERN = 40;
+
+/**
+ * The tools whose first argument is a file this session is touching. All four
+ * carry it as `file_path`, and all four show it the same way — relative to
+ * the SESSION's cwd, and nothing but a basename when it escapes.
+ */
+const FILE_TOOLS = new Set(['Edit', 'Read', 'Write', 'MultiEdit']);
+
+/**
  * One line of plain text, at most `max` characters.
  *
  * Hook payloads are text this project did not write: a command can contain
@@ -230,6 +245,49 @@ function relativePath(file, cwd) {
 }
 
 /**
+ * A search pattern as the floor should show it.
+ *
+ * A `Grep` pattern is a regular expression the user typed — a search string,
+ * not a place the tool opened — so it is flattened and cut and nothing else.
+ * A `Glob` pattern is usually the same kind of thing (`**\/*.ts` is a shape),
+ * but an ABSOLUTE one names a location, and a location outside the session's
+ * cwd is exactly what WP-52 says must not reach a screenshot. So an absolute
+ * pattern goes through {@link relativePath} and a relative one does not,
+ * which keeps `src/**\/*.ts` readable and reduces `/somebody/else/**\/*.ts`
+ * to its last segment.
+ * @param {string} value
+ * @param {string} cwd
+ */
+function searchPattern(value, cwd) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (!path.isAbsolute(raw)) return oneLine(raw, MAX_PATTERN);
+  return oneLine(relativePath(raw, cwd), MAX_PATTERN);
+}
+
+/**
+ * A fetched URL as the floor should show it: the host, and nothing else.
+ *
+ * The path and the query string of a URL an agent fetched are the parts that
+ * carry an issue number, a document id, a search term or a token, and this
+ * string goes over a head on a floor that gets screenshotted. "Which service
+ * is it talking to" is the whole of what the bubble is for.
+ * @param {string} value
+ */
+function fetchHost(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  try {
+    const host = new URL(raw).hostname;
+    return oneLine(host, MAX_PATTERN);
+  } catch {
+    // Not a URL this runtime can parse. A bare name says less than a guess
+    // that might be a path.
+    return '';
+  }
+}
+
+/**
  * What a `PreToolUse` payload says the session is doing, as a name plus a
  * summary of at most {@link MAX_TOOL_SUMMARY} characters (WP-52,
  * `docs/plan/08-PLAN-V2-100X.md` §9).
@@ -238,10 +296,24 @@ function relativePath(file, cwd) {
  * is Claude Code's, and nothing outside `src/adapters/` may know a runtime's
  * format (`docs/02-ARCHITECTURE.md` §2).
  *
- *   Bash  -> `Bash npm test` (first 80 characters of the command line)
- *   Edit  -> `Edit src/foo.ts` (relative to cwd; basename if outside it)
- *   Read  -> `Read src/foo.ts`
- *   other -> the tool name on its own
+ *   Bash      -> `Bash npm test` (first 80 characters of the command line)
+ *   Edit      -> `Edit src/foo.ts` (relative to cwd; basename if outside it)
+ *   Read      -> `Read src/foo.ts`
+ *   Write     -> `Write src/foo.ts`
+ *   MultiEdit -> `MultiEdit src/foo.ts`
+ *   Grep      -> `Grep TODO\\(.*\\)` (first 40 characters of the pattern)
+ *   Glob      -> `Glob src/**\/*.ts`
+ *   WebFetch  -> `WebFetch example.com` (the host, never the path)
+ *   other     -> the tool name on its own
+ *
+ * The five after `Read` were left as bare names by the package that built
+ * this: inventing argument shapes was a spec change rather than an
+ * implementation detail, and they were to be revisited once the bubble had
+ * been watched on a real machine (`docs/DEVIATIONS.md` §89, "Accepted
+ * limits"). They are revisited. Every one of them keeps the same two
+ * disciplines as the first three — a path relative to the SESSION's cwd, and
+ * nothing but a basename for a path outside it — and the two that carry
+ * neither a path nor a command say the least they can rather than the most.
  *
  * @param {Record<string, any>} payload
  * @returns {{name:string, summary:string}|null} null when the payload names
@@ -263,9 +335,15 @@ export function toolSummary(payload) {
   if (name === 'Bash') {
     const command = oneLine(input.command ?? '', MAX_COMMAND);
     if (command) summary = `${name} ${command}`;
-  } else if (name === 'Edit' || name === 'Read') {
+  } else if (FILE_TOOLS.has(name)) {
     const file = relativePath(input.file_path ?? input.filePath ?? '', cwd);
     if (file) summary = `${name} ${file}`;
+  } else if (name === 'Grep' || name === 'Glob') {
+    const pattern = searchPattern(input.pattern ?? '', cwd);
+    if (pattern) summary = `${name} ${pattern}`;
+  } else if (name === 'WebFetch') {
+    const host = fetchHost(input.url ?? '');
+    if (host) summary = `${name} ${host}`;
   }
   return { name, summary: oneLine(summary, MAX_TOOL_SUMMARY) };
 }
