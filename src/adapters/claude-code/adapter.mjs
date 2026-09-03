@@ -461,7 +461,7 @@ async function scanSessions({ maxAgeDays, limit }) {
   // — so it can never reach the stored entry. Both halves are asserted.
   let desktop;
   try {
-    desktop = readDesktopSessions();
+    desktop = await readDesktopSessions();
   } catch {
     desktop = null; // the app's own store; unreadable is not an error here
   }

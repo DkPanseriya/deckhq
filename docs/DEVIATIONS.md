@@ -2049,3 +2049,87 @@ copy-out, and a cache that serves its entries when the store directory
 disappears — so none of them is vacuous. One earlier draft *was*: a scan-level
 copy-out test that could not fail, because the adapter mutates the summary and
 never the desktop record. It was replaced rather than kept for the count.
+
+## 79. The desktop store's read stops blocking, and stops parsing 155 KB for two fields
+
+§78 cached this read and left two things on the table, which its own table
+shows: a process's **first** scan barely moved (99.8–120.5 ms before,
+94.2–100.0 ms after), because a cache miss still read and parsed a whole
+~155 KB file — and it did all of it **synchronously, on the event loop**. A
+cache turns "every poll" into "every change", but every change still costs
+full price, and the daemon's HTTP server and SSE stream stop being served for
+the duration.
+
+Two further bounds, both in `src/adapters/claude-code/desktop.mjs`. The cache
+from §78 is unchanged and so is its reasoning — including the `fstat`-on-the-
+open-handle stamp, the copy-out on the way to the caller, and the empty-listing
+guard on eviction.
+
+**The reads are asynchronous.** `fsp` throughout, at the read concurrency of 8
+the transcript scan uses. Results are still assembled in listing order, not
+completion order, so two files claiming the same `cliSessionId` resolve the
+same way on every poll — the sequential loop gave that for free and it had to
+be kept deliberately.
+
+**A miss reads a bounded head window, not the file.** 99.1% of every byte in
+these files is one field, `remoteMcpServersConfig`, and `JSON.parse` was
+building the whole object graph to answer two questions. A scanner walks the
+JSON text instead: it records only `cliSessionId`, `isArchived` and `title`,
+skips every other value without materialising it, and stops as soon as it has
+all three — over an 8 KB prefix read off the handle that is already open.
+Across the 57 session files measured, the last of the three sits at byte 397
+(median), 507 (p95), 626 (worst), so 8 KB is thirteen times the worst case.
+
+The scanner reads **top-level** keys only. A `cliSessionId` nested inside some
+other object is not this session's id, and the app's own
+`backgroundTaskSuggestions` really does carry nested session records — a regex
+over the text would take the wrong one. Asserted.
+
+Two fallbacks, because this is a store DeckHQ does not own and dropping a
+session silently is worse than reading it slowly: a window that cannot answer
+costs the whole file, and text the scanner cannot read still goes to
+`JSON.parse`. So the scanner can be slower than what it replaced, never
+blinder. Neither fires on any of the 61 files here; the `fullReads` counter on
+`desktopCacheStats` counts them, and the tests assert which path ran.
+
+Measured on this machine (Windows 11, **61** desktop session files, 60 of them
+joinable, ~140 KB each), both arms in one process, interleaved and their order
+flipped between passes so machine drift hit both equally: 4 passes, a first
+call plus 8 warm polls each. "Longest block" is the largest gap between
+consecutive event-loop turns, taken with a `setImmediate` chain — Windows'
+~15.6 ms timer resolution puts a floor under any `setInterval` figure, which
+is why §77 and §78 could only see this cost as wall time.
+
+| | §78 (sync, whole-file parse) | this change |
+|---|---|---|
+| **First call of a process** | 116.6 ms (106.2–120.4) | **11.3 ms** (7.4–21.1) |
+| First call, longest block | 116.7 ms (107.1–120.5) | **0.9 ms** (0.6–1.1) |
+| Warm poll | 2.2 ms (1.4–8.3) | 2.5 ms (1.9–3.2) |
+| Warm poll, longest block | 2.3 ms (1.4–8.3) | **0.8 ms** (0.5–1.0) |
+
+And the case a running daemon actually meets — one archive flip, which
+invalidates exactly one entry (synthetic store, 61 files of 220 KB, 11 flips):
+
+| | §78 | this change |
+|---|---|---|
+| One changed file | 3.95 ms | **1.78 ms** |
+| longest block | 4.06 ms | **0.36 ms** |
+
+**The warm wall time did not improve, and is marginally worse** — 61
+asynchronous `stat` calls cost a little more than 61 synchronous ones. That is
+the honest result: §78 had already taken the warm path down to a stat per
+file, and there was nothing left in it. What changed warm is the *blocking*,
+2.3 ms to 0.8 ms, and what changed a great deal is everything that is not a
+pure cache hit. `scanSessions` end to end on this machine: 86.2 ms first,
+8.2 ms warm median (7.5–10.3), against the **< 50 ms** budget in
+docs/02-ARCHITECTURE.md §8.
+
+Behaviour is unchanged and was checked as such: over the real store both
+versions return the same 60 entries, the same values, in the same order, and
+all eleven of §78's own tests pass against this one untouched apart from the
+`await`. §46's ordering is intact — the flag is still read once per scan and
+still applied after the summary cache, and it is still keyed to the file that
+carries it.
+
+No new dependency, no network, and every byte of format knowledge is still
+inside `src/adapters/claude-code/`.
