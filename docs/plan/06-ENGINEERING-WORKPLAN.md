@@ -469,7 +469,7 @@ Each was opened by a package that hit something the plan had not named. Full tex
 |---|---|---|---|---|---|---|
 | WP-54 | The Windows console launch is quoted for `cmd.exe`, not for `CreateProcess` — `&` in a session id split one command into two | AB | 0.5d | P0 | — | landed, §98 |
 | WP-55 | The building is the size of what is in it; the header counts what the floor draws | AR | 2d | P1 | WP-50 | landed, §106 |
-| WP-56 | `doctor` names the two managed-settings kill switches that can turn DeckHQ's `http` hooks off over its head | AB | 0.5d | P1 | WP-19 build | open, from §97.4 |
+| WP-56 | `doctor` names the two managed-settings kill switches that can turn DeckHQ's `http` hooks off over its head, neither of which it detects today | AB | 0.5d | P1 | WP-19 build | open, from §97.4 |
 | WP-57 | The integration cleanup: `Scene.anchorFor()` for coach marks 2 and 3, the room plate's payroll line painted, the whiteboard's rate-card version, "no rate" on every cost surface, the hover card's record line, the deny copy's case | AR + PE + UX | 2d | P1 | — | open, from §107, §108.1, §111, §97.3 |
 | WP-58 | Codex answers a permission prompt through a `command` hook — it has `PermissionRequest` but no `http` type | AB | 1.5d | P3 | with WP-23 | open, from §97.4 |
 
