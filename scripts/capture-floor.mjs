@@ -44,11 +44,14 @@ const DEBUG_PORT = Number(opt('--debug-port', 9222));
  * is oldest-first and deterministic on the demo fixture, so a sequence is how
  * you aim the shot at one particular agent.
  *
- * Two characters are escapes rather than keys, added for WP-07 because the
- * command palette is opened with a chord and driven with Enter:
+ * Three characters are escapes rather than keys. Two were added for WP-07,
+ * because the command palette is opened with a chord and driven with Enter,
+ * and the third for WP-10, whose deck is on Tab:
  *   `^`  hold Ctrl for the next key — `^k` is the palette
  *   `~`  Enter
- * So `^k,~` opens the palette, types the Settings accelerator, and runs it.
+ *   `>`  Tab — the floor ⇄ deck toggle
+ * So `^k,~` opens the palette, types the Settings accelerator, and runs it,
+ * and `>` alone photographs the deck.
  */
 const PRESS = opt('--press', '');
 /**
@@ -109,17 +112,19 @@ await withChrome(
         continue;
       }
       const isEnter = key === '~';
+      const isTab = key === '>';
+      const named = isEnter ? 'Enter' : isTab ? 'Tab' : key;
       const modifiers = ctrl ? 2 : 0; // CDP: Alt 1, Ctrl 2, Meta 4, Shift 8
       for (const type of ['keyDown', 'keyUp']) {
         await client.send('Input.dispatchKeyEvent', {
           type,
           modifiers,
-          key: isEnter ? 'Enter' : key,
-          // A key held with a modifier produces no text, and neither does
-          // Enter; sending one anyway types a literal character into whatever
-          // has focus instead of firing the shortcut.
-          text: type === 'keyDown' && !ctrl && !isEnter ? key : undefined,
-          windowsVirtualKeyCode: isEnter ? 13 : key.toUpperCase().charCodeAt(0),
+          key: named,
+          // A key held with a modifier produces no text, and neither do Enter
+          // and Tab; sending one anyway types a literal character into
+          // whatever has focus instead of firing the shortcut.
+          text: type === 'keyDown' && !ctrl && !isEnter && !isTab ? key : undefined,
+          windowsVirtualKeyCode: isEnter ? 13 : isTab ? 9 : key.toUpperCase().charCodeAt(0),
         });
       }
       ctrl = false;

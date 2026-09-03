@@ -1641,6 +1641,394 @@ button {
   }
 }
 
+/* ======================================================================
+   WP-10 · THE QUEUE STRIP AND THE DECK (docs/plan/05-GUI-UX-SPEC.md §3)
+
+   The floor is the glance and the deck is the work, and trying to make one
+   surface do both is why the floor was doing neither well. Three levels: the
+   floor, a strip of chips under the header that gives the queue its shape
+   without leaving the floor, and a dense table on Tab that replaces it.
+
+   Nothing in this block is decorative. There are exactly two animations —
+   a chip sliding in and a departing chip collapsing its width to zero, both
+   §9 — and no hover lift, no card entrance, no page transition anywhere. The
+   floor is already a moving image; chrome that also moves is noise.
+
+   Colour is never the carrier. Every chip and every row pairs its state
+   colour with a glyph and a neutral-ink label, and the elapsed time only
+   reaches for --accent past 24 hours, where "this has been waiting a day"
+   is exactly what crimson is reserved to mean. Small text is never set in a
+   state colour: at 11-12px none of them clears the 4.5:1 floor.
+   ====================================================================== */
+
+.queue-strip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 0.4rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.strip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px; /* CHIP_GAP in public/deck.js */
+  flex: 1 1 auto;
+  /* No scroller, on purpose: §3.1 promises the oldest chip is always leftmost
+     and never scrolls out, and the only way to keep that unconditionally is
+     to have nowhere for it to scroll to. Overflow becomes `+N`. */
+  min-width: 0;
+  overflow: hidden;
+}
+
+.strip-item {
+  flex: 0 0 auto;
+  display: flex;
+  overflow: hidden;
+}
+
+/* §9: chips slide in from the right; a departing chip collapses its width to
+   zero rather than vanishing, so the queue is seen to shorten. */
+.strip-item.is-entering {
+  animation: chip-in 180ms ease-out;
+}
+.strip-item.is-leaving {
+  transition:
+    width 180ms ease,
+    opacity 180ms ease;
+  opacity: 0;
+  pointer-events: none;
+}
+@keyframes chip-in {
+  from {
+    transform: translateX(14px);
+    opacity: 0;
+  }
+}
+
+.strip-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  max-width: 22rem;
+  padding: 0.28rem 0.6rem;
+  /* The chip is INSET into the strip, not raised off it: --bg on a --surface
+     bar. That is not a style preference — the state glyph is a graphical
+     object held to 3:1, and crimson measures 2.78:1 on --surface-2 and
+     2.39:1 on --surface-3. The ground moves, never the state colour. */
+  background: var(--bg);
+  /* One hairline, the same on all four sides. State is carried by the glyph
+     and its colour plus the neutral-ink name beside it — a coloured slab down
+     one edge of every chip would put three saturated bars in a row across the
+     top of the window and spend crimson on decoration. */
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.strip-chip:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+/* The selected chip is ringed at the same moment the floor rings the same
+   person. That simultaneity is the whole teaching mechanism for the mapping
+   between the two surfaces (§3.1), so the ring is deliberately loud. */
+.strip-chip.is-selected {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+/* The state glyph. A graphical object, not a word: it is held to the 3:1
+   non-text floor on --bg and --surface (the only two grounds a chip has), and
+   test/unit/state-visuals.test.mjs measures exactly that. The word itself is
+   beside it in --ink and in the button's aria-label. */
+.strip-icon {
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--ink-2);
+}
+.strip-chip[data-state='for_review'] .strip-icon {
+  color: var(--state-for_review);
+}
+.strip-chip[data-state='needs_input'] .strip-icon {
+  color: var(--state-needs_input);
+}
+.strip-chip[data-state='stalled'] .strip-icon {
+  color: var(--state-stalled);
+}
+
+.strip-when {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+/* Past 24 hours (§3.1). Crimson is under the 4.5:1 text floor on every ground
+   in this product, so it arrives as a rule under the number rather than in it
+   — the discipline WP-07 set and state-visuals.test.mjs guards: "the waiting
+   clock carries crimson on a rule, with the words themselves in --ink". */
+.strip-when.is-old {
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 1px;
+}
+.strip-who {
+  color: var(--ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.strip-sep {
+  color: var(--muted);
+}
+.strip-project {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip-more {
+  flex: 0 0 auto;
+  padding: 0.28rem 0.55rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.strip-more:hover {
+  color: var(--ink);
+  background: var(--surface-3);
+}
+
+/* "7 waiting · press Tab for the deck" (§3.2). One line, at the quiet end of
+   the strip: past six items the floor stops being the efficient surface, and
+   saying so once is the honest version of silently switching surfaces. */
+.strip-hint {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+/* Hover reveals the last line the agent said (§3.1). It floats below the
+   strip rather than growing it: a rail that changes height under the cursor
+   would push the floor about every time the mouse crossed it. */
+.strip-last {
+  position: absolute;
+  left: 1rem;
+  right: 1rem;
+  top: 100%;
+  z-index: 30;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-top: none;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: var(--shadow-elevated);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------- the deck */
+
+/* The deck replaces the floor inside the stage, so the panel beside it keeps
+   its exact box and nothing reflows on Tab. */
+.stage.is-deck > #floor-canvas,
+.stage.is-deck > .floor-skeleton,
+.stage.is-deck > .empty-state,
+.stage.is-deck > .tooltip {
+  display: none !important;
+}
+
+.deck {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--bg);
+}
+.deck:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.deck-scroll {
+  min-width: max-content;
+}
+
+.deck-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  /* Fixed, so the columns do not jump about as the queue's contents change.
+     A table whose WAITING column is 40 px wide on one snapshot and 200 px on
+     the next is a table you cannot read down. */
+  table-layout: fixed;
+}
+.deck-table th,
+.deck-table td {
+  text-align: left;
+  padding: 0 0.6rem;
+  height: 34px; /* §3.2: row height 34 px */
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 400;
+}
+.deck-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+/* LAST WORD takes whatever is left; everything else is the width its content
+   needs and no more. */
+.deck-table th.deck-col-waiting {
+  width: 9rem;
+}
+.deck-table th.deck-col-who {
+  width: 14rem;
+}
+.deck-table th.deck-col-project {
+  width: 12rem;
+}
+.deck-table th.deck-col-tokens {
+  width: 8rem;
+}
+/* The two mono, tabular columns are right-aligned so the digits line up
+   (§3.2). Written at the same specificity as the shared rule above, which
+   otherwise wins and left-aligns them. */
+.deck-table th.deck-col-waiting,
+.deck-table th.deck-col-tokens,
+.deck-table td.deck-waiting,
+.deck-table td.deck-tokens {
+  text-align: right;
+}
+
+/* The rule between a raised hand and a stall (§3.2): they need different
+   responses, and a stall is not a debt in the same way. It is a border on the
+   second row group rather than a fake row, so a screen reader is not read a
+   line of dashes. */
+.deck-group + .deck-group {
+  border-top: 2px solid var(--line-2);
+}
+
+.deck-row {
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.deck-row:hover {
+  background: var(--surface);
+}
+/* --surface, not --surface-2: the selected row still has to carry a state
+   glyph at 3:1, and crimson is 2.78:1 on --surface-2. */
+.deck-row.is-selected {
+  background: var(--surface);
+  box-shadow: inset 3px 0 0 var(--focus);
+}
+.deck-row.is-selected .deck-name {
+  color: var(--ink);
+}
+
+.deck-waiting {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.deck-when {
+  margin-right: 0.45rem;
+}
+/* Past 24 hours, on a rule rather than in the ink. See .strip-when.is-old. */
+.deck-when.is-old {
+  font-weight: 600;
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 1px;
+}
+.deck-icon {
+  display: inline-block;
+  width: 1.1em;
+  text-align: center;
+  color: var(--ink-2);
+}
+.deck-row[data-state='for_review'] .deck-icon {
+  color: var(--state-for_review);
+}
+.deck-row[data-state='needs_input'] .deck-icon {
+  color: var(--state-needs_input);
+}
+.deck-row[data-state='stalled'] .deck-icon {
+  color: var(--state-stalled);
+}
+
+.deck-who {
+  color: var(--ink-2);
+}
+.deck-name {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.deck-mk {
+  margin-left: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.deck-project {
+  color: var(--ink-2);
+}
+.deck-last {
+  color: var(--muted);
+  max-width: 46rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-tokens {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.deck-empty {
+  margin: 0;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ================================================== end WP-10 block */
+
 /* ------------------------------------------------------------ responsive */
 @media (max-width: 980px) {
   .app {

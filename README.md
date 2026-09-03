@@ -302,21 +302,30 @@ These are real, and listed here rather than discovered later.
 
 ## Keyboard
 
-| Key                 | Action                                            |
-| ------------------- | ------------------------------------------------- |
-| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings   |
-| `1` / `2` / `3`     | Reply, approve, bench — on the open review card   |
-| `J` / `K`           | Move through the needs-you queue, oldest first    |
-| `A`                 | Acknowledge the selected agent                    |
-| `B`                 | Bench the selected agent                          |
-| `Esc`               | Close the panel                                   |
-| `+` / `-`           | Magnify, 1x to 2.5x                               |
-| `0`                 | Back to fit — which is also the minimum           |
-| `Ctrl`/`⌘` + scroll | Zoom about the cursor                             |
-| Drag / scroll       | Pan, whenever the floor is bigger than the window |
+| Key                 | Action                                                |
+| ------------------- | ----------------------------------------------------- |
+| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings       |
+| `Tab`               | The deck — every waiting session as a table, and back |
+| `J` / `K`           | Move through the needs-you queue, oldest first        |
+| `Enter`             | Open the deck row under the cursor                    |
+| `1` / `2` / `3`     | Reply, approve, bench — on the selected session       |
+| `A`                 | Acknowledge the selected agent                        |
+| `B`                 | Bench the selected agent                              |
+| `Esc`               | Close the panel                                       |
+| `+` / `-`           | Magnify, 1x to 2.5x                                   |
+| `0`                 | Back to fit — which is also the minimum               |
+| `Ctrl`/`⌘` + scroll | Zoom about the cursor                                 |
+| Drag / scroll       | Pan, whenever the floor is bigger than the window     |
 
 Everything is reachable without a mouse. `prefers-reduced-motion` is honoured: characters snap
 instead of walking, clips hold a representative pose, and the floor stays fully legible.
+
+The floor answers _"is anything waiting on me"_ from across the room; the deck is where you clear
+it. `Tab` swaps between them and leaves the panel where it is. It is a real table — same queue,
+same order, same actions — so a screen reader reaches everything the floor shows, and the floor is
+never the only way to get to anything. Whenever something is waiting, a strip of chips under the
+header carries the queue's shape without leaving the floor at all: oldest on the left, and it
+stays there.
 
 ## Options
 
