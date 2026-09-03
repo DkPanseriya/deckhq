@@ -9,7 +9,7 @@
  */
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { DEFAULT_SETTINGS, MOTION_MODES, RESUME_TARGETS } from '../../core/store.mjs';
-import { RATE_CARD_VERSION } from '../../core/model.mjs';
+import { rateCardVersion } from '../../core/rates.mjs';
 import { EDITOR_NAMES } from '../../core/editor.mjs';
 import { terminalIds } from '../../adapters/claude-code/terminals.mjs';
 
@@ -108,7 +108,7 @@ export function register(router, ctx) {
   router.get('/api/about', (_req, res) => {
     sendJson(res, 200, {
       statePath: store.file,
-      rateCardVersion: RATE_CARD_VERSION,
+      rateCardVersion: rateCardVersion(),
       writeError: store.writeError,
     });
   });

@@ -30,7 +30,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { clampText, estimateCost } from '../../core/model.mjs';
+import { clampText } from '../../core/model.mjs';
+import { estimateCost } from '../../core/rates.mjs';
 
 /** Root of Claude Code's per-machine config. Overridable for tests/tooling. */
 export const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');

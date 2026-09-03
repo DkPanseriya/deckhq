@@ -4,7 +4,6 @@ import {
   agentId,
   clampText,
   counts,
-  estimateCost,
   needsYou,
   placement,
   projectIdFromCwd,
@@ -185,12 +184,24 @@ test('clampText collapses whitespace and truncates at 400', () => {
   assert.ok(long.endsWith('…'));
 });
 
-test('estimateCost separates cache reads from input and scales by model tier', () => {
-  const opus = estimateCost({ input: 1e6, output: 0, model: 'claude-opus-5' });
-  const sonnet = estimateCost({ input: 1e6, output: 0, model: 'claude-sonnet-5' });
-  assert.ok(opus > sonnet, 'opus must not be priced below sonnet');
-  // Cache reads are an order of magnitude cheaper than fresh input.
-  const cached = estimateCost({ cacheRead: 1e6, model: 'claude-opus-5' });
-  assert.ok(cached < opus / 5);
-  assert.equal(estimateCost({}), 0);
+// `estimateCost` and the rate card left this file at WP-26: they read
+// `src/data/rates.json` and the user's override, and this module promises no
+// I/O. Their tests live in `test/unit/rates.test.mjs`.
+
+test('a project sums only the sessions the rate card could price', () => {
+  const [p] = projects([
+    agent({ id: 'a', projectId: 'p', costEstimate: 1.5 }),
+    agent({ id: 'b', projectId: 'p', costEstimate: null }),
+  ]);
+  assert.equal(p.costEstimate, 1.5);
+  assert.equal(p.costRated, true, 'one priced session is enough to have a rate');
+});
+
+test('a project nobody could price is flagged unrated rather than zero', () => {
+  const [p] = projects([
+    agent({ id: 'a', projectId: 'p', costEstimate: null }),
+    agent({ id: 'b', projectId: 'p', costEstimate: null }),
+  ]);
+  assert.equal(p.costEstimate, 0);
+  assert.equal(p.costRated, false, '"no rate" and "$0.00" are different claims');
 });
