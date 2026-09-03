@@ -1153,6 +1153,14 @@ function handleKeydown(e) {
     case '0':
       if (scene) scene.resetZoom();
       break;
+    // WP-39's floating mini-floor: the office, the corridor beside it and the
+    // count, over the terminal (`08` B3). The palette's "Float the office" is
+    // the other way in. Not awaited — the module is loaded on demand and a
+    // slow import must not hold the key map.
+    case 'p':
+    case 'P':
+      floatOffice();
+      break;
     default:
       return;
   }
@@ -2218,20 +2226,11 @@ async function floatOffice() {
   await miniFloor.toggle();
 }
 
-// `P` floats the office. Registered here rather than in `handleKeydown`'s
-// switch so this package is one block in a file two others are editing; the
-// guards are that map's own, in the same order — a key never acts while text
-// has focus or a modal is open, and a modifier means the browser's shortcut.
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'p' && e.key !== 'P') return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const target = /** @type {HTMLElement|null} */ (e.target);
-  const tag = target?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
-  if (document.querySelector('dialog[open]')) return;
-  e.preventDefault();
-  floatOffice();
-});
+// `P` floats the office, as a case in `handleKeydown`'s switch. It was a
+// standalone listener with the map's guards copied into it, because three
+// packages were editing that switch at once (DEVIATIONS §113.5); they have
+// merged, so the duplicate guards are gone and the key is in the map with
+// every other key on the floor.
 // WP-39 · the floating mini-floor — end -------------------------------------
 
 // ---------------------------------------------------------- palette + sheet
