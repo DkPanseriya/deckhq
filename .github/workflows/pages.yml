@@ -1,0 +1,70 @@
+name: Pages
+
+# Builds `site/` and publishes it to GitHub Pages on every push to main.
+#
+# One prerequisite, one-time, and it is the repository owner's to do:
+#
+#   Settings -> Pages -> Build and deployment -> Source: GitHub Actions
+#
+# Until that is set, this job runs, builds, uploads the artifact, and the
+# `deploy` step fails with "Get Pages site failed" — there is no way for a
+# workflow to enable Pages on its own. Nothing else in the repository depends
+# on it.
+#
+# The site is static HTML written by hand plus one Node script over the repo's
+# own markdown. There is nothing to install: the product has no runtime
+# dependencies and its site has no build ones either, so there is no
+# `npm install` step and no lockfile to restore.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Read-only by default. `deploy` raises itself to what Pages needs and nothing
+# more, and it is the only job here that is granted anything.
+permissions:
+  contents: read
+
+# One deployment at a time, and a newer push waits for the running one rather
+# than cancelling it — a half-deployed site is worse than a late one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the site
+        run: node site/build.mjs
+
+      - name: Assert the site fetches nothing from anywhere else
+        # The same test CI runs, run again here against the bytes about to be
+        # published. The site keeps the product's promise or it does not ship.
+        run: npm test -- test/unit/site.test.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
