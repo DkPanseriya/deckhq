@@ -220,7 +220,8 @@ All JSON. All errors `{ error: string }` with an appropriate status.
 | `POST` | `/api/hooks/install` | Consent-gated; writes hooks |
 | `POST` | `/api/hooks/remove` | Removes only what was written |
 | `POST` | `/api/hook` | Hook callback endpoint (from the runtime) |
-| `GET`/`POST` | `/api/settings` | Stall window, notification prefs, poll interval |
+| `GET`/`POST` | `/api/settings` | Stall window, notification prefs, poll interval, ledger retention |
+| `GET` | `/api/stats?since=` | WP-17. Median and p90 time in `for_review`, items over 24h, discharges and sends per day, tokens per project per day, longest wait ever — replayed from the event ledger, never from live state. `since` is an epoch, or a duration in ms |
 
 ### 5.1 Action semantics
 
