@@ -387,6 +387,7 @@ These are real, and listed here rather than discovered later.
 | `1` / `2` / `3`     | Reply, approve, bench — on the selected session       |
 | `A`                 | Acknowledge the selected agent                        |
 | `B`                 | Bench the selected agent                              |
+| `P`                 | Float the office — a small always-on-top window       |
 | `Esc`               | Close the panel                                       |
 | `+` / `-`           | Magnify, 1x to 2.5x                                   |
 | `0`                 | Back to fit — which is also the minimum               |
