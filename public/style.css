@@ -1600,6 +1600,85 @@ button {
 }
 /* ==================================================== end WP-13 block */
 
+/* ======================================================================
+   WP-15 · THE OFFICE CLEARED — the product's one celebration
+
+   docs/plan/05-GUI-UX-SPEC.md §9, docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md
+   §2. When the last waiting agent is discharged and the office had been
+   busy for at least a minute: the light warms 6% over 1.2 s, a two-note
+   chime plays, and one line fades in and out over 3 s. At most a few times
+   a day, and then it is gone.
+
+   The warming is a CSS overlay on the stage, deliberately NOT a change in
+   the renderer: it is chrome *about* the floor, it must not touch the
+   floor's baked materials or its state colours, and it must be suppressible
+   by `prefers-reduced-motion` without the renderer knowing anything about
+   that. `mix-blend-mode: soft-light` warms what is already there rather than
+   painting a film over it, which is what "the lights came up" looks like.
+   ====================================================================== */
+/* The overlay exists ONLY while the class is on. A permanently-present
+   `.stage::after` at `opacity: 0` with a blend mode still puts the canvas on
+   a composited layer, and the floor is photographed pixel for pixel by
+   `npm run goldens` — a compositing change that moves one channel by one
+   count is exactly what that gate is for. */
+.stage.is-cleared::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  /* Tungsten, not the accent: crimson is reserved for for_review and primary
+     actions (docs/03-VISUAL-SPEC.md §5), and a red flash over a cleared
+     office would say the opposite of what this moment means. */
+  background: radial-gradient(120% 90% at 50% 0%, #ffcf94 0%, #ff9d4d 55%, transparent 100%);
+  mix-blend-mode: soft-light;
+  animation: office-cleared-light 2.4s ease-in-out both;
+}
+@keyframes office-cleared-light {
+  0% {
+    opacity: 0;
+  }
+  /* 1.2 s to reach the top of the warm, per §9. */
+  50% {
+    opacity: 0.06;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The line. Reduced motion keeps it — it is the information, and the
+   warming is the decoration (§9). The transition is neutralised by the
+   global reduced-motion block below, so it appears and goes without a
+   fade rather than not at all. */
+.office-cleared {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -6px);
+  margin: 0;
+  padding: 0.55rem 1.1rem;
+  max-width: min(36rem, calc(100% - 2rem));
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ink);
+  background: rgb(26 28 35 / 92%);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
+}
+.office-cleared.is-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+/* ==================================================== end WP-15 block */
+
 /* ---------------------------------------------------------- hooks dialog
    Restraint pass: each runtime's section is separated from the next by a
    hairline rule instead of a bordered card. */

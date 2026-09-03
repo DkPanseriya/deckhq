@@ -4435,3 +4435,126 @@ refused rather than truncated; a 2 MB body accepted; and the hostname, including
 **Screenshot:** `docs/media/snapshot-sample.png` — an actual `S` output from the demo floor at a
 1200×760 window: the floor, then `DECKHQ-DEMO · 6 rooms · 25 people`, the four tallies with their
 state dots, the estimate line and the wordmark.
+
+## 98. WP-15 — three sounds measured rather than described, and the default that was left alone
+
+**Spec:** `05-GUI-UX-SPEC.md` §8 and §9. Three WebAudio-synthesised sounds, rate-limited to the
+notification coalescing window, silent when the tab is hidden and the OS notification is doing the
+work, globally off in one keystroke from the palette. The office-cleared moment: light warms 6%
+over 1.2 s, chime, one line for 3 s; `prefers-reduced-motion` suppresses the light and keeps the
+line.
+
+### 98.1 `settings.sound` still defaults to **off**, and that is a decision for the owner
+
+§8's table says all three sounds default **on**. `DEFAULT_SETTINGS.sound` is `false`, and
+`test/unit/settings-keys.test.mjs` pins it with a named test and a stated reason:
+
+> *A product that sits beside a terminal at 11pm does not arrive making noise.*
+
+That test and that default landed in WP-07. Flipping it now would make every existing install
+start making noise on upgrade — a stored `state.json` written before this change has no `sound`
+key, so it would merge to the new default — which is the precise shape of the thing `04` §5 calls
+out: *"sounds that play more than a few times a day"* and settings people turn off. Making that
+call is above this package's line, so **the default was left alone and the conflict is written
+down here**. Everything else about §8 is real: the three sounds exist, the scheduler is wired, the
+volume works, and one palette keystroke (`⌘K` → `u`) turns them on and persists it.
+
+Turning them **on** from the palette now plays the chime once and says what the three are. A
+sound setting whose effect you cannot hear is a setting nobody can judge, and this is the one
+moment where a sound is a direct answer to something the user just did — so it is the one place
+that bypasses the coalescing window.
+
+### 98.2 The synths were measured, not described
+
+Rendered through a real `OfflineAudioContext` in Chrome. The first version was wrong in a way no
+unit test would have caught, because a stub records what you asked for and not what comes out:
+
+| | door | knocks | chime |
+|---|---|---|---|
+| peak at `soundVolume` 0.4, **before** makeup gain | 0.069 | 0.093 | 0.396 |
+| peak at 0.4, shipped | **0.195** | **0.265** | **0.396** |
+| peak at 1.0, shipped | 0.463 | 0.632 | 0.989 |
+| clipped samples, at every volume tested | 0 | 0 | 0 |
+| audible until (declared budget) | 136 ms (180) | 170 ms (190) | 336 ms (400) |
+
+A lowpass at 380–1600 Hz throws away most of white noise's energy while an oscillator loses none
+of its own, so the two noise sounds arrived about 15 dB under the chime — the door, which is the
+sound that happens several times an hour, would have been inaudible beside the celebration that
+happens twice a day. `NOISE_MAKEUP` is ×3, and the number is in the source with the measurement
+beside it.
+
+A second defect fell out of the same measurement: the burst envelope was clamped to 1, which made
+the volume slider stop affecting the door above about a third of its travel (0.187 at volume 1.0
+against 0.164 at 0.4). The clamp is gone — the gain is applied *before* a filter that removes most
+of it, so it does not need to be inside unity — and the output is checked for clipping instead.
+
+The noise source is a seeded LCG rather than `Math.random`, so two door closes a second apart are
+the same door. Asserted.
+
+### 98.3 The office-cleared line says `1d 2h`, where the spec's example says `26h`
+
+`04` §2's example line is *"Office clear. 7 discharged today, longest wait 26h."* The product says
+`1d 2h` everywhere else a wait appears — the office plate, the waiting badges, the snapshot strip
+— and `04` §3.2's own strip mock uses `1d 2h` for the same duration. One register beats one
+example, so the line reads *"Office clear. 7 discharged today, longest wait 1d 2h."* That is
+exactly what `docs/media/office-cleared.png` caught on a real floor.
+
+### 98.4 The numbers are this tab's counters, and say so by being small
+
+Until WP-17's ledger, "discharged today" and "longest wait" are counted by the open tab from the
+snapshots it has seen. Consequences, stated rather than papered over:
+
+- A tab opened at noon reports what it has watched since noon, not since midnight. The counters
+  do reset at local midnight for a tab left open overnight.
+- The **first** snapshot only establishes a baseline. Without that, a tab opened onto an
+  already-empty floor would count the page load as a clearing, and one opened onto a busy floor
+  would date "busy since" to the page load rather than admit it does not know.
+- "Discharged" counts every agent that left the needs-you queue — a button, a reply typed in the
+  terminal, or a bench. All three are the user acting, which is what the count is about.
+
+The line is honest at every value it can take, and it never scores the human: there is no version
+of it containing "you", a streak, a level or a badge, and that is asserted by scanning the
+generated copy across four counts and three wait lengths.
+
+### 98.5 The warm is a stage overlay that does not exist until it is needed
+
+§9's light is a CSS overlay on `.stage`, not a change in the renderer — it is chrome *about* the
+floor, it must not touch the floor's baked materials or its state colours, and
+`public/render/**` is another package's file. It is tungsten rather than the accent: crimson is
+reserved for `for_review` and primary actions, and a red flash over a cleared office would say the
+opposite of what the moment means.
+
+One detail worth the line it costs: the overlay is declared on `.stage.is-cleared::after`, not on
+`.stage::after` at `opacity: 0`. A permanently-present pseudo-element with `mix-blend-mode` puts
+the canvas on a composited layer even at zero opacity, and the floor is photographed pixel for
+pixel by `npm run goldens` — a compositing change that moves one channel by one count is exactly
+what that gate exists to catch. Goldens confirmed unchanged after this package.
+
+`prefers-reduced-motion` is honoured twice over: the JS guard never adds the class, and the
+stylesheet's global reduced-motion block would neutralise the animation anyway. The line is
+written *before* the guard returns, so reduced motion keeps it — asserted by reading the
+function's own source, because the alternative is a browser test for an ordering.
+
+### What is tested
+
+`test/unit/sound.test.mjs` (14) — the four scheduler rules one at a time, including that a hidden
+tab is silent *only* when a notification actually fired (both halves of §8's rule, and the reason
+`app.js` records `lastNotifyShown` from what happened rather than from what was requested); that
+the sound window and `app.js`'s `NOTIFY_COALESCE_MS` cannot drift apart, read out of the source;
+the three synths' shapes, durations and filter bands against a recording stub; the makeup gain and
+the volume slider's full travel; that no envelope ramps to exactly zero (which throws in a real
+`AudioContext`); that the noise is deterministic; and that neither `sound.js` nor `docs/media/`
+contains a single audio file, fetch or `new Audio` — WP-15's "no network request and no bundled
+audio file", asserted rather than promised.
+
+`test/unit/office-cleared.test.mjs` (13) — the queue definition matching the header numeral; the
+first-snapshot baseline; that it fires once per clearing and never again while the floor stays
+empty; that a two-second turn earns nothing; the sixtieth second as an exact boundary; that the
+busy clock restarts rather than carrying credit over; the day counters and their midnight reset,
+with an overnight wait surviving it; an agent with no clock of its own timed from first sight; the
+copy at one, many and no measurable wait; that it never scores the human; and that reduced motion
+drops the light and keeps the line.
+
+**Screenshot:** `docs/media/office-cleared.png` — a real clearing on the demo floor: six
+discharged, the header at zero, the office empty, and the line on screen inside its three seconds.
+The warm is at 6% and is deliberately hard to see, which is the point.

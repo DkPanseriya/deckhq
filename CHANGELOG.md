@@ -190,6 +190,33 @@
   spells the project out. The hostname stays, deliberately — the office is named after the
   machine because people share things with their name on them, and `DECKHQ_HOSTNAME` is there for
   anyone who wants it called something else.
+- **Three sounds, synthesised in the browser.** A low wooden door-close when a session finishes
+  its turn and walks into your office, two soft knocks when a hand goes up, and a rising two-note
+  chime when the office clears. No asset files, no fetches, nothing bundled — each is an
+  oscillator or a filtered noise burst and an envelope. Rate-limited to the same ten-second window
+  the notifications coalesce in, so three sessions finishing together is one door; silent when the
+  tab is hidden _and_ the OS notification actually fired, which is checked from what happened
+  rather than assumed from what was asked for; and one keystroke from the palette (`⌘K` → `u`)
+  turns them off for good. Volume comes from the settings sheet. The envelopes were measured
+  through a real `OfflineAudioContext` rather than described: the two noise sounds arrived 15 dB
+  under the chime, because a lowpass throws away most of white noise's energy and an oscillator
+  loses none of its own, and the volume slider had stopped affecting the door above a third of its
+  travel. Both fixed, with the measurements in the source. **They still default to off**, which is
+  a departure from the GUI spec and is deliberate: flipping that default would make every existing
+  install start making noise on upgrade, and the reason it is off — a product that sits beside a
+  terminal at 11pm does not arrive making noise — is pinned by a named test. Turning them on now
+  plays the chime once so you can hear what you have agreed to. `docs/DEVIATIONS.md` §98.1 puts
+  the call to the owner.
+- **The office-cleared moment.** When the last waiting agent is discharged and the office had been
+  busy for at least a minute: the light warms 6% over 1.2 seconds, the chime plays, and one line
+  fades in and out over three — _"Office clear. 6 discharged today, longest wait 1d 2h."_ Then it
+  is gone. The minute is the rule that makes it worth having: a session that arrives and is
+  discharged in the same breath earns nothing, so the moment marks a real milestone and not a
+  keystroke. It never scores you — it records the team's work, in the third person, and there is
+  no version of the line containing "you", a streak or a level. `prefers-reduced-motion`
+  suppresses the warming and keeps the line, because the line is the information and the warming
+  is the decoration. The warm is a CSS overlay on the stage that does not exist until it is
+  needed; the floor is unchanged.
 - **`POST /api/snapshot` writes the PNG, and takes nothing from the request but the pixels.** The
   daemon names the file from its own clock, checks the PNG magic bytes before writing anything,
   and has its own 8 MB body ceiling — the shared 1 MB JSON cap is right for JSON and wrong for

@@ -30,6 +30,8 @@ import {
   snapshotModel,
   stripColors,
 } from './snapshot.js';
+import { createSounds } from './sound.js';
+import { createClearedTracker } from './office-cleared.js';
 
 /**
  * Fallback copy of the glyph vocabulary in docs/CONTRACTS-WP15.md §2, used
@@ -179,6 +181,17 @@ let lastAnnounced = '';
 let pendingNotifyBatch = [];
 let notifyCoalesceTimer = null;
 let lastNotifyAt = 0;
+/** Whether the most recent batch actually produced an OS notification (WP-15's §8 rule). */
+let lastNotifyShown = false;
+
+/** WP-15's three sounds. Silent until `settings.sound` is on. */
+const sounds = createSounds({
+  getSettings: () => latestSnapshot?.settings || {},
+});
+
+/** WP-15's office-cleared moment. One tab's own counters, until WP-17's ledger. */
+const clearedTracker = createClearedTracker();
+let clearedTimers = [];
 
 // ------------------------------------------------------------- utilities
 
@@ -485,9 +498,20 @@ function renderFloorState(snapshot) {
 function diffAndNotify(snapshot) {
   const settings = snapshot.settings || {};
   const entered = [];
+  // WP-15 §8's two entry sounds. Tracked separately from the notification
+  // batch because they answer to different switches: a sound plays for an
+  // entry the OS notification is *not* covering, and the per-state
+  // notification switches must not silence it. One of each per snapshot at
+  // most — three doors closing together is one door.
+  let enteredForReview = false;
+  let enteredNeedsInput = false;
   for (const agent of snapshot.agents) {
     if (agent.ackState !== 'active') continue;
     const prev = prevActivityStates.get(agent.id);
+    if (prev !== agent.activityState) {
+      if (agent.activityState === 'for_review') enteredForReview = true;
+      if (agent.activityState === 'needs_input') enteredNeedsInput = true;
+    }
     // Both the state's own switch and the master switch have to be on. A
     // state whose switch is off is still tracked below, so turning it back on
     // does not then fire for everything that entered while it was off.
@@ -507,6 +531,13 @@ function diffAndNotify(snapshot) {
   }
   prevActivityStates = new Map(snapshot.agents.map((a) => [a.id, a.activityState]));
   if (entered.length > 0) queueNotification(entered);
+
+  // A hand going up outranks a door closing: both in one snapshot means
+  // somebody is blocked *and* somebody finished, and the blocked one is the
+  // interrupting event (`04` §6). The scheduler would drop the second anyway;
+  // this decides which one it drops.
+  if (enteredNeedsInput) sounds.play('knock', { notified: lastNotifyShown });
+  else if (enteredForReview) sounds.play('door', { notified: lastNotifyShown });
 }
 
 /** @param {{id:string,label:string,projectName:string}[]} enteredAgents */
@@ -537,6 +568,12 @@ function flushNotification() {
  * @param {{id:string,label:string,projectName:string}[]} batch
  */
 function showNotification(batch) {
+  // Whether the OS actually said it is what WP-15's §8 rule turns on: a
+  // hidden tab is silent only when the notification is doing the work.
+  // Declining permission, or turning notifications off, is exactly when the
+  // sound is the only signal there is — so this is recorded from what
+  // happened, never assumed from what was requested.
+  lastNotifyShown = false;
   if (!('Notification' in window)) return;
   // The master switch in the settings sheet. Off means the tab badge and the
   // floor carry the signal and the OS is left alone.
@@ -550,6 +587,7 @@ function showNotification(batch) {
     } else {
       notification = new Notification('DeckHQ', { body: `${batch.length} sessions need you` });
     }
+    lastNotifyShown = true;
     notification.onclick = () => {
       try {
         window.focus();
@@ -644,6 +682,72 @@ function moveNeedsYouQueue(direction) {
     idx = Math.max(0, Math.min(queue.length - 1, idx + direction));
   }
   selectAgent(queue[idx].id);
+}
+
+// ---------------------------------------------------- the office cleared
+
+/** How long the line stays: §9's "fades in and out over 3 s". */
+const CLEARED_LINE_MS = 3000;
+/** §9's "ambient light warms 6% over 1.2 s", plus the fall. */
+const CLEARED_LIGHT_MS = 2400;
+
+/**
+ * The product's one celebration. WP-15, `05` §9.
+ *
+ * Three things at once: the light warms, the chime plays, one line appears
+ * and goes. The light is a CSS overlay on the stage rather than anything in
+ * the renderer — it is chrome about the floor, not part of the floor, and
+ * `public/render/**` is another package's file.
+ *
+ * `prefers-reduced-motion` suppresses the light and keeps the line, exactly
+ * as §9 asks: the line is information, the warming is decoration, and the
+ * person who asked for less motion still wants to know their office is clear.
+ *
+ * @param {string} line
+ */
+function celebrateOfficeCleared(line) {
+  for (const t of clearedTimers) clearTimeout(t);
+  clearedTimers = [];
+
+  sounds.play('chime');
+
+  el.officeCleared.textContent = line;
+  el.officeCleared.hidden = false;
+  // The line is announced rather than left to a `hidden` attribute flip,
+  // because a screen-reader user gets the milestone or they get nothing.
+  announce(line);
+  // Two frames' worth of delay so the transition has a start state to run
+  // from; a `setTimeout(0)` is enough and does not depend on rAF, which a
+  // hidden tab would never fire.
+  clearedTimers.push(setTimeout(() => el.officeCleared.classList.add('is-shown'), 20));
+  clearedTimers.push(
+    setTimeout(() => el.officeCleared.classList.remove('is-shown'), CLEARED_LINE_MS - 400),
+  );
+  clearedTimers.push(
+    setTimeout(() => {
+      el.officeCleared.hidden = true;
+      el.officeCleared.textContent = '';
+    }, CLEARED_LINE_MS),
+  );
+
+  if (prefersReducedMotion()) return;
+  el.stage.classList.add('is-cleared');
+  clearedTimers.push(setTimeout(() => el.stage.classList.remove('is-cleared'), CLEARED_LIGHT_MS));
+}
+
+/**
+ * The same three-way rule the stylesheet uses (`05` §5.4, §9): an explicit
+ * setting wins, otherwise the OS decides.
+ */
+function prefersReducedMotion() {
+  const mode = latestSnapshot?.settings?.reducedMotion;
+  if (mode === 'reduce') return true;
+  if (mode === 'no-preference') return false;
+  try {
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
 }
 
 // ------------------------------------------------------ the office snapshot
@@ -1221,6 +1325,13 @@ function handleSnapshot(snapshot) {
   // WP-15).
   if (!first && !snapshot.demo) diffAndNotify(snapshot);
   else prevActivityStates = new Map(snapshot.agents.map((a) => [a.id, a.activityState]));
+  // The office-cleared moment (WP-15). The actor floor is excluded for the
+  // same reason it fires no notifications: nothing on it was ever really
+  // waiting, so nothing on it can really be cleared.
+  if (!snapshot.demo) {
+    const cleared = clearedTracker.update(snapshot, Date.now());
+    if (cleared.fire) celebrateOfficeCleared(cleared.line);
+  }
   panel.refresh();
   if (coachMarks.isRunning()) coachMarks.reposition();
   if (first) maybeShowOnboarding(snapshot.settings);
@@ -1879,7 +1990,23 @@ const paletteUI = createPalette({
     openHooks: () => settingsUI.open('hooks'),
     openOnboarding: showOnboarding,
     setNotifications,
-    setSound: (next) => saveSetting({ sound: next }),
+    // One keystroke from the palette mutes globally, and it persists
+    // (WP-15, `05` §8). Turning it *on* plays the chime once, because a
+    // sound setting you cannot hear the result of is a setting you cannot
+    // judge — and this is the one place where a sound is a direct answer to
+    // something the user just did, so the coalescing window is bypassed.
+    setSound: async (next) => {
+      const saved = await saveSetting({ sound: next });
+      if (!saved) return;
+      if (next) {
+        sounds.unlock();
+        sounds._state.lastPlayedAt = -Infinity;
+        sounds.play('chime');
+        toast('Sound on. A door closes, two knocks, and a chime when the office clears.');
+      } else {
+        toast('Sound off, on this machine, until you turn it back on.');
+      }
+    },
     snapshot: takeSnapshot,
     toggleRedaction,
     toggleLetGoVisible: () => {
@@ -1911,6 +2038,18 @@ function handlePaletteKey(e) {
 
 document.addEventListener('keydown', handlePaletteKey);
 document.addEventListener('keydown', handleKeydown);
+
+// A browser will not start an AudioContext until the page has had a real
+// gesture, so WP-15's first door would otherwise be swallowed. One listener,
+// removed the moment it has done its job — the context is created here and
+// lives for the tab.
+function unlockAudioOnce() {
+  document.removeEventListener('pointerdown', unlockAudioOnce);
+  document.removeEventListener('keydown', unlockAudioOnce);
+  sounds.unlock();
+}
+document.addEventListener('pointerdown', unlockAudioOnce);
+document.addEventListener('keydown', unlockAudioOnce);
 
 document.addEventListener('visibilitychange', () => {
   if (!scene) return;
