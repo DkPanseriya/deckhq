@@ -3865,3 +3865,156 @@ the `--json` shape and its agreement with the printed rows, the no-daemon refusa
 an INVARIANT test that the CLI writes nothing to `state.json`, exactly one POST per action, a
 daemon refusal reported rather than retried, and the three `open` cases. 514 tests to 570 across
 both packages.
+
+---
+
+## 94. WP-31 · The VS Code extension: an iframe rather than a port, and eight decisions the package left open
+
+`08-PLAN-V2-100X.md` B2 and WP-31, `06-ENGINEERING-WORKPLAN.md` WP-31. Shipped as `vscode/`: a
+thin extension — seven files of plain CommonJS, no dependencies, no build step — that finds the
+daemon on loopback or starts one, opens the floor in a webview panel, and puts the needs-you count
+in the status bar. Packaged as a 27 KB `.vsix`, installed with `code --install-extension`, and
+verified in a real editor.
+
+**The structural decision: the floor is framed, not re-served.** VS Code's own idiom is
+`webview.asWebviewUri`, which would serve `public/` from the `vscode-webview://` origin. That was
+rejected. On that origin every request the floor makes for `/api/state` is cross-origin, and every
+POST — `/api/ack` above all — is exactly the cross-site request `src/daemon.mjs`'s CSRF guard
+exists to refuse. The alternative was to teach the guard about `vscode-webview://`, which means
+teaching it about an origin whose authority is a GUID assigned by the editor, on a product whose
+whole security story is "loopback and same-origin, nothing else". So the panel document is a
+wrapper whose only content is an `<iframe src="http://127.0.0.1:<port>/">`. Inside the frame the
+floor keeps its own origin: its requests are same-origin, they carry `Sec-Fetch-Site:
+same-origin`, and the guard passes them untouched.
+
+**Nothing in `src/` changed.** The brief allowed an explicit, documented, tested allowance for a
+`vscode-webview://` origin if the guard blocked the panel. It does not, so none was added, and
+`test/integration/vscode-webview.test.mjs` asserts the opposite in both directions: that a POST
+carrying `Origin: vscode-webview://…` is still **403**, and that the floor's own static response
+carries no `X-Frame-Options` and no `frame-ancestors` — the two headers that would blank the panel
+silently if anyone ever added them.
+
+**The panel's CSP is four directives.** `default-src 'none'` (the wrapper loads no image, font,
+style or connection of its own), `frame-src http://127.0.0.1:<port>` — one origin, the exact port
+the daemon answered on — and a nonce for the one style block that sizes the frame and the one
+script that moves it. No `unsafe-inline`, no `unsafe-eval`, no wildcard. That script's whole body
+is a `message` listener that accepts one shape, checks the URL begins `http://127.0.0.1:`, and
+assigns `iframe.src`; it exists so a second `Show waiting` can move the frame to another agent
+without tearing down the floor's SSE stream and animation loop.
+
+### The decisions the package did not specify
+
+**1. Auto-start is on by default, and a started daemon outlives the window.** WP-31 says "start the
+daemon", and the extension does: on activation it sweeps 4317–4326, and finding nothing runs `npx
+--yes deckhq --no-open`. That first start downloads from npm, which is the only moment anything in
+this feature reaches the network, and the README says so in the same paragraph as the fix (install
+`deckhq` and even that stops). `deckhq.autoStart: false` turns it off. The daemon is spawned
+detached and unreferenced, so closing VS Code does not kill it — the product exists because debts
+accumulate while you are not looking, and a queue that stops counting when the editor closes is
+not that product.
+
+**2. `Stop daemon` stops only a daemon this window started.** There is no shutdown endpoint and
+this package did not add one: an HTTP route that kills the process would be reachable by anything
+the CSRF guard lets through, for the sake of a menu item. So `stop()` kills the child in this
+process's table — `taskkill /T` on Windows, because the child is `cmd.exe` waiting on `npx`
+waiting on `node` — and when there is nothing of ours to kill it says which daemon it found and
+leaves it alone.
+
+**3. The start command is an argument list, read from user settings only.** `deckhq.startCommand`
+is `["npx","--yes","deckhq","--no-open"]`, an array rather than a string so there is no splitting
+to get wrong, declared `"scope": "application"` and read through `inspect()` taking `globalValue`
+or the default. A repository you cloned to read cannot ship a `.vscode/settings.json` that names
+the program this extension spawns. On Windows the command does go through `cmd.exe` — Node refuses
+to spawn a `.cmd` without a shell, the fix for CVE-2024-27980 — and `windowsCommandLine()` is what
+makes that safe: every token is double-quoted, and a token holding `"`, `%`, `!`, `^` or a line
+break is **refused** rather than escaped. Two smaller Windows facts, both found by running it:
+`cmd /s /c` strips the first and last character of its command line, so the whole line needs an
+outer pair of quotes to sacrifice; and a bare `npx` can resolve to the extensionless POSIX shell
+script npm ships beside `npx.cmd`, which `cmd` then tries to run as a batch file, so
+`resolveWindowsExecutable()` names the `.cmd` outright.
+
+**4. The count comes from SSE, with the 5 s poll as the fallback.** WP-31 offers either. The
+daemon pushes a whole snapshot on every change, so the number moves when a turn ends rather than
+up to five seconds later; a 5 s timer runs alongside it and does the three jobs the stream cannot
+— find a daemon when none is connected, refresh the count when the stream is not open, and notice
+a daemon that went away. A dropped stream is explicitly **not** treated as a dead daemon: a
+sleeping machine drops SSE streams, and it is the next poll of `/api/state` that decides.
+
+**5. The status bar line is the status line's line.** `▣ 3 waiting · 1 hand up`, and `▣ clear`
+when nothing is owed — the same string `deckhq statusline` renders, asserted against
+`renderStatusline()` from `src/cli/statusline.mjs` by a test, so two DeckHQ surfaces on one screen
+cannot disagree. Two states the CLI has no need for: `▣ starting…` and `▣ off`. Counting is not
+repeated: `counts` comes off the wire as `/api/state` computed it. The one predicate that is
+restated, `needsYou`, is asserted against `src/core/model.mjs` across every `ackState` ×
+`activityState` pair.
+
+**6. `Show waiting` opens the floor and names the agent in the fragment.** Same limit as `deckhq
+open <id>` — §93. The client does not read `#agent=` yet, so today the pick opens the panel and
+the selection lands when `public/` honours it. Stated rather than quietly shipped as if it worked.
+
+**7. `retainContextWhenHidden` is on.** VS Code's docs discourage it. The floor is an SSE stream, a
+queue and an animation loop; rebuilding it every time the tab loses focus would make the panel
+feel like a page rather than a room, which is the one thing this product is trying not to be.
+
+**8. `activate()` returns a read-only view of its own state.** `ready`, `state`, `statusBarText`,
+`panelHtml`, all getters over state the extension already holds, none of which can change
+anything. It exists because VS Code offers no API to read a status bar item back, and "the status
+bar item appears, with the queue in it" is the acceptance criterion.
+
+### Verification
+
+`node scripts/vscode-verify.mjs` starts `scripts/demo-floor.mjs` on a free port, writes a
+throwaway workspace pointed at it, and runs `vscode/test/host.js` inside a real editor via `code
+--extensionDevelopmentPath --extensionTestsPath`. Six assertions: the extension activates, the
+four commands are registered, a daemon is found on loopback, **the status bar item reads the queue
+and agrees with the daemon's own counts**, `Open floor` produces one webview tab framing that
+loopback origin under the expected CSP, and a second `Open floor` reveals the same panel rather
+than stacking another. The demo floor is not optional: this opens a real window on a real desktop,
+and it must never be showing somebody's actual project names while it does.
+
+**What that script cannot do, and why.** It runs the working tree, not an installed `.vsix`.
+`--extensionTestsPath` is silently ignored unless `--extensionDevelopmentPath` is given as well —
+`code --extensionTestsPath=C:/nope.js` exits 0 having done nothing — so an "installed" mode would
+report a pass it never earned. The `.vsix` holds the same files byte for byte. The installed build
+was checked by hand instead, on 4 September: `code --install-extension deckhq-0.1.0.vsix`
+succeeded, `code --list-extensions --show-versions` reported `dkpanseriya.deckhq@0.1.0`, a plain
+window's extension host log recorded `ExtensionService#_doActivateExtension DkPanseriya.deckhq …
+activationEvent: 'onStartupFinished'`, and its status bar read `▣ 6 waiting · 2 hands up` against
+a demo floor with six.
+
+**The screenshot is real, and it took three attempts to take one safely.** `code
+--extensionDevelopmentPath` is interactive, so the first approach drove the palette with synthetic
+keystrokes and captured the screen rectangle. Both halves of that are wrong: `SetForegroundWindow`
+fails from a background process, so the keystrokes went to whatever had focus, and a screen-
+rectangle capture photographs whatever window happens to be in front — on this machine it caught
+an unrelated application, and that image was destroyed unexamined. The method that works is
+`PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT)`, which renders **one window's own pixels** and can
+capture nothing else, driven by a throwaway copy of the extension that opens the panel itself so
+no synthetic input is needed at all. `vscode/media/panel.png` is that: the real panel, the demo
+floor, and the real status bar item, downsampled 2× from the 2848×1768 the display renders.
+
+**Packaging.** `npx --yes @vscode/vsce package`, never a runtime dependency. `vsce` rewrites
+relative README image paths using `repository.url` and **ignores `repository.directory`**, so a
+relative `media/panel.png` becomes `…/deckhq/raw/HEAD/media/panel.png` — a path that does not
+exist. The README therefore carries the absolute raw URL, and `.vscodeignore` keeps the 555 KB
+screenshot out of the package: the Marketplace fetches it from the repository, and nothing in the
+extension loads it. Nothing in `vscode/` reaches npm — the root `package.json`'s `files` is an
+allow-list of `bin`, `src`, `public`, `README.md`, `LICENSE`, and a test asserts no entry can
+match `vscode`.
+
+**Acceptance.** 40 tests: four `EGRESS:` tests that read the extension's own source and fail on any
+host but `127.0.0.1`, on `node:https`/`node:dns`/`node:tls`/`fetch(`, on a socket opened outside
+`lib/loopback.js`, and on a dependency or build step in the manifest; an `INVARIANT:` test that the
+only path the extension ever requests is `/api/events` and that it makes no POST; the two
+no-second-representation tests against `model.mjs` and `statusline.mjs`; the port scan against
+`source.mjs`; the quick pick's order, fallbacks and truncation; five webview tests including the
+CSP shape and an attribute-escape case; four `SECURITY:` spawn tests including seven refused
+`cmd.exe` metacharacter cases; SSE frame reassembly against a real loopback server; four monitor
+tests covering connect, stream, fallback and disappearance; and the manifest, its four commands,
+and the application-scoped start command. Plus four integration tests against a real daemon for
+the framing and CSRF facts above, and the six in-editor assertions. 714 tests to 754.
+
+**Left for the owner.** Publishing needs a Marketplace publisher account for `DkPanseriya`, an
+Azure DevOps PAT with Marketplace → Manage, and `vsce publish`. The extension is versioned `0.1.0`
+independently of the npm package: a Marketplace listing and an npm release are not the same
+artifact and should not be forced to move together.

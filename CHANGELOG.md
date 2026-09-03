@@ -135,6 +135,22 @@
   `bench` go through the running daemon's `/api/ack` and nothing else, because `act()` is the only
   code path allowed to clear a user-owned state — with no daemon they print `start deckhq to act`
   and exit 2. §93.
+- **DeckHQ has a VS Code extension.** `vscode/` — install it and the floor is a panel beside your
+  code, with `▣ 3 waiting · 1 hand up` in the status bar. On the first window it looks for a
+  daemon on `127.0.0.1:4317`–`4326` and, finding none, starts one with `npx --yes deckhq
+--no-open`; `deckhq.autoStart: false` if you would rather start it yourself. Four commands:
+  **Open floor**, **Show waiting** (the queue as a quick pick, oldest first, Enter opens the panel
+  at that agent), **Start daemon** and **Stop daemon**. The count is pushed live from
+  `/api/events`, so it moves the moment a session's turn ends, with a 5-second poll as the
+  fallback; the line is the same string `deckhq statusline` renders, asserted against it so two
+  DeckHQ surfaces on one screen cannot disagree. **No telemetry, no dependencies, no build step,
+  and no socket that goes anywhere but `127.0.0.1`** — a test reads the extension's own source and
+  fails the build if another host, `node:https`, `node:dns`, `node:tls` or a `fetch(` appears in
+  it. It reads `/api/state` and `/api/events` and posts nothing: a status bar cannot discharge a
+  debt by displaying it. The panel loads the floor in an iframe on the daemon's own origin rather
+  than re-serving it, so the floor's own requests stay same-origin and **nothing in the daemon's
+  CSRF guard had to be relaxed for the editor** — a test asserts a `vscode-webview://` origin is
+  still refused. §94.
 
 ### Changed
 
@@ -225,6 +241,16 @@
 
 ### Testing
 
+- **The VS Code extension is asserted from the repository's own suite, and once inside a real
+  editor.** Forty unit and integration tests cover the egress scan over the extension's source,
+  an `INVARIANT:` test that `/api/events` is the only path it ever requests, its `needsYou` and
+  its status line against `src/core/model.mjs` and `src/cli/statusline.mjs`, its port scan
+  against `src/cli/source.mjs`, the panel's CSP, seven refused `cmd.exe` metacharacters in a
+  configured start command, SSE frame reassembly against a real loopback server, and the daemon
+  facts the panel depends on — that the floor may be framed, and that a `vscode-webview://` POST
+  is still 403. `node scripts/vscode-verify.mjs` then runs six assertions inside a real VS Code
+  against the demo floor, including that the status bar item appears and agrees with the daemon.
+  §94.
 - **Every (platform, emulator, launch form) pair has its exact argument list asserted** —
   twenty-one of them, byte for byte, in `test/unit/terminals.test.mjs`, plus detection order,
   `$TERMINAL` precedence, the pinned setting, and a hostile session id checked against every
@@ -255,6 +281,12 @@
 
 ### Packaging
 
+- **Nothing in `vscode/` reaches npm.** The root `files` allow-list is unchanged and a test
+  asserts no entry can match it. The extension is packaged separately with `npx --yes
+@vscode/vsce package` — never a runtime dependency — into a 27 KB `.vsix`, versioned `0.1.0`
+  independently of this package because a Marketplace listing and an npm release are not the same
+  artifact. Publishing it needs a Marketplace publisher account and a token, and has not happened.
+  §94.
 - **A tag now produces the release page, not only the package.** `publish.yml` gains a `release`
   job that runs once the OIDC publish has succeeded. It downloads the tarball the registry
   actually serves and checks it against the registry's own `dist.integrity`; builds
