@@ -6095,3 +6095,148 @@ and **0 px moved at all** — a quieter noise floor than §87 measured, whose
 `docs/media/` carries the pair for both populations:
 `floor-before-wp55.png` / `floor-after-wp55.png` and `demo-before-wp55.png` /
 `demo-after-wp55.png`, each taken from the golden itself.
+
+## 107. WP-46 — the team's records, and the one surface this package could not reach
+
+`docs/plan/08-PLAN-V2-100X.md` §9's WP-46 asked for "longest wait ever and its
+date, busiest day, most turns in a week, the room that never slept", on the
+hover card and in Wrapped, "phrased as the team's record", with "a test [that]
+asserts no copy addresses the user in the second person with an implication of
+fault". §7 adds the fifth: a falling number, computed from the ledger and never
+from the human. All five landed as `records()` in `src/core/ledger.mjs`, on
+`GET /api/stats` under `records`, and in `deckhq stats`. Wrapped is WP-27 and is
+not in this package.
+
+### The four definitions the plan did not fix, and what they are now
+
+The plan names the records; it does not say what a turn is, what "never slept"
+counts, or how fast a fast day has to be before it is a day at all. Each of
+these is written down because each could have been decided the other way and
+the number would still have looked plausible — which is exactly the class of
+thing this log exists for.
+
+**1. A turn is a session starting work.** `isTurn()` counts `state` records
+with `dim: 'activity'` and `to: 'working'`. The obvious alternative was to count
+`send` records — the ledger already has them, and they are unambiguous. They are
+also only the half of the floor that came through DeckHQ. On the reference
+machine most turns are typed in a terminal, so "the busiest day" computed from
+sends would have been a fact about the panel wearing the name of a fact about
+the floor. The `to: 'working'` transition is written whoever caused it.
+
+**One exclusion, and only one:** `stalled` → `working` does not count. A stall is
+*inferred from silence*, so coming out of one is the same turn resuming; a long
+quiet turn would otherwise register as several short ones, and the busiest day
+would be won by whichever day had the worst network. `working` → `working` is
+guarded too, although the state machine does not write it.
+
+**2. "Never slept" counts distinct hours OF THE DAY, not hour-slots in the
+week.** The alternative — 168 slots across the window — makes the record "the
+busiest room", which is `busiestDay` again with more arithmetic. Hours of the
+day, capped at 24, makes the record what its name says: somebody was in that
+room at 04:00 *and* at 16:00, and 24 of 24 is a room that genuinely never slept.
+Every kind of record counts as activity, including a token delta: a token delta
+at 03:00 is somebody working at 03:00.
+
+**3. A day needs three discharges before it can be the fastest.**
+`MIN_DISCHARGES_FOR_FASTEST_DAY = 3`. Without a floor the record is permanently
+held by whichever day happened to contain exactly one two-second discharge,
+which is not a fact about a day — it is a fact about one click. Three is the
+smallest number for which "the median" is the median of anything. A ledger with
+no qualifying day reports `null` and the line is simply absent, which is the
+shape every other record uses when it has nothing to say.
+
+**4. Records are never windowed by `--days` or by `?since=`.** The rest of `GET
+/api/stats` is a window; these are not, for the same reason `longestWaitEver`
+already was not. A record that a thirty-day window could erase is not a record.
+The rolling week inside `busiestWeek` and `neverSlept` is a property of those
+two records, not of the report they sit under.
+
+### `records` on the route used to be a number
+
+`GET /api/stats` published `records: <count of ledger lines>`. WP-46 needs the
+name, so the count moved to `recordCount` and `records` is now the object.
+`computeStats()` emits **both** names, so nothing that read the count has to move
+in the same commit as the thing that took its name. Nothing in the tree read the
+route's `records`; `deckhq stats` reads `computeStats()` directly and is
+unaffected. This is a breaking change to the JSON shape of one field on one
+local endpoint and it is recorded as one.
+
+### Degrading on a young ledger
+
+WP-46's records are mostly about history, and a floor installed yesterday has
+none. Three ways to handle that: report nothing until a week has passed, report
+a week that did not happen, or report what there is and say what there is. The
+third is the only one compatible with `docs/plan/08` §1.1 rule 11.
+
+So every record carries `since` — the first day the ledger holds — and `partial`,
+true while that is less than `RECORD_WINDOW_DAYS` ago. `deckhq stats` prints
+`since <day>` once under the heading; the panel's line carries ` · since 1 Sep`
+on itself, because it travels alone. The rolling window is **clipped** to the
+ledger rather than extended past it: `neverSlept.from` on a two-day-old ledger is
+the day the ledger starts, so "22 hours of the day" is never quietly a claim
+about a week that has not happened.
+
+### Never scoring the human, as a test rather than a convention
+
+Rule 6 and `docs/plan/04` §5 are the binding constraint on this package, and the
+failure mode is not a designed feature — it is one sentence written in the wrong
+person during a later edit. So it is asserted:
+
+- `no record line addresses the reader` renders every record through **both**
+  surfaces — `renderRecords()` in the CLI, `recordLineFor()` in the client — over
+  a fixture that sets all five, and scans the output.
+- `no string literal in the records copy addresses the reader` reads
+  `public/records.js` whole and the body of `renderRecords()` from
+  `src/cli/stats.mjs`, strips comments, and scans every string literal. That
+  covers the branches a fixture does not reach, including one added later.
+
+The detector matches `you`, `your`, `yours`, `you've`, `you're`, `you'll`, with
+one allowance: **"waiting on you"**, which is the product's own noun phrase for
+the queue and is a description of a state rather than a reproach. The allowlist
+is one array with a comment saying so, so widening it is a visible act.
+
+The CLI's `--help` is deliberately **out of scope** of the literal scan: it says
+"your retention window", which is possession and predates this package. The scan
+is scoped to `renderRecords()` for exactly that reason, and scoping it is
+recorded here rather than left to be discovered.
+
+### DEPARTURE: the hover card was not touched — **DECISION NEEDED**
+
+WP-46 says the records "live in the hover card and in Wrapped". The panel's
+identity area has its line. **The floating hover card does not**, and this is a
+departure, not an oversight.
+
+The hover card is `showTooltip()` in `public/app.js`. This package's brief
+prohibits touching `public/app.js`, `public/index.html` and
+`public/render/plan.js` — the same brief also described the hover card as living
+in `public/render/scene.js` or `public/render/agents.js`, where it does not:
+those two report a hover *target*, and `app.js` builds the DOM. So the
+instruction to add the line and the instruction not to open the file are the same
+instruction about the same file, and the file-ownership one was taken as binding:
+a package that quietly edits a file it was told another agent owns costs more
+than a missing grace note.
+
+What exists instead is the seam. `public/records.js` is a pure module with no DOM
+at module scope and one function, `recordLineFor(agent, stats)`, already used by
+`public/panel.js` and already covered by tests. Landing the hover card is an
+import plus three lines inside `showTooltip()`, after the project/model line:
+
+```js
+import { recordLineFor } from './records.js';
+// … inside showTooltip(), after the meta line:
+const record = recordLineFor(agent, teamStats);
+if (record) el.tooltip.appendChild(tooltipLine(record));
+```
+
+with `teamStats` fetched from `GET /api/stats` on the same five-minute cache
+`panel.js` uses. **Decision needed:** whoever owns `public/app.js` applies that,
+or WP-46 is accepted as panel-only and §7's sentence is amended.
+
+### Goldens
+
+`npm run goldens:check` is green on all four populations at **0 px moved at
+all**, checked rather than assumed. The record line renders only inside the side
+panel, which the golden captures never open — `scripts/goldens.mjs` passes no
+keys and no `--click` — and the one shared file this package touched that could
+have reached a capture, `public/style.css`, gained a single new rule for a class
+that appears nowhere on the floor.

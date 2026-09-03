@@ -308,6 +308,22 @@
   `legendary` beside the name, in the muted ink, and show nothing at all for the ~74% that are
   common. A word and never a number: no percentage, no rank, and no count of what you have
   "collected" — `docs/plan/08` §1.1 rule 6.
+- **The team has records.** Longest wait ever and the day that stretch began, the busiest day, the
+  most turns in any seven days, the room that never slept — the project with somebody in it across
+  the most distinct hours of the day this week — and the fastest discharge day, the lowest median
+  time in review of any day that discharged enough to have a median. All five are computed from
+  the local event ledger by `records()`, published on `GET /api/stats` under `records`, and
+  printed under `deckhq stats`. **Every one is a record of the team's work and none of them is a
+  score on you**: there is no streak, no level, no count of your days and nothing that can be
+  broken by a weekend, and two tests assert that no line of the copy addresses the reader in the
+  second person — one over the rendered output of both surfaces, one over every string literal in
+  the source. `docs/plan/08` §7 and §1.1 rule 6, `docs/plan/04` §1 and §5.
+- **A record shows up beside the agent it is about.** When one of the records has the open session
+  or its project as its subject, the panel's identity area carries one quiet line for it —
+  _"longest wait ever was here: 2d 12h, 1 Sep"_ — and nothing at all the rest of the time, which
+  is most of the time. A ledger younger than a week says so on the line (`· since 1 Sep`) rather
+  than claiming a week it has not lived through, and the rolling window is clipped to the ledger
+  instead of padded past it.
 
 ### Changed
 
@@ -429,6 +445,11 @@
   The column used to fall through to the session title because almost nobody had ever named an
   agent; now everybody has a name and it says what it was always meant to say. A given name also
   resolves an agent by name on the command line, exactly as a chosen one does.
+- **`records` on `GET /api/stats` is the team's records, not a line count.** The raw count of
+  ledger records it used to hold is `recordCount` now, and `computeStats()` publishes both names,
+  so anything reading the count has somewhere to move to that is already there. `deckhq stats`
+  reads the computation directly and is unaffected. One field, one local endpoint, recorded in
+  `docs/DEVIATIONS.md` §107 as the breaking change it is.
 
 ### Fixed
 
@@ -544,6 +565,13 @@
 
 ### Testing
 
+- **The team's records are checked against ledgers built so the answer is known.** Twenty-two
+  tests over synthetic ledgers: each record is the record it claims to be, a stall coming back is
+  not a new turn, a single two-second discharge cannot be a "fastest day", a room with no name
+  never borrows another room's record, a ledger three days old reports three days and dates them,
+  and adding a day to a date still lands on the next day when the clocks change. Two of them are
+  the copy guard: the second person appears nowhere in either surface, with `waiting on you`
+  allowlisted because it is the product's own noun phrase for the queue and not a reproach.
 - **The permission feature's five "never"s are each a named `INVARIANT:` test.** Never auto-allow,
   never answer on a timer, never set `interrupt`, never send a destination other than `session`,
   never touch `ackState`. The route is driven through fake request and response objects so that
