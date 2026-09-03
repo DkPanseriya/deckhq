@@ -310,6 +310,21 @@ export function createPanel(opts) {
   let teamStats = null;
   let teamStatsAt = 0;
   let teamStatsInFlight = false;
+  /**
+   * WP-09 · the turn currently streaming into the live region, if any.
+   * `{sendId, id, text, fromComposer}` — `text` is what was sent, kept so a
+   * failure can put it back in the composer where the user left it.
+   * @type {{sendId:string, id:string, text:string, fromComposer:boolean}|null}
+   */
+  let streaming = null;
+  /** The panel's own SSE connection (send progress + transcript tail). */
+  let liveSource = null;
+  /** Which agent id `liveSource` is watching, so it is not reopened per render. */
+  let liveWatching = null;
+  let liveBackoff = 1000;
+  let liveRetryTimer = null;
+  /** Coalesces transcript pings into at most one re-read (WP-09). */
+  let tailTimer = null;
 
   // ---------------------------------------------------------------- build
   root.textContent = '';
@@ -434,7 +449,36 @@ export function createPanel(opts) {
   saidHeading.textContent = 'What it said';
   const saidEl = document.createElement('div');
   saidEl.className = 'review-said';
-  saidSection.append(saidHeading, saidEl);
+
+  // WP-09 · the reply arriving. While a turn is streaming this sits directly
+  // under WHAT IT SAID and fills a word at a time; when the turn ends it is
+  // emptied and the canonical, markdown-rendered message replaces it above.
+  //
+  // Everything in here is `textContent`. Deltas are the model's own prose
+  // arriving a fragment at a time, so there is no complete markdown document
+  // to parse — half a fenced block is not a fenced block — and building DOM
+  // from a partial string is exactly the pass docs/plan/05-GUI-UX-SPEC.md
+  // §4.2 forbids. The finished turn is re-rendered as markdown by
+  // loadConversation(); the live view is plain text and says so.
+  const liveSection = document.createElement('div');
+  liveSection.className = 'review-live';
+  liveSection.hidden = true;
+  const liveRow = document.createElement('div');
+  liveRow.className = 'msg msg--assistant';
+  const liveWho = document.createElement('div');
+  liveWho.className = 'msg-who';
+  const liveBody = document.createElement('div');
+  liveBody.className = 'msg-body msg-body--plain review-live-body';
+  // Announced politely, once per turn boundary rather than per fragment: a
+  // screen reader reading every delta aloud would be unusable.
+  liveRow.setAttribute('aria-live', 'off');
+  const liveTools = document.createElement('div');
+  liveTools.className = 'review-live-tools';
+  liveTools.hidden = true;
+  liveRow.append(liveWho, liveBody, liveTools);
+  liveSection.appendChild(liveRow);
+
+  saidSection.append(saidHeading, saidEl, liveSection);
 
   const threadDetails = document.createElement('details');
   threadDetails.className = 'review-thread';
@@ -1742,13 +1786,26 @@ export function createPanel(opts) {
   }
 
   /**
-   * One send path for the composer and for `2 Approve`. Runs the turn
-   * through POST /api/send; the composer is held while it runs (WP-09 will
-   * stream instead). On failure the composer's own text is restored so
-   * nothing is lost; an approval that fails simply reports it.
+   * One send path for the composer and for `2 Approve`.
+   *
+   * WP-09. `POST /api/send` answers **202** as soon as the daemon has the
+   * turn, so the composer is held only for as long as that round trip takes
+   * — not for the whole turn, which is up to ten minutes and which the user
+   * used to spend looking at a disabled box reading "Sending…". The reply
+   * itself arrives afterwards on the panel's SSE connection and fills the
+   * live region under WHAT IT SAID (`onSendEvent` below).
+   *
+   * On failure the composer's own text is restored so nothing is lost —
+   * whether the failure is the request itself or a `send` event that arrives
+   * seconds later saying the runtime refused. An approval that fails simply
+   * reports it.
+   *
    * `o.id` sends to a row the panel is not showing — WP-10's `2 Approve`
    * from the deck. The composer belongs to the open row, so it is neither
    * cleared nor held busy in that case; the toast is the feedback.
+   *
+   * Passive with respect to ack state, like everything else here: this
+   * reaches /api/send and nothing else. `2 Approve` is a send, never an ack.
    * @param {string} text
    * @param {{approve?: boolean, id?: string|null}} [o]
    */
@@ -1791,25 +1848,208 @@ export function createPanel(opts) {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       toast(o.approve ? `Approved — sent “${text}” to ${who(agent)}` : 'Message sent');
       if (o.approve) announce(`${who(agent)}: approved`);
-      if (currentId === id) await loadConversation(id);
-    } catch (err) {
-      if (fromComposer && currentId === id) {
-        // On failure, restore the composer content so nothing is lost.
-        textarea.value = text;
-        drafts.save(id, text);
-        renderDraftChip();
-        onDraftChange?.(id, true);
+      // The turn is accepted, not finished. Hold on to what was sent so the
+      // stream's own failure can still put it back, and start the live row.
+      if (body.sendId) {
+        streaming = { sendId: String(body.sendId), id, text, fromComposer };
+        if (currentId === id) beginLive();
       }
+    } catch (err) {
+      restoreComposer(id, text, fromComposer);
       if (inPanel) {
         hintEl.textContent = `Could not send: ${err.message}`;
         hintEl.classList.add('is-warn');
       }
       toast(`Could not send: ${err.message}`, { isError: true });
     } finally {
+      // The composer comes back the moment the turn is ACCEPTED. This is the
+      // whole point of the package.
       sending = false;
       if (inPanel) setComposerBusy(false);
       if (hintEl.textContent === '' && !sending) hintEl.classList.remove('is-warn');
     }
+  }
+
+  /**
+   * Put a failed send's text back where the user typed it. Only for the
+   * composer's own sends: `2 Approve` never took anything out of the box, so
+   * it has nothing to give back.
+   * @param {string} id
+   * @param {string} text
+   * @param {boolean} fromComposer
+   */
+  function restoreComposer(id, text, fromComposer) {
+    if (!fromComposer || currentId !== id) return;
+    // Never overwrite something typed since. The reply that failed is the
+    // one being restored; a newer draft is the user's more recent intent.
+    if (textarea.value.trim()) return;
+    textarea.value = text;
+    drafts.save(id, text);
+    renderDraftChip();
+    onDraftChange?.(id, true);
+  }
+
+  // ------------------------------------------------------------- streaming
+
+  /** Show the live row, empty, with the typing state on it. */
+  function beginLive() {
+    liveBody.textContent = '';
+    liveTools.textContent = '';
+    liveTools.hidden = true;
+    liveWho.textContent = displayedAgent ? who(displayedAgent) : 'Agent';
+    liveRow.classList.add('is-typing');
+    liveSection.hidden = false;
+  }
+
+  /** Take the live row down. */
+  function endLive() {
+    liveRow.classList.remove('is-typing');
+    liveSection.hidden = true;
+    liveBody.textContent = '';
+    liveTools.textContent = '';
+    liveTools.hidden = true;
+  }
+
+  /**
+   * One `send` event off the SSE channel. Everything it writes to the DOM is
+   * `textContent`; see the live region's own note for why the streamed half
+   * of a reply is deliberately not put through the markdown renderer.
+   * @param {any} event
+   */
+  function onSendEvent(event) {
+    if (!streaming || !event || event.sendId !== streaming.sendId) return;
+    const id = streaming.id;
+    switch (event.type) {
+      case 'accepted':
+      case 'status':
+        return;
+      case 'delta':
+        if (typeof event.text === 'string') liveBody.textContent += event.text;
+        return;
+      case 'text':
+        // A runtime that gave whole messages rather than fragments. Same
+        // region, same rule.
+        if (typeof event.text === 'string') {
+          liveBody.textContent += (liveBody.textContent ? '\n\n' : '') + event.text;
+        }
+        return;
+      case 'tool':
+        if (typeof event.summary === 'string' && event.summary) {
+          const line = document.createElement('div');
+          line.className = 'review-live-tool';
+          line.textContent = event.summary;
+          liveTools.appendChild(line);
+          liveTools.hidden = false;
+        }
+        return;
+      case 'turn':
+        liveBody.textContent += '\n\n';
+        return;
+      case 'error':
+        restoreComposer(id, streaming.text, streaming.fromComposer);
+        if (currentId === id && !root.hidden) {
+          hintEl.textContent = `Could not send: ${event.error || 'the turn failed'}`;
+          hintEl.classList.add('is-warn');
+        }
+        toast(`Could not send: ${event.error || 'the turn failed'}`, { isError: true });
+        return;
+      case 'result':
+        if (!event.ok) return; // the `error` event above carries the reason
+        return;
+      case 'done':
+        streaming = null;
+        endLive();
+        // The canonical text, rendered as markdown from the transcript the
+        // runtime actually wrote. A passive GET; it touches no ack state.
+        if (currentId === id) loadConversation(id);
+        return;
+      default:
+        return;
+    }
+  }
+
+  /**
+   * Re-read the conversation because the transcript moved. Debounced, and
+   * suppressed while a turn is streaming — the live region is the truth for
+   * those seconds, and `done` re-reads once at the end anyway.
+   * @param {string} id
+   */
+  function onTranscriptChange(id) {
+    if (id !== currentId || streaming) return;
+    if (tailTimer) clearTimeout(tailTimer);
+    tailTimer = setTimeout(() => {
+      tailTimer = null;
+      // Reading a conversation is passive. THE INVARIANT: no ack call here.
+      if (currentId === id) loadConversation(id);
+    }, 120);
+  }
+
+  /**
+   * The panel's own SSE connection: send progress, and the transcript tail
+   * for the session on screen.
+   *
+   * It is a second connection to the SAME endpoint app.js already uses, with
+   * `?stream=send`. That filter is why it is affordable: without it the
+   * daemon would serialise the whole floor snapshot twice on every scan for a
+   * listener that reads neither copy. app.js owns the snapshot connection and
+   * is another package's file this one may not edit (WP-57), so the panel
+   * opens its own rather than reaching into it.
+   * @param {string|null} id
+   */
+  function watchLive(id) {
+    if (id === liveWatching && liveSource) return;
+    closeLive();
+    liveWatching = id;
+    if (!id) return;
+    openLive();
+  }
+
+  function openLive() {
+    if (!liveWatching || typeof EventSource !== 'function') return;
+    const url = `/api/events?stream=send&watch=${encodeURIComponent(liveWatching)}`;
+    const es = new EventSource(url);
+    liveSource = es;
+    es.addEventListener('send', (ev) => {
+      liveBackoff = 1000;
+      try {
+        onSendEvent(JSON.parse(/** @type {MessageEvent} */ (ev).data));
+      } catch (err) {
+        console.debug('[deckhq] malformed send event', err);
+      }
+    });
+    es.addEventListener('transcript', (ev) => {
+      liveBackoff = 1000;
+      try {
+        const data = JSON.parse(/** @type {MessageEvent} */ (ev).data);
+        onTranscriptChange(String(data.id || ''));
+      } catch (err) {
+        console.debug('[deckhq] malformed transcript event', err);
+      }
+    });
+    es.onerror = () => {
+      // Quietly, with backoff, exactly like app.js's own connection. A panel
+      // that cannot hold this open still works: it just stops being live.
+      es.close();
+      if (liveSource === es) liveSource = null;
+      if (liveRetryTimer) clearTimeout(liveRetryTimer);
+      liveRetryTimer = setTimeout(openLive, liveBackoff);
+      liveBackoff = Math.min(liveBackoff * 2, 30000);
+    };
+  }
+
+  function closeLive() {
+    if (liveRetryTimer) clearTimeout(liveRetryTimer);
+    liveRetryTimer = null;
+    liveBackoff = 1000;
+    if (tailTimer) clearTimeout(tailTimer);
+    tailTimer = null;
+    try {
+      liveSource?.close();
+    } catch (err) {
+      console.debug('[deckhq] could not close the live stream', err);
+    }
+    liveSource = null;
+    liveWatching = null;
   }
 
   form.addEventListener('submit', (e) => {
@@ -1861,7 +2101,15 @@ export function createPanel(opts) {
       // the panel: another agent's expanded rows are not this one's.
       expandedFiles.clear();
       fileRows = [];
+      // A reply streaming into the row we just left keeps running on the
+      // daemon; what it must not do is keep writing into a card showing
+      // somebody else.
+      endLive();
     }
+    // WP-09 · watch this session's transcript so a reply typed in a terminal
+    // appears here without a poll, and receive send progress on the same
+    // connection. Passive: it reads a file and pushes a digest.
+    watchLive(id);
     renderChrome();
     loadConversation(id);
     loadChanges(id, snapshot?.scannedAt ?? null);
@@ -1884,6 +2132,10 @@ export function createPanel(opts) {
     expandedFiles.clear();
     fileRows = [];
     stopCloseUp();
+    // Close the tail watch with the card. The daemon stops watching the file
+    // the moment this connection drops, so a closed panel costs nothing.
+    closeLive();
+    endLive();
     if (waitingTimer) clearInterval(waitingTimer);
     waitingTimer = null;
     setMoreOpen(false);

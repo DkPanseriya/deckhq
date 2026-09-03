@@ -3067,3 +3067,71 @@ textarea.field-input {
   animation: none;
 }
 /* WP-39 · the floating mini-floor — end ------------------------------------ */
+
+/* WP-09 · the reply arriving ------------------------------------------------
+
+   The live region under WHAT IT SAID while a turn streams. Everything in it
+   is plain text (see public/panel.js): a fragment of markdown is not
+   markdown, and the finished turn is re-rendered properly the moment the
+   runtime says it is finished.
+
+   The caret is the only motion, and it stops under reduced motion — where the
+   "typing" state stays legible as the dashed rule above the row and the muted
+   name line, both of which are information rather than decoration. Nothing
+   here is coloured: crimson means "in your office" and a reply arriving is
+   not that. */
+.review-live {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px dashed var(--line);
+}
+.review-live-body {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* The caret sits after the last character, so it moves with the text. */
+.review-live .msg.is-typing .review-live-body::after {
+  content: '▍';
+  margin-left: 0.05em;
+  color: var(--muted);
+  animation: panel-caret 1s steps(1, end) infinite;
+}
+@keyframes panel-caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .review-live .msg.is-typing .review-live-body::after {
+    animation: none;
+  }
+}
+[data-motion='reduce'] .review-live .msg.is-typing .review-live-body::after {
+  animation: none;
+}
+/* What it picked up on the way. Context, in the neutral ink the thought
+   bubbles use — never a state colour, and never the accent. */
+.review-live-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.4rem;
+}
+.review-live-tool {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.review-live-tool::before {
+  content: '· ';
+}
+/* WP-09 · the reply arriving — end ----------------------------------------- */
