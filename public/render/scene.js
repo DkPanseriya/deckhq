@@ -13,7 +13,7 @@
  * of this file for what that concurrency means for testing this module.
  */
 
-import { buildPlan, floorPopulation, U, formatTokens } from './plan.js';
+import { buildPlan, floorPopulation, U, formatTokens, payrollLine } from './plan.js';
 import { bakeBackdrop } from './backdrop.js';
 import {
   drawCharacter,
@@ -319,6 +319,86 @@ export function computeAnchor(target, id, view) {
   }
 
   return null;
+}
+
+/**
+ * What a room's door plate says, right now.
+ *
+ * A plate is recomputed from the live snapshot rather than read from
+ * `room.plateLines`, because the plan is rebuilt only when the floor's SHAPE
+ * changes and these numbers move on every poll. `room.plateLines` is the
+ * fallback for a room the snapshot has nothing to say about.
+ *
+ * **A project room has three lines** (WP-26, `docs/plan/08` §8.1): its name,
+ * its session/token/needs-you line, and the payroll meter under them. The
+ * third is `''` whenever nothing in that room has a rate — `payrollLine`
+ * refuses to put `$0.00` on a wall when what it means is "no rate" — and
+ * `_drawRoomPlate` simply draws nothing for an empty line, so a floor of
+ * unpriced rooms looks exactly as it did before the meter existed.
+ *
+ * A plain named export rather than only a method, for the reason the note at
+ * the bottom of this file gives: `new Scene(...)` needs a canvas, so anything
+ * that must be unit-tested lives out here where a stub snapshot is enough.
+ *
+ * @param {any} room
+ * @param {any} snapshot
+ * @param {any} [plan]
+ * @returns {string[]} `[title, data]` or `[title, data, payroll]`
+ */
+export function plateLinesFor(room, snapshot, plan) {
+  const snap = snapshot || {};
+  const fallback = () => room.plateLines || [room.name, ''];
+
+  if (room.kind === 'project') {
+    const project = (snap.projects || []).find((p) => p.id === room.id);
+    if (!project) return fallback();
+    return [
+      room.name,
+      `${project.sessionCount} sessions · ${formatTokens(project.tokens)} tok · ${project.needsYou} need you`,
+      payrollLine(project),
+    ];
+  }
+  if (room.kind === 'office') {
+    const c = snap.counts || {};
+    const waiting = c.forReview || 0;
+    // The longest wait is the number that makes debt visible. Individual
+    // badges cannot fit across a packed waiting area at a tight fit scale,
+    // so the plate carries the worst case; per-agent badges reappear once
+    // the viewport is wide enough to fit them.
+    let oldest = 0;
+    for (const a of snap.agents || []) {
+      if (a.ackState === 'active' && a.activityState === 'for_review' && a.reviewSince) {
+        oldest = Math.max(oldest, Date.now() - a.reviewSince);
+      }
+    }
+    const suffix = waiting > 0 && oldest > 0 ? ` · oldest ${formatElapsed(oldest)}` : '';
+    return [room.name, `${waiting} waiting${suffix}`];
+  }
+  if (room.kind === 'lounge') {
+    const c = snap.counts || {};
+    // THE DOOR PLATE CARRIES THE PEOPLE WHO ARE NOT IN THE ROOM (`08` B6).
+    // The lounge is sized by, and draws, only the benched agents still
+    // inside the gone-home window; the rest are on this line and nowhere
+    // else on the floor. `counts.benched` is every benched agent, which is
+    // what the header reports and what the panel lists — nothing about
+    // their state changed, only whether they are drawn.
+    const goneHome = plan && plan.goneHome ? plan.goneHome.size : 0;
+    const drawn = Math.max(0, (c.benched || 0) - goneHome);
+    return [
+      room.name,
+      goneHome > 0 ? `${drawn} benched · ${goneHome} went home` : `${drawn} benched`,
+    ];
+  }
+  if (room.kind === 'directory') {
+    const n = (room.entries || []).length;
+    return [room.name, `${n} repo${n === 1 ? '' : 's'} · nobody in`];
+  }
+  if (room.kind === 'let_go') {
+    const c = snap.counts || {};
+    const n = c.letGo || 0;
+    return [room.name, n === 1 ? '1 let go · archived' : `${n} let go · archived`];
+  }
+  return fallback();
 }
 
 export function resolveLabelCollisions(items) {
@@ -1616,17 +1696,38 @@ export class Scene {
       ctx.fillStyle = PALETTE.plateInkSecondary;
       ctx.fillText(data, x, dataY);
     }
+
+    // WP-26's payroll meter, on the same 11 px mono face as the line above it
+    // rather than a smaller one: it is the third line on a door plate, so it
+    // is already quiet by position, and shrinking it further would put a
+    // currency figure under the legibility floor the rest of the plate keeps.
+    // Present only for a project room that has a rate — `plateLinesFor`
+    // returns `''` rather than an invented `$0.00`.
+    let payWidth = 0;
+    let payY = dataY;
+    if (lines[2]) {
+      payY = dataY + 14;
+      ctx.font = `600 11px ${FONT_MONO}`;
+      const pay = ellipsise(ctx, lines[2], maxW);
+      payWidth = ctx.measureText(pay).width;
+      ctx.strokeStyle = PALETTE.plateHalo;
+      ctx.lineWidth = 2.6;
+      ctx.strokeText(pay, x, payY);
+      ctx.fillStyle = PALETTE.plateInkSecondary;
+      ctx.fillText(pay, x, payY);
+    }
     ctx.restore();
 
     // No card is drawn (above), but a room plate is still click-to-filter
     // (VISUAL-SPEC §8) — the hit rect now wraps the text itself rather than
-    // a drawn plate.
+    // a drawn plate. Every line that was drawn is inside it, the payroll line
+    // included: a plate you can read is a plate you can click.
     const top = titleY - 12;
-    const bottom = (lines[1] ? dataY : titleY) + 4;
+    const bottom = (lines[2] ? payY : lines[1] ? dataY : titleY) + 4;
     this._plateRects.push({
       x,
       y: top,
-      w: Math.max(titleW, dataW),
+      w: Math.max(titleW, dataW, payWidth),
       h: bottom - top,
       kind: room.kind === 'project' ? 'project' : room.kind,
       id: room.id,
@@ -1797,55 +1898,7 @@ export class Scene {
   }
 
   _plateLinesFor(room) {
-    if (room.kind === 'project') {
-      const project = (this._snapshot.projects || []).find((p) => p.id === room.id);
-      if (!project) return room.plateLines || [room.name, ''];
-      return [
-        room.name,
-        `${project.sessionCount} sessions · ${formatTokens(project.tokens)} tok · ${project.needsYou} need you`,
-      ];
-    }
-    if (room.kind === 'office') {
-      const c = this._snapshot.counts || {};
-      const waiting = c.forReview || 0;
-      // The longest wait is the number that makes debt visible. Individual
-      // badges cannot fit across a packed waiting area at a tight fit scale,
-      // so the plate carries the worst case; per-agent badges reappear once
-      // the viewport is wide enough to fit them.
-      let oldest = 0;
-      for (const a of this._snapshot.agents || []) {
-        if (a.ackState === 'active' && a.activityState === 'for_review' && a.reviewSince) {
-          oldest = Math.max(oldest, Date.now() - a.reviewSince);
-        }
-      }
-      const suffix = waiting > 0 && oldest > 0 ? ` · oldest ${formatElapsed(oldest)}` : '';
-      return [room.name, `${waiting} waiting${suffix}`];
-    }
-    if (room.kind === 'lounge') {
-      const c = this._snapshot.counts || {};
-      // THE DOOR PLATE CARRIES THE PEOPLE WHO ARE NOT IN THE ROOM (`08` B6).
-      // The lounge is sized by, and draws, only the benched agents still
-      // inside the gone-home window; the rest are on this line and nowhere
-      // else on the floor. `counts.benched` is every benched agent, which is
-      // what the header reports and what the panel lists — nothing about
-      // their state changed, only whether they are drawn.
-      const goneHome = this._plan && this._plan.goneHome ? this._plan.goneHome.size : 0;
-      const drawn = Math.max(0, (c.benched || 0) - goneHome);
-      return [
-        room.name,
-        goneHome > 0 ? `${drawn} benched · ${goneHome} went home` : `${drawn} benched`,
-      ];
-    }
-    if (room.kind === 'directory') {
-      const n = (room.entries || []).length;
-      return [room.name, `${n} repo${n === 1 ? '' : 's'} · nobody in`];
-    }
-    if (room.kind === 'let_go') {
-      const c = this._snapshot.counts || {};
-      const n = c.letGo || 0;
-      return [room.name, n === 1 ? '1 let go · archived' : `${n} let go · archived`];
-    }
-    return room.plateLines || [room.name, ''];
+    return plateLinesFor(room, this._snapshot, this._plan);
   }
 }
 

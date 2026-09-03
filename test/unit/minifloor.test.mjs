@@ -551,7 +551,32 @@ test('the palette command and the P key are the only two ways in', () => {
   assert.match(palette, /label: 'Float the office'/);
   assert.match(palette, /run: \(\) => actions\.floatOffice\(\)/);
   assert.match(app, /floatOffice, \/\/ WP-39/);
-  assert.match(app, /e\.key !== 'p' && e\.key !== 'P'/);
+
+  // `P` is a case in the floor's own keyboard map, not a listener of its own.
+  // It was registered separately while three packages were editing that
+  // switch (DEVIATIONS §113.5); the duplicate guards it carried are the class
+  // of thing that drifts out of step with the map it was copied from, so the
+  // duplication is asserted gone rather than left to be noticed.
+  const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
+  const bare = stripComments(app);
+  const start = bare.indexOf('function handleKeydown(');
+  assert.notEqual(start, -1, 'handleKeydown() not found in app.js');
+  const map = bare.slice(start, bare.indexOf('\nfunction ', start + 1));
+  assert.match(map, /case 'p':\s*case 'P':\s*floatOffice\(\);/);
+  assert.doesNotMatch(bare, /e\.key !== 'p' && e\.key !== 'P'/);
+  // Every document-level `keydown` listener is a named handler — the map, the
+  // palette accelerator, the audio unlock — and none of them is an anonymous
+  // block claiming one key for one feature.
+  const documentKeyListeners =
+    bare.match(/document\.addEventListener\('keydown', ([^)]*)\)/g) || [];
+  assert.ok(documentKeyListeners.length >= 3);
+  for (const line of documentKeyListeners) {
+    assert.match(
+      line,
+      /keydown', [A-Za-z_$][\w$]*\)/,
+      `a keydown listener was added outside the keyboard map: ${line}`,
+    );
+  }
   // `05` §5.2's header is a headline: no control for this was added to it.
   const html = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8');
   assert.doesNotMatch(html, /minifloor|float-office|Float the office/i);

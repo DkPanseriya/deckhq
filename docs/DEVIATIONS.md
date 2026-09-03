@@ -3424,7 +3424,9 @@ working sessions, then `scripts/capture-floor.mjs`. `public/render/plan.js`,
 `public/app.js` and the WP-08 panel layout are untouched; the panel gained one
 line under the header and nothing was restructured.
 
-**Accepted limits.** `Write`, `MultiEdit` and `Grep` show as their bare names:
+**Accepted limits.** *(The first of these was revisited and closed in §114.6: `Write`,
+`MultiEdit`, `Grep`, `Glob` and `WebFetch` all carry an argument now.)* `Write`, `MultiEdit` and
+`Grep` show as their bare names:
 the package specifies four rules (`Bash`, `Edit`, `Read`, otherwise the name)
 and inventing more argument shapes is a spec change, not an implementation
 detail — worth revisiting once the bubble has been watched on a real machine for
@@ -4421,7 +4423,8 @@ the claim happens after the card check, never before.
    `"Denied from DeckHQ."`. The string lands in the session's own transcript as
    the reason a tool did not run, so it is a user-visible piece of copy and the
    difference is recorded rather than silently reconciled. If the sentence case
-   is wanted back, it is one literal in `permissionDecisionBody`.
+   is wanted back, it is one literal in `permissionDecisionBody`. — *It was
+   wanted back: §114.5 makes it `"Denied from DeckHQ."`, as §86.3 specified.*
 
 2. **The hold is the runtime's timeout minus a margin, not the timeout.**
    `600_000 − 15_000 = 585_000 ms`, so the socket is released from our side
@@ -6202,6 +6205,9 @@ recorded here rather than left to be discovered.
 
 ### DEPARTURE: the hover card was not touched — **DECISION NEEDED**
 
+> **Decided in §114.3.** The card gets the line, off the panel's own cache rather than a second
+> fetch. `08` §7's sentence stands as written.
+
 WP-46 says the records "live in the hover card and in Wrapped". The panel's
 identity area has its line. **The floating hover card does not**, and this is a
 departure, not an oversight.
@@ -6250,6 +6256,9 @@ the first real session appears.
 Four departures, in order of how much they matter.
 
 ### 108.1 The two floor anchors point at the whole canvas, because the renderer exposes no geometry
+
+> **Closed.** `Scene.anchorFor` landed with WP-39 (§113) and the two marks are exact. §114.7 adds
+> the tests that hold it. Everything below is the gap as it was written; read it as history.
 
 §7 anchors mark 2 to "the user's office" and mark 3 to "one waiting agent". Both are regions of a
 single `<canvas>`: there is no element to measure, and `public/render/scene.js` has no public
@@ -6735,6 +6744,9 @@ sheet's "Rate card" row now reads the live version rather than a constant.
 
 ### RAISE — the plate's third line is computed but not yet painted
 
+> **Closed by §114.1.** The line is painted and the goldens are regenerated. Everything below is
+> the raise as it was written; read it as history.
+
 `08` §8.1 asks for per-room daily spend on the room plate, and this package
 produces it: `buildPlan` puts it in `room.plateLines[2]`, the snapshot carries
 `todaySpend`/`todaySpendIsToday` per project, and it is tested. **It does not
@@ -6994,7 +7006,7 @@ in `handleKeydown`'s switch, because two other packages were editing that file a
 that switch is the part of it they were most likely to touch. The guards are copied from that map
 in the same order: inert while text has focus, inert while a modal `<dialog>` is open, and a
 modifier means the browser's shortcut. **This is a duplication and it should be folded back into
-`handleKeydown` once the three branches have merged.**
+`handleKeydown` once the three branches have merged.** — *Folded back in §114.4.*
 
 The module is `import()`ed at load and never awaited at load, for two separate reasons. A static
 import would make `./render/*` a hard dependency of the shell, which `app.js`'s own file header
@@ -7404,3 +7416,214 @@ _"DeckHQ reads the managed settings file and reports what it finds there"_, whic
 that is actually ignoring them. The gap in 114.1 — MDM, the registry, and server-managed settings
 from the console — is not closeable by reading files, and needs its own decision before it is
 described as a limitation of the *feature* rather than of *this package*.
+
+## 116. WP-57 — the seven seams, and the two rules that decided each one
+
+Seven packages landed in one day, and six of them stopped one file short. Each had been told a
+file belonged to somebody else, each said so in this log rather than editing it quietly, and each
+wrote down the lines it would have added. That is the cost of parallel work paid correctly: the
+alternative is a package that edits a file another agent is holding, and a merge nobody can read.
+
+This package is the collection. There is no new feature in it. Its whole content is the last
+lines of six other packages, applied where their own briefs could not reach, plus the
+confirmation that a seventh gap had already closed.
+
+Two rules decided every one of them, and they are worth stating before the list because they are
+the only thing here that generalises:
+
+1. **The raise is the spec.** Where an entry wrote out the change it wanted, that is what was
+   applied — not an improved version of it. A package that could not reach a file had still
+   thought about the file, and re-deciding its decision from outside is how a seam becomes a
+   redesign. The two places this package departed from a raise are named below, both of them
+   because the raise was written before something else landed.
+2. **Zero is a claim.** Three of the seven are the same defect wearing different clothes: a value
+   that means "we do not know" arriving somewhere that reads it as "nothing". It is worth saying
+   once that `null` and `0` are different sentences about money, and that `|| 0` turns the first
+   into the second every time.
+
+### 116.1 The room plate's third line — §111's RAISE
+
+`_plateLinesFor`'s project branch returns `[name, dataLine, payrollLine(project)]` and
+`_drawRoomPlate` draws `lines[2]` under `dataY`, at the same 11 px mono face, folded into the hit
+rect's `bottom`. That is §111's raise verbatim.
+
+One thing the raise did not say, and it is the reason this is not a two-line commit.
+`_plateLinesFor` was a private method on a class that cannot be constructed without a canvas, a
+document and a window — so the function that decides what every room on the floor says had no
+test, and adding a line to it would have had no test either. It is now a plain exported
+`plateLinesFor(room, snapshot, plan)` with the method delegating, which is the pattern the note at
+the bottom of `scene.js` already states for `computeFitScale` and `computeAnchor` and the reason
+those have tests. Four new tests cover the payroll line, the no-rate branch, the "to date" branch,
+and that no other room kind grew a third line.
+
+**The face is the same 11 px mono as the line above it, not smaller.** A third line on a door
+plate is already quiet by position; shrinking it further would put a currency figure under the
+legibility floor the rest of the plate keeps (`05` §6.2), and a number nobody can read is worse
+than no number.
+
+**Accepted: the plate can now exceed `PLATE_BAND` at a tight fit scale.** The band is 3.4 units,
+which is 47.6 px at the maximum scale and less at every real one, while the plate's text is a
+fixed pixel size. Two lines already reached 35 px and a third reaches 49 px, so on a small floor
+the payroll line can sit a few pixels into the room's interior. It is drawn before the furniture
+and over the clear top-left corner every room reserves; the four goldens show no collision at
+1600×1000 on any population. Recorded rather than fixed, because fixing it properly means
+scaling the plate with the floor, which is a plate redesign and not this package.
+
+### 116.2 The project board's cost — §111's `|| 0`
+
+`showWhiteboard()` summed `x.costEstimate || 0` over the room's sessions. `costEstimate` is
+`number|null` and `null` means the rate card has no row for that model, so a room of unknown
+models produced `$0.00` — rule 2 above, exactly. It sums only priceable sessions now, and a room
+with none says `no rate`.
+
+**Departure from the obvious fix: the copy did not stay in `app.js`.** The board also had to name
+its rate card, and the natural place to write two new strings is where they are used. They are in
+`boardCostParts()` in `panel.js` instead, beside `costLineParts()`, for one reason: the thing
+being shared between the panel and the board is not the DOM, it is *what a cost figure must say
+about itself*, and `test/unit/rates.test.mjs`'s rule 7 scan can only read strings it can import.
+The board's two standalone lines are in that scan now. Its tile is not: a tile is a figure under
+its own `Est. cost` label in a grid, not a line that travels alone, and it carries the same number
+the total line carries a sentence later.
+
+A second test scans every module in `public/` for `costEstimate || 0`, so the next surface that
+adds one fails the build rather than the review.
+
+### 116.3 The hover card's record line — §107's DECISION NEEDED
+
+§107 asked for a decision: either `app.js`'s owner applies the four lines, or WP-46 is accepted as
+panel-only and `08` §7's sentence is amended. The line is applied.
+
+**Departure from the raise, and it is the whole of the work.** §107's sketch had the card fetching
+`GET /api/stats` "on the same five-minute cache `panel.js` uses" — which, read literally, is a
+second cache with the same TTL. That is two fetches and two answers, and the failure it produces
+is the card and the panel showing different records at the same moment, on the same screen, about
+the same session. `createPanel` now returns `teamRecords()`, a getter that warms its existing
+cache and hands back whatever is in it, and the card reads that. One fetch, one window, one
+answer. `null` until the first resolves, which `recordLineFor` already reads as "no line", so a
+hover never waits on the network.
+
+Consequence worth naming: the card can now trigger the stats fetch before the panel has ever been
+opened. It is a GET over a replay of text files, it reads no ack state and writes nothing, and it
+is the same call the panel was already making — but it is a call on a hover path, and that is the
+kind of thing that should be visible in a log rather than discovered in a profile.
+
+The line is placed **last** in the card rather than after the project/model line as §107's comment
+suggested. That is the position the panel gives it (`recordEl` is last in the identity block), and
+a grace note between two data lines reads as data.
+
+### 116.4 `P` folds into the keyboard map — §113.5
+
+§113.5 said it plainly: "This is a duplication and it should be folded back into `handleKeydown`
+once the three branches have merged." They have. The standalone listener is gone, the copied
+guards with it, and `P` is a case in the switch beside every other floor key.
+
+The test that pinned the old shape (`e.key !== 'p' && e.key !== 'P'`) now pins the new one, and
+adds the general form: every `document.addEventListener('keydown', …)` in `app.js` must name a
+handler rather than take an anonymous block. Three named handlers is the whole list — the map, the
+palette accelerator, the audio unlock — and a fourth anonymous one claiming a key for a feature is
+the thing that produced this seam.
+
+### 116.5 The deny message — §97.3 decision 1
+
+`"denied from DeckHQ"` → `"Denied from DeckHQ."`, which is what §86.3's table specified before
+§97's build took the package brief's wording instead and recorded the difference. §86.3 is the
+spec and the difference was recorded precisely so somebody could close it in one edit.
+
+The literal is `DENY_MESSAGE`, exported. Three suites assert the wire shape of a deny — one unit,
+one route, one integration against a real daemon — and they were three independent copies of the
+string. Two now assert the exported constant's value and the shape it produces; the copies that
+remain are deliberate, in the two deep-equal assertions that exist to catch a change to the
+*shape*.
+
+### 116.6 Five more tool summaries — §89's accepted limits
+
+§89 shipped `Bash`, `Edit`, `Read` and "otherwise the name", and said the rest were a spec change
+"worth revisiting once the bubble has been watched on a real machine for a week". The five rules
+this package was given are applied as given:
+
+| tool | summary |
+| --- | --- |
+| `Write`, `MultiEdit` | the file, on exactly the `Edit`/`Read` rule |
+| `Grep` | the pattern, first 40 characters |
+| `Glob` | the pattern |
+| `WebFetch` | the host, and nothing else |
+
+Three decisions inside them.
+
+**1. `Write` and `MultiEdit` join `Edit` and `Read` in a set, not in a longer `else if` chain.**
+All four carry the path as `file_path` and all four must show it the same way. `FILE_TOOLS` is one
+line, and the security discipline is asserted once over all of it rather than once per tool.
+
+**2. An absolute `Glob` pattern is path-reduced; a `Grep` pattern is not.** A relative glob
+(`src/**/*.ts`) is a *shape* and stays readable. An absolute one (`/somebody/else/**/*.rs`) is a
+*location*, and a location outside the session's cwd is the exact thing WP-52's acceptance
+criterion forbids on a floor that gets screenshotted — so it goes through `relativePath` and comes
+out as `*.rs`. A `Grep` pattern is a regular expression the user typed rather than a place the
+tool opened, and running `^/api/v2` through a path reducer would produce `v2`, which is a lie
+about what was searched for. The two tests name the reason next to the assertion, so the next
+person does not "fix" one to match the other — the same treatment §97.3 gave the mirror-image
+disagreement between the bubble and the permission card.
+
+**3. `WebFetch` is host-only, and an unparseable URL is the bare name.** A URL's path and query
+are where an issue number, a document id, a search term or a token live; "which service is it
+talking to" is the whole of what the bubble is for. A string that will not parse as a URL gets no
+argument at all rather than a guess that might be a path — including `/local/path/file.md`, which
+is the case that makes the rule matter.
+
+`MAX_PATTERN` is 40, which is the brief's number for `Grep` and is applied to `Glob` and to the
+host as well. A regular expression past forty characters is not read at a glance over somebody's
+head; it is recognised by its beginning.
+
+### 116.7 The coach marks already point at the right things — §108.1
+
+Nothing to fix. `Scene.anchorFor` landed with WP-39 and `coachAnchorFor` already prefers it, so
+mark 2 points at the office and mark 3 at one person, exactly as §108.1 said they would "the day
+it lands". What was missing was anything that fails if that stops being true: `computeAnchor` was
+tested against a stub plan, and the glue in `app.js` was tested not at all.
+
+Two tests close it. The first resolves `COACH_MARKS`'s own anchor descriptors through the real
+`computeAnchor`, over a real `buildPlan` and a real seated `AgentRuntime`, and asserts mark 2 is
+the office room as the plan draws it and mark 3 is a body standing inside that room — both
+strictly smaller than the stage, which is the exact question that separates a mark that points
+from the canvas-sized fallback it used to return. The second reads `app.js` and asserts the
+renderer is asked *before* the canvas is measured, that the fallback is still there for a renderer
+that failed to load, and that `Scene` really exports the method, so the preferred branch is not
+dead code.
+
+§108.1's "The gap, stated as a request" is closed and should be read as history.
+
+### Goldens
+
+**Regenerated, and this is the package that had to.** §111's Goldens note said it in advance: the
+moment `scene.js` paints `lines[2]` the floor changes and the goldens must be regenerated in the
+same package that does it. Before regeneration, `demo` failed at 6,337 px over tolerance (0.396%),
+`reference` at 1,332 px (0.083%) and `single` at 1,268 px (0.079%) — all of it the new plate line
+and none of it anywhere else on the floor.
+
+`empty` was **0 px moved at all**, which is not a coincidence and is worth reading as a test: the
+`empty` population is WP-13's actor floor, its actors carry no priceable project, and "no rate, no
+line" is therefore exercised on a whole population rather than only in a unit test.
+
+After regeneration all four match at 0 px. On `reference` the `platform-api` plate reads:
+
+```
+platform-api
+13 sessions · 1.4M tok · 2 need you
+today ≈ $22.93 · list price
+```
+
+and on `demo` all five project rooms carry their own figure ($9.50, $8.52, $8.68, $6.39, $4.91).
+Read at full size: the third line sits clear of the whiteboard prop and the desks, in the room's
+own reserved corner, at the same weight as the line above it. The office, lounge, directory and
+archive plates are unchanged at two lines.
+
+### Acceptance
+
+15 new tests: 4 in `scene-math.test.mjs` (`plateLinesFor`), 2 in `rates.test.mjs` (the board's
+copy, and the `|| 0` scan across `public/`), 1 in `records.test.mjs` (the hover card's wiring), 1
+in `hooks.test.mjs` for the deny sentence and 5 more for the new tool summaries, 2 in
+`coach-marks.test.mjs`. Plus the two rewritten to pin new shapes rather than old ones
+(`minifloor.test.mjs`'s key registration, `hooks.test.mjs`'s deny body). 1301 → 1316. Lint,
+format and all four goldens green.
+
+Seven commits, one per seam, each with its tests.

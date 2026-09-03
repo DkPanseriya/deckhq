@@ -364,15 +364,107 @@ test('SECURITY: control characters and newlines never survive into a summary', (
   assert.match(out.summary, /^Bash npm test then \[31mred/);
 });
 
+test('toolSummary: Write and MultiEdit name their file, on the Edit/Read rule', () => {
+  // DEVIATIONS §89 shipped these as bare names and said so. They carry the
+  // file now, and they carry it the same way `Edit` does — there is one rule
+  // for showing a path on the floor, not four.
+  assert.equal(
+    hooks.toolSummary(pre('Write', { file_path: path.join(SESSION_CWD, 'src', 'new.ts') })).summary,
+    'Write src/new.ts',
+  );
+  assert.equal(
+    hooks.toolSummary(pre('MultiEdit', { file_path: path.join(SESSION_CWD, 'a', 'b.ts') })).summary,
+    'MultiEdit a/b.ts',
+  );
+  // A relative path is resolved against the SESSION's cwd, never the daemon's.
+  assert.equal(
+    hooks.toolSummary(pre('Write', { file_path: 'notes.md' })).summary,
+    'Write notes.md',
+  );
+  // No file at all is the bare name rather than a trailing space.
+  assert.equal(hooks.toolSummary(pre('MultiEdit', { edits: [] })).summary, 'MultiEdit');
+});
+
+test('SECURITY: Write and MultiEdit reduce an outside path to its basename too', () => {
+  const elsewhere = path.join(path.resolve(os.tmpdir()), 'someone-elses-secret', 'notes.md');
+  assert.equal(hooks.toolSummary(pre('Write', { file_path: elsewhere })).summary, 'Write notes.md');
+  assert.equal(
+    hooks.toolSummary(pre('MultiEdit', { file_path: path.join(SESSION_CWD, '..', 'up.txt') }))
+      .summary,
+    'MultiEdit up.txt',
+  );
+  const other = process.platform === 'win32' ? 'Z:\\other\\deep\\file.rs' : '/other/deep/file.rs';
+  assert.equal(hooks.toolSummary(pre('Write', { file_path: other })).summary, 'Write file.rs');
+});
+
+test('toolSummary: Grep and Glob carry their pattern, cut to 40 characters', () => {
+  assert.equal(
+    hooks.toolSummary(pre('Grep', { pattern: 'TODO\\(.*\\)', path: 'src' })).summary,
+    'Grep TODO\\(.*\\)',
+  );
+  assert.equal(
+    hooks.toolSummary(pre('Glob', { pattern: 'src/**/*.ts' })).summary,
+    'Glob src/**/*.ts',
+  );
+  // Forty characters, cut with an ellipsis like every other flattened string.
+  const long = hooks.toolSummary(pre('Grep', { pattern: 'z'.repeat(300) }));
+  assert.equal(long.summary.length, 'Grep '.length + 40);
+  assert.ok(long.summary.endsWith('…'));
+  // A pattern with nothing in it is the bare name.
+  assert.equal(hooks.toolSummary(pre('Glob', { pattern: '  ' })).summary, 'Glob');
+  assert.equal(hooks.toolSummary(pre('Grep', {})).summary, 'Grep');
+});
+
+test('SECURITY: an absolute Glob outside the cwd keeps nothing but its last segment', () => {
+  // A relative glob is a SHAPE and stays readable; an absolute one is a
+  // LOCATION, and a location outside the session is what must not reach a
+  // screenshot. A Grep pattern is a regular expression the user typed and is
+  // deliberately not path-reduced — mangling `^/api/` would be a lie about
+  // what was searched for.
+  const inside = path.join(SESSION_CWD, 'src', '**', '*.ts');
+  assert.equal(hooks.toolSummary(pre('Glob', { pattern: inside })).summary, 'Glob src/**/*.ts');
+  const outside =
+    process.platform === 'win32' ? 'Z:\\other\\deep\\*.rs' : '/other/deep/secret/*.rs';
+  assert.equal(hooks.toolSummary(pre('Glob', { pattern: outside })).summary, 'Glob *.rs');
+  assert.equal(hooks.toolSummary(pre('Grep', { pattern: '^/api/v2' })).summary, 'Grep ^/api/v2');
+});
+
+test('SECURITY: WebFetch shows the host and never the path or the query', () => {
+  // A URL's path and query are where an issue number, a document id, a search
+  // term or a token live. "Which service is it talking to" is the whole of
+  // what the bubble is for.
+  assert.deepEqual(
+    hooks.toolSummary(pre('WebFetch', { url: 'https://example.invalid/x?token=abc123#frag' })),
+    { name: 'WebFetch', summary: 'WebFetch example.invalid' },
+  );
+  assert.equal(
+    hooks.toolSummary(
+      pre('WebFetch', { url: 'https://user:pw@api.example.invalid:8443/v1/secret' }),
+    ).summary,
+    'WebFetch api.example.invalid',
+  );
+  for (const url of ['not a url', '', '/local/path/file.md']) {
+    assert.equal(
+      hooks.toolSummary(pre('WebFetch', { url })).summary,
+      'WebFetch',
+      `"${url}" produced more than the bare name`,
+    );
+  }
+});
+
 test('toolSummary: any other tool is its name alone, and never longer than 120 characters', () => {
-  assert.deepEqual(hooks.toolSummary(pre('WebFetch', { url: 'https://example.invalid/x' })), {
-    name: 'WebFetch',
-    summary: 'WebFetch',
-  });
   assert.equal(hooks.toolSummary(pre('Task', {})).summary, 'Task');
+  assert.deepEqual(hooks.toolSummary(pre('NotebookEdit', { notebook_path: '/a/b.ipynb' })), {
+    name: 'NotebookEdit',
+    summary: 'NotebookEdit',
+  });
   for (const payload of [
     pre('Bash', { command: 'y'.repeat(4000) }),
     pre('Edit', { file_path: path.join(SESSION_CWD, 'a'.repeat(400), 'b'.repeat(400)) }),
+    pre('Write', { file_path: path.join(SESSION_CWD, 'c'.repeat(400)) }),
+    pre('Grep', { pattern: 'y'.repeat(4000) }),
+    pre('Glob', { pattern: path.join(SESSION_CWD, 'd'.repeat(400)) }),
+    pre('WebFetch', { url: `https://${'e'.repeat(400)}.invalid/x` }),
     pre('W'.repeat(400), {}),
   ]) {
     const out = hooks.toolSummary(payload);
@@ -506,12 +598,25 @@ test('permissionDecisionBody: allow is the exact object the installed runtime pa
   });
 });
 
+test('the deny message is a sentence, because it lands in somebody else’s transcript', () => {
+  // `docs/DEVIATIONS.md` §86.3 specified `"Denied from DeckHQ."`; the build
+  // shipped the brief's lower-case fragment and recorded the difference
+  // (§97.3 decision 1). The spec wins. Asserted as a literal here rather than
+  // against the export, so the export changing is a test failure and not a
+  // silent copy change.
+  assert.equal(hooks.DENY_MESSAGE, 'Denied from DeckHQ.');
+  assert.equal(
+    hooks.permissionDecisionBody('deny').hookSpecificOutput.decision.message,
+    'Denied from DeckHQ.',
+  );
+});
+
 test('INVARIANT: deny never sets interrupt — denying a command is not stopping the agent', () => {
   const body = hooks.permissionDecisionBody('deny');
   assert.deepEqual(body, {
     hookSpecificOutput: {
       hookEventName: 'PermissionRequest',
-      decision: { behavior: 'deny', message: 'denied from DeckHQ' },
+      decision: { behavior: 'deny', message: 'Denied from DeckHQ.' },
     },
   });
   assert.equal('interrupt' in body.hookSpecificOutput.decision, false);

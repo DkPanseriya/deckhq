@@ -422,6 +422,40 @@ test('no string literal in the records copy addresses the reader', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The hover card
+//
+// WP-46 asked for the record on the hover card as well as in the panel, and
+// could not reach `public/app.js` (`docs/DEVIATIONS.md` §107, DEPARTURE). The
+// card needs a DOM and `showTooltip()` is not exported, so this reads the
+// wiring as source, the way `permission-keys.test.mjs` does — what can be
+// checked without a browser is that the card asks the right question of the
+// right cache.
+// ---------------------------------------------------------------------------
+
+test('the hover card carries the record line, off the panel’s own stats cache', () => {
+  const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
+  const app = stripComments(fs.readFileSync(path.resolve(HERE, '../../public/app.js'), 'utf8'));
+  const panel = stripComments(fs.readFileSync(path.resolve(HERE, '../../public/panel.js'), 'utf8'));
+
+  assert.match(app, /import \{ recordLineFor \} from '\.\/records\.js';/);
+  const tooltip = block(app, 'function showTooltip(');
+  assert.match(
+    tooltip,
+    /recordLineFor\(agent, panel\.teamRecords\(\)\)/,
+    'the hover card does not ask records.js for a line',
+  );
+  assert.match(tooltip, /tooltipLine\(record\)/, 'the line is computed and never appended');
+
+  // ONE cache, not two. A second fetch here would let the card and the panel
+  // show different records at the same moment, and would put a network call
+  // on the hover path.
+  assert.doesNotMatch(tooltip, /fetch\(/, 'the hover card fetches on hover');
+  assert.doesNotMatch(app, /['"`]\/api\/stats['"`]/, 'app.js fetches /api/stats itself');
+  assert.match(panel, /function teamRecords\(\)/);
+  assert.match(panel, /\bteamRecords,/, 'the panel does not export its records cache');
+});
+
+// ---------------------------------------------------------------------------
 // The panel line
 // ---------------------------------------------------------------------------
 

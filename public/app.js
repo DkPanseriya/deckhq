@@ -15,13 +15,14 @@
  * never breaks the header, panel, keyboard map or notifications.
  */
 
-import { createPanel } from './panel.js';
+import { boardCostParts, createPanel } from './panel.js';
 import { createHooksUI } from './hooks-ui.js';
 import { createPalette } from './palette.js';
 import { createDeckUI, queueOrder } from './deck.js';
 import { applyMotionPreference, createSettingsUI } from './settings-ui.js';
 import { availableNames } from './names.js';
 import { createCoachMarks } from './coach-marks.js';
+import { recordLineFor } from './records.js';
 import {
   MAX_PNG_BYTES,
   MIN_SCALE,
@@ -1152,6 +1153,14 @@ function handleKeydown(e) {
     case '0':
       if (scene) scene.resetZoom();
       break;
+    // WP-39's floating mini-floor: the office, the corridor beside it and the
+    // count, over the terminal (`08` B3). The palette's "Float the office" is
+    // the other way in. Not awaited — the module is loaded on demand and a
+    // slow import must not hold the key map.
+    case 'p':
+    case 'P':
+      floatOffice();
+      break;
     default:
       return;
   }
@@ -1273,6 +1282,19 @@ function showTooltip(agentId) {
     ),
   );
 
+  // WP-46's grace note: the team's record, when this session or this room
+  // holds one. Last, and in the same position the panel puts it in — a record
+  // is context, never a call to action, and it never scores the reader
+  // (`docs/plan/08` §1.1 rule 6, asserted in `records.test.mjs`).
+  //
+  // The stats body comes from the panel's own five-minute cache rather than a
+  // second fetch, so the card and the panel cannot disagree about a record
+  // while both are on screen. It is `null` until the first one resolves and
+  // `recordLineFor` reads that as "no line", so a hover never waits on the
+  // network. `docs/DEVIATIONS.md` §107 asked for exactly this.
+  const record = recordLineFor(agent, panel.teamRecords());
+  if (record) el.tooltip.appendChild(tooltipLine(record));
+
   el.tooltip.hidden = false;
   placeNearCursor(el.tooltip, 320);
 }
@@ -1377,7 +1399,15 @@ function showWhiteboard(projectId) {
   const onFloor = all.filter((a) => a.ackState !== 'let_go');
   const tokens = onFloor.reduce((a, x) => a + (x.tokens || 0), 0);
   const cache = onFloor.reduce((a, x) => a + (x.cacheTokens || 0), 0);
-  const cost = onFloor.reduce((a, x) => a + (x.costEstimate || 0), 0);
+  // `costEstimate` is `number|null`, and null means "the rate card has no row
+  // for this model" (WP-26). Summing it with `|| 0` turned a room nobody can
+  // price into a confident `$0.00` — a claim about the money that nothing in
+  // the product had made. A room with no priceable session at all sums to
+  // null and says "no rate"; one with some says what it can price, which is
+  // the same rule `projects()` keeps with `costRated`.
+  const rated = onFloor.some((a) => a.costEstimate != null && Number.isFinite(a.costEstimate));
+  const cost = rated ? onFloor.reduce((a, x) => a + (x.costEstimate ?? 0), 0) : null;
+  const money = boardCostParts(cost, latestSnapshot.rateCardVersion);
   const models = [...new Set(onFloor.map((a) => a.model).filter(Boolean))];
 
   const board = document.createElement('div');
@@ -1420,7 +1450,7 @@ function showWhiteboard(projectId) {
   // the full figures.
   tile('Tokens', compactTokens(tokens));
   tile('Cache tokens', compactTokens(cache));
-  tile('Est. cost', `$${cost.toFixed(2)}`);
+  tile('Est. cost', money.tile);
   board.appendChild(tiles);
 
   const heading = document.createElement('p');
@@ -1454,13 +1484,16 @@ function showWhiteboard(projectId) {
   const totalLabel = document.createElement('span');
   totalLabel.textContent = 'Project total';
   const totalValue = document.createElement('span');
-  totalValue.textContent = `${formatNumber(tokens)} tok · $${cost.toFixed(2)}`;
+  totalValue.textContent = `${formatNumber(tokens)} tok · ${money.total}`;
   total.append(totalLabel, totalValue);
   board.appendChild(total);
 
   const hint = document.createElement('p');
   hint.className = 'whiteboard-hint';
-  hint.textContent = 'Cost is an estimate at public list prices, not a bill. Esc closes.';
+  // The board's figures are only checkable if the table they came from is
+  // named on the board. `rateCardVersion` rides in on every snapshot for
+  // exactly this, so no surface has to fetch `/api/about` for a string.
+  hint.textContent = money.note;
   board.appendChild(hint);
 
   el.whiteboardOverlay.textContent = '';
@@ -2193,20 +2226,11 @@ async function floatOffice() {
   await miniFloor.toggle();
 }
 
-// `P` floats the office. Registered here rather than in `handleKeydown`'s
-// switch so this package is one block in a file two others are editing; the
-// guards are that map's own, in the same order — a key never acts while text
-// has focus or a modal is open, and a modifier means the browser's shortcut.
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'p' && e.key !== 'P') return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
-  const target = /** @type {HTMLElement|null} */ (e.target);
-  const tag = target?.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
-  if (document.querySelector('dialog[open]')) return;
-  e.preventDefault();
-  floatOffice();
-});
+// `P` floats the office, as a case in `handleKeydown`'s switch. It was a
+// standalone listener with the map's guards copied into it, because three
+// packages were editing that switch at once (DEVIATIONS §113.5); they have
+// merged, so the duplicate guards are gone and the key is in the map with
+// every other key on the floor.
 // WP-39 · the floating mini-floor — end -------------------------------------
 
 // ---------------------------------------------------------- palette + sheet
