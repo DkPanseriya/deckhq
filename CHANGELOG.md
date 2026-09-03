@@ -752,6 +752,17 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   assertions. Goldens **0 px**, and the keyboard, the palette, the deck, the redaction toggle and
   the new-agent dialog were each driven in a real browser. `docs/DEVIATIONS.md` §121.
 
+- **"Who is on the floor" is one rule in one file.** It used to be two, either side of the
+  static-file boundary — `placement()` and `isGoneHome()` in `src/core/model.mjs`,
+  `derivePlacement()` and `isGoneHome()` in `public/render/` — each with a comment asking the next
+  person not to let them drift, and both had drifted. The boundary was never symmetrical: a
+  browser genuinely cannot resolve `src/`, but Node resolves `public/` fine and has been importing
+  `public/names.js` since WP-20. So the rule lives in `public/floor-rule.js`, which both sides
+  import; `model.mjs` and `plan.js` re-export it, so no import anywhere had to change, and
+  `derivePlacement` is now the same function object as `placement` rather than a copy of it.
+  Proven on both routes: `GET /floor-rule.js` serves 200, the live page imports it and answers,
+  and `GET /../src/core/model.mjs` still 404s. `docs/DEVIATIONS.md` §121.
+
 ### Fixed
 
 - **Thirty-two type defects the JSDoc had been hiding.** Every one was live and invisible to 1,520

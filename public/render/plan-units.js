@@ -280,10 +280,6 @@ export const DIRECTORY_PAD = 1;
  */
 export const DIRECTORY_MAX_H = PLATE_BAND + DIRECTORY_MAX_ROWS * DIRECTORY_LINE_H + DIRECTORY_PAD;
 
-/** Days of no activity after which a benched agent is not drawn. */
-export const GONE_HOME_DAYS = 7;
-export const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
  * Where the shelf and the dashboard screen start down a project room's east
  * wall — clear of the in-room "+" that sits in the corner above them.

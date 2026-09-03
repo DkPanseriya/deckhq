@@ -205,3 +205,83 @@ test('a project nobody could price is flagged unrated rather than zero', () => {
   assert.equal(p.costEstimate, 0);
   assert.equal(p.costRated, false, '"no rate" and "$0.00" are different claims');
 });
+
+// ----------------------------------------- WP-22: one rule, on one side only
+
+/**
+ * `public/floor-rule.js` is imported by `src/core/model.mjs` AND served to the
+ * browser as a static file. That is only safe while it stays pure, and only
+ * useful while it stays the only copy. Both are asserted here rather than left
+ * to the comment at the top of it (`docs/DEVIATIONS.md` §121).
+ */
+test('the shared floor rule is pure enough to live on both sides of the boundary', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const file = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    '..',
+    'public',
+    'floor-rule.js',
+  );
+  const src = await readFile(file, 'utf8');
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+
+  // No Node: it is fetched by a browser over HTTP.
+  assert.doesNotMatch(code, /from '(node:|\.\.\/src)/, 'the browser cannot resolve that');
+  assert.doesNotMatch(code, /\bprocess\.|\bBuffer\b|require\(/, 'no Node globals');
+  // No DOM: it is imported by the daemon, which has none.
+  assert.doesNotMatch(code, /\bdocument\.|\bwindow\.|localStorage/, 'no DOM');
+  // No top-level side effect: both sides load it for the functions alone.
+  assert.doesNotMatch(code, /^[a-z].*\(\);$/m, 'a bare call at module scope');
+  // No import of its own at all, so it can never pull either side into the
+  // other by accident.
+  assert.doesNotMatch(code, /^import /m, 'the shared rule imports nothing');
+});
+
+test('placement() and derivePlacement() are the same function, not two copies', async () => {
+  const agents = await import('../../public/render/agents.js');
+  const rule = await import('../../public/floor-rule.js');
+  assert.equal(agents.derivePlacement, placement, 'the renderer got a copy again');
+  assert.equal(rule.placement, placement, 'the core got a copy again');
+
+  // And the rule itself is stated once. Before WP-22 this literal appeared in
+  // `src/core/model.mjs` and in `public/render/plan.js`, with a comment in each
+  // asking the next person not to let them drift.
+  const { readFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  for (const rel of ['src/core/model.mjs', 'public/render/plan.js']) {
+    const src = await readFile(path.join(root, rel), 'utf8');
+    assert.doesNotMatch(
+      src,
+      /\['working', 'needs_input', 'stalled', 'for_review'\]/,
+      `${rel} carries a second copy of the on-the-floor set`,
+    );
+  }
+});
+
+test('WP-22: no plan or app module is over 900 lines', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'public');
+
+  const groups = [
+    [path.join(root, 'render'), (f) => f.startsWith('plan') && f.endsWith('.js')],
+    [root, (f) => f.startsWith('app') && f.endsWith('.js')],
+  ];
+  let checked = 0;
+  for (const [dir, keep] of groups) {
+    const files = (await readdir(dir)).filter(keep);
+    assert.ok(files.length >= 7, `${dir} did not split into the modules it should have`);
+    for (const f of files) {
+      const lines = (await readFile(path.join(dir, f), 'utf8')).split('\n').length;
+      assert.ok(lines <= 900, `${f} is ${lines} lines; WP-22's ceiling is 900`);
+      checked++;
+    }
+  }
+  assert.ok(checked >= 18, `expected the whole split, saw ${checked} files`);
+});

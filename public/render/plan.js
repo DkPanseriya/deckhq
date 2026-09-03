@@ -37,11 +37,16 @@
  *   plan-service.js  the office and the lounge
  *   plan-nav.js      walls, corridor centrelines, doors
  *
+ * Who is on the floor at all is not here either, and never was two answers
+ * again: `public/floor-rule.js` is the one copy, and `src/core/model.mjs`
+ * imports the same file (WP-22).
+ *
  * Everything the old module exported is re-exported at the foot of this file,
  * so no import anywhere had to change. Nothing else moved: `buildPlan` below
  * is the same function, line for line, and the goldens are byte-identical.
  */
 
+import { floorPopulation } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
 import { squarify } from './plan-packing.js';
@@ -52,10 +57,8 @@ import {
   ASPECT_MIN,
   BAND_STRETCH_MAX,
   CORRIDOR,
-  DAY_MS,
   DEFAULT_ASPECT,
   DOOR_WIDTH,
-  GONE_HOME_DAYS,
   HEIGHT_BAND_RATIO,
   MARGIN,
   MAX_WORKING_ROWS,
@@ -75,123 +78,7 @@ import {
   WORKING_HEADROOM,
   clamp,
 } from './plan-units.js';
-
-// ------------------------------------------------- who is on the floor at all
-
-/**
- * The activity states that count as "on the floor": at a desk, hand up, or
- * waiting in the office. `ended` is not one of them — a session that has
- * finished and been acknowledged is history, not a person in the building.
- */
-const ON_THE_FLOOR = new Set(['working', 'needs_input', 'stalled', 'for_review']);
-
-/**
- * Does this agent put its project on the working floor?
- *
- * `08` B6, the rule this file is built around: the plan is a function of
- * active projects and active agents and nothing else. An active agent is one
- * the user has not benched or archived, doing something — working, hand up,
- * gone quiet, or standing in the office waiting to be seen.
- * @param {AgentLike} agent
- */
-export function isActiveAgent(agent) {
-  return (
-    !!agent &&
-    agent.ackState === 'active' &&
-    ON_THE_FLOOR.has(/** @type {string} */ (agent.activityState))
-  );
-}
-
-/**
- * Does this agent occupy a DESK in its project's room?
- *
- * Everything `placement()` (src/core/model.mjs) calls `desk`: active, and not
- * standing in the office. That includes an `ended` session sitting at its own
- * desk — it is drawn whenever its project has a room, and it is what "desks
- * equal agents at desks" counts.
- * @param {AgentLike} agent
- */
-export function isDeskAgent(agent) {
-  return !!agent && agent.ackState === 'active' && agent.activityState !== 'for_review';
-}
-
-/**
- * Has this benched agent gone home?
- *
- * A DISPLAY FILTER AND NOTHING ELSE. `ackState` is untouched, the agent is
- * still counted, still in the panel, still one keystroke away, and any new
- * activity brings it back on the next scan — which is why this reads
- * `lastActivityAt` rather than storing a flag anywhere. The `INVARIANT:` tests
- * must pass unchanged, and they do: nothing here writes.
- *
- * Two deliberate refusals. A window of zero disables the filter rather than
- * hiding everybody, and an agent whose last activity is unknown is DRAWN — the
- * floor does not hide what it cannot date.
- *
- * @param {AgentLike} agent
- * @param {number} now ms epoch
- * @param {number} [goneHomeDays] `settings.goneHomeDays`
- */
-export function isGoneHome(agent, now, goneHomeDays = GONE_HOME_DAYS) {
-  if (!agent || agent.ackState !== 'benched') return false;
-  const days = Number(goneHomeDays);
-  if (!Number.isFinite(days) || days <= 0) return false;
-  const last = Number(agent.lastActivityAt);
-  if (!Number.isFinite(last) || last <= 0) return false;
-  return now - last > days * DAY_MS;
-}
-
-/**
- * Everything the plan needs to know about a population, counted once.
- *
- * Exported because it is the whole of B6's rule in one place, and a test that
- * checks the rule should read the same numbers the floor is built from rather
- * than re-deriving them.
- *
- * @param {AgentLike[]} agents
- * @param {{now?:number, goneHomeDays?:number}} [opts]
- */
-export function floorPopulation(agents, opts = {}) {
-  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
-  const goneHomeDays = opts.goneHomeDays ?? GONE_HOME_DAYS;
-  const list = Array.isArray(agents) ? agents : [];
-
-  let waiting = 0;
-  let benchedDrawn = 0;
-  /** @type {Map<string, number>} */
-  const active = new Map();
-  /** @type {Map<string, number>} */
-  const desks = new Map();
-  /** Project ids the agent list actually mentions. See `buildPlan`. */
-  const known = new Set();
-  /** @type {Set<string>} */
-  const goneHome = new Set();
-  /** Newest activity per project — the directory strip's third column. */
-  const lastActivity = new Map();
-
-  const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
-
-  for (const a of list) {
-    if (!a || a.ackState === 'let_go') continue;
-    const pid = a.projectId == null ? '' : String(a.projectId);
-    if (pid) {
-      known.add(pid);
-      const at = Number(a.lastActivityAt) || 0;
-      if (at > (lastActivity.get(pid) || 0)) lastActivity.set(pid, at);
-    }
-    if (a.ackState === 'benched') {
-      if (isGoneHome(a, now, goneHomeDays)) goneHome.add(String(a.id));
-      else benchedDrawn++;
-      continue;
-    }
-    if (a.ackState !== 'active') continue;
-    if (a.activityState === 'for_review') waiting++;
-    if (pid && isActiveAgent(a)) bump(active, pid);
-    if (pid && isDeskAgent(a)) bump(desks, pid);
-  }
-
-  return { now, goneHomeDays, waiting, benchedDrawn, goneHome, active, desks, known, lastActivity };
-}
+import { isDeskAgent } from '../floor-rule.js';
 
 // ------------------------------------------------------------------ the plan
 
@@ -958,7 +845,14 @@ export function buildPlan(projects, agents, opts = {}) {
 export { resolveAnchors, tableSizesFor } from './plan-anchors.js';
 export { shelfPack, squarify, tileRows } from './plan-packing.js';
 export { formatTokens, payrollLine } from './plan-rooms.js';
-export { DIRECTORY_MAX_H, GONE_HOME_DAYS, PLATE_BAND, U } from './plan-units.js';
+export { DIRECTORY_MAX_H, PLATE_BAND, U } from './plan-units.js';
+export {
+  GONE_HOME_DAYS,
+  floorPopulation,
+  isActiveAgent,
+  isDeskAgent,
+  isGoneHome,
+} from '../floor-rule.js';
 
 /** @typedef {import('./plan-units.js').ActivityState} ActivityState */
 /** @typedef {import('./plan-units.js').AckState} AckState */

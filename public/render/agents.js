@@ -11,8 +11,12 @@
  * §9 — static serving is confined to `publicDir`, so `public/render/*.js` cannot
  * `import` from `src/core/*.mjs` at runtime even though Node can for tests):
  *
- *   - `derivePlacement()` mirrors `placement()` in `src/core/model.mjs` exactly.
- *     Do not let these drift; if `model.mjs`'s rule changes, update both.
+ *   - `derivePlacement()` USED TO mirror `placement()` in `src/core/model.mjs`,
+ *     and they had drifted. WP-22 made it an alias of the one copy in
+ *     `public/floor-rule.js`, which `model.mjs` imports too. That module is
+ *     pure — no DOM, no `node:` import, no top-level side effect — so it is
+ *     legal on both sides of the boundary and this file stays loadable on its
+ *     own under `node --test`.
  *   - `clipForActivity()` is a minimal stand-in for `clipForState()`, which is
  *     specified to live in `./clips.js` (docs/03-VISUAL-SPEC.md §5). `clips.js`
  *     did not exist at the time this file was written (it is owned by another
@@ -38,6 +42,8 @@
  * header above — this module never statically imports `./plan.js`, and stays
  * loadable on its own under `node --test` — is untouched.
  */
+import { placement } from '../floor-rule.js';
+
 /** @typedef {import('./plan.js').Seat} Seat */
 /** @typedef {import('./plan.js').LoungeSpot} LoungeSpot */
 /** @typedef {import('./plan.js').Door} Door */
@@ -494,20 +500,15 @@ export function planWalk(from, to, rooms, plan) {
 // -------------------------------------------------------- seat assignment
 
 /**
- * Mirrors `placement()` in `src/core/model.mjs` exactly. See file header for
- * why this cannot simply import that function.
+ * Where an agent stands. WP-22: this WAS a hand-written copy of `placement()`
+ * in `src/core/model.mjs`, with a comment asking the next person not to let
+ * the two drift. There is one copy now — `public/floor-rule.js` — and
+ * `model.mjs` imports the same file. The name is kept because six call sites
+ * and four test files use it.
  * @param {AgentLike} agent
  * @returns {'desk'|'office'|'lounge'|'let_go'}
  */
-export function derivePlacement(agent) {
-  if (agent.ackState === 'let_go') return 'let_go';
-  // WP-41: a junior is only ever beside its parent — never in the office,
-  // never in the lounge. Mirrors `placement()`'s own subagent branch.
-  if (agent.subagent === true) return 'desk';
-  if (agent.ackState === 'benched') return 'lounge';
-  if (agent.activityState === 'for_review') return 'office';
-  return 'desk';
-}
+export const derivePlacement = placement;
 
 /**
  * Deterministic seat index for an id among `n` seats, with linear-probe

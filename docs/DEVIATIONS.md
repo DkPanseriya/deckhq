@@ -8834,3 +8834,81 @@ So those were run, on the demo floor in Chrome (`08` §1.1 rule 10):
 `/api/postcard` is 404 on the demo server, so the day's card could not be shown
 on it — that is a property of the demo fixture, not of this change, and it is
 the one surface here with no runtime evidence behind it.
+
+### The rule that was stated twice is stated once
+
+`public/floor-rule.js`. `ON_THE_FLOOR`, `GONE_HOME_DAYS`, `isSubagent`,
+`placement`, `isActiveAgent`, `isDeskAgent`, `isGoneHome`, `floorPopulation` —
+152 lines, one copy, imported by both sides.
+
+**The boundary was never symmetrical, and that is the whole answer.**
+`docs/02-ARCHITECTURE.md` §9 confines static serving to `publicDir`, so a
+browser module genuinely cannot resolve `src/core/*.mjs`; that direction is
+impossible and stays impossible. The other direction was never impossible, only
+unused — Node resolves a path under `public/` like any other, and
+`src/core/identity.mjs` has imported `public/names.js` for the name pool since
+WP-20. The typecheck found that first (§121's `@ts-ignore` note: three
+`public/` modules are already reachable from the Node side). So the rule lives
+on the side both can see.
+
+Verified rather than assumed, on both routes:
+
+| | evidence |
+|---|---|
+| Node resolves it | `src/core/model.mjs` imports it; 1,524 tests pass, including every `INVARIANT:` case |
+| the static server serves it | `GET /floor-rule.js` → **200, `text/javascript`, 8,480 bytes** |
+| the browser executes it | `await import('/floor-rule.js')` in the live page returns all eight exports, and `placement({ackState:'active', activityState:'for_review', subagent:true})` answers `'desk'` |
+| `src/` is still unreachable | `GET /../src/core/model.mjs` → **404** |
+
+**What each side gave up.** `src/core/model.mjs` re-exports `placement`,
+`isSubagent`, `isGoneHome`, `isActiveAgent`, `isDeskAgent` and
+`GONE_HOME_DAYS`, so every `import { placement } from './model.mjs'` in the
+tree still works. `public/render/agents.js`'s `derivePlacement` is now
+`export const derivePlacement = placement` — the name is kept because six call
+sites and four test files use it, and `agents.js` still statically imports
+nothing but this one pure module, so it stays loadable on its own under
+`node --test`. `plan.js` re-exports the four predicates it used to define.
+Nothing outside those two files changed.
+
+**Three tests hold it there**, in `test/unit/model.test.mjs`:
+
+1. **The module is pure.** No `node:` import, no `process`, no `Buffer`, no
+   `document`, no `window`, no top-level call — and no `import` of its own at
+   all, so it can never pull either side into the other by accident.
+2. **`derivePlacement === placement === floorRule.placement`.** Not "they agree
+   on the reference fixture" — the same function object. Plus: neither
+   `src/core/model.mjs` nor `public/render/plan.js` may contain the literal
+   `['working', 'needs_input', 'stalled', 'for_review']` again.
+3. **No `plan*.js` or `app*.js` module is over 900 lines**, across all
+   eighteen of them.
+
+`floor-integrity.test.mjs`'s "the header floor counts equal the plan's drawn
+totals" stays exactly as it was. It used to be the thing standing between two
+copies of a rule; it is now a check that `counts()` and `buildPlan()` *wire* the
+one rule the same way, which is a smaller claim and still worth making — the
+§106 bug was in the wiring as much as in the duplication.
+
+### What is still over 900 lines, and why that is a different package
+
+`plan.js` is 871 and `app.js` is 748. Ten files in the repository are still
+over the line this package set for the two it was asked to split:
+
+| file | lines |
+|---|---|
+| `public/panel.js` | 2,422 |
+| `public/render/scene.js` | 1,953 |
+| `public/render/rig.js` | 1,716 |
+| `src/core/ledger.mjs` | 1,556 |
+| `public/render/backdrop.js` | 1,491 |
+| `src/core/state-machine.mjs` | 1,466 |
+| `src/adapters/claude-code/adapter.mjs` | 1,444 |
+| `src/cli/doctor.mjs` | 1,281 |
+| `public/render/agents.js` | 1,183 |
+| `src/core/terminals.mjs` | 990 |
+
+They are named here rather than left to be discovered. Splitting them is not
+this package: WP-22 asked for `plan.js` and `app.js`, and each of the ten above
+needs the same care those two got — a reading of what the file's parts share, a
+rule for the state between them, and a way to prove nothing moved. The ceiling
+test asserts the ceiling for the modules this package produced, and does not
+pretend to a ceiling the repository does not yet meet.
