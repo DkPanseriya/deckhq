@@ -742,6 +742,16 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   exactly one module each, and the goldens moved **0 px** on all four populations.
   `docs/DEVIATIONS.md` §121.
 
+- **`public/app.js` was 2,721 lines and is now a composition root over ten parts.** The keyboard
+  map, the header, the hover card and the floor wiring — plus the notifications, the snapshot, the
+  day's card, the creation dialogs, the furniture launchers and the state they share. Three rules
+  made it safe: every `document` listener stayed on the line it was on, because the panel's own
+  keydown handler must still run before the floor's; the shared mutable state moved to one leaf
+  module as live bindings a part can read and cannot write; and no part imports the root back.
+  `app.js` is 748 lines. Seven static-scan tests had their file lists updated and not one of their
+  assertions. Goldens **0 px**, and the keyboard, the palette, the deck, the redaction toggle and
+  the new-agent dialog were each driven in a real browser. `docs/DEVIATIONS.md` §121.
+
 ### Fixed
 
 - **Thirty-two type defects the JSDoc had been hiding.** Every one was live and invisible to 1,520

@@ -8737,3 +8737,100 @@ thirteen of those lines are closures over its own locals — `measureService`,
 `place`. Lifting any of them out means giving it an explicit parameter list,
 which means changing a function body, which is the one thing this package
 promised not to do. It is the assembly step; it reads top to bottom; it stays.
+
+### F21's other half, part two: `app.js`, 2,721 lines → eleven modules
+
+`plan.js` was arithmetic and could be cut anywhere. `app.js` is a browser entry
+point: mutable state, listener order, and one function calling another across
+what would become a file boundary. Three rules made the cut safe, and every one
+of them is visible in the result.
+
+**Rule 1 — every top-level side effect stayed where it was.** Not one
+`document.addEventListener` moved. That is not tidiness: `panel.js` registers
+its own `keydown` listener inside `createPanel()`, which `app.js` calls at line
+1,236, and the floor's map is registered at line 1,867. Listener order IS the
+rule that lets a permission card take `A`, `D` and `S` while it is up and lets
+them fall through when it is not (`docs/DEVIATIONS.md` §86,
+`test/unit/permission-keys.test.mjs`). An imported module is evaluated BEFORE
+the module that imports it, so moving one registration into a part would have
+silently inverted that order — with every test still green, because the tests
+read source rather than run a browser. The two exceptions are listeners on
+elements of their own (`el.newProjectGo`, the pickers), where nothing about
+order can matter, and they moved with the code they call.
+
+**Rule 2 — mutable state moved to one leaf module, with the writes staying in
+the root.** `app-state.js` exports `latestSnapshot`, `scene`, `panel`,
+`deckUI`, `palette`, `projectFilter`, `selectedId` and `openCard` as live
+bindings with a setter each. A part reads `latestSnapshot` by name, exactly as
+it did when it was a local of one big file, and **cannot** reassign it: an
+import binding is read-only, so "the parts see the state, the root owns it" is
+enforced by the language rather than by review. `app.js` is the only file that
+calls a setter.
+
+**Rule 3 — the dependency runs one way.** Nothing under `app-*.js` imports
+`app.js`. Where a part needed one of the root's actions the action was handed
+in, never imported back:
+
+- `app-floor.js` takes them as a destructured parameter — same identifiers, so
+  the `onSelect` and `onHover` closures inside are untouched by the move.
+- `app-keys.js` takes them through `wireKeyboard()`, into module-level `let`s
+  with the names the map already used. It cannot take a parameter (its two
+  functions are event handlers), and importing them from `app.js` would have
+  made a module and its own entry point mutually dependent for no gain.
+
+| file | lines | what it is |
+|---|---|---|
+| `app.js` | 748 | the composition root: boot, wiring, listeners |
+| `app-dialogs.js` | 346 | new project, new agent, rename — and the pickers all three share |
+| `app-state.js` | 336 | the DOM refs, the display vocabulary, the shared state, the selection |
+| `app-header.js` | 305 | the counts, the banners, the filter chip, WP-16's badge |
+| `app-cards.js` | 293 | WP-18's postcard and WP-27's Wrapped |
+| `app-keys.js` | 227 | the floor keyboard map |
+| `app-launchers.js` | 217 | the shelf, the screen and the whiteboard |
+| `app-snapshot.js` | 212 | WP-14's `S` and `Shift+S` |
+| `app-notify.js` | 209 | OS notifications, their sounds, the settings write |
+| `app-tooltip.js` | 153 | the hover card and the cursor both overlays share |
+| `app-floor.js` | 86 | the renderer modules and what a click on furniture means |
+
+The brief named four parts — keyboard, header, tooltip, floor wiring. Those
+four are here; the other six exist because four would have left `app.js` at
+1,935 lines, and this package set itself a 900-line ceiling.
+
+### The static scans, and what changed in them
+
+Seven test files read `app.js` as source rather than running it — the panel
+invariant, the permission keys, the deck keys, the mini-floor, the PWA, the
+records line, the sound window. All seven kept working the same way: **only the
+file list changed, not one assertion.** Where a rule spans two files now (the
+`performAction` call count is two in the map and one in the palette) the test
+reads both and concatenates them, so the count it asserts is still every call
+site there is.
+
+One block moved to keep a scan honest rather than to satisfy it. WP-16's client
+footprint is one delimited `// WP-16 · begin`/`· end` region whose own comment
+says it is "the badge call (renderHeader above), and the registration below".
+`renderHeader` went to `app-header.js`, so the block followed it; the comment is
+true again, and the test that counts the delimiters counts two.
+
+### What the goldens do not cover, and what was run instead
+
+The goldens moved **0 px** on all four populations, which proves the floor still
+draws — and, since `scene.js` reaches the renderer through `app.js`, that the
+whole boot path still works. It proves nothing about the keyboard, the dialogs
+or the cards.
+
+So those were run, on the demo floor in Chrome (`08` §1.1 rule 10):
+
+| | result |
+|---|---|
+| boot | floor drawn, header `6` needs you / `14` at desk, tab title `(6) DeckHQ` |
+| `Ctrl+K` | palette opens, and closes on the second press |
+| `j` | queue moves and the panel opens on `Backfill the events table` |
+| `Tab` | the deck opens |
+| `Shift+S` | the redaction toast appears, with its exact wording |
+| new-agent dialog | opens, 61 names and 9 glyphs in the pickers |
+| console | no uncaught error, no module-resolution error |
+
+`/api/postcard` is 404 on the demo server, so the day's card could not be shown
+on it — that is a property of the demo fixture, not of this change, and it is
+the one surface here with no runtime evidence behind it.

@@ -545,7 +545,11 @@ test('it is a second render target, not a second scene', () => {
 });
 
 test('the palette command and the P key are the only two ways in', () => {
-  const app = fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8');
+  // WP-22: the keyboard map lives in app-keys.js now, the palette wiring and
+  // the listeners still in app.js. Both are read; the rules are unchanged.
+  const app =
+    fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8') +
+    fs.readFileSync(path.join(PUBLIC, 'app-keys.js'), 'utf8');
   const palette = fs.readFileSync(path.join(PUBLIC, 'palette.js'), 'utf8');
   assert.match(palette, /id: 'cmd:float-office'/);
   assert.match(palette, /label: 'Float the office'/);
