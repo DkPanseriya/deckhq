@@ -17,6 +17,11 @@
  * The `SECURITY:` tests at the bottom are the ones that matter most. A session
  * id arrives from a request body, and `docs/DEVIATIONS.md` §28 is what happens
  * when data from a request reaches something that executes it.
+ *
+ * The Windows row is the exception to all of the above and has its own section
+ * below: it is not an argv array, because `start` is an internal `cmd.exe`
+ * command, and it IS a launch form that has been run for real on the machine
+ * this was written on. `docs/DEVIATIONS.md` §96.
  */
 
 import test from 'node:test';
@@ -30,6 +35,7 @@ import {
   LINUX_TERMINALS,
   MAC_TERMINALS,
   TERMINAL_AUTO,
+  WINDOWS_CMD_REFUSAL,
   WINDOWS_TERMINALS,
   buildLaunch,
   detectTerminal,
@@ -44,8 +50,10 @@ import {
   terminalFromEnvVar,
   terminalIds,
   terminalsFor,
+  windowsConsoleLaunch,
   writeLauncherScript,
 } from '../../src/core/terminals.mjs';
+import { CMD_UNSAFE_CODE } from '../../src/core/cmdline.mjs';
 import * as shim from '../../src/adapters/claude-code/terminals.mjs';
 import * as moved from '../../src/core/terminals.mjs';
 
@@ -146,10 +154,15 @@ const EXPECTED = {
   },
 
   // ---------------------------------------------------------------- Windows
+  // Not an argv: `start` is an internal `cmd.exe` command, so `cmd.exe`
+  // re-parses everything after it and the line is quoted by DeckHQ rather
+  // than by Node (docs/DEVIATIONS.md §96). This is the exact string, and it
+  // is the one form in this file that has been run on a real machine.
   'linux/../win32': undefined, // (placeholder removed below; see pairsInTable)
   'win32/windows-console/bin': {
-    cmd: 'cmd',
-    args: ['/c', 'start', '', 'cmd', '/k', 'claude', '--resume', ID],
+    cmd: 'cmd.exe',
+    args: ['/d', '/s', '/c', `start "" /d "${WIN_CWD}" cmd /d /s /k claude "--resume" "${ID}"`],
+    spawnOptions: { windowsVerbatimArguments: true },
   },
 };
 delete EXPECTED['linux/../win32'];
@@ -200,6 +213,56 @@ function unquoteShLine(line) {
       }
     }
     out.push(cur);
+  }
+  return out;
+}
+
+/**
+ * Recover an argv from a `cmd.exe` command line, through the rule `cmd.exe`
+ * itself uses: whitespace separates words unless it is inside double quotes,
+ * and the quotes are removed. Used the same way `unquoteShLine` is — the
+ * claim being checked is about what `cmd.exe` would do with the line, so
+ * reading it any other way would be checking something else.
+ * @param {string} line
+ * @returns {string[]}
+ */
+function unquoteCmdLine(line) {
+  /** @type {string[]} */
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  let started = false;
+  for (const ch of line) {
+    if (ch === '"') {
+      quoted = !quoted;
+      started = true;
+    } else if (ch === ' ' && !quoted) {
+      if (started) out.push(cur);
+      cur = '';
+      started = false;
+    } else {
+      cur += ch;
+      started = true;
+    }
+  }
+  if (started) out.push(cur);
+  return out;
+}
+
+/**
+ * The `cmd.exe` metacharacters that appear OUTSIDE quotes in a command line —
+ * i.e. the ones it would read as syntax. The whole Windows fix is that this
+ * comes back empty for every value DeckHQ puts on a line.
+ * @param {string} line
+ * @returns {string[]}
+ */
+function bareMetachars(line) {
+  /** @type {string[]} */
+  const out = [];
+  let quoted = false;
+  for (const ch of line) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && '&|^<>()'.includes(ch)) out.push(ch);
   }
   return out;
 }
@@ -484,6 +547,29 @@ test('SECURITY: a session id full of shell metacharacters never becomes shell sy
       continue;
     }
 
+    if (platform === 'win32') {
+      // The Windows console is one `cmd.exe` command line rather than an argv
+      // (§96), so the claim is different in shape and stronger in kind: read
+      // the line back through cmd.exe's own quoting rule and the id comes out
+      // as one word, equal to itself — and no metacharacter is left outside a
+      // quoted region for cmd.exe to act on.
+      assert.deepEqual(unquoteCmdLine(args[3]), [
+        'start',
+        '',
+        '/d',
+        WIN_CWD,
+        'cmd',
+        '/d',
+        '/s',
+        '/k',
+        'claude',
+        '--resume',
+        HOSTILE,
+      ]);
+      assert.deepEqual(bareMetachars(args[3]), [], `${key}: metacharacters escaped their quotes`);
+      continue;
+    }
+
     // Everywhere else the id travels as one argv element and nothing else.
     const carriers = args.filter((a) => a.includes(HOSTILE));
     assert.equal(carriers.length, 1, `${key}: expected exactly one carrier`);
@@ -523,6 +609,201 @@ test('SECURITY: a first prompt is one argv element too, however it is written', 
     cwd: LINUX_CWD,
   });
   assert.deepEqual(launch.args, [`--working-directory=${LINUX_CWD}`, '--', 'claude', prompt]);
+});
+
+// ---------------------------------------------------------------------------
+// SECURITY: the Windows command line
+//
+// The one launch form in this file that is not an argv array, because `start`
+// is an internal `cmd.exe` command rather than a program. Until §96 it relied
+// on Node's win32 argument quoting, which wraps a value only when it holds a
+// space, a tab or a quote — so an id of `x&calc` arrived at `cmd.exe` bare and
+// became two commands. Measured, on Windows 11: with the old form an argument
+// of `x&y` reached the program as `x`.
+// ---------------------------------------------------------------------------
+
+test('the Windows console builds one command line, and asks Node not to quote it', () => {
+  const launch = buildLaunch(findTerminal('win32', 'windows-console'), {
+    command: COMMAND,
+    cwd: WIN_CWD,
+  });
+  assert.deepEqual(launch, {
+    cmd: 'cmd.exe',
+    args: [
+      '/d',
+      '/s',
+      '/c',
+      `start "" /d "C:\\Dk\\deckhq" cmd /d /s /k claude "--resume" "abc-123"`,
+    ],
+    spawnOptions: { windowsVerbatimArguments: true },
+  });
+});
+
+test('no other launch form asks for verbatim arguments; every one of them is a real argv', () => {
+  for (const { platform, terminal, via, key } of pairsInTable()) {
+    const launch = buildLaunch(terminal, {
+      command: COMMAND,
+      cwd: CWD[platform],
+      scriptPath: SCRIPT,
+      via,
+    });
+    assert.equal(
+      launch.spawnOptions?.windowsVerbatimArguments ?? false,
+      platform === 'win32',
+      `${key}: wrong quoting responsibility`,
+    );
+  }
+});
+
+test('SECURITY: a Windows working directory with a space and an & stays one word', () => {
+  // The shape that broke: a space made Node quote the value, an `&` did not,
+  // and a folder holding both is ordinary on Windows ("R&D projects").
+  const cwd = 'C:\\Users\\ada\\R&D projects\\deckhq';
+  const { args } = buildLaunch(findTerminal('win32', 'windows-console'), {
+    command: ['claude', '--resume', 'a&b c'],
+    cwd,
+  });
+  assert.deepEqual(args, [
+    '/d',
+    '/s',
+    '/c',
+    `start "" /d "C:\\Users\\ada\\R&D projects\\deckhq" cmd /d /s /k claude "--resume" "a&b c"`,
+  ]);
+  assert.deepEqual(unquoteCmdLine(args[3]), [
+    'start',
+    '',
+    '/d',
+    cwd,
+    'cmd',
+    '/d',
+    '/s',
+    '/k',
+    'claude',
+    '--resume',
+    'a&b c',
+  ]);
+  assert.deepEqual(bareMetachars(args[3]), []);
+});
+
+test('SECURITY: every cmd.exe metacharacter survives as text, not as syntax', () => {
+  // `&`, `|`, `^`, `<`, `>` and `()` are literal inside double quotes. This
+  // was checked on Windows 11, not read: the argument below reached the
+  // launched program byte for byte (docs/DEVIATIONS.md §96).
+  const nasty = 'x&y|z^w<v>u(t)';
+  const { args } = buildLaunch(findTerminal('win32', 'windows-console'), {
+    command: ['claude', '--resume', nasty],
+    cwd: WIN_CWD,
+  });
+  assert.equal(unquoteCmdLine(args[3]).at(-1), nasty);
+  assert.deepEqual(bareMetachars(args[3]), []);
+});
+
+test('SECURITY: a quote or a percent sign in the id is refused, with a message that says why', () => {
+  for (const id of ['a"b', 'a%PATH%b', 'a\u0000b']) {
+    assert.throws(
+      () =>
+        buildLaunch(findTerminal('win32', 'windows-console'), {
+          command: ['claude', '--resume', id],
+          cwd: WIN_CWD,
+        }),
+      (err) => {
+        assert.equal(err.code, CMD_UNSAFE_CODE, id);
+        assert.equal(err.message, WINDOWS_CMD_REFUSAL, id);
+        // The message tells the user this is not a normal thing to hit.
+        assert.match(err.message, /UUID/);
+        assert.match(err.message, /rare/);
+        return true;
+      },
+      id,
+    );
+  }
+});
+
+test('SECURITY: a quote or a percent sign in the working directory is refused the same way', () => {
+  for (const cwd of ['C:\\a"b\\p', 'C:\\100%%\\p']) {
+    assert.throws(
+      () => buildLaunch(findTerminal('win32', 'windows-console'), { command: COMMAND, cwd }),
+      (err) => {
+        assert.equal(err.code, CMD_UNSAFE_CODE, cwd);
+        assert.equal(err.message, WINDOWS_CMD_REFUSAL, cwd);
+        return true;
+      },
+      cwd,
+    );
+  }
+});
+
+test('SECURITY: the Windows console refuses to start anything but a bare command name', () => {
+  // Never user data — the adapters pass `claude` and `codex` — but a program
+  // name is the one token left unquoted, so it is the one that must be safe
+  // by construction rather than by convention.
+  assert.throws(
+    () =>
+      buildLaunch(findTerminal('win32', 'windows-console'), {
+        command: ['C:\\Program Files\\x.exe & calc', '--resume', ID],
+        cwd: WIN_CWD,
+      }),
+    (err) => {
+      assert.equal(err.code, CMD_UNSAFE_CODE);
+      assert.match(err.message, /plain command name/);
+      return true;
+    },
+  );
+  assert.equal(
+    windowsConsoleLaunch({ command: ['claude'], cwd: '' }).args[3],
+    'start "" cmd /d /s /k claude',
+  );
+});
+
+test('SECURITY: a refusal reaches the user rather than becoming "could not open a terminal"', async () => {
+  // `launchTerminal` walks its candidates and swallows the failures, which is
+  // right for an emulator that will not open and wrong for a value that
+  // cannot be quoted: no other terminal can make a `%` safe, so the message
+  // that says what is wrong has to survive.
+  const spawns = [];
+  await assert.rejects(
+    () =>
+      launchTerminal({
+        command: ['claude', '--resume', 'a%PATH%b'],
+        cwd: WIN_CWD,
+        platform: 'win32',
+        env: {},
+        spawn: async (cmd, args) => {
+          spawns.push({ cmd, args });
+          return true;
+        },
+      }),
+    (err) => {
+      assert.equal(err.code, CMD_UNSAFE_CODE);
+      assert.equal(err.message, WINDOWS_CMD_REFUSAL);
+      return true;
+    },
+  );
+  assert.deepEqual(spawns, [], 'nothing may be started when a value was refused');
+});
+
+test('launchTerminal hands the Windows form its spawn options, so Node does not re-quote the line', async () => {
+  const spawns = [];
+  const out = await launchTerminal({
+    command: COMMAND,
+    cwd: WIN_CWD,
+    sessionId: ID,
+    platform: 'win32',
+    env: {},
+    spawn: async (cmd, args, cwd, options) => {
+      spawns.push({ cmd, args, cwd, options });
+      return true;
+    },
+  });
+  assert.equal(out.id, 'windows-console');
+  assert.deepEqual(spawns, [
+    {
+      cmd: 'cmd.exe',
+      args: ['/d', '/s', '/c', `start "" /d "${WIN_CWD}" cmd /d /s /k claude "--resume" "${ID}"`],
+      cwd: WIN_CWD,
+      options: { windowsVerbatimArguments: true },
+    },
+  ]);
 });
 
 // ---------------------------------------------------------------------------

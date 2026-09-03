@@ -25,16 +25,20 @@
  * without a shell (CVE-2024-27980, EINVAL), and `shell: true` with an args
  * array concatenates without escaping — Node deprecated exactly that as a
  * vulnerability (DEP0190). So a batch launcher goes through `cmd.exe /d /s /c`
- * with `windowsVerbatimArguments`, with the command line quoted by this file
- * rather than by Node. Two characters can escape a double-quoted `cmd`
- * argument — `"` itself and `%` (variable expansion happens inside quotes) —
- * and a path containing either is refused rather than launched. `&`, `|`,
- * `<`, `>` and `^` were each checked and are literal inside the quotes.
+ * with `windowsVerbatimArguments`, with the command line quoted by
+ * `core/cmdline.mjs` rather than by Node. Two characters can escape a
+ * double-quoted `cmd` argument — `"` itself and `%` (variable expansion
+ * happens inside quotes) — and a path containing either is refused rather than
+ * launched. `&`, `|`, `<`, `>` and `^` were each checked and are literal
+ * inside the quotes. That quoting rule moved out of this file when the Windows
+ * console launch needed the same one (`docs/DEVIATIONS.md` §96).
  */
 import { constants as FS, accessSync, statSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
+
+import { assertCmdSafe, cmdQuote } from './cmdline.mjs';
 
 /**
  * @typedef {object} EditorSpec
@@ -60,19 +64,12 @@ export const EDITORS = Object.freeze({
 export const EDITOR_NAMES = Object.freeze(Object.keys(EDITORS));
 
 /**
- * Characters that do not survive `cmd.exe`'s quoting rules. See the header:
- * `"` closes the quoting and `%` expands a variable even inside it, and a
- * control character would end the command line outright. `&`, `|`, `<`, `>`
- * and `^` were each checked and are literal inside the quotes, so a path
- * containing them is opened rather than refused.
- * @param {string} s
+ * What the user is told when a path cannot be quoted for `cmd.exe`. The rule
+ * itself, and why it refuses rather than escapes, is in `core/cmdline.mjs`.
  */
-function cmdUnsafe(s) {
-  for (const ch of String(s)) {
-    if (ch === '"' || ch === '%' || ch.codePointAt(0) < 0x20) return true;
-  }
-  return false;
-}
+const CMD_REFUSAL =
+  'That path contains a character Windows cannot pass to a .cmd launcher safely ' +
+  '(a quote or a percent sign). Open it from the editor instead.';
 
 /** @param {string} p @returns {boolean} */
 function isExecutableFile(p) {
@@ -210,18 +207,11 @@ export function editorArgv(editor, file, line, opts = {}) {
     .extname(editor.command)
     .toLowerCase();
   if (platform === 'win32' && (ext === '.cmd' || ext === '.bat')) {
-    for (const a of [editor.command, ...args]) {
-      if (cmdUnsafe(a)) {
-        throw new Error(
-          'That path contains a character Windows cannot pass to a .cmd launcher safely ' +
-            '(a quote or a percent sign). Open it from the editor instead.',
-        );
-      }
-    }
+    assertCmdSafe([editor.command, ...args], CMD_REFUSAL);
     // The doubled outer quotes are `cmd /s`'s documented rule: it strips the
     // first and last character of the string after /c, so the real command
     // line needs its own pair inside them.
-    const line_ = `""${editor.command}" ${args.map((a) => `"${a}"`).join(' ')}"`;
+    const line_ = `""${editor.command}" ${args.map((a) => cmdQuote(a, CMD_REFUSAL)).join(' ')}"`;
     return ['cmd.exe', ['/d', '/s', '/c', line_], { windowsVerbatimArguments: true }];
   }
   return [editor.command, args, {}];

@@ -90,6 +90,53 @@ function unquoteShLine(line) {
   return out;
 }
 
+/**
+ * The same for a `cmd.exe` command line, which the Windows console row builds
+ * itself (`docs/DEVIATIONS.md` §96). Whitespace separates words unless it is
+ * inside double quotes; the quotes are removed.
+ * @param {string} line
+ * @returns {string[]}
+ */
+function unquoteCmdLine(line) {
+  /** @type {string[]} */
+  const out = [];
+  let cur = '';
+  let quoted = false;
+  let started = false;
+  for (const ch of line) {
+    if (ch === '"') {
+      quoted = !quoted;
+      started = true;
+    } else if (ch === ' ' && !quoted) {
+      if (started) out.push(cur);
+      cur = '';
+      started = false;
+    } else {
+      cur += ch;
+      started = true;
+    }
+  }
+  if (started) out.push(cur);
+  return out;
+}
+
+/**
+ * The `cmd.exe` metacharacters left OUTSIDE quotes — the ones it would read as
+ * syntax. Empty is the whole claim.
+ * @param {string} line
+ * @returns {string[]}
+ */
+function bareMetachars(line) {
+  /** @type {string[]} */
+  const out = [];
+  let quoted = false;
+  for (const ch of line) {
+    if (ch === '"') quoted = !quoted;
+    else if (!quoted && '&|^<>()'.includes(ch)) out.push(ch);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // The commands, as data
 // ---------------------------------------------------------------------------
@@ -144,7 +191,13 @@ for (const { platform, terminal, via, key } of pairs()) {
       assert.ok(!/^-{1,2}(c|lc|lic|command)$/.test(a), `${key}: shell flag ${a}`);
     }
     // `codex` is the program being run, never a fragment of a larger string.
-    if (!terminal.needsScript) {
+    if (platform === 'win32') {
+      // One `cmd.exe` command line rather than an argv (§96); read it back
+      // through cmd.exe's own quoting rule to get the words out.
+      const words = unquoteCmdLine(args[3]);
+      assert.ok(words.includes('codex'), `${key}: the command did not survive`);
+      assert.ok(words.includes(ID), `${key}: the id did not survive as its own word`);
+    } else if (!terminal.needsScript) {
       assert.ok(args.includes('codex'), `${key}: the command did not survive as argv`);
       assert.ok(args.includes(ID), `${key}: the id did not survive as its own element`);
     }
@@ -170,6 +223,14 @@ test('SECURITY: a Codex session id full of shell metacharacters never becomes sh
       continue;
     }
 
+    if (platform === 'win32') {
+      // The id is one double-quoted word of a `cmd.exe` command line, and no
+      // metacharacter is left outside a quoted region for cmd.exe to act on.
+      assert.equal(unquoteCmdLine(args[3]).at(-1), HOSTILE, `${key}: the id was not one word`);
+      assert.deepEqual(bareMetachars(args[3]), [], `${key}: metacharacters escaped their quotes`);
+      continue;
+    }
+
     const carriers = args.filter((a) => a.includes(HOSTILE));
     assert.equal(carriers.length, 1, `${key}: expected exactly one carrier`);
     assert.equal(carriers[0], HOSTILE, `${key}: the id was concatenated with something`);
@@ -177,13 +238,22 @@ test('SECURITY: a Codex session id full of shell metacharacters never becomes sh
 });
 
 test('SECURITY: a hostile working directory is one argv element too, or is not in the argv at all', () => {
-  for (const { terminal, via, key } of pairs()) {
+  for (const { platform, terminal, via, key } of pairs()) {
     const { args } = buildLaunch(terminal, {
       command: codexResumeCommand(ID),
       cwd: HOSTILE_CWD,
       scriptPath: SCRIPT,
       via,
     });
+    if (platform === 'win32') {
+      // One command line, so the cwd is one double-quoted word of it — after
+      // `start`'s `/d`, which is what makes the directory stated rather than
+      // inherited (§96).
+      const words = unquoteCmdLine(args[3]);
+      assert.equal(words[words.indexOf('/d') + 1], HOSTILE_CWD, `${key}: cwd was not one word`);
+      assert.deepEqual(bareMetachars(args[3]), [], `${key}: metacharacters escaped their quotes`);
+      continue;
+    }
     const carriers = args.filter((a) => a.includes(HOSTILE_CWD));
     // xterm and x-terminal-emulator have no working-directory flag (the spawn
     // carries it), and the three script emulators keep it in the wrapper.
