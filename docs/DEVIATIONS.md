@@ -6756,7 +6756,7 @@ see the RAISE above — so no pixel on the floor moved. `npm run goldens:check`
 was run against the committed set and passes on every population it can capture
 on this machine. The moment `scene.js` paints `lines[2]`, the floor changes and
 the goldens must be regenerated in the same package that does it.
-## 107. WP-29 — the documentation site: hand-written HTML, and the promise it has to keep
+## 112. WP-29 — the documentation site: hand-written HTML, and the promise it has to keep
 
 **Spec:** [`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md) WP-29 asks for a
 user-facing site — install, the model in 60 seconds, hooks, adapters, privacy, an FAQ whose first

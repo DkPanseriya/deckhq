@@ -776,7 +776,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   resolves to a file that was built, that a `<script>` inside a deviation entry renders as the six
   visible characters it is, and that the copy contains none of the phrasings `docs/plan/08` §4.2
   retires. A site that quietly grew a font from a CDN would fail the build the same way a daemon
-  that grew a socket does. §107.
+  that grew a socket does. §112.
 
 ### Packaging
 
@@ -928,7 +928,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   one page per entry. **No site generator and no dependency**: hand-written HTML bodies, a shared
   shell, and a 250-line markdown converter that escapes before it adds a tag. `node site/build.mjs`
   renders `site/dist/`; `--serve` puts it on a loopback port to look at.
-  `docs/media/site-index.png` is the home page. §107.
+  `docs/media/site-index.png` is the home page. §112.
 - **The site keeps the product's promise, and a test says so.** No analytics, no CDN, no web font,
   no script of any kind on any page. `JetBrains Mono` and `IBM Plex Sans` are named first in their
   stacks and fall back to the system's own faces, because there is no `.woff2` in this repository
