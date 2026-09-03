@@ -127,6 +127,11 @@ const ACTION_LABELS = {
  */
 function legalActions(agent) {
   if (!agent) return [];
+  // WP-41. A junior has no user-owned state to act on: it is not the user's
+  // to bench, let go or acknowledge, and it will be gone before a decision
+  // about it could mean anything. `Registry.act()` refuses these outright, so
+  // this is the interface agreeing with the daemon rather than guarding it.
+  if (agent.subagent === true) return [];
   if (agent.ackState === 'let_go') return ['rehire'];
   if (agent.ackState === 'benched') return ['recall', 'let_go'];
   const acts = [];
@@ -608,6 +613,14 @@ export function createPanel(opts) {
     if (a.ackState === 'let_go') {
       metaEl.appendChild(separator());
       metaEl.appendChild(textNode('let go'));
+    }
+    // WP-41. Which way the relationship runs, said in words on whichever end
+    // of it the user is looking at: "junior of Rosa" on the junior, and
+    // "3 juniors" on the senior that spawned them.
+    const juniorLine = juniorMetaFor(a, getSnapshot());
+    if (juniorLine) {
+      metaEl.appendChild(separator());
+      metaEl.appendChild(textNode(juniorLine));
     }
     renderWaiting();
     renderDoing();
@@ -1962,6 +1975,31 @@ export function createPanel(opts) {
 /** The compact name for toasts and placeholders: display name, else MK tag. */
 function who(a) {
   return a?.displayName || a?.label || a?.mk || a?.title || 'this session';
+}
+
+/**
+ * The junior line for the panel's state row (WP-41), or null when the session
+ * is neither a junior nor has one.
+ *
+ * Exported because it is the whole rule in one pure function and
+ * `test/unit/subagents.test.mjs` reads it directly rather than standing up a
+ * DOM to find out what a string says.
+ *
+ * @param {any} agent
+ * @param {any} snapshot the current snapshot, for looking the parent up by id.
+ *   A junior whose parent is not in it — it was archived, or the scan caught
+ *   the junior first — still says "junior", just not whose.
+ * @returns {string|null}
+ */
+export function juniorMetaFor(agent, snapshot) {
+  if (!agent) return null;
+  if (agent.subagent === true) {
+    const parent = ((snapshot && snapshot.agents) || []).find((p) => p && p.id === agent.parentId);
+    return parent ? `junior of ${who(parent)}` : 'junior';
+  }
+  const n = Number(agent.juniorCount) || 0;
+  if (n <= 0) return null;
+  return n === 1 ? '1 junior' : `${n} juniors`;
 }
 
 /** "claude-opus-5" reads as "opus-5" on a line that already says Claude Code. */

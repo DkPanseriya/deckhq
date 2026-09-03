@@ -133,6 +133,42 @@ const OVERFLOW_RING_R = 1.3;
 const SEAT_SPREAD = 2.2;
 
 /**
+ * How far to the side of its parent a junior stands, in plan units (WP-41).
+ *
+ * One seat pitch, and that is not a coincidence: WP-50 sizes a room's table by
+ * the agents at desks in it, and juniors are counted among them, so a senior
+ * with two juniors already has two extra seats' worth of table. Standing each
+ * junior at one of them is the same arithmetic read back out.
+ *
+ * It has to be at least this. Measured at the demo floor's fit scale
+ * (~12 px/U), the first attempt at 1.5 U put two junior labels 36 px apart
+ * with about 45 px of text in each, and the collision pass had to stack them.
+ * At a seat pitch the two juniors are 5.2 U apart — the first is on the
+ * parent's left and the second on its right — and both labels sit clear.
+ *
+ * `SEAT_PITCH` in `plan.js` is the same 2.6; the two files are either side of
+ * the static-file boundary and cannot import from one another, which is the
+ * same reason `derivePlacement` exists twice.
+ */
+export const JUNIOR_OFFSET = 2.6;
+
+/**
+ * How far BEHIND its parent's chair a junior stands, in plan units.
+ *
+ * Zero would put a junior in the seat line, which reads as three people trying
+ * to sit on one chair; the juniors are standing at the desk, not sitting at
+ * it, which is the picture `08` B7 asks for.
+ *
+ * A chair is 2 U deep and sits 0.15 U off the table, so 1.6 U would already
+ * clear the back of it — and 1.6 U was wrong. A junior is one seat pitch to
+ * the side, which is exactly where the NEXT chair is, and on the demo floor
+ * that chair has somebody in it: at 1.6 U the junior was drawn standing
+ * through its neighbour. A body is `BODY_HEIGHT_U` ≈ 2.52 U, so 2.8 U puts a
+ * whole body's clearance between the standing row and the seated one.
+ */
+export const JUNIOR_BACK = 2.8;
+
+/**
  * The `index`-th place on a seat, spread ALONG the furniture (perpendicular to
  * the way its occupants face). A single-capacity spot is its own only place.
  * @param {Seat|LoungeSpot} seat
@@ -433,6 +469,9 @@ export function planWalk(from, to, rooms, plan) {
  */
 export function derivePlacement(agent) {
   if (agent.ackState === 'let_go') return 'let_go';
+  // WP-41: a junior is only ever beside its parent — never in the office,
+  // never in the lounge. Mirrors `placement()`'s own subagent branch.
+  if (agent.subagent === true) return 'desk';
   if (agent.ackState === 'benched') return 'lounge';
   if (agent.activityState === 'for_review') return 'office';
   return 'desk';
@@ -525,9 +564,26 @@ export function assignSeats(plan, agents) {
   // it — and both are the plan's call, so there is one answer to "is this
   // person on the floor" instead of two that can disagree.
   const hidden = (plan && plan.hidden) || null;
+  /**
+   * WP-41. Juniors, by parent id. They are held back from the hashed seating
+   * pass on purpose: a junior does not take a chair of its own, it stands
+   * beside the person who spawned it, and its position is only knowable once
+   * that person has a seat. They still COUNT as occupants — `buildPlan` sized
+   * the table with them in it (`plan.js`'s `floorPopulation`), which is what
+   * gives a senior with three juniors a four-seater to stand around.
+   * @type {Map<string, AgentLike[]>}
+   */
+  const juniorsByParent = new Map();
 
   for (const agent of agents) {
     if (hidden && hidden.has(agent.id)) continue;
+    if (agent.subagent === true) {
+      const parent = agent.parentId == null ? '' : String(agent.parentId);
+      const list = juniorsByParent.get(parent) || [];
+      list.push(agent);
+      juniorsByParent.set(parent, list);
+      continue;
+    }
     const p = derivePlacement(agent);
     if (p === 'let_go') {
       letGoAgents.push(agent);
@@ -576,6 +632,40 @@ export function assignSeats(plan, agents) {
   });
 
   assignHashed(loungeAgents, plan.loungeSpots || [], result);
+
+  // WP-41, last: the juniors, once every senior has a seat to stand beside.
+  // Deterministic — sorted by id, alternating left and right — so the same
+  // three juniors line up the same way on every push and nobody shuffles.
+  for (const [parentId, list] of juniorsByParent) {
+    const anchor = result.get(parentId);
+    const ordered = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    ordered.forEach((junior, i) => {
+      if (!anchor) {
+        // A junior whose parent is not on the floor at all: it went home, it
+        // was let go, or the scan caught the junior a poll before its parent.
+        // Nothing to stand beside, so nothing is drawn — `sync` drops the
+        // record for the same reason it drops an archived session, rather
+        // than parking a body on the floor's origin.
+        return;
+      }
+      // Alternate sides, working outwards: 1st on the parent's left, 2nd on
+      // its right, 3rd further left, and so on.
+      const step = Math.floor(i / 2) + 1;
+      const side = i % 2 === 0 ? -1 : 1;
+      const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
+      // The seat's `angle` is the way its occupant FACES, so "along the desk"
+      // is that direction turned a quarter turn.
+      const alongX = Math.cos(angle + Math.PI / 2);
+      const alongY = Math.sin(angle + Math.PI / 2);
+      result.set(junior.id, {
+        x: anchor.x + alongX * side * step * JUNIOR_OFFSET - Math.cos(angle) * JUNIOR_BACK,
+        y: anchor.y + alongY * side * step * JUNIOR_OFFSET - Math.sin(angle) * JUNIOR_BACK,
+        angle,
+        kind: anchor.kind,
+        junior: true,
+      });
+    });
+  }
   // Archived sessions are off the floor entirely — no room, no seat, nothing
   // drawn. They are still counted in the header and still listed in the panel;
   // they simply do not take screen space away from the rooms in play. `sync`
@@ -777,9 +867,15 @@ export class AgentRuntime {
       // who went home, and an agent at a desk in a project with no room.
       if (placement === 'let_go') continue;
       if (hidden && hidden.has(agent.id)) continue;
+      const seat = seatMap ? seatMap.get(agent.id) || null : null;
+      // WP-41. A junior with no seat has no parent on the floor to stand
+      // beside (`assignSeats` places one only when the parent has a seat).
+      // Same rule as an archived session: no seat, no record, nothing drawn —
+      // rather than falling through to the room-centre fallback, which would
+      // stack every orphaned junior on one spot.
+      if (agent.subagent === true && !seat) continue;
       seen.add(agent.id);
       const rec = this._ensure(agent.id);
-      const seat = seatMap ? seatMap.get(agent.id) || null : null;
       const destRoom = roomFor(placement, agent);
 
       if (!rec.initialised) {
