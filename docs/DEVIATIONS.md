@@ -2133,3 +2133,110 @@ carries it.
 
 No new dependency, no network, and every byte of format knowledge is still
 inside `src/adapters/claude-code/`.
+
+## 80. WP-53 · The review follow-ups on the perf code: what closed, what is accepted, what was left to its owner
+
+`08-PLAN-V2-100X.md` WP-53 lists five risks from the review of PRs #1–#4.
+Four are closed here with tests; one is a documented, measured exposure rather
+than a fix; one belongs to a file another agent owns and was not touched.
+
+**(1) `pidAlive()` on Windows — verified, unchanged.** The function treats
+`EPERM` as alive and everything else as dead, and the review asked whether a
+vanished pid on Windows really surfaces as something other than `EPERM`. It was
+measured rather than read off libuv's source, on the reference machine
+(Windows 11, Node 24):
+
+| `process.kill(pid, 0)` against | throws |
+|---|---|
+| a child that ran and exited | `ESRCH` |
+| a pid that never existed (`0x7ffffffe`) | `ESRCH` |
+| a child killed by us, handle still held by this process | `ESRCH` |
+| the protected System process (pid 4) | `EPERM` |
+| a live child | nothing |
+
+So the two-way reading holds on Windows, where libuv answers signal 0 with
+`OpenProcess` + `GetExitCodeProcess` rather than a signal: an exited process
+whose handle someone still holds is reported by its exit code, not as alive.
+4000 calls cost 53.5 ms, 13 µs each — §77's 0.055 ms per roster stands. A test
+now spawns a real child, waits for it to exit, and asserts the roster retires
+it within one poll and without a spawn; the existing test used only a pid that
+never existed, which on Windows is a different code path.
+
+**(1b) Pid reuse inside the 60 s TTL — accepted, bounded, measured.** The
+review's case: a session exits and the OS hands its pid to another process
+before the next probe, so the pid check reads the impostor as the session.
+
+What the code already did, now pinned by a test: a pid the check has once seen
+dead is *removed* from the cached roster, and nothing short of the next probe
+puts a session back. So a pid reused *after* the check saw it dead cannot
+resurrect anything — the roster is corrected by removal, not re-evaluated
+every poll. The exposure that leaves is narrower than the review stated: the
+exit **and** the reuse must both land inside one poll interval (5 s), before
+any check ran. Only then does the impostor read alive, and it does so until the
+TTL probe — up to 60 s.
+
+How likely is that, on the platform that reuses pids most eagerly? Measured
+here: 300 sequential `cmd /c exit` spawns in 9.7 s produced 16 reused pids; a
+pid came back after a **minimum of 123 and a median of 155** further process
+creations, the first reuse 4.8 s in. So the reuse half of the window needs on
+the order of 25 process creations a second sustained across the 5 s the check
+is blind, on top of the session exiting in that same 5 s. On Linux pids are
+allocated sequentially up to `pid_max` and reuse inside 5 s needs thousands of
+spawns a second; macOS is sequential to 99998.
+
+Mechanisms weighed for closing it, and why none was taken:
+
+- **Process start time as identity.** The right fix, and cheap only on Linux
+  (`/proc/<pid>/stat`). Windows has no Node API for it; macOS needs `ps`.
+  Both mean a spawn per pid per poll — the exact cost §77 removed — for a
+  window that is narrowest precisely where a spawn-free check exists.
+- **Force a probe when identity is uncertain.** The suggestion in the plan.
+  Nothing cheap distinguishes "same pid, same process" from "same pid,
+  different process", so there is no signal to trigger on. Forcing a probe
+  whenever *any* roster pid died would spend a 609 ms spawn on the common
+  transition the pid check handles for free, and would not help the case in
+  question, which by definition no check saw.
+- **Hooks.** Not a mechanism to add — it is already the answer where it
+  matters. `SessionEnd` is authoritative and `_computeAgents` prefers
+  `hookLive` over this roster whenever hooks are installed, so the exposure
+  exists only on the degraded path. WP-36 (§81) removes the commonest way of
+  ending up on that path by accident.
+
+And what a wrong `live` costs if it happens: nothing user-owned. `live` is an
+observation; `for_review` is sticky through it either way. The worst outcome is
+a desk drawn occupied for up to 60 s after its session left.
+
+So the window is accepted and stated in the code, here, and in a test that
+pins its size: the impostor may read alive at TTL−5 s and must be gone the
+moment the TTL probe answers. A third seam, `alive`, was added beside `probe`
+and `now` so a pid can be made to die and return on cue without a real process.
+
+**(2) and (5) The head-window scanner's cut cases.** Three tests against the
+scanner directly — `_scanTopLevelFields`, exported for tests only — and three
+end to end through `readDesktopSessions`, where `fullReads` proves the fallback
+ran rather than the answer merely coming out right: a window cut inside a
+string, one cut inside a number (five digits inside the window, five outside),
+and one whose last byte is the backslash of an escaped quote — read only the
+head, the string is unclosed; read naively past the backslash, the quote
+looks like a close. All three answer null from the window, take the whole file,
+and return the right fields. `endOfString()` on `"abc\` at end of text stays in
+bounds and returns −1; the direct test also covers `\u00` cut mid-escape, an
+escaped backslash then EOF, and the two complete-escape cases that must
+decode. No scanner change was needed; the tests confirm the behaviour that was
+there.
+
+**(4) The desktop-cache mtime pins are proven, not assumed.** The tests pinned
+mtimes in whole seconds and never checked the pin took. That let the "size
+moved but mtime did not" test pass for the wrong reason on any filesystem that
+rounded the timestamp — the re-read would have come from the mtime moving. The
+helper now sets a millisecond value with a non-zero fraction of a second
+(`…000_250`, `…000_750`), reads `mtimeMs` straight back, and asserts equality;
+the size-only test additionally asserts the re-pinned value equals the first.
+Round-trips exactly on NTFS here; a filesystem where it does not will now say
+so instead of passing.
+
+**(3) `publish.yml` — not touched.** The npm floor for trusted publishing is
+another agent's file in this pass, so WP-53's fifth item and the second half of
+its acceptance criterion ("`publish.yml` fails loudly on an npm below the
+trusted-publishing floor") are not delivered by this package. Recorded so the
+orchestrator does not accept WP-53 on the strength of this commit alone.

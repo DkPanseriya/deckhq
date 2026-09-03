@@ -31,6 +31,16 @@
   while a first scan is unchanged. The archive flag is cached against the file that carries it,
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
+- **The review of that work is closed out.** The pid check behind the roster cache was verified on
+  Windows against a process that really exited, not just a pid that never existed (both `ESRCH`;
+  only the protected System process is `EPERM`). Pid reuse inside the 60 s roster window is now a
+  measured, tested exposure rather than an open question: a pid the check has once seen dead can
+  never bring its session back, so the only way to be wrong is for a session to exit **and** have
+  its pid reused inside one 5 s poll — which here needs ~25 process creations a second — and even
+  then the desk is drawn occupied for at most 60 s and nothing user-owned moves. The head-window
+  JSON scanner has tests for a window cut mid-string, mid-number and on the backslash of an
+  escape, and the desktop-cache tests prove their mtime pins round-trip on the filesystem they run
+  on instead of assuming it. `docs/DEVIATIONS.md` §80.
 
 ## 1.2.0
 
