@@ -97,3 +97,93 @@ test('a malformed body is dropped without reaching the registry', async () => {
   await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
   assert.equal(applied.length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// GET /api/hooks — the status the header banner reads
+// ---------------------------------------------------------------------------
+//
+// WP-56. A managed settings key can switch these hooks off over DeckHQ's head
+// (docs/DEVIATIONS.md §86.4, §114). The screen has no button for it — there is
+// nothing on this side to press — so all it can do is say which key, in which
+// file, and the route is what carries that.
+
+/** One adapter's hook status, straight out of the real GET handler. */
+async function getStatus(hooks) {
+  const registry = {
+    applyHook() {},
+    setHookStatus() {},
+    hookHealthFor: () => ({ eventsSeen: 0, lastEventAt: null, daemonStartedAt: 0 }),
+  };
+  const adapter = {
+    id: 'claude-code',
+    label: 'Claude Code',
+    hooks: {
+      supported: true,
+      describe: () => ({ file: '/x/settings.json', json: '{}', events: [], note: '' }),
+      installed: async () => true,
+      installedPort: async () => 4317,
+      ...hooks,
+    },
+  };
+  const router = new Router();
+  register(router, {
+    registry,
+    adapters: { getAdapters: () => [adapter], getAdapter: () => adapter },
+    log: silentLog,
+    port: 4317,
+  });
+  const handler = router.match('GET', '/api/hooks');
+  assert.ok(handler, 'GET /api/hooks is not registered');
+  let payload = '';
+  await handler(
+    {},
+    {
+      writeHead() {},
+      end: (p) => {
+        payload = p;
+      },
+    },
+  );
+  return JSON.parse(payload).adapters[0];
+}
+
+test('WP-56: /api/hooks carries the managed policy that blocks the hooks', async () => {
+  const blocked = { key: 'allowManagedHooksOnly', file: '/etc/claude-code/managed-settings.json' };
+  const status = await getStatus({ blockedByPolicy: async () => blocked });
+  assert.deepEqual(status.blockedByPolicy, blocked);
+});
+
+test('WP-56: blockedByPolicy is null, never absent, when no policy blocks', async () => {
+  const status = await getStatus({ blockedByPolicy: async () => null });
+  assert.ok('blockedByPolicy' in status);
+  assert.equal(status.blockedByPolicy, null);
+
+  // And for an adapter with no such check at all.
+  const without = await getStatus({});
+  assert.ok('blockedByPolicy' in without);
+  assert.equal(without.blockedByPolicy, null);
+});
+
+test('WP-56: a policy check that throws never fails the hook status', async () => {
+  const status = await getStatus({
+    blockedByPolicy: async () => {
+      throw new Error('EACCES: permission denied');
+    },
+  });
+  assert.equal(status.error, null);
+  assert.equal(status.installed, true);
+  assert.equal(status.blockedByPolicy, null);
+});
+
+test('WP-56: the policy is checked against the port the hooks actually target', async () => {
+  /** @type {any} */
+  let seen = null;
+  await getStatus({
+    installedPort: async () => 4400,
+    blockedByPolicy: async (opts) => {
+      seen = opts;
+      return null;
+    },
+  });
+  assert.equal(seen.port, 4400);
+});

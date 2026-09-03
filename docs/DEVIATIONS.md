@@ -7254,3 +7254,153 @@ must be handed every input that decides it, the host's own platform included.** 
 seams were already in this codebase (`editor.mjs`, `terminals.mjs`, `notify.mjs` all take a
 `platform`); one module had not been given one, and one line of a workflow comment had promised a
 skip that the code did not implement.
+
+## 114. WP-56 — the managed policy that switches the hooks off, and the row that names it
+
+The WP-19 spike found two Claude Code settings keys that stop DeckHQ's hooks from running
+(§86.4), and the WP-19 build left detecting them as a follow-up (§97.4): _"on a managed machine
+they look exactly like a hook that is installed and never fires."_ This is that follow-up.
+
+It is worth an entry of its own because of what the state looks like from inside the product. The
+settings file is byte-for-byte what the consent screen showed. `installed()` is true. The port
+matches the daemon. The daemon is up and answering. And no event ever arrives, forever. Every
+surface DeckHQ has says the install is healthy; the only observable is an event counter that never
+moves, which is the same observable as a firewall, a missing `node` on `PATH`, or a bug in this
+project. §75 reserved exit 1 for exactly this class — _"the failure this check is actually for,
+and it is invisible in every other surface"_ — and this is the second member of it.
+
+### 114.1 Where the files are, and how much of that is verified
+
+Read from the Claude Code documentation (_Deploy managed settings_ at
+`code.claude.com/docs/en/managed-settings`, _Settings_ at `/docs/en/settings`, and the settings
+reference index), 4 September 2026:
+
+| | Read from the docs | Verified on a machine |
+|---|---|---|
+| macOS `/Library/Application Support/ClaudeCode/managed-settings.json` | yes | **no** |
+| Linux and WSL `/etc/claude-code/managed-settings.json` | yes | **no** |
+| Windows `C:\Program Files\ClaudeCode\managed-settings.json` | yes | yes — absent on the reference machine, the correct answer for an unmanaged box |
+| `managed-settings.d/*.json` beside it, merged after it, alphabetically, ignoring hidden files and non-`.json` | yes | no |
+| The legacy Windows `C:\ProgramData\ClaudeCode\managed-settings.json` is **not** read by the runtime | yes | n/a — so this does not read it either, and a test asserts that path never appears |
+| `allowedHttpHookUrls`, scope **any file**, and a handler runs only if its URL matches the **merged** allowlist | yes | no |
+| `allowManagedHooksOnly`, scope **managed**; hooks from a plugin force-enabled in the managed `enabledPlugins` are exempt | yes | no |
+
+The prose the spike quoted for the two keys in §86.4 came from the shipped runtime bundle, which
+is the stronger source; the published reference gives their scope and the merge rule, which the
+bundle reading did not.
+
+**No managed machine was available.** Nothing here was measured against a Claude Code with a
+policy in force: this package could not deploy one, because writing into any of those three
+directories is modifying a managed settings location. What *was* run is the whole of DeckHQ's own
+side against injected directories — 114.4 — which proves the read, the merge, the match, the row,
+the problem line, the share block, the route field and the exit code, and proves nothing at all
+about how the runtime behaves when the key is set. If someone runs DeckHQ on a fleet with
+`allowManagedHooksOnly` deployed and the hooks still fire, that is the fact this entry has wrong,
+and the correction belongs here.
+
+**The file mechanism is the only one read.** The same documentation lists MDM profiles (the
+`com.anthropic.claudecode` managed preferences domain on macOS), the Windows registry, an
+embedding host's `managedSettings`, and server-managed settings fetched from the claude.ai
+console. None of those is a file this process can open, and three of them are not on disk at all.
+So a machine policed by MDM or by the console reports exactly what it reported before this
+package: hooks installed, events zero. That is a real gap and it is not closeable from here.
+
+### 114.2 The two keys are not the same size, and the report does not pretend they are
+
+`allowManagedHooksOnly` ignores every hook DeckHQ installs, by either route — the eight `command`
+entries and WP-19's `http` one. `allowedHttpHookUrls` reaches **only** the `http` entry, because
+that is the only HTTP hook DeckHQ writes and the plugin (§102) writes none at all: the eight
+lifecycle events keep delivering, and what dies is the permission card.
+
+So the row is the same short sentence for both — it sits in a column-aligned report, and the key
+and the file are what the reader needs in order to go and look —
+
+```
+  hooks           installed, but a managed policy blocks them — allowManagedHooksOnly (C:\Program Files\ClaudeCode\managed-settings.json)
+```
+
+— and the `!` line under it says what that key actually takes away, differently for each. §73's
+discipline is _say only what can be checked_, and a row that said "blocks them" and stopped would
+be overstating `allowedHttpHookUrls` by eight events. The share block (§84) carries the key
+without the file, because a managed settings path is a path like any other and that block carries
+none.
+
+### 114.3 Four decisions the package had to make
+
+1. **A generous match, on purpose.** The documentation names `allowedHttpHookUrls` and says a
+   handler runs only if its URL "matches the merged allowlist". It does not say what matching
+   *is* — exact, prefix, origin, glob — and there was no managed machine to measure it on. So
+   `allowlistCovers()` counts all four, and a `*` glob is translated as a glob rather than as a
+   regular expression (a test pins that `http://127x0x0x1:4317/*` does **not** cover our URL,
+   which a naive translation would have let through). The two errors do not cost the same: missing
+   a block leaves the report saying exactly what it said yesterday, while inventing one puts a
+   healthy machine at exit 1 and a red banner in its header over a matching rule this project
+   guessed at.
+2. **The user's own settings file is read, and can only ever widen.** The key's documented scope
+   is *any file* and the allowlist *merges*, so a managed `[]` beside a user entry naming our URL
+   may well be a machine where the hook runs. Reading `~/.claude/settings.json` into the union is
+   what keeps `doctor` from failing that machine. It is never allowed to originate a block: a
+   block requires a *managed* source to have defined the key, because the row says "a managed
+   policy" and it will not say that about a file the user wrote.
+3. **The plugin exemption is honoured.** `allowManagedHooksOnly` exempts hooks from a plugin the
+   managed policy force-enables in `enabledPlugins`, so the managed sources' `enabledPlugins` are
+   read too, and a `deckhq@<marketplace>: true` there means a plugin install is *not* reported as
+   blocked. Without it, the one deployment where an organisation has deliberately shipped DeckHQ
+   to its fleet is the one where `doctor` would call it broken.
+4. **A file that exists and cannot be read is neither a block nor nothing.** `managedSettings()`
+   lists it under `unreadable` and takes no position; `blockedByPolicy()` returns null. "There is
+   a policy here we could not read" and "there is no policy here" are different facts, and only
+   one of them is safe to act on. `ENOENT` is not reported at all — an absent file is the resting
+   state of an unmanaged machine, which is most machines.
+
+Everything is read-only. Nothing here opens a managed settings file for writing, and `doctor`
+never could: it is the command that must not be able to change the thing it reports on — the same
+rule that makes `readTerminalPin` a plain read rather than a `Store`.
+
+### 114.4 What was measured
+
+`deckhq doctor` on the reference machine, unchanged and exit 0 — Windows 11, no
+`C:\Program Files\ClaudeCode` at all, hooks installed on 4400 with 424 events delivered, the last
+one 7m before the run. That is the case the check must not disturb, and it is the case almost
+every machine is in.
+
+Then the same real adapter and the same real `collectReport` / `renderReport` / `renderShare`,
+with the managed directory injected at a temp path, on this machine:
+
+| Injected `managed-settings.json` | Row | Exit |
+|---|---|---|
+| `{"allowManagedHooksOnly": true}` | `installed, but a managed policy blocks them — allowManagedHooksOnly (<file>)` | 1 |
+| `{"allowedHttpHookUrls": []}` | `installed, but a managed policy blocks them — allowedHttpHookUrls (<file>)` | 1 |
+| `{"allowedHttpHookUrls": ["http://127.0.0.1:4400/api/permission"]}` | `installed, port 4400, 424 events, last 7m ago` | 0 |
+| `{}` | `installed, port 4400, 424 events, last 7m ago` | 0 |
+
+**Proved by test** (48 new; the suite goes 1301 → 1349):
+
+- `test/unit/hook-policy.test.mjs` (35): the directory for each platform, `%ProgramFiles%` rather
+  than an assumed system drive, the legacy Windows path's absence, the drop-in merge order and
+  what it skips; each key present, absent, true, false and empty; the union across sources; an
+  unparseable file and a non-object file; the plugin force-enable; ten cases of what covers a URL
+  and what does not; and the verdict for every combination — allowlist containing the daemon URL,
+  omitting it, empty, followed to a moved port, widened by the user's file, never originated by
+  it, both keys blocking at once, and `blockedByPolicy` pointed at a directory where a file
+  should be.
+- `test/unit/doctor.test.mjs` (9): the row's exact wording, exit 1 for each key, the two different
+  problem lines, an adapter with no policy check at all, a policy read that throws leaving the
+  report untouched, hooks that are not installed never being reported as blocked, the share
+  block's key-without-path, and the JSON document's stable key set.
+- `test/unit/hook-route.test.mjs` (4): `blockedByPolicy` on `/api/hooks`, null rather than absent,
+  a throw that does not fail the status, and the port the check is asked about.
+
+The §74 honesty tests still pass, and a new one runs the same assertions over the blocked wording:
+"cannot see", "invisible", "blind" and "hidden" appear in none of the row, the problem line, the
+share block or the header banner. What is blocked is a hook, and what the report says is that it
+does not run.
+
+### 114.5 What is still owed
+
+A run on a machine with a real managed policy in force. Until that has happened the claim is
+_"DeckHQ reads the managed settings file and reports what it finds there"_, which is proved, and
+**not** _"DeckHQ tells you when Claude Code is ignoring your hooks"_, which needs a Claude Code
+that is actually ignoring them. The gap in 114.1 — MDM, the registry, and server-managed settings
+from the console — is not closeable by reading files, and needs its own decision before it is
+described as a limitation of the *feature* rather than of *this package*.

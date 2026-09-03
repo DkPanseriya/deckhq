@@ -28,12 +28,32 @@ export function register(router, ctx) {
     let error = null;
     let installedAtPort = null;
     let viaPlugin = false;
+    /** @type {{key:string, file:string}|null} */
+    let blockedByPolicy = null;
     try {
       plan = adapter.hooks.describe(port());
       if (adapter.hooks.supported) {
         installed = await adapter.hooks.installed(port());
         installedAtPort = (await adapter.hooks.installedPort?.()) ?? null;
         viaPlugin = Boolean(await adapter.hooks.pluginInstalled?.());
+        // WP-56. A managed policy can switch these hooks off over DeckHQ's
+        // head, and the result is indistinguishable from a broken install
+        // everywhere else: the file is right, the port is right, nothing
+        // arrives (`docs/DEVIATIONS.md` §86.4, §114). Never fails the status.
+        if (installed || viaPlugin) {
+          try {
+            const found = await adapter.hooks.blockedByPolicy?.({
+              port: installedAtPort ?? port(),
+              viaPlugin,
+            });
+            blockedByPolicy =
+              found && found.key && found.file
+                ? { key: String(found.key), file: String(found.file) }
+                : null;
+          } catch {
+            blockedByPolicy = null;
+          }
+        }
       }
     } catch (err) {
       error = err.message;
@@ -60,6 +80,10 @@ export function register(router, ctx) {
         !viaPlugin && installedAtPort != null && installedAtPort !== port()
           ? installedAtPort
           : null,
+      // `{key, file}` when a managed settings key stops these hooks from
+      // running, otherwise null. The header banner says so; there is no
+      // button, because there is nothing on this side to press.
+      blockedByPolicy,
       ...registry.hookHealthFor(adapter.id),
     };
   }

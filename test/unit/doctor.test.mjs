@@ -52,7 +52,7 @@ import {
  * A runtime adapter with only the surface `doctor` is allowed to touch.
  * @param {Partial<{id:string,label:string,available:boolean,sessions:any[],live:any[],
  *   hooksSupported:boolean,installed:boolean,port:number|null,version:string,
- *   scanThrows:string}>} spec
+ *   scanThrows:string,blockedByPolicy:any,policyThrows:string}>} spec
  */
 function fakeAdapter(spec = {}) {
   const {
@@ -66,6 +66,8 @@ function fakeAdapter(spec = {}) {
     port = null,
     version,
     scanThrows,
+    blockedByPolicy,
+    policyThrows,
   } = spec;
 
   const adapter = {
@@ -84,6 +86,14 @@ function fakeAdapter(spec = {}) {
     },
   };
   if (version !== undefined) adapter.version = async () => version;
+  // WP-56. Optional on purpose: a runtime whose hooks no policy can switch off
+  // simply does not have this method, and the row must be unchanged for it.
+  if (blockedByPolicy !== undefined || policyThrows) {
+    adapter.hooks.blockedByPolicy = async () => {
+      if (policyThrows) throw new Error(policyThrows);
+      return blockedByPolicy;
+    };
+  }
   return adapter;
 }
 
@@ -649,6 +659,196 @@ test('an adapter that throws is reported rather than swallowed', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// The managed policy that switches the hooks off (WP-56)
+// ---------------------------------------------------------------------------
+//
+// Two managed settings keys can stop DeckHQ's hooks from running over its head
+// — `allowManagedHooksOnly` and `allowedHttpHookUrls` (docs/DEVIATIONS.md
+// §86.4, §97.4, §114). From every other surface the result is identical to a
+// broken install: the settings file is exactly right, the port is exactly
+// right, the daemon is up, and no event ever arrives. This is the "looks
+// healthy, delivers nothing" class §75 reserved exit 1 for.
+
+const MANAGED_FILE = '/etc/claude-code/managed-settings.json';
+
+test('a managed policy that blocks the hooks is named in the row, and is a failure', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(5, '/p'),
+        installed: true,
+        port: 4317,
+        blockedByPolicy: { key: 'allowManagedHooksOnly', file: MANAGED_FILE },
+      }),
+    ),
+    { machine: daemonOn(4317) },
+  );
+
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.hooks[0].blockedByPolicy, {
+    key: 'allowManagedHooksOnly',
+    file: MANAGED_FILE,
+  });
+  assert.match(
+    renderReport(report),
+    /hooks {11}installed, but a managed policy blocks them — allowManagedHooksOnly \(\/etc\/claude-code\/managed-settings\.json\)/,
+  );
+  // The row is short; the problem line says what that key actually takes away.
+  assert.match(
+    report.problems.join('\n'),
+    /only the hooks your organisation deploys run and DeckHQ's are ignored/,
+  );
+  assert.match(report.problems.join('\n'), /reinstalling the hooks will not, either/i);
+});
+
+test('the exit code is 1 for each key, in each state that blocks', async () => {
+  for (const blockedByPolicy of [
+    { key: 'allowManagedHooksOnly', file: MANAGED_FILE },
+    { key: 'allowedHttpHookUrls', file: MANAGED_FILE },
+  ]) {
+    const { dataDir, stateFile } = await tmpStateDir();
+    const code = await runDoctor([], {
+      write: () => {},
+      collect: () =>
+        collectReport({
+          adapters: registry(
+            fakeAdapter({
+              sessions: sessionsIn(5, '/p'),
+              installed: true,
+              port: 4317,
+              blockedByPolicy,
+            }),
+          ),
+          dataDir,
+          stateFile,
+          now: NOW,
+          terminal: async () => A_TERMINAL,
+          ...daemonOn(4317),
+        }),
+    });
+    assert.equal(code, 1, `${blockedByPolicy.key} must exit 1`);
+  }
+});
+
+test('allowedHttpHookUrls is reported at the size it is: the http hook, not all of them', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(5, '/p'),
+        installed: true,
+        port: 4400,
+        blockedByPolicy: { key: 'allowedHttpHookUrls', file: MANAGED_FILE },
+      }),
+    ),
+    { machine: daemonOn(4400) },
+  );
+  const problems = report.problems.join('\n');
+  assert.match(problems, /http:\/\/127\.0\.0\.1:4400\/api\/permission/);
+  assert.match(problems, /the PermissionRequest hook does not run/);
+  assert.match(problems, /The other hook events are unaffected/);
+});
+
+test('a policy that blocks nothing leaves the row and the exit code exactly as they were', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(5, '/p'),
+        installed: true,
+        port: 4317,
+        blockedByPolicy: null,
+      }),
+    ),
+    { machine: daemonOn(4317) },
+  );
+  assert.equal(report.ok, true);
+  assert.equal(report.hooks[0].blockedByPolicy, null);
+  assert.match(renderReport(report), /hooks {11}installed, port 4317/);
+});
+
+test('an adapter with no policy check at all is unchanged', async () => {
+  const report = await collect(
+    registry(fakeAdapter({ sessions: sessionsIn(5, '/p'), installed: true, port: 4317 })),
+    { machine: daemonOn(4317) },
+  );
+  assert.equal(report.ok, true);
+  assert.equal(report.hooks[0].blockedByPolicy, null);
+});
+
+test('a policy read that throws never fails the report', async () => {
+  // The managed settings directory is a system directory. A permission error
+  // reading it must leave the row saying what it said before this check
+  // existed, not turn a healthy machine into exit 1.
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(5, '/p'),
+        installed: true,
+        port: 4317,
+        policyThrows: 'EACCES: permission denied',
+      }),
+    ),
+    { machine: daemonOn(4317) },
+  );
+  assert.equal(report.ok, true);
+  assert.equal(report.hooks[0].blockedByPolicy, null);
+  assert.doesNotMatch(report.problems.join('\n'), /EACCES/);
+});
+
+test('hooks that are not installed are never reported as policy-blocked', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(5, '/p'),
+        installed: false,
+        blockedByPolicy: { key: 'allowManagedHooksOnly', file: MANAGED_FILE },
+      }),
+    ),
+  );
+  assert.equal(report.hooks[0].blockedByPolicy, null);
+  assert.equal(report.ok, true);
+});
+
+test('the share block names the key and carries no managed settings path', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(5, '/p'),
+        installed: true,
+        port: 4317,
+        blockedByPolicy: { key: 'allowManagedHooksOnly', file: MANAGED_FILE },
+      }),
+    ),
+    { machine: daemonOn(4317) },
+  );
+  const block = renderShare(report, { home: '/home/x', host: 'somebox' });
+  assert.match(
+    block,
+    /hooks {11}installed, but a managed policy blocks them — allowManagedHooksOnly/,
+  );
+  assert.doesNotMatch(block, /etc\/claude-code/);
+  assert.doesNotMatch(block, /managed-settings\.json/);
+});
+
+test('INVARIANT OF HONESTY: a blocked policy is never described as something unseen', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        sessions: sessionsIn(66, '/p'),
+        live: sessionsIn(5, '/p'),
+        installed: true,
+        port: 4317,
+        blockedByPolicy: { key: 'allowedHttpHookUrls', file: MANAGED_FILE },
+      }),
+    ),
+    { machine: daemonOn(4317) },
+  );
+  for (const text of [renderReport(report), renderShare(report), report.problems.join('\n')]) {
+    assert.doesNotMatch(text, /cannot see/i);
+    assert.doesNotMatch(text, /(?:invisible|blind|hidden from)/i);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Hook delivery evidence
 // ---------------------------------------------------------------------------
 
@@ -753,6 +953,9 @@ test('--json emits one JSON document with a stable shape', async () => {
     'version',
   ]);
   assert.deepEqual(Object.keys(parsed.hooks[0]).sort(), [
+    // WP-56: `{key, file}` when a managed settings key stops these hooks from
+    // running, null otherwise. Null rather than absent, like `share` above.
+    'blockedByPolicy',
     'error',
     'eventsSeen',
     'installed',

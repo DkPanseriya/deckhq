@@ -10,6 +10,7 @@
 
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import process from 'node:process';
 import { CLAUDE_DIR } from './parse.mjs';
 import { BACKUP_DIR } from '../../core/paths.mjs';
 import { MAX_TOOL_SUMMARY, MAX_PERMISSION_SUMMARY } from '../../core/model.mjs';
@@ -631,6 +632,251 @@ export async function pluginInstalled(file = SETTINGS_FILE) {
     if (String(key).split('@')[0] === PLUGIN_NAME) return true;
   }
   return false;
+}
+
+// ------------------------------------------------------ the managed policy
+
+/**
+ * Where Claude Code reads a `managed-settings.json` from on this platform.
+ *
+ * Verified against the Claude Code documentation (Deploy managed settings,
+ * read 4 September 2026): macOS `/Library/Application Support/ClaudeCode/`,
+ * Linux and WSL `/etc/claude-code/`, Windows `C:\Program Files\ClaudeCode\`.
+ * The same page states that the legacy Windows path
+ * `C:\ProgramData\ClaudeCode\managed-settings.json` is **not** read, so this
+ * does not look there — a policy file sitting at a path the runtime ignores is
+ * not a policy, and reporting one would be the same class of error as §74.
+ *
+ * `%ProgramFiles%` rather than a literal `C:` so a machine whose Windows
+ * install is not on the system drive is read correctly.
+ *
+ * @param {string} [platform]
+ * @param {Record<string, string|undefined>} [env]
+ * @returns {string}
+ */
+export function managedSettingsDir(platform = process.platform, env = process.env) {
+  if (platform === 'win32') {
+    return path.join(env.ProgramFiles || 'C:\\Program Files', 'ClaudeCode');
+  }
+  if (platform === 'darwin') return '/Library/Application Support/ClaudeCode';
+  return '/etc/claude-code';
+}
+
+/** The drop-in directory Claude Code merges after `managed-settings.json`. */
+const MANAGED_DROP_INS = 'managed-settings.d';
+
+/**
+ * Every managed settings file on this machine, in the order Claude Code merges
+ * them: `managed-settings.json` first, then every `*.json` in
+ * `managed-settings.d/` in alphabetical order. Hidden files and anything that
+ * is not `.json` are skipped, as the documentation says the runtime does.
+ *
+ * Read-only and never throws: a missing directory is the normal case on an
+ * unmanaged machine and returns the one path, whether or not it exists.
+ *
+ * @param {string} [dir]
+ * @returns {Promise<string[]>}
+ */
+export async function managedSettingsFiles(dir = managedSettingsDir()) {
+  const files = [path.join(dir, 'managed-settings.json')];
+  let names;
+  try {
+    names = await fsp.readdir(path.join(dir, MANAGED_DROP_INS));
+  } catch {
+    return files;
+  }
+  const dropIns = names
+    .filter((n) => n.endsWith('.json') && !n.startsWith('.'))
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const name of dropIns) files.push(path.join(dir, MANAGED_DROP_INS, name));
+  return files;
+}
+
+/**
+ * The two hook kill switches, read from the managed settings files on this
+ * platform. `docs/DEVIATIONS.md` §86.4 named them and §97.4 left detecting them
+ * as a follow-up; this is that follow-up.
+ *
+ * What is reported, and nothing more:
+ *
+ *   - `allowManagedHooksOnly` — documented scope **Managed**: when it is true,
+ *     "only hooks from managed settings run. User, project, and local hooks are
+ *     ignored", with hooks from a plugin force-enabled in the managed
+ *     `enabledPlugins` exempted. Both routes DeckHQ installs by are on the
+ *     ignored side of that line unless the plugin is the force-enabled one, so
+ *     `managedPluginEnabled` is read too.
+ *   - `allowedHttpHookUrls` — documented scope **Any file**, and the
+ *     documentation says a handler runs only if its URL matches the *merged*
+ *     allowlist. So the arrays from every managed source are unioned here, and
+ *     `blockedByPolicy()` widens that union with the user's own settings file
+ *     before deciding anything.
+ *
+ * Read-only, and never throws. A file that is absent contributes nothing; a
+ * file that exists and cannot be read or parsed is listed in `unreadable`
+ * rather than guessed at, because "there is a policy file here we could not
+ * read" and "there is no policy here" are different facts.
+ *
+ * Only the *file* delivery mechanism is read. MDM profiles, the Windows
+ * registry and server-managed settings from the claude.ai console deliver the
+ * same keys through channels that are not files on disk, and none of them is
+ * visible to this process — see `docs/DEVIATIONS.md` §114.
+ *
+ * @param {{dir?:string}} [opts]
+ * @returns {Promise<{dir:string, files:string[], unreadable:string[],
+ *   allowManagedHooksOnly:{value:boolean, file:string|null},
+ *   allowedHttpHookUrls:{value:string[]|null, file:string|null},
+ *   managedPluginEnabled:boolean}>}
+ */
+export async function managedSettings({ dir = managedSettingsDir() } = {}) {
+  const result = {
+    dir,
+    /** @type {string[]} */ files: [],
+    /** @type {string[]} */ unreadable: [],
+    allowManagedHooksOnly: { value: false, /** @type {string|null} */ file: null },
+    allowedHttpHookUrls: {
+      /** @type {string[]|null} */ value: null,
+      /** @type {string|null} */ file: null,
+    },
+    managedPluginEnabled: false,
+  };
+
+  for (const file of await managedSettingsFiles(dir)) {
+    let parsed;
+    try {
+      parsed = JSON.parse(await fsp.readFile(file, 'utf8'));
+    } catch (err) {
+      // ENOENT is the normal case and is not worth reporting. Anything else —
+      // a permission error, a truncated file, invalid JSON — is a file that
+      // exists and whose contents we do not know.
+      if (!err || err.code !== 'ENOENT') result.unreadable.push(file);
+      continue;
+    }
+    if (!isPlainObject(parsed)) {
+      result.unreadable.push(file);
+      continue;
+    }
+    result.files.push(file);
+
+    if (parsed.allowManagedHooksOnly === true && !result.allowManagedHooksOnly.value) {
+      result.allowManagedHooksOnly = { value: true, file };
+    }
+    if (Array.isArray(parsed.allowedHttpHookUrls)) {
+      const urls = parsed.allowedHttpHookUrls.filter((u) => typeof u === 'string');
+      result.allowedHttpHookUrls = {
+        value: [...(result.allowedHttpHookUrls.value || []), ...urls],
+        file: result.allowedHttpHookUrls.file ?? file,
+      };
+    }
+    if (isPlainObject(parsed.enabledPlugins)) {
+      for (const [key, value] of Object.entries(parsed.enabledPlugins)) {
+        if (value === true && String(key).split('@')[0] === PLUGIN_NAME) {
+          result.managedPluginEnabled = true;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Does one entry of an HTTP hook allowlist cover `url`?
+ *
+ * The documentation names `allowedHttpHookUrls` and says a handler runs only
+ * if its URL "matches the merged allowlist"; it does **not** define what
+ * matching is, and no managed machine was available to measure it on. So this
+ * is deliberately generous — an exact URL, a prefix such as an origin, and a
+ * `*` glob all count — because the two errors do not cost the same. Failing to
+ * notice a block leaves the report saying exactly what it says today. Claiming
+ * a block that is not there would put `doctor` at exit 1 and a banner in the
+ * header of a machine whose policy is fine, over a matching rule this project
+ * guessed at. See `docs/DEVIATIONS.md` §114.
+ *
+ * @param {unknown} entry
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function allowlistCovers(entry, url) {
+  if (typeof entry !== 'string') return false;
+  const pattern = entry.trim().toLowerCase();
+  const target = String(url).trim().toLowerCase();
+  if (!pattern || !target) return false;
+  if (pattern === '*' || pattern === target) return true;
+  if (pattern.includes('*')) {
+    const source = pattern
+      .split('*')
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+    return new RegExp(`^${source}$`).test(target);
+  }
+  return target.startsWith(pattern);
+}
+
+/**
+ * A managed policy that stops DeckHQ's installed hooks from running, or null.
+ *
+ * This is the "looks healthy, delivers nothing" case §75 reserved exit 1 for,
+ * and it is the one the user has no way to tell apart from a broken install:
+ * the settings file is exactly right, the consent screen is satisfied, the
+ * daemon is on the correct port, and no event ever arrives.
+ *
+ * Two keys, checked in the order of how much they take away:
+ *
+ *   1. `allowManagedHooksOnly` kills every hook DeckHQ installs by either
+ *      route, unless the plugin route is in use *and* the managed policy
+ *      force-enables that plugin, which the documentation exempts.
+ *   2. `allowedHttpHookUrls` reaches only the one `http` entry — WP-19's
+ *      `PermissionRequest` — because that is the only HTTP hook DeckHQ writes
+ *      and the plugin route writes none at all. It is reported only when a
+ *      *managed* source defines it, since the documented scope is any file and
+ *      the allowlist merges: a user's own entry widens the list rather than
+ *      narrowing it, so it is read here to avoid claiming a block that a merge
+ *      would have lifted, and never to originate one.
+ *
+ * Never throws: every unreadable file simply contributes nothing, and the
+ * caller gets `null`, which is what it would have had before this existed.
+ *
+ * @param {{port?:number, viaPlugin?:boolean, dir?:string, userSettingsFile?:string}} [opts]
+ * @returns {Promise<{key:string, file:string}|null>}
+ */
+export async function blockedByPolicy(opts = {}) {
+  const { port, viaPlugin = false, dir, userSettingsFile = SETTINGS_FILE } = opts;
+  let managed;
+  try {
+    managed = await managedSettings(dir ? { dir } : {});
+  } catch {
+    return null;
+  }
+
+  if (managed.allowManagedHooksOnly.value && !(viaPlugin && managed.managedPluginEnabled)) {
+    return {
+      key: 'allowManagedHooksOnly',
+      file: managed.allowManagedHooksOnly.file ?? path.join(managed.dir, 'managed-settings.json'),
+    };
+  }
+
+  const allowlist = managed.allowedHttpHookUrls;
+  // No managed source defines the allowlist, or there is no `http` entry of
+  // ours for it to reach: nothing to say.
+  if (!allowlist.value || port == null) return null;
+
+  let userUrls = [];
+  try {
+    const parsed = JSON.parse(await fsp.readFile(userSettingsFile, 'utf8'));
+    if (isPlainObject(parsed) && Array.isArray(parsed.allowedHttpHookUrls)) {
+      userUrls = parsed.allowedHttpHookUrls;
+    }
+  } catch {
+    userUrls = []; // absent or unreadable: it widens nothing
+  }
+
+  const url = `http://127.0.0.1:${port}${PERMISSION_PATH}`;
+  const merged = [...allowlist.value, ...userUrls];
+  if (merged.some((entry) => allowlistCovers(entry, url))) return null;
+  return {
+    key: 'allowedHttpHookUrls',
+    file: allowlist.file ?? path.join(managed.dir, 'managed-settings.json'),
+  };
 }
 
 /**

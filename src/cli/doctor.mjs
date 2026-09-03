@@ -345,6 +345,15 @@ async function collectHooks(adapter, deps) {
     listening: null,
     eventsSeen: null,
     lastEventAt: null,
+    /**
+     * WP-56. A managed policy that stops these hooks from running, as
+     * `{key, file}`, or null. Two settings keys can switch DeckHQ's hooks off
+     * over its head, and from every other surface the result is identical to a
+     * broken install: the settings file is exactly right and nothing arrives
+     * (`docs/DEVIATIONS.md` §86.4, §97.4, §114). Read through an optional
+     * adapter method, so a runtime with no such policy simply has none.
+     */
+    blockedByPolicy: null,
     error: null,
   };
   if (!row.supported) return row;
@@ -359,6 +368,23 @@ async function collectHooks(adapter, deps) {
   } catch (err) {
     row.error = err?.message || String(err);
     return row;
+  }
+
+  if (row.installed && typeof adapter.hooks.blockedByPolicy === 'function') {
+    try {
+      const blocked = await adapter.hooks.blockedByPolicy({
+        port: row.port ?? undefined,
+        viaPlugin: row.viaPlugin,
+      });
+      row.blockedByPolicy =
+        blocked && blocked.key && blocked.file
+          ? { key: String(blocked.key), file: String(blocked.file) }
+          : null;
+    } catch {
+      // A policy read that fails leaves the row saying what it said before
+      // this check existed. It must never be able to fail the report.
+      row.blockedByPolicy = null;
+    }
   }
 
   if (row.installed && row.port != null) {
@@ -502,6 +528,18 @@ export async function collectReport(opts = {}) {
       problems.push(`${row.label} hooks could not be read: ${row.error}`);
       continue;
     }
+
+    // A managed policy switching the hooks off is the "looks healthy, delivers
+    // nothing" case §75 reserved exit 1 for, and the only one of its class the
+    // user cannot diagnose from any other surface: the settings file is right,
+    // the port is right, the daemon is up, and no event ever arrives. The row
+    // above names the key and the file; this line says exactly what that key
+    // takes away, because the two keys do not take away the same thing.
+    if (row.blockedByPolicy) {
+      problems.push(policyProblem(row));
+      continue;
+    }
+
     if (!row.installed || row.port == null || row.listening !== false) continue;
 
     // Hooks aimed at a silent port. Which of these it is decides everything:
@@ -671,12 +709,47 @@ export function renderReport(report, opts = {}) {
 }
 
 /**
+ * What one blocking key actually takes away, named exactly.
+ *
+ * The two keys are not the same size and the report will not pretend they are.
+ * `allowManagedHooksOnly` ignores every hook DeckHQ installs, by either route.
+ * `allowedHttpHookUrls` reaches only the one `http` entry — WP-19's
+ * `PermissionRequest` — and leaves the eight `command` events delivering
+ * normally. §72–§73: say only what was checked, at the size it is.
+ * @param {any} h
+ */
+function policyProblem(h) {
+  const { key, file } = h.blockedByPolicy;
+  if (key === 'allowedHttpHookUrls') {
+    return (
+      `${h.label} hooks are installed, but managed settings set allowedHttpHookUrls in ${file} ` +
+      `and it does not cover http://127.0.0.1:${h.port}/api/permission, so the PermissionRequest ` +
+      'hook does not run and no permission prompt reaches DeckHQ. The other hook events are ' +
+      'unaffected. Nothing DeckHQ can do changes this — the allowlist is set by whoever manages ' +
+      'this machine.'
+    );
+  }
+  return (
+    `${h.label} hooks are installed, but managed settings set ${key} in ${file}, so only the ` +
+    "hooks your organisation deploys run and DeckHQ's are ignored. No event reaches it and " +
+    'state is being inferred instead. Nothing DeckHQ can do changes this — reinstalling the ' +
+    'hooks will not, either.'
+  );
+}
+
+/**
  * @param {any} h
  * @param {number} now
  */
 function describeHooks(h, now) {
   if (h.error) return `could not be read: ${h.error}`;
   if (!h.installed) return 'not installed (DeckHQ polls instead)';
+  if (h.blockedByPolicy) {
+    return (
+      'installed, but a managed policy blocks them — ' +
+      `${h.blockedByPolicy.key} (${h.blockedByPolicy.file})`
+    );
+  }
   // A plugin install carries no port: its hook command asks the daemon where
   // it is on every event, so there is no port to report and nothing that can
   // go stale. Saying so is the difference between a row that explains the
@@ -927,6 +1000,12 @@ export function renderShare(report, opts = {}) {
 function describeHooksForShare(h, now) {
   if (h.error) return 'could not be read';
   if (!h.installed) return 'not installed (DeckHQ polls instead)';
+  // The key, without the file. A managed settings path is a path like any
+  // other and the share block carries none; the key alone is the actionable
+  // half, and it is the same on every machine that policy is deployed to.
+  if (h.blockedByPolicy) {
+    return `installed, but a managed policy blocks them — ${h.blockedByPolicy.key}`;
+  }
   const parts = [h.viaPlugin && h.port == null ? 'installed as a plugin' : 'installed'];
   if (h.listening === false) parts.push('NOTHING LISTENING THERE');
   if (h.eventsSeen != null) {

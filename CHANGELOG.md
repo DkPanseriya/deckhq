@@ -425,6 +425,24 @@
   building and one answer to where each session is standing. It also keeps the people moving while
   the tab is hidden, which is the only time it is the thing you are looking at.
   `public/minifloor.js`, `docs/DEVIATIONS.md` §113, `docs/media/mini-floor.png`.
+- **`deckhq doctor` now names the managed policy that is switching your hooks off.** Two Claude
+  Code settings keys can stop DeckHQ's hooks from running over its head — `allowManagedHooksOnly`,
+  which ignores every hook your organisation did not deploy, and `allowedHttpHookUrls`, which
+  decides whether the `PermissionRequest` hook may reach `127.0.0.1` at all. From every surface
+  DeckHQ had, that state was indistinguishable from a broken install: the settings file is
+  byte-for-byte what the consent screen showed, the port matches the running daemon, and no event
+  ever arrives. The adapter now reads the `managed-settings.json` for the platform — macOS
+  `/Library/Application Support/ClaudeCode/`, Linux and WSL `/etc/claude-code/`, Windows
+  `C:\Program Files\ClaudeCode\` — plus the `managed-settings.d/` drop-ins beside it, and the row
+  reads `installed, but a managed policy blocks them — <key> (<file>)`, with exit 1, because this
+  is the "looks healthy, delivers nothing" class §75 reserved that code for. The `!` line under it
+  says what each key actually takes away, which is not the same thing: `allowManagedHooksOnly`
+  ends every event, `allowedHttpHookUrls` ends only the permission card and leaves the other eight
+  delivering. `GET /api/hooks` gains `blockedByPolicy`, and the hooks screen says the same thing
+  in one line above the Install button, including that pressing it again will not help. Read-only
+  throughout, generous about what counts as being on the allowlist, and the user's own
+  `allowedHttpHookUrls` can only ever widen the merged list — never fail a machine whose policy is
+  fine. `docs/DEVIATIONS.md` §114.
 
 - **The floor is photographed on every change, and a pixel that moves without permission fails the
   build.** The three worst bugs in this project's history — the rig a quarter-turn out of true, a
@@ -958,8 +976,17 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
 - **Codex cannot answer a permission prompt yet.** It has the same hook and the same response
   shape, but no `http` hook type at all, so it needs a `command` hook that reads the daemon's
   port and relays on stdin/stdout. That same hook is also the fallback for the two managed-settings
-  switches that can turn HTTP hooks off over DeckHQ's head, neither of which is detected today.
-  §97.4.
+  switches that can turn HTTP hooks off over DeckHQ's head — now detected and named by `doctor`
+  and the hooks screen, but still without a route around them. §97.4, §114.
+- **No machine with a managed policy in force has been run against.** `doctor` reads the
+  `managed-settings.json` for the platform and the `managed-settings.d/` drop-ins beside it, and
+  every part of DeckHQ's own side is proved against injected directories — but no Claude Code has
+  been observed actually ignoring a hook because of one of those keys, because deploying a policy
+  means writing into a managed settings location and this project will not. The same read cannot
+  reach the other delivery mechanisms at all: MDM profiles, the Windows registry and
+  server-managed settings from the claude.ai console are not files on disk, so a fleet policed
+  that way still reports "installed, 0 events" with no explanation. `docs/DEVIATIONS.md` §114.1,
+  §114.5.
 - **Goldens are committed for Windows only, so the Ubuntu CI job reports SKIPPED and proves
   nothing yet.** Text is rasterised by the operating system, so one set of goldens cannot serve
   three platforms and there was no linux or macOS machine in reach. The job captures anyway and
