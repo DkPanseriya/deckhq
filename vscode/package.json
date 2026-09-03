@@ -1,0 +1,116 @@
+{
+  "name": "deckhq",
+  "displayName": "DeckHQ",
+  "description": "Every AI coding session on your machine, on one office floor — in a VS Code panel. Local, private, no telemetry.",
+  "version": "0.1.0",
+  "publisher": "DkPanseriya",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "author": "Darshak Panseriya",
+  "homepage": "https://github.com/DkPanseriya/deckhq#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DkPanseriya/deckhq.git",
+    "directory": "vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/DkPanseriya/deckhq/issues"
+  },
+  "sponsor": {
+    "url": "https://github.com/sponsors/DkPanseriya"
+  },
+  "categories": [
+    "Visualization",
+    "AI",
+    "Other"
+  ],
+  "keywords": [
+    "claude code",
+    "codex",
+    "ai agents",
+    "agent management",
+    "sessions",
+    "dashboard",
+    "local-first"
+  ],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "extensionKind": [
+    "ui",
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "DeckHQ can start a local daemon. The command it runs is read from your user settings only, never from a workspace.",
+      "restrictedConfigurations": [
+        "deckhq.startCommand"
+      ]
+    }
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "deckhq.openFloor",
+        "title": "Open floor",
+        "category": "DeckHQ"
+      },
+      {
+        "command": "deckhq.showWaiting",
+        "title": "Show waiting",
+        "category": "DeckHQ"
+      },
+      {
+        "command": "deckhq.startDaemon",
+        "title": "Start daemon",
+        "category": "DeckHQ"
+      },
+      {
+        "command": "deckhq.stopDaemon",
+        "title": "Stop daemon",
+        "category": "DeckHQ"
+      }
+    ],
+    "configuration": {
+      "title": "DeckHQ",
+      "properties": {
+        "deckhq.port": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 65535,
+          "markdownDescription": "The loopback port the DeckHQ daemon listens on. `0` scans `4317`–`4326`, which is the range the daemon itself walks. Nothing outside `127.0.0.1` is ever contacted."
+        },
+        "deckhq.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Start a DeckHQ daemon when none is already running. Turn this off to use the extension only with a daemon you start yourself."
+        },
+        "deckhq.startCommand": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "npx",
+            "--yes",
+            "deckhq",
+            "--no-open"
+          ],
+          "scope": "application",
+          "markdownDescription": "The command that starts the daemon, as an argument list — never a shell string. `--no-open` is added if it is missing, and `--port` is added when `#deckhq.port#` is set. **Read from your user settings only**: a workspace cannot change what this extension runs."
+        },
+        "deckhq.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show `▣ 3 waiting · 1 hand up` in the status bar. Click it to open the floor."
+        }
+      }
+    }
+  }
+}
