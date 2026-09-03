@@ -25,6 +25,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     # The suite is about 5 s. This is a hang guard for a test that waits on a
     # socket or a child that never exits, not a budget.
+    #
+    # It has fired once, and reading the result took a while, so: **a job the
+    # runner kills at this timeout is recorded as `cancelled`, not `failed`,
+    # and one cancelled job makes the whole RUN `cancelled`** — even when five
+    # of its siblings failed with real assertions. A run summary that says
+    # "cancelled" is therefore not evidence that something cancelled it, and in
+    # particular is not evidence about the `concurrency` block above. Read the
+    # per-job conclusions. See DEVIATIONS.md §121.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
