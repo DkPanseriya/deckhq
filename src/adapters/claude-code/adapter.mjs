@@ -803,6 +803,11 @@ export const adapter = {
     // business, so the HTTP route asks the adapter what the payload says
     // rather than parsing it itself.
     toolSummary: hooksImpl.toolSummary,
+    // WP-19: same rule for the `PermissionRequest` payload and for the body
+    // that answers it. The route holds the socket; the adapter owns the
+    // spelling on both ends of it.
+    permissionRequest: hooksImpl.permissionRequest,
+    permissionDecisionBody: hooksImpl.permissionDecisionBody,
   },
 };
 
