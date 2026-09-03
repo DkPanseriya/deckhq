@@ -506,12 +506,25 @@ test('permissionDecisionBody: allow is the exact object the installed runtime pa
   });
 });
 
+test('the deny message is a sentence, because it lands in somebody else’s transcript', () => {
+  // `docs/DEVIATIONS.md` §86.3 specified `"Denied from DeckHQ."`; the build
+  // shipped the brief's lower-case fragment and recorded the difference
+  // (§97.3 decision 1). The spec wins. Asserted as a literal here rather than
+  // against the export, so the export changing is a test failure and not a
+  // silent copy change.
+  assert.equal(hooks.DENY_MESSAGE, 'Denied from DeckHQ.');
+  assert.equal(
+    hooks.permissionDecisionBody('deny').hookSpecificOutput.decision.message,
+    'Denied from DeckHQ.',
+  );
+});
+
 test('INVARIANT: deny never sets interrupt — denying a command is not stopping the agent', () => {
   const body = hooks.permissionDecisionBody('deny');
   assert.deepEqual(body, {
     hookSpecificOutput: {
       hookEventName: 'PermissionRequest',
-      decision: { behavior: 'deny', message: 'denied from DeckHQ' },
+      decision: { behavior: 'deny', message: 'Denied from DeckHQ.' },
     },
   });
   assert.equal('interrupt' in body.hookSpecificOutput.decision, false);

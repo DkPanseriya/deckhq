@@ -119,7 +119,7 @@ test('Deny: behavior "deny" with a message, and interrupt is never sent', async 
     assert.deepEqual(JSON.parse(out), {
       hookSpecificOutput: {
         hookEventName: 'PermissionRequest',
-        decision: { behavior: 'deny', message: 'denied from DeckHQ' },
+        decision: { behavior: 'deny', message: 'Denied from DeckHQ.' },
       },
     });
     // `interrupt: true` would also abort the turn. Denying one command is not

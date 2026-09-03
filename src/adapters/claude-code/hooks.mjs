@@ -403,6 +403,21 @@ export function permissionRequest(payload) {
 }
 
 /**
+ * What a denied tool call says in the session's own transcript.
+ *
+ * User-visible copy, and the only sentence this product writes into somebody
+ * else's terminal — so it is a sentence: capitalised, with a full stop, the
+ * way `docs/DEVIATIONS.md` §86.3's table specified it. The build shipped a
+ * lower-case fragment from the package brief instead and recorded the
+ * difference (§97.3 decision 1) rather than reconciling it silently; §86.3 is
+ * the spec and it wins.
+ *
+ * Exported so the tests assert the literal that ships rather than a copy of
+ * it that can drift.
+ */
+export const DENY_MESSAGE = 'Denied from DeckHQ.';
+
+/**
  * The body that answers a held `PermissionRequest`, in the shape the installed
  * runtime's parser actually accepts — a `behavior`-discriminated OBJECT, not
  * the bare string the prose documentation shows (`docs/DEVIATIONS.md` §86.3).
@@ -427,7 +442,7 @@ export function permissionDecisionBody(decision, suggestions = []) {
     return {
       hookSpecificOutput: {
         hookEventName: 'PermissionRequest',
-        decision: { behavior: 'deny', message: 'denied from DeckHQ' },
+        decision: { behavior: 'deny', message: DENY_MESSAGE },
       },
     };
   }

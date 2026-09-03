@@ -193,7 +193,7 @@ test('Deny sends behavior:"deny" with the message, and never interrupt', async (
   assert.deepEqual(answer(held), {
     hookSpecificOutput: {
       hookEventName: 'PermissionRequest',
-      decision: { behavior: 'deny', message: 'denied from DeckHQ' },
+      decision: { behavior: 'deny', message: 'Denied from DeckHQ.' },
     },
   });
   assert.doesNotMatch(held.body, /interrupt/);
