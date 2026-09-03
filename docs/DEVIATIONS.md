@@ -1897,3 +1897,135 @@ copy-out, and a cache that serves its entries when the store directory
 disappears — so none of them is vacuous. One earlier draft *was*: a scan-level
 copy-out test that could not fail, because the adapter mutates the summary and
 never the desktop record. It was replaced rather than kept for the count.
+## 77. The live roster is cached, because asking for it booted the whole CLI
+
+`liveSessions()` ran `claude agents --json` through `execFile` on **every**
+daemon poll — `Registry._doRefresh` calls it once per refresh, and
+`Registry.start` refreshes every `pollIntervalMs`, default 5000. The command
+works and returns real data; nothing was failing and nothing was being
+retried. It is simply the most expensive question in the product, asked
+twelve times a minute, forever.
+
+Measured on this machine (Windows 11 ARM64, 68 sessions on disk, 6 live),
+with `Start-Process -PassThru -Wait` so the child's own processor time is
+read rather than inferred:
+
+| One `claude agents --json` | |
+|---|---|
+| Wall time | 1027–1130 ms |
+| **Child CPU** | **406–984 ms, median 609 ms** |
+
+It is booting the entire Claude Code CLI to print six lines of JSON. At one
+spawn per 5 s that is **~12% of one core** (8–20% across the range), spent
+out of process and therefore invisible to any measurement taken on the
+daemon's own process time. §11 reports **1.9%** for this same daemon; that
+figure cannot have counted the spawned CLI, or it would have read ~14%.
+`docs/02-ARCHITECTURE.md` §8 allows **2%**.
+
+This is a different failure from §11's. That one was event-loop blocking and
+was fixed by not re-reading unchanged files. This one is wall time and
+out-of-process CPU: the daemon's own block during a refresh is 17–55 ms, and
+always was.
+
+### What it costs to not ask
+
+The roster is now cached for `LIVE_PROBE_TTL_MS`, and the two transitions
+that matter are recovered without spawning anything:
+
+- **A session that exits** — the common case, and the one the floor must not
+  get wrong — is caught by `process.kill(pid, 0)` against the cached roster on
+  every call. `agents --json` already returns a `pid`. Measured at **0.055 ms
+  for a whole roster**, against 609 ms for a probe. Death is still noticed
+  within one poll, exactly as before.
+- **A session that comes alive** is caught by the scan, which was running
+  anyway: a transcript whose `lastActivityAt` is newer than the last probe,
+  belonging to a session that probe did not list, sets a flag that drags the
+  next `liveSessions()` forward instead of waiting out the TTL. This is what
+  keeps the degraded path (§4.2) honest, where the poll is the only liveness
+  signal there is. With hooks installed `SessionStart` already reports it
+  directly and authoritatively, which is why no hook-awareness was added —
+  see below.
+
+What is left stale is the single case neither covers: a session that starts
+or resumes and then **writes nothing at all** — a terminal opened and left
+sitting at the prompt. Its `live` flag reads false for up to the TTL. That is
+the whole price, and it is bounded, self-correcting, and cannot touch
+user-owned state: `live` is an observation, and `for_review` is sticky
+through a liveness loss either way.
+
+### The numbers
+
+Same harness for both arms, each arm in its own process so the module state
+is fresh, three rounds with the order flipped each round so machine drift hit
+both equally. A "poll" is one `scanSessions()` + one `liveSessions()`, the
+pair `_doRefresh` runs, at the daemon's real 5 s interval. The **before** arm
+runs the identical spawn path, forced every poll.
+
+Three rounds of 24 polls, a ~115 s window each:
+
+| Per 24 polls (~115 s) | before | after |
+|---|---|---|
+| CLI spawns | 24, 24, 24 | **2, 2, 3** |
+| `liveSessions()` median | 521–721 ms | **0.1 ms** |
+| `liveSessions()` total over the window | 14.0–18.3 s | **1.0–1.5 s** |
+| Share of one core (spawns × 609 ms median CPU) | 12.7% | **1.1%** |
+
+The `after` round that spent three spawns is the arithmetic working: a 115 s
+window crosses a 60 s TTL twice, plus the mandatory first probe.
+
+Live counts drifted between arms within a round (6 vs 7 in round two) because
+real sessions on this machine start and stop while a four-minute measurement
+runs. That proves nothing either way, so equivalence was measured directly
+instead: two module instances in one process, one on the shipped path and one
+forced to probe on every poll, their rosters compared **in the same poll**.
+**12 polls, 12 exact agreements, no session in one roster and not the other.**
+
+The daemon was then run for real on port 4499: 70 agents, 8 live, 18 projects,
+stable across polls, nothing on stderr.
+
+### Why 60 s, and why the 10 s floor
+
+`LIVE_PROBE_TTL_MS` was set against the budget, not by taste. At 609 ms of
+child CPU per probe, a 30 s TTL still spends ~2% of a core at idle — the
+entirety of §8's allowance, on one question. 60 s is ~1%, and the extra 30 s
+of staleness lands only on the "alive and silent" case above, which the scan
+trigger cannot see at any TTL.
+
+`LIVE_PROBE_MIN_INTERVAL_MS` (10 s) is a floor on how often disk evidence may
+drag a probe forward. Without it, a top-level transcript being appended to by
+something the roster never lists would force a spawn on every poll — the
+exact behaviour being removed. `deckhq`'s own `send()` (`claude --resume -p`)
+is a plausible source of one. The worst case with the floor is one probe per
+10 s, ~6% of a core, and only while such a file is actively being written —
+which is not idle. A memo of ids a probe has already declined to explain
+would remove even that; it was left out because it needs its own eviction
+rule for a case that has not been observed.
+
+### Options weighed and not taken
+
+- **Skip or slow the probe when hooks are installed.** Hooks are the
+  authoritative liveness path (§42, and the "accurate path" comment in
+  `_computeAgents`), so this is tempting. Rejected: the registry already
+  prefers `hookLive` over the poll wherever it has one, so the probe is only
+  load-bearing for a session that has fired no event yet — which is precisely
+  the case a hook-aware TTL could not help with. It would buy two staleness
+  contracts to explain, a second code path to test, and a settings-file read
+  in the adapter, for a case the scan trigger already covers.
+- **Derive liveness from pid checks alone, with no probe.** Cannot discover a
+  session the daemon has never seen running, and cannot survive a daemon
+  restart. It is the right *refinement*, not a replacement, which is how it is
+  used.
+
+### Not fixed, and measured on the way past
+
+The warm scan is over budget for a reason that has nothing to do with this
+change. §8 sets warm < 50 ms and §11 measured 3–5 ms; it now runs **99–220 ms
+(median ~150)**, of which `readDesktopSessions()` — the §46 archive join — is
+**65–140 ms**. It re-reads and re-parses all 58 files in
+`%APPDATA%/Claude/claude-code-sessions/` on every single scan, with no cache
+of any kind, because §46 deliberately applies it *after* the summary cache so
+an archive flag cannot go stale. That ordering is right; re-reading the store
+to honour it is not. Left alone here because it is a separate defect with a
+separate fix (an `(mtime, size)` cache on the store directory, matching the
+summary cache), and folding it into this change would have made both
+unmeasurable.
