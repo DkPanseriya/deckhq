@@ -23,7 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import { findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
+import { connect, findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -74,6 +74,29 @@ const SCROLL = opt('--scroll', '');
  * regenerable screenshot where a hand-rolled script is not.
  */
 const KEEP_ONBOARDING = argv.includes('--onboarding');
+/**
+ * Photograph the floating mini-floor (WP-39) instead of the page.
+ *
+ * Chromium's Document Picture-in-Picture window is its OWN CDP page target —
+ * verified on this machine, headless included — so it can be captured
+ * directly rather than photographed through the window it floats over. Open it
+ * first (`--press p`), then this finds that target by the title
+ * `public/minifloor.js` gives its document and shoots it:
+ *
+ *   node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ \
+ *     --press p --pip --out docs/media/mini-floor.png
+ *
+ * The window's own size is Chrome's to decide — headless gives it a size of
+ * its own regardless of what `requestWindow` asked for — so the viewport is
+ * forced to `--pip-width x --pip-height`, which default to the size the
+ * product actually requests. A screenshot at a size no user will ever see is
+ * not evidence of anything.
+ */
+const PIP = argv.includes('--pip');
+const PIP_W = Number(opt('--pip-width', 320));
+const PIP_H = Number(opt('--pip-height', 200));
+/** Title `public/minifloor.js` sets on the PiP document. */
+const PIP_TITLE = 'DeckHQ — your office';
 
 if (!hasWebSocket()) {
   throw new Error(
@@ -168,14 +191,49 @@ await withChrome(
       await new Promise((r) => setTimeout(r, 800));
     }
 
-    const { data } = await client.send('Page.captureScreenshot', {
+    let shooter = client;
+    let shotW = WIDTH;
+    let shotH = HEIGHT;
+    if (PIP) {
+      const targets = await (await fetch(`http://127.0.0.1:${DEBUG_PORT}/json/list`)).json();
+      const pipTarget = targets.find(
+        (t) => t.type === 'page' && t.title === PIP_TITLE && t.webSocketDebuggerUrl,
+      );
+      if (!pipTarget) {
+        throw new Error(
+          `--pip: no floating window is open. Did you pass --press p, and is this a Chromium ` +
+            `with Document Picture-in-Picture? Targets seen: ${targets
+              .filter((t) => t.type === 'page')
+              .map((t) => t.title)
+              .join(' | ')}`,
+        );
+      }
+      shooter = connect(pipTarget.webSocketDebuggerUrl);
+      await shooter.ready;
+      await shooter.send('Page.enable');
+      await shooter.send('Emulation.setDeviceMetricsOverride', {
+        width: PIP_W,
+        height: PIP_H,
+        deviceScaleFactor: SCALE * 2,
+        mobile: false,
+      });
+      shotW = PIP_W;
+      shotH = PIP_H;
+      // One settling window for the resize: the mini-floor refits its camera
+      // on the next frame, and shooting before that photographs the old one.
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+
+    const { data } = await shooter.send('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: false,
     });
+    if (shooter !== client) shooter.close();
 
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, Buffer.from(data, 'base64'));
     const kb = Math.round(fs.statSync(OUT).size / 1024);
-    process.stdout.write(`wrote ${OUT}  ${WIDTH * SCALE}x${HEIGHT * SCALE}  ${kb} KB\n`);
+    const scale = PIP ? SCALE * 2 : SCALE;
+    process.stdout.write(`wrote ${OUT}  ${shotW * scale}x${shotH * scale}  ${kb} KB\n`);
   },
 );

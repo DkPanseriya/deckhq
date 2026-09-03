@@ -1607,7 +1607,15 @@ function coachAnchorFor(anchor) {
         const id =
           anchor.target === 'agent' ? (getNeedsYouQueue(latestSnapshot)[0]?.id ?? null) : null;
         const r = scene.anchorFor(anchor.target, id);
-        if (r && (r.w || r.h)) return { x: r.x, y: r.y, w: r.w, h: r.h };
+        if (r && (r.w || r.h)) {
+          // `anchorFor` answers in the canvas's own frame, which is the frame
+          // the renderer works in throughout (`_hitTest` reads
+          // `clientX - rect.left`). The coach layer places cards in viewport
+          // coordinates, like the `element` branch above, so the canvas's own
+          // offset is added here — once, at the boundary between the two.
+          const box = el.canvas.getBoundingClientRect();
+          return { x: box.left + r.x, y: box.top + r.y, w: r.w, h: r.h };
+        }
       } catch (err) {
         console.debug('[deckhq] scene.anchorFor failed', err);
       }
@@ -2142,6 +2150,65 @@ el.whiteboardOverlay.addEventListener('click', (e) => {
   if (e.target === el.whiteboardOverlay) hideWhiteboard();
 });
 
+// WP-39 · the floating mini-floor — begin -----------------------------------
+//
+// A 320x200 Document Picture-in-Picture window holding your office, the
+// corridor beside it and the needs-you numeral, always on top of the terminal.
+// Everything about it lives in `public/minifloor.js`; this is the whole of its
+// wiring, kept as one block on purpose because two other packages are editing
+// this file at the same time.
+//
+// The module is warmed on load but never awaited on load, for two reasons.
+// Statically importing it would make `./render/*` a hard dependency of the
+// shell, which the note at the top of this file forbids — a broken renderer
+// must cost the floor and nothing else. And `requestWindow()` needs transient
+// user activation, so the import must already be settled by the time the key
+// is pressed rather than fetched inside the handler.
+const miniFloorModule = import('./minifloor.js').catch((err) => {
+  console.error('[deckhq] the mini-floor failed to load', err);
+  return null;
+});
+/** @type {any} the controller, built on first use */
+let miniFloor = null;
+
+async function floatOffice() {
+  const mod = await miniFloorModule;
+  if (!mod) {
+    toast('The floating window could not be loaded.', { isError: true });
+    return;
+  }
+  if (!miniFloor) {
+    miniFloor = mod.createMiniFloor({
+      // The mini-floor is a second render target of the SAME Scene, so it is
+      // handed the live one rather than a snapshot to build its own from.
+      getScene: () => scene,
+      onSelect: (id) => selectAgent(id),
+      // Firefox and Safari expose no floating window. WP-16 already puts the
+      // count on the app icon, so that is where it goes, and the toast says
+      // as much in one line rather than pretending nothing was asked for.
+      onFallback: (count) => setAppBadge(count),
+      toast,
+    });
+  }
+  await miniFloor.toggle();
+}
+
+// `P` floats the office. Registered here rather than in `handleKeydown`'s
+// switch so this package is one block in a file two others are editing; the
+// guards are that map's own, in the same order — a key never acts while text
+// has focus or a modal is open, and a modifier means the browser's shortcut.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'p' && e.key !== 'P') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const target = /** @type {HTMLElement|null} */ (e.target);
+  const tag = target?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return;
+  if (document.querySelector('dialog[open]')) return;
+  e.preventDefault();
+  floatOffice();
+});
+// WP-39 · the floating mini-floor — end -------------------------------------
+
 // ---------------------------------------------------------- palette + sheet
 
 const settingsUI = createSettingsUI({
@@ -2173,6 +2240,7 @@ const paletteUI = createPalette({
     archiveProject: setProjectArchived,
     newAgent: startNewAgent,
     newProject: openNewProject,
+    floatOffice, // WP-39
     rename: openIdentityDialog,
     // The palette never calls /api/ack itself: it hands the action to the
     // panel's performAction(), the single funnel in the client. THE

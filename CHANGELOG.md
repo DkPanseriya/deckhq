@@ -413,6 +413,18 @@
   its session totals and says `to date` instead — the plate never says "today" about a number that
   is not today's. Produced and tested; not yet painted, because the one function that draws a room
   plate was outside this package's scope. §111.
+- **Float your office over the terminal.** `P`, or `⌘K` → "Float the office", opens a 320×200
+  always-on-top window holding your office, the corridor beside it, the needs-you numeral and the
+  hands-up count. It survives tab switches and app switches, it updates on every event the floor
+  does, it flashes once when somebody walks in, and clicking a person opens the main window's panel
+  on them. It answers "I closed the tab and forgot" without a tray app, a shell, or a permission
+  prompt — Chromium's Document Picture-in-Picture is a plain web API. Firefox and Safari have no
+  such window: there the count goes to the app badge WP-16 already wires, and one line says so.
+  It is **a second render target of the same floor**, never a second floor: it draws the live plan,
+  the live baked bitmap and the live agent records the main canvas is using, so there is one
+  building and one answer to where each session is standing. It also keeps the people moving while
+  the tab is hidden, which is the only time it is the thing you are looking at.
+  `public/minifloor.js`, `docs/DEVIATIONS.md` §113, `docs/media/mini-floor.png`.
 
 ### Changed
 
