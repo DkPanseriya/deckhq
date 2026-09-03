@@ -1065,6 +1065,34 @@ test('a junior is drawn smaller than its parent, but never below the legibility 
   assert.equal(characterScaleFor(tight * JUNIOR_SCALE) * BODY_HEIGHT_U >= 16, true);
 });
 
+test('the panel offers a junior no action, no composer and no resume link', () => {
+  const src = readFileSync(new URL('../../public/panel.js', import.meta.url), 'utf8').replace(
+    /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm,
+    '$1',
+  );
+  // Three refusals, each in the one function that would otherwise build the
+  // thing: the weighted row and the composer, the resume links, and the
+  // number keys that are the row's shortcuts. Read from source for the same
+  // reason `panel-invariant.test.mjs` does — there is no DOM here, and these
+  // are the guards that must not quietly disappear in a refactor.
+  for (const [fn, why] of [
+    ['renderActions', 'the actions row and the composer'],
+    ['renderResume', 'the resume links'],
+    ['pressNumberKey', 'the 1/2/3 shortcuts'],
+  ]) {
+    const start = src.indexOf(`function ${fn}(`);
+    assert.notEqual(start, -1, `${fn}() not found`);
+    let i = src.indexOf('{', start);
+    let depth = 0;
+    for (; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}' && --depth === 0) break;
+    }
+    const body = src.slice(start, i + 1);
+    assert.match(body, /subagent === true/, `${why} must be refused for a junior`);
+  }
+});
+
 test('the panel builds its junior line from `juniorMetaFor` and nowhere else', () => {
   // The repo's own way of checking a client render path (see
   // `panel-invariant.test.mjs`): read the source. A second, hand-rolled copy

@@ -802,6 +802,25 @@ export function createPanel(opts) {
     moreMenu.textContent = '';
     setMoreOpen(false);
 
+    // WP-41. A junior gets no action row and no composer at all.
+    //
+    // Not only the ack half: none of these three does anything for a
+    // subagent. `3 Bench` writes an `ackState` the daemon refuses outright
+    // (`Registry.act()`), and `1 Reply` / `2 Approve` / Send would post to
+    // `claude --resume <agentId>`, which is not a session id — a junior's
+    // work comes from its parent and its answer goes back to its parent.
+    // Offering buttons that cannot work is worse than offering none, so the
+    // panel shows what the junior is and what it said, and stops there.
+    // `Registry.act()` refuses these independently: this is the interface
+    // agreeing with the daemon, not the only thing holding the line.
+    if (a && a.subagent === true) {
+      actionsWrap.hidden = true;
+      form.hidden = true;
+      return;
+    }
+    actionsWrap.hidden = false;
+    form.hidden = false;
+
     actionsEl.appendChild(weightedButton('1', 'Reply', 'btn', () => focusComposer()));
     // `2 Approve` is normally the one filled button on the screen (`05` §4.2).
     // It yields the fill while a permission card is up: that card is the only
@@ -898,6 +917,10 @@ export function createPanel(opts) {
    */
   function renderResume() {
     resumeEl.textContent = '';
+    // WP-41: same rule as the actions. `claude --resume <agentId>` is not a
+    // session and would open nothing; a junior is resumed by its parent
+    // carrying on, which is not a link this panel can offer.
+    if (displayedAgent && displayedAgent.subagent === true) return;
     const preference = getSnapshot()?.settings?.resumeIn === 'app' ? 'app' : 'terminal';
     resumeEl.appendChild(resumeLink('terminal', 'resume in terminal', preference));
     if (resumeAppAvailable) {
@@ -1613,6 +1636,10 @@ export function createPanel(opts) {
     const agent = agentFor(id);
     if (!id || !agent) return;
     if (!targetId && root.hidden) return;
+    // WP-41: the keys are the buttons. A junior has none of the three (see
+    // `renderActions`), so the shortcuts must not reach around the missing
+    // row and do by keystroke what the interface declined to offer.
+    if (agent.subagent === true) return;
     switch (String(key)) {
       case '1':
         if (id !== currentId) open(id);
