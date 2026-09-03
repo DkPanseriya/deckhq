@@ -25,6 +25,7 @@ import {
   resolveLabelCollisions,
   characterScaleFor,
   computeAnchor,
+  plateLinesFor,
   CHAR_MIN_PX_PER_UNIT,
 } from '../../public/render/scene.js';
 import { buildPlan } from '../../public/render/plan.js';
@@ -968,4 +969,97 @@ test('the character scale is a floor on the world scale, not a replacement for i
     BODY_HEIGHT_U * CHAR_MIN_PX_PER_UNIT >= LEGIBILITY_MIN_PX.body - 1e-9,
     'the floor must be exactly what 16 px of body needs',
   );
+});
+
+// ------------------------------------------------------- what a plate says
+//
+// The plate is recomputed from the live snapshot on every draw, so this is
+// the function that decides what is on the wall of every room. WP-26's third
+// line is the reason it is asserted here: a payroll figure is a claim about
+// money, and the rule (`08` §1.1 rule 7) is that it is an estimate or it is
+// not shown at all.
+
+test('a project room plate carries the payroll line under its data line', () => {
+  const room = { kind: 'project', id: 'p0', name: 'deckhq' };
+  const snapshot = {
+    projects: [
+      {
+        id: 'p0',
+        sessionCount: 3,
+        tokens: 2_200_000,
+        needsYou: 1,
+        todaySpend: 18.4,
+        todaySpendIsToday: true,
+      },
+    ],
+  };
+  assert.deepEqual(plateLinesFor(room, snapshot), [
+    'deckhq',
+    '3 sessions · 2.2M tok · 1 need you',
+    'today ≈ $18.40 · list price',
+  ]);
+});
+
+test('a project nothing can price gets no payroll line, not $0.00', () => {
+  // `todaySpendFor` reports null for a room whose every model is missing from
+  // the rate card. Zero is a claim about the money and there is not one.
+  const room = { kind: 'project', id: 'p0', name: 'deckhq' };
+  const unrated = {
+    projects: [{ id: 'p0', sessionCount: 1, tokens: 900, needsYou: 0, todaySpend: null }],
+  };
+  const lines = plateLinesFor(room, unrated);
+  assert.equal(lines[2], '');
+  assert.doesNotMatch(lines.join(' '), /\$/);
+  // A figure that is not today's says so rather than being labelled "today".
+  const stale = {
+    projects: [
+      {
+        id: 'p0',
+        sessionCount: 1,
+        tokens: 900,
+        needsYou: 0,
+        todaySpend: 7.86,
+        todaySpendIsToday: false,
+      },
+    ],
+  };
+  assert.equal(plateLinesFor(room, stale)[2], '≈ $7.86 to date · list price');
+});
+
+test('every other room plate is still exactly two lines', () => {
+  // The payroll meter is a property of a project room. Adding a third line to
+  // the office or the lounge would put a number on a door that owns none.
+  const now = Date.now();
+  const snapshot = {
+    counts: { forReview: 2, benched: 4, letGo: 1 },
+    agents: [{ ackState: 'active', activityState: 'for_review', reviewSince: now - 3 * 3_600_000 }],
+  };
+  const office = plateLinesFor({ kind: 'office', id: '__office__', name: 'Your Office' }, snapshot);
+  assert.equal(office.length, 2);
+  assert.match(office[1], /^2 waiting · oldest 3h$/);
+
+  const lounge = plateLinesFor({ kind: 'lounge', id: '__lounge__', name: 'Lounge' }, snapshot, {
+    goneHome: new Set(['x']),
+  });
+  assert.deepEqual(lounge, ['Lounge', '3 benched · 1 went home']);
+
+  const dir = plateLinesFor(
+    { kind: 'directory', id: '__dir__', name: 'Directory', entries: [{}, {}] },
+    snapshot,
+  );
+  assert.deepEqual(dir, ['Directory', '2 repos · nobody in']);
+
+  const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
+  assert.deepEqual(letGo, ['Archive', '1 let go · archived']);
+});
+
+test('a room the snapshot has nothing to say about falls back to its own plate', () => {
+  const room = { kind: 'project', id: 'ghost', name: 'ghost', plateLines: ['ghost', 'gone'] };
+  assert.deepEqual(plateLinesFor(room, { projects: [] }), ['ghost', 'gone']);
+  assert.deepEqual(plateLinesFor({ kind: 'corridor', id: 's', name: '' }, {}), ['', '']);
+  // No snapshot at all is not a crash: the floor draws before the first poll.
+  assert.deepEqual(plateLinesFor({ kind: 'office', id: 'o', name: 'Your Office' }, null), [
+    'Your Office',
+    '0 waiting',
+  ]);
 });
