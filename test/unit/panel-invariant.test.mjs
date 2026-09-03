@@ -89,14 +89,40 @@ test('INVARIANT: performAction() is reached only from explicit clicks and explic
   const calls = panel.match(/performAction\((?!\))[^)]*\)/g) || [];
   assert.ok(calls.length >= 3, `expected the button and key call sites, found ${calls.length}`);
 
-  // app.js reaches it only from the keyboard map.
+  // app.js reaches it from the keyboard map and, since WP-07, from the
+  // command palette's action table — where an entry runs only on an explicit
+  // Enter or click on a highlighted row. Three call sites, all explicit.
   const app = read(path.join(PUBLIC, 'app.js'));
   const appCalls = app.match(/panel\.performAction\(/g) || [];
-  assert.equal(appCalls.length, 2, 'app.js: the A and B shortcuts, nothing else');
+  assert.equal(appCalls.length, 3, 'app.js: the A and B shortcuts and the palette, nothing else');
   const keydownStart = app.indexOf('function handleKeydown(');
   const keydownEnd = app.indexOf('\nfunction ', keydownStart + 1);
   const keydown = app.slice(keydownStart, keydownEnd);
   assert.equal((keydown.match(/panel\.performAction\(/g) || []).length, 2);
+
+  // The third is the palette's `ack:` action and nothing else. It is declared
+  // inside createPalette's options object, so a call added anywhere outside
+  // that object fails this.
+  const paletteStart = app.indexOf('createPalette({');
+  assert.notEqual(paletteStart, -1, 'createPalette({ ... }) not found in app.js');
+  const paletteEnd = app.indexOf('\n});', paletteStart);
+  const paletteOpts = app.slice(paletteStart, paletteEnd);
+  assert.equal(
+    (paletteOpts.match(/panel\.performAction\(/g) || []).length,
+    1,
+    'the palette reaches performAction() exactly once, through its ack action',
+  );
+  assert.match(paletteOpts, /ack:\s*\(action\)\s*=>\s*panel\.performAction\(action\)/);
+});
+
+test('INVARIANT: the palette never reaches /api/ack itself', () => {
+  // public/palette.js offers the six acknowledgement actions as entries, but
+  // running one calls back into panel.js. A fetch here would be a second
+  // funnel, which is exactly what the first test in this file forbids — this
+  // one says so at the palette, where the temptation lives.
+  const palette = read(path.join(PUBLIC, 'palette.js'));
+  assert.doesNotMatch(palette, /\/api\/ack/);
+  assert.doesNotMatch(palette, /fetch\(/, 'the palette asks app.js to act; it makes no requests');
 });
 
 test('SECURITY: no client module assigns innerHTML or builds HTML from strings', () => {

@@ -40,27 +40,57 @@ import { createLog } from './log.mjs';
 export const RESUME_TARGETS = /** @type {const} */ (['app', 'terminal']);
 
 /**
+ * How the floor and the chrome treat motion. `'system'` defers to the
+ * browser's own `prefers-reduced-motion`; the other two are an explicit
+ * override in either direction, for a machine whose OS setting is wrong for
+ * this one window. docs/plan/05-GUI-UX-SPEC.md §5.4, §9.
+ */
+export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-preference']);
+
+/**
+ * Every persisted setting, and nothing else. A key in here that no code reads
+ * is a defect, not a placeholder: the header shipped a "Show let go" toggle
+ * for four months that wrote `showLetGo` and changed nothing, and `zoom` was
+ * written by no one and read by no one. Both are gone (WP-07,
+ * docs/DEVIATIONS.md §88), and `test/unit/settings-keys.test.mjs` now fails
+ * on the next orphan.
+ *
  * @typedef {object} Settings
- * @property {number} stallWindowMs
- * @property {boolean} notifications
- * @property {boolean} sound
- * @property {number} zoom
- * @property {number} pollIntervalMs
- * @property {boolean} showLetGo
- * @property {ResumeTarget} resumeIn
- * @property {string} approveText   what the panel's `2 Approve` sends
+ * @property {number} stallWindowMs      how long silence means "stalled", 2–120 min
+ * @property {number} pollIntervalMs     how often the registry rescans
+ * @property {boolean} notifications     the OS-notification master switch
+ * @property {boolean} notifyHandsUp     notify when a session raises its hand
+ * @property {boolean} notifyForReview   notify when a session finishes and waits
+ * @property {boolean} sound             the sound master switch
+ * @property {number} soundVolume        0–1, deliberately low by default
+ * @property {'system'|'reduce'|'no-preference'} reducedMotion
+ * @property {ResumeTarget} resumeIn     where "resume this session" opens
+ * @property {string} approveText        what the panel's `2 Approve` sends
+ * @property {boolean} onboarded         first run is over
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
   stallWindowMs: 600000,
-  notifications: true,
-  sound: false,
-  zoom: 0,
   pollIntervalMs: 5000,
-  showLetGo: false,
+  notifications: true,
+  notifyHandsUp: true,
+  notifyForReview: true,
+  sound: false,
+  soundVolume: 0.3,
+  reducedMotion: 'system',
   resumeIn: 'terminal',
   approveText: 'Yes, go ahead.',
+  onboarded: false,
 });
+
+/** The keys above whose value is a plain boolean, so a stray string cannot land. */
+const BOOLEAN_SETTINGS = Object.freeze([
+  'notifications',
+  'notifyHandsUp',
+  'notifyForReview',
+  'sound',
+  'onboarded',
+]);
 
 /** An approval is one line the user would have typed; anything longer is a reply. */
 const MAX_APPROVE_TEXT = 500;
@@ -72,6 +102,14 @@ const MAX_APPROVE_TEXT = 500;
 export const SAVE_DEBOUNCE_MS = 250;
 const MIN_STALL_WINDOW_MS = 2 * 60 * 1000;
 const MAX_STALL_WINDOW_MS = 120 * 60 * 1000;
+/**
+ * The poll interval's floor is a courtesy to the machine — every scan reads
+ * transcripts — and its ceiling is a courtesy to the user: past a minute the
+ * floor stops being a live picture. Hooks make the interval close to
+ * irrelevant; without them it is the whole latency budget.
+ */
+const MIN_POLL_INTERVAL_MS = 1000;
+const MAX_POLL_INTERVAL_MS = 60 * 1000;
 
 /** @param {unknown} v */
 function isPlainObject(v) {
@@ -83,6 +121,35 @@ function clampStallWindow(ms) {
   const n = Number(ms);
   if (!Number.isFinite(n)) return DEFAULT_SETTINGS.stallWindowMs;
   return Math.min(MAX_STALL_WINDOW_MS, Math.max(MIN_STALL_WINDOW_MS, n));
+}
+
+/** @param {unknown} ms */
+function clampPollInterval(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.pollIntervalMs;
+  return Math.min(MAX_POLL_INTERVAL_MS, Math.max(MIN_POLL_INTERVAL_MS, Math.round(n)));
+}
+
+/**
+ * Volume as a 0–1 fraction. A non-number, a NaN or an out-of-range value is
+ * clamped rather than rejected: the slider that writes this cannot produce one,
+ * but a hand-edited state.json can, and a volume of 40 would be a fright.
+ * @param {unknown} v
+ */
+function clampVolume(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.soundVolume;
+  return Math.min(1, Math.max(0, Math.round(n * 100) / 100));
+}
+
+/**
+ * @param {unknown} v
+ * @returns {'system'|'reduce'|'no-preference'}
+ */
+function sanitizeMotion(v) {
+  return /** @type {readonly string[]} */ (MOTION_MODES).includes(/** @type {string} */ (v))
+    ? /** @type {any} */ (v)
+    : DEFAULT_SETTINGS.reducedMotion;
 }
 
 /**
@@ -111,6 +178,32 @@ function sanitizeApproveText(v) {
   return s ? s.slice(0, MAX_APPROVE_TEXT) : DEFAULT_SETTINGS.approveText;
 }
 
+/**
+ * Coerce a whole settings object into range, key by key. Every sanitizer is
+ * idempotent, so this is safe to run on already-clean data — which is why
+ * both `normalize()` (disk) and `setSettings()` (HTTP) run the same pass
+ * instead of each remembering its own subset.
+ * @param {Record<string, any>} raw
+ * @returns {Settings}
+ */
+function sanitizeSettings(raw) {
+  const s = { ...DEFAULT_SETTINGS, ...raw };
+  s.stallWindowMs = clampStallWindow(s.stallWindowMs);
+  s.pollIntervalMs = clampPollInterval(s.pollIntervalMs);
+  s.soundVolume = clampVolume(s.soundVolume);
+  s.reducedMotion = sanitizeMotion(s.reducedMotion);
+  s.resumeIn = sanitizeResumeIn(s.resumeIn);
+  s.approveText = sanitizeApproveText(s.approveText);
+  for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);
+  // Anything not in DEFAULT_SETTINGS is dropped rather than carried: a key
+  // from an older build (`showLetGo`, `zoom`) must not survive a round-trip
+  // through the store and reappear in state.json for ever.
+  for (const key of Object.keys(s)) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) delete s[key];
+  }
+  return /** @type {Settings} */ (s);
+}
+
 function defaultData() {
   return {
     version: 1,
@@ -134,13 +227,7 @@ function defaultData() {
  * @param {any} parsed
  */
 function normalize(parsed) {
-  const settings = {
-    ...DEFAULT_SETTINGS,
-    ...(isPlainObject(parsed.settings) ? parsed.settings : {}),
-  };
-  settings.stallWindowMs = clampStallWindow(settings.stallWindowMs);
-  settings.resumeIn = sanitizeResumeIn(settings.resumeIn);
-  settings.approveText = sanitizeApproveText(settings.approveText);
+  const settings = sanitizeSettings(isPlainObject(parsed.settings) ? parsed.settings : {});
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -270,17 +357,7 @@ export class Store {
    * @returns {Settings}
    */
   setSettings(patch) {
-    const next = { ...this._data.settings, ...(patch || {}) };
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'stallWindowMs')) {
-      next.stallWindowMs = clampStallWindow(patch.stallWindowMs);
-    }
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'resumeIn')) {
-      next.resumeIn = sanitizeResumeIn(patch.resumeIn);
-    }
-    if (patch && Object.prototype.hasOwnProperty.call(patch, 'approveText')) {
-      next.approveText = sanitizeApproveText(patch.approveText);
-    }
-    this._data.settings = next;
+    this._data.settings = sanitizeSettings({ ...this._data.settings, ...(patch || {}) });
     this.save();
     return this.settings;
   }

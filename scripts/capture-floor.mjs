@@ -43,6 +43,12 @@ const DEBUG_PORT = Number(opt('--debug-port', 9222));
  * open the review queue panel, or `jjj` to walk three deep into it. The queue
  * is oldest-first and deterministic on the demo fixture, so a sequence is how
  * you aim the shot at one particular agent.
+ *
+ * Two characters are escapes rather than keys, added for WP-07 because the
+ * command palette is opened with a chord and driven with Enter:
+ *   `^`  hold Ctrl for the next key — `^k` is the palette
+ *   `~`  Enter
+ * So `^k,~` opens the palette, types the Settings accelerator, and runs it.
  */
 const PRESS = opt('--press', '');
 
@@ -82,15 +88,27 @@ await withChrome(
     // work surface and not just a picture. Each character is pressed in turn,
     // with a pause between so the panel's own fetches (the conversation, the
     // "what changed" summary) land before the next key moves the selection.
+    let ctrl = false;
     for (const key of PRESS) {
+      if (key === '^') {
+        ctrl = true;
+        continue;
+      }
+      const isEnter = key === '~';
+      const modifiers = ctrl ? 2 : 0; // CDP: Alt 1, Ctrl 2, Meta 4, Shift 8
       for (const type of ['keyDown', 'keyUp']) {
         await client.send('Input.dispatchKeyEvent', {
           type,
-          key,
-          text: type === 'keyDown' ? key : undefined,
-          windowsVirtualKeyCode: key.toUpperCase().charCodeAt(0),
+          modifiers,
+          key: isEnter ? 'Enter' : key,
+          // A key held with a modifier produces no text, and neither does
+          // Enter; sending one anyway types a literal character into whatever
+          // has focus instead of firing the shortcut.
+          text: type === 'keyDown' && !ctrl && !isEnter ? key : undefined,
+          windowsVirtualKeyCode: isEnter ? 13 : key.toUpperCase().charCodeAt(0),
         });
       }
+      ctrl = false;
       await new Promise((r) => setTimeout(r, 2500));
     }
 
