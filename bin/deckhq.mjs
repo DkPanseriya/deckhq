@@ -7,6 +7,11 @@
  *   npx deckhq --port N   listen on a different loopback port
  *   npx deckhq doctor     print what DeckHQ can see here, and start nothing
  *
+ * With no --port, the daemon prefers the port the installed hooks already
+ * post to, so a daemon and its hooks cannot drift apart by accident; if a
+ * DeckHQ daemon is already on that port, this prints one line naming it and
+ * starts nothing. An explicit --port is honoured as given.
+ *
  * The daemon binds 127.0.0.1 and nothing else. There is no --host flag and
  * there never will be one; see docs/02-ARCHITECTURE.md §9.
  */
@@ -40,7 +45,7 @@ if (subcommand) {
 }
 
 async function main() {
-  const { startDaemon } = await import('../src/daemon.mjs');
+  const { startDaemon, DeckhqAlreadyRunningError } = await import('../src/daemon.mjs');
 
   const flag = (name) => argv.includes(name);
 
@@ -58,7 +63,7 @@ async function main() {
         'Usage: deckhq [options]',
         '       deckhq doctor [--json] [--capture-proof]',
         '',
-        '  --port <n>    loopback port (default 4317)',
+        '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
         '  --version     print the version',
         '  --help        this message',
@@ -82,6 +87,10 @@ async function main() {
     return;
   }
 
+  // A port named on the command line or in the environment is a request to
+  // be on that port, and is honoured as given. Only when neither names one may
+  // the daemon prefer the port the installed hooks already post to.
+  const explicitPort = flag('--port') || Boolean(process.env.DECKHQ_PORT);
   const port = Number(option('--port', process.env.DECKHQ_PORT || 4317)) || 4317;
 
   /** Open a URL in the platform's default browser. Best-effort, never fatal. */
@@ -99,7 +108,22 @@ async function main() {
     }
   };
 
-  const { url, close } = await startDaemon({ port });
+  let daemon;
+  try {
+    daemon = await startDaemon({ port, adoptHooksPort: !explicitPort });
+  } catch (err) {
+    if (err instanceof DeckhqAlreadyRunningError) {
+      // The hooks already deliver to a DeckHQ on that port. A second daemon
+      // beside it would run degraded and steal nothing, so: name it, stop.
+      process.stdout.write(
+        `\n  DeckHQ is already running at ${err.url} — the installed ${err.label} hooks post ` +
+          'there. Nothing was started.\n\n',
+      );
+      return;
+    }
+    throw err;
+  }
+  const { url, close } = daemon;
 
   process.stdout.write(`\n  DeckHQ  ${url}\n\n`);
   if (!flag('--no-open')) openBrowser(url);

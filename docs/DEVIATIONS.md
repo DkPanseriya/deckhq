@@ -2240,3 +2240,63 @@ another agent's file in this pass, so WP-53's fifth item and the second half of
 its acceptance criterion ("`publish.yml` fails loudly on an npm below the
 trusted-publishing floor") are not delivered by this package. Recorded so the
 orchestrator does not accept WP-53 on the strength of this commit alone.
+
+## 81. WP-36 · The daemon adopts the hooks' port, and refuses to start beside a DeckHQ that already has it
+
+`08-PLAN-V2-100X.md` WP-36. Shipped as specified, with three decisions the
+package description did not settle.
+
+**The failure this removes.** Hooks are written with the port the daemon had at
+install time. A daemon started later on a different port — the 4317 default
+after an install on 4400, or 4318 after the `EADDRINUSE` walk — is the one
+broken state that looks healthy from every surface at once: the settings file
+is valid, the header claims exact state, and every hook event posts into a
+void. §75 gave `doctor` the job of reporting it. This stops the daemon
+creating it.
+
+Now, with no port named: if the installed hooks post to a free port, the daemon
+listens there and logs one line saying why. The header then reads `installed`
+and the reinstall banner does not appear.
+
+**Decision 1 — an explicit port is never overridden.** Adoption is a CLI
+decision, passed to `startDaemon` as `adoptHooksPort` and off by default;
+`--port 4400` and `DECKHQ_PORT=4400` both suppress it. Naming a port is a
+request to be on that port, and the banner is the honest report of what that
+costs. `DECKHQ_PORT=` (set but empty) reads as unset, because that is what a
+shell wrapper clearing the variable means. Embedders and the 400-odd tests that
+pass a port keep the old behaviour untouched — nothing in the suite changed.
+
+**Decision 2 — the hooks' port held by another DeckHQ is a refusal, not a
+walk.** The plan says "exit with a one-line message naming it". Starting
+anyway would bind 4318 and produce precisely the degraded daemon this package
+exists to prevent, with the added insult that the healthy one next door is
+getting all the events. So `startDaemon` throws `DeckhqAlreadyRunningError`
+**before the store is opened or anything is bound** — the refusal leaves no
+trace, and a test asserts the requested port is still free afterwards — and
+`bin/deckhq.mjs` prints one line with the URL and exits 0. Exit 0, not 1:
+"DeckHQ is already up" is the state the user wanted. A test spawns the real
+binary to assert one line of stdout and no start banner, because §76 is the
+standing reminder that a command's contract includes how it ends.
+
+**Decision 3 — a stranger on the hooks' port falls back rather than fails.**
+Something else on 4400 is not ours to reason about. The daemon logs what it
+found, starts on the requested port, and the header's banner offers the
+reinstall as before. "Ours" is identified the way §75's `doctor` identifies a
+daemon — a well-formed `/api/state` snapshot — so the two surfaces cannot
+disagree about what a DeckHQ is.
+
+**Cost, measured.** Two loopback round trips at most, once, before the server
+binds: a bare TCP connect (refused immediately when the port is free; 500 ms
+ceiling) and, only when something answered, one `/api/state` fetch with a
+1500 ms ceiling. On the common path — hooks installed, port free — it is the
+settings read plus one refused connect: **median 0.87 ms** over 20 runs on the
+reference machine, min 0.28, max 9.8. Nothing is added to the poll loop, and
+nothing is added to a start that names a port.
+
+**Accepted limits.** The port is taken from the first adapter that reports one,
+so a machine whose two runtimes' hooks point at different ports adopts the
+first and leaves the second's banner up; there is one hook-capable adapter
+today and no honest way to satisfy both. Adoption reads the settings file once
+at startup, so hooks reinstalled at another port while the daemon runs are not
+followed — the reinstall in the header aims at the running daemon, which is the
+only way that happens in practice.

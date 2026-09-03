@@ -6,6 +6,21 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are
+  written with the port the daemon had when they were installed, so a later start on the 4317
+  default — or on 4318 after the in-use walk — left every hook event posting into a void while the
+  settings file stayed valid and the header went on claiming exact state. It is the only broken
+  state in the product that looks healthy from every surface at once. `deckhq doctor` reports it
+  (§75); now `deckhq` does not create it. With no `--port` given, the daemon listens where the
+  installed hooks post if that port is free, and says so in one log line. If a DeckHQ daemon
+  already holds it, `deckhq` prints one line naming its URL and starts nothing rather than binding
+  the next port along and running degraded beside it. If something that is not DeckHQ holds it, the
+  requested port is used and the header's reinstall banner does the rest. An explicit `--port` or
+  `DECKHQ_PORT` is honoured exactly as given — naming a port is a request to be on it.
+  `docs/DEVIATIONS.md` §81.
+
 ### Performance
 
 - **The daemon no longer boots the Claude Code CLI every five seconds.** `liveSessions()` shelled
