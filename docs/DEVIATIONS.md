@@ -3865,3 +3865,330 @@ the `--json` shape and its agreement with the printed rows, the no-daemon refusa
 an INVARIANT test that the CLI writes nothing to `state.json`, exactly one POST per action, a
 daemon refusal reported rather than retried, and the three `open` cases. 514 tests to 570 across
 both packages.
+
+## 94. WP-37 — the Claude Code plugin: the spike's answers, and the seven decisions the build made from them
+
+`08-PLAN-V2-100X.md` §3.0, B2 and §9 WP-37. **Go.** Everything the plan assumed
+about plugins is true on the build in front of us; the one question the plan
+left open — how a plugin's hook finds the daemon without a hard-coded port —
+has a clean answer that did not exist before this package; and the whole thing
+installs, validates and delivers events on a throwaway config directory.
+
+Measured against **Claude Code 2.1.231 native, win32-arm64, commit
+`bbff368ec698`**, and the plugin, marketplace and skills documentation as it
+stood on 4 September, in a disposable `CLAUDE_CONFIG_DIR` under the scratch
+directory. `~/.claude` was never written to at any point.
+
+### 94.1 What was verified by experiment, and what was not
+
+**Verified by running it:**
+
+- `claude plugin validate ./plugin --strict` and `claude plugin validate .
+  --strict` both pass, and the validation is real rather than a manifest read:
+  a copy with a bogus event key is rejected with `hooks.NotAnEvent: Invalid key
+  in record`, and one with `"async": "yes"` with
+  `hooks.SessionStart.0.hooks.0.async: Invalid input: expected boolean,
+  received string`. So **`async` is a typed field in the shipped hook schema**,
+  the plan's assumption in §3.0 holds, and the extra `"_deckhq": true` tag on
+  every entry survives validation exactly as §86.1 found for settings files.
+- `claude plugin marketplace add <repo path>` registers the repository as a
+  `directory` source in the config's `settings.json`, and `claude plugin
+  install deckhq@deckhq` installs it. `claude plugin details deckhq` then
+  reports the full inventory: **Skills (2) deck, waiting; Hooks (8)
+  SessionStart, UserPromptSubmit, Notification, Stop, SubagentStop, SessionEnd,
+  PreToolUse, PostToolUse; MCP servers (1) deckhq**, at ~48 tokens of always-on
+  context.
+- **The install is a copy.** `~/.claude/plugins/cache/deckhq/deckhq/1.2.0/`
+  holds eleven files and nothing else — the eleven in `plugin/`. Nothing
+  outside that directory comes with it. This is the most consequential
+  measurement in the spike; see decision 1.
+- The hook command, run out of the installed cache copy with a real
+  `SessionStart` payload on stdin, found a daemon on **port 4489** — outside
+  the ten-port walk, discoverable only through `~/.deckhq/daemon.json` — and
+  delivered the event: `/api/hooks` went from `eventsSeen 0` to `eventsSeen 1`.
+- The MCP server, driven over stdio with hand-written JSON-RPC, answered
+  `initialize`, `tools/list` and `tools/call deckhq_waiting`, the last with the
+  22 sessions actually waiting on the reference machine.
+- `SessionStart --start` with no daemon running spawned one, waited for it to
+  bind, and reported `{"port":4317,"started":true,"reason":"started"}`; run
+  again it reported `{"port":4317,"started":false,"reason":"running"}` and
+  spawned nothing.
+- `deckhq doctor` on that machine prints `hooks   installed as a plugin, 0
+  events, none yet this run`, and the floor's `/api/hooks` reports
+  `installed=true viaPlugin=true staleAtPort=null` — the "exact state, no
+  banner" half of the acceptance criterion.
+- **Uninstall removes only what the plugin owns.** With a hand-written
+  `statusLine`, a hand-written `Stop` hook and a `model` setting placed in the
+  throwaway config first, `claude plugin uninstall deckhq` emptied
+  `enabledPlugins` and `installed_plugins.json`, marked the cache directory
+  `.orphaned_at`, and left all three of those untouched. The install had added
+  exactly one key: `enabledPlugins["deckhq@deckhq"] = true`.
+
+**Not verified, because it needs inference.** The CLI's stored OAuth token is
+expired (§86.1), so no session could be started. That leaves four things
+**unproven on a real machine**, and they must not appear anywhere as facts
+until they are:
+
+1. that Claude Code actually *fires* the plugin's hooks in a live session — the
+   registration is proved, the firing is not;
+2. that `/deckhq:deck` and `/deckhq:waiting` run their injected `` !`…` ``
+   commands and render (the two skills are proved to register by name);
+3. that `${CLAUDE_PLUGIN_ROOT}` is substituted inside a command's markdown body
+   as the reference documents — the substitution inside `hooks.json` and
+   `.mcp.json` is in the same documented table and is not verified either;
+4. that the MCP server is reachable as
+   `mcp__plugin_deckhq_deckhq__deckhq_waiting` from a model's tool list.
+
+By `08` §1.1 rule 11 those are hypotheses. The README section this package adds
+describes the install and the commands, which is unavoidable for a feature
+whose whole point is that it installs — but it claims no measured behaviour,
+and nothing about the plugin goes in a launch tweet until a signed-in machine
+has run it end to end.
+
+**Read from documentation only:** the marketplace `source` forms other than a
+relative path, `defaultEnabled`, `userConfig`, `${CLAUDE_PLUGIN_DATA}`, and the
+monitor `when` trigger.
+
+### 94.2 Decision 1 — the plugin is self-contained, and a test enforces it
+
+The install copies `plugin/` and nothing else. An `import
+'../src/cli/source.mjs'` would resolve on the author's machine, where the
+plugin directory sits next to `src/`, and on **no** user's, where it sits in a
+version-stamped cache directory with ten sibling files. That is a bug that
+passes every test the author can run and fails for everybody else, so it is
+closed structurally: `test/unit/plugin-manifest.test.mjs` walks every `.mjs`
+under `plugin/`, parses every import specifier, and fails any that is a bare
+package or resolves outside `plugin/`. The plugin also ships no `package.json`,
+so nothing in it can acquire a dependency later either.
+
+The cost is `plugin/lib/deckhq.mjs`, which restates about forty lines of `src/`:
+the three activity states that mean "this is on you", the loopback probe, and
+the one-line flattener. Everything else it asks the daemon over `/api/state`,
+so the plugin computes no state, keeps no cache, and holds no second opinion
+about what `for_review` means.
+
+### 94.3 Decision 2 — the daemon publishes its port, and the hook reads it
+
+§86.6 left this open and recommended baking the port in. A plugin cannot: there
+is no install-time moment when a daemon is running to be asked, and the same
+copied `hooks.json` has to work on a machine that installs DeckHQ tomorrow. So
+the fallback §86.6 named as option 2 is now built, and it is the primary route.
+
+`startDaemon` writes `~/.deckhq/daemon.json` — `{port, url, pid, startedAt}` —
+after the listener binds, and removes it on a clean close. Three properties, in
+`src/core/daemon-file.mjs`:
+
+- **It is not `state.json`.** Nothing about a listening socket is user-owned,
+  and the file the acknowledgements live in keeps exactly one writer. §93
+  refused a second writer against it for the CLI; the same rule applies here.
+- **A stale record is a hint, not an answer.** A killed daemon leaves the file
+  behind, so every reader probes the port before believing it. `pid` is
+  recorded so a reader can tell a fresh record from one left by a reboot, and a
+  daemon shutting down will not delete a record another daemon wrote — a
+  restart writes the new one before the old one finishes closing its sockets,
+  and an unconditional unlink there would leave a live daemon nothing can find.
+- **It never fails a start.** Every function swallows its errors; a read-only
+  home directory costs the plugin its shortcut and nothing else.
+
+An embedder that passes `stateFile` gets the record beside that file rather
+than in the user's home directory. Four hundred tests start daemons, and none
+of them may overwrite the record the real one on this machine wrote.
+
+The hook's candidate list is then, in order: an explicit port, `DECKHQ_PORT`,
+the published port, **the port any settings-file hooks already name**, then the
+ten-port walk. The fourth entry earns its place: on a machine that adopted 4400
+(§83) and has not restarted since this build, the settings file is the only
+record of where the daemon is, and without it a `SessionStart` hook would try
+to start a second daemon beside a healthy one — the exact failure §83 exists to
+prevent. Reading a runtime's own configuration would belong in an adapter if
+this code were inside `src/` (`02-ARCHITECTURE.md` §2); it is not, it is a
+Claude Code plugin running inside Claude Code, and it cannot import from a
+repository that may not be on the machine.
+
+`deckhq doctor` reads the published port too, for the same reason: a daemon the
+plugin started outside the walk would otherwise be invisible to the one command
+whose job is to find it.
+
+**The hook's find budget is 1500 ms, not 400.** On the machine with no daemon
+this costs nothing measurable — every candidate refuses the TCP connect
+immediately and the HTTP client is never loaded. On the machine that has one it
+has to cover the ~88 ms Node spends standing `fetch` up in a cold process plus
+the round trip; 400 ms was tried and dropped events on a loaded Windows box.
+The ceiling is spent in full only by a stranger holding a port open silently,
+and `PreToolUse`/`PostToolUse` — the two highest-frequency events — are declared
+`async` so they cannot block a session even then.
+
+### 94.4 Decision 3 — an async `SessionStart` hook, not a monitor
+
+The plan asked for a reasoned choice. A monitor is a **session-lifetime
+background process whose stdout lines are delivered to Claude as
+notifications**. Three things make it the wrong shape here, and none of them is
+about difficulty:
+
+1. **Lifetime.** The daemon must outlive every session and be shared by all of
+   them — that is what "it remembers what is waiting on you after you have
+   closed the tab" means. A monitor dies with its session and is restarted per
+   session, which is either N daemons or a supervisor that immediately exits.
+2. **It writes into the model's context.** Every line a monitor prints becomes
+   a notification the model reads and pays for. DeckHQ's countermeasure to its
+   own fatal risk (`08` §1.2) is that the product lets you *stop* watching;
+   piping the floor into a language model's context is the most expensive
+   possible way to watch it.
+3. **It is experimental.** `experimental.monitors` sits under a key named
+   `experimental`, and the front door of the distribution strategy should not.
+
+The async hook has none of those problems: `async: true` means Claude Code does
+not wait, so the fifteen seconds a cold start can take are invisible; the
+daemon is spawned `detached` with `stdio: 'ignore'` and `unref`'d, so it
+outlives the session that started it; and `SessionStart` fires on resume as
+well as on start, which makes the arrangement self-healing after a daemon is
+killed.
+
+**Exactly one daemon** is held by three things in series, because ten terminals
+opened at once fire ten hooks in the same second: a probe first, then an
+exclusive `wx` lock file at `~/.deckhq/daemon.start.lock`, then a second probe
+inside the lock. A hook that cannot take the lock waits for the other one's
+daemon rather than racing it — two daemons is the failure, a floor that arrives
+a second late is not. A lock older than sixty seconds is broken open, because a
+hook process killed mid-start would otherwise hold it forever.
+
+**Argv arrays, never a shell string.** `resolveLauncher` looks for
+`DECKHQ_BIN`, then for `<PATH dir>/node_modules/deckhq/bin/deckhq.mjs` — npm's
+own entry point, beside the shim — and only then for the shim itself.
+Preferring the entry point means `node <file>` on every platform and skips
+`cmd.exe` entirely; when only a `.cmd` shim exists it is passed as an
+**argument** to `cmd.exe` (`/d /s /c <file>`), which is the supported route
+since Node 18.20.2 refused to spawn batch files directly. Nothing from a hook
+payload reaches a child process at all.
+
+### 94.5 Decision 4 — `plugin/` stays out of the npm tarball
+
+The plugin's distribution channel is the repository, which is what `claude
+plugin marketplace add` clones and what a GitHub-sourced marketplace entry
+fetches. Shipping a second copy inside every `npx deckhq` download would be
+bytes nobody runs. So `package.json`'s `files` whitelist is unchanged and
+neither `plugin` nor `.claude-plugin` is in it — asserted by a test, so the
+decision cannot drift by accident. The daemon does not serve the plugin
+directory either: there is no route that would, and adding one would mean the
+floor hosting an installer for itself.
+
+### 94.6 Decision 5 — a plugin install reads as "hooks installed"
+
+This is the acceptance criterion — *"an exact-state floor with no other
+command"* — and without it the package fails it while working perfectly.
+`installed()` reads `settings.json`; the plugin puts nothing there; so a
+machine where every hook event is arriving would show the reinstall banner, and
+`_hooksInstalled()` in the registry would keep running the inference path
+beside exact events.
+
+So the adapter gained `pluginInstalled()`, which reads `enabledPlugins` in
+Claude Code's settings for a truthy key whose plugin half is `deckhq`.
+`enabledPlugins` rather than `plugins/installed_plugins.json` on purpose: it is
+the key `plugin install` writes and `plugin disable` flips, so an installed but
+disabled plugin — whose hooks do not run — correctly reads as not installed.
+Verified in both directions on the throwaway config, including that an
+uninstall's orphaned cache directory does not read as installed.
+
+`/api/hooks` reports `installed: settings || plugin` plus a new `viaPlugin`
+field, and **suppresses `staleAtPort` when the plugin is present**: the
+plugin's hook command discovers the port at run time, so it cannot drift, and a
+stale settings-file entry beside a working plugin is not a fault worth a
+banner. `doctor` says `installed as a plugin` when there is no port to report,
+which is the difference between a row that explains the missing port and a row
+that looks half-read. `public/` was not touched.
+
+### 94.7 Decision 6 — the MCP server is read-only, and hand-written
+
+One tool, `deckhq_waiting`, annotated `readOnlyHint` and `openWorldHint:
+false`. **There is no `deckhq_ack` and there will not be one from this server.**
+Acknowledging is the user discharging a debt; a model that can clear the
+needs-you count can clear it by accident, which is precisely the shape
+`01-PRODUCT.md` §2 forbids. An `INVARIANT:` test asserts the server declares
+exactly one tool and that its source contains no POST and no write endpoint.
+
+It also starts nothing. A tool call is the model's decision, not the user's,
+and spawning a daemon on one is a side effect nobody asked for; `SessionStart`
+is where the daemon gets started, by the user opening a session.
+
+No SDK, per `08` §1.1 rule 3. The protocol surface a one-tool read-only server
+needs is `initialize`, `tools/list`, `tools/call` and `ping` over
+newline-delimited JSON — about two hundred lines including the comments.
+Requests are answered in order rather than concurrently: one tool, a two-second
+ceiling, and serialising removes every interleaving question a client could
+ask. `initialize` echoes a protocol version the client asked for when it is one
+we can speak, rather than telling a client on an older revision to give up over
+a server whose whole surface is one read-only list.
+
+The text it returns is deliberately **not** the ANSI table `deckhq waiting`
+prints (WP-42): this output is read by a model as often as by a person, and
+escape codes are noise in a transcript. Every transcript line is flattened to
+one line of printable text first — the §89 decision 6 rule, applied to a second
+surface — and a test asserts the queue never scores the human (`08` §1.1
+rule 6).
+
+### 94.8 Decision 7 — the slash commands run a bundled script, not a prompt
+
+`/deckhq:deck` and `/deckhq:waiting` are markdown skills whose body is a single
+injected `` !`node "${CLAUDE_PLUGIN_ROOT}/scripts/…"` `` command, with
+`disable-model-invocation: true` and an `allowed-tools` rule naming that exact
+command. Three consequences, all wanted: the output is deterministic and
+identical to what the CLI would print rather than something a model composed;
+the model's whole job is to relay it, which is why both bodies end with an
+instruction not to re-rank, advise or editorialise; and neither command can
+fire on its own, because `/deck` opens a browser window and Claude does not get
+to decide when that happens.
+
+Note the namespace. They are `/deckhq:deck` and `/deckhq:waiting`, not `/deck`
+and `/waiting`. Plugin skills are always namespaced by the plugin name, with no
+way to opt out short of renaming the plugin, so the plan's `/deck` and
+`/waiting` are **not** what a user types and the README says the real names.
+
+### 94.9 Accepted limits
+
+- **`node` must be on the PATH Claude Code runs hooks with.** Claude Code 2.x
+  is a native binary and does not supply one. If `node` is missing the hooks
+  silently do nothing — the same failure the hooks screen already describes in
+  words for the settings-file route, and the reason that screen reports events
+  seen rather than only "installed".
+- **`deckhq` must be findable for `SessionStart` to start anything.** `npx`
+  leaves no binary behind, and the plugin will not run `npx` itself: that is a
+  network fetch, and this product adds no egress, ever. A machine with the
+  plugin and no DeckHQ gets a plugin that delivers events to whatever daemon is
+  running and starts none — and `/deckhq:deck` says so in a sentence naming
+  `npm i -g deckhq`.
+- **Both install routes at once means every event is delivered twice.** The
+  settings-file hooks and the plugin's hooks are independent and nothing
+  deduplicates them. It is not harmful — `applyHook` is idempotent for every
+  event shape it handles — but it is two processes per event instead of one.
+  The README says to remove the settings-file hooks from the header after
+  installing the plugin. A tagged marker letting the daemon drop the duplicate
+  is the obvious fix and was left out deliberately: it is a change to the hook
+  payload contract, not a plugin detail.
+- **`claude doctor` does not validate a plugin's hooks.** It validates hook
+  blocks in settings files (§86.1). `claude plugin validate <path> --strict` is
+  what validates `hooks/hooks.json`, and it is what the acceptance criterion
+  was met with; the CLI's own `doctor` reported no errors with the plugin
+  installed, which is the weaker but still true half.
+- **The marketplace is listed under no account yet.** The repository carries
+  `.claude-plugin/marketplace.json`, so `claude plugin marketplace add
+  DkPanseriya/deckhq` works the day it is pushed. Submission to
+  `claude-community` is a form, needs a decision about which account submits,
+  and is the PM's call rather than this package's.
+- **Six child processes in the suite made two latency tests flaky**, and the
+  fix was to stop spawning them: `runHook` is exported and driven in-process,
+  and exactly one test per file spawns the real thing. Three consecutive full
+  runs pass. §80 and §87 are the standing reminders that a wall-clock
+  assertion is a load test of whatever else is running.
+
+**Acceptance.** 64 tests across four files: the daemon-file record and its
+staleness and failure paths; the manifest, marketplace and hook-block shapes,
+including that the plugin block covers exactly the events the settings block
+covers and that no hook entry contains a port; the self-containment walk over
+every import; three `SECURITY:` egress tests — every URL in every copied file
+is loopback, the manifest's two metadata URLs are pinned by key, and the host
+is one constant nothing can move; the hook command spawned as a real child
+process posting a real payload to an OS-assigned port discoverable only through
+`daemon.json`; the discovery order; eight concurrent `ensureDaemon` calls
+producing exactly one spawn and releasing the lock; the launcher resolution
+including the `cmd.exe` argv; and the MCP server over its real transport plus
+the `INVARIANT:` no-write test. 714 tests to 778.

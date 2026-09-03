@@ -219,6 +219,52 @@ event-driven instead.
 Without a daemon running, the line comes straight from `~/.deckhq/state.json` — 3 ms on a machine
 with 77 sessions — so it costs a status bar nothing to carry.
 
+## Install as a Claude Code plugin
+
+DeckHQ ships a Claude Code plugin, so the setup can happen inside the tool you already have open
+instead of beside it. In any Claude Code session:
+
+```
+/plugin marketplace add DkPanseriya/deckhq
+/plugin install deckhq@deckhq
+```
+
+or from a shell, or against a local checkout:
+
+```bash
+claude plugin marketplace add DkPanseriya/deckhq
+claude plugin install deckhq@deckhq
+claude plugin marketplace add ./deckhq   # a clone on disk works the same way
+```
+
+That is the whole setup. The plugin brings:
+
+- **The hooks**, all eight events, without touching your `settings.json` at all — installing the
+  plugin _is_ the consent, and uninstalling takes them with it.
+- **The daemon, started on your first session.** An `async` `SessionStart` hook checks whether one
+  is already running and starts one if not, detached and without opening a browser. Ten terminals
+  opened at once start exactly one daemon between them.
+- **`/deckhq:deck`** — opens the floor, starting DeckHQ first if it has to.
+- **`/deckhq:waiting`** — prints the queue: who is waiting, on what project, for how long.
+- **`deckhq_waiting`**, an MCP tool, so you can ask Claude itself what is waiting on you across
+  every project and it can answer without you leaving the terminal. It is read-only: the tool can
+  report the queue and cannot discharge it.
+
+The plugin's hooks carry no port. The daemon publishes the one it bound to `~/.deckhq/daemon.json`
+and the hook command looks it up on each event, so a daemon that moved to another port keeps
+receiving everything — the reinstall banner has nothing to warn you about on this route.
+
+Two things it needs from your machine. `node` must be on the `PATH` Claude Code runs hooks with,
+and `deckhq` must be findable for the `SessionStart` start to work — a global install, Homebrew,
+winget or scoop; `npx` leaves no binary behind, and the plugin will not fetch one, because DeckHQ
+makes no outbound network calls of any kind. Without `deckhq` on the `PATH` the plugin still
+delivers events to a daemon you started yourself; it just cannot start one for you.
+
+If you had already installed the hooks from the floor's header, remove them there after installing
+the plugin. Both routes work, but together they deliver every event twice.
+
+To remove it: `claude plugin uninstall deckhq`. It takes out only what it put in.
+
 ## What it reads from your disk
 
 Everything is read locally and nothing leaves the machine.
@@ -241,6 +287,8 @@ Everything is read locally and nothing leaves the machine.
 - `~/.deckhq/backups/` — a copy of your Claude Code settings file, taken before DeckHQ ever
   modifies it.
 - `~/.deckhq/snapshots/` — only what `--capture-proof` writes, when you ask for it.
+- `~/.deckhq/daemon.json` — the port a running daemon bound, so a hook can find it. Removed on a
+  clean shutdown; nothing you own is in it.
 - `~/.claude/settings.json` — **only with your explicit consent**, and only a tagged hook block.
 
 If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
