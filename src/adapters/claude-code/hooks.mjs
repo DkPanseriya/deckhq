@@ -137,7 +137,7 @@ const MAX_COMMAND = 80;
  * on a canvas and in the panel header. Everything outside the printable range
  * becomes a space, runs of whitespace collapse, and the result is cut to
  * length. (The renderer draws it with `fillText`/`textContent` and never as
- * markup — see `docs/DEVIATIONS.md` §88.)
+ * markup — see `docs/DEVIATIONS.md` §89.)
  * @param {string} value
  * @param {number} max
  */

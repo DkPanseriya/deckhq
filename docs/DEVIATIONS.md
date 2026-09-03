@@ -3321,7 +3321,7 @@ this size costs ~280 ms, which caps an external loop at 3–4 fps, and the
 frames are pulled out as PNGs only after the walk is over. Measured rate,
 10.0 fps against 10 requested.
 
-## 88. WP-52 — thought bubbles: what the two new hook events are allowed to touch, and what they are not
+## 89. WP-52 — thought bubbles: what the two new hook events are allowed to touch, and what they are not
 
 `08-PLAN-V2-100X.md` §3.5 and §9. `PreToolUse` and `PostToolUse` join the
 tagged hook block; the daemon keeps a `currentTool` per session; the floor

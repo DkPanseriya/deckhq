@@ -69,7 +69,7 @@
   `fillText`, in the panel with `textContent`, never as markup. Nothing about a tool event
   touches `ackState`, the needs-you count, or the stall clock; there is a named `INVARIANT:` test
   for exactly that. A tool nobody reported finishing expires with the stall window rather than
-  hanging over a head forever. `docs/DEVIATIONS.md` §88.
+  hanging over a head forever. `docs/DEVIATIONS.md` §89.
 
 ### Changed
 

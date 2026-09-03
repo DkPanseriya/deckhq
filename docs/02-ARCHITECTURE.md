@@ -152,7 +152,7 @@ The header shows the total plus a breakdown: *hands up* (`needs_input`), *stalle
 | `SubagentStop` | update `lastOutputAt` only; does not change parent state |
 | `SessionEnd` | `live = false`. **`activityState` becomes `ended` only if it is not `for_review`; `reviewSince` is never touched.** A session that finished a turn and then exited still owes you a review. |
 | `SessionStart` | register the session, `live = true`. **`activityState` becomes `working` only if it is not `for_review`; `reviewSince` is never touched.** |
-| `PreToolUse` | set `currentTool = {name, summary, since}` from the adapter's reading of the payload. **Nothing else** — not `activityState`, not `lastOutputAt`, not one user-owned field (WP-52, `docs/DEVIATIONS.md` §88). |
+| `PreToolUse` | set `currentTool = {name, summary, since}` from the adapter's reading of the payload. **Nothing else** — not `activityState`, not `lastOutputAt`, not one user-owned field (WP-52, `docs/DEVIATIONS.md` §89). |
 | `PostToolUse` | clear `currentTool`. Nothing else. |
 
 `currentTool` is also cleared by `Stop`, by `SessionEnd`, and by the tick once it is older than
