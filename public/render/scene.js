@@ -17,7 +17,7 @@ import { buildPlan, floorPopulation, U, formatTokens } from './plan.js';
 import { bakeBackdrop } from './backdrop.js';
 import { drawCharacter, formatElapsed, labelBox, BODY_HEIGHT_U, LEGIBILITY_MIN_PX } from './rig.js';
 import { sampleClip, makeActivityRotation } from './clips.js';
-import { STATE_COLORS, PALETTE, identityFor } from './palette.js';
+import { STATE_COLORS, PALETTE, identityFor, appearanceFor } from './palette.js';
 import { AgentRuntime, assignSeats, lodForZoom, worldToScreen, screenToWorld } from './agents.js';
 
 // ---------------------------------------------------------------------------
@@ -1329,6 +1329,12 @@ export class Scene {
     // `identityFor` is tolerant of a missing/unresolved `projectMk`, so this
     // is safe to call for every agent without a guard.
     const identity = identityFor(agent.projectMk, agent.avatar);
+    // Per-agent appearance (WP-20): who this particular session is — hair
+    // style, skin, an outfit accent, glasses, build, and a rarity trait on a
+    // minority of agents. A pure function of the session id, so it needs
+    // nothing from the snapshot and nothing persisted, and like `identityFor`
+    // it is total: an id that has not resolved yet still draws.
+    const appearance = appearanceFor(agent.id);
 
     drawCharacter(ctx, pose, {
       x: s.x,
@@ -1352,6 +1358,7 @@ export class Scene {
       // drawn.
       tool: agent.currentTool || null,
       identity,
+      appearance,
       selected: rec.id === this._selectedId,
       reduced: this._reduced,
     });

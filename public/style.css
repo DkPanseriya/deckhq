@@ -730,6 +730,33 @@ button {
   color: var(--muted);
 }
 
+/* WP-20's rarity word, in both places an agent is identified: the panel
+   header and the hover card.
+
+   It is deliberately the quietest thing in its line — lower case, small caps
+   weight, the muted ink, no pill and no badge. It is a grace note about the
+   AGENT, and the moment it looks like a trophy it has started to be a score
+   on the human, which this product does not do (docs/plan/08 §1.1 rule 6 and
+   docs/plan/04 §5). `legendary` is allowed one step of emphasis and no
+   colour, because colour on the floor and in this shell means state. */
+.mk-chip-rarity,
+.tooltip-rarity {
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
+.tooltip-rarity {
+  margin-left: 0.4rem;
+}
+.mk-chip-rarity[data-tier='legendary'],
+.tooltip-rarity[data-tier='legendary'] {
+  color: var(--ink-2);
+  opacity: 1;
+}
+
 .panel-meta {
   font-family: var(--font-mono);
   font-size: 0.66rem;

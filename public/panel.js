@@ -415,10 +415,15 @@ export function createPanel(opts) {
 
     mkChip.textContent = '';
     const mk = a.mk || a.id;
-    if (a.displayName) {
+    // Since WP-20 an agent has a name from the moment it is first seen, so
+    // this is nearly always a name over a tag rather than a bare tag. The tag
+    // stays underneath as the sub-label: it is what makes the session
+    // locatable by project, and a name never replaces it.
+    const name = a.displayName || a.givenName || null;
+    if (name) {
       const nameEl = document.createElement('span');
       nameEl.className = 'mk-chip-label';
-      nameEl.textContent = a.displayName;
+      nameEl.textContent = name;
       const tagEl = document.createElement('span');
       tagEl.className = 'mk-chip-tag';
       tagEl.textContent = mk;
@@ -428,6 +433,20 @@ export function createPanel(opts) {
       tagEl.className = 'mk-chip-tag';
       tagEl.textContent = mk;
       mkChip.appendChild(tagEl);
+    }
+    // One quiet word for an uncommon-or-better agent, and nothing at all for
+    // the ~74% that are common. Never a number, never a rank, never a count of
+    // how many the user has "collected" — the agents have faces, the human is
+    // never scored (docs/plan/08 §1.1 rule 6).
+    const word = rarityWordFor(a);
+    if (word) {
+      const rarityEl = document.createElement('span');
+      rarityEl.className = 'mk-chip-rarity';
+      rarityEl.dataset.tier = word;
+      rarityEl.textContent = word;
+      // A real space as well as the flex gap: a screen reader reads the text,
+      // and "MK2.2rare" is one word to it.
+      mkChip.append(' ', rarityEl);
     }
     renderDraftChip();
 
@@ -1091,6 +1110,10 @@ export function createPanel(opts) {
     // The same hair, accent and glyph the floor draws (CONTRACTS-WP15.md §2),
     // so the close-up is recognisably the same person.
     const identity = palette?.identityFor ? palette.identityFor(a.projectMk, a.avatar) : undefined;
+    // And the same face (WP-20): hair style, skin, outfit accent, glasses,
+    // build and any rarity trait. The close-up is where a rare agent is
+    // actually legible, so it must not be the one place that omits it.
+    const appearance = palette?.appearanceFor ? palette.appearanceFor(a.id) : undefined;
 
     const draw = (elapsedSeconds) => {
       ctx.clearRect(0, 0, closeupCanvas.width, closeupCanvas.height);
@@ -1116,6 +1139,7 @@ export function createPanel(opts) {
           badge: null,
           selected: false,
           identity,
+          appearance,
         });
       } catch (err) {
         console.debug('[deckhq] drawCharacter failed', err);
@@ -1512,4 +1536,22 @@ function formatElapsed(ms) {
 /** @param {string} state */
 function stateColor(state) {
   return paletteModule?.STATE_COLORS?.[state] || FALLBACK_STATE_COLORS[state] || '#888888';
+}
+
+/**
+ * The rarity word for one agent, or null — for a common agent, and for as
+ * long as `render/palette.js` has not loaded (it is a dynamic, defensive
+ * import; see the file header). Absent rather than wrong is the right failure
+ * here: the word is a grace note, not information the user needs.
+ * @param {any} agent
+ * @returns {string|null}
+ */
+function rarityWordFor(agent) {
+  if (!agent || !paletteModule?.appearanceFor || !paletteModule?.rarityWord) return null;
+  try {
+    return paletteModule.rarityWord(paletteModule.appearanceFor(agent.id).tier);
+  } catch (err) {
+    console.debug('[deckhq] rarityWord failed', err);
+    return null;
+  }
 }
