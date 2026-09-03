@@ -23,6 +23,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import http from 'node:http';
+import { execFileSync } from 'node:child_process';
 
 const argv = process.argv.slice(2);
 const portArg = argv.indexOf('--port');
@@ -149,6 +150,20 @@ function writeTranscript({ id, cwd, title, ageHours, tokensM, finished }) {
   ];
 
   if (finished) {
+    // Written the way an agent actually writes: markdown. The review card
+    // renders it (WP-08), so the fixture carries a list and a fenced block.
+    const text = [
+      'Done. Tests pass and the change is on the branch.',
+      '',
+      '- `src/events/backfill.ts` now batches by 500 rows and persists the cursor',
+      '- the old full-table scan in `index.ts` is gone',
+      '',
+      '```',
+      'npm test  ✓ 214 passing',
+      '```',
+      '',
+      'Want me to open the PR?',
+    ].join('\n');
     lines.push({
       ...base,
       type: 'assistant',
@@ -157,12 +172,7 @@ function writeTranscript({ id, cwd, title, ageHours, tokensM, finished }) {
         id: `msg_${id}_2`,
         role: 'assistant',
         model: 'claude-opus-5',
-        content: [
-          {
-            type: 'text',
-            text: 'Done. Tests pass and the change is on the branch — want me to open the PR?',
-          },
-        ],
+        content: [{ type: 'text', text }],
         usage: { input_tokens: 0, output_tokens: 0 },
       },
     });
@@ -210,6 +220,76 @@ function writeClaudeShim() {
     fs.chmodSync(sh, 0o755);
   } catch {
     /* not POSIX */
+  }
+}
+
+/**
+ * The project directories themselves, so the review card's "what changed in
+ * <project>" (GET /api/changes, WP-08) has a real working tree to read. One
+ * of each shape the panel draws: a dirty repository, a clean one, plain
+ * directories with no git, and one project whose directory is simply gone.
+ * Skipped quietly when git is not installed — the floor still works.
+ */
+const GIT_ENV = {
+  ...process.env,
+  GIT_AUTHOR_NAME: 'DeckHQ Demo',
+  GIT_AUTHOR_EMAIL: 'demo@example.invalid',
+  GIT_COMMITTER_NAME: 'DeckHQ Demo',
+  GIT_COMMITTER_EMAIL: 'demo@example.invalid',
+  GIT_CONFIG_NOSYSTEM: '1',
+};
+function git(cwd, args) {
+  execFileSync('git', args, { cwd, env: GIT_ENV, stdio: 'ignore' });
+}
+function writeLines(file, from, to, label) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const out = [];
+  for (let i = from; i < to; i++) out.push(`${label} line ${i}`);
+  fs.writeFileSync(file, out.join('\n') + '\n', 'utf8');
+}
+function writeProjectDirs(root) {
+  let hasGit = true;
+  try {
+    execFileSync('git', ['--version'], { stdio: 'ignore' });
+  } catch {
+    hasGit = false;
+  }
+  const dir = (name) => {
+    const d = path.join(root, name);
+    fs.mkdirSync(d, { recursive: true });
+    return d;
+  };
+  // Plain directories: "not a git repository".
+  for (const name of ['design-system', 'data-pipeline', 'mobile-app']) dir(name);
+  // infra-terraform is deliberately not created: "the directory no longer exists".
+  if (!hasGit) return;
+  try {
+    // checkout-flow: a repository with nothing uncommitted.
+    const clean = dir('checkout-flow');
+    git(clean, ['init', '-q', '-b', 'main']);
+    writeLines(path.join(clean, 'README.md'), 0, 5, 'readme');
+    git(clean, ['add', '.']);
+    git(clean, ['commit', '-q', '-m', 'init']);
+
+    // orbital-api: the busy room, with the spec's own diff on disk —
+    // src/events/backfill.ts +98 −4, src/events/index.ts +21 −8,
+    // test/backfill.test.ts +23 −6.
+    const dirty = dir('orbital-api');
+    git(dirty, ['init', '-q', '-b', 'main']);
+    const files = [
+      ['src/events/backfill.ts', 30, 4, 98],
+      ['src/events/index.ts', 20, 8, 21],
+      ['test/backfill.test.ts', 15, 6, 23],
+    ];
+    for (const [rel, n] of files) writeLines(path.join(dirty, rel), 0, n, rel);
+    git(dirty, ['add', '.']);
+    git(dirty, ['commit', '-q', '-m', 'events table']);
+    for (const [rel, n, removed, added] of files) {
+      // Drop `removed` lines from the top, append `added` new ones.
+      writeLines(path.join(dirty, rel), removed, n + added, rel);
+    }
+  } catch {
+    /* a git that cannot commit here is not the demo's problem */
   }
 }
 
@@ -270,7 +350,10 @@ fs.mkdirSync(STATE_DIR, { recursive: true });
 writeClaudeShim();
 writeSettings();
 
-const root = process.platform === 'win32' ? 'C:\\code' : path.join(os.homedir(), 'code');
+// The projects live inside the fixture too, so the review card can read real
+// working trees (see writeProjectDirs) and nothing on the real disk is touched.
+const root = path.join(ROOT, 'code');
+writeProjectDirs(root);
 const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
   const id = fakeId(i + 1);
   const cwd = path.join(root, project);
