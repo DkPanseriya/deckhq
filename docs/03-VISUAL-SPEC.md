@@ -100,8 +100,24 @@ interface Pose {
 Draw order per character: contact shadow → legs → torso → held prop (behind) → arms → head →
 hair → prop (in front) → state icon → badge.
 
-Body colour is the **state colour**. Skin, hair and clothing detail are constant across agents —
-individuality is carried by the name label, not by appearance. This keeps state readable.
+Body colour is the **state colour**, at full strength, and the state icon owns the slot above the
+head. Those two carry the state and nothing else may take them.
+
+**Appearance is a deterministic per-session identity, not a constant.** Superseded by WP-20 on
+3 September 2026 — this paragraph used to say that skin, hair and clothing detail were constant
+across agents and that individuality was carried by the name label alone. Hair style, skin tone,
+outfit accent, glasses and build are now a hash of the session id, so the same session looks like
+the same person on every machine, for ever, with nothing persisted and nothing to migrate. A small
+set of accessories sits on rarity tiers — measured over 10,000 ids at 73.6% common, 20.3% uncommon,
+5.3% rare, 0.9% legendary — an uncommon agent wearing a hat or a scarf, a rare one a jacket or a
+striking hair colour, a legendary one a crown or a soft aura.
+
+The old sentence's reason survives as the constraint on the new rule: **state stays readable.**
+Identity may not touch the torso or the icon, and every appearance colour is at least 70 in sRGB
+from every state colour — computed at import time rather than eyeballed, so a new hair colour that
+reads as a state fails the build. Nothing here is earned, nothing decays, no count moves, and none
+of it is a score on the human (`docs/plan/08-PLAN-V2-100X.md` §1.1 rule 6). Full reasoning and the
+measurements: `docs/DEVIATIONS.md` §105.
 
 ## 4. Motion clips
 
