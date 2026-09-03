@@ -987,6 +987,18 @@ button {
   text-overflow: ellipsis;
 }
 
+/* WP-46 · the team's record line, when one of the records has this session or
+   its room as its subject. Quieter than the tool line above it — it is a
+   grace note, not information the review needs — and it wraps rather than
+   truncating, because half a record is not a record. */
+.panel-record {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
 /* the scrolling review body */
 .panel-body {
   flex: 1 1 auto;

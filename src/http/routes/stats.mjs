@@ -10,6 +10,14 @@
  *   - tokens per project per day
  *   - the longest wait ever, and the day it started
  *
+ * WP-46 adds `records`: the team's five records — longest wait ever, busiest
+ * day, busiest week, the room that never slept, the fastest discharge day —
+ * each with the day it was set and each carrying the first day the ledger
+ * holds, so a young ledger reports what it has rather than a week it has not
+ * lived through. The raw record COUNT, which used to be `records`, is
+ * `recordCount`; `computeStats` emits both names, so nothing that read the
+ * count has to move at once.
+ *
  * Three things this route deliberately does not do.
  *
  * **It does not read the registry's live state.** Every number is a replay of
@@ -28,7 +36,12 @@
  * put in the response.
  */
 import { sendError, sendJson } from '../server.mjs';
-import { computeStats, projectKeyFor, readAll } from '../../core/ledger.mjs';
+import {
+  computeStats,
+  projectKeyFor,
+  readAll,
+  records as teamRecords,
+} from '../../core/ledger.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_WINDOW_MS = 30 * DAY_MS;
@@ -72,6 +85,10 @@ export function register(router, ctx) {
 
       return sendJson(res, 200, {
         ...stats,
+        // WP-46. Deliberately NOT windowed by `since`: a record is a record,
+        // and the same reason `longestWaitEver` ignores the window applies to
+        // every one of these.
+        records: teamRecords(records, { now }),
         projects,
         // Say so rather than quietly reporting a short answer.
         incomplete: Boolean(ledger.writeError),
