@@ -2133,3 +2133,56 @@ carries it.
 
 No new dependency, no network, and every byte of format knowledge is still
 inside `src/adapters/claude-code/`.
+
+## 80. WP-51: the debounce test is proved on an injected clock, not a widened window
+
+**Spec:** WP-51 (`08-PLAN-V2-100X.md` §9) offers two remedies for the flaky
+`save() debounces` test: "fake timers or a widened, explicitly documented
+window."
+
+**What actually failed.** Run 33756126370, `windows-latest`, Node 18 and 20,
+the same assertion both times:
+
+```
+not ok 403 - save() debounces: no write appears before ~250ms, one appears after
+  error: 'must have written after the debounce window'   false !== true
+  duration_ms: 886.5 (Node 18)   1948.6 (Node 20)
+```
+
+The test slept 100 ms, looked, slept 300 ms, looked again — and at 400 ms the
+file was not there. The durations say the sleeps were honoured (the test took
+0.9 s and 1.9 s end to end against a 0.4 s script), so it was not only the
+timer arriving late: `_writeNow()` is `mkdir` + `writeFile` + `rename`, and on
+a shared Windows runner under the full matrix, 150 ms of slack for three
+filesystem calls was not enough. That rules out the widened window. Any sleep
+length is a guess about a machine we do not own, and the test would keep the
+same shape — two looks at the disk with a wall clock in between.
+
+**Shipped.** The store's debounce clock is injectable. `new Store(file, {
+timers })` takes `{ setTimeout, clearTimeout }` in the shape of the globals and
+defaults to them, so `src/daemon.mjs` constructs the store exactly as before.
+`SAVE_DEBOUNCE_MS` is exported. The test hands in a clock it cranks by hand
+and asserts, in order:
+
+1. no file synchronously after `setAck()`;
+2. exactly one timer scheduled, for exactly `SAVE_DEBOUNCE_MS` — the debounce
+   exists and is the documented one;
+3. after the event loop turns, still no file — nothing but that timer can
+   reach the disk, so this cannot flake in either direction;
+4. fire the timer, `await store.flush()` — the public API, which with no timer
+   pending awaits only the write in flight — then the file exists with the
+   expected record, and nothing was rescheduled.
+
+The sibling "rapid successive writes coalesce" test slept 350 ms for the same
+reason and now proves the stronger thing directly: three mutations inside one
+window share one timer. `flush()`'s own tests were already deterministic.
+
+**Why not `node:test`'s `mock.timers`.** It arrived in Node 20.4; `engines`
+says `>=18` and CI runs 18. Mocking the globals would also have reached into
+every other timer in the process, where an injected clock touches exactly the
+one under test.
+
+**Measurement.** `npm test` three times locally: 443/443, 443/443, 443/443;
+the file alone three times, 13/13 each. What cannot be produced here is the
+acceptance criterion itself — ten consecutive green runs on `main` across all
+nine combinations — because it is CI's to produce after the merge.

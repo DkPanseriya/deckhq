@@ -32,6 +32,19 @@
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
 
+### Testing
+
+- **The debounce test no longer races the wall clock.** "save() debounces" in
+  `test/unit/store.test.mjs` slept 100 ms and looked for the file, slept 300 ms and looked again.
+  On Windows CI (Node 18 and 20, run 33756126370) that turned `main` red while the same test
+  passed everywhere else: a runner that services a timer late puts the write on the wrong side
+  of the look, and no choice of sleep length can rule that out. The store's debounce clock is now
+  injectable — `new Store(file, { timers })`, defaulting to the real one — and the test cranks it
+  by hand: exactly one timer is scheduled, for exactly `SAVE_DEBOUNCE_MS`; nothing reaches the
+  disk until it is fired; one write with the right contents lands when it is. Same proof, no
+  timing. The sibling "rapid successive writes coalesce" test, which slept 350 ms for the same
+  reason, is on the same clock. `docs/DEVIATIONS.md` §80.
+
 ## 1.2.0
 
 The release that can actually be installed. 1.1.0 called itself the first public release and was
