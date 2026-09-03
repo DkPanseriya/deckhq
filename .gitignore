@@ -13,5 +13,9 @@ stage/
 .impeccable/
 .claude/settings.local.json
 
+# Captures and diff images from `npm run goldens:check`. The goldens themselves
+# (test/goldens/<platform>/*.png) are committed.
+test/goldens/.out/
+
 # Agent worktrees, created by the orchestrator. Never committed.
 .claude/worktrees/

@@ -173,13 +173,16 @@ export function connect(wsUrl) {
  * `--window-size`, because headless Chrome does not always honour the flag and
  * a screenshot at the wrong size is worse than no screenshot.
  *
+ * `extraArgs` are appended to Chrome's command line; the goldens harness uses
+ * them for the rendering-determinism flags a README capture has no need of.
+ *
  * @template T
- * @param {{chromePath:string, width:number, height:number, scale?:number, debugPort?:number}} opts
+ * @param {{chromePath:string, width:number, height:number, scale?:number, debugPort?:number, extraArgs?:string[]}} opts
  * @param {(client: ReturnType<typeof connect>) => Promise<T>} fn
  * @returns {Promise<T>}
  */
 export async function withChrome(opts, fn) {
-  const { chromePath, width, height, scale = 1 } = opts;
+  const { chromePath, width, height, scale = 1, extraArgs = [] } = opts;
   const debugPort = opts.debugPort || (await freePort());
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-shot-'));
 
@@ -194,6 +197,7 @@ export async function withChrome(opts, fn) {
       `--user-data-dir=${profile}`,
       `--remote-debugging-port=${debugPort}`,
       `--window-size=${width},${height}`,
+      ...extraArgs,
       'about:blank',
     ],
     { stdio: 'ignore' },
