@@ -135,9 +135,36 @@
   `bench` go through the running daemon's `/api/ack` and nothing else, because `act()` is the only
   code path allowed to clear a user-owned state — with no daemon they print `start deckhq to act`
   and exit 2. §93.
+- **A permission prompt can be answered from the panel — not yet proven against a live session.**
+  DeckHQ now installs a ninth hook, `PermissionRequest`, and it is the only one in the block the
+  runtime waits on: when a tool call is about to ask your permission in the terminal, the request
+  is held open on `POST /api/permission` for up to ten minutes while a card appears above WHAT IT
+  SAID with the tool, its literal input, and **Allow** / **Deny** / **Allow for session** on
+  `A` / `D` / `S`. "Allow for session" sends back the runtime's own rule with its destination
+  rewritten to `session`, so nothing is ever written into your settings files. DeckHQ never
+  allows anything by itself, never answers on a timer, never aborts a turn, and never touches
+  `ackState` — five named `INVARIANT:` tests, one per never. The terminal prompt stays live the
+  whole time: if nobody answers, if the daemon is closed, or if you answer in the terminal first,
+  the terminal is what decides, so a closed DeckHQ can never block a session. The consent screen
+  says all of that in its own paragraph before anything is written.
+  **The acceptance run is still owed.** No real `PermissionRequest` has ever reached this code:
+  the CLI's login on the reference machine is expired, so no tool call could be provoked. What
+  exists is 38 tests and a scripted stand-in for the runtime's hook client
+  (`scripts/fake-permission-client.mjs`) that sends the real payload to the real route and
+  asserts the exact bytes that come back. Until a live session raises a prompt, has it answered
+  from the panel, and carries on, this feature is not accepted and stays out of the README, the
+  tweet and the pricing page. `docs/DEVIATIONS.md` §86 and §94.
 
 ### Changed
 
+- **`2 Approve` gives up its accent fill while a permission card is up.** The panel's rule is one
+  filled button on the screen; Allow is also a primary action, and two crimson buttons is exactly
+  the "which one is the action?" problem that rule exists to prevent. Approve keeps its key, its
+  place and its label. `docs/DEVIATIONS.md` §94.3.
+- **The hooks consent screen reads as paragraphs.** An adapter's note is split on blank lines
+  instead of being set as one block, because the `PermissionRequest` paragraph is the one that
+  grants a runtime the ability to be answered rather than only watched, and it must not be the
+  tail of a wall of text. Still `textContent`, still no markup.
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
   runtime records the user turn — the documented `UserPromptSubmit` exception — never by the
@@ -225,6 +252,13 @@
 
 ### Testing
 
+- **The permission feature's five "never"s are each a named `INVARIANT:` test.** Never auto-allow,
+  never answer on a timer, never set `interrupt`, never send a destination other than `session`,
+  never touch `ackState`. The route is driven through fake request and response objects so that
+  "nothing was written back" — the load-bearing state in this feature — can be asserted while the
+  socket is still open, which a real HTTP client cannot observe until the hold has already ended.
+  `test/integration/permission.test.mjs` then runs the scripted runtime against a real daemon and
+  asserts the exact JSON it receives for all three buttons and for both fall-through paths.
 - **Every (platform, emulator, launch form) pair has its exact argument list asserted** —
   twenty-one of them, byte for byte, in `test/unit/terminals.test.mjs`, plus detection order,
   `$TERMINAL` precedence, the pinned setting, and a hostile session id checked against every
@@ -314,6 +348,17 @@
 
 ### Known gaps
 
+- **The permission feature has never met a live session.** Everything downstream of the runtime is
+  tested and screenshotted; the runtime itself has not been in the loop once, because `claude`'s
+  stored login on the reference machine is expired and re-authenticating is an interactive browser
+  flow. The remaining step is one `claude login`, one session raising a real prompt, and one
+  press of Allow. Until then the response bytes are verified against a schema read out of the
+  installed binary rather than against the binary's behaviour. `docs/DEVIATIONS.md` §86.1, §94.5.
+- **Codex cannot answer a permission prompt yet.** It has the same hook and the same response
+  shape, but no `http` hook type at all, so it needs a `command` hook that reads the daemon's
+  port and relays on stdin/stdout. That same hook is also the fallback for the two managed-settings
+  switches that can turn HTTP hooks off over DeckHQ's head, neither of which is detected today.
+  §94.4.
 - **Goldens are committed for Windows only, so the Ubuntu CI job reports SKIPPED and proves
   nothing yet.** Text is rasterised by the operating system, so one set of goldens cannot serve
   three platforms and there was no linux or macOS machine in reach. The job captures anyway and
