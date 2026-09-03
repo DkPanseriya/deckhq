@@ -3965,5 +3965,20 @@ That is `over24h`. `everOver24h` is the same question asked of history, and it i
 whether it used to happen — a product that has just reached zero and one that has always been at
 zero are not the same product, and one number cannot say which you are.
 
+**The measured cost, reference machine, 4 September.** A 10.7-minute run of the real daemon
+against the machine's real transcripts, into a scratch `DECKHQ_STATE_DIR`: **190 records, 47,039
+bytes — 46 KB for the day, 248 bytes a record.** The shape is one cold-start burst and then almost
+nothing. 78 of those records are the per-day `first_seen` carry-over, one per session on the
+machine; 86 are the first token totals; 20 are the desktop app's archive flags being reconciled
+against a fresh seed on a first run; and **6 are actual state transitions in ten minutes.** A day
+of ordinary use is therefore roughly the burst plus a few hundred bytes an hour, and 90 days of
+retention on this machine is single-digit megabytes. Nothing about the daemon changed measurably:
+the poll is unchanged, and `record()` is an array push.
+
+That run also produced the first real numbers this product has ever had about itself: 23 sessions
+in `for_review`, **13 of them waiting more than 24 hours**, and a longest wait of 2 d 12 h standing
+since 1 September. §6's first criterion is not met on the reference machine, which is precisely
+what a measurement is for.
+
 **Acceptance.** 52 tests, 714 to 766. `npm run goldens:check` is unaffected and was run: 4 of 4
 match, 0 px over tolerance — nothing in this package touches `public/`.
