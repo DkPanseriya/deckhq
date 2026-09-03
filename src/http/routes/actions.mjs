@@ -15,6 +15,7 @@ import { readJson, sendError, sendJson } from '../server.mjs';
 import { discoverActions, openUrl, revealInFileManager, runAction } from '../../core/actions.mjs';
 import { ACK_ACTIONS, splitAgentId } from '../../core/model.mjs';
 import { RESUME_TARGETS } from '../../core/store.mjs';
+import { SendHub } from '../../core/sends.mjs';
 
 /**
  * `git init` in a directory. argv array, never a shell string — the path is
@@ -39,6 +40,9 @@ const MAX_SEND_CHARS = 100_000;
  */
 export function register(router, ctx) {
   const { registry, store, log } = ctx;
+  // WP-09's in-flight sends. An embedder that built its own ctx without one
+  // gets a hub of its own rather than a crash on the first send.
+  const sends = ctx.sends || (ctx.sends = new SendHub({ log }));
 
   /** @param {string} id */
   function adapterFor(id) {
@@ -150,6 +154,25 @@ export function register(router, ctx) {
     }
   });
 
+  /**
+   * Run a turn in a session.
+   *
+   * WP-09. This answers **202 Accepted** the moment the child is spawned and
+   * the turn's progress arrives on `GET /api/events?stream=send` as
+   * `send` events carrying the `sendId` this hands back. The composer is
+   * therefore handed back to the user in the time it takes to start a
+   * process, not in the time it takes the model to think — which was the
+   * open half of `docs/plan/01-AUDIT.md` F8.
+   *
+   * The whole turn is still awaited HERE, in the background, because two
+   * things have to happen when it finishes and neither belongs to the
+   * browser: the ledger entry, and the final result event.
+   *
+   * Sending is an explicit user action, so it may legitimately move observed
+   * state. It does not touch `ackState`, and there is no /api/ack call
+   * anywhere on this path — `2 Approve` reaches this route and nothing else
+   * (THE INVARIANT, docs/01-PRODUCT.md §2).
+   */
   router.post('/api/send', async (req, res) => {
     let body;
     try {
@@ -166,20 +189,49 @@ export function register(router, ctx) {
     const agent = registry.agents.find((a) => a.id === id);
     if (!agent) return sendError(res, 404, 'Unknown session');
 
+    let adapter;
     try {
-      const result = await adapterFor(id).send(splitAgentId(id).sessionId, text, {
+      adapter = adapterFor(id);
+    } catch (err) {
+      return sendError(res, 404, err.message);
+    }
+
+    const { sendId, signal } = sends.begin({ agentId: id });
+
+    // The turn, running in the background. Nothing below writes to `res`.
+    const turn = adapter
+      .send(splitAgentId(id).sessionId, text, {
         cwd: agent.cwd,
         timeoutMs: SEND_TIMEOUT_MS,
-      });
-      // Sending is a user action, so it legitimately moves observed state:
-      // the session is now working. It does NOT touch ackState.
-      registry.noteSent?.(id, { chars: text.length, ok: result.ok !== false });
-      if (!result.ok) return sendJson(res, 502, { error: result.error || 'Send failed' });
-      return sendJson(res, 200, result);
-    } catch (err) {
-      log.warn('send failed', id, err.message);
-      return sendError(res, 502, err.message);
-    }
+        signal,
+        onEvent: (event) => sends.publish(sendId, event),
+      })
+      .then(
+        (result) => {
+          registry.noteSent?.(id, { chars: text.length, ok: result.ok !== false });
+          // An adapter that produced no `result` event of its own — an older
+          // runtime, a crash, a timeout — still has to close the turn on the
+          // wire, or the panel would sit typing forever.
+          if (!result.ok) {
+            sends.publish(sendId, { type: 'error', error: result.error || 'Send failed' });
+          }
+          sends.publish(sendId, { type: 'done', ok: result.ok !== false });
+          return result;
+        },
+        (err) => {
+          log.warn('send failed', id, err.message);
+          sends.publish(sendId, { type: 'error', error: err.message || 'Send failed' });
+          sends.publish(sendId, { type: 'done', ok: false });
+          return { ok: false, error: err.message };
+        },
+      )
+      .finally(() => sends.end(sendId));
+
+    // Awaited only so an unhandled rejection cannot escape; `turn` never
+    // rejects, because `.then`'s second argument already absorbs it.
+    turn.catch(() => {});
+
+    return sendJson(res, 202, { ok: true, id, sendId });
   });
 
   /**

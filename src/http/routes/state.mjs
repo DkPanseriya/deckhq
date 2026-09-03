@@ -19,7 +19,22 @@ export function register(router, ctx) {
     sendJson(res, 200, registry.snapshot());
   });
 
-  router.get('/api/events', (req, res) => {
+  /**
+   * The SSE channel. One endpoint, two kinds of subscriber, chosen by
+   * `?stream=`:
+   *
+   *   (default)      `state` events — the whole snapshot, on every change.
+   *                  Byte-for-byte what it has always been.
+   *   ?stream=send   `send` events (WP-09), and nothing else.
+   *
+   * The filter exists because the page needs both and app.js owns the
+   * snapshot connection. Without it the panel's own connection would be a
+   * second full snapshot on every scan, forever, for events it never reads —
+   * see docs/DEVIATIONS.md §115.
+   */
+  router.get('/api/events', (req, res, url) => {
+    const stream = url?.searchParams?.get('stream') === 'send' ? 'send' : 'state';
+
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store, no-transform',
@@ -32,18 +47,30 @@ export function register(router, ctx) {
     let closed = false;
     let lastId = 0;
 
-    const push = (snapshot) => {
+    /** @param {string} event @param {any} data */
+    const write = (event, data) => {
       if (closed) return;
       try {
         lastId += 1;
-        res.write(`id: ${lastId}\nevent: state\ndata: ${JSON.stringify(snapshot)}\n\n`);
+        res.write(`id: ${lastId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       } catch (err) {
         log.debug('SSE write failed', err);
       }
     };
 
-    push(registry.snapshot());
-    const unsubscribe = registry.on(push);
+    /** @type {(() => void)[]} */
+    const teardown = [];
+
+    if (stream === 'state') {
+      const push = (snapshot) => write('state', snapshot);
+      push(registry.snapshot());
+      teardown.push(registry.on(push));
+    } else {
+      // WP-09. Progress for whichever sends this client started. Every event
+      // carries its own `sendId`, so one connection serves a page that has
+      // more than one turn in flight.
+      if (ctx.sends) teardown.push(ctx.sends.subscribe((event) => write('send', event)));
+    }
 
     const heartbeat = setInterval(() => {
       if (closed) return;
@@ -59,7 +86,14 @@ export function register(router, ctx) {
       if (closed) return;
       closed = true;
       clearInterval(heartbeat);
-      unsubscribe();
+      for (const fn of teardown) {
+        try {
+          fn();
+        } catch (err) {
+          log.debug('SSE teardown failed', err);
+        }
+      }
+      teardown.length = 0;
     };
 
     req.on('close', cleanup);
