@@ -4334,3 +4334,182 @@ drawn on it.
 The check is green against fresh captures on all four, and the harness's own
 noise floor is unchanged from §87's measurement: 0 px over tolerance
 everywhere, 36 px moved at all on `empty` and 0 on the other three.
+
+## 97. WP-20 — every agent gets a face, a name and, sometimes, a hat
+
+`docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §4 and
+`docs/plan/08-PLAN-V2-100X.md` §7 asked for a stable appearance derived from the
+session id, a first name assigned on first sight, and rarity tiers on the agent.
+All three shipped. This entry records the places the package had to choose, and
+the one document it contradicts.
+
+![Five agents on the demo floor, no two alike](media/identity.png)
+
+### The one contradiction: VISUAL-SPEC §3 — **RAISE**
+
+`docs/03-VISUAL-SPEC.md` §3 says, in terms:
+
+> Skin, hair and clothing detail are constant across agents — individuality is
+> carried by the name label, not by appearance. This keeps state readable.
+
+WP-20 is the decision to stop doing that, and `08` §7 is where it was taken. The
+sentence's *reason* is preserved rather than overturned: what keeps state
+readable is that the BODY COLOUR is the state, and that is untouched. The torso
+is still filled with `opts.color`, at full opacity, at every LOD, and the state
+icon still owns the slot above the head. Both are now tests rather than
+conventions:
+
+- `LEGIBILITY: the torso is filled with the state colour, at full strength, for
+  every appearance` renders 400 appearances × 3 LODs through a recording context
+  and asserts the torso ellipse's fill is exactly the state colour.
+- `LEGIBILITY: no appearance mark is a filled shape over the torso` asserts that
+  nothing else paints a torso-scale opaque shape on the body centre. Every mark
+  is an edge, or is on the head, or is behind everything at 16% opacity.
+- `LEGIBILITY: the chrome above the head is byte-identical with and without an
+  appearance` renders the same character twice and diffs every call above the
+  crown of the head. The icon, the badge and the label do not move.
+
+**Decision needed:** confirm that §3's sentence is superseded and let a later
+pass rewrite it, or say that appearance should go back to being uniform.
+
+### Which channel says what, now that there are two
+
+§30 split the channels once already: the torso is the state, and the PROJECT
+rides on hair colour, a collar accent and a glyph. WP-20 adds a second,
+orthogonal channel — the AGENT — and it had to fit around the first rather than
+fight it:
+
+| Channel | Carries | Drawn as |
+| --- | --- | --- |
+| State | `activityState` | the torso fill, the legs, the arms — unchanged |
+| Project (§30) | `projectMk` | hair **colour**, collar dot, shoulder glyph — unchanged |
+| Agent (WP-20) | the session id | hair **style**, skin tone, an outfit accent at the hem, glasses, build, and one rarity trait |
+
+Hair splits: the project keeps the colour, the agent gets the silhouette. That
+is the only way both channels fit on one head, and silhouette is the half that
+survives at 16 px anyway.
+
+**The one exception**, and it is deliberate: the rare `hair` trait replaces the
+project's hair colour outright, for about 2.5% of agents. `08` §7 names "a rare
+hair colour" as one of the traits, and a rare trait that is not visible is not a
+rare trait. The project is still on that agent's collar dot and glyph, so
+nothing is lost — only the loudest of the three project marks is borrowed, and
+only for one agent in forty.
+
+### Colour discipline, one level stricter than before
+
+§30's guard asked that no project accent be near crimson. The agent tables are
+held to more: **no appearance colour may be within 70 in sRGB of ANY state
+colour**, not just of crimson. An agent whose hem is the copper of
+`needs_input`, standing beside an agent whose torso is that copper, is a
+legibility bug even though crimson is nowhere in it. There is a runtime guard in
+`palette.js` that throws at import time, and a test that recomputes every
+distance. That bar cost the obvious colours: the orange-copper and olive-brown
+bands are absent from `AGENT_ACCENTS` entirely, because they are `needs_input`
+and `stalled`.
+
+**Skin is held to 40, not 70, and that is a real decision.** Mid-brown is a band
+`needs_input` (#B87333) and `stalled` (#9A7B4F) genuinely occupy. A 70 floor
+there would have meant the product could not draw a whole range of real faces,
+in order to protect a channel that skin does not carry: skin is a fixed shape in
+a fixed place — a head above a torso, two hands at the ends of two arms — never
+an area that could be read as the body colour. Clothing, which sits ON the body,
+keeps the strict bar. Measured: the tightest skin/state pair is 44.5, the
+tightest skin/skin pair is 42.9, and the nearest approach to crimson is 52.1 (a
+desaturated brown, which flat sRGB distance understates). Crimson keeps a
+tighter bar than the other states even for skin — 50 — because it is the one
+colour that must mean exactly one thing.
+
+### The tier split, measured rather than asserted
+
+`08` §7 gives the targets: uncommon, rare 5%, legendary 1%, common the
+remainder. The tier is drawn from its own value out of a mulberry32 stream
+seeded by an FNV-1a hash of the session id, so the split inherits no bias from
+the hair/skin/accent draws before it. Over 10,000 fixed synthetic ids
+(`session-0` … `session-9999`):
+
+| Tier | Target | Measured | Within ±20% |
+| --- | --- | --- | --- |
+| common | 74% | 73.56% | yes |
+| uncommon | 20% | 20.28% | yes |
+| rare | 5% | 5.28% | yes |
+| legendary | 1% | 0.88% | yes |
+
+A second, UUID-shaped set of 10,000 ids lands at 73.9 / 20.1 / 5.2 / 0.84 — the
+same split, so the spread is a property of the hash rather than of the id
+format. The test is deterministic by construction (fixed ids, a pure function),
+so it can never be flaky; at n = 10,000 a ±20% band on the 1% tier is only ±2σ,
+and a randomly sampled version of this test would fail about one run in twenty.
+
+The appearance hash is deliberately NOT `agents.js`'s `hashString`. That one
+seeds seat and lounge-spot assignment; sharing it would mean that tuning where
+somebody sits re-rolls everybody's face, and a face that changes is the one
+thing this package exists to prevent.
+
+### Names: a third field, not a fourth meaning for `displayName`
+
+An agent is now named on first sight. The obvious implementation — write the
+name into `identity.names[id].name` — is wrong twice over. That field is the
+user's, and the `INVARIANT` this package was asked for is that identity
+assignment touches no user-owned field. And `!a.displayName` is asked as a real
+question elsewhere in the tree: `http/routes/actions.mjs` uses it to find the
+session a queued rename belongs to, and a daemon-given name answering yes to it
+would have silently broken launching an agent with a chosen name.
+
+So `given` is its own key, `displayName` still means exactly "the user chose
+this", and `label` is `displayName ?? givenName ?? mk`. A user rename outranks
+the given name and does not erase it.
+
+Assignment walks forward from a hash of the agent id through `SHORT_NAMES`,
+skipping every name already spoken for by either channel. Past the end of the
+list — 60 names, and `08` §0's reference machine has 70 sessions — it falls back
+to `Wren 2`, `Wren 3`. A duplicate would be worse than an ugly name: two agents
+both called Wren is precisely the confusion the MK tag was invented to end.
+Tested to 72 agents with no repeat.
+
+`src/core/identity.mjs` imports `SHORT_NAMES` from `public/names.js`. The
+direction matters: `docs/02-ARCHITECTURE.md` §9 forbids `public/**` importing
+`src/**`, because the browser cannot reach past `publicDir`. The reverse is
+fine, and one list beats two copies.
+
+### Two shapes that were tuned by looking at them
+
+Both changed after the first magnified capture, which is the whole argument for
+WP-21 restated in miniature:
+
+- **The outfit accent** started as a band spanning nearly the full torso width
+  at the midline. From directly above that reads as a stripe bisecting the body,
+  and it pulled the eye off the state colour it was supposed to sit quietly
+  inside. It is now half the width and set well back, where it reads as the back
+  hem of a shirt.
+- **The hat** started as an unlined ellipse a fifth wider than the skull, in the
+  agent's accent. It looked like a coloured disc where a head used to be. It is
+  now the width of the skull, set back so the brow shows in front of it, with a
+  rim line and a darker crown — an object on a head. Glasses are no longer
+  suppressed under a hat, because there is a face left to wear them on.
+
+### The one file this package touched that it was told not to
+
+The work order fenced off `public/render/plan.js` and `public/render/scene.js`,
+because WP-55 is changing their sizing concurrently. `scene.js` is also the only
+place on the floor that hands an identity to the rig, and it passes
+`identityFor(agent.projectMk, agent.avatar)` — two primitives, neither of which
+is the session id. There is no seam that reaches `drawCharacter` without it, and
+without it every agent on the floor is still drawn as the same person.
+
+The change is **three functional lines in `scene.js`, plus a comment, in one
+place**: `appearanceFor` added to the existing `palette.js` import,
+`const appearance = appearanceFor(agent.id)` beside the existing
+`const identity = …`, and `appearance,` in the `drawCharacter` options literal.
+It is in `_drawCharacterAt`'s identity block, not in the sizing code WP-55 is
+working in, and it re-applies by hand in under a minute if it conflicts.
+
+**Decision needed:** keep it, or drop those three lines and land the wiring in
+WP-55's merge instead. Everything else in this package — the model, the names,
+the hover card, the panel close-up, the tests — works either way.
+
+### Goldens
+
+Regenerated as the last step of the package. Every drawn character changed, so
+`demo`, `single` and `reference` all moved. `empty` has nobody on it and is the
+control.

@@ -157,6 +157,30 @@
   as a section rather than opened as a dialog of its own. Nothing about the consent contract
   changed: the literal file path and the literal JSON block are still shown before anything is
   written.
+- **Every agent has a face and a name, and a few of them are rare.** Appearance is a deterministic
+  hash of the session id — hair style, skin tone, an outfit accent, glasses, build — so the same
+  session looks like the same person on every machine, forever, with nothing persisted and nothing
+  to migrate. On top of that sit rarity tiers, measured over 10,000 ids at 73.6% common, 20.3%
+  uncommon, 5.3% rare and 0.9% legendary: an uncommon agent wears a hat or a scarf, a rare one a
+  jacket or a striking hair colour, and a legendary one a crown or a soft aura. It is the Claude
+  Buddy mechanic (`docs/plan/08` §3.0), applied to the **agent** — nothing is earned, nothing
+  decays, no state or count moves, and the human is never scored. The torso is still the state
+  colour at full strength and the state icon still owns the slot above the head, both with tests;
+  every appearance colour is at least 70 in sRGB from every state colour, computed rather than
+  eyeballed, and guarded at import time. `docs/plan/04` §4, `docs/plan/08` §7, `docs/DEVIATIONS.md`
+  §97.
+- **An agent arrives already named.** A first name from `public/names.js` is assigned the first
+  time a session is seen instead of waiting to be asked for, persisted beside the MK numbers, and
+  never reassigned — not when other agents arrive, not across a restart, and not when the list of
+  names runs out. _"Ada has been waiting since yesterday"_ is a sentence that makes someone open a
+  tab; _"MK3.2 has been waiting since yesterday"_ is not. The MK tag stays underneath as the
+  sub-label, in the hover card and on the panel header, because it is what makes a session
+  locatable by project. Renaming still wins over the given name, and identity assignment writes no
+  user-owned field — that is an `INVARIANT` test.
+- **A quiet word for a rare agent.** The hover card and the panel header show `uncommon`, `rare` or
+  `legendary` beside the name, in the muted ink, and show nothing at all for the ~74% that are
+  common. A word and never a number: no percentage, no rank, and no count of what you have
+  "collected" — `docs/plan/08` §1.1 rule 6.
 
 ### Changed
 
@@ -226,6 +250,10 @@
   screenshot can be aimed at a chosen place in the needs-you queue. It also understands two
   escapes — `^` holds Ctrl for the next key and `~` is Enter — so a shot can be aimed through the
   command palette.
+- **The WHO column, the deck's JSON and `deckhq deck open <name>` all know an agent's given name.**
+  The column used to fall through to the session title because almost nobody had ever named an
+  agent; now everybody has a name and it says what it was always meant to say. A given name also
+  resolves an agent by name on the command line, exactly as a chosen one does.
 
 ### Fixed
 
