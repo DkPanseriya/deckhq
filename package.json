@@ -31,7 +31,7 @@
     "access": "public"
   },
   "bin": {
-    "deckhq": "./bin/deckhq.mjs"
+    "deckhq": "bin/deckhq.mjs"
   },
   "exports": {
     ".": "./src/daemon.mjs"
