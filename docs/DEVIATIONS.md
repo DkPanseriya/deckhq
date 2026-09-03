@@ -2133,3 +2133,108 @@ carries it.
 
 No new dependency, no network, and every byte of format knowledge is still
 inside `src/adapters/claude-code/`.
+
+## 80. WP-08's review card: seven small departures from `05` §4
+
+The layout, the markdown rendering, the "what changed" section and the three
+weighted keys all landed as specified. Seven things differ from the letter of
+`docs/plan/05-GUI-UX-SPEC.md` §4 and `06-ENGINEERING-WORKPLAN.md` WP-08, none
+of them a judgement call anyone should have to reconstruct from the diff.
+
+**1. `git diff --numstat`, not `git diff --stat`.** §4.2 and WP-08 both name
+`--stat`. `--stat` is the human form: it truncates long paths with `…`, pads to
+the terminal width, and scales its bar graph, so parsing it back into numbers
+means undoing formatting that is deliberately lossy. `--numstat` is the same
+three figures, tab-separated, with paths intact and binary files reported as
+`-  -`. The section renders the identical content — `+142  −18  3 files` over
+per-file rows — so this is a change of source, not of what is shown.
+`test/unit/changes.test.mjs` pins the parse, including a rename (which
+`--numstat` gives as `old\tnew`, and the reader wants the new path) and a
+binary file (which shows `bin` and no counts).
+
+**2. `[ open the diff ]` is not there.** The §4.1 mockup ends the changes
+section with that button. It is WP-47 (`05` §12, "in-panel diff and open in
+editor", `2d`, `P1`, listed as *after WP-08*), so shipping it here would be
+building the next package. The section ends at the file table.
+
+**3. The renderer is 259 lines of code, not "~150".** WP-08's estimate was for
+"headings, paragraphs, lists, fences, inline code, bold, italic and
+links-as-text". `public/markdown.js` covers all of that plus block quotes,
+thematic breaks, nested lists and ordered lists with their real start number —
+because agents write those, and an unhandled block falling through to a
+paragraph turns a nested list into one run-on line. The estimate was for the
+narrower subset and was not wrong about it; the two-stage split it asks for
+(`parseMarkdown()` touches no DOM at all; `renderMarkdown()` builds it) is what
+made the wider coverage cheap and is what the `SECURITY:` test can check.
+
+**4. The rest of the conversation is behind a disclosure the mockup does not
+show.** §4.1 draws `WHAT IT SAID` and nothing beneath it, and §4.2 explains
+why: the last message is "the first thing you see". But the earlier turns
+cannot simply be deleted from the panel — they were reachable before this
+package and reviewing a reply sometimes needs the question. They sit in a
+closed `<details>`: *earlier in this conversation · 2 messages*. Closed by
+default, so the reading order §4.2 wants is intact, and one click from the
+material it hides.
+
+**5. The third key is not always Bench.** §4.2 specifies `3 Bench`. Bench is
+not a legal action on an agent that is already benched, and a key wired to an
+illegal action either does nothing or needs an error. Slot 3 therefore carries
+the state's own third action: `Bench` for anyone on the floor, `Recall` for
+someone in the lounge, `Rehire` for someone let go — read off `legalActions()`,
+which already existed. For every agent the review card is actually about, it is
+Bench.
+
+**6. `no-repo` is a fifth outcome.** WP-08's accepted-when names four: dirty,
+clean, no git, deleted directory. A directory that exists and simply is not a
+repository is none of those, and it is the common case for anyone who runs an
+agent in a scratch folder — three of the six demo projects. It reads *"not a
+git repository"*, distinct from *"git is not installed, so nothing here can be
+read"* (`no-git`), because the two ask different things of the reader. All five
+are asserted.
+
+**7. `approveText` has no settings UI.** §4.2 requires the affirmative to be
+configurable and it is — `DEFAULT_SETTINGS.approveText`, patchable over
+`PATCH /api/settings`, trimmed, capped at 500 characters and falling back to
+`"Yes, go ahead."` when blank, because an approve key that sent an empty string
+would be a silent no-op. There is no control for it because, per §5.4, there is
+no settings surface in the product at all yet; it joins stall window, poll
+interval and the rest as API-only until that sheet is built. The button's
+tooltip shows what it will send, so the current value is never a secret.
+
+**The invariant, checked statically rather than trusted.** WP-08's last
+accepted-when — *no path in this package calls `/api/ack` except an explicit
+button or number key* — is a claim about code that no behavioural test can
+make, so `test/unit/panel-invariant.test.mjs` reads the client source with
+comments stripped and asserts it: `/api/ack` appears exactly once in
+`public/panel.js` and nowhere else under `public/`; that one call sits inside
+`performAction()`; `open`, `close`, `refresh`, `renderChrome`, `renderSaid`,
+`renderThread`, `renderChanges`, `loadConversation`, `loadChanges`,
+`loadResumeTargets` and `sendText` contain no call to it; `app.js` reaches it
+exactly twice, both inside `handleKeydown`. It also asserts that `2 Approve`
+routes to `sendText()` and never to ack — the review is discharged by the
+daemon when the runtime records the user turn, never by the client guessing —
+and that keys `1` and `2` reach `performAction` not at all. The same file
+carries the `SECURITY:` sweep: no module under `public/` mentions `innerHTML`,
+`outerHTML`, `insertAdjacentHTML`, `DOMParser` or `createContextualFragment`.
+
+**What the screenshot proves** (`docs/media/panel-review-card.png`, rule 10).
+The demo floor's `for_review` fixtures now carry markdown — a paragraph, a
+bulleted list with inline code, a fenced block — and the fixture builds real
+working trees under its own temp root, one of each shape the section draws: a
+dirty repository, a clean one, three plain directories, and one project whose
+directory does not exist. So the panel in that PNG is reading real
+`git diff --numstat` output, and it reports `+142  −18  3 files` over
+`src/events/backfill.ts +98 −4`, `src/events/index.ts +21 −8`,
+`test/backfill.test.ts +23 −6` — §4.1's own numbers, at §4.1's own
+`waiting 1d 2h`. Reproduced with
+`npm run demo` and
+`node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ --width 1600 --height 1000 --settle 9000 --press j --out docs/media/panel-review-card.png`;
+`--press` now takes a sequence of keys rather than one, so a shot can be aimed
+at a chosen place in the needs-you queue.
+
+**Two things the fixture changed that are not about the panel.** The demo's
+project directories used to be `C:\code` or `~/code` — paths it never created
+and only ever named. The review card reads the working tree, so they had to
+become real, and they are created inside the fixture root that the demo already
+removes on exit; nothing is written outside it, and a machine without `git`
+still gets a floor (the repositories are skipped, and the section says so).

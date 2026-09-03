@@ -6,6 +6,64 @@
 
 ## Unreleased
 
+### Added
+
+- **The panel is a review surface, not a viewer.** It used to show a state chip, three big number
+  tiles, an animated close-up and the conversation as one wall of unstyled plain text, under seven
+  identical grey buttons. You were being asked to review work with none of the review material in
+  front of you. Top to bottom it is now the identity line with the close-up shrunk to 44 px
+  inline, the session's own title, its state and branch, how long it has been waiting, **what it
+  said**, **what changed on disk**, three weighted actions, the composer, and the cost estimate as
+  one quiet line at the bottom. `docs/plan/05-GUI-UX-SPEC.md` §4.
+- **The last message renders as markdown.** Headings, paragraphs, bullet and numbered lists nested
+  by indentation, block quotes, fenced code with a mono face and a ground of its own, inline code,
+  bold, italic, and links as their text with the URL visible beside them. The agent wrote
+  markdown; showing it as plain text was throwing away the structure the reader needs. Own
+  renderer, `public/markdown.js`, no new dependency — and it is two stages on purpose:
+  `parseMarkdown()` produces a token tree and touches no DOM, `renderMarkdown()` builds elements
+  with `createElement` and `textContent`. There is no `innerHTML` in the client at all, and a
+  `<script>` tag inside a fenced block renders as the visible characters it is and executes
+  nothing. Both are asserted as `SECURITY:` tests.
+- **"What changed in `<project>`", from the working tree.** New endpoint `GET /api/changes?id=`
+  runs three read-only git commands in the session's cwd — the unstaged diff, the staged diff, and
+  how far the branch is ahead of the default branch — and reports `+142  −18  3 files` over
+  per-file rows. Cached per scan, so a panel left open costs three spawns per scan per project at
+  most, not three per poll. It turns "want me to open the PR?" from a question you must go
+  somewhere else to answer into one you can answer here. The heading names the **project**, never
+  the agent: with several agents in one repository a working-tree diff is not attributable to one
+  of them, and the section will not imply otherwise. A clean repository says _"nothing
+  uncommitted"_ rather than disappearing, because "no changes" is itself review-relevant.
+- **Three weighted actions on `1`, `2`, `3`.** `1 Reply` focuses the composer. `2 Approve` sends a
+  configurable affirmative — `"Yes, go ahead."` by default, `approveText` in settings — and is the
+  only accent-filled button on the screen, because it is the commonest reply in this workflow and
+  making it one keystroke is the largest per-day saving in the redesign. `3` benches. Everything
+  else — mark for review, let go, rename, new agent, recall, rehire — moved behind `⋯ more`.
+  Seven equal buttons was not a choice architecture, it was an inventory.
+- **An unsent reply is a visible state.** Text left in the composer is kept per session in
+  `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
+  a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
+  client-side: the daemon never sees a draft and a draft never touches ack state.
+
+### Changed
+
+- **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
+  `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
+  runtime records the user turn — the documented `UserPromptSubmit` exception — never by the
+  client deciding it has been dealt with. THE INVARIANT is now also checked statically:
+  `test/unit/panel-invariant.test.mjs` reads the client source and fails if `/api/ack` appears
+  anywhere under `public/` outside the one call inside `performAction()`, or if any render, open,
+  refresh, load or send path can reach it. The worst version of this bug is a well-meaning ack
+  wired into a render path, and no behavioural test can see it.
+- **The demo floor builds real repositories.** Its project directories used to be `C:\code` or
+  `~/code` — paths it named and never created. The review card reads the working tree, so the
+  fixture now creates one of each shape the panel draws: a dirty repository carrying the diff the
+  spec uses as its example, a clean one, plain directories with no git, and one project whose
+  directory does not exist. All of it inside the temp root the demo already removes on exit, and a
+  machine without `git` still gets a floor. Its `for_review` sessions also end on a message
+  written the way an agent actually writes one, in markdown.
+- `scripts/capture-floor.mjs --press` takes a sequence of keys rather than a single one, so a
+  screenshot can be aimed at a chosen place in the needs-you queue.
+
 ### Performance
 
 - **The daemon no longer boots the Claude Code CLI every five seconds.** `liveSessions()` shelled
