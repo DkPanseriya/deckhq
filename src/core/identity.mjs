@@ -230,6 +230,47 @@ export class Identity {
   }
 
   /**
+   * A junior's identity (WP-41), which is DERIVED AND NEVER PERSISTED.
+   *
+   * `describe()` above assigns and stores an MK number and a first name the
+   * first time it sees an agent, and never reassigns either — which is exactly
+   * right for a session and exactly wrong for a subagent. A busy week spawns
+   * hundreds of juniors that live for seconds; giving each one a permanent
+   * number would burn through a project's MK sequence, grow `~/.deckhq`'s
+   * identity table without bound, and drain the finite first-name pool
+   * (`_usedNames` is what the picker avoids, and it never shrinks).
+   *
+   * So a junior wears its parent's tag with a suffix: `MK1.2j1`, `MK1.2j2`.
+   * It says whose junior it is, it is short enough for a floor label, and it
+   * writes nothing. The junior's FACE is unaffected — `appearanceFor()` is a
+   * pure function of the session id (§105), so a junior looks like itself and
+   * like nobody else without any of this.
+   *
+   * The project number IS assigned, because the project is real and the parent
+   * would have assigned it a moment later anyway.
+   *
+   * @param {IdentityRecord} parent the parent's own record, from `describe()`
+   * @param {string} projectId
+   * @param {number} index 1-based, in a stable order the caller decides
+   * @returns {IdentityRecord}
+   */
+  describeJunior(parent, projectId, index) {
+    const projectMk = this.projectMk(projectId);
+    const mk = `${parent && parent.mk ? parent.mk : `MK${projectMk}`}j${index}`;
+    return {
+      projectMk,
+      agentMk: parent && Number.isFinite(parent.agentMk) ? parent.agentMk : 0,
+      mk,
+      // A junior is never renamed and never named: both of these are the
+      // user's or the daemon's word for a session, and a junior is neither.
+      displayName: null,
+      givenName: null,
+      avatar: null,
+      label: mk,
+    };
+  }
+
+  /**
    * Every name currently in use, so a picker can avoid collisions. Includes
    * the names the daemon gave as well as the ones the user chose: from the
    * floor's point of view a name is taken either way.

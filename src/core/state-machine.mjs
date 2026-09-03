@@ -73,6 +73,7 @@ import {
   clampText,
   counts,
   projects as projectsOf,
+  isSubagent,
   ACK_ACTIONS,
 } from './model.mjs';
 import { seedIfNeeded } from './seed.mjs';
@@ -106,6 +107,9 @@ import { rateCardVersion } from './rates.mjs';
  * @property {any} [payload]
  * @property {{name:string, summary:string}|null} [tool] parsed by the runtime's
  *   own adapter from a `PreToolUse` payload (WP-52); absent for every other event
+ * @property {{agentId:string, parentSessionId:string|null}|null} [subagent]
+ *   parsed by the runtime's own adapter from a `SubagentStop` payload (WP-41);
+ *   null when the payload names no junior, and absent for every other event
  * @property {number} [at] ms epoch; defaults to Date.now() — override in tests
  */
 
@@ -296,6 +300,22 @@ export class Registry {
     this._hookStatus = {};
 
     /**
+     * WP-41. Juniors a `SubagentStop` has named as finished, by agent id.
+     *
+     * Without hooks a junior leaves the floor when its transcript stops moving
+     * — five minutes at the worst (`SUBAGENT_IDLE_MS` in the Claude Code
+     * adapter). With hooks the runtime says so at once, and this is where that
+     * is remembered until the next scan drops the summary too.
+     *
+     * It is observed state and it is about a session the user does not own:
+     * nothing in this set is persisted, nothing in it reaches `store.setAck`,
+     * and it is pruned against `_lastSummaries` on every rebuild so it cannot
+     * grow without bound. Subagent ids are never reused.
+     * @type {Set<string>}
+     */
+    this._stoppedJuniors = new Set();
+
+    /**
      * WP-19. Permission prompts this daemon is holding open, by agent id.
      *
      * Observed and transient, exactly like `currentTool`: set when a
@@ -371,11 +391,35 @@ export class Registry {
    * @returns {any}
    */
   _realSnapshot() {
+    // WP-41. Two passes, because a junior's tag is its PARENT's tag with a
+    // suffix and the parent may sort after it. Seniors first, then the
+    // juniors against the records the first pass produced.
+    /** @type {Map<string, any>} */
+    const described = new Map();
     const agents = this._agents.map((a) => {
-      if (!this.identity) return a;
+      if (!this.identity || a.subagent === true) return a;
       const id = this.identity.describe(a.id, a.projectId);
+      described.set(a.id, id);
       return { ...a, ...id };
     });
+    if (this.identity) {
+      /** How many juniors of each parent have been numbered. @type {Map<string, number>} */
+      const seen = new Map();
+      // Sorted by id so `MK1.2j1` is the same junior on every push — the same
+      // ordering `assignSeats` uses to decide which side of the desk each one
+      // stands on.
+      const juniors = agents
+        .map((a, i) => ({ a, i }))
+        .filter(({ a }) => a.subagent === true)
+        .sort((x, y) => String(x.a.id).localeCompare(String(y.a.id)));
+      for (const { a, i } of juniors) {
+        const key = String(a.parentId ?? '');
+        const n = (seen.get(key) || 0) + 1;
+        seen.set(key, n);
+        const id = this.identity.describeJunior(described.get(key) || null, a.projectId, n);
+        agents[i] = { ...a, ...id };
+      }
+    }
     const todayTokens = this.ledger ? this.ledger.todayTokens() : {};
     const projects = projectsOf(agents).map((p) => {
       // `hasDashboard` decides whether the room gets a screen to click, so it
@@ -792,6 +836,21 @@ export class Registry {
         obs.hookLive = true;
         obs.lastOutputAt = now;
         obs.lastActivityAt = Math.max(obs.lastActivityAt, now);
+        // WP-41. The event fires on the PARENT's session id — that is why
+        // §89's bubbles attribute a junior's tools to its parent — so the
+        // only thing that can say WHICH junior finished is the payload, and
+        // only the runtime's own adapter is allowed to read that
+        // (standing rule 8). `event.subagent` is null whenever the payload
+        // names none, and then this event does exactly what it did before
+        // this package: it moves the parent's stall clock and nothing else.
+        //
+        // Note what is NOT here. No `activityState`, no `ackState`, no
+        // `reviewSince`, on either the parent or the junior. A junior leaving
+        // is the runtime tidying up after itself; it is not a thing that
+        // happened to the user.
+        if (event.subagent && event.subagent.agentId) {
+          this._stoppedJuniors.add(toAgentId(runtime, event.subagent.agentId));
+        }
         break;
 
       case 'SessionEnd':
@@ -864,6 +923,15 @@ export class Registry {
     const agent = this._agents.find((a) => a.id === id);
     if (!agent) {
       throw new Error(`No such agent "${id}"`);
+    }
+    // WP-41. A junior has no user-owned state and the interface offers no
+    // button that would write one. Refused here rather than only in the
+    // client, because `POST /api/ack` and `deckhq bench <id>` reach this same
+    // method and a subagent's `ackState` must not become a thing that exists:
+    // it would persist past the junior's life, into a store keyed by an id
+    // that will never be seen again.
+    if (isSubagent(agent)) {
+      throw new Error(`Action "${action}" is not available for a subagent ("${id}")`);
     }
     if (!LEGAL_FROM[action](agent)) {
       throw new Error(
@@ -1099,8 +1167,29 @@ export class Registry {
 
     const ids = new Set([...summaryMap.keys(), ...liveMap.keys()]);
 
+    // WP-41. Two things about juniors, both decided here so nothing further
+    // down has to re-derive them:
+    //
+    //   1. A junior a `SubagentStop` has already named is gone. It leaves the
+    //      floor now rather than when its file stops moving, and its
+    //      observation record goes with it — there is no session left to be
+    //      the state of.
+    //   2. The set is pruned to what this scan actually found, so it holds at
+    //      most the juniors currently on disk and never grows.
+    if (this._stoppedJuniors.size) {
+      for (const id of [...this._stoppedJuniors]) {
+        if (!summaryMap.has(id)) this._stoppedJuniors.delete(id);
+        else {
+          ids.delete(id);
+          this._observed.delete(id);
+        }
+      }
+    }
+
     /** @type {Agent[]} */
     const agents = [];
+    /** How many juniors each parent has on the floor. @type {Map<string, number>} */
+    const juniorsByParent = new Map();
 
     for (const id of ids) {
       const summary = summaryMap.get(id);
@@ -1131,15 +1220,33 @@ export class Registry {
         obs.lastActivityAt = Math.max(obs.lastActivityAt || 0, liveSession.startedAt || 0);
       }
 
+      // WP-41. Decided before liveness, because it changes what liveness
+      // means. See the `for_review` note below the state derivation.
+      const junior = summary ? summary.subagent === true : false;
+
       const hooksOn = this._hooksInstalled(runtime);
 
       // Liveness: once a hook lifecycle event has fired for this session,
       // it is authoritative (the "accurate path"). Until then, fall back to
       // the poll-reported liveness.
-      const live = hooksOn && obs.hookLive != null ? obs.hookLive : polledLive;
+      //
+      // WP-41 — A JUNIOR'S ONLY WITNESS IS ITS OWN FILE. Neither of the two
+      // normal sources can see one: every hook event fires on the PARENT's
+      // session id (§89), and `claude agents --json` lists sessions, not
+      // subagents. So a junior would read `hookLive == null` and
+      // `polledLive === false` on every machine that has hooks installed —
+      // permanently `ended`, drawn in the finished colour, while it was
+      // visibly working. Its transcript is the evidence instead, and the
+      // adapter has already applied it: a junior reaches this list only
+      // because its own file moved inside `SUBAGENT_IDLE_MS`. So it is live,
+      // on both paths, and the shape of its last record says what it is
+      // doing — the same rule the degraded path uses for everybody else.
+      const live = junior ? true : hooksOn && obs.hookLive != null ? obs.hookLive : polledLive;
       obs.live = live;
 
-      if (hooksOn) {
+      if (junior) {
+        obs.activityState = obs.turnEnded === true ? 'ended' : 'working';
+      } else if (hooksOn) {
         if (!live) {
           obs.activityState = endedOr(obs.activityState);
         } else if (obs.activityState === 'ended') {
@@ -1172,16 +1279,56 @@ export class Registry {
         }
       }
 
-      if (obs.activityState === 'for_review') {
+      // WP-41. A JUNIOR IS NEVER `for_review`.
+      //
+      // `for_review` means "this turn ended and it is waiting on you", and it
+      // is the one state the product invariant makes sticky — it survives the
+      // process dying, and only the user can clear it. None of that is true
+      // of a junior: its finished turn is handed to its PARENT, the parent
+      // reads it in the same second, and no keystroke of the user's was ever
+      // going to discharge it. Left alone, every junior that ever finished
+      // would queue in the office for ever with a crimson badge over its head.
+      //
+      // So a finished junior is `ended`, which is what it is: it stops, and
+      // the adapter stops reporting it, and it walks off the floor. Nothing
+      // about it reaches `store.setAck` — `_markForReview` WRITES
+      // `reviewSince`, a user-owned field, keyed by an id that will never be
+      // seen again. The parent's own fields are untouched either way, and the
+      // `INVARIANT:` test in `test/unit/subagents.test.mjs` drives a whole
+      // junior lifecycle past a parent and deep-compares every one of them.
+      //
+      // The derivation above already produces `working` or `ended` and never
+      // `for_review` for a junior; this catches the one path that reaches
+      // around it, `_ensureObserved` restoring a state from a persisted ack.
+      // There should be no such record for a junior — nothing ever writes one
+      // — and if a hand-edited state file carries one it is ignored here
+      // rather than trusted.
+      if (junior && obs.activityState === 'for_review') {
+        obs.activityState = obs.turnEnded === true ? 'ended' : 'working';
+      }
+      if (!junior && obs.activityState === 'for_review') {
         this._markForReview(id, obs.lastActivityAt || Date.now());
       }
 
-      const ack = this.store.getAck(id) || {
-        state: 'active',
-        reviewSince: null,
-        needsInputSince: null,
-        updatedAt: 0,
-      };
+      // A junior is never benched, never let go and never acknowledged: the
+      // interface offers none of those buttons for one (`act()` refuses them
+      // outright), so its ack record is a constant rather than a store read.
+      // This is also what stops a stale ack from a previous life of the same
+      // id — there is no such thing, ids are per spawn — reaching the floor.
+      const ack = junior
+        ? { state: /** @type {const} */ ('active'), reviewSince: null, needsInputSince: null }
+        : this.store.getAck(id) || {
+            state: 'active',
+            reviewSince: null,
+            needsInputSince: null,
+            updatedAt: 0,
+          };
+
+      const parentId =
+        junior && summary && summary.parentSessionId
+          ? toAgentId(runtime, summary.parentSessionId)
+          : null;
+      if (parentId) juniorsByParent.set(parentId, (juniorsByParent.get(parentId) || 0) + 1);
 
       /** @type {Agent} */
       const agent = {
@@ -1214,8 +1361,26 @@ export class Registry {
         pendingPermission: this._pendingPermissions.has(id)
           ? { ...this._pendingPermissions.get(id) }
           : null,
+        // WP-41. Present on every agent so a consumer never has to ask
+        // whether the field exists; `juniorCount` is filled in below, once
+        // every junior on this floor has been seen.
+        subagent: junior,
+        parentId,
+        subagentType: junior && summary ? (summary.subagentType ?? null) : null,
+        subagentDescription: junior && summary ? (summary.subagentDescription ?? null) : null,
+        spawnedAt: junior && summary ? (summary.spawnedAt ?? null) : null,
+        juniorCount: 0,
       };
       agents.push(agent);
+    }
+
+    // Second pass: a parent cannot know how many juniors it has until every
+    // junior has been read, and a junior's parent may sort after it.
+    if (juniorsByParent.size) {
+      for (const a of agents) {
+        const n = juniorsByParent.get(a.id);
+        if (n) a.juniorCount = n;
+      }
     }
 
     agents.sort(compareAgents);
