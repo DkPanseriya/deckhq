@@ -49,6 +49,10 @@
  * @property {number} [tokens]
  * @property {number} [needsYou]
  * @property {boolean} [hasDashboard] the project has a runnable dashboard
+ * @property {boolean} [archived] the user collapsed this project off the floor
+ * @property {number} [lastActivityAt] ms epoch of the newest session in it
+ * @property {number|null} [todaySpend] WP-26's payroll meter; see `payrollLine`
+ * @property {boolean} [todaySpendIsToday] whether that figure is today's
  */
 
 /**
@@ -136,6 +140,16 @@
  * @property {'wood'|'carpet'|'tile'|'circulation'} floor
  * @property {{x:number,y:number,w:number,h:number}} [kitchenZone]
  * @property {DirectoryEntry[]} [entries] the directory strip only
+ * @property {number} [plateBand] height reserved across the top of the room for
+ *   its plate. `PLATE_BAND` on every room that carries one.
+ * @property {{w:number, h:number}} [natural] what this room's own contents need,
+ *   before the packer gives it a cell (WP-55, docs/DEVIATIONS.md §106).
+ * @property {boolean} [thoroughfare] a corridor nobody routes down when false.
+ * @property {{x:number,y:number}} [door] where an occupant leaves the room, set
+ *   by `assignDoors` once the nav graph exists.
+ * @property {{x:number,y:number}} [navEntry] the point on the corridor that door
+ *   opens onto.
+ * @property {string} [navLineId] which nav line `navEntry` sits on.
  */
 
 /**
@@ -175,6 +189,8 @@
  * @property {Map<string, Seat[]>} seats keyed by projectId
  * @property {Seat[]} officeSeats
  * @property {LoungeSpot[]} loungeSpots
+ * @property {Seat[]} letGoSpots always empty: an archived session has no place
+ *   on the floor at all. Kept so a renderer can ask without a guard.
  * @property {Door[]} doors
  * @property {Set<string>} hidden agent ids the plan draws nobody for
  * @property {Set<string>} goneHome the subset of `hidden` that went home
@@ -1949,6 +1965,7 @@ function buildLounge(benchedCount, fit, goneHomeCount = 0) {
 
   if (wants(4)) {
     game('dining', 'dining_table', 7.2, 6.2, (z, t) => {
+      /** @type {Array<['N'|'S'|'E'|'W', number]>} */
       const seats = [
         ['S', 0.28],
         ['S', 0.72],
@@ -2026,6 +2043,7 @@ function buildLounge(benchedCount, fit, goneHomeCount = 0) {
   }
   if (wants(4)) {
     game('board', 'board_game_table', 7.2, 6.2, (z, t) => {
+      /** @type {Array<['N'|'S'|'E'|'W', number]>} */
       const seats = [
         ['S', 0.28],
         ['S', 0.72],
@@ -2165,7 +2183,11 @@ function buildLounge(benchedCount, fit, goneHomeCount = 0) {
  *
  * @param {{w:number,h:number}[]} items natural sizes
  * @param {{x:number,y:number,w:number,h:number}} rect
- * @returns {{x:number,y:number,w:number,h:number}[]}
+ * @param {number} [gap]
+ * @returns {{cells: {x:number,y:number,w:number,h:number}[],
+ *   corridors: {x:number,y:number,w:number,h:number}[]}} the cells AND the
+ *   corridors between them. It was declared as returning the cells alone,
+ *   which is not what any of its three callers read (WP-22).
  */
 export function tileRows(items, rect, gap = 0) {
   if (items.length === 0) return { cells: [], corridors: [] };

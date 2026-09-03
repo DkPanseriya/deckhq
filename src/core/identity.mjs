@@ -69,7 +69,13 @@ export class Identity {
     this.store = store;
   }
 
-  /** @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null}>, nextProject: number}} */
+  /**
+   * `names` carries three fields, not two: `name` and `avatar` are the user's,
+   * `given` is the one this class assigns and never reassigns. The record type
+   * used to name only the first two while `givenName()`, `_usedNames()` and
+   * `takenNames()` all read and wrote the third (WP-22).
+   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null}>, nextProject: number}}
+   */
   _state() {
     const s = this.store.identity;
     if (!s.projects) s.projects = {};

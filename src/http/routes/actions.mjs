@@ -36,7 +36,8 @@ const MAX_SEND_CHARS = 100_000;
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{registry:any, adapters:any, log:any}} ctx
+ * @param {{registry:any, adapters:any, log:any, store:any, sends:any, identity:any}} ctx
+ *   `store`, `sends` and `identity` were read here and not declared (WP-22).
  */
 export function register(router, ctx) {
   const { registry, store, log } = ctx;

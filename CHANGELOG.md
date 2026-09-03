@@ -720,8 +720,31 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   before the server stops. A `SIGKILL` of the daemon itself still runs no JavaScript and leaves
   its children reparented; that case is named rather than claimed.
 
+- **`npm run typecheck` — `tsc --noEmit --checkJs` over the JSDoc that was already there.** Two
+  projects, because the two sides of the static-file boundary do not share a platform: the root
+  `tsconfig.json` covers `src/`, `scripts/`, `plugin/`, `vscode/` and `bin/` with no DOM, and
+  `public/tsconfig.json` covers the browser with no `process` and no `Buffer` — so `public/`
+  reaching for a Node global is a type error now rather than a code review. CI runs it on Ubuntu
+  once, after lint, and `prepublishOnly` runs it too. One dev dependency, `typescript`; Node and
+  the VS Code API are declared by hand in `types/` rather than installed, with the cost of that
+  written at the top of the file. **Zero `@ts-ignore` in the tree.** It found thirty-two places
+  where the documentation and the code had drifted apart, including the one
+  `docs/plan/01-AUDIT.md` F21 named: `placement()` in `src/core/model.mjs` reads `subagent` and
+  its signature did not say so, while `derivePlacement()` — its copy on the other side of the
+  boundary — always did. `docs/DEVIATIONS.md` §121.
+
 ### Fixed
 
+- **Thirty-two type defects the JSDoc had been hiding.** Every one was live and invisible to 1,520
+  tests: `Settings` was three keys short of `DEFAULT_SETTINGS`, `SessionSummary` never declared
+  the `archived` flag the adapter stamps onto it, `public/render/plan.js`'s `Room` was missing the
+  six fields the packer and the walk planner write and read, `agents.js` carried five stale copies
+  of `plan.js`'s types (so `scene.js` was handing one plan to two modules that disagreed about
+  what a plan is), `el.stage` was declared twice in `public/app.js`, a `@property` in
+  `src/core/actions.mjs` closed with a brace instead of a bracket, and one branch in
+  `roomFor()` looked for a room kind that has never existed. Every fix is a comment, a type
+  annotation, one duplicate object key and one provably dead line: the goldens moved **0 px** on
+  all four populations. `docs/DEVIATIONS.md` §121.
 - **SECURITY: on Windows, a session id containing `&` was split into two commands.** Opening a
   session in a console goes through `start`, which is an internal `cmd.exe` command rather than a
   program, so `cmd.exe` re-parses the whole command line after it — and Node's Windows argument

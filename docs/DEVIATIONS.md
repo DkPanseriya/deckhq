@@ -8453,3 +8453,231 @@ own desk five minutes into a screenshot session. Goldens regenerated as the last
 step of the package: `demo` changed (two juniors, a bigger table, a plate line),
 and `reference`, `single` and `empty` are byte-identical, which is the control
 working — none of those populations has a subagent directory.
+
+## 121. WP-22 — the JSDoc was thorough and unchecked, and thirty-two places had drifted
+
+`01-AUDIT.md` F21 said two things: the files are large, and the JSDoc is
+unchecked. This package does both halves. This part is the first — what
+`tsc --noEmit --checkJs` found the first time it was pointed at this
+repository, and what it cost to make it green.
+
+### The shape of the gate
+
+Two projects, not one, because the two sides of the static-file boundary do not
+share a platform:
+
+| | root `tsconfig.json` | `public/tsconfig.json` |
+|---|---|---|
+| covers | `src/`, `scripts/`, `plugin/`, `vscode/`, `bin/` | `public/` |
+| `lib` | `ES2023` | `ES2023`, `DOM`, `DOM.Iterable` |
+| ambient | `types/node.d.ts` | `types/browser.d.ts` |
+| `process`, `Buffer` | declared | **not declared** |
+
+That split is not tidiness. Under one config with both libraries loaded,
+`setTimeout()` came from `lib.dom` and returned a `number`, so every
+`setTimeout(...).unref()` in the daemon — four of them, all correct — was an
+error, and `window` was in scope inside `src/`. The browser project having no
+Node globals at all is the static-file boundary stated in the one place a tool
+can enforce it: `public/` reaching for `process` is a type error now rather than
+a code review.
+
+`public/tsconfig.json` lives in `public/` rather than at the root so an editor
+picks the right project for the file it has open. `npm run typecheck` runs both.
+
+### The one dependency, and the two it did not get
+
+`typescript` is the dev dependency this package was allowed. `@types/node` and
+`@types/vscode` are not in that budget, so `types/node.d.ts` declares the two
+host platforms by hand — every specifier and member the repository actually
+imports, and nothing else, all of it `any`.
+
+**Stated cost, so nobody discovers it later:** a wrong argument to
+`fs.readFileSync`, a misspelt `process.env` key, or a `vscode` API that does not
+exist is NOT caught. Only what this repository declares about itself is. That is
+the half F21 asked for. If the dependency budget ever opens, deleting
+`types/node.d.ts` and putting `"node"` back in `types` is the whole migration.
+
+`strict` is off. It was tried on: roughly 1,400 further findings, almost all of
+them "this `getElementById` could return null", which this code already answers
+with runtime guards. Turning it on is a different package with a different
+acceptance criterion. What IS on is every check that finds JSDoc disagreeing
+with the code beneath it.
+
+### `@ts-ignore` count: zero
+
+Not one, anywhere. The DOM names the Node project needs — `document`,
+`getComputedStyle`, `atob`, and the types `Document`, `HTMLCanvasElement`,
+`CanvasRenderingContext2D` — are declared in `types/node.d.ts` rather than
+suppressed, and the comment above them says why they are there: **three
+`public/` modules are reachable from the Node side.** `src/core/identity.mjs`
+imports `public/names.js` for the name pool, and `scripts/demo-floor.mjs`
+imports `public/postcard.js`, which imports `public/snapshot.js`. TypeScript
+checks whatever an import reaches, so those three are in the Node program
+whether or not they are in `include`. They are checked for real by the browser
+project; here they only need to resolve.
+
+That finding decides §121's fourth part. A pure module under `public/` is
+already imported from `src/core/` in shipped code, and has been since WP-20.
+
+### The thirty-two defects
+
+Every one of these was live on `main` and invisible to 1,520 tests.
+
+**Wrong by construction — the code could not have matched the doc**
+
+1. `src/core/actions.mjs` — `@property {string} [furniture}`. A brace for a
+   bracket, so `ProjectAction` silently lost the field that decides which prop
+   an action surfaces on. TS1005: a parse error inside a type annotation.
+2. `public/app.js` — `stage` appeared **twice** in the `el` object literal,
+   thirty lines apart, with the same value. The second silently won. TS1117.
+3. `public/render/agents.js` — the `NavLine` type was referenced in five JSDoc
+   annotations and defined nowhere in the file.
+
+**A doc comment separated from the function it documents**
+
+4. `public/render/agents.js` — `planWalk`'s original block (`from`, `to`,
+   `rooms`) sits directly above a *second* block, for `lineIntersection`, so it
+   documents nothing. The real `planWalk` a hundred lines below has its own.
+   Left in place: it is the only orphan of the three that is not misleading.
+5. `src/adapters/claude-code/adapter.mjs` — `scanSessions`'s block had been
+   pushed thirty lines up the file by the summary cache landing between the
+   two, so it documented `summaryCache` and `scanSessions` had no types at all.
+   Moved back onto its function.
+6. `src/core/store.mjs` — a bare `/** @returns {Settings} */` sat above the
+   `identity` getter, which returns the identity block. It belongs to
+   `get settings()` twelve lines below, which had nothing. Moved.
+
+**A type that said less than the code**
+
+7. `src/core/store.mjs` — the `Settings` typedef was **three fields short**:
+   `lightsOutHour` (WP-18), `postcardDay` (WP-18) and `wrappedShown` (WP-27)
+   were in `DEFAULT_SETTINGS`, in `sanitizeSettings()` and in
+   `settings-keys.test.mjs`, and not in the type. `DEFAULT_SETTINGS` carries
+   `@type {Readonly<Settings>}` now, which is what stops it recurring.
+8. `src/core/model.mjs` — `SessionSummary` had no `archived`, though the
+   claude-code adapter stamps exactly that field onto every summary it returns,
+   and §46's ordering rule turns on it.
+9. `src/core/model.mjs` — `placement()`'s parameter was
+   `Pick<Agent,'ackState'|'activityState'>`. WP-41 made it read `subagent` too
+   and did not widen the signature, so the function could not be called with
+   the very field it branches on. `public/render/agents.js`'s
+   `derivePlacement()` — the copy on the other side of the boundary — always
+   named all three. **This is the drift F21 predicted, found by the checker F21
+   asked for.**
+10. `src/core/state-machine.mjs` — `RuntimeAdapter.id` was `string` where every
+    `Agent.runtime` it produces is a `RuntimeId`, so `_degraded()` could not
+    compare an adapter against the runtimes in use.
+11. `src/core/state-machine.mjs` — the `Registry` constructor's `opts` declared
+    `store`, `adapters` and `log`. It destructures `identity` and `ledger` too,
+    and `src/daemon.mjs` has been passing `identity` since WP-20.
+12. `src/adapters/claude-code/adapter.mjs` — `listSessionFiles()` returns `size`
+    on every row and did not declare it. `size` is half the summary cache's
+    invalidation key (§78).
+13. `src/core/summary-cache.mjs` — `get()` returned `object`, which to this
+    checker means "no properties", so every field the adapter read off a cache
+    hit was an error. It only ever stores a `SessionSummary`.
+14. `src/core/rates.mjs` — `loadRateCard()` assigns `builtinFile`,
+    `overrideFile` and `overrideError` onto the merged card. None of the three
+    was declared anywhere; they are the provenance the cost line quotes.
+15. `src/core/identity.mjs` — the `names` record declared `name` and `avatar`.
+    `givenName()`, `_usedNames()` and `takenNames()` all read and write `given`.
+16. `src/core/ledger.mjs` — `_writing` was annotated `Promise<void>` while
+    `flush()` documents and stores a `Promise<boolean>`.
+17. `src/cli/doctor.mjs` — `collectReport`'s `opts` did not declare
+    `publishedPort`, which it reads to find a running daemon.
+18. `src/http/routes/actions.mjs` — the route context declared
+    `{registry, adapters, log}` and reads `store`, `sends` and `identity`.
+19. `src/http/routes/hooks.mjs` — the same context, reading `port` and writing
+    `refreshHookStatus`.
+20. `src/http/routes/state.mjs` — the same context, reading `sends`.
+21. `src/http/routes/changes.mjs` — `totals(...lists)` is a rest parameter
+    annotated `@param {FileChange[]} lists`. A rest parameter's type is the type
+    of each argument, not of the collected array, so the annotation said each
+    argument was one change rather than one list of them.
+22. `src/adapters/codex/parse.mjs` — six `@param {object} rec` on functions that
+    then read `rec.payload`, `rec.type`, `rec.session_id` and eleven more.
+    `object` means "no properties"; the honest type for a parsed JSONL record is
+    `Record<string, any>`, and saying so is the difference between a checkable
+    annotation and a decorative one.
+23. `public/render/plan.js` — `Room` was missing `plateBand`, `natural`,
+    `thoroughfare`, `door`, `navEntry` and `navLineId`. The last three are
+    written by `assignDoors` and read by `planWalk`; `natural` is the footprint
+    the whole of §106 turns on.
+24. `public/render/plan.js` — `Plan` was missing `letGoSpots`, which `buildPlan`
+    returns on every call.
+25. `public/render/plan.js` — `ProjectLike` was missing `archived`,
+    `lastActivityAt`, `todaySpend` and `todaySpendIsToday`. The last two are
+    what `payrollLine()` reads.
+26. `public/render/plan.js` — `tileRows()` was annotated as returning the cells.
+    It returns `{cells, corridors}`, which is what all of its callers read.
+27. `public/render/agents.js` — `AgentLike` was missing `subagent` and
+    `parentId`, though the whole WP-41 junior seating pass turns on both.
+28. `public/render/agents.js` — `AgentRecord` was missing `placement`, written
+    by `sync()` and read five times.
+29. `public/render/scene.js` — `iconForAgent()` had a comment saying its
+    vocabulary is exactly `'hand' | 'hourglass' | 'check' | null` and no
+    `@returns` saying it, so `minifloor.js` declared the field as `string|null`
+    and could not pass it to `drawCharacter`. `minifloor.js` also had
+    `projectMk: string|undefined` where it is a number.
+30. `public/app.js` — `normaliseHit()` returns `'shelf'` and `'screen'` and
+    declared neither, so the two `onSelect` branches that test for them were
+    unreachable as far as any checker was concerned.
+31. `public/sound.js` — the audio context was annotated `BaseAudioContext`,
+    which has no `resume()`. `resume()` is the one method the
+    suspended-context path calls.
+
+**One branch that could never run**
+
+32. `public/render/agents.js` — `roomFor()` ended with
+    `if (placement === 'let_go') return rooms.find((r) => r.kind === 'let_go') || null;`.
+    No room in this product has `kind: 'let_go'` and none ever has, so the
+    `find` could only return `undefined` and the `|| null` made the line
+    identical to the `return null` on the next one. Deleted; the goldens are
+    byte-identical, which is the proof it was dead.
+
+### The duplication the typedefs were hiding
+
+`public/render/agents.js` carried hand-written copies of `plan.js`'s `Seat`,
+`LoungeSpot`, `Door`, `Room` and `Plan`, and they had drifted far enough apart
+that `scene.js` — which builds ONE plan and hands it to both modules — was
+passing a value whose type did not match the parameter, five times over. The
+copies are gone: `agents.js` says `@typedef {import('./plan.js').Room} Room` and
+so on.
+
+A JSDoc `import()` is a comment. It compiles to nothing, so the rule in that
+file's header — never statically import `./plan.js`, stay loadable on its own
+under `node --test` — is untouched, and the tests that load `agents.js` alone
+still pass.
+
+`assignSeats` also writes five fields onto the seats it hands out (`id`, `kind`,
+`seatIndex`, `overflow`, `junior`) that nothing declared. They are a
+`PlacedSeat` now, which is the difference between a plan's chair and a chair
+somebody is sitting in.
+
+### What was NOT done
+
+- **`strict` stays off.** See above; it is a different package.
+- **No `@ts-ignore`, anywhere.** The two platforms are declared rather than
+  suppressed, and the declaration file says what that costs.
+- **The `= {}` defaults were not removed.** Four adapter functions destructure
+  `{maxMessages}`, `{maxAgeDays, limit}`, `{cwd, timeoutMs}` and `{onChange}`
+  from a parameter that defaults to `{}`. The type said those fields were
+  required; the default says they are not, and `watchConversation` even guards
+  with `typeof onChange === 'function'`. The types were made optional to match
+  the code rather than the code changed to match the types — a bare call is
+  legal today and something may rely on it.
+
+### The gate
+
+`npm run typecheck` runs both projects; CI runs it on Ubuntu, Node 22, once,
+after lint. Once, because unlike the suite the checker's answer cannot differ by
+platform or Node version: same source, same compiler, same hand-written ambient
+types. `prepublishOnly` runs it too. `public/tsconfig.json` is kept out of the
+published tarball (`"!public/tsconfig.json"` in `files`); `types/` was never
+in it.
+
+**Measurements.** 398 errors on the first run under one config; 311 after the
+Node/browser split; 0 after the fixes above. Suite unchanged at 1,520. Goldens
+**0 px moved at all** on all four populations — which is the whole point: every
+fix above is a comment, a type annotation, one duplicate object key and one
+provably dead line.

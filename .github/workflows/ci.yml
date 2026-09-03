@@ -40,6 +40,32 @@ jobs:
       - name: Test
         run: npm test
 
+  # Type checking: `tsc --noEmit --checkJs` over the JSDoc that was already
+  # there and unchecked (01-AUDIT.md F21, WP-22).
+  #
+  # Ubuntu only, and once. Unlike the suite, the checker's answer cannot differ
+  # by platform or by Node version: it reads the same source with the same
+  # compiler and the same hand-written ambient types (`types/`), so nine copies
+  # of it would be nine copies of the same verdict. It runs AFTER lint in the
+  # job list for the same reason lint runs before the tests — the cheapest,
+  # most localised failure should be the one you read first.
+  #
+  # Two projects, because the two halves of the static-file boundary do not
+  # share a platform: the root `tsconfig.json` is Node and `public/` is a
+  # browser. `npm run typecheck` runs both.
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dev tooling
+        run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+
   # Visual regression: golden PNGs of the demo floor per fixture population,
   # compared pixel for pixel (scripts/goldens.mjs).
   #

@@ -1,0 +1,27 @@
+{
+  "//": [
+    "The BROWSER half of the typecheck (WP-22, 01-AUDIT.md F21). Everything in",
+    "public/ is served as a static file and runs in a tab: DOM libs, no Node",
+    "globals, no `types/node.d.ts`. A `process` or a `Buffer` reached for from",
+    "here is a type error, which is the static-file boundary stated in the one",
+    "place a tool can enforce it.",
+    "",
+    "It lives in public/ rather than at the root so an editor picks the right",
+    "project for the file it has open. `npm run typecheck` runs both."
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": [],
+    "strict": false,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["../types/browser.d.ts", "**/*.js"],
+  "exclude": ["../node_modules"]
+}

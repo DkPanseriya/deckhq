@@ -322,7 +322,7 @@ export function createCoachMarks(opts) {
     // The spotlight is a ring around the anchor rather than a scrim over
     // everything else: the floor is the thing being explained, so covering it
     // to point at part of it would be self-defeating.
-    const ring = layer.querySelector('.coach-ring');
+    const ring = /** @type {HTMLElement|null} */ (layer.querySelector('.coach-ring'));
     if (ring && ring.style) {
       ring.hidden = anchor.arrow === false;
       // Grown outwards, in script rather than by CSS margin: the global

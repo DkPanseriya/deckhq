@@ -227,7 +227,7 @@ export const SYNTHS = { door, knock, chime };
  * @param {() => any} opts.getSettings
  * @param {() => boolean} [opts.isHidden]
  * @param {() => number} [opts.now]
- * @param {() => (BaseAudioContext|null)} [opts.makeContext]  injectable for tests
+ * @param {() => (AudioContext|null)} [opts.makeContext]  injectable for tests
  */
 export function createSounds(opts) {
   const getSettings = opts.getSettings;
@@ -241,7 +241,8 @@ export function createSounds(opts) {
       return Ctor ? new Ctor() : null;
     });
 
-  /** @type {BaseAudioContext|null} */
+  /** @type {AudioContext|null} `BaseAudioContext` has no `resume()`, which is
+   * the one method the suspended-context path calls (WP-22). */
   let ac = null;
   const state = { lastPlayedAt: -Infinity };
 

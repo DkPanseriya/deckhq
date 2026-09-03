@@ -74,7 +74,7 @@ export function applyMotionPreference(mode) {
  * @param {HTMLElement} opts.bodyEl
  * @param {() => any} opts.getSnapshot
  * @param {(message:string, opts?:{isError?:boolean}) => void} opts.toast
- * @param {{renderInto:(host:HTMLElement)=>void}} opts.hooks the hook consent
+ * @param {{renderInto:(host:HTMLElement)=>void, refresh?:()=>void}} opts.hooks the hook consent
  *   screen, embedded as this sheet's last section.
  */
 export function createSettingsUI(opts) {

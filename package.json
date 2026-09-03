@@ -41,13 +41,14 @@
     "test": "node scripts/test.mjs",
     "test:unit": "node scripts/test.mjs test/unit",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json && tsc -p public/tsconfig.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "demo": "node scripts/demo-floor.mjs",
     "demo:capture": "node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ --width 1600 --height 1000 --settle 8000",
     "goldens": "node scripts/goldens.mjs",
     "goldens:check": "node scripts/goldens.mjs --check",
-    "prepublishOnly": "npm run lint && npm test"
+    "prepublishOnly": "npm run lint && npm run typecheck && npm test"
   },
   "engines": {
     "node": ">=18"
@@ -57,10 +58,12 @@
     "src",
     "public",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "!public/tsconfig.json"
   ],
   "devDependencies": {
     "eslint": "^9.13.0",
-    "prettier": "^3.3.3"
+    "prettier": "^3.3.3",
+    "typescript": "^7.0.2"
   }
 }

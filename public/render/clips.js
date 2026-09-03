@@ -132,6 +132,7 @@ function lerpAngle(a, b, u) {
  */
 const TYPE_ARM = arm(2.05, 0.45, 'rest');
 
+/** @type {Clip} */
 const TYPE_CLIP = {
   duration: 0.9,
   loop: true,
@@ -168,6 +169,7 @@ const TYPE_CLIP = {
   },
 };
 
+/** @type {Clip} */
 const THINK_CLIP = {
   duration: 3.2,
   loop: true,
@@ -186,6 +188,7 @@ const THINK_CLIP = {
   reducedPose: { lean: -0.2, headTurn: 0.15, armR: arm(2.45, 1.15, 'open'), thoughtPhase: 0.5 },
 };
 
+/** @type {Clip} */
 const DRINK_CLIP = {
   duration: 2.6,
   loop: false,
@@ -218,6 +221,7 @@ const DRINK_CLIP = {
   },
 };
 
+/** @type {Clip} */
 const STRETCH_CLIP = {
   duration: 2.0,
   loop: false,
@@ -232,6 +236,7 @@ const STRETCH_CLIP = {
   reducedPose: { lean: -0.4, armL: arm(2.9, 0, 'open'), armR: arm(2.9, 0, 'open') },
 };
 
+/** @type {Clip} */
 const HAND_RAISE_CLIP = {
   duration: 1.4,
   loop: true,
@@ -246,6 +251,7 @@ const HAND_RAISE_CLIP = {
   reducedPose: { armR: arm(2.9, 0.18, 'raised'), ring: true, ringPhase: 0.5 },
 };
 
+/** @type {Clip} */
 const SLUMP_CLIP = {
   duration: 4.0,
   loop: true,
@@ -263,6 +269,7 @@ const WALK_OUT = 1.62;
 const WALK_MID = 1.2;
 const WALK_IN = 0.72;
 
+/** @type {Clip} */
 const WALK_CLIP = {
   duration: 0.8,
   loop: true,
@@ -308,6 +315,7 @@ const WALK_CLIP = {
   reducedPose: { legPhase: 0, armR: arm(WALK_OUT, 0.25, 'rest'), armL: arm(WALK_IN, 0.25, 'rest') },
 };
 
+/** @type {Clip} */
 const STAND_WAIT_CLIP = {
   duration: 4.0,
   loop: true,
@@ -326,6 +334,7 @@ const STAND_WAIT_CLIP = {
 
 // -------------------------------------------------------------- lounge clips
 
+/** @type {Clip} */
 const POOL_CLIP = {
   duration: 4.5,
   loop: true,
@@ -340,6 +349,7 @@ const POOL_CLIP = {
   reducedPose: { lean: 0.3, armR: arm(0.8, 0.5, 'grip'), armL: arm(1.3, 0.6, 'grip'), prop: 'cue' },
 };
 
+/** @type {Clip} */
 const TABLE_TENNIS_CLIP = {
   duration: 1.6,
   loop: true,
@@ -356,6 +366,7 @@ const TABLE_TENNIS_CLIP = {
   reducedPose: { armR: arm(1.2, 0.5, 'grip'), prop: 'paddle' },
 };
 
+/** @type {Clip} */
 const BOARD_GAME_CLIP = {
   duration: 5.0,
   loop: true,
@@ -374,6 +385,7 @@ const BOARD_GAME_CLIP = {
   reducedPose: { lean: 0.1, armR: arm(1.3, 0.8, 'grip'), prop: 'piece' },
 };
 
+/** @type {Clip} */
 const ARCADE_CLIP = {
   duration: 2.2,
   loop: true,
@@ -397,6 +409,7 @@ const ARCADE_CLIP = {
   },
 };
 
+/** @type {Clip} */
 const COFFEE_CLIP = {
   duration: 6.0,
   loop: false,
@@ -418,6 +431,7 @@ const COFFEE_CLIP = {
   reducedPose: { seated: true, armR: arm(1.0, 0.5, 'grip'), prop: 'mug' },
 };
 
+/** @type {Clip} */
 const EAT_CLIP = {
   duration: 3.4,
   loop: true,
@@ -433,6 +447,7 @@ const EAT_CLIP = {
   reducedPose: { lean: 0.1, armR: arm(2.2, 1.3, 'grip'), prop: 'plate' },
 };
 
+/** @type {Clip} */
 const CHAT_CLIP = {
   duration: 4.0,
   loop: true,
@@ -451,6 +466,7 @@ const CHAT_CLIP = {
   reducedPose: { armR: arm(1.0, 0.4, 'open'), speechPhase: 1 },
 };
 
+/** @type {Clip} */
 const LOUNGE_IDLE_CLIP = {
   duration: 5.0,
   loop: true,
@@ -625,6 +641,7 @@ export function sampleClip(name, t, reduced) {
 
 // --------------------------------------------------------- state -> clip map
 
+/** @type {Record<string, string>} state name -> clip name; NOT a clip */
 const STATE_CLIP = {
   working: 'type',
   needs_input: 'hand_raise',

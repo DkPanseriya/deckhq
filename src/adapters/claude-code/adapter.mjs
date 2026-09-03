@@ -345,7 +345,9 @@ export function _resetLiveProbeCache() {
  * subagent workflow transcripts live several levels deeper and are not
  * top-level sessions (CONTRACTS.md: "Do not reverse-engineer the cwd from
  * the directory name — read cwd from a record.").
- * @returns {Promise<{file:string, sessionId:string, mtimeMs:number}[]>}
+ * `size` pairs with `mtimeMs` as the summary cache's invalidation key; it
+ * was returned but not declared (WP-22).
+ * @returns {Promise<{file:string, sessionId:string, mtimeMs:number, size:number}[]>}
  */
 async function listSessionFiles() {
   let projectDirs;
@@ -517,7 +519,7 @@ async function listSubagentFiles(sessionDir, parentSessionId) {
  * `ackState` is ever written for one, so a junior leaving the floor cannot
  * touch a user-owned field even in principle.
  *
- * @param {{file:string, sessionId:string, mtimeMs:number}[]} parents the scan's
+ * @param {{file:string, sessionId:string, mtimeMs:number, size:number}[]} parents the scan's
  *   own candidate list — already sorted and bounded.
  * @param {number} now
  * @returns {Promise<import('../../core/model.mjs').SessionSummary[]>}
@@ -584,11 +586,6 @@ async function scanSubagents(parents, now) {
 }
 
 /**
- * Every Claude Code session on disk, newest first, bounded by `opts`.
- * @param {{maxAgeDays:number, limit:number}} opts
- * @returns {Promise<import('../../core/model.mjs').SessionSummary[]>}
- */
-/**
  * Parsed-summary cache, keyed by file path and invalidated by (mtime, size).
  *
  * The daemon re-scans every few seconds, forever, on a machine where a single
@@ -616,6 +613,11 @@ const summaryCache = new SummaryCache(cacheFileFor(RUNTIME_ID), { runtime: RUNTI
  */
 const SCAN_CONCURRENCY = 8;
 
+/**
+ * Every Claude Code session on disk, newest first, bounded by `opts`.
+ * @param {{maxAgeDays:number, limit:number}} opts
+ * @returns {Promise<import('../../core/model.mjs').SessionSummary[]>}
+ */
 async function scanSessions({ maxAgeDays, limit }) {
   // Reading the cache file is a one-off per process and never throws; a
   // missing or unusable one simply leaves every lookup below a miss, which is
@@ -777,7 +779,8 @@ async function findSessionFile(sessionId) {
 /**
  * Full message list for one session, most recent last.
  * @param {string} id
- * @param {{maxMessages:number}} opts
+ * @param {{maxMessages?:number}} [opts] optional at runtime: the `= {}`
+ *   default means a bare call is legal (WP-22).
  * @returns {Promise<import('../../core/model.mjs').Message[]>}
  */
 async function conversation(id, { maxMessages } = {}) {
@@ -1069,8 +1072,10 @@ const WATCH_POLL_MS = 1000;
  * still comes alive when it does.
  *
  * @param {string} id agent id, runtime-prefixed
- * @param {{onChange:(digest:{at:number, count:number, lastRole:string|null})=>void,
- *          pollMs?:number, debounceMs?:number}} opts
+ * @param {{onChange?:(digest:{at:number, count:number, lastRole:string|null})=>void,
+ *          pollMs?:number, debounceMs?:number}} [opts] `onChange` is what a
+ *   caller wants, but it is optional at runtime — the `= {}` default and the
+ *   `typeof onChange === 'function'` guard both say so (WP-22).
  * @returns {Promise<() => void>} a stop function; calling it twice is safe.
  */
 async function watchConversation(id, { onChange, pollMs, debounceMs } = {}) {

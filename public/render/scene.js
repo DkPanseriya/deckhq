@@ -512,7 +512,12 @@ function agentLabelFor(agent) {
 }
 
 // Icon names are rig.js's vocabulary exactly: 'hand' | 'hourglass' | 'check' | null.
-/** @see colorForAgent for why this is exported. @param {{ackState?:string, activityState?:string}} agent */
+/**
+ * @see colorForAgent for why this is exported.
+ * @param {{ackState?:string, activityState?:string}} agent
+ * @returns {'hand'|'hourglass'|'check'|null} rig.js's vocabulary, said in the
+ *   signature as well as in the comment above it (WP-22).
+ */
 export function iconForAgent(agent) {
   if (agent.ackState !== 'active') return null;
   if (agent.activityState === 'needs_input') return 'hand';
@@ -1242,7 +1247,7 @@ export class Scene {
     // order, so the priority holds regardless of how that array was filled.
     // A click on the "+" (or any of these) must never fall through to the
     // character or room plate that might sit behind or near it.
-    for (const kind of ['new-agent', 'shelf', 'screen', 'whiteboard']) {
+    for (const kind of /** @type {const} */ (['new-agent', 'shelf', 'screen', 'whiteboard'])) {
       const hit = this._hitTestFixtureKind(sx, sy, kind);
       if (hit) return hit;
     }

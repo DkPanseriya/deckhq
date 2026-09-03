@@ -1,0 +1,37 @@
+{
+  "//": [
+    "The NODE half of the typecheck (WP-22, 01-AUDIT.md F21). `public/` has its",
+    "own tsconfig.json with the DOM libs and none of these globals, because the",
+    "two sides of the static-file boundary do not share a platform. `npm run",
+    "typecheck` runs both.",
+    "",
+    "`strict` is off. It was tried on and it is a different package: ~1400",
+    "strictNullChecks findings, nearly all of them 'this DOM lookup could",
+    "return null', which is noise this codebase already answers with runtime",
+    "guards. What IS on is every check that finds JSDoc disagreeing with the",
+    "code it sits above, which is the drift F21 named."
+  ],
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2023"],
+    "types": [],
+    "strict": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "types/node.d.ts",
+    "src/**/*.mjs",
+    "scripts/**/*.mjs",
+    "plugin/**/*.mjs",
+    "vscode/**/*.js",
+    "bin/**/*.mjs"
+  ],
+  "exclude": ["node_modules", "public", "reference", "test/goldens/.out"]
+}

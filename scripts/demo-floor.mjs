@@ -88,6 +88,7 @@ const HOUR = 60 * MINUTE;
  *
  * Rows are `[project, title, state, ageHours, tokensM]`.
  */
+/** @type {Array<[string, string, string, number, number]>} */
 const DEMO_SESSIONS = [
   // orbital-api — the busy room: someone working, someone with a hand up.
   ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
@@ -154,6 +155,7 @@ const DEMO_SESSIONS = [
  *      cannot photograph it.
  */
 function referenceSessions() {
+  /** @type {Array<[string, number]>} */
   const projects = [
     ['platform-api', 13],
     ['web-console', 9],
@@ -187,11 +189,13 @@ function referenceSessions() {
     'the metrics exporter',
     'the release script',
   ];
+  /** @type {Array<[string, string, string, number, number]>} */
   const rows = [];
   let n = 0;
   let benched = 0;
   for (const [project, count] of projects) {
     for (let k = 0; k < count; k++) {
+      /** @type {string} */
       let state;
       if (n === 0) state = 'working';
       else if (n === 1 || n === 2) state = 'for_review';
@@ -280,6 +284,7 @@ function writeTranscript({ id, cwd, title, ageHours, tokensM, finished }) {
   const cacheRead = Math.round(tokensM * 1_000_000 * 0.85);
   const cacheWrite = Math.round(tokensM * 1_000_000 * 0.05);
 
+  /** @type {any[]} a hand-built transcript; every record is a different shape */
   const lines = [
     { type: 'custom-title', customTitle: title },
     {
@@ -419,6 +424,7 @@ function writeSubagent({ parentId, cwd, junior }) {
     version: '2.1.231',
   };
 
+  /** @type {any[]} a hand-built transcript; every record is a different shape */
   const lines = [
     {
       ...base,
@@ -582,6 +588,7 @@ function writeProjectDirs(root) {
     // test/backfill.test.ts +23 −6.
     const dirty = dir('orbital-api');
     git(dirty, ['init', '-q', '-b', 'main']);
+    /** @type {Array<[string, number, number, number]>} */
     const files = [
       ['src/events/backfill.ts', 30, 4, 98],
       ['src/events/index.ts', 20, 8, 21],

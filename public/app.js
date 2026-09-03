@@ -115,33 +115,43 @@ const el = {
   paletteBtn: document.getElementById('palette-btn'),
   paletteHintKey: document.getElementById('palette-hint-key'),
   newAgentBtn: document.getElementById('new-agent-btn'),
-  paletteDialog: document.getElementById('palette'),
-  paletteInput: document.getElementById('palette-input'),
+  paletteDialog: /** @type {HTMLDialogElement} */ (document.getElementById('palette')),
+  paletteInput: /** @type {HTMLInputElement} */ (document.getElementById('palette-input')),
   paletteList: document.getElementById('palette-list'),
   paletteEmpty: document.getElementById('palette-empty'),
-  settingsDialog: document.getElementById('settings-dialog'),
+  settingsDialog: /** @type {HTMLDialogElement} */ (document.getElementById('settings-dialog')),
   settingsBody: document.getElementById('settings-body'),
   settingsClose: document.getElementById('settings-close'),
-  newProjectDialog: document.getElementById('new-project-dialog'),
-  newProjectPath: document.getElementById('new-project-path'),
-  newProjectCreateToggle: document.getElementById('new-project-create-toggle'),
-  newProjectGitInitToggle: document.getElementById('new-project-gitinit-toggle'),
-  newProjectName: document.getElementById('new-project-name'),
-  newProjectInstructions: document.getElementById('new-project-instructions'),
-  newProjectGo: document.getElementById('new-project-go'),
+  newProjectDialog: /** @type {HTMLDialogElement} */ (
+    document.getElementById('new-project-dialog')
+  ),
+  newProjectPath: /** @type {HTMLInputElement} */ (document.getElementById('new-project-path')),
+  newProjectCreateToggle: /** @type {HTMLButtonElement} */ (
+    document.getElementById('new-project-create-toggle')
+  ),
+  newProjectGitInitToggle: /** @type {HTMLButtonElement} */ (
+    document.getElementById('new-project-gitinit-toggle')
+  ),
+  newProjectName: /** @type {HTMLInputElement} */ (document.getElementById('new-project-name')),
+  newProjectInstructions: /** @type {HTMLTextAreaElement} */ (
+    document.getElementById('new-project-instructions')
+  ),
+  newProjectGo: /** @type {HTMLButtonElement} */ (document.getElementById('new-project-go')),
   newProjectError: document.getElementById('new-project-error'),
-  newAgentDialog: document.getElementById('new-agent-dialog'),
+  newAgentDialog: /** @type {HTMLDialogElement} */ (document.getElementById('new-agent-dialog')),
   newAgentIntro: document.getElementById('new-agent-intro'),
   newAgentNamePicker: document.getElementById('new-agent-name-picker'),
   newAgentAvatarPicker: document.getElementById('new-agent-avatar-picker'),
-  newAgentInstructions: document.getElementById('new-agent-instructions'),
-  newAgentGo: document.getElementById('new-agent-go'),
+  newAgentInstructions: /** @type {HTMLTextAreaElement} */ (
+    document.getElementById('new-agent-instructions')
+  ),
+  newAgentGo: /** @type {HTMLButtonElement} */ (document.getElementById('new-agent-go')),
   newAgentError: document.getElementById('new-agent-error'),
-  identityDialog: document.getElementById('identity-dialog'),
+  identityDialog: /** @type {HTMLDialogElement} */ (document.getElementById('identity-dialog')),
   identityIntro: document.getElementById('identity-intro'),
   identityNamePicker: document.getElementById('identity-name-picker'),
   identityAvatarPicker: document.getElementById('identity-avatar-picker'),
-  identityGo: document.getElementById('identity-go'),
+  identityGo: /** @type {HTMLButtonElement} */ (document.getElementById('identity-go')),
   identityError: document.getElementById('identity-error'),
   queueStrip: document.getElementById('queue-strip'),
   stripList: document.getElementById('strip-list'),
@@ -149,8 +159,8 @@ const el = {
   stripHint: document.getElementById('strip-hint'),
   stripLast: document.getElementById('strip-last'),
   deck: document.getElementById('deck'),
-  stage: document.querySelector('.stage'),
-  canvas: document.getElementById('floor-canvas'),
+  stage: /** @type {HTMLElement} */ (document.querySelector('.stage')),
+  canvas: /** @type {HTMLCanvasElement} */ (document.getElementById('floor-canvas')),
   tooltip: document.getElementById('tooltip'),
   whiteboardOverlay: document.getElementById('whiteboard-overlay'),
   floorSkeleton: document.getElementById('floor-skeleton'),
@@ -169,7 +179,6 @@ const el = {
   nightcardRows: document.getElementById('nightcard-rows'),
   nightcardFoot: document.getElementById('nightcard-foot'),
   nightcardHint: document.getElementById('nightcard-hint'),
-  stage: document.querySelector('.stage'),
   liveRegion: document.getElementById('live-region'),
   toast: document.getElementById('toast'),
 };
@@ -271,7 +280,10 @@ let projectFilter = null;
  * kinds this pass adds; anything unrecognised falls back to `'agent'` so a
  * future kind degrades to the old behaviour instead of throwing.
  * @param {unknown} hit
- * @returns {{kind:'agent'|'project'|'whiteboard'|'new-agent', id:string}|null}
+ * @returns {{kind:'agent'|'project'|'whiteboard'|'new-agent'|'shelf'|'screen',
+ *   id:string}|null} `'shelf'` (the project folder) and `'screen'` (the
+ *   dashboard) were added to the body and to two call sites without being
+ *   added here, so both of those branches were unreachable to a checker (WP-22).
  */
 function normaliseHit(hit) {
   if (!hit) return null;
@@ -975,7 +987,10 @@ function snapshotFonts() {
  * Put the PNG on the clipboard. Refused permission, an unfocused tab and a
  * browser without `ClipboardItem` all degrade to `false` rather than throwing:
  * the file on disk is the durable half, and the toast says which half landed.
- * @param {Uint8Array} bytes
+ * `Uint8Array<ArrayBuffer>` rather than a bare `Uint8Array`: a `Blob` cannot be
+ * built from a view over a `SharedArrayBuffer`, and the PNG encoder never
+ * produces one (WP-22).
+ * @param {Uint8Array<ArrayBuffer>} bytes
  */
 async function copyPng(bytes) {
   try {
@@ -991,7 +1006,7 @@ async function copyPng(bytes) {
 
 /**
  * POST the bytes to the daemon, which names the file and writes it.
- * @param {Uint8Array} bytes
+ * @param {Uint8Array<ArrayBuffer>} bytes
  * @returns {Promise<string|null>} the path written, or null
  */
 async function saveSnapshot(bytes) {

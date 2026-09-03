@@ -97,6 +97,10 @@
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText
  * @property {boolean} [turnEnded]
+ * @property {boolean} [archived]              the desktop app's archive flag,
+ *   stamped on by the adapter AFTER the summary cache has handed the summary
+ *   out and never stored in it (docs/DEVIATIONS.md §46). It was being written
+ *   without ever being declared here (WP-22).
  * @property {boolean} [subagent]              WP-41; see `Agent`
  * @property {string} [parentSessionId]        the parent's RAW session id, as
  *   the adapter found it. The registry prefixes it into `Agent.parentId`.
@@ -201,7 +205,11 @@ export const MAX_PERMISSION_SUMMARY = 400;
  * A session that is not running still sits at its project desk. Only an
  * explicit bench moves it to the lounge.
  *
- * @param {Pick<Agent,'ackState'|'activityState'>} agent
+ * WP-41 made this read `subagent` as well, and the signature was not widened
+ * with it (WP-22). `public/render/agents.js`'s `derivePlacement()` — the copy
+ * on the other side of the static-file boundary — always named all three.
+ *
+ * @param {Pick<Agent,'ackState'|'activityState'|'subagent'>} agent
  * @returns {Placement}
  */
 export function placement(agent) {

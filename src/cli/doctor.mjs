@@ -426,6 +426,7 @@ function candidatePorts(hookPorts, explicit, published = null) {
  *   probe?: (port:number) => Promise<boolean>,
  *   inspect?: (port:number) => Promise<any>,
  *   port?: number|null,
+ *   publishedPort?: number|null,
  *   now?: number,
  *   scan?: {maxAgeDays:number, limit:number},
  *   terminal?: (opts:any) => Promise<any>,
