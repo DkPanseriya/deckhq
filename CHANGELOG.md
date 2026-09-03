@@ -324,6 +324,72 @@
   is most of the time. A ledger younger than a week says so on the line (`· since 1 Sep`) rather
   than claiming a week it has not lived through, and the rolling window is clipped to the ledger
   instead of padded past it.
+- **A machine with nothing on it gets actors, not a blank screen.** Install DeckHQ before you have
+  run anything and the floor used to say "Nothing on the floor yet" over a `claude` code block —
+  the blank screen that dev tools lose people on. The daemon now serves a small cast instead:
+  seven actors across three rooms, two of them waiting on you, under one line — _"These are
+  actors. Run `claude` in any repo and a real one walks in."_ The moment the scan finds a real
+  session the whole cast is gone and it walks in alone, within one poll rather than on a reload.
+  The actors are inert by construction and not by a check somebody has to remember: they never
+  enter the registry, so acknowledging, benching, replying to or resuming one is refused by the
+  same code that refuses an id that does not exist, and nothing about one can reach `state.json`,
+  the identity file or the cache. `deckhq waiting`, `deckhq statusline` and `deckhq doctor` all
+  report zero on that machine, because a fake count in a shell prompt is the one lie this product
+  cannot afford. `docs/DEVIATIONS.md` §108.
+- **`S` puts your office on the clipboard.** One key composites the floor and a stat strip into a
+  PNG — `SAMCO-DESK · 6 rooms · 25 people`, the four tallies with their state dots, today's
+  estimate, the longest wait, and a small wordmark — copies it, and saves it to
+  `~/.deckhq/snapshots/`. No "share to X" button that opens a compose window; the PNG is on the
+  clipboard and the product gets out of the way. It works with the tab in the background, which
+  is the case that found a real bug: a hidden tab reports `clientWidth` of 0 and a stale
+  `clientHeight`, so the image is sized from the canvas's backing store and the device pixel
+  ratio and never from layout. Two-times resolution and under 2 MB turned out to disagree until
+  the floor was resampled the unobvious way: nearest-neighbour rather than smooth, which took the
+  same 1600×1000 floor from **4.05 MB to 1.96 MB** and is also sharper, because the floor's
+  materials are deliberately high-entropy and bilinear interpolation invents a new colour at
+  nearly every pixel. Where they still disagree on a very large floor, resolution wins and the
+  toast says the size. `docs/DEVIATIONS.md` §109.
+- **`Shift+S` redacts, and it means the whole image.** Every project name becomes its MK tag —
+  on the room plates as well as in the strip, because the plates are what a screenshot actually
+  shows. The floor is handed a redacted snapshot to draw and handed the truth back immediately
+  afterwards, so redaction needed no new renderer entry point and no second copy of the floor.
+  The working directory and the project id go too: the id is a slug of the directory name, so it
+  spells the project out. The hostname stays, deliberately — the office is named after the
+  machine because people share things with their name on them, and `DECKHQ_HOSTNAME` is there for
+  anyone who wants it called something else.
+- **Three sounds, synthesised in the browser.** A low wooden door-close when a session finishes
+  its turn and walks into your office, two soft knocks when a hand goes up, and a rising two-note
+  chime when the office clears. No asset files, no fetches, nothing bundled — each is an
+  oscillator or a filtered noise burst and an envelope. Rate-limited to the same ten-second window
+  the notifications coalesce in, so three sessions finishing together is one door; silent when the
+  tab is hidden _and_ the OS notification actually fired, which is checked from what happened
+  rather than assumed from what was asked for; and one keystroke from the palette (`⌘K` → `u`)
+  turns them off for good. Volume comes from the settings sheet. The envelopes were measured
+  through a real `OfflineAudioContext` rather than described: the two noise sounds arrived 15 dB
+  under the chime, because a lowpass throws away most of white noise's energy and an oscillator
+  loses none of its own, and the volume slider had stopped affecting the door above a third of its
+  travel. Both fixed, with the measurements in the source. **They still default to off**, which is
+  a departure from the GUI spec and is deliberate: flipping that default would make every existing
+  install start making noise on upgrade, and the reason it is off — a product that sits beside a
+  terminal at 11pm does not arrive making noise — is pinned by a named test. Turning them on now
+  plays the chime once so you can hear what you have agreed to. `docs/DEVIATIONS.md` §110.1 puts
+  the call to the owner.
+- **The office-cleared moment.** When the last waiting agent is discharged and the office had been
+  busy for at least a minute: the light warms 6% over 1.2 seconds, the chime plays, and one line
+  fades in and out over three — _"Office clear. 6 discharged today, longest wait 1d 2h."_ Then it
+  is gone. The minute is the rule that makes it worth having: a session that arrives and is
+  discharged in the same breath earns nothing, so the moment marks a real milestone and not a
+  keystroke. It never scores you — it records the team's work, in the third person, and there is
+  no version of the line containing "you", a streak or a level. `prefers-reduced-motion`
+  suppresses the warming and keeps the line, because the line is the information and the warming
+  is the decoration. The warm is a CSS overlay on the stage that does not exist until it is
+  needed; the floor is unchanged.
+- **`POST /api/snapshot` writes the PNG, and takes nothing from the request but the pixels.** The
+  daemon names the file from its own clock, checks the PNG magic bytes before writing anything,
+  and has its own 8 MB body ceiling — the shared 1 MB JSON cap is right for JSON and wrong for
+  the one route that carries an image. Five non-PNG bodies, including a shell script announced as
+  `image/png`, and a filename smuggled through two headers, are all covered by named `SECURITY:`
+  tests.
 
 ### Changed
 
@@ -413,6 +479,19 @@
   instead of being set as one block, because the `PermissionRequest` paragraph is the one that
   grants a runtime the ability to be answered rather than only watched, and it must not be the
   tail of a wall of text. Still `textContent`, still no markup.
+- **Onboarding is three coach marks on real things, not a modal.** What was there listed all six
+  states in about 190 words, in a dialog, in front of the floor, before you had seen the floor do
+  anything. Now: one card on the needs-you numeral (_"7 sessions are waiting on you. This number
+  is yours. The runtime can't clear it."_), one on your office (_"They finished and walked in
+  here. Reading a message doesn't send them away — only you do."_), one on a waiting agent
+  (_"Click anyone."_). Each is dismissible, `Escape` skips all three and never asks again, and the
+  whole sequence reads in 10.2 seconds against the fifteen the spec budgets — asserted in the
+  suite, so copy that grows past it fails the build. `⌘K` → "Onboarding again" brings it back on
+  purpose. The floor stays clickable underneath: there is no scrim, because the third card's whole
+  instruction is to click something. A card whose anchor the renderer cannot place drops its arrow
+  rather than pointing at a guess — that is the state the two floor marks are in today, and
+  `docs/DEVIATIONS.md` §108.1 states the one renderer export that would fix it.
+
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
   runtime records the user turn — the documented `UserPromptSubmit` exception — never by the

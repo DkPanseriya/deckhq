@@ -79,6 +79,7 @@ import { seedIfNeeded } from './seed.mjs';
 import { createLog } from './log.mjs';
 import { discoverActions } from './actions.mjs';
 import { projectKeyFor } from './ledger.mjs';
+import { buildDemoSnapshot } from './demo-fixture.mjs';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -281,9 +282,41 @@ export class Registry {
   }
 
   /**
-   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean>, scannedAt: number|null}}
+   * The snapshot every surface reads — with one substitution.
+   *
+   * A machine with nothing on it gets the actors instead of an empty room
+   * (WP-13; `docs/plan/05-GUI-UX-SPEC.md` §7). The substitution happens here,
+   * at the one place a snapshot is produced, so the SSE stream, the initial
+   * `GET /api/state` and every internal subscriber agree — and so the actors
+   * cannot leak anywhere else: `this._agents` is still empty, so nothing in
+   * `act()`, the store, the identity file or the scan ever sees them.
+   *
+   * The substitution ends the moment the scan finds anybody, which is what
+   * makes "run `claude` and a real one walks in" true within one poll rather
+   * than after a reload.
+   *
+   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean>, scannedAt: number|null, demo?: boolean, demoNote?: string}}
    */
   snapshot() {
+    if (this._agents.length === 0 && this._scannedAt !== null) {
+      return buildDemoSnapshot({
+        settings: this.store.settings,
+        takenNames: this.identity ? this.identity.takenNames() : [],
+        hooks: { ...this._hookStatus },
+        writeError: this.store.writeError || null,
+        scannedAt: this._scannedAt,
+      });
+    }
+    return this._realSnapshot();
+  }
+
+  /**
+   * The floor as it actually is. Split out of `snapshot()` so the demo
+   * substitution above has something to fall through to, and so a test can
+   * assert the empty case really is empty underneath.
+   * @returns {any}
+   */
+  _realSnapshot() {
     const agents = this._agents.map((a) => {
       if (!this.identity) return a;
       const id = this.identity.describe(a.id, a.projectId);

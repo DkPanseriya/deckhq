@@ -6240,3 +6240,399 @@ panel, which the golden captures never open — `scripts/goldens.mjs` passes no
 keys and no `--click` — and the one shared file this package touched that could
 have reached a capture, `public/style.css`, gained a single new rule for a class
 that appears nowhere on the floor.
+## 108. WP-13 — the coach marks, the anchor the renderer does not expose, and the actor floor the daemon serves
+
+**Spec:** `05-GUI-UX-SPEC.md` §7. Delete the modal. Three coach marks on real elements, each
+dismissible, `Escape` skips all three forever, total reading under fifteen seconds. And: an empty
+machine shows the demo floor's actors with one line of copy, and switches to the real floor when
+the first real session appears.
+
+Four departures, in order of how much they matter.
+
+### 108.1 The two floor anchors point at the whole canvas, because the renderer exposes no geometry
+
+§7 anchors mark 2 to "the user's office" and mark 3 to "one waiting agent". Both are regions of a
+single `<canvas>`: there is no element to measure, and `public/render/scene.js` has no public
+accessor that maps either to screen space. `Scene` exposes `setState`, `select`, `start`, `stop`,
+`destroy`, the zoom controls and the static `describeFloor`; the screen-space rects it keeps
+(`_plateRects`, `_fixtureRects`) and its camera parameters (`_cameraParams`) are private, and
+`public/render/**` was being rewritten by another engineer for WP-50 while this package was built,
+so reading a private field would be coupling to a file that is changing underneath.
+
+What shipped: `app.js`'s `coachAnchorFor()` asks for `scene.anchorFor(target, id)` and uses it if
+it is ever there. When it is not — which is today, always — it falls back to the canvas's own
+bounding box and marks the anchor `arrow: false`. A card with `arrow: false` is placed *inside*
+the box rather than beside it, with the pointer triangle and the highlight ring both suppressed.
+
+That is deliberate: the alternative was to place an arrow at a guess. A coach mark whose arrow
+points at empty carpet is worse than one with no arrow, because the arrow is a claim.
+
+**The gap, stated as a request.** `Scene` needs one method:
+
+```js
+/** @returns {{x:number,y:number,w:number,h:number}|null}  CSS px, viewport-relative */
+anchorFor(target /* 'office' | 'lounge' | 'agent' | 'project' */, id /* for agent/project */);
+```
+
+It is the arithmetic `_hitTest` already does in reverse — `worldToScreen` against
+`_cameraParams()` — and once it exists the two marks become exact with no change to
+`coach-marks.js`, only to the three lines in `coachAnchorFor()`. Requested of the renderer owner;
+not built here, because building it would mean editing a file this package may not touch.
+`test/unit/coach-marks.test.mjs` covers both paths, so the day it lands the fallback stops being
+exercised and nothing else moves.
+
+### 108.2 The reading budget is costed at 200 wpm, and the count is asserted rather than claimed
+
+§7 says "total reading time under 15 seconds" and does not say at what speed. Screen-prose reading
+speed is measured anywhere between roughly 175 and 300 wpm depending on the study and the
+material, so a budget costed at the fast end is a budget that passes on paper and fails in a
+chair. `READING_WPM` is 200 — the slow end but not the pathological one — and the whole sequence
+measures **10.2 s** (34 words at the populated-floor variant of mark 1). The assertion is in the
+suite, so copy that grows past the budget fails the build rather than being noticed by nobody.
+
+### 108.3 The empty machine is served by the daemon, not by booting the demo script
+
+§7 says "run the demo floor's actors". The obvious reading is `scripts/demo-floor.mjs`, which
+builds a fake `~/.claude` on disk and drives a second daemon through the real hook endpoint. That
+is right for screenshots and wrong for a user's first run: it writes a fixture tree, spawns a
+process, and — the part that decided it — puts actor sessions into the same scan path the user's
+real sessions come from, where an acknowledgement could land on one.
+
+What shipped instead is `src/core/demo-fixture.mjs`: a pure function producing a snapshot-shaped
+object with `demo: true`, substituted at the single place a snapshot is made
+(`Registry.snapshot()`) when the scan found nobody. The registry's own `_agents` stays empty, so:
+
+- `/api/ack`, `/api/send`, `/api/resume` and `/api/conversation` 404 on an actor id **by
+  construction** rather than by a check somebody has to remember to write. There is a named
+  `INVARIANT:` integration test that posts all three ack actions at an actor and asserts each is
+  refused and that nothing was written.
+- The substitution ends on the scan that finds anybody, which is what makes §7's "within one poll"
+  true. The integration test writes a real transcript, calls `/api/refresh`, and asserts the cast
+  is gone and the real session stands alone.
+- Nothing about an actor can reach `state.json`, the identity file or the cache.
+
+Three consequences worth naming:
+
+1. **The terminal surfaces strip them.** `deckhq ls`, `waiting` and `statusline` all read
+   `/api/state`, and a fake `2 waiting` in a shell prompt is the one lie this product cannot
+   afford. `askDaemon()` applies `withoutDemoAgents()` at the single door they come through, and
+   `doctor`'s `deckFrom()` does the same. Both are asserted.
+2. **The actor floor never raises the degraded banner.** Nothing has run on this machine, so
+   there is nothing for hooks to be exact about; telling a first-time user their state is
+   degraded would be false and would be the first thing they read.
+3. **The panel had to learn about them**, because mark 3 says "Click anyone." A click on an actor
+   used to produce `Could not load the conversation: Unknown runtime "demo"` and `Could not read
+   the working tree: Unknown session`. It now shows the actor's own line and says what it is; the
+   action row and the composer answer with one sentence rather than an error toast.
+
+### 108.4 `test/goldens/win32/empty.png` had to be regenerated, and it is now a populated floor
+
+The `empty` population exists to photograph a machine with no sessions. That machine now shows the
+actors, so the golden changed from "Nothing on the floor yet" to a floor. That is the correct
+picture of the new behaviour and it is why the golden was regenerated; it is also the reason the
+`empty` population no longer proves anything about the empty-state markup, which survives in
+`index.html` for the case the demo fixture cannot cover (a renderer that failed to load).
+
+### What is tested
+
+`test/unit/coach-marks.test.mjs` (16) — the three marks and their anchors; the copy at 0, 1 and n
+waiting, and a scan for second-person fault; the lesson each mark carries; the reading budget; a
+mark whose anchor is absent being dropped rather than shown lying; the sequence reducer forward
+and skipped, including that a finished sequence ignores a second `Escape` (which is what stops
+`onboarded` being posted twice); card placement below, flipped above, clamped at the edge and
+inside an anchor the size of the stage; and, over a DOM stub, that the tour shows one mark at a
+time, that `Escape` reaches `onDone({skipped:true})` exactly once and removes its own listener,
+and that the modal is gone from `index.html` and from `app.js`.
+
+`test/unit/demo-fixture.test.mjs` (9) — snapshot shape; that the two states the product is about
+are both on the floor; identity fields; purity against the clock; `INVARIANT:` unaddressable ids;
+the degraded banner; carried settings and write errors; and `withoutDemoAgents`.
+
+`test/integration/demo-floor.test.mjs` (4) — a real daemon over an empty machine: the actors are
+served, an actor cannot be acknowledged/benched/let go, the first real session replaces the whole
+cast within one `/api/refresh`, and the terminal surfaces report zero.
+
+**Screenshot:** `docs/media/coach-marks.png` — the first mark on the needs-you numeral, over the
+actor floor, with the actors' line underneath. Regenerable:
+`node scripts/capture-floor.mjs --url <daemon> --onboarding`, a flag added for exactly this shot.
+
+## 109. WP-14 — the office snapshot: how redaction reaches the room plates, and the two numbers that had to be measured before they could be believed
+
+**Spec:** `04-ENGAGEMENT-AND-GAMIFICATION.md` §3.2 and WP-14's acceptance: `S` composites the
+floor plus a stat strip into a PNG, on the clipboard and saved to `~/.deckhq/snapshots/`,
+hostname as the office name, one-key redact swapping project names for MK tags. Accepted when the
+PNG is ≥ 2× device pixel ratio and under 2 MB, redaction leaves no project name anywhere in the
+image **including room plates**, and it works with the tab backgrounded.
+
+All three of those turned out to have a sharp edge on them.
+
+### 109.1 Redaction reaches the room plates through `setState`, not through a new render export
+
+The brief anticipated this: "the compositor re-draws plates itself or asks the renderer for a
+redacted frame — if the latter needs a render export that does not exist, draw the strip and
+composite the existing canvas, redact only the strip, and record the gap."
+
+Neither was necessary, because a third route exists using only what `Scene` already exports.
+The room plates are painted from the snapshot the renderer was last given, and `setState` is
+public and means exactly "draw this". So `takeSnapshot()`:
+
+```
+scene.stop()                      // a stopped Scene draws on setState, synchronously
+scene.setState(redactedSnapshot)  // plates repaint with MK tags
+… capture …
+scene.setState(latestSnapshot)    // the floor goes back to the truth
+scene.start()                     // if it was running
+```
+
+Redaction is therefore total across the image rather than confined to the strip, and no file
+under `public/render/**` was touched. Shipping the fallback the brief allowed would have meant a
+control labelled "redact" that leaves every project name legible on the floor above the strip,
+which is worse than having no control at all.
+
+`redactSnapshot()` covers three fields, not one:
+
+| Field | Why |
+|---|---|
+| `projects[].name`, `agents[].projectName` | what the plates draw — the spec's requirement |
+| `cwd` | the one field carrying a directory tree; not drawn today |
+| `projects[].id`, `agents[].projectId` | a slug **of the directory name**, so it spells the project out verbatim |
+
+Substituting the id is safe because it is a key, not a seed: the floor plan derives geometry from
+counts and the array's order, and the only string the renderer hashes is the *agent* id
+(`agents.js` `hashString(agent.id)`), which is untouched. Verified by inspection of `plan.js` and
+`agents.js`, and the redacted capture in `docs/media/` has the same room layout as the
+unredacted one taken seconds earlier.
+
+**Not redacted, and deliberately:** the hostname. §3.2 is explicit that the office is named after
+the machine "because people share things with their name on them", and redaction is defined there
+as a project-name control. `DECKHQ_HOSTNAME` overrides it for anyone who wants a different name —
+added because `scripts/demo-floor.mjs` exists so that nothing real reaches a committed
+screenshot, and a machine name is somebody's real something.
+
+**Also not redacted, and flagged rather than solved:** a thought bubble (WP-52) draws a tool
+summary such as `Edit src/refunds/reconcile.ts`. Those are paths relative to the session's own
+working directory, so they do not normally carry a project name, and a path from outside the cwd
+is already reduced to its file name by WP-52 itself. It is a narrower surface than the plates
+were, it is not what §3.2's control is about, and it is recorded here rather than silently
+assumed safe.
+
+### 109.2 "≥ 2× and under 2 MB" is reachable, but only by resampling the opposite way to the obvious one
+
+Measured on the demo floor, a 1600×1000 window, device pixel ratio 1:
+
+| How the floor is scaled to 2× | PNG |
+|---|---|
+| Smooth (bilinear, `imageSmoothingQuality: 'high'`) | **4.05 MB** |
+| Nearest-neighbour | **1.96 MB** |
+| For reference, the same floor captured at 1× | 900 KB |
+
+The floor's materials are deliberately high-entropy — herringbone, woven carpet, poured screed,
+ambient-occlusion bands — so smooth interpolation invents a new intermediate colour at nearly
+every output pixel and destroys PNG's row prediction. Nearest-neighbour emits four identical
+pixels per source pixel, which compresses close to the 1× original. It is also the *sharper*
+result: a pixel-doubled screenshot viewed at 1× on a dense display is crisp, where a blurred one
+is permanently blurred.
+
+So the compositor smooths only when it is genuinely downsampling (`scale > dpr` disables
+smoothing), and the acceptance criterion is met at the reference window rather than missed by
+2×. `alpha: false` on the output context is asked for as well; Chrome ignores it for PNG (3.7 KB
+of 2.27 MB, measured) and it costs nothing.
+
+**Where the two requirements still disagree**, on a floor large enough, the resolution floor
+wins: `nextScaleDown()` steps the scale down towards 2× and stops there, and the toast names the
+size rather than silently shipping a blurry office. A 2.3 MB snapshot at 2× is a snapshot; a
+1.9 MB one at 1.4× is a blurry picture of an office, which is the thing this feature exists to
+stop.
+
+### 109.3 A backgrounded tab reports no layout, and the first version of this shipped a 6400×672 sliver
+
+"Works with the tab backgrounded" was tested by backgrounding a tab and dispatching the key into
+it, which is how the defect was found. Measured in Chrome with `document.hidden === true`:
+
+```
+clientWidth  0        clientHeight 240 (stale)
+innerWidth   0        innerHeight  0
+getBoundingClientRect().width 0
+canvas.width 3200     canvas.height 480     devicePixelRatio 2
+```
+
+The compositor's first version read `floor.clientWidth || floor.width` — a CSS-pixel field with a
+**device-pixel** fallback, two different units in one slot. Hidden, that produced a 6400×672
+image of a sliver of floor. The fix is to stop reading layout at all: the CSS size is derived
+from the backing store and the device pixel ratio (`floor.width / dpr`), which is the one
+description that is always right because it is what the renderer actually drew into. The
+capture is otherwise already frame-independent — a stopped `Scene` draws inside `setState`, and
+`toDataURL` is synchronous, so nothing waits for a `requestAnimationFrame` a hidden tab will
+never fire.
+
+Both the hidden-tab geometry and the no-backing-store fallback are now unit tests, with the
+measured numbers in them.
+
+### 109.4 The route names the file, and takes nothing else from the request
+
+`POST /api/snapshot` is the only endpoint in the product whose entire purpose is to put a file on
+the user's disk, so what it accepts is the whole of its security surface:
+
+- **The daemon names the file**, from its own clock (`deckhq-20260904-142233.png`). There is no
+  filename field, no fragment of one, and no header that reaches a path. A route that takes a
+  name from a request body is a route that eventually writes outside its directory.
+- **The body must be a PNG**, checked by magic bytes before anything is written. The
+  `content-type` header is a claim, not evidence.
+- **Its own 8 MB ceiling**, because `server.mjs`'s `readJson` caps every other route at 1 MB —
+  right for JSON, wrong for the one route that carries an image. Over the ceiling the socket is
+  destroyed rather than the file truncated.
+- It touches no ack state, no settings and no identity.
+
+### 109.5 "Today's spend" is today's *sessions*, summed over their whole lives
+
+§3.2's strip line is `today ≈ $18.40 · 2.4M tokens`. There is no per-day token record until the
+ledger lands (WP-17), so what the strip can honestly compute is: the sessions whose last activity
+falls after local midnight, summed over their entire history. That over-counts a session that
+started yesterday and got one more turn today. It is labelled `estimate` in the line itself —
+standing rule 7, and the word is in the image rather than in a tooltip nobody screenshots — and
+it becomes exact for free when WP-17 lands.
+
+### What is tested
+
+`test/unit/snapshot.test.mjs` (18) — redaction over a floor of three deliberately
+unshowable project names, asserting none survives anywhere in the model the image is drawn from,
+that the MK tag takes the name's place so plates still say something, that cwd and id go too,
+and that the live snapshot is not mutated (it is handed straight back to the renderer); the
+strip's four lines against §3.2's mock; that the money line says "estimate" and never "bill";
+that only today counts towards today; the formatters; the resolution floor beating the size
+budget; the composite's geometry visible, backgrounded, and with no backing store; and that
+`drawStrip` needs nothing but a 2d context.
+
+`test/integration/snapshot-route.test.mjs` (8) — a real daemon: a PNG is written byte for byte
+under a daemon-chosen name inside the directory it was given; the directory is created on demand;
+`SECURITY:` five non-PNG bodies including a shell script announced as `image/png`, none of which
+reaches disk; `SECURITY:` a filename smuggled through two headers, ignored; an oversized body
+refused rather than truncated; a 2 MB body accepted; and the hostname, including
+`DECKHQ_HOSTNAME` and the six malformed values that fall back to the machine's own name.
+
+**Screenshot:** `docs/media/snapshot-sample.png` — an actual `S` output from the demo floor at a
+1200×760 window: the floor, then `DECKHQ-DEMO · 6 rooms · 25 people`, the four tallies with their
+state dots, the estimate line and the wordmark.
+
+## 110. WP-15 — three sounds measured rather than described, and the default that was left alone
+
+**Spec:** `05-GUI-UX-SPEC.md` §8 and §9. Three WebAudio-synthesised sounds, rate-limited to the
+notification coalescing window, silent when the tab is hidden and the OS notification is doing the
+work, globally off in one keystroke from the palette. The office-cleared moment: light warms 6%
+over 1.2 s, chime, one line for 3 s; `prefers-reduced-motion` suppresses the light and keeps the
+line.
+
+### 110.1 `settings.sound` still defaults to **off**, and that is a decision for the owner
+
+§8's table says all three sounds default **on**. `DEFAULT_SETTINGS.sound` is `false`, and
+`test/unit/settings-keys.test.mjs` pins it with a named test and a stated reason:
+
+> *A product that sits beside a terminal at 11pm does not arrive making noise.*
+
+That test and that default landed in WP-07. Flipping it now would make every existing install
+start making noise on upgrade — a stored `state.json` written before this change has no `sound`
+key, so it would merge to the new default — which is the precise shape of the thing `04` §5 calls
+out: *"sounds that play more than a few times a day"* and settings people turn off. Making that
+call is above this package's line, so **the default was left alone and the conflict is written
+down here**. Everything else about §8 is real: the three sounds exist, the scheduler is wired, the
+volume works, and one palette keystroke (`⌘K` → `u`) turns them on and persists it.
+
+Turning them **on** from the palette now plays the chime once and says what the three are. A
+sound setting whose effect you cannot hear is a setting nobody can judge, and this is the one
+moment where a sound is a direct answer to something the user just did — so it is the one place
+that bypasses the coalescing window.
+
+### 110.2 The synths were measured, not described
+
+Rendered through a real `OfflineAudioContext` in Chrome. The first version was wrong in a way no
+unit test would have caught, because a stub records what you asked for and not what comes out:
+
+| | door | knocks | chime |
+|---|---|---|---|
+| peak at `soundVolume` 0.4, **before** makeup gain | 0.069 | 0.093 | 0.396 |
+| peak at 0.4, shipped | **0.195** | **0.265** | **0.396** |
+| peak at 1.0, shipped | 0.463 | 0.632 | 0.989 |
+| clipped samples, at every volume tested | 0 | 0 | 0 |
+| audible until (declared budget) | 136 ms (180) | 170 ms (190) | 336 ms (400) |
+
+A lowpass at 380–1600 Hz throws away most of white noise's energy while an oscillator loses none
+of its own, so the two noise sounds arrived about 15 dB under the chime — the door, which is the
+sound that happens several times an hour, would have been inaudible beside the celebration that
+happens twice a day. `NOISE_MAKEUP` is ×3, and the number is in the source with the measurement
+beside it.
+
+A second defect fell out of the same measurement: the burst envelope was clamped to 1, which made
+the volume slider stop affecting the door above about a third of its travel (0.187 at volume 1.0
+against 0.164 at 0.4). The clamp is gone — the gain is applied *before* a filter that removes most
+of it, so it does not need to be inside unity — and the output is checked for clipping instead.
+
+The noise source is a seeded LCG rather than `Math.random`, so two door closes a second apart are
+the same door. Asserted.
+
+### 110.3 The office-cleared line says `1d 2h`, where the spec's example says `26h`
+
+`04` §2's example line is *"Office clear. 7 discharged today, longest wait 26h."* The product says
+`1d 2h` everywhere else a wait appears — the office plate, the waiting badges, the snapshot strip
+— and `04` §3.2's own strip mock uses `1d 2h` for the same duration. One register beats one
+example, so the line reads *"Office clear. 7 discharged today, longest wait 1d 2h."* That is
+exactly what `docs/media/office-cleared.png` caught on a real floor.
+
+### 110.4 The numbers are this tab's counters, and say so by being small
+
+Until WP-17's ledger, "discharged today" and "longest wait" are counted by the open tab from the
+snapshots it has seen. Consequences, stated rather than papered over:
+
+- A tab opened at noon reports what it has watched since noon, not since midnight. The counters
+  do reset at local midnight for a tab left open overnight.
+- The **first** snapshot only establishes a baseline. Without that, a tab opened onto an
+  already-empty floor would count the page load as a clearing, and one opened onto a busy floor
+  would date "busy since" to the page load rather than admit it does not know.
+- "Discharged" counts every agent that left the needs-you queue — a button, a reply typed in the
+  terminal, or a bench. All three are the user acting, which is what the count is about.
+
+The line is honest at every value it can take, and it never scores the human: there is no version
+of it containing "you", a streak, a level or a badge, and that is asserted by scanning the
+generated copy across four counts and three wait lengths.
+
+### 110.5 The warm is a stage overlay that does not exist until it is needed
+
+§9's light is a CSS overlay on `.stage`, not a change in the renderer — it is chrome *about* the
+floor, it must not touch the floor's baked materials or its state colours, and
+`public/render/**` is another package's file. It is tungsten rather than the accent: crimson is
+reserved for `for_review` and primary actions, and a red flash over a cleared office would say the
+opposite of what the moment means.
+
+One detail worth the line it costs: the overlay is declared on `.stage.is-cleared::after`, not on
+`.stage::after` at `opacity: 0`. A permanently-present pseudo-element with `mix-blend-mode` puts
+the canvas on a composited layer even at zero opacity, and the floor is photographed pixel for
+pixel by `npm run goldens` — a compositing change that moves one channel by one count is exactly
+what that gate exists to catch. Goldens confirmed unchanged after this package.
+
+`prefers-reduced-motion` is honoured twice over: the JS guard never adds the class, and the
+stylesheet's global reduced-motion block would neutralise the animation anyway. The line is
+written *before* the guard returns, so reduced motion keeps it — asserted by reading the
+function's own source, because the alternative is a browser test for an ordering.
+
+### What is tested
+
+`test/unit/sound.test.mjs` (14) — the four scheduler rules one at a time, including that a hidden
+tab is silent *only* when a notification actually fired (both halves of §8's rule, and the reason
+`app.js` records `lastNotifyShown` from what happened rather than from what was requested); that
+the sound window and `app.js`'s `NOTIFY_COALESCE_MS` cannot drift apart, read out of the source;
+the three synths' shapes, durations and filter bands against a recording stub; the makeup gain and
+the volume slider's full travel; that no envelope ramps to exactly zero (which throws in a real
+`AudioContext`); that the noise is deterministic; and that neither `sound.js` nor `docs/media/`
+contains a single audio file, fetch or `new Audio` — WP-15's "no network request and no bundled
+audio file", asserted rather than promised.
+
+`test/unit/office-cleared.test.mjs` (13) — the queue definition matching the header numeral; the
+first-snapshot baseline; that it fires once per clearing and never again while the floor stays
+empty; that a two-second turn earns nothing; the sixtieth second as an exact boundary; that the
+busy clock restarts rather than carrying credit over; the day counters and their midnight reset,
+with an overnight wait surviving it; an agent with no clock of its own timed from first sight; the
+copy at one, many and no measurable wait; that it never scores the human; and that reduced motion
+drops the light and keeps the line.
+
+**Screenshot:** `docs/media/office-cleared.png` — a real clearing on the demo floor: six
+discharged, the header at zero, the office empty, and the line on screen inside its three seconds.
+The warm is at 6% and is deliberately hard to see, which is the point.

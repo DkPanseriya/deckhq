@@ -116,8 +116,8 @@ await withChrome({ chromePath, width: WIDTH, height: HEIGHT, scale: 1 }, async (
   // Floor only: dismiss onboarding, hide the header, and let the stage take
   // the whole viewport. The scene's ResizeObserver re-fits to the new box.
   await evaluate(`(() => {
-    const d = document.getElementById('onboarding-dialog');
-    if (d && d.open) document.getElementById('onboarding-dismiss')?.click();
+    const layer = document.getElementById('coach-layer');
+    if (layer && !layer.hidden) layer.querySelector('.coach-skip')?.click();
     const s = document.createElement('style');
     s.textContent = '#topbar{display:none!important} #tooltip{display:none!important}';
     document.head.appendChild(s);

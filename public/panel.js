@@ -76,6 +76,15 @@ const FALLBACK_STATE_COLORS = {
 };
 
 const DEFAULT_APPROVE_TEXT = 'Yes, go ahead.';
+
+/**
+ * What an action on the empty-machine floor says (WP-13). The actors are not
+ * sessions and are not addressable, so the refusal is about them rather than
+ * about the reader — no second-person fault, per
+ * `docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §5.
+ */
+const DEMO_REFUSAL =
+  "Actors don't take instructions. Run `claude` in any repo and a real one walks in.";
 /** The close-up's on-screen size, docs/plan/05-GUI-UX-SPEC.md §4.2. */
 const CLOSEUP_PX = 44;
 /** How often the "waiting …" line re-reads the clock while the panel is open. */
@@ -144,6 +153,63 @@ function thirdAction(agent) {
   if (agent.ackState === 'let_go') return 'rehire';
   if (agent.ackState === 'benched') return 'recall';
   return 'bench';
+}
+
+/**
+ * Which permission decision, if any, a keystroke means — and therefore which
+ * of the two `S` keys the user just pressed.
+ *
+ * `A`, `D` and `S` answer WP-19's permission card. `S` is also WP-14's office
+ * snapshot, and `Shift+S` is WP-14's redaction toggle, both bound in app.js.
+ * Two features cannot own one key by accident, so the precedence is written
+ * down here, in one pure function, rather than emerging from the order two
+ * listeners happen to be registered in:
+ *
+ *   1. WP-19 wins `S` only when there is a card to answer — the panel open on
+ *      an agent, a `pendingPermission` on it that the runtime did not mark
+ *      `requiresUserInteraction`, the composer (or any text control) not
+ *      focused, and no modal `<dialog>` over the top. `S` in particular also
+ *      needs the runtime to have offered a session-scoped suggestion; with no
+ *      suggestion there is no "allow for session" to give.
+ *   2. Otherwise this returns null, the listener lets the event through, and
+ *      app.js does what it always does: `S` takes the snapshot.
+ *
+ * `Shift` is never WP-19's. `Shift+S` is the redaction toggle wherever the
+ * user is standing, card or no card, so a held shift ends the question here.
+ *
+ * Pure, so `test/unit/permission-keys.test.mjs` can walk every case without a
+ * DOM. It reads nothing and decides nothing on its own — the caller acts.
+ *
+ * @param {{key:string, shiftKey?:boolean, ctrlKey?:boolean, metaKey?:boolean,
+ *          altKey?:boolean}} e
+ * @param {{panelOpen:boolean, typing:boolean, dialogOpen:boolean,
+ *          pending:any}} ctx
+ * @returns {'allow'|'deny'|'session'|null} null means "not ours; let it pass"
+ */
+export function permissionKeyDecision(e, ctx) {
+  if (!e || !ctx) return null;
+  if (e.ctrlKey || e.metaKey || e.altKey) return null;
+  // Shift+S is WP-14's redaction toggle, always. Shift+A and Shift+D mean
+  // nothing to the card either, so one rule covers all three.
+  if (e.shiftKey) return null;
+  if (!ctx.panelOpen || ctx.typing || ctx.dialogOpen) return null;
+  const p = ctx.pending;
+  if (!p || p.requiresUserInteraction) return null;
+  switch (e.key) {
+    case 'a':
+    case 'A':
+      return 'allow';
+    case 'd':
+    case 'D':
+      return 'deny';
+    case 's':
+    case 'S':
+      // No session-scoped suggestion means no third button, so `S` is not the
+      // card's to take and falls through to the office snapshot.
+      return Array.isArray(p.suggestions) && p.suggestions.length > 0 ? 'session' : null;
+    default:
+      return null;
+  }
 }
 
 /**
@@ -858,6 +924,22 @@ export function createPanel(opts) {
     saidEl.textContent = '';
     saidEl.appendChild(threadSkeleton());
     threadDetails.hidden = true;
+    // An actor on the empty-machine floor (WP-13) has no transcript on disk,
+    // and the third coach mark says "Click anyone" — so clicking one has to
+    // land somewhere sensible rather than on `Unknown runtime "demo"`. Its
+    // one line is shown, and the panel says plainly what it is looking at.
+    if (getSnapshot()?.demo) {
+      messages = [];
+      saidEl.textContent = '';
+      if (displayedAgent?.lastText) {
+        saidEl.appendChild(renderMarkdown(displayedAgent.lastText, document));
+      }
+      const note = document.createElement('div');
+      note.className = 'msg-empty';
+      note.textContent = 'An actor. A real session shows its whole conversation here.';
+      saidEl.appendChild(note);
+      return;
+    }
     try {
       const res = await fetch(`/api/conversation?id=${encodeURIComponent(id)}`);
       const body = await res.json().catch(() => ({}));
@@ -976,6 +1058,15 @@ export function createPanel(opts) {
     if (!changedEl.childElementCount) {
       changedEl.textContent = '';
       changedEl.appendChild(threadSkeleton());
+    }
+    if (getSnapshot()?.demo) {
+      changedEl.textContent = '';
+      changedTotals.textContent = '';
+      const note = document.createElement('div');
+      note.className = 'review-note';
+      note.textContent = 'An actor has no working tree. A real session shows what changed here.';
+      changedEl.appendChild(note);
+      return;
     }
     try {
       const res = await fetch(`/api/changes?id=${encodeURIComponent(id)}`);
@@ -1364,6 +1455,11 @@ export function createPanel(opts) {
     const agent = agentFor(id);
     if (!id || !agent) return;
     if (!legalActions(agent).includes(action)) return;
+    // The actors on an empty machine's floor (WP-13) are not sessions and are
+    // not in the registry, so every one of these would come back "No such
+    // agent". Say the true and useful thing instead. This holds for a deck
+    // row as much as for the panel's own: the whole floor is actors.
+    if (getSnapshot()?.demo) return toast(DEMO_REFUSAL);
 
     // Only the panel's own row has anything to patch optimistically; a deck
     // row's feedback is the next snapshot, which is 250 ms away.
@@ -1460,41 +1556,27 @@ export function createPanel(opts) {
    * A / D / S, while the panel is open and the composer is not focused.
    *
    * This listener is registered when the panel is built, which is before
-   * app.js registers its own — and app.js binds `A` to acknowledge. So while
-   * a permission card is up, `A` answers the card and `stopImmediatePropagation`
-   * keeps it from also acknowledging the session. With no card up this handler
-   * returns before touching the event and `A` acknowledges exactly as before.
+   * app.js registers its own — and app.js binds `A` to acknowledge and `S` to
+   * the office snapshot. So while a permission card is up, `A` answers the
+   * card and `stopImmediatePropagation` keeps it from also acknowledging the
+   * session; `S` allows for the session rather than photographing the office.
+   * Whenever `permissionKeyDecision()` says null this handler touches nothing
+   * and app.js's bindings fire exactly as they do with no card on screen —
+   * which is every press of `Shift+S`, card or no card.
+   *
+   * All of that rule lives in `permissionKeyDecision()` above; this reads the
+   * four DOM facts it needs and acts on the answer.
    */
   document.addEventListener('keydown', (e) => {
-    if (root.hidden || !currentId || !displayedAgent) return;
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
     const t = /** @type {HTMLElement|null} */ (e.target);
     const tag = t?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || Boolean(t?.isContentEditable)) return;
-    if (document.querySelector('dialog[open]')) return;
-    const p = pendingPermission();
-    if (!p || p.requiresUserInteraction) return;
-    /** @type {'allow'|'deny'|'session'|null} */
-    let decision = null;
-    switch (e.key) {
-      case 'a':
-      case 'A':
-        decision = 'allow';
-        break;
-      case 'd':
-      case 'D':
-        decision = 'deny';
-        break;
-      case 's':
-      case 'S':
-        decision = 'session';
-        break;
-      default:
-        return;
-    }
-    if (decision === 'session' && !(Array.isArray(p.suggestions) && p.suggestions.length > 0)) {
-      return;
-    }
+    const decision = permissionKeyDecision(e, {
+      panelOpen: !root.hidden && Boolean(currentId) && Boolean(displayedAgent),
+      typing: tag === 'INPUT' || tag === 'TEXTAREA' || Boolean(t?.isContentEditable),
+      dialogOpen: Boolean(document.querySelector('dialog[open]')),
+      pending: pendingPermission(),
+    });
+    if (!decision) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     answerPermission(decision);
@@ -1676,6 +1758,7 @@ export function createPanel(opts) {
     const agent = agentFor(id);
     if (!id || !agent) return;
     if (!text.trim()) return;
+    if (getSnapshot()?.demo) return toast(DEMO_REFUSAL);
     const inPanel = id === currentId && !root.hidden;
 
     // Mid-turn means actively producing output. A finished turn standing for

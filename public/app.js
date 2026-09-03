@@ -21,6 +21,18 @@ import { createPalette } from './palette.js';
 import { createDeckUI, queueOrder } from './deck.js';
 import { applyMotionPreference, createSettingsUI } from './settings-ui.js';
 import { availableNames } from './names.js';
+import { createCoachMarks } from './coach-marks.js';
+import {
+  MAX_PNG_BYTES,
+  MIN_SCALE,
+  composite,
+  nextScaleDown,
+  pngBytes,
+  snapshotModel,
+  stripColors,
+} from './snapshot.js';
+import { createSounds } from './sound.js';
+import { createClearedTracker } from './office-cleared.js';
 
 /**
  * Fallback copy of the glyph vocabulary in docs/CONTRACTS-WP15.md §2, used
@@ -139,12 +151,14 @@ const el = {
   whiteboardOverlay: document.getElementById('whiteboard-overlay'),
   floorSkeleton: document.getElementById('floor-skeleton'),
   emptyState: document.getElementById('empty-state'),
+  demoNote: document.getElementById('demo-note'),
   errorBanner: document.getElementById('error-banner'),
   errorBannerText: document.getElementById('error-banner-text'),
   projectFilter: document.getElementById('project-filter'),
   panelRoot: document.getElementById('panel'),
-  onboardingDialog: document.getElementById('onboarding-dialog'),
-  onboardingDismiss: document.getElementById('onboarding-dismiss'),
+  coachLayer: document.getElementById('coach-layer'),
+  officeCleared: document.getElementById('office-cleared'),
+  stage: document.querySelector('.stage'),
   liveRegion: document.getElementById('live-region'),
   toast: document.getElementById('toast'),
 };
@@ -186,6 +200,17 @@ let lastAnnounced = '';
 let pendingNotifyBatch = [];
 let notifyCoalesceTimer = null;
 let lastNotifyAt = 0;
+/** Whether the most recent batch actually produced an OS notification (WP-15's §8 rule). */
+let lastNotifyShown = false;
+
+/** WP-15's three sounds. Silent until `settings.sound` is on. */
+const sounds = createSounds({
+  getSettings: () => latestSnapshot?.settings || {},
+});
+
+/** WP-15's office-cleared moment. One tab's own counters, until WP-17's ledger. */
+const clearedTracker = createClearedTracker();
+let clearedTimers = [];
 
 // ------------------------------------------------------------- utilities
 
@@ -478,8 +503,16 @@ function renderFloorState(snapshot) {
   const hasAgents = Array.isArray(snapshot.agents) && snapshot.agents.length > 0;
   el.floorSkeleton.hidden = true;
   el.errorBanner.hidden = true;
+  // A machine with no sessions gets the actors from the daemon, so the
+  // never-run case is a populated floor with one line under it rather than a
+  // blank screen (WP-13). `empty-state` is now only reachable when the
+  // renderer has nothing at all to draw — which the demo fixture makes
+  // essentially unreachable, and it is kept because "essentially" is not
+  // "provably".
   el.emptyState.hidden = hasAgents;
   el.canvas.hidden = !hasAgents;
+  el.demoNote.hidden = !snapshot.demo || !hasAgents;
+  if (snapshot.demo && snapshot.demoNote) el.demoNote.textContent = snapshot.demoNote;
   if (scene) {
     try {
       scene.setState(snapshot);
@@ -502,9 +535,20 @@ function renderFloorState(snapshot) {
 function diffAndNotify(snapshot) {
   const settings = snapshot.settings || {};
   const entered = [];
+  // WP-15 §8's two entry sounds. Tracked separately from the notification
+  // batch because they answer to different switches: a sound plays for an
+  // entry the OS notification is *not* covering, and the per-state
+  // notification switches must not silence it. One of each per snapshot at
+  // most — three doors closing together is one door.
+  let enteredForReview = false;
+  let enteredNeedsInput = false;
   for (const agent of snapshot.agents) {
     if (agent.ackState !== 'active') continue;
     const prev = prevActivityStates.get(agent.id);
+    if (prev !== agent.activityState) {
+      if (agent.activityState === 'for_review') enteredForReview = true;
+      if (agent.activityState === 'needs_input') enteredNeedsInput = true;
+    }
     // Both the state's own switch and the master switch have to be on. A
     // state whose switch is off is still tracked below, so turning it back on
     // does not then fire for everything that entered while it was off.
@@ -524,6 +568,13 @@ function diffAndNotify(snapshot) {
   }
   prevActivityStates = new Map(snapshot.agents.map((a) => [a.id, a.activityState]));
   if (entered.length > 0) queueNotification(entered);
+
+  // A hand going up outranks a door closing: both in one snapshot means
+  // somebody is blocked *and* somebody finished, and the blocked one is the
+  // interrupting event (`04` §6). The scheduler would drop the second anyway;
+  // this decides which one it drops.
+  if (enteredNeedsInput) sounds.play('knock', { notified: lastNotifyShown });
+  else if (enteredForReview) sounds.play('door', { notified: lastNotifyShown });
 }
 
 /** @param {{id:string,label:string,projectName:string}[]} enteredAgents */
@@ -554,6 +605,12 @@ function flushNotification() {
  * @param {{id:string,label:string,projectName:string}[]} batch
  */
 function showNotification(batch) {
+  // Whether the OS actually said it is what WP-15's §8 rule turns on: a
+  // hidden tab is silent only when the notification is doing the work.
+  // Declining permission, or turning notifications off, is exactly when the
+  // sound is the only signal there is — so this is recorded from what
+  // happened, never assumed from what was requested.
+  lastNotifyShown = false;
   if (!('Notification' in window)) return;
   // The master switch in the settings sheet. Off means the tab badge and the
   // floor carry the signal and the OS is left alone.
@@ -567,6 +624,7 @@ function showNotification(batch) {
     } else {
       notification = new Notification('DeckHQ', { body: `${batch.length} sessions need you` });
     }
+    lastNotifyShown = true;
     notification.onclick = () => {
       try {
         window.focus();
@@ -716,6 +774,256 @@ function selectNextGoneHome() {
   selectAgent(ids[(at + 1) % ids.length]);
 }
 
+// ---------------------------------------------------- the office cleared
+
+/** How long the line stays: §9's "fades in and out over 3 s". */
+const CLEARED_LINE_MS = 3000;
+/** §9's "ambient light warms 6% over 1.2 s", plus the fall. */
+const CLEARED_LIGHT_MS = 2400;
+
+/**
+ * The product's one celebration. WP-15, `05` §9.
+ *
+ * Three things at once: the light warms, the chime plays, one line appears
+ * and goes. The light is a CSS overlay on the stage rather than anything in
+ * the renderer — it is chrome about the floor, not part of the floor, and
+ * `public/render/**` is another package's file.
+ *
+ * `prefers-reduced-motion` suppresses the light and keeps the line, exactly
+ * as §9 asks: the line is information, the warming is decoration, and the
+ * person who asked for less motion still wants to know their office is clear.
+ *
+ * @param {string} line
+ */
+function celebrateOfficeCleared(line) {
+  for (const t of clearedTimers) clearTimeout(t);
+  clearedTimers = [];
+
+  sounds.play('chime');
+
+  el.officeCleared.textContent = line;
+  el.officeCleared.hidden = false;
+  // The line is announced rather than left to a `hidden` attribute flip,
+  // because a screen-reader user gets the milestone or they get nothing.
+  announce(line);
+  // Two frames' worth of delay so the transition has a start state to run
+  // from; a `setTimeout(0)` is enough and does not depend on rAF, which a
+  // hidden tab would never fire.
+  clearedTimers.push(setTimeout(() => el.officeCleared.classList.add('is-shown'), 20));
+  clearedTimers.push(
+    setTimeout(() => el.officeCleared.classList.remove('is-shown'), CLEARED_LINE_MS - 400),
+  );
+  clearedTimers.push(
+    setTimeout(() => {
+      el.officeCleared.hidden = true;
+      el.officeCleared.textContent = '';
+    }, CLEARED_LINE_MS),
+  );
+
+  if (prefersReducedMotion()) return;
+  el.stage.classList.add('is-cleared');
+  clearedTimers.push(setTimeout(() => el.stage.classList.remove('is-cleared'), CLEARED_LIGHT_MS));
+}
+
+/**
+ * The same three-way rule the stylesheet uses (`05` §5.4, §9): an explicit
+ * setting wins, otherwise the OS decides.
+ */
+function prefersReducedMotion() {
+  const mode = latestSnapshot?.settings?.reducedMotion;
+  if (mode === 'reduce') return true;
+  if (mode === 'no-preference') return false;
+  try {
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+// ------------------------------------------------------ the office snapshot
+
+/**
+ * Whether `S` redacts. A property of this tab, not of the machine — the same
+ * reasoning as `letGoVisible`: "am I about to screenshot this for people who
+ * cannot see my project names" is a decision about the next keystroke, not a
+ * preference to persist. `Shift+S` toggles it and says so.
+ */
+let redactSnapshots = false;
+
+/** Cached `/api/about`. The hostname is the only field `S` needs, and it never changes. */
+let aboutCache = null;
+async function about() {
+  if (aboutCache) return aboutCache;
+  try {
+    const res = await fetch('/api/about');
+    if (res.ok) aboutCache = await res.json();
+  } catch (err) {
+    console.debug('[deckhq] /api/about unavailable', err);
+  }
+  return aboutCache || {};
+}
+
+/** True while a capture is running, so holding `S` down cannot start twenty. */
+let capturing = false;
+
+/**
+ * `S` — composite the floor and a stat strip into a PNG, put it on the
+ * clipboard, and save it. WP-14 /
+ * `docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §3.2.
+ *
+ * The redaction path is the interesting part. Project names are on the room
+ * plates, which the renderer paints from the snapshot it was last given — and
+ * `public/render/**` belongs to another package, so there is no "give me a
+ * redacted frame" entry point to call. There is, however, `Scene.setState`,
+ * which is public and is exactly "draw this". So: stop the loop, hand the
+ * renderer the redacted snapshot (which it draws synchronously while stopped),
+ * capture, hand back the real one, restart. Redaction therefore covers the
+ * plates as well as the strip, which is what §3.2 asks for and what a control
+ * called "redact" has to mean.
+ *
+ * Stopping the loop first is also what makes this work in a backgrounded tab:
+ * a stopped Scene draws on `setState` rather than on the next frame, and
+ * `pngBytes` is synchronous, so no part of the capture waits for a
+ * `requestAnimationFrame` that a hidden tab will never fire.
+ */
+async function takeSnapshot() {
+  if (capturing) return;
+  if (!latestSnapshot) return;
+  if (el.canvas.hidden) {
+    toast('There is no floor to photograph yet.', { isError: true });
+    return;
+  }
+  capturing = true;
+  const wasRunning = Boolean(scene) && !document.hidden;
+  try {
+    const { hostname } = await about();
+    const model = snapshotModel(latestSnapshot, { hostname, redact: redactSnapshots });
+
+    if (scene && redactSnapshots) {
+      try {
+        scene.stop();
+        scene.setState(model.source);
+      } catch (err) {
+        console.warn('[deckhq] could not redact the floor for the snapshot', err);
+        // Never ship a picture that claims to be redacted and is not.
+        toast('Could not redact the floor, so nothing was captured.', { isError: true });
+        return;
+      }
+    }
+
+    const colors = stripColors(document);
+    // The floor's own backing scale. Read here rather than inside the
+    // compositor because a hidden tab reports no layout at all, so the
+    // backing store plus this ratio is the only description of the floor's
+    // size that survives being backgrounded.
+    const dpr = window.devicePixelRatio || 1;
+    let scale = Math.max(MIN_SCALE, Math.round(dpr));
+    let bytes = null;
+    for (;;) {
+      const out = composite({ floor: el.canvas, model, scale, dpr, colors, ...snapshotFonts() });
+      bytes = pngBytes(out);
+      if (bytes.length <= MAX_PNG_BYTES) break;
+      const next = nextScaleDown(scale);
+      if (next === null || next === scale) break;
+      scale = next;
+    }
+
+    const oversize = bytes.length > MAX_PNG_BYTES;
+    const copied = await copyPng(bytes);
+    const saved = await saveSnapshot(bytes);
+    reportSnapshot({ copied, saved, oversize, bytes: bytes.length });
+  } finally {
+    // Whatever happened, the floor goes back to showing the truth.
+    if (scene && redactSnapshots) {
+      try {
+        scene.setState(latestSnapshot);
+        if (wasRunning) scene.start();
+      } catch (err) {
+        console.warn('[deckhq] could not restore the floor after a snapshot', err);
+      }
+    }
+    capturing = false;
+  }
+}
+
+/** The two faces the strip uses, taken from the stylesheet rather than restated. */
+function snapshotFonts() {
+  let style;
+  try {
+    style = getComputedStyle(document.documentElement);
+  } catch {
+    return {};
+  }
+  return {
+    fontSans: style.getPropertyValue('--font-sans').trim() || undefined,
+    fontMono: style.getPropertyValue('--font-mono').trim() || undefined,
+  };
+}
+
+/**
+ * Put the PNG on the clipboard. Refused permission, an unfocused tab and a
+ * browser without `ClipboardItem` all degrade to `false` rather than throwing:
+ * the file on disk is the durable half, and the toast says which half landed.
+ * @param {Uint8Array} bytes
+ */
+async function copyPng(bytes) {
+  try {
+    if (!navigator.clipboard || typeof ClipboardItem !== 'function') return false;
+    const blob = new Blob([bytes], { type: 'image/png' });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    return true;
+  } catch (err) {
+    console.debug('[deckhq] clipboard write refused', err);
+    return false;
+  }
+}
+
+/**
+ * POST the bytes to the daemon, which names the file and writes it.
+ * @param {Uint8Array} bytes
+ * @returns {Promise<string|null>} the path written, or null
+ */
+async function saveSnapshot(bytes) {
+  try {
+    const res = await fetch('/api/snapshot', {
+      method: 'POST',
+      headers: { 'content-type': 'image/png' },
+      body: bytes,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+    return body.file || null;
+  } catch (err) {
+    console.debug('[deckhq] snapshot save failed', err);
+    return null;
+  }
+}
+
+/** One toast that says exactly what happened, in the order the user cares about. */
+function reportSnapshot({ copied, saved, oversize, bytes }) {
+  const mb = (bytes / (1024 * 1024)).toFixed(1);
+  const what = redactSnapshots ? 'Redacted snapshot' : 'Snapshot';
+  if (!copied && !saved) {
+    toast(`${what} could not be copied or saved.`, { isError: true });
+    return;
+  }
+  const parts = [];
+  if (copied) parts.push('on the clipboard');
+  if (saved) parts.push(`saved to ${saved}`);
+  const tail = oversize ? ` It is ${mb} MB, over the 2 MB target.` : '';
+  toast(`${what} ${parts.join(' and ')}.${tail}`);
+}
+
+/** `Shift+S`. A toggle that says which way it went, because the next `S` acts on it. */
+function toggleRedaction() {
+  redactSnapshots = !redactSnapshots;
+  toast(
+    redactSnapshots
+      ? 'Redaction on. S swaps every project name for its MK tag, on the floor and in the strip.'
+      : 'Redaction off. S shows project names.',
+  );
+}
+
 // -------------------------------------------------------------- keyboard
 
 /**
@@ -811,6 +1119,14 @@ function handleKeydown(e) {
     case 'g':
     case 'G':
       selectNextGoneHome();
+      break;
+    // The office snapshot (WP-14). `Shift+S` decides what the next `S`
+    // contains; the shift key is read explicitly rather than inferred from
+    // the case of `e.key`, so caps lock does not silently swap them.
+    case 's':
+    case 'S':
+      if (e.shiftKey) toggleRedaction();
+      else takeSnapshot();
       break;
     // The review card's weighted actions (docs/plan/05-GUI-UX-SPEC.md §4.2):
     // 1 focuses the composer, 2 approves (a send), 3 benches. On the floor
@@ -1174,10 +1490,23 @@ function handleSnapshot(snapshot) {
     if (snapshot.projects?.some((p) => p.id === projectFilter)) renderProjectFilterChip();
     else filterToProject(null); // the project vanished from the floor
   }
-  if (!first) diffAndNotify(snapshot);
+  // The actors never interrupt anybody. They are not real sessions, so an
+  // actor "entering" needs_input must not raise an OS notification, play a
+  // sound, or count towards the office-cleared moment — the celebration in
+  // this product is reserved for real work being really finished (WP-13,
+  // WP-15).
+  if (!first && !snapshot.demo) diffAndNotify(snapshot);
   else prevActivityStates = new Map(snapshot.agents.map((a) => [a.id, a.activityState]));
   deckUI?.render();
+  // The office-cleared moment (WP-15). The actor floor is excluded for the
+  // same reason it fires no notifications: nothing on it was ever really
+  // waiting, so nothing on it can really be cleared.
+  if (!snapshot.demo) {
+    const cleared = clearedTracker.update(snapshot, Date.now());
+    if (cleared.fire) celebrateOfficeCleared(cleared.line);
+  }
   panel.refresh();
+  if (coachMarks.isRunning()) coachMarks.reposition();
   if (first) maybeShowOnboarding(snapshot.settings);
 }
 
@@ -1249,9 +1578,69 @@ function connectEvents() {
 // ----------------------------------------------------------- onboarding
 
 /**
- * First-run onboarding: shown once, until the user dismisses it, recorded
- * with POST /api/settings {onboarded:true} and never shown again.
- * docs/04-BUILD-PLAN.md WP11.
+ * Where a coach mark points.
+ *
+ * Two of the three anchors are regions of the floor, and the floor is one
+ * `<canvas>`: there is no element to measure. The renderer owns that geometry
+ * and does not expose it — `Scene` has no public "where is the office" or
+ * "where is this agent on screen" accessor, and `public/render/**` is another
+ * engineer's file this package may not edit. So this asks for one
+ * (`scene.anchorFor`), and when it is absent falls back to the canvas's own
+ * box with the pointer ring suppressed, which is honest about what it knows
+ * rather than drawing an arrow at a guess. `docs/DEVIATIONS.md` §108 records
+ * the export this wants.
+ *
+ * @param {{kind:string, selector?:string, target?:string}} anchor
+ * @returns {{x:number,y:number,w:number,h:number,arrow?:boolean}|null}
+ */
+function coachAnchorFor(anchor) {
+  if (anchor.kind === 'element') {
+    const node = document.querySelector(anchor.selector || '');
+    if (!node) return null;
+    const r = node.getBoundingClientRect();
+    if (!r.width && !r.height) return null;
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  }
+  if (anchor.kind === 'floor') {
+    if (scene && typeof scene.anchorFor === 'function') {
+      try {
+        const id =
+          anchor.target === 'agent' ? (getNeedsYouQueue(latestSnapshot)[0]?.id ?? null) : null;
+        const r = scene.anchorFor(anchor.target, id);
+        if (r && (r.w || r.h)) return { x: r.x, y: r.y, w: r.w, h: r.h };
+      } catch (err) {
+        console.debug('[deckhq] scene.anchorFor failed', err);
+      }
+    }
+    if (el.canvas.hidden) return null;
+    const r = el.canvas.getBoundingClientRect();
+    if (!r.width && !r.height) return null;
+    return { x: r.left, y: r.top, w: r.width, h: r.height, arrow: false };
+  }
+  return null;
+}
+
+const coachMarks = createCoachMarks({
+  layer: el.coachLayer,
+  getSnapshot: () => latestSnapshot,
+  anchorFor: coachAnchorFor,
+  announce,
+  onDone: () => {
+    // One bit, set by either route — reading all three, or Escape. `onboarded`
+    // is the whole of "has this person seen the tour", and the palette's
+    // "Onboarding again" is what brings it back on purpose.
+    if (latestSnapshot?.settings) latestSnapshot.settings.onboarded = true;
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ onboarded: true }),
+    }).catch((err) => console.debug('[deckhq] could not record onboarding as seen', err));
+  },
+});
+
+/**
+ * First run: the three coach marks, once, then never again.
+ * docs/plan/05-GUI-UX-SPEC.md §7.
  * @param {any} settings
  */
 function maybeShowOnboarding(settings) {
@@ -1261,31 +1650,9 @@ function maybeShowOnboarding(settings) {
 
 /** Open it on purpose — the palette's "Onboarding again". */
 function showOnboarding() {
-  if (el.onboardingDialog.open) return;
-  if (typeof el.onboardingDialog.showModal === 'function') {
-    el.onboardingDialog.showModal();
-  } else {
-    el.onboardingDialog.setAttribute('open', '');
-  }
+  if (coachMarks.isRunning()) return;
+  coachMarks.start();
 }
-
-el.onboardingDismiss.addEventListener('click', () => {
-  el.onboardingDialog.close();
-});
-
-// The 'close' event fires however the dialog closed (button, Esc, or a
-// future backdrop click), so recording "seen" lives in one place.
-el.onboardingDialog.addEventListener('close', async () => {
-  try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ onboarded: true }),
-    });
-  } catch (err) {
-    console.debug('[deckhq] could not record onboarding as seen', err);
-  }
-});
 
 // ---------------------------------------------------------------- panel
 
@@ -1795,6 +2162,7 @@ const paletteUI = createPalette({
   getSnapshot: () => latestSnapshot,
   getSelectedId: () => selectedId,
   getLetGoVisible: () => letGoVisible,
+  getRedactSnapshots: () => redactSnapshots,
   actions: {
     selectAgent,
     filterToProject,
@@ -1817,7 +2185,25 @@ const paletteUI = createPalette({
     openHooks: () => settingsUI.open('hooks'),
     openOnboarding: showOnboarding,
     setNotifications,
-    setSound: (next) => saveSetting({ sound: next }),
+    // One keystroke from the palette mutes globally, and it persists
+    // (WP-15, `05` §8). Turning it *on* plays the chime once, because a
+    // sound setting you cannot hear the result of is a setting you cannot
+    // judge — and this is the one place where a sound is a direct answer to
+    // something the user just did, so the coalescing window is bypassed.
+    setSound: async (next) => {
+      const saved = await saveSetting({ sound: next });
+      if (!saved) return;
+      if (next) {
+        sounds.unlock();
+        sounds._state.lastPlayedAt = -Infinity;
+        sounds.play('chime');
+        toast('Sound on. A door closes, two knocks, and a chime when the office clears.');
+      } else {
+        toast('Sound off, on this machine, until you turn it back on.');
+      }
+    },
+    snapshot: takeSnapshot,
+    toggleRedaction,
     toggleLetGoVisible: () => {
       letGoVisible = !letGoVisible;
       toast(letGoVisible ? 'Let-go agents are reachable from ⌘K' : 'Let-go agents hidden again');
@@ -1847,6 +2233,18 @@ function handlePaletteKey(e) {
 
 document.addEventListener('keydown', handlePaletteKey);
 document.addEventListener('keydown', handleKeydown);
+
+// A browser will not start an AudioContext until the page has had a real
+// gesture, so WP-15's first door would otherwise be swallowed. One listener,
+// removed the moment it has done its job — the context is created here and
+// lives for the tab.
+function unlockAudioOnce() {
+  document.removeEventListener('pointerdown', unlockAudioOnce);
+  document.removeEventListener('keydown', unlockAudioOnce);
+  sounds.unlock();
+}
+document.addEventListener('pointerdown', unlockAudioOnce);
+document.addEventListener('keydown', unlockAudioOnce);
 
 document.addEventListener('visibilitychange', () => {
   if (!scene) return;

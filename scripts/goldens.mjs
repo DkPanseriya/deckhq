@@ -220,11 +220,12 @@ async function probe(client) {
       const s = c && c.__deckhqScene;
       if (!s || !s._plan) return null;
       const conn = document.getElementById('connection-status');
-      const dlg = document.getElementById('onboarding-dialog');
+      // Since WP-13 onboarding is a coach-mark layer, not a <dialog>.
+      const layer = document.getElementById('coach-layer');
       return {
         agents: [...s._runtime.all()].length,
         connected: !!(conn && conn.hidden),
-        onboarding: !!(dlg && dlg.open),
+        onboarding: !!(layer && !layer.hidden),
       };
     })()`,
   });

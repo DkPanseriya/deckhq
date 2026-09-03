@@ -7,6 +7,9 @@
  * docs/02-ARCHITECTURE.md §5; docs/plan/05-GUI-UX-SPEC.md §5.4 for the sheet
  * these routes serve.
  */
+import os from 'node:os';
+import process from 'node:process';
+
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { DEFAULT_SETTINGS, MOTION_MODES, RESUME_TARGETS } from '../../core/store.mjs';
 import { RATE_CARD_VERSION } from '../../core/model.mjs';
@@ -26,6 +29,17 @@ const ALLOWED = new Set(Object.keys(DEFAULT_SETTINGS));
  * emulator table. Computed once: the table is static.
  */
 const TERMINAL_IDS = new Set(terminalIds());
+
+/**
+ * A hostname the operator asked for instead of the machine's own, sanitised
+ * to the characters a hostname can have so nothing else can arrive through
+ * it. Empty when unset, which is every real install.
+ * @returns {string}
+ */
+function demoHostname() {
+  const raw = String(process.env.DECKHQ_HOSTNAME || '').trim();
+  return /^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$/.test(raw) ? raw : '';
+}
 
 /**
  * @param {import('../server.mjs').Router} router
@@ -110,6 +124,18 @@ export function register(router, ctx) {
       statePath: store.file,
       rateCardVersion: RATE_CARD_VERSION,
       writeError: store.writeError,
+      // The office is named after the machine, because people share things
+      // with their name on them (WP-14,
+      // `docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §3.2). The browser
+      // cannot read this, so it comes from here. It never leaves the machine:
+      // this daemon makes no outbound request of any kind, and the only place
+      // the value goes is into a PNG the user asked for.
+      //
+      // `DECKHQ_HOSTNAME` overrides it. That exists for the same reason
+      // `scripts/demo-floor.mjs` invents project names and token counts: a
+      // screenshot committed to a public repository must carry nobody's real
+      // anything, and a machine name is somebody's real something.
+      hostname: demoHostname() || os.hostname(),
     });
   });
 

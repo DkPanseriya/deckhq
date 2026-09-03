@@ -325,8 +325,10 @@ export function createSettingsUI(opts) {
       s,
       'Sounds',
       toggle('Sounds', Boolean(current.sound), (next) => save({ sound: next })),
-      'Stored now; the three office sounds are synthesised by their own package and no sound ' +
-        'plays yet.',
+      'Three, a handful of times a day: a door closing when a session finishes and walks in, ' +
+        'two knocks when a hand goes up, and a rising chime when the office clears. ' +
+        'Synthesised in the browser — no files, no downloads. Silent while the tab is hidden ' +
+        'and the notification has already said it.',
     );
 
     const volume = document.createElement('input');
