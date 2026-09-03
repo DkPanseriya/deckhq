@@ -222,10 +222,19 @@ export function createHooksUI(opts) {
       }
 
       if (plan.note) {
-        const noteP = document.createElement('p');
-        noteP.className = 'hooks-note';
-        noteP.textContent = plan.note;
-        section.appendChild(noteP);
+        // A blank line in the adapter's note starts a new paragraph. WP-19's
+        // PermissionRequest paragraph is the one thing on this screen that
+        // grants a runtime the ability to be ANSWERED rather than only
+        // watched, and it must not be a wall of text at the end of a wall of
+        // text. Text nodes only, as everywhere in this client.
+        for (const para of String(plan.note).split(/\n{2,}/)) {
+          const text = para.trim();
+          if (!text) continue;
+          const noteP = document.createElement('p');
+          noteP.className = 'hooks-note';
+          noteP.textContent = text;
+          section.appendChild(noteP);
+        }
       }
     }
 

@@ -12,7 +12,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { CLAUDE_DIR } from './parse.mjs';
 import { BACKUP_DIR } from '../../core/paths.mjs';
-import { MAX_TOOL_SUMMARY } from '../../core/model.mjs';
+import { MAX_TOOL_SUMMARY, MAX_PERMISSION_SUMMARY } from '../../core/model.mjs';
 
 /** `true` — Claude Code supports the hook mechanism this module implements. */
 export const supported = true;
@@ -41,7 +41,24 @@ const HOOK_EVENTS = [
   // see `applyHook` in src/core/state-machine.mjs.
   'PreToolUse',
   'PostToolUse',
+  // WP-19. The only entry in this block that is not a `command` hook, and the
+  // only one the runtime waits on: it fires when a tool call would otherwise
+  // raise a prompt in the terminal, and its HTTP response can answer that
+  // prompt. Everything about it is in `docs/DEVIATIONS.md` §86 and §97.
+  'PermissionRequest',
 ];
+
+/**
+ * How long, in seconds, the runtime is told to wait for an answer.
+ *
+ * Written explicitly rather than relying on the runtime's own default (600 s
+ * on 2.1.231, `docs/DEVIATIONS.md` §86.4), so a future change to that default
+ * cannot silently shorten the hold under a card the user is still looking at.
+ */
+export const PERMISSION_TIMEOUT_SECONDS = 600;
+
+/** The path the `PermissionRequest` hook posts to. Its own route, never `/api/hook`. */
+export const PERMISSION_PATH = '/api/permission';
 
 /**
  * The `node -e` one-liner every hook entry runs. Reads the hook's JSON
@@ -82,13 +99,21 @@ function hookCommand(port) {
 }
 
 /**
- * The port a `_deckhq`-tagged command posts to, or null if it does not look
- * like one of ours.
- * @param {unknown} command
+ * The port one of our hook entries posts to, or null if it does not look like
+ * one of ours. Handles both kinds: the `command` one-liner every lifecycle
+ * event runs, and WP-19's `http` entry, whose port lives in its literal URL.
+ * @param {any} entry
  * @returns {number|null}
  */
-function portOfCommand(command) {
-  const m = /port:(\d+),path:'\/api\/hook'/.exec(String(command || ''));
+function portOfEntry(entry) {
+  if (!entry || entry._deckhq !== true) return null;
+  if (entry.type === 'http') {
+    const m = new RegExp(`^http://127\\.0\\.0\\.1:(\\d+)${PERMISSION_PATH}$`).exec(
+      String(entry.url || ''),
+    );
+    return m ? Number(m[1]) : null;
+  }
+  const m = /port:(\d+),path:'\/api\/hook'/.exec(String(entry.command || ''));
   return m ? Number(m[1]) : null;
 }
 
@@ -98,6 +123,28 @@ function portOfCommand(command) {
  */
 function hookEntry(port) {
   return { type: 'command', command: hookCommand(port), _deckhq: true };
+}
+
+/**
+ * WP-19's `PermissionRequest` entry: an `http` hook, tagged the same way.
+ *
+ * `http` rather than `command` because this one is answered rather than fired
+ * and forgotten — no process spawn per raised hand, and a real ten-minute hold
+ * on one socket (`docs/DEVIATIONS.md` §86.4, §86.5). The URL is a literal: the
+ * `http` schema allows no interpolation, so the port is baked in at install
+ * time and the existing `staleAtPort` reinstall is what cures a moved daemon
+ * (§86.6). No `matcher` and no `if`: every raised hand appears, which is the
+ * product's claim.
+ * @param {number} port
+ */
+function permissionEntry(port) {
+  return {
+    type: 'http',
+    url: `http://127.0.0.1:${port}${PERMISSION_PATH}`,
+    timeout: PERMISSION_TIMEOUT_SECONDS,
+    statusMessage: 'Waiting for DeckHQ…',
+    _deckhq: true,
+  };
 }
 
 /**
@@ -121,6 +168,8 @@ function buildHooksBlock(port) {
     // No matcher: every tool, because "which tool" is the whole point.
     PreToolUse: [{ hooks: [hookEntry(port)] }],
     PostToolUse: [{ hooks: [hookEntry(port)] }],
+    // WP-19. The one entry the runtime waits on.
+    PermissionRequest: [{ hooks: [permissionEntry(port)] }],
   };
 }
 
@@ -221,6 +270,181 @@ export function toolSummary(payload) {
   return { name, summary: oneLine(summary, MAX_TOOL_SUMMARY) };
 }
 
+// ------------------------------------------------- the permission request
+
+/**
+ * Tools whose approval card IS the interaction surface. The runtime discards
+ * a hook allow for these and makes the user answer in the session:
+ * `if (!g.updatedInput && e.requiresUserInteraction?.()) return null`
+ * (`docs/DEVIATIONS.md` §86.3). The panel must therefore offer no buttons for
+ * them, and say where to answer instead.
+ *
+ * MCP tools carry the same property through their own `anthropic/…` metadata,
+ * which the hook payload does not currently include; `requires_user_interaction`
+ * is read from the payload as well so that the day the runtime starts sending
+ * it, DeckHQ is already honouring it.
+ */
+const REQUIRES_USER_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
+
+/**
+ * A file path as a permission card should show it: relative to the session's
+ * own working directory when it is inside it, and **unchanged** when it is
+ * not.
+ *
+ * This is deliberately the opposite of {@link relativePath}, which reduces an
+ * outside path to its basename so a screenshot of the floor cannot carry
+ * somebody else's directory tree. Here the reader is deciding whether to let
+ * a write happen, and a write landing outside the project is precisely the
+ * case where hiding the location would be the dangerous choice. The card is a
+ * review surface, not a wall decoration.
+ * @param {string} file
+ * @param {string} cwd
+ */
+function permissionPath(file, cwd) {
+  const raw = String(file ?? '').trim();
+  if (!raw || !cwd) return raw;
+  try {
+    const abs = path.isAbsolute(raw) ? raw : path.resolve(cwd, raw);
+    const rel = path.relative(cwd, abs);
+    if (!rel || rel === '.' || rel.startsWith('..') || path.isAbsolute(rel)) return raw;
+    return rel.replace(/\\/g, '/');
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * The one line the card puts under the tool name: what this call would
+ * actually do.
+ * @param {string} name
+ * @param {Record<string, any>} input
+ * @param {string} cwd
+ */
+function permissionSummary(name, input, cwd) {
+  const one = (v) => oneLine(v, MAX_PERMISSION_SUMMARY);
+  if (name === 'Bash') return one(input.command ?? '');
+  const file = input.file_path ?? input.filePath ?? input.notebook_path ?? input.path;
+  if (typeof file === 'string' && file.trim()) return one(permissionPath(file, cwd));
+  if (typeof input.url === 'string' && input.url.trim()) return one(input.url);
+  if (typeof input.command === 'string' && input.command.trim()) return one(input.command);
+  // Anything else: the input's own keys, so the card never claims to know
+  // more about a tool than it does.
+  const parts = [];
+  for (const [k, v] of Object.entries(input)) {
+    if (v === undefined) continue;
+    parts.push(`${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`);
+  }
+  return one(parts.join(' · '));
+}
+
+/**
+ * A human label for one `addRules` suggestion — the runtime's own rule text,
+ * never one DeckHQ minted.
+ * @param {any} suggestion
+ */
+function suggestionLabel(suggestion) {
+  const rules = Array.isArray(suggestion.rules) ? suggestion.rules : [];
+  const parts = rules
+    .map((r) => {
+      const tool = oneLine(r?.toolName ?? '', 40);
+      const content = oneLine(r?.ruleContent ?? '', 80);
+      if (!tool) return content;
+      return content ? `${tool}(${content})` : tool;
+    })
+    .filter(Boolean);
+  return oneLine(parts.join(', '), MAX_TOOL_SUMMARY);
+}
+
+/**
+ * What a `PermissionRequest` payload says, in the shape the daemon and the
+ * panel use (WP-19). Parsing lives here, not in the HTTP route, because the
+ * payload shape is Claude Code's and nothing outside `src/adapters/` may know
+ * a runtime's format (`docs/02-ARCHITECTURE.md` §2).
+ *
+ * `permission_suggestions` is the field that earns the third button: it is the
+ * set of permission updates the terminal prompt itself would have offered, so
+ * "Allow for this session" retargets one of the runtime's own rules rather
+ * than inventing rule syntax (`docs/DEVIATIONS.md` §86.2). Only `addRules` is
+ * kept: `setMode` and `addDirectories` are wider grants than the button says.
+ *
+ * @param {Record<string, any>} payload
+ * @returns {{id:string, sessionId:string, cwd:string, tool:string, summary:string,
+ *   suggestions:any[], requiresUserInteraction:boolean}|null} null when the
+ *   payload names no tool — there is then nothing honest to ask about.
+ */
+export function permissionRequest(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const tool = oneLine(payload.tool_name ?? payload.toolName ?? '', 60);
+  if (!tool) return null;
+  const input =
+    payload.tool_input && typeof payload.tool_input === 'object'
+      ? payload.tool_input
+      : payload.toolInput && typeof payload.toolInput === 'object'
+        ? payload.toolInput
+        : {};
+  const cwd = String(payload.cwd || payload.workspace || '');
+  const rawSuggestions = Array.isArray(payload.permission_suggestions)
+    ? payload.permission_suggestions
+    : [];
+  const suggestions = rawSuggestions
+    .filter((s) => s && typeof s === 'object' && s.type === 'addRules' && Array.isArray(s.rules))
+    .map((s) => ({ ...s, label: suggestionLabel(s) }));
+
+  return {
+    id: String(payload.tool_use_id || payload.toolUseId || ''),
+    sessionId: String(payload.session_id || payload.sessionId || ''),
+    cwd,
+    tool,
+    summary: permissionSummary(tool, input, cwd),
+    suggestions,
+    requiresUserInteraction:
+      REQUIRES_USER_INTERACTION.has(tool) || payload.requires_user_interaction === true,
+  };
+}
+
+/**
+ * The body that answers a held `PermissionRequest`, in the shape the installed
+ * runtime's parser actually accepts — a `behavior`-discriminated OBJECT, not
+ * the bare string the prose documentation shows (`docs/DEVIATIONS.md` §86.3).
+ * A body in the documented shape fails validation silently and the prompt just
+ * sits there, so this function is the single place that spelling lives.
+ *
+ * Three things it will never emit, each with an `INVARIANT:` test:
+ *   - `interrupt: true` on a deny. Denying one command is not stopping the
+ *     agent, and the runtime's `interrupt` aborts the whole turn.
+ *   - a `destination` other than `"session"`. `userSettings`, `projectSettings`
+ *     and `localSettings` write a permanent grant into the user's settings
+ *     files, and that is not a button this panel has.
+ *   - anything at all on a timeout. Silence is how "let the terminal decide"
+ *     is expressed; there is no `ask` behaviour to send.
+ *
+ * @param {'allow'|'deny'|'session'} decision
+ * @param {any[]} [suggestions] the `addRules` suggestions from the request
+ * @returns {Record<string, any>}
+ */
+export function permissionDecisionBody(decision, suggestions = []) {
+  if (decision === 'deny') {
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision: { behavior: 'deny', message: 'denied from DeckHQ' },
+      },
+    };
+  }
+  /** @type {Record<string, any>} */
+  const inner = { behavior: 'allow' };
+  if (decision === 'session') {
+    const updates = (Array.isArray(suggestions) ? suggestions : [])
+      .filter((s) => s && s.type === 'addRules')
+      // `label` is ours, for the panel; it never goes back to the runtime.
+      .map(({ label: _label, ...rest }) => ({ ...rest, destination: 'session' }));
+    if (updates.length > 0) inner.updatedPermissions = updates;
+  }
+  return {
+    hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: inner },
+  };
+}
+
 /**
  * Exactly what would be written and where, for the consent screen.
  * docs §6: "The consent screen shows the literal JSON that will be written
@@ -238,7 +462,16 @@ export function describe(port = DEFAULT_PORT) {
       'DeckHQ adds one command hook per event below to your Claude Code settings so it can ' +
       'show exact, real-time state instead of polling. Each hook POSTs the event payload to ' +
       `DeckHQ on your own machine (127.0.0.1:${port}) and nothing else. Nothing leaves this ` +
-      'computer. Remove it any time from this screen — removal deletes only what was added here.',
+      'computer. Remove it any time from this screen — removal deletes only what was added here.\n\n' +
+      'PermissionRequest is the one entry that is different, and it is the one to read twice. ' +
+      'It fires only when a tool call is about to ask your permission in the terminal, and it ' +
+      'lets DeckHQ answer that prompt: the request is held open for up to ' +
+      `${PERMISSION_TIMEOUT_SECONDS} seconds while the panel shows you the tool and its input, ` +
+      'and it is answered only when you press Allow, Deny or Allow for this session. DeckHQ ' +
+      'never allows anything by itself, never answers on a timer and never writes a permanent ' +
+      'permission rule into your settings files — "Allow for this session" lasts as long as that ' +
+      'session and no longer. The terminal prompt stays on screen the whole time: if DeckHQ is ' +
+      'closed, or you answer in the terminal first, the terminal is what decides.',
   };
 }
 
@@ -330,8 +563,7 @@ function firstDeckhqPort(settings) {
     for (const group of groups) {
       const list = group && Array.isArray(group.hooks) ? group.hooks : [];
       for (const h of list) {
-        if (!h || h._deckhq !== true) continue;
-        const port = portOfCommand(h.command);
+        const port = portOfEntry(h);
         if (port != null) return port;
       }
     }

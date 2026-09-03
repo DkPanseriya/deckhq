@@ -3077,10 +3077,11 @@ hook). **The end-to-end run on the reference machine is still owed, and until it
 happens this feature stays out of the README, the changelog and every tweet**,
 per WP-19 and `08` §1.1 rule 11.
 
-`scripts/spike-permission/` holds the throwaway prototype that reproduces all of
-this. It is not product code, it is excluded from the published tarball by the
-`files` whitelist in `package.json`, and it should be deleted when the build
-lands.
+`scripts/spike-permission/` held the throwaway prototype that reproduced all of
+this. It was not product code and was excluded from the published tarball by the
+`files` whitelist in `package.json`. **The build landed and it is gone** —
+`scripts/fake-permission-client.mjs` and `test/integration/permission.test.mjs`
+reproduce the same findings against the real route. See §94.
 ## 87. WP-21 — the goldens gate, and the numbers it was calibrated with
 
 WP-21 asks for three things: a deliberately reverted rig fix must fail the
@@ -4334,3 +4335,231 @@ drawn on it.
 The check is green against fresh captures on all four, and the harness's own
 noise floor is unchanged from §87's measurement: 0 px over tolerance
 everywhere, 36 px moved at all on `empty` and 0 on the other three.
+## 97. WP-19 build — the panel can answer a permission prompt, and the run that proves it has not happened
+
+Built against the contract in §86, which was measured on Claude Code 2.1.231.
+**The acceptance criterion in WP-19 — _"a permission prompt raised by a session
+is answered from the panel and the session continues, verified end to end on
+the reference machine"_ — is still NOT met.** The CLI's stored OAuth token on
+this machine is still expired, so no tool call can be provoked and no real
+`PermissionRequest` has ever reached this code. Everything below is proved by
+tests and by a scripted stand-in for the runtime's hook client; the one thing
+neither can prove is that the installed runtime accepts the bytes DeckHQ puts
+on the wire. Per `08` §1.1 rule 11 and WP-19's own text, **this feature stays
+out of the README, out of a tweet and out of a pricing page until that run
+happens.** The changelog entry says so in its own words.
+
+### 97.1 What was built
+
+**The hook.** `PermissionRequest` joins the tagged block in
+`src/adapters/claude-code/hooks.mjs` as the ninth event and the only `http`
+entry:
+
+```json
+{
+  "type": "http",
+  "url": "http://127.0.0.1:<port>/api/permission",
+  "timeout": 600,
+  "statusMessage": "Waiting for DeckHQ…",
+  "_deckhq": true
+}
+```
+
+No `matcher` and no `if` — the product's claim is that every raised hand
+appears, so the hook narrows on nothing (§86.4). `timeout` is written
+explicitly rather than inherited, so a future change to the runtime's own
+default cannot silently shorten a hold under a card somebody is reading.
+Install, remove, the byte-exact backup, the port-mismatch-reads-as-not-installed
+rule and the one-click reinstall all inherit unchanged; `portOfEntry` now reads
+a port from either an entry's command line or its literal URL, so a settings
+file carrying only the `http` entry still reports its port correctly.
+
+**The route.** `POST /api/permission`, in its own module, deliberately NOT
+`/api/hook` — that one acknowledges in under 200 ms because the runtime is
+blocked on it, and this one is blocked on a person. It parses through the
+adapter (rule 8: the payload shape is Claude Code's), registers a
+`pendingPermission` on the session, and writes nothing.
+`POST /api/permission/decide` is the only thing in the product that can produce
+a decision.
+
+**The card.** `pendingPermission: {id, tool, summary, suggestions,
+requiresUserInteraction, since}` rides on the agent in the snapshot and over
+SSE, beside `currentTool` and with the same discipline: observed, transient, a
+copy rather than a handle, and never touching a user-owned field. The panel
+draws it above WHAT IT SAID with **Allow** / **Deny** / **Allow for session**
+on `A` / `D` / `S`.
+
+### 97.2 The five things it will never do, and where each is nailed down
+
+| Never | Where it is enforced | Test |
+| --- | --- | --- |
+| auto-allow, on any heuristic | only `decide()` builds a decision body, and only the panel's POST reaches it | `INVARIANT: the hold expires into no decision at all` |
+| answer on a timer | the one timer releases the socket with `{}` — no `hookSpecificOutput`, so not a decision | the same, plus the integration test's exit code 1 |
+| set `interrupt: true` | `permissionDecisionBody` has no branch that emits it | `INVARIANT: deny never sets interrupt` |
+| send a `destination` other than `"session"` | suggestions are echoed back with `destination` overwritten | `INVARIANT: Allow for this session sends destination:"session" and nothing else` |
+| touch `ackState` / `reviewSince` / `needsInputSince` | `Permissions` holds no store reference and calls only two write-only registry methods | `INVARIANT: holding, answering and expiring a request never touch ack state`, and the registry-side `INVARIANT: a pending permission changes no user-owned field` |
+
+The client half is guarded the same way: `answerPermission()` is its own funnel
+to its own endpoint and never reaches `performAction()` or `/api/ack`, asserted
+statically in `test/unit/panel-invariant.test.mjs` alongside the existing ack
+invariants. `A` is also app.js's acknowledge shortcut: the panel's listener
+runs first and claims the key **only** while a card is up, and a test asserts
+the claim happens after the card check, never before.
+
+### 97.3 Nine decisions this build took that §86 left open
+
+1. **The deny message is `"denied from DeckHQ"`**, lower case and without a
+   full stop — the package brief's literal wording. §86.3's table wrote
+   `"Denied from DeckHQ."`. The string lands in the session's own transcript as
+   the reason a tool did not run, so it is a user-visible piece of copy and the
+   difference is recorded rather than silently reconciled. If the sentence case
+   is wanted back, it is one literal in `permissionDecisionBody`.
+
+2. **The hold is the runtime's timeout minus a margin, not the timeout.**
+   `600_000 − 15_000 = 585_000 ms`, so the socket is released from our side
+   before the runtime gives up on it and the withdrawal is orderly rather than
+   a reset somebody has to explain. Configurable by
+   `DECKHQ_PERMISSION_HOLD_MS` and by `startDaemon({permissionHoldMs})`, which
+   is what lets the integration test prove the fall-through in 250 ms instead
+   of ten minutes.
+
+3. **A path outside the session's cwd is shown in full, not reduced to its
+   basename.** This is the exact opposite of WP-52's thought bubble, and
+   deliberately so. The bubble hangs over a floor that gets screenshotted, so
+   an outside path loses everything but its file name. The permission card is
+   the surface on which somebody decides whether to allow a write, and a write
+   landing outside the project is precisely the case where hiding where it goes
+   would be the dangerous choice. Both rules have their own `SECURITY:` test,
+   and the tests name the reason so the next person does not "fix" one to match
+   the other.
+
+4. **Only `addRules` suggestions are kept.** The runtime's update union also
+   carries `setMode`, `addDirectories`, `removeDirectories` and the `replace`/
+   `remove` rule forms. Retargeting a `setMode` at the session would change the
+   permission mode of a session from a web panel, which is a wider grant than
+   the button's words. Anything that is not `addRules` is dropped, and a
+   request that carried none is offered two buttons rather than three — absent,
+   not disabled-with-a-tooltip, per §86.5.
+
+5. **`2 Approve` gives up its fill while a card is up.** `05` §4.2 makes
+   Approve the only accent-filled button on the panel. Allow is also a primary
+   action, and two crimson-filled buttons is exactly the "which one is *the*
+   action?" problem the single-fill rule exists to prevent. So while a
+   permission card is showing, Allow is the filled button and Approve is plain;
+   it keeps its key, its place and its label. The screenshot shows the result.
+
+6. **The card carries no live clock.** `since` is in the snapshot and is part
+   of the contract, but the panel does not render "held for 42 s". The card is
+   already the most urgent thing on the screen and a second-by-second counter
+   on it is noise, not information — and it would need a one-second timer in a
+   panel that currently has one thirty-second one. The card simply vanishes
+   when the hold ends.
+
+7. **The `requires_user_interaction` set is a name list plus a payload flag.**
+   `AskUserQuestion` and `ExitPlanMode` are named; MCP tools carry the property
+   in metadata the hook payload does not currently include, so
+   `requires_user_interaction` is also read off the payload against the day the
+   runtime starts sending it. Those requests are still **held** — withdrawing
+   them would be a lie about what the runtime is doing — the card says to
+   answer in the terminal, offers no buttons, and the API refuses a decision
+   with a 409 rather than sending an allow the runtime would discard.
+
+8. **The held map is capped at 32 and sheds its oldest.** Held sockets are the
+   only new resource this feature introduces (§86.5). A shed entry is released
+   with `{}`, so shedding degrades into the terminal prompt like everything
+   else here. A repeated `tool_use_id` replaces the older socket rather than
+   orphaning it, and a payload with no `tool_use_id` still gets a card under a
+   key of our own instead of being dropped.
+
+9. **The consent screen's note is now paragraphs, not one block.** The
+   `PermissionRequest` paragraph grants a runtime the ability to be *answered*
+   rather than only watched, and it must not be the tail of a wall of text.
+   `public/hooks-ui.js` splits an adapter's note on blank lines; still
+   `textContent`, still no markup. The note names the button labels, says the
+   hold length, and says in so many words that DeckHQ never allows anything by
+   itself, never answers on a timer, never writes a permanent rule into a
+   settings file, and that the terminal prompt is live the whole time. A test
+   asserts each of those clauses is present.
+
+### 97.4 Codex is not built, and here is the route when it is
+
+§86.7 records, from documentation only, that Codex has `PermissionRequest` in
+`~/.codex/hooks.json` with the same object-shaped response and the same
+fall-through — **but its hook types are `command` and `mcp_tool` only, with no
+`http`.** So the Codex adapter cannot point at `/api/permission` and this
+package does not attempt it. `src/adapters/codex/hooks.mjs` is untouched and
+still reports `supported: false`.
+
+The follow-up, when it is picked up:
+
+1. Have the daemon write its bound port somewhere readable (§86.6 option 2;
+   that belongs in WP-36, not here).
+2. Ship a `command` hook — a Node one-liner that reads the port, POSTs the
+   payload it got on stdin to `/api/permission`, and prints the decision JSON
+   to stdout. The endpoint, the hold, the card, the three buttons and the
+   response body are all runtime-agnostic already; only the transport differs.
+   It costs one process spawn per raised hand, which is affordable at one per
+   prompt.
+3. The same command hook is the fallback for the two managed-settings kill
+   switches in §86.4, `allowedHttpHookUrls` and `allowManagedHooksOnly`, which
+   can switch the `http` route off over DeckHQ's head. Neither is detected
+   today: on a managed machine they look exactly like a hook that is installed
+   and never fires, which is what the hooks screen's delivery evidence already
+   reports. Making `doctor` name them by reading managed settings is a
+   separate, small package.
+
+None of this was run against Codex: it is not installed on this machine, and
+the claim that the hook shipped in 0.150.0 is still unverified.
+
+### 97.5 What proves what, and what is still owed
+
+**Proved by test** (38 new; the suite goes 714 → 752, and the four goldens still match):
+
+- The hook block: the `http` entry's type, URL, timeout and tag; that it
+  narrows on nothing; that install / remove / repoint / backup still behave;
+  that a port is readable from the `http` entry alone; that the consent screen
+  names the event and says what it does, clause by clause.
+- The payload parser: the tool, the literal input, the id, the suggestions and
+  their labels; the two path rules; one line of printable text at 400
+  characters; the `requiresUserInteraction` set.
+- The response bodies, byte for byte, for all three buttons, plus every "never"
+  in §97.2.
+- The route: the socket is not written to while it is held; a malformed body,
+  an unreadable payload and an unknown runtime all fall through; double
+  answers, unknown ids, unknown decisions and a `session` with no rule are all
+  refused without touching the held socket; the cap sheds; a closed socket
+  withdraws the card.
+- The registry: a card appearing, changing and vanishing moves no user-owned
+  field, no activity state and no count, and a stale clear cannot take a newer
+  card down.
+
+**Proved by the scripted runtime.** `scripts/fake-permission-client.mjs` sends
+§86.2's payload to the real route on a real daemon and waits on the socket the
+way the runtime waits. `test/integration/permission.test.mjs` drives it for all
+three buttons and for both fall-through paths (nobody answers; the daemon
+closes mid-hold), asserting the exact JSON the fake runtime receives. The
+prototype in `scripts/spike-permission/` is superseded by this and by the route
+itself; §86.9 said to delete it when the build lands, and it is deleted here.
+
+**Proved by screenshot** (`docs/media/permission-card.png`, rule 10). The demo
+floor with a `PermissionRequest` held open on _Migrate auth to short-lived
+tokens_: the card above WHAT IT SAID, the tool, the literal command, the three
+buttons on their keys, the note about the terminal, one filled button on the
+screen, and the raised hand still up on the floor beside it — the card came and
+will go without the runtime having moved on. Reproduce it with:
+
+```
+node scripts/demo-floor.mjs --port 4499
+node scripts/fake-permission-client.mjs --port 4499 \
+  --session <the needs_input session's id> --tool Bash \
+  --input "npx prisma migrate deploy --schema prisma/schema.prisma"
+node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ \
+  --width 1600 --height 1000 --settle 9000 --press jjjjj \
+  --out docs/media/permission-card.png
+```
+
+**Still owed, and it is the acceptance criterion itself:** `claude login` on the
+reference machine, then a real interactive session raising a real prompt,
+answered from the panel, and the session carrying on. Until that has been done
+and recorded here, WP-19 is not accepted and the feature is not spoken about
+outside this file and the changelog's own hedged entry.

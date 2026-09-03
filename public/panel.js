@@ -22,6 +22,14 @@
  * render*(), load*(), or any scroll/hover/input listener.
  * test/unit/panel-invariant.test.mjs asserts this statically.
  *
+ * WP-19's permission card has its own funnel, `answerPermission()`, and its
+ * own endpoint, POST /api/permission/decide. It is deliberately NOT routed
+ * through performAction(): allowing or denying one tool call says nothing
+ * about whether the user is done with the session, and letting it move
+ * `ackState` would be an observed event clearing a user-owned state. Nothing
+ * in the permission path touches ack state, and there is an `INVARIANT:` test
+ * for it in test/unit/panel-invariant.test.mjs.
+ *
  * `2 Approve` is a SEND, not an ack: it posts the configurable affirmative
  * through /api/send exactly as typing it would. The review is discharged by
  * the daemon when the runtime records the user turn — the documented
@@ -184,6 +192,10 @@ export function createPanel(opts) {
 
   /** @type {string|null} */
   let currentId = null;
+  /** WP-19: an answer is in flight, so the buttons are held. */
+  let answering = false;
+  /** The permission request id the card last announced, so it is said once. */
+  let announcedPermissionId = null;
   /** @type {any} the agent object currently displayed, possibly optimistic */
   let displayedAgent = null;
   let sending = false;
@@ -297,6 +309,36 @@ export function createPanel(opts) {
   body.tabIndex = 0;
   body.setAttribute('aria-label', 'Review');
 
+  // WP-19 · the permission card, above WHAT IT SAID because a question the
+  // runtime is holding a socket open for outranks anything it already said.
+  // Built once, hidden until `pendingPermission` appears on the snapshot.
+  const permissionSection = document.createElement('section');
+  permissionSection.className = 'permission-card';
+  permissionSection.setAttribute('role', 'group');
+  permissionSection.setAttribute('aria-label', 'Permission request');
+  permissionSection.hidden = true;
+  const permissionHeading = document.createElement('h3');
+  permissionHeading.className = 'review-heading permission-heading';
+  permissionHeading.textContent = 'Asking permission';
+  const permissionTool = document.createElement('div');
+  permissionTool.className = 'permission-tool';
+  // The literal tool input, from a hook payload: `textContent`, never markup,
+  // never a regex-to-HTML pass. It is `pre`-wrapped so a command reads as the
+  // command it is.
+  const permissionInput = document.createElement('pre');
+  permissionInput.className = 'permission-input mono';
+  const permissionActions = document.createElement('div');
+  permissionActions.className = 'permission-actions';
+  const permissionNote = document.createElement('p');
+  permissionNote.className = 'permission-note';
+  permissionSection.append(
+    permissionHeading,
+    permissionTool,
+    permissionInput,
+    permissionActions,
+    permissionNote,
+  );
+
   const saidSection = document.createElement('section');
   saidSection.className = 'review-section';
   const saidHeading = document.createElement('h3');
@@ -341,7 +383,7 @@ export function createPanel(opts) {
   changedFoot.appendChild(expandAllBtn);
   changedSection.append(changedHeadRow, changedEl);
 
-  body.append(saidSection, threadDetails, changedSection);
+  body.append(permissionSection, saidSection, threadDetails, changedSection);
 
   // Actions: three weighted buttons on 1/2/3, everything else behind ⋯ more.
   const actionsWrap = document.createElement('div');
@@ -461,6 +503,7 @@ export function createPanel(opts) {
     }
     renderWaiting();
     renderDoing();
+    renderPermission();
 
     changedHeading.textContent = `What changed in ${a.projectName || 'this project'}`;
     textarea.placeholder = `Reply to ${who(a)}…`;
@@ -516,6 +559,102 @@ export function createPanel(opts) {
     draftChip.hidden = !(currentId && drafts.has(currentId));
   }
 
+  /**
+   * The pending permission on the displayed agent, or null. Read-only.
+   * @returns {any|null}
+   */
+  function pendingPermission() {
+    const p = displayedAgent && displayedAgent.pendingPermission;
+    return p && typeof p === 'object' && p.id ? p : null;
+  }
+
+  /**
+   * WP-19 · the permission card. A read of `pendingPermission` off the
+   * snapshot, rendered as text. It writes nothing: rendering a question is
+   * not answering it, and this function must never reach performAction(),
+   * /api/ack or /api/permission/decide — only an explicit button or its
+   * explicit key does that, through answerPermission().
+   *
+   * Four states, per `docs/DEVIATIONS.md` §86.5: waiting with three buttons,
+   * waiting with two when the runtime offered no rule to add, "answer in the
+   * terminal" for the tools whose approval card IS the interaction surface,
+   * and — by simply disappearing — answered or withdrawn, which the daemon
+   * reports by clearing the field.
+   */
+  function renderPermission() {
+    const p = pendingPermission();
+    if (!p) {
+      permissionSection.hidden = true;
+      permissionActions.textContent = '';
+      permissionInput.textContent = '';
+      announcedPermissionId = null;
+      return;
+    }
+    permissionSection.hidden = false;
+    permissionTool.textContent = String(p.tool || 'A tool');
+    permissionInput.textContent = String(p.summary || '');
+    permissionActions.textContent = '';
+
+    if (p.requiresUserInteraction) {
+      // A hook allow is discarded for these, so offering a button would be
+      // offering something that does not work.
+      permissionNote.textContent =
+        `${p.tool} has to be answered in the session itself — this one cannot be answered ` +
+        'from here. Open the terminal running it and answer there.';
+      maybeAnnouncePermission(p, `${p.tool}: answer in the terminal`);
+      return;
+    }
+
+    const suggestions = Array.isArray(p.suggestions) ? p.suggestions : [];
+    permissionActions.append(
+      permissionButton('A', 'Allow', 'btn btn--primary', 'allow'),
+      permissionButton('D', 'Deny', 'btn', 'deny'),
+    );
+    if (suggestions.length > 0) {
+      const btn = permissionButton('S', 'Allow for session', 'btn', 'session');
+      const label = suggestions
+        .map((s) => (s && typeof s.label === 'string' ? s.label : ''))
+        .filter(Boolean)
+        .join(', ');
+      btn.title = label
+        ? `Adds ${label} for this session only — nothing is written to your settings files`
+        : 'For this session only — nothing is written to your settings files';
+      permissionActions.appendChild(btn);
+    }
+    permissionNote.textContent =
+      'The same prompt is open in the terminal. Whichever answers first wins, and DeckHQ ' +
+      'never answers on its own.';
+    maybeAnnouncePermission(p, `${p.tool} is asking permission: ${p.summary || ''}`);
+  }
+
+  /**
+   * Say a new permission card once, for a screen reader. Guarded on the
+   * request id so a snapshot per second does not repeat it.
+   * @param {any} p @param {string} text
+   */
+  function maybeAnnouncePermission(p, text) {
+    if (announcedPermissionId === p.id) return;
+    announcedPermissionId = p.id;
+    announce(text);
+  }
+
+  /**
+   * @param {string} key @param {string} label @param {string} className
+   * @param {'allow'|'deny'|'session'} decision
+   */
+  function permissionButton(key, label, className, decision) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `${className} btn--weighted`;
+    const kbd = document.createElement('kbd');
+    kbd.textContent = key;
+    btn.append(kbd, textNode(label));
+    btn.setAttribute('aria-keyshortcuts', key);
+    btn.disabled = answering;
+    btn.addEventListener('click', () => answerPermission(decision));
+    return btn;
+  }
+
   /** @param {string} text */
   function textNode(text) {
     const span = document.createElement('span');
@@ -543,7 +682,13 @@ export function createPanel(opts) {
     setMoreOpen(false);
 
     actionsEl.appendChild(weightedButton('1', 'Reply', 'btn', () => focusComposer()));
-    const approveBtn = weightedButton('2', 'Approve', 'btn btn--primary', () => approve());
+    // `2 Approve` is normally the one filled button on the screen (`05` §4.2).
+    // It yields the fill while a permission card is up: that card is the only
+    // thing on this panel with a socket and a deadline behind it, and two
+    // accent-filled buttons is exactly the "which one is the action?" problem
+    // the single-fill rule exists to prevent. It keeps its key and its place.
+    const approveClass = pendingPermission() ? 'btn' : 'btn btn--primary';
+    const approveBtn = weightedButton('2', 'Approve', approveClass, () => approve());
     approveBtn.title = `Sends “${approveText()}”`;
     actionsEl.appendChild(approveBtn);
     const third = thirdAction(a);
@@ -1184,6 +1329,104 @@ export function createPanel(opts) {
   }
 
   /**
+   * WP-19 · answer the permission prompt this daemon is holding open.
+   *
+   * The single funnel for POST /api/permission/decide, and deliberately NOT
+   * part of performAction(): a permission decision says something about one
+   * tool call, and `ackState` says whether the user is done with the session.
+   * Routing one through the other would let a tool approval clear a review
+   * debt, which is the `08` §1.1 rule 1 invariant. Nothing in this function
+   * touches ack state, the review queue, or the agent's activity state, and
+   * there is an `INVARIANT:` test that says so.
+   *
+   * Reached only from an explicit button built in renderPermission() or from
+   * its explicit A / D / S key. Never from a render, a refresh or a timer.
+   * @param {'allow'|'deny'|'session'} decision
+   */
+  async function answerPermission(decision) {
+    const p = pendingPermission();
+    if (!p || answering) return;
+    if (p.requiresUserInteraction) return;
+    if (decision === 'session' && !(Array.isArray(p.suggestions) && p.suggestions.length > 0)) {
+      return;
+    }
+    answering = true;
+    for (const b of permissionActions.querySelectorAll('button')) b.disabled = true;
+    try {
+      const res = await fetch('/api/permission/decide', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: p.id, decision }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      // A control says what happens (docs/plan/05 §11).
+      toast(
+        decision === 'deny'
+          ? `Denied. ${p.tool} did not run.`
+          : decision === 'session'
+            ? `Allowed for this session. ${p.tool} may run again without asking, until this session ends.`
+            : `Allowed. ${p.tool} is running.`,
+      );
+      announce(`${p.tool}: ${decision === 'session' ? 'allowed for this session' : decision}ed`);
+    } catch (err) {
+      toast(`Could not answer: ${err.message}`, { isError: true });
+      answering = false;
+      renderPermission();
+      return;
+    }
+    answering = false;
+    // The daemon clears `pendingPermission` as it answers the socket, so the
+    // card goes on the next snapshot. Re-render now so the buttons do not sit
+    // there looking live in the meantime.
+    renderPermission();
+  }
+
+  /**
+   * A / D / S, while the panel is open and the composer is not focused.
+   *
+   * This listener is registered when the panel is built, which is before
+   * app.js registers its own — and app.js binds `A` to acknowledge. So while
+   * a permission card is up, `A` answers the card and `stopImmediatePropagation`
+   * keeps it from also acknowledging the session. With no card up this handler
+   * returns before touching the event and `A` acknowledges exactly as before.
+   */
+  document.addEventListener('keydown', (e) => {
+    if (root.hidden || !currentId || !displayedAgent) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = /** @type {HTMLElement|null} */ (e.target);
+    const tag = t?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || Boolean(t?.isContentEditable)) return;
+    if (document.querySelector('dialog[open]')) return;
+    const p = pendingPermission();
+    if (!p || p.requiresUserInteraction) return;
+    /** @type {'allow'|'deny'|'session'|null} */
+    let decision = null;
+    switch (e.key) {
+      case 'a':
+      case 'A':
+        decision = 'allow';
+        break;
+      case 'd':
+      case 'D':
+        decision = 'deny';
+        break;
+      case 's':
+      case 'S':
+        decision = 'session';
+        break;
+      default:
+        return;
+    }
+    if (decision === 'session' && !(Array.isArray(p.suggestions) && p.suggestions.length > 0)) {
+      return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    answerPermission(decision);
+  });
+
+  /**
    * The number keys, 1/2/3, from app.js's keydown handler — which already
    * stays inert while focus is in the composer or any text control. `1` only
    * moves focus, `2` is a send, and `3` is the one that reaches
@@ -1417,6 +1660,11 @@ export function createPanel(opts) {
     currentId = null;
     displayedAgent = null;
     messages = null;
+    // The card belongs to the daemon's hold, not to this panel: closing the
+    // panel neither answers it nor withdraws it. Only the local view resets.
+    answering = false;
+    announcedPermissionId = null;
+    permissionSection.hidden = true;
     changesScannedAt = undefined;
     expandedFiles.clear();
     fileRows = [];

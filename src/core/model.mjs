@@ -51,6 +51,9 @@
  * @property {CurrentTool|null} [currentTool]  observed; null when no tool is
  *                                      running, or when the runtime does not
  *                                      report tool events at all
+ * @property {PendingPermission|null} [pendingPermission] WP-19; null unless a
+ *                                      `PermissionRequest` from this session is
+ *                                      being held open by the daemon right now
  * @property {boolean} [turnEnded]       the last record is an assistant message
  *                                      with no tool call: idle, up for review
  * @property {boolean} [archived]        the user archived this session in the
@@ -140,6 +143,33 @@ export const MAX_LAST_TEXT = 400;
  * The adapter that parses a hook payload is what enforces it.
  */
 export const MAX_TOOL_SUMMARY = 120;
+
+/**
+ * The longest tool-input summary a permission card will carry (WP-19). It is
+ * longer than a thought bubble's because this one is the thing being judged:
+ * the reader is deciding whether to allow the literal command in front of
+ * them, so it gets the same budget as a conversation excerpt. The adapter that
+ * parses the `PermissionRequest` payload is what enforces it.
+ */
+export const MAX_PERMISSION_SUMMARY = 400;
+
+/**
+ * What the panel is told about a permission prompt this daemon is holding
+ * open (WP-19, `docs/DEVIATIONS.md` §86). Observed, transient, and entirely
+ * separate from `ackState`: a permission decision is a statement about one
+ * tool call, never about whether the user is done with the session.
+ *
+ * @typedef {object} PendingPermission
+ * @property {string} id            correlation key, the runtime's `tool_use_id`
+ * @property {string} tool          the runtime's own tool name, e.g. `Bash`
+ * @property {string} summary       <= MAX_PERMISSION_SUMMARY chars, one line
+ * @property {{type:string, rules?:any[], behavior?:string, label:string}[]} suggestions
+ *   the `addRules` updates the terminal prompt itself would have offered, each
+ *   with a display label. Empty means "Allow for this session" is not offered.
+ * @property {boolean} requiresUserInteraction  true when a hook allow would be
+ *   discarded by the runtime and the user has to answer in the session
+ * @property {number} since         ms epoch the request arrived
+ */
 
 /**
  * Placement is derived, never stored. docs/02-ARCHITECTURE.md §3.1.

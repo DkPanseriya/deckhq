@@ -1404,6 +1404,73 @@ button {
 }
 /* ====================================================== end WP-47 block */
 
+/* ======================================================================
+   WP-19 · THE PERMISSION CARD (docs/DEVIATIONS.md §86.5, §97)
+   A question the runtime is holding a socket open for, so it sits at the top
+   of the review body, above WHAT IT SAID. It is the one card on this screen
+   with a real deadline behind it, and it gets the accent — on a rule and on
+   the Allow button's fill, never on small text, which is this stylesheet's
+   standing contract. The tool input is drawn from `textContent` into a `pre`:
+   it is a literal command from a hook payload and it is never markup.
+   ====================================================================== */
+
+.permission-card {
+  border: 1px solid var(--accent-soft-line);
+  border-left-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  padding: 0.55rem 0.7rem 0.6rem;
+  margin-bottom: 0.9rem;
+}
+.permission-heading {
+  margin: 0 0 0.35rem;
+}
+.permission-tool {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+/* The literal input. Wraps rather than scrolls sideways: a command you are
+   about to allow must be readable in full, not trailed off behind an
+   ellipsis. Long single tokens break so the card cannot widen the panel. */
+.permission-input {
+  margin: 0.3rem 0 0;
+  padding: 0.4rem 0.5rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 9rem;
+  overflow-y: auto;
+}
+.permission-input:empty {
+  display: none;
+}
+.permission-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+.permission-actions:empty {
+  display: none;
+}
+/* The note under the buttons carries the one fact that makes the card safe to
+   ignore: the terminal is still asking, so doing nothing is a valid answer. */
+.permission-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ====================================================== end WP-19 block */
+
 /* ----------------------------------------------------------------- dialog
    On-demand, not always-visible: this is the one place a real popup opens,
    dense with fields and copy, so it keeps a solid surface — a dark tinted
