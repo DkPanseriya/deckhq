@@ -77,6 +77,11 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  * @property {string} approveText        what the panel's `2 Approve` sends
  * @property {string} editor             which editor "open in editor" launches (WP-47)
  * @property {string} terminal           pinned emulator id, or `auto` to detect (WP-04)
+ * @property {number} goneHomeDays       days of no activity after which a benched
+ *                                       agent is not DRAWN on the floor (WP-50). A
+ *                                       display filter only — see
+ *                                       `public/render/plan.js`'s `isGoneHome`.
+ *                                       0 disables it.
  * @property {boolean} onboarded         first run is over
  */
 
@@ -96,6 +101,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // be wrong on any machine that later installs a different editor.
   editor: '',
   terminal: TERMINAL_AUTO,
+  goneHomeDays: 7,
   onboarded: false,
 });
 
@@ -110,6 +116,12 @@ const BOOLEAN_SETTINGS = Object.freeze([
 
 /** An approval is one line the user would have typed; anything longer is a reply. */
 const MAX_APPROVE_TEXT = 500;
+
+/**
+ * A gone-home window past a year is indistinguishable from "never", and a
+ * negative one is meaningless. `0` is the honest way to say "draw everybody".
+ */
+const MAX_GONE_HOME_DAYS = 365;
 
 /**
  * How long `save()` waits for further mutations before it writes. Exported so
@@ -235,6 +247,20 @@ function sanitizeEditor(v) {
 }
 
 /**
+ * How many days of silence make a benched agent stop being drawn (WP-50).
+ * Clamped the same way as the stall window: an out-of-range or non-numeric
+ * value is a hand-edited state.json or a stale build, and falls back to the
+ * default rather than reaching the renderer as a NaN that hides everybody.
+ * @param {unknown} v
+ * @returns {number}
+ */
+function clampGoneHomeDays(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.goneHomeDays;
+  return Math.min(MAX_GONE_HOME_DAYS, Math.max(0, n));
+}
+
+/**
  * Coerce a whole settings object into range, key by key. Every sanitizer is
  * idempotent, so this is safe to run on already-clean data — which is why
  * both `normalize()` (disk) and `setSettings()` (HTTP) run the same pass
@@ -252,6 +278,7 @@ function sanitizeSettings(raw) {
   s.approveText = sanitizeApproveText(s.approveText);
   s.editor = sanitizeEditor(s.editor);
   s.terminal = sanitizeTerminal(s.terminal);
+  s.goneHomeDays = clampGoneHomeDays(s.goneHomeDays);
   for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);
   // Anything not in DEFAULT_SETTINGS is dropped rather than carried: a key
   // from an older build (`showLetGo`, `zoom`) must not survive a round-trip

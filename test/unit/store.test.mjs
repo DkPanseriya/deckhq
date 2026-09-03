@@ -397,3 +397,51 @@ test('editor: only a name on the allowlist is ever stored (WP-47)', async () => 
     await cleanup(dir);
   }
 });
+
+test('goneHomeDays: the gone-home window is clamped, and 0 means "draw everybody"', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    assert.equal(store.settings.goneHomeDays, 7, 'the default window is a week');
+
+    // 0 is meaningful and must survive: it turns the display filter off rather
+    // than sending everybody home. A clamp to a minimum of 1 would have made
+    // "draw everybody" unreachable.
+    store.setSettings({ goneHomeDays: 0 });
+    assert.equal(store.settings.goneHomeDays, 0);
+
+    store.setSettings({ goneHomeDays: -5 });
+    assert.equal(store.settings.goneHomeDays, 0, 'a negative window is not a window');
+
+    store.setSettings({ goneHomeDays: 10_000 });
+    assert.equal(store.settings.goneHomeDays, 365, 'past a year is indistinguishable from never');
+
+    store.setSettings({ goneHomeDays: 'soon' });
+    assert.equal(store.settings.goneHomeDays, 7, 'a non-number falls back to the default');
+
+    store.setSettings({ goneHomeDays: 0.5 });
+    assert.equal(store.settings.goneHomeDays, 0.5, 'half a day is a legitimate window');
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('load() clamps an out-of-range goneHomeDays found on disk', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    // A hand-edited state.json. A NaN reaching the renderer would decide
+    // nobody has gone home, which is the harmless direction — but a value out
+    // of range is still a value nothing wrote on purpose.
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ version: 1, settings: { goneHomeDays: 'forever' } }),
+      'utf8',
+    );
+    const store = new Store(file);
+    await store.load();
+    assert.equal(store.settings.goneHomeDays, 7);
+  } finally {
+    await cleanup(dir);
+  }
+});

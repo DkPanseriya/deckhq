@@ -110,8 +110,19 @@ const DEMO_SESSIONS = [
  * the goldens have to hold still.
  *
  * Built rather than listed: 70 hand-written rows would be noise. The 18 sizes
- * sum to 70; states are dealt so every room gets a mix and the benched count
- * lands on exactly 47.
+ * sum to 70; states are dealt so the counts land on §0's exactly.
+ *
+ * TWO CORRECTIONS MADE FOR WP-50, both so this fixture is the machine §0
+ * measured rather than an approximation of it:
+ *
+ *   1. Both office sessions belong to ONE project. §0's floor is "one
+ *      furnished room"; dealing the second one into `web-console` (it fell on
+ *      index 14) gave the fixture a second active repo that the real machine
+ *      did not have.
+ *   2. Ages span a month, not five days. The real machine's 47 benched
+ *      sessions had been benched for weeks — that is what the gone-home
+ *      window is FOR — and a fixture whose oldest session is five days old
+ *      cannot photograph it.
  */
 function referenceSessions() {
   const projects = [
@@ -154,7 +165,7 @@ function referenceSessions() {
     for (let k = 0; k < count; k++) {
       let state;
       if (n === 0) state = 'working';
-      else if (n === 1 || n === 14) state = 'for_review';
+      else if (n === 1 || n === 2) state = 'for_review';
       else if (benched < 47 && n % 10 !== 5) {
         state = 'benched';
         benched++;
@@ -163,8 +174,9 @@ function referenceSessions() {
         project,
         `${verbs[n % verbs.length]} ${nouns[(n * 7) % nouns.length]}`,
         state,
-        // Ages step from a couple of hours to a few days, in whole hours.
-        2 + ((n * 37) % 120),
+        // Ages step from a couple of hours to a month, in whole hours, so the
+        // gone-home window (7 days) has a real spread to bite on.
+        2 + ((n * 37) % 120) * 6,
         0.2 + ((n * 13) % 25) / 10,
       ]);
       n++;

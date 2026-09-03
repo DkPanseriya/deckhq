@@ -185,7 +185,28 @@
   consulted; the client checked only the browser permission. It is now the master switch, with
   `notifyHandsUp` and `notifyForReview` under it, so the two states that reach you when the tab is
   closed can be chosen separately.
-
+- **The floor is generated from the people on it, not from the repositories on disk.** Rooms exist
+  only for projects with an agent at a desk, hand up, or waiting; a room's desks are the agents at
+  them, minimum one table, where they used to be the session count with every benched session
+  included. Projects nobody is in collapse into ONE directory strip along the bottom of the
+  working floor — one line each, carrying the name, the session count and how long ago anything
+  happened, and clicking a line scopes the panel exactly as clicking a room plate does. Archived
+  projects stay off the floor entirely. On the reference machine the working floor was one
+  furnished room and ten large empty cells; it is now one furnished room filling 59% of the floor,
+  3.3% of it bare, with seventeen idle repos in a strip taking 8.2%. `docs/DEVIATIONS.md` §96.
+- **Benched agents who have gone quiet go home.** A benched agent with no activity for longer than
+  `settings.goneHomeDays` (default 7, `0` to keep everybody) is not drawn, the lounge is sized to
+  the people who ARE drawn, and the door plate reads `12 benched · 35 went home`. Nothing about
+  their state changes — this reads an observed timestamp and writes nothing, so `ackState` and the
+  invariant are untouched, and any new activity brings them back on the next scan. They stay in
+  the header, in the panel, and one `g` away on the keyboard.
+- **People never shrink below legibility.** The character scale is decoupled from the world scale,
+  and `05-GUI-UX-SPEC.md` §6.2's floors are applied per element where each is drawn: 16 px of
+  body, 11 px of name label (was 9), 12 px of state icon (was 10), 13 px of waiting badge. At fit
+  on a 1600x1000 stage the reference floor now draws a 31 px body and an 11 px label.
+- **A re-plan is animated.** A room appearing when its first agent sits down, or folding into the
+  directory when its last one leaves, cross-fades over 260 ms rather than popping. Reduced motion
+  and a hidden tab get the cut.
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
   runtime records the user turn — the documented `UserPromptSubmit` exception — never by the
@@ -232,6 +253,9 @@
   in the one wrapper file that has to exist — and there are now tests over every platform and
   every emulator asserting that an id made of shell metacharacters lands in exactly one argument
   and is equal to it. `docs/DEVIATIONS.md` §91.
+- **A prop's contact shadow no longer scales without bound.** Its depth is a property of how thick
+  a thing is, not of how big it is; unbounded, the room-sized rug a large project room now gets
+  cast a 380 px ellipse across half the room.
 - **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are
   written with the port the daemon had when they were installed, so a later start on the 4317
   default — or on 4318 after the in-use walk — left every hook event posting into a void while the

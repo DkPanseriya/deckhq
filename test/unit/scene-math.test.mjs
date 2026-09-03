@@ -23,9 +23,17 @@ import {
   shouldRebuildAspect,
   computeFitScale,
   resolveLabelCollisions,
+  characterScaleFor,
+  CHAR_MIN_PX_PER_UNIT,
 } from '../../public/render/scene.js';
 import { buildPlan } from '../../public/render/plan.js';
-import { truncateLabel, labelBox } from '../../public/render/rig.js';
+import {
+  truncateLabel,
+  labelBox,
+  labelFontSize,
+  BODY_HEIGHT_U,
+  LEGIBILITY_MIN_PX,
+} from '../../public/render/rig.js';
 
 // ------------------------------------------------------- world <-> screen
 
@@ -691,4 +699,138 @@ test('a floor that fits leaves nothing to scroll', () => {
   const viewW = 1200;
   const span = Math.max(0, floorPx - pinnedW - (viewW - pinnedW));
   assert.equal(span, 0, 'a fitting floor has zero scroll span');
+});
+
+// ---------------------------------------------- WP-50: people stay legible
+
+/**
+ * 05-GUI-UX-SPEC.md §6.2, as a property over every population and viewport.
+ *
+ * The measurement is `computeFitScale`, deliberately: the floor is drawn at
+ * `max(fit, MIN_SCALE)`, so fit is the smaller of the two and passing here
+ * means passing on the real floor. The sizes come from the rig's own exports,
+ * not from a second copy of its arithmetic — the whole class of bug §16, §35,
+ * §38, §52 and §55 belong to is two representations allowed to disagree.
+ */
+test('a character is never under 16 px of body, and its label never under 11 px', () => {
+  const NOW = 1_800_000_000_000;
+  const DAY = 24 * 60 * 60 * 1000;
+  const populations = {
+    // The reference machine's shape: one active repo, seventeen idle, and a
+    // benched population mostly past the gone-home window.
+    reference: () => {
+      const projects = [];
+      const agents = [];
+      projects.push({ id: 'active', name: 'active', sessionCount: 13, tokens: 0, needsYou: 0 });
+      agents.push({
+        id: 'w',
+        projectId: 'active',
+        ackState: 'active',
+        activityState: 'working',
+        lastActivityAt: NOW,
+      });
+      for (let i = 0; i < 2; i++) {
+        agents.push({
+          id: `r${i}`,
+          projectId: 'active',
+          ackState: 'active',
+          activityState: 'for_review',
+          reviewSince: NOW - 3600e3,
+          lastActivityAt: NOW,
+        });
+      }
+      for (let i = 0; i < 17; i++) {
+        projects.push({ id: `i${i}`, name: `idle-${i}`, sessionCount: 3, tokens: 0, needsYou: 0 });
+        agents.push({
+          id: `ia${i}`,
+          projectId: `i${i}`,
+          ackState: 'active',
+          activityState: 'ended',
+          lastActivityAt: NOW - 3 * DAY,
+        });
+      }
+      for (let i = 0; i < 47; i++) {
+        agents.push({
+          id: `b${i}`,
+          projectId: 'active',
+          ackState: 'benched',
+          activityState: 'ended',
+          lastActivityAt: NOW - (i < 12 ? 1 : 30) * DAY,
+        });
+      }
+      return { projects, agents };
+    },
+    // The demo floor: six repos, five of them with somebody in them.
+    demo: () => {
+      const projects = [];
+      const agents = [];
+      [4, 3, 3, 2, 2].forEach((n, k) => {
+        projects.push({ id: `p${k}`, name: `p${k}`, sessionCount: n + 2, tokens: 0, needsYou: 0 });
+        for (let i = 0; i < n; i++) {
+          agents.push({
+            id: `p${k}-${i}`,
+            projectId: `p${k}`,
+            ackState: 'active',
+            activityState: i === 0 ? 'working' : 'ended',
+            lastActivityAt: NOW,
+          });
+        }
+      });
+      projects.push({ id: 'idle', name: 'idle', sessionCount: 2, tokens: 0, needsYou: 0 });
+      for (let i = 0; i < 9; i++) {
+        agents.push({
+          id: `b${i}`,
+          projectId: 'idle',
+          ackState: 'benched',
+          activityState: 'ended',
+          lastActivityAt: NOW - DAY,
+        });
+      }
+      return { projects, agents };
+    },
+  };
+
+  // The goldens' stage, plus the narrowest and widest real windows.
+  const VIEWPORTS = [
+    [1600, 936],
+    [1280, 656],
+    [2560, 1376],
+  ];
+
+  for (const [name, build] of Object.entries(populations)) {
+    const { projects, agents } = build();
+    for (const [viewW, viewH] of VIEWPORTS) {
+      const plan = buildPlan(projects, agents, {
+        targetAspect: computeTargetAspect(viewW, viewH),
+        now: NOW,
+      });
+      const fit = computeFitScale(plan.width, plan.height, viewW, viewH);
+      const u = characterScaleFor(fit);
+      const body = BODY_HEIGHT_U * u;
+      const label = labelFontSize(u);
+      assert.ok(
+        body >= LEGIBILITY_MIN_PX.body,
+        `${name} at ${viewW}x${viewH}: a body is ${body.toFixed(1)} px`,
+      );
+      assert.ok(
+        label >= LEGIBILITY_MIN_PX.label,
+        `${name} at ${viewW}x${viewH}: a label is ${label.toFixed(1)} px`,
+      );
+    }
+  }
+});
+
+test('the character scale is a floor on the world scale, not a replacement for it', () => {
+  // Above the floor, a person is drawn at exactly the floor's scale — the
+  // decoupling must not start magnifying people on a floor that is already
+  // large enough for them.
+  assert.equal(characterScaleFor(40), 40);
+  assert.equal(characterScaleFor(CHAR_MIN_PX_PER_UNIT + 1), CHAR_MIN_PX_PER_UNIT + 1);
+  // Below it, they stop shrinking.
+  assert.equal(characterScaleFor(1), CHAR_MIN_PX_PER_UNIT);
+  assert.equal(characterScaleFor(0), CHAR_MIN_PX_PER_UNIT);
+  assert.ok(
+    BODY_HEIGHT_U * CHAR_MIN_PX_PER_UNIT >= LEGIBILITY_MIN_PX.body - 1e-9,
+    'the floor must be exactly what 16 px of body needs',
+  );
 });

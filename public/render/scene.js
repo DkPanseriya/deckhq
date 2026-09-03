@@ -13,9 +13,9 @@
  * of this file for what that concurrency means for testing this module.
  */
 
-import { buildPlan, U, formatTokens } from './plan.js';
+import { buildPlan, floorPopulation, U, formatTokens } from './plan.js';
 import { bakeBackdrop } from './backdrop.js';
-import { drawCharacter, formatElapsed, labelBox } from './rig.js';
+import { drawCharacter, formatElapsed, labelBox, BODY_HEIGHT_U, LEGIBILITY_MIN_PX } from './rig.js';
 import { sampleClip, makeActivityRotation } from './clips.js';
 import { STATE_COLORS, PALETTE, identityFor } from './palette.js';
 import { AgentRuntime, assignSeats, lodForZoom, worldToScreen, screenToWorld } from './agents.js';
@@ -44,6 +44,34 @@ const BADGE_MIN_PX_PER_UNIT = 14;
  * needs to stay legible, not from a project count.
  */
 const MIN_SCALE = 7.5;
+
+/**
+ * THE CHARACTER SCALE IS NOT THE WORLD SCALE (05-GUI-UX-SPEC §6.2).
+ *
+ * A person is drawn at `max(worldScale, CHAR_MIN_PX_PER_UNIT)`, so below the
+ * point where a body would be under `BODY_MIN_PX` tall people stop shrinking
+ * with the plan and grow relative to it. A slightly-too-large person in a
+ * small room is a legible floor; a correctly-scaled six-pixel person is a
+ * decorative texture.
+ *
+ * The per-element floors — 11 px of name label, 12 px of state icon, 13 px of
+ * waiting badge — are `rig.js`'s, because §6.2 states them per element and the
+ * rig is where each one is measured and drawn.
+ */
+export const CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
+
+/**
+ * The scale a person is drawn at, given the scale the FLOOR is drawn at.
+ * Exported as a plain function so the legibility test can ask for it without a
+ * canvas — see the note at the bottom of this file.
+ * @param {number} worldScale px per plan unit
+ */
+export function characterScaleFor(worldScale) {
+  return Math.max(Number(worldScale) || 0, CHAR_MIN_PX_PER_UNIT);
+}
+
+/** How long a re-plan cross-fades for. Skipped under reduced motion. */
+const REPLAN_FADE_MS = 260;
 
 // Plan-rebuild policy (CONTRACTS-WP13.md "Rebuild policy (scene.js)"): the
 // stage's target aspect (same clamp `plan.js` applies internally, reproduced
@@ -305,6 +333,15 @@ function iconForAgent(agent) {
 function planSignature(snapshot) {
   const projects = (snapshot && snapshot.projects) || [];
   const agents = (snapshot && snapshot.agents) || [];
+  // WP-50: the plan is a function of active projects and active agents, so the
+  // signature has to be too. A project's room exists only while somebody in it
+  // is active, its desks are the agents at them, and the lounge is sized by
+  // who is DRAWN — so benching the last active agent in a repo, or a benched
+  // agent crossing the gone-home window, both change the geometry without
+  // changing a single session count.
+  const pop = floorPopulation(agents, {
+    goneHomeDays: (snapshot && snapshot.settings && snapshot.settings.goneHomeDays) ?? undefined,
+  });
   // The floor's GEOMETRY depends on more than the project set. The lounge
   // grows a games table at three, five, seven, nine and eleven benched agents;
   // the departures room exists only while somebody is in it and is sized from
@@ -312,22 +349,23 @@ function planSignature(snapshot) {
   // Keying the rebuild on projects alone left all three stale, so a session
   // that was benched or archived was assigned a seat that did not exist — and
   // an agent with no seat is parked at the floor's origin.
-  let waiting = 0;
-  let benched = 0;
   let letGo = 0;
   for (const a of agents) {
-    if (!a) continue;
-    if (a.ackState === 'let_go') letGo++;
-    else if (a.ackState === 'benched') benched++;
-    else if (a.activityState === 'for_review') waiting++;
+    if (a && a.ackState === 'let_go') letGo++;
   }
   return [
     projects
-      .map((p) => `${p.id}:${p.sessionCount}`)
+      .map(
+        (p) =>
+          `${p.id}:${p.sessionCount}:${pop.active.get(String(p.id)) ?? -1}:${
+            pop.desks.get(String(p.id)) ?? -1
+          }:${p.archived ? 1 : 0}`,
+      )
       .sort()
       .join('|'),
-    `w${waiting}`,
-    `b${benched}`,
+    `w${pop.waiting}`,
+    `b${pop.benchedDrawn}`,
+    `h${pop.goneHome.size}`,
     `g${letGo}`,
   ].join('~');
 }
@@ -368,6 +406,13 @@ export class Scene {
     this._plan = null;
     this._planSignature = null;
     this._backdrop = null;
+    /**
+     * The floor the last re-plan replaced, kept only long enough to fade it
+     * out under the new one (`REPLAN_FADE_MS`). See `_rebuildPlan`.
+     * @type {{backdrop:any, plan:any, scale:number, camera:{panX:number,panY:number}}|null}
+     */
+    this._fadeFrom = null;
+    this._fadeStartedAt = 0;
     this._snapshot = { agents: [], projects: [], counts: {} };
     this._agentsById = new Map();
     this._plateRects = []; // screen-space rects for hit-testing, refreshed each draw
@@ -464,13 +509,54 @@ export class Scene {
    */
   _rebuildPlan(targetAspect) {
     const agents = this._snapshot.agents || [];
-    this._plan = buildPlan(this._snapshot.projects || [], agents, { targetAspect });
+    // A re-plan is a new building. Walls that pop are the reason for the
+    // cross-fade below: the old backdrop is kept and faded out over the new
+    // one, so a room appearing or folding into the directory reads as a
+    // change rather than as a flicker. Reduced motion gets the cut.
+    //
+    // So does a stopped loop (a hidden tab). A fade needs frames to run; with
+    // none, the single `_draw` that `setState` makes would paint the OLD floor
+    // over the new one at full opacity and leave it there until the tab came
+    // back — the flicker this exists to remove, held still.
+    const previous =
+      this._backdrop && this._plan && !this._reduced && this._running
+        ? {
+            backdrop: this._backdrop,
+            plan: this._plan,
+            scale: this._scale(),
+            camera: { ...this._camera },
+          }
+        : null;
+    this._plan = buildPlan(this._snapshot.projects || [], agents, {
+      targetAspect,
+      goneHomeDays: (this._snapshot.settings || {}).goneHomeDays,
+    });
     this._backdrop = bakeBackdrop(this._plan, this._dpr);
+    this._fadeFrom = previous;
+    this._fadeStartedAt = previous ? nowMs() : 0;
     this._recomputeFitScale();
     // The pan referred to a floor that no longer exists, so it is discarded;
     // the magnification is the user's and is kept.
     this._centerCamera();
     this.canvas.style.cursor = this._pannable() ? 'grab' : '';
+  }
+
+  /**
+   * The agents the floor is not drawing because they went home — benched, and
+   * quiet for longer than `settings.goneHomeDays`.
+   *
+   * Newest activity first, which is the order somebody looking for one wants
+   * them in. The floor is the only surface that hides them; the header still
+   * counts them, the panel still lists them, and this is what lets a keyboard
+   * command reach them in one keystroke (`08` WP-40's acceptance).
+   * @returns {string[]}
+   */
+  goneHomeAgentIds() {
+    const ids = this._plan && this._plan.goneHome ? [...this._plan.goneHome] : [];
+    const lastActivity = (id) => (this._agentsById.get(id) || {}).lastActivityAt || 0;
+    return ids.sort(
+      (a, b) => lastActivity(b) - lastActivity(a) || String(a).localeCompare(String(b)),
+    );
   }
 
   /**
@@ -579,6 +665,19 @@ export class Scene {
   /** The px-per-unit the floor is actually drawn at: fit scale times zoom. */
   _scale() {
     return this._fitScale * this._zoom;
+  }
+
+  /**
+   * The px-per-unit a PERSON is drawn at, which is not the same number.
+   *
+   * 05-GUI-UX-SPEC.md §6.2: below the point where a body would be under
+   * `BODY_MIN_PX`, people stop scaling down with the plan. Everything derived
+   * from a character — its label box, its badge, its icon, its hit radius —
+   * reads this rather than `_scale()`, so the whole figure grows together
+   * instead of a body floating away from the label under it.
+   */
+  _characterScale() {
+    return characterScaleFor(this._scale());
   }
 
   /**
@@ -1059,6 +1158,30 @@ export class Scene {
       ctx.restore();
 
       paint(camera, 0, viewW);
+
+      // A RE-PLAN IS ANIMATED, NOT POPPED (`08` B6).
+      //
+      // A room appears when its first agent sits down and folds into the
+      // directory when its last one leaves, and the whole envelope resizes
+      // with it. Sliding individual walls would mean interpolating between two
+      // different buildings — different room counts, different bands, a
+      // different width — which the plan has no representation for; the floor
+      // is one baked bitmap by design (re-baking is ~190 ms). So the old floor
+      // is drawn OVER the new one and faded out. Recorded as a deviation.
+      const fade = this._fadeFrom;
+      if (fade) {
+        const t = (nowMs() - this._fadeStartedAt) / REPLAN_FADE_MS;
+        if (t >= 1 || this._reduced) {
+          this._fadeFrom = null;
+        } else {
+          ctx.save();
+          ctx.globalAlpha = 1 - t;
+          ctx.translate(fade.camera.panX, fade.camera.panY);
+          ctx.scale(fade.scale / U, fade.scale / U);
+          ctx.drawImage(fade.backdrop.canvas, 0, 0, fade.plan.width * U, fade.plan.height * U);
+          ctx.restore();
+        }
+      }
     }
 
     // LOD keys off the effective px-per-unit, which is now simply the fit
@@ -1088,6 +1211,7 @@ export class Scene {
     // drawn — a label can only be nudged away from one already placed if it
     // knows that one exists yet.
     let labelPlan = null;
+    const charU = this._characterScale();
     if (lod >= 1) {
       const items = [];
       for (const rec of records) {
@@ -1095,8 +1219,9 @@ export class Scene {
         const agentLabel = agent && agentLabelFor(agent);
         if (!agentLabel) continue;
         const s = worldToScreen(rec, camera);
-        const u = U * camera.zoom;
-        const box = labelBox(ctx, s.x, s.y, u, agentLabel);
+        // The CHARACTER scale, not the world scale — the label hangs off the
+        // body and has to be measured in the frame the body is drawn in.
+        const box = labelBox(ctx, s.x, s.y, charU, agentLabel);
         items.push({
           id: rec.id,
           x: box.x,
@@ -1127,6 +1252,7 @@ export class Scene {
         // the office and lounge have neither a project to launch nor a
         // whiteboard.
         if (room.kind === 'project') this._drawRoomFixtures(room, camera);
+        if (room.kind === 'directory') this._drawDirectory(room, camera);
       }
     }
 
@@ -1137,7 +1263,10 @@ export class Scene {
     const ctx = this.ctx;
     const agent = this._agentsById.get(rec.id);
     if (!agent) return;
-    const u = U * camera.zoom;
+    // People are drawn at their own scale (`_characterScale`), which is the
+    // world scale except on a floor small enough that a body would drop below
+    // 16 px — 05-GUI-UX-SPEC.md §6.2.
+    const u = this._characterScale();
     // Look up this frame's label-collision resolution (built once, before
     // any character is drawn — see `_draw`). `labelPlan` is null at lod 0,
     // where no label is gated to draw anyway (VISUAL-SPEC §7: "shown at L1
@@ -1182,10 +1311,12 @@ export class Scene {
     // longest wait instead, and the per-agent badges return as soon as there
     // is room for them. BADGE_MIN_PX_PER_UNIT is the office seat pitch (3.2 U)
     // measured against a badge's width, so the gate is a real fit test
-    // rather than a taste call.
+    // rather than a taste call — and it is asked of the WORLD scale, because
+    // the pitch between two seats is a fact about the floor, not about how
+    // large the people standing on them are drawn.
     const badge =
       lod >= 1 &&
-      u >= BADGE_MIN_PX_PER_UNIT &&
+      this._scale() >= BADGE_MIN_PX_PER_UNIT &&
       agent.ackState === 'active' &&
       agent.activityState === 'for_review' &&
       agent.reviewSince
@@ -1394,6 +1525,81 @@ export class Scene {
     });
   }
 
+  /**
+   * The idle-projects directory (`plan.js`'s `buildDirectory`, `08` B6).
+   *
+   * One line per repo nobody is in: name, session count, last activity. Drawn
+   * live rather than baked, because the last two change on every push and a
+   * re-bake is ~190 ms. Each line registers a plate rect, so clicking it does
+   * exactly what clicking a room plate does — scope the panel to that project.
+   * @param {import('./plan.js').Room} room
+   * @param {{zoom:number,panX:number,panY:number,U:number}} camera
+   */
+  _drawDirectory(room, camera) {
+    const ctx = this.ctx;
+    const entries = room.entries || [];
+    if (!entries.length) return;
+    const u = U * camera.zoom;
+    const byId = new Map((this._snapshot.projects || []).map((p) => [p.id, p]));
+
+    ctx.save();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+
+    for (const entry of entries) {
+      const at = worldToScreen({ x: entry.x, y: entry.y }, camera);
+      const lineH = entry.h * u;
+      const midY = at.y + lineH / 2;
+      const maxW = Math.max(24, entry.w * u - 10);
+
+      // A hairline under each line, so a column of names reads as a list
+      // rather than as loose text lying on the floor.
+      ctx.strokeStyle = PALETTE.partitionEdge;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(at.x, Math.round(at.y + lineH) - 0.5);
+      ctx.lineTo(at.x + maxW, Math.round(at.y + lineH) - 0.5);
+      ctx.stroke();
+
+      const project = byId.get(entry.id);
+      const sessions = project ? project.sessionCount : entry.sessionCount;
+      const last = entry.lastActivityAt
+        ? formatElapsed(Math.max(0, Date.now() - entry.lastActivityAt))
+        : '';
+      const stat = `${sessions}${last ? ` · ${last}` : ''}`;
+
+      ctx.font = `600 11px ${FONT_MONO}`;
+      const statW = ctx.measureText(stat).width;
+      ctx.font = `600 12px ${FONT_UI}`;
+      const name = ellipsise(ctx, entry.name, Math.max(16, maxW - statW - 10));
+      const nameW = ctx.measureText(name).width;
+      ctx.strokeStyle = PALETTE.plateHalo;
+      ctx.lineWidth = 3;
+      ctx.strokeText(name, at.x, midY);
+      ctx.fillStyle = PALETTE.plateInk;
+      ctx.fillText(name, at.x, midY);
+
+      ctx.font = `600 11px ${FONT_MONO}`;
+      ctx.strokeStyle = PALETTE.plateHalo;
+      ctx.lineWidth = 2.6;
+      ctx.strokeText(stat, at.x + maxW - statW, midY);
+      ctx.fillStyle = PALETTE.plateInkSecondary;
+      ctx.fillText(stat, at.x + maxW - statW, midY);
+
+      this._plateRects.push({
+        x: at.x,
+        y: at.y,
+        w: Math.max(nameW, maxW),
+        h: lineH,
+        kind: 'project',
+        id: entry.id,
+      });
+    }
+    ctx.restore();
+  }
+
   _plateLinesFor(room) {
     if (room.kind === 'project') {
       const project = (this._snapshot.projects || []).find((p) => p.id === room.id);
@@ -1421,7 +1627,22 @@ export class Scene {
     }
     if (room.kind === 'lounge') {
       const c = this._snapshot.counts || {};
-      return [room.name, `${c.benched || 0} benched`];
+      // THE DOOR PLATE CARRIES THE PEOPLE WHO ARE NOT IN THE ROOM (`08` B6).
+      // The lounge is sized by, and draws, only the benched agents still
+      // inside the gone-home window; the rest are on this line and nowhere
+      // else on the floor. `counts.benched` is every benched agent, which is
+      // what the header reports and what the panel lists — nothing about
+      // their state changed, only whether they are drawn.
+      const goneHome = this._plan && this._plan.goneHome ? this._plan.goneHome.size : 0;
+      const drawn = Math.max(0, (c.benched || 0) - goneHome);
+      return [
+        room.name,
+        goneHome > 0 ? `${drawn} benched · ${goneHome} went home` : `${drawn} benched`,
+      ];
+    }
+    if (room.kind === 'directory') {
+      const n = (room.entries || []).length;
+      return [room.name, `${n} repo${n === 1 ? '' : 's'} · nobody in`];
     }
     if (room.kind === 'let_go') {
       const c = this._snapshot.counts || {};

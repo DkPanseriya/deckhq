@@ -4161,3 +4161,176 @@ cannot silently go stale.
   still resolves rather than throwing, `openNewSession` still reports a missing Codex.
 
 Plus one test in `terminals.test.mjs` for the re-export shim. 714 tests to 744.
+
+## 96. WP-50 — the floor is generated from the people on it
+
+`08` B6, delivered. The plan was a function of the repositories on disk:
+`buildProjectRoom(p, p.sessionCount)` sized desks by session count with the
+benched included, an idle project became a collapsed ROOM that still bid for
+area in the treemap, and the squarifier then stretched every cell to tile its
+band. The reference machine showed one furnished room and ten large empty
+cells with a plate each.
+
+It is now a function of two numbers and nothing else: **active projects** (at
+least one agent with `activityState` in `working | needs_input | stalled |
+for_review` and `ackState === 'active'`) and **active agents**.
+
+| | before | after |
+|---|---|---|
+| project rooms on the reference floor | 11 (1 furnished, 10 empty) | **1, furnished** |
+| that room's share of the floor | — | **59%** |
+| bare carpet in it | — | **3.3%** |
+| idle projects | 10 rooms, most of the working band | **17 lines in one strip, 8.2% of the floor** |
+| people drawn | 70 | **16** |
+| lounge | 47 benched | **12 benched · 35 went home** |
+| px per unit at fit, 1600x1000 | 10.5 | **12.3** |
+| character body / name label at fit | 26.4 px / 11 px | **31.1 px / 11 px** |
+
+On the demo floor: five rooms, every one with at least one occupant, **6.6% to
+7.4% bare carpet** in each, one idle repo in the strip.
+
+Before and after, both populations, from the goldens' own captures:
+`docs/media/floor-before-wp50.png` / `docs/media/floor-after-wp50.png`
+(reference) and `docs/media/demo-before-wp50.png` /
+`docs/media/demo-after-wp50.png`.
+
+### The eight decisions inside it
+
+**1. `ended` is not "on the floor".** The parenthetical in B6 is exact, and an
+`ended` session that is still `active` is not in the set. A project whose only
+sessions have finished is idle, so it gets a directory line — and the sessions
+themselves are not drawn either, because there is no room to draw them in. On
+the reference machine that is 19 of the 70. They are still counted in the
+header, still in the panel, still one click from the strip's own line, which
+carries their number. **This is the largest behavioural change in the package
+and it is a display filter: nothing writes to `ackState`, and every
+`INVARIANT:` test passes untouched.**
+
+**2. A project with an agent waiting in the office keeps its room.** The agent
+is drawn in the reception, not at its desk, but the room is its room: if it
+folded away while its owner queued and reappeared the moment you acknowledged
+it, the walls would move twice for one piece of work. So "no room without an
+active occupant" counts the project's active agents, not the seats filled in
+the room. The room gets its minimum one table.
+
+**3. The plan decides who is drawn, and everything else reads that.** `buildPlan`
+returns `plan.hidden` (gone home, plus desk agents in projects with no room)
+and `plan.goneHome`. `assignSeats` and `AgentRuntime#sync` filter on it instead
+of re-deriving the rule. §16, §35, §38, §52 and §55 are five bugs with one
+cause — two representations of the same thing, allowed to disagree — and "who
+is on the floor" was about to become the sixth.
+
+**4. A caller that supplies a project with no agents falls back to the project
+record.** `buildPlan(projects, [])` cannot invent people it was not given, so
+when the agent list mentions a project id at all, the counts come from the
+agents; when it mentions it not at all, `activeCount ?? sessionCount` is the
+only thing to go on. On a real snapshot every project comes from its own
+agents, so the fallback never fires there. It is what let 500-odd existing
+assertions keep testing geometry rather than being rewritten to carry
+populations they were never about.
+
+**5. The strip is one horizontal band, capped at three rows.** B6 asks for "one
+line per project ... it takes a plate's height, not a room". A line is
+`DIRECTORY_LINE_H` (1.6 U) — under half a plate band — and the whole strip is
+capped at `DIRECTORY_MAX_H` = a plate band plus three lines (9.2 U), flowing
+into as many columns as it needs. **The acceptance text says "a strip no taller
+than a room plate"; taken as the whole strip that is one row of seventeen
+columns across 84 units, four units and about a hundred pixels per repo, and a
+name is all that fits.** So the cap is on the LINE and on the strip's total,
+and both are asserted. A project is never dropped from the directory whatever
+the count — a repo you cannot see is a repo you cannot start an agent in — the
+columns narrow and the names ellipsise instead. Measured: 17 repos in 3 rows of
+6 columns, 13.9 U (172 px) per line at fit, every name legible.
+
+**6. Gone home is measured against `lastActivityAt`, with two refusals.** A
+window of `0` disables the filter rather than hiding everybody, and an agent
+whose last activity is unknown (`undefined`, `0`) is DRAWN. The floor does not
+hide what it cannot date. The boundary is exclusive: at exactly seven days you
+are still in the lounge. `settings.goneHomeDays` is clamped to [0, 365] in
+`store.mjs` the same way `stallWindowMs` is, and reaches the renderer through
+the snapshot — no new state, no new file, nothing persisted about who is away.
+
+**7. A large project room is furnished by its rug.** Desks now count agents, so
+a room's furniture is routinely far smaller than the cell the treemap gives it
+— on the reference floor, one two-seat table in an 88 x 67 room. A small rug in
+a large room is §64's defect one level up: a group of desks adrift in the
+middle of it. The rug therefore grows to the room, stopping 4 U clear of the
+walls so the corner planting and the wall fixtures keep floor of their own.
+That exposed a real bug in `backdrop.js`: a prop's contact shadow was
+`h * 0.22` deep with no ceiling, so the room-sized rug cast a 380 px ellipse
+across half the room. Depth says how THICK a thing is, not how big; capped at
+10 px. The rug's border inset also scales now, because 6 px is a border on a
+desk mat and invisible on a room. **Still open:** a room that large is honest
+and sparse — one table, a rug, three plants, a whiteboard and a shelf. Denser
+furnishing of a big room (a breakout group, planting along the long walls) is
+interior design, not layout, and is left to WP-12 / UI/UX.
+
+**8. The re-plan cross-fades. It does not slide.** B6 asks for walls that
+slide. Sliding them means interpolating between two buildings that differ in
+room count, band count, envelope width and envelope height — the plan has no
+representation for a half-state, and the floor is one baked bitmap by design
+(re-baking is ~190 ms, §68's own measurement). **Deviation, taken with the
+escape hatch B6's own text offers:** the old backdrop is kept and faded out
+over the new one across 260 ms. Reduced motion gets the cut, and so does a
+stopped render loop — a hidden tab has no frames to fade with, and the single
+`_draw` that a push makes would otherwise paint the old floor over the new at
+full opacity and leave it there until the tab came back.
+
+### People never shrink below legibility
+
+`05` §6.2 states its floors PER ELEMENT, and that is how they are applied:
+`rig.js` exports `LEGIBILITY_MIN_PX` (16 px body, 11 px label, 12 px icon,
+13 px badge) and each one is enforced where that element is measured and drawn.
+The label was floored at 9 px and the icon at 10; those are now 11 and 12. The
+badge's pill grows with its floored font, which it did not before — at a tight
+fit scale the glyphs stood proud of it.
+
+The body's floor is a floor on `u`, which is the caller's, so `scene.js` holds
+it: `characterScaleFor(worldScale) = max(worldScale, 16 / BODY_HEIGHT_U)`, and
+everything hanging off a character — label box, badge, icon, the collision pass
+— is measured in that frame rather than the world's. `BODY_HEIGHT_U` (2.52) is
+exported from `rig.js` rather than recomputed in the test, for the same reason
+as decision 3.
+
+**Measured, and worth stating plainly: the character-scale clamp never fires on
+any population this project has.** `CHAR_MIN_PX_PER_UNIT` is 6.35 and the
+floor's own `MIN_SCALE` is 7.5, so the world scale already clears it
+everywhere; at fit on 1600x1000 the reference floor draws people at 12.3 px per
+unit, a 31 px body. What actually binds is the label, and the label is floored
+where it is set. The decoupling is kept anyway: it is the structural half of
+§6.2, it costs one `Math.max`, and it is what stops a future `MIN_SCALE` change
+from silently taking the people with it.
+
+The badge's own visibility gate keeps reading the WORLD scale, not the
+character scale: the gate asks whether two office seats are far enough apart
+for two badges, and the pitch between two seats is a fact about the floor, not
+about how large the people standing on them are drawn.
+
+### The reference fixture is the machine §0 measured
+
+Two corrections to `scripts/demo-floor.mjs`'s `reference` population, both so
+the golden photographs `08` §0's floor rather than an approximation of it:
+
+- **Both office sessions belong to one project.** §0's floor is "one furnished
+  room"; the second `for_review` fell on index 14, which put it in
+  `web-console` and gave the fixture a second active repo the real machine did
+  not have. It is now index 2, in `platform-api`. Counts are unchanged: 70
+  sessions, 18 projects, 47 benched.
+- **Ages span a month, not five days.** The real machine's benched sessions had
+  been benched for weeks — that is what the gone-home window is FOR — and a
+  fixture whose oldest session is five days old cannot photograph it. The
+  fixture now spreads 2 h to 30 d, which sends 35 of the 47 home and puts
+  `12 benched · 35 went home` on the lounge door in the golden.
+
+### Goldens
+
+Regenerated as the last step of the package, as the workplan requires. Three
+of the four changed — `reference` and `demo` because the floor is a different
+building, `single` because of the room-sized rug and the 9 px to 11 px name
+label. **`empty` is byte-identical**, which is the control working: there is
+nobody on that floor and no repo in its directory, so nothing WP-50 touches is
+drawn on it.
+
+The check is green against fresh captures on all four, and the harness's own
+noise floor is unchanged from §87's measurement: 0 px over tolerance
+everywhere, 36 px moved at all on `empty` and 0 on the other three.

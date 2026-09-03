@@ -88,7 +88,7 @@ test('the client only writes settings the store knows about', () => {
 });
 
 test('the settings sheet offers every setting a person can meaningfully change', () => {
-  // The four it does not: `approveText` belongs to the panel's `2 Approve`
+  // The five it does not: `approveText` belongs to the panel's `2 Approve`
   // and is edited there; `onboarded` is a fact, not a preference; and
   // `editor` (WP-47) and `terminal` (WP-04) both default to "work it out",
   // which is the right answer on nearly every machine — the sheet's own rule
@@ -96,8 +96,14 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // are pinned by POSTing to /api/settings until a package owns their row
   // (docs/DEVIATIONS.md §94.3). They are exempt from HAVING a control, not
   // from being real settings: both are persisted, sanitized and validated.
+  //
+  // `goneHomeDays` (WP-50, docs/DEVIATIONS.md §96) is the fifth, and it is
+  // exempt for the same reason and only for now: the gone-home window arrived
+  // with the dynamic floor, is read by the renderer's filter in
+  // `public/render/plan.js`, and is pinned by POSTing to /api/settings until
+  // the sheet's floor section grows a row for it.
   const sheetOwned = new Set(SETTINGS_KEYS);
-  const exempt = new Set(['approveText', 'onboarded', 'editor', 'terminal']);
+  const exempt = new Set(['approveText', 'onboarded', 'editor', 'terminal', 'goneHomeDays']);
   const missing = Object.keys(DEFAULT_SETTINGS).filter((k) => !sheetOwned.has(k) && !exempt.has(k));
   assert.deepEqual(
     missing,

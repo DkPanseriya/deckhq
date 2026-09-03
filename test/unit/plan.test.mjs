@@ -587,23 +587,85 @@ function mkProject(id, sessions, active, archived = false) {
   };
 }
 
-test('a repo with no active agents collapses to a strip', () => {
+test('a repo with no active agents gets a directory line, not a room', () => {
   // After a settle, most repos have every agent benched: desks, chairs, a
   // plant and nobody in them. On a real machine that was eleven of thirteen
-  // rooms, which is a lot of floor spent on nothing.
+  // rooms, which is a lot of floor spent on nothing. They are now ONE strip
+  // with one line each (`08` B6), and the rooms that remain are the ones
+  // somebody is actually in.
   const plan = buildPlan(
     [mkProject('busy', 4, 2), mkProject('idle', 4, 0)],
-    [{ id: 'a', ackState: 'active', activityState: 'working', projectId: 'busy' }],
+    [
+      { id: 'a', ackState: 'active', activityState: 'working', projectId: 'busy' },
+      { id: 'b', ackState: 'benched', activityState: 'ended', projectId: 'idle' },
+    ],
     {},
   );
   const busy = plan.rooms.find((r) => r.id === 'busy');
-  const idle = plan.rooms.find((r) => r.id === 'idle');
-  assert.ok(busy && !busy.collapsed, 'a repo with active agents keeps its room');
-  assert.ok(idle && idle.collapsed, 'an idle repo collapses');
-  assert.ok(
-    idle.w * idle.h < busy.w * busy.h,
-    'and a collapsed room must actually be smaller than an open one',
+  assert.ok(busy && busy.kind === 'project', 'a repo with an active agent keeps its room');
+  assert.equal(
+    plan.rooms.find((r) => r.id === 'idle'),
+    undefined,
+    'an idle repo gets no room of its own',
   );
+
+  const directory = plan.rooms.find((r) => r.kind === 'directory');
+  assert.ok(directory, 'the idle repo needs somewhere to be listed');
+  assert.deepEqual(
+    directory.entries.map((e) => e.id),
+    ['idle'],
+    'the strip lists exactly the idle repos',
+  );
+  assert.ok(
+    directory.h < busy.h,
+    `the strip is ${directory.h.toFixed(1)} U tall and the room ${busy.h.toFixed(1)} U — it is meant to cost a plate, not a room`,
+  );
+});
+
+test('desks equal the agents at them, not the sessions on disk', () => {
+  // `buildProjectRoom(p, p.sessionCount)` gave a repo with twenty benched
+  // agents and one working one three benches and one occupant.
+  const agents = [
+    { id: 'w', ackState: 'active', activityState: 'working', projectId: 'p' },
+    ...Array.from({ length: 20 }, (_, i) => ({
+      id: `b${i}`,
+      ackState: 'benched',
+      activityState: 'ended',
+      projectId: 'p',
+    })),
+  ];
+  const plan = buildPlan([mkProject('p', 21, 1)], agents, {});
+  assert.equal(plan.seats.get('p').length, 1, 'one agent at a desk is one desk');
+
+  // And an acknowledged session still sitting at its own desk counts too.
+  const withEnded = [
+    ...agents,
+    { id: 'e', ackState: 'active', activityState: 'ended', projectId: 'p' },
+  ];
+  const plan2 = buildPlan([mkProject('p', 22, 2)], withEnded, {});
+  assert.equal(plan2.seats.get('p').length, 2);
+});
+
+test('the directory strip lists every idle repo and never drops one', () => {
+  const projects = Array.from({ length: 24 }, (_, i) => mkProject(`idle-${i}`, i + 1, 0));
+  projects.push(mkProject('busy', 2, 1));
+  const agents = [{ id: 'a', ackState: 'active', activityState: 'working', projectId: 'busy' }];
+  for (const aspect of [1.2, 1.6, 2.2]) {
+    const plan = buildPlan(projects, agents, { targetAspect: aspect });
+    const directory = plan.rooms.find((r) => r.kind === 'directory');
+    assert.equal(directory.entries.length, 24, `24 idle repos, ${aspect}:1`);
+    const ids = new Set(directory.entries.map((e) => e.id));
+    assert.equal(ids.size, 24, 'every line is a different repo');
+    for (const e of directory.entries) {
+      assert.ok(
+        e.x >= directory.x - 0.01 &&
+          e.y >= directory.y - 0.01 &&
+          e.x + e.w <= directory.x + directory.w + 0.01 &&
+          e.y + e.h <= directory.y + directory.h + 0.01,
+        `${e.id}'s line is outside the strip`,
+      );
+    }
+  }
 });
 
 test('an archived repo leaves the floor, but only while it is idle', () => {
@@ -618,24 +680,27 @@ test('an archived repo leaves the floor, but only while it is idle', () => {
     undefined,
     'archived and idle: off the floor entirely',
   );
+  assert.ok(
+    !(plan.directory ? plan.directory.entries : []).some((e) => e.id === 'gone'),
+    'and not in the directory either — archived is archived',
+  );
   const woken = plan.rooms.find((r) => r.id === 'woken');
-  assert.ok(woken && !woken.collapsed, 'archived but working: the room pops back open by itself');
+  assert.ok(woken && woken.kind === 'project', 'archived but working: the room pops back open');
 });
 
-test('a collapsed room still packs, places and gets a door like any other', () => {
+test('the directory strip packs, places and gets a door like any other room', () => {
   const plan = buildPlan(
     [mkProject('a', 2, 1), mkProject('b', 3, 0), mkProject('c', 5, 0)],
     [{ id: 'x', ackState: 'active', activityState: 'working', projectId: 'a' }],
     {},
   );
-  for (const id of ['b', 'c']) {
-    const room = plan.rooms.find((r) => r.id === id);
-    assert.ok(room.collapsed, `${id} should be collapsed`);
-    assert.ok(room.w > 0 && room.h > 0, `${id} collapsed to nothing`);
-    assert.ok(room.door, `${id} needs a door: it is still a room you can walk into`);
-    assert.ok(
-      room.x >= 0 && room.y >= 0 && room.x + room.w <= plan.width + 0.01,
-      `${id} escaped the floor`,
-    );
-  }
+  const directory = plan.rooms.find((r) => r.kind === 'directory');
+  assert.ok(directory, 'two idle repos need a strip');
+  assert.ok(directory.w > 0 && directory.h > 0, 'the strip collapsed to nothing');
+  assert.ok(directory.door, 'the strip is a rectangle in the tiling like any other');
+  assert.ok(
+    directory.x >= 0 && directory.y >= 0 && directory.x + directory.w <= plan.width + 0.01,
+    'the strip escaped the floor',
+  );
+  assert.deepEqual(directory.entries.map((e) => e.id).sort(), ['b', 'c']);
 });
