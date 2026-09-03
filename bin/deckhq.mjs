@@ -61,7 +61,7 @@ async function main() {
         'DeckHQ — command deck for every agent session on your machine.',
         '',
         'Usage: deckhq [options]',
-        '       deckhq doctor [--json] [--capture-proof]',
+        '       deckhq doctor [--json] [--share] [--capture-proof]',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',

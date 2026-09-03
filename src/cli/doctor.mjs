@@ -644,6 +644,198 @@ function plural(n, word) {
 }
 
 // ---------------------------------------------------------------------------
+// The share block
+// ---------------------------------------------------------------------------
+
+/**
+ * The pitch, as one line, and the last line of every share block.
+ * `docs/plan/08-PLAN-V2-100X.md` §1.3 is the source; the wording of this line
+ * belongs to the PM (WP-44 in that document's §11 list), so it is a named
+ * export rather than a string buried in a template.
+ */
+export const PITCH =
+  'DeckHQ — every AI coding session on your machine, on one office floor. ' +
+  'npx deckhq · local, private, MIT.';
+
+/** How wide the share block's label gutter is. The report's width, unindented. */
+const SHARE_LABEL_WIDTH = 16;
+
+/**
+ * Everything that could name this machine or its work, gone.
+ *
+ * The share block is assembled only from counts and fixed phrases, so on the
+ * ordinary path this replaces nothing at all. It exists because two fields in
+ * the report are strings this file did not write — a runtime's `version()` and
+ * an adapter's error message — and an error message from a filesystem call
+ * carries an absolute path by default. Defence in depth for a block whose
+ * whole purpose is to be pasted somewhere public.
+ *
+ * The home directory goes first, so `~` never has to be inferred from a
+ * pattern, then the shapes of an absolute path, then the machine's name.
+ * Hostnames under three characters are left alone: a two-letter host name is
+ * indistinguishable from a word and redacting it would corrupt the text it is
+ * meant to protect.
+ *
+ * @param {string} text
+ * @param {{home?:string, host?:string}} [opts]
+ * @returns {string}
+ */
+export function redact(text, opts = {}) {
+  const home = opts.home ?? os.homedir();
+  const host = opts.host ?? os.hostname();
+  let out = String(text);
+
+  if (home) {
+    for (const form of new Set([home, home.replace(/\\/g, '/'), home.replace(/\//g, '\\')])) {
+      // Anything hanging off the home directory goes with it: the path is the
+      // part that identifies the machine, the rest identifies the work.
+      //
+      // Anchored at the start of a token, because the separator-swapped forms
+      // are otherwise substrings of the real thing: `C:\Users\ada` contains
+      // `\Users\ada`, and replacing the tail alone would leave `C:[path]`
+      // behind for the drive-letter rule to no longer recognise.
+      out = out.replace(
+        new RegExp(`(^|[\\s,;('"=])${escapeRegExp(form)}[^\\s,;)'"]*`, 'gi'),
+        '$1[path]',
+      );
+    }
+  }
+
+  out = out
+    .replace(/\\\\[^\s,;)'"]+/g, '[path]') // \\server\share
+    .replace(/[A-Za-z]:[\\/][^\s,;)'"]*/g, '[path]') // C:\Users\…, C:/Users/…
+    .replace(/~[\\/][^\s,;)'"]*/g, '[path]') // ~/…
+    .replace(/(?:\/[A-Za-z0-9._@%+-]+){2,}\/?/g, '[path]'); // /home/ada/work
+
+  for (const name of new Set([host, String(host).split('.')[0]])) {
+    if (!name || name.length < 3) continue;
+    out = out.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'gi'), '[host]');
+  }
+  return out;
+}
+
+/** @param {string} s */
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The pasteable block: the same report, fenced, with nothing in it that
+ * belongs to the person running it. `docs/plan/08-PLAN-V2-100X.md` WP-44.
+ *
+ * This is the launch asset, and it is text on purpose — a number travels
+ * through a thread, a terminal and a chat window, and a screenshot only
+ * travels through one of those. What makes it postable is that a reader can
+ * run the same command and check it, so the block carries the whole report's
+ * numbers and not a selected highlight.
+ *
+ * What it drops against `renderReport`, and why:
+ *
+ *   - **The state path.** The only path in the healthy report, and a home
+ *     directory names its owner. The row keeps its verdict — writable or not
+ *     — because that is the part a reader can act on.
+ *   - **Every free-text problem, note and per-runtime error.** These are the
+ *     strings most likely to carry a path, a project name or a machine name,
+ *     and none of them is meaningful to a stranger. When the report is not
+ *     `ok`, the block says how many problems there are and where to see them:
+ *     the honest summary, with nothing leaked.
+ *   - **The hook port.** A port number tells a reader nothing about whether
+ *     hooks are working, which is what the row is for.
+ *
+ * It adds a date (UTC, to the day — the hour would date-stamp a person's
+ * working habits for no gain) and the pitch as its last line.
+ *
+ * Project names never appear because they never enter: `collectReport` counts
+ * distinct working directories and keeps the count, never the strings. The
+ * test for that asserts the absence of the fixture's directory names in the
+ * rendered block rather than trusting this paragraph.
+ *
+ * @param {Awaited<ReturnType<typeof collectReport>>} report
+ * @param {{home?:string, host?:string}} [opts]
+ * @returns {string}
+ */
+export function renderShare(report, opts = {}) {
+  /** @param {string} label @param {string} value */
+  const srow = (label, value) => `${label.padEnd(SHARE_LABEL_WIDTH)}${value}`;
+  const lines = [`deckhq doctor · ${new Date(report.generatedAt).toISOString().slice(0, 10)}`, ''];
+
+  for (const rt of report.runtimes) {
+    const name = rt.label.toLowerCase();
+    if (!rt.available) {
+      lines.push(srow(name, 'not installed'));
+      continue;
+    }
+    lines.push(srow(name, rt.version ? `${rt.version} on PATH` : 'available'));
+    lines.push(
+      srow(
+        'transcripts',
+        `${group(rt.sessions)} ${plural(rt.sessions, 'session')} across ` +
+          `${group(rt.projects)} ${plural(rt.projects, 'project')}`,
+      ),
+    );
+    lines.push(
+      srow(
+        'running now',
+        `${group(rt.live)}   (${name}'s own agent view reports ${group(rt.liveReported)})`,
+      ),
+    );
+    lines.push(
+      srow(
+        'on the floor',
+        rt.finished > 0
+          ? `${group(rt.sessions)}  ← ${group(rt.finished)} ${plural(rt.finished, 'session')} ` +
+              `${rt.finished === 1 ? 'has' : 'have'} already finished; ` +
+              'the agent view no longer lists them'
+          : `${group(rt.sessions)}`,
+      ),
+    );
+  }
+
+  lines.push(srow('waiting on you', describeDeck(report.deck, report.generatedAt)));
+
+  const hookRows = report.hooks.filter((h) => h.supported);
+  for (const h of hookRows) {
+    const label = hookRows.length > 1 ? `hooks (${h.label.toLowerCase()})` : 'hooks';
+    lines.push(srow(label, describeHooksForShare(h, report.generatedAt)));
+  }
+
+  lines.push(srow('state', report.state.writable ? 'writable' : 'NOT WRITABLE'));
+  lines.push(srow('egress', report.egress.note));
+
+  if (report.problems.length) {
+    lines.push('');
+    lines.push(
+      `! ${group(report.problems.length)} ${plural(report.problems.length, 'problem')} — ` +
+        'run `deckhq doctor` here for the detail',
+    );
+  }
+
+  lines.push('');
+  lines.push(PITCH);
+
+  return '```\n' + redact(lines.join('\n'), opts) + '\n```\n';
+}
+
+/**
+ * The hooks row for the share block: the verdict and the delivery evidence,
+ * without the port and without an error message.
+ * @param {any} h
+ * @param {number} now
+ */
+function describeHooksForShare(h, now) {
+  if (h.error) return 'could not be read';
+  if (!h.installed) return 'not installed (DeckHQ polls instead)';
+  const parts = ['installed'];
+  if (h.listening === false) parts.push('NOTHING LISTENING THERE');
+  if (h.eventsSeen != null) {
+    parts.push(`${group(h.eventsSeen)} ${plural(h.eventsSeen, 'event')}`);
+    if (h.lastEventAt) parts.push(`last ${ago(now - h.lastEventAt)} ago`);
+    else parts.push('none yet this run');
+  }
+  return parts.join(', ');
+}
+
+// ---------------------------------------------------------------------------
 // The capture proof
 // ---------------------------------------------------------------------------
 
@@ -859,6 +1051,8 @@ export async function runDoctor(argv = [], deps = {}) {
         'Usage: deckhq doctor [options]',
         '',
         '  --json             emit the same report as a JSON object',
+        '  --share            print the report as a fenced block with no paths,',
+        '                     project names or machine name in it, ready to paste',
         '  --capture-proof    also write a PNG of the comparison to',
         '                     ~/.deckhq/snapshots/, ready to post',
         '  --port <n>         also look for a running DeckHQ on this port',
@@ -877,18 +1071,26 @@ export async function runDoctor(argv = [], deps = {}) {
   const report = await collect({ port });
   const json = argv.includes('--json');
   const wantProof = argv.includes('--capture-proof');
+  const wantShare = argv.includes('--share');
 
   // Text mode prints the report first and lets the capture add its own line
   // underneath. JSON mode stays exactly one JSON document on stdout, whatever
   // the flags — anything else is unparseable by the scripts this flag exists
   // for, so the capture's progress line is swallowed there.
-  if (!json) write('\n' + renderReport(report));
+  //
+  // `--share` prints the block and nothing else: it is meant to be selected
+  // whole, or piped straight into a clipboard command, and a second copy of
+  // the same numbers above it makes both jobs harder. With `--json` it becomes
+  // one more field of the single document rather than stdout carrying two
+  // formats at once.
+  const share = wantShare ? renderShare(report) : null;
+  if (!json) write('\n' + (share ?? renderReport(report)));
 
   const proof = wantProof
     ? await captureProof(report, { write: json ? () => {} : write })
     : { ok: false, path: null, reason: 'not requested' };
 
-  if (json) write(JSON.stringify({ ...report, proof }, null, 2) + '\n');
+  if (json) write(JSON.stringify({ ...report, proof, share }, null, 2) + '\n');
   else write('\n');
 
   return report.ok ? 0 : 1;

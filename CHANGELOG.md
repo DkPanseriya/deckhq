@@ -6,6 +6,21 @@
 
 ## Unreleased
 
+### Added
+
+- **`deckhq doctor --share` prints the report as a fenced block you can paste anywhere.** The same
+  numbers as the report — transcripts, running now, on the floor, waiting on you, hooks, egress —
+  with everything that belongs to you taken out: no paths, no project names, no machine name, no
+  hook port, no free-text error message, and a date to the day rather than the hour. A problem is
+  reported as a count with a pointer back to `deckhq doctor`, so the block says a check failed
+  without saying what it read. Project names cannot leak by construction — the report counts
+  distinct working directories and never keeps the strings — and a redaction pass runs over the
+  assembled block anyway, because a runtime's version string and an adapter's error message are
+  text this project did not write. The pitch is its last line. `--share --json` keeps stdout to
+  exactly one JSON document and carries the block as a `share` field. The honesty tests of
+  `docs/DEVIATIONS.md` §74 now run against this block as well as the report and the proof card:
+  the retired overclaim cannot come back through the launch asset. §82.
+
 ### Fixed
 
 - **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are

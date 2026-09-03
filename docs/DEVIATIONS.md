@@ -2300,3 +2300,82 @@ today and no honest way to satisfy both. Adoption reads the settings file once
 at startup, so hooks reinstalled at another port while the daemon runs are not
 followed — the reinstall in the header aims at the running daemon, which is the
 only way that happens in practice.
+
+## 82. WP-44 · `doctor --share`: what the pasteable block leaves out, and the one line the PM still owns
+
+`08-PLAN-V2-100X.md` WP-44: "prints a fenced block of the report with no
+paths, no project names and the pitch line as the last line. Governed by the
+same honesty tests as §74." Shipped as `deckhq doctor --share`. Four decisions
+the description left open.
+
+**Decision 1 — the block is the whole report, not a highlight.** The temptation
+in a launch asset is to print the biggest number and stop. What makes this
+postable is that a reader can run the same command on their own machine and
+check it, so the block carries every row the report does — including
+`waiting on you 0`, which on the reference machine is what it says today. A
+selected highlight would make the asset unfalsifiable, which is the failure
+mode §74 was written after.
+
+**Decision 2 — what is dropped, and why each one is not a number.** Against
+`renderReport`: the state **path** (its verdict, writable or not, stays — that
+is the part a reader can act on); every free-text problem, note and
+per-runtime error; and the hook port. The free text is where a path actually
+lives in practice — an adapter error is a filesystem error and names the file
+it failed on — and none of it means anything to a stranger. When the report is
+not `ok`, the block says `! 2 problems — run \`deckhq doctor\` here for the
+detail`: the count is the honest part, the message is the private part. The
+port is dropped because a port number tells a reader nothing about whether
+hooks are delivering, which is what the row is for.
+
+**Decision 3 — the date is to the day.** A UTC timestamp to the hour would
+publish when a person was at their desk, in exchange for nothing.
+
+**Decision 4 — a redaction pass, even though nothing should reach it.** Project
+names cannot leak by construction: `collectReport` turns working directories
+into a distinct count and never keeps the strings, and the block is assembled
+from counts and fixed phrases. Two fields are still strings this file did not
+write — a runtime's `version()` and an adapter's error message — so
+`redact()` runs over the assembled text and replaces the home directory and
+anything hanging off it, `C:\…` and `C:/…`, `\server\share`, `~/…`, absolute
+POSIX paths, and the machine's own name. It is defence in depth for a block
+whose whole purpose is to be pasted somewhere public, and it is unit-tested
+directly, including the two cases that made it non-obvious: the
+separator-swapped home directory is a substring of the real Windows path
+(`C:\Users\ada` contains `\Users\ada`, and replacing only the tail would leave
+`C:[path]` behind), so home matching is anchored at the start of a token; and a
+hostname shorter than three characters is indistinguishable from a word, so it
+is left alone rather than shredding the text it exists to protect. A test
+pins that the report's own vocabulary — `70 sessions across 18 projects`,
+`127.0.0.1`, `none. no outbound sockets.` — passes through untouched.
+
+**Flag behaviour.** `--share` prints the block and nothing else: it is meant to
+be selected whole or piped into a clipboard command, and a second copy of the
+same numbers above it makes both jobs harder. With `--json` the block becomes
+one more field (`share`, `null` when the flag is absent), because "exactly one
+JSON document on stdout" is that mode's contract. The exit code is the
+report's, unchanged.
+
+**Acceptance, checked.** Nine new tests: the fence and the pitch as its last
+line inside it; the absence of the fixture's two scanned directory names
+(`/Users/ada/skunkworks-alpha`, `C:/Dk/Projects/ClientAcme`) and of their
+fragments; the absence of any path shape, the state path, the machine name and
+the port; a problem counted rather than quoted; `redact()` directly; the three
+flag surfaces (`--share`, `--share --json`, `--help`); and a machine with no
+runtime and no daemon, where the block must still be honest and printable. Two
+existing tests were amended: the `--json` shape test now pins `share` in the
+document's key set, and the §74 honesty invariant runs against three surfaces
+rather than two — the report, the proof card and this block — so the retired
+overclaim cannot come back through the launch asset. 458 tests to 467.
+
+**Left to its owner.** The pitch itself. `07-AGENT-HANDOVERS.md` gives the PM
+the wording review of this asset, so the line is the named export `PITCH` in
+`src/cli/doctor.mjs` rather than a string inside a template, and today it is
+one line condensed from `08-PLAN-V2-100X.md` §1.3:
+
+> DeckHQ — every AI coding session on your machine, on one office floor. npx deckhq · local, private, MIT.
+
+§1.3's full pitch is three sentences and 40 words; a block that people paste
+into a thread earns one line, and the sentence that was cut ("it sees the ones
+your terminal forgot, and it remembers what's waiting on you even after you've
+read it") is the one the rows above it are already demonstrating. That is a
+judgement about copy, not about code, and the PM's to overrule.
