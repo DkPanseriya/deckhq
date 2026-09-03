@@ -2296,7 +2296,7 @@ WP-43's acceptance — "a `vX.Y.Z` tag produces a published package with the
 provenance badge and a release page with no manual step after the tag" — is
 still the owner's next tag to produce, after the one-time trusted-publisher
 setup in the workflow's header.
-## 80. WP-53 · The review follow-ups on the perf code: what closed, what is accepted, what was left to its owner
+## 82. WP-53 · The review follow-ups on the perf code: what closed, what is accepted, what was left to its owner
 
 `08-PLAN-V2-100X.md` WP-53 lists five risks from the review of PRs #1–#4.
 Four are closed here with tests; one is a documented, measured exposure rather
@@ -2361,7 +2361,7 @@ Mechanisms weighed for closing it, and why none was taken:
 - **Hooks.** Not a mechanism to add — it is already the answer where it
   matters. `SessionEnd` is authoritative and `_computeAgents` prefers
   `hookLive` over this roster whenever hooks are installed, so the exposure
-  exists only on the degraded path. WP-36 (§81) removes the commonest way of
+  exists only on the degraded path. WP-36 (§83) removes the commonest way of
   ending up on that path by accident.
 
 And what a wrong `live` costs if it happens: nothing user-owned. `live` is an
@@ -2403,7 +2403,7 @@ its acceptance criterion ("`publish.yml` fails loudly on an npm below the
 trusted-publishing floor") are not delivered by this package. Recorded so the
 orchestrator does not accept WP-53 on the strength of this commit alone.
 
-## 81. WP-36 · The daemon adopts the hooks' port, and refuses to start beside a DeckHQ that already has it
+## 83. WP-36 · The daemon adopts the hooks' port, and refuses to start beside a DeckHQ that already has it
 
 `08-PLAN-V2-100X.md` WP-36. Shipped as specified, with three decisions the
 package description did not settle.
@@ -2463,7 +2463,7 @@ at startup, so hooks reinstalled at another port while the daemon runs are not
 followed — the reinstall in the header aims at the running daemon, which is the
 only way that happens in practice.
 
-## 82. WP-44 · `doctor --share`: what the pasteable block leaves out, and the one line the PM still owns
+## 84. WP-44 · `doctor --share`: what the pasteable block leaves out, and the one line the PM still owns
 
 `08-PLAN-V2-100X.md` WP-44: "prints a fenced block of the report with no
 paths, no project names and the pitch line as the last line. Governed by the

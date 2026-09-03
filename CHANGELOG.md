@@ -19,7 +19,7 @@
   text this project did not write. The pitch is its last line. `--share --json` keeps stdout to
   exactly one JSON document and carries the block as a `share` field. The honesty tests of
   `docs/DEVIATIONS.md` §74 now run against this block as well as the report and the proof card:
-  the retired overclaim cannot come back through the launch asset. §82.
+  the retired overclaim cannot come back through the launch asset. §84.
 
 ### Fixed
 
@@ -34,7 +34,7 @@
   the next port along and running degraded beside it. If something that is not DeckHQ holds it, the
   requested port is used and the header's reinstall banner does the rest. An explicit `--port` or
   `DECKHQ_PORT` is honoured exactly as given — naming a port is a request to be on it.
-  `docs/DEVIATIONS.md` §81.
+  `docs/DEVIATIONS.md` §83.
 
 ### Performance
 
@@ -70,7 +70,7 @@
   then the desk is drawn occupied for at most 60 s and nothing user-owned moves. The head-window
   JSON scanner has tests for a window cut mid-string, mid-number and on the backslash of an
   escape, and the desktop-cache tests prove their mtime pins round-trip on the filesystem they run
-  on instead of assuming it. `docs/DEVIATIONS.md` §80.
+  on instead of assuming it. `docs/DEVIATIONS.md` §82.
 
 ### Testing
 

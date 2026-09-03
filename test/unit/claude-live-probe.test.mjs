@@ -140,7 +140,7 @@ test('an entry with no pid survives until the next probe', async () => {
   );
 });
 
-// --- The pid check, and what it cannot know (docs/DEVIATIONS.md §80) -------
+// --- The pid check, and what it cannot know (docs/DEVIATIONS.md §82) -------
 
 test('a pid that has really exited reads dead on this platform, not just a pid that never existed', async () => {
   // DEAD_PID above never existed. The case the roster actually meets is a

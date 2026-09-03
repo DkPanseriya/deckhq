@@ -438,7 +438,7 @@ test('a multi-byte character split by the window boundary does not corrupt the a
   }
 });
 
-// --- A window that ends mid-value (docs/DEVIATIONS.md §80) -----------------
+// --- A window that ends mid-value (docs/DEVIATIONS.md §82) -----------------
 //
 // The scanner's contract is "null means read more, never a guess". The three
 // ways an 8 KB prefix can cut a JSON value — inside a string, inside a number,

@@ -180,7 +180,7 @@ let liveProbeForced = false;
  * the entire process group.
  *
  * Verified on Windows, where libuv answers signal 0 with `OpenProcess` plus
- * `GetExitCodeProcess` rather than a real signal (docs/DEVIATIONS.md §80): a
+ * `GetExitCodeProcess` rather than a real signal (docs/DEVIATIONS.md §82): a
  * pid that has exited, a pid that never existed, and a child that has exited
  * while this process still holds its handle all throw `ESRCH`; the protected
  * System process (pid 4) throws `EPERM`. So the same two-way reading holds on
@@ -253,7 +253,7 @@ function copyRoster(sessions) {
  * observation, never a user-owned state, so the worst outcome is a desk drawn
  * occupied for up to 60 s. No cheap cross-platform identity for a pid exists
  * without spawning — the exact cost this cache removes — so the window is
- * accepted and recorded (docs/DEVIATIONS.md §80) rather than closed. With
+ * accepted and recorded (docs/DEVIATIONS.md §82) rather than closed. With
  * hooks installed it does not arise at all: `SessionEnd` is authoritative and
  * the registry prefers it over this roster.
  *
