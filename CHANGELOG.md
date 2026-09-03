@@ -55,6 +55,28 @@
   `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
   a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
   client-side: the daemon never sees a draft and a draft never touches ack state.
+- **"Open in terminal" knows ten terminals, not one.** macOS detects and prefers Ghostty, iTerm2,
+  Warp, kitty, WezTerm, then Terminal.app; Linux honours `$TERMINAL` first and then tries
+  Alacritty, foot, kitty, WezTerm, GNOME Terminal, Konsole, Xfce Terminal, xterm and the Debian
+  `x-terminal-emulator` alternative. Each one is launched through its own documented interface —
+  `ghostty -e`, `kitty --directory`, `wezterm start --cwd`, `konsole --workdir`,
+  `xfce4-terminal -x` — rather than a shared guess at `-e`. It picks the emulator DeckHQ is itself
+  running inside when it can tell (`$TERM_PROGRAM`, or the variable each one exports), falls back
+  to whatever is installed in that order, and walks on to the next candidate if one will not open,
+  so a terminal that has been uninstalled costs one failed spawn rather than the feature.
+  `openNewSession()` gets the same treatment — and, on macOS, finally passes the first prompt
+  through, which the old path silently dropped. `docs/DEVIATIONS.md` §88.
+- **A `terminal` setting pins one.** `POST /api/settings {"terminal": "ghostty"}` — `auto` by
+  default, which is detection. A pin outranks `$TERMINAL` and everything detected; a pin for
+  something the machine no longer has is reported rather than silently ignored, and the detected
+  terminals are still tried behind it.
+- **`deckhq doctor` says which terminal it would open**, and how it knows:
+  `terminal        Ghostty   (this session runs inside it)`. The parenthesis is one of
+  `(installed)`, `($TERMINAL)`, `(pinned in settings)`, `(always present)`, or, for a pin the
+  machine no longer satisfies, one saying so. The row names only checks that were actually run
+  and never claims the launch works — outside Windows, it has not been tried on a real desktop.
+  It is in the local report only, never in `--share`: which emulator you run is a fact about
+  you, not a number anyone can check.
 
 ### Changed
 
@@ -78,6 +100,14 @@
 
 ### Fixed
 
+- **SECURITY: a session id could choose where a launcher script was written.** The macOS
+  "open in terminal" path built its temp filename as `deckhq-resume-<session id>-<timestamp>`,
+  and the id arrives in a request body. An id containing `../` therefore picked the directory.
+  Ids are now stripped to `[A-Za-z0-9._-]` and capped before they reach a path. The id's journey
+  into the command itself was already safe — argv arrays throughout, and single-quoted for `sh`
+  in the one wrapper file that has to exist — and there are now tests over every platform and
+  every emulator asserting that an id made of shell metacharacters lands in exactly one argument
+  and is equal to it. `docs/DEVIATIONS.md` §88.
 - **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are
   written with the port the daemon had when they were installed, so a later start on the 4317
   default — or on 4318 after the in-use walk — left every hook event posting into a void while the
@@ -129,6 +159,12 @@
 
 ### Testing
 
+- **Every (platform, emulator, launch form) pair has its exact argument list asserted** —
+  twenty-one of them, byte for byte, in `test/unit/terminals.test.mjs`, plus detection order,
+  `$TERMINAL` precedence, the pinned setting, and a hostile session id checked against every
+  pair. The pair list is compared against the table itself, so an emulator cannot be added
+  without an assertion. This is the only proof available for code written on a machine that
+  cannot run it, and it is not the same thing as verification — see `docs/DEVIATIONS.md` §9.
 - **The debounce test no longer races the wall clock.** "save() debounces" in
   `test/unit/store.test.mjs` slept 100 ms and looked for the file, slept 300 ms and looked again.
   On Windows CI (Node 18 and 20, run 33756126370) that turned `main` red while the same test

