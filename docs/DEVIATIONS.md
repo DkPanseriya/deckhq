@@ -2645,3 +2645,423 @@ and only ever named. The review card reads the working tree, so they had to
 become real, and they are created inside the fixture root that the demo already
 removes on exit; nothing is written outside it, and a machine without `git`
 still gets a floor (the repositories are skipped, and the section says so).
+## 80. WP-19 spike — `PermissionRequest` is real, and its response shape is not the documented one
+
+**Go.** The route in [`08`](plan/08-PLAN-V2-100X.md) §3.0.2 / B4 holds: a
+`PermissionRequest` hook of type `http`, pointed at the daemon, can answer a
+permission prompt raised by an interactive Claude Code session DeckHQ never
+spawned, and silence falls back to the terminal prompt. Two things in the plan
+are wrong in detail and one is wrong in kind; all three are cheap to fix and
+none of them blocks the build.
+
+Measured against **Claude Code 2.1.231 native, win32-arm64, commit
+`bbff368ec698`**, the build on the reference machine on 3 September.
+
+### 80.1 What was verified by experiment, and what was not
+
+The end-to-end run — a live session raising a prompt, DeckHQ answering it, the
+session continuing — **could not be executed.** The CLI's stored OAuth token is
+expired (`claude auth status` reports `loggedIn: true`, every inference call
+returns `401 OAuth access token has expired. Re-authenticate to continue.`), no
+`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is available to a child
+process, and re-authenticating is an interactive browser flow an agent must not
+perform. So no tool call could be provoked, and the listener registered for the
+attempt was never called.
+
+That is the honest boundary, and by rule 11 in `08` §1.1 it means the
+acceptance criterion in WP-19 — _"verified end to end on the reference
+machine"_ — is **not yet met and must be met before this feature appears in a
+README, a tweet or a pricing page.** What follows is verified by two weaker
+methods that between them still settle every question the spike was asked,
+because the second one reads the shipped implementation rather than its prose.
+
+**Verified by experiment** (ran on this machine):
+
+- `claude doctor` validates the `hooks` block of settings files in the working
+  directory and names the failing path. A block with `"type": "https"`,
+  `"url": "not a url"` and `"timeout": -5` is rejected with
+  `hooks.PermissionRequest.0.hooks.0.type: Invalid input`. The same block with
+  `"type": "http"`, a loopback `url`, a `timeout`, a `statusMessage` and an
+  extra `"_deckhq": true` validates **clean**. So `PermissionRequest` is a
+  recognised event, `http` is a legal type for it, and the tagged-entry
+  discipline the existing hooks use in `src/adapters/claude-code/hooks.mjs`
+  survives validation unchanged — unknown keys are tolerated, not rejected.
+- `--permission-prompt-tool mcp__x__y` is still accepted by the argument parser
+  on 2.1.231 (it fails later, at auth, not at parse) but it is **no longer
+  listed in `claude --help`**. It is a hidden flag now. See §80.8.
+- `--settings <file>` layers a settings file on top of the real scopes without
+  writing to any of them. This is the safe way to run the spike, and it is what
+  `scripts/spike-permission/settings.sample.json` is for. Nothing was written to
+  `~/.claude/settings.json` at any point.
+- The prototype in `scripts/spike-permission/holding-endpoint.mjs` holds a
+  `PermissionRequest` POST open indefinitely, lists it on `GET /pending`, and on
+  `POST /decide` answers the held socket with a body that matches the runtime's
+  own parser schema below. Driven with a realistic payload it returned:
+
+  ```json
+  {"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow",
+   "updatedPermissions":[{"type":"addRules","rules":[{"toolName":"Bash","ruleContent":"npm test:*"}],
+   "behavior":"allow","destination":"session"}]}}}
+  ```
+
+**Verified by reading the installed build.** The 2.1.231 native binary embeds
+its JavaScript as readable text, so the zod schemas and the permission pipeline
+can be read straight out of `~/.local/share/claude/versions/2.1.231`.
+Everything in §80.2–§80.5 is quoted from there. This is stronger evidence than
+the documentation, and in one important case it **contradicts** it.
+
+**Read from documentation only:** the Codex side (§80.7) and the
+`--permission-prompt-tool` output contract (§80.8).
+
+### 80.2 The request payload
+
+Built by `executePermissionRequestHooks`:
+
+```js
+let l = { ...fg(n.session, Wt(), o, n),
+          hook_event_name: "PermissionRequest",
+          tool_name: e, tool_input: r, permission_suggestions: i };
+```
+
+and `fg` is the common-field builder:
+
+```js
+return { session_id: e.id, transcript_path: oH(e.id), cwd: t,
+         prompt_id: PZe() ?? undefined, permission_mode: r,
+         agent_id: n?.agentId, agent_type: o, effort: a };
+```
+
+So the POST body is:
+
+```json
+{
+  "session_id": "bf6a1bf1-…",
+  "transcript_path": "…/.claude/projects/…/….jsonl",
+  "cwd": "C:\\Dk\\Projects\\1_Project_DeckHQ",
+  "prompt_id": "550e8400-…",
+  "permission_mode": "default",
+  "agent_id": "…",
+  "agent_type": "general-purpose",
+  "effort": { "level": "…" },
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Bash",
+  "tool_input": { "command": "npm test", "description": "Run test suite" },
+  "tool_use_id": "toolu_01ABC…",
+  "permission_suggestions": [
+    {
+      "type": "addRules",
+      "rules": [{ "toolName": "Bash", "ruleContent": "npm test:*" }],
+      "behavior": "allow",
+      "destination": "localSettings"
+    }
+  ]
+}
+```
+
+`permission_suggestions` is **not in the documentation** and it is the single
+most useful field in the payload: it is the array of permission updates the
+terminal prompt itself would have offered as "don't ask again for this". It
+gives the panel its third button for free, with the runtime's own rule text
+rather than a rule DeckHQ guessed. `tool_use_id` is the natural correlation key.
+Everything DeckHQ needs to render a card — which session, which project, which
+tool, the literal command — arrives in one POST.
+
+### 80.3 The response shape. The docs are wrong here
+
+The prose documentation at `code.claude.com/docs/en/hooks` presents
+
+```json
+{ "hookSpecificOutput": { "hookEventName": "PermissionRequest",
+                          "decision": "allow" } }
+```
+
+with sibling `reason`, `updatedInput`,
+`updatedPermissions: {allow, allowForSession}` and `interrupt` fields. **The
+installed build accepts none of that.** Its parser is a discriminated union in
+which `decision` is an **object**:
+
+```js
+be({ hookEventName: It("PermissionRequest"),
+     decision: vs([
+       be({ behavior: It("allow"),
+            updatedInput: no(F(), oo()).optional(),
+            updatedPermissions: gt(uRt()).optional() }),
+       be({ behavior: It("deny"),
+            message: F().optional(),
+            interrupt: qt().optional() })
+     ]) })
+```
+
+Three consequences:
+
+1. `decision` is `{ "behavior": "allow" | "deny", … }`. A bare string fails
+   validation, and a failed hook body is a non-blocking error — the decision is
+   simply not applied and the prompt stays on screen. **A DeckHQ that emitted
+   the documented shape would look like it was doing nothing at all.**
+2. There is **no `"ask"` behaviour** in the hook's output union, and no `reason`
+   on the allow branch. "Leave it to the terminal" is expressed by answering
+   nothing, not by an `ask` decision.
+3. `updatedPermissions` is an **array** of permission-update objects, not the
+   documented `{allow, allowForSession}` object:
+
+   ```js
+   uRt = OE("type", [
+     be({ type: It("addRules"),          rules: gt(C7o()), behavior: k7o(), destination: sMr() }),
+     be({ type: It("replaceRules"),      rules: gt(C7o()), behavior: k7o(), destination: sMr() }),
+     be({ type: It("removeRules"),       rules: gt(C7o()), behavior: k7o(), destination: sMr() }),
+     be({ type: It("setMode"),           mode: cln(),                       destination: sMr() }),
+     be({ type: It("addDirectories"),    directories: gt(F()),              destination: sMr() }),
+     be({ type: It("removeDirectories"), directories: gt(F()),              destination: sMr() })
+   ])
+   C7o = be({ toolName: F(), ruleContent: F().optional() })
+   k7o = Mr(["allow", "deny", "ask"])
+   sMr = Mr(["userSettings", "projectSettings", "localSettings", "session", "cliArg"])
+   ```
+
+So the three buttons are:
+
+| Panel                       | Response body                                                                                                              |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| **Allow**                   | `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`                              |
+| **Deny**                    | `…"decision":{"behavior":"deny","message":"Denied from DeckHQ."}`                                                           |
+| **Allow for this session**  | `…"decision":{"behavior":"allow","updatedPermissions":[ <a suggestion from the request, `destination` rewritten to `"session"`> ]}` |
+
+`destination: "session"` is the whole "for this session" mechanism, and it is
+why §80.2's `permission_suggestions` matters: DeckHQ retargets a suggestion it
+was handed rather than minting rule syntax of its own. `"userSettings"`,
+`"projectSettings"` and `"localSettings"` write to the user's settings files and
+**DeckHQ must never send them** — that is a permanent grant made from a web
+panel, and it is not the button the panel offers.
+
+Two further clauses in the consumer bear on the build:
+
+- `interrupt: true` on a deny also calls `abortController.abort()`, killing the
+  turn. DeckHQ's Deny must **not** set it. Denying a command is not the same as
+  stopping the agent, and the two must stay separate actions.
+- `if (!g.updatedInput && e.requiresUserInteraction?.()) return null` — for
+  tools whose approval card _is_ the interaction surface (`AskUserQuestion`,
+  `ExitPlanMode`, MCP tools flagged `anthropic/requiresUserInteraction`) a hook
+  allow is discarded and the user must answer in the session. The runtime's own
+  remote-control wire carries the matching flag and describes it as _"True when
+  one-tap Approve/Deny must not be offered … Either way the user has to open the
+  session to answer."_ The panel needs a fourth state for this: **"answer in the
+  terminal"**, with no buttons. See §80.5.
+
+### 80.4 The `http` type, its timeout, and silence
+
+The `http` hook schema, verbatim from the build:
+
+```js
+be({ type: It("http"), url: F().url(), if: dln(),
+     timeout: ct().positive().optional(),   // seconds
+     headers: no(F(), F()).optional(),
+     allowedEnvVars: gt(F()).optional(),
+     statusMessage: F().optional(),
+     once: qt().optional() })
+```
+
+- **Timeout.** `var Ng = 600000` and
+  `executePermissionRequestHooks(…, a = Ng)` — the default is **600 000 ms, ten
+  minutes**, per request, and `timeout` overrides it in seconds. Ten minutes is
+  a genuinely useful hold. It is not the 30 s that `UserPromptSubmit` gets
+  (`var AWu = 30000`).
+- **The body.** `POST`, `Content-Type: application/json`, response parsed by the
+  same JSON-output schema as a command hook's stdout. An empty body is _"HTTP
+  hook returned empty body, treating as empty JSON object"_; a body not starting
+  with `{` is _"HTTP hook must return JSON, but got non-JSON response body"_.
+  Both are non-blocking errors: no decision, prompt stays.
+- **Silence falls through, confirmed in code.** The consumer loops the hook
+  results and returns a decision only on `behavior === "allow" | "deny"`;
+  otherwise it falls out of the loop and returns `undefined`. No hook, no
+  answer, a malformed answer, a refused connection, a closed daemon — all the
+  same: the terminal prompt is what happens. **A closed DeckHQ cannot block a
+  session.** This is the load-bearing fact for B4 and the one that was most
+  worth checking.
+- **The terminal prompt is shown _while_ the hook runs.** The hook is fired as a
+  detached task beside the prompt UI (`if (!s) (async () => { … let x = await
+t.runHooks(…); … d(x) })()`), racing the on-screen prompt and the
+  remote-control watcher. Whichever answers first resolves the decision and
+  cancels the others. So both surfaces are live at once and the user can answer
+  in either. DeckHQ answering dismisses the terminal prompt; the user answering
+  in the terminal closes our socket, which the prototype treats as a withdrawal.
+- **`PermissionRequest` fires only when a prompt would otherwise appear.** The
+  caller evaluates the normal rules first (`let a = s ?? await yI(…)`) and
+  consults the hook only once the outcome is _ask_. This is unlike
+  `PreToolUse`, which runs for every call. It is exactly the event DeckHQ wants
+  — one POST per raised hand, none for the thousands of allowed calls — and it
+  is worth stating because the published permission-flow diagram puts "Hooks" at
+  step 1 and invites the opposite conclusion.
+- **`if`** narrows a hook by permission-rule syntax (`"Bash(git *)"`), and
+  `matcher` narrows by tool name. DeckHQ should register with **neither**: the
+  product's claim is that every raised hand appears.
+- **Two managed-settings kill switches exist**, and `doctor` and the banner must
+  know about them, because from the user's side they look identical to a broken
+  install: `allowedHttpHookUrls`, _"Allowlist of URL patterns that HTTP hooks
+  may target … If empty array, no HTTP hooks are allowed"_, and
+  `allowManagedHooksOnly`, _"only hooks from managed settings run. User, project,
+  and local hooks are ignored."_ On a managed machine the `http` route can be
+  switched off over DeckHQ's head. §80.6 has the fallback.
+
+A user-scope hook applies to every session in every terminal: hook lookup reads
+the merged settings sources with no session or terminal condition
+(`zq(event, …)` checks managed, then user/project/local unless
+`allowManagedHooksOnly`, then plugins, then session hooks), and
+`~/.claude/settings.json` is documented as scope "all your projects". This is
+the same mechanism the six existing DeckHQ hooks already rely on, so it is
+treated as settled rather than re-measured — but it was **not** independently
+re-verified for `PermissionRequest`, because that needs the end-to-end run.
+
+### 80.5 Recommended build design
+
+**Hook type: `http`, with a `command` fallback.** `http` is one settings entry,
+no process spawn per prompt, and a real ten-minute hold. Register one entry, no
+`matcher`, no `if`:
+
+```json
+{
+  "type": "http",
+  "url": "http://127.0.0.1:<port>/api/permission",
+  "timeout": 600,
+  "statusMessage": "Waiting for DeckHQ…",
+  "_deckhq": true
+}
+```
+
+**Endpoint: `POST /api/permission`, separate from `/api/hook`.** `/api/hook`
+acknowledges in under 200 ms by contract (`src/http/routes/hooks.mjs`) and must
+keep doing so. The permission endpoint does the opposite — it holds. Two
+different contracts, two routes.
+
+**Holding.** Keep the `ServerResponse` in a map keyed by `tool_use_id`, and key
+the card on `(session_id, tool_use_id)`. Register `res.on('close')` and drop the
+entry when the socket dies — that is the user having answered in the terminal,
+or the ten minutes having elapsed. Sockets held open are the only new resource
+this feature introduces; cap the map and shed the oldest rather than letting it
+grow without bound.
+
+**Timeout.** Set `timeout: 600` explicitly rather than relying on the default,
+so a future change to `Ng` cannot silently shorten the hold. **DeckHQ itself
+must never run a timer that answers.** If nobody answers, DeckHQ answers
+nothing and the ten minutes expire into the terminal prompt, which is the
+correct outcome.
+
+**UI states**, four of them:
+
+1. **Waiting** — the card, with Allow / Deny / Allow for this session. Allow for
+   this session is offered only when the request carried an `addRules`
+   suggestion; otherwise it is absent, not disabled-with-a-tooltip.
+2. **Answer in the terminal** — the `requires_user_interaction` class of tools.
+   The card says which session and where, and offers no buttons, because a hook
+   allow would be discarded.
+3. **Withdrawn** — the socket closed before we answered. The card says "answered
+   in the terminal", not "expired", because that is what almost always happened.
+4. **Answered** — what DeckHQ sent, and by which button, kept visible long
+   enough to be read.
+
+**What DeckHQ must never do.** Never auto-allow, in any mode, for any tool, with
+any allowlist. Never answer on a timer, on a heuristic, on a classifier, or on
+"the user usually allows this" — the only thing that may resolve a card is a
+human clicking one of its buttons. Never send `updatedPermissions` with a
+`destination` other than `"session"`: a permanent grant written into the user's
+settings files is not a button this panel has. Never set `interrupt: true`.
+Never touch `ackState` — a permission decision is a statement about one tool
+call, not about whether the user is done with the session, and routing it into
+the user-owned half of the model would let an observed event clear a user-owned
+state, which is the `08` §1.1 rule 1 invariant and has named `INVARIANT:` tests.
+The permission card is its own object with its own lifetime; it may sit _beside_
+an agent on the floor and must not mutate it.
+
+**Consent and removal** reuse the existing discipline in
+`src/adapters/claude-code/hooks.mjs` unchanged: the literal JSON on the consent
+screen, `_deckhq: true` for exact removal, the byte-exact backup, and the
+port-mismatch-reads-as-not-installed rule. Verified above: the extra tag does
+not fail settings validation.
+
+### 80.6 Port discovery — the plan's third question has no clean answer yet
+
+The plan asks how the hook finds the daemon "without a hard-coded port". For the
+`http` type it **cannot**: `url` is `F().url()`, a literal, and the only
+interpolation the schema allows anywhere is `$VAR` inside `headers`, gated by
+`allowedEnvVars`. The `${path}` interpolation from the hook input applies to
+`mcp_tool` arguments only. So an `http` hook's port is baked in at install time,
+exactly like today's command hooks.
+
+And `~/.deckhq/state.json` is **not** a discovery mechanism today: the daemon
+resolves its port in `startDaemon` (walking forward from 4317) and never writes
+it anywhere. `src/core/paths.mjs` and `src/core/store.mjs` have no port. So the
+options, in order of preference:
+
+1. **Bake the port in, and keep the existing staleness cure.** `installedPort`
+   and `staleAtPort` in `src/http/routes/hooks.mjs` already detect a hook aimed
+   at the wrong port and already offer the one-click reinstall. The permission
+   hook inherits that for free and needs no new machinery. This is the
+   recommendation for the build.
+2. **Have the daemon write its bound port** to `~/.deckhq/` on listen, and use a
+   `command` hook — a node one-liner that reads the port, POSTs, and prints the
+   decision JSON to stdout — for machines where the port moves often or where
+   `allowedHttpHookUrls` forbids `http`. This is a real fallback for §80.4's
+   managed-settings kill switches, and it is also the only route Codex has
+   (§80.7). It costs a process spawn per raised hand, which is affordable at one
+   per prompt.
+
+Writing the port out is a small change with a use beyond this package; it
+belongs in WP-36, not here.
+
+### 80.7 Codex, from documentation only
+
+Codex has `PermissionRequest` in `~/.codex/hooks.json` (or inline in
+`config.toml`), and its documented response is the **object** form, which is
+independent corroboration of §80.3 against the Claude Code prose docs:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "deny", "message": "Blocked by repository policy." }
+  }
+}
+```
+
+Payload fields named: `turn_id`, `tool_name`, `tool_input` (with
+`tool_input.description` as the human-readable reason). Default timeout 600 s.
+On no decision, _"Codex uses the normal approval flow"_ — the same
+fall-through.
+
+**The divergence that matters: Codex hook types are `command` and `mcp_tool`
+only. There is no `http` type.** So the Codex adapter cannot reuse the endpoint
+directly; it needs the §80.6 option 2 command hook. That makes option 2 worth
+building for its own sake, not only as a fallback. None of this was run: Codex
+is not installed on this machine, and the claim that the hook shipped in 0.150.0
+on 26 August is unverified — the documentation gives no version.
+
+### 80.8 `--permission-prompt-tool`, from documentation only
+
+Still the right fallback for headless sessions DeckHQ spawns, with three
+caveats. It must name an **MCP** tool — _"tool … must be an MCP tool"_ — so
+DeckHQ would have to run an MCP server, which it does not today (that lands
+with WP-37's plugin). The tool must return a **single text block** whose text is
+JSON: _"Expected a single text block param with type=\"text\" and a string text
+value"_, parsed to `allow` / `deny` with `updated_input` and
+`updatedPermissions`. And it inherits the same exclusion as the hook — _"MCP
+tool requires user interaction; not supported via --permission-prompt-tool"_. It
+is also now hidden from `claude --help` while still being parsed, which makes it
+the less stable of the two routes and confirms the plan's decision to lead with
+the hook.
+
+### 80.9 Go/no-go
+
+**Go, with the acceptance criterion unchanged and unmet.** The mechanism exists,
+covers interactive sessions DeckHQ never spawned, degrades to the terminal
+prompt on every failure path including a closed daemon, and hands DeckHQ the
+rule text for its third button. Nothing in the four days of build work depends
+on a question this spike left open. The two corrections the plan needs are in
+§80.3 (the response shape — the one that would have cost days of "why is
+nothing happening") and §80.6 (the port is baked in, and Codex needs a `command`
+hook). **The end-to-end run on the reference machine is still owed, and until it
+happens this feature stays out of the README, the changelog and every tweet**,
+per WP-19 and `08` §1.1 rule 11.
+
+`scripts/spike-permission/` holds the throwaway prototype that reproduces all of
+this. It is not product code, it is excluded from the published tarball by the
+`files` whitelist in `package.json`, and it should be deleted when the build
+lands.
