@@ -20,6 +20,13 @@ import {
   readTail,
   parseSummary,
   parseConversation,
+  SUBAGENT_DIR,
+  SUBAGENT_MAX_DEPTH,
+  subagentIdFromFile,
+  subagentMetaFile,
+  parseSubagentMeta,
+  parseSubagentTimes,
+  subagentEvent,
 } from './parse.mjs';
 import * as hooksImpl from './hooks.mjs';
 import { readDesktopSessions } from './desktop.mjs';
@@ -310,6 +317,11 @@ function noteScanEvidence(summaries) {
   if (!liveProbe.at || liveProbeForced) return;
   for (const s of summaries) {
     if ((s.lastActivityAt || 0) <= liveProbe.at) break; // sorted: nothing newer follows
+    // WP-41. A junior is never in the live roster — `claude agents --json`
+    // lists sessions, not subagents — so a busy junior would force a fresh
+    // CLI spawn on every single poll, which is the exact cost §77's cache
+    // exists to remove. Its parent is in the roster and speaks for it.
+    if (s.subagent === true) continue;
     if (!liveProbe.ids.has(s.id)) {
       liveProbeForced = true;
       return;
@@ -376,6 +388,198 @@ async function listSessionFiles() {
   );
 
   return perDir.flat();
+}
+
+// ------------------------------------------------------ subagents (WP-41)
+
+/**
+ * How long after its last written record a junior is still on the floor.
+ *
+ * A subagent transcript carries no stop marker of any kind (verified: the last
+ * record is an ordinary `user` or `assistant` turn, §117), so with no hook to
+ * say otherwise the only honest signal that a junior has finished is that its
+ * file stopped moving. Too short and a junior thinking hard flickers off the
+ * floor and back; too long and juniors that finished linger at a desk.
+ *
+ * Measured over 28,813 consecutive-record gaps in 300 real subagent
+ * transcripts on this machine: p50 1.7 s, p90 7.9 s, p99 63.5 s, p99.9 253 s.
+ * Five minutes clears 99.93% of them, so a junior effectively never blinks
+ * out mid-task, and a finished one leaves within five minutes at the worst.
+ * With hooks installed and a `SubagentStop` that names the junior, it leaves
+ * at once and this never binds.
+ */
+export const SUBAGENT_IDLE_MS = 300_000;
+
+/**
+ * How recently a session's own transcript must have moved before its
+ * `subagents/` directory is looked at.
+ *
+ * This is the cost control. Reading every session's subagent directory would
+ * be one `readdir` per session — up to `SCAN_LIMIT` of them, every poll,
+ * forever — to find juniors that by definition only exist while their parent
+ * is running. A parent that has not written for half an hour has no live
+ * junior, so its directory is not opened.
+ *
+ * Half an hour rather than `SUBAGENT_IDLE_MS`: a parent can sit silent for the
+ * whole of a long junior's run (it writes the `Task` call, then nothing until
+ * the result comes back), and the longest subagent lifetime measured here was
+ * 88,273 s. This is generous on purpose — being wrong here loses a junior,
+ * and being right costs one `readdir` on a directory that is nearly always
+ * absent.
+ */
+export const SUBAGENT_PARENT_WINDOW_MS = 30 * 60_000;
+
+/**
+ * Where each known junior's transcript is, so `conversation()` and
+ * `findSessionFile()` can answer for an id that is not a top-level session.
+ * Rebuilt by every scan; a junior that has left simply falls out of it.
+ * @type {Map<string, string>}
+ */
+let subagentFiles = new Map();
+
+/** Test seam: forget which junior transcripts the last scan found. */
+export function _resetSubagentIndex() {
+  subagentFiles = new Map();
+}
+
+/**
+ * Every subagent transcript under one parent session's directory.
+ *
+ * Two shapes exist on disk and both are handled (§117):
+ *   `<sessionDir>/subagents/agent-<id>.jsonl`                 — a Task subagent
+ *   `<sessionDir>/subagents/workflows/wf_<id>/agent-<id>.jsonl` — a workflow one
+ *
+ * `journal.jsonl` sits beside the second and is the workflow's own log, not a
+ * subagent: `subagentIdFromFile` returns null for it, which is what drops it.
+ * Never throws — a session with no `subagents/` directory (the overwhelming
+ * majority) resolves to [].
+ *
+ * @param {string} sessionDir `<projectDir>/<parentSessionId>`
+ * @param {string} parentSessionId
+ * @returns {Promise<{file:string, subagentId:string, parentSessionId:string,
+ *   mtimeMs:number, size:number}[]>}
+ */
+async function listSubagentFiles(sessionDir, parentSessionId) {
+  /** @type {{file:string, subagentId:string, parentSessionId:string, mtimeMs:number, size:number}[]} */
+  const out = [];
+
+  /** @param {string} dir @param {number} depth */
+  async function walk(dir, depth) {
+    let entries;
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return; // no subagents/ here, or it is not readable. Both are normal.
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (depth < SUBAGENT_MAX_DEPTH) await walk(full, depth + 1);
+        continue;
+      }
+      if (!e.isFile()) continue;
+      const subagentId = subagentIdFromFile(e.name);
+      if (!subagentId) continue;
+      let stat;
+      try {
+        stat = await fsp.stat(full);
+      } catch {
+        continue;
+      }
+      out.push({
+        file: full,
+        subagentId,
+        parentSessionId,
+        mtimeMs: stat.mtimeMs,
+        size: stat.size,
+      });
+    }
+  }
+
+  await walk(path.join(sessionDir, SUBAGENT_DIR), 0);
+  return out;
+}
+
+/**
+ * Summarise the juniors that are still working, for the sessions that could
+ * plausibly have one.
+ *
+ * A junior is a session in every way the model cares about — it has a cwd, a
+ * title, tokens, a last line and an activity state — plus four fields nobody
+ * else has: `subagent`, `parentSessionId`, `subagentType` and `spawnedAt`.
+ * Everything here is parsed by `parse.mjs`; this function does directories,
+ * freshness and assembly and nothing else (standing rule 8).
+ *
+ * A junior whose transcript has not moved for `SUBAGENT_IDLE_MS` is NOT
+ * returned. That is the "it leaves when it stops" half of WP-41 and it is a
+ * display decision made in one place: nothing about a junior is persisted, no
+ * `ackState` is ever written for one, so a junior leaving the floor cannot
+ * touch a user-owned field even in principle.
+ *
+ * @param {{file:string, sessionId:string, mtimeMs:number}[]} parents the scan's
+ *   own candidate list — already sorted and bounded.
+ * @param {number} now
+ * @returns {Promise<import('../../core/model.mjs').SessionSummary[]>}
+ */
+async function scanSubagents(parents, now) {
+  const fresh = parents.filter((p) => now - p.mtimeMs <= SUBAGENT_PARENT_WINDOW_MS);
+  if (!fresh.length) {
+    subagentFiles = new Map();
+    return [];
+  }
+
+  const perParent = await mapWithConcurrency(fresh, SCAN_CONCURRENCY, (p) =>
+    listSubagentFiles(path.join(path.dirname(p.file), p.sessionId), p.sessionId),
+  );
+  const candidates = perParent.flat().filter((f) => now - f.mtimeMs <= SUBAGENT_IDLE_MS);
+
+  /** @type {Map<string, string>} */
+  const index = new Map();
+  for (const c of candidates) index.set(c.subagentId, c.file);
+  subagentFiles = index;
+
+  const summaries = await mapWithConcurrency(candidates, SCAN_CONCURRENCY, async (entry) => {
+    try {
+      const base = path.basename(entry.file);
+      const [head, tail, metaText] = await Promise.all([
+        readHead(entry.file, HEAD_BYTES),
+        readTail(entry.file, TAIL_BYTES),
+        fsp
+          .readFile(path.join(path.dirname(entry.file), subagentMetaFile(base)), 'utf8')
+          .catch(() => ''),
+      ]);
+      const meta = parseSubagentMeta(metaText);
+      const times = parseSubagentTimes(head, tail);
+      const summary = parseSummary(head, tail, {
+        id: entry.subagentId,
+        mtimeMs: entry.mtimeMs,
+        sidechain: true,
+      });
+      return {
+        ...summary,
+        id: agentId(RUNTIME_ID, entry.subagentId),
+        // The Task call's own description is a better title than the first
+        // 60 characters of a prompt the user never wrote by hand.
+        title: meta.description || summary.title,
+        hasCustomTitle: Boolean(meta.description) || summary.hasCustomTitle,
+        model: summary.model ?? meta.model ?? null,
+        subagent: true,
+        parentSessionId: entry.parentSessionId,
+        subagentType: meta.agentType,
+        subagentDescription: meta.description,
+        spawnedAt: times.spawnedAt,
+      };
+    } catch (err) {
+      // Same rule as a session: one unreadable junior never fails a scan.
+      console.error(
+        `[claude-code] failed to parse subagent ${entry.subagentId}:`,
+        err && err.message ? err.message : err,
+      );
+      return null;
+    }
+  });
+
+  return /** @type {any[]} */ (summaries.filter((s) => s !== null));
 }
 
 /**
@@ -496,6 +700,20 @@ async function scanSessions({ maxAgeDays, limit }) {
   }
 
   const out = summaries.filter((s) => s !== null);
+
+  // WP-41. The juniors, appended to the same list: a subagent is a session
+  // like any other from here on, and everything downstream — the state
+  // machine, the plan, the panel — reads the four extra fields or ignores
+  // them. Scanned from `candidates` rather than `all` so the same age window
+  // and limit that bound the sessions bound their juniors, and so a machine
+  // with nothing running pays one filter and no directory reads at all.
+  try {
+    out.push(...(await scanSubagents(candidates, Date.now())));
+  } catch (err) {
+    // A junior is a decoration on a floor that has to draw without one.
+    console.error('[claude-code] subagent scan failed:', err && err.message ? err.message : err);
+  }
+
   if (desktop && desktop.size) {
     for (const summary of out) {
       const meta = desktop.get(splitAgentId(summary.id).sessionId);
@@ -531,6 +749,11 @@ async function scanSessions({ maxAgeDays, limit }) {
  * @returns {Promise<string|null>}
  */
 async function findSessionFile(sessionId) {
+  // WP-41. A junior's transcript is not a top-level session file, so the loop
+  // below would never find it. The scan already knows where every junior on
+  // the floor lives; asking it is one map lookup and needs no extra walk.
+  const junior = subagentFiles.get(sessionId);
+  if (junior) return junior;
   let entries;
   try {
     entries = await fsp.readdir(PROJECTS_DIR, { withFileTypes: true });
@@ -562,7 +785,11 @@ async function conversation(id, { maxMessages } = {}) {
   if (!file) return [];
   try {
     const tail = await readTail(file, TAIL_BYTES);
-    return parseConversation(tail, { maxMessages });
+    // WP-41. In a junior's own transcript every record carries
+    // `isSidechain: true`; keeping the usual filter would hand the panel an
+    // empty conversation for a session that plainly said things.
+    const sidechain = subagentFiles.has(sessionId);
+    return parseConversation(tail, { maxMessages, sidechain });
   } catch {
     return [];
   }
@@ -813,6 +1040,10 @@ export const adapter = {
     // spelling on both ends of it.
     permissionRequest: hooksImpl.permissionRequest,
     permissionDecisionBody: hooksImpl.permissionDecisionBody,
+    // WP-41: and the same rule again for `SubagentStop`. Which junior a stop
+    // event is about is a question about Claude Code's payload spelling, so
+    // the route asks the adapter rather than guessing at a key name itself.
+    subagentEvent,
   },
 };
 
