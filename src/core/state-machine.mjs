@@ -80,6 +80,7 @@ import { createLog } from './log.mjs';
 import { discoverActions } from './actions.mjs';
 import { projectKeyFor } from './ledger.mjs';
 import { buildDemoSnapshot } from './demo-fixture.mjs';
+import { rateCardVersion } from './rates.mjs';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -177,7 +178,60 @@ function freshObserved(runtime) {
     model: /** @type {string|null} */ (null),
     tokens: 0,
     cacheTokens: 0,
-    costEstimate: 0,
+    // null, not 0: an unpriced session is one we have no rate for, and zero
+    // would be a claim about the money (WP-26, `src/core/rates.mjs`).
+    costEstimate: /** @type {number|null} */ (null),
+  };
+}
+
+/**
+ * What one project has spent TODAY, in USD, at list prices (WP-26).
+ *
+ * The room plate's payroll line. Three things it is, and one it is not:
+ *
+ * **It is derived from the ledger.** `todayTokens` is the day's `tokens`
+ * records folded per project — how far each room's token counters actually
+ * moved since local midnight — and the day's share of the project's own
+ * lifetime estimate is that movement over the lifetime total. The blend is
+ * deliberate and it is why this is an estimate of an estimate: a `tokens`
+ * record carries a delta and a project key, not a model, so the day's tokens
+ * are priced at the room's own average rate rather than at whichever model
+ * produced them. On a room running one model — which is nearly every room —
+ * the two are the same number.
+ *
+ * **It falls back rather than lying.** A project with no `tokens` record today
+ * (a fresh install, a ledger that cannot be written, a daemon started five
+ * minutes ago) gets its session total instead, flagged with
+ * `todaySpendIsToday: false` so the plate can say "to date" rather than
+ * claiming a day's figure it does not have.
+ *
+ * **It is null when nothing in the room has a rate.** Not zero. See
+ * `src/core/rates.mjs`.
+ *
+ * **It is not a bill.** Rule 7. Every display of it says so.
+ *
+ * @param {{cwd?:string, tokens?:number, cacheTokens?:number, costEstimate?:number, costRated?:boolean}} project
+ * @param {Record<string, {tokens?:number, cache?:number}>} todayTokens
+ * @returns {{todaySpend:number|null, todaySpendIsToday:boolean}}
+ */
+export function todaySpendFor(project, todayTokens) {
+  if (!project || project.costRated !== true) {
+    return { todaySpend: null, todaySpendIsToday: false };
+  }
+  const lifetime = Number(project.costEstimate) || 0;
+  const round = (/** @type {number} */ n) => Math.round(n * 10000) / 10000;
+  const total = (Number(project.tokens) || 0) + (Number(project.cacheTokens) || 0);
+  const entry = (todayTokens || {})[projectKeyFor(project.cwd || '')];
+  const moved = entry ? (Number(entry.tokens) || 0) + (Number(entry.cache) || 0) : 0;
+  if (moved <= 0 || total <= 0) {
+    return { todaySpend: round(lifetime), todaySpendIsToday: false };
+  }
+  // Clamped: a day cannot have cost more than the session has ever cost, and
+  // a scan that read a longer transcript than the totals it is blended
+  // against would otherwise produce a plate line larger than the whiteboard's.
+  return {
+    todaySpend: round(Math.min(lifetime, (moved / total) * lifetime)),
+    todaySpendIsToday: true,
   };
 }
 
@@ -322,6 +376,7 @@ export class Registry {
       const id = this.identity.describe(a.id, a.projectId);
       return { ...a, ...id };
     });
+    const todayTokens = this.ledger ? this.ledger.todayTokens() : {};
     const projects = projectsOf(agents).map((p) => {
       // `hasDashboard` decides whether the room gets a screen to click, so it
       // is refreshed by the scan rather than probed per frame.
@@ -330,9 +385,11 @@ export class Registry {
       // `buildPlan`: the room pops back open on its own rather than hiding
       // somebody who is working.
       const archived = this.store.isProjectArchived(p.id);
-      if (!this.identity) return { ...p, hasDashboard, archived };
+      const today = todaySpendFor(p, todayTokens);
+      const base = { ...p, hasDashboard, archived, ...today };
+      if (!this.identity) return base;
       const projectMk = this.identity.projectMk(p.id);
-      return { ...p, hasDashboard, archived, projectMk, mk: `MK${projectMk}` };
+      return { ...base, projectMk, mk: `MK${projectMk}` };
     });
     return {
       agents,
@@ -348,6 +405,11 @@ export class Registry {
       // A store that cannot write is losing every acknowledgement made since
       // it last succeeded. Carried in the snapshot so the client can say so.
       writeError: this.store.writeError || null,
+      // WP-26. Every cost display carries the date of the table it came from,
+      // so a figure nobody can check is at least a figure whose source is
+      // dated. The floor reads it from here rather than fetching /api/about
+      // for a string that is already in every snapshot.
+      rateCardVersion: rateCardVersion(),
       scannedAt: this._scannedAt,
     };
   }
@@ -1059,7 +1121,7 @@ export class Registry {
         obs.model = summary.model ?? null;
         obs.tokens = summary.tokens || 0;
         obs.cacheTokens = summary.cacheTokens || 0;
-        obs.costEstimate = summary.costEstimate || 0;
+        obs.costEstimate = summary.costEstimate ?? null;
         obs.lastRole = summary.lastRole ?? null;
         obs.turnEnded = summary.turnEnded === true;
         obs.lastText = clampText(summary.lastText);

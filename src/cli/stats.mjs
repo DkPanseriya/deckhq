@@ -29,6 +29,7 @@ import process from 'node:process';
 
 import { LEDGER_DIR } from '../core/paths.mjs';
 import { computeStats, projectKeyFor, readAll, records as teamRecords } from '../core/ledger.mjs';
+import { rateCardVersion } from '../core/rates.mjs';
 import { readCache } from './source.mjs';
 import { group, palette, useColor, waited } from './deck.mjs';
 
@@ -163,19 +164,28 @@ export function renderRecords(rec, opts = {}) {
 /**
  * The report, as text.
  * @param {ReturnType<typeof computeStats>} stats
- * @param {{names?:Record<string,string>, color?:boolean, dir?:string,
+ * @param {{names?:Record<string,string>, color?:boolean, dir?:string, rateCard?:string,
  *          records?:ReturnType<typeof teamRecords>}} [opts]
  */
 export function renderStats(stats, opts = {}) {
   const c = palette(Boolean(opts.color));
   const names = opts.names || {};
   const lines = [''];
+  // WP-26. Wherever a number that came off the rate card is shown, the dated
+  // table it came off is named beside it — here, in the panel, on the room
+  // plate and in the settings sheet. Printed even for an empty ledger:
+  // "which table is this build pricing with" is a question a user asks
+  // before there are any numbers, and this is the command they ask it from.
+  const rateCard = opts.rateCard || rateCardVersion();
+  const rateCardLine = c.dim(`  rate card ${rateCard} — list-price estimate, not a bill`);
 
   if (stats.records === 0) {
     lines.push(
       '  the ledger is empty',
       '',
       c.dim('  it fills as the floor moves; there is nothing to measure yet'),
+      '',
+      rateCardLine,
       '',
     );
     return lines.join('\n');
@@ -244,6 +254,7 @@ export function renderStats(stats, opts = {}) {
   }
 
   lines.push('');
+  lines.push(rateCardLine);
   lines.push(c.dim(`  from ${opts.dir || LEDGER_DIR} — ${group(stats.records)} records`), '');
   return lines.join('\n');
 }
@@ -285,8 +296,16 @@ export async function runStats(argv = [], deps = {}) {
   const teamRec = teamRecords(records, { now });
   const names = projectNames(readCache(deps.cacheDir));
 
+  const rateCard = rateCardVersion();
+
   if (argv.includes('--json')) {
-    write(JSON.stringify({ ...stats, records: teamRec, projects: names, dir }, null, 2) + '\n');
+    write(
+      JSON.stringify(
+        { ...stats, records: teamRec, projects: names, dir, rateCardVersion: rateCard },
+        null,
+        2,
+      ) + '\n',
+    );
     return 0;
   }
 
@@ -296,6 +315,7 @@ export async function runStats(argv = [], deps = {}) {
       color: deps.color ?? useColor({ argv }),
       dir,
       records: teamRec,
+      rateCard,
     }),
   );
   return 0;

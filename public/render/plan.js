@@ -127,7 +127,10 @@
  * @property {number} w
  * @property {number} h
  * @property {'full'|'partial'} walls
- * @property {[string, string]} plateLines
+ * @property {[string, string]|[string, string, string]} plateLines
+ *   Name, one data line, and — project rooms only, WP-26 — a quiet payroll
+ *   line. The third is `''` when there is nothing honest to put there, and a
+ *   renderer that only knows about two lines is correct to ignore it.
  * @property {Prop[]} props
  * @property {Zone[]} zones
  * @property {'wood'|'carpet'|'tile'|'circulation'} floor
@@ -472,6 +475,37 @@ export function formatTokens(n) {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `${Math.round(v / 1000)}k`;
   return `${Math.round(v)}`;
+}
+
+/**
+ * The room plate's payroll line (WP-26), or `''` when there is nothing
+ * honest to put on it.
+ *
+ * Three rules, and the third is the one that matters:
+ *
+ *   1. **Quiet.** It is the third line on a door plate, under the name and the
+ *      session count. It is context for a room, not a headline.
+ *   2. **Dated by its own words.** `today` when the ledger has the day's token
+ *      deltas for this project; `to date` when it does not and the line is the
+ *      session totals falling back (`todaySpendFor` in
+ *      `src/core/state-machine.mjs`). The plate never says "today" about a
+ *      number that is not today's.
+ *   3. **It says what kind of number it is.** `list price` is not decoration:
+ *      `08` §1.1 rule 7 is that cost is an estimate and never a bill, and a
+ *      currency figure on a wall with no qualifier beside it reads as a bill.
+ *      A project nothing in the rate card can price gets NO LINE at all rather
+ *      than `$0.00` — see `src/core/rates.mjs`.
+ *
+ * @param {{todaySpend?:number|null, todaySpendIsToday?:boolean}} project
+ * @returns {string}
+ */
+export function payrollLine(project) {
+  const usd = project ? project.todaySpend : null;
+  if (usd == null || !Number.isFinite(Number(usd))) return '';
+  const amount = `≈ $${Number(usd).toFixed(2)}`;
+  return project.todaySpendIsToday
+    ? `today ${amount} · list price`
+    : `${amount} to date · list price`;
 }
 
 // ------------------------------------------------- who is on the floor at all
@@ -1339,6 +1373,9 @@ function buildProjectRoom(project, deskCount, targetAspect = 1, fit = undefined)
     plateLines: [
       name,
       `${sessionCount} session${sessionCount === 1 ? '' : 's'} · ${formatTokens(project.tokens || 0)} tok · ${project.needsYou || 0} need you`,
+      // WP-26's payroll meter. Third and quietest; `''` when the room has no
+      // priceable model, which is what keeps an invented `$0.00` off the wall.
+      payrollLine(project),
     ],
     props,
     zones,
