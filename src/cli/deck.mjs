@@ -228,11 +228,14 @@ export function rowCells(agent, now) {
   return {
     waiting,
     icon: ICONS[agent.activityState] ?? '  ',
-    // The name the user gave, and failing that the session's own title. The
-    // spec's WHO column holds "Ada"; almost nobody has named an agent yet, and
-    // repeating the MK tag from the column beside it says nothing at all. See
-    // docs/DEVIATIONS.md §93.
-    who: agent.displayName || agent.title || '',
+    // The name the user gave, then the one the daemon gave on first sight
+    // (WP-20), and only then the session's own title. The spec's WHO column
+    // holds "Ada" — before WP-20 almost nobody had named an agent, so this
+    // column fell through to the title; now every agent has a name and the
+    // column says what it was always meant to say. Repeating the MK tag from
+    // the column beside it would say nothing at all. See docs/DEVIATIONS.md
+    // §93.
+    who: agent.displayName || agent.givenName || agent.title || '',
     mk: shortId(agent),
     project: agent.projectName || agent.projectId || '',
     last: agent.lastText || '',
@@ -351,7 +354,7 @@ export function jsonRows(agents, opts = {}) {
       rows.push({
         id: agent.id,
         mk: agent.mk ?? null,
-        name: agent.displayName ?? null,
+        name: agent.displayName ?? agent.givenName ?? null,
         title: agent.title ?? '',
         project: agent.projectName || agent.projectId || '',
         cwd: agent.cwd || '',
@@ -400,7 +403,8 @@ export function resolveId(agents, token) {
       String(a.id).toLowerCase() === needle ||
       String(a.mk || '').toLowerCase() === needle ||
       `mk${needle}` === String(a.mk || '').toLowerCase() ||
-      String(a.displayName || '').toLowerCase() === needle,
+      String(a.displayName || '').toLowerCase() === needle ||
+      String(a.givenName || '').toLowerCase() === needle,
   );
   if (exact.length === 1) return { id: exact[0].id };
   if (exact.length > 1) return { error: `"${raw}" matches ${exact.length} agents`, matches: exact };
@@ -591,7 +595,8 @@ export async function runAct(action, argv = [], deps = {}) {
   }
 
   const label = row ? shortId(row) : token;
-  const who = row && row.displayName ? ` (${row.displayName})` : '';
+  const name = row ? row.displayName || row.givenName : null;
+  const who = name ? ` (${name})` : '';
   write(`  ${action === 'bench' ? 'benched' : 'acknowledged'} ${label}${who}\n`);
   return 0;
 }
