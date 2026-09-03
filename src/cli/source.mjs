@@ -300,10 +300,15 @@ function identityOf(identity, agentId, projectId) {
       : null;
   const rec = isPlainObject(identity.names[agentId]) ? identity.names[agentId] : {};
   const displayName = typeof rec.name === 'string' && rec.name ? rec.name : null;
+  // The name the daemon gave on first sight (WP-20). Read-only here: this path
+  // never assigns one — it reads a state.json the daemon owns, and an offline
+  // read must not start writing names into it.
+  const givenName = typeof rec.given === 'string' && rec.given ? rec.given : null;
   return {
     mk,
     displayName,
-    label: displayName || mk || splitAgentId(agentId).sessionId.slice(0, 8),
+    givenName,
+    label: displayName || givenName || mk || splitAgentId(agentId).sessionId.slice(0, 8),
   };
 }
 

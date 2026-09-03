@@ -13,17 +13,50 @@
  *
  * A user-chosen display name replaces the tag on the floor but never replaces
  * the numbering underneath it.
+ *
+ * GIVEN NAMES (WP-20). Since `docs/plan/04` §4, every agent is also handed a
+ * first name from `public/names.js` the first time it is seen, rather than
+ * waiting for the user to ask for one. *"Ada has been waiting since
+ * yesterday"* is a sentence that makes someone open a tab; *"MK3.2 has been
+ * waiting since yesterday"* is not. The given name is persisted beside the MK
+ * numbers, under its own key, and — like the numbers — is never reassigned.
+ *
+ * THE INVARIANT: assignment never writes a user-owned field. `name` and
+ * `avatar` belong to the user and are written by `setDisplay` and by nothing
+ * else, ever. `given` is the daemon's, and a user rename simply outranks it
+ * (`displayName` still means "the user chose this", everywhere in the tree
+ * that already asks that question). Guarded in identity.test.mjs.
  */
+
+import { SHORT_NAMES } from '../../public/names.js';
 
 /**
  * @typedef {object} IdentityRecord
  * @property {number} projectMk
  * @property {number} agentMk
  * @property {string} mk            e.g. 'MK3.2'
- * @property {string|null} displayName
+ * @property {string|null} displayName  the USER's chosen name, or null
+ * @property {string|null} givenName    the auto-assigned first name
  * @property {string|null} avatar
- * @property {string} label         displayName ?? mk
+ * @property {string} label         displayName ?? givenName ?? mk
  */
+
+/**
+ * FNV-1a over the agent id, 32-bit: where in `SHORT_NAMES` this agent starts
+ * looking. Only a starting point — the search below walks forward from it past
+ * anything already in use — so two agents never share a name, and the same
+ * agent starts from the same place on a machine that has seen nobody else.
+ * @param {string} str
+ * @returns {number} unsigned 32-bit
+ */
+function nameHash(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h >>> 0;
+}
 
 /**
  * Assigns and remembers MK numbers.
@@ -89,6 +122,63 @@ export class Identity {
   }
 
   /**
+   * Every name currently spoken for, lower-cased: names the user chose, and
+   * names the daemon gave. Both count — offering a picker a name another
+   * agent is already wearing is the collision this exists to prevent.
+   * @param {string} [exceptAgentId]
+   * @returns {Set<string>}
+   */
+  _usedNames(exceptAgentId) {
+    const used = new Set();
+    for (const [id, rec] of Object.entries(this._state().names)) {
+      if (id === exceptAgentId || !rec) continue;
+      if (typeof rec.name === 'string' && rec.name) used.add(rec.name.toLowerCase());
+      if (typeof rec.given === 'string' && rec.given) used.add(rec.given.toLowerCase());
+    }
+    return used;
+  }
+
+  /**
+   * The agent's first name, assigning one if this is the first time it is
+   * seen. Persisted immediately, so it survives a restart and is never
+   * reassigned — a name the user has learned must be as stable as the MK tag
+   * underneath it.
+   *
+   * Writes ONLY `given`. `name` and `avatar` are the user's (see the header).
+   * @param {string} agentId
+   * @returns {string}
+   */
+  givenName(agentId) {
+    const s = this._state();
+    const rec = s.names[agentId] || {};
+    if (typeof rec.given === 'string' && rec.given) return rec.given;
+
+    const used = this._usedNames(agentId);
+    const start = nameHash(agentId) % SHORT_NAMES.length;
+    let chosen = null;
+    for (let i = 0; i < SHORT_NAMES.length && chosen === null; i++) {
+      const candidate = SHORT_NAMES[(start + i) % SHORT_NAMES.length];
+      if (!used.has(candidate.toLowerCase())) chosen = candidate;
+    }
+    if (chosen === null) {
+      // More agents than names. A repeated name would be worse than a plain
+      // one: two agents both called Wren is exactly the confusion the MK tag
+      // was invented to end. `used.size + 2` is a bound that cannot fail —
+      // there are at most `used.size` names in the way.
+      const base = SHORT_NAMES[start];
+      for (let n = 2; n < used.size + 3 && chosen === null; n++) {
+        const candidate = `${base} ${n}`;
+        if (!used.has(candidate.toLowerCase())) chosen = candidate;
+      }
+    }
+
+    rec.given = chosen;
+    s.names[agentId] = rec;
+    this.store.touch();
+    return chosen;
+  }
+
+  /**
    * Set or clear an agent's display name and avatar.
    * @param {string} agentId
    * @param {{name?: string|null, avatar?: string|null}} patch
@@ -119,22 +209,38 @@ export class Identity {
     const projectMk = this.projectMk(projectId);
     const agentMk = this.agentMk(agentId, projectId);
     const mk = `MK${projectMk}.${agentMk}`;
+    // Assigned before the record is read, so an agent seen for the first time
+    // arrives already named rather than named one snapshot later.
+    const givenName = this.givenName(agentId);
     const rec = this._state().names[agentId] || {};
+    // `displayName` keeps meaning exactly what it meant before this package:
+    // the name the USER chose, or null. Several places in the tree ask that
+    // question — the pending-identity match in http/routes/actions.mjs is one
+    // — and a daemon-assigned name must not answer yes to it.
     const displayName = rec.name ?? null;
     return {
       projectMk,
       agentMk,
       mk,
       displayName,
+      givenName,
       avatar: rec.avatar ?? null,
-      label: displayName || mk,
+      label: displayName || givenName || mk,
     };
   }
 
-  /** Every display name currently in use, so a picker can avoid collisions. */
+  /**
+   * Every name currently in use, so a picker can avoid collisions. Includes
+   * the names the daemon gave as well as the ones the user chose: from the
+   * floor's point of view a name is taken either way.
+   */
   takenNames() {
-    return Object.values(this._state().names)
-      .map((r) => r && r.name)
-      .filter(Boolean);
+    const out = [];
+    for (const rec of Object.values(this._state().names)) {
+      if (!rec) continue;
+      if (rec.name) out.push(rec.name);
+      if (rec.given && rec.given !== rec.name) out.push(rec.given);
+    }
+    return out;
   }
 }

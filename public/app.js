@@ -174,7 +174,7 @@ let deckUI = null;
 let scene = null;
 /** @type {any} the whole ./render/scene.js module namespace, if loaded */
 let sceneModule = null;
-/** @type {{STATE_COLORS?: Record<string,string>}|null} */
+/** @type {any} the whole ./render/palette.js module namespace, if loaded */
 let palette = null;
 let toastTimer = null;
 let lastAnnounced = '';
@@ -842,6 +842,24 @@ function placeNearCursor(node, maxW) {
   node.style.top = `${Math.max(0, y)}px`;
 }
 
+/**
+ * The rarity word for one agent, or null — for a common agent (most of them),
+ * and for as long as `render/palette.js` has not loaded, since that import is
+ * dynamic and defensive (see the file header). Absent rather than wrong is the
+ * right failure: the word is a grace note, not information the user needs.
+ * @param {any} agent
+ * @returns {string|null}
+ */
+function rarityWordFor(agent) {
+  if (!agent || !palette?.appearanceFor || !palette?.rarityWord) return null;
+  try {
+    return palette.rarityWord(palette.appearanceFor(agent.id).tier);
+  } catch (err) {
+    console.debug('[deckhq] rarityWord failed', err);
+    return null;
+  }
+}
+
 /** @param {string} text */
 function tooltipLine(text) {
   const line = document.createElement('div');
@@ -874,18 +892,32 @@ function showTooltip(agentId) {
   title.textContent = agent.title;
   el.tooltip.appendChild(title);
 
-  // The MK tag always identifies the session; the display name (if any) is
-  // what actually replaced it on the floor, so both are worth showing here.
+  // The MK tag always identifies the session; the name — the user's, or the
+  // one the daemon gave on first sight (WP-20) — is what actually replaced it
+  // on the floor, so both belong here. Then, for the minority of agents that
+  // have one, the rarity word: one quiet adjective, never a number and never
+  // a count of what the user has collected (docs/plan/08 §1.1 rule 6).
   const mk = agent.mk || agent.id;
+  const name = agent.displayName || agent.givenName || null;
   const tag = document.createElement('div');
   tag.className = 'tooltip-tag';
-  if (agent.displayName) {
+  if (name) {
     const b = document.createElement('b');
-    b.textContent = agent.displayName;
+    b.textContent = name;
     tag.appendChild(b);
     tag.appendChild(document.createTextNode(` · ${mk}`));
   } else {
     tag.textContent = mk;
+  }
+  const word = rarityWordFor(agent);
+  if (word) {
+    const rare = document.createElement('span');
+    rare.className = 'tooltip-rarity';
+    rare.dataset.tier = word;
+    rare.textContent = word;
+    // A real space, not only the CSS margin: a screen reader reads the text,
+    // and "MK2.2rare" is one word to it.
+    tag.append(' ', rare);
   }
   el.tooltip.appendChild(tag);
 
