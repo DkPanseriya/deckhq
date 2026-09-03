@@ -1213,6 +1213,13 @@ export class Scene {
       labelOffsetY,
       icon,
       badge,
+      // WP-52: what this session is doing right now, straight off the
+      // snapshot. `rig.js` decides how much of it fits — the bubble at L1+,
+      // the tool class alone at L0 or under reduced motion — and yields the
+      // slot entirely to `icon`/`badge` when either is present. A snapshot
+      // from a daemon that predates the field simply has none, and nothing is
+      // drawn.
+      tool: agent.currentTool || null,
       identity,
       selected: rec.id === this._selectedId,
       reduced: this._reduced,

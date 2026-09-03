@@ -270,7 +270,14 @@ export function createPanel(opts) {
   waitingEl.className = 'panel-waiting';
   waitingEl.hidden = true;
 
-  top.append(identityRow, titleEl, metaEl, waitingEl);
+  // "doing: Bash npm test" — the live tool line (WP-52), one quiet line under
+  // the header, present only while a tool is actually running. The text comes
+  // from a hook payload, so it is set with `textContent` and never as markup.
+  const doingEl = document.createElement('div');
+  doingEl.className = 'panel-doing';
+  doingEl.hidden = true;
+
+  top.append(identityRow, titleEl, metaEl, waitingEl, doingEl);
 
   // The scrolling body: WHAT IT SAID, the rest of the thread folded beneath
   // it, then WHAT CHANGED.
@@ -429,6 +436,7 @@ export function createPanel(opts) {
       metaEl.appendChild(textNode('let go'));
     }
     renderWaiting();
+    renderDoing();
 
     changedHeading.textContent = `What changed in ${a.projectName || 'this project'}`;
     textarea.placeholder = `Reply to ${who(a)}…`;
@@ -461,6 +469,23 @@ export function createPanel(opts) {
     }
     waitingEl.hidden = false;
     waitingEl.textContent = `waiting ${formatElapsed(Date.now() - since)}`;
+  }
+
+  /**
+   * The live "doing: …" line (WP-52). Reads the snapshot's `currentTool`;
+   * writes nothing, and touches no ack state — a tool starting or finishing
+   * is an observation, never an acknowledgement.
+   */
+  function renderDoing() {
+    const tool = displayedAgent && displayedAgent.currentTool;
+    const summary = tool && typeof tool.summary === 'string' ? tool.summary.trim() : '';
+    if (!summary) {
+      doingEl.hidden = true;
+      doingEl.textContent = '';
+      return;
+    }
+    doingEl.hidden = false;
+    doingEl.textContent = `doing: ${summary}`;
   }
 
   function renderDraftChip() {

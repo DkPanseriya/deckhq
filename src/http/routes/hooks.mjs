@@ -124,7 +124,13 @@ export function register(router, ctx) {
       setImmediate(() => {
         try {
           const payload = raw ? JSON.parse(raw) : {};
-          registry.applyHook(normaliseHookPayload(payload));
+          // "Which tool is this" is a runtime-format question, so it is
+          // answered by that runtime's adapter (docs/02-ARCHITECTURE.md §2).
+          // An adapter that does not report tool events simply has no
+          // `toolSummary`, and the floor draws no bubble for it.
+          const adapter = adapters.getAdapter(String(payload.runtime || 'claude-code'));
+          const toolSummary = adapter && adapter.hooks && adapter.hooks.toolSummary;
+          registry.applyHook(normaliseHookPayload(payload, toolSummary));
         } catch (err) {
           log.warn('bad hook payload', err.message);
         }
@@ -164,9 +170,23 @@ export function register(router, ctx) {
  * Claude Code posts its own payload shape. Normalise it into the shape the
  * registry expects, without assuming any particular key is present.
  * @param {Record<string, any>} p
+ * @param {((payload: Record<string, any>) => {name:string,summary:string}|null)|undefined|null} [toolSummary]
+ *   the adapter's own tool-payload parser (WP-52). Only consulted for
+ *   `PreToolUse`, the one event that names a tool that is starting.
  */
-function normaliseHookPayload(p) {
+function normaliseHookPayload(p, toolSummary) {
   const hookEvent = String(p.hook_event_name || p.hookEventName || p.event || '');
+  /** @type {{name:string,summary:string}|null} */
+  let tool = null;
+  if (hookEvent === 'PreToolUse' && typeof toolSummary === 'function') {
+    try {
+      tool = toolSummary(p) || null;
+    } catch {
+      // A payload the adapter cannot make sense of is not an error worth
+      // failing the whole event over: the rest of it still applies.
+      tool = null;
+    }
+  }
   return {
     runtime: String(p.runtime || 'claude-code'),
     sessionId: String(p.session_id || p.sessionId || ''),
@@ -174,6 +194,7 @@ function normaliseHookPayload(p) {
     cwd: String(p.cwd || p.workspace || ''),
     matcher: String(p.matcher || p.notification_type || p.type || ''),
     message: String(p.message || ''),
+    tool,
     at: Date.now(),
     payload: p,
   };

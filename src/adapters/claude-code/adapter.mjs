@@ -889,6 +889,10 @@ export const adapter = {
     remove: hooksImpl.remove,
     installed: hooksImpl.installed,
     installedPort: hooksImpl.installedPort,
+    // WP-52: the runtime's own `PreToolUse` payload shape is this adapter's
+    // business, so the HTTP route asks the adapter what the payload says
+    // rather than parsing it itself.
+    toolSummary: hooksImpl.toolSummary,
   },
 };
 

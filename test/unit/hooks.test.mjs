@@ -67,11 +67,48 @@ test('install() writes every event, tagged, pointing at the given port', async (
 
   const settings = read();
   const commands = ourCommands(settings);
-  assert.equal(commands.length, 7); // 6 events, Notification split across 2 matchers
+  assert.equal(commands.length, 9); // 8 events, Notification split across 2 matchers
   for (const c of commands) assert.match(c, /port:4400/);
 
   assert.equal(await hooks.installed(4400), true);
   assert.equal(await hooks.installedPort(), 4400);
+});
+
+test('install() writes the WP-52 tool events, and the consent screen names them', async () => {
+  await reset();
+  await hooks.install(4317);
+
+  const settings = read();
+  for (const event of ['PreToolUse', 'PostToolUse']) {
+    const groups = settings.hooks[event];
+    assert.ok(Array.isArray(groups) && groups.length === 1, `${event} was not written`);
+    // No matcher: every tool, because "which tool" is the whole point.
+    assert.equal(groups[0].matcher, undefined);
+    assert.equal(groups[0].hooks.length, 1);
+    assert.equal(groups[0].hooks[0]._deckhq, true);
+    assert.match(groups[0].hooks[0].command, /port:4317,path:'\/api\/hook'/);
+  }
+
+  // The consent screen shows the literal JSON and the event list, so both
+  // new events have to be visible there before anything is written
+  // (docs/02-ARCHITECTURE.md §6).
+  const plan = hooks.describe(4317);
+  assert.ok(plan.events.includes('PreToolUse'), 'PreToolUse is missing from the consent screen');
+  assert.ok(plan.events.includes('PostToolUse'), 'PostToolUse is missing from the consent screen');
+  assert.match(plan.json, /"PreToolUse"/);
+  assert.match(plan.json, /"PostToolUse"/);
+});
+
+test('remove() takes the tool events out again, leaving no empty event keys behind', async () => {
+  await reset();
+  await hooks.install(4317);
+  await hooks.remove();
+  // The file did not exist before install and nothing else was added, so it
+  // is gone entirely; either way, none of ours may remain.
+  const after = fs.existsSync(SETTINGS) ? read() : {};
+  assert.equal(ourCommands(after).length, 0);
+  assert.equal((after.hooks && after.hooks.PreToolUse) ?? null, null);
+  assert.equal((after.hooks && after.hooks.PostToolUse) ?? null, null);
 });
 
 test('installed() reports FALSE when the hooks point at a different port', async () => {
@@ -101,7 +138,7 @@ test('install() at a new port repoints rather than accumulating a second set', a
   await hooks.install(4400);
 
   const commands = ourCommands(read());
-  assert.equal(commands.length, 7, 'the stale set must be removed, not left behind');
+  assert.equal(commands.length, 9, 'the stale set must be removed, not left behind');
   for (const c of commands) assert.match(c, /port:4400/);
   assert.equal(await hooks.installed(4400), true);
   assert.equal(await hooks.installed(4317), false);
@@ -158,6 +195,111 @@ test('install() backs the original up outside the package directory', async () =
     backups.some((n) => /^settings-backup-\d+\.json$/.test(n)),
     'a backup is written to the user data directory, not next to the package',
   );
+});
+
+// ---------------------------------------------------------------------------
+// WP-52 — the tool summary parsed out of a PreToolUse payload.
+//
+// Paths are built with `path.join` from a real absolute base, so these run
+// the same way on Windows and POSIX (`path.relative` is platform-specific by
+// design, and so is the thing being tested).
+// ---------------------------------------------------------------------------
+
+const SESSION_CWD = path.join(path.resolve(os.tmpdir()), 'deckhq-project');
+
+/** @param {string} name @param {object} input @param {string} [cwd] */
+function pre(name, input, cwd = SESSION_CWD) {
+  return {
+    session_id: 's',
+    cwd,
+    hook_event_name: 'PreToolUse',
+    tool_name: name,
+    tool_input: input,
+  };
+}
+
+test('toolSummary: Bash carries the command, cut to 80 characters', () => {
+  assert.deepEqual(hooks.toolSummary(pre('Bash', { command: 'npm test' })), {
+    name: 'Bash',
+    summary: 'Bash npm test',
+  });
+  const long = hooks.toolSummary(pre('Bash', { command: 'x'.repeat(500) }));
+  // 80 characters of command (79 + an ellipsis), plus "Bash ".
+  assert.equal(long.summary.length, 85);
+  assert.ok(long.summary.startsWith('Bash xxx'));
+  assert.ok(long.summary.endsWith('…'));
+});
+
+test('toolSummary: Edit and Read carry a path relative to the session cwd', () => {
+  assert.equal(
+    hooks.toolSummary(pre('Edit', { file_path: path.join(SESSION_CWD, 'src', 'foo.ts') })).summary,
+    'Edit src/foo.ts',
+  );
+  assert.equal(
+    hooks.toolSummary(pre('Read', { file_path: path.join(SESSION_CWD, 'README.md') })).summary,
+    'Read README.md',
+  );
+  // Separators are normalised for display, whatever the platform uses.
+  assert.doesNotMatch(
+    hooks.toolSummary(pre('Edit', { file_path: path.join(SESSION_CWD, 'a', 'b', 'c.ts') })).summary,
+    /\\/,
+  );
+});
+
+test('SECURITY: a path outside the session cwd is reduced to its basename', () => {
+  // The bubble ends up on a floor that gets screenshotted. WP-52's acceptance
+  // criterion is that it "never contains project paths outside the session's
+  // cwd" — so an absolute path elsewhere, a parent-directory escape and a
+  // different drive all keep nothing but the last segment.
+  const elsewhere = path.join(path.resolve(os.tmpdir()), 'someone-elses-secret', 'notes.md');
+  assert.equal(hooks.toolSummary(pre('Read', { file_path: elsewhere })).summary, 'Read notes.md');
+  assert.equal(
+    hooks.toolSummary(pre('Edit', { file_path: path.join(SESSION_CWD, '..', 'up.txt') })).summary,
+    'Edit up.txt',
+  );
+  const other = process.platform === 'win32' ? 'Z:\\other\\deep\\file.rs' : '/other/deep/file.rs';
+  assert.equal(hooks.toolSummary(pre('Edit', { file_path: other })).summary, 'Edit file.rs');
+  // A relative path is resolved against the SESSION's cwd, never the
+  // daemon's — otherwise it would escape by accident.
+  assert.equal(
+    hooks.toolSummary(pre('Read', { file_path: 'src/deep/thing.ts' })).summary,
+    'Read src/deep/thing.ts',
+  );
+});
+
+test('SECURITY: control characters and newlines never survive into a summary', () => {
+  const nasty = `npm test\n\r\tthen \u001b[31mred\u001b[0m and \u202ereversed`;
+  const out = hooks.toolSummary(pre('Bash', { command: nasty }));
+  assert.doesNotMatch(out.summary, /[\u0000-\u001F\u007F-\u009F\u202A-\u202E]/);
+  assert.equal(out.summary.includes('\n'), false);
+  assert.match(out.summary, /^Bash npm test then \[31mred/);
+});
+
+test('toolSummary: any other tool is its name alone, and never longer than 120 characters', () => {
+  assert.deepEqual(hooks.toolSummary(pre('WebFetch', { url: 'https://example.invalid/x' })), {
+    name: 'WebFetch',
+    summary: 'WebFetch',
+  });
+  assert.equal(hooks.toolSummary(pre('Task', {})).summary, 'Task');
+  for (const payload of [
+    pre('Bash', { command: 'y'.repeat(4000) }),
+    pre('Edit', { file_path: path.join(SESSION_CWD, 'a'.repeat(400), 'b'.repeat(400)) }),
+    pre('W'.repeat(400), {}),
+  ]) {
+    const out = hooks.toolSummary(payload);
+    assert.ok(out.summary.length <= 120, `"${out.summary}" is ${out.summary.length} chars`);
+  }
+});
+
+test('toolSummary: a payload that names no tool has nothing to say', () => {
+  assert.equal(hooks.toolSummary(pre('', { command: 'npm test' })), null);
+  assert.equal(hooks.toolSummary({}), null);
+  assert.equal(hooks.toolSummary(null), null);
+  // A tool with no input at all still reports itself.
+  assert.equal(hooks.toolSummary({ tool_name: 'Bash' }).summary, 'Bash');
+  // ...and a Bash with an empty command falls back to the bare name rather
+  // than a trailing space.
+  assert.equal(hooks.toolSummary(pre('Bash', { command: '   ' })).summary, 'Bash');
 });
 
 test.after(async () => {
