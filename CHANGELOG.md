@@ -158,6 +158,22 @@
 
 ### Fixed
 
+- **SECURITY: a Codex session id reached a shell.** Opening a Codex session in a terminal built
+  its command as a shell string on both POSIX platforms — an AppleScript
+  `do script "cd \"<cwd>\" && codex resume <id>"` on macOS, and `bash -lc "codex resume <id>"` on
+  Linux — with the session id and the working directory interpolated straight in. Both arrive in
+  a request body, and the macOS escaping covered `"` and `\` only, so `'`, `` ` ``, `$(` and `;`
+  went through into something that would run them. Every Codex spawn is now an argv array:
+  opening a terminal goes through the same `launchTerminal()` the Claude Code adapter uses, and
+  the adapter contains no `bash`, no `osascript`, no `do script` and no shell of any kind. There
+  are 29 new tests asserting the exact array for all 19 (platform, emulator, launch form) pairs,
+  that an id made of shell metacharacters lands in exactly one argument and is equal to it, that
+  a hostile working directory does the same, and — over the adapter's own source — that it
+  launches exactly one process and does it with a named argv array. Codex sessions also pick up
+  the whole of WP-04 in passing: ten emulators instead of four, `$TERMINAL`, and the `terminal`
+  setting, which this adapter used to ignore. The adapter is still unverified against real Codex
+  (`docs/DEVIATIONS.md` §8) — what is proved here is the arrays, not the behaviour.
+  `docs/DEVIATIONS.md` §94.
 - **SECURITY: a session id could choose where a launcher script was written.** The macOS
   "open in terminal" path built its temp filename as `deckhq-resume-<session id>-<timestamp>`,
   and the id arrives in a request body. An id containing `../` therefore picked the directory.
