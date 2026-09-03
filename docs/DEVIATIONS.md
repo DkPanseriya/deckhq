@@ -8156,3 +8156,300 @@ straight through its own value.
 a `PRIVACY:` assertion that no path and no project name reaches the response — a card is a thing
 people post), and 5 more in `test/unit/snapshot.test.mjs` for the card compositor. Goldens: 4 of 4
 match, 0 pixels moved. **Screenshot:** `docs/media/wrapped-weekly.png`.
+
+## 120. WP-41 — subagents as juniors: what is on disk, what was measured, and what is inferred
+
+`08` B7 and §7, and WP-41 in §9. Claude Code spawns subagents and they write
+their own transcripts; DeckHQ now reads them, attaches each one to the session
+that spawned it, and draws it as a junior standing beside that session's desk
+for as long as it is working.
+
+![Two juniors standing at a senior's desk on the demo floor](media/juniors.png)
+
+The package divides cleanly into what could be **measured on this machine** and
+what could not. That line is the most important thing in this entry, so it comes
+first.
+
+### What subagent storage actually looks like — VERIFIED ON DISK
+
+Claude Code 2.1.222 through 2.1.231, Windows 11, `~/.claude/projects`. Surveyed
+with a read-only script over every file in the tree: 22 project directories,
+80 top-level session transcripts, **1,048 subagent transcripts** and **987
+`.meta.json` sidecars**.
+
+**The layout.** A subagent's transcript lives inside its PARENT SESSION'S OWN
+DIRECTORY, which is a directory named for the session id sitting beside the
+session's `.jsonl` file:
+
+```
+~/.claude/projects/<projectDir>/
+    <parentSessionId>.jsonl                                  the session
+    <parentSessionId>/
+        tool-results/                                        not ours
+        subagents/
+            agent-<agentId>.jsonl                            a Task subagent
+            agent-<agentId>.meta.json
+            workflows/wf_<workflowId>/
+                agent-<agentId>.jsonl                        a workflow subagent
+                agent-<agentId>.meta.json
+                journal.jsonl                                NOT a subagent
+```
+
+Both depths occur: 141 of the 1,048 sit directly under `subagents/` and 907 sit
+two levels down under `workflows/wf_*/`. The 61-file difference between the
+transcripts and the sidecars is exactly the `journal.jsonl` count — every real
+subagent has a sidecar, and every file without one is a journal. That is why
+`subagentIdFromFile()` matches `agent-<id>.jsonl` and nothing else, rather than
+taking every `.jsonl` in the directory: a journal's first record is
+`{"type":"started","key":"v2:…","agentId":"…"}` and it would otherwise have
+become a person on the floor.
+
+**The parent link is the DIRECTORY NAME, not a field.** This is the single most
+important measured fact, and it is the opposite of what the field names suggest:
+
+- every record in a subagent transcript carries `"sessionId": "<PARENT's id>"`;
+- the subagent's own identity is `"agentId": "a17d285494ed98b0e"`, 17 hex
+  characters, which also names the file;
+- `"isSidechain": true` is on every record;
+- checked across all 1,048 files: `sessionId` equals the enclosing directory
+  name in 959 of 959 real transcripts. The 61 mismatches are the journals,
+  which carry no `sessionId` at all.
+
+So `parentSessionId` comes from the path and the subagent's id comes from
+`agentId`/the filename. Nothing has to be inferred.
+
+**The sidecar.** `agent-<id>.meta.json` is one JSON object. Key shapes over all
+987, most common first:
+
+| n | keys |
+|---|---|
+| 607 | `agentType,spawnDepth` |
+| 239 | `agentType` |
+| 50 | `agentType,description,spawnDepth,toolUseId` |
+| 38 | + `model` |
+| 34 | + `spawnedWithWorktree,worktreeBranch,worktreePath` |
+| 7 | + `worktreeCleanlyRemoved` |
+| 5 | as 34 without `model` |
+| 4 | + `parentAgentId` (a subagent that spawned a subagent) |
+| 3 | `agentType,description,toolUseId` |
+
+`agentType` values seen: `workflow-subagent` (787), `general-purpose` (118),
+`Explore` (68), and single figures of user-defined agent names. `spawnDepth` is
+1 for a subagent of the session and 2 for a subagent of a subagent (4 files).
+**Nothing is required**, so `parseSubagentMeta()` requires nothing: every field
+is optional and a missing, empty or corrupt sidecar produces an all-null record
+rather than an error. A junior with no sidecar still appears; it just has no
+`subagentType` and takes its title from its own opening prompt.
+
+**There is no spawn record and no stop record.** The first record of a subagent
+transcript is an ordinary `user` turn carrying the Task prompt, and the last is
+an ordinary `user` or `assistant` turn — measured over 400 files, the final
+record is `user` 276 times, `assistant/end_turn` 70, `assistant/tool_use` 16,
+`assistant/stop_sequence` 6. **Nothing marks the end.** So spawn time is the
+oldest timestamp in the file and there is no stop time at all; how the floor
+answers "has it finished" is decision 3 below.
+
+**A junior's turns are NOT in its parent's transcript.** Checked on this
+machine's largest live session: 998 records in the tail window, zero with
+`isSidechain: true`, zero distinct `agentId`s. On this version a subagent's
+traffic is wholly in its own file. That is what makes it safe for the room to
+add a junior's tokens to the project total — there is no double count — and it
+is a version-specific fact, so it is written down here rather than assumed.
+
+### What could NOT be measured — INFERRED, AND MARKED AS SUCH
+
+**The `SubagentStop` payload.** The floor would like the runtime to say WHICH
+junior finished, because that is the difference between a junior leaving at once
+and leaving when its file goes quiet. `SubagentStop` fires on the PARENT's
+session id (§89 already relies on that), so the payload has to name the junior
+some other way, and this package could not find out what that way is: driving
+Claude Code through a real `Task` call needed a `claude -p` run, and the
+reference machine's OAuth token had expired (`API Error: 401`). Installing a
+logging hook into the user's own `~/.claude/settings.json` to catch a live event
+was not an acceptable alternative.
+
+So `subagentEvent()` in `parse.mjs` reads whichever of three shapes is present
+and **returns `null` rather than guessing** when none is:
+
+1. an explicit `agent_id` / `agentId` / `subagent_id` field;
+2. a `transcript_path` inside a `subagents/` directory — the shape verified on
+   disk above, from which both the junior's id and its parent's fall out;
+3. nothing, in which case `SubagentStop` does exactly what §89 left it doing:
+   moves the parent's `lastOutputAt` and touches no junior.
+
+Case 3 is the current behaviour on every machine until somebody watches a real
+event, and the floor is correct in it — a junior still arrives and still leaves,
+five minutes later than it might have. **This is the one thing in WP-41 that is
+unverified, and it is failure-safe by construction.** Whoever confirms the real
+payload should add a case to `subagentEvent`'s test and delete this paragraph.
+
+### The eight decisions
+
+**1. A junior is a session, everywhere except where it is not.** It comes back
+from `scanSessions()` in the same array as everything else, carrying four extra
+fields — `subagent`, `parentSessionId`, `subagentType`, `spawnedAt` — and every
+consumer that does not care about juniors needed no change at all. What it is
+NOT is in `model.mjs`, in three functions:
+
+- `needsYou()` counts a junior **only when it is `needs_input`**. `for_review`
+  means "this turn ended and it is waiting on you", and a junior's turn ends
+  inside its parent's; its result goes to the parent and no keystroke of the
+  user's would ever discharge it. `stalled` is the same argument. A raised hand
+  is different in kind — the runtime is asking a question only a person can
+  answer, and a blocked junior blocks its parent — so that one counts. `08` §9's
+  "never in the needs-you count unless they raise a hand themselves", exactly.
+- `placement()` returns `desk` for a junior unconditionally. It is never in the
+  office (see above) and never in the lounge (it cannot be benched).
+- `counts()` applies the same rule to the BREAKDOWN, not only the total, so
+  `handsUp + stalled + forReview` still equals `needsYou`.
+
+**2. A junior is never `for_review`, so `reviewSince` is never written for one.**
+This is the invariant half and it is worth being explicit about. `for_review` is
+the one state `docs/01-PRODUCT.md` §2 makes sticky, and marking it WRITES
+`reviewSince` into the store under the agent's id. A junior's id is used once and
+never again; a store full of `reviewSince` records for thirty-second sessions
+would be a user-owned field accumulating for entities the user has never seen.
+So `_computeAgents` maps a junior's finished turn to `ended` before
+`_markForReview` is reached, and the degraded path's own `setAck` call is behind
+the same guard. `Registry.act()` refuses all six actions on a junior outright —
+`POST /api/ack` and `deckhq bench <id>` reach the same method — and
+`legalActions()` in the panel offers none, so no surface can produce one.
+
+`INVARIANT: a subagent lifecycle changes no user-owned field on the parent`
+drives a parent that is standing in the office with an unanswered review through
+three juniors arriving, a `Task` `PreToolUse`, a `SubagentStop` that names one, a
+`SubagentStop` that names none, and every junior leaving — then deep-compares
+`ackState`, `reviewSince` and `needsInputSince` on the parent, the whole ack
+store, and all six counts.
+
+**3. A junior leaves when its file stops moving, and 5 minutes is a measurement.**
+With no stop marker on disk (above) and no confirmed hook payload (above), the
+only honest signal that a junior has finished is that nothing is being appended
+to it. `SUBAGENT_IDLE_MS` is the window, and it was chosen from data rather than
+taste: over **28,813 consecutive-record gaps in 300 real subagent transcripts**
+on this machine, p50 is 1.7 s, p90 7.9 s, p99 63.5 s and p99.9 253 s. Five
+minutes clears **99.93%** of them, so a junior that is merely thinking never
+blinks off the floor and back; a junior that has finished lingers at the desk for
+at most five minutes. A `SubagentStop` that names it removes it immediately and
+this never binds.
+
+**4. The cost control is the PARENT's mtime, and it is what makes this free.**
+Opening every session's `subagents/` directory would be one `readdir` per session
+per poll, forever — up to `SCAN_LIMIT` of them — to find juniors that only exist
+while their parent is running. So a session's directory is only looked at when
+the session's own transcript has moved within `SUBAGENT_PARENT_WINDOW_MS`
+(30 minutes). Measured on the reference machine right now: 80 top-level
+transcripts, **2** inside the window. Two `readdir` calls per scan, on
+directories that usually do not exist. The window is generous rather than tight
+because a parent can sit silent for the whole of a long junior's run — it writes
+the `Task` call, then nothing until the result returns — and the longest subagent
+lifetime measured here is 88,273 s. Being wrong here loses a junior; being right
+costs a failed `readdir`.
+
+Cold scan on the reference machine after the package: **213 ms for 83 sessions
+including 3 juniors** (149 ms warm). Before it, the same scan was inside the same
+budget; the difference is not measurable against the noise.
+
+**5. A junior's liveness is its own file, on BOTH paths.** This was a real bug
+found by running the demo floor. Neither of the two normal liveness sources can
+see a junior: every hook event fires on the parent's session id, and
+`claude agents --json` lists sessions, not subagents. So with hooks installed —
+the accurate path, which is most machines — a junior read `hookLive == null` and
+`polledLive === false`, which is `ended`, and every junior on the floor was drawn
+in the finished colour while it was visibly working. The adapter has already
+applied the evidence (a junior is in the list only because its file moved inside
+the idle window), so `_computeAgents` treats a junior as live unconditionally and
+derives `working` / `ended` from the shape of its last record — the same rule the
+degraded path uses for everybody. `noteScanEvidence` skips juniors for the mirror
+image of the same reason: a busy junior is never in the live roster, so it would
+force a fresh CLI spawn on every poll and undo §77's cache.
+
+**6. A junior wears its parent's tag and is never numbered or named.**
+`Identity.describe()` assigns an MK number and a first name the first time it
+sees an agent and never reassigns either — right for a session, wrong for a
+subagent. A busy week spawns hundreds of juniors that live for seconds; each one
+would take a permanent number out of its project's sequence, add a row to
+`~/.deckhq`'s identity table for ever, and consume a name from the finite pool
+`_usedNames()` protects. So `describeJunior()` derives instead: `MK1.2j1`,
+`MK1.2j2` — the parent's tag with a suffix, in id order — and writes nothing but
+the project number, which the parent would have assigned anyway. The junior's
+FACE is untouched by this: `appearanceFor()` is a pure function of the session id
+(§105), so a junior looks like itself and like nobody else for free. The room's
+accent is the project's, which is the parent's, because they share a cwd.
+
+**7. Juniors are occupants, and the table grows for them.** §96's rule is desks =
+agents at desks; a junior is `isDeskAgent`, so `floorPopulation().desks` counts
+it and `tableSizesFor` sizes the room's table with it in — a senior with three
+juniors gets a four-seat table. But a junior does not TAKE one of those chairs:
+`assignSeats` holds the juniors back from the hashed pass and places them once
+their parent has a seat, one `JUNIOR_OFFSET` (2.6 U, one seat pitch — the same
+arithmetic read back out) to the side, alternating left and right in id order,
+and `JUNIOR_BACK` (2.8 U) behind the seat line so they read as standing at the
+desk rather than sitting at it. Both numbers were set from screenshots: at 1.5 U
+the two junior labels were 36 px apart with 45 px of text in each, and at a
+1.6 U step back a junior was drawn standing through whoever was in the next
+chair. A junior whose parent has no seat — the parent went home, or the scan
+caught the junior a poll first — is not drawn at all, the same refusal
+`AgentRuntime#sync` already makes for an archived session, rather than falling
+through to the room-centre fallback that once stacked seventeen bodies on one
+spot (§96 decision 3).
+
+They are drawn at `JUNIOR_SCALE` = 0.8 of the floor's scale, through
+`characterScaleFor`, so §96's legibility floor still holds: a junior is 80% of
+its senior right down to the point where 80% would put its body under 16 px, and
+below that they are the same size — which is honest, because under 16 px there
+is no room to say "smaller" and still say "person".
+
+**8. Juniors are counted apart on the plate and named on both ends in the panel.**
+The room plate reads `4 sessions · +2 juniors · 540k tok · 0 need you`. Folding
+them into `sessionCount` would claim the user has six things running when they
+started four; `projects()` therefore counts juniors into `juniors` and
+`activeCount` but not `sessionCount`, and their tokens into the room's total
+(safe — see the double-count measurement above). The panel says `junior of Boris`
+on a junior and `3 juniors` on the senior, from one pure function,
+`juniorMetaFor()`, with a test that the phrase exists exactly once in the client.
+
+### What did not change
+
+`public/app.js` is untouched (WP-18/27 owns it this cycle) and so is the Claude
+Code adapter's `send()` (WP-09 owns it). The hook block is unchanged —
+`SubagentStop` has been installed since the beginning, which is what B7 meant by
+"already delivered". Nothing new is persisted anywhere: no file, no store key,
+no setting. `parseSummary` and `parseConversation` grew one optional
+`sidechain` flag each, defaulting to the old behaviour, because in a junior's own
+transcript every record is a sidechain record and the existing filter would have
+left the summary blank and the panel empty.
+
+### Accepted limits
+
+A junior can only reach `needs_input`, and therefore the needs-you count, if some
+signal says so — and today none does, because hooks attribute to the parent's
+session id. The rule is implemented and tested; the path that would exercise it
+on a real machine arrives with the `SubagentStop` payload above. A junior's
+`send()` would go to `claude --resume <agentId>`, which is not a session id. The
+panel offers a junior no composer, no action row, no resume link and no `1`/`2`/
+`3` — that was a real defect found by opening the panel on one, because
+`legalActions()` only governs the ⋯ menu and the three weighted buttons are
+built unconditionally — but `POST /api/send` itself does not yet refuse a
+subagent id, and `send()` belongs to WP-09 this cycle. Nested
+subagents (`spawnDepth: 2`, 4 files on this machine) are drawn beside the
+SESSION, not beside the junior that spawned them: `parentAgentId` is parsed and
+carried but not yet used for placement, because a junior standing beside a junior
+needs a seating rule this package did not have a screenshot to justify.
+
+### Tests and goldens
+
+28 new tests in `test/unit/subagents.test.mjs`, over synthetic fixtures written
+into a temp directory and deleted afterwards — **no real transcript content is
+committed anywhere in this repository.** The four adapter cases run the real
+adapter in a child process with `CLAUDE_CONFIG_DIR` pointed at the fixture,
+because `PROJECTS_DIR` is resolved at import time and a query-string re-import
+would give a fresh `adapter.mjs` over a stale `parse.mjs`. 1,375 → 1,403.
+
+The demo floor spawns two juniors for `Dark mode audit across 40 components` in
+`design-system`, and keeps their mtimes moving once a minute — a real junior
+writes to its file every few seconds, so a fixture that did not would empty its
+own desk five minutes into a screenshot session. Goldens regenerated as the last
+step of the package: `demo` changed (two juniors, a bigger table, a plate line),
+and `reference`, `single` and `empty` are byte-identical, which is the control
+working — none of those populations has a subagent directory.

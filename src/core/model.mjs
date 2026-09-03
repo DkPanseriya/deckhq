@@ -61,6 +61,23 @@
  *                                      runtime's own UI. Undefined when the
  *                                      runtime cannot report it — never read
  *                                      an absent flag as "not archived".
+ * @property {boolean} [subagent]        WP-41. This session is a junior: the
+ *                                      runtime spawned it from another session
+ *                                      and it lives and dies inside that
+ *                                      session's turn. Observed, never
+ *                                      user-owned, and it is what
+ *                                      `needsYou()` and the renderer key off.
+ * @property {string|null} [parentId]    the junior's parent agent id (prefixed),
+ *                                      or null. Only ever set on a subagent.
+ * @property {string|null} [subagentType] the runtime's own name for what kind
+ *                                      of junior this is, e.g.
+ *                                      `general-purpose`, `Explore`.
+ * @property {string|null} [subagentDescription] the Task call's own short
+ *                                      description of the work.
+ * @property {number|null} [spawnedAt]   ms epoch the junior's transcript opens.
+ * @property {number} [juniorCount]      how many juniors this session has on
+ *                                      the floor right now. Zero on a junior
+ *                                      and on every session that has none.
  */
 
 /**
@@ -80,6 +97,12 @@
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText
  * @property {boolean} [turnEnded]
+ * @property {boolean} [subagent]              WP-41; see `Agent`
+ * @property {string} [parentSessionId]        the parent's RAW session id, as
+ *   the adapter found it. The registry prefixes it into `Agent.parentId`.
+ * @property {string|null} [subagentType]
+ * @property {string|null} [subagentDescription]
+ * @property {number|null} [spawnedAt]
  */
 
 /**
@@ -183,20 +206,56 @@ export const MAX_PERMISSION_SUMMARY = 400;
  */
 export function placement(agent) {
   if (agent.ackState === 'let_go') return 'let_go';
+  // WP-41. A junior is only ever beside its parent. It cannot be benched (the
+  // user is never offered the button) and it never stands in the office: its
+  // finished turn is handed to its parent, not to you, so putting it in the
+  // waiting area would queue work nobody can discharge.
+  if (isSubagent(agent)) return 'desk';
   if (agent.ackState === 'benched') return 'lounge';
   if (agent.activityState === 'for_review') return 'office';
   return 'desk';
 }
 
 /**
- * @param {Pick<Agent,'ackState'|'activityState'>} agent
+ * Is this a junior — a subagent its parent spawned (WP-41)?
+ *
+ * Stated as a function rather than read as a field wherever the answer decides
+ * behaviour, for the reason §96 decision 3 gives: two representations of the
+ * same thing, allowed to disagree, is the bug this project keeps having.
+ * @param {Pick<Agent,'subagent'>} agent
+ * @returns {boolean}
+ */
+export function isSubagent(agent) {
+  return !!agent && agent.subagent === true;
+}
+
+/**
+ * Does this session need the user?
+ *
+ * **A junior is never in this count unless it raises its own hand** (`08` §9,
+ * WP-41). The other two needs-you states are debts the user owes the SESSION,
+ * and a junior's session is its parent:
+ *
+ *   - `for_review` means "this turn ended and you have not seen it". A junior's
+ *     turn ends dozens of times inside one turn of its parent's, and its result
+ *     goes to the parent, not to you. Counting it would put a number on the
+ *     header that no keystroke of the user's could ever discharge.
+ *   - `stalled` means "no turn boundary in ten minutes". A junior grinding
+ *     through a long tool call is its parent's problem and the parent is
+ *     already on the floor saying so.
+ *
+ * `needs_input` is different in kind: it is the runtime raising a prompt that
+ * only a person can answer, and a junior blocked on one blocks its parent
+ * with it. That one counts, which is what "unless they raise a hand
+ * themselves" means.
+ *
+ * @param {Pick<Agent,'ackState'|'activityState'|'subagent'>} agent
  * @returns {boolean}
  */
 export function needsYou(agent) {
-  return (
-    agent.ackState === 'active' &&
-    /** @type {readonly string[]} */ (NEEDS_YOU_STATES).includes(agent.activityState)
-  );
+  if (agent.ackState !== 'active') return false;
+  if (isSubagent(agent)) return agent.activityState === 'needs_input';
+  return /** @type {readonly string[]} */ (NEEDS_YOU_STATES).includes(agent.activityState);
 }
 
 /**
@@ -288,9 +347,12 @@ export function counts(agents, opts = {}) {
       else drawnBenched++;
       continue;
     }
+    // WP-41: the same rule `needsYou()` states, applied to its breakdown. A
+    // junior contributes only when it has raised its own hand.
+    const junior = isSubagent(a);
     if (a.activityState === 'needs_input') handsUp++;
-    else if (a.activityState === 'stalled') stalled++;
-    else if (a.activityState === 'for_review') forReview++;
+    else if (!junior && a.activityState === 'stalled') stalled++;
+    else if (!junior && a.activityState === 'for_review') forReview++;
     if (a.activityState === 'working') working++;
     if (placement(a) !== 'desk') continue;
     atDesk++;
@@ -357,7 +419,7 @@ export function projectNameFromCwd(cwd) {
  * @param {Agent[]} agents
  */
 export function projects(agents) {
-  /** @type {Map<string, {id:string,name:string,cwd:string,agentIds:string[],sessionCount:number,tokens:number,cacheTokens:number,costEstimate:number,costRated:boolean,needsYou:number,working:number,activeCount:number}>} */
+  /** @type {Map<string, {id:string,name:string,cwd:string,agentIds:string[],sessionCount:number,tokens:number,cacheTokens:number,costEstimate:number,costRated:boolean,needsYou:number,working:number,activeCount:number,juniors:number}>} */
   const byId = new Map();
   for (const a of agents) {
     let p = byId.get(a.projectId);
@@ -382,6 +444,12 @@ export function projects(agents) {
         // neither benched nor let go. A project with none of these has an
         // empty room: nobody is at a desk in it, and it collapses.
         activeCount: 0,
+        // WP-41. Juniors in this room right now. They are occupants — they
+        // take a seat and they grow the table (`08` B7, §96/§106) — but they
+        // are not sessions the user started, so they are counted apart from
+        // `sessionCount` and the room plate says "+2 juniors" rather than
+        // quietly inflating the session number.
+        juniors: 0,
       };
       byId.set(a.projectId, p);
     }
@@ -390,7 +458,11 @@ export function projects(agents) {
     p.cacheTokens += a.cacheTokens;
     p.costEstimate += a.costEstimate ?? 0;
     if (a.costEstimate != null) p.costRated = true;
-    if (a.ackState !== 'let_go') p.sessionCount++;
+    // A junior's spend is real spend and it is NOT double counted: verified on
+    // this machine that a subagent's turns are written only to its own file
+    // and never appear in the parent's transcript (§120).
+    if (isSubagent(a)) p.juniors++;
+    else if (a.ackState !== 'let_go') p.sessionCount++;
     if (needsYou(a)) p.needsYou++;
     if (a.ackState === 'active') p.activeCount++;
     if (a.ackState === 'active' && a.activityState === 'working') p.working++;

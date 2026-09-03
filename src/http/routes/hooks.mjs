@@ -167,7 +167,8 @@ export function register(router, ctx) {
           // `toolSummary`, and the floor draws no bubble for it.
           const adapter = adapters.getAdapter(String(payload.runtime || 'claude-code'));
           const toolSummary = adapter && adapter.hooks && adapter.hooks.toolSummary;
-          registry.applyHook(normaliseHookPayload(payload, toolSummary));
+          const subagentEvent = adapter && adapter.hooks && adapter.hooks.subagentEvent;
+          registry.applyHook(normaliseHookPayload(payload, toolSummary, subagentEvent));
         } catch (err) {
           log.warn('bad hook payload', err.message);
         }
@@ -213,8 +214,12 @@ export function register(router, ctx) {
  * @param {((payload: Record<string, any>) => {name:string,summary:string}|null)|undefined|null} [toolSummary]
  *   the adapter's own tool-payload parser (WP-52). Only consulted for
  *   `PreToolUse`, the one event that names a tool that is starting.
+ * @param {((payload: Record<string, any>) => {agentId:string,parentSessionId:string|null}|null)|undefined|null} [subagentEvent]
+ *   the adapter's own subagent-payload parser (WP-41). Only consulted for
+ *   `SubagentStop`, and it returns null whenever the payload names no junior —
+ *   in which case the event does exactly what it did before this package.
  */
-function normaliseHookPayload(p, toolSummary) {
+function normaliseHookPayload(p, toolSummary, subagentEvent) {
   const hookEvent = String(p.hook_event_name || p.hookEventName || p.event || '');
   /** @type {{name:string,summary:string}|null} */
   let tool = null;
@@ -227,6 +232,15 @@ function normaliseHookPayload(p, toolSummary) {
       tool = null;
     }
   }
+  /** @type {{agentId:string, parentSessionId:string|null}|null} */
+  let subagent = null;
+  if (hookEvent === 'SubagentStop' && typeof subagentEvent === 'function') {
+    try {
+      subagent = subagentEvent(p) || null;
+    } catch {
+      subagent = null;
+    }
+  }
   return {
     runtime: String(p.runtime || 'claude-code'),
     sessionId: String(p.session_id || p.sessionId || ''),
@@ -235,6 +249,7 @@ function normaliseHookPayload(p, toolSummary) {
     matcher: String(p.matcher || p.notification_type || p.type || ''),
     message: String(p.message || ''),
     tool,
+    subagent,
     at: Date.now(),
     payload: p,
   };

@@ -105,9 +105,13 @@ const DEMO_SESSIONS = [
   ['checkout-flow', 'Copy pass on the error states', 'benched', 44, 0.2],
   ['checkout-flow', 'Tax rounding off by a cent', 'benched', 58, 0.5],
 
-  // design-system — one gone quiet.
+  // design-system — one gone quiet, and one running two juniors (WP-41).
   ['design-system', 'Token pipeline to Figma', 'stalled', 0.8, 1.3],
-  ['design-system', 'Dark mode audit across 40 components', 'working', 1.1, 3.1],
+  // `JUNIOR_PARENT` below. Freshly written on purpose: the adapter only opens
+  // a session's `subagents/` directory when the session's own transcript has
+  // moved recently (`SUBAGENT_PARENT_WINDOW_MS`), which is what stops a scan
+  // paying a directory read per session on a machine with 70 of them.
+  ['design-system', 'Dark mode audit across 40 components', 'working', 0.05, 3.1],
   ['design-system', 'Drop the old Button API', 'idle', 33, 0.5],
   ['design-system', 'Storybook a11y violations', 'benched', 47, 0.4],
 
@@ -353,6 +357,154 @@ function writeTranscript({ id, cwd, title, ageHours, tokensM, finished }) {
   fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
   const mtime = new Date(end);
   fs.utimesSync(file, mtime, mtime);
+}
+
+/**
+ * The session whose juniors the demo floor shows (WP-41), and what they are
+ * doing. Two, in one room, so a README screenshot can show the thing `08` B7
+ * is about: a senior with juniors standing beside it that were not there five
+ * minutes ago and will not be there in five more.
+ *
+ * Titles rather than ids because the ids are derived from cast position, and a
+ * row moving in `DEMO_SESSIONS` should not silently reattach the juniors to
+ * somebody else.
+ */
+const JUNIOR_PARENT = 'Dark mode audit across 40 components';
+const JUNIORS = [
+  {
+    agentId: 'ad3m0000000000001',
+    agentType: 'Explore',
+    description: 'Find every hard-coded hex',
+    text: 'Sweeping the token files for literals the audit has to replace.',
+    tool: { name: 'Grep', input: { pattern: '#[0-9a-fA-F]{6}' } },
+    ageMinutes: 3,
+  },
+  {
+    agentId: 'ad3m0000000000002',
+    agentType: 'general-purpose',
+    description: 'Check the contrast ratios',
+    text: 'Computing contrast for every pair the dark palette introduces.',
+    tool: { name: 'Read', input: { file_path: 'tokens/dark.json' } },
+    ageMinutes: 2,
+  },
+];
+
+/**
+ * One synthetic subagent transcript, in the shape the real ones have on disk
+ * (docs/DEVIATIONS.md §120): under the PARENT session's own directory, in a
+ * `subagents/` folder, named for the subagent's id, with a `.meta.json`
+ * sidecar beside it and `isSidechain: true` on every record.
+ *
+ * It ends on a `tool_use`, so the junior reads as working rather than
+ * finished — a finished junior is `ended` and walks off the floor, which is
+ * correct behaviour and a poor screenshot.
+ */
+function writeSubagent({ parentId, cwd, junior }) {
+  const dir = path.join(PROJECTS_DIR, slugForCwd(cwd), parentId, 'subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  const transcript = path.join(dir, `agent-${junior.agentId}.jsonl`);
+  JUNIOR_FILES.push(transcript);
+
+  const end = Date.now() - junior.ageMinutes * MINUTE;
+  const at = (offsetMs) => new Date(end + offsetMs).toISOString();
+  // `sessionId` is the PARENT's id on every record — verified on this machine:
+  // a subagent transcript never carries an id of its own in that field, only
+  // in `agentId`.
+  const base = {
+    cwd,
+    gitBranch: 'main',
+    sessionId: parentId,
+    agentId: junior.agentId,
+    isSidechain: true,
+    version: '2.1.231',
+  };
+
+  const lines = [
+    {
+      ...base,
+      parentUuid: null,
+      type: 'user',
+      userType: 'external',
+      timestamp: at(-3 * MINUTE),
+      message: { role: 'user', content: junior.description },
+    },
+    {
+      ...base,
+      type: 'assistant',
+      timestamp: at(0),
+      message: {
+        id: `msg_${junior.agentId}_1`,
+        role: 'assistant',
+        model: 'claude-opus-5',
+        stop_reason: 'tool_use',
+        content: [
+          { type: 'text', text: junior.text },
+          {
+            type: 'tool_use',
+            id: `tu_${junior.agentId}`,
+            name: junior.tool.name,
+            input: junior.tool.input,
+          },
+        ],
+        usage: {
+          input_tokens: 4_000,
+          output_tokens: 900,
+          cache_read_input_tokens: 61_000,
+          cache_creation_input_tokens: 8_000,
+        },
+      },
+    },
+  ];
+
+  fs.writeFileSync(transcript, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', 'utf8');
+  fs.writeFileSync(
+    path.join(dir, `agent-${junior.agentId}.meta.json`),
+    JSON.stringify({
+      agentType: junior.agentType,
+      description: junior.description,
+      toolUseId: `toolu_${junior.agentId}`,
+      spawnDepth: 1,
+    }),
+    'utf8',
+  );
+  // Deliberately NOT backdated, where `writeTranscript` backdates every
+  // session: a junior is drawn only while its transcript is still moving, and
+  // the in-file timestamps say how long it has been going.
+}
+
+/** Every junior transcript in this fixture, for `keepJuniorsWorking`. */
+const JUNIOR_FILES = [];
+
+/**
+ * Keep the demo's juniors at their desks (WP-41).
+ *
+ * A junior leaves the floor when its transcript stops being written to — five
+ * minutes, `SUBAGENT_IDLE_MS` in the Claude Code adapter — which is right, and
+ * which means a demo floor left running for a coffee has nobody standing
+ * beside the senior any more. A REAL junior is writing to its file every few
+ * seconds for the whole of its life; this is the fixture doing the same thing,
+ * so `npm run demo` and a goldens capture see the same floor at minute one and
+ * at minute forty.
+ *
+ * Nothing else about the transcript changes, so every number on the floor is
+ * exactly what it was: this touches the mtime and no bytes.
+ */
+function keepJuniorsWorking() {
+  if (!JUNIOR_FILES.length) return null;
+  const beat = () => {
+    const now = new Date();
+    for (const file of JUNIOR_FILES) {
+      try {
+        fs.utimesSync(file, now, now);
+      } catch {
+        /* the fixture is being torn down; nothing to keep alive */
+      }
+    }
+  };
+  const timer = setInterval(beat, 60_000);
+  // Do not hold the process open on its own account.
+  if (typeof timer.unref === 'function') timer.unref();
+  return timer;
 }
 
 /**
@@ -648,6 +800,19 @@ const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
   });
   return { id, agentId: `claude-code:${id}`, cwd, project, title, state };
 });
+
+// WP-41. The juniors, once their parent's transcript exists to hang them off.
+// Only the `demo` population has them: `reference` photographs `08` §0's
+// machine, which had none, and `single` and `empty` are controls.
+if (POPULATION === 'demo') {
+  const parent = built.find((s) => s.title === JUNIOR_PARENT);
+  if (parent) {
+    for (const junior of JUNIORS) {
+      writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
+    }
+    keepJuniorsWorking();
+  }
+}
 
 // Seed ack state so the lounge is populated the moment the daemon starts,
 // and so seeding does not re-derive something else on first run.

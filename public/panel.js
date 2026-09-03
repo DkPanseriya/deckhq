@@ -127,6 +127,11 @@ const ACTION_LABELS = {
  */
 function legalActions(agent) {
   if (!agent) return [];
+  // WP-41. A junior has no user-owned state to act on: it is not the user's
+  // to bench, let go or acknowledge, and it will be gone before a decision
+  // about it could mean anything. `Registry.act()` refuses these outright, so
+  // this is the interface agreeing with the daemon rather than guarding it.
+  if (agent.subagent === true) return [];
   if (agent.ackState === 'let_go') return ['rehire'];
   if (agent.ackState === 'benched') return ['recall', 'let_go'];
   const acts = [];
@@ -653,6 +658,14 @@ export function createPanel(opts) {
       metaEl.appendChild(separator());
       metaEl.appendChild(textNode('let go'));
     }
+    // WP-41. Which way the relationship runs, said in words on whichever end
+    // of it the user is looking at: "junior of Rosa" on the junior, and
+    // "3 juniors" on the senior that spawned them.
+    const juniorLine = juniorMetaFor(a, getSnapshot());
+    if (juniorLine) {
+      metaEl.appendChild(separator());
+      metaEl.appendChild(textNode(juniorLine));
+    }
     renderWaiting();
     renderDoing();
     renderPermission();
@@ -833,6 +846,25 @@ export function createPanel(opts) {
     moreMenu.textContent = '';
     setMoreOpen(false);
 
+    // WP-41. A junior gets no action row and no composer at all.
+    //
+    // Not only the ack half: none of these three does anything for a
+    // subagent. `3 Bench` writes an `ackState` the daemon refuses outright
+    // (`Registry.act()`), and `1 Reply` / `2 Approve` / Send would post to
+    // `claude --resume <agentId>`, which is not a session id — a junior's
+    // work comes from its parent and its answer goes back to its parent.
+    // Offering buttons that cannot work is worse than offering none, so the
+    // panel shows what the junior is and what it said, and stops there.
+    // `Registry.act()` refuses these independently: this is the interface
+    // agreeing with the daemon, not the only thing holding the line.
+    if (a && a.subagent === true) {
+      actionsWrap.hidden = true;
+      form.hidden = true;
+      return;
+    }
+    actionsWrap.hidden = false;
+    form.hidden = false;
+
     actionsEl.appendChild(weightedButton('1', 'Reply', 'btn', () => focusComposer()));
     // `2 Approve` is normally the one filled button on the screen (`05` §4.2).
     // It yields the fill while a permission card is up: that card is the only
@@ -929,6 +961,10 @@ export function createPanel(opts) {
    */
   function renderResume() {
     resumeEl.textContent = '';
+    // WP-41: same rule as the actions. `claude --resume <agentId>` is not a
+    // session and would open nothing; a junior is resumed by its parent
+    // carrying on, which is not a link this panel can offer.
+    if (displayedAgent && displayedAgent.subagent === true) return;
     const preference = getSnapshot()?.settings?.resumeIn === 'app' ? 'app' : 'terminal';
     resumeEl.appendChild(resumeLink('terminal', 'resume in terminal', preference));
     if (resumeAppAvailable) {
@@ -1644,6 +1680,10 @@ export function createPanel(opts) {
     const agent = agentFor(id);
     if (!id || !agent) return;
     if (!targetId && root.hidden) return;
+    // WP-41: the keys are the buttons. A junior has none of the three (see
+    // `renderActions`), so the shortcuts must not reach around the missing
+    // row and do by keystroke what the interface declined to offer.
+    if (agent.subagent === true) return;
     switch (String(key)) {
       case '1':
         if (id !== currentId) open(id);
@@ -2214,6 +2254,31 @@ export function createPanel(opts) {
 /** The compact name for toasts and placeholders: display name, else MK tag. */
 function who(a) {
   return a?.displayName || a?.label || a?.mk || a?.title || 'this session';
+}
+
+/**
+ * The junior line for the panel's state row (WP-41), or null when the session
+ * is neither a junior nor has one.
+ *
+ * Exported because it is the whole rule in one pure function and
+ * `test/unit/subagents.test.mjs` reads it directly rather than standing up a
+ * DOM to find out what a string says.
+ *
+ * @param {any} agent
+ * @param {any} snapshot the current snapshot, for looking the parent up by id.
+ *   A junior whose parent is not in it — it was archived, or the scan caught
+ *   the junior first — still says "junior", just not whose.
+ * @returns {string|null}
+ */
+export function juniorMetaFor(agent, snapshot) {
+  if (!agent) return null;
+  if (agent.subagent === true) {
+    const parent = ((snapshot && snapshot.agents) || []).find((p) => p && p.id === agent.parentId);
+    return parent ? `junior of ${who(parent)}` : 'junior';
+  }
+  const n = Number(agent.juniorCount) || 0;
+  if (n <= 0) return null;
+  return n === 1 ? '1 junior' : `${n} juniors`;
 }
 
 /** "claude-opus-5" reads as "opus-5" on a line that already says Claude Code. */

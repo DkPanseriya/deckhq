@@ -96,6 +96,22 @@ export function characterScaleFor(worldScale) {
   return Math.max(Number(worldScale) || 0, CHAR_MIN_PX_PER_UNIT);
 }
 
+/**
+ * How much smaller a junior is drawn than the senior it stands beside (WP-41).
+ *
+ * `08` B7 and `docs/plan/04` §4 both ask for "smaller figures beside the
+ * parent", and this is that number. Smaller than this and the junior stops
+ * reading as a person at a tight fit scale; larger and it reads as a second
+ * senior standing oddly close.
+ *
+ * It goes through `characterScaleFor` like every other body, so §96's
+ * legibility floor still holds: a junior is 80% of its parent right up to the
+ * point where 80% would put it under 16 px, and from there down they are the
+ * same size, which is honest — below that there is no room to say "smaller"
+ * and still say "person".
+ */
+export const JUNIOR_SCALE = 0.8;
+
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 const REPLAN_FADE_MS = 260;
 
@@ -352,9 +368,16 @@ export function plateLinesFor(room, snapshot, plan) {
   if (room.kind === 'project') {
     const project = (snap.projects || []).find((p) => p.id === room.id);
     if (!project) return fallback();
+    // WP-41. Juniors are counted apart from the sessions, because they are a
+    // different KIND of occupant: the user did not start them, cannot bench
+    // them, and they will be gone before the next coffee. "3 sessions ·
+    // +2 juniors" says what is in the room; folding them into `sessionCount`
+    // would quietly claim the user has five things running.
+    const juniors = Number(project.juniors) || 0;
+    const juniorPart = juniors > 0 ? ` · +${juniors} junior${juniors === 1 ? '' : 's'}` : '';
     return [
       room.name,
-      `${project.sessionCount} sessions · ${formatTokens(project.tokens)} tok · ${project.needsYou} need you`,
+      `${project.sessionCount} sessions${juniorPart} · ${formatTokens(project.tokens)} tok · ${project.needsYou} need you`,
       payrollLine(project),
     ];
   }
@@ -1534,8 +1557,13 @@ export class Scene {
     if (!agent) return;
     // People are drawn at their own scale (`_characterScale`), which is the
     // world scale except on a floor small enough that a body would drop below
-    // 16 px — 05-GUI-UX-SPEC.md §6.2.
-    const u = this._characterScale();
+    // 16 px — 05-GUI-UX-SPEC.md §6.2. A junior is drawn at `JUNIOR_SCALE` of
+    // the floor's scale and then through the same floor, so it is smaller
+    // than its senior everywhere there is room for it to be (WP-41).
+    const u =
+      agent.subagent === true
+        ? characterScaleFor(this._scale() * JUNIOR_SCALE)
+        : this._characterScale();
     // Look up this frame's label-collision resolution (built once, before
     // any character is drawn — see `_draw`). `labelPlan` is null at lod 0,
     // where no label is gated to draw anyway (VISUAL-SPEC §7: "shown at L1

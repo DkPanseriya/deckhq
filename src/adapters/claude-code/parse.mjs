@@ -239,10 +239,21 @@ function truncateTitle(s) {
  *
  * @param {string} headText
  * @param {string} tailText
- * @param {{id:string, file:string, mtimeMs:number}} meta
+ * @param {{id:string, file?:string, mtimeMs:number, sidechain?:boolean}} meta
+ *   `sidechain` (WP-41): this file IS a subagent transcript, so every record in
+ *   it carries `isSidechain: true` and the usual "sidechain turns are not what
+ *   the session said" filter would leave the summary blank. Set it only for a
+ *   file found under a `subagents/` directory; a primary transcript must keep
+ *   the filter, because there the sidechain records belong to somebody else.
  * @returns {import('../../core/model.mjs').SessionSummary}
  */
-export function parseSummary(headText, tailText, { id, mtimeMs }) {
+export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = false }) {
+  // In a subagent transcript every record is the subagent's own speech; in a
+  // primary one a sidechain record belongs to a junior and must not win "what
+  // did this session last say".
+  const primary = sidechain
+    ? /** @param {any} _r */ (_r) => true
+    : /** @param {any} r */ (r) => r.isSidechain !== true;
   let cwd = null;
   let cwdTs = -Infinity;
   let gitBranch = null;
@@ -300,7 +311,7 @@ export function parseSummary(headText, tailText, { id, mtimeMs }) {
 
         // Subagent traffic still counts toward token spend, but never wins
         // "what did the session last say" — that's the primary thread only.
-        if (rec.isSidechain !== true) {
+        if (primary(rec)) {
           const t = contentToText(rec.message.content);
           if (t && hasTs && ts >= lastTextTs) {
             lastRole = 'assistant';
@@ -309,7 +320,7 @@ export function parseSummary(headText, tailText, { id, mtimeMs }) {
           }
         }
       } else if (rec.type === 'user' && rec.message && typeof rec.message === 'object') {
-        if (rec.isSidechain !== true) {
+        if (primary(rec)) {
           const t = contentToText(rec.message.content);
           if (t && hasTs && ts >= lastTextTs) {
             lastRole = 'user';
@@ -341,8 +352,7 @@ export function parseSummary(headText, tailText, { id, mtimeMs }) {
     } else {
       const userRec = findFirst(
         [headText, tailText],
-        (r) =>
-          r.type === 'user' && r.isSidechain !== true && r.message && typeof r.message === 'object',
+        (r) => r.type === 'user' && primary(r) && r.message && typeof r.message === 'object',
       );
       const text = userRec ? contentToText(userRec.message.content) : '';
       title = text ? truncateTitle(text) : String(id).slice(0, 8);
@@ -371,7 +381,7 @@ export function parseSummary(headText, tailText, { id, mtimeMs }) {
     }),
     lastRole,
     lastText: clampText(lastText),
-    turnEnded: turnHasEnded(tailText),
+    turnEnded: turnHasEnded(tailText, sidechain),
   };
 }
 
@@ -401,9 +411,11 @@ export function parseSummary(headText, tailText, { id, mtimeMs }) {
  * happening now.
  *
  * @param {string} tailText
+ * @param {boolean} [sidechain] the file is a subagent transcript, so its
+ *   `isSidechain` records ARE the conversation. See `parseSummary`.
  * @returns {boolean}
  */
-function turnHasEnded(tailText) {
+function turnHasEnded(tailText, sidechain = false) {
   const lines = tailText.split('\n');
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
@@ -415,7 +427,7 @@ function turnHasEnded(tailText) {
     } catch {
       continue; // torn or partial line; the record before it still counts
     }
-    if (!rec || rec.isSidechain === true) continue;
+    if (!rec || (!sidechain && rec.isSidechain === true)) continue;
     if (rec.type !== 'assistant' && rec.type !== 'user') continue;
     const msg = rec.message;
     if (!msg || typeof msg !== 'object') continue;
@@ -463,14 +475,16 @@ function turnHasEnded(tailText) {
  * `<command-message>`, `<command-args>`, `<local-command-stdout>`) is
  * stripped; a message left empty after stripping is dropped.
  * @param {string} text
- * @param {{maxMessages?:number}} [opts]
+ * @param {{maxMessages?:number, sidechain?:boolean}} [opts] `sidechain`
+ *   (WP-41): this text came from a subagent transcript, where every record is
+ *   flagged `isSidechain` and dropping them would leave the panel empty.
  * @returns {import('../../core/model.mjs').Message[]}
  */
-export function parseConversation(text, { maxMessages = 200 } = {}) {
+export function parseConversation(text, { maxMessages = 200, sidechain = false } = {}) {
   const out = [];
   for (const rec of jsonLines(text)) {
     if (rec.type !== 'user' && rec.type !== 'assistant') continue;
-    if (rec.isSidechain === true) continue;
+    if (!sidechain && rec.isSidechain === true) continue;
     if (!rec.message || typeof rec.message !== 'object') continue;
 
     const raw = contentToText(rec.message.content);
@@ -485,4 +499,178 @@ export function parseConversation(text, { maxMessages = 200 } = {}) {
     });
   }
   return maxMessages > 0 && out.length > maxMessages ? out.slice(out.length - maxMessages) : out;
+}
+
+// --------------------------------------------------------- subagents (WP-41)
+
+/**
+ * The directory Claude Code writes subagent transcripts into, inside a
+ * session's own directory. Verified on this machine (2.1.222 – 2.1.231):
+ *
+ *   ~/.claude/projects/<projectDir>/<parentSessionId>/subagents/agent-<id>.jsonl
+ *   ~/.claude/projects/<projectDir>/<parentSessionId>/subagents/agent-<id>.meta.json
+ *
+ * Workflow subagents nest one level deeper under `workflows/wf_<id>/`, with a
+ * `journal.jsonl` beside them that is the workflow's own log and NOT a
+ * subagent. Full measurements: `docs/DEVIATIONS.md` §120.
+ */
+export const SUBAGENT_DIR = 'subagents';
+
+/** Filenames in a `subagents/` directory that are transcripts, and their id. */
+const SUBAGENT_FILE_RE = /^agent-([A-Za-z0-9_-]+)\.jsonl$/;
+
+/** How deep below `subagents/` a transcript may be. `workflows/wf_x/a.jsonl` is 2. */
+export const SUBAGENT_MAX_DEPTH = 2;
+
+/**
+ * The subagent id a transcript filename names, or null when the file is not a
+ * subagent transcript at all (`journal.jsonl` is the case that matters).
+ * @param {string} basename
+ * @returns {string|null}
+ */
+export function subagentIdFromFile(basename) {
+  const m = SUBAGENT_FILE_RE.exec(String(basename || ''));
+  return m ? m[1] : null;
+}
+
+/** The sidecar metadata filename for a subagent transcript. @param {string} basename */
+export function subagentMetaFile(basename) {
+  return String(basename).replace(/\.jsonl$/, '.meta.json');
+}
+
+/**
+ * @typedef {object} SubagentMeta
+ * @property {string|null} agentType    e.g. `general-purpose`, `Explore`,
+ *   `workflow-subagent`, or a user's own agent name
+ * @property {string|null} description  the Task call's short description
+ * @property {string|null} model
+ * @property {string|null} toolUseId    the parent's `Task` tool_use id
+ * @property {number|null} spawnDepth   1 for a subagent of the session itself
+ * @property {string|null} parentAgentId set when a subagent spawned this one
+ */
+
+/**
+ * Parse an `agent-<id>.meta.json` sidecar. Never throws: a missing, empty or
+ * corrupt file gives an all-null record, which is exactly what a junior with
+ * no metadata should look like.
+ *
+ * Key shapes measured across 987 sidecars on this machine:
+ * 607 `agentType,spawnDepth`; 239 `agentType` alone;
+ * 50 `agentType,description,spawnDepth,toolUseId`; 38 of those also with
+ * `model`; 34 also with `spawnedWithWorktree,worktreeBranch,worktreePath`;
+ * 4 with `parentAgentId`. Nothing is required, so nothing here is.
+ *
+ * @param {string} text
+ * @returns {SubagentMeta}
+ */
+export function parseSubagentMeta(text) {
+  /** @type {SubagentMeta} */
+  const empty = {
+    agentType: null,
+    description: null,
+    model: null,
+    toolUseId: null,
+    spawnDepth: null,
+    parentAgentId: null,
+  };
+  if (!text) return empty;
+  let j;
+  try {
+    j = JSON.parse(text);
+  } catch {
+    return empty;
+  }
+  if (!j || typeof j !== 'object') return empty;
+  const str = (/** @type {unknown} */ v) => (typeof v === 'string' && v ? v : null);
+  return {
+    agentType: str(j.agentType),
+    description: str(j.description),
+    model: str(j.model),
+    toolUseId: str(j.toolUseId),
+    spawnDepth: Number.isFinite(Number(j.spawnDepth)) ? Number(j.spawnDepth) : null,
+    parentAgentId: str(j.parentAgentId),
+  };
+}
+
+/**
+ * When a subagent started, from the transcript's own first record.
+ *
+ * There is no spawn record and no stop record: a subagent transcript opens on
+ * an ordinary `user` turn carrying the Task prompt and simply stops being
+ * appended to when the junior finishes (verified — §120). So the oldest
+ * timestamp in the head window is the spawn and the newest anywhere is the
+ * last thing it did. Both are null when nothing in the window carries one,
+ * and the caller falls back to the file's mtime.
+ *
+ * @param {string} headText
+ * @param {string} tailText
+ * @returns {{spawnedAt:number|null, lastActivityAt:number|null}}
+ */
+export function parseSubagentTimes(headText, tailText) {
+  let spawnedAt = null;
+  let newest = null;
+  const scan = (/** @type {string} */ text) => {
+    for (const rec of jsonLines(text)) {
+      const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : NaN;
+      if (!Number.isFinite(ts)) continue;
+      if (spawnedAt == null || ts < spawnedAt) spawnedAt = ts;
+      if (newest == null || ts > newest) newest = ts;
+    }
+  };
+  scan(headText);
+  scan(tailText);
+  return { spawnedAt, lastActivityAt: newest };
+}
+
+/**
+ * The parent session id a subagent transcript path implies: the directory
+ * immediately above `subagents/`. Null for anything else.
+ * @param {unknown} transcriptPath
+ * @returns {string|null}
+ */
+function parentOfTranscript(transcriptPath) {
+  if (typeof transcriptPath !== 'string' || !transcriptPath) return null;
+  const parts = transcriptPath.split(/[\\/]+/).filter(Boolean);
+  const i = parts.lastIndexOf(SUBAGENT_DIR);
+  if (i <= 0) return null;
+  return parts[i - 1] || null;
+}
+
+/**
+ * Which junior, if any, a hook payload is about.
+ *
+ * `SubagentStop` fires on the PARENT's session id — that is the whole reason
+ * §89's thought bubbles attribute a junior's tools to its parent — so the
+ * payload has to name the junior some other way if the floor is to know which
+ * one sat down and which one left.
+ *
+ * THIS IS THE ONE PART OF WP-41 NOT VERIFIED ON A MACHINE. The reference
+ * machine's Claude Code (2.1.231) could not be driven through a Task call
+ * during this package (its OAuth token had expired), so the exact
+ * `SubagentStop` payload keys are unconfirmed. This therefore reads whichever
+ * of three shapes is present and returns `null` — not a guess — when none is:
+ *
+ *   1. an explicit `agent_id` / `agentId` / `subagent_id` field;
+ *   2. a `transcript_path` inside a `subagents/` directory, whose basename is
+ *      `agent-<id>.jsonl` and whose grandparent names the parent session —
+ *      the shape verified ON DISK (§120);
+ *   3. nothing, in which case the caller keeps today's behaviour exactly: the
+ *      parent's `lastOutputAt` moves and no junior is touched.
+ *
+ * @param {Record<string, any>} payload
+ * @returns {{agentId:string, parentSessionId:string|null}|null}
+ */
+export function subagentEvent(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const direct = payload.agent_id ?? payload.agentId ?? payload.subagent_id ?? null;
+  if (typeof direct === 'string' && direct) {
+    return { agentId: direct, parentSessionId: parentOfTranscript(payload.transcript_path) };
+  }
+  const tp = payload.transcript_path ?? payload.transcriptPath ?? null;
+  if (typeof tp !== 'string' || !tp) return null;
+  const parts = tp.split(/[\\/]+/).filter(Boolean);
+  if (!parts.includes(SUBAGENT_DIR)) return null;
+  const id = subagentIdFromFile(parts[parts.length - 1]);
+  if (!id) return null;
+  return { agentId: id, parentSessionId: parentOfTranscript(tp) };
 }

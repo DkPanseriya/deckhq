@@ -540,6 +540,22 @@
   The watch starts when a card opens and stops when it closes; a runtime with no transcript watch
   simply has no live tail. Reading a file changes nothing: this cannot clear a review debt and
   makes no `/api/ack` call, and there is a named `INVARIANT:` test for it.
+- **Subagents are people too: juniors, standing beside the agent that spawned them.** When a
+  Claude Code session sends work out to a subagent, that subagent writes its own transcript — and
+  DeckHQ now reads it. A junior arrives at its parent's desk the moment it starts, is drawn at
+  80% beside them in its parent's project colours and a face of its own (the same hash of the
+  session id every agent gets), and walks off the floor when it finishes. The room's table grows
+  to seat the whole huddle, the door plate says `4 sessions · +2 juniors`, and the panel says
+  `junior of Boris` on one and `3 juniors` on the other. **A junior is never in the needs-you
+  count unless it raises its own hand**: its finished turn goes to its parent, not to you, so
+  counting it would put a number on the header that no keystroke of yours could discharge — but a
+  permission prompt only a person can answer still counts, because a blocked junior blocks its
+  parent. It owns no user-facing state either: there is no bench button, no let-go button, no
+  acknowledge, and `POST /api/ack` refuses all six actions on one, so nothing about a session that
+  lives for thirty seconds can be written into a store keyed by an id you will never see again.
+  It also takes no MK number and no first name — it wears its parent's tag with a suffix,
+  `MK1.2j1` — so a busy week does not drain a project's numbering or the name pool. All the
+  parsing is in the adapter, as always. `docs/DEVIATIONS.md` §117.
 
 ### Changed
 
@@ -962,6 +978,20 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   is not there at all ends as that label rather than as a stack trace. None of them launches a
   real Chrome; the test that would is the goldens gate, which is a separate npm script for exactly
   that reason. §114.
+- **28 tests for subagents, over fixtures shaped like the real files and containing none of
+  them.** Every subagent fixture in the suite is written into a temp directory by the test that
+  needs it and deleted afterwards; nothing from anybody's `~/.claude` is committed. They cover
+  both on-disk layouts and the workflow journal that must never become a person, all nine
+  `meta.json` key shapes counted on the reference machine, the three `SubagentStop` payload
+  shapes and the fourth case where the answer is "this names no junior, so change nothing", the
+  idle window that takes a junior off the floor and the parent window that stops a scan opening
+  eighty directories to find nothing, the needs-you rule and its breakdown, the table growing to
+  seat a huddle, and the seating that gives a junior a place to stand without taking a chair.
+  Four of them run the real adapter in a child process pointed at the fixture, because
+  `PROJECTS_DIR` is resolved at import time. The named one is `INVARIANT: a subagent lifecycle
+changes no user-owned field on the parent` — a parent standing in the office with an unanswered
+  review, three juniors arriving and leaving around it, and a deep compare of every user-owned
+  field, the whole ack store and all six counts. 1,375 → 1,403. §117.
 - **The goldens job skips a browser it cannot start, as §87 said it would.** It named two tooling
   gaps — no WebSocket, no Chrome — and missed the third and likeliest: a Chrome that is present and
   will not start. The Ubuntu runner has one, both guards passed, and the job then failed a merge
@@ -1068,6 +1098,19 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   binary itself rather than watched arriving. Everything downstream is proved against that
   recording through a real child process. The remaining step is one `claude login` and one real
   reply, and it is the same login the permission card is waiting on. `docs/DEVIATIONS.md` §117.
+- **Nobody has watched a real `SubagentStop` payload.** The event fires on the parent's session
+  id, so something in it has to name which junior finished if a junior is to leave the floor the
+  instant it stops rather than five minutes later — and this could not be checked, because
+  driving a real `Task` call needs a `claude -p` run and the reference machine's login is expired
+  (the same wall §86.1 hit). The reader therefore takes an explicit `agent_id` if there is one, a
+  `transcript_path` inside a `subagents/` directory if there is one, and **returns nothing rather
+  than guessing** when there is neither — in which case the event does exactly what it has always
+  done, and juniors still arrive and leave on their transcripts alone. Everything else about
+  subagent storage was measured on disk over 1,048 real transcripts. `docs/DEVIATIONS.md` §120.
+- **A junior can never raise its hand yet.** The rule that a subagent counts toward "needs you"
+  when, and only when, it is `needs_input` is implemented and tested — but no signal on this
+  machine can put one there, because every hook event is attributed to the parent's session id.
+  It arrives with the payload above. §117.
 - **The room plate's daily spend is computed but not drawn.** `buildPlan` puts it in the room's
   third plate line and the snapshot carries it per project, but the only function that paints a
   room plate draws two lines and recomputes them from the snapshot rather than reading the plan's —
