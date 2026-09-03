@@ -71,6 +71,23 @@
       </div>
     </header>
 
+    <!-- Level 2, the queue strip (docs/plan/05-GUI-UX-SPEC.md §3.1). A rail of
+         chips under the header, oldest first, one per item that needs you,
+         only while there is one. It gives the queue's shape and length without
+         leaving the floor, which is what makes the floor safe to keep looking
+         at. Built by public/deck.js; this is only its shell. -->
+    <div class="queue-strip" id="queue-strip" hidden>
+      <ul
+        class="strip-list"
+        id="strip-list"
+        role="list"
+        aria-label="Waiting on you, oldest first"
+      ></ul>
+      <button type="button" class="strip-more" id="strip-more" hidden>+0</button>
+      <p class="strip-hint" id="strip-hint" hidden></p>
+      <p class="strip-last" id="strip-last" hidden></p>
+    </div>
+
     <main class="app">
       <section class="stage" aria-label="Office floor">
         <canvas
@@ -110,6 +127,19 @@
           <h2>Can't reach the DeckHQ daemon</h2>
           <p id="error-banner-text">Retrying…</p>
         </div>
+
+        <!-- Level 3, the deck (§3.2). Replaces the floor on Tab, keeps the
+             panel exactly where it was, and is a genuine table: a screen
+             reader traverses the same queue in the same order with the same
+             actions. The floor is never the only way to reach anything (§10). -->
+        <div
+          class="deck"
+          id="deck"
+          tabindex="-1"
+          role="group"
+          aria-label="The deck. Everything waiting on you, oldest first."
+          hidden
+        ></div>
       </section>
 
       <aside class="panel" id="panel" aria-label="Session detail" hidden></aside>

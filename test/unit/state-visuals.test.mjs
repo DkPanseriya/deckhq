@@ -287,6 +287,17 @@ test('CONTRAST: the primary button label clears 4.5:1 on the accent', () => {
   );
 });
 
+/**
+ * Selectors that are a state GLYPH and not a word: WP-10's chip and row icons
+ * (`✓`, `✋`, `⏳`). A glyph is non-text content under WCAG 1.4.11 and is held
+ * to 3:1, not 4.5:1 — and the state word it stands for is always beside it in
+ * neutral ink and in the control's `aria-label`. The test below measures the
+ * 3:1 rather than taking it on trust, so this list buys an exemption from one
+ * floor and an obligation to the other. Nothing may join it that renders a
+ * word.
+ */
+const STATE_GLYPH_SELECTORS = /\.(strip|deck)-icon$/;
+
 test('COLOUR DISCIPLINE: state colours never set small text', () => {
   // The stylesheet's own header rule. Several state colours sit between 3:1
   // and 4.5:1 on the chrome ground — legible as a dot, a border or an icon,
@@ -294,13 +305,56 @@ test('COLOUR DISCIPLINE: state colours never set small text', () => {
   // label, so a `color: var(--state-*)` declaration is the smell.
   const offenders = readRules()
     .filter((r) => /(^|[^-])color:\s*var\(--state-[\w-]+\)/.test(r.body))
-    .map((r) => r.selector);
+    .map((r) => r.selector)
+    .filter((selector) => !STATE_GLYPH_SELECTORS.test(selector));
   assert.deepEqual(
     offenders,
     [],
     `these rules set text in a state colour: ${offenders.join(', ')}. ` +
       'Colour the border, the dot or the icon instead and leave the words in --ink.',
   );
+});
+
+test('CONTRAST: a CSS state glyph clears 3:1 on every ground it is drawn on', () => {
+  // The exemption above, paid for. WP-10 draws the first state icons that are
+  // characters in the DOM rather than paint on the canvas, so the grounds they
+  // land on became a measurable thing this suite had to start checking.
+  //
+  // Those grounds are --bg and --surface and no others, which is why the chip
+  // is inset into the strip rather than raised off it: crimson measures
+  // 2.78:1 on --surface-2 and 2.39:1 on --surface-3. The ground moved.
+  const t = readTokens();
+  const glyphRules = readRules().filter(
+    (r) =>
+      STATE_GLYPH_SELECTORS.test(r.selector) &&
+      /(^|[^-])color:\s*var\(--state-[\w-]+\)/.test(r.body),
+  );
+  assert.ok(glyphRules.length >= 3, 'the strip and the deck draw state glyphs; none were found');
+
+  for (const rule of glyphRules) {
+    const state = /var\(--state-([\w-]+)\)/.exec(rule.body)[1];
+    for (const ground of ['bg', 'surface']) {
+      const ratio = contrastRatio(t[`state-${state}`], t[ground]);
+      assert.ok(
+        ratio >= 3,
+        `${rule.selector} draws ${state} at ${ratio.toFixed(2)}:1 on --${ground}; ` +
+          'a glyph is non-text content and needs >= 3:1. Move the ground.',
+      );
+    }
+  }
+
+  // And the grounds really are only those two: nothing under the strip or the
+  // deck may quietly raise a glyph onto --surface-2 or --surface-3.
+  const chipGrounds = readRules()
+    .filter((r) => /^\.(strip-chip|deck-row)(:|\.|$)/.test(r.selector))
+    .flatMap((r) => [...r.body.matchAll(/background(?:-color)?:\s*var\(--([\w-]+)\)/g)])
+    .map((m) => m[1]);
+  for (const ground of chipGrounds) {
+    assert.ok(
+      ground === 'bg' || ground === 'surface',
+      `a chip or deck row sits on --${ground}; a state glyph cannot clear 3:1 there`,
+    );
+  }
 });
 
 test('COLOUR DISCIPLINE: the accent sets no text anywhere', () => {

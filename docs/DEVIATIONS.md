@@ -5409,3 +5409,182 @@ process posting a real payload to an OS-assigned port discoverable only through
 producing exactly one spawn and releasing the lock; the launcher resolution
 including the `cmd.exe` argv; and the MCP server over its real transport plus
 the `INVARIANT:` no-write test. 714 tests to 778.
+## 103. WP-10 — the queue strip and the deck: eight departures from `05` §3, and the two guarded tests that moved
+
+WP-10 is accepted against four clauses in
+[`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md): `Tab` toggles floor ⇄ deck with no
+reflow of the panel; `J`/`K`/`1`/`2`/`3` work identically in strip, deck and floor; the deck is a
+real semantic grid a screen reader can traverse in queue order; and the oldest chip never scrolls
+out of the strip. All four hold. What follows is where the implementation departed from
+[`05`](plan/05-GUI-UX-SPEC.md) §3 and why.
+
+### 103.1 The ordering is duplicated on purpose, and pinned by a test
+
+`05` §3 wants one order across the floor's `J`/`K`, the strip, the deck and — since WP-42 —
+`deckhq ls`. `src/cli/deck.mjs` already had it, in `groupRows()`. The browser cannot import it:
+`src/` is never served, and shipping a Node module to the page to save twelve lines would put the
+core module graph behind an HTTP route.
+
+The alternative considered and rejected was **ordering on the server and sending the order in the
+snapshot payload**. It looks like the honest fix and it is worse: it makes the client's most
+keyboard-sensitive behaviour depend on a field the daemon may not have sent yet (the first paint
+comes from `/api/state`, the rest from SSE), it adds a snapshot field for something the client can
+compute in a microsecond from data it already has, and it leaves the CLI needing its own copy
+anyway because `deckhq ls` reads `state.json` when no daemon is running.
+
+So `queueGroups()` in `public/deck.js` is a second implementation of one rule, and
+`test/unit/deck-view.test.mjs` runs **both over one fixture** and asserts the id sequences are
+equal. The fixture is deliberately awkward: a stall older than everything else, two rows sharing a
+timestamp to the millisecond, a benched agent, a let-go agent and a working one. If the two ever
+drift, that test says so before a user notices that `deckhq waiting` and `J` disagree about what
+comes next.
+
+One thing did change in the shared rule: **ties now break on the id, in both files.** Two sessions
+can share a `reviewSince` after a restart, and an order that falls through to `Array.prototype`
+sort stability is an order that can differ between engines — which would mean `J` landing somewhere
+different in a different browser.
+
+### 103.2 `J` and `K` now sort stalls last on the floor too
+
+Before this package the floor's queue was a flat sort by wait time; `05` §3.2's grouping —
+`for_review` and `needs_input` above `stalled` — existed only in the deck's sketch. Applying it to
+one surface and not the others would have failed "identically in strip, deck and floor" outright,
+so `getNeedsYouQueue()` in `app.js` is now a call to `queueOrder()` and nothing else.
+
+**This changes what `J` lands on** when a stall is the oldest thing on the floor: it is now last,
+not first. That is the spec's intent ("a stall is not a debt in the same way"), and it is the
+behaviour `deckhq waiting` has had since WP-42.
+
+### 103.3 One cursor rule, and the reason it has two forms
+
+"Identically" is only meaningful if one function decides what "the selected one" is. That is
+`queueCursor()`, and it has a sibling, `queueAnchor()`, which returns `null` where the cursor
+returns the oldest item.
+
+The distinction is not academic — it was a live bug for exactly one screenshot. The cursor falls
+back to the oldest item so `1`, `2` and `3` always have something to act on while a queue is on
+screen. Stepping from *that* meant the very first `J` skipped past the oldest item to the second
+one. `move()` therefore steps from the anchor ("where the user actually is, or nowhere"), and the
+number keys read the cursor ("where the user is, or the oldest"). Both are pinned in
+`test/unit/deck-keys.test.mjs`.
+
+`J`/`K` clamp rather than wrap, unchanged from the pre-WP-10 floor: the queue is a list of debts in
+age order, and wrapping makes "keep pressing `J`" silently start again.
+
+### 103.4 The chip is ringed only when somebody really is selected; the deck row always has a cursor
+
+`05` §3.1: "The selected chip is ringed and the corresponding person on the floor is ringed at the
+same moment, which is what teaches the mapping between the two." That sentence forbids ringing a
+chip when the floor is ringing nobody, so the strip paints `selectedId` and only `selectedId`.
+
+The deck is a table, and a table has a cursor row whether or not anything is open — that row is
+where its keys act, so drawing it is a statement about the deck rather than a claim about the
+floor. The two therefore disagree on purpose when the panel is shut, and `syncSelection()` says so
+in as many words.
+
+### 103.5 `Tab` is claimed only when focus is on the floor
+
+`05` §3.2 says `Tab` toggles the deck. `Tab` is also how a keyboard user moves between controls,
+and `05` §10 is "every action reachable by keyboard, with a visible focus ring" — so taking `Tab`
+globally would have satisfied §3.2 by breaking §10 on the same page.
+
+It is claimed only when `document.activeElement` is the body or inside `.stage` (the canvas, the
+deck), and never with `Shift` held. Tabbing out of the strip, the header or the panel behaves
+exactly as it did; `Shift+Tab` is always the browser's; and from inside the deck, `Tab` returns to
+the floor while `Shift+Tab` leaves for the panel.
+
+### 103.6 Five labelled columns, and the MK tag rides inside WHO
+
+§3.2's sketch draws six columns, one of which (the MK tag) has no heading, plus the state glyph in
+a seventh. A column header a screen reader reads as empty is worse than no column, so the deck
+ships the five the workplan names — WAITING · WHO · PROJECT · LAST WORD · TOKENS — with the tag as
+a dim span inside WHO and the glyph inside WAITING, in the same visual order the sketch has them.
+`deckhq ls` keeps its own `ID` column, for the reason §93 gives: there you type an id, here you
+press `J`.
+
+WHO is the row header (`<th scope="row">`), so reading down LAST WORD still says whose last word it
+is. The rule between the two groups is a `border-top` on the second `<tbody>`, not a row of
+dashes — a screen reader should not be read a line of hyphens.
+
+### 103.7 `1 Reply` opens the panel; `2` and `3` do not
+
+"`1`/`2`/`3` act on the selected row without opening it" holds for two of the three. `1 Reply`
+focuses the composer, and the composer is in the panel: there is nowhere else to type. So `1` on a
+deck row the panel is not showing opens it first, then focuses. `2 Approve` sends to the named row
+without touching the open row's composer, and `3` acts on the named row outright.
+
+This is the one change to `public/panel.js`'s public surface: `performAction(action, targetId)` and
+`pressNumberKey(key, targetId)` now take an optional row. There is still exactly one
+`fetch('/api/ack')` in the client, still inside `performAction()`, and it is still reached only
+from a button, a number key, or the `A`/`B` shortcuts.
+`test/unit/panel-invariant.test.mjs` passes unchanged.
+
+### 103.8 The strip has no scroller, and the accent moved off the clock
+
+§3.1 promises the oldest chip is always leftmost and never scrolls out. The only way to keep that
+unconditionally on a narrow window is to have nowhere for it to scroll to, so the strip measures
+its chips and collapses the ones that do not fit into a `+N` button that opens the deck. The first
+chip is kept even when it alone does not fit; `overflow: hidden` clips it rather than dropping it.
+
+§3.1 also asks for elapsed times past 24 h "in `--accent`". They are not, and the reason is §94.1:
+crimson is under the 4.5:1 text floor on every ground in this product, and WP-07 removed the
+numeral's licensed exception rather than widening it. The 24-hour signal is carried by a 2 px
+crimson rule under the number, with the number itself in `--ink` and bold — which is the remedy
+`state-visuals.test.mjs` names in its own failure message ("the waiting clock carries crimson on a
+rule, with the words themselves in `--ink`").
+
+### 103.9 Two guarded tests moved, both in the strengthening direction
+
+**`state-visuals.test.mjs` now allows a state colour on a state glyph, and measures it.** WP-10
+draws the first state icons that are characters in the DOM rather than paint on the canvas. A glyph
+is non-text content under WCAG 1.4.11 and is held to 3:1, not 4.5:1 — which is what the existing
+test's own failure message already said ("colour the border, the dot or the icon instead"). The
+exemption is a regex matching `.strip-icon` and `.deck-icon` and nothing else, and it is paid for
+by a new test that recomputes the contrast of every such rule against every ground it can land on.
+
+That measurement immediately moved a ground. `for_review` is 2.78:1 on `--surface-2` and 2.39:1 on
+`--surface-3`, so a chip cannot sit on either. The chip is **inset** into the strip (`--bg` on a
+`--surface` bar, hover `--surface`) and the deck's selected row is `--surface` rather than
+`--surface-2`. The rule held: the ground moved, not the state colour. A third assertion now says no
+chip or deck row may be given any other ground.
+
+**`capture-floor.mjs` grew a third `--press` escape.** `>` is `Tab`, alongside WP-07's `^` (Ctrl)
+and `~` (Enter). `docs/media/deck-view.png` is `--press "jj>"`.
+
+### 103.10 What this cost, and what is not covered
+
+One new client module, `public/deck.js`, whose pure half — the ordering, the formatting and the two
+render functions — is what the tests drive, and whose controller half is the wiring. 36 new tests
+across `deck-view.test.mjs` and `deck-keys.test.mjs`. 778 tests to 814.
+
+Not covered by a test, and named here rather than left implied:
+
+- **The fit pass.** `fitStrip()` reads `offsetWidth` and `clientWidth`, which a DOM stub cannot
+  produce honestly. It was checked by capture instead: at 820 px the demo floor's seven chips
+  collapse to two and a `+5`, with the oldest still leftmost.
+- **The chip enter and leave animations.** §9's "chips slide in from the right; the departing chip
+  collapses its width to zero" is CSS plus a `setTimeout`, both invisible to the unit suite. The
+  reduced-motion path removes the node immediately and is the branch that matters.
+- **`ResizeObserver`.** Absent in older embedders; the strip then keeps whatever fit at first paint
+  rather than throwing.
+
+### 103.11 The goldens now carry minute-precision clocks, and stay stable anyway
+
+`demo` and `reference` were regenerated: the strip appears on both, and it pushes the floor down by
+its own height, so every pixel below the header moved. That was expected and is the last thing this
+package did.
+
+What was not obvious is that the strip puts **minute-precision elapsed times into a golden** for
+the first time. The floor's own clocks are coarser at fit scale — the office plate reads
+`oldest 1d 2h` and the per-agent badges are suppressed — so until now a golden could go a whole
+hour without changing. A chip reading `40m`, `7m` or `just now` changes every minute.
+
+It is stable regardless, and the reason is worth writing down because it is not luck: every capture
+starts its **own** daemon, and `demo-floor.mjs` derives every fixture timestamp from `Date.now()` at
+that start. An elapsed time in a golden is therefore a function of how long boot plus settle takes
+(about seven seconds), not of the wall clock. The margin to the next minute boundary is the
+remaining ~50 seconds. Checked three times at different times of day after regenerating: 0 pixels
+moved on all four populations, every time.
+
+The thing that would break it is a fixture age that is not a whole number of minutes, which would
+put a boundary anywhere in the window. There is not one today.

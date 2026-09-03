@@ -18,6 +18,7 @@
 import { createPanel } from './panel.js';
 import { createHooksUI } from './hooks-ui.js';
 import { createPalette } from './palette.js';
+import { createDeckUI, queueOrder } from './deck.js';
 import { applyMotionPreference, createSettingsUI } from './settings-ui.js';
 import { availableNames } from './names.js';
 
@@ -122,6 +123,13 @@ const el = {
   identityAvatarPicker: document.getElementById('identity-avatar-picker'),
   identityGo: document.getElementById('identity-go'),
   identityError: document.getElementById('identity-error'),
+  queueStrip: document.getElementById('queue-strip'),
+  stripList: document.getElementById('strip-list'),
+  stripMore: document.getElementById('strip-more'),
+  stripHint: document.getElementById('strip-hint'),
+  stripLast: document.getElementById('strip-last'),
+  deck: document.getElementById('deck'),
+  stage: document.querySelector('.stage'),
   canvas: document.getElementById('floor-canvas'),
   tooltip: document.getElementById('tooltip'),
   whiteboardOverlay: document.getElementById('whiteboard-overlay'),
@@ -154,6 +162,13 @@ let selectedId = null;
 let letGoVisible = false;
 /** How much one press of `+` / `-` changes the magnification. */
 const ZOOM_KEY_STEP = 1.25;
+/**
+ * Levels 2 and 3 — the queue strip and the deck (WP-10, docs/plan
+ * /05-GUI-UX-SPEC.md §3). Assigned once, below the panel it hands its keys to;
+ * declared here so the selection helpers can reach it without a TDZ trap.
+ * @type {ReturnType<typeof createDeckUI>|null}
+ */
+let deckUI = null;
 
 /** @type {any} the Scene instance, once (if) ./render/scene.js loads */
 let scene = null;
@@ -242,6 +257,9 @@ function normaliseHit(hit) {
 function filterToProject(projectId) {
   projectFilter = projectId;
   renderProjectFilterChip();
+  // The filter scopes the queue, so the strip and the deck are showing a
+  // different list from the one they were a moment ago.
+  deckUI?.render();
   if (!projectId) return;
   // Land on the most overdue session in that project, or its first session.
   const queue = getNeedsYouQueue(latestSnapshot);
@@ -323,21 +341,18 @@ function showRendererError(err) {
  * attention-needing state (reviewSince / needsInputSince), falling back to
  * the last time it produced output for `stalled`, which has no dedicated
  * timestamp in the Agent model.
+ *
+ * WP-10 moved the ordering itself into ./deck.js so the floor's `J`/`K`, the
+ * queue strip and the deck cannot disagree about which item is next — and so
+ * one test can pin all three against `deckhq ls`. That is also where the
+ * grouping came from: `for_review` and `needs_input` now sort above `stalled`
+ * (docs/plan/05-GUI-UX-SPEC.md §3.2), which is a change to what `J` lands on
+ * next when a stall is the oldest thing on the floor.
  * @param {any} snapshot
  */
 function getNeedsYouQueue(snapshot) {
   if (!snapshot) return [];
-  const list = snapshot.agents.filter(
-    (a) =>
-      a.ackState === 'active' &&
-      (projectFilter === null || a.projectId === projectFilter) &&
-      (a.activityState === 'needs_input' ||
-        a.activityState === 'stalled' ||
-        a.activityState === 'for_review'),
-  );
-  const sortKey = (a) =>
-    a.reviewSince ?? a.needsInputSince ?? a.lastOutputAt ?? a.lastActivityAt ?? 0;
-  return list.sort((a, b) => sortKey(a) - sortKey(b));
+  return queueOrder(snapshot.agents, { projectFilter });
 }
 
 /**
@@ -641,8 +656,20 @@ registerServiceWorker();
 
 // --------------------------------------------------------------- actions
 
-/** @param {string|null} id */
-function selectAgent(id) {
+/**
+ * Select an agent everywhere at once: the ring on the floor, the ringed chip
+ * in the strip, the current row in the deck, and the panel.
+ *
+ * `openPanel: false` moves the selection without opening the panel — the
+ * deck's `J`/`K`, which must not reflow the column the deck sits beside on
+ * every keystroke (docs/plan/05-GUI-UX-SPEC.md §3.2: `Enter` opens). A panel
+ * that is already open follows the selection regardless, because it is
+ * already occupying its column and nothing moves.
+ *
+ * @param {string|null} id
+ * @param {{openPanel?:boolean}} [opts]
+ */
+function selectAgent(id, opts = {}) {
   selectedId = id;
   if (scene) {
     try {
@@ -651,21 +678,9 @@ function selectAgent(id) {
       console.warn('[deckhq] Scene.select failed', err);
     }
   }
-  if (id) panel.open(id);
-  else panel.close();
-}
-
-/** @param {1|-1} direction */
-function moveNeedsYouQueue(direction) {
-  const queue = getNeedsYouQueue(latestSnapshot);
-  if (queue.length === 0) return;
-  let idx = queue.findIndex((a) => a.id === selectedId);
-  if (idx === -1) {
-    idx = direction > 0 ? 0 : queue.length - 1;
-  } else {
-    idx = Math.max(0, Math.min(queue.length - 1, idx + direction));
-  }
-  selectAgent(queue[idx].id);
+  if (!id) panel.close();
+  else if (opts.openPanel !== false || !el.panelRoot.hidden) panel.open(id);
+  deckUI?.syncSelection();
 }
 
 /**
@@ -686,6 +701,20 @@ function selectNextGoneHome() {
 // -------------------------------------------------------------- keyboard
 
 /**
+ * Which agent the action keys act on.
+ *
+ * On the floor that is the panel's own selection and the panel decides for
+ * itself, so this passes nothing. In the deck it is the row under the cursor,
+ * which is very often not the row the panel is showing: WP-10's whole point is
+ * that `1`, `2` and `3` clear an item without opening it first
+ * (docs/plan/05-GUI-UX-SPEC.md §3.2).
+ * @returns {string|null}
+ */
+function keyTarget() {
+  return deckUI?.isOpen() ? deckUI.cursor() : null;
+}
+
+/**
  * The whole floor keyboard map, docs/03-VISUAL-SPEC.md §8. Deliberately
  * inert whenever focus is inside a text control (the composer or any
  * `<input>`/`<textarea>`/contenteditable), or while a modal `<dialog>` is
@@ -700,6 +729,28 @@ function handleKeydown(e) {
   if (document.querySelector('dialog[open]')) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
+  // `Tab` toggles the floor and the deck (§3.2) — but Tab is also how a
+  // keyboard user moves between controls, and taking it globally would strand
+  // them. It is claimed only while focus is on the floor itself (the canvas,
+  // the stage, the deck) or on nothing in particular, and never with Shift
+  // held, so tabbing out of the deck, the strip, the header or the panel keeps
+  // working exactly as it did. Shift+Tab is always the browser's.
+  if (e.key === 'Tab' && !e.shiftKey) {
+    const active = /** @type {HTMLElement|null} */ (document.activeElement);
+    const onFloor = !active || active === document.body || Boolean(active.closest?.('.stage'));
+    if (!onFloor) return;
+    deckUI?.toggle();
+    e.preventDefault();
+    return;
+  }
+
+  // In the deck, `Enter` is what opens a row; `J`/`K` only move the cursor.
+  if (e.key === 'Enter' && deckUI?.isOpen()) {
+    deckUI.openCursor();
+    e.preventDefault();
+    return;
+  }
+
   switch (e.key) {
     case 'Escape':
       // The whiteboard overlay is the most transient thing on screen — a
@@ -711,24 +762,28 @@ function handleKeydown(e) {
       }
       selectAgent(null);
       break;
+    // One queue, walked the same way on all three levels (§3): the floor's
+    // ring, the strip's chip and the deck's row are the same selection, in
+    // the same oldest-first order, moved by the same code.
     case 'j':
     case 'J':
-      moveNeedsYouQueue(1);
+      deckUI?.move(1);
       break;
     case 'k':
     case 'K':
-      moveNeedsYouQueue(-1);
+      deckUI?.move(-1);
       break;
     case 'a':
     case 'A':
       // Explicit keyboard action, equivalent in kind to a button press —
       // routed through panel.performAction(), the single funnel for
-      // /api/ack calls. Never wired from render or selection code.
-      panel.performAction('acknowledge');
+      // /api/ack calls. Never wired from render or selection code. In the
+      // deck it names the cursor row, which is where the user is looking.
+      panel.performAction('acknowledge', keyTarget());
       break;
     case 'b':
     case 'B':
-      panel.performAction('bench');
+      panel.performAction('bench', keyTarget());
       break;
     // The floor stops drawing a benched agent that has been quiet for longer
     // than `settings.goneHomeDays` (WP-50 / `08` B6, "N went home" on the
@@ -740,13 +795,14 @@ function handleKeydown(e) {
       selectNextGoneHome();
       break;
     // The review card's weighted actions (docs/plan/05-GUI-UX-SPEC.md §4.2):
-    // 1 focuses the composer, 2 approves (a send), 3 benches. The panel
-    // ignores them while it is closed, and the `isTyping` guard above keeps
+    // 1 focuses the composer, 2 approves (a send), 3 benches. On the floor
+    // the panel ignores them while it is closed; in the deck they act on the
+    // cursor row without opening it (§3.2). The `isTyping` guard above keeps
     // them inert while the composer has focus.
     case '1':
     case '2':
     case '3':
-      panel.pressNumberKey(e.key);
+      panel.pressNumberKey(e.key, keyTarget());
       break;
     // Magnification (VISUAL-SPEC §1, 05-LAYOUT-REWORK.md §2.4). `0` returns
     // to fit, which is also the minimum — there is no zooming out past the
@@ -1070,6 +1126,7 @@ function handleSnapshot(snapshot) {
   }
   if (!first) diffAndNotify(snapshot);
   else prevActivityStates = new Map(snapshot.agents.map((a) => [a.id, a.activityState]));
+  deckUI?.render();
   panel.refresh();
   if (first) maybeShowOnboarding(snapshot.settings);
 }
@@ -1196,6 +1253,7 @@ const panel = createPanel({
         /* Scene may not exist yet */
       }
     }
+    deckUI?.syncSelection();
   },
   // WP15 task C.2: "New agent in a project ... also from the panel when a
   // project is selected." Every agent shown in the panel belongs to a
@@ -1208,6 +1266,27 @@ const panel = createPanel({
     const a = latestSnapshot?.agents?.find((x) => x.id === id);
     if (a) a.hasDraft = hasDraft;
   },
+});
+
+// -------------------------------------------------------- strip and deck
+//
+// Levels 2 and 3 (docs/plan/05-GUI-UX-SPEC.md §3). They read the same queue
+// this file's J/K walk, they move the same selection, and their number keys
+// are handed straight to the panel's own pressNumberKey() — there is no
+// second route to /api/ack anywhere in here. THE INVARIANT, 01-PRODUCT §2.
+
+deckUI = createDeckUI({
+  stripEl: el.queueStrip,
+  listEl: el.stripList,
+  moreEl: el.stripMore,
+  hintEl: el.stripHint,
+  lastEl: el.stripLast,
+  deckEl: el.deck,
+  stageEl: el.stage,
+  getQueue: () => getNeedsYouQueue(latestSnapshot),
+  getSelectedId: () => selectedId,
+  onSelect: (id, o) => selectAgent(id, o),
+  announce,
 });
 
 // The hook consent screen. It has no dialog of its own any more — it renders

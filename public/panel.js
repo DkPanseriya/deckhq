@@ -1283,24 +1283,49 @@ export function createPanel(opts) {
   // ------------------------------------------------------------- actions
 
   /**
+   * The agent a targeted key or action is about. The panel's own displayed
+   * copy when it is that one (so an optimistic patch is honoured), otherwise
+   * the authoritative row from the latest snapshot. WP-10's deck acts on the
+   * row under its cursor, which is very often not the row the panel is on.
+   * @param {string|null|undefined} id
+   */
+  function agentFor(id) {
+    if (!id || id === currentId) return displayedAgent;
+    return getSnapshot()?.agents?.find((a) => a.id === id) || null;
+  }
+
+  /**
    * The single funnel for the six user-owned actions (docs/02-ARCHITECTURE
    * §5.1). This is the ONLY function in the client that calls POST
    * /api/ack. It is invoked exclusively from:
    *   - an explicit click on a button built in renderActions() above,
    *   - the `3` number key, via pressNumberKey() below, or
-   *   - app.js's keydown handler for the explicit 'A'/'B' shortcuts.
+   *   - app.js's keydown handler for the explicit 'A'/'B' shortcuts, which
+   *     since WP-10 may name the deck's cursor row instead of the open one.
    * It is never called from open(), refresh(), or any rendering/selection
    * path. Optimistic update with rollback on failure, per WP9.
+   *
+   * `targetId` acts on a row the panel is not showing — the deck's `3` key
+   * clears an item without opening it (docs/plan/05-GUI-UX-SPEC.md §3.2).
+   * There is still exactly one request here, and it still only happens
+   * because somebody pressed something.
    * @param {string} action
+   * @param {string|null} [targetId]
    */
-  async function performAction(action) {
-    const id = currentId;
-    if (!id || !displayedAgent) return;
-    if (!legalActions(displayedAgent).includes(action)) return;
+  async function performAction(action, targetId) {
+    const id = targetId || currentId;
+    const agent = agentFor(id);
+    if (!id || !agent) return;
+    if (!legalActions(agent).includes(action)) return;
 
+    // Only the panel's own row has anything to patch optimistically; a deck
+    // row's feedback is the next snapshot, which is 250 ms away.
+    const inPanel = id === currentId && Boolean(displayedAgent);
     const rollback = displayedAgent;
-    displayedAgent = optimisticPatch(displayedAgent, action);
-    renderChrome();
+    if (inPanel) {
+      displayedAgent = optimisticPatch(displayedAgent, action);
+      renderChrome();
+    }
 
     try {
       const res = await fetch('/api/ack', {
@@ -1312,7 +1337,7 @@ export function createPanel(opts) {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       // A control says what happens (docs/plan/05 §11): the toast names the
       // outcome, in the panel's compact voice (display name, else MK tag).
-      const name = who(displayedAgent);
+      const name = who(inPanel ? displayedAgent : agent);
       toast(
         action === 'bench'
           ? `Benched. ${name} is in the lounge.`
@@ -1322,8 +1347,10 @@ export function createPanel(opts) {
       );
       announce(`${name}: ${ACTION_LABELS[action].toLowerCase()}`);
     } catch (err) {
-      displayedAgent = rollback;
-      renderChrome();
+      if (inPanel) {
+        displayedAgent = rollback;
+        renderChrome();
+      }
       toast(`Could not ${ACTION_LABELS[action].toLowerCase()}: ${err.message}`, { isError: true });
     }
   }
@@ -1431,19 +1458,29 @@ export function createPanel(opts) {
    * stays inert while focus is in the composer or any text control. `1` only
    * moves focus, `2` is a send, and `3` is the one that reaches
    * performAction(), as an explicit keystroke equivalent to its button.
+   *
+   * `targetId` is WP-10's deck and queue strip: the same three keys, on the
+   * row under the cursor, without opening it first. `1` is the exception and
+   * has to open — a reply needs somewhere to type, and the composer is in the
+   * panel.
    * @param {string} key
+   * @param {string|null} [targetId]
    */
-  function pressNumberKey(key) {
-    if (root.hidden || !currentId || !displayedAgent) return;
+  function pressNumberKey(key, targetId) {
+    const id = targetId || currentId;
+    const agent = agentFor(id);
+    if (!id || !agent) return;
+    if (!targetId && root.hidden) return;
     switch (String(key)) {
       case '1':
+        if (id !== currentId) open(id);
         focusComposer();
         break;
       case '2':
-        approve();
+        approve(id);
         break;
       case '3':
-        performAction(thirdAction(displayedAgent));
+        performAction(thirdAction(agent), id);
         break;
       default:
         break;
@@ -1462,10 +1499,12 @@ export function createPanel(opts) {
 
   /**
    * `2 Approve`: send the configurable affirmative, exactly as if it had been
-   * typed. A send, not an ack — see the module note.
+   * typed. A send, not an ack — see the module note. `id` is WP-10's deck
+   * row, which need not be the row the panel is showing.
+   * @param {string|null} [id]
    */
-  function approve() {
-    return sendText(approveText(), { approve: true });
+  function approve(id) {
+    return sendText(approveText(), { approve: true, id });
   }
 
   /**
@@ -1539,15 +1578,19 @@ export function createPanel(opts) {
    * through POST /api/send; the composer is held while it runs (WP-09 will
    * stream instead). On failure the composer's own text is restored so
    * nothing is lost; an approval that fails simply reports it.
+   * `o.id` sends to a row the panel is not showing — WP-10's `2 Approve`
+   * from the deck. The composer belongs to the open row, so it is neither
+   * cleared nor held busy in that case; the toast is the feedback.
    * @param {string} text
-   * @param {{approve?: boolean}} [o]
+   * @param {{approve?: boolean, id?: string|null}} [o]
    */
   async function sendText(text, o = {}) {
     if (sending) return;
-    const id = currentId;
-    const agent = displayedAgent;
+    const id = o.id || currentId;
+    const agent = agentFor(id);
     if (!id || !agent) return;
     if (!text.trim()) return;
+    const inPanel = id === currentId && !root.hidden;
 
     // Mid-turn means actively producing output. A finished turn standing for
     // review, or a hand up waiting for an answer, is exactly when a reply is
@@ -1561,7 +1604,7 @@ export function createPanel(opts) {
 
     const fromComposer = !o.approve;
     sending = true;
-    setComposerBusy(true, o.approve ? `Sending “${text}”…` : 'Sending…');
+    if (inPanel) setComposerBusy(true, o.approve ? `Sending “${text}”…` : 'Sending…');
     if (fromComposer) {
       textarea.value = '';
       drafts.clear(id);
@@ -1588,12 +1631,14 @@ export function createPanel(opts) {
         renderDraftChip();
         onDraftChange?.(id, true);
       }
-      hintEl.textContent = `Could not send: ${err.message}`;
-      hintEl.classList.add('is-warn');
+      if (inPanel) {
+        hintEl.textContent = `Could not send: ${err.message}`;
+        hintEl.classList.add('is-warn');
+      }
       toast(`Could not send: ${err.message}`, { isError: true });
     } finally {
       sending = false;
-      setComposerBusy(false);
+      if (inPanel) setComposerBusy(false);
       if (hintEl.textContent === '' && !sending) hintEl.classList.remove('is-warn');
     }
   }

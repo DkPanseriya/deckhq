@@ -246,6 +246,28 @@
   that can clear the needs-you count can clear it by accident. `plugin/` imports nothing outside
   itself, has no `package.json`, and every URL in every file it ships is loopback; three
   `SECURITY:` tests hold that. **No egress added.** §102.
+- **A queue strip under the header, whenever something is waiting.** One chip per item, oldest
+  first, each carrying a state glyph, the elapsed time in mono, the agent's name and its project.
+  The oldest chip is always leftmost and never scrolls out — there is no scroller at all; on a
+  narrow window the rest collapse into a `+N` that opens the deck. Hovering a chip shows the last
+  line that agent said; clicking one selects it and opens the panel, and the chip is ringed at the
+  same moment the floor rings the same person, which is what teaches the mapping between the two
+  surfaces. The times tick live, and past a day of waiting they take a crimson rule under the
+  number. It is a `role="list"` of real buttons, not canvas, so it is reachable by keyboard and by
+  a screen reader like anything else. `docs/plan/05-GUI-UX-SPEC.md` §3.1.
+- **The deck, on `Tab`.** A dense table that replaces the floor and leaves the panel exactly where
+  it was — WAITING · WHO · PROJECT · LAST WORD · TOKENS, oldest first, finished turns and raised
+  hands above sessions that have gone quiet with a rule between them, 34 px rows. `J` and `K`
+  move, `Enter` opens, `1`, `2` and `3` act on the row under the cursor without opening it, `Tab`
+  goes back to the floor. It is a genuine `<table>` with a caption, column headers and a row
+  header per session, because it is the accessible equivalent of the floor: a screen-reader user
+  gets the same queue, in the same order, with the same actions. **The floor is never the only way
+  to reach anything.** The floor earns the screenshot; the deck does the job. §3.2, §10.
+- **Past six items waiting, the floor says so.** One line at the end of the strip — _"7 waiting ·
+  press Tab for the deck"_ — and nothing else changes: it still opens on the floor, because the
+  spatial view is the thing that makes the product make sense. Past six, though, the floor stops
+  being the efficient surface, and pretending otherwise is the failure mode this whole package
+  exists to answer. §3.2.
 
 ### Changed
 
@@ -319,10 +341,16 @@
   directory does not exist. All of it inside the temp root the demo already removes on exit, and a
   machine without `git` still gets a floor. Its `for_review` sessions also end on a message
   written the way an agent actually writes one, in markdown.
+- **`J` and `K` sort stalled sessions last, on the floor as well as in the deck.** The queue is one
+  list now, in one order, wherever you walk it — the floor's ring, the strip's chips, the deck's
+  rows and `deckhq waiting` all read the same function, and a test runs the browser's copy and the
+  CLI's over one snapshot and asserts they agree row for row. A finished turn and a raised hand
+  come before a session that has merely gone quiet, because they need different responses and a
+  stall is not a debt in the same way.
 - `scripts/capture-floor.mjs --press` takes a sequence of keys rather than a single one, so a
-  screenshot can be aimed at a chosen place in the needs-you queue. It also understands two
-  escapes — `^` holds Ctrl for the next key and `~` is Enter — so a shot can be aimed through the
-  command palette.
+  screenshot can be aimed at a chosen place in the needs-you queue. It also understands three
+  escapes — `^` holds Ctrl for the next key, `~` is Enter and `>` is Tab — so a shot can be aimed
+  through the command palette or into the deck.
 
 ### Fixed
 
@@ -440,6 +468,16 @@
   socket is still open, which a real HTTP client cannot observe until the hold has already ended.
   `test/integration/permission.test.mjs` then runs the scripted runtime against a real daemon and
   asserts the exact JSON it receives for all three buttons and for both fall-through paths.
+- **The GUI's queue and `deckhq waiting` are held to one order by one test.** The browser cannot
+  import the CLI's module and the CLI cannot import the browser's, so the ordering exists twice on
+  purpose; `test/unit/deck-view.test.mjs` runs both over a single fixture — a stall older than
+  everything else, two rows sharing a timestamp to the millisecond, a benched agent, a let-go one
+  and a working one — and asserts the id sequences are identical. Ties now break on the session id
+  in both, so the order cannot depend on how a particular engine happens to sort. The deck's own
+  DOM is asserted against a stub document that parses no HTML: a caption, five column headers with
+  `scope="col"`, a row header per session, one `<tbody>` per group, rows in queue order, and a
+  hostile display name that stays characters rather than becoming an element.
+  `docs/DEVIATIONS.md` §103.
 - **Every (platform, emulator, launch form) pair has its exact argument list asserted** —
   twenty-one of them, byte for byte, in `test/unit/terminals.test.mjs`, plus detection order,
   `$TERMINAL` precedence, the pinned setting, and a hostile session id checked against every
