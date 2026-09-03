@@ -117,6 +117,20 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // to mean something and for an annual Wrapped to have most of its material,
   // short enough that the directory stays a few megabytes on a busy machine.
   ledgerRetentionDays: DEFAULT_RETENTION_DAYS,
+  // WP-18. The hour the floor turns its lights off and the day's card
+  // appears. 22:00 because the card is an ending, not a summons: it wants to
+  // arrive after the last thing you were going to do today, and a card at
+  // 18:00 is an interruption of the evening rather than a close to it. The
+  // last live session ending after 18:00 brings it forward, which is the
+  // "lights out" the name is about (`docs/plan/04` §3.3).
+  lightsOutHour: 22,
+  // The local day whose card has already been shown, `YYYY-MM-DD`. §3.3: "it
+  // appears once, it does not nag". Kept here rather than in the browser so a
+  // second tab, and a reload, cannot each earn their own card.
+  postcardDay: '',
+  // WP-27. Which Wrapped has already been shown — `2026-W36` for a week,
+  // `2026-annual` for the year. Same reason as `postcardDay`.
+  wrappedShown: '',
   onboarded: false,
 });
 
@@ -277,6 +291,31 @@ function clampGoneHomeDays(v) {
 }
 
 /**
+ * The hour of the local day the lights go out, 0–23. A fractional or
+ * out-of-range value is clamped rather than rejected: the settings row that
+ * writes it cannot produce one, a hand-edited `state.json` can, and an hour of
+ * 30 would mean a card that never appears — a silent failure, which is the
+ * worst kind for a feature whose whole promise is that it arrives.
+ * @param {unknown} v
+ */
+function clampLightsOutHour(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.lightsOutHour;
+  return Math.min(23, Math.max(0, Math.round(n)));
+}
+
+/**
+ * A "which card has been seen" marker: a short opaque key the client writes
+ * and reads back. Anything that is not a plain short token is dropped to
+ * empty, which costs at most one extra card and never a stored string of
+ * somebody's choosing.
+ * @param {unknown} v
+ */
+function sanitizeShownKey(v) {
+  return typeof v === 'string' && /^[0-9A-Za-z-]{0,32}$/.test(v) ? v : '';
+}
+
+/**
  * Coerce a whole settings object into range, key by key. Every sanitizer is
  * idempotent, so this is safe to run on already-clean data — which is why
  * both `normalize()` (disk) and `setSettings()` (HTTP) run the same pass
@@ -296,6 +335,9 @@ function sanitizeSettings(raw) {
   s.terminal = sanitizeTerminal(s.terminal);
   s.goneHomeDays = clampGoneHomeDays(s.goneHomeDays);
   s.ledgerRetentionDays = clampRetentionDays(s.ledgerRetentionDays);
+  s.lightsOutHour = clampLightsOutHour(s.lightsOutHour);
+  s.postcardDay = sanitizeShownKey(s.postcardDay);
+  s.wrappedShown = sanitizeShownKey(s.wrappedShown);
   for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);
   // Anything not in DEFAULT_SETTINGS is dropped rather than carried: a key
   // from an older build (`showLetGo`, `zoom`) must not survive a round-trip

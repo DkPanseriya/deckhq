@@ -397,7 +397,7 @@ These are real, and listed here rather than discovered later.
 | `G`                 | Step through the agents who went home, newest activity first            |
 | `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk |
 | `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot    |
-| `Esc`               | Close the panel                                                         |
+| `Esc`               | Close the panel — or dismiss the day's card, if one is up               |
 | `+` / `-`           | Magnify, 1x to 2.5x                                                     |
 | `0`                 | Back to fit — which is also the minimum                                 |
 | `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                   |
@@ -405,8 +405,36 @@ These are real, and listed here rather than discovered later.
 
 With a permission card open in the panel — a session with its hand up, asking before it runs
 something — `A`, `D` and `S` belong to that card: allow, deny, and allow for the rest of the
-session. That is the only time `S` is not the office snapshot, and it holds only while the card is
-up and the composer is unfocused. `Shift+S` is the redaction toggle either way.
+session. It holds only while the card is up and the composer is unfocused. With the day's card or
+Wrapped on screen, `S` saves **that** — the card plus a small photograph of the floor it is about.
+`Shift+S` is the redaction toggle either way.
+
+## The day's card, and Wrapped
+
+At 22:00, or as soon as the last live session ends once the evening is under way, the floor dims to
+night and one card appears:
+
+> **Friday.** 40 turns across 6 rooms. `orbital-api` shipped 6, `checkout-flow` waited 4h 3m. 6
+> agents still up. ≈ $39.46 list price, rate card 2026-09-04. Longest wait today: 1d 2h → still
+> standing.
+
+Once a day, at most. Escape or a click dismisses it, `S` saves it as a PNG, and it does not come
+back on its own. Monday morning it is Wrapped instead — the week's turns per room, tokens, spend,
+whether the longest wait fell, the room that never slept, the busiest hour, and how many times an
+agent said _"You're absolutely right"_ — and from 1 December, the year so far.
+
+![Wrapped for the week, over the dimmed floor: turns per room, tokens, spend with its rate card, the longest wait, the room that never slept, the session sent the most, the busiest hour, and the count of one phrase](docs/media/wrapped-weekly.png)
+
+Every number is a replay of the event ledger on this machine. Nothing is emailed, uploaded or
+counted anywhere else.
+
+| Where               | What                                                          |
+| ------------------- | ------------------------------------------------------------- |
+| `⌘K` → Today's card | Show the day's card again, without spending the automatic one |
+| `⌘K` → Wrapped      | The week, or the year from 1 December                         |
+| Settings → Floor    | `Lights out` — the hour the card arrives. Default 22          |
+| `S` on a card       | The card plus a floor thumbnail, on the clipboard and on disk |
+| `Shift+S`           | MK tags instead of project names, on the card and the floor   |
 
 Everything is reachable without a mouse. `prefers-reduced-motion` is honoured: characters snap
 instead of walking, clips hold a representative pose, and the floor stays fully legible.

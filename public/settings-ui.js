@@ -38,12 +38,16 @@ export const SETTINGS_KEYS = Object.freeze([
   'soundVolume',
   'reducedMotion',
   'resumeIn',
+  'lightsOutHour',
 ]);
 
 const MIN_STALL_MIN = 2;
 const MAX_STALL_MIN = 120;
 const MIN_POLL_S = 1;
 const MAX_POLL_S = 60;
+/** WP-18. Any hour of the day is legal; the store clamps to this range. */
+const MIN_LIGHTS_OUT = 0;
+const MAX_LIGHTS_OUT = 23;
 
 const MOTION_LABELS = {
   system: 'Follow the system',
@@ -383,6 +387,25 @@ export function createSettingsUI(opts) {
         (next) => save({ reducedMotion: next }),
       ),
       'Reduced motion snaps walks to their end, holds one pose per state, and stops the lounge.',
+    );
+    // WP-18. The one control the daily postcard has, and the only thing about
+    // it that is a preference: when the day ends. Whether the card appears at
+    // all is not offered as a toggle, because it appears once, it interrupts
+    // nothing, and dismissing it costs one keystroke — a switch for that would
+    // be a setting for a thing that is already free to ignore.
+    row(
+      s,
+      'Lights out',
+      numberField({
+        label: 'Lights out hour',
+        value: Number.isFinite(Number(current.lightsOutHour)) ? Number(current.lightsOutHour) : 22,
+        min: MIN_LIGHTS_OUT,
+        max: MAX_LIGHTS_OUT,
+        unit: 'o’clock',
+        onChange: (hour) => save({ lightsOutHour: hour }),
+      }),
+      'When the floor dims and the day’s card appears — once a day, at most. It also arrives ' +
+        'early if the last live session ends after 18:00. ⌘K → “Today’s card” shows it again.',
     );
     host.appendChild(s);
   }

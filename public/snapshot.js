@@ -355,6 +355,282 @@ export function composite(o) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// WP-18 / WP-27 — the card as a PNG
+// ---------------------------------------------------------------------------
+
+/**
+ * The card image's metrics, in CSS px before the output scale is applied.
+ *
+ * It is deliberately **not** the floor's shape. `S` on the floor produces a
+ * wide picture of an office with a caption; `S` on a card produces something
+ * closer to a postcard — a small photograph of the floor it is about, and then
+ * the words. The floor is the evidence here, not the subject, which is why the
+ * thumbnail is a band rather than the top three quarters.
+ */
+export const CARD = Object.freeze({
+  width: 760,
+  padX: 32,
+  padY: 28,
+  thumbHeight: 190,
+  titleSize: 24,
+  rowGap: 10,
+  lineHeight: 22,
+});
+
+/**
+ * Break `text` into lines that fit `maxWidth` at the context's current font.
+ *
+ * Word-wrapping on a canvas is manual — there is no text box — and a card that
+ * ran its longest sentence off the right edge would be the one thing about
+ * this feature anybody noticed. A single word wider than the box is left long
+ * rather than broken mid-word: a truncated project name is worse than a line
+ * that overhangs, and the widths here make it unreachable in practice.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} text
+ * @param {number} maxWidth
+ * @returns {string[]}
+ */
+export function wrapText(ctx, text, maxWidth) {
+  const words = String(text ?? '')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return [];
+  /** @type {string[]} */
+  const lines = [];
+  let line = words[0];
+  for (let i = 1; i < words.length; i++) {
+    const next = `${line} ${words[i]}`;
+    if (ctx.measureText(next).width <= maxWidth) line = next;
+    else {
+      lines.push(line);
+      line = words[i];
+    }
+  }
+  lines.push(line);
+  return lines;
+}
+
+/**
+ * How tall a card is, and where each of its parts sits.
+ *
+ * Measured before anything is drawn, because the output canvas has to be sized
+ * before the first `fillText` and the height depends on how the copy wrapped.
+ * Returns the laid-out lines as well as the height, so the drawing pass never
+ * re-wraps and the two cannot disagree.
+ *
+ * @param {CanvasRenderingContext2D} ctx a scratch context, used only to measure
+ * @param {{title:string, subtitle?:string, rows:{label?:string|null, value:string}[], footer?:string}} model
+ * @param {{fontSans:string, fontMono:string, thumb:boolean}} opts
+ */
+export function layoutCard(ctx, model, opts) {
+  const inner = CARD.width - CARD.padX * 2;
+  const sans = opts.fontSans || 'system-ui, sans-serif';
+  const mono = opts.fontMono || 'ui-monospace, monospace';
+  const labelWidth = 132;
+
+  ctx.font = `600 ${CARD.titleSize}px ${sans}`;
+  const title = wrapText(ctx, model.title || '', inner);
+
+  ctx.font = `13px ${sans}`;
+  const subtitle = model.subtitle ? wrapText(ctx, model.subtitle, inner) : [];
+
+  /** @type {{label:string[], lines:string[]}[]} */
+  const rows = [];
+  for (const row of model.rows || []) {
+    // The label is wrapped as well as the value. Wrapped's longest label is
+    // the catchphrase in quotation marks, which is wider than the column — the
+    // first version measured only the value, and the label ran straight
+    // through it.
+    ctx.font = `12px ${mono}`;
+    const label = row.label ? wrapText(ctx, String(row.label), labelWidth - 12) : [];
+    ctx.font = `15px ${sans}`;
+    rows.push({ label, lines: wrapText(ctx, row.value, row.label ? inner - labelWidth : inner) });
+  }
+
+  ctx.font = `12px ${sans}`;
+  const footer = model.footer ? wrapText(ctx, model.footer, inner) : [];
+
+  let h = opts.thumb ? CARD.thumbHeight : 0;
+  h += CARD.padY;
+  h += title.length * (CARD.titleSize + 6);
+  if (subtitle.length) h += 6 + subtitle.length * 18;
+  h += 14;
+  // A row is as tall as its taller half — the value's lines, or the label's.
+  for (const row of rows) {
+    h += Math.max(row.lines.length, row.label.length) * CARD.lineHeight + CARD.rowGap;
+  }
+  if (footer.length) h += 10 + footer.length * 17;
+  h += CARD.padY;
+
+  return { width: CARD.width, height: Math.round(h), title, subtitle, rows, footer, labelWidth };
+}
+
+/**
+ * Paint a laid-out card into `ctx`, whose origin is the card's top-left and
+ * which is already scaled. The thumbnail band, if any, is drawn by the caller
+ * — this function starts below it.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {ReturnType<typeof layoutCard>} laid
+ * @param {{colors:Record<string,string>, fontSans:string, fontMono:string, top:number}} opts
+ */
+export function drawCard(ctx, laid, opts) {
+  const { colors } = opts;
+  const sans = opts.fontSans || 'system-ui, sans-serif';
+  const mono = opts.fontMono || 'ui-monospace, monospace';
+  let y = opts.top + CARD.padY;
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+
+  ctx.font = `600 ${CARD.titleSize}px ${sans}`;
+  ctx.fillStyle = colors.ink;
+  for (const line of laid.title) {
+    ctx.fillText(line, CARD.padX, y);
+    y += CARD.titleSize + 6;
+  }
+
+  if (laid.subtitle.length) {
+    y += 6;
+    ctx.font = `13px ${sans}`;
+    ctx.fillStyle = colors.muted;
+    for (const line of laid.subtitle) {
+      ctx.fillText(line, CARD.padX, y);
+      y += 18;
+    }
+  }
+  y += 14;
+
+  for (const row of laid.rows) {
+    let x = CARD.padX;
+    if (row.label.length) {
+      // The label is the quiet half. State and emphasis are never colour alone
+      // (`05` §10), so this is a weight and a width, not a hue with meaning.
+      ctx.font = `12px ${mono}`;
+      ctx.fillStyle = colors.muted;
+      let ly = y + 3;
+      for (const line of row.label) {
+        ctx.fillText(line, x, ly);
+        ly += 16;
+      }
+      x += laid.labelWidth;
+    }
+    ctx.font = `15px ${sans}`;
+    ctx.fillStyle = colors.ink2;
+    let ry = y;
+    for (const line of row.lines) {
+      ctx.fillText(line, x, ry);
+      ry += CARD.lineHeight;
+    }
+    y += Math.max(row.lines.length, row.label.length) * CARD.lineHeight + CARD.rowGap;
+  }
+
+  if (laid.footer.length) {
+    y += 10;
+    ctx.font = `12px ${sans}`;
+    ctx.fillStyle = colors.muted;
+    for (const line of laid.footer) {
+      ctx.fillText(line, CARD.padX, y);
+      y += 17;
+    }
+  }
+
+  // The wordmark, bottom right, exactly as on the strip. No watermark beyond
+  // it and no share button (§3.2).
+  ctx.font = `12px ${mono}`;
+  ctx.fillStyle = colors.muted;
+  ctx.textAlign = 'right';
+  // `laid.height` already includes the thumbnail band, so this is the card's
+  // own bottom edge and not an offset from the text's start.
+  ctx.fillText(WORDMARK, CARD.width - CARD.padX, laid.height - CARD.padY + 4);
+  ctx.textAlign = 'left';
+}
+
+/**
+ * Composite a card and a small photograph of the floor into one canvas.
+ *
+ * The floor is drawn **cover-cropped** into the band: a letterboxed floor
+ * would put two grey bars in the one image this feature exists to make
+ * shareable, and the band is a glimpse of the office rather than a
+ * reproduction of it. `MIN_SCALE` and the smoothing rule are the strip's, for
+ * the reasons in `docs/DEVIATIONS.md` §109.2 — a floor scaled up is drawn
+ * nearest-neighbour, a floor scaled down is smoothed.
+ *
+ * @param {object} o
+ * @param {HTMLCanvasElement|null} o.floor
+ * @param {{title:string, subtitle?:string, rows:{label?:string|null, value:string}[], footer?:string}} o.model
+ * @param {number} o.scale
+ * @param {number} [o.dpr]
+ * @param {Record<string,string>} o.colors
+ * @param {string} [o.fontSans]
+ * @param {string} [o.fontMono]
+ * @param {(w:number,h:number)=>HTMLCanvasElement} [o.makeCanvas]
+ * @returns {HTMLCanvasElement}
+ */
+export function compositeCard(o) {
+  const make =
+    o.makeCanvas ||
+    ((w, h) => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      return c;
+    });
+  const scale = Math.max(MIN_SCALE, o.scale || MIN_SCALE);
+  const dpr = o.dpr || 1;
+  const sans = o.fontSans || 'system-ui, sans-serif';
+  const mono = o.fontMono || 'ui-monospace, monospace';
+
+  const hasThumb = Boolean(o.floor && o.floor.width && o.floor.height);
+  // A scratch context purely to measure; 1x1 is enough because text metrics
+  // do not depend on the canvas's size.
+  const scratch = make(1, 1).getContext('2d');
+  const laid = layoutCard(scratch, o.model, { fontSans: sans, fontMono: mono, thumb: hasThumb });
+
+  const out = make(Math.round(CARD.width * scale), Math.round(laid.height * scale));
+  const ctx = out.getContext('2d', { alpha: false }) || out.getContext('2d');
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = o.colors.surface;
+  ctx.fillRect(0, 0, CARD.width, laid.height);
+
+  if (hasThumb) {
+    const floor = /** @type {HTMLCanvasElement} */ (o.floor);
+    const cssW = floor.width / dpr;
+    const cssH = floor.height / dpr;
+    // Cover: fill the band and crop the overflow — centred horizontally, but
+    // aligned to the TOP of the floor rather than its middle. The office and
+    // the busiest rooms are laid out from the top (`public/render/plan.js`),
+    // so a centred crop of a tall floor reliably lands on carpet; the first
+    // version of this did exactly that and photographed a corridor.
+    const k = Math.max(CARD.width / cssW, CARD.thumbHeight / cssH);
+    const drawW = cssW * k;
+    const drawH = cssH * k;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, CARD.width, CARD.thumbHeight);
+    ctx.clip();
+    const upscaling = k * scale > dpr + 0.001;
+    ctx.imageSmoothingEnabled = !upscaling;
+    if (!upscaling) ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(floor, (CARD.width - drawW) / 2, 0, drawW, drawH);
+    ctx.restore();
+    // One hairline under the photograph, the same rule the strip draws over
+    // itself: the picture is the caption's evidence and the rule says so.
+    ctx.fillStyle = o.colors.line;
+    ctx.fillRect(0, CARD.thumbHeight - 1, CARD.width, 1);
+  }
+
+  drawCard(ctx, laid, {
+    colors: o.colors,
+    fontSans: sans,
+    fontMono: mono,
+    top: hasThumb ? CARD.thumbHeight : 0,
+  });
+  return out;
+}
+
 /**
  * Read the chrome's own colours off the document, so the strip is the same
  * palette as the window it came out of rather than a second hard-coded copy

@@ -41,6 +41,7 @@ import {
   projectKeyFor,
   readAll,
   records as teamRecords,
+  windowDigest,
 } from '../../core/ledger.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -89,6 +90,12 @@ export function register(router, ctx) {
         // and the same reason `longestWaitEver` ignores the window applies to
         // every one of these.
         records: teamRecords(records, { now }),
+        // WP-18. The one part of this response that IS the window: what
+        // happened between `since` and now, room by room. The daily postcard
+        // asks for `?since=<local midnight>` and reads this; nothing else in
+        // the body changed shape. `since`/`until` travel inside it so a card
+        // can never label a number with a period it was not computed over.
+        window: windowDigest(records, { since, until: now }),
         projects,
         // Say so rather than quietly reporting a short answer.
         incomplete: Boolean(ledger.writeError),

@@ -7858,3 +7858,301 @@ changes the floor.
 One `claude login`, one real reply, and a check that the deltas arrive as
 described. That is the same debt §97.5 records for the permission card, and it
 is the same single action that clears both.
+
+## 117. WP-18 — the daily postcard: two triggers, one marker, and the number the ledger cannot price
+
+**Spec:** [`04-ENGAGEMENT-AND-GAMIFICATION.md`](plan/04-ENGAGEMENT-AND-GAMIFICATION.md) §3.3 and
+[`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md) WP-18. At lights out the floor dims
+to night and one card appears:
+
+> **Friday.** 40 turns across 6 rooms. `orbital-api` shipped 6, `checkout-flow` waited 4h 3m.
+> 6 agents still up. ≈ $39.46 list price, rate card 2026-09-04. Longest wait today: 1d 2h →
+> still standing.
+
+Accepted when: it appears once a day at most, dismissing costs one keystroke, the numbers reconcile
+exactly with the ledger, and the copy contains no second-person fault.
+
+Shipped as `public/postcard.js` (pure), `windowDigest()` in `src/core/ledger.mjs`, a `window` field
+on `GET /api/stats`, one card element and one dim overlay in `public/index.html`, and the wiring in
+`public/app.js`.
+
+### 117.1 `windowDigest` is a third function, not a wider `computeStats`
+
+`computeStats` answers `docs/01-PRODUCT.md` §6's questions; `records()` answers WP-46's. Neither
+answers _"what happened between these two timestamps, room by room"_, which is the only question a
+card about a day asks. Widening either would have put a card's needs inside a contract three other
+surfaces already depend on.
+
+It is **one** function for the day and the week, which is the argument `fold()`'s own header makes:
+a day and a week differ by their bounds and by nothing else, so they must not be able to disagree
+about what a turn is. WP-27's card is the same call with different bounds.
+
+**Episodes are attributed by where they END, plus the ones still open.** A wait that began on
+Sunday and was cleared on Monday is Monday's clearing — that is the moment the user acted, and
+"26h → cleared" is a sentence about the clearing. A wait still open at the window's end is counted
+too, as `open`, because a day that ends with somebody still waiting has to say so rather than
+reporting the best of what happened to close. An open episode is measured **to the window's end**,
+not to `Date.now()`: a card about yesterday must not grow a longer wait every hour it is left
+unread.
+
+### 117.2 The spend comes from the floor, because the ledger cannot price it
+
+§111 decision 6: a `tokens` ledger record carries a delta and a project key and **not a model**, so
+the day's tokens cannot be priced from the ledger alone. The state machine already prices them per
+room at the room's own average rate and puts the answer on the snapshot as `todaySpend` — the
+number the room plates draw. The card sums that rather than computing a second answer, so the card
+and the floor underneath it can never disagree about what today cost.
+
+A room the rate card cannot price contributes nothing and is counted separately, and the line falls
+back to `2.4M tokens, no rate for them` rather than printing a zero. **Zero is a claim about the
+money** (§111 decision 4). The line names its dated table — `≈ $39.46 list price, rate card
+2026-09-04` — and `test/unit/postcard.test.mjs` asserts that as literal text, the same discipline
+`rates.test.mjs` applies to every other cost surface.
+
+### 117.3 Two triggers, and why the second one has a floor under it
+
+§3.3 says "when the last live session ends, **or** at a configured hour". Both are implemented and
+both need a floor:
+
+- **`settings.lightsOutHour`**, default 22. The card is an ending, not a summons; it wants to
+  arrive after the last thing you were going to do today. A card at 18:00 interrupts an evening
+  rather than closing a day.
+- **the floor going quiet after 18:00.** Nobody is working and the evening is under way: that is
+  lights out, and waiting for a clock would be waiting for a clock rather than for the day. Without
+  the 18:00 floor, a floor that empties at 11am would card the morning as an ending — that is a
+  coffee break, not a day.
+
+`lightsOutHour` is the one control the feature has, in the settings sheet's Floor section. **There
+is no "off" toggle**, deliberately: §6's interruption budget lists the postcard as in-app and
+silent, it appears once, and dismissing it costs one keystroke — a switch for a thing already free
+to ignore is a setting nobody needs. What does exist is the marker below.
+
+### 117.4 "Once a day" is one comparison in one place, persisted on the machine
+
+`settings.postcardDay` holds the local day key already carded. It is settings rather than
+`localStorage` for a specific reason: two tabs and a reload would each earn their own card, and
+"once, and it does not nag" would be true per browser session rather than per day.
+
+The check lives inside `lightsOut()` beside the triggers, not in the caller, so "once a day" cannot
+be enforced in two places and disagree. The palette's **"Today's card"** passes `manual: true` and
+does **not** write the marker: asking for something is not the same as being interrupted by it, and
+a person who looks at the card at noon should still get it at 22:00.
+
+**`CARDS_OFF`** — the string `off` in either marker — never matches a real key and never expires,
+so it is the opt-out. It exists because `scripts/demo-floor.mjs` needs it (§117.8) and because "can
+I turn this off" deserves an answer other than "no".
+
+### 117.5 The card is not a `<dialog>`, and that is the whole reason it works
+
+`handleKeydown` in `public/app.js` stands down entirely while a modal `<dialog>` is open — right
+for the settings sheet, wrong here, because this card's two promises are _Escape dismisses it_ and
+_`S` saves it_. So it is a `<div role="region">` with an accessible name: dismissible with one key
+or one click, trapping nothing, and leaving the floor clickable underneath. The night overlay
+carries `pointer-events: none` for the same reason — a card that arrives while somebody is
+mid-thought costs them nothing.
+
+`Escape` takes the card ahead of the whiteboard and the selection, and a second `Escape` does
+whatever it would have done. `S` saves the card **only unshifted**; `Shift+S` is still redaction
+whatever is on screen. `test/unit/permission-keys.test.mjs` pins the order.
+
+### 117.6 The dim is WP-15's warm, run backwards
+
+§110's office-cleared moment lifts the light 6% towards tungsten over 1.2 s and lets it fall. This
+takes it **down**, towards the cold end of the same palette, and leaves it there until the card is
+dismissed. Same idea, opposite direction, same restraint: one translucent layer over the floor,
+`pointer-events: none`, and nothing in `public/render/**` knows it exists.
+
+`prefers-reduced-motion` removes the **fade** and keeps the **dim**, which is the same split `05`
+§9 makes for the warm: the state is the information, the transition is the decoration. The card
+appears either way.
+
+### 117.7 Never scoring the human, tested twice
+
+Rule 6 and `04` §5. The failure mode is not a designed feature — it is one sentence written in the
+wrong person during a later edit — so it is asserted the way §107 asserts it:
+
+- the generator is driven over synthetic stats spanning every branch it has (a full day, a quiet
+  day, an unpriced day, a young ledger, an open wait) and every produced string is scanned;
+- `public/postcard.js` is then read whole, comments stripped, and every string literal scanned,
+  which covers the branches a fixture cannot reach.
+
+One allowance, inherited from §107: **"waiting on you"**, the product's own noun phrase for the
+queue. A quiet day prints _"A quiet day on the floor."_ rather than `0 turns across 0 rooms`, and a
+wait that is still standing prints `→ still standing` rather than borrowing `→ cleared`.
+
+### 117.8 The screenshot needed a ledger, and the goldens needed it not to exist
+
+The cards are the only surfaces in this product whose content comes from the ledger rather than
+from the floor, so photographing one needs records — and a real ledger is somebody's real work.
+`scripts/demo-floor.mjs --ledger-fixture` writes nine days of plausible records, in the shapes
+`ledger.mjs` documents, against the fixture's own sessions; the card then renders the real
+`windowDigest` over real records and only the data is invented, which is this script's standing
+rule.
+
+Two things fell out of doing it:
+
+1. **The plain demo marks both cards shown** (`postcardDay` / `wrappedShown` = `off`, §117.4).
+   Without that, `npm run goldens:check` would fail after 22:00, on every Monday, and every day in
+   December — a visual regression suite that depends on the day of the week is not one.
+2. **A `--ledger-fixture` run gets its own fixture directory.** This script's first act is to
+   delete its fixture root, so a card run sharing the plain demo's root took the plain demo's
+   ledger with it, and the two daemons then appended into one directory. Found by doing it; the
+   root now carries a `-ledger` suffix.
+
+`npm run goldens:check`: 4 of 4 match, **0 pixels moved at all**. No golden was regenerated and
+none needed to be — the card and the overlay are `hidden` on a demo floor by construction.
+
+### 117.9 Acceptance
+
+20 tests in `test/unit/postcard.test.mjs`, the digest assertions there, and the route's `window`
+contract in `test/integration/wrapped-route.test.mjs`. **Screenshot:** `docs/media/postcard.png` —
+the demo floor dimmed to night with the day's card over it, taken through the palette's "Today's
+card" on a floor with a synthetic ledger.
+## 118. WP-27 — Wrapped: the joke that had to be true, and what it cost to make it true
+
+**Spec:** [`04-ENGAGEMENT-AND-GAMIFICATION.md`](plan/04-ENGAGEMENT-AND-GAMIFICATION.md) §3.4 and
+[`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md) WP-27. Weekly on Monday, annual
+from 1 December, generated locally from the ledger, one click to PNG, redaction through WP-14's
+control. Accepted when every number reconciles with the ledger, it degrades gracefully with fewer
+than seven days of history, and the PNG is shareable at 2× and passes redaction.
+
+Shipped as `GET /api/wrapped`, `public/wrapped.js` (pure), and
+`src/adapters/claude-code/catchphrase.mjs`.
+
+### 118.1 The derived stat: it is the count, and it is 0 on this machine
+
+§3.4 asks for "one genuinely funny derived stat (the count of a phrase across all transcripts, in
+the spirit of the 'you're absolutely right' tracker)", and offers "the tool most used" as the
+cheaper fallback. **The phrase won, and it won on cost**, which was the opposite of the
+expectation.
+
+Measured on the reference machine, 4 September, for a seven-day window:
+
+| | files opened | bytes read | wall clock | longest event-loop block | answer |
+|---|---|---|---|---|---|
+| Phrase count, one regex pass per chunk | 58 | **300.7 MB** | **1.9 s** | **7.3 ms** | **0** |
+| The same files, matches anywhere in them | 58 | 300.7 MB | 1.3 s | — | 11 |
+
+Three things make 1.9 s affordable, and the second is the whole design:
+
+1. **Only files whose mtime falls in the window are opened.** A transcript untouched since June
+   holds no assistant turn from this week. That is 58 of the machine's transcripts rather than all
+   of them, and 300 MB rather than 975 MB.
+2. **One regular expression pass per chunk, and no `JSON.parse` until it matches.** The obvious
+   implementation — parse every record, then test its text — is the expensive one, and it is what
+   makes the fallback ("the tool most used") strictly _more_ costly than the phrase: tool use is
+   only visible inside parsed `tool_use` blocks, so counting it means parsing 300 MB of JSON. The
+   phrase can be found by scanning bytes and parsing eleven lines.
+3. **Ceilings on files, bytes and wall clock**, with a `truncated` flag. Over one, the card says
+   `at least 40 times` instead of quietly reporting a short answer — rule 11.
+
+**The gap between 11 and 0 is the point.** Eleven matches appear _somewhere_ in those files;
+**none** is an assistant turn inside the window. The rest are users quoting it back, records from
+before the window sitting in files touched inside it, and tool results. A funny statistic that is
+not true is just a wrong statistic, so the counter filters on `type === 'assistant'`, on the
+record's own timestamp, on `text` blocks only (not `thinking`, which is not something the agent
+said to anybody and would make the number depend on whether extended thinking was on), and skips
+`isSidechain` records because a subagent's turns also live in the subagent's own transcript and
+would otherwise be counted twice.
+
+So the honest weekly answer on the reference machine is **zero**, and the card says
+_"not once this week"_. That is the number, it is funny, and it is true — which is the order those
+three have to come in.
+
+It runs when a Wrapped card is generated, once a week, and never on the poll path. The engine's
+budgets in `docs/02-ARCHITECTURE.md` §8 are about the scan; this is not one, and it does not touch
+them.
+
+### 118.2 The counter is in the adapter, and it is registered from `index.mjs` — a stated debt
+
+`08` §1.1 rule 8 is absolute: all runtime-format parsing stays inside its adapter. So the code is
+`src/adapters/claude-code/catchphrase.mjs`, and the route asks
+`catchphraseCount()` in `src/adapters/index.mjs` rather than importing a runtime-specific path.
+
+**It belongs on the adapter object itself**, beside `hooks.toolSummary` and the rest, and it is not
+there because `src/adapters/claude-code/adapter.mjs` was held by another package (WP-09) for the
+whole of this one. `index.mjs` carries a per-runtime capability table with a comment saying so.
+Moving it is one line in each file and no behaviour change; it is written down here so it is a
+decision somebody made rather than a shape somebody found. **Owed.**
+
+Codex has no entry: its transcripts have a different shape and nobody has measured the phrase in
+them. A runtime with no counter contributes nothing and the card reads that as _leave the line
+out_, never as _zero_ — which is why `supported` is a separate field from `count`.
+
+### 118.3 Two windows, the same length, or "it fell" is arithmetic
+
+The card says whether the longest wait **fell**, and a fall is a comparison. So `windowDigest` is
+run twice: over the window, and over the window immediately before it, of exactly the same length.
+A test asserts `since - previousSince === until - since`, because two windows of different lengths
+would make the most satisfying number in the product (`08` §7) an artifact of the bounds.
+
+**The week starts on Monday** and the card is about the week that just ended, because §3.4's card
+arrives on Monday morning. A Sunday-start week would hand the Monday reader a window whose last day
+was yesterday and whose first was eight days ago.
+
+**The annual card is the year so far**, and says so in as many words. It appears on or after 1
+December (`08` §7), which is three weeks before the year is over; a card titled "2026" in the first
+week of December would be claiming a year that has not happened.
+
+**The annual card outranks the week on a December Monday** — one card a day is the budget and the
+year is the bigger thing to have missed — but once the year has been seen, December's Mondays get
+their week as usual.
+
+### 118.4 The week's spend is priced like the room plate, with one deliberate difference
+
+§111 decision 6 again: the window's tokens are priced per room at the room's own average rate.
+`windowSpend()` is exported and tested rather than inlined, because it is the one piece of
+arithmetic here that could be wrong and still look plausible.
+
+It differs from `todaySpendFor()` in `state-machine.mjs` in exactly one way, on purpose: **a room
+with no token movement in the window contributes nothing**, where the room plate falls back to the
+project's lifetime total. That fallback is right for a plate that must say something about a room
+today; here it would add a project's entire history to a week. Rooms that cannot be priced at all
+are counted and named (`· 2 rooms unpriced`) rather than silently dropped, and a window with no
+priceable room reports `null`, never `0`.
+
+### 118.5 The catchphrase is the one second person the card may carry, and that is asserted
+
+`records.test.mjs` scans for the second person with one allowance. Wrapped needs a second one —
+the phrase itself — and an allowance that is merely added is an allowance that widens. So there
+are two assertions:
+
+- the detector with **no** allowances runs over the card and exactly **one** row survives: the
+  catchphrase row, whose _value_ ("11 times", "not once this week") addresses nobody. That is the
+  proof nothing else in the card leans on the allowance.
+- the file-literal scan of `public/wrapped.js` needs **no** allowance at all, because the phrase
+  reaches the client from the adapter as data and is never written in the copy.
+
+The quotation marks are load-bearing: `"You're absolutely right" — not once this week` is a
+quotation of something the agents said, in the third person about the team. It is the mechanic `04`
+§1 permits (the agents are the characters) rather than the one §5 refuses.
+
+### 118.6 Degrading, redaction, and the PNG
+
+**Under seven days of history**, `windowDigest` reports `covered: false` and the first day the
+ledger actually holds, and the card's subtitle reads
+`27 Aug – 31 Aug · since 27 Aug, where this ledger starts`. Every row is dropped rather than faked
+when its number does not exist: a week with no sends has no "sent the most" row, not a row saying
+nobody was sent anything, which is a sentence with the shape of blame in it.
+
+**Redaction** is WP-14's `Shift+S` and reaches the card by a second lookup: the route resolves
+project hashes to names by hashing the cwds the registry holds (§100 decision 5), and the client
+maps those names to their MK tags through the floor it already has. The floor thumbnail is redacted
+by the same `Scene.setState` route §109.1 describes. A key the floor cannot name stays six
+characters of its hash, which spells nothing.
+
+**The PNG** goes through the same compositor, size budget, resolution floor and `POST /api/snapshot`
+route as `S` on the floor, so §109's measured acceptance covers it rather than being re-derived.
+What is new is the shape: `compositeCard()` puts a 190 px band of the floor at the top and the words
+under it. Two things were wrong in the first version and are fixed with the reason in the code: the
+band was **centre-cropped**, which on a tall floor reliably photographs a corridor (it is
+top-aligned now, because the office and the busiest rooms are laid out from the top); and the row
+**labels were not wrapped**, so Wrapped's longest label — the catchphrase, in quotation marks — ran
+straight through its own value.
+
+### 118.7 Acceptance
+
+29 tests in `test/unit/wrapped.test.mjs`, 8 in `test/integration/wrapped-route.test.mjs` (including
+a `PRIVACY:` assertion that no path and no project name reaches the response — a card is a thing
+people post), and 5 more in `test/unit/snapshot.test.mjs` for the card compositor. Goldens: 4 of 4
+match, 0 pixels moved. **Screenshot:** `docs/media/wrapped-weekly.png`.

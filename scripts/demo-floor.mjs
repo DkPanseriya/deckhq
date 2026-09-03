@@ -15,6 +15,8 @@
  *   node scripts/demo-floor.mjs                    # start and print the URL
  *   node scripts/demo-floor.mjs --port N           # a different port (0 = any free port)
  *   node scripts/demo-floor.mjs --population NAME  # a different fixture, see POPULATIONS
+ *   node scripts/demo-floor.mjs --ledger-fixture   # + a synthetic week of ledger records,
+ *                                                  #   so the day's card and Wrapped appear
  *
  * Ctrl-C to stop. The fixture lives in a temp directory and is rebuilt on
  * every run; nothing is written to your real ~/.claude or ~/.deckhq.
@@ -31,6 +33,8 @@ import process from 'node:process';
 import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 
+import { CARDS_OFF } from '../public/postcard.js';
+
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
   const i = argv.indexOf(name);
@@ -38,12 +42,33 @@ const opt = (name, fallback) => {
 };
 const PORT = Number(opt('--port', 4499));
 const POPULATION = opt('--population', 'demo');
+/**
+ * WP-18 / WP-27. Write a synthetic ledger into the fixture's state directory
+ * and let the day's card and Wrapped appear.
+ *
+ * The cards are the only surfaces in this product whose content comes from the
+ * ledger rather than from the floor, so photographing them needs a ledger — and
+ * a real one is somebody's real work. This builds a week of plausible records
+ * against the same fake sessions the floor is already made of, using the
+ * documented record shapes, so what the card renders is the real
+ * `windowDigest` over real records and only the data is invented.
+ *
+ * Off by default, and the goldens never use it: with a ledger present the
+ * cards would appear over the floor and every capture would depend on the day
+ * of the week.
+ */
+const LEDGER_FIXTURE = argv.includes('--ledger-fixture');
 
 // Each population gets its own fixture directory, so a goldens run cannot
-// tear down the floor somebody is looking at in `npm run demo`.
+// tear down the floor somebody is looking at in `npm run demo`. A run with the
+// synthetic ledger gets its own too, for the same reason and one more: this
+// script's first act is to delete its fixture directory, so a card run sharing
+// the plain demo's root would take the plain demo's ledger with it — and the
+// two floors would then append into one directory. Found by doing it.
 const ROOT = path.join(
   os.tmpdir(),
-  POPULATION === 'demo' ? 'deckhq-demo' : `deckhq-demo-${POPULATION}`,
+  (POPULATION === 'demo' ? 'deckhq-demo' : `deckhq-demo-${POPULATION}`) +
+    (LEDGER_FIXTURE ? '-ledger' : ''),
 );
 const CLAUDE_DIR = path.join(ROOT, 'claude');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
@@ -422,6 +447,132 @@ function writeProjectDirs(root) {
   }
 }
 
+/**
+ * A week of plausible ledger records for the fake floor. WP-18 / WP-27.
+ *
+ * The cards are the only surfaces in this product whose content comes from the
+ * ledger rather than from the floor, so a screenshot of one needs records —
+ * and a real ledger is somebody's real work. These are written in the shape
+ * `src/core/ledger.mjs` documents (`session/first_seen`, `state` with
+ * `dim: 'activity'`, `send`, `tokens`), against the fixture's own sessions and
+ * project directories, so the card renders the real `windowDigest` over real
+ * records. Only the data is invented, which is this script's whole rule.
+ *
+ * Everything is a pure function of the session index and the day offset, so a
+ * second run at the same hour produces the same card.
+ *
+ * @param {Array<{id:string, cwd:string, project:string, state:string}>} sessions
+ */
+async function writeLedgerFixture(sessions) {
+  const { dayKey, projectKeyFor } = await import('../src/core/ledger.mjs');
+  const dir = path.join(STATE_DIR, 'ledger');
+  fs.mkdirSync(dir, { recursive: true });
+  const machineId = '0'.repeat(32);
+  /** @type {Map<string, {t:number, line:string}[]>} day file -> records */
+  const files = new Map();
+  const push = (t, rec) => {
+    const day = dayKey(t);
+    const line = JSON.stringify({
+      t,
+      machineId,
+      projectKey: rec.projectKey,
+      sessionId: rec.sessionId,
+      ...rec.body,
+    });
+    const list = files.get(day) || [];
+    list.push({ t, line });
+    files.set(day, list);
+  };
+
+  const now = Date.now();
+  const midnight = new Date(now);
+  midnight.setHours(0, 0, 0, 0);
+
+  // Eight days back, so the weekly Wrapped has a full window AND a previous
+  // one to have fallen from.
+  for (let back = 8; back >= 0; back--) {
+    const dayStart = new Date(midnight);
+    dayStart.setDate(dayStart.getDate() - back);
+    sessions.forEach((s, i) => {
+      const key = projectKeyFor(s.cwd);
+      // A deterministic, uneven number of turns per session per day. Rooms
+      // differ, days differ, and nothing depends on a random source.
+      const turns = (i * 3 + back * 5) % 4;
+      if (turns === 0) return;
+      // A working day starts at 08:00 and runs nine hours — except today,
+      // which has only run as far as it has run. Without the second half a
+      // demo started before 08:00 would have an empty "today", and the daily
+      // postcard's own screenshot would be a card about nothing.
+      const elapsed = Math.max(1, Math.floor((now - dayStart.getTime()) / HOUR));
+      const span = Math.min(9, elapsed);
+      const first =
+        dayStart.getTime() + Math.min(8, Math.max(0, elapsed - span)) * HOUR + (i % span) * HOUR;
+      if (first > now) return;
+      push(first, {
+        projectKey: key,
+        sessionId: s.id,
+        body: {
+          kind: 'session',
+          event: 'first_seen',
+          activity: 'ended',
+          ack: 'active',
+          since: first,
+        },
+      });
+      for (let n = 0; n < turns; n++) {
+        const at = first + n * 47 * MINUTE;
+        if (at > now) break;
+        push(at, {
+          projectKey: key,
+          sessionId: s.id,
+          body: { kind: 'state', dim: 'activity', from: 'ended', to: 'working' },
+        });
+        push(at + 60_000, {
+          projectKey: key,
+          sessionId: s.id,
+          body: { kind: 'tokens', delta: 12_000 + ((i * 37 + n * 11) % 40) * 1000, cacheDelta: 0 },
+        });
+        // Finished, then discharged — an episode with both ends, which is what
+        // "shipped 3" and "longest wait → cleared" are counted from.
+        const done = at + (14 + ((i + n) % 5) * 9) * MINUTE;
+        if (done > now) break;
+        push(done, {
+          projectKey: key,
+          sessionId: s.id,
+          body: { kind: 'state', dim: 'activity', from: 'working', to: 'for_review' },
+        });
+        const cleared = done + (6 + ((i * 13 + n * 29) % 90)) * MINUTE;
+        if (cleared > now) break;
+        push(cleared, {
+          projectKey: key,
+          sessionId: s.id,
+          body: { kind: 'state', dim: 'activity', from: 'for_review', to: 'ended' },
+        });
+        // Some of those clearings were a reply typed here rather than in a
+        // terminal, which is the only half of the conversation the ledger can
+        // honestly count as a send.
+        if ((i + n + back) % 3 === 0) {
+          push(cleared - 30_000, {
+            projectKey: key,
+            sessionId: s.id,
+            body: { kind: 'send', chars: 120 + ((i * 17) % 200) },
+          });
+        }
+      }
+    });
+  }
+
+  for (const [day, recs] of files) {
+    recs.sort((a, b) => a.t - b.t);
+    fs.writeFileSync(
+      path.join(dir, `${day}.jsonl`),
+      recs.map((r) => r.line).join('\n') + '\n',
+      'utf8',
+    );
+  }
+  return { days: files.size, records: [...files.values()].reduce((a, b) => a + b.length, 0) };
+}
+
 /** An empty settings file for the fake machine. Hooks are installed later. */
 function writeSettings() {
   fs.mkdirSync(CLAUDE_DIR, { recursive: true });
@@ -529,6 +680,14 @@ fs.writeFileSync(
         stallWindowMs: 2 * MINUTE,
         notifications: false,
         onboarded: true,
+        // The day's card (WP-18) and Wrapped (WP-27) are marked already shown,
+        // for exactly the reason `onboarded` is: this floor exists to be
+        // photographed, and a capture taken after 22:00 — or on a Monday, or
+        // in December — would otherwise have a card over the middle of it and
+        // every golden would fail on the clock. `--ledger-fixture` turns the
+        // markers off, which is how the cards' own screenshots are taken.
+        postcardDay: LEDGER_FIXTURE ? '' : CARDS_OFF,
+        wrappedShown: LEDGER_FIXTURE ? '' : CARDS_OFF,
       },
       ack,
     },
@@ -536,6 +695,12 @@ fs.writeFileSync(
     2,
   ),
 );
+
+// The synthetic ledger, only when it was asked for. It is written before the
+// daemon starts so `Ledger.prime()` reads it as the day already in progress,
+// exactly as a restart would.
+let ledgerFixture = null;
+if (LEDGER_FIXTURE) ledgerFixture = await writeLedgerFixture(built);
 
 process.env.CLAUDE_CONFIG_DIR = CLAUDE_DIR;
 process.env.DECKHQ_STATE_DIR = STATE_DIR;
@@ -590,6 +755,9 @@ process.stdout.write(
     `  fixture:  ${ROOT}`,
     `  projects: ${new Set(built.map((s) => s.project)).size}`,
     `  sessions: ${built.length}`,
+    ...(ledgerFixture
+      ? [`  ledger:   ${ledgerFixture.records} records across ${ledgerFixture.days} days (fixture)`]
+      : []),
     '',
     `  "stalled" appears after ~${stallSeconds}s (the minimum stall window).`,
     '  Ctrl-C to stop. Nothing was written to your real ~/.claude or ~/.deckhq.',

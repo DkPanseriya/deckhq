@@ -22,6 +22,7 @@ import { register as registerDiff } from './http/routes/diff.mjs';
 import { register as registerPermission } from './http/routes/permission.mjs';
 import { register as registerStats } from './http/routes/stats.mjs';
 import { register as registerSnapshot } from './http/routes/snapshot.mjs';
+import { register as registerWrapped } from './http/routes/wrapped.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { Ledger } from './core/ledger.mjs';
@@ -292,6 +293,7 @@ export async function startDaemon(opts = {}) {
   };
   registerState(router, ctx);
   registerStats(router, ctx);
+  registerWrapped(router, ctx);
   registerActions(router, ctx);
   registerHooks(router, ctx);
   registerSettings(router, ctx);

@@ -150,7 +150,15 @@ test('app.js still owns S and Shift+S, and reads shift explicitly', () => {
   assert.match(map, /case 's':\s*case 'S':/);
   // The shift key is read from the event rather than inferred from the case of
   // `e.key`, so caps lock does not silently swap the two.
-  assert.match(map, /if \(e\.shiftKey\) toggleRedaction\(\);\s*else takeSnapshot\(\);/);
+  //
+  // WP-18 added the third branch: with the day's card up, `S` saves the CARD
+  // (plus a small photograph of the floor) rather than the floor alone. The
+  // order matters and is asserted — `Shift+S` is still redaction whatever is
+  // on screen, and the card only intercepts the unshifted key.
+  assert.match(
+    map,
+    /if \(e\.shiftKey\) toggleRedaction\(\);[\s\S]*?else if \(openCard\) saveCard\(\);[\s\S]*?else takeSnapshot\(\);/,
+  );
 });
 
 test('the keys WP-10, WP-19, WP-50 and WP-14 each brought all still have a home', () => {

@@ -163,6 +163,33 @@
         <!-- The office-cleared line (WP-15, §9). One sentence, three seconds,
              gone. Sits over the floor because that is what it is about. -->
         <p class="office-cleared" id="office-cleared" hidden aria-hidden="true"></p>
+
+        <!-- Lights out (WP-18). The sibling of the office-cleared warm above,
+             in the opposite direction: the floor dims to night rather than
+             warming. Its own element rather than a pseudo-element on .stage,
+             because .stage::after is already the warm and the two can never
+             be on screen at once but must not have to share a slot. -->
+        <div class="night-overlay" id="night-overlay" hidden aria-hidden="true"></div>
+
+        <!-- The daily postcard (WP-18) and Wrapped (WP-27). One card, two
+             fillings. Deliberately NOT a <dialog>: the floor's keyboard map
+             stands down entirely while a modal dialog is open, and this card
+             wants Escape to dismiss it and S to save it. It is a region with
+             an accessible name, dismissible with one key or one click, and it
+             traps nothing. -->
+        <div
+          class="nightcard"
+          id="nightcard"
+          role="region"
+          aria-labelledby="nightcard-title"
+          hidden
+        >
+          <h2 class="nightcard-title" id="nightcard-title"></h2>
+          <p class="nightcard-sub" id="nightcard-sub" hidden></p>
+          <div class="nightcard-rows" id="nightcard-rows"></div>
+          <p class="nightcard-foot" id="nightcard-foot" hidden></p>
+          <p class="nightcard-hint" id="nightcard-hint"></p>
+        </div>
       </section>
 
       <aside class="panel" id="panel" aria-label="Session detail" hidden></aside>
