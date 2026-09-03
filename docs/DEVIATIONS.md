@@ -2133,3 +2133,164 @@ carries it.
 
 No new dependency, no network, and every byte of format knowledge is still
 inside `src/adapters/claude-code/`.
+
+## 80. WP-21 — the goldens gate, and the numbers it was calibrated with
+
+WP-21 asks for three things: a deliberately reverted rig fix must fail the
+gate, goldens must regenerate with one documented command, and the job must add
+under 90 s to CI. All three, plus the part the workplan does not ask for and
+the harness is worthless without — a tolerance that came from measurement
+rather than from taste (`08` §1.1 rule 11).
+
+**The gate.** `scripts/goldens.mjs`, zero dependencies: `npm run goldens` to
+regenerate, `npm run goldens:check` to compare. Four populations from
+`scripts/demo-floor.mjs` — `demo` (25 agents, the README floor), `empty`
+(nobody), `single` (one agent), `reference` (the 70-session, 18-project
+reference machine from `08` §0, the shape WP-50 exists to fix). PNG decode,
+encode and the pixel diff are `scripts/lib/png.mjs` over `node:zlib`: 8-bit
+non-interlaced PNG is a chunk walk, one `inflate` and five scanline filters,
+which is cheaper than a dev dependency with a native build story.
+
+**Determinism, and how it is enforced rather than hoped for.** Every fixture
+value is a pure function of the population name — no clock, no random source.
+The viewport is fixed at 1600x1000 at device scale 1, `prefers-reduced-motion`
+is emulated so the renderer draws one static pose per state, and Chrome runs
+with `--force-color-profile=srgb`, `--disable-lcd-text` and
+`--font-render-hinting=none`. Then the belt: **two screenshots half a second
+apart must be byte-identical before either is used.** A floor that is still
+moving fails loudly instead of quietly becoming a golden that can never match
+again.
+
+### The noise floor, measured
+
+Regenerate, then check twice against fresh captures, which is the procedure
+this entry exists to record.
+
+| | demo | empty | single | reference |
+|---|---|---|---|---|
+| Pixels that moved at all | 36 | 36 or 0 | 36 or 0 | 36 or 0 |
+| Max channel delta | 1 | 1 | 1 | 1 |
+| Bounding box | x 990–1581, y 12–13 | same | same | same |
+| Pixels over a tolerance of 4 | 0 | 0 | 0 | 0 |
+
+**36 pixels of 1,600,000, and always the same 36.** A 592x2 strip in the
+header, one count on one channel, and the direction flips between runs — a
+bistable rounding in a single blend, not drift. It appears in some populations
+and not others on any given run, which is what says it is the blend and not the
+floor. Nothing else in either image moves by even one count: the floor itself,
+all 70 agents of it, is bit-exact across Chrome sessions.
+
+### The signal, measured
+
+Revert the one line of the §26 rig facing fix — `facingRot = pose.bodyAngle`
+instead of `pose.bodyAngle + PI/2`, in `public/render/rig.js` — and check.
+
+| Population | Over tolerance | Moved at all | Verdict |
+|---|---|---|---|
+| `reference` | 24,449 (1.528%) | 27,978 | **FAIL** |
+| `demo` | 12,602 (0.788%) | 14,252 | **FAIL** |
+| `single` | 1,181 (0.074%) | 1,295 | **FAIL** |
+| `empty` | 0 | 36 | ok — correctly |
+
+Exit 1, three of four. `empty` passing is not a hole, it is the control: there
+is nobody on that floor to draw wrongly, so its capture under the reverted
+build is the 36-pixel noise floor and nothing else. The line was restored and
+`public/render/rig.js` verified byte-identical to before the revert; the check
+is green again.
+
+### So the numbers are
+
+`CHANNEL_TOLERANCE = 8`. Eight times the measured noise amplitude of 1, and it
+still keeps 91% of the weakest real signal (1,181 of the 1,295 pixels `single`
+moves). **The first draft of this harness had 24**, picked by eye before
+anything was measured; 24 keeps only 83% of that signal and, worse, would be
+blind to a whole class of defect the noise gives no reason to tolerate — a
+palette regression that shifted a colour by twenty counts across a large area
+would have passed silently.
+
+`MAX_DIFF_FRACTION = 0.0001` — 0.01%, 160 pixels. **The first draft had
+0.0005 (800 pixels), and the measurement says that was nearly useless:** the
+weakest signal is 1,181 pixels, so the old budget sat a factor of 1.5 under the
+very defect this harness exists to catch. One slightly less visible bug on a
+one-agent floor and the gate would have shrugged. 160 pixels sits 7.4x under
+that weakest signal and 4.4x above the raw 36-pixel noise count — so the budget
+holds even in the hypothetical where the tolerance stops suppressing the header
+flip altogether.
+
+What no tolerance can absorb is a Chrome or OS font update, which moves every
+label at once. That is not a defect to be forgiven by a wider budget; it is a
+regeneration, and the per-platform directory below is what makes that cheap.
+
+### Goldens are per platform, and linux has no set yet — **RAISE**
+
+Text is rasterised by the OS, so the same floor under Segoe UI/DirectWrite and
+DejaVu/FreeType differs in every label. One set cannot serve three platforms;
+`test/goldens/<process.platform>/` holds one set each.
+
+**Committed here: `win32` only, 2.9 MB for four PNGs.** This is the machine
+WP-21 was done on and there is no linux or macOS host in reach, so the CI job
+runs on Ubuntu, finds no set, **reports SKIPPED and exits 0**, and uploads its
+four fresh captures as the `goldens-linux` artifact — which is exactly how the
+first linux set gets made: download, commit under `test/goldens/linux/`, and
+the gate starts biting on the next push. Until somebody does that, **the CI job
+proves nothing and must not be read as protection.** The harness says so in
+those words rather than printing a green "all match" over an empty comparison,
+which is the failure mode that would actually hurt. The local Windows gate is
+real today, and is what the proof above was run against.
+
+The 2.9 MB is accepted, with one thing checked first: re-encoding Chrome's PNGs
+with paeth filtering at zlib level 9 makes all four **larger** (940 to 994, 629
+to 663, 1328 to 1400, 28 to 32 KB). Chrome's encoder already wins, so the
+goldens are the bytes Chrome produced, unmodified.
+
+### CI
+
+Ubuntu only and Node 22 only — the runner image ships Google Chrome, and the
+CDP client needs the global `WebSocket` Node has unflagged only from 22.
+**No install step**, because the harness is zero-dependency by design; that is
+about 15 s of the budget saved. Both tooling gaps degrade to a skip with exit 0
+rather than a red build — no Chrome, and no goldens for the platform — because
+a gate that goes red over a missing browser is a gate people learn to ignore.
+Failures upload the actual capture and a diff image (the expected floor at
+quarter contrast with every differing pixel painted red) as artifacts.
+
+**Timing: 26.1–28.6 s for all four populations, measured over six runs on the
+Windows laptop**, against WP-21's budget of 90 s. Per population: `empty`
+5.1–5.8 s, `single` 5.4–6.6, `demo` 5.8–6.6, `reference` 6.0–7.2. The Ubuntu
+runner is unmeasured and is the one number here that is an estimate — checkout
+and setup-node add roughly 5 s with nothing to install, and the job's
+`timeout-minutes: 4` is a hang guard, not the budget.
+
+### Two harness bugs found by running it repeatedly, not by reading it
+
+Both would have shown up first as a flaky CI job, which is the way to lose a
+visual gate.
+
+**A demo that failed to boot aborted the whole run.** `startDemo` was awaited
+outside the `try`, so one population failing to start took down the other three
+with an unhandled rejection and a stack trace instead of printing one `FAIL`
+line. It happened once in ten runs. Now inside the `try`, with one retry, and
+`finally` copes with there being nothing to stop.
+
+**The one error message that would have explained it was empty**, which is why
+the cause took a second run to find: the child's exit was reported on `exit`,
+which on Windows can fire before the child's stderr has been drained, so the
+report arrived with the stack trace it was supposed to carry still sitting in
+the pipe. Now `close`. The cause underneath was Windows holding a handle on the
+fixture directory for a moment after the harness kills a population, so the
+next run's `rmrf` hit EBUSY — `fs.rmSync` retries exactly those errors when
+asked, and `demo-floor.mjs` now asks (`maxRetries: 20, retryDelay: 100`).
+
+### Also landed here, and why
+
+`--population NAME` on `scripts/demo-floor.mjs`, with its fixture directory
+keyed to the name so a goldens run cannot tear down a floor somebody is looking
+at in `npm run demo`; `onboarded: true` in the seeded settings, so the
+first-run dialog is not something every capture script has to dismiss;
+`extraArgs` on `withChrome`, for the rendering-determinism flags a README
+capture has no use for; and `diffImages` now returns `differingAtAll` beside
+`differing`, which is what lets `goldens:check` print its own noise floor on
+every run. That last one is the guard on this whole entry: the tolerance was
+measured once, and the number it was measured against is now reported
+continuously, so the day the noise starts creeping is the day it becomes
+visible rather than the day the tolerance is quietly widened to suit.

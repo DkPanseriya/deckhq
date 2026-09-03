@@ -32,6 +32,53 @@
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
 
+### Added
+
+- **The floor is photographed on every change, and a pixel that moves without permission fails the
+  build.** The three worst bugs in this project's history — the rig a quarter-turn out of true, a
+  sofa drawn through a wall, chair backrests ninety degrees off — were invisible to hundreds of
+  passing unit tests and obvious in one screenshot. `npm run goldens` captures the demo floor at
+  1600x1000 for four fixture populations (25 agents, nobody, one agent, and the 70-session
+  reference machine) and commits them; `npm run goldens:check` recaptures and compares pixel for
+  pixel. Zero dependencies: the PNG codec and the diff are 300 lines over `node:zlib`, because
+  8-bit non-interlaced PNG is a chunk walk, one `inflate` and five scanline filters. A failure
+  writes the actual capture and a diff image — the expected floor at quarter contrast with every
+  changed pixel painted red.
+- **The gate is calibrated against a measured noise floor, not a guess.** Two captures of the same
+  floor differ by exactly 36 pixels of 1,600,000 — one count on one channel, in the same 592x2
+  strip of the header, flipping direction between runs. The smallest real defect it has to catch
+  moves 1,181. So a pixel counts as changed at a channel delta over 8, and a capture fails past
+  160 changed pixels: 4.4x above the noise, 7.4x below the weakest signal. The check prints the
+  noise it is seeing on every run, so the day that number starts creeping is the day it is visible
+  rather than the day the tolerance gets quietly widened. Both numbers replace an earlier
+  eyeballed pair that measurement showed sat _under_ the defect they existed to catch;
+  `docs/DEVIATIONS.md` §80 has both tables and the arithmetic.
+- **Proved load-bearing the only way that counts:** the one line of the rig facing fix was
+  reverted, and the check failed three of four populations by 24,449, 12,602 and 1,181 pixels.
+  The fourth is the population with nobody on the floor, so it correctly still passed. The line
+  was then restored.
+- Captures are made repeatable rather than hoped to be: every fixture value is a pure function of
+  the population name, `prefers-reduced-motion` is emulated so the renderer draws one static pose
+  per state, Chrome is pinned to sRGB with greyscale anti-aliasing and no hinting — and two
+  screenshots half a second apart must be byte-identical before either is used, so a floor that is
+  still moving fails loudly instead of quietly becoming a golden that can never match again.
+- `scripts/demo-floor.mjs` takes `--population NAME`, each with its own fixture directory, so a
+  goldens run cannot tear down the floor you are looking at in `npm run demo`. Its seeded settings
+  mark the tour as done, which every capture script previously had to dismiss by hand.
+
+### Known gaps
+
+- **Goldens are committed for Windows only, so the Ubuntu CI job reports SKIPPED and proves
+  nothing yet.** Text is rasterised by the operating system, so one set of goldens cannot serve
+  three platforms and there was no linux or macOS machine in reach. The job captures anyway and
+  uploads the four PNGs as an artifact, which is how the first linux set gets made: download it,
+  commit it under `test/goldens/linux/`, and the gate starts biting on the next push. Until then
+  the check is real locally and decorative in CI, and it says so in those words rather than
+  printing a green "all match" over a comparison that never happened.
+- The Ubuntu runner's time for the job is the one unmeasured number: 26–29 s for all four
+  populations on the Windows laptop over six runs, against the 90 s budget the work package asked
+  for, plus roughly 5 s of checkout and Node setup with nothing to install.
+
 ## 1.2.0
 
 The release that can actually be installed. 1.1.0 called itself the first public release and was
