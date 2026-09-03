@@ -92,7 +92,7 @@ function unquoteShLine(line) {
 
 /**
  * The same for a `cmd.exe` command line, which the Windows console row builds
- * itself (`docs/DEVIATIONS.md` §96). Whitespace separates words unless it is
+ * itself (`docs/DEVIATIONS.md` §98). Whitespace separates words unless it is
  * inside double quotes; the quotes are removed.
  * @param {string} line
  * @returns {string[]}
@@ -192,7 +192,7 @@ for (const { platform, terminal, via, key } of pairs()) {
     }
     // `codex` is the program being run, never a fragment of a larger string.
     if (platform === 'win32') {
-      // One `cmd.exe` command line rather than an argv (§96); read it back
+      // One `cmd.exe` command line rather than an argv (§98); read it back
       // through cmd.exe's own quoting rule to get the words out.
       const words = unquoteCmdLine(args[3]);
       assert.ok(words.includes('codex'), `${key}: the command did not survive`);
@@ -248,7 +248,7 @@ test('SECURITY: a hostile working directory is one argv element too, or is not i
     if (platform === 'win32') {
       // One command line, so the cwd is one double-quoted word of it — after
       // `start`'s `/d`, which is what makes the directory stated rather than
-      // inherited (§96).
+      // inherited (§98).
       const words = unquoteCmdLine(args[3]);
       assert.equal(words[words.indexOf('/d') + 1], HOSTILE_CWD, `${key}: cwd was not one word`);
       assert.deepEqual(bareMetachars(args[3]), [], `${key}: metacharacters escaped their quotes`);

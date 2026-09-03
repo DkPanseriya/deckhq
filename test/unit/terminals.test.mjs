@@ -21,7 +21,7 @@
  * The Windows row is the exception to all of the above and has its own section
  * below: it is not an argv array, because `start` is an internal `cmd.exe`
  * command, and it IS a launch form that has been run for real on the machine
- * this was written on. `docs/DEVIATIONS.md` §96.
+ * this was written on. `docs/DEVIATIONS.md` §98.
  */
 
 import test from 'node:test';
@@ -156,7 +156,7 @@ const EXPECTED = {
   // ---------------------------------------------------------------- Windows
   // Not an argv: `start` is an internal `cmd.exe` command, so `cmd.exe`
   // re-parses everything after it and the line is quoted by DeckHQ rather
-  // than by Node (docs/DEVIATIONS.md §96). This is the exact string, and it
+  // than by Node (docs/DEVIATIONS.md §98). This is the exact string, and it
   // is the one form in this file that has been run on a real machine.
   'linux/../win32': undefined, // (placeholder removed below; see pairsInTable)
   'win32/windows-console/bin': {
@@ -549,7 +549,7 @@ test('SECURITY: a session id full of shell metacharacters never becomes shell sy
 
     if (platform === 'win32') {
       // The Windows console is one `cmd.exe` command line rather than an argv
-      // (§96), so the claim is different in shape and stronger in kind: read
+      // (§98), so the claim is different in shape and stronger in kind: read
       // the line back through cmd.exe's own quoting rule and the id comes out
       // as one word, equal to itself — and no metacharacter is left outside a
       // quoted region for cmd.exe to act on.
@@ -615,7 +615,7 @@ test('SECURITY: a first prompt is one argv element too, however it is written', 
 // SECURITY: the Windows command line
 //
 // The one launch form in this file that is not an argv array, because `start`
-// is an internal `cmd.exe` command rather than a program. Until §96 it relied
+// is an internal `cmd.exe` command rather than a program. Until §98 it relied
 // on Node's win32 argument quoting, which wraps a value only when it holds a
 // space, a tab or a quote — so an id of `x&calc` arrived at `cmd.exe` bare and
 // became two commands. Measured, on Windows 11: with the old form an argument
@@ -688,7 +688,7 @@ test('SECURITY: a Windows working directory with a space and an & stays one word
 test('SECURITY: every cmd.exe metacharacter survives as text, not as syntax', () => {
   // `&`, `|`, `^`, `<`, `>` and `()` are literal inside double quotes. This
   // was checked on Windows 11, not read: the argument below reached the
-  // launched program byte for byte (docs/DEVIATIONS.md §96).
+  // launched program byte for byte (docs/DEVIATIONS.md §98).
   const nasty = 'x&y|z^w<v>u(t)';
   const { args } = buildLaunch(findTerminal('win32', 'windows-console'), {
     command: ['claude', '--resume', nasty],

@@ -30,7 +30,7 @@
  *    escape `&`, `|`, `^`, `<` or `>`, which `cmd.exe` reads as syntax — so
  *    the whole command line is built by `windowsConsoleLaunch()` with
  *    `core/cmdline.mjs`'s rule and handed over with
- *    `windowsVerbatimArguments`. `docs/DEVIATIONS.md` §96.
+ *    `windowsVerbatimArguments`. `docs/DEVIATIONS.md` §98.
  * 4. **Every launch form is a pure function of its context**, so the exact
  *    argv array for every (platform, emulator) pair is asserted in
  *    `test/unit/terminals.test.mjs` rather than reasoned about. That matters
@@ -454,7 +454,7 @@ export const WINDOWS_CMD_REFUSAL =
  * ```
  *
  * Every piece of that is load-bearing, and every claim below was checked on
- * Windows 11 (`docs/DEVIATIONS.md` §96), not read in documentation:
+ * Windows 11 (`docs/DEVIATIONS.md` §98), not read in documentation:
  *
  * - **`windowsVerbatimArguments`.** Node's win32 quoting wraps a value only
  *   when it holds a space, a tab or a quote, so an id of `x&calc` reached

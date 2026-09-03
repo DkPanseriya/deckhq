@@ -3700,7 +3700,7 @@ user data: `osascript` gets the wrapper's path as `argv`, and the script quotes 
 The Windows row is the third case, and it was the one this entry got wrong. `start` is an
 internal `cmd.exe` command rather than a program, so `cmd.exe` re-parses everything after it —
 and node's win32 argument quoting, which this row relied on, does not escape `&`, `|`, `^`, `<`
-or `>`. The claim above was therefore false on Windows for two months. §96 is the fix: the
+or `>`. The claim above was therefore false on Windows for two months. §98 is the fix: the
 command line is built by this module and handed over with `windowsVerbatimArguments`.
 
 The wrapper files are not cleaned up. One ~150-byte file per resume accumulates in the temp
@@ -4144,7 +4144,7 @@ cannot silently go stale.
    It is the same exposure before and after this change, it belongs to the terminal table rather
    than to either adapter, and rewriting the one launch form that has actually been run on real
    machines was not worth folding into a security fix for a different bug. Named here so it is not
-   mistaken for covered.~~ **Closed by §96**, which rewrote the row's quoting and measured both
+   mistaken for covered.~~ **Closed by §98**, which rewrote the row's quoting and measured both
    the defect and the fix on the reference Windows machine.
 
 ### Acceptance
@@ -4570,7 +4570,7 @@ reference machine, then a real interactive session raising a real prompt,
 answered from the panel, and the session carrying on. Until that has been done
 and recorded here, WP-19 is not accepted and the feature is not spoken about
 outside this file and the changelog's own hedged entry.
-## 96. Windows launch quoting — the one row that had been run, and the metacharacter it let through
+## 98. Windows launch quoting — the one row that had been run, and the metacharacter it let through
 
 **Spec:** `08-PLAN-V2-100X.md` §1.1 rule 8 and rule 11; `07-AGENT-HANDOVERS.md` Agent Backend's
 "argv arrays only, never shell strings with interpolated user data". §95's third residual named

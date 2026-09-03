@@ -271,7 +271,7 @@
   two processes. The quoting rule is the one WP-47 already worked out for `code.cmd`, moved into
   `src/core/cmdline.mjs` so there is one definition of it. Both the defect and the fix were
   launched for real, with a working directory containing a space and an `&`.
-  `docs/DEVIATIONS.md` §96.
+  `docs/DEVIATIONS.md` §98.
 - **SECURITY: a Codex session id reached a shell.** Opening a Codex session in a terminal built
   its command as a shell string on both POSIX platforms — an AppleScript
   `do script "cd \"<cwd>\" && codex resume <id>"` on macOS, and `bash -lc "codex resume <id>"` on

@@ -31,7 +31,7 @@
  * happens inside quotes) — and a path containing either is refused rather than
  * launched. `&`, `|`, `<`, `>` and `^` were each checked and are literal
  * inside the quotes. That quoting rule moved out of this file when the Windows
- * console launch needed the same one (`docs/DEVIATIONS.md` §96).
+ * console launch needed the same one (`docs/DEVIATIONS.md` §98).
  */
 import { constants as FS, accessSync, statSync } from 'node:fs';
 import path from 'node:path';

@@ -10,7 +10,7 @@
  *      shell (CVE-2024-27980). `src/core/editor.mjs`, WP-47, §90.
  *   2. Opening a new console window means `start`, which is an internal
  *      `cmd.exe` command and not a program. `src/core/terminals.mjs`, WP-04,
- *      §96.
+ *      §98.
  *
  * Both therefore build a command line, and both must build it the same way,
  * because `cmd.exe` does not parse a command line the way `CreateProcess`

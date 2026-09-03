@@ -91,7 +91,7 @@ those two DeckHQ builds the command line itself, in `src/core/cmdline.mjs`, and 
 `windowsVerbatimArguments`. Every value is double-quoted, where those metacharacters are literal;
 the two characters that can escape a double-quoted `cmd` argument, `"` and `%`, are **refused**
 rather than escaped, because nothing can make them safe and neither belongs in a session id or a
-project path. `docs/DEVIATIONS.md` §96 records the defect this replaced, measured on a real
+project path. `docs/DEVIATIONS.md` §98 records the defect this replaced, measured on a real
 machine, and the tests that keep it out.
 
 On macOS, three applications (Terminal.app, iTerm2, Warp) accept only a shell line or a file. For
