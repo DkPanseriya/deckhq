@@ -2296,3 +2296,248 @@ WP-43's acceptance — "a `vX.Y.Z` tag produces a published package with the
 provenance badge and a release page with no manual step after the tag" — is
 still the owner's next tag to produce, after the one-time trusted-publisher
 setup in the workflow's header.
+## 80. WP-53 · The review follow-ups on the perf code: what closed, what is accepted, what was left to its owner
+
+`08-PLAN-V2-100X.md` WP-53 lists five risks from the review of PRs #1–#4.
+Four are closed here with tests; one is a documented, measured exposure rather
+than a fix; one belongs to a file another agent owns and was not touched.
+
+**(1) `pidAlive()` on Windows — verified, unchanged.** The function treats
+`EPERM` as alive and everything else as dead, and the review asked whether a
+vanished pid on Windows really surfaces as something other than `EPERM`. It was
+measured rather than read off libuv's source, on the reference machine
+(Windows 11, Node 24):
+
+| `process.kill(pid, 0)` against | throws |
+|---|---|
+| a child that ran and exited | `ESRCH` |
+| a pid that never existed (`0x7ffffffe`) | `ESRCH` |
+| a child killed by us, handle still held by this process | `ESRCH` |
+| the protected System process (pid 4) | `EPERM` |
+| a live child | nothing |
+
+So the two-way reading holds on Windows, where libuv answers signal 0 with
+`OpenProcess` + `GetExitCodeProcess` rather than a signal: an exited process
+whose handle someone still holds is reported by its exit code, not as alive.
+4000 calls cost 53.5 ms, 13 µs each — §77's 0.055 ms per roster stands. A test
+now spawns a real child, waits for it to exit, and asserts the roster retires
+it within one poll and without a spawn; the existing test used only a pid that
+never existed, which on Windows is a different code path.
+
+**(1b) Pid reuse inside the 60 s TTL — accepted, bounded, measured.** The
+review's case: a session exits and the OS hands its pid to another process
+before the next probe, so the pid check reads the impostor as the session.
+
+What the code already did, now pinned by a test: a pid the check has once seen
+dead is *removed* from the cached roster, and nothing short of the next probe
+puts a session back. So a pid reused *after* the check saw it dead cannot
+resurrect anything — the roster is corrected by removal, not re-evaluated
+every poll. The exposure that leaves is narrower than the review stated: the
+exit **and** the reuse must both land inside one poll interval (5 s), before
+any check ran. Only then does the impostor read alive, and it does so until the
+TTL probe — up to 60 s.
+
+How likely is that, on the platform that reuses pids most eagerly? Measured
+here: 300 sequential `cmd /c exit` spawns in 9.7 s produced 16 reused pids; a
+pid came back after a **minimum of 123 and a median of 155** further process
+creations, the first reuse 4.8 s in. So the reuse half of the window needs on
+the order of 25 process creations a second sustained across the 5 s the check
+is blind, on top of the session exiting in that same 5 s. On Linux pids are
+allocated sequentially up to `pid_max` and reuse inside 5 s needs thousands of
+spawns a second; macOS is sequential to 99998.
+
+Mechanisms weighed for closing it, and why none was taken:
+
+- **Process start time as identity.** The right fix, and cheap only on Linux
+  (`/proc/<pid>/stat`). Windows has no Node API for it; macOS needs `ps`.
+  Both mean a spawn per pid per poll — the exact cost §77 removed — for a
+  window that is narrowest precisely where a spawn-free check exists.
+- **Force a probe when identity is uncertain.** The suggestion in the plan.
+  Nothing cheap distinguishes "same pid, same process" from "same pid,
+  different process", so there is no signal to trigger on. Forcing a probe
+  whenever *any* roster pid died would spend a 609 ms spawn on the common
+  transition the pid check handles for free, and would not help the case in
+  question, which by definition no check saw.
+- **Hooks.** Not a mechanism to add — it is already the answer where it
+  matters. `SessionEnd` is authoritative and `_computeAgents` prefers
+  `hookLive` over this roster whenever hooks are installed, so the exposure
+  exists only on the degraded path. WP-36 (§81) removes the commonest way of
+  ending up on that path by accident.
+
+And what a wrong `live` costs if it happens: nothing user-owned. `live` is an
+observation; `for_review` is sticky through it either way. The worst outcome is
+a desk drawn occupied for up to 60 s after its session left.
+
+So the window is accepted and stated in the code, here, and in a test that
+pins its size: the impostor may read alive at TTL−5 s and must be gone the
+moment the TTL probe answers. A third seam, `alive`, was added beside `probe`
+and `now` so a pid can be made to die and return on cue without a real process.
+
+**(2) and (5) The head-window scanner's cut cases.** Three tests against the
+scanner directly — `_scanTopLevelFields`, exported for tests only — and three
+end to end through `readDesktopSessions`, where `fullReads` proves the fallback
+ran rather than the answer merely coming out right: a window cut inside a
+string, one cut inside a number (five digits inside the window, five outside),
+and one whose last byte is the backslash of an escaped quote — read only the
+head, the string is unclosed; read naively past the backslash, the quote
+looks like a close. All three answer null from the window, take the whole file,
+and return the right fields. `endOfString()` on `"abc\` at end of text stays in
+bounds and returns −1; the direct test also covers `\u00` cut mid-escape, an
+escaped backslash then EOF, and the two complete-escape cases that must
+decode. No scanner change was needed; the tests confirm the behaviour that was
+there.
+
+**(4) The desktop-cache mtime pins are proven, not assumed.** The tests pinned
+mtimes in whole seconds and never checked the pin took. That let the "size
+moved but mtime did not" test pass for the wrong reason on any filesystem that
+rounded the timestamp — the re-read would have come from the mtime moving. The
+helper now sets a millisecond value with a non-zero fraction of a second
+(`…000_250`, `…000_750`), reads `mtimeMs` straight back, and asserts equality;
+the size-only test additionally asserts the re-pinned value equals the first.
+Round-trips exactly on NTFS here; a filesystem where it does not will now say
+so instead of passing.
+
+**(3) `publish.yml` — not touched.** The npm floor for trusted publishing is
+another agent's file in this pass, so WP-53's fifth item and the second half of
+its acceptance criterion ("`publish.yml` fails loudly on an npm below the
+trusted-publishing floor") are not delivered by this package. Recorded so the
+orchestrator does not accept WP-53 on the strength of this commit alone.
+
+## 81. WP-36 · The daemon adopts the hooks' port, and refuses to start beside a DeckHQ that already has it
+
+`08-PLAN-V2-100X.md` WP-36. Shipped as specified, with three decisions the
+package description did not settle.
+
+**The failure this removes.** Hooks are written with the port the daemon had at
+install time. A daemon started later on a different port — the 4317 default
+after an install on 4400, or 4318 after the `EADDRINUSE` walk — is the one
+broken state that looks healthy from every surface at once: the settings file
+is valid, the header claims exact state, and every hook event posts into a
+void. §75 gave `doctor` the job of reporting it. This stops the daemon
+creating it.
+
+Now, with no port named: if the installed hooks post to a free port, the daemon
+listens there and logs one line saying why. The header then reads `installed`
+and the reinstall banner does not appear.
+
+**Decision 1 — an explicit port is never overridden.** Adoption is a CLI
+decision, passed to `startDaemon` as `adoptHooksPort` and off by default;
+`--port 4400` and `DECKHQ_PORT=4400` both suppress it. Naming a port is a
+request to be on that port, and the banner is the honest report of what that
+costs. `DECKHQ_PORT=` (set but empty) reads as unset, because that is what a
+shell wrapper clearing the variable means. Embedders and the 400-odd tests that
+pass a port keep the old behaviour untouched — nothing in the suite changed.
+
+**Decision 2 — the hooks' port held by another DeckHQ is a refusal, not a
+walk.** The plan says "exit with a one-line message naming it". Starting
+anyway would bind 4318 and produce precisely the degraded daemon this package
+exists to prevent, with the added insult that the healthy one next door is
+getting all the events. So `startDaemon` throws `DeckhqAlreadyRunningError`
+**before the store is opened or anything is bound** — the refusal leaves no
+trace, and a test asserts the requested port is still free afterwards — and
+`bin/deckhq.mjs` prints one line with the URL and exits 0. Exit 0, not 1:
+"DeckHQ is already up" is the state the user wanted. A test spawns the real
+binary to assert one line of stdout and no start banner, because §76 is the
+standing reminder that a command's contract includes how it ends.
+
+**Decision 3 — a stranger on the hooks' port falls back rather than fails.**
+Something else on 4400 is not ours to reason about. The daemon logs what it
+found, starts on the requested port, and the header's banner offers the
+reinstall as before. "Ours" is identified the way §75's `doctor` identifies a
+daemon — a well-formed `/api/state` snapshot — so the two surfaces cannot
+disagree about what a DeckHQ is.
+
+**Cost, measured.** Two loopback round trips at most, once, before the server
+binds: a bare TCP connect (refused immediately when the port is free; 500 ms
+ceiling) and, only when something answered, one `/api/state` fetch with a
+1500 ms ceiling. On the common path — hooks installed, port free — it is the
+settings read plus one refused connect: **median 0.87 ms** over 20 runs on the
+reference machine, min 0.28, max 9.8. Nothing is added to the poll loop, and
+nothing is added to a start that names a port.
+
+**Accepted limits.** The port is taken from the first adapter that reports one,
+so a machine whose two runtimes' hooks point at different ports adopts the
+first and leaves the second's banner up; there is one hook-capable adapter
+today and no honest way to satisfy both. Adoption reads the settings file once
+at startup, so hooks reinstalled at another port while the daemon runs are not
+followed — the reinstall in the header aims at the running daemon, which is the
+only way that happens in practice.
+
+## 82. WP-44 · `doctor --share`: what the pasteable block leaves out, and the one line the PM still owns
+
+`08-PLAN-V2-100X.md` WP-44: "prints a fenced block of the report with no
+paths, no project names and the pitch line as the last line. Governed by the
+same honesty tests as §74." Shipped as `deckhq doctor --share`. Four decisions
+the description left open.
+
+**Decision 1 — the block is the whole report, not a highlight.** The temptation
+in a launch asset is to print the biggest number and stop. What makes this
+postable is that a reader can run the same command on their own machine and
+check it, so the block carries every row the report does — including
+`waiting on you 0`, which on the reference machine is what it says today. A
+selected highlight would make the asset unfalsifiable, which is the failure
+mode §74 was written after.
+
+**Decision 2 — what is dropped, and why each one is not a number.** Against
+`renderReport`: the state **path** (its verdict, writable or not, stays — that
+is the part a reader can act on); every free-text problem, note and
+per-runtime error; and the hook port. The free text is where a path actually
+lives in practice — an adapter error is a filesystem error and names the file
+it failed on — and none of it means anything to a stranger. When the report is
+not `ok`, the block says `! 2 problems — run \`deckhq doctor\` here for the
+detail`: the count is the honest part, the message is the private part. The
+port is dropped because a port number tells a reader nothing about whether
+hooks are delivering, which is what the row is for.
+
+**Decision 3 — the date is to the day.** A UTC timestamp to the hour would
+publish when a person was at their desk, in exchange for nothing.
+
+**Decision 4 — a redaction pass, even though nothing should reach it.** Project
+names cannot leak by construction: `collectReport` turns working directories
+into a distinct count and never keeps the strings, and the block is assembled
+from counts and fixed phrases. Two fields are still strings this file did not
+write — a runtime's `version()` and an adapter's error message — so
+`redact()` runs over the assembled text and replaces the home directory and
+anything hanging off it, `C:\…` and `C:/…`, `\server\share`, `~/…`, absolute
+POSIX paths, and the machine's own name. It is defence in depth for a block
+whose whole purpose is to be pasted somewhere public, and it is unit-tested
+directly, including the two cases that made it non-obvious: the
+separator-swapped home directory is a substring of the real Windows path
+(`C:\Users\ada` contains `\Users\ada`, and replacing only the tail would leave
+`C:[path]` behind), so home matching is anchored at the start of a token; and a
+hostname shorter than three characters is indistinguishable from a word, so it
+is left alone rather than shredding the text it exists to protect. A test
+pins that the report's own vocabulary — `70 sessions across 18 projects`,
+`127.0.0.1`, `none. no outbound sockets.` — passes through untouched.
+
+**Flag behaviour.** `--share` prints the block and nothing else: it is meant to
+be selected whole or piped into a clipboard command, and a second copy of the
+same numbers above it makes both jobs harder. With `--json` the block becomes
+one more field (`share`, `null` when the flag is absent), because "exactly one
+JSON document on stdout" is that mode's contract. The exit code is the
+report's, unchanged.
+
+**Acceptance, checked.** Nine new tests: the fence and the pitch as its last
+line inside it; the absence of the fixture's two scanned directory names
+(`/Users/ada/skunkworks-alpha`, `C:/Dk/Projects/ClientAcme`) and of their
+fragments; the absence of any path shape, the state path, the machine name and
+the port; a problem counted rather than quoted; `redact()` directly; the three
+flag surfaces (`--share`, `--share --json`, `--help`); and a machine with no
+runtime and no daemon, where the block must still be honest and printable. Two
+existing tests were amended: the `--json` shape test now pins `share` in the
+document's key set, and the §74 honesty invariant runs against three surfaces
+rather than two — the report, the proof card and this block — so the retired
+overclaim cannot come back through the launch asset. 458 tests to 467.
+
+**Left to its owner.** The pitch itself. `07-AGENT-HANDOVERS.md` gives the PM
+the wording review of this asset, so the line is the named export `PITCH` in
+`src/cli/doctor.mjs` rather than a string inside a template, and today it is
+one line condensed from `08-PLAN-V2-100X.md` §1.3:
+
+> DeckHQ — every AI coding session on your machine, on one office floor. npx deckhq · local, private, MIT.
+
+§1.3's full pitch is three sentences and 40 words; a block that people paste
+into a thread earns one line, and the sentence that was cut ("it sees the ones
+your terminal forgot, and it remembers what's waiting on you even after you've
+read it") is the one the rows above it are already demonstrating. That is a
+judgement about copy, not about code, and the PM's to overrule.

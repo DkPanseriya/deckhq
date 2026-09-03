@@ -6,6 +6,36 @@
 
 ## Unreleased
 
+### Added
+
+- **`deckhq doctor --share` prints the report as a fenced block you can paste anywhere.** The same
+  numbers as the report — transcripts, running now, on the floor, waiting on you, hooks, egress —
+  with everything that belongs to you taken out: no paths, no project names, no machine name, no
+  hook port, no free-text error message, and a date to the day rather than the hour. A problem is
+  reported as a count with a pointer back to `deckhq doctor`, so the block says a check failed
+  without saying what it read. Project names cannot leak by construction — the report counts
+  distinct working directories and never keeps the strings — and a redaction pass runs over the
+  assembled block anyway, because a runtime's version string and an adapter's error message are
+  text this project did not write. The pitch is its last line. `--share --json` keeps stdout to
+  exactly one JSON document and carries the block as a `share` field. The honesty tests of
+  `docs/DEVIATIONS.md` §74 now run against this block as well as the report and the proof card:
+  the retired overclaim cannot come back through the launch asset. §82.
+
+### Fixed
+
+- **A daemon can no longer start on a different port from the hooks that feed it.** Hooks are
+  written with the port the daemon had when they were installed, so a later start on the 4317
+  default — or on 4318 after the in-use walk — left every hook event posting into a void while the
+  settings file stayed valid and the header went on claiming exact state. It is the only broken
+  state in the product that looks healthy from every surface at once. `deckhq doctor` reports it
+  (§75); now `deckhq` does not create it. With no `--port` given, the daemon listens where the
+  installed hooks post if that port is free, and says so in one log line. If a DeckHQ daemon
+  already holds it, `deckhq` prints one line naming its URL and starts nothing rather than binding
+  the next port along and running degraded beside it. If something that is not DeckHQ holds it, the
+  requested port is used and the header's reinstall banner does the rest. An explicit `--port` or
+  `DECKHQ_PORT` is honoured exactly as given — naming a port is a request to be on it.
+  `docs/DEVIATIONS.md` §81.
+
 ### Performance
 
 - **The daemon no longer boots the Claude Code CLI every five seconds.** `liveSessions()` shelled
@@ -31,6 +61,16 @@
   while a first scan is unchanged. The archive flag is cached against the file that carries it,
   not against the transcript, so archiving in the app is still seen on the very next poll and a
   rehired agent cannot be re-fired by a stale flag (§78).
+- **The review of that work is closed out.** The pid check behind the roster cache was verified on
+  Windows against a process that really exited, not just a pid that never existed (both `ESRCH`;
+  only the protected System process is `EPERM`). Pid reuse inside the 60 s roster window is now a
+  measured, tested exposure rather than an open question: a pid the check has once seen dead can
+  never bring its session back, so the only way to be wrong is for a session to exit **and** have
+  its pid reused inside one 5 s poll — which here needs ~25 process creations a second — and even
+  then the desk is drawn occupied for at most 60 s and nothing user-owned moves. The head-window
+  JSON scanner has tests for a window cut mid-string, mid-number and on the backslash of an
+  escape, and the desktop-cache tests prove their mtime pins round-trip on the filesystem they run
+  on instead of assuming it. `docs/DEVIATIONS.md` §80.
 
 ### Testing
 

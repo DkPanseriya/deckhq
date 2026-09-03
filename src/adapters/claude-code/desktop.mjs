@@ -298,6 +298,19 @@ function readTopLevelFields(text, wanted) {
 }
 
 /**
+ * The scanner, exposed for tests only. Nothing in the product calls it: the
+ * product goes through `readDesktopSessions`, whose `fullReads` counter shows
+ * which path answered. This exists so the three ways a head window can end
+ * mid-value — inside a string, inside a number, on a trailing escape — can be
+ * pinned as "answer null, never guess" without building a file for each.
+ * @param {string} text
+ * @param {string[]} [wanted]
+ */
+export function _scanTopLevelFields(text, wanted = WANTED) {
+  return readTopLevelFields(text, wanted);
+}
+
+/**
  * @typedef {object} DesktopSession
  * @property {boolean} archived
  * @property {string} [title]  the title the app's sidebar shows
