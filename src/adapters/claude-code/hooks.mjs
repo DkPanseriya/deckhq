@@ -357,6 +357,51 @@ function hasDeckhqEntries(settings) {
 }
 
 /**
+ * The plugin's name, as `.claude-plugin/plugin.json` declares it. Claude Code
+ * records an enabled plugin under `<name>@<marketplace>`, and the marketplace
+ * half depends on where the user got it from, so only the left half is ours to
+ * recognise.
+ */
+export const PLUGIN_NAME = 'deckhq';
+
+/**
+ * Is DeckHQ installed and enabled as a Claude Code *plugin* (WP-37)?
+ *
+ * This is a second, entirely separate way for the same hooks to be present.
+ * The plugin carries its own `hooks/hooks.json`; nothing of ours appears in
+ * `settings.json`, so `installed()` above — which reads that file — reports
+ * `false` on a machine where every hook event is arriving perfectly. Left
+ * uncorrected, the floor would put its reinstall banner up over an install
+ * that is working, and `_hooksInstalled()` in the registry would keep running
+ * the inference path beside exact events.
+ *
+ * `enabledPlugins` is the key Claude Code writes on `plugin install` and flips
+ * on `plugin disable`, which makes it the honest signal: installed but
+ * disabled has to read as not installed, because a disabled plugin's hooks do
+ * not run.
+ *
+ * Never throws: a missing or malformed settings file reads as "no plugin".
+ *
+ * @param {string} [file] the settings file to read; for tests
+ * @returns {Promise<boolean>}
+ */
+export async function pluginInstalled(file = SETTINGS_FILE) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await fsp.readFile(file, 'utf8'));
+  } catch {
+    return false;
+  }
+  const enabled = parsed && parsed.enabledPlugins;
+  if (!isPlainObject(enabled)) return false;
+  for (const [key, value] of Object.entries(enabled)) {
+    if (value !== true) continue;
+    if (String(key).split('@')[0] === PLUGIN_NAME) return true;
+  }
+  return false;
+}
+
+/**
  * The port the installed hooks currently post to, or null if none are
  * installed. Never throws.
  * @returns {Promise<number|null>}

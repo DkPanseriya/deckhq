@@ -799,6 +799,10 @@ export const adapter = {
     remove: hooksImpl.remove,
     installed: hooksImpl.installed,
     installedPort: hooksImpl.installedPort,
+    // WP-37: the same hooks can arrive as a plugin, which puts nothing in
+    // settings.json. Reported separately so the status screen can say which
+    // of the two routes is delivering.
+    pluginInstalled: hooksImpl.pluginInstalled,
     // WP-52: the runtime's own `PreToolUse` payload shape is this adapter's
     // business, so the HTTP route asks the adapter what the payload says
     // rather than parsing it itself.

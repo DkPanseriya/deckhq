@@ -762,6 +762,10 @@ test('--json emits one JSON document with a stable shape', async () => {
     'port',
     'runtime',
     'supported',
+    // WP-37: the same hooks can arrive as a Claude Code plugin, which carries
+    // no port. The row says which route it found so the reader is not left
+    // wondering why a healthy install reports no port.
+    'viaPlugin',
   ]);
   assert.deepEqual(Object.keys(parsed.deck).sort(), [
     'found',

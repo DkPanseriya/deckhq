@@ -25,6 +25,7 @@ import process from 'node:process';
 
 import * as defaultAdapters from '../adapters/index.mjs';
 import { DATA_DIR, STATE_FILE } from '../core/paths.mjs';
+import { readDaemonFile } from '../core/daemon-file.mjs';
 import { TERMINAL_AUTO } from '../core/store.mjs';
 import { describeTerminal } from '../adapters/claude-code/terminals.mjs';
 
@@ -331,6 +332,11 @@ async function collectHooks(adapter, deps) {
     label: adapter.label,
     supported: Boolean(adapter.hooks && adapter.hooks.supported),
     installed: false,
+    // WP-37: the same hook block can arrive as a Claude Code plugin, which
+    // puts nothing in the settings file and carries no port. Reported
+    // separately so the row can say which route it found without claiming a
+    // port that does not exist.
+    viaPlugin: false,
     port: null,
     listening: null,
     eventsSeen: null,
@@ -340,7 +346,8 @@ async function collectHooks(adapter, deps) {
   if (!row.supported) return row;
 
   try {
-    row.installed = Boolean(await adapter.hooks.installed());
+    row.viaPlugin = Boolean(await adapter.hooks.pluginInstalled?.());
+    row.installed = Boolean(await adapter.hooks.installed()) || row.viaPlugin;
     if (row.installed && typeof adapter.hooks.installedPort === 'function') {
       const port = await adapter.hooks.installedPort();
       row.port = typeof port === 'number' ? port : null;
@@ -361,12 +368,19 @@ async function collectHooks(adapter, deps) {
  * user named, and the range the daemon walks when 4317 is taken. Finding a
  * daemon on a port DIFFERENT from the one the hooks target is the whole
  * reason this scan exists — see the exit-code rules below.
+ * A plugin install adds a third source (WP-37): its hooks carry no port, so
+ * the running daemon publishes the one it bound in `~/.deckhq/daemon.json` and
+ * this scan reads it. Without that, a daemon the plugin started outside the
+ * ten-port walk would be invisible to the one command whose job is to find it.
+ *
  * @param {number[]} hookPorts
  * @param {number|null} explicit
+ * @param {number|null} [published]
  */
-function candidatePorts(hookPorts, explicit) {
+function candidatePorts(hookPorts, explicit, published = null) {
   const ports = new Set(hookPorts.filter((p) => typeof p === 'number'));
   if (explicit != null) ports.add(explicit);
+  if (published != null) ports.add(published);
   for (let p = DEFAULT_PORT; p < DEFAULT_PORT + PORT_SCAN_SPAN; p++) ports.add(p);
   return [...ports];
 }
@@ -407,6 +421,9 @@ export async function collectReport(opts = {}) {
   const candidates = candidatePorts(
     hooks.map((h) => h.port),
     opts.port ?? null,
+    opts.publishedPort !== undefined
+      ? opts.publishedPort
+      : (readDaemonFile(path.join(dataDir, 'daemon.json'))?.port ?? null),
   );
   const open = await Promise.all(candidates.map((p) => probe(p)));
   const listening = new Set(candidates.filter((_p, i) => open[i]));
@@ -656,7 +673,11 @@ export function renderReport(report, opts = {}) {
 function describeHooks(h, now) {
   if (h.error) return `could not be read: ${h.error}`;
   if (!h.installed) return 'not installed (DeckHQ polls instead)';
-  const parts = ['installed'];
+  // A plugin install carries no port: its hook command asks the daemon where
+  // it is on every event, so there is no port to report and nothing that can
+  // go stale. Saying so is the difference between a row that explains the
+  // missing port and a row that looks half-read.
+  const parts = [h.viaPlugin && h.port == null ? 'installed as a plugin' : 'installed'];
   if (h.port != null) parts.push(`port ${h.port}`);
   if (h.listening === false) parts.push('NOTHING LISTENING THERE');
   if (h.eventsSeen != null) {
@@ -902,7 +923,7 @@ export function renderShare(report, opts = {}) {
 function describeHooksForShare(h, now) {
   if (h.error) return 'could not be read';
   if (!h.installed) return 'not installed (DeckHQ polls instead)';
-  const parts = ['installed'];
+  const parts = [h.viaPlugin && h.port == null ? 'installed as a plugin' : 'installed'];
   if (h.listening === false) parts.push('NOTHING LISTENING THERE');
   if (h.eventsSeen != null) {
     parts.push(`${group(h.eventsSeen)} ${plural(h.eventsSeen, 'event')}`);
