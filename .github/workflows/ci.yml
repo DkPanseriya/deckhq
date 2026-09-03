@@ -5,6 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# Superseding a push is only ever right on a branch somebody is iterating on.
+# Keyed on the ref for a pull request, so a second push to a PR cancels the
+# first; keyed on the commit for a push to `main`, so every merge gets its own
+# group and runs to completion. Grouping `main` by ref would have been worse
+# than the cancellation it fixes: back-to-back merges would queue behind each
+# other and the history would still have runs with no verdict on them.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     strategy:
@@ -13,6 +23,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         node: [18, 20, 22]
     runs-on: ${{ matrix.os }}
+    # The suite is about 5 s. This is a hang guard for a test that waits on a
+    # socket or a child that never exits, not a budget.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -39,19 +52,23 @@ jobs:
   # our own PNG codec over node:zlib, and a Chrome the runner already has. That
   # is worth ~15 s of the budget below.
   #
-  # Two tooling gaps are skips rather than failures, because a red build on a
-  # missing browser teaches people to ignore the gate: no Chrome (the script
-  # says so and exits 0), and no goldens committed for this platform yet — see
-  # DEVIATIONS.md WP-21, this is the state linux is in today. In both cases the
-  # fresh captures are uploaded below, which is how the first linux set gets
-  # generated and committed.
+  # Three tooling gaps are skips rather than failures, because a red build on a
+  # missing browser teaches people to ignore the gate: no WebSocket, no Chrome,
+  # and a Chrome that will not start (each says so and exits 0); plus no
+  # goldens committed for this platform yet — see DEVIATIONS.md §87 and §113,
+  # this is the state linux is in today. In every case the fresh captures are
+  # uploaded below, which is how the first linux set gets generated and
+  # committed.
   #
   # Budget: WP-21 asks for under 90 s. Measured 26-28 s for all four
   # populations on a Windows laptop; the timeout is a hang guard, not the
-  # budget.
+  # budget. It is 8 minutes rather than 4 because the launch now retries three
+  # times against a 60 s target wait, and the whole point of that path is to
+  # reach the SKIPPED line — a job the runner kills at the timeout has failed,
+  # which is the outcome §87 promised it would not have.
   goldens:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

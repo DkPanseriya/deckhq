@@ -406,11 +406,12 @@ test('DECKHQ_BIN pointing at a script is run through this node', () => {
 });
 
 test("npm's own entry point is preferred to the shim beside it", () => {
-  const dir = path.join('/usr', 'local', 'bin');
-  const entry = path.join(dir, 'node_modules', 'deckhq', 'bin', 'deckhq.mjs');
+  const dir = path.posix.join('/usr', 'local', 'bin');
+  const entry = path.posix.join(dir, 'node_modules', 'deckhq', 'bin', 'deckhq.mjs');
   const launcher = resolveLauncher({
     env: { PATH: dir },
-    exists: (p) => p === entry || p === path.join(dir, 'deckhq'),
+    platform: 'linux',
+    exists: (p) => p === entry || p === path.posix.join(dir, 'deckhq'),
   });
   assert.equal(launcher.command, process.execPath);
   assert.deepEqual(launcher.args, [entry]);
@@ -421,19 +422,69 @@ test('a .cmd shim is run as an argument to the interpreter, never as a shell str
   // SECURITY: node refuses to spawn a batch file directly since 18.20.2, and
   // shelling out with an interpolated path is the class of bug this project
   // does not write. Every argument here is a literal.
+  //
+  // The platform is injected rather than read off the host, so the argv this
+  // asserts is the one built FOR win32 — on the two thirds of the CI matrix
+  // that is not Windows as much as on the third that is. The one exact
+  // interpreter path comes in through `env` for the same reason.
   const dir = 'C:\\tools';
-  const shim = path.join(dir, 'deckhq.cmd');
-  const launcher = resolveLauncher({ env: { PATH: dir }, exists: (p) => p === shim });
+  const shim = path.win32.join(dir, 'deckhq.cmd');
+  const launcher = resolveLauncher({
+    env: { PATH: dir, ComSpec: 'C:\\WINDOWS\\system32\\cmd.exe' },
+    platform: 'win32',
+    exists: (p) => p === shim,
+  });
+  assert.equal(launcher.command, 'C:\\WINDOWS\\system32\\cmd.exe');
+  assert.deepEqual(launcher.args, ['/d', '/s', '/c', shim]);
+  assert.equal(launcher.via, 'path');
+});
+
+test('a machine with no ComSpec still goes through cmd.exe, not a shell', () => {
+  const shim = path.win32.join('C:\\tools', 'deckhq.bat');
+  const launcher = resolveLauncher({
+    env: { PATH: 'C:\\tools' },
+    platform: 'win32',
+    exists: (p) => p === shim,
+  });
   assert.match(launcher.command, /cmd\.exe$/i);
   assert.deepEqual(launcher.args, ['/d', '/s', '/c', shim]);
 });
 
+test('the .exe beside a .cmd wins, and is spawned with no interpreter at all', () => {
+  const exe = path.win32.join('C:\\tools', 'deckhq.exe');
+  const launcher = resolveLauncher({
+    env: { PATH: 'C:\\tools' },
+    platform: 'win32',
+    exists: (p) => p === exe || p === path.win32.join('C:\\tools', 'deckhq.cmd'),
+  });
+  assert.deepEqual(launcher, { command: exe, args: [], via: 'path' });
+});
+
+test('a posix machine never looks for a .cmd, so a stray one is not run', () => {
+  const stray = path.posix.join('/usr', 'local', 'bin', 'deckhq.cmd');
+  assert.equal(
+    resolveLauncher({
+      env: { PATH: '/usr/local/bin' },
+      platform: 'linux',
+      exists: (p) => p === stray,
+    }),
+    null,
+  );
+});
+
 test('an extensionless executable is spawned directly', () => {
-  const shim = path.join('/usr', 'local', 'bin', 'deckhq');
-  const launcher = resolveLauncher({ env: { PATH: '/usr/local/bin' }, exists: (p) => p === shim });
+  const shim = path.posix.join('/usr', 'local', 'bin', 'deckhq');
+  const launcher = resolveLauncher({
+    env: { PATH: '/usr/local/bin' },
+    platform: 'linux',
+    exists: (p) => p === shim,
+  });
   assert.deepEqual(launcher, { command: shim, args: [], via: 'path' });
 });
 
 test('a machine with no deckhq anywhere resolves to nothing', () => {
-  assert.equal(resolveLauncher({ env: { PATH: '/nowhere' }, exists: () => false }), null);
+  assert.equal(
+    resolveLauncher({ env: { PATH: '/nowhere' }, platform: 'linux', exists: () => false }),
+    null,
+  );
 });
