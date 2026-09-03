@@ -7,9 +7,11 @@
  */
 
 import { promises as fsp } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { createLog } from './log.mjs';
 import { EDITOR_NAMES } from './editor.mjs';
+import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -60,6 +62,7 @@ export const TERMINAL_AUTO = 'auto';
  * @property {string} approveText   what the panel's `2 Approve` sends
  * @property {string} editor        which editor "open in editor" launches
  * @property {string} terminal      pinned emulator id, or `auto` to detect
+ * @property {number} ledgerRetentionDays  how many days of event ledger to keep
  */
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -76,6 +79,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // be wrong on any machine that later installs a different editor.
   editor: '',
   terminal: TERMINAL_AUTO,
+  // WP-17. Ninety days is a quarter: long enough for "falling week over week"
+  // to mean something and for an annual Wrapped to have most of its material,
+  // short enough that the directory stays a few megabytes on a busy machine.
+  ledgerRetentionDays: DEFAULT_RETENTION_DAYS,
 });
 
 /** An approval is one line the user would have typed; anything longer is a reply. */
@@ -167,10 +174,24 @@ function sanitizeEditor(v) {
   return /** @type {readonly string[]} */ (EDITOR_NAMES).includes(s) ? s : DEFAULT_SETTINGS.editor;
 }
 
+/**
+ * A hand-edited or absent machine id reads back as absent, and the getter
+ * mints a new one. WP-48: 32 hex characters of `randomBytes`, nothing derived
+ * from the machine — not its name, not its MAC, not its user. A random id is
+ * a join key for two of the user's OWN ledgers; anything derived would be a
+ * fingerprint, which is a different thing entirely.
+ * @param {unknown} v
+ */
+function sanitizeMachineId(v) {
+  return typeof v === 'string' && /^[0-9a-f]{32}$/.test(v) ? v : null;
+}
+
 function defaultData() {
   return {
     version: 1,
     seededAt: null,
+    // WP-48. Minted on first use, never sent anywhere. See `get machineId`.
+    machineId: null,
     settings: { ...DEFAULT_SETTINGS },
     ack: {},
     // MK numbering and user-chosen names. Assigned once and kept forever, so
@@ -199,6 +220,7 @@ function normalize(parsed) {
   settings.approveText = sanitizeApproveText(settings.approveText);
   settings.editor = sanitizeEditor(settings.editor);
   settings.terminal = sanitizeTerminal(settings.terminal);
+  settings.ledgerRetentionDays = clampRetentionDays(settings.ledgerRetentionDays);
   const ack = isPlainObject(parsed.ack) ? { ...parsed.ack } : {};
   const rawIdentity = isPlainObject(parsed.identity) ? parsed.identity : {};
   const identity = {
@@ -214,6 +236,7 @@ function normalize(parsed) {
   return {
     version: 1,
     seededAt: typeof parsed.seededAt === 'number' ? parsed.seededAt : null,
+    machineId: sanitizeMachineId(parsed.machineId),
     settings,
     ack,
     identity,
@@ -254,19 +277,38 @@ export class Store {
   /**
    * Load state.json. A corrupt or unparseable file never prevents startup:
    * it is backed up alongside itself and the store starts from defaults.
+   *
+   * An id already minted in this process survives the re-read. `load()` is
+   * called more than once on a normal start — `startDaemon()` calls it, and
+   * `Registry.start()` calls it again — and the machine id is minted between
+   * those two, before the 250 ms debounce has put it on disk. Without this
+   * the second read would parse a file with no id, hand back `null`, and the
+   * daemon would mint a *different* id on every start: the one field in the
+   * file whose entire value is being stable would be the one field that
+   * never was. See `docs/DEVIATIONS.md` §94.
+   *
    * @returns {Promise<void>}
    */
   async load() {
+    const minted = this._data?.machineId || null;
+    const restore = () => {
+      if (minted && !this._data.machineId) {
+        this._data.machineId = minted;
+        this.save();
+      }
+    };
     let raw;
     try {
       raw = await fsp.readFile(this.file, 'utf8');
     } catch (err) {
       if (err && err.code === 'ENOENT') {
         this._data = defaultData();
+        restore();
         return;
       }
       this._log.warn(`could not read ${this.file}; starting from defaults`, err);
       this._data = defaultData();
+      restore();
       return;
     }
 
@@ -280,6 +322,7 @@ export class Store {
         err,
       );
       this._data = defaultData();
+      restore();
       return;
     }
 
@@ -289,10 +332,12 @@ export class Store {
         `state file at ${this.file} has an invalid shape; backed up and starting from defaults`,
       );
       this._data = defaultData();
+      restore();
       return;
     }
 
     this._data = normalize(parsed);
+    restore();
   }
 
   /** @param {string} raw */
@@ -344,9 +389,32 @@ export class Store {
     if (patch && Object.prototype.hasOwnProperty.call(patch, 'terminal')) {
       next.terminal = sanitizeTerminal(patch.terminal);
     }
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'ledgerRetentionDays')) {
+      next.ledgerRetentionDays = clampRetentionDays(patch.ledgerRetentionDays);
+    }
     this._data.settings = next;
     this.save();
     return this.settings;
+  }
+
+  /**
+   * This machine's random id, minted on first read and kept forever.
+   *
+   * WP-48. It exists so that two ledgers the same person's two machines
+   * wrote can be merged into one team floor without either of them holding a
+   * name, a path or an account. It is written to `state.json` and read by
+   * `src/core/ledger.mjs`; **nothing in this repository sends it anywhere**,
+   * and there is a test that asserts the string never appears in any
+   * outbound-facing surface (`doctor --share`).
+   *
+   * @returns {string}
+   */
+  get machineId() {
+    if (!this._data.machineId) {
+      this._data.machineId = randomBytes(16).toString('hex');
+      this.save();
+    }
+    return this._data.machineId;
   }
 
   /** @returns {number|null} */

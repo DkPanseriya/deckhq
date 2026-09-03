@@ -173,7 +173,7 @@ export function register(router, ctx) {
       });
       // Sending is a user action, so it legitimately moves observed state:
       // the session is now working. It does NOT touch ackState.
-      registry.noteSent?.(id);
+      registry.noteSent?.(id, { chars: text.length, ok: result.ok !== false });
       if (!result.ok) return sendJson(res, 502, { error: result.error || 'Send failed' });
       return sendJson(res, 200, result);
     } catch (err) {

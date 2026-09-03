@@ -43,6 +43,19 @@
  * (`_computeAgents`) never touches the store's ack fields directly except
  * through `_markForReview` / `_markNeedsInput`, which are strictly
  * set-only-if-unset. Every other user-owned mutation happens in `act()`.
+ *
+ * THE LEDGER (WP-17), and why it cannot break any of the above:
+ * `_noteLedger()` runs at the very END of `_rebuild()`, after the agents are
+ * already computed and assigned. It is handed the previous and the current
+ * `Agent[]` — plain values — and it may do exactly two things with them:
+ * compare them, and hand the difference to `Ledger.record()`, which is
+ * synchronous, buffers in memory and cannot throw. It never calls
+ * `store.getAck`, never calls `store.setAck`, and every call site here is
+ * inside a `try` that swallows. A ledger that is absent, broken, or throwing
+ * on every call therefore produces byte-identical agents and byte-identical
+ * ack state — asserted by the `INVARIANT:` test in
+ * `test/unit/ledger-invariant.test.mjs`, which drives the same script through
+ * two registries and diffs both.
  */
 
 import {
@@ -58,6 +71,7 @@ import {
 import { seedIfNeeded } from './seed.mjs';
 import { createLog } from './log.mjs';
 import { discoverActions } from './actions.mjs';
+import { projectKeyFor } from './ledger.mjs';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -169,10 +183,17 @@ export class Registry {
   /**
    * @param {{store: Store, adapters: RuntimeAdapter[], log?: import('./log.mjs').Log}} opts
    */
-  constructor({ store, adapters, log, identity }) {
+  constructor({ store, adapters, log, identity, ledger }) {
     this.store = store;
     this.adapters = adapters || [];
     this.log = log || createLog('state-machine');
+    /**
+     * The event ledger (WP-17), or null. Optional everywhere: a Registry
+     * without one behaves identically, which is both what the unit suite
+     * relies on and what the invariant guarantees.
+     * @type {import('./ledger.mjs').Ledger|null}
+     */
+    this.ledger = ledger || null;
     /**
      * Assigns the stable MK tags the floor draws. Optional so the unit suite
      * can build a Registry without one; the daemon always supplies it.
@@ -448,9 +469,19 @@ export class Registry {
       if (summary.archived && state !== 'let_go') {
         this.store.setAck(id, { state: 'let_go' });
         this._changed = true;
+        this._ledger('session', {
+          sessionId: id,
+          projectKey: projectKeyFor(summary.cwd),
+          event: 'archived',
+        });
       } else if (!summary.archived && state === 'let_go') {
         this.store.setAck(id, { state: 'active' });
         this._changed = true;
+        this._ledger('session', {
+          sessionId: id,
+          projectKey: projectKeyFor(summary.cwd),
+          event: 'unarchived',
+        });
       }
     }
   }
@@ -682,6 +713,18 @@ export class Registry {
         throw new Error(`Unknown action "${action}"`);
     }
 
+    // Recorded after the store has already been written, and before the
+    // rebuild that will record the state change it caused: the action is the
+    // user's decision, the transitions are its consequences, and the ledger
+    // wants both. An illegal action never reaches here — it threw above — so
+    // the ledger never claims an action that did not happen.
+    this._ledger('action', {
+      sessionId: id,
+      projectKey: projectKeyFor(agent.cwd),
+      action,
+      t: now,
+    });
+
     this._rebuild();
     this._emitIfChanged();
     return this._agents.find((a) => a.id === id);
@@ -746,6 +789,7 @@ export class Registry {
   }
 
   _rebuild() {
+    const previous = this._agents;
     const agents = this._computeAgents();
     const key = JSON.stringify(agents);
     if (key !== this._lastKey) {
@@ -753,6 +797,107 @@ export class Registry {
       this._changed = true;
     }
     this._agents = agents;
+    // Last, and on the already-assigned result. See the module header.
+    this._noteLedger(previous, agents);
+  }
+
+  /**
+   * Hand one ledger record over, and let nothing that happens to it matter.
+   * @param {string} kind
+   * @param {Record<string, any>} fields
+   */
+  _ledger(kind, fields) {
+    if (!this.ledger) return;
+    try {
+      this.ledger.record(/** @type {any} */ (kind), fields);
+    } catch (err) {
+      // `record()` is documented not to throw; if a future one does, the
+      // state machine is still not the place it takes anything down.
+      this.log.debug('ledger record failed', err);
+    }
+  }
+
+  /**
+   * Write down what changed between two computed agent lists.
+   *
+   * Pure comparison of two plain arrays. Reads no store field and writes no
+   * store field — see the module header, and the `INVARIANT:` test.
+   *
+   * @param {Agent[]} prev
+   * @param {Agent[]} next
+   */
+  _noteLedger(prev, next) {
+    if (!this.ledger) return;
+    try {
+      /** @type {Map<string, Agent>} */
+      const before = new Map();
+      for (const a of prev) before.set(a.id, a);
+
+      for (const a of next) {
+        const projectKey = projectKeyFor(a.cwd);
+        const base = { sessionId: a.id, projectKey };
+        const was = before.get(a.id);
+
+        // One carry-over snapshot per session per local day, whether the
+        // session is new to this process or the file simply rolled over at
+        // midnight. `since` is what keeps an episode measurable across the
+        // roll; the header of ledger.mjs has the reasoning.
+        if (this.ledger.markSeen(a.id)) {
+          this._ledger('session', {
+            ...base,
+            event: 'first_seen',
+            activity: a.activityState,
+            ack: a.ackState,
+            since: a.reviewSince ?? a.needsInputSince ?? a.lastActivityAt ?? null,
+          });
+        }
+
+        if (was && was.activityState !== a.activityState) {
+          this._ledger('state', {
+            ...base,
+            dim: 'activity',
+            from: was.activityState,
+            to: a.activityState,
+          });
+        }
+        if (was && was.ackState !== a.ackState) {
+          this._ledger('state', { ...base, dim: 'ack', from: was.ackState, to: a.ackState });
+        }
+        const prevTokens = was ? was.tokens || 0 : 0;
+        if ((a.tokens || 0) !== prevTokens) {
+          this._ledger('tokens', {
+            ...base,
+            delta: (a.tokens || 0) - prevTokens,
+            tokens: a.tokens || 0,
+            cacheDelta: (a.cacheTokens || 0) - (was ? was.cacheTokens || 0 : 0),
+            cacheTokens: a.cacheTokens || 0,
+          });
+        }
+      }
+    } catch (err) {
+      this.log.debug('ledger diff failed', err);
+    }
+  }
+
+  /**
+   * A turn was sent to this session from DeckHQ. Called by `POST /api/send`
+   * after the adapter accepted it. Observational as far as this class is
+   * concerned: it records, and changes nothing.
+   * A send the adapter refused is not a send: recording one would inflate
+   * "sends per day" with the user's failures, which is the one direction a
+   * measurement of your own work must not lean.
+   *
+   * @param {string} id
+   * @param {{chars?:number, ok?:boolean}} [info]
+   */
+  noteSent(id, info = {}) {
+    if (info.ok === false) return;
+    const agent = this._agents.find((a) => a.id === id);
+    this._ledger('send', {
+      sessionId: id,
+      projectKey: projectKeyFor(agent ? agent.cwd : ''),
+      chars: Number(info.chars) || 0,
+    });
   }
 
   _computeAgents() {

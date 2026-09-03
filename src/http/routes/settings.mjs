@@ -22,6 +22,7 @@ const ALLOWED = new Set([
   'approveText',
   'editor',
   'terminal',
+  'ledgerRetentionDays',
 ]);
 
 /**
@@ -82,6 +83,9 @@ export function register(router, ctx) {
       // that travels between a Mac and a Linux box is not a bad request, and
       // detection ignores a pin it cannot resolve.
       if (k === 'terminal' && !(typeof v === 'string' && TERMINAL_IDS.has(v))) continue;
+      // The store clamps this to 1..3650; a non-number would silently become
+      // the default, so it is rejected here where the caller can be told.
+      if (k === 'ledgerRetentionDays' && !(typeof v === 'number' && Number.isFinite(v))) continue;
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

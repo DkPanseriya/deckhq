@@ -35,6 +35,17 @@ export const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 export const CACHE_DIR = path.join(DATA_DIR, 'cache');
 
 /**
+ * The event ledger, one append-only `YYYY-MM-DD.jsonl` per local day (WP-17).
+ *
+ * Beside the cache rather than inside `state.json` for the same reason the
+ * cache is: it is derived measurement, not the user-owned half of the model.
+ * Deleting it costs the history behind the postcard and the records and
+ * nothing else — no acknowledgement lives here. It is pruned to
+ * `settings.ledgerRetentionDays` at every daemon start.
+ */
+export const LEDGER_DIR = path.join(DATA_DIR, 'ledger');
+
+/**
  * Where one runtime adapter's scan cache lives.
  *
  * The id is sanitised rather than trusted: it becomes a filename, and an
