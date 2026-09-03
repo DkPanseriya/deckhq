@@ -69,6 +69,12 @@ const CLICK = opt('--click', '');
  */
 const SCROLL = opt('--scroll', '');
 /**
+ * Leave WP-13's coach marks up instead of skipping them. The one shot that
+ * needs this is `docs/media/coach-marks.png`, and a documented flag is a
+ * regenerable screenshot where a hand-rolled script is not.
+ */
+const KEEP_ONBOARDING = argv.includes('--onboarding');
+/**
  * Photograph the floating mini-floor (WP-39) instead of the page.
  *
  * Chromium's Document Picture-in-Picture window is its OWN CDP page target —
@@ -113,14 +119,19 @@ await withChrome(
     // first SSE snapshot, the backdrop bake and the walk animations to finish.
     await new Promise((r) => setTimeout(r, SETTLE_MS));
 
-    // Dismiss first-run onboarding if it is showing, so the shot is of the floor.
-    await client.send('Runtime.evaluate', {
-      expression: `(() => {
-      const d = document.getElementById('onboarding-dialog');
-      if (d && d.open) { document.getElementById('onboarding-dismiss')?.click(); return 'dismissed'; }
+    // Skip first-run onboarding if it is showing, so the shot is of the floor.
+    // Since WP-13 that is three coach marks in a layer, not a `<dialog>`; the
+    // demo fixtures seed `onboarded: true` so this should never fire, and it
+    // stays because "should never" is not "cannot".
+    if (!KEEP_ONBOARDING) {
+      await client.send('Runtime.evaluate', {
+        expression: `(() => {
+      const layer = document.getElementById('coach-layer');
+      if (layer && !layer.hidden) { layer.querySelector('.coach-skip')?.click(); return 'skipped'; }
       return 'not shown';
     })()`,
-    });
+      });
+    }
     await new Promise((r) => setTimeout(r, 1500));
 
     // Optionally drive the keyboard before the shot — `j` walks the needs-you

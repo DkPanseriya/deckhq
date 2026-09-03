@@ -165,32 +165,63 @@ test('INVARIANT: the permission card never reaches /api/ack, and answering is it
 });
 
 test('INVARIANT: A / D / S only ever answer a card that is actually up', () => {
-  // `A` is app.js's acknowledge shortcut. The panel's own listener runs first
-  // and takes the key ONLY while a permission card is showing; with no card it
-  // must fall through untouched, or acknowledging by keyboard would break.
+  // `A` is app.js's acknowledge shortcut and `S` is its office snapshot. The
+  // panel's own listener runs first and takes those keys ONLY while a
+  // permission card is showing; with no card they must fall through
+  // untouched, or acknowledging and photographing by keyboard would break.
+  //
+  // The rule itself lives in the pure `permissionKeyDecision()` (WP-14 and
+  // WP-19 both want `S`, so the precedence is written down rather than left to
+  // listener order — `test/unit/permission-keys.test.mjs` walks every case).
+  // The listener is the half that reads the DOM, so the guards are asserted
+  // across both: each one must exist, and each one must be reachable from the
+  // listener.
   const panel = read(path.join(PUBLIC, 'panel.js'));
+  const bodyFrom = (start) => {
+    let i = panel.indexOf('{', start);
+    let depth = 0;
+    for (; i < panel.length; i++) {
+      if (panel[i] === '{') depth++;
+      else if (panel[i] === '}' && --depth === 0) break;
+    }
+    return panel.slice(start, i + 1);
+  };
+
   const start = panel.indexOf("document.addEventListener('keydown'");
   assert.notEqual(start, -1, 'the panel registers no keydown listener');
-  let i = panel.indexOf('{', start);
-  let depth = 0;
-  for (; i < panel.length; i++) {
-    if (panel[i] === '{') depth++;
-    else if (panel[i] === '}' && --depth === 0) break;
-  }
-  const handler = panel.slice(start, i + 1);
+  const handler = bodyFrom(start);
 
-  // Every guard that has to be there before the key is claimed.
+  const ruleStart = panel.indexOf('export function permissionKeyDecision(');
+  assert.notEqual(ruleStart, -1, 'the A/D/S rule is not a function of its own');
+  const rule = bodyFrom(ruleStart);
+
+  // The listener asks the rule, and does nothing with the key on its own.
+  assert.match(handler, /permissionKeyDecision\(e, \{/, 'the listener bypasses the rule');
+  assert.doesNotMatch(handler, /case '[adsADS]'/, 'a second key map would drift from the rule');
+
+  // Every guard that has to be there before the key is claimed. The four DOM
+  // facts are read in the listener; the two facts about the request itself are
+  // decided in the rule.
   assert.match(handler, /root\.hidden/, 'it acts while the panel is closed');
   assert.match(handler, /TEXTAREA/, 'it acts while the composer has focus');
   assert.match(handler, /isContentEditable/);
   assert.match(handler, /dialog\[open\]/);
   assert.match(handler, /pendingPermission\(\)/);
-  assert.match(handler, /requiresUserInteraction/);
-  // It never acknowledges, benches or sends.
+  assert.match(rule, /requiresUserInteraction/);
+  // And the rule must actually consult all four, not merely be handed them.
+  for (const fact of ['panelOpen', 'typing', 'dialogOpen', 'pending']) {
+    assert.match(rule, new RegExp(`ctx\\.${fact}|\\b${fact}\\b`), `the rule ignores ${fact}`);
+  }
+  // It never acknowledges, benches or sends — neither half.
   assert.doesNotMatch(handler, /performAction\(|\/api\/ack|sendText\(/);
-  // The key is only swallowed after a decision has been settled on.
+  assert.doesNotMatch(rule, /performAction\(|\/api\/|sendText\(|answerPermission\(/);
+  // The key is only swallowed after a decision has been settled on: nothing is
+  // claimed before `permissionKeyDecision()` has returned one.
+  const asked = handler.indexOf('permissionKeyDecision(');
+  const bailed = handler.indexOf('if (!decision) return;');
   const claim = handler.indexOf('stopImmediatePropagation');
-  assert.ok(claim > handler.indexOf("case 'a'"), 'the key is claimed before the card is checked');
+  assert.ok(asked !== -1 && bailed > asked, 'the listener does not bail on a null decision');
+  assert.ok(claim > bailed, 'the key is claimed before the card is checked');
 });
 
 test('SECURITY: no client module assigns innerHTML or builds HTML from strings', () => {

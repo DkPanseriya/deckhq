@@ -987,6 +987,18 @@ button {
   text-overflow: ellipsis;
 }
 
+/* WP-46 · the team's record line, when one of the records has this session or
+   its room as its subject. Quieter than the tool line above it — it is a
+   grace note, not information the review needs — and it wraps rather than
+   truncating, because half a record is not a record. */
+.panel-record {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
 /* the scrolling review body */
 .panel-body {
   flex: 1 1 auto;
@@ -1554,40 +1566,224 @@ button {
   border-top: 1px solid var(--line);
 }
 
-/* ------------------------------------------------------------- onboarding */
-.state-guide {
-  list-style: none;
-  margin: 0 0 1rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+/* ======================================================================
+   WP-13 · ONBOARDING — three coach marks, no modal
+
+   docs/plan/05-GUI-UX-SPEC.md §7. What was here was a modal listing the six
+   states, about 190 words, in front of the floor and before the reader had
+   seen the floor do anything.
+
+   The layer is a fixed overlay that does NOT take pointer events except on
+   the card itself: the floor stays clickable underneath, because the third
+   mark's whole instruction is "click anyone" and a scrim would make that a
+   lie. There is no dimming for the same reason — the thing being explained
+   is the thing you would be covering up.
+   ====================================================================== */
+.coach-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
 }
-.state-guide li {
+
+/* The ring around the anchor. A hairline in the focus ink rather than the
+   accent: crimson is reserved for for_review and primary actions
+   (docs/03-VISUAL-SPEC.md §5), and a decorative red ring around the header
+   numeral would read as an alert about that number. */
+.coach-ring {
+  position: absolute;
+  border: 2px solid var(--focus);
+  border-radius: var(--radius-md);
+  /* The stand-off is applied to the box in coach-marks.js, not here: the
+     global `box-sizing: border-box` turns a negative margin on a sized box
+     into a shift rather than an expansion. */
+  pointer-events: none;
+  animation: coach-ring-in 220ms ease both;
+}
+@keyframes coach-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.coach-card {
+  position: absolute;
+  pointer-events: auto;
+  width: min(23rem, calc(100vw - 2rem));
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  padding: 0.85rem 0.95rem 0.7rem;
+  animation: coach-card-in 180ms ease both;
+}
+@keyframes coach-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The pointer. A rotated square rather than a border triangle so it inherits
+   the card's own surface and hairline, and it is suppressed entirely
+   (`data-side="none"`) when the anchor is the whole canvas — an arrow that
+   points at a 1200 px rectangle points at nothing. */
+.coach-card::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  transform: rotate(45deg);
+}
+.coach-card[data-side='below']::before {
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+}
+.coach-card[data-side='above']::before {
+  bottom: -6px;
+  border-left: none;
+  border-top: none;
+}
+.coach-card[data-side='none']::before {
+  display: none;
+}
+
+.coach-text {
+  margin: 0 0 0.7rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.coach-foot {
   display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
+  align-items: center;
+  gap: 0.7rem;
+}
+.coach-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.coach-skip {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* The actor floor's one line (§7, WP-13). Quiet, under the floor, and gone
+   within one poll of the first real session appearing. */
+.demo-note {
+  position: absolute;
+  left: 50%;
+  bottom: 0.9rem;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: min(40rem, calc(100% - 2rem));
+  text-align: center;
+  font-size: 0.8rem;
   line-height: 1.5;
+  color: var(--ink-2);
+  background: rgb(19 20 25 / 82%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.8rem;
+  pointer-events: none;
 }
-.state-guide .state-dot {
-  margin-top: 0.45rem;
+/* ==================================================== end WP-13 block */
+
+/* ======================================================================
+   WP-15 · THE OFFICE CLEARED — the product's one celebration
+
+   docs/plan/05-GUI-UX-SPEC.md §9, docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md
+   §2. When the last waiting agent is discharged and the office had been
+   busy for at least a minute: the light warms 6% over 1.2 s, a two-note
+   chime plays, and one line fades in and out over 3 s. At most a few times
+   a day, and then it is gone.
+
+   The warming is a CSS overlay on the stage, deliberately NOT a change in
+   the renderer: it is chrome *about* the floor, it must not touch the
+   floor's baked materials or its state colours, and it must be suppressible
+   by `prefers-reduced-motion` without the renderer knowing anything about
+   that. `mix-blend-mode: soft-light` warms what is already there rather than
+   painting a film over it, which is what "the lights came up" looks like.
+   ====================================================================== */
+/* The overlay exists ONLY while the class is on. A permanently-present
+   `.stage::after` at `opacity: 0` with a blend mode still puts the canvas on
+   a composited layer, and the floor is photographed pixel for pixel by
+   `npm run goldens` — a compositing change that moves one channel by one
+   count is exactly what that gate is for. */
+.stage.is-cleared::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  /* Tungsten, not the accent: crimson is reserved for for_review and primary
+     actions (docs/03-VISUAL-SPEC.md §5), and a red flash over a cleared
+     office would say the opposite of what this moment means. */
+  background: radial-gradient(120% 90% at 50% 0%, #ffcf94 0%, #ff9d4d 55%, transparent 100%);
+  mix-blend-mode: soft-light;
+  animation: office-cleared-light 2.4s ease-in-out both;
 }
-.state-guide b {
+@keyframes office-cleared-light {
+  0% {
+    opacity: 0;
+  }
+  /* 1.2 s to reach the top of the warm, per §9. */
+  50% {
+    opacity: 0.06;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The line. Reduced motion keeps it — it is the information, and the
+   warming is the decoration (§9). The transition is neutralised by the
+   global reduced-motion block below, so it appears and goes without a
+   fade rather than not at all. */
+.office-cleared {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translate(-50%, -6px);
+  margin: 0;
+  padding: 0.55rem 1.1rem;
+  max-width: min(36rem, calc(100% - 2rem));
+  text-align: center;
+  font-size: 0.95rem;
+  line-height: 1.5;
   color: var(--ink);
+  background: rgb(26 28 35 / 92%);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  pointer-events: none;
+  opacity: 0;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
 }
-.invariant-callout {
-  /* Deliberately neutral: the accent colour is reserved exclusively for
-     for_review and primary actions (docs/03-VISUAL-SPEC.md §5). Emphasis
-     here comes from typography and layout, not from spending red on a
-     decorative border — and, per the restraint pass, not from a background
-     fill either. A single hairline rule carries the same weight. */
-  border-left: 2px solid var(--line-2);
-  padding: 0.1rem 0 0.1rem 0.8rem;
-  line-height: 1.6;
+.office-cleared.is-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
-.invariant-callout strong {
-  color: var(--ink);
-}
+/* ==================================================== end WP-15 block */
 
 /* ---------------------------------------------------------- hooks dialog
    Restraint pass: each runtime's section is separated from the next by a
@@ -2779,7 +2975,7 @@ textarea.field-input {
    the same numeral (`.numeral` / `.numeral-v` / `.numeral-k` above, unchanged
    and therefore already measured for contrast by state-visuals.test.mjs), the
    same state dot. Only the layout of that one window lives here.
-   `public/minifloor.js`, docs/DEVIATIONS.md §107. */
+   `public/minifloor.js`, docs/DEVIATIONS.md §113. */
 
 /* Tight on purpose. The window is 320x200 and every pixel the chrome takes
    comes off the office: the canvas is width-bound at that size, so padding

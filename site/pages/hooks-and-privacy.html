@@ -1,0 +1,186 @@
+<article class="prose">
+  <h1>Hooks and privacy</h1>
+  <p class="lede">
+    Everything DeckHQ knows, it read off your own disk. Everything it keeps, it wrote to your own
+    disk. Nothing goes anywhere else, and the last line of <code>deckhq doctor</code> reports the
+    egress it found.
+  </p>
+
+  <h2>No network egress, ever</h2>
+  <ul>
+    <li>
+      <strong>The daemon binds <code>127.0.0.1</code> and nothing else.</strong> There is no
+      <code>--host</code> flag and there never will be one. It is not reachable from your network,
+      which is why it needs no password. It also refuses cross-site requests, so a page in another
+      tab cannot drive it.
+    </li>
+    <li>
+      <strong>No analytics, no telemetry, no update check, no crash reporting.</strong> There is no
+      setting to turn off, because there is nothing to turn off.
+    </li>
+    <li>
+      <strong>No fonts or scripts from a CDN</strong> &#8212; in the product, and on this site. The
+      only sockets are the loopback listener and the runtime processes DeckHQ starts on your behalf.
+    </li>
+    <li>
+      Your conversation content never leaves the machine, and is rendered as text, never as HTML.
+      There is no <code>innerHTML</code> in the client at all.
+    </li>
+    <li>
+      No accounts, no billing, no licence checks. MIT, zero runtime dependencies &#8212; you can
+      read the whole thing in an afternoon, and there is nothing underneath it to read.
+    </li>
+  </ul>
+
+  <h2>What it reads from your disk</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Path</th>
+          <th>What is read</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>~/.claude/projects/**/*.jsonl</code></td>
+          <td>
+            Claude Code transcripts, in bounded chunks: the head for the title, the tail for recent
+            state and token usage. Transcripts on a busy machine reach tens of megabytes, so DeckHQ
+            never reads a whole one.
+          </td>
+        </tr>
+        <tr>
+          <td><code>claude agents --json</code></td>
+          <td>Which sessions are alive right now.</td>
+        </tr>
+        <tr>
+          <td><code>~/.codex/sessions/**</code></td>
+          <td>Codex rollout files, when Codex is installed.</td>
+        </tr>
+        <tr>
+          <td><code>~/.claude/settings.json</code></td>
+          <td>Only if you opt into hooks, and only the block DeckHQ wrote.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>What it writes</h2>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Path</th>
+          <th>What is in it</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>~/.deckhq/state.json</code></td>
+          <td>
+            Your acknowledgements, bench states, names and settings. Set
+            <code>DECKHQ_STATE_DIR</code> to move it. It is deliberately <em>not</em> stored beside
+            the package: <code>npx</code> owns that directory and may replace it on any version
+            bump, which would throw your queue away silently.
+          </td>
+        </tr>
+        <tr>
+          <td><code>~/.deckhq/cache/</code></td>
+          <td>
+            Parsed session summaries, so a restart does not re-read every transcript on disk.
+            Derived and disposable; delete it any time and it rebuilds.
+          </td>
+        </tr>
+        <tr>
+          <td><code>~/.deckhq/ledger/</code></td>
+          <td>
+            One JSON object per line, per day, behind <code>deckhq stats</code>. It holds no paths
+            and no project names &#8212; a project is a hash &#8212; and it is pruned at
+            <code>ledgerRetentionDays</code>, 90 by default.
+          </td>
+        </tr>
+        <tr>
+          <td><code>~/.deckhq/backups/</code></td>
+          <td>A copy of your Claude Code settings file, taken before DeckHQ ever modifies it.</td>
+        </tr>
+        <tr>
+          <td><code>~/.deckhq/daemon.json</code></td>
+          <td>
+            The port a running daemon bound, so a hook can find it. Removed on a clean shutdown;
+            nothing you own is in it.
+          </td>
+        </tr>
+        <tr>
+          <td><code>~/.claude/settings.json</code></td>
+          <td><strong>Only with your explicit consent</strong>, and only a tagged hook block.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
+    quietly.
+  </p>
+
+  <h2>What hooks are for</h2>
+  <p>
+    Without hooks, DeckHQ infers state from transcripts. It can tell you a session is alive and
+    whether the last word was yours or the agent&#8217;s. It <strong>cannot</strong> tell
+    <code>needs_input</code> from <code>stalled</code> &#8212; a transcript alone does not
+    distinguish those two states, and the header says so plainly rather than showing you a
+    confidently wrong picture.
+  </p>
+  <p>
+    With hooks installed, state is exact and instant: a permission prompt raises a hand within
+    milliseconds of it appearing in your terminal, and a thought bubble above the head says what
+    tool the agent is running right now.
+  </p>
+
+  <h2>Consent, and taking it back</h2>
+  <ul>
+    <li>
+      The consent screen shows you <strong>the literal JSON</strong> that will be written and the
+      exact file it goes in. Nothing is written until you click.
+    </li>
+    <li>Your settings file is copied to <code>~/.deckhq/backups/</code> before the first write.</li>
+    <li>
+      Every entry DeckHQ writes is tagged, and removal deletes only tagged entries. A hook you
+      configured yourself is reported and left exactly where it is.
+    </li>
+    <li>
+      Hooks are reported by <em>delivery</em>, not just installation. A hook aimed at a port nothing
+      is listening on leaves a settings file that looks perfect while every event goes nowhere, so
+      <code>deckhq doctor</code> counts the events that actually arrived and when the last one did.
+    </li>
+    <li>
+      Installing the <a href="install.html">Claude Code plugin</a> instead writes nothing into your
+      settings file at all, and uninstalling the plugin takes the hooks with it.
+    </li>
+  </ul>
+
+  <h2>What a hook event may touch</h2>
+  <p>
+    A tool event moves a thought bubble and nothing else. Nothing about it touches
+    <code>ackState</code>, the needs-you count, or the stall clock &#8212; there is a named
+    <code>INVARIANT:</code> test for exactly that. A path outside the session&#8217;s own working
+    directory is reduced to its file name, so a screenshot of your floor cannot carry someone
+    else&#8217;s directory tree, and every payload string is flattened to one line of printable text
+    before it is drawn.
+  </p>
+
+  <h2>What you can share, and what stays</h2>
+  <p>
+    <code>deckhq doctor --share</code> prints the report as a fenced block with everything that
+    belongs to you taken out: no paths, no project names, no machine name, no hook port, no
+    free-text error message, and a date to the day rather than the hour. Project names cannot leak
+    by construction &#8212; the report counts distinct working directories and never keeps the
+    strings &#8212; and a redaction pass runs over the assembled block anyway, because a
+    runtime&#8217;s version string is text this project did not write.
+  </p>
+  <p>
+    <code>deckhq ledger export --signed</code> writes one day out with an Ed25519 signature so
+    somebody else can check it has not been altered. The signing key is generated on your machine
+    and never leaves it.
+  </p>
+</article>

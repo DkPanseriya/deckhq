@@ -1,0 +1,129 @@
+<article class="prose">
+  <h1>Install</h1>
+  <p class="lede">
+    Node 18 or newer, and nothing else. There is no build step, no runtime dependency and no
+    account, whichever route you take.
+  </p>
+
+  <h2>npx</h2>
+  <p>The one to start with. It downloads the package, runs it, and leaves no binary behind.</p>
+  <p class="command">npx deckhq</p>
+  <p>
+    That starts the daemon on <code>127.0.0.1</code> and opens the floor in your browser.
+    <code>npx deckhq doctor</code> prints the environment report without starting anything, and
+    <code>npx deckhq --no-open</code> starts the daemon without a tab.
+  </p>
+
+  <h2>A global install</h2>
+  <p>
+    Two features want <code>deckhq</code> on your <code>PATH</code>: the status line, and the
+    plugin&#8217;s ability to start a daemon for you. <code>npx</code> leaves no binary, so those
+    want a real install.
+  </p>
+  <pre><code>npm install -g deckhq</code></pre>
+
+  <h2>Homebrew, winget and scoop</h2>
+  <p>
+    The release job renders a Homebrew formula, a three-file winget manifest and a scoop manifest
+    against the sha256 of the tarball the npm registry actually serves, and attaches them to the
+    GitHub Release along with a Windows zip. They install Node as a dependency rather than bundling
+    it, and what they install is byte-for-byte what <code>npx deckhq</code> runs.
+  </p>
+  <div class="note">
+    <p>
+      <strong>On the next release.</strong> That job exists and is tested, but it has never been run
+      by a real tag, so no release page carries those files yet. There is also no Homebrew tap and
+      no scoop bucket: today the manifests are files you point the tool at, not names you can type.
+      <code>packaging/README.md</code> in the repository says exactly what to do with each one.
+    </p>
+  </div>
+
+  <h2>As a Claude Code plugin</h2>
+  <p>The setup can happen inside the tool you already have open. In any Claude Code session:</p>
+  <pre><code>/plugin marketplace add DkPanseriya/deckhq
+/plugin install deckhq@deckhq</code></pre>
+  <p>or from a shell, or against a checkout on disk:</p>
+  <pre><code>claude plugin marketplace add DkPanseriya/deckhq
+claude plugin install deckhq@deckhq
+claude plugin marketplace add ./deckhq</code></pre>
+  <p>That is the whole setup. The plugin brings:</p>
+  <ul>
+    <li>
+      <strong>The hooks</strong>, all of them, without touching your <code>settings.json</code> at
+      all &#8212; installing the plugin <em>is</em> the consent, and uninstalling takes them with
+      it.
+    </li>
+    <li>
+      <strong>The daemon, started on your first session.</strong> An <code>async</code>
+      <code>SessionStart</code> hook checks whether one is already running and starts one if not,
+      detached and without opening a browser. Ten terminals opened at once start exactly one daemon
+      between them.
+    </li>
+    <li><code>/deckhq:deck</code> &#8212; opens the floor, starting DeckHQ first if it has to.</li>
+    <li>
+      <code>/deckhq:waiting</code> &#8212; prints the queue: who is waiting, on what project, for
+      how long.
+    </li>
+    <li>
+      <code>deckhq_waiting</code>, an MCP tool, so you can ask Claude itself what is waiting on you
+      across every project. It is read-only: it can report the queue and cannot discharge it.
+    </li>
+  </ul>
+  <p>
+    The plugin&#8217;s hooks carry no port. The daemon publishes the one it bound to
+    <code>~/.deckhq/daemon.json</code> and the hook command looks it up on each event, so a daemon
+    that moved to another port keeps receiving everything.
+  </p>
+  <p>
+    If you had already installed the hooks from the floor&#8217;s header, remove them there after
+    installing the plugin. Both routes work, but together they deliver every event twice. To remove
+    the plugin: <code>claude plugin uninstall deckhq</code>. It takes out only what it put in.
+  </p>
+
+  <h2>In VS Code</h2>
+  <p>
+    The extension is the thin part: it finds the daemon on
+    <code>127.0.0.1:4317</code>&#8211;<code>4326</code>, starts one if there is none, opens the
+    floor in a panel beside your code, and puts <code>&#9635; 3 waiting &#183; 1 hand up</code> in
+    the status bar. It reads and posts nothing &#8212; a status bar cannot discharge a debt by
+    displaying it.
+  </p>
+  <div class="note">
+    <p>
+      <strong>Not on the Marketplace yet.</strong> Publishing needs a Marketplace publisher account
+      and a token, and that has not happened. Until it does, build it from the repository:
+      <code>npx --yes @vscode/vsce package</code> in <code>vscode/</code>, then install the
+      resulting <code>.vsix</code> from the Extensions view.
+    </p>
+  </div>
+
+  <h2>The status line</h2>
+  <p>
+    Claude Code renders a user-configurable status line in every session, and DeckHQ can write one
+    segment of it. Every terminal you have open becomes a live badge for the queue.
+  </p>
+  <pre><code>deckhq statusline --install        # prints the exact JSON and the file. Writes nothing.
+deckhq statusline --install --yes  # writes it
+deckhq statusline --remove --yes   # takes it out again</code></pre>
+  <p>
+    Same discipline as the hooks: you see the literal JSON and the path before anything is written,
+    your settings file is copied to <code>~/.deckhq/backups/</code> first, the entry is tagged, and
+    removal deletes only the entry DeckHQ wrote. A status line you configured yourself is reported
+    and left where it is. It needs <code>deckhq</code> on your <code>PATH</code>.
+  </p>
+
+  <h2>Uninstalling</h2>
+  <ul>
+    <li><code>npx</code>: nothing to undo &#8212; it left nothing behind.</li>
+    <li><code>npm uninstall -g deckhq</code> for a global install.</li>
+    <li>
+      Hooks and the status line have their own removal, which deletes only the tagged entries DeckHQ
+      wrote: the hooks screen in the floor&#8217;s header, or
+      <code>deckhq statusline --remove --yes</code>.
+    </li>
+    <li>
+      Your queue, names and settings live in <code>~/.deckhq/</code>. Delete the directory and there
+      is nothing left of DeckHQ on the machine.
+    </li>
+  </ul>
+</article>

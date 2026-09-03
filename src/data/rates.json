@@ -1,0 +1,189 @@
+{
+  "version": "2026-09-04",
+  "source": "https://platform.claude.com/docs/en/docs/about-claude/pricing",
+  "retrievedAt": "2026-09-04",
+  "note": "List prices in USD per million tokens. An estimate for comparing projects, never a bill. cacheWrite is the 5-minute write price; cacheRead is the cache hit price. Anthropic rows were read off the published pricing page on retrievedAt. Rows flagged unverified were NOT read off a published price list and are carried over from the hand-typed tiers this file replaced.",
+  "rates": [
+    {
+      "match": "claude-fable-5-1",
+      "input": 10,
+      "output": 50,
+      "cacheRead": 0.25,
+      "cacheWrite": 12.5,
+      "per": 1000000
+    },
+    {
+      "match": "claude-mythos-5-1",
+      "input": 10,
+      "output": 50,
+      "cacheRead": 0.25,
+      "cacheWrite": 12.5,
+      "per": 1000000
+    },
+    {
+      "match": "claude-fable-5",
+      "input": 10,
+      "output": 50,
+      "cacheRead": 1,
+      "cacheWrite": 12.5,
+      "per": 1000000
+    },
+    {
+      "match": "claude-mythos-5",
+      "input": 10,
+      "output": 50,
+      "cacheRead": 1,
+      "cacheWrite": 12.5,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-5",
+      "input": 5,
+      "output": 25,
+      "cacheRead": 0.5,
+      "cacheWrite": 6.25,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-4-8",
+      "input": 5,
+      "output": 25,
+      "cacheRead": 0.5,
+      "cacheWrite": 6.25,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-4-7",
+      "input": 5,
+      "output": 25,
+      "cacheRead": 0.5,
+      "cacheWrite": 6.25,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-4-6",
+      "input": 5,
+      "output": 25,
+      "cacheRead": 0.5,
+      "cacheWrite": 6.25,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-4-5",
+      "input": 5,
+      "output": 25,
+      "cacheRead": 0.5,
+      "cacheWrite": 6.25,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-4-1",
+      "input": 15,
+      "output": 75,
+      "cacheRead": 1.5,
+      "cacheWrite": 18.75,
+      "per": 1000000
+    },
+    {
+      "match": "claude-opus-4",
+      "input": 15,
+      "output": 75,
+      "cacheRead": 1.5,
+      "cacheWrite": 18.75,
+      "per": 1000000
+    },
+    {
+      "match": "claude-sonnet-5",
+      "input": 2,
+      "output": 10,
+      "cacheRead": 0.2,
+      "cacheWrite": 2.5,
+      "per": 1000000
+    },
+    {
+      "match": "claude-sonnet-4-6",
+      "input": 3,
+      "output": 15,
+      "cacheRead": 0.3,
+      "cacheWrite": 3.75,
+      "per": 1000000
+    },
+    {
+      "match": "claude-sonnet-4-5",
+      "input": 3,
+      "output": 15,
+      "cacheRead": 0.3,
+      "cacheWrite": 3.75,
+      "per": 1000000
+    },
+    {
+      "match": "claude-sonnet-4",
+      "input": 3,
+      "output": 15,
+      "cacheRead": 0.3,
+      "cacheWrite": 3.75,
+      "per": 1000000
+    },
+    {
+      "match": "claude-haiku-4-5",
+      "input": 1,
+      "output": 5,
+      "cacheRead": 0.1,
+      "cacheWrite": 1.25,
+      "per": 1000000
+    },
+    {
+      "match": "claude-3-5-haiku",
+      "input": 0.8,
+      "output": 4,
+      "cacheRead": 0.08,
+      "cacheWrite": 1,
+      "per": 1000000
+    },
+    {
+      "match": "gpt-5",
+      "input": 2,
+      "output": 8,
+      "cacheRead": 0.5,
+      "cacheWrite": 2,
+      "per": 1000000,
+      "unverified": true
+    },
+    {
+      "match": "gpt-4",
+      "input": 2,
+      "output": 8,
+      "cacheRead": 0.5,
+      "cacheWrite": 2,
+      "per": 1000000,
+      "unverified": true
+    },
+    {
+      "match": "codex",
+      "input": 2,
+      "output": 8,
+      "cacheRead": 0.5,
+      "cacheWrite": 2,
+      "per": 1000000,
+      "unverified": true
+    },
+    {
+      "match": "o3",
+      "input": 2,
+      "output": 8,
+      "cacheRead": 0.5,
+      "cacheWrite": 2,
+      "per": 1000000,
+      "unverified": true
+    },
+    {
+      "match": "o4",
+      "input": 2,
+      "output": 8,
+      "cacheRead": 0.5,
+      "cacheWrite": 2,
+      "per": 1000000,
+      "unverified": true
+    }
+  ]
+}

@@ -16,12 +16,20 @@
  * `docs/02-ARCHITECTURE.md` §9.
  *
  * Nothing here writes. Not the ledger, not `state.json`, not the cache.
+ *
+ * WP-46 adds the team's records under the report: longest wait ever, busiest
+ * day, most turns in a week, the room that never slept, fastest discharge
+ * day. They are records of the team's work and never a score on the person
+ * reading them — `docs/plan/08-PLAN-V2-100X.md` §1.1 rule 6 — and a ledger
+ * younger than a week prints the same lines under a `since <first day>` note
+ * rather than padding a window it has not lived through.
  */
 import fs from 'node:fs';
 import process from 'node:process';
 
 import { LEDGER_DIR } from '../core/paths.mjs';
-import { computeStats, projectKeyFor, readAll } from '../core/ledger.mjs';
+import { computeStats, projectKeyFor, readAll, records as teamRecords } from '../core/ledger.mjs';
+import { rateCardVersion } from '../core/rates.mjs';
 import { readCache } from './source.mjs';
 import { group, palette, useColor, waited } from './deck.mjs';
 
@@ -32,7 +40,8 @@ const HELP = [
   '',
   'Usage: deckhq stats [--days N] [--json] [--no-color]',
   '',
-  '  --days N     the window, in days. Default 30.',
+  '  --days N     the window, in days. Default 30. The records below it are',
+  '               never windowed — "ever" means ever.',
   '  --json       the same numbers as JSON',
   '  --no-color   no ANSI (NO_COLOR is honoured too)',
   '  --help       this message',
@@ -84,20 +93,99 @@ export function projectNames(summaries) {
 }
 
 /**
+ * The team's records, as text — WP-46.
+ *
+ * Every line is a fact about the team's work: how long a session waited, how
+ * many turns a day held, which room had somebody in it at 4am. There is no
+ * count of the reader's days, nothing that can be broken, and no sentence
+ * whose subject is the person running the command (`docs/plan/08` §1.1 rule
+ * 6, `docs/plan/04` §5). A test asserts the second person never appears here
+ * in a fault sense.
+ *
+ * A ledger younger than a week prints exactly the same lines with `since
+ * <first day>` beside the heading, rather than either padding the window or
+ * printing nothing.
+ *
+ * @param {ReturnType<typeof teamRecords>} rec
+ * @param {{names?:Record<string,string>, color?:boolean}} [opts]
+ * @returns {string[]}
+ */
+export function renderRecords(rec, opts = {}) {
+  const c = palette(Boolean(opts.color));
+  const names = opts.names || {};
+  const label = (s) => c.dim(String(s).padEnd(26));
+  /** @type {string[]} */
+  const lines = [];
+  if (!rec) return lines;
+
+  /** @type {string[]} */
+  const rows = [];
+  if (rec.longestWait) {
+    const l = rec.longestWait;
+    rows.push(
+      `  ${label('longest wait ever')}${dur(l.ms)}` +
+        c.dim(`  ${l.date}${l.open ? ', still waiting' : ''}`),
+    );
+  }
+  if (rec.busiestDay) {
+    const b = rec.busiestDay;
+    rows.push(`  ${label('busiest day')}${group(b.turns)} turns` + c.dim(`  ${b.date}`));
+  }
+  if (rec.busiestWeek) {
+    const w = rec.busiestWeek;
+    rows.push(
+      `  ${label('most turns in a week')}${group(w.turns)} turns` + c.dim(`  ${w.from} to ${w.to}`),
+    );
+  }
+  if (rec.neverSlept) {
+    const n = rec.neverSlept;
+    const name = names[n.projectKey] || n.projectKey.slice(0, 8);
+    rows.push(
+      `  ${label('the room that never slept')}${name}` +
+        c.dim(`  ${n.hours} hour${n.hours === 1 ? '' : 's'} of the day, ${n.from} to ${n.to}`),
+    );
+  }
+  if (rec.fastestDischargeDay) {
+    const f = rec.fastestDischargeDay;
+    rows.push(
+      `  ${label('fastest discharge day')}${dur(f.medianMs)} median` +
+        c.dim(`  ${f.date}, ${group(f.discharged)} discharged`),
+    );
+  }
+  if (rows.length === 0) return lines;
+
+  lines.push('', c.bold('  the team’s records'));
+  // The honest caveat, once, where it applies to every line under it.
+  if (rec.partial) lines.push(c.dim(`  since ${rec.since}`));
+  lines.push('', ...rows);
+  return lines;
+}
+
+/**
  * The report, as text.
  * @param {ReturnType<typeof computeStats>} stats
- * @param {{names?:Record<string,string>, color?:boolean, dir?:string}} [opts]
+ * @param {{names?:Record<string,string>, color?:boolean, dir?:string, rateCard?:string,
+ *          records?:ReturnType<typeof teamRecords>}} [opts]
  */
 export function renderStats(stats, opts = {}) {
   const c = palette(Boolean(opts.color));
   const names = opts.names || {};
   const lines = [''];
+  // WP-26. Wherever a number that came off the rate card is shown, the dated
+  // table it came off is named beside it — here, in the panel, on the room
+  // plate and in the settings sheet. Printed even for an empty ledger:
+  // "which table is this build pricing with" is a question a user asks
+  // before there are any numbers, and this is the command they ask it from.
+  const rateCard = opts.rateCard || rateCardVersion();
+  const rateCardLine = c.dim(`  rate card ${rateCard} — list-price estimate, not a bill`);
 
   if (stats.records === 0) {
     lines.push(
       '  the ledger is empty',
       '',
       c.dim('  it fills as the floor moves; there is nothing to measure yet'),
+      '',
+      rateCardLine,
       '',
     );
     return lines.join('\n');
@@ -127,7 +215,11 @@ export function renderStats(stats, opts = {}) {
   lines.push(`  ${label('waiting over 24h')}` + (over === 0 ? c.review('0') : c.old(String(over))));
   lines.push(`  ${label('waiting now')}${group(stats.forReview.open)}`);
 
-  if (stats.longestWaitEver) {
+  // WP-46's block leads with the longest wait ever, so the §6 report prints
+  // it only when it is being rendered without records — one number, one
+  // place, whichever way this function is called.
+  const recordLines = renderRecords(opts.records, { names, color: opts.color });
+  if (recordLines.length === 0 && stats.longestWaitEver) {
     const l = stats.longestWaitEver;
     lines.push(
       '',
@@ -135,6 +227,7 @@ export function renderStats(stats, opts = {}) {
         c.dim(`  ${l.date}${l.open ? ', still waiting' : ''}`),
     );
   }
+  lines.push(...recordLines);
 
   // Tokens per project per day, folded to per project over the window, with
   // the per-day detail available in --json. A wall of days in a terminal is
@@ -161,6 +254,7 @@ export function renderStats(stats, opts = {}) {
   }
 
   lines.push('');
+  lines.push(rateCardLine);
   lines.push(c.dim(`  from ${opts.dir || LEDGER_DIR} — ${group(stats.records)} records`), '');
   return lines.join('\n');
 }
@@ -197,14 +291,33 @@ export async function runStats(argv = [], deps = {}) {
   }
 
   const stats = computeStats(records, { now, since: now - windowDays * DAY_MS });
+  // Records are never windowed by --days: "ever" means ever, and the rolling
+  // week is a week whatever the report above it covers.
+  const teamRec = teamRecords(records, { now });
   const names = projectNames(readCache(deps.cacheDir));
 
+  const rateCard = rateCardVersion();
+
   if (argv.includes('--json')) {
-    write(JSON.stringify({ ...stats, projects: names, dir }, null, 2) + '\n');
+    write(
+      JSON.stringify(
+        { ...stats, records: teamRec, projects: names, dir, rateCardVersion: rateCard },
+        null,
+        2,
+      ) + '\n',
+    );
     return 0;
   }
 
-  write(renderStats(stats, { names, color: deps.color ?? useColor({ argv }), dir }));
+  write(
+    renderStats(stats, {
+      names,
+      color: deps.color ?? useColor({ argv }),
+      dir,
+      records: teamRec,
+      rateCard,
+    }),
+  );
   return 0;
 }
 

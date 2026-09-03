@@ -21,6 +21,7 @@ import { register as registerChanges } from './http/routes/changes.mjs';
 import { register as registerDiff } from './http/routes/diff.mjs';
 import { register as registerPermission } from './http/routes/permission.mjs';
 import { register as registerStats } from './http/routes/stats.mjs';
+import { register as registerSnapshot } from './http/routes/snapshot.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { Ledger } from './core/ledger.mjs';
@@ -186,10 +187,12 @@ function envHoldMs() {
 /**
  * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string,
  *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
- *           notify?: boolean, daemonFile?: string }} [opts]
+ *           notify?: boolean, daemonFile?: string, snapshotDir?: string }} [opts]
  *   `daemonFile` overrides where the bound port is published; it defaults to
  *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
  *   caller named no state file.
+ *   `snapshotDir` overrides where `S` writes its PNGs (WP-14), for the same
+ *   reason: a test must never write into the user's real `~/.deckhq`.
  *   `adoptHooksPort` is set by the CLI when the user named no port: the daemon
  *   may then prefer the port the installed hooks post to (see `adoptHooksPort`
  *   above). Tests and embedders that pass a port leave it unset.
@@ -275,6 +278,9 @@ export async function startDaemon(opts = {}) {
     permissions,
     log,
     publicDir,
+    // Where `S` writes (WP-14). Overridable for the same reason `stateFile`
+    // is: a test must never write into the user's real `~/.deckhq`.
+    snapshotDir: opts.snapshotDir,
     port: null,
   };
   registerState(router, ctx);
@@ -285,6 +291,7 @@ export async function startDaemon(opts = {}) {
   registerChanges(router, ctx);
   registerDiff(router, ctx);
   registerPermission(router, ctx);
+  registerSnapshot(router, ctx);
 
   const server = http.createServer((req, res) => {
     // A missing Host header, or one pointing anywhere but loopback, is not a

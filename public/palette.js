@@ -211,13 +211,15 @@ export function rankEntries(entries, query) {
  * costs one keystroke plus Enter. They are unique by assertion, not by
  * inspection.
  *
- * @param {{snapshot:any, letGoVisible:boolean, actions:Record<string, Function>}} ctx
+ * @param {{snapshot:any, letGoVisible:boolean, redactSnapshots?:boolean,
+ *          actions:Record<string, Function>}} ctx
  */
 export function buildCommandEntries(ctx) {
   const { snapshot, letGoVisible, actions } = ctx;
   const settings = snapshot?.settings || {};
   const soundOn = Boolean(settings.sound);
   const notifyOn = settings.notifications !== false;
+  const redacting = Boolean(ctx.redactSnapshots);
 
   return [
     {
@@ -278,6 +280,28 @@ export function buildCommandEntries(ctx) {
       run: () => actions.refresh(),
     },
     {
+      // §5.3 lists "Snapshot the office" among the commands. It carries no
+      // accelerator on purpose: it already has a one-key shortcut of its own
+      // (`S`), and spending a palette accelerator on it would mean either a
+      // second way to type the same thing or taking `s` off Settle floor.
+      id: 'cmd:snapshot',
+      group: 'command',
+      label: 'Snapshot the office',
+      hint: 'floor plus stats, on the clipboard — S',
+      keywords: ['screenshot', 'png', 'share', 'capture', 'clipboard', 'image'],
+      run: () => actions.snapshot(),
+    },
+    {
+      id: 'cmd:redact',
+      group: 'command',
+      label: redacting ? 'Redact project names — turn off' : 'Redact project names',
+      hint: redacting
+        ? 'currently on; every snapshot shows MK tags'
+        : 'MK tags instead of names in the next snapshot — Shift S',
+      keywords: ['privacy', 'anonymise', 'anonymize', 'hide', 'mk', 'nda'],
+      run: () => actions.toggleRedaction(),
+    },
+    {
       id: 'cmd:settings',
       group: 'command',
       label: 'Settings',
@@ -290,9 +314,9 @@ export function buildCommandEntries(ctx) {
       id: 'cmd:onboarding',
       group: 'command',
       label: 'Onboarding again',
-      hint: 'what the six states mean',
+      hint: 'the three coach marks, from the top',
       accel: 'o',
-      keywords: ['help', 'guide', 'intro', 'tour'],
+      keywords: ['help', 'guide', 'intro', 'tour', 'coach'],
       run: () => actions.openOnboarding(),
     },
     {
@@ -520,6 +544,7 @@ export function buildEntries(ctx) {
  * @param {() => any} opts.getSnapshot
  * @param {() => string|null} opts.getSelectedId
  * @param {() => boolean} opts.getLetGoVisible
+ * @param {() => boolean} [opts.getRedactSnapshots]
  * @param {Record<string, Function>} opts.actions
  */
 export function createPalette(opts) {
@@ -531,6 +556,7 @@ export function createPalette(opts) {
     getSnapshot,
     getSelectedId,
     getLetGoVisible,
+    getRedactSnapshots,
     actions,
   } = opts;
 
@@ -543,6 +569,7 @@ export function createPalette(opts) {
       snapshot: getSnapshot(),
       selectedId: getSelectedId(),
       letGoVisible: getLetGoVisible(),
+      redactSnapshots: getRedactSnapshots ? getRedactSnapshots() : false,
       actions,
     };
   }

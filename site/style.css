@@ -1,0 +1,646 @@
+/*
+ * The documentation site.
+ *
+ * The palette is the product's own — the tokens here are copied from
+ * `public/style.css` so the site and the floor cannot drift apart. Dark only,
+ * because the product is dark only; a light site over a dark product would be
+ * a screenshot that never matches the page around it.
+ *
+ * No web font is loaded. `JetBrains Mono` and `IBM Plex Sans` are named first
+ * so a machine that has them uses them, and every stack falls back to what the
+ * system already has. There is no `@font-face`, no `@import` and no CDN,
+ * because the site keeps the product's promise: it fetches nothing from
+ * anywhere else.
+ */
+
+:root {
+  color-scheme: dark;
+
+  --bg: #131419;
+  --surface: #1a1c23;
+  --surface-2: #23262f;
+  --surface-3: #2d313c;
+  --line: #333846;
+  --line-2: #464c5e;
+
+  --ink: #eceef3;
+  --ink-2: #b8bdc9;
+  --muted: #8a92a3;
+
+  --accent: #c0392b;
+  --accent-ink: #eceef3;
+  --accent-soft: rgba(192, 57, 43, 0.16);
+  --accent-soft-line: rgba(192, 57, 43, 0.45);
+
+  --state-working: #2e7d63;
+  --state-needs_input: #b87333;
+  --state-stalled: #9a7b4f;
+  --state-for_review: #c0392b;
+  --state-benched: #7b8794;
+  --state-let_go: #bdb7aa;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* Prose sits at a reading measure; a figure is allowed to be wider than the
+     column it sits in, but not so much wider that the page reads as two
+     layouts stacked. */
+  --measure: 36rem;
+  --wide: 48rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+/* ------------------------------------------------------------- structure */
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  padding: 0.5rem 0.9rem;
+  background: var(--surface-2);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+}
+
+.skip-link:focus {
+  left: 0.75rem;
+  top: 0.75rem;
+  z-index: 10;
+}
+
+.site-head {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 0.7rem clamp(1rem, 4vw, 2.5rem);
+  background: rgba(19, 20, 25, 0.92);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(6px);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--ink);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 0.8rem;
+  height: 0.8rem;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.15rem;
+  font-size: 0.9rem;
+}
+
+.site-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  padding-bottom: 2px;
+  border-bottom: 1px solid transparent;
+}
+
+.site-nav a:hover {
+  color: var(--ink);
+}
+
+.site-nav a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+main {
+  padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 3rem;
+}
+
+.prose,
+.hero,
+.band {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.wide {
+  max-width: var(--wide);
+  margin-inline: auto;
+}
+
+/* ------------------------------------------------------------ typography */
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--ink);
+  line-height: 1.25;
+  font-weight: 600;
+  margin: 2.4rem 0 0.8rem;
+  scroll-margin-top: 4.5rem;
+}
+
+h1 {
+  font-size: clamp(1.7rem, 4.2vw, 2.3rem);
+  letter-spacing: -0.015em;
+  margin-top: 0;
+}
+
+h2 {
+  font-size: 1.3rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+h4 {
+  font-size: 0.95rem;
+  color: var(--ink-2);
+}
+
+p,
+ul,
+ol {
+  margin: 0 0 1rem;
+}
+
+li {
+  margin-bottom: 0.35rem;
+}
+
+li > ul,
+li > ol {
+  margin-top: 0.35rem;
+}
+
+a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-soft-line);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration-color: var(--accent);
+}
+
+strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2rem 0;
+}
+
+blockquote {
+  margin: 1.4rem 0;
+  padding: 0.1rem 0 0.1rem 1.1rem;
+  border-left: 2px solid var(--accent);
+  color: var(--ink);
+}
+
+blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.lede {
+  font-size: 1.08rem;
+  color: var(--ink);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* ------------------------------------------------------------------ code */
+
+/* No border on an inline code span. The engineering log runs eight or ten of
+   them to a paragraph, and a boxed outline on each one turns a sentence into a
+   row of chips. The ground and the face are enough to mark it. */
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 0.1em 0.32em;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+pre {
+  margin: 1.2rem 0;
+  padding: 0.95rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+pre code {
+  font-size: 0.83rem;
+  line-height: 1.6;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink-2);
+  word-break: normal;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The command a reader is meant to run, and nothing else on the line. */
+.command {
+  display: block;
+  margin: 1.2rem 0;
+  padding: 0.85rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--accent-soft-line);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 1.02rem;
+  color: var(--ink);
+}
+
+.command::before {
+  content: '$ ';
+  color: var(--muted);
+}
+
+/* The doctor report: numbers, in a mono face, tabular. Its longest line is
+   wider than a reading measure and it is the point of the page, so it steps
+   out of the column rather than being read through a scrollbar. */
+.report {
+  background: var(--surface);
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(var(--wide), calc(100vw - 3rem));
+}
+
+.report code {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- tables */
+
+/* A table is data, not prose, and the log's are four and five columns wide.
+   Like the doctor report, one steps out of the reading measure rather than
+   being folded into it. */
+.table-scroll {
+  overflow-x: auto;
+  margin: 1.4rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(var(--wide), calc(100vw - 3rem));
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid var(--line);
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+td code {
+  white-space: nowrap;
+}
+
+/* A state name and its colour dot are one label and break as one. */
+.state-cell {
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- figures */
+
+figure {
+  margin: 1.8rem auto;
+  max-width: var(--wide);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+figcaption {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------------ home */
+
+.hero h1 {
+  font-size: clamp(1.9rem, 5.2vw, 2.8rem);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.9rem;
+}
+
+.hero-sub {
+  font-size: 1.1rem;
+  color: var(--ink-2);
+}
+
+.hero-meta {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.state-dot {
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  margin-right: 0.45em;
+  vertical-align: 0.05em;
+}
+
+.dot--working {
+  background: var(--state-working);
+}
+
+.dot--needs_input {
+  background: var(--state-needs_input);
+}
+
+.dot--stalled {
+  background: var(--state-stalled);
+}
+
+.dot--for_review {
+  background: var(--state-for_review);
+}
+
+.dot--benched {
+  background: var(--state-benched);
+}
+
+.dot--let_go {
+  background: var(--state-let_go);
+}
+
+.cards {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  max-width: var(--wide);
+  margin: 1.6rem auto 2.2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.cards li {
+  margin: 0;
+  padding: 0.95rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.cards h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+}
+
+.cards p {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.callout {
+  margin: 1.6rem 0;
+  padding: 0.9rem 1.1rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-line);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+}
+
+.callout p:last-child {
+  margin-bottom: 0;
+}
+
+.note {
+  margin: 1.6rem 0;
+  padding: 0.9rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: 0.94rem;
+}
+
+.note > p:first-child > strong:first-child {
+  color: var(--state-stalled);
+}
+
+.note p:last-child {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------------- questions */
+
+.qa {
+  margin: 0 0 1.8rem;
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--line);
+}
+
+.qa h2 {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+/* ------------------------------------------------------- engineering log */
+
+.log-index {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.log-index li {
+  margin: 0;
+}
+
+.log-index a {
+  display: flex;
+  gap: 0.9rem;
+  padding: 0.55rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--ink-2);
+}
+
+.log-index a:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.log-index-n {
+  flex: 0 0 3.2rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding-top: 0.15rem;
+}
+
+.log-index-t code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.log-back,
+.log-number {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.log-number {
+  font-family: var(--font-mono);
+  margin-bottom: 0.3rem;
+}
+
+.log-entry h1 {
+  font-size: clamp(1.4rem, 3.4vw, 1.9rem);
+  margin-bottom: 1.4rem;
+}
+
+.log-entry h2 {
+  font-size: 1.1rem;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: var(--measure);
+  margin: 2.5rem auto 0;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+/* ---------------------------------------------------------------- footer */
+
+.site-foot {
+  padding: 2rem clamp(1rem, 4vw, 2.5rem) 3rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.site-foot > * {
+  max-width: var(--wide);
+  margin-inline: auto;
+}
+
+.foot-pitch {
+  color: var(--ink-2);
+}
+
+.foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.2rem;
+  margin: 0.6rem auto 0.9rem;
+}
+
+.foot-links a {
+  color: var(--muted);
+}
+
+.foot-note {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------- motion */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (max-width: 34rem) {
+  .site-head {
+    position: static;
+  }
+}

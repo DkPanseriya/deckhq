@@ -539,6 +539,10 @@ fs.writeFileSync(
 
 process.env.CLAUDE_CONFIG_DIR = CLAUDE_DIR;
 process.env.DECKHQ_STATE_DIR = STATE_DIR;
+// The office snapshot names the office after the machine (WP-14), and this
+// script exists so that nothing real ends up in a committed screenshot. A
+// machine name is somebody's real something, so it is invented here too.
+process.env.DECKHQ_HOSTNAME = 'DECKHQ-DEMO';
 process.env.PATH = `${BIN_DIR}${path.delimiter}${process.env.PATH}`;
 
 const { startDaemon } = await import('../src/daemon.mjs');

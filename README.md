@@ -368,9 +368,15 @@ These are real, and listed here rather than discovered later.
   that emulator's documented interface and unit-tested down to the exact argument list — and
   none of them has been run on a real Mac or a real Linux desktop. Treat them as untested until
   this line says otherwise. The rest of the product is CI-tested on all three.
-- **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by public list
+- **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by published list
   prices so you can compare projects against each other. It has no idea what your plan actually
-  charges you, and it is labelled as an estimate everywhere it appears.
+  charges you, and every place a figure appears carries the dated table it came from — the review
+  card, the room plate and `deckhq stats` all say `rate card <date>`, and all of them say
+  `list price`. The table is `src/data/rates.json`, keyed by model id prefix; a
+  `~/.deckhq/rates.json` merges over it entry by entry and takes effect the moment you save the
+  file, with no restart. A model the table has no row for reads **no rate** rather than `$0.00`:
+  we would rather show you nothing than a number we made up. The Codex/OpenAI rows are flagged
+  `unverified` in the file, because we have not checked them against a published price list.
 - **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.
@@ -378,21 +384,29 @@ These are real, and listed here rather than discovered later.
 
 ## Keyboard
 
-| Key                 | Action                                                |
-| ------------------- | ----------------------------------------------------- |
-| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings       |
-| `Tab`               | The deck — every waiting session as a table, and back |
-| `J` / `K`           | Move through the needs-you queue, oldest first        |
-| `Enter`             | Open the deck row under the cursor                    |
-| `1` / `2` / `3`     | Reply, approve, bench — on the selected session       |
-| `A`                 | Acknowledge the selected agent                        |
-| `B`                 | Bench the selected agent                              |
-| `P`                 | Float the office — a small always-on-top window       |
-| `Esc`               | Close the panel                                       |
-| `+` / `-`           | Magnify, 1x to 2.5x                                   |
-| `0`                 | Back to fit — which is also the minimum               |
-| `Ctrl`/`⌘` + scroll | Zoom about the cursor                                 |
-| Drag / scroll       | Pan, whenever the floor is bigger than the window     |
+| Key                 | Action                                                                  |
+| ------------------- | ----------------------------------------------------------------------- |
+| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings                         |
+| `Tab`               | The deck — every waiting session as a table, and back                   |
+| `J` / `K`           | Move through the needs-you queue, oldest first                          |
+| `Enter`             | Open the deck row under the cursor                                      |
+| `1` / `2` / `3`     | Reply, approve, bench — on the selected session                         |
+| `A`                 | Acknowledge the selected agent                                          |
+| `B`                 | Bench the selected agent                                                |
+| `P`                 | Float the office — a small always-on-top window over your terminal      |
+| `G`                 | Step through the agents who went home, newest activity first            |
+| `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk |
+| `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot    |
+| `Esc`               | Close the panel                                                         |
+| `+` / `-`           | Magnify, 1x to 2.5x                                                     |
+| `0`                 | Back to fit — which is also the minimum                                 |
+| `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                   |
+| Drag / scroll       | Pan, whenever the floor is bigger than the window                       |
+
+With a permission card open in the panel — a session with its hand up, asking before it runs
+something — `A`, `D` and `S` belong to that card: allow, deny, and allow for the rest of the
+session. That is the only time `S` is not the office snapshot, and it holds only while the card is
+up and the composer is unfocused. `Shift+S` is the redaction toggle either way.
 
 Everything is reachable without a mouse. `prefers-reduced-motion` is honoured: characters snap
 instead of walking, clips hold a representative pose, and the floor stays fully legible.
@@ -424,12 +438,13 @@ npx deckhq --version
 | `--notify`   | OS notification when a hand goes up, or when a working session dies |
 | `--version`  | Print the version                                                   |
 
-| Environment variable | Effect                                                           |
-| -------------------- | ---------------------------------------------------------------- |
-| `DECKHQ_STATE_DIR`   | Where state, cache, ledger and backups live. Default `~/.deckhq` |
-| `DECKHQ_PORT`        | Default port, if `--port` is not given                           |
-| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`               |
-| `DECKHQ_DEBUG`       | Verbose logging                                                  |
+| Environment variable | Effect                                                                      |
+| -------------------- | --------------------------------------------------------------------------- |
+| `DECKHQ_STATE_DIR`   | Where state, cache, ledger, snapshots and backups live. Default `~/.deckhq` |
+| `DECKHQ_PORT`        | Default port, if `--port` is not given                                      |
+| `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`                          |
+| `DECKHQ_HOSTNAME`    | What the office is called in a snapshot. Default: the machine's own name    |
+| `DECKHQ_DEBUG`       | Verbose logging                                                             |
 
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —
 the whole point is that debts accumulate while you are not looking.

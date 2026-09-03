@@ -915,7 +915,21 @@ test('nothing the floor is not drawing gets an anchor', () => {
   // An agent the plan hides: they have a position and no presence.
   assert.equal(computeAnchor('agent', 'gone-home-agent', view), null);
   // An unknown target is not an error and not a guess.
-  assert.equal(computeAnchor('lounge', undefined, view), null);
+  assert.equal(computeAnchor('directory', undefined, view), null);
+  assert.equal(computeAnchor(undefined, undefined, view), null);
+});
+
+test('the two names for a project room mean the same room, and the lounge has one too', () => {
+  const plan = stubPlan();
+  const view = { plan, camera: cameraAt(12), scale: 12, charScale: 12 };
+  // `08` WP-13's request (DEVIATIONS §108.1) says 'project'; the renderer's own
+  // vocabulary says 'room'. A caller that guesses wrong gets the room, not null.
+  assert.deepEqual(computeAnchor('project', 'p0', view), computeAnchor('room', 'p0', view));
+  assert.ok(computeAnchor('lounge', undefined, view));
+  assert.notDeepEqual(
+    computeAnchor('lounge', undefined, view),
+    computeAnchor('office', undefined, view),
+  );
 });
 
 test('an anchor lands on the same room a real plan draws, at fit', () => {

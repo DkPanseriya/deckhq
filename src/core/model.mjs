@@ -45,7 +45,8 @@
  * @property {number} lastActivityAt
  * @property {number} tokens             input + output only
  * @property {number} cacheTokens        cache read + write
- * @property {number} costEstimate       list-price equivalent. NEVER a bill.
+ * @property {number|null} costEstimate  list-price equivalent, or null when the
+ *                                      rate card has no row for this model. NEVER a bill.
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText           <= 400 chars
  * @property {CurrentTool|null} [currentTool]  observed; null when no tool is
@@ -75,7 +76,7 @@
  * @property {number} lastActivityAt
  * @property {number} tokens
  * @property {number} cacheTokens
- * @property {number} costEstimate
+ * @property {number|null} costEstimate  null when the model has no rate
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText
  * @property {boolean} [turnEnded]
@@ -356,7 +357,7 @@ export function projectNameFromCwd(cwd) {
  * @param {Agent[]} agents
  */
 export function projects(agents) {
-  /** @type {Map<string, {id:string,name:string,cwd:string,agentIds:string[],sessionCount:number,tokens:number,cacheTokens:number,costEstimate:number,needsYou:number,working:number,activeCount:number}>} */
+  /** @type {Map<string, {id:string,name:string,cwd:string,agentIds:string[],sessionCount:number,tokens:number,cacheTokens:number,costEstimate:number,costRated:boolean,needsYou:number,working:number,activeCount:number}>} */
   const byId = new Map();
   for (const a of agents) {
     let p = byId.get(a.projectId);
@@ -370,6 +371,11 @@ export function projects(agents) {
         tokens: 0,
         cacheTokens: 0,
         costEstimate: 0,
+        // Whether ANY agent in this room could be priced at all. A project
+        // whose every model is missing from the rate card sums to zero, and
+        // zero is a claim about the money we do not have — this is what lets
+        // a caller show "no rate" instead of "$0.00" (WP-26).
+        costRated: false,
         needsYou: 0,
         working: 0,
         // How many of this project's agents are still on the payroll —
@@ -382,7 +388,8 @@ export function projects(agents) {
     p.agentIds.push(a.id);
     p.tokens += a.tokens;
     p.cacheTokens += a.cacheTokens;
-    p.costEstimate += a.costEstimate;
+    p.costEstimate += a.costEstimate ?? 0;
+    if (a.costEstimate != null) p.costRated = true;
     if (a.ackState !== 'let_go') p.sessionCount++;
     if (needsYou(a)) p.needsYou++;
     if (a.ackState === 'active') p.activeCount++;
@@ -402,36 +409,23 @@ export function clampText(s) {
 }
 
 /**
- * The date the rate table below was last checked against published list
- * prices. Shown beside the cost estimate in the settings sheet so a figure
- * nobody can check is at least a figure whose source is dated. It is not a
- * bill and it is not a promise; it is a table with a date on it.
+ * THE RATE CARD LIVES IN `src/core/rates.mjs`, NOT HERE.
+ *
+ * It used to be four hand-typed tiers and a `RATE_CARD_VERSION` constant in
+ * this file (WP-07). WP-26 moved both: the numbers are `src/data/rates.json`,
+ * the user can merge their own over them at `~/.deckhq/rates.json`, and the
+ * table is re-read when that file changes. Reading a file is I/O, and this
+ * module's header promises there is none in it — so `estimateCost` and the
+ * version string moved out rather than dragging a `readFileSync` into the
+ * contract every other module imports.
+ *
+ * `import { estimateCost, rateCardVersion } from './rates.mjs'`.
+ *
+ * Note the return type changed with the move: `estimateCost` now returns
+ * `null` for a model the table has no row for, where it used to price the
+ * unknown as Opus. `Agent.costEstimate` is `number|null` for the same reason —
+ * "no rate" is the honest answer and `$0.00` is not.
  */
-export const RATE_CARD_VERSION = '2026-09-03';
-
-/**
- * List-price estimate, in USD, for comparing projects. Never a bill.
- * Rates are per million tokens and deliberately coarse.
- * @param {{input?:number,output?:number,cacheRead?:number,cacheWrite?:number,model?:string|null}} usage
- */
-export function estimateCost({
-  input = 0,
-  output = 0,
-  cacheRead = 0,
-  cacheWrite = 0,
-  model = null,
-}) {
-  const m = String(model || '').toLowerCase();
-  let rates = { in: 15, out: 75, cr: 1.5, cw: 18.75 }; // opus tier
-  if (m.includes('haiku')) rates = { in: 1, out: 5, cr: 0.1, cw: 1.25 };
-  else if (m.includes('sonnet')) rates = { in: 3, out: 15, cr: 0.3, cw: 3.75 };
-  else if (m.includes('gpt') || m.includes('codex') || m.includes('o3') || m.includes('o4')) {
-    rates = { in: 2, out: 8, cr: 0.5, cw: 2 };
-  }
-  const usd =
-    (input * rates.in + output * rates.out + cacheRead * rates.cr + cacheWrite * rates.cw) / 1e6;
-  return Math.round(usd * 10000) / 10000;
-}
 
 /**
  * Prefix a runtime session id so ids are globally unique on the floor.

@@ -272,7 +272,11 @@ export function ellipsise(ctx, text, maxW) {
  * and a window, so anything that must be unit-tested lives out here where a
  * stub plan is enough.
  *
- * @param {'office'|'agent'|'room'} target
+ * `'project'` is accepted as a synonym for `'room'`: `docs/DEVIATIONS.md` §108.1
+ * states the request in those words and the orchestrator's in the other, and a
+ * caller that guesses wrong should get the room rather than a null.
+ *
+ * @param {'office'|'agent'|'room'|'project'|'lounge'} target
  * @param {string|undefined|null} id agent id for `'agent'`, project id for `'room'`
  * @param {{plan:any, camera:{zoom:number,panX:number,panY:number,U:number},
  *   scale:number, charScale:number, record?:any}} view
@@ -283,10 +287,10 @@ export function computeAnchor(target, id, view) {
   if (!plan || !view.camera) return null;
   const rooms = plan.rooms || [];
 
-  if (target === 'office' || target === 'room') {
+  if (target === 'office' || target === 'lounge' || target === 'room' || target === 'project') {
     const room =
-      target === 'office'
-        ? rooms.find((r) => r && r.kind === 'office')
+      target === 'office' || target === 'lounge'
+        ? rooms.find((r) => r && r.kind === target)
         : rooms.find((r) => r && r.kind === 'project' && String(r.id) === String(id));
     if (!room) return null;
     // The room's whole footprint as it is drawn, plate band included — the
@@ -730,7 +734,7 @@ export class Scene {
    * in a project with no room). A rect is never invented for something that
    * is not there.
    *
-   * @param {'office'|'agent'|'room'} target
+   * @param {'office'|'agent'|'room'|'project'|'lounge'} target
    * @param {string} [id] the agent id for `'agent'`, the project id for `'room'`
    * @returns {{x:number, y:number, w:number, h:number}|null}
    */

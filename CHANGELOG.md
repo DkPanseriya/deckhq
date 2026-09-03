@@ -308,6 +308,111 @@
   `legendary` beside the name, in the muted ink, and show nothing at all for the ~74% that are
   common. A word and never a number: no percentage, no rank, and no count of what you have
   "collected" — `docs/plan/08` §1.1 rule 6.
+- **The team has records.** Longest wait ever and the day that stretch began, the busiest day, the
+  most turns in any seven days, the room that never slept — the project with somebody in it across
+  the most distinct hours of the day this week — and the fastest discharge day, the lowest median
+  time in review of any day that discharged enough to have a median. All five are computed from
+  the local event ledger by `records()`, published on `GET /api/stats` under `records`, and
+  printed under `deckhq stats`. **Every one is a record of the team's work and none of them is a
+  score on you**: there is no streak, no level, no count of your days and nothing that can be
+  broken by a weekend, and two tests assert that no line of the copy addresses the reader in the
+  second person — one over the rendered output of both surfaces, one over every string literal in
+  the source. `docs/plan/08` §7 and §1.1 rule 6, `docs/plan/04` §1 and §5.
+- **A record shows up beside the agent it is about.** When one of the records has the open session
+  or its project as its subject, the panel's identity area carries one quiet line for it —
+  _"longest wait ever was here: 2d 12h, 1 Sep"_ — and nothing at all the rest of the time, which
+  is most of the time. A ledger younger than a week says so on the line (`· since 1 Sep`) rather
+  than claiming a week it has not lived through, and the rolling window is clipped to the ledger
+  instead of padded past it.
+- **A machine with nothing on it gets actors, not a blank screen.** Install DeckHQ before you have
+  run anything and the floor used to say "Nothing on the floor yet" over a `claude` code block —
+  the blank screen that dev tools lose people on. The daemon now serves a small cast instead:
+  seven actors across three rooms, two of them waiting on you, under one line — _"These are
+  actors. Run `claude` in any repo and a real one walks in."_ The moment the scan finds a real
+  session the whole cast is gone and it walks in alone, within one poll rather than on a reload.
+  The actors are inert by construction and not by a check somebody has to remember: they never
+  enter the registry, so acknowledging, benching, replying to or resuming one is refused by the
+  same code that refuses an id that does not exist, and nothing about one can reach `state.json`,
+  the identity file or the cache. `deckhq waiting`, `deckhq statusline` and `deckhq doctor` all
+  report zero on that machine, because a fake count in a shell prompt is the one lie this product
+  cannot afford. `docs/DEVIATIONS.md` §108.
+- **`S` puts your office on the clipboard.** One key composites the floor and a stat strip into a
+  PNG — `SAMCO-DESK · 6 rooms · 25 people`, the four tallies with their state dots, today's
+  estimate, the longest wait, and a small wordmark — copies it, and saves it to
+  `~/.deckhq/snapshots/`. No "share to X" button that opens a compose window; the PNG is on the
+  clipboard and the product gets out of the way. It works with the tab in the background, which
+  is the case that found a real bug: a hidden tab reports `clientWidth` of 0 and a stale
+  `clientHeight`, so the image is sized from the canvas's backing store and the device pixel
+  ratio and never from layout. Two-times resolution and under 2 MB turned out to disagree until
+  the floor was resampled the unobvious way: nearest-neighbour rather than smooth, which took the
+  same 1600×1000 floor from **4.05 MB to 1.96 MB** and is also sharper, because the floor's
+  materials are deliberately high-entropy and bilinear interpolation invents a new colour at
+  nearly every pixel. Where they still disagree on a very large floor, resolution wins and the
+  toast says the size. `docs/DEVIATIONS.md` §109.
+- **`Shift+S` redacts, and it means the whole image.** Every project name becomes its MK tag —
+  on the room plates as well as in the strip, because the plates are what a screenshot actually
+  shows. The floor is handed a redacted snapshot to draw and handed the truth back immediately
+  afterwards, so redaction needed no new renderer entry point and no second copy of the floor.
+  The working directory and the project id go too: the id is a slug of the directory name, so it
+  spells the project out. The hostname stays, deliberately — the office is named after the
+  machine because people share things with their name on them, and `DECKHQ_HOSTNAME` is there for
+  anyone who wants it called something else.
+- **Three sounds, synthesised in the browser.** A low wooden door-close when a session finishes
+  its turn and walks into your office, two soft knocks when a hand goes up, and a rising two-note
+  chime when the office clears. No asset files, no fetches, nothing bundled — each is an
+  oscillator or a filtered noise burst and an envelope. Rate-limited to the same ten-second window
+  the notifications coalesce in, so three sessions finishing together is one door; silent when the
+  tab is hidden _and_ the OS notification actually fired, which is checked from what happened
+  rather than assumed from what was asked for; and one keystroke from the palette (`⌘K` → `u`)
+  turns them off for good. Volume comes from the settings sheet. The envelopes were measured
+  through a real `OfflineAudioContext` rather than described: the two noise sounds arrived 15 dB
+  under the chime, because a lowpass throws away most of white noise's energy and an oscillator
+  loses none of its own, and the volume slider had stopped affecting the door above a third of its
+  travel. Both fixed, with the measurements in the source. **They still default to off**, which is
+  a departure from the GUI spec and is deliberate: flipping that default would make every existing
+  install start making noise on upgrade, and the reason it is off — a product that sits beside a
+  terminal at 11pm does not arrive making noise — is pinned by a named test. Turning them on now
+  plays the chime once so you can hear what you have agreed to. `docs/DEVIATIONS.md` §110.1 puts
+  the call to the owner.
+- **The office-cleared moment.** When the last waiting agent is discharged and the office had been
+  busy for at least a minute: the light warms 6% over 1.2 seconds, the chime plays, and one line
+  fades in and out over three — _"Office clear. 6 discharged today, longest wait 1d 2h."_ Then it
+  is gone. The minute is the rule that makes it worth having: a session that arrives and is
+  discharged in the same breath earns nothing, so the moment marks a real milestone and not a
+  keystroke. It never scores you — it records the team's work, in the third person, and there is
+  no version of the line containing "you", a streak or a level. `prefers-reduced-motion`
+  suppresses the warming and keeps the line, because the line is the information and the warming
+  is the decoration. The warm is a CSS overlay on the stage that does not exist until it is
+  needed; the floor is unchanged.
+- **`POST /api/snapshot` writes the PNG, and takes nothing from the request but the pixels.** The
+  daemon names the file from its own clock, checks the PNG magic bytes before writing anything,
+  and has its own 8 MB body ceiling — the shared 1 MB JSON cap is right for JSON and wrong for
+  the one route that carries an image. Five non-PNG bodies, including a shell script announced as
+  `image/png`, and a filename smuggled through two headers, are all covered by named `SECURITY:`
+  tests.
+- **The rate card is a file with a date on it, and you can replace it.** Cost estimates used to
+  come from four tiers hand-typed in the middle of `src/core/model.mjs`. They are now
+  `src/data/rates.json` — versioned `2026-09-04`, carrying the pricing page it was read from and
+  the date it was read, keyed by model id prefix with the longest prefix winning. Drop a
+  `~/.deckhq/rates.json` beside your state and it merges over the shipped table entry by entry —
+  change one model's price, add a model nobody ships, name your own version string — and it takes
+  effect the moment you save the file. No restart. Rows this project has not checked against a
+  published price list (the Codex/OpenAI prefixes) are flagged `unverified` in the file itself,
+  because a number in a dated table implies a source. `docs/DEVIATIONS.md` §111.
+- **Every cost on the screen names the table it came from.** The review card's bottom line reads
+  `≈ $7.86 · list price, rate card 2026-09-04 · not a bill`; `deckhq stats` prints
+  `rate card 2026-09-04 — list-price estimate, not a bill` (and carries `rateCardVersion` in
+  `--json`); the settings sheet's "Rate card" row reads the live version rather than a constant. A
+  cost figure whose table nobody can name is a figure nobody can check. The rule that cost is an
+  estimate and never a bill is now asserted as literal text: a test collects every cost string any
+  surface can produce and fails if one of them carries a figure without a qualifier, or says
+  "bill" without "not a" in front of it.
+- **A room's plate carries what it has spent today.** `today ≈ $18.40 · list price`, as a quiet
+  third line under the name and the session count, computed from the event ledger's per-project
+  token deltas since local midnight. A project the ledger has no record for today falls back to
+  its session totals and says `to date` instead — the plate never says "today" about a number that
+  is not today's. Produced and tested; not yet painted, because the one function that draws a room
+  plate was outside this package's scope. §111.
 - **Float your office over the terminal.** `P`, or `⌘K` → "Float the office", opens a 320×200
   always-on-top window holding your office, the corridor beside it, the needs-you numeral and the
   hands-up count. It survives tab switches and app switches, it updates on every event the floor
@@ -319,7 +424,7 @@
   the live baked bitmap and the live agent records the main canvas is using, so there is one
   building and one answer to where each session is standing. It also keeps the people moving while
   the tab is hidden, which is the only time it is the thing you are looking at.
-  `public/minifloor.js`, `docs/DEVIATIONS.md` §107, `docs/media/mini-floor.png`.
+  `public/minifloor.js`, `docs/DEVIATIONS.md` §113, `docs/media/mini-floor.png`.
 
 ### Changed
 
@@ -409,6 +514,19 @@
   instead of being set as one block, because the `PermissionRequest` paragraph is the one that
   grants a runtime the ability to be answered rather than only watched, and it must not be the
   tail of a wall of text. Still `textContent`, still no markup.
+- **Onboarding is three coach marks on real things, not a modal.** What was there listed all six
+  states in about 190 words, in a dialog, in front of the floor, before you had seen the floor do
+  anything. Now: one card on the needs-you numeral (_"7 sessions are waiting on you. This number
+  is yours. The runtime can't clear it."_), one on your office (_"They finished and walked in
+  here. Reading a message doesn't send them away — only you do."_), one on a waiting agent
+  (_"Click anyone."_). Each is dismissible, `Escape` skips all three and never asks again, and the
+  whole sequence reads in 10.2 seconds against the fifteen the spec budgets — asserted in the
+  suite, so copy that grows past it fails the build. `⌘K` → "Onboarding again" brings it back on
+  purpose. The floor stays clickable underneath: there is no scrim, because the third card's whole
+  instruction is to click something. A card whose anchor the renderer cannot place drops its arrow
+  rather than pointing at a guess — that is the state the two floor marks are in today, and
+  `docs/DEVIATIONS.md` §108.1 states the one renderer export that would fix it.
+
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the
   runtime records the user turn — the documented `UserPromptSubmit` exception — never by the
@@ -441,6 +559,19 @@
   The column used to fall through to the session title because almost nobody had ever named an
   agent; now everybody has a name and it says what it was always meant to say. A given name also
   resolves an agent by name on the command line, exactly as a chosen one does.
+- **`records` on `GET /api/stats` is the team's records, not a line count.** The raw count of
+  ledger records it used to hold is `recordCount` now, and `computeStats()` publishes both names,
+  so anything reading the count has somewhere to move to that is already there. `deckhq stats`
+  reads the computation directly and is unaffected. One field, one local endpoint, recorded in
+  `docs/DEVIATIONS.md` §111 as the breaking change it is.
+- **A model the rate card has never heard of now has no price, instead of Opus's.** The old tier
+  test matched `haiku`, then `sonnet`, then `gpt|codex|o3|o4`, and priced everything else at
+  $15/$75 per million — a local model, a Codex id the tests never saw, an unrecognised Bedrock
+  string, all of them. That is not a coarse estimate, it is an invented one, and it was being
+  summed into project totals. `estimateCost` returns `null` now, the panel says
+  `no rate for this model`, and a room nothing can price gets no cost line at all. `$0.00` is a
+  claim about the money; "no rate" is the truth. `Agent.costEstimate` is `number|null`
+  accordingly.
 
 ### Fixed
 
@@ -556,6 +687,13 @@
 
 ### Testing
 
+- **The team's records are checked against ledgers built so the answer is known.** Twenty-two
+  tests over synthetic ledgers: each record is the record it claims to be, a stall coming back is
+  not a new turn, a single two-second discharge cannot be a "fastest day", a room with no name
+  never borrows another room's record, a ledger three days old reports three days and dates them,
+  and adding a day to a date still lands on the next day when the clocks change. Two of them are
+  the copy guard: the second person appears nowhere in either surface, with `waiting on you`
+  allowlisted because it is the product's own noun phrase for the queue and not a reproach.
 - **The permission feature's five "never"s are each a named `INVARIANT:` test.** Never auto-allow,
   never answer on a timer, never set `interrupt`, never send a destination other than `session`,
   never touch `ackState`. The route is driven through fake request and response objects so that
@@ -642,6 +780,15 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   to find a daemon on an OS-assigned port discoverable only through `daemon.json`; the MCP server
   is driven over its real stdio transport; eight concurrent `SessionStart` starts produce exactly
   one spawn. `docs/DEVIATIONS.md` §102.
+- **12 tests for the documentation site, and four of them are the egress promise.** The suite builds
+  `site/` into a temporary directory and reads what came out: no page fetches anything
+  cross-origin, no page carries a `<script>` or an `<iframe>` at all, the stylesheet has no
+  `@import`, no `@font-face` and no remote `url()`, and the only hosts named anywhere in the
+  sources are the two a reader is meant to be sent to. It also asserts that every internal link
+  resolves to a file that was built, that a `<script>` inside a deviation entry renders as the six
+  visible characters it is, and that the copy contains none of the phrasings `docs/plan/08` §4.2
+  retires. A site that quietly grew a font from a CDN would fail the build the same way a daemon
+  that grew a socket does. §112.
 
 ### Packaging
 
@@ -710,6 +857,17 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
 
 ### Known gaps
 
+- **The room plate's daily spend is computed but not drawn.** `buildPlan` puts it in the room's
+  third plate line and the snapshot carries it per project, but the only function that paints a
+  room plate draws two lines and recomputes them from the snapshot rather than reading the plan's —
+  and that file was outside the package that added the line. The remaining change is roughly ten
+  lines in `public/render/scene.js`, spelled out in `docs/DEVIATIONS.md` §111, plus a goldens
+  regeneration in the same commit, because it is the first thing in months to change what the
+  floor looks like without changing what is on it.
+- **The Codex/OpenAI rates in `src/data/rates.json` are unverified.** They are the numbers the
+  hand-typed tier carried, flagged as such in the file, and nothing in this project has checked
+  them against a published price list. Anthropic's rows were read off the pricing page on
+  2026-09-04.
 - **The permission feature has never met a live session.** Everything downstream of the runtime is
   tested and screenshotted; the runtime itself has not been in the loop once, because `claude`'s
   stored login on the reference machine is expired and re-authenticating is an interactive browser
@@ -771,6 +929,32 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   `publish.yml` and `packaging/README.md` named `docs/media/panel.png`, which is the panel from
   before WP-08, so every future release page would have shown the superseded surface. Both now name
   the review card and the hero GIF, matching what v1.2.0 actually carries.
+- **DeckHQ has a documentation site.** `site/` — the pitch and `npx deckhq` over the hero GIF, a
+  real `doctor` run, the floor, the review card and the deck; "the model in 60 seconds" for the six
+  states and the one rule; install for `npx`, a global install, the Claude Code plugin and the VS
+  Code extension, with Homebrew, winget and scoop marked _on the next release_ because no tag has
+  run that job yet; hooks and privacy for every path read and written and the consent in front of
+  both; adapters for what is verified, what is not, and how to contribute one; an FAQ whose first
+  entry answers "why not just use `claude agents`" with the measured persistence argument and this
+  machine's own four lines; and `docs/DEVIATIONS.md` rendered as an engineering log, an index plus
+  one page per entry. **No site generator and no dependency**: hand-written HTML bodies, a shared
+  shell, and a 250-line markdown converter that escapes before it adds a tag. `node site/build.mjs`
+  renders `site/dist/`; `--serve` puts it on a loopback port to look at.
+  `docs/media/site-index.png` is the home page. §112.
+- **The site keeps the product's promise, and a test says so.** No analytics, no CDN, no web font,
+  no script of any kind on any page. `JetBrains Mono` and `IBM Plex Sans` are named first in their
+  stacks and fall back to the system's own faces, because there is no `.woff2` in this repository
+  and fetching one would be exactly the thing being refused. The palette is `public/style.css`'s
+  own tokens, so a screenshot and the page around it are the same colours.
+- **`.github/workflows/pages.yml` publishes it on every push to `main`.** Checkout, `node
+site/build.mjs`, the site suite again against the bytes about to be published, then
+  `upload-pages-artifact` and `deploy-pages`. Read-only by default, with only the deploy job
+  raising itself to what Pages needs; one deployment at a time, and a newer push waits rather than
+  cancelling a running one. There is no `npm install` step because there is nothing to install.
+  **The owner must enable Pages once** — Settings → Pages → Build and deployment → Source: GitHub
+  Actions — because no workflow can turn it on for its own repository, and until that is done the
+  deploy step fails while nothing else in the repository notices. **Unproven until a push runs
+  it.**
 
 ## 1.2.0
 
