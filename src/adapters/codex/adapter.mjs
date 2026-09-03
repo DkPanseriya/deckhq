@@ -514,6 +514,20 @@ export function codexResumeCommand(sessionId) {
 }
 
 /**
+ * The argv for a brand-new interactive session: plain `codex`, plus the
+ * first prompt as one element when there is one. The prompt is user text
+ * from a request body and travels exactly like a session id — one argv
+ * element to `spawn()`, or one single-quoted word inside the wrapper script.
+ * Pure and exported for the same reason as the two above.
+ * @param {unknown} [instructions]
+ * @returns {string[]}
+ */
+export function codexNewSessionCommand(instructions) {
+  const prompt = String(instructions || '').trim();
+  return prompt ? ['codex', prompt] : ['codex'];
+}
+
+/**
  * Send a turn into a Codex session via its non-interactive exec surface.
  * @param {string} id
  * @param {string} text
@@ -592,25 +606,32 @@ async function openInTerminal(id, cwd, opts = {}) {
  */
 
 /**
- * Open a terminal running a new Codex session in `cwd`. Unavailable on a
+ * Open a terminal running a NEW Codex session in `cwd` — `codex`, plus the
+ * first prompt as one argv element when one is given. Unavailable on a
  * machine without Codex, like every other method here.
  *
- * The delegation to `openInTerminal('codex:new', …)` is deliberately left as
- * it was, which means the command is literally `codex resume new`. That is
- * almost certainly not how Codex starts a fresh session, and `opts
- * .instructions` is still dropped where the Claude Code adapter now carries
- * it — but both are behaviour, not the shell-string defect this change is
- * for, and neither can be checked without Codex on the machine (§8). WP-23
- * owns them; `docs/DEVIATIONS.md` §95 records them so they are not forgotten.
+ * Until §99 this delegated to `openInTerminal('codex:new', …)`, so the argv
+ * was literally `['codex', 'resume', 'new']` and `opts.instructions` was
+ * dropped (§95, "not fixed"). It now names its own command and hands it to
+ * `launchTerminal()`, as the Claude Code adapter does.
  *
- * The user's pinned emulator IS forwarded, because the whole point of routing
- * through `launchTerminal()` is that both adapters obey the same setting.
- * @param {string} cwd
- * @param {{instructions?: string, terminal?: string}} [opts]
+ * Unlike `openInTerminal`, a launcher failure is NOT swallowed here: the
+ * route that calls this reports the message, and "Could not open a terminal.
+ * Tried: …" is more useful than a silent nothing. That is also what the
+ * Claude Code adapter does.
+ * @param {string} cwd absolute path to an existing directory
+ * @param {{instructions?: string, terminal?: string}} [opts] an optional
+ *   first prompt, and the user's pinned emulator from settings
+ * @returns {Promise<void>}
  */
 async function openNewSession(cwd, opts = {}) {
   if (!(await available())) throw new Error('Codex is not installed');
-  return openInTerminal('codex:new', cwd, { terminal: opts.terminal });
+  await launchTerminal({
+    command: codexNewSessionCommand(opts.instructions),
+    cwd,
+    prefix: 'codex-new',
+    pin: opts.terminal,
+  });
 }
 
 export const adapter = {
