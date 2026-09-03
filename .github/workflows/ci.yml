@@ -26,3 +26,46 @@ jobs:
         run: npm run format:check
       - name: Test
         run: npm test
+
+  # Visual regression: golden PNGs of the demo floor per fixture population,
+  # compared pixel for pixel (scripts/goldens.mjs).
+  #
+  # Ubuntu only, and Node 22 only. Goldens are per platform because text is
+  # rasterised by the OS, so one set cannot serve three; the ubuntu runner
+  # image ships Google Chrome; and the CDP client needs the global WebSocket
+  # Node only has unflagged from 22.
+  #
+  # No install step: the harness is zero-dependency by design — node builtins,
+  # our own PNG codec over node:zlib, and a Chrome the runner already has. That
+  # is worth ~15 s of the budget below.
+  #
+  # Two tooling gaps are skips rather than failures, because a red build on a
+  # missing browser teaches people to ignore the gate: no Chrome (the script
+  # says so and exits 0), and no goldens committed for this platform yet — see
+  # DEVIATIONS.md WP-21, this is the state linux is in today. In both cases the
+  # fresh captures are uploaded below, which is how the first linux set gets
+  # generated and committed.
+  #
+  # Budget: WP-21 asks for under 90 s. Measured 26-28 s for all four
+  # populations on a Windows laptop; the timeout is a hang guard, not the
+  # budget.
+  goldens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check goldens
+        run: npm run goldens:check
+      - name: Upload captures and diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Failed captures with their diff images, or — while this platform
+          # has no committed set — the captures to commit as the first one.
+          name: goldens-linux
+          path: test/goldens/.out/
+          if-no-files-found: ignore
+          retention-days: 14

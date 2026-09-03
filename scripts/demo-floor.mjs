@@ -12,11 +12,17 @@
  * real parser, the states are produced by the real state machine, and the
  * floor is laid out by the real planner. Only the data is invented.
  *
- *   node scripts/demo-floor.mjs            # start and print the URL
- *   node scripts/demo-floor.mjs --port N   # a different port
+ *   node scripts/demo-floor.mjs                    # start and print the URL
+ *   node scripts/demo-floor.mjs --port N           # a different port (0 = any free port)
+ *   node scripts/demo-floor.mjs --population NAME  # a different fixture, see POPULATIONS
  *
  * Ctrl-C to stop. The fixture lives in a temp directory and is rebuilt on
  * every run; nothing is written to your real ~/.claude or ~/.deckhq.
+ *
+ * Everything about a population is a pure function of its name: ids, titles,
+ * ages and token counts are all derived from the session's index, never from
+ * the clock or a random source. That is what lets `scripts/goldens.mjs`
+ * photograph each one and compare the pixels against a committed golden.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,10 +31,19 @@ import process from 'node:process';
 import http from 'node:http';
 
 const argv = process.argv.slice(2);
-const portArg = argv.indexOf('--port');
-const PORT = portArg !== -1 ? Number(argv[portArg + 1]) : 4499;
+const opt = (name, fallback) => {
+  const i = argv.indexOf(name);
+  return i !== -1 && argv[i + 1] !== undefined ? argv[i + 1] : fallback;
+};
+const PORT = Number(opt('--port', 4499));
+const POPULATION = opt('--population', 'demo');
 
-const ROOT = path.join(os.tmpdir(), 'deckhq-demo');
+// Each population gets its own fixture directory, so a goldens run cannot
+// tear down the floor somebody is looking at in `npm run demo`.
+const ROOT = path.join(
+  os.tmpdir(),
+  POPULATION === 'demo' ? 'deckhq-demo' : `deckhq-demo-${POPULATION}`,
+);
 const CLAUDE_DIR = path.join(ROOT, 'claude');
 const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
 const STATE_DIR = path.join(ROOT, 'state');
@@ -38,14 +53,16 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 /**
- * The floor we want to photograph.
+ * The floor we want to photograph for the README.
  *
  * `state` is what the session should end up in, not something written
  * directly — `working`, `needs_input` and `stalled` are produced by posting
  * real hook events below, and `for_review` by the transcript ending on a
  * finished assistant turn.
+ *
+ * Rows are `[project, title, state, ageHours, tokensM]`.
  */
-const SESSIONS = [
+const DEMO_SESSIONS = [
   // orbital-api — the busy room: someone working, someone with a hand up.
   ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
   ['orbital-api', 'Migrate auth to short-lived tokens', 'needs_input', 3.4, 0.9],
@@ -85,6 +102,102 @@ const SESSIONS = [
   ['infra-terraform', 'Least-privilege the CI role', 'let_go', 90, 0.3],
 ];
 
+/**
+ * The reference machine from docs/plan/08-PLAN-V2-100X.md §0: 70 sessions
+ * across 18 projects, 1 at a desk, 2 in the office, 47 benched, the other 20
+ * idle at their desks. It is the shape WP-50 exists to fix, so it is the shape
+ * the goldens have to hold still.
+ *
+ * Built rather than listed: 70 hand-written rows would be noise. The 18 sizes
+ * sum to 70; states are dealt so every room gets a mix and the benched count
+ * lands on exactly 47.
+ */
+function referenceSessions() {
+  const projects = [
+    ['platform-api', 13],
+    ['web-console', 9],
+    ['billing-service', 7],
+    ['search-indexer', 6],
+    ['notifications', 5],
+    ['auth-gateway', 4],
+    ['mobile-ios', 4],
+    ['mobile-android', 3],
+    ['design-tokens', 3],
+    ['docs-site', 3],
+    ['infra-k8s', 3],
+    ['data-warehouse', 2],
+    ['ml-ranking', 2],
+    ['cli-tools', 2],
+    ['legacy-monolith', 1],
+    ['status-page', 1],
+    ['sdk-typescript', 1],
+    ['marketing-site', 1],
+  ];
+  const verbs = ['Fix', 'Refactor', 'Migrate', 'Investigate', 'Add', 'Remove', 'Speed up', 'Test'];
+  const nouns = [
+    'the retry path',
+    'pagination',
+    'the cache layer',
+    'flaky CI',
+    'the audit log',
+    'rate limits',
+    'the onboarding flow',
+    'config loading',
+    'the metrics exporter',
+    'the release script',
+  ];
+  const rows = [];
+  let n = 0;
+  let benched = 0;
+  for (const [project, count] of projects) {
+    for (let k = 0; k < count; k++) {
+      let state;
+      if (n === 0) state = 'working';
+      else if (n === 1 || n === 14) state = 'for_review';
+      else if (benched < 47 && n % 10 !== 5) {
+        state = 'benched';
+        benched++;
+      } else state = 'idle';
+      rows.push([
+        project,
+        `${verbs[n % verbs.length]} ${nouns[(n * 7) % nouns.length]}`,
+        state,
+        // Ages step from a couple of hours to a few days, in whole hours.
+        2 + ((n * 37) % 120),
+        0.2 + ((n * 13) % 25) / 10,
+      ]);
+      n++;
+    }
+  }
+  if (rows.length !== 70 || benched !== 47) {
+    throw new Error(`reference population drifted: ${rows.length} sessions, ${benched} benched`);
+  }
+  return rows;
+}
+
+/**
+ * Named fixtures. `scripts/goldens.mjs` photographs each of these; add one
+ * here and a golden for it will be generated on the next `npm run goldens`.
+ * @type {Record<string, () => Array<[string, string, string, number, number]>>}
+ */
+const POPULATIONS = {
+  /** The README floor: every state, six projects, a busy lounge. */
+  demo: () => DEMO_SESSIONS,
+  /** A machine with no sessions at all: reception and an empty lounge. */
+  empty: () => [],
+  /** One project, one agent, working. The smallest floor that has a room. */
+  single: () => [['orbital-api', 'Rate limiter for the public API', 'working', 0.5, 0.4]],
+  reference: referenceSessions,
+};
+
+if (!POPULATIONS[POPULATION]) {
+  process.stderr.write(
+    `unknown population "${POPULATION}"; one of: ${Object.keys(POPULATIONS).join(', ')}\n`,
+  );
+  process.exit(2);
+}
+const SESSIONS = POPULATIONS[POPULATION]();
+
 /** A deterministic uuid-shaped id, so runs are reproducible. */
 function fakeId(n) {
   const hex = (n * 2654435761).toString(16).padStart(8, '0').slice(-8);
@@ -97,7 +210,11 @@ function slugForCwd(cwd) {
 }
 
 function rmrf(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+  // `maxRetries` is not belt-and-braces on Windows: the goldens harness stops
+  // one population by killing it, and the OS can still hold a handle on the
+  // fixture for a moment afterwards, so the next run's reset hits EBUSY or
+  // EPERM. Node retries exactly those errors for us.
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }
 
 /**
@@ -311,7 +428,15 @@ fs.writeFileSync(
     {
       version: 1,
       seededAt: Date.now(),
-      settings: { stallWindowMs: 2 * MINUTE, notifications: false, showLetGo: false, zoom: 0 },
+      // `onboarded` keeps the first-run dialog off a floor that exists to be
+      // photographed; the capture scripts used to have to dismiss it.
+      settings: {
+        stallWindowMs: 2 * MINUTE,
+        notifications: false,
+        showLetGo: false,
+        zoom: 0,
+        onboarded: true,
+      },
       ack,
     },
     null,
@@ -364,6 +489,7 @@ process.stdout.write(
     '',
     `  DeckHQ demo floor  ${url}`,
     '',
+    `  population: ${POPULATION}`,
     `  fixture:  ${ROOT}`,
     `  projects: ${new Set(built.map((s) => s.project)).size}`,
     `  sessions: ${built.length}`,
