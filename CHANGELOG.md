@@ -19,6 +19,18 @@
   card" shows it again without spending the day's. Nothing in it addresses you, and that is a test
   rather than a convention: the copy generator is driven over synthetic ledgers and every string
   literal in the file is scanned for a second person. `docs/DEVIATIONS.md` §117.
+- **Wrapped, weekly and annual.** Monday morning, and from 1 December the year so far. Turns per
+  room, tokens, an estimated spend that names its dated rate card, the longest wait and whether it
+  fell against the week before, the room that never slept, the session sent the most messages, the
+  busiest hour — and the count of _"You're absolutely right"_ across the week's assistant turns.
+  Every line carries the window it was computed over, and a ledger younger than the window says
+  where it actually starts instead of claiming a week it did not live through. Generated on the
+  machine, from the machine: no email, no server, no account, no request of any kind leaves the
+  box. One key puts it on the clipboard as a PNG, and `Shift+S` swaps every project name for its
+  MK tag first. `⌘K` → "Wrapped". `docs/DEVIATIONS.md` §118.
+- **`GET /api/wrapped?kind=week|annual`**, and a `window` field on `GET /api/stats` — what
+  happened between two timestamps, room by room, from one walk over the ledger. Both cards read the
+  same function, so a day and a week cannot disagree about what a turn is.
 - **`deckhq doctor --share` prints the report as a fenced block you can paste anywhere.** The same
   numbers as the report — transcripts, running now, on the floor, waiting on you, hooks, egress —
   with everything that belongs to you taken out: no paths, no project names, no machine name, no

@@ -7777,4 +7777,151 @@ none needed to be — the card and the overlay are `hidden` on a demo floor by c
 contract in `test/integration/wrapped-route.test.mjs`. **Screenshot:** `docs/media/postcard.png` —
 the demo floor dimmed to night with the day's card over it, taken through the palette's "Today's
 card" on a floor with a synthetic ledger.
+## 118. WP-27 — Wrapped: the joke that had to be true, and what it cost to make it true
 
+**Spec:** [`04-ENGAGEMENT-AND-GAMIFICATION.md`](plan/04-ENGAGEMENT-AND-GAMIFICATION.md) §3.4 and
+[`06-ENGINEERING-WORKPLAN.md`](plan/06-ENGINEERING-WORKPLAN.md) WP-27. Weekly on Monday, annual
+from 1 December, generated locally from the ledger, one click to PNG, redaction through WP-14's
+control. Accepted when every number reconciles with the ledger, it degrades gracefully with fewer
+than seven days of history, and the PNG is shareable at 2× and passes redaction.
+
+Shipped as `GET /api/wrapped`, `public/wrapped.js` (pure), and
+`src/adapters/claude-code/catchphrase.mjs`.
+
+### 118.1 The derived stat: it is the count, and it is 0 on this machine
+
+§3.4 asks for "one genuinely funny derived stat (the count of a phrase across all transcripts, in
+the spirit of the 'you're absolutely right' tracker)", and offers "the tool most used" as the
+cheaper fallback. **The phrase won, and it won on cost**, which was the opposite of the
+expectation.
+
+Measured on the reference machine, 4 September, for a seven-day window:
+
+| | files opened | bytes read | wall clock | longest event-loop block | answer |
+|---|---|---|---|---|---|
+| Phrase count, one regex pass per chunk | 58 | **300.7 MB** | **1.9 s** | **7.3 ms** | **0** |
+| The same files, matches anywhere in them | 58 | 300.7 MB | 1.3 s | — | 11 |
+
+Three things make 1.9 s affordable, and the second is the whole design:
+
+1. **Only files whose mtime falls in the window are opened.** A transcript untouched since June
+   holds no assistant turn from this week. That is 58 of the machine's transcripts rather than all
+   of them, and 300 MB rather than 975 MB.
+2. **One regular expression pass per chunk, and no `JSON.parse` until it matches.** The obvious
+   implementation — parse every record, then test its text — is the expensive one, and it is what
+   makes the fallback ("the tool most used") strictly _more_ costly than the phrase: tool use is
+   only visible inside parsed `tool_use` blocks, so counting it means parsing 300 MB of JSON. The
+   phrase can be found by scanning bytes and parsing eleven lines.
+3. **Ceilings on files, bytes and wall clock**, with a `truncated` flag. Over one, the card says
+   `at least 40 times` instead of quietly reporting a short answer — rule 11.
+
+**The gap between 11 and 0 is the point.** Eleven matches appear _somewhere_ in those files;
+**none** is an assistant turn inside the window. The rest are users quoting it back, records from
+before the window sitting in files touched inside it, and tool results. A funny statistic that is
+not true is just a wrong statistic, so the counter filters on `type === 'assistant'`, on the
+record's own timestamp, on `text` blocks only (not `thinking`, which is not something the agent
+said to anybody and would make the number depend on whether extended thinking was on), and skips
+`isSidechain` records because a subagent's turns also live in the subagent's own transcript and
+would otherwise be counted twice.
+
+So the honest weekly answer on the reference machine is **zero**, and the card says
+_"not once this week"_. That is the number, it is funny, and it is true — which is the order those
+three have to come in.
+
+It runs when a Wrapped card is generated, once a week, and never on the poll path. The engine's
+budgets in `docs/02-ARCHITECTURE.md` §8 are about the scan; this is not one, and it does not touch
+them.
+
+### 118.2 The counter is in the adapter, and it is registered from `index.mjs` — a stated debt
+
+`08` §1.1 rule 8 is absolute: all runtime-format parsing stays inside its adapter. So the code is
+`src/adapters/claude-code/catchphrase.mjs`, and the route asks
+`catchphraseCount()` in `src/adapters/index.mjs` rather than importing a runtime-specific path.
+
+**It belongs on the adapter object itself**, beside `hooks.toolSummary` and the rest, and it is not
+there because `src/adapters/claude-code/adapter.mjs` was held by another package (WP-09) for the
+whole of this one. `index.mjs` carries a per-runtime capability table with a comment saying so.
+Moving it is one line in each file and no behaviour change; it is written down here so it is a
+decision somebody made rather than a shape somebody found. **Owed.**
+
+Codex has no entry: its transcripts have a different shape and nobody has measured the phrase in
+them. A runtime with no counter contributes nothing and the card reads that as _leave the line
+out_, never as _zero_ — which is why `supported` is a separate field from `count`.
+
+### 118.3 Two windows, the same length, or "it fell" is arithmetic
+
+The card says whether the longest wait **fell**, and a fall is a comparison. So `windowDigest` is
+run twice: over the window, and over the window immediately before it, of exactly the same length.
+A test asserts `since - previousSince === until - since`, because two windows of different lengths
+would make the most satisfying number in the product (`08` §7) an artifact of the bounds.
+
+**The week starts on Monday** and the card is about the week that just ended, because §3.4's card
+arrives on Monday morning. A Sunday-start week would hand the Monday reader a window whose last day
+was yesterday and whose first was eight days ago.
+
+**The annual card is the year so far**, and says so in as many words. It appears on or after 1
+December (`08` §7), which is three weeks before the year is over; a card titled "2026" in the first
+week of December would be claiming a year that has not happened.
+
+**The annual card outranks the week on a December Monday** — one card a day is the budget and the
+year is the bigger thing to have missed — but once the year has been seen, December's Mondays get
+their week as usual.
+
+### 118.4 The week's spend is priced like the room plate, with one deliberate difference
+
+§111 decision 6 again: the window's tokens are priced per room at the room's own average rate.
+`windowSpend()` is exported and tested rather than inlined, because it is the one piece of
+arithmetic here that could be wrong and still look plausible.
+
+It differs from `todaySpendFor()` in `state-machine.mjs` in exactly one way, on purpose: **a room
+with no token movement in the window contributes nothing**, where the room plate falls back to the
+project's lifetime total. That fallback is right for a plate that must say something about a room
+today; here it would add a project's entire history to a week. Rooms that cannot be priced at all
+are counted and named (`· 2 rooms unpriced`) rather than silently dropped, and a window with no
+priceable room reports `null`, never `0`.
+
+### 118.5 The catchphrase is the one second person the card may carry, and that is asserted
+
+`records.test.mjs` scans for the second person with one allowance. Wrapped needs a second one —
+the phrase itself — and an allowance that is merely added is an allowance that widens. So there
+are two assertions:
+
+- the detector with **no** allowances runs over the card and exactly **one** row survives: the
+  catchphrase row, whose _value_ ("11 times", "not once this week") addresses nobody. That is the
+  proof nothing else in the card leans on the allowance.
+- the file-literal scan of `public/wrapped.js` needs **no** allowance at all, because the phrase
+  reaches the client from the adapter as data and is never written in the copy.
+
+The quotation marks are load-bearing: `"You're absolutely right" — not once this week` is a
+quotation of something the agents said, in the third person about the team. It is the mechanic `04`
+§1 permits (the agents are the characters) rather than the one §5 refuses.
+
+### 118.6 Degrading, redaction, and the PNG
+
+**Under seven days of history**, `windowDigest` reports `covered: false` and the first day the
+ledger actually holds, and the card's subtitle reads
+`27 Aug – 31 Aug · since 27 Aug, where this ledger starts`. Every row is dropped rather than faked
+when its number does not exist: a week with no sends has no "sent the most" row, not a row saying
+nobody was sent anything, which is a sentence with the shape of blame in it.
+
+**Redaction** is WP-14's `Shift+S` and reaches the card by a second lookup: the route resolves
+project hashes to names by hashing the cwds the registry holds (§100 decision 5), and the client
+maps those names to their MK tags through the floor it already has. The floor thumbnail is redacted
+by the same `Scene.setState` route §109.1 describes. A key the floor cannot name stays six
+characters of its hash, which spells nothing.
+
+**The PNG** goes through the same compositor, size budget, resolution floor and `POST /api/snapshot`
+route as `S` on the floor, so §109's measured acceptance covers it rather than being re-derived.
+What is new is the shape: `compositeCard()` puts a 190 px band of the floor at the top and the words
+under it. Two things were wrong in the first version and are fixed with the reason in the code: the
+band was **centre-cropped**, which on a tall floor reliably photographs a corridor (it is
+top-aligned now, because the office and the busiest rooms are laid out from the top); and the row
+**labels were not wrapped**, so Wrapped's longest label — the catchphrase, in quotation marks — ran
+straight through its own value.
+
+### 118.7 Acceptance
+
+29 tests in `test/unit/wrapped.test.mjs`, 8 in `test/integration/wrapped-route.test.mjs` (including
+a `PRIVACY:` assertion that no path and no project name reaches the response — a card is a thing
+people post), and 5 more in `test/unit/snapshot.test.mjs` for the card compositor. Goldens: 4 of 4
+match, 0 pixels moved. **Screenshot:** `docs/media/wrapped-weekly.png`.
