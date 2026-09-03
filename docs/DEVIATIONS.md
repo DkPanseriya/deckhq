@@ -1545,7 +1545,7 @@ on **every 5-second poll**. Pointing it at an empty directory drops the warm
 start to 6–8 ms and the poll from 52–57 ms to 5–7 ms. It is now essentially the
 entire cost of a scan, and it is what holds the warm scan against §8's < 50 ms
 budget instead of comfortably inside it. Out of scope here: flagged, not
-touched.
+touched. **Closed in §78.**
 ## 69. `--muted` is one step lighter than the repalette spec proposed
 
 **Spec:** the WP-06 chrome repalette — `docs/plan/05-GUI-UX-SPEC.md` §2.2, which lives on the
@@ -1929,4 +1929,123 @@ an archive flag cannot go stale. That ordering is right; re-reading the store
 to honour it is not. Left alone here because it is a separate defect with a
 separate fix (an `(mtime, size)` cache on the store directory, matching the
 summary cache), and folding it into this change would have made both
-unmeasurable.
+unmeasurable. **Fixed in §78.**
+
+## 78. The desktop store's own read is cached, keyed on the file that carries the flag
+
+§68 flagged this and §77 measured it on the way past without fixing it: with
+the summary cache in, `readDesktopSessions()` was **essentially the entire cost
+of a warm scan**, and it runs on every 5 s poll forever. §77 named the fix it
+was leaving — "an `(mtime, size)` cache on the store directory, matching the
+summary cache" — and this is that. §11 had the warm scan at 3–5 ms once the
+summary cache landed; the desktop-store read added in §46 put it back outside
+the **< 50 ms** budget in docs/02-ARCHITECTURE.md §8.
+
+Each file's *parsed* result is now cached in
+`src/adapters/claude-code/desktop.mjs`, keyed by `(path, mtime, size)` — the
+same invalidation rule `src/core/summary-cache.mjs` uses.
+
+Measured on this machine (Windows 11 ARM64, **61** desktop session files
+totalling **8.8 MB**, 70 transcripts), the two arms interleaved and their order
+flipped between passes so machine drift hit both equally; four fresh processes
+per arm per pass, each doing a first scan and then eight polls.
+
+It was measured twice, in two different machine conditions, because the first
+window disagreed with §77's numbers and the difference turned out to be load
+rather than code. Both are reported. Per-pass medians, with the full range
+across every run in the window:
+
+**Quiet machine** (three passes):
+
+| | before | after |
+|---|---|---|
+| `readDesktopSessions()`, warm | 78.4–80.5 ms (71.3–105.0) | **1.2–1.3 ms** (1.1–2.2) |
+| **Warm scan — every poll** | **82.5–87.4 ms** (75.6–154.6) | **4.5–5.1 ms** (3.5–9.2) |
+| First scan of a process | 99.8–120.5 ms (89.3–154.5) | 94.2–100.0 ms (85.6–157.8) |
+
+**Busy machine** (seven passes, several other agent sessions running):
+
+| | before | after |
+|---|---|---|
+| `readDesktopSessions()`, warm | 82.5–169.1 ms (72.4–528.0) | **1.3–3.2 ms** (1.1–8.4) |
+| **Warm scan — every poll** | **116.1–173.0 ms** (58.2–308.2) | **4.8–8.9 ms** (3.1–36.6) |
+
+| | before | after |
+|---|---|---|
+| Files opened per poll | 61 | 0 |
+| Held in memory | — | ~120 KB, measured after `gc()` |
+
+The busy window is where §77's **99–220 ms** came from — it reproduces almost
+exactly — so the two records agree; a quiet machine simply reads 82–87 ms. The
+ratio is what is stable: the warm scan is **17–20x faster** in both windows,
+and lands an order of magnitude inside §8's budget from either starting point.
+The control arm — `DECKHQ_DESKTOP_SESSIONS_DIR` pointed at a nonexistent
+directory, i.e. the same scan with no desktop store to read at all — polls in
+3.0 ms quiet, so the store now costs a scan about **1.5 ms** instead of about
+96% of it. The first scan of a process is unchanged within noise; the `fstat`
+note below is why it is not worse.
+
+**It is deliberately not folded into the summary cache, and §46's ordering is
+untouched.** That cache is keyed by the *transcript's* mtime, and archiving a
+session does not touch its transcript — so a flag cached there goes stale the
+moment the user archives something and stays stale until the conversation
+happens to change, which for a finished session is never. `archived` drives
+`let_go`, so a stale `true` re-fires an agent the user rehired, on every poll,
+forever (§46, §68). The flag has to stay keyed to the file that actually carries
+it, and the app rewrites exactly that file when the user archives — so the flip
+is still seen on the very next poll. The adapter continues to stamp `archived`
+onto summaries *after* the summary cache, exactly as before; nothing about that
+ordering moved.
+
+**It never persists.** The whole point of that ordering is that this answer is
+re-derived from the app's own store on every run, so a restart starts empty. An
+in-memory cache is all the poll loop needs, and a persisted one would be the
+§68 trap with a longer fuse.
+
+**`fstat` off the open handle, not a second `statSync`.** The obvious shape —
+stat every file, then read the ones that moved — costs a path lookup per file
+that the old code never paid, and on a cold metadata cache that measured **30–50
+ms** across 61 files, on a quiet machine: first scans went from ~95 ms to
+125–146 ms, handing back on the first scan much of what the cache saves on
+every later one. So a file is
+`statSync`-ed only when there is a cached entry to compare it against; with
+nothing cached it has to be opened anyway, and `readRecord` takes the stamp
+from `fstatSync` on that handle. A cold run does one path lookup per file, as
+it always did, which is why the first scan in the table is back at parity.
+
+The stamp is taken **before** the read, deliberately. That direction can only
+attribute new content to an old stamp, which the next poll re-reads; the
+reverse attributes old content to the new stamp and pins it in the cache for
+good.
+
+**What it inherits from the summary cache, on purpose.** Copies out, never the
+held object — the field a caller would be mutating is `archived`, which is the
+§68 copy-out bug in the one store where that flag actually lives. A file the
+app deleted loses its entry, so a daemon left running for months cannot
+accumulate them; but an *empty listing* evicts nothing, because that is also
+what an unreadable or momentarily missing store directory returns, and emptying
+a good cache on it buys nothing but a re-read of 8.8 MB. A file that is
+unreadable, corrupt, mid-write or simply not this store's shape yields no entry
+and does not condemn the rest — and that verdict is cached too, so a store full
+of files this adapter cannot use is not re-parsed on every poll either. No
+runtime dependency was added, and every byte of format knowledge stayed inside
+`src/adapters/`.
+
+**The residual exposure, stated plainly.** `(mtime, size)` cannot see a change
+that lands inside one filesystem timestamp tick *and* leaves the byte count
+identical. That is the same exposure `src/core/summary-cache.mjs` already
+accepts, and it is narrower here: archiving is user-paced, seconds apart at
+worst, and `"isArchived":true` and `"isArchived":false` differ in length
+anyway. It was not worth a content hash, which would mean reading all 8.8 MB
+every poll — the exact cost being removed.
+
+Eleven tests in `test/unit/claude-desktop-cache.test.mjs` — in-process, so they
+can count the reads that did and did not happen, which `desktopSessionsDir()`
+allows by reading the environment per call rather than at import — plus three
+added to `test/unit/claude-scan-cache.test.mjs` for the same-process poll path
+its start-to-start tests never reached. Each was confirmed to fail against a
+deliberately broken build — a cache keyed on path alone, no cache at all, no
+copy-out, and a cache that serves its entries when the store directory
+disappears — so none of them is vacuous. One earlier draft *was*: a scan-level
+copy-out test that could not fail, because the adapter mutates the summary and
+never the desktop record. It was replaced rather than kept for the count.

@@ -22,13 +22,15 @@
   as not-live for up to 60 s. It cannot touch user-owned state — `live` is an observation, and
   `for_review` is sticky through a liveness loss either way. `docs/DEVIATIONS.md` §77 has the
   reasoning, including why hook-awareness was weighed and not added.
-
-### Known gaps
-
-- **The warm scan is over its 50 ms budget**, at 99–220 ms. `readDesktopSessions()` — the desktop
-  app's archive join added in `docs/DEVIATIONS.md` §46 — re-reads and re-parses all 58 files in
-  its store on every poll with no cache of any kind, and is 65–140 ms of that. Measured here, not
-  fixed here: it needs its own cache and its own before/after.
+- **The warm scan is back inside its 50 ms budget.** `readDesktopSessions()` — the desktop app's
+  archive join from `docs/DEVIATIONS.md` §46 — re-read and re-parsed all 61 files (8.8 MB) of the
+  app's session store on every poll, with no cache of any kind: 78 ms on a quiet machine, up to
+  170 ms on a busy one, which was **about 96% of the whole scan**. Each file's parsed result is
+  now cached and invalidated by `(mtime, size)`, the same rule the summary cache uses. The warm
+  scan drops from 82–173 ms to **4.5–8.9 ms** — 17–20x, and an order of magnitude inside budget —
+  while a first scan is unchanged. The archive flag is cached against the file that carries it,
+  not against the transcript, so archiving in the app is still seen on the very next poll and a
+  rehired agent cannot be re-fired by a stale flag (§78).
 
 ## 1.2.0
 

@@ -24,6 +24,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ADAPTER = pathToFileURL(
   path.resolve(HERE, '../../src/adapters/claude-code/adapter.mjs'),
 ).href;
+const DESKTOP = pathToFileURL(
+  path.resolve(HERE, '../../src/adapters/claude-code/desktop.mjs'),
+).href;
 const FIXTURE = path.resolve(HERE, '../fixtures/claude-sample.jsonl');
 const SESSION_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -62,8 +65,23 @@ async function makeWorld() {
 function inChild(world, body, opts = {}) {
   const script = `
     const { adapter } = await import(${JSON.stringify(ADAPTER)});
+    const { desktopCacheStats } = await import(${JSON.stringify(DESKTOP)});
+    const fs = (await import('node:fs')).default;
+    const nodePath = (await import('node:path')).default;
     const out = (v) => process.stdout.write(JSON.stringify(v));
     const scan = () => adapter.scanSessions({ maxAgeDays: 36500, limit: 5000 });
+    // Archive or un-archive the one desktop record, the way the app does:
+    // by rewriting its file. Used by the same-process poll tests below.
+    const setArchived = (archived) =>
+      fs.writeFileSync(
+        nodePath.join(process.env.DECKHQ_DESKTOP_SESSIONS_DIR, 'local_abc.json'),
+        JSON.stringify({
+          sessionId: 'local_abc',
+          cliSessionId: ${JSON.stringify(SESSION_ID)},
+          isArchived: archived,
+        }),
+        'utf8',
+      );
     ${body}
   `;
   const stdout = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
@@ -342,6 +360,89 @@ test('INVARIANT: a persisted cache entry cannot resurrect a stale archive state'
     // `false` as "not archived" and would rehire a let-go agent. Neither of
     // those decisions is the cache's to make.
     assert.equal('archived' in summaries[0], false);
+  } finally {
+    await cleanup(world);
+  }
+});
+
+// --------------------------------------------------------------------------
+// docs/DEVIATIONS.md §78: the desktop store's own read is cached too, per file
+// and keyed by (path, mtime, size). The daemon polls in ONE long-lived
+// process, so these are the calls that actually happen in production — the
+// start-to-start tests above never exercise a warm desktop cache.
+// --------------------------------------------------------------------------
+
+test('the desktop store is read once per process, not once per poll', async () => {
+  const world = await makeWorld();
+  try {
+    await writeDesktopSession(world.desktopDir, true);
+
+    const reads = inChild(
+      world,
+      `
+      await scan();
+      const afterFirst = desktopCacheStats.reads;
+      await scan();
+      await scan();
+      out({ afterFirst, afterThree: desktopCacheStats.reads });
+      `,
+    );
+    assert.equal(reads.afterFirst, 1, 'the first scan opens the one record');
+    assert.equal(reads.afterThree, 1, 'and two more polls open nothing');
+  } finally {
+    await cleanup(world);
+  }
+});
+
+test('INVARIANT: archiving is seen on the next poll of the SAME process', async () => {
+  const world = await makeWorld();
+  try {
+    await writeDesktopSession(world.desktopDir, false);
+
+    // The transcript never changes here, so every summary below is a summary
+    // cache hit. Caching the desktop read on top of that is what could have
+    // stranded the flag — so the flag has to be keyed to the file that
+    // carries it, which archiving does rewrite.
+    const flags = inChild(
+      world,
+      `
+      const seen = [];
+      seen.push((await scan())[0].archived);
+      setArchived(true);
+      seen.push((await scan())[0].archived);
+      setArchived(false);
+      seen.push((await scan())[0].archived);
+      out(seen);
+      `,
+    );
+    assert.deepEqual(flags, [false, true, false]);
+  } finally {
+    await cleanup(world);
+  }
+});
+
+test('INVARIANT: a desktop store that vanishes mid-run drops the flag, it does not strand it', async () => {
+  const world = await makeWorld();
+  try {
+    await writeDesktopSession(world.desktopDir, true);
+
+    // The desktop cache deliberately keeps its entries when the store reads
+    // as empty (that is also what an unreadable directory looks like), so the
+    // question is what the *scan* then reports. It has to be absent: the
+    // registry reads a missing `archived` as "this runtime cannot see an
+    // archive" and leaves ackState alone, and reads `false` as a rehire.
+    // Neither is a decision a cache is entitled to make.
+    const result = inChild(
+      world,
+      `
+      const first = await scan();
+      fs.rmSync(process.env.DECKHQ_DESKTOP_SESSIONS_DIR, { recursive: true, force: true });
+      const second = await scan();
+      out({ before: first[0].archived, after: 'archived' in second[0] });
+      `,
+    );
+    assert.equal(result.before, true);
+    assert.equal(result.after, false, 'absent, not a stale true and not a false');
   } finally {
     await cleanup(world);
   }
