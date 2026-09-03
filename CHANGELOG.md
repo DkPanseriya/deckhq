@@ -178,6 +178,16 @@
   repos on top of each other inside it. Rows grow instead and the columns hold their width, so the
   strip on the reference machine is seventeen legible lines. A line still costs a line, and the
   strip is still a corner of the floor rather than a room. §97.
+- **The header counts describe what is on the floor.** It read `21 at desk · 47 benched` over a
+  picture with two people at a desk and twelve in the lounge: both numbers were true of the deck
+  and neither was true of the room under them. "At desk" is now the sessions the floor actually
+  draws at a desk, "benched" the ones drawn in the lounge, and the two that are not drawn are
+  named rather than folded in — a quiet `N finished` for sessions that have ended in a repo nobody
+  is working in, and the lounge door's own `N went home`. Both are hidden when they are nought.
+  Nothing is lost: a finished session is still in the panel, still in `deckhq ls`, still one
+  keystroke from the palette, and still counted on its repo's line in the idle strip. The
+  needs-you numeral and its three-way breakdown are unchanged — a session that needs you needs you
+  whether or not there is a room to stand it in. §97.
 - **The floor stops growing as well as shrinking.** The fit scale is now clamped at both ends — a
   character body is never under 16 px and never over 44 px. A quiet machine's floor is genuinely
   small, and on a large display it was being blown up like a poster. §97.
@@ -250,6 +260,11 @@
 
 ### Fixed
 
+- **An archived project's finished sessions were drawn in a room that did not exist.** The floor
+  decided who to hide by asking whether a session's project was _idle_, and a project you archived
+  and then stopped working in is on neither the active list nor the idle one — so its sessions
+  were left at desks in a room the plan had never built. It asks whether the project has a room
+  now, which is the question it meant. §97.
 - **SECURITY: a Codex session id reached a shell.** Opening a Codex session in a terminal built
   its command as a shell string on both POSIX platforms — an AppleScript
   `do script "cd \"<cwd>\" && codex resume <id>"` on macOS, and `bash -lc "codex resume <id>"` on

@@ -29,6 +29,7 @@ import {
   PLATE_BAND,
 } from '../../public/render/plan.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
+import { counts } from '../../src/core/model.mjs';
 
 const EPS = 1e-6;
 
@@ -879,6 +880,53 @@ test('the building is the sum of its parts, not the shape of the window', () => 
       Math.abs(right - plan.width) < 0.01,
       'the working side reaches the building line exactly',
     );
+  }
+});
+
+// ------------------------------- WP-55: the header describes what is drawn
+
+test('the header floor counts equal the plan’s drawn totals', () => {
+  // The header and the plan are either side of the static-file boundary and
+  // cannot import each other (docs/CONTRACTS.md), so "who is on the floor" is
+  // stated twice: `counts().drawn` in `src/core/model.mjs` and `plan.hidden` in
+  // `plan.js`. This is the test that stops the two drifting. Before WP-55 they
+  // disagreed by nineteen on the reference machine: "21 at desk" over a floor
+  // drawing two.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    const plan = buildPlan(projects, agents, { targetAspect: 1.78, now: NOW });
+    const c = counts(agents, { now: NOW, goneHomeDays: GONE_HOME_DAYS });
+
+    const onFloor = (a) => !plan.hidden.has(a.id);
+    const desks = agents.filter((a) => derivePlacement(a) === 'desk');
+    const benchedAgents = agents.filter((a) => a.ackState === 'benched');
+
+    assert.equal(
+      c.drawn.atDesk,
+      desks.filter(onFloor).length,
+      `"at desk" must be the sessions the floor draws at a desk (${JSON.stringify(spec)})`,
+    );
+    assert.equal(
+      c.drawn.finished,
+      desks.filter((a) => !onFloor(a)).length,
+      `"finished" must be the desk sessions the floor draws nowhere (${JSON.stringify(spec)})`,
+    );
+    assert.equal(c.drawn.benched, benchedAgents.filter(onFloor).length);
+    assert.equal(c.drawn.wentHome, plan.goneHome.size);
+    assert.equal(c.drawn.waiting, plan.officeSeats.length);
+
+    // The lounge plate carries the same two numbers the header does.
+    const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+    const expected =
+      c.drawn.wentHome > 0
+        ? `${c.drawn.benched} benched · ${c.drawn.wentHome} went home`
+        : `${c.drawn.benched} benched`;
+    assert.equal(lounge.plateLines[1], expected);
+
+    // And nobody has been lost: every session is still counted somewhere.
+    assert.equal(c.drawn.atDesk + c.drawn.finished, c.atDesk);
+    assert.equal(c.drawn.benched + c.drawn.wentHome, c.benched);
+    assert.equal(c.atDesk + c.forReview + c.benched + c.letGo, c.total);
   }
 });
 

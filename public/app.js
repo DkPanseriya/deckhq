@@ -85,6 +85,10 @@ const el = {
   forReview: document.getElementById('stat-for-review'),
   atDesk: document.getElementById('stat-at-desk'),
   benched: document.getElementById('stat-benched'),
+  finished: document.getElementById('stat-finished'),
+  finishedWrap: document.getElementById('floor-count-finished'),
+  wentHome: document.getElementById('stat-went-home'),
+  wentHomeWrap: document.getElementById('floor-count-went-home'),
   writeErrorBanner: document.getElementById('write-error-banner'),
   writeErrorText: document.getElementById('write-error-text'),
   degradedBanner: document.getElementById('degraded-banner'),
@@ -364,11 +368,13 @@ function normalizeDegraded(degraded) {
 function localDescribeFloor(s) {
   if (!s) return 'Floor loading.';
   const c = s.counts || {};
+  const drawn = c.drawn || {};
   return (
     `${formatNumber(c.needsYou)} sessions need you: ` +
     `${formatNumber(c.handsUp)} hands up, ${formatNumber(c.stalled)} stalled, ` +
-    `${formatNumber(c.forReview)} for review. ${formatNumber(c.atDesk)} at their desks, ` +
-    `${formatNumber(c.benched)} benched.`
+    `${formatNumber(c.forReview)} for review. ` +
+    `${formatNumber(drawn.atDesk ?? c.atDesk)} at their desks, ` +
+    `${formatNumber(drawn.benched ?? c.benched)} benched.`
   );
 }
 
@@ -408,8 +414,20 @@ function renderHeader(snapshot) {
   el.handsUp.textContent = formatNumber(c.handsUp);
   el.stalled.textContent = formatNumber(c.stalled);
   el.forReview.textContent = formatNumber(c.forReview);
-  el.atDesk.textContent = formatNumber(c.atDesk);
-  el.benched.textContent = formatNumber(c.benched);
+  // The floor counts describe what the floor DRAWS (WP-55, docs/DEVIATIONS.md
+  // §97). "at desk" was `placement() === 'desk'`, which counts a finished
+  // session sitting in a repo nobody is working in — on the reference machine
+  // that read "21 at desk" over a floor drawing two. The sessions that are not
+  // drawn are named rather than folded in: they are still in the panel, still
+  // in the deck, and still one keystroke away. `drawn` is absent from a
+  // snapshot pushed by an older daemon, in which case the old numbers stand.
+  const drawn = c.drawn || {};
+  el.atDesk.textContent = formatNumber(drawn.atDesk ?? c.atDesk);
+  el.benched.textContent = formatNumber(drawn.benched ?? c.benched);
+  el.finished.textContent = formatNumber(drawn.finished);
+  el.finishedWrap.hidden = !drawn.finished;
+  el.wentHome.textContent = formatNumber(drawn.wentHome);
+  el.wentHomeWrap.hidden = !drawn.wentHome;
 
   document.title = c.needsYou > 0 ? `(${formatNumber(c.needsYou)}) DeckHQ` : 'DeckHQ';
 

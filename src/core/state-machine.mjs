@@ -254,7 +254,10 @@ export class Registry {
     return {
       agents,
       projects,
-      counts: counts(agents),
+      // The gone-home window reaches `counts` for the same reason it reaches
+      // the renderer: `counts.drawn` describes what the floor shows, and what
+      // the floor shows depends on it (WP-55).
+      counts: counts(agents, { goneHomeDays: this.store.settings.goneHomeDays }),
       settings: this.store.settings,
       takenNames: this.identity ? this.identity.takenNames() : [],
       hooks: { ...this._hookStatus },

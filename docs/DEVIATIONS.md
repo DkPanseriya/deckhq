@@ -4450,3 +4450,65 @@ other in it. `DIRECTORY_MAX_ROWS` is 18; the line height, the per-repo cost and
 quarter of the floor. Its "shorter than every room" assertion is gone: one
 active repo beside seventeen idle ones makes a strip taller than the one room,
 and that is the honest picture of that machine.
+
+### The header counts what is drawn
+
+The same floor's header read **`21 at desk · 47 benched`** over a picture with
+two people at a desk and twelve in the lounge. Both numbers were true of the
+DECK and neither was true of the floor they were printed above, which is the
+kind of quiet dishonesty this product cannot afford — the invariant is the only
+unforgeable thing in the category and a header that disagrees with the room
+under it undermines it for free.
+
+`counts()` gains a `drawn` sub-object and the top-level numbers are untouched,
+so the CLI, the deck and the panel keep the counts they mean:
+
+| | header before | header now | what it counts |
+|---|---|---|---|
+| at desk | 21 | **2** | sessions the floor draws at a desk |
+| finished | — | **19** | active-but-`ended` sessions in a repo with no room |
+| benched | 47 | **12** | sessions drawn in the lounge |
+| went home | — | **35** | benched past `goneHomeDays`; the lounge plate's own number |
+
+Four notes on it.
+
+**The needs-you numeral and its breakdown are unchanged.** They count the deck,
+which is right: a session that needs you needs you whether or not the floor has
+somewhere to stand it. `drawn.waiting` exists and is exactly `forReview`.
+
+**"Finished" is drawn nowhere and lost nowhere.** Those nineteen sessions are in
+the panel, in `deckhq ls`, in the palette, and on the directory line of the repo
+they belong to — which carries their count. Naming them in the header is the
+point: the alternative to an honest number is not a smaller number, it is a
+missing one.
+
+**The rule is stated twice, and there is a test that says so.** `src/core/` and
+`public/render/` are either side of the static-file boundary and neither may
+import the other, so `model.mjs` carries its own copy of B6's on-the-floor set
+and of the gone-home window. §96's decision 3 is the reason that is dangerous —
+two representations of one thing, allowed to disagree, is five of this project's
+bugs — so `floor-integrity.test.mjs` asserts `counts().drawn` equals the plan's
+own drawn totals across every population, including the lounge plate's wording.
+
+**A real bug fell out of writing that test.** `buildPlan` decided who to hide by
+asking "is this agent's project IDLE?", and a project the user archived and then
+stopped working in is in neither the active nor the idle list — so its finished
+sessions were left drawn in a room that does not exist. It asks "does this
+agent's project have a ROOM?" now, which is the question it meant.
+
+### Goldens
+
+Regenerated as the last step of the package. Three of the four changed —
+`reference`, `demo` and `single`, because the building is a different size and
+the header prints different numbers over it. **`empty` is byte-identical
+again**, as it was under WP-50: that machine has nobody on the floor, so it
+draws the onboarding screen rather than a plan, and every count above it is
+nought either way. It is the control, and it is still working.
+
+The check is green against fresh captures on all four at 0 px over tolerance
+and **0 px moved at all** — a quieter noise floor than §87 measured, whose
+36-pixel header flip does not appear in this build.
+
+`docs/media/` carries the pair for both populations:
+`floor-before-wp55.png` / `floor-after-wp55.png` and `demo-before-wp55.png` /
+`demo-after-wp55.png`, each taken from the golden itself.

@@ -2517,12 +2517,17 @@ export function buildPlan(projects, agents, opts = {}) {
   // first. `assignSeats` and `AgentRuntime#sync` read this set rather than
   // re-deriving it, so there is one answer to "is this person on the floor"
   // and not two that can disagree.
-  const idleIds = new Set(idleProjects.map(idOf));
+  // Keyed on the projects that HAVE a room rather than on the idle ones. Those
+  // are not the same set: a project the user archived and then stopped working
+  // in is off the floor entirely, so it is in neither `activeProjects` nor
+  // `idleProjects`, and asking "is this agent's project idle?" answered no for
+  // it — leaving its sessions drawn in a room that does not exist.
+  const roomIds = new Set(activeProjects.map(idOf));
   /** @type {Set<string>} */
   const hidden = new Set(pop.goneHome);
   for (const a of list) {
     if (!a || !isDeskAgent(a)) continue;
-    if (idleIds.has(String(a.projectId))) hidden.add(String(a.id));
+    if (!roomIds.has(String(a.projectId))) hidden.add(String(a.id));
   }
 
   // ---- pass 1: everything at its natural size, purely to bid for space.

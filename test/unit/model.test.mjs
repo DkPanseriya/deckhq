@@ -92,6 +92,57 @@ test('counts gives the three-way header breakdown', () => {
   assert.equal(c.atDesk, 3);
 });
 
+test('counts.drawn describes the floor, and counts still describes the deck', () => {
+  // WP-55. `atDesk` is every session whose placement is a desk, which is what
+  // the deck and the CLI mean by it. `drawn.atDesk` is the ones the FLOOR puts
+  // at a desk — a project with nobody active in it has no room, so the finished
+  // sessions sitting in it are not drawn anywhere and are counted as
+  // `drawn.finished` instead. They are still in `total`, still in the panel,
+  // still in the deck.
+  const list = [
+    // `busy` has somebody working, so it gets a room and its finished session
+    // is drawn at a desk in it.
+    agent({ id: 'a', projectId: 'busy', activityState: 'working' }),
+    agent({ id: 'b', projectId: 'busy', activityState: 'ended' }),
+    // `quiet` has only finished sessions: a directory line, no room, nobody
+    // drawn.
+    agent({ id: 'c', projectId: 'quiet', activityState: 'ended' }),
+    agent({ id: 'd', projectId: 'quiet', activityState: 'ended' }),
+    // Waiting in the office — drawn, but not at a desk. Its project keeps a
+    // room while it queues, which is why it is not in `quiet`.
+    agent({ id: 'e', projectId: 'queued', activityState: 'for_review' }),
+  ];
+  const c = counts(list, { now: 1_000_000_000_000, goneHomeDays: 7 });
+  assert.equal(c.atDesk, 4, 'the deck still counts every session at a desk');
+  assert.equal(c.drawn.atDesk, 2, 'the floor draws two of them at a desk');
+  assert.equal(c.drawn.finished, 2, 'and names the two it does not draw');
+  assert.equal(c.drawn.waiting, 1);
+  assert.equal(c.drawn.atDesk + c.drawn.finished, c.atDesk, 'every desk session is accounted for');
+});
+
+test('counts.drawn splits the benched by the gone-home window', () => {
+  const NOW = 1_800_000_000_000;
+  const DAY = 24 * 60 * 60 * 1000;
+  const benched = (id, ageDays) =>
+    agent({ id, ackState: 'benched', lastActivityAt: NOW - ageDays * DAY });
+  const list = [benched('a', 1), benched('b', 30), benched('c', 30), { ...benched('d', 30) }];
+  list[3].lastActivityAt = 0; // nobody can date it, so the floor draws it
+
+  const c = counts(list, { now: NOW, goneHomeDays: 7 });
+  assert.equal(c.benched, 4, 'the deck counts every benched session');
+  assert.equal(c.drawn.benched, 2, 'the lounge draws the recent one and the undateable one');
+  assert.equal(c.drawn.wentHome, 2);
+  assert.equal(c.drawn.benched + c.drawn.wentHome, c.benched);
+
+  // A window of zero turns the filter off rather than sending everybody home,
+  // the same refusal `plan.js` makes.
+  const off = counts(list, { now: NOW, goneHomeDays: 0 });
+  assert.equal(off.drawn.wentHome, 0);
+  assert.equal(off.drawn.benched, 4);
+  // And nothing wrote to anybody's ackState.
+  for (const a of list) assert.equal(a.ackState, 'benched');
+});
+
 test('project slugs are stable across separators and case', () => {
   const a = projectIdFromCwd('C:\\Dk\\Projects\\1_Project_DeckHQ');
   const b = projectIdFromCwd('c:/dk/projects/1_project_deckhq/');
