@@ -22,6 +22,7 @@ import { createDeckUI, queueOrder } from './deck.js';
 import { applyMotionPreference, createSettingsUI } from './settings-ui.js';
 import { availableNames } from './names.js';
 import { createCoachMarks } from './coach-marks.js';
+import { recordLineFor } from './records.js';
 import {
   MAX_PNG_BYTES,
   MIN_SCALE,
@@ -1272,6 +1273,19 @@ function showTooltip(agentId) {
         `${formatNumber(agent.tokens)} tokens · ${elapsedMin}m`,
     ),
   );
+
+  // WP-46's grace note: the team's record, when this session or this room
+  // holds one. Last, and in the same position the panel puts it in — a record
+  // is context, never a call to action, and it never scores the reader
+  // (`docs/plan/08` §1.1 rule 6, asserted in `records.test.mjs`).
+  //
+  // The stats body comes from the panel's own five-minute cache rather than a
+  // second fetch, so the card and the panel cannot disagree about a record
+  // while both are on screen. It is `null` until the first one resolves and
+  // `recordLineFor` reads that as "no line", so a hover never waits on the
+  // network. `docs/DEVIATIONS.md` §107 asked for exactly this.
+  const record = recordLineFor(agent, panel.teamRecords());
+  if (record) el.tooltip.appendChild(tooltipLine(record));
 
   el.tooltip.hidden = false;
   placeNearCursor(el.tooltip, 320);

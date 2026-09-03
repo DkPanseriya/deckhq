@@ -1732,6 +1732,22 @@ export function createPanel(opts) {
     recordEl.hidden = !line;
   }
 
+  /**
+   * The last `GET /api/stats` body, for a surface outside this panel — the
+   * floor's hover card (WP-46, `docs/DEVIATIONS.md` §107).
+   *
+   * The cache is shared rather than copied: one fetch, one five-minute
+   * window, one answer, so the card and the panel can never disagree about a
+   * record while both are on screen. Calling this warms the cache and returns
+   * whatever is in it — `null` on the first call, which `recordLineFor`
+   * already reads as "no line", so a hover never waits on the network.
+   * @returns {any}
+   */
+  function teamRecords() {
+    loadTeamRecords();
+    return teamStats;
+  }
+
   /** @param {boolean} busy @param {string} [label] */
   function setComposerBusy(busy, label) {
     textarea.disabled = busy;
@@ -1928,7 +1944,17 @@ export function createPanel(opts) {
     waitingTimer = null;
   }
 
-  return { open, close, refresh, performAction, pressNumberKey, getSelectedId, hasDraft, destroy };
+  return {
+    open,
+    close,
+    refresh,
+    performAction,
+    pressNumberKey,
+    getSelectedId,
+    hasDraft,
+    teamRecords,
+    destroy,
+  };
 }
 
 // ------------------------------------------------------------- utilities
