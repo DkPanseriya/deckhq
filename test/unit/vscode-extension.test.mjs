@@ -331,33 +331,85 @@ test('the start command keeps --no-open and honours a configured port', () => {
   ]);
 });
 
+/**
+ * A Windows machine, in full: the `PATH`, what is on it, and the interpreter.
+ *
+ * npm ships `npx` (a POSIX shell script) beside `npx.cmd`, and VS Code ships
+ * `code` beside `code.cmd` — the pair `cmd.exe` picks wrong. Everything the
+ * resolver reads is here, so the answer it gives is decided by this object and
+ * not by the machine running the test (docs/DEVIATIONS.md §114, §121).
+ */
+const WINDOWS_FILES = new Set([
+  'C:\\bin\\npx',
+  'C:\\bin\\npx.cmd',
+  'C:\\bin\\code',
+  'C:\\bin\\code.cmd',
+  'C:\\bin\\deckhq.exe',
+  'C:\\bin\\deckhq.cmd',
+]);
+const WINDOWS_MACHINE = {
+  path: 'C:\\nowhere;C:\\bin',
+  comspec: 'C:\\Windows\\system32\\cmd.exe',
+  exists: (p) => WINDOWS_FILES.has(p),
+};
+
 test('SECURITY: a start command never becomes a shell string', () => {
   const posix = command.spawnPlan(['npx', '--yes', 'deckhq', '--no-open'], 'linux');
   assert.equal(posix.file, 'npx');
   assert.deepEqual(posix.args, ['--yes', 'deckhq', '--no-open']);
   assert.equal(posix.options.shell, false);
 
-  const win = command.spawnPlan(['npx', 'deckhq'], 'win32');
-  assert.match(win.file, /cmd\.exe$/i);
+  // Every input the Windows plan reads is handed to it, so this row proves the
+  // same thing on all nine matrix jobs rather than only on the three that
+  // happen to be Windows (docs/DEVIATIONS.md §114, §121).
+  const win = command.spawnPlan(['npx', 'deckhq'], 'win32', WINDOWS_MACHINE);
+  assert.equal(win.file, 'C:\\Windows\\system32\\cmd.exe');
   assert.deepEqual(win.args.slice(0, 3), ['/d', '/s', '/c']);
   assert.equal(win.options.shell, false);
-  // `npx` is resolved to whatever Windows will actually run; the shape of the
-  // command line is what this asserts, not which npx the machine has.
-  assert.match(win.args[3], /^""[^"]*npx(\.cmd|\.exe)?" "deckhq""$/i);
+  // `npx` is resolved to what Windows will actually run — exactly, not by a
+  // regex that a bare `npx` would also have satisfied.
+  assert.equal(win.args[3], `""C:\\bin\\npx.cmd" "deckhq""`);
   assert.equal(command.windowsCommandLine(['npx', 'deckhq']), `""npx" "deckhq""`);
+
+  // With no `comspec` injected the fallback is still an interpreter, and still
+  // an argv array.
+  const bare = command.spawnPlan(['deckhq.exe'], 'win32', { path: '', comspec: '' });
+  assert.match(bare.file, /cmd\.exe$/i);
+  assert.equal(bare.args[3], `""deckhq.exe""`);
 });
 
 test('a bare program name resolves to something Windows will run', () => {
-  // npm ships `npx` (a shell script) beside `npx.cmd`; handed the bare name,
-  // cmd.exe can pick the wrong one of the pair.
-  const files = new Set(['C:\\bin\\npx', 'C:\\bin\\npx.cmd', 'C:\\bin\\code', 'C:\\bin\\code.cmd']);
-  const env = { path: 'C:\\nowhere;C:\\bin', exists: (p) => files.has(p) };
-  assert.equal(command.resolveWindowsExecutable('npx', env), 'C:\\bin\\npx.cmd');
-  assert.equal(command.resolveWindowsExecutable('code', env), 'C:\\bin\\code.cmd');
+  const resolve = (name, env = WINDOWS_MACHINE) => command.resolveWindowsExecutable(name, env);
+  // The PATH above is a Windows PATH whatever the host is. Split on the host's
+  // own `path.delimiter`, `C:\nowhere;C:\bin` is one directory that does not
+  // exist, joined with `/` — so every lookup below silently returns the bare
+  // name. That is §114's defect, in a module the §114 sweep did not cover.
+  assert.equal(resolve('npx'), 'C:\\bin\\npx.cmd');
+  assert.equal(resolve('code'), 'C:\\bin\\code.cmd');
+  // Preference order: `.cmd` before `.exe`, which is the order `cmd` itself
+  // reads PATHEXT in.
+  assert.equal(resolve('deckhq'), 'C:\\bin\\deckhq.cmd');
   // A name that already carries an extension is taken as given, and one that
   // is nowhere on PATH is left for spawn to report.
-  assert.equal(command.resolveWindowsExecutable('deckhq.exe', env), 'deckhq.exe');
-  assert.equal(command.resolveWindowsExecutable('nothing', env), 'nothing');
+  assert.equal(resolve('deckhq.exe'), 'deckhq.exe');
+  assert.equal(resolve('nothing'), 'nothing');
+  // An absolute name looks only where it was told to look, joined the Windows
+  // way — `C:\bin` + `code.cmd`, never `C:\bin/code.cmd`.
+  assert.equal(resolve('C:\\bin\\code'), 'C:\\bin\\code.cmd');
+  assert.equal(resolve('C:\\nowhere\\code'), 'C:\\nowhere\\code');
+});
+
+test('the extension list is injected, and the host machine never decides it', () => {
+  const resolve = (name, env) => command.resolveWindowsExecutable(name, env);
+  // The runner's own PATHEXT — or its absence, on Linux and macOS — must not
+  // reach this. The list is an input, and the order in it is the answer.
+  assert.equal(
+    resolve('deckhq', { ...WINDOWS_MACHINE, pathext: '.exe;.cmd' }),
+    'C:\\bin\\deckhq.exe',
+  );
+  assert.equal(resolve('npx', { ...WINDOWS_MACHINE, pathext: '.exe' }), 'npx');
+  // An empty injected PATH is an empty PATH, not a licence to read the host's.
+  assert.equal(resolve('npx', { path: '', exists: () => true }), 'npx');
 });
 
 test('SECURITY: cmd.exe metacharacters are refused, never escaped', () => {
