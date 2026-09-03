@@ -1,0 +1,11 @@
+# What stays out of the .vsix. The extension is seven files of plain JavaScript
+# and one icon; there is no build output to exclude, because there is no build.
+.vscode/**
+node_modules/**
+*.vsix
+.gitignore
+test/**
+
+# The README screenshot is served from the repository, not from the package:
+# the Marketplace fetches it over HTTP and nothing in the extension loads it.
+media/panel.png
