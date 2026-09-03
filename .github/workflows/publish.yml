@@ -1,0 +1,84 @@
+name: Publish
+
+# Publishes to npm when a v* tag is pushed.
+#
+# Why this exists rather than publishing by hand: npm requires a second factor
+# to publish, so a manual release means finding an authenticator app at exactly
+# the wrong moment, and 1.1.0 was never published at all because the steps
+# lived in somebody's head. An automation token is exempt from the 2FA prompt,
+# which is the whole point — the secret is scoped to publishing this package
+# and nothing else.
+#
+# It also publishes with provenance, so the registry records which workflow,
+# which commit and which tag produced the tarball. For a tool whose pitch is
+# "zero dependencies, read it in an afternoon", a verifiable link from the
+# published bytes back to the source is worth having.
+#
+# Setup, once, by the repository owner:
+#   1. npmjs.com -> Access Tokens -> Generate -> Automation
+#   2. Repository Settings -> Secrets and variables -> Actions -> New secret
+#      Name: NPM_TOKEN
+#   3. Push a tag: git push origin v1.2.0
+#
+# The publish is gated on the full test matrix in ci.yml passing first, so a
+# tag on a broken commit cannot reach the registry.
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [18, 20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install dev tooling
+        run: npm install --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Format check
+        run: npm run format:check
+      - name: Test
+        run: npm test
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Required for npm provenance. Without it the publish still works but
+      # the registry records no attestation.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dev tooling
+        run: npm install --no-audit --no-fund
+
+      - name: Refuse to publish if the tag and package.json disagree
+        # A tag that says v1.3.0 on a commit whose package.json says 1.2.0
+        # would publish the wrong version under the right name, which is not
+        # something the registry lets you take back.
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG="$(node -p "require('./package.json').version")"
+          echo "tag=$TAG package.json=$PKG"
+          test "$TAG" = "$PKG"
+
+      - name: Publish
+        # prepublishOnly runs lint and the full suite again here.
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
