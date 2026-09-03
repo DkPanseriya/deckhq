@@ -93,6 +93,13 @@
           <div class="sk-block"></div>
         </div>
 
+        <!-- The empty machine (WP-13, docs/plan/05-GUI-UX-SPEC.md §7). The
+             daemon serves an actor floor when the scan finds nobody, so this
+             is one line under a populated floor rather than a blank screen
+             with a code block. It disappears within one poll of the first
+             real session. -->
+        <p class="demo-note" id="demo-note" hidden></p>
+
         <div class="empty-state" id="empty-state" hidden>
           <h2>Nothing on the floor yet</h2>
           <p>
@@ -106,60 +113,21 @@
           <h2>Can't reach the DeckHQ daemon</h2>
           <p id="error-banner-text">Retrying…</p>
         </div>
+
+        <!-- The office-cleared line (WP-15, §9). One sentence, three seconds,
+             gone. Sits over the floor because that is what it is about. -->
+        <p class="office-cleared" id="office-cleared" hidden aria-hidden="true"></p>
       </section>
 
       <aside class="panel" id="panel" aria-label="Session detail" hidden></aside>
     </main>
 
-    <dialog id="onboarding-dialog" class="dialog" aria-labelledby="onboarding-title">
-      <div class="dialog-head">
-        <h2 id="onboarding-title">How DeckHQ works</h2>
-      </div>
-      <div class="dialog-body">
-        <p>
-          DeckHQ watches every Claude Code session and shows what needs you. Each agent is always in
-          one of six states:
-        </p>
-        <ul class="state-guide">
-          <li>
-            <span class="state-dot dot--working" aria-hidden="true"></span>
-            <span><b>Working</b>: producing output, at its desk.</span>
-          </li>
-          <li>
-            <span class="state-dot dot--needs_input" aria-hidden="true"></span>
-            <span><b>Hands up</b>: blocked on a question, mid-task, still at its desk.</span>
-          </li>
-          <li>
-            <span class="state-dot dot--stalled" aria-hidden="true"></span>
-            <span><b>Stalled</b>: gone quiet, still at its desk.</span>
-          </li>
-          <li>
-            <span class="state-dot dot--for_review" aria-hidden="true"></span>
-            <span><b>For review</b>: finished, standing in your office, waiting on you.</span>
-          </li>
-          <li>
-            <span class="state-dot dot--benched" aria-hidden="true"></span>
-            <span><b>Benched</b>: reviewed, no work assigned, resting in the lounge.</span>
-          </li>
-          <li>
-            <span class="state-dot dot--let_go" aria-hidden="true"></span>
-            <span><b>Let go</b>: removed from the floor.</span>
-          </li>
-        </ul>
-        <p>
-          What matters: <b>hands up</b> is mid-task, asking you something now. <b>For review</b>
-          already finished; it's waiting on your look. Different problems, different responses.
-        </p>
-        <p class="invariant-callout">
-          Once an agent is standing in your office, it stays until you act: acknowledge, bench, or
-          send new work. <strong>Reading its conversation never dismisses it.</strong> Only a button
-          does.
-        </p>
-      </div>
-      <div class="dialog-foot">
-        <button type="button" class="btn btn--primary" id="onboarding-dismiss">Got it</button>
-      </div>
-    </dialog>
+    <!-- Onboarding is three coach marks on real elements, not a modal
+         (WP-13, docs/plan/05-GUI-UX-SPEC.md §7). The modal that used to be
+         here listed all six states in about 190 words, in front of the floor,
+         before the reader had seen the floor do anything. This is its host
+         element; public/coach-marks.js fills it. -->
+    <div class="coach-layer" id="coach-layer" hidden></div>
 
     <dialog id="new-project-dialog" class="dialog" aria-labelledby="new-project-title">
       <form method="dialog" class="dialog-head">

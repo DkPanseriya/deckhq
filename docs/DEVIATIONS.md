@@ -4161,3 +4161,119 @@ cannot silently go stale.
   still resolves rather than throwing, `openNewSession` still reports a missing Codex.
 
 Plus one test in `terminals.test.mjs` for the re-export shim. 714 tests to 744.
+
+## 96. WP-13 — the coach marks, the anchor the renderer does not expose, and the actor floor the daemon serves
+
+**Spec:** `05-GUI-UX-SPEC.md` §7. Delete the modal. Three coach marks on real elements, each
+dismissible, `Escape` skips all three forever, total reading under fifteen seconds. And: an empty
+machine shows the demo floor's actors with one line of copy, and switches to the real floor when
+the first real session appears.
+
+Four departures, in order of how much they matter.
+
+### 96.1 The two floor anchors point at the whole canvas, because the renderer exposes no geometry
+
+§7 anchors mark 2 to "the user's office" and mark 3 to "one waiting agent". Both are regions of a
+single `<canvas>`: there is no element to measure, and `public/render/scene.js` has no public
+accessor that maps either to screen space. `Scene` exposes `setState`, `select`, `start`, `stop`,
+`destroy`, the zoom controls and the static `describeFloor`; the screen-space rects it keeps
+(`_plateRects`, `_fixtureRects`) and its camera parameters (`_cameraParams`) are private, and
+`public/render/**` was being rewritten by another engineer for WP-50 while this package was built,
+so reading a private field would be coupling to a file that is changing underneath.
+
+What shipped: `app.js`'s `coachAnchorFor()` asks for `scene.anchorFor(target, id)` and uses it if
+it is ever there. When it is not — which is today, always — it falls back to the canvas's own
+bounding box and marks the anchor `arrow: false`. A card with `arrow: false` is placed *inside*
+the box rather than beside it, with the pointer triangle and the highlight ring both suppressed.
+
+That is deliberate: the alternative was to place an arrow at a guess. A coach mark whose arrow
+points at empty carpet is worse than one with no arrow, because the arrow is a claim.
+
+**The gap, stated as a request.** `Scene` needs one method:
+
+```js
+/** @returns {{x:number,y:number,w:number,h:number}|null}  CSS px, viewport-relative */
+anchorFor(target /* 'office' | 'lounge' | 'agent' | 'project' */, id /* for agent/project */);
+```
+
+It is the arithmetic `_hitTest` already does in reverse — `worldToScreen` against
+`_cameraParams()` — and once it exists the two marks become exact with no change to
+`coach-marks.js`, only to the three lines in `coachAnchorFor()`. Requested of the renderer owner;
+not built here, because building it would mean editing a file this package may not touch.
+`test/unit/coach-marks.test.mjs` covers both paths, so the day it lands the fallback stops being
+exercised and nothing else moves.
+
+### 96.2 The reading budget is costed at 200 wpm, and the count is asserted rather than claimed
+
+§7 says "total reading time under 15 seconds" and does not say at what speed. Screen-prose reading
+speed is measured anywhere between roughly 175 and 300 wpm depending on the study and the
+material, so a budget costed at the fast end is a budget that passes on paper and fails in a
+chair. `READING_WPM` is 200 — the slow end but not the pathological one — and the whole sequence
+measures **10.2 s** (34 words at the populated-floor variant of mark 1). The assertion is in the
+suite, so copy that grows past the budget fails the build rather than being noticed by nobody.
+
+### 96.3 The empty machine is served by the daemon, not by booting the demo script
+
+§7 says "run the demo floor's actors". The obvious reading is `scripts/demo-floor.mjs`, which
+builds a fake `~/.claude` on disk and drives a second daemon through the real hook endpoint. That
+is right for screenshots and wrong for a user's first run: it writes a fixture tree, spawns a
+process, and — the part that decided it — puts actor sessions into the same scan path the user's
+real sessions come from, where an acknowledgement could land on one.
+
+What shipped instead is `src/core/demo-fixture.mjs`: a pure function producing a snapshot-shaped
+object with `demo: true`, substituted at the single place a snapshot is made
+(`Registry.snapshot()`) when the scan found nobody. The registry's own `_agents` stays empty, so:
+
+- `/api/ack`, `/api/send`, `/api/resume` and `/api/conversation` 404 on an actor id **by
+  construction** rather than by a check somebody has to remember to write. There is a named
+  `INVARIANT:` integration test that posts all three ack actions at an actor and asserts each is
+  refused and that nothing was written.
+- The substitution ends on the scan that finds anybody, which is what makes §7's "within one poll"
+  true. The integration test writes a real transcript, calls `/api/refresh`, and asserts the cast
+  is gone and the real session stands alone.
+- Nothing about an actor can reach `state.json`, the identity file or the cache.
+
+Three consequences worth naming:
+
+1. **The terminal surfaces strip them.** `deckhq ls`, `waiting` and `statusline` all read
+   `/api/state`, and a fake `2 waiting` in a shell prompt is the one lie this product cannot
+   afford. `askDaemon()` applies `withoutDemoAgents()` at the single door they come through, and
+   `doctor`'s `deckFrom()` does the same. Both are asserted.
+2. **The actor floor never raises the degraded banner.** Nothing has run on this machine, so
+   there is nothing for hooks to be exact about; telling a first-time user their state is
+   degraded would be false and would be the first thing they read.
+3. **The panel had to learn about them**, because mark 3 says "Click anyone." A click on an actor
+   used to produce `Could not load the conversation: Unknown runtime "demo"` and `Could not read
+   the working tree: Unknown session`. It now shows the actor's own line and says what it is; the
+   action row and the composer answer with one sentence rather than an error toast.
+
+### 96.4 `test/goldens/win32/empty.png` had to be regenerated, and it is now a populated floor
+
+The `empty` population exists to photograph a machine with no sessions. That machine now shows the
+actors, so the golden changed from "Nothing on the floor yet" to a floor. That is the correct
+picture of the new behaviour and it is why the golden was regenerated; it is also the reason the
+`empty` population no longer proves anything about the empty-state markup, which survives in
+`index.html` for the case the demo fixture cannot cover (a renderer that failed to load).
+
+### What is tested
+
+`test/unit/coach-marks.test.mjs` (16) — the three marks and their anchors; the copy at 0, 1 and n
+waiting, and a scan for second-person fault; the lesson each mark carries; the reading budget; a
+mark whose anchor is absent being dropped rather than shown lying; the sequence reducer forward
+and skipped, including that a finished sequence ignores a second `Escape` (which is what stops
+`onboarded` being posted twice); card placement below, flipped above, clamped at the edge and
+inside an anchor the size of the stage; and, over a DOM stub, that the tour shows one mark at a
+time, that `Escape` reaches `onDone({skipped:true})` exactly once and removes its own listener,
+and that the modal is gone from `index.html` and from `app.js`.
+
+`test/unit/demo-fixture.test.mjs` (9) — snapshot shape; that the two states the product is about
+are both on the floor; identity fields; purity against the clock; `INVARIANT:` unaddressable ids;
+the degraded banner; carried settings and write errors; and `withoutDemoAgents`.
+
+`test/integration/demo-floor.test.mjs` (4) — a real daemon over an empty machine: the actors are
+served, an actor cannot be acknowledged/benched/let go, the first real session replaces the whole
+cast within one `/api/refresh`, and the terminal surfaces report zero.
+
+**Screenshot:** `docs/media/coach-marks.png` — the first mark on the needs-you numeral, over the
+actor floor, with the actors' line underneath. Regenerable:
+`node scripts/capture-floor.mjs --url <daemon> --onboarding`, a flag added for exactly this shot.

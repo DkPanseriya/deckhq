@@ -42,6 +42,7 @@ import {
   projectNameFromCwd,
   splitAgentId,
 } from '../core/model.mjs';
+import { withoutDemoAgents } from '../core/demo-fixture.mjs';
 
 /** The port the daemon prefers, and how far it walks when that one is taken. */
 export const DEFAULT_PORT = 4317;
@@ -117,7 +118,12 @@ export async function askDaemon(port, timeoutMs) {
     const snapshot = await res.json();
     // Something else on the port answering 200 to /api/state is not a daemon.
     if (!snapshot || !Array.isArray(snapshot.agents) || !snapshot.counts) return null;
-    return { port, snapshot };
+    // A machine with no sessions gets an actor floor in the browser (WP-13).
+    // The terminal is not the browser: `deckhq waiting` and the status line
+    // exist to say what is really waiting, and a fake `2` in a shell prompt
+    // is the one lie this product cannot afford. The actors are stripped
+    // here, at the single door every CLI surface comes through.
+    return { port, snapshot: withoutDemoAgents(snapshot) };
   } catch {
     return null;
   }

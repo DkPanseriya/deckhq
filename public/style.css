@@ -1460,40 +1460,145 @@ button {
   border-top: 1px solid var(--line);
 }
 
-/* ------------------------------------------------------------- onboarding */
-.state-guide {
-  list-style: none;
-  margin: 0 0 1rem;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
+/* ======================================================================
+   WP-13 · ONBOARDING — three coach marks, no modal
+
+   docs/plan/05-GUI-UX-SPEC.md §7. What was here was a modal listing the six
+   states, about 190 words, in front of the floor and before the reader had
+   seen the floor do anything.
+
+   The layer is a fixed overlay that does NOT take pointer events except on
+   the card itself: the floor stays clickable underneath, because the third
+   mark's whole instruction is "click anyone" and a scrim would make that a
+   lie. There is no dimming for the same reason — the thing being explained
+   is the thing you would be covering up.
+   ====================================================================== */
+.coach-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
 }
-.state-guide li {
+
+/* The ring around the anchor. A hairline in the focus ink rather than the
+   accent: crimson is reserved for for_review and primary actions
+   (docs/03-VISUAL-SPEC.md §5), and a decorative red ring around the header
+   numeral would read as an alert about that number. */
+.coach-ring {
+  position: absolute;
+  border: 2px solid var(--focus);
+  border-radius: var(--radius-md);
+  /* The stand-off is applied to the box in coach-marks.js, not here: the
+     global `box-sizing: border-box` turns a negative margin on a sized box
+     into a shift rather than an expansion. */
+  pointer-events: none;
+  animation: coach-ring-in 220ms ease both;
+}
+@keyframes coach-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.coach-card {
+  position: absolute;
+  pointer-events: auto;
+  width: min(23rem, calc(100vw - 2rem));
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  padding: 0.85rem 0.95rem 0.7rem;
+  animation: coach-card-in 180ms ease both;
+}
+@keyframes coach-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* The pointer. A rotated square rather than a border triangle so it inherits
+   the card's own surface and hairline, and it is suppressed entirely
+   (`data-side="none"`) when the anchor is the whole canvas — an arrow that
+   points at a 1200 px rectangle points at nothing. */
+.coach-card::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  transform: rotate(45deg);
+}
+.coach-card[data-side='below']::before {
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+}
+.coach-card[data-side='above']::before {
+  bottom: -6px;
+  border-left: none;
+  border-top: none;
+}
+.coach-card[data-side='none']::before {
+  display: none;
+}
+
+.coach-text {
+  margin: 0 0 0.7rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.coach-foot {
   display: flex;
-  align-items: flex-start;
-  gap: 0.55rem;
+  align-items: center;
+  gap: 0.7rem;
+}
+.coach-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.coach-skip {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* The actor floor's one line (§7, WP-13). Quiet, under the floor, and gone
+   within one poll of the first real session appearing. */
+.demo-note {
+  position: absolute;
+  left: 50%;
+  bottom: 0.9rem;
+  transform: translateX(-50%);
+  margin: 0;
+  max-width: min(40rem, calc(100% - 2rem));
+  text-align: center;
+  font-size: 0.8rem;
   line-height: 1.5;
+  color: var(--ink-2);
+  background: rgb(19 20 25 / 82%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.8rem;
+  pointer-events: none;
 }
-.state-guide .state-dot {
-  margin-top: 0.45rem;
-}
-.state-guide b {
-  color: var(--ink);
-}
-.invariant-callout {
-  /* Deliberately neutral: the accent colour is reserved exclusively for
-     for_review and primary actions (docs/03-VISUAL-SPEC.md §5). Emphasis
-     here comes from typography and layout, not from spending red on a
-     decorative border — and, per the restraint pass, not from a background
-     fill either. A single hairline rule carries the same weight. */
-  border-left: 2px solid var(--line-2);
-  padding: 0.1rem 0 0.1rem 0.8rem;
-  line-height: 1.6;
-}
-.invariant-callout strong {
-  color: var(--ink);
-}
+/* ==================================================== end WP-13 block */
 
 /* ---------------------------------------------------------- hooks dialog
    Restraint pass: each runtime's section is separated from the next by a

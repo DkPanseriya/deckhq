@@ -145,7 +145,11 @@ export async function inspectDaemon(port) {
  * @param {any} snapshot
  */
 export function deckFrom(snapshot) {
-  const agents = Array.isArray(snapshot?.agents) ? snapshot.agents : [];
+  // The actor floor a never-run machine gets in the browser (WP-13) is not
+  // this machine's work. `doctor` reports what is true here, so it reports
+  // zero — the same rule the terminal deck follows in `askDaemon`.
+  const agents =
+    snapshot?.demo === true ? [] : Array.isArray(snapshot?.agents) ? snapshot.agents : [];
   const waiting = agents.filter(
     (a) =>
       a &&

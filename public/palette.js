@@ -278,9 +278,9 @@ export function buildCommandEntries(ctx) {
       id: 'cmd:onboarding',
       group: 'command',
       label: 'Onboarding again',
-      hint: 'what the six states mean',
+      hint: 'the three coach marks, from the top',
       accel: 'o',
-      keywords: ['help', 'guide', 'intro', 'tour'],
+      keywords: ['help', 'guide', 'intro', 'tour', 'coach'],
       run: () => actions.openOnboarding(),
     },
     {

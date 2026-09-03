@@ -20,6 +20,7 @@ import { createHooksUI } from './hooks-ui.js';
 import { createPalette } from './palette.js';
 import { applyMotionPreference, createSettingsUI } from './settings-ui.js';
 import { availableNames } from './names.js';
+import { createCoachMarks } from './coach-marks.js';
 
 /**
  * Fallback copy of the glyph vocabulary in docs/CONTRACTS-WP15.md §2, used
@@ -127,12 +128,14 @@ const el = {
   whiteboardOverlay: document.getElementById('whiteboard-overlay'),
   floorSkeleton: document.getElementById('floor-skeleton'),
   emptyState: document.getElementById('empty-state'),
+  demoNote: document.getElementById('demo-note'),
   errorBanner: document.getElementById('error-banner'),
   errorBannerText: document.getElementById('error-banner-text'),
   projectFilter: document.getElementById('project-filter'),
   panelRoot: document.getElementById('panel'),
-  onboardingDialog: document.getElementById('onboarding-dialog'),
-  onboardingDismiss: document.getElementById('onboarding-dismiss'),
+  coachLayer: document.getElementById('coach-layer'),
+  officeCleared: document.getElementById('office-cleared'),
+  stage: document.querySelector('.stage'),
   liveRegion: document.getElementById('live-region'),
   toast: document.getElementById('toast'),
 };
@@ -441,8 +444,16 @@ function renderFloorState(snapshot) {
   const hasAgents = Array.isArray(snapshot.agents) && snapshot.agents.length > 0;
   el.floorSkeleton.hidden = true;
   el.errorBanner.hidden = true;
+  // A machine with no sessions gets the actors from the daemon, so the
+  // never-run case is a populated floor with one line under it rather than a
+  // blank screen (WP-13). `empty-state` is now only reachable when the
+  // renderer has nothing at all to draw — which the demo fixture makes
+  // essentially unreachable, and it is kept because "essentially" is not
+  // "provably".
   el.emptyState.hidden = hasAgents;
   el.canvas.hidden = !hasAgents;
+  el.demoNote.hidden = !snapshot.demo || !hasAgents;
+  if (snapshot.demo && snapshot.demoNote) el.demoNote.textContent = snapshot.demoNote;
   if (scene) {
     try {
       scene.setState(snapshot);
@@ -1002,9 +1013,15 @@ function handleSnapshot(snapshot) {
     if (snapshot.projects?.some((p) => p.id === projectFilter)) renderProjectFilterChip();
     else filterToProject(null); // the project vanished from the floor
   }
-  if (!first) diffAndNotify(snapshot);
+  // The actors never interrupt anybody. They are not real sessions, so an
+  // actor "entering" needs_input must not raise an OS notification, play a
+  // sound, or count towards the office-cleared moment — the celebration in
+  // this product is reserved for real work being really finished (WP-13,
+  // WP-15).
+  if (!first && !snapshot.demo) diffAndNotify(snapshot);
   else prevActivityStates = new Map(snapshot.agents.map((a) => [a.id, a.activityState]));
   panel.refresh();
+  if (coachMarks.isRunning()) coachMarks.reposition();
   if (first) maybeShowOnboarding(snapshot.settings);
 }
 
@@ -1076,9 +1093,69 @@ function connectEvents() {
 // ----------------------------------------------------------- onboarding
 
 /**
- * First-run onboarding: shown once, until the user dismisses it, recorded
- * with POST /api/settings {onboarded:true} and never shown again.
- * docs/04-BUILD-PLAN.md WP11.
+ * Where a coach mark points.
+ *
+ * Two of the three anchors are regions of the floor, and the floor is one
+ * `<canvas>`: there is no element to measure. The renderer owns that geometry
+ * and does not expose it — `Scene` has no public "where is the office" or
+ * "where is this agent on screen" accessor, and `public/render/**` is another
+ * engineer's file this package may not edit. So this asks for one
+ * (`scene.anchorFor`), and when it is absent falls back to the canvas's own
+ * box with the pointer ring suppressed, which is honest about what it knows
+ * rather than drawing an arrow at a guess. `docs/DEVIATIONS.md` §96 records
+ * the export this wants.
+ *
+ * @param {{kind:string, selector?:string, target?:string}} anchor
+ * @returns {{x:number,y:number,w:number,h:number,arrow?:boolean}|null}
+ */
+function coachAnchorFor(anchor) {
+  if (anchor.kind === 'element') {
+    const node = document.querySelector(anchor.selector || '');
+    if (!node) return null;
+    const r = node.getBoundingClientRect();
+    if (!r.width && !r.height) return null;
+    return { x: r.left, y: r.top, w: r.width, h: r.height };
+  }
+  if (anchor.kind === 'floor') {
+    if (scene && typeof scene.anchorFor === 'function') {
+      try {
+        const id =
+          anchor.target === 'agent' ? (getNeedsYouQueue(latestSnapshot)[0]?.id ?? null) : null;
+        const r = scene.anchorFor(anchor.target, id);
+        if (r && (r.w || r.h)) return { x: r.x, y: r.y, w: r.w, h: r.h };
+      } catch (err) {
+        console.debug('[deckhq] scene.anchorFor failed', err);
+      }
+    }
+    if (el.canvas.hidden) return null;
+    const r = el.canvas.getBoundingClientRect();
+    if (!r.width && !r.height) return null;
+    return { x: r.left, y: r.top, w: r.width, h: r.height, arrow: false };
+  }
+  return null;
+}
+
+const coachMarks = createCoachMarks({
+  layer: el.coachLayer,
+  getSnapshot: () => latestSnapshot,
+  anchorFor: coachAnchorFor,
+  announce,
+  onDone: () => {
+    // One bit, set by either route — reading all three, or Escape. `onboarded`
+    // is the whole of "has this person seen the tour", and the palette's
+    // "Onboarding again" is what brings it back on purpose.
+    if (latestSnapshot?.settings) latestSnapshot.settings.onboarded = true;
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ onboarded: true }),
+    }).catch((err) => console.debug('[deckhq] could not record onboarding as seen', err));
+  },
+});
+
+/**
+ * First run: the three coach marks, once, then never again.
+ * docs/plan/05-GUI-UX-SPEC.md §7.
  * @param {any} settings
  */
 function maybeShowOnboarding(settings) {
@@ -1088,31 +1165,9 @@ function maybeShowOnboarding(settings) {
 
 /** Open it on purpose — the palette's "Onboarding again". */
 function showOnboarding() {
-  if (el.onboardingDialog.open) return;
-  if (typeof el.onboardingDialog.showModal === 'function') {
-    el.onboardingDialog.showModal();
-  } else {
-    el.onboardingDialog.setAttribute('open', '');
-  }
+  if (coachMarks.isRunning()) return;
+  coachMarks.start();
 }
-
-el.onboardingDismiss.addEventListener('click', () => {
-  el.onboardingDialog.close();
-});
-
-// The 'close' event fires however the dialog closed (button, Esc, or a
-// future backdrop click), so recording "seen" lives in one place.
-el.onboardingDialog.addEventListener('close', async () => {
-  try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ onboarded: true }),
-    });
-  } catch (err) {
-    console.debug('[deckhq] could not record onboarding as seen', err);
-  }
-});
 
 // ---------------------------------------------------------------- panel
 

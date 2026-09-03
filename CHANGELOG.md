@@ -157,6 +157,18 @@
   as a section rather than opened as a dialog of its own. Nothing about the consent contract
   changed: the literal file path and the literal JSON block are still shown before anything is
   written.
+- **A machine with nothing on it gets actors, not a blank screen.** Install DeckHQ before you have
+  run anything and the floor used to say "Nothing on the floor yet" over a `claude` code block —
+  the blank screen that dev tools lose people on. The daemon now serves a small cast instead:
+  seven actors across three rooms, two of them waiting on you, under one line — _"These are
+  actors. Run `claude` in any repo and a real one walks in."_ The moment the scan finds a real
+  session the whole cast is gone and it walks in alone, within one poll rather than on a reload.
+  The actors are inert by construction and not by a check somebody has to remember: they never
+  enter the registry, so acknowledging, benching, replying to or resuming one is refused by the
+  same code that refuses an id that does not exist, and nothing about one can reach `state.json`,
+  the identity file or the cache. `deckhq waiting`, `deckhq statusline` and `deckhq doctor` all
+  report zero on that machine, because a fake count in a shell prompt is the one lie this product
+  cannot afford. `docs/DEVIATIONS.md` §96.
 
 ### Changed
 
@@ -185,6 +197,18 @@
   consulted; the client checked only the browser permission. It is now the master switch, with
   `notifyHandsUp` and `notifyForReview` under it, so the two states that reach you when the tab is
   closed can be chosen separately.
+- **Onboarding is three coach marks on real things, not a modal.** What was there listed all six
+  states in about 190 words, in a dialog, in front of the floor, before you had seen the floor do
+  anything. Now: one card on the needs-you numeral (_"7 sessions are waiting on you. This number
+  is yours. The runtime can't clear it."_), one on your office (_"They finished and walked in
+  here. Reading a message doesn't send them away — only you do."_), one on a waiting agent
+  (_"Click anyone."_). Each is dismissible, `Escape` skips all three and never asks again, and the
+  whole sequence reads in 10.2 seconds against the fifteen the spec budgets — asserted in the
+  suite, so copy that grows past it fails the build. `⌘K` → "Onboarding again" brings it back on
+  purpose. The floor stays clickable underneath: there is no scrim, because the third card's whole
+  instruction is to click something. A card whose anchor the renderer cannot place drops its arrow
+  rather than pointing at a guess — that is the state the two floor marks are in today, and
+  `docs/DEVIATIONS.md` §96.1 states the one renderer export that would fix it.
 
 - **`2 Approve` is a send, never an acknowledgement.** It posts the affirmative through
   `/api/send` exactly as typing it would, and the review is discharged by the daemon when the

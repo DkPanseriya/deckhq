@@ -67,6 +67,15 @@ const FALLBACK_STATE_COLORS = {
 };
 
 const DEFAULT_APPROVE_TEXT = 'Yes, go ahead.';
+
+/**
+ * What an action on the empty-machine floor says (WP-13). The actors are not
+ * sessions and are not addressable, so the refusal is about them rather than
+ * about the reader — no second-person fault, per
+ * `docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §5.
+ */
+const DEMO_REFUSAL =
+  "Actors don't take instructions. Run `claude` in any repo and a real one walks in.";
 /** The close-up's on-screen size, docs/plan/05-GUI-UX-SPEC.md §4.2. */
 const CLOSEUP_PX = 44;
 /** How often the "waiting …" line re-reads the clock while the panel is open. */
@@ -671,6 +680,22 @@ export function createPanel(opts) {
     saidEl.textContent = '';
     saidEl.appendChild(threadSkeleton());
     threadDetails.hidden = true;
+    // An actor on the empty-machine floor (WP-13) has no transcript on disk,
+    // and the third coach mark says "Click anyone" — so clicking one has to
+    // land somewhere sensible rather than on `Unknown runtime "demo"`. Its
+    // one line is shown, and the panel says plainly what it is looking at.
+    if (getSnapshot()?.demo) {
+      messages = [];
+      saidEl.textContent = '';
+      if (displayedAgent?.lastText) {
+        saidEl.appendChild(renderMarkdown(displayedAgent.lastText, document));
+      }
+      const note = document.createElement('div');
+      note.className = 'msg-empty';
+      note.textContent = 'An actor. A real session shows its whole conversation here.';
+      saidEl.appendChild(note);
+      return;
+    }
     try {
       const res = await fetch(`/api/conversation?id=${encodeURIComponent(id)}`);
       const body = await res.json().catch(() => ({}));
@@ -789,6 +814,15 @@ export function createPanel(opts) {
     if (!changedEl.childElementCount) {
       changedEl.textContent = '';
       changedEl.appendChild(threadSkeleton());
+    }
+    if (getSnapshot()?.demo) {
+      changedEl.textContent = '';
+      changedTotals.textContent = '';
+      const note = document.createElement('div');
+      note.className = 'review-note';
+      note.textContent = 'An actor has no working tree. A real session shows what changed here.';
+      changedEl.appendChild(note);
+      return;
     }
     try {
       const res = await fetch(`/api/changes?id=${encodeURIComponent(id)}`);
@@ -1152,6 +1186,10 @@ export function createPanel(opts) {
     const id = currentId;
     if (!id || !displayedAgent) return;
     if (!legalActions(displayedAgent).includes(action)) return;
+    // The actors on an empty machine's floor (WP-13) are not sessions and are
+    // not in the registry, so every one of these would come back "No such
+    // agent". Say the true and useful thing instead.
+    if (getSnapshot()?.demo) return toast(DEMO_REFUSAL);
 
     const rollback = displayedAgent;
     displayedAgent = optimisticPatch(displayedAgent, action);
@@ -1305,6 +1343,7 @@ export function createPanel(opts) {
     const agent = displayedAgent;
     if (!id || !agent) return;
     if (!text.trim()) return;
+    if (getSnapshot()?.demo) return toast(DEMO_REFUSAL);
 
     // Mid-turn means actively producing output. A finished turn standing for
     // review, or a hand up waiting for an answer, is exactly when a reply is
