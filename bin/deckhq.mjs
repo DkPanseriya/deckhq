@@ -12,6 +12,8 @@
  *   npx deckhq bench ID   park it in the lounge
  *   npx deckhq open ID    open the floor at that agent
  *   npx deckhq statusline one line for a status bar
+ *   npx deckhq stats      what the floor did, from the local event ledger
+ *   npx deckhq ledger     list, export and verify days of that ledger
  *
  * With no --port, the daemon prefers the port the installed hooks already
  * post to, so a daemon and its hooks cannot drift apart by accident; if a
@@ -48,6 +50,8 @@ const SUBCOMMANDS = {
   ack: async (rest) => (await import('../src/cli/deck.mjs')).runAct('acknowledge', rest),
   bench: async (rest) => (await import('../src/cli/deck.mjs')).runAct('bench', rest),
   open: async (rest) => (await import('../src/cli/deck.mjs')).runOpen(rest),
+  stats: async (rest) => (await import('../src/cli/stats.mjs')).runStats(rest),
+  ledger: async (rest) => (await import('../src/cli/ledger.mjs')).runLedger(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
@@ -85,6 +89,8 @@ async function main() {
         '       deckhq ls | waiting [--json] [--all]',
         '       deckhq ack | bench | open <id>',
         '       deckhq statusline [--json] [--install] [--remove]',
+        '       deckhq stats [--days N] [--json]',
+        '       deckhq ledger days | export [--signed] | verify <file>',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
@@ -101,6 +107,10 @@ async function main() {
         '  open <id>     open the floor at that agent.',
         '  statusline    one line — "▣ 3 waiting · 1 hand up" — for a status bar.',
         '                --install writes it into your Claude Code settings.',
+        '  stats         median and p90 time in review, what is over 24h,',
+        '                discharges and sends per day, tokens per project, and the',
+        '                longest wait ever. From ~/.deckhq/ledger; no daemon needed.',
+        '  ledger        the ledger itself: `days`, `export [--signed]`, `verify`.',
         '',
         'Every command takes an id: the MK tag the deck prints, a name you gave,',
         'or any prefix of the session id.',
