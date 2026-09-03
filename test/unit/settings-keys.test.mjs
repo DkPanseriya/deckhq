@@ -88,7 +88,7 @@ test('the client only writes settings the store knows about', () => {
 });
 
 test('the settings sheet offers every setting a person can meaningfully change', () => {
-  // The four it does not: `approveText` belongs to the panel's `2 Approve`
+  // The five it does not: `approveText` belongs to the panel's `2 Approve`
   // and is edited there; `onboarded` is a fact, not a preference; and
   // `editor` (WP-47) and `terminal` (WP-04) both default to "work it out",
   // which is the right answer on nearly every machine — the sheet's own rule
@@ -96,8 +96,15 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // are pinned by POSTing to /api/settings until a package owns their row
   // (docs/DEVIATIONS.md §94.3). They are exempt from HAVING a control, not
   // from being real settings: both are persisted, sanitized and validated.
+  //
+  // `osNotify` (WP-16) is the same shape and for a sharper reason: it decides
+  // whether a background process may interrupt this machine's user, it ships
+  // OFF, and who gets to turn it on — and what the row says when they do — is
+  // an open decision for the owner (docs/DEVIATIONS.md §99). Until that is
+  // answered it is `deckhq --notify` and a POST to /api/settings, not a
+  // toggle somebody flips without reading it.
   const sheetOwned = new Set(SETTINGS_KEYS);
-  const exempt = new Set(['approveText', 'onboarded', 'editor', 'terminal']);
+  const exempt = new Set(['approveText', 'onboarded', 'editor', 'terminal', 'osNotify']);
   const missing = Object.keys(DEFAULT_SETTINGS).filter((k) => !sheetOwned.has(k) && !exempt.has(k));
   assert.deepEqual(
     missing,

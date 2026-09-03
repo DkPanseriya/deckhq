@@ -136,6 +136,16 @@ function freshObserved(runtime) {
      * @type {import('./model.mjs').CurrentTool|null}
      */
     currentTool: null,
+    /**
+     * WP-16. Did the runtime say goodbye? `Stop` and `SessionEnd` set it;
+     * every other lifecycle event clears it. It is the difference between a
+     * session that finished or was closed and one whose process simply went
+     * away mid-task, which is the only death `docs/plan/04-ENGAGEMENT-AND-
+     * GAMIFICATION.md` §6 spends an interruption on. Observed, transient, and
+     * it never reaches a user-owned field or the snapshot.
+     * @type {boolean}
+     */
+    closedCleanly: false,
     title: '',
     hasCustomTitle: false,
     cwd: '',
@@ -320,6 +330,22 @@ export class Registry {
     };
   }
 
+  /**
+   * WP-16. Did this session's runtime say goodbye before the process went?
+   *
+   * Read-only, and deliberately NOT part of the snapshot: it answers one
+   * question for the OS notifier (`core/notify-watch.mjs`) and it is not a
+   * fact about the agent that any surface renders. On a machine with no hooks
+   * installed nothing ever sets it, so it reads false and the notifier falls
+   * back to the only signal the degraded path has.
+   *
+   * @param {string} id
+   * @returns {boolean}
+   */
+  wasClosedCleanly(id) {
+    return this._observed.get(id)?.closedCleanly === true;
+  }
+
   /** @param {string} runtime */
   _hooksInstalled(runtime) {
     return !!(this._hookStatus[runtime] && this._hookStatus[runtime].installed);
@@ -501,6 +527,16 @@ export class Registry {
     health.lastEventAt = now;
     this._hookHealth.set(runtime, health);
 
+    // WP-16. Any event that is evidence the session is still going clears the
+    // goodbye; `Stop` and `SessionEnd` set it below. Done once, here, so a
+    // future hook event cannot forget to — the failure mode is a spurious
+    // "stopped mid-task" toast, which is exactly the interruption §6 budgets
+    // against. An event this build does not recognise counts as evidence of
+    // life too: something is running to have sent it.
+    if (event.hookEvent !== 'Stop' && event.hookEvent !== 'SessionEnd') {
+      obs.closedCleanly = false;
+    }
+
     switch (event.hookEvent) {
       case 'SessionStart':
         // A restart/resume of a session id that was already for_review (e.g.
@@ -542,6 +578,7 @@ export class Registry {
         obs.hookLive = true;
         obs.activityState = 'for_review';
         obs.currentTool = null;
+        obs.closedCleanly = true;
         this._markForReview(id, now);
         break;
 
@@ -582,6 +619,9 @@ export class Registry {
         obs.hookLive = false;
         obs.activityState = endedOr(obs.activityState);
         obs.currentTool = null;
+        // The user closed their own session. Their action, not an accident —
+        // so nothing interrupts them about it (WP-16).
+        obs.closedCleanly = true;
         break;
 
       default:

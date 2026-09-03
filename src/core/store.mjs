@@ -70,6 +70,7 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  * @property {boolean} notifications     the OS-notification master switch
  * @property {boolean} notifyHandsUp     notify when a session raises its hand
  * @property {boolean} notifyForReview   notify when a session finishes and waits
+ * @property {boolean} osNotify          let the DAEMON raise OS notifications (WP-16)
  * @property {boolean} sound             the sound master switch
  * @property {number} soundVolume        0–1, deliberately low by default
  * @property {'system'|'reduce'|'no-preference'} reducedMotion
@@ -86,6 +87,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   notifications: true,
   notifyHandsUp: true,
   notifyForReview: true,
+  // WP-16. The daemon's own OS notifications — the ones that arrive with
+  // every browser window closed. OFF until the owner decides otherwise
+  // (`docs/DEVIATIONS.md` §99): `notifications` above governs a permission the
+  // browser asked for and the user granted, and this one governs a process
+  // this machine's user never opted into. `deckhq --notify` turns it on for a
+  // single run without writing anything here.
+  osNotify: false,
   sound: false,
   soundVolume: 0.3,
   reducedMotion: 'system',
@@ -104,6 +112,7 @@ const BOOLEAN_SETTINGS = Object.freeze([
   'notifications',
   'notifyHandsUp',
   'notifyForReview',
+  'osNotify',
   'sound',
   'onboarded',
 ]);
