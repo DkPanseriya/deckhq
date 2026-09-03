@@ -714,3 +714,82 @@ test('listDays returns only our day files, sorted oldest first', async () => {
     await cleanup(dir);
   }
 });
+
+// --------------------------------------------------------------------- WP-26
+//
+// The room plate's payroll line needs "how far did this project's token
+// counters move since local midnight". That number goes past `record()`
+// anyway, so it is tallied in memory here rather than re-derived by reading
+// the day file back on every snapshot. Nothing user-owned is in it: losing
+// the tally costs one line on one plate until the next scan.
+
+test("todayTokens tallies the day's deltas per project, as they are recorded", () => {
+  const now = Date.now();
+  const led = new Ledger(path.join(os.tmpdir(), 'deckhq-today-unused'), {
+    timers: fakeTimers(),
+    log: fakeLog(),
+    now: () => now,
+  });
+  led.record('tokens', { projectKey: 'aaa', delta: 100, cacheDelta: 20 });
+  led.record('tokens', { projectKey: 'aaa', delta: 50, cacheDelta: 5 });
+  led.record('tokens', { projectKey: 'bbb', delta: 7 });
+  // Not a token record, so not in the tally.
+  led.record('send', { projectKey: 'aaa', chars: 10 });
+  assert.deepEqual(led.todayTokens(now), {
+    aaa: { tokens: 150, cache: 25 },
+    bbb: { tokens: 7, cache: 0 },
+  });
+});
+
+test('a token total that went DOWN is not money coming back', () => {
+  const now = Date.now();
+  const led = new Ledger(path.join(os.tmpdir(), 'deckhq-today-unused'), {
+    timers: fakeTimers(),
+    log: fakeLog(),
+    now: () => now,
+  });
+  led.record('tokens', { projectKey: 'aaa', delta: 100, cacheDelta: 10 });
+  // A truncated or rotated transcript reads shorter than the last scan did.
+  led.record('tokens', { projectKey: 'aaa', delta: -80, cacheDelta: -5 });
+  assert.deepEqual(led.todayTokens(now), { aaa: { tokens: 100, cache: 10 } });
+});
+
+test("the tally is the DAY's, and empties at the roll", () => {
+  let now = Date.now();
+  const led = new Ledger(path.join(os.tmpdir(), 'deckhq-today-unused'), {
+    timers: fakeTimers(),
+    log: fakeLog(),
+    now: () => now,
+  });
+  led.record('tokens', { projectKey: 'aaa', delta: 100 });
+  assert.equal(led.todayTokens(now).aaa.tokens, 100);
+  now += DAY;
+  assert.deepEqual(led.todayTokens(now), {}, 'yesterday is not today');
+});
+
+test('a restart inside the day picks the tally back up off the day file', async () => {
+  const dir = await tmpDir('today');
+  try {
+    const now = Date.now();
+    const first = new Ledger(dir, { timers: fakeTimers(), log: fakeLog(), now: () => now });
+    first.record('tokens', { projectKey: 'aaa', delta: 400, cacheDelta: 40 });
+    await first.flush();
+
+    const second = new Ledger(dir, { timers: fakeTimers(), log: fakeLog(), now: () => now });
+    await second.prime(now);
+    assert.deepEqual(second.todayTokens(now), { aaa: { tokens: 400, cache: 40 } });
+    // And keeps counting from there rather than starting over.
+    second.record('tokens', { projectKey: 'aaa', delta: 100 });
+    assert.equal(second.todayTokens(now).aaa.tokens, 500);
+  } finally {
+    await cleanup(dir);
+  }
+});
+
+test('a ledger that has never seen a token record reports an empty day', () => {
+  const led = new Ledger(path.join(os.tmpdir(), 'deckhq-today-unused'), {
+    timers: fakeTimers(),
+    log: fakeLog(),
+  });
+  assert.deepEqual(led.todayTokens(), {}, 'the plate falls back rather than showing $0.00');
+});

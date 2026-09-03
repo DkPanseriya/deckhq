@@ -533,7 +533,7 @@ export function createPanel(opts) {
     for (const [i, part] of [
       `${formatNumber(a.tokens)} tok`,
       `${formatCompact(a.cacheTokens)} cache`,
-      `${formatCost(a.costEstimate)} list price · not a bill`,
+      ...costLineParts(a, getSnapshot()?.rateCardVersion),
     ].entries()) {
       if (i) costEl.appendChild(separator());
       costEl.appendChild(textNode(part));
@@ -1814,6 +1814,38 @@ function formatCompact(n) {
 /** @param {number} n */
 function formatCost(n) {
   return `≈ $${Number(n || 0).toFixed(2)}`;
+}
+
+/**
+ * The bottom line of the review card, as the parts the renderer joins with
+ * `·` (WP-26).
+ *
+ * Three obligations, and none of them is optional:
+ *
+ *   1. **It names its source.** `rate card 2026-09-04` is the dated table in
+ *      `src/data/rates.json` — or the user's own `~/.deckhq/rates.json`, in
+ *      which case the version carries their date or `+local`. A cost figure
+ *      whose table nobody can name is a figure nobody can check.
+ *   2. **It says what kind of number it is.** `list price`, and `not a bill`
+ *      in as many words. `docs/plan/08-PLAN-V2-100X.md` §1.1 rule 7.
+ *   3. **It refuses to invent one.** A model the rate card has no row for
+ *      reads `no rate for this model`, never `$0.00`. Zero is a claim about
+ *      the money and we do not have one.
+ *
+ * Exported for `test/unit/rates.test.mjs`, which asserts every branch of it
+ * carries "list price" or "estimate" and never "bill" without "not a".
+ *
+ * @param {{costEstimate?:number|null}} agent
+ * @param {string|null|undefined} version
+ * @returns {string[]}
+ */
+export function costLineParts(agent, version) {
+  const card = `rate card ${version || 'unknown'}`;
+  const usd = agent ? agent.costEstimate : null;
+  if (usd == null || !Number.isFinite(Number(usd))) {
+    return ['no rate for this model', card, 'estimate unavailable'];
+  }
+  return [formatCost(usd), `list price, ${card}`, 'not a bill'];
 }
 
 /** @param {number} ms */

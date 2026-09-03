@@ -231,6 +231,23 @@ export class Ledger {
     this._seenDay = '';
 
     /**
+     * Today's token deltas, per project, kept as they are recorded (WP-26).
+     *
+     * The room plate's payroll line is "what this room has cost TODAY", and
+     * the only place that number exists is the day's `tokens` records. Reading
+     * the day file back on every snapshot to re-derive it would be a file read
+     * per frame for a number this class watches go past anyway, so it is
+     * tallied here instead: seeded from the day file by `prime()`, added to by
+     * `record()`, and thrown away at the day roll.
+     *
+     * Still measurement and still derived — this holds no ack state, and
+     * losing it costs one line on one plate until the next scan.
+     * @type {Map<string, {tokens:number, cache:number}>}
+     */
+    this._today = new Map();
+    this._todayDay = '';
+
+    /**
      * The first write failure, if there has been one. Logged exactly once —
      * a daemon whose disk is full must not fill the terminal as well — and
      * exposed so `deckhq doctor` and the stats route can say the numbers are
@@ -271,9 +288,61 @@ export class Ledger {
     } catch {
       return;
     }
+    this._today = new Map();
+    this._todayDay = day;
     for (const rec of parseRecords(raw)) {
       if (rec.sessionId) this._seen.add(rec.sessionId);
+      if (rec.kind === 'tokens') this._noteTokens(rec, day);
     }
+  }
+
+  /**
+   * Add one `tokens` record to today's per-project tally.
+   *
+   * Only forward movement counts. A negative delta is a session's total going
+   * DOWN, which happens when a transcript is truncated or a scan reads a
+   * shorter file than the last one — it is not money coming back, and letting
+   * it subtract would make a room's day cheaper because a log rotated.
+   *
+   * @param {{projectKey?:string, delta?:number, cacheDelta?:number}} rec
+   * @param {string} day
+   */
+  _noteTokens(rec, day) {
+    if (day !== this._todayDay) {
+      this._today = new Map();
+      this._todayDay = day;
+    }
+    const key = String(rec.projectKey || 'unknown');
+    const delta = Math.max(0, finiteNumber(rec.delta) ?? 0);
+    const cache = Math.max(0, finiteNumber(rec.cacheDelta) ?? 0);
+    if (delta === 0 && cache === 0) return;
+    const cur = this._today.get(key) || { tokens: 0, cache: 0 };
+    cur.tokens += delta;
+    cur.cache += cache;
+    this._today.set(key, cur);
+  }
+
+  /**
+   * What each project has spent tokens on since local midnight.
+   *
+   * A plain object so a caller can hand it straight to a snapshot. Empty when
+   * the day has no `tokens` records yet, which is the signal the room plate
+   * uses to fall back to the session totals rather than claiming a project
+   * did nothing today.
+   *
+   * @param {number} [now]
+   * @returns {Record<string, {tokens:number, cache:number}>}
+   */
+  todayTokens(now = this._now()) {
+    const day = dayKey(now);
+    if (day !== this._todayDay) {
+      this._today = new Map();
+      this._todayDay = day;
+    }
+    /** @type {Record<string, {tokens:number, cache:number}>} */
+    const out = {};
+    for (const [key, v] of this._today) out[key] = { tokens: v.tokens, cache: v.cache };
+    return out;
   }
 
   /**
@@ -329,6 +398,7 @@ export class Ledger {
         if (v === undefined || v === null) continue;
         rec[k] = typeof v === 'string' ? clampField(v) : v;
       }
+      if (kind === 'tokens') this._noteTokens(rec, dayKey(t));
       this._buffer.push(JSON.stringify(rec));
       this.stats.recorded += 1;
       if (this._buffer.length > this.maxBuffered) {

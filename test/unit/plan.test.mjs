@@ -12,7 +12,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlan, formatTokens, U } from '../../public/render/plan.js';
+import { buildPlan, formatTokens, payrollLine, U } from '../../public/render/plan.js';
 
 const EPS = 1e-6;
 // docs/DEVIATIONS.md §12: 05-LAYOUT-REWORK.md §2.2's [1.60, 1.78] clamp and
@@ -366,13 +366,39 @@ test('every waiting agent faces the desk, and the queue runs front-to-back', () 
 test('plate lines report session count, compact tokens, and needs-you count', () => {
   const plan = buildPlan([makeProject('career-ops', 21, { tokens: 2_200_000, needsYou: 3 })], []);
   const room = plan.rooms.find((r) => r.id === 'career-ops');
-  assert.deepEqual(room.plateLines, ['career-ops', '21 sessions · 2.2M tok · 3 need you']);
+  assert.deepEqual(room.plateLines, ['career-ops', '21 sessions · 2.2M tok · 3 need you', '']);
 });
 
 test('plate lines use the singular "session" for a one-session project', () => {
   const plan = buildPlan([makeProject('solo', 1, { tokens: 500, needsYou: 0 })], []);
   const room = plan.rooms.find((r) => r.id === 'solo');
-  assert.deepEqual(room.plateLines, ['solo', '1 session · 500 tok · 0 need you']);
+  assert.deepEqual(room.plateLines, ['solo', '1 session · 500 tok · 0 need you', '']);
+});
+
+// WP-26. The third line is the payroll meter, and it is empty above because a
+// project with no `todaySpend` has nothing honest to put on it.
+test('the payroll line names the day when the ledger has the day', () => {
+  const plan = buildPlan(
+    [makeProject('career-ops', 3, { todaySpend: 18.4, todaySpendIsToday: true })],
+    [],
+  );
+  const room = plan.rooms.find((r) => r.id === 'career-ops');
+  assert.equal(room.plateLines[2], 'today ≈ $18.40 · list price');
+});
+
+test('the payroll line says "to date" when it is falling back to session totals', () => {
+  const plan = buildPlan(
+    [makeProject('career-ops', 3, { todaySpend: 7.855, todaySpendIsToday: false })],
+    [],
+  );
+  const room = plan.rooms.find((r) => r.id === 'career-ops');
+  assert.equal(room.plateLines[2], '≈ $7.86 to date · list price');
+});
+
+test('a room the rate card cannot price gets no payroll line at all', () => {
+  for (const spend of [null, undefined, Number.NaN]) {
+    assert.equal(payrollLine({ todaySpend: spend, todaySpendIsToday: true }), '');
+  }
 });
 
 // -------------------------------------------------------- survivors: lounge
