@@ -8453,3 +8453,178 @@ own desk five minutes into a screenshot session. Goldens regenerated as the last
 step of the package: `demo` changed (two juniors, a bigger table, a plate line),
 and `reference`, `single` and `empty` are byte-identical, which is the control
 working — none of those populations has a subagent directory.
+
+## 121. CI — two tests that were asking the runner a question, and a timeout that was reading as a cancellation
+
+The `merge: WP-41` run on `main` (3 September 2026, 20:31 UTC, run 33802760502) came back
+**`cancelled`**. It had not been cancelled. Six of its ten jobs failed on two real assertions, three
+more were killed by their own timeout, and the run heading was reporting the killings.
+
+| Job | Conclusion |
+| --- | --- |
+| test (ubuntu \| macos \| windows, 20 and 22) — 6 jobs | **failure**, on the same two tests |
+| test (ubuntu \| macos \| windows, 18) — 3 jobs | **cancelled** — killed at `timeout-minutes: 10` |
+| goldens | **cancelled** — killed at `timeout-minutes: 8` |
+
+Three separate things, and the third is why the first two survived a merge.
+
+### 121.1 `PRIVACY:` — the fixture and the daemon picked the same word
+
+```
+not ok 42 - PRIVACY: no path and no project name is in the response
+  location: 'test/integration/wrapped-route.test.mjs:128:1'
+  error: the response leaked orbital-api; the ledger holds hashes for exactly this reason
+```
+
+Six jobs, every platform. The test seeds a ledger for a project at `/code/orbital-api`, asks
+`GET /api/wrapped` for the week, and asserts the word `orbital-api` is nowhere in the response —
+because the ledger holds hashes (§100 decision 5) and a card is a thing people post.
+
+`orbital-api` is also **one of the actor floor's three rooms** (`src/core/demo-fixture.mjs`). A
+machine with no sessions is served the actors rather than an empty room (§108), every CI runner is a
+machine with no sessions, and the route's `projects` lookup resolves the hashes it can to names taken
+from the live floor (§119.6). So the response carried `orbital-api` — from the daemon's own fiction,
+about a project at `/deckhq-demo/orbital-api` that does not exist, having nothing to do with the
+ledger.
+
+**The route is not what was wrong, and it is unchanged.** §119.6 is precise about where names come
+from: the live floor, hashed. The ledger contributes hashes and only hashes. What was wrong is that
+the test could not tell those two sources apart, for two reasons, and both are fixed:
+
+1. **The machine was not pinned, so the floor was whatever the host had.** The registry scans the
+   real home directory. On the developer's laptop it found real sessions, the actor floor never
+   appeared, and the assertion passed — while quietly checking the developer's own project names
+   against a needle list that could not match them. On a runner it found nothing, and the actors
+   walked in. `wrapped-route.test.mjs` now pins `CLAUDE_CONFIG_DIR`, `HOME` and `USERPROFILE` to a
+   sandbox before importing `src/`, exactly as `test/integration/demo-floor.test.mjs` already did.
+   Same precedent, three lines. It also stops `the derived stat never blocks the card` from reading
+   the developer's own transcript directory.
+2. **The fixture's project name was one the daemon can produce.** It is now `wrapped-fixture-only`,
+   and the test asserts that before it asserts anything else: every project on the live floor is
+   checked against the fixture name, and a collision fails with `pick a fixture name the daemon
+   cannot produce` rather than as a privacy leak. Restoring `orbital-api` reproduces the CI failure
+   on a Windows laptop, which is the whole point — the old test could only be made to fail by being
+   run somewhere else.
+
+**And the assertion got stronger.** The needle list survives, with the sandbox home added. What is
+new is the invariant §119.6 states, now stated in code rather than approximated by a word search:
+every key in the card's `projects` map is the hash of a cwd the floor holds, and its value is that
+floor project's name — so no name in the card was invented for it. The fixture's own key, which the
+floor has never heard of, must **not** be in the map at all. That is a claim about where names come
+from; `text.includes('orbital-api')` was a claim about one word.
+
+### 121.2 `resolveWindowsExecutable` was reading the host's `path`, in the one module §114 did not sweep
+
+```
+not ok 1447 - a bare program name resolves to something Windows will run
+  location: 'test/unit/vscode-extension.test.mjs:350:1'
+  + actual 'npx'   - expected 'C:\bin\npx.cmd'
+```
+
+Four jobs — ubuntu and macos, Node 20 and 22. Green on all three Windows jobs, which is exactly the
+shape §114 is about, arriving one merge later in a different file.
+
+The test injects a Windows `PATH` (`C:\nowhere;C:\bin`) and a fabricated set of files, and asserts
+that a bare `npx` resolves to `C:\bin\npx.cmd` — the real property, because npm ships `npx` (a POSIX
+shell script) beside `npx.cmd` and `cmd.exe` picks the wrong one of that pair. Every input was
+injected. The function then split that `PATH` on the **host's** `path.delimiter` and joined with the
+**host's** separator, so on Linux it looked for `C/npx.cmd`, `\nowhere;C/npx.cmd` and `\bin/npx.cmd`,
+found nothing, and returned the bare name — the exact outcome it exists to prevent, arriving as a
+test failure rather than as a broken launch.
+
+**Fixed with `path.win32`, unconditionally.** `resolveWindowsExecutable` answers "what will Windows
+run"; no part of that question depends on the host, so `extname`, `isAbsolute`, `dirname`,
+`basename`, `delimiter` and `join` all come from `path.win32` now. `spawnPlan` gained the same `env`
+seam its sibling in `plugin/lib/start.mjs` was given in §114, `ComSpec` included, so the Windows plan
+is decidable from any host.
+
+**The assertions that were only true on Windows are now true everywhere.** `SECURITY: a start command
+never becomes a shell string` asserted the interpreter with `/cmd\.exe$/i` and the command line with
+a regex that a bare `npx` also satisfied; it now asserts both exactly, against an injected `ComSpec`
+and an injected PATH. `a bare program name resolves…` gained the `.cmd`-before-`.exe` preference and
+two absolute-path rows. And a new test — `the extension list is injected, and the host machine never
+decides it` — pins the one input nobody had thought to hand it: `PATHEXT`, which does not exist at
+all on the six non-Windows jobs.
+
+**The rest of the tree was swept for the same defect and does not have it.** Four modules resolve a
+program against a `PATH`. `src/core/editor.mjs` and `plugin/lib/start.mjs` already pick `path.win32`
+or `path.posix` from an injected platform (§114); `vscode/lib/command.js` is fixed here; and
+`src/cli/chrome.mjs` reads the host's real `PATH` on purpose, because "which browser does *this*
+machine have" is a question about the host, and the host's `path` is the right one to answer it with.
+
+### 121.3 The run said `cancelled` because a timed-out job is recorded as cancelled
+
+This is not the `concurrency` block, which §114 added and which behaved exactly as written: the push
+to `main` was keyed on its own commit and nothing superseded it. `fail-fast: false` is set and no job
+cancelled a sibling — the six failures all ran to completion and reported.
+
+**Three Node 18 jobs and the goldens job hit their `timeout-minutes` and were killed. GitHub records
+a job killed by its timeout as `cancelled`, not `failed`, and a run holding any cancelled job rolls
+up to `cancelled`.** So the run heading described the four jobs that were killed rather than the six
+that failed on real assertions, and two straightforward test defects came back looking like
+infrastructure noise. `ci.yml` now says so where the timeout is set, because the wrong conclusion to
+draw from it is one line above.
+
+**Why the Node 18 jobs took ten minutes over a five-second suite.** Every daemon test on them took
+64–65 seconds:
+
+```
+ok 7  - daemon binds loopback and serves a snapshot     duration_ms: 65125.307
+ok 9  - static serving refuses traversal…               duration_ms: 64122.376
+ok 10 - unknown api routes 404 and unknown actions 400  duration_ms: 65013.285
+```
+
+Eighteen of them before the runner killed the job, every one `ok`, none of them doing any work. The
+number is the giveaway: `headersTimeout` (60 s) plus `keepAliveTimeout` (5 s) is how long an idle
+keep-alive socket survives on a server that has been asked to close. `startDaemon`'s `close()`
+awaited `server.close()` — which waits for every connection to *end*, and a pooled keep-alive
+connection with no request on it does not end — and then called `server.closeAllConnections()`, after
+the promise it was meant to unblock had already resolved. It could never have helped. Node 19 made
+`server.close()` release idle connections itself, which is precisely why Node 20 and 22 were fast and
+Node 18 was not.
+
+The fix is to let go of the idle sockets **inside** the wait:
+
+```js
+await new Promise((resolve) => {
+  server.close(() => resolve(undefined));
+  server.closeIdleConnections?.();
+});
+server.closeAllConnections?.();
+```
+
+`closeIdleConnections()` is the narrow one — a connection mid-request is left to finish — and on Node
+19 and later it is a redundant second call, which is why nothing changes on the six jobs that were
+already fast. `closeAllConnections()` stays as the backstop it was written to be.
+
+**Unproven until this runs on Node 18 — RAISE.** No Node 18 is installed on the reference machine, so
+what is demonstrated here is that the change is inert on Node 24 (1,521 tests, three runs, 5.5 s) and
+that both the arithmetic and the version boundary point at this one line. If the Node 18 jobs are
+still slow they will now say so with a verdict of their own instead of by dragging the run's heading
+down, and the next move is `timeout-minutes` on that leg rather than a guess.
+
+### 121.4 A note on measuring this suite, which cost an hour
+
+Whole-suite wall clock on the reference machine moved between 5 s and 68 s **on one commit**, which
+made every before-and-after reading worthless until the cause was found. It is not flakiness: several
+integration tests scan the developer's real home directory, and one of them — `INVARIANT: reading a
+conversation over HTTP never clears reviewSince` — takes a completely different branch depending on
+whether that machine happens to have a session in `for_review` at that moment. §121.1 pins one file.
+The others still read the host, and a timing claim about this suite is worth nothing until they do
+not.
+
+### What this earns
+
+§114 ended on a rule — _a test that asserts what the code builds must be handed every input that
+decides it, the host's own platform included_ — and swept the suite for tests reading
+`process.platform`. Both failures here are that same rule, in the two places that sweep could not
+have looked:
+
+- **§121.2 is the rule in the source rather than in the test.** `vscode/lib/command.js` never
+  mentions `process.platform`. It reads the host by importing `node:path` and using it, and a grep
+  for the symptom will not find that. The sweep that does find it is "which modules answer a question
+  about a platform they are not necessarily running on", and it is in §121.2 above, done.
+- **§121.1 is the rule applied to a fixture.** Nothing in that test read the platform. It read the
+  machine — the home directory, the sessions on it, and therefore the floor — and then a fixture
+  value collided with a value the code under test produces on its own. A fixture is an input too, and
+  it had not been chosen so that it could only have come from the test.
