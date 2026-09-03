@@ -368,9 +368,15 @@ These are real, and listed here rather than discovered later.
   that emulator's documented interface and unit-tested down to the exact argument list — and
   none of them has been run on a real Mac or a real Linux desktop. Treat them as untested until
   this line says otherwise. The rest of the product is CI-tested on all three.
-- **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by public list
+- **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by published list
   prices so you can compare projects against each other. It has no idea what your plan actually
-  charges you, and it is labelled as an estimate everywhere it appears.
+  charges you, and every place a figure appears carries the dated table it came from — the review
+  card, the room plate and `deckhq stats` all say `rate card <date>`, and all of them say
+  `list price`. The table is `src/data/rates.json`, keyed by model id prefix; a
+  `~/.deckhq/rates.json` merges over it entry by entry and takes effect the moment you save the
+  file, with no restart. A model the table has no row for reads **no rate** rather than `$0.00`:
+  we would rather show you nothing than a number we made up. The Codex/OpenAI rows are flagged
+  `unverified` in the file, because we have not checked them against a published price list.
 - **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.

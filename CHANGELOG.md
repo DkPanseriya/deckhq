@@ -308,6 +308,29 @@
   `legendary` beside the name, in the muted ink, and show nothing at all for the ~74% that are
   common. A word and never a number: no percentage, no rank, and no count of what you have
   "collected" — `docs/plan/08` §1.1 rule 6.
+- **The rate card is a file with a date on it, and you can replace it.** Cost estimates used to
+  come from four tiers hand-typed in the middle of `src/core/model.mjs`. They are now
+  `src/data/rates.json` — versioned `2026-09-04`, carrying the pricing page it was read from and
+  the date it was read, keyed by model id prefix with the longest prefix winning. Drop a
+  `~/.deckhq/rates.json` beside your state and it merges over the shipped table entry by entry —
+  change one model's price, add a model nobody ships, name your own version string — and it takes
+  effect the moment you save the file. No restart. Rows this project has not checked against a
+  published price list (the Codex/OpenAI prefixes) are flagged `unverified` in the file itself,
+  because a number in a dated table implies a source. `docs/DEVIATIONS.md` §107.
+- **Every cost on the screen names the table it came from.** The review card's bottom line reads
+  `≈ $7.86 · list price, rate card 2026-09-04 · not a bill`; `deckhq stats` prints
+  `rate card 2026-09-04 — list-price estimate, not a bill` (and carries `rateCardVersion` in
+  `--json`); the settings sheet's "Rate card" row reads the live version rather than a constant. A
+  cost figure whose table nobody can name is a figure nobody can check. The rule that cost is an
+  estimate and never a bill is now asserted as literal text: a test collects every cost string any
+  surface can produce and fails if one of them carries a figure without a qualifier, or says
+  "bill" without "not a" in front of it.
+- **A room's plate carries what it has spent today.** `today ≈ $18.40 · list price`, as a quiet
+  third line under the name and the session count, computed from the event ledger's per-project
+  token deltas since local midnight. A project the ledger has no record for today falls back to
+  its session totals and says `to date` instead — the plate never says "today" about a number that
+  is not today's. Produced and tested; not yet painted, because the one function that draws a room
+  plate was outside this package's scope. §107.
 
 ### Changed
 
@@ -429,6 +452,14 @@
   The column used to fall through to the session title because almost nobody had ever named an
   agent; now everybody has a name and it says what it was always meant to say. A given name also
   resolves an agent by name on the command line, exactly as a chosen one does.
+- **A model the rate card has never heard of now has no price, instead of Opus's.** The old tier
+  test matched `haiku`, then `sonnet`, then `gpt|codex|o3|o4`, and priced everything else at
+  $15/$75 per million — a local model, a Codex id the tests never saw, an unrecognised Bedrock
+  string, all of them. That is not a coarse estimate, it is an invented one, and it was being
+  summed into project totals. `estimateCost` returns `null` now, the panel says
+  `no rate for this model`, and a room nothing can price gets no cost line at all. `$0.00` is a
+  claim about the money; "no rate" is the truth. `Agent.costEstimate` is `number|null`
+  accordingly.
 
 ### Fixed
 
@@ -698,6 +729,17 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
 
 ### Known gaps
 
+- **The room plate's daily spend is computed but not drawn.** `buildPlan` puts it in the room's
+  third plate line and the snapshot carries it per project, but the only function that paints a
+  room plate draws two lines and recomputes them from the snapshot rather than reading the plan's —
+  and that file was outside the package that added the line. The remaining change is roughly ten
+  lines in `public/render/scene.js`, spelled out in `docs/DEVIATIONS.md` §107, plus a goldens
+  regeneration in the same commit, because it is the first thing in months to change what the
+  floor looks like without changing what is on it.
+- **The Codex/OpenAI rates in `src/data/rates.json` are unverified.** They are the numbers the
+  hand-typed tier carried, flagged as such in the file, and nothing in this project has checked
+  them against a published price list. Anthropic's rows were read off the pricing page on
+  2026-09-04.
 - **The permission feature has never met a live session.** Everything downstream of the runtime is
   tested and screenshotted; the runtime itself has not been in the loop once, because `claude`'s
   stored login on the reference machine is expired and re-authenticating is an interactive browser

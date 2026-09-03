@@ -6095,3 +6095,124 @@ and **0 px moved at all** — a quieter noise floor than §87 measured, whose
 `docs/media/` carries the pair for both populations:
 `floor-before-wp55.png` / `floor-after-wp55.png` and `demo-before-wp55.png` /
 `demo-after-wp55.png`, each taken from the golden itself.
+
+## 107. WP-26 — the rate card is data with a date on it, and an unknown model has no price
+
+`01-AUDIT.md` F14: "hard-coded rates". They were four hand-typed tiers in the
+middle of `src/core/model.mjs` — a substring test for `haiku`, then `sonnet`,
+then `gpt|codex|o3|o4`, and **Opus prices for everything else**. Three separate
+things were wrong with that, and the third is the one that mattered:
+
+1. Nobody could check the numbers. There was a `RATE_CARD_VERSION` string
+   beside them (WP-07) and nothing tying it to a published page.
+2. Nobody could correct them without editing the installed package, which
+   `npx` is free to replace on the next version bump.
+3. **A model nobody had heard of was priced as Opus.** A Codex session on a
+   model id the tests never saw, a local model, a Bedrock id with a region
+   prefix — all of them came out at $15/$75 per million. That is not a coarse
+   estimate, it is a fabricated one, and it was being summed into project
+   totals and shown on the review card as a dollar figure.
+
+### What shipped
+
+`src/data/rates.json` — versioned `2026-09-04`, carrying the URL it was read
+from and the date it was read. `~/.deckhq/rates.json` merges over it entry by
+entry and is picked up on its next mtime change, no restart. The loader is
+`src/core/rates.mjs`; the pure half (prefix matching, the merge, the
+arithmetic) is exported separately so the tests never touch a disk they did
+not make. The JSON is under `src/`, which is already in `package.json`'s
+`files`, so it is in the tarball by construction rather than by a new entry
+somebody can drop.
+
+### Six decisions
+
+**1. The table left `model.mjs`.** That file's header promises "no I/O" and it
+is the contract every other module imports. A rate card that is read from disk
+and reloaded when it changes is I/O, so `estimateCost` and the version string
+moved to `rates.mjs` rather than dragging a `readFileSync` into the contract.
+`model.mjs` keeps a signpost where they were.
+
+**2. Longest prefix wins, and nothing else disambiguates.** Not row order: a
+table whose behaviour depended on the order of its rows is a table nobody can
+safely add a row to. `claude-opus-5` beats `claude-opus`; `claude-haiku-4-5`
+beats neither because it is not a prefix of them. Two tests assert it, one of
+them by matching against the same table reversed.
+
+**3. A provider prefix is not a different model.** Bedrock ships
+`us.anthropic.claude-opus-5…` and Vertex ships `claude-opus-5@20260101`. The
+old substring test happened to survive both; strict prefix matching would not
+have, and every Bedrock user's floor would have gone to "no rate" in silence.
+`normaliseModelId` peels the known provider prefixes and the `@` version
+separator and does nothing else — a normalisation that rewrote the id would be
+a second, invisible matching rule on top of the one the table states.
+
+**4. An unknown model returns `null`, not `0`.** `Agent.costEstimate` and
+`SessionSummary.costEstimate` are `number|null` now. The panel says
+`no rate for this model`, the room plate shows no payroll line at all, and
+`projects()` carries a `costRated` flag so a caller can tell "nothing here has
+a price" apart from "this cost nothing". **Zero is a claim about the money.**
+We did not have one, so we no longer make one.
+
+**5. The OpenAI/Codex rows are flagged `unverified` in the file itself.** The
+retrieval was from Anthropic's pricing page; the Codex numbers are the ones the
+hand-typed tier carried, and nothing in this package has checked them against a
+published list. They are in the table because a Codex session with no rate at
+all would be a regression, and they are flagged because a number in a dated
+table implies a source. A test asserts that every non-`claude-` row carries the
+flag and every `claude-` row does not.
+
+**6. The payroll line is an estimate of an estimate, and says which day it
+means.** A `tokens` ledger record carries a delta and a project key — **not a
+model** — so the day's tokens cannot be priced per model without changing
+WP-17's record shape. They are priced at the room's own average rate instead:
+the day's token movement over the project's lifetime token total, times the
+project's lifetime estimate. On a room running one model, which is nearly every
+room, the two are the same number. A project with no `tokens` record today
+falls back to its session totals and the line reads `≈ $7.86 to date` rather
+than `today ≈ $7.86` — the plate never says "today" about a number that is not
+today's. The day's tally is kept in memory by `Ledger` (seeded by `prime()`,
+added to by `record()`, emptied at the roll) rather than re-derived by reading
+the day file back on every snapshot.
+
+### Rule 7 is asserted as literal text
+
+`08` §1.1 rule 7 — cost is an estimate, never a bill — is only true if it is
+true of the characters on the screen. `test/unit/rates.test.mjs` collects every
+cost string any surface can produce (the panel's bottom line in all three of
+its branches, both payroll-line branches, `deckhq stats` with and without a
+ledger) and asserts two things over the set: every string carrying a figure
+also carries `estimate`, `list price` or `not a bill`; and no string contains
+`bill` without `not a ` immediately in front of it. A new display that forgets
+the qualifier fails the suite rather than the review.
+
+The panel's line reads
+`≈ $7.86 · list price, rate card 2026-09-04 · not a bill`, the room plate's
+third line reads `today ≈ $18.40 · list price`, `deckhq stats` prints
+`rate card 2026-09-04 — list-price estimate, not a bill` (including on an empty
+ledger, because "which table is this build pricing with" is a question asked
+before there are numbers), `--json` carries `rateCardVersion`, and the settings
+sheet's "Rate card" row now reads the live version rather than a constant.
+
+### RAISE — the plate's third line is computed but not yet painted
+
+`08` §8.1 asks for per-room daily spend on the room plate, and this package
+produces it: `buildPlan` puts it in `room.plateLines[2]`, the snapshot carries
+`todaySpend`/`todaySpendIsToday` per project, and it is tested. **It does not
+appear on the floor yet**, because the only thing that paints a room plate is
+`Scene._drawRoomPlate` in `public/render/scene.js`, which draws `lines[0]` and
+`lines[1]` and recomputes a project room's lines from the snapshot in
+`_plateLinesFor` rather than reading `room.plateLines` at all — and that file
+was explicitly outside this package's file scope. The change it needs is small
+and additive: `_plateLinesFor`'s `project` branch returns
+`[name, dataLine, payrollLine(project)]`, and `_drawRoomPlate` draws a third
+line under `dataY` at the same 11 px mono face, with `lines[2]` folded into the
+hit rect's `bottom` the way `lines[1]` already is. Until that lands the floor is
+byte-identical, which is why the goldens did not move (below).
+
+### Goldens
+
+**Not regenerated, and not needing to be.** The plate change is data only —
+see the RAISE above — so no pixel on the floor moved. `npm run goldens:check`
+was run against the committed set and passes on every population it can capture
+on this machine. The moment `scene.js` paints `lines[2]`, the floor changes and
+the goldens must be regenerated in the same package that does it.
