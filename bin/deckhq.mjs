@@ -6,6 +6,7 @@
  *   npx deckhq --no-open  start the daemon only
  *   npx deckhq --port N   listen on a different loopback port
  *   npx deckhq doctor     print what DeckHQ can see here, and start nothing
+ *   npx deckhq statusline one line for a status bar
  *
  * With no --port, the daemon prefers the port the installed hooks already
  * post to, so a daemon and its hooks cannot drift apart by accident; if a
@@ -20,25 +21,34 @@ import process from 'node:process';
 
 const argv = process.argv.slice(2);
 
-// Subcommands are dispatched before anything else is imported. `doctor` must
-// not start the server or open a browser, and importing the daemon eagerly
-// would pull the whole HTTP stack in for a command that only reads.
-const SUBCOMMANDS = new Set(['doctor']);
+// Subcommands are dispatched before anything else is imported, and each one
+// imports only its own module. `doctor` must not start the server or open a
+// browser; `statusline` runs inside somebody else's editing loop and has a
+// 20 ms budget on its no-daemon path, which a static import of the daemon (or
+// of the adapter registry) would spend before it read anything.
+//
+// Every handler returns an exit code rather than calling `process.exit()`.
+// These commands talk to a daemon over loopback, and exiting hard while that
+// socket is still closing aborts the process inside libuv — measured on
+// Windows as "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING),
+// src\\win\\async.c", which turned a perfectly healthy report into exit code
+// 127 (docs/DEVIATIONS.md §76). Letting the loop drain costs nothing: none of
+// them holds a timer or a listener open.
+/** @type {Record<string, (rest: string[]) => Promise<number>>} */
+const SUBCOMMANDS = {
+  doctor: async (rest) => (await import('../src/cli/doctor.mjs')).runDoctor(rest),
+  statusline: async (rest) => (await import('../src/cli/statusline.mjs')).runStatusline(rest),
+};
+
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
 
 if (subcommand) {
-  if (!SUBCOMMANDS.has(subcommand)) {
+  const handler = SUBCOMMANDS[subcommand];
+  if (!handler) {
     process.stderr.write(`deckhq: unknown command "${subcommand}". Try "deckhq --help".\n`);
     process.exitCode = 2;
   } else {
-    const { runDoctor } = await import('../src/cli/doctor.mjs');
-    // `process.exitCode`, never `process.exit()`. `doctor` talks to a running
-    // daemon over loopback, and exiting hard while that socket is still
-    // closing aborts the process inside libuv — measured on Windows as
-    // "Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\\win\\async.c",
-    // which turns a perfectly healthy report into exit code 127. Letting the
-    // loop drain costs nothing: the command holds no timers or listeners open.
-    process.exitCode = await runDoctor(argv.slice(1));
+    process.exitCode = await handler(argv.slice(1));
   }
 } else {
   await main();
@@ -62,6 +72,7 @@ async function main() {
         '',
         'Usage: deckhq [options]',
         '       deckhq doctor [--json] [--share] [--capture-proof]',
+        '       deckhq statusline [--json] [--install] [--remove]',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
@@ -71,6 +82,8 @@ async function main() {
         'Commands:',
         '  doctor        what DeckHQ can see here, and what it cannot.',
         '                Starts nothing. `deckhq doctor --help` for its options.',
+        '  statusline    one line — "▣ 3 waiting · 1 hand up" — for a status bar.',
+        '                --install writes it into your Claude Code settings.',
         '',
         'The daemon binds 127.0.0.1 only and makes no outbound network calls.',
         '',

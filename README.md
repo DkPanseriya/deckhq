@@ -113,6 +113,40 @@ of the comparison.
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
 
+## `deckhq statusline`
+
+One line, for a status bar:
+
+```
+$ deckhq statusline
+▣ 3 waiting · 1 hand up
+```
+
+`waiting` is the same number the floor's header shows; `hands up` is the part of it that is blocked
+on an answer from you. Nothing waiting prints `▣ clear`. `--json` gives the counts as data.
+
+Claude Code can render it in every session you have open, which turns every terminal into a live
+badge for the queue with no interface of ours on the screen:
+
+```bash
+deckhq statusline --install        # prints the exact JSON and the file. Writes nothing.
+deckhq statusline --install --yes  # writes it
+deckhq statusline --remove --yes   # takes it out again
+```
+
+Same discipline as the hooks: you see the literal JSON and the path before anything is written,
+your settings file is copied to `~/.deckhq/backups/` first, the entry is tagged, and removal
+deletes only the entry DeckHQ wrote. A status line you configured yourself is reported and left
+exactly where it is.
+
+It assumes `deckhq` is on your `PATH` — a global install, Homebrew, winget or scoop; `npx` does not
+leave one behind. `--command "<something else>"` writes a different command. The installed entry
+refreshes every 5 seconds, matching the floor's own poll, and `--interval 0` leaves it
+event-driven instead.
+
+Without a daemon running, the line comes straight from `~/.deckhq/state.json` — 3 ms on a machine
+with 77 sessions — so it costs a status bar nothing to carry.
+
 ## What it reads from your disk
 
 Everything is read locally and nothing leaves the machine.
@@ -212,6 +246,7 @@ instead of walking, clips hold a representative pose, and the floor stays fully 
 npx deckhq --port 4400    # a different loopback port
 npx deckhq --no-open      # start the daemon without opening a browser
 npx deckhq doctor         # the environment report above
+npx deckhq statusline     # the queue, as one line
 npx deckhq --version
 ```
 

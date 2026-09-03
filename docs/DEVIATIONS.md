@@ -3233,3 +3233,93 @@ populations with a uniform speckle across every project room's floor and nothing
 person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
 tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
 floor (36 px) is unchanged.
+
+## 88. WP-38 · The status line: what it counts, where it reads from, and the six decisions the package left open
+
+`08-PLAN-V2-100X.md` WP-38: "`deckhq statusline` prints one line (`▣ 3 waiting · 1 hand up`) from
+the state file, without a daemon, in under 20 ms; the settings sheet and the plugin offer to add it
+to the user's Claude Code status line configuration with the same consent screen and tagging
+discipline as hooks." Shipped as `deckhq statusline`, `--json`, `--install`, `--remove`. Six
+decisions, and one measurement that changed the implementation.
+
+**Decision 1 — `waiting` is the header's numeral, and `hands up` is inside it.** `waiting` is
+`counts.needsYou`; `handsUp` is the `needs_input` subset. They overlap deliberately: "3 waiting ·
+1 hand up" says three things need you and one of them is blocked on an answer, which is the shape
+of the decision the reader has to make. Both come from `counts()` in `src/core/model.mjs` — the
+same function the header calls — which is what makes WP-38's acceptance criterion (the count
+matches the header) structurally true rather than separately implemented and hoped for. `▣ clear`
+when nothing is waiting: a cleared queue is a state worth showing, and a blank line is
+indistinguishable from a broken command.
+
+**Decision 2 — the no-daemon path is the daemon's own restart bootstrap, and nothing more.** With
+no daemon there is no liveness and no stall clock, so `readOffline()` derives exactly what
+`Registry._ensureObserved()` already derives when the daemon restarts: a persisted `reviewSince`
+is `for_review`, a persisted `needsInputSince` is `needs_input`, everything else is `ended`. It
+never invents `working` and it never invents `stalled` — a stall is a function of a live process
+and a window, and inventing one would be a second representation of state allowed to disagree with
+the first, which is the root cause behind §16, §35, §38, §52 and §55. A test asserts the absence.
+
+**Decision 3 — the agent set is the cache UNION the undischarged ack records.** The cache
+(`~/.deckhq/cache/`) mirrors the transcripts on disk, which is what the daemon would count; but it
+is capped by entry count and by bytes (`summary-cache.mjs`), so it can legitimately be missing a
+session. An ack record carrying an undischarged `reviewSince` is evidence of a debt regardless.
+The union can over-count exactly one class — a session whose transcript was deleted while its debt
+stood — and the intersection would under-count the queue, which for this product is the worse
+failure ("capture beats features"). Union, with the cache filling in the display columns.
+
+**Decision 4 — the port scan does not consult the installed hooks.** `doctor` finds a daemon
+properly, by asking each adapter where its hooks post. Doing that here would mean loading the
+adapter registry — `parse.mjs`, `desktop.mjs`, `hooks.mjs` — on a path with a 20 ms budget. The
+status line scans `--port`, then `DECKHQ_PORT`, then 4317–4326, which is the range `startDaemon()`
+itself walks. A daemon deliberately started outside it needs `--port`, and that is what `--command`
+in the install plan exists for.
+
+**Decision 5 — the backup is `statusline-backup-*.json`, not the hooks installer's own helper.**
+The brief said to reuse the existing backup helper. That helper in
+`src/adapters/claude-code/hooks.mjs` is module-private and this package may not edit
+`src/adapters/`, so this writes the same `{existed, raw}` shape into the same `~/.deckhq/backups/`
+directory under a different prefix. The different prefix is not a workaround, it is required:
+`hooks.remove()` restores the newest `settings-backup-*.json` **verbatim** when the pruned object
+matches it, and a status-line backup taken after the hooks were installed would otherwise become
+the file hook removal restores — silently reinstating the hooks it had just removed. A test pins
+the filename apart from that pattern.
+
+**Decision 6 — `refreshInterval: 5`, and what it costs.** Claude Code refreshes a status line on
+events in _that_ session; this line changes because of _other_ sessions, so with no timer an idle
+terminal shows a frozen number. Five seconds is `DEFAULT_SETTINGS.pollIntervalMs`, which is what
+makes "matches the header within one poll" true rather than aspirational. Measured cost of one run
+on the reference machine (Windows, Node 22, 77 sessions, no daemon): **148 ms median end to end**,
+of which ~60–90 ms is Node's own start-up. `--interval 0` writes no timer at all.
+
+**The measurement that changed the implementation.** The first cut asked each candidate port over
+HTTP. That measured **321 ms** end to end on a machine with no daemon — and 88 ms of it was the
+_first_ `fetch()` in the process standing undici up, paid on a machine that has nothing to talk to.
+Every candidate is now TCP-probed first (`net.connect`, the probe `doctor` already uses) and only a
+port that accepted a connection is spoken HTTP to. 321 ms → 148 ms. The in-process budget the
+package names is met with room to spare: **3 ms median on the reference machine's 77 sessions, and
+5.6 ms median on a synthetic 400**, against the 20 ms asserted in the test.
+
+**Consent, unchanged from hooks.** `--install` prints the literal JSON and the absolute path of the
+file it goes in, and writes nothing without `--yes`. The entry carries `"_deckhq": true`, and
+removal takes only an entry that is tagged or whose command is recognisably ours (`deckhq
+statusline`, `npx deckhq statusline`, `node "…/bin/deckhq.mjs" statusline`) — a status line
+somebody else configured is reported and left exactly where it is. An install that would replace an
+existing status line says so, and shows what is there now, before asking.
+
+**Unverified.** The rendered line has not been seen inside a real Claude Code session: doing that
+means writing to the user's own `~/.claude/settings.json`, which this package will not do without
+them typing `--yes` themselves. What _is_ verified is the file transaction (round-trip
+install/remove against a temporary settings file, including the "no settings file existed" case),
+the JSON shape against the published `statusLine` contract, and the command's own output. The
+`_deckhq` tag is an extra key inside `statusLine`; hook entries have carried the same tag since 1.0
+without complaint, but Claude Code's treatment of an unknown key _inside_ `statusLine` specifically
+is untested here — which is why removal also recognises our command string, so a stripped tag
+cannot orphan the entry.
+
+**Acceptance.** 29 tests: the line's arithmetic and its wording (including that it never says
+"you"), the daemon path and the file path, benched and let-go excluded, no invented stall, a debt
+with no cached summary still counted, a corrupt state file and a corrupt cache both reading as an
+empty machine, the 20 ms budget, the loopback-only host, TCP-probe-before-HTTP, two INVARIANT tests
+(printing the line leaves `state.json` byte-identical, and a read never assigns an MK number), and
+eight install/remove tests.
+

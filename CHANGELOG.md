@@ -55,6 +55,17 @@
   `localStorage`, survives closing the panel, switching agents and reloading the tab, and shows as
   a `draft` chip on the panel header. It is the agent's queue being held by you. Purely
   client-side: the daemon never sees a draft and a draft never touches ack state.
+- **`deckhq statusline` — the queue as one line, for a status bar.** `▣ 3 waiting · 1 hand up`,
+  with the zero half omitted and `▣ clear` when nothing is waiting. `waiting` is the header's own
+  numeral and `hands up` is the subset that is blocked on an answer, both from the same `counts()`
+  the interface uses, so the two can never disagree. It reads a running DeckHQ if one answers on
+  127.0.0.1 within 150 ms and `~/.deckhq/state.json` plus the scan cache if none does — 3 ms median
+  on 77 sessions, 5.6 ms on a synthetic 400, against a 20 ms budget asserted in the test.
+  `--json` for scripts. `deckhq statusline --install` writes it into your Claude Code status line
+  under the same consent discipline as hooks: the literal JSON and the file path are printed, and
+  nothing is written without `--yes`. The entry is tagged, your settings file is copied to
+  `~/.deckhq/backups/` first, `--remove` takes out only what DeckHQ wrote, and a status line
+  somebody else configured is reported and left alone. No outbound network calls. §88.
 
 ### Changed
 
