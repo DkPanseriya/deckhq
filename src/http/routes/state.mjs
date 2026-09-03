@@ -5,6 +5,7 @@
  * docs/02-ARCHITECTURE.md §5.
  */
 import { sendJson } from '../server.mjs';
+import { splitAgentId } from '../../core/model.mjs';
 
 const HEARTBEAT_MS = 15000;
 
@@ -19,7 +20,24 @@ export function register(router, ctx) {
     sendJson(res, 200, registry.snapshot());
   });
 
-  router.get('/api/events', (req, res) => {
+  /**
+   * The SSE channel. One endpoint, three kinds of subscriber, chosen by
+   * `?stream=`:
+   *
+   *   (default)      `state` events — the whole snapshot, on every change.
+   *                  Byte-for-byte what it has always been.
+   *   ?stream=send   `send` events (WP-09) and, with `&watch=<agentId>`,
+   *                  `transcript` events for that one session.
+   *
+   * The filter exists because the page needs both and app.js owns the
+   * snapshot connection. Without it the panel's own connection would be a
+   * second full snapshot on every scan, forever, for events it never reads —
+   * see docs/DEVIATIONS.md §117.
+   */
+  router.get('/api/events', (req, res, url) => {
+    const stream = url?.searchParams?.get('stream') === 'send' ? 'send' : 'state';
+    const watchId = stream === 'send' ? url?.searchParams?.get('watch') || '' : '';
+
     res.writeHead(200, {
       'content-type': 'text/event-stream; charset=utf-8',
       'cache-control': 'no-store, no-transform',
@@ -32,18 +50,50 @@ export function register(router, ctx) {
     let closed = false;
     let lastId = 0;
 
-    const push = (snapshot) => {
+    /** @param {string} event @param {any} data */
+    const write = (event, data) => {
       if (closed) return;
       try {
         lastId += 1;
-        res.write(`id: ${lastId}\nevent: state\ndata: ${JSON.stringify(snapshot)}\n\n`);
+        res.write(`id: ${lastId}\nevent: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       } catch (err) {
         log.debug('SSE write failed', err);
       }
     };
 
-    push(registry.snapshot());
-    const unsubscribe = registry.on(push);
+    /** @type {(() => void)[]} */
+    const teardown = [];
+
+    if (stream === 'state') {
+      const push = (snapshot) => write('state', snapshot);
+      push(registry.snapshot());
+      teardown.push(registry.on(push));
+    } else {
+      // WP-09. Progress for whichever sends this client started. Every event
+      // carries its own `sendId`, so one connection serves a page that has
+      // more than one turn in flight.
+      if (ctx.sends) teardown.push(ctx.sends.subscribe((event) => write('send', event)));
+
+      if (watchId) {
+        // The transcript of the session the panel currently has open. A
+        // passive read of a file: it clears nothing and acks nothing.
+        let stop = null;
+        let gone = false;
+        watchTranscript(ctx, watchId, (digest) =>
+          write('transcript', { id: watchId, ...digest }),
+        ).then(
+          (fn) => {
+            if (gone) fn();
+            else stop = fn;
+          },
+          (err) => log.debug('transcript watch failed', watchId, err),
+        );
+        teardown.push(() => {
+          gone = true;
+          stop?.();
+        });
+      }
+    }
 
     const heartbeat = setInterval(() => {
       if (closed) return;
@@ -59,7 +109,14 @@ export function register(router, ctx) {
       if (closed) return;
       closed = true;
       clearInterval(heartbeat);
-      unsubscribe();
+      for (const fn of teardown) {
+        try {
+          fn();
+        } catch (err) {
+          log.debug('SSE teardown failed', err);
+        }
+      }
+      teardown.length = 0;
     };
 
     req.on('close', cleanup);
@@ -67,4 +124,21 @@ export function register(router, ctx) {
     res.on('close', cleanup);
     res.on('error', cleanup);
   });
+}
+
+/**
+ * Ask the session's own adapter to watch its transcript. The daemon knows
+ * nothing about transcript formats and does not learn any here — a runtime
+ * with no `watchConversation` (Codex today) simply has no live tail, and
+ * costs the panel nothing else.
+ * @param {any} ctx
+ * @param {string} id
+ * @param {(digest:any) => void} onChange
+ * @returns {Promise<() => void>}
+ */
+async function watchTranscript(ctx, id, onChange) {
+  const { runtime } = splitAgentId(id);
+  const adapter = ctx.adapters?.getAdapter?.(runtime);
+  if (!adapter || typeof adapter.watchConversation !== 'function') return () => {};
+  return adapter.watchConversation(id, { onChange });
 }

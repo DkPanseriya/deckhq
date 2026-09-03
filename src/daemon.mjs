@@ -30,6 +30,7 @@ import { clearDaemonFile, writeDaemonFile } from './core/daemon-file.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
 import { Permissions } from './core/permissions.mjs';
+import { SendHub } from './core/sends.mjs';
 import { createNotificationWatcher } from './core/notify-watch.mjs';
 import * as adapters from './adapters/index.mjs';
 
@@ -198,7 +199,7 @@ function envHoldMs() {
  *   above). Tests and embedders that pass a port leave it unset.
  *   `notify` is `--notify`: OS notifications for this run, without writing
  *   `settings.osNotify` (WP-16).
- * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, ledger:Ledger, permissions:Permissions, close:() => Promise<void> }>}
+ * @returns {Promise<{ url:string, port:number, server:import('node:http').Server, registry:Registry, store:Store, ledger:Ledger, permissions:Permissions, sends:SendHub, close:() => Promise<void> }>}
  * @throws {DeckhqAlreadyRunningError} when adopting and the hooks' port is
  *   already a running DeckHQ daemon. Thrown before anything is opened or
  *   written, so there is nothing to close.
@@ -264,6 +265,11 @@ export async function startDaemon(opts = {}) {
     holdMs: opts.permissionHoldMs ?? envHoldMs(),
   });
 
+  // WP-09. The turns currently running, and the channel their progress
+  // reaches the page on. Held here rather than inside the route so `close()`
+  // below can cancel every one of them while this process is still alive.
+  const sends = new SendHub({ log: createLog('sends') });
+
   const router = new Router();
   /** @type {any} */
   // `port` is filled in once the listener is bound. The hooks routes read it
@@ -276,6 +282,7 @@ export async function startDaemon(opts = {}) {
     identity,
     ledger,
     permissions,
+    sends,
     log,
     publicDir,
     // Where `S` writes (WP-14). Overridable for the same reason `stateFile`
@@ -407,6 +414,11 @@ export async function startDaemon(opts = {}) {
     // nothing: a closing DeckHQ must never leave a session blocked, and must
     // never spend its last act deciding something (docs/DEVIATIONS.md §97).
     permissions.shutdown();
+    // And cancel every turn still running, for the same reason: a closing
+    // DeckHQ must not leave a `claude` child of its own behind it. The
+    // children are spawned `detached: false`, so this reaches them — see
+    // SendHub.shutdown() for what that does and does not promise.
+    sends.shutdown();
     notifier.stop();
     clearDaemonFile({ file: daemonFile });
     registry.stop();
@@ -418,7 +430,7 @@ export async function startDaemon(opts = {}) {
     server.closeAllConnections?.();
   }
 
-  return { url, port, server, registry, store, ledger, permissions, close };
+  return { url, port, server, registry, store, ledger, permissions, sends, close };
 }
 
 /**

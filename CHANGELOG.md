@@ -494,6 +494,29 @@
   screenshot never carries somebody else's directory tree. `WebFetch` shows the **host only** —
   the path and the query are where an issue number, a document id or a token live.
   `docs/DEVIATIONS.md` §89.
+- **The reply streams into the panel while you watch, and the composer comes back immediately.**
+  A send used to block for the whole turn — up to ten minutes with the box disabled reading
+  "Sending…" and nothing on screen. `send()` now runs
+  `claude --resume <id> -p <text> --output-format stream-json --verbose --include-partial-messages`,
+  parses the events as they arrive, and reports them. `POST /api/send` answers **202** with a
+  send id the instant the turn is accepted and pushes its progress over the SSE channel the page
+  is already on, so the composer is released in the time it takes to start a process rather than
+  the time it takes the model to think. Text lands in the panel a fragment at a time under
+  **what it said**, with the agent's row in a typing state and a line for each tool it picks up
+  (`· Read vite.config.ts`); when the turn closes the canonical message is re-rendered as
+  markdown from the transcript. A turn that fails puts your text back in the composer — and never
+  over the top of something you have typed since. Every fragment reaches the screen through
+  `textContent`: half a fenced block is not a fenced block, and the client still has no
+  `innerHTML` at all. `docs/plan/05-GUI-UX-SPEC.md` §4.3, `docs/DEVIATIONS.md` §117.
+- **A reply typed in a terminal appears in the open panel, without a poll.** The daemon watches
+  the transcript of whichever session the panel has open — `fs.watch` with a one-second `stat`
+  fallback, because `fs.watch` is unusable on some filesystems and is also blind to a transcript
+  that does not exist yet — reads a bounded 256 KB tail through the adapter's own parser, and
+  tells the page only that the conversation moved. The messages themselves still come from
+  `GET /api/conversation`, so there is one parsed copy of a conversation on the wire and not two.
+  The watch starts when a card opens and stops when it closes; a runtime with no transcript watch
+  simply has no live tail. Reading a file changes nothing: this cannot clear a review debt and
+  makes no `/api/ack` call, and there is a named `INVARIANT:` test for it.
 
 ### Changed
 
@@ -645,6 +668,18 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   into a session's transcript when you press Deny is `Denied from DeckHQ.` rather than the
   lower-case fragment that shipped: it is the only sentence this product writes into somebody
   else's terminal, so it is a sentence. `docs/DEVIATIONS.md` §111, §97.
+- **`POST /api/send` answers 202 with a send id instead of 200 with the whole reply.** The turn is
+  no longer awaited on the socket, so the answer is "accepted", not "finished". Anything reading
+  the reply out of that response now reads it off the SSE channel: `GET /api/events?stream=send`
+  carries `send` events tagged with the id the 202 handed back — `accepted`, `delta`, `tool`,
+  `result`, `error`, `done`. The default `GET /api/events` stream is unchanged, byte for byte;
+  `?stream=send` exists so the panel's own connection does not cost a second floor snapshot on
+  every scan for a listener that never reads one. A failed turn is an `error` event, never an
+  HTTP status, and its message is the runtime's own. `docs/DEVIATIONS.md` §117.
+- **A `claude` DeckHQ started is killed when DeckHQ closes.** Turns are spawned `detached: false`
+  with stdin closed, each carries an `AbortSignal`, and the daemon's shutdown aborts every one
+  before the server stops. A `SIGKILL` of the daemon itself still runs no JavaScript and leaves
+  its children reparented; that case is named rather than claimed.
 
 ### Fixed
 
@@ -766,6 +801,21 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
 
 ### Testing
 
+- **The streamed send is proved against a recorded stream and a fake CLI that really is a
+  process.** `test/fixtures/claude-stream-json.ndjson` and its error twin carry a turn of
+  `--output-format stream-json`; the error one is a real run of Claude Code 2.1.231 verbatim, the
+  other says on its own first line which envelopes are recorded and which are reconstructed.
+  `test/fixtures/fake-claude.mjs` replays them out of a real child process, splitting every line
+  mid-way so no chunk boundary is where the parser would like it, and it also refuses, crashes,
+  emits rubbish and hangs on demand. Fifty-five tests across the parser (chunk sizes of 1, 7, 64
+  and 997 bytes; corrupt lines; a line over the 8 MB cap), `send()` (the exact argv, a non-zero
+  exit, a missing binary, a timeout that kills, and an abort that leaves no orphan pid), the
+  route's 202 and its SSE sequence, the transcript watch against real filesystem events, and the
+  panel's own rules — the composer released on acceptance, the text restored on failure,
+  `textContent` only, and no `/api/ack` anywhere on the path. The fake is reached through a `bin`
+  seam rather than `PATH`, because Node's `spawn` cannot execute a `.cmd` on Windows and the real
+  `claude` here is an `.exe`: `docs/DEVIATIONS.md` §117 records that, and the live-roster probe it
+  also affects.
 - **The team's records are checked against ledgers built so the answer is known.** Twenty-two
   tests over synthetic ledgers: each record is the record it claims to be, a stall coming back is
   not a new turn, a single two-second discharge cannot be a "fastest day", a room with no name
@@ -988,6 +1038,13 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
 
 ### Known gaps
 
+- **The streamed send has never met a live `claude` either.** The flags were read out of
+  `claude --help` on 2.1.231 and the envelopes were recorded from the real binary — which got as
+  far as `401 OAuth access token has expired` before it could produce a reply — so the assistant
+  deltas and the tool call in the fixture are reconstructed from the event vocabulary in the
+  binary itself rather than watched arriving. Everything downstream is proved against that
+  recording through a real child process. The remaining step is one `claude login` and one real
+  reply, and it is the same login the permission card is waiting on. `docs/DEVIATIONS.md` §117.
 - **The room plate's daily spend is computed but not drawn.** `buildPlan` puts it in the room's
   third plate line and the snapshot carries it per project, but the only function that paints a
   room plate draws two lines and recomputes them from the snapshot rather than reading the plan's —

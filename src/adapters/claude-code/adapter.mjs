@@ -21,6 +21,7 @@ import {
   parseSummary,
   parseConversation,
 } from './parse.mjs';
+import { createStreamParser } from './stream.mjs';
 import * as hooksImpl from './hooks.mjs';
 import { readDesktopSessions } from './desktop.mjs';
 import { launchTerminal, trySpawnDetached } from '../../core/terminals.mjs';
@@ -569,53 +570,429 @@ async function conversation(id, { maxMessages } = {}) {
 }
 
 /**
- * Send a turn into a session via `claude --resume <id> -p <text>`. Argument
- * list is always an argv array — never a shell string (docs §9).
+ * The exact argv one streamed turn is spawned with. Pure and exported so the
+ * flags can be asserted without a process, and so there is one place to look
+ * when Claude Code's CLI moves.
+ *
+ * Every flag was checked against `claude --help` on Claude Code 2.1.231:
+ *
+ *   -p, --print                    non-interactive; required by the other two
+ *   --output-format stream-json    "realtime streaming" (only with --print)
+ *   --verbose                      stream-json in --print mode is verbose-only
+ *   --include-partial-messages     "Include partial message chunks as they
+ *                                  arrive (only works with --print and
+ *                                  --output-format=stream-json)" — this is
+ *                                  what makes a reply appear a word at a
+ *                                  time rather than a message at a time.
+ *
+ * `--resume <id>` is the existing contract from docs/DEVIATIONS.md §9: it
+ * appends to the same transcript and comes back with the same session id.
+ *
+ * The session id and the user's text are argv ELEMENTS. Neither is ever
+ * interpolated into a command string (docs/02-ARCHITECTURE.md §9).
+ *
+ * @param {string} sessionId
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function sendArgs(sessionId, text) {
+  return [
+    '--resume',
+    sessionId,
+    '-p',
+    text,
+    '--output-format',
+    'stream-json',
+    '--verbose',
+    '--include-partial-messages',
+  ];
+}
+
+/**
+ * The child-process options one streamed turn is spawned with. Exported for
+ * the same reason as `sendArgs`, and because ONE of these fields is a
+ * product promise rather than a detail:
+ *
+ *   detached: false — the child stays in this process's group. Closing the
+ *   daemon kills it (see `send`'s abort handling), and a Ctrl+C in the
+ *   terminal the daemon was started from reaches it too. A detached child
+ *   would outlive both and go on writing into the user's transcript with
+ *   nothing left to read it.
+ *
+ * @param {string|undefined} cwd
+ * @param {Record<string,string>} [env] left undefined in production, so the
+ *   child inherits this process's environment exactly as it always has. The
+ *   `bin` test seam sets it, which is how the fake CLI is configured without
+ *   putting anything into the daemon's own environment.
+ */
+export function sendSpawnOptions(cwd, env) {
+  /** @type {any} */
+  const opts = {
+    cwd,
+    windowsHide: true,
+    detached: false,
+    // stdin is closed rather than inherited: `claude -p` must never be able
+    // to sit waiting on a terminal this process does not have.
+    stdio: ['ignore', 'pipe', 'pipe'],
+  };
+  if (env) opts.env = env;
+  return opts;
+}
+
+/** How much of a failing run's stderr is kept for the error message. */
+const SEND_STDERR_BYTES = 8 * 1024;
+
+/**
+ * Send a turn into a session and report what comes back as it comes back.
+ *
+ * WP-09. This used to be one `execFile` that resolved when the whole turn was
+ * over — up to ten minutes with the composer disabled and nothing on screen.
+ * It now spawns the CLI in `stream-json` mode and hands each event to
+ * `onEvent` the moment the line arrives, so the caller can push it at the
+ * browser (docs/plan/05-GUI-UX-SPEC.md §4.3). The returned promise still
+ * resolves to the same `SendResult` it always did, so a caller that only
+ * wants the answer is unchanged.
+ *
+ * Never throws and never rejects: every failure — a missing binary, a
+ * non-zero exit, a timeout, an abort, output that is not JSON — comes back as
+ * `{ok:false, error}`.
+ *
  * @param {string} id
  * @param {string} text
- * @param {{cwd:string, timeoutMs:number}} opts
+ * @param {{cwd?:string, timeoutMs?:number,
+ *          onEvent?:(event:any)=>void,
+ *          signal?:AbortSignal,
+ *          bin?:{command:string, args?:string[], env?:Record<string,string>},
+ *          spawnFn?:typeof spawn}} [opts]
+ *   `onEvent` receives the neutral events described in ./stream.mjs.
+ *   `signal` aborts the run and kills the child — this is how a closing
+ *   daemon guarantees it leaves nothing behind.
+ *   `bin` and `spawnFn` are test seams in the same shape as `liveSessions`'
+ *   `probe` and `openInApp`'s `checkAvailable`: they stand in for the CLI so
+ *   the whole path can be driven against a recorded stream without a login.
+ *   The daemon passes neither.
  * @returns {Promise<import('../../core/model.mjs').SendResult>}
  */
-function send(id, text, { cwd, timeoutMs = 120_000 } = {}) {
+function send(id, text, opts = {}) {
   const { sessionId } = splitAgentId(id);
+  const { cwd, timeoutMs = 120_000, onEvent, signal } = opts;
+  const bin = opts.bin || { command: 'claude', args: [] };
+  const spawnChild = opts.spawnFn || spawn;
+  const argv = [...(bin.args || []), ...sendArgs(sessionId, text)];
+
   return new Promise((resolve) => {
-    execFile(
-      'claude',
-      ['--resume', sessionId, '-p', text, '--output-format', 'json'],
-      {
-        cwd,
-        timeout: timeoutMs,
-        windowsHide: true,
-        maxBuffer: 8 * 1024 * 1024,
-        killSignal: 'SIGTERM',
-      },
-      (err, stdout) => {
-        if (err) {
-          if (err.killed || err.signal) {
-            resolve({ ok: false, error: `claude timed out after ${timeoutMs}ms and was killed` });
-          } else {
-            resolve({ ok: false, error: err.message || 'claude exited with an error' });
-          }
-          return;
-        }
-        let parsed;
+    let settled = false;
+    /** @type {import('node:child_process').ChildProcess|null} */
+    let child = null;
+    let timer = null;
+    let stderr = '';
+    /** @type {{ok:boolean, text:string, error:string|null}|null} */
+    let result = null;
+
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve(value);
+    };
+
+    /** Kill the child, and everything this function holds open with it. */
+    const kill = () => {
+      if (!child || child.killed || child.exitCode !== null) return;
+      try {
+        child.kill();
+      } catch {
+        // Already gone. Nothing to clean up.
+      }
+    };
+
+    function onAbort() {
+      kill();
+      finish({ ok: false, error: 'the send was cancelled' });
+    }
+
+    if (signal?.aborted) {
+      resolve({ ok: false, error: 'the send was cancelled' });
+      return;
+    }
+
+    const parser = createStreamParser((event) => {
+      if (event.type === 'result') {
+        result = { ok: event.ok, text: event.text, error: event.error };
+      }
+      if (typeof onEvent === 'function') {
         try {
-          parsed = JSON.parse(stdout);
+          onEvent(event);
         } catch {
-          resolve({ ok: false, error: 'could not parse claude --output-format json output' });
-          return;
+          // A listener's failure must not fail the send.
         }
-        if (parsed && parsed.is_error) {
-          resolve({
-            ok: false,
-            error: typeof parsed.result === 'string' ? parsed.result : 'claude reported an error',
-          });
-          return;
-        }
-        resolve({ ok: true, text: typeof parsed?.result === 'string' ? parsed.result : '' });
-      },
-    );
+      }
+    });
+
+    try {
+      child = spawnChild(bin.command, argv, sendSpawnOptions(cwd, bin.env));
+    } catch (err) {
+      resolve({ ok: false, error: err && err.message ? err.message : 'could not start claude' });
+      return;
+    }
+
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        kill();
+        finish({ ok: false, error: `claude timed out after ${timeoutMs}ms and was killed` });
+      }, timeoutMs);
+      if (typeof timer.unref === 'function') timer.unref();
+    }
+
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk) => parser.push(String(chunk)));
+    child.stdout?.on('error', () => {
+      /* the exit handler below is what settles this */
+    });
+
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk) => {
+      if (stderr.length >= SEND_STDERR_BYTES) return;
+      stderr += String(chunk).slice(0, SEND_STDERR_BYTES - stderr.length);
+    });
+    child.stderr?.on('error', () => {});
+
+    child.on('error', (err) => {
+      finish({
+        ok: false,
+        error: err && err.message ? err.message : 'claude could not be started',
+      });
+    });
+
+    child.on('close', (code, sig) => {
+      parser.end();
+      if (result) {
+        finish(
+          result.ok
+            ? { ok: true, text: result.text }
+            : { ok: false, error: result.error || 'claude reported an error' },
+        );
+        return;
+      }
+      // No `result` line. Say what actually happened rather than inventing a
+      // reply: the stderr tail if there is one, the signal if it was killed,
+      // the exit code otherwise.
+      const tail = stderr.trim().split('\n').slice(-4).join(' ').trim();
+      if (sig) {
+        finish({ ok: false, error: tail || `claude was killed (${sig})` });
+        return;
+      }
+      if (code !== 0) {
+        finish({ ok: false, error: tail || `claude exited with code ${code}` });
+        return;
+      }
+      finish({
+        ok: false,
+        error: tail || 'claude produced no result event',
+      });
+    });
   });
+}
+
+/**
+ * How much of the tail one watch tick re-reads. Much smaller than
+ * `TAIL_BYTES`: this runs on every write to a live transcript, and all it has
+ * to answer is "has the conversation moved". 256 KB is several hundred turns
+ * on the transcripts on this machine, and the panel re-fetches the full
+ * bounded conversation through /api/conversation once told.
+ */
+export const WATCH_TAIL_BYTES = 256 * 1024;
+
+/** Quiet period after a change before the tail is read. */
+const WATCH_DEBOUNCE_MS = 150;
+
+/** How often the fallback poll stats the file when `fs.watch` is unusable. */
+const WATCH_POLL_MS = 1000;
+
+/**
+ * Watch one session's transcript and say when its CONVERSATION changed.
+ *
+ * WP-09's second half: a reply typed into a terminal should appear in the
+ * open panel without the browser polling for it. The daemon already re-scans
+ * every few seconds, but a scan is a whole-floor operation with a summary
+ * cache behind it — it is not, and should not become, a per-keystroke feed
+ * for one open card.
+ *
+ * Two things this deliberately does NOT do:
+ *
+ *  - It never sends the messages. It sends a digest, and the panel re-reads
+ *    /api/conversation. A transcript is appended to for reasons that are not
+ *    conversation — token accounting, `custom-title` records, tool results —
+ *    and pushing parsed text on every one of those would put a second,
+ *    divergent copy of the conversation on the wire beside the one the panel
+ *    already fetches.
+ *  - It touches no state at all. It is a read of a file (THE INVARIANT,
+ *    docs/01-PRODUCT.md §2): nothing here can clear a review debt, and the
+ *    events it emits reach only the client that asked for them.
+ *
+ * `fs.watch` is used where it works and a poll takes over where it does not:
+ * it throws on some network and container filesystems, and on those it
+ * throws at `watch()` time, which is where the fallback is installed.
+ *
+ * Never throws. A session with no transcript on disk is watched for one
+ * appearing, so opening the panel on a session that has not written yet
+ * still comes alive when it does.
+ *
+ * @param {string} id agent id, runtime-prefixed
+ * @param {{onChange:(digest:{at:number, count:number, lastRole:string|null})=>void,
+ *          pollMs?:number, debounceMs?:number}} opts
+ * @returns {Promise<() => void>} a stop function; calling it twice is safe.
+ */
+async function watchConversation(id, { onChange, pollMs, debounceMs } = {}) {
+  const { sessionId } = splitAgentId(id);
+  const quiet = Number.isFinite(debounceMs) ? debounceMs : WATCH_DEBOUNCE_MS;
+  const interval = Number.isFinite(pollMs) ? pollMs : WATCH_POLL_MS;
+
+  let stopped = false;
+  /** @type {import('node:fs').FSWatcher|null} */
+  let watcher = null;
+  let poll = null;
+  let debounce = null;
+  let reading = false;
+  let again = false;
+  /** null until the first read has taken the baseline. */
+  let lastDigest = null;
+  let file = await findSessionFile(sessionId);
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    if (debounce) clearTimeout(debounce);
+    if (poll) clearInterval(poll);
+    try {
+      watcher?.close();
+    } catch {
+      // already closed
+    }
+    watcher = null;
+    poll = null;
+    debounce = null;
+  };
+
+  async function read() {
+    if (stopped || !file) return;
+    if (reading) {
+      again = true;
+      return;
+    }
+    reading = true;
+    try {
+      const tail = await readTail(file, WATCH_TAIL_BYTES);
+      const messages = parseConversation(tail, { maxMessages: 200 });
+      const last = messages[messages.length - 1] || null;
+      const digest = `${messages.length}:${last ? last.at : 0}:${last ? last.text.length : 0}`;
+      if (digest !== lastDigest) {
+        const baseline = lastDigest === null;
+        lastDigest = digest;
+        // The conversation as it already stands is not news: the panel just
+        // fetched it. Only what happens NEXT is worth waking it for.
+        if (!baseline && typeof onChange === 'function') {
+          try {
+            onChange({
+              at: last ? last.at : 0,
+              count: messages.length,
+              lastRole: last ? last.role : null,
+            });
+          } catch {
+            // A listener's failure is not the watcher's to propagate.
+          }
+        }
+      }
+    } catch {
+      // An unreadable transcript is not an error here; the next tick retries.
+    } finally {
+      reading = false;
+      if (again && !stopped) {
+        again = false;
+        schedule();
+      }
+    }
+  }
+
+  function schedule() {
+    if (stopped) return;
+    if (debounce) clearTimeout(debounce);
+    debounce = setTimeout(() => {
+      debounce = null;
+      read();
+    }, quiet);
+    if (typeof debounce.unref === 'function') debounce.unref();
+  }
+
+  function attach() {
+    if (stopped || !file || watcher) return;
+    try {
+      watcher = fs.watch(file, { persistent: false }, () => schedule());
+      watcher.on('error', () => {
+        // The file was rotated or the platform gave up on the handle. The
+        // poll below is still running and takes over from here.
+        try {
+          watcher?.close();
+        } catch {
+          // already closed
+        }
+        watcher = null;
+      });
+    } catch {
+      watcher = null; // fs.watch is unusable here; the poll is the whole answer
+    }
+  }
+
+  // The poll runs alongside `fs.watch` rather than instead of it. It is one
+  // `stat` a second on one file, and it is what closes the two gaps the
+  // watcher leaves: a filesystem that reports nothing, and a transcript that
+  // does not exist yet when the panel opens.
+  let lastStamp = '';
+  poll = setInterval(async () => {
+    if (stopped) return;
+    if (!file) {
+      file = await findSessionFile(sessionId);
+      if (file) {
+        attach();
+        schedule();
+      }
+      return;
+    }
+    try {
+      const info = await fsp.stat(file);
+      const stamp = `${info.mtimeMs}:${info.size}`;
+      if (stamp !== lastStamp) {
+        lastStamp = stamp;
+        schedule();
+      }
+    } catch {
+      // Gone for now — a rotation, or a sync client mid-write. Look again.
+      file = null;
+      try {
+        watcher?.close();
+      } catch {
+        // already closed
+      }
+      watcher = null;
+    }
+  }, interval);
+  if (typeof poll.unref === 'function') poll.unref();
+
+  attach();
+  // One read up front so `lastDigest` is the conversation as it stands, and
+  // the first event the caller sees is a real change rather than the file
+  // simply existing.
+  await read();
+  // A session with nothing on disk yet still has a baseline: the empty
+  // conversation. So the transcript APPEARING is a change and does wake the
+  // panel, which is what opening the card on a session that has not written
+  // yet has to do.
+  if (lastDigest === null) lastDigest = '0:0:0';
+
+  return stop;
 }
 
 /**
@@ -788,7 +1165,11 @@ export const adapter = {
   liveSessions,
   scanSessions,
   conversation,
+  // WP-09. `send` streams its events to `opts.onEvent` as they arrive and
+  // still resolves to the same SendResult; `watchConversation` is how a reply
+  // typed in a terminal reaches the open panel without a poll.
   send,
+  watchConversation,
   openInTerminal,
   appAvailable,
   openInApp,

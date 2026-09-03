@@ -7627,3 +7627,234 @@ in `hooks.test.mjs` for the deny sentence and 5 more for the new tool summaries,
 format and all four goldens green.
 
 Seven commits, one per seam, each with its tests.
+## 117. WP-09 — the reply arrives while you watch, and the live run that is still owed
+
+`docs/plan/06-ENGINEERING-WORKPLAN.md` WP-09, `05-GUI-UX-SPEC.md` §4.3,
+`01-AUDIT.md` F8's second half. `send()` ran `claude --resume <id> -p <text>
+--output-format json` to completion — up to ten minutes — with the composer
+disabled reading "Sending…", and a reply typed into a terminal did not appear
+in the open panel at all. Both halves are closed. Eleven decisions the package
+description did not settle, and one thing it cannot claim.
+
+**Say this first: no turn has been run against a logged-in `claude`.** The
+stored login on the reference machine is expired, the same gap §97.5 records
+for the permission card. What HAS been run, on 4 September 2026 against Claude
+Code 2.1.231 on this machine, is the real binary with the real flags:
+`claude -p "hi" --output-format stream-json --verbose
+--include-partial-messages` emitted its `system/init`, its `system/status`,
+its `system/api_retry`, an `assistant` message and a `result` line before the
+API refused it with `401 OAuth access token has expired`. Every envelope in
+`test/fixtures/claude-stream-json-error.ndjson` is that run, verbatim except
+for identifiers. What is reconstructed is the part the API would have
+produced: the assistant text deltas and the tool call. The remaining step is
+one `claude login` and one real reply. Until then the parser is proved against
+a recorded stream, and the plumbing around it against a real child process
+replaying that stream.
+
+### Decision 1 — the four flags, and how each was checked
+
+```
+--resume <id> -p <text> --output-format stream-json --verbose --include-partial-messages
+```
+
+`claude --help` on 2.1.231, verbatim: `--output-format <format>` is "Output
+format (only works with --print): "text" (default), "json" (single result), or
+"stream-json" (realtime streaming)"; `--include-partial-messages` is "Include
+partial message chunks as they arrive (only works with --print and
+--output-format=stream-json)". `--verbose` is required for `stream-json` under
+`--print`. `--resume <id>` is the existing contract from §9 and is unchanged.
+
+`--include-partial-messages` is the flag that makes this a stream rather than
+a faster batch. Without it the runtime emits whole `assistant` messages, which
+for a long turn is one wall of text arriving at the end — the thing WP-09
+exists to stop. `sendArgs()` is exported and pure, and a test asserts the
+whole array, so the flags are one line to find when the CLI moves.
+
+The delta shapes were read out of the binary itself rather than guessed:
+`stream_event`, `content_block_start`, `content_block_delta`, `text_delta`,
+`input_json_delta`, `thinking_delta`, `compaction_delta`, `signature_delta`,
+`citations_delta`, `message_delta`, `message_stop` all appear as literals in
+`claude.exe`, wrapping the Anthropic streaming events of the same names.
+
+### Decision 2 — the route answers 202, and the turn arrives on the SSE channel
+
+`POST /api/send` used to hold the socket for the whole turn and answer once.
+It now answers **202** with `{ok, id, sendId}` as soon as the child is
+spawned, and the turn's events are published to `GET /api/events?stream=send`
+as they arrive. The composer is released on that 202 — which is what "the
+composer re-enables the moment the turn is accepted" means, and it is the
+whole point of the package.
+
+The turn is still awaited in the daemon, in the background, because two things
+have to happen when it ends and neither belongs to the browser: the ledger
+entry (`registry.noteSent`, unchanged, and still not recorded for a send the
+runtime refused) and the closing event.
+
+**`send:<id>` is spelled as one `send` event carrying its own `sendId`, not as
+an SSE event named `send:<id>`.** The browser's server-sent-events API
+dispatches by event name, so a per-id name would mean adding and removing a
+listener around every turn and would race with an event that arrives before
+the listener does. One name, one listener, `sendId` in the payload — and it is
+what lets one connection serve a page with more than one turn in flight.
+
+### Decision 3 — `?stream=send`, and why the panel opens a second connection
+
+`public/app.js` owns the snapshot event stream, and it is WP-57's file for the
+duration of that package. The panel therefore opens its own connection to the
+same endpoint rather than reaching into app.js's.
+
+A second unfiltered subscriber would cost a **second full floor snapshot,
+serialised and written, on every scan, forever**, for a listener that reads
+neither copy. So `GET /api/events` takes `?stream=send`: that subscriber gets
+send and transcript events and no snapshots; the default is byte-for-byte the
+stream it has always been, and a test asserts both halves. The alternative —
+a second endpoint — would have duplicated the heartbeat, the retry hint and
+the teardown for no gain.
+
+### Decision 4 — exactly one of two paths produces text, never both
+
+With `--include-partial-messages` the runtime emits BOTH the fragments and,
+afterwards, the whole `assistant` message they add up to. Printing both prints
+the reply twice. The parser's rule: once any delta has been seen, whole
+assistant messages contribute their tool calls and their turn boundary but no
+prose; if no delta is ever seen — an older CLI, or the flag refused — the
+whole messages become the stream. Deterministic, and tested from both sides by
+running the same fixture with the `stream_event` lines filtered out.
+
+### Decision 5 — `is_error` decides, and the recorded failure says `"subtype":"success"`
+
+The real 401 run ended with `{"is_error":true, … "subtype":"success", …
+"result":"Failed to authenticate. API Error: 401 OAuth access token has
+expired."}`. Reading `subtype` — the obvious field — would have reported an
+authentication failure to the user as the agent's reply. The adapter reads
+`is_error` and nothing else, and the fixture that proves it is the recorded
+one, not an invented one.
+
+### Decision 6 — what streams is plain text; what is finished is markdown
+
+Deltas land in the panel's live region with `textContent` and are never put
+through `public/markdown.js`. Half a fenced block is not a fenced block, and
+building DOM from a partial document is precisely the regex-to-HTML pass §85
+and `05` §4.2 forbid. The live region is plain text, monospaced only where the
+runtime's own words are; the moment the turn closes it is emptied and
+`loadConversation()` re-renders the canonical message as markdown from the
+transcript the runtime actually wrote. There is still no `innerHTML` anywhere
+in the client, and `panel-invariant.test.mjs` still says so.
+
+### Decision 7 — the tool line, and the moment it is emitted
+
+A streamed `tool_use` block arrives as a `content_block_start` carrying the
+NAME and an empty input, then the input as `input_json_delta` fragments, then
+a `content_block_stop`. Emitting at the start would print a bare "Read";
+emitting from the whole message would print it after the turn. So the parser
+accumulates the argument fragments (bounded at 64 KB) and emits at the stop:
+`Read vite.config.ts`, seconds before the turn ends. A path keeps only its
+basename and every string is flattened to one printable line first — the same
+two rules, for the same two reasons, as §89 decisions 5 and 6.
+
+`thinking_delta` is dropped entirely. It is the model's private reasoning and
+it is not something this panel is entitled to render as the agent's reply.
+
+### Decision 8 — the transcript tail sends a digest, never the conversation
+
+`adapter.watchConversation()` watches the open session's transcript with
+`fs.watch` **and** a one-second `stat` poll — both, not one: `fs.watch` throws
+at `watch()` time on some network and container filesystems, and the poll is
+also what notices a transcript that did not exist when the panel opened. A
+change debounces 150 ms, reads a bounded 256 KB tail through the existing
+`readTail`/`parseConversation`, and reports `{at, count, lastRole}`.
+
+It reports a digest rather than the messages for two reasons. A transcript is
+appended to for things the panel does not render — token accounting,
+`custom-title`, tool results — and a digest is what tells those apart from a
+reply, so a poll that changes nothing wakes nobody. And pushing parsed text
+would put a second, divergent copy of the conversation on the wire beside the
+one `/api/conversation` already serves. The panel re-reads through the
+endpoint it already uses. Parsing stays in the adapter throughout; a runtime
+with no `watchConversation` — Codex today — simply has no live tail.
+
+The conversation as it already stands is not an event: the first read is a
+silent baseline, and only what happens next wakes the panel. Measured on this
+machine, an append reaches the watcher in well under a second, which is the
+acceptance criterion.
+
+### Decision 9 — no orphans, and the one case this does not close
+
+Children are spawned with `detached: false` and `stdio: ['ignore','pipe','pipe']`
+— stdin closed so `claude -p` can never sit waiting on a terminal this
+process does not have. Each turn carries an `AbortSignal`; the daemon's
+`close()` calls `SendHub.shutdown()`, which aborts every one, which kills the
+child, before the server stops. There is a test that spawns a real process
+that will never exit on its own, aborts, and asserts the pid is gone.
+
+**What that does not cover, stated plainly:** a `SIGKILL` of the daemon runs
+no JavaScript on any platform, and a child of a hard-killed parent is
+reparented rather than reaped. `detached: false` still means an interrupt in
+the terminal the daemon was started from reaches the child through the shared
+process group, which is the case a person actually creates. The hard-kill case
+is open and is not claimed to be closed.
+
+### Decision 10 — the fake CLI is reached by a seam, not by PATH
+
+The intention was to plant a fake `claude` on `PATH`. **It cannot be done on
+Windows.** Node's `spawn` without a shell will not execute a `.cmd` or `.bat`,
+and it does not find one either — verified here: a `fakeclaude.cmd` first on
+`PATH` answers `spawn fakeclaude ENOENT`. On the reference machine the real
+`claude` is a 296 MB `.exe`, so there is nothing to imitate with a script.
+
+So `send()` takes a `bin` seam — `{command, args, env}`, defaulting to
+`{command: 'claude'}` — in the same shape as `liveSessions`' `probe` and
+`openInApp`'s `checkAvailable`. `test/fixtures/fake-claude.mjs` is run through
+it as a real child process: real pipes, real chunk boundaries deliberately
+split mid-line, real exit codes, real signals. Every mode the adapter has to
+survive is a mode of that script — replay, hang, crash, garbage, silent — and
+the argv it receives is written to a file and asserted against `sendArgs()`
+verbatim, which is the assertion that PATH resolution would not have added
+anything to.
+
+**A note this leaves behind, which is not WP-09's to fix:** the same
+limitation applies to `probeLiveSessions` and to the shim
+`scripts/demo-floor.mjs` writes. On a Windows machine where `claude` is only a
+`.cmd` shim rather than an `.exe`, DeckHQ's live roster and its send would
+both fail, and neither would say why. Nothing here has measured how common
+that install shape is.
+
+### Decision 11 — the honest failure, and the composer's text
+
+A turn that fails is a `send` event, seconds after the 202, not an HTTP
+status. The panel restores the composer's text on both routes — the request
+failing, and the stream reporting a failure later — and **never overwrites
+something typed since**, because by then the user may have moved on and their
+newer draft is the more recent intent.
+
+`send()` never throws and never rejects. A missing binary, a non-zero exit, a
+timeout, an abort, output that is not JSON, or a clean exit with no `result`
+line all come back as `{ok:false, error}` with the runtime's own stderr tail
+where there is one. It is never an empty reply.
+
+### What was verified, and how
+
+- The parser, over both fixtures, at chunk sizes of 1, 7, 64 and 997 bytes,
+  with corrupt lines spliced in and with a line larger than the 8 MB cap.
+- `send()` end to end over the fake CLI: the streamed turn, the argv, a
+  non-zero exit, non-JSON output, a missing binary, a timeout that kills, and
+  the abort that proves no orphan.
+- The route's 202, the SSE sequence, the failure event, the adapter throwing,
+  and that nothing on the path touches ack state.
+- The transcript tail, against a real filesystem watch and real appends.
+- The panel, on a running daemon with the fake CLI wired in: the composer
+  released and cleared while `Right — reading the build config first.` filled
+  the live region under WHAT IT SAID with `· Read vite.config.ts` beneath it,
+  the caret blinking, and the region gone when the turn closed. Screenshotted.
+  The failure path was photographed separately against the demo floor's own
+  shim: text back in the composer, `Could not send: …` on the hint and in a
+  toast.
+
+The four goldens are byte-identical and were not regenerated: nothing here
+changes the floor.
+
+### What is owed
+
+One `claude login`, one real reply, and a check that the deltas arrive as
+described. That is the same debt §97.5 records for the permission card, and it
+is the same single action that clears both.
