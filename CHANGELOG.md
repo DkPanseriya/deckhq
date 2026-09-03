@@ -272,6 +272,11 @@
   `src/core/cmdline.mjs` so there is one definition of it. Both the defect and the fix were
   launched for real, with a working directory containing a space and an `&`.
   `docs/DEVIATIONS.md` §98.
+- **"New Codex session" now runs `codex`, with your first prompt.** It used to open a terminal
+  running `codex resume new` — a resume of nothing — and drop the prompt the panel had asked
+  you for. The prompt is one argument, never part of a shell string, on every platform; and
+  if no terminal emulator can be found the panel now says so instead of reporting success.
+  (`docs/DEVIATIONS.md` §99)
 - **SECURITY: a Codex session id reached a shell.** Opening a Codex session in a terminal built
   its command as a shell string on both POSIX platforms — an AppleScript
   `do script "cd \"<cwd>\" && codex resume <id>"` on macOS, and `bash -lc "codex resume <id>"` on
