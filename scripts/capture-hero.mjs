@@ -26,6 +26,7 @@
  */
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -41,21 +42,26 @@ const URL_ = opt('--url', 'http://127.0.0.1:4499/');
 const OUT = path.resolve(opt('--out', 'hero-frames'));
 const WIDTH = Number(opt('--width', 1200));
 const HEIGHT = Number(opt('--height', 750));
-const SETTLE_MS = Number(opt('--settle', 7000));
+/**
+ * Long enough that the floor is at rest before recording starts. Agents walk
+ * in from the door on first paint, and that ambient motion competes with the
+ * one walk this GIF is about — the eye should have exactly one thing to
+ * follow.
+ */
+const SETTLE_MS = Number(opt('--settle', 18000));
 /** Seconds of floor to record before the turn ends, and the total length. */
-const LEAD_S = Number(opt('--lead', 1));
+const LEAD_S = Number(opt('--lead', 1.5));
 const DURATION_S = Number(opt('--duration', 9));
 const FPS = Number(opt('--fps', 10));
 /**
  * The agent that finishes. Defaults to demo-floor.mjs's first session: the
  * "Rate limiter for the public API" agent working in orbital-api. The id is
- * `fakeId(1)` from that script and the cwd is what it writes on Windows.
+ * `fakeId(1)` from that script, and the cwd is the fixture directory that
+ * script builds — it has to match exactly, because the cwd is how a hook
+ * event is resolved to a session.
  */
 const SESSION_ID = opt('--session-id', '9e3779b1-d3m0-4f00-9a1b-000000000001');
-const CWD = opt(
-  '--cwd',
-  process.platform === 'win32' ? 'C:\\code\\orbital-api' : `${process.env.HOME}/code/orbital-api`,
-);
+const CWD = opt('--cwd', path.join(os.tmpdir(), 'deckhq-demo', 'code', 'orbital-api'));
 
 if (!hasWebSocket()) {
   throw new Error(

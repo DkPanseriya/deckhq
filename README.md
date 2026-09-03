@@ -98,16 +98,34 @@ yours. `for_review` is entered automatically and can only be _left_ by you.
 
 ## Run the floor, don't just watch it
 
-Click anyone and their real conversation opens beside the floor, with the token spend, a cost
-estimate that is labelled an estimate, and the buttons that move them: acknowledge, bench, let go,
-resume in a terminal or the app. Reply straight from the composer, or start a fresh agent in any
-room without leaving the page.
+Click anyone and the panel opens beside the floor with the review material already in front of
+you: how long they have been waiting, **what they said** — rendered as the markdown they actually
+wrote, headings and lists and fenced code included — and then **what changed in that project's
+working tree**, read straight from git as `+142  −18  3 files` over a row per file.
+
+Then three actions, weighted rather than equal. `1 Reply` focuses the composer. `2 Approve` sends
+an affirmative — `"Yes, go ahead."` by default, configurable — and is the only filled button on
+the screen, because it is the commonest reply in this workflow and one keystroke is the largest
+saving in the day. `3` benches. Everything rarer — mark for review, let go, rename, new agent,
+recall, rehire — sits behind `⋯ more`. The cost estimate is one quiet line at the bottom, which is
+where an estimate belongs.
+
+**`2 Approve` is a send, never an acknowledgement.** It posts the reply exactly as typing it would,
+and the review is discharged when the runtime records your turn — never by the client deciding it
+has been dealt with. The one rule above holds here too. Anything you leave unsent in the composer
+is kept per session and shows as a `draft` chip, because an unfinished reply is that agent's queue
+being held by you.
+
+The heading over the diff names the **project**, never the agent: where several agents share one
+repository a working-tree diff cannot be attributed to any one of them, and the panel will not
+imply otherwise. A clean repository says _nothing uncommitted_ rather than showing you an empty
+space, because "no changes" is itself review-relevant.
+
+![The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project's working tree at +142 −18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line](docs/media/panel-review-card.png)
 
 The furniture works too. A room's shelf opens that project's folder; its screen runs that
 project's dashboard script. The object is the verb, and it lives in the room the project lives in,
 so there is nothing to hunt for in a menu.
-
-![The side panel: a session's conversation, its token and cost figures, and the acknowledge, bench, let go and resume actions](docs/media/panel.png)
 
 ## More on `deckhq doctor`
 
@@ -119,9 +137,11 @@ of them as work the runtime has forgotten — **because all three are still runn
 lists them too**. It reports the number it can substantiate, which is the only kind worth
 reporting.
 
-`--json` gives the same data for scripting. `--share` prints the same report as a fenced block
-with no paths, project names or machine name in it, ready to paste. `--capture-proof` writes a PNG
-of the comparison.
+`--share` is the pasteable version: the same numbers as a fenced block with everything that
+belongs to you taken out — no paths, no project names, no machine name, no hook port — so you can
+drop it in a thread without reading it line by line first. `--json` gives the same data for
+scripting, and `--capture-proof` writes a PNG of the comparison.
+
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
 
