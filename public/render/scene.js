@@ -61,6 +61,25 @@ const MIN_SCALE = 7.5;
 export const CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
 
 /**
+ * THE FIT HAS A CEILING TOO (WP-55).
+ *
+ * The building is the size of what is in it now, so a quiet machine's floor is
+ * genuinely small — one room, a reception and a lounge — and fitting that to a
+ * 2560 x 1440 window would draw eighty-pixel people in a diagram blown up like a
+ * poster. Past this the floor stops growing and the leftover viewport is the
+ * studio ground the building stands on (`05` §2.2), which is what the drop
+ * shadow under the envelope is for.
+ *
+ * 44 px is a little under three times the 16 px legibility floor: a body still
+ * reads as a person at a glance and its label still sits under it rather than
+ * beside a giant.
+ */
+const BODY_MAX_PX = 44;
+
+/** The largest px-per-unit the floor is ever drawn at. See `BODY_MAX_PX`. */
+export const CHAR_MAX_PX_PER_UNIT = BODY_MAX_PX / BODY_HEIGHT_U;
+
+/**
  * The scale a person is drawn at, given the scale the FLOOR is drawn at.
  * Exported as a plain function so the legibility test can ask for it without a
  * canvas — see the note at the bottom of this file.
@@ -657,8 +676,9 @@ export class Scene {
     // projects. But a floor can only be shrunk so far before a room stops
     // being readable, and past that point squeezing more projects in serves
     // nobody. Below MIN_SCALE the floor stops shrinking and the user pans
-    // instead.
-    this._fitScale = Math.max(fit, MIN_SCALE);
+    // instead; above CHAR_MAX_PX_PER_UNIT it stops GROWING and the rest of the
+    // viewport is the studio ground the building stands on (WP-55).
+    this._fitScale = clamp(fit, MIN_SCALE, Math.max(MIN_SCALE, CHAR_MAX_PX_PER_UNIT));
     this._clampCamera();
   }
 

@@ -43,10 +43,22 @@
         </ul>
       </div>
 
+      <!-- The floor counts describe what the FLOOR DRAWS, not what the deck
+           holds (WP-55). "at desk" is the sessions drawn at a desk; the three
+           that follow are the ones that are not, and each is hidden when it is
+           nought rather than stating an absence. -->
       <p class="floor-counts" id="floor-counts">
         <span class="num" id="stat-at-desk">0</span> at desk
+        <span class="floor-count" id="floor-count-finished" hidden>
+          <span class="sep" aria-hidden="true">·</span>
+          <span class="num" id="stat-finished">0</span> finished
+        </span>
         <span class="sep" aria-hidden="true">·</span>
         <span class="num" id="stat-benched">0</span> benched
+        <span class="floor-count" id="floor-count-went-home" hidden>
+          <span class="sep" aria-hidden="true">·</span>
+          <span class="num" id="stat-went-home">0</span> went home
+        </span>
       </p>
 
       <div class="project-filter" id="project-filter" hidden></div>

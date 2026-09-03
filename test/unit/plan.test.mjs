@@ -164,8 +164,25 @@ test('§3.2 out-of-range targetAspect is clamped into [1.20, 2.20]', () => {
   const high = buildPlan([makeProject('p', 5)], [], { targetAspect: 5.0 });
   assert.equal(high.targetAspect, ASPECT_MAX);
 
-  // Clamped or not, a wider request still gives a wider floor.
-  assert.ok(high.width / high.height > low.width / low.height);
+  // Clamped or not, a wider request still gives a wider floor — where the plan
+  // has a choice to make. WP-55: the envelope is the sum of its rooms, the
+  // service column and the corridors, so the target aspect is spent on how the
+  // working floor is BANDED rather than on stretching it, and a floor with one
+  // room has nothing to band. Six do.
+  const six = (aspect) =>
+    buildPlan(
+      Array.from({ length: 6 }, (_, i) => makeProject(`p${i}`, 3)),
+      [],
+      { targetAspect: aspect },
+    );
+  const narrow = six(0.5);
+  const wide = six(5.0);
+  assert.ok(
+    wide.width / wide.height > narrow.width / narrow.height,
+    `a wider stage should give a wider floor (${(wide.width / wide.height).toFixed(2)} vs ${(
+      narrow.width / narrow.height
+    ).toFixed(2)})`,
+  );
 
   // No targetAspect at all defaults to 1.70 (headless/unit-test use, per the
   // WP13 contract), never to an unclamped value.
@@ -195,7 +212,8 @@ test('the lounge furnishes itself to the benched population, and never dominates
   };
 
   const empty = measure(0);
-  const busy = measure(12);
+  const few = measure(12);
+  const busy = measure(30);
 
   assert.ok(
     empty.props < busy.props,
@@ -203,8 +221,18 @@ test('the lounge furnishes itself to the benched population, and never dominates
   );
   for (const games of ['pool_table', 'table_tennis', 'arcade_cabinet']) {
     assert.ok(!empty.kinds.has(games), `an empty lounge must not lay out a ${games}`);
-    assert.ok(busy.kinds.has(games), `a lounge with twelve benched must have a ${games}`);
+    assert.ok(busy.kinds.has(games), `a lounge with thirty benched must have a ${games}`);
   }
+  // WP-55: a table appears when there are more people than places to put them,
+  // not on a fixed headcount. Twelve benched fit on the furniture the lounge
+  // already has, so they get one table; thirty do not, so they get the games
+  // room. Before this a dozen agents were dealt an arcade, and a service column
+  // seventy-six units tall stood beside a working floor that needed twenty.
+  assert.ok(
+    few.props < busy.props,
+    `a lounge of twelve must be less furnished than one of thirty (${few.props} vs ${busy.props})`,
+  );
+  assert.ok(!few.kinds.has('arcade_cabinet'), 'twelve benched do not fill an arcade');
   // The sofa group and the kitchen are always there.
   for (const always of ['sofa', 'counter']) {
     assert.ok(empty.kinds.has(always), `the lounge always has a ${always}`);
@@ -350,9 +378,9 @@ test('plate lines use the singular "session" for a one-session project', () => {
 // -------------------------------------------------------- survivors: lounge
 
 test('table_tennis spots are paired via partnerOf, pointing at each other', () => {
-  const plan = buildPlan([], benchedAgents(12));
+  const plan = buildPlan([], benchedAgents(30));
   const tt = plan.loungeSpots.filter((s) => s.kind === 'table_tennis');
-  assert.equal(tt.length, 2, 'a 12-benched plan should have earned the table tennis activity');
+  assert.equal(tt.length, 2, 'a 30-benched plan should have earned the table tennis activity');
   assert.equal(tt[0].partnerOf, tt[1].id);
   assert.equal(tt[1].partnerOf, tt[0].id);
 });
@@ -414,9 +442,12 @@ test('the lounge reads as a rest area at a glance, even when empty', () => {
     assert.ok(kinds.has(cue), `an empty lounge should still have a ${cue}`);
   }
 
+  // Thirty, not twelve: WP-55 lays a games table out when there are more
+  // people in the lounge than places to sit, and twelve all fit on the
+  // furniture that is there whether anybody is in or not.
   const busy = buildPlan(
     [],
-    Array.from({ length: 12 }, (_, i) => ({
+    Array.from({ length: 30 }, (_, i) => ({
       id: `b${i}`,
       ackState: 'benched',
       activityState: 'ended',

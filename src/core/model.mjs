@@ -199,10 +199,60 @@ export function needsYou(agent) {
 }
 
 /**
- * The header breakdown. docs/02-ARCHITECTURE.md §3.2.
- * @param {Agent[]} agents
+ * Days of no activity after which a benched session is not drawn on the floor.
+ * `settings.goneHomeDays`; the same default `store.mjs` and `plan.js` carry.
  */
-export function counts(agents) {
+export const GONE_HOME_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The activity states that put a session on the floor at all — at a desk, hand
+ * up, gone quiet, or standing in the office waiting to be seen.
+ *
+ * `08` B6's rule, and the same set `public/render/plan.js` calls `ON_THE_FLOOR`.
+ * It is stated twice on purpose: `src/core/` and `public/render/` are either
+ * side of the static-file boundary and neither may import the other
+ * (docs/CONTRACTS.md). `test/unit/model.test.mjs` asserts the two agree on the
+ * reference fixture, so the copy cannot drift in silence.
+ */
+const ON_THE_FLOOR = ['working', 'needs_input', 'stalled', 'for_review'];
+
+/**
+ * Has this benched session gone home? A DISPLAY FILTER AND NOTHING ELSE — it
+ * reads `lastActivityAt` and writes nothing, which is why it can never touch
+ * the invariant. Mirrors `plan.js`'s `isGoneHome`, including both refusals: a
+ * window of zero draws everybody, and a session nobody can date is drawn.
+ * @param {Pick<Agent,'ackState'|'lastActivityAt'>} agent
+ * @param {number} now
+ * @param {number} goneHomeDays
+ */
+function isGoneHome(agent, now, goneHomeDays) {
+  if (agent.ackState !== 'benched') return false;
+  const days = Number(goneHomeDays);
+  if (!Number.isFinite(days) || days <= 0) return false;
+  const last = Number(agent.lastActivityAt);
+  if (!Number.isFinite(last) || last <= 0) return false;
+  return now - last > days * DAY_MS;
+}
+
+/**
+ * The header breakdown. docs/02-ARCHITECTURE.md §3.2.
+ *
+ * `drawn` is what the FLOOR shows, and it is the half of this the header's
+ * floor counts read (WP-55). The two used to be the same number and stopped
+ * being one at WP-50: "at desk" was `placement() === 'desk'`, which counts a
+ * finished session sitting in a repo nobody is working in, and on the reference
+ * machine that read "21 at desk" over a floor drawing two. Everything under
+ * `drawn` is a display filter over observed fields — nothing here writes, and
+ * the needs-you numeral and its breakdown are untouched.
+ *
+ * @param {Agent[]} agents
+ * @param {{now?:number, goneHomeDays?:number}} [opts]
+ */
+export function counts(agents, opts = {}) {
+  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
+  const goneHomeDays = opts.goneHomeDays ?? GONE_HOME_DAYS;
+
   let handsUp = 0;
   let stalled = 0;
   let forReview = 0;
@@ -210,6 +260,22 @@ export function counts(agents) {
   let benched = 0;
   let letGo = 0;
   let working = 0;
+
+  // Which projects have a room: one with at least one active agent on the
+  // floor. A session at a desk in a project with no room is not drawn — there
+  // is nowhere to draw it — which is what "N finished" counts.
+  const activeProjects = new Set();
+  for (const a of agents) {
+    if (a.ackState !== 'active') continue;
+    if (!ON_THE_FLOOR.includes(a.activityState)) continue;
+    activeProjects.add(String(a.projectId ?? ''));
+  }
+
+  let drawnAtDesk = 0;
+  let finished = 0;
+  let drawnBenched = 0;
+  let wentHome = 0;
+
   for (const a of agents) {
     if (a.ackState === 'let_go') {
       letGo++;
@@ -217,14 +283,20 @@ export function counts(agents) {
     }
     if (a.ackState === 'benched') {
       benched++;
+      if (isGoneHome(a, now, goneHomeDays)) wentHome++;
+      else drawnBenched++;
       continue;
     }
     if (a.activityState === 'needs_input') handsUp++;
     else if (a.activityState === 'stalled') stalled++;
     else if (a.activityState === 'for_review') forReview++;
     if (a.activityState === 'working') working++;
-    if (placement(a) === 'desk') atDesk++;
+    if (placement(a) !== 'desk') continue;
+    atDesk++;
+    if (activeProjects.has(String(a.projectId ?? ''))) drawnAtDesk++;
+    else finished++;
   }
+
   return {
     needsYou: handsUp + stalled + forReview,
     handsUp,
@@ -235,6 +307,14 @@ export function counts(agents) {
     letGo,
     working,
     total: agents.length,
+    /** What the floor actually draws. See the note above. */
+    drawn: {
+      atDesk: drawnAtDesk,
+      finished,
+      waiting: forReview,
+      benched: drawnBenched,
+      wentHome,
+    },
   };
 }
 
