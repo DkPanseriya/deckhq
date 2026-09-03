@@ -185,7 +185,7 @@
   noise it is seeing on every run, so the day that number starts creeping is the day it is visible
   rather than the day the tolerance gets quietly widened. Both numbers replace an earlier
   eyeballed pair that measurement showed sat _under_ the defect they existed to catch;
-  `docs/DEVIATIONS.md` §80 has both tables and the arithmetic.
+  `docs/DEVIATIONS.md` §87 has both tables and the arithmetic.
 - **Proved load-bearing the only way that counts:** the one line of the rig facing fix was
   reverted, and the check failed three of four populations by 24,449, 12,602 and 1,181 pixels.
   The fourth is the population with nobody on the floor, so it correctly still passed. The line

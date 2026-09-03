@@ -3065,7 +3065,7 @@ per WP-19 and `08` §1.1 rule 11.
 this. It is not product code, it is excluded from the published tarball by the
 `files` whitelist in `package.json`, and it should be deleted when the build
 lands.
-## 80. WP-21 — the goldens gate, and the numbers it was calibrated with
+## 87. WP-21 — the goldens gate, and the numbers it was calibrated with
 
 WP-21 asks for three things: a deliberately reverted rig fix must fail the
 gate, goldens must regenerate with one documented command, and the job must add
@@ -3225,3 +3225,11 @@ every run. That last one is the guard on this whole entry: the tolerance was
 measured once, and the number it was measured against is now reported
 continuously, so the day the noise starts creeping is the day it becomes
 visible rather than the day the tolerance is quietly widened to suit.
+
+**Regenerated once on merge, 3 September.** WP-08 landed on `main` between this package's
+capture and its merge, and its demo fixture now builds real repositories in the temp root, which
+changed the project identities the carpet grain is seeded from. The check failed on three of four
+populations with a uniform speckle across every project room's floor and nothing else — no
+person, prop, wall or label moved, and `empty` passed. Goldens regenerated against the merged
+tree; the speckle is why a fixture change must regenerate goldens, and the harness's own noise
+floor (36 px) is unchanged.
