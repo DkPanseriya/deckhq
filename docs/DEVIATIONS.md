@@ -7897,9 +7897,12 @@ A junior can only reach `needs_input`, and therefore the needs-you count, if som
 signal says so — and today none does, because hooks attribute to the parent's
 session id. The rule is implemented and tested; the path that would exercise it
 on a real machine arrives with the `SubagentStop` payload above. A junior's
-`send()` would go to `claude --resume <agentId>`, which is not a session id; the
-panel offers no composer action a junior can reach, but nothing yet refuses it at
-the adapter, and that belongs with WP-09's owner of that function. Nested
+`send()` would go to `claude --resume <agentId>`, which is not a session id. The
+panel offers a junior no composer, no action row, no resume link and no `1`/`2`/
+`3` — that was a real defect found by opening the panel on one, because
+`legalActions()` only governs the ⋯ menu and the three weighted buttons are
+built unconditionally — but `POST /api/send` itself does not yet refuse a
+subagent id, and `send()` belongs to WP-09 this cycle. Nested
 subagents (`spawnDepth: 2`, 4 files on this machine) are drawn beside the
 SESSION, not beside the junior that spawned them: `parentAgentId` is parsed and
 carried but not yet used for placement, because a junior standing beside a junior
@@ -7907,12 +7910,12 @@ needs a seating rule this package did not have a screenshot to justify.
 
 ### Tests and goldens
 
-27 new tests in `test/unit/subagents.test.mjs`, over synthetic fixtures written
+28 new tests in `test/unit/subagents.test.mjs`, over synthetic fixtures written
 into a temp directory and deleted afterwards — **no real transcript content is
 committed anywhere in this repository.** The four adapter cases run the real
 adapter in a child process with `CLAUDE_CONFIG_DIR` pointed at the fixture,
 because `PROJECTS_DIR` is resolved at import time and a query-string re-import
-would give a fresh `adapter.mjs` over a stale `parse.mjs`. 1,375 → 1,402.
+would give a fresh `adapter.mjs` over a stale `parse.mjs`. 1,375 → 1,403.
 
 The demo floor spawns two juniors for `Dark mode audit across 40 components` in
 `design-system`, and keeps their mtimes moving once a minute — a real junior

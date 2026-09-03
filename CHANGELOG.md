@@ -905,7 +905,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   is not there at all ends as that label rather than as a stack trace. None of them launches a
   real Chrome; the test that would is the goldens gate, which is a separate npm script for exactly
   that reason. §114.
-- **27 tests for subagents, over fixtures shaped like the real files and containing none of
+- **28 tests for subagents, over fixtures shaped like the real files and containing none of
   them.** Every subagent fixture in the suite is written into a temp directory by the test that
   needs it and deleted afterwards; nothing from anybody's `~/.claude` is committed. They cover
   both on-disk layouts and the workflow journal that must never become a person, all nine
@@ -918,7 +918,7 @@ SessionEnd`. Coalescing is proved on an injected clock rather than slept through
   `PROJECTS_DIR` is resolved at import time. The named one is `INVARIANT: a subagent lifecycle
 changes no user-owned field on the parent` — a parent standing in the office with an unanswered
   review, three juniors arriving and leaving around it, and a deep compare of every user-owned
-  field, the whole ack store and all six counts. 1,375 → 1,402. §117.
+  field, the whole ack store and all six counts. 1,375 → 1,403. §117.
 - **The goldens job skips a browser it cannot start, as §87 said it would.** It named two tooling
   gaps — no WebSocket, no Chrome — and missed the third and likeliest: a Chrome that is present and
   will not start. The Ubuntu runner has one, both guards passed, and the job then failed a merge
