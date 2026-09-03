@@ -17,6 +17,7 @@
  * a read of the running daemon's own hook-health numbers.
  */
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,6 +25,8 @@ import process from 'node:process';
 
 import * as defaultAdapters from '../adapters/index.mjs';
 import { DATA_DIR, STATE_FILE } from '../core/paths.mjs';
+import { TERMINAL_AUTO } from '../core/store.mjs';
+import { describeTerminal } from '../adapters/claude-code/terminals.mjs';
 
 /**
  * The same scan bounds the daemon uses (src/core/state-machine.mjs), so
@@ -296,6 +299,28 @@ async function collectRuntime(adapter, scan) {
 }
 
 /**
+ * The `terminal` setting, read straight off `state.json`.
+ *
+ * `doctor` does not construct a `Store`: that one would schedule debounced
+ * writes and, on a machine where the state file is missing, is one method call
+ * away from creating it. A read-only command must not be able to write the
+ * state it is reporting on. So this is a plain read, and every failure — no
+ * file, unreadable, unparseable, wrong shape — is `auto`, which is also what
+ * the daemon would use.
+ * @param {string} stateFile
+ * @returns {Promise<string>}
+ */
+export async function readTerminalPin(stateFile) {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
+    const pin = parsed?.settings?.terminal;
+    return typeof pin === 'string' && pin.trim() ? pin.trim() : TERMINAL_AUTO;
+  } catch {
+    return TERMINAL_AUTO;
+  }
+}
+
+/**
  * One hooks row per adapter that supports hooks.
  * @param {any} adapter
  * @param {{probe:Function}} deps
@@ -359,6 +384,8 @@ function candidatePorts(hookPorts, explicit) {
  *   port?: number|null,
  *   now?: number,
  *   scan?: {maxAgeDays:number, limit:number},
+ *   terminal?: (opts:any) => Promise<any>,
+ *   terminalPin?: string,
  * }} [opts]
  */
 export async function collectReport(opts = {}) {
@@ -369,6 +396,7 @@ export async function collectReport(opts = {}) {
   const inspect = opts.inspect || inspectDaemon;
   const now = opts.now ?? Date.now();
   const scan = opts.scan || { maxAgeDays: SCAN_MAX_AGE_DAYS, limit: SCAN_LIMIT };
+  const findTerminal = opts.terminal || describeTerminal;
 
   const list = adapters.getAdapters();
   const runtimes = await Promise.all(list.map((a) => collectRuntime(a, scan)));
@@ -419,6 +447,23 @@ export async function collectReport(opts = {}) {
 
   const deck = daemon ? { ...daemon.deck, port: daemon.port } : { ...NO_DECK, port: null };
   const state = checkState({ stateFile, dataDir });
+
+  // Which terminal "open in terminal" would actually use, and how it was
+  // chosen. WP-04. Never fails the report: an emulator probe that throws
+  // leaves the row saying it found nothing, which is the same thing the
+  // launcher would then do.
+  //
+  // The pin is read from the same state file `checkState` just looked at, so
+  // this row reflects the user's setting rather than what detection would pick
+  // if they had never set one.
+  /** @type {{id:string|null,label:string|null,reason:string|null,present:boolean,pinned:boolean}} */
+  let terminal = { id: null, label: null, reason: null, present: false, pinned: false };
+  try {
+    const pin = opts.terminalPin ?? (await readTerminalPin(stateFile));
+    terminal = await findTerminal({ pin });
+  } catch {
+    // leave the row as "none found"
+  }
 
   /** @type {string[]} */
   const problems = [];
@@ -476,6 +521,7 @@ export async function collectReport(opts = {}) {
     hooks,
     deck,
     state,
+    terminal,
     // Static and deliberate. The core opens no outbound socket at all
     // (docs/02-ARCHITECTURE.md §9), including from this command: the only
     // connections it makes are to 127.0.0.1.
@@ -585,6 +631,8 @@ export function renderReport(report, opts = {}) {
     lines.push(row(label, describeHooks(h, report.generatedAt)));
   }
 
+  lines.push(row('terminal', describeTerminalRow(report.terminal)));
+
   lines.push(
     row(
       'state',
@@ -617,6 +665,35 @@ function describeHooks(h, now) {
     else parts.push('none yet this run');
   }
   return parts.join(', ');
+}
+
+/**
+ * Which terminal "open in terminal" would use, and how it was chosen.
+ *
+ * Same wording discipline as the rest of the report (`docs/DEVIATIONS.md`
+ * §72–§73): every phrase here names a check that was actually run — an
+ * environment variable that is set, a binary on `PATH`, an app bundle that
+ * exists, a setting that is stored. The row does NOT claim the launch works.
+ * As of WP-04 no launch form outside Windows has been run on a real desktop
+ * (`docs/DEVIATIONS.md` §9), and a row saying "will open Ghostty" would be
+ * exactly the kind of unearned claim §74 exists to keep out of this file.
+ * @param {any} t
+ */
+function describeTerminalRow(t) {
+  if (!t || !t.id) {
+    return 'none found — "open in terminal" has nothing to open';
+  }
+  if (t.pinned && !t.present) {
+    return `${t.label}   (pinned in settings; not found on this machine)`;
+  }
+  const how = {
+    pinned: 'pinned in settings',
+    env: 'this session runs inside it',
+    TERMINAL: '$TERMINAL',
+    installed: 'installed',
+    fallback: 'always present',
+  }[t.reason];
+  return how ? `${t.label}   (${how})` : String(t.label);
 }
 
 /**

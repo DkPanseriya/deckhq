@@ -36,6 +36,7 @@ import {
   deckFrom,
   group,
   PITCH,
+  readTerminalPin,
   redact,
   renderReport,
   renderShare,
@@ -132,6 +133,19 @@ async function tmpStateDir() {
   return { dataDir: dir, stateFile: path.join(dir, 'state.json') };
 }
 
+/**
+ * The terminal row, pinned. Which emulator is actually installed varies by
+ * machine and by CI runner, so every test that is not ABOUT the terminal row
+ * gets this fixed answer rather than whatever the box happens to have.
+ */
+const A_TERMINAL = {
+  id: 'ghostty',
+  label: 'Ghostty',
+  reason: 'env',
+  present: true,
+  pinned: false,
+};
+
 /** Collect with every machine-dependent input pinned. */
 async function collect(adapters, extra = {}) {
   const { dataDir, stateFile } = extra.state || (await tmpStateDir());
@@ -141,6 +155,7 @@ async function collect(adapters, extra = {}) {
     dataDir,
     stateFile,
     now: NOW,
+    terminal: async () => A_TERMINAL,
     ...machine,
     ...extra.overrides,
   });
@@ -371,6 +386,140 @@ test('a debt of zero is reported as zero, not hidden', async () => {
 // Exit codes
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// The terminal row (WP-04)
+// ---------------------------------------------------------------------------
+
+/** @param {any} terminal */
+async function terminalRow(terminal) {
+  const report = await collect(registry(fakeAdapter()), {
+    overrides: { terminal: async () => terminal },
+  });
+  return renderReport(report)
+    .split('\n')
+    .find((l) => l.trim().startsWith('terminal'));
+}
+
+test('the terminal row names the emulator and how it was found', async () => {
+  assert.match(
+    await terminalRow(A_TERMINAL),
+    /terminal\s+Ghostty\s+\(this session runs inside it\)/,
+  );
+  assert.match(
+    await terminalRow({ ...A_TERMINAL, id: 'kitty', label: 'kitty', reason: 'installed' }),
+    /kitty\s+\(installed\)/,
+  );
+  assert.match(
+    await terminalRow({ ...A_TERMINAL, id: 'konsole', label: 'Konsole', reason: 'TERMINAL' }),
+    /Konsole\s+\(\$TERMINAL\)/,
+  );
+  assert.match(
+    await terminalRow({
+      ...A_TERMINAL,
+      id: 'terminal-app',
+      label: 'Terminal.app',
+      reason: 'fallback',
+    }),
+    /Terminal\.app\s+\(always present\)/,
+  );
+});
+
+test('a pinned terminal says so, and says when it is not on this machine', async () => {
+  assert.match(
+    await terminalRow({ ...A_TERMINAL, reason: 'pinned', pinned: true }),
+    /Ghostty\s+\(pinned in settings\)/,
+  );
+  assert.match(
+    await terminalRow({ ...A_TERMINAL, reason: 'pinned', pinned: true, present: false }),
+    /Ghostty\s+\(pinned in settings; not found on this machine\)/,
+  );
+});
+
+test('INVARIANT OF HONESTY: the terminal row never claims the launch works', async () => {
+  // WP-04 is implemented and unit-tested, and has not been run on a real Mac
+  // or Linux desktop (docs/DEVIATIONS.md §9, §88). Every phrase in this row
+  // names a check that was run — an environment variable, a binary, a bundle,
+  // a stored setting. None of them may promise an outcome.
+  for (const reason of ['env', 'installed', 'TERMINAL', 'pinned', 'fallback']) {
+    const line = await terminalRow({ ...A_TERMINAL, reason, pinned: reason === 'pinned' });
+    assert.doesNotMatch(line, /\bwill\b|\bworks?\b|verified|supported|tested/i, line);
+  }
+});
+
+test('a machine with no terminal at all says so, and is not a failure', async () => {
+  const none = { id: null, label: null, reason: null, present: false, pinned: false };
+  assert.match(await terminalRow(none), /none found/);
+  const report = await collect(registry(fakeAdapter()), {
+    overrides: { terminal: async () => none },
+  });
+  // Honest, but not a reason to exit non-zero: DeckHQ still captures
+  // everything it captured before, and "open in terminal" is one action.
+  assert.equal(report.ok, true);
+});
+
+test('a terminal probe that throws leaves the row empty rather than failing the report', async () => {
+  const report = await collect(registry(fakeAdapter()), {
+    overrides: {
+      terminal: async () => {
+        throw new Error('/Applications is not readable');
+      },
+    },
+  });
+  assert.equal(report.ok, true);
+  assert.deepEqual(report.terminal, {
+    id: null,
+    label: null,
+    reason: null,
+    present: false,
+    pinned: false,
+  });
+  assert.match(renderReport(report), /none found/);
+});
+
+test('the pinned terminal comes from the state file the report is already reading', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  await fsp.writeFile(
+    stateFile,
+    JSON.stringify({ version: 1, settings: { terminal: 'wezterm' } }),
+    'utf8',
+  );
+  /** @type {any[]} */
+  const asked = [];
+  await collectReport({
+    adapters: registry(fakeAdapter()),
+    dataDir,
+    stateFile,
+    now: NOW,
+    ...noDaemon,
+    terminal: async (opts) => {
+      asked.push(opts);
+      return A_TERMINAL;
+    },
+  });
+  assert.deepEqual(asked, [{ pin: 'wezterm' }]);
+});
+
+test('readTerminalPin answers "auto" for every way a state file can be unusable', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  assert.equal(await readTerminalPin(stateFile), 'auto'); // absent
+  for (const body of ['', 'not json', 'null', '[]', '{"settings":{}}', '{"settings":42}']) {
+    await fsp.writeFile(stateFile, body, 'utf8');
+    assert.equal(await readTerminalPin(stateFile), 'auto', body);
+  }
+  await fsp.writeFile(stateFile, JSON.stringify({ settings: { terminal: ' kitty ' } }), 'utf8');
+  assert.equal(await readTerminalPin(stateFile), 'kitty');
+  assert.equal(await readTerminalPin(dataDir), 'auto'); // a directory, not a file
+});
+
+test('the share block does not carry which terminal this person uses', async () => {
+  // The block is a launch asset that gets pasted in public. Which emulator
+  // someone runs is a fact about them and adds nothing to the numbers, so it
+  // stays in the local report. docs/DEVIATIONS.md §88.
+  const report = await collect(registry(fakeAdapter({ sessions: sessionsIn(3, '/p') })));
+  const share = renderShare(report);
+  assert.doesNotMatch(share, /Ghostty|terminal\s+/i);
+});
+
 test('a healthy machine exits 0', async () => {
   const report = await collect(registry(fakeAdapter({ sessions: sessionsIn(5, '/p') })));
   assert.equal(report.ok, true);
@@ -586,6 +735,7 @@ test('--json emits one JSON document with a stable shape', async () => {
     'runtimes',
     'share',
     'state',
+    'terminal',
   ]);
   // Null rather than absent when the flag was not given: the shape is stable
   // whatever the flags, which is the whole contract of this mode.
@@ -622,6 +772,13 @@ test('--json emits one JSON document with a stable shape', async () => {
     'waitingNotRunning',
   ]);
   assert.deepEqual(Object.keys(parsed.state).sort(), ['error', 'path', 'writable']);
+  assert.deepEqual(Object.keys(parsed.terminal).sort(), [
+    'id',
+    'label',
+    'pinned',
+    'present',
+    'reason',
+  ]);
   assert.deepEqual(Object.keys(parsed.egress).sort(), ['note', 'outbound']);
 
   assert.equal(parsed.ok, true);
