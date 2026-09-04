@@ -1,41 +1,42 @@
-# Release checklist — publishing `1.2.0`
+# Release checklist — publishing `1.3.0`
 
-**Owner:** the repository owner, by hand. **Time:** about twenty minutes, most of it waiting on CI.
+**Owner:** the repository owner, by hand up to the tag. **Time:** about ten minutes of checks, then
+about fifteen watching a workflow.
 
 1.1.0 called itself the first public release and was never pushed to the registry, so `npx deckhq`
 returned `E404` for its entire life. That happened because nobody had written the steps down. These
 are the steps.
 
-Everything below is safe to run except **step 9**, which cannot be undone: `npm unpublish` is
-time-boxed to 72 hours and the version number is burned either way. Do not skip step 8.
+**What changed since 1.2.0: the tag does the release.** `.github/workflows/publish.yml` publishes
+to npm through trusted publishing (OIDC) and then creates the GitHub Release with its assets. So
+**step 7 is the last thing a human does**, and it is the irreversible one — `npm publish` runs on a
+runner a minute later and npm unpublish is time-boxed to 72 hours with the version number burned
+either way. Everything before step 7 is safe to run and repeatable. Steps 8 to 12 are watching.
 
 ---
 
 ## Before you start
 
-You need to be logged in to npm as an account that owns (or can claim) the name `deckhq`, with 2FA
-ready.
+Nothing to log in to. There is no npm token here and there is no `NPM_TOKEN` secret: GitHub mints a
+short-lived OIDC credential for this repository and this workflow file, and npm verifies it against
+the trusted publisher configured on the package.
 
 ```sh
-npm whoami                      # expect your npm username, not an error
-npm view deckhq version         # expect E404 for the very first publish
+npm view deckhq version         # expect 1.2.0 — the version this release replaces
 ```
 
-If `npm view deckhq` returns a package you do not own, stop — the name is taken and the rest of the
-plan needs revisiting before anything else happens.
+The owner's one-time trusted-publisher setup (npmjs.com → the package → Settings → Trusted
+publisher: `DkPanseriya` / `deckhq` / `publish.yml`, no environment) **is done**. If it were not,
+the publish job would fail looking for a token that does not exist.
 
-## 1. Land everything that ships in 1.2.0
+## 1. Land everything that ships in 1.3.0
 
 `CHANGELOG.md` is written so each agent appends to the existing headings. Confirm every merged
-package has its line in the `1.2.0` entry, and that anything in **Known gaps** that has since been
-verified has been moved out of it. In particular:
+package has its line in the `1.3.0` entry, and that anything in **Known gaps** that has since been
+verified has been moved out of it.
 
-- WP-01 packaging — `publishConfig`, `prepublishOnly`, description, keywords.
-- WP-02 repository files — `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, templates.
-- WP-03 README rewrite and hero GIF — **this is what the npm page renders.** If the README has not
-  landed, the npm page is the old one forever for this version number.
-- WP-04 macOS/Linux terminals, WP-05 `deckhq doctor` — the bug report form already asks for
-  `deckhq doctor` output, so a release without it sends people to a command that does not exist.
+The `1.3.0` section is closed: `## Unreleased` was renamed to `## 1.3.0 — 2026-09-04` and a fresh
+empty `## Unreleased` opened above it, so the next package has a heading to append to.
 
 ## 2. Get to a clean `main`
 
@@ -51,11 +52,20 @@ git status                      # must be clean; nothing staged, nothing modifie
 npm install
 npm run lint
 npm run format:check
+npm run typecheck
 npm test
 ```
 
-All four must pass. `prepublishOnly` runs lint and test again at publish time, but finding a
-failure here costs nothing and finding it at step 9 wastes a version number.
+All five must pass. `prepublishOnly` runs lint, typecheck and the suite again on the runner, but
+finding a failure here costs nothing and finding it after the tag wastes a version number.
+
+> **A known flake to re-run, not to ignore.** `test/integration/daemon-hooks-port.test.mjs` takes
+> two ports from a helper that binds port 0, reads the number and releases it — so two calls can
+> hand back the *same* port. When they do, the stranger in the test occupies the port the daemon
+> was asked for, the daemon correctly walks to the next one, and the assertion fails with an
+> `actual`/`expected` pair one apart. Seen once during 1.3.0 prep and not reproduced in eight
+> consecutive runs of that file. If a red suite is that test with adjacent port numbers, re-run;
+> anything else is real.
 
 ## 4. Confirm CI is green
 
@@ -63,8 +73,8 @@ failure here costs nothing and finding it at step 9 wastes a version number.
 gh run list --branch main --limit 1
 ```
 
-Nine combinations — Ubuntu, macOS, Windows × Node 18, 20, 22. All green. Not "green except
-Windows".
+Nine combinations — Ubuntu, macOS, Windows × Node 18, 20, 22 — plus the type gate and the Ubuntu
+goldens job. All green. Not "green except Windows".
 
 ## 5. Inspect the tarball
 
@@ -72,13 +82,19 @@ Windows".
 npm pack --dry-run
 ```
 
-Expect roughly **42 files, ~225 kB** (`bin`, `src`, `public`, `README.md`, `LICENSE`; the count
-moves if a source file was added). Read the list and confirm none of the following appear:
+Expect **198 files, 730.1 kB packed, 2.4 MB unpacked** for 1.3.0 (1.2.0 was 42 files and 225 kB;
+the growth is the split modules, the render parts and the two PWA icons). Read the list and
+confirm `bin/`, `src/` (including `src/data/rates.json` and `src/core/publisher-key.mjs`),
+`public/` (including `deck.js`, `palette.js`, `settings-ui.js`, `minifloor.js`, `snapshot.js`,
+`sound.js`, `coach-marks.js`, `floor-rule.js`, all forty `render/*` parts,
+`manifest.webmanifest`, `sw.js` and both icons), `README.md` and `LICENSE` are present — and that
+none of the following are:
 
+- `plugin/`, `vscode/`, `site/`, `packs/` — separate artifacts with their own channels
+- `test/`, `docs/`, `scripts/`, `node_modules/`
 - `state.json` or `state/` — user data
-- `run.log`, `run.err.log`, any `*.log`
-- `.claude/`
-- `docs/`, `test/`, `scripts/`, `node_modules/`
+- `run.log`, `run.err.log`, any `*.log`, any golden, any `.pem`
+- `.claude/`, `public/tsconfig.json`
 
 If anything unwanted is there, fix the `files` field in `package.json` — never by adding a
 `.npmignore`, which silently overrides `files`.
@@ -89,39 +105,89 @@ If anything unwanted is there, fix the `files` field in `package.json` — never
 node -e "const p=require('./package.json');console.log(p.version,'|',p.description)"
 ```
 
-- Version is `1.2.0`.
+- Version is `1.3.0`, and `plugin/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
+  agree with it — `test/unit/plugin-manifest.test.mjs` fails if they do not.
+- `vscode/package.json` stays on its own version (`0.1.0`). It is a different artifact.
 - The description is the pitch and contains no caveat, no "unverified", no changelog fragment. The
-  Codex caveat lives in the README's Honest limits and must still be there.
-- `publishConfig.access` is `public`.
+  Codex, Gemini CLI and OpenCode caveats live in the README's Honest limits and must still be there.
+- `publishConfig.access` is `public`; `engines.node` is `>=18`.
 - `license` is `MIT` and `LICENSE` is in the tarball.
+- `repository`, `homepage`, `bugs` and `funding` all resolve. **`funding` still points at a GitHub
+  Sponsors profile that is not enrolled** — see step 12.
 
-## 7. Tag
-
-```sh
-git tag -a v1.2.0 -m "v1.2.0"
-git push origin main
-git push origin v1.2.0
-```
-
-## 8. Dry-run the publish
+## 7. Dry-run the publish, then tag
 
 ```sh
 npm publish --dry-run --access public
 ```
 
 This runs the full `prepublishOnly` gate and prints exactly what would be uploaded without
-uploading it. **This is the last reversible step.** Read the output. If the file list here differs
-from step 5, stop and find out why.
+uploading it. **This is the last reversible step.** Read the output. If the file list differs from
+step 5, stop and find out why.
 
-## 9. Publish
+### 7a. Check the release notes will fit — **this currently fails**
 
 ```sh
-npm publish --access public
+node scripts/release/changelog-section.mjs 1.3.0 | node -e "
+  let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+    const n=s.length;console.log(n,'characters',n>125000?'— TOO LONG':'— fits');});"
 ```
 
-Approve the 2FA prompt. This cannot be undone.
+A GitHub Release body is capped at **125,000 characters**. The `1.3.0` section is **145,581** —
+20,581 over. `gh release create --notes-file` will be refused with a 422, and it will be refused in
+the `release` job, **after** the npm publish has already happened and cannot be taken back. The
+package would land on the registry with no release page and no assets, which is the exact failure
+1.1.0's post-mortem exists to prevent.
 
-## 10. Verify the registry
+Nothing in the workflow catches this: the `publish` job runs `changelog-section.mjs` only to check
+that a section *exists*, never that it fits.
+
+Three ways out, and one of them has to be chosen before the tag:
+
+1. **Trim the section** so the extract fits. 1.3.0 is nine packages' worth of entries and reads
+   like an engineering log; a release page is not that. The Highlights paragraph already carries
+   the release for a stranger.
+2. **Change what the release job sends** — the Highlights plus a link to `CHANGELOG.md` for the
+   rest. This is a change to `publish.yml` or `changelog-section.mjs` and needs its own tests.
+3. **Accept the failure**, let the publish go through, and cut the release page by hand with
+   shortened notes (see *Recovering a failed `release` job*). Cheapest to do, worst to look at:
+   the first observed run of WP-43's job would be a red one.
+
+Whichever is chosen, re-run the command above and get *fits* before tagging.
+
+### 7b. Tag
+
+Then, and only then:
+
+```sh
+git tag -a v1.3.0 -m "v1.3.0" && git push origin v1.3.0
+```
+
+**That is the whole release.** The tag push starts `publish.yml`, which runs the nine-way matrix,
+publishes to npm with provenance, and creates the GitHub Release. Nothing else is typed by a human.
+
+Push the tag only from a commit that is already on `main` and already green — the workflow refuses
+a tag whose `package.json` version disagrees with it, and refuses a version with no `CHANGELOG.md`
+section, but neither check can undo a publish that has already happened.
+
+## 8. Watch the run
+
+```sh
+gh run watch "$(gh run list --workflow publish.yml --limit 1 --json databaseId -q '.[0].databaseId')"
+```
+
+Or open it: `https://github.com/DkPanseriya/deckhq/actions/workflows/publish.yml`, and the run
+itself at `https://github.com/DkPanseriya/deckhq/actions/runs/<run-id>`.
+
+Three jobs, in order, each gating the next:
+
+| Job       | What it does                                                                                     | If it fails                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `verify`  | lint, format check and the suite on nine OS × Node combinations                                  | Nothing was published. Fix, delete the tag, tag again.                                               |
+| `publish` | asserts the npm floor, refuses a tag/version mismatch, refuses a missing changelog section, publishes | If it fails **before** `npm publish`, nothing happened. If it fails during, check the registry first. |
+| `release` | downloads the published tarball, checks it against the registry's own sha512, builds the Windows zip, renders the manifests, creates the Release | The package is already on the registry and cannot be taken back. See below.                          |
+
+## 9. Verify the registry
 
 ```sh
 npm view deckhq
@@ -136,9 +202,21 @@ Then open <https://www.npmjs.com/package/deckhq> and check, in this order:
 - **The description under the package name** is the pitch, and reads well truncated — it is what
   appears in search results next to a dozen competitors.
 - **"Dependencies: 0"** — the whole trust story in one number, on the page, for free.
-- The repository, homepage, issues and funding links all resolve.
-- The licence reads MIT.
-- The published version is `1.2.0` and `latest` points at it.
+- **The provenance badge.** This is the first release published through trusted publishing, so it
+  is the first that can have one. Its absence means the publish did not go through OIDC.
+- The repository, homepage, issues and funding links all resolve, and the licence reads MIT.
+- The published version is `1.3.0` and `latest` points at it.
+
+## 10. Verify the release page
+
+<https://github.com/DkPanseriya/deckhq/releases/tag/v1.3.0>. The release job has **never run**, so
+this is the first time any of it is observed rather than reviewed:
+
+- The notes are the `## 1.3.0` section of `CHANGELOG.md`, opening on the Highlights paragraph.
+- Nine assets: `floor.png`, `panel-review-card.png`, `hero.gif`, `deckhq-1.3.0-win.zip`,
+  `Formula/deckhq.rb`, the three winget manifests and `scoop/deckhq.json`.
+- `packaging/README.md` says what a user does with each. Spot-check one digest against
+  `npm view deckhq@1.3.0 dist.integrity`.
 
 ## 11. Smoke test on a machine that has never seen the repo
 
@@ -153,68 +231,65 @@ Expect: it downloads, the daemon starts on `127.0.0.1:4317`, a browser opens, an
 Then:
 
 ```sh
-npx deckhq@latest --version     # 1.2.0
-npx deckhq@latest doctor        # once WP-05 has landed
+npx deckhq@latest --version     # 1.3.0
+npx deckhq@latest doctor
 ```
 
-If this fails, the fix is a `1.2.1`, not an unpublish.
+If this fails, the fix is a `1.3.1`, not an unpublish.
 
-## 12. GitHub release
+## 12. Repository settings — owner only, in the GitHub UI
 
-**Done for 1.2.0** — <https://github.com/DkPanseriya/deckhq/releases/tag/v1.2.0>, with
-`floor.png`, `panel-review-card.png` and `hero.gif` attached. `scripts/release/changelog-section.mjs`
-extracts the notes, so the fragile `sed` range this step used to carry is gone:
-
-```sh
-node scripts/release/changelog-section.mjs 1.2.0 > notes.md
-gh release create v1.2.0 \
-  --title "v1.2.0 — installable" \
-  --notes-file notes.md \
-  docs/media/floor.png docs/media/panel-review-card.png docs/media/hero.gif
-```
-
-`panel.png` is the panel before WP-08 and is not attached any more. Check the rendered release
-page: the release notes are the first thing a visitor from Hacker News reads.
-
-## 13. Repository settings — owner only, in the GitHub UI
-
-None of these are in the repository, so none of them are done by a commit. **The description and
-topics are done** — `gh repo edit` can set both, so they were, and they are struck through below.
-The remaining four need the owner in the GitHub UI or an enrolment only the owner can make:
+None of these are in the repository, so none of them are done by a commit. The description and
+topics are done. These four need the owner in the GitHub UI or an enrolment only the owner can make,
+and none of them is new for 1.3.0:
 
 - **Social preview image.** Settings → General → Social preview. Without it every link to this
   repo, in Slack, X, Discord and iMessage, renders as a grey box with a repo name, permanently.
   This is WP-02's acceptance criterion. There is no API for it — it is an upload in the UI.
-- ~~**Repository description and topics**, matching `02-MARKET-AND-LAUNCH.md` §2.~~ Done
-  3 September. The description is the `package.json` description verbatim, so the two cannot drift
-  apart silently. Topics: `claude-code`, `ai-agents`, `developer-tools`, `local-first`, `privacy`,
-  `dashboard`, plus the `cli`, `nodejs`, `agent-management` and `multi-project` already there.
-- **Enable private vulnerability reporting.** Settings → Advanced Security. Confirmed still off
-  (`repos/:owner/:repo/private-vulnerability-reporting` reports `{"enabled": false}`). `SECURITY.md`,
-  `CODE_OF_CONDUCT.md` and the issue template chooser all link to
-  `/security/advisories/new`, which 404s until this is on.
-- **Enable Discussions.** The issue template chooser links to it. Confirmed still off
-  (`hasDiscussionsEnabled: false`).
+- **Enable private vulnerability reporting.** Settings → Advanced Security. `SECURITY.md`,
+  `CODE_OF_CONDUCT.md` and the issue template chooser all link to `/security/advisories/new`,
+  which 404s until this is on.
+- **Enable Discussions.** The issue template chooser links to it.
 - **Enable GitHub Sponsors** for `DkPanseriya`, or remove `.github/FUNDING.yml` and the `funding`
   field in `package.json`. A Sponsor button pointing at a profile that is not enrolled is worse
-  than no button. Confirmed not enrolled (`hasSponsorsListing: false`), and `.github/FUNDING.yml`
-  still reads `github: [DkPanseriya]`, so the button is live and pointing at nothing.
+  than no button, and 1.3.0 ships that button pointing at nothing.
+- **Enable Pages** — Settings → Pages → Source: GitHub Actions — or `pages.yml` keeps failing
+  quietly on every push to `main`.
 - Confirm the issue forms render: open **New issue** and check both forms appear and that blank
   issues are disabled.
 
-## 14. After
+## 13. After
 
 - Watch `npm view deckhq` downloads for the first week — that is the first row of the metrics
   table in `08-PLAN-V2-100X.md` §11 moving off zero.
-- **WP-43** replaces steps 7–12 with a tag push. This checklist stays the reference for what the
-  workflow must do, and for the owner-only settings in step 13, which no workflow can do.
-- Open the `1.3.0` heading in `CHANGELOG.md` when the next package lands, so nobody has to
-  remember to. `.github/workflows/publish.yml` refuses to publish a version that has no `## X.Y.Z`
-  section in `CHANGELOG.md`, and `npm test` fails on a version bump without one, so a forgotten
-  heading is caught before the irreversible step rather than after it.
-- **Provenance needs no flag and no token.** `publish.yml` publishes through trusted publishing
-  (OIDC), which attaches the provenance attestation on its own; `--provenance` must **not** be
-  added, and an npm automation token must not be created — the point of the OIDC design is that no
-  long-lived credential exists in the repository to leak. The workflow header lists the owner's
-  one-time trusted-publisher setup on npmjs.com, which is the only remaining manual step and the
-  reason the badge is not on the 1.2.0 page.
+- **WP-43's acceptance criterion is met the moment the `release` job goes green**, and not before.
+  Until then `packaging/README.md`, the site's install page and the README all describe a job that
+  has been reviewed and never observed, and they say so.
+- Open the `1.4.0` heading in `CHANGELOG.md` when the next package lands. `publish.yml` refuses to
+  publish a version that has no `## X.Y.Z` section, and `npm test` fails on a version bump without
+  one, so a forgotten heading is caught before the irreversible step rather than after it.
+- **Provenance needs no flag and no token.** Trusted publishing attaches the attestation on its
+  own; `--provenance` must **not** be added, and an npm automation token must not be created — the
+  point of the OIDC design is that no long-lived credential exists in the repository to leak.
+
+## Recovering a failed `release` job
+
+The npm publish is already done and cannot be undone, so this is a repair, not a retry of the
+release. The job is written to be re-runnable: it re-uploads assets onto a release that already
+exists rather than failing on it. So:
+
+1. Re-run the failed job from the Actions UI. Most failures here are the registry lagging the
+   publish, and the tarball step already retries twenty times at fifteen seconds.
+2. If it fails again for a reason in the repository, fix it on `main`, delete and re-push the tag.
+   The `publish` job will refuse the second run — the version is already on the registry — which is
+   correct and expected; `release` still needs the publish to have succeeded, so cut the release by
+   hand instead:
+
+```sh
+node scripts/release/changelog-section.mjs 1.3.0 > notes.md
+gh release create v1.3.0 --verify-tag --title "v1.3.0" --notes-file notes.md \
+  docs/media/floor.png docs/media/panel-review-card.png docs/media/hero.gif
+```
+
+3. Never delete a published version to make a release page work. A `1.3.1` is cheaper than a
+   burned version number.
