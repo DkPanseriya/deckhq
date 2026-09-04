@@ -17,6 +17,7 @@ import { daemonScratch, writeClaudeSession } from '../helpers/isolate.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
@@ -143,6 +144,120 @@ test('SSE pushes an initial snapshot and keeps the stream open', async () => {
     assert.match(buffer, /"agents"/);
     controller.abort();
   });
+});
+
+test('close() ends an open event stream instead of waiting forever for it', async () => {
+  // The defect this pins: `close()` awaits `server.close()`, which waits for
+  // every request to finish, and an SSE response never finishes on its own.
+  // With a browser parked on the floor `close()` simply did not return —
+  // measured here at >10 s and unbounded before the fix, 9 ms after it. That
+  // deadlocked the goldens gate for eight minutes and hung any embedder.
+  // `docs/DEVIATIONS.md` §126.3, §127.
+  const { dir, stateFile, publicDir } = daemonScratch('daemon-sse-close-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir });
+  // A raw request, not `fetch`: nothing pools it, nothing aborts it, and it
+  // stays open exactly as long as the daemon leaves it open. Held out here so
+  // the `finally` can destroy it: a regression must come back as a failing
+  // assertion, and without this it would come back as a test file that never
+  // exits — which is the reporting problem §121.3 and §126.3 are both about.
+  const req = http.request({
+    host: '127.0.0.1',
+    port: d.port,
+    path: '/api/events',
+    method: 'GET',
+  });
+  try {
+    const res = await new Promise((resolve, reject) => {
+      req.on('response', resolve);
+      req.on('error', reject);
+      req.end();
+    });
+    assert.equal(res.statusCode, 200);
+    assert.match(res.headers['content-type'], /text\/event-stream/);
+    res.setEncoding('utf8');
+
+    let seen = '';
+    let ended = false;
+    const streamEnded = new Promise((resolve) =>
+      res.on('end', () => {
+        ended = true;
+        resolve(undefined);
+      }),
+    );
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('no snapshot arrived on the stream')), 5000);
+      res.on('data', (chunk) => {
+        seen += chunk;
+        if (seen.includes('event: state')) {
+          clearTimeout(timer);
+          resolve(undefined);
+        }
+      });
+    });
+    assert.equal(ended, false, 'the stream must still be open when close() is called');
+
+    // Raced rather than awaited: before the fix this promise never settles at
+    // all, and a test that hangs reports nothing.
+    const started = Date.now();
+    const verdict = await Promise.race([
+      d.close().then(() => 'closed'),
+      new Promise((resolve) => {
+        const timer = setTimeout(() => resolve('hung'), 5000);
+        if (typeof timer.unref === 'function') timer.unref();
+      }),
+    ]);
+    const elapsed = Date.now() - started;
+    assert.equal(verdict, 'closed', 'close() did not return within 5 s with a stream attached');
+    assert.ok(elapsed < 2000, `close() took ${elapsed} ms with a stream attached; budget is 2000`);
+
+    // And the client is told, rather than left to notice a socket disappear.
+    await streamEnded;
+    assert.match(seen, /event: bye/, 'the stream must be ended with a bye, not cut');
+  } finally {
+    req.destroy();
+    await d.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('close() releases what it owns in order, and the user-owned things first', async () => {
+  // The order is the contract, not an implementation detail: a closing DeckHQ
+  // must never leave a session blocked on a held permission request, and must
+  // never leave a `claude` child of its own behind it, so those two go before
+  // anything of ours (§97). The rest is ours to shut down, ledger last.
+  const { dir, stateFile, publicDir } = daemonScratch('daemon-order-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir });
+  /** @type {string[]} */
+  const calls = [];
+  const spy = (obj, name, label) => {
+    const original = obj[name].bind(obj);
+    obj[name] = (...args) => {
+      calls.push(label);
+      return original(...args);
+    };
+  };
+  spy(d.permissions, 'shutdown', 'permissions.shutdown');
+  spy(d.sends, 'shutdown', 'sends.shutdown');
+  spy(d.registry, 'stop', 'registry.stop');
+  spy(d.store, 'flush', 'store.flush');
+  spy(d.ledger, 'close', 'ledger.close');
+
+  const daemonFile = path.join(dir, 'daemon.json');
+  assert.ok(existsSync(daemonFile), 'the daemon publishes where it is bound while it runs');
+
+  try {
+    await d.close();
+    assert.deepEqual(calls, [
+      'permissions.shutdown',
+      'sends.shutdown',
+      'registry.stop',
+      'store.flush',
+      'ledger.close',
+    ]);
+    assert.equal(existsSync(daemonFile), false, 'the daemon file must not outlive the daemon');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('INVARIANT: reading a conversation over HTTP never clears reviewSince', async () => {

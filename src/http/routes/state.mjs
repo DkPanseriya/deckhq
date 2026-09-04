@@ -11,11 +11,44 @@ const HEARTBEAT_MS = 15000;
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{registry:any, log:any, sends:any}} ctx `sends` was read here and
- *   not declared (WP-22).
+ * @param {{registry:any, log:any, sends:any, endEventStreams?:() => number}} ctx
+ *   `sends` was read here and not declared (WP-22). `endEventStreams` is
+ *   written here and read by `startDaemon`'s `close()` — see below.
  */
 export function register(router, ctx) {
   const { registry, log } = ctx;
+
+  /**
+   * Every event stream open right now, held as the function that ends it.
+   *
+   * An SSE response is a request **in flight, forever, by design**, and
+   * `server.close()` waits for every request to finish. So a browser parked
+   * on the floor made a graceful shutdown wait for a stream that would never
+   * end on its own: `close()` simply did not return (`docs/DEVIATIONS.md`
+   * §126.3, §127). Nothing outside this file can end one, because nothing
+   * outside this file holds the `res`. So this file keeps the set, and hands
+   * shutdown one function to call.
+   * @type {Set<() => void>}
+   */
+  const open = new Set();
+
+  /**
+   * End every open stream, `bye` first. Called by `close()` in
+   * `src/daemon.mjs` before it asks the server to close.
+   * @returns {number} how many streams were ended
+   */
+  ctx.endEventStreams = () => {
+    let ended = 0;
+    for (const end of [...open]) {
+      try {
+        end();
+        ended += 1;
+      } catch (err) {
+        log.debug('SSE shutdown failed', err);
+      }
+    }
+    return ended;
+  };
 
   router.get('/api/state', (_req, res) => {
     sendJson(res, 200, registry.snapshot());
@@ -50,6 +83,8 @@ export function register(router, ctx) {
 
     let closed = false;
     let lastId = 0;
+    /** Takes this stream back out of `open`; set once it is in there. */
+    let forget = () => {};
 
     /** @param {string} event @param {any} data */
     const write = (event, data) => {
@@ -107,6 +142,7 @@ export function register(router, ctx) {
     if (typeof heartbeat.unref === 'function') heartbeat.unref();
 
     const cleanup = () => {
+      forget();
       if (closed) return;
       closed = true;
       clearInterval(heartbeat);
@@ -119,6 +155,31 @@ export function register(router, ctx) {
       }
       teardown.length = 0;
     };
+
+    /**
+     * Shutdown's end of the stream, and the only one that is ours to take:
+     * a last `event: bye` so the client learns the daemon is going rather
+     * than watching a socket vanish, then the teardown the client's own
+     * disconnect would have run, then `res.end()` — which is what takes this
+     * request out of flight and lets `server.close()` complete.
+     */
+    const bye = () => {
+      if (!closed) {
+        try {
+          res.write(`id: ${++lastId}\nevent: bye\ndata: {"reason":"shutdown"}\n\n`);
+        } catch (err) {
+          log.debug('SSE bye failed', err);
+        }
+      }
+      cleanup();
+      try {
+        res.end();
+      } catch (err) {
+        log.debug('SSE end failed', err);
+      }
+    };
+    open.add(bye);
+    forget = () => open.delete(bye);
 
     req.on('close', cleanup);
     req.on('error', cleanup);

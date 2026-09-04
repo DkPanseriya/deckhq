@@ -808,6 +808,18 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
 
 ### Fixed
 
+- **A daemon with a browser attached can now be shut down at all.** `close()` awaits
+  `server.close()`, which waits for every request to finish, and `/api/events` is a request in
+  flight **forever, by design** — so one page parked on the floor meant `close()` never returned.
+  Measured before: still going at 10 s, unbounded. After: **6–7 ms**. `closeAllConnections()`, the
+  one call that would have ended the stream, sat after the `await` it was meant to unblock, exactly
+  where the previous fix to this function had left it; it is now inside the wait, behind a 500 ms
+  grace so a request that arrived in the last instant is still allowed to finish. And the streams
+  are ended properly rather than cut: each gets a final `event: bye` and a real end of response, so
+  a page learns the daemon is going instead of watching a socket disappear. Both Node calls stay
+  optional, because the floor is Node 18 and they arrived in 18.2. This deadlocked the goldens gate
+  for eight minutes a run and hung any embedder; only the demo script had a backstop, and the
+  backstops stay because none of them was only about this. `docs/DEVIATIONS.md` §127.
 - **Thirty-two type defects the JSDoc had been hiding.** Every one was live and invisible to 1,520
   tests: `Settings` was three keys short of `DEFAULT_SETTINGS`, `SessionSummary` never declared
   the `archived` flag the adapter stamps onto it, `public/render/plan.js`'s `Room` was missing the
