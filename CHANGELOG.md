@@ -1168,6 +1168,39 @@ changes no user-owned field on the parent` — a parent standing in the office w
 - **The `reviewSince` invariant asserts something now.** It used to look for a `for_review` agent on
   the host and `return` without asserting anything when it found none, so on most machines it was
   green and empty. It plants the session it needs and runs its four assertions every time. §124.3.
+- **The fake `claude` no longer exits out from under its own pipe.** One test failed on
+  `macos-latest, 20` and nowhere else: the recorded turn arrived truncated and `send()` correctly
+  reported "no result event". `process.stdout` is synchronous for a pipe on Windows and
+  **asynchronous** on POSIX, and the fixture's flush helper was checking backpressure rather than
+  waiting for a flush — so `process.exit(0)` discarded whatever was still queued. The write
+  callback is now the completion signal, and no path that writes calls `process.exit()` at all;
+  `crash` had the same bug on stderr and had simply not lost the race yet. Pinned structurally,
+  because a bug that appears on one runner image cannot be proved by running the test again.
+  `docs/DEVIATIONS.md` §126.1.
+- **A ledger test that passed and then failed in its own cleanup.** `fs.rm` recursive answers
+  `ENOTEMPTY` on APFS for a directory whose contents were just removed, and its `maxRetries`
+  defaults to 0. The retrying remove that `claude-stream.test.mjs` already had is now here too.
+  The unwritable-directory test keeps its portable injection — a **file** where the directory
+  should be, which the kernel refuses on every platform including for root, rather than a `chmod`
+  that Windows ignores and root overrules — and gains a real-permission variant that runs only
+  where a 0500 directory is _probed_ to actually reject a write, and otherwise skips with the
+  reason printed. §126.2.
+- **The goldens gate stopped deadlocking the daemon it was photographing.** The job never failed;
+  it hung for eight minutes and was killed, which GitHub records as `cancelled`. Killing a demo
+  while the browser still held its `/api/events` SSE stream open deadlocked its graceful shutdown —
+  `server.close()` waits for every connection to end, and an SSE stream never does. Invisible on
+  Windows, where `child.kill()` is `TerminateProcess` and no handler runs. The page is now released
+  to `about:blank` before the demo is stopped, `stop()` escalates to SIGKILL and gives up, the demo
+  script force-exits after a grace period, and the CDP client rejects every pending command when its
+  socket closes instead of waiting forever with no output. `scripts/goldens.mjs` also names the
+  stage it is in — booting, navigating, settling, screenshotting — and enforces a per-capture
+  deadline and a whole-run budget inside the job's timeout, so an overrun prints **where** it was
+  stuck; `--verbose` gives one timestamped line per stage. A capture that could not be taken is now
+  SKIPPED rather than red, because it says nothing about the pixels; only a real mismatch exits 1.
+  Windows is unchanged at **6 of 6, 0 px**. §126.3.
+- **The linux captures are actually uploaded now.** `test/goldens/.out/` is a dotted directory and
+  `upload-artifact` skips hidden paths by default, so every run that captured the first linux set
+  wrote it to disk and then uploaded nothing. `include-hidden-files: true`. §126.4.
 
 ### Packaging
 

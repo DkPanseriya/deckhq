@@ -57,8 +57,20 @@ async function tmpDir(tag = 'ledger') {
   return fsp.mkdtemp(path.join(os.tmpdir(), `deckhq-${tag}-`));
 }
 
+/**
+ * Remove a temp directory, retried.
+ *
+ * `fs.rm` recursive is a readdir followed by unlinks followed by an rmdir, and
+ * on APFS the rmdir can arrive before the directory has actually settled —
+ * which answers `ENOTEMPTY` for a directory whose contents were just removed.
+ * That is what failed this file on `macos-latest` while every assertion in it
+ * passed: the error came from the `finally`, not from the ledger
+ * (docs/DEVIATIONS.md §126.2). Windows has the same shape for a different
+ * reason (§124: a handle held a beat longer than the process that opened it),
+ * so the retries are unconditional rather than platform-gated.
+ */
 async function cleanup(dir) {
-  await fsp.rm(dir, { recursive: true, force: true });
+  await fsp.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 
 /**
@@ -247,10 +259,50 @@ test('an unknown kind is refused rather than written', async () => {
 // 3. Failure is survivable and quiet
 // ---------------------------------------------------------------------------
 
+/**
+ * Can this machine actually make a directory unwritable to this process?
+ *
+ * Not a guess from `process.platform`. `chmod` is a no-op on Windows, root
+ * ignores the mode bits outright, and some CI filesystems (and any overlay or
+ * network mount) honour the call and then let the write through anyway — so
+ * the only trustworthy answer is to try the write and see. Returns the reason
+ * it cannot, or null when it can, so the skip below says WHY rather than
+ * silently reporting a pass.
+ * @returns {Promise<string|null>}
+ */
+async function whyNoUnwritableDir() {
+  if (typeof process.getuid !== 'function') return `no POSIX uid on ${process.platform}`;
+  if (process.getuid() === 0) return 'running as root: the mode bits do not apply';
+  const probeRoot = await tmpDir('perm-probe');
+  try {
+    const locked = path.join(probeRoot, 'locked');
+    await fsp.mkdir(locked);
+    await fsp.chmod(locked, 0o500);
+    try {
+      await fsp.writeFile(path.join(locked, 'probe'), 'x');
+      return 'the filesystem allowed a write into a 0500 directory';
+    } catch {
+      return null; // the mode is honoured here; the real-permission test is meaningful
+    }
+  } catch (err) {
+    return `the probe itself failed: ${err.message}`;
+  } finally {
+    await fsp.chmod(path.join(probeRoot, 'locked'), 0o700).catch(() => {});
+    await cleanup(probeRoot);
+  }
+}
+
 test('a directory that cannot be written costs one warning, never a throw', async () => {
   const parent = await tmpDir();
   try {
     // A file where the directory should be: mkdir and open both fail.
+    //
+    // This is the portable half, and it is deliberately NOT a `chmod`. A mode
+    // bit is advice that root, Windows and several CI filesystems all decline
+    // to take, so a permission-shaped test proves nothing on the machines it
+    // silently passes on. `ENOTDIR` is refused by the kernel on every platform
+    // this runs on, for every user including root. The real-permission variant
+    // below covers the other shape, where it can be made to mean something.
     const blocker = path.join(parent, 'ledger');
     fs.writeFileSync(blocker, 'not a directory');
     const log = fakeLog();
@@ -266,6 +318,40 @@ test('a directory that cannot be written costs one warning, never a throw', asyn
     // And it is still usable: nothing latched shut.
     assert.equal(led.record('send', { sessionId: 'again' }), true);
   } finally {
+    await cleanup(parent);
+  }
+});
+
+test('a directory the OS refuses to write into is the same one warning', async (t) => {
+  // The other shape of "cannot be written": the directory exists, is a
+  // directory, and the write is refused. Only run where the refusal is real —
+  // see `whyNoUnwritableDir`.
+  const why = await whyNoUnwritableDir();
+  if (why) {
+    t.skip(`no unwritable directory can be made here: ${why}`);
+    return;
+  }
+
+  const parent = await tmpDir('unwritable');
+  const dir = path.join(parent, 'ledger');
+  await fsp.mkdir(dir);
+  await fsp.chmod(dir, 0o500); // r-x: the day file cannot be created
+  try {
+    const log = fakeLog();
+    const led = new Ledger(dir, { machineId: 'x', log, flushIntervalMs: 0 });
+    for (let i = 0; i < 5; i++) {
+      assert.equal(led.record('send', { sessionId: `s${i}` }), true);
+      await led.flush();
+    }
+    assert.equal(log.calls.warn.length, 1, 'exactly one warning for the life of the process');
+    assert.ok(led.writeError);
+    assert.equal(led.stats.dropped, 5);
+    assert.equal(led.record('send', { sessionId: 'again' }), true);
+  } finally {
+    // Restore the mode BEFORE the remove. A 0500 directory cannot have its
+    // contents unlinked, so cleanup would answer ENOTEMPTY on the parent —
+    // which is a test tidying up badly, reported as a product failure.
+    await fsp.chmod(dir, 0o700).catch(() => {});
     await cleanup(parent);
   }
 });

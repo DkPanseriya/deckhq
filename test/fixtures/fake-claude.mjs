@@ -41,13 +41,31 @@ if (process.env.FAKE_CLAUDE_PID_FILE) {
   fs.writeFileSync(process.env.FAKE_CLAUDE_PID_FILE, String(process.pid), 'utf8');
 }
 
-/** Write one chunk and resolve when it has actually been flushed. */
-function write(text) {
-  return new Promise((resolve) => {
-    if (!process.stdout.write(text)) process.stdout.once('drain', resolve);
-    else resolve();
+/**
+ * Write one chunk and resolve when it has ACTUALLY reached the operating
+ * system, not merely when it was accepted into a buffer.
+ *
+ * The distinction is the whole of docs/DEVIATIONS.md §126.1. `write()`'s
+ * return value is backpressure — false means "the buffer is over its high
+ * water mark", true means only "there is room for more", never "it is gone".
+ * On POSIX a pipe is an ASYNCHRONOUS stream for `process.stdout` (it is
+ * synchronous only on Windows, and for files everywhere), so a `true` return
+ * routinely leaves bytes queued inside libuv. `process.exit()` then discards
+ * them: the transcript arrives truncated, the `result` line is never written,
+ * and the adapter correctly reports "claude produced no result event".
+ *
+ * The write callback is the real completion signal, so that is what is
+ * awaited here — and no mode below calls `process.exit()` on a successful
+ * path. A pending write keeps the loop alive, so the natural exit is both
+ * correct and still prompt.
+ */
+function write(stream, text) {
+  return new Promise((resolve, reject) => {
+    stream.write(text, (err) => (err ? reject(err) : resolve()));
   });
 }
+
+const out = (text) => write(process.stdout, text);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -58,23 +76,24 @@ if (mode === 'hang') {
   process.stdout.write('{"type":"system","subtype":"init","session_id":"hang"}\n');
   setInterval(() => {}, 1000);
 } else if (mode === 'crash') {
-  process.stderr.write('claude: something went wrong\n');
-  process.exit(Number(process.env.FAKE_CLAUDE_EXIT_CODE) || 1);
+  // Same flush rule as stdout, and for the same reason: the test that reads
+  // this asserts on the sentence, so losing it to `process.exit` would be the
+  // §126.1 failure again with a different pipe.
+  await write(process.stderr, 'claude: something went wrong\n');
+  process.exitCode = Number(process.env.FAKE_CLAUDE_EXIT_CODE) || 1;
 } else if (mode === 'garbage') {
   // Not JSON, and not newline-terminated: the shape a broken pipe leaves.
-  process.stdout.write('this is not json\nnor is this {');
-  process.exit(0);
+  await out('this is not json\nnor is this {');
+  process.exitCode = 0;
 } else if (mode === 'silent') {
   // Exits cleanly having said nothing at all — no `result` event.
-  process.exit(0);
+  process.exitCode = 0;
+} else if (!process.env.FAKE_CLAUDE_FIXTURE) {
+  await write(process.stderr, 'fake-claude: FAKE_CLAUDE_FIXTURE is not set\n');
+  process.exitCode = 2;
 } else {
-  const file = process.env.FAKE_CLAUDE_FIXTURE;
-  if (!file) {
-    process.stderr.write('fake-claude: FAKE_CLAUDE_FIXTURE is not set\n');
-    process.exit(2);
-  }
   const lines = fs
-    .readFileSync(file, 'utf8')
+    .readFileSync(process.env.FAKE_CLAUDE_FIXTURE, 'utf8')
     .split('\n')
     .filter((l) => l.trim());
   // Deliberately written in pieces that do not line up with line boundaries:
@@ -82,9 +101,12 @@ if (mode === 'hang') {
   // chunk is one event.
   for (const line of lines) {
     const half = Math.max(1, Math.floor(line.length / 2));
-    await write(line.slice(0, half));
-    await write(line.slice(half) + '\n');
+    await out(line.slice(0, half));
+    await out(line.slice(half) + '\n');
     if (delay) await sleep(delay);
   }
-  process.exit(0);
+  // No `process.exit(0)`: every byte above is flushed, and the process leaves
+  // on its own the moment nothing is left to do. Exiting explicitly here is
+  // what truncated the last line on macOS (§126.1).
+  process.exitCode = 0;
 }

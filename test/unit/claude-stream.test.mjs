@@ -329,6 +329,28 @@ test('send() streams the recorded turn out of a real child process', async () =>
   }
 });
 
+test('the fake CLI never exits out from under its own stdout', async () => {
+  // A structural assertion, because the defect it pins cannot be reproduced on
+  // demand: `process.stdout` is a SYNCHRONOUS stream for a pipe on Windows and
+  // an ASYNCHRONOUS one on POSIX, so `process.exit()` after a write truncates
+  // the transcript on macOS and Linux and never on the machine this was
+  // written on. It cost one `not ok 162` on `macos-latest` and nothing
+  // anywhere else (docs/DEVIATIONS.md §126.1). The rule is: on a path that
+  // writes, set `process.exitCode` and let the process leave when its pipes
+  // are empty. `hang` is exempt — it writes once and then never exits at all,
+  // which is the point of it.
+  const source = await fsp.readFile(FAKE_CLI, 'utf8');
+  const code = source
+    .slice(source.indexOf("if (mode === 'hang')"))
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, ''); // the rule is discussed in comments; only code counts
+  assert.doesNotMatch(
+    code,
+    /process\.exit\(/,
+    'the fake CLI calls process.exit() on a path that writes; that truncates the pipe on POSIX',
+  );
+});
+
 test('the fake CLI receives exactly the argv the real one would have', async () => {
   const dir = await tmpDir('argv');
   try {
