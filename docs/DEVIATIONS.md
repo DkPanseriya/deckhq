@@ -11219,3 +11219,110 @@ took the daemon with it. A second daemon ran the WP-09 turn and shut down
 cleanly on request. **This was not chased down**, and it is written here rather
 than left out because an unexplained daemon exit is exactly the kind of thing
 that turns out to matter later.
+
+## 135. WP-23 prep — the Codex app arrived, and it brought a CLI it did not put on the PATH
+
+The owner installed the **OpenAI Codex desktop app** (build `26.901.31953`) on the reference
+Windows machine on 4 September 2026, so for the first time `~/.codex` exists here. **§8 is not
+closed and nothing in the adapter changed.** The app has not run a task, `~/.codex/sessions` does
+not exist, and there is still no real session for the adapter to be verified against. What this
+entry records is the survey done in preparation, so that the run which does close §8 is twenty
+minutes of work rather than a day of it. The whole of it is
+[`plan/CODEX-VERIFICATION.md`](plan/CODEX-VERIFICATION.md); this is the part that changes what we
+believe.
+
+Everything under `~/.codex` was read **read-only**. No SQLite connection was made to any file in
+it — the databases were copied to a scratch directory outside the repository and the _copies_ were
+opened `readOnly` — and no Codex process was started that does anything but print a version or a
+help text. `auth.json` and `installation_id` were not read, and nothing from this machine was
+copied into the repository (§135.5).
+
+### 135.1 The adapter was largely right, which was not the expected answer
+
+§8 has said since the day it was written that `parse.mjs` was reasoned from documentation and had
+never met the format. Checked against the shipped `codex.exe` 0.153.1 and OpenAI's current
+documentation, **most of it holds**: `~/.codex/sessions/YYYY/MM/DD/rollout-<ISO>-<uuid>.jsonl`,
+first line `session_meta` with `payload.cwd`, `{type, payload}` envelopes, tool calls as separate
+item types. The three argv builders hold too, against the real `--help`:
+`codex resume [SESSION_ID] [PROMPT]`, `codex [PROMPT]`, `codex exec [--json] [PROMPT]` and
+`codex exec resume [SESSION_ID] [PROMPT]` are all real subcommand grammars, so §95's and §99's
+arrays name commands that exist.
+
+That is worth stating plainly because the honest expectation was worse. It does not make the
+adapter verified — a grammar is not a run, and the token semantics, the `NON_MESSAGE_ITEM_TYPES`
+membership and the exec event schema are still untested — but it narrows what the WP-23 run is
+looking for.
+
+### 135.2 Two things that are wrong, found before they shipped a wrong number
+
+**Old rollout files are compressed to `.jsonl.zst`, and the adapter drops them silently.**
+`walkSessionFiles()` accepts a file only if it ends `.jsonl`; a compressed rollout does not, so the
+session leaves the floor with no error anywhere. This is read out of the installed binary rather
+than from a blog: `codex.exe` contains `.jsonl.zst`, `rollout compression worker failed for`, and a
+metrics family `codex.rollout_compression.{run.duration_ms, file.source_bytes, file.duration_ms,
+materialize, temp_cleanup}`. The documented threshold — around seven days untouched — is the only
+part still a hypothesis. **Not fixed here**, because `ADAPTERS.md` §6 wants it measured and there is
+no compressed file on this machine to measure against; the three candidate fixes and the
+recommendation (count them and let `doctor` say so, rather than raise the Node floor or take a
+dependency §1.1 rule 3 forbids) are in the plan document.
+
+**`available()` is now `true` while `codex` is not on the PATH, and the error message lies about
+it.** The app bundles a complete `codex-cli 0.153.1` at
+`%LOCALAPPDATA%\OpenAI\Codex\bin\<build-hash>\codex.exe` — 250 MB, the real CLI, not a stub — and
+does not add it to `PATH`; `which codex` fails. So `available()` passes (it tests for `~/.codex`,
+which is the documented pattern and is right for the read path), `send()` spawns, `ENOENT` comes
+back, and `describeSpawnError` reports **"Codex is not installed"** to somebody who can see Codex
+running in another window. `available()` should not change — a second probe on the poll path is the
+cost §77 removed — but the message must, and `doctor` should separate "data directory present" from
+"`codex` on PATH". Left for the WP-23 run, with the rest of the behaviour changes.
+
+### 135.3 `hooks.mjs` now says something false, and that is the one copy change WP-23 owes
+
+`src/adapters/codex/hooks.mjs` tells the user Codex "does not provide a way for DeckHQ to be
+notified when something happens in a session". **In 0.153.1 that is untrue.** The binary contains
+`hooks.json` (with `failed to parse hooks config` beside it), `PermissionRequest`,
+`hook_event_name`, `hookSpecificOutput`, and the event names `SessionStart`, `SessionEnd`,
+`PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `TurnStart`, `TurnEnd` and `Notification`. So
+§86.7's Codex findings are confirmed on a real build, including the two that matter: the response is
+the **object** form `hookSpecificOutput.decision.behavior`, corroborating §86.3 independently, and
+the types are still **`command` and `mcp_tool` only, with no `http`** — so §86.6's option 2 remains
+Codex's only route and WP-19's plan is unchanged.
+
+Codex is no longer in §8's position; it is in Gemini CLI's (§123.4). `supported: false` stays —
+nobody has written a `hooks.json` on a real install and watched Codex read it back, and
+`ADAPTERS.md` §5 is explicit that a documented mechanism you have never tested is still
+`supported: false` — but the note must stop claiming the runtime lacks hooks, in the shape Gemini
+CLI's already uses, with the test that asserts it. **This is a false statement about somebody else's
+product, which §1.1 rule 11 forbids as firmly as a false statement about ours**, and it is the one
+item on the WP-23 checklist that is a defect today rather than a question.
+
+### 135.4 The 100 rows that must never reach the floor
+
+`~/.codex/sqlite/codex-dev.db` holds a `local_thread_catalog` with **100 rows** — the only real
+content anywhere under `~/.codex` — and they are the owner's **ChatGPT / Codex Cloud** threads,
+synced for the app's sidebar. `cwd` is NULL in all 100, as are `git_branch`, `model_provider` and
+`thread_source`; the timestamps are float seconds where `state_5.sqlite`'s are integer milliseconds.
+A reader that treated this as a session source would put 100 cloud conversations in the `unknown`
+room, none resumable, none the user's local work. Here the honest answer is not `cwd: 'unknown'`,
+it is **do not show them at all**. Named because nothing reads that file today and the trap is
+invisible until somebody decides to.
+
+Which is also the answer to the question the brief asked — _does the app keep threads in SQLite?_
+**It keeps an index.** `state_5.sqlite`'s `threads` table has a `rollout_path` column: the JSONL
+remains the artifact, the database points at it. So the brief's condition for writing a reader does
+not fire and **the adapter is left alone**. The plan document carries a design note for the day
+somebody wants `git_branch` or `archived` out of it, marked **no-go**, with §123.3's WAL objection
+made concrete rather than quoted: on this machine `state_5.sqlite` is a **4 096-byte main file with
+a 1 841 672-byte WAL**. A main-file parser would confidently report an empty database.
+
+### 135.5 What was not done
+
+- **Nothing real was copied into the repository**, and `test/fixtures/codex-sample.jsonl` is
+  unchanged. The tempting artifact after a real run is the rollout file itself, and it contains the
+  owner's prompts and an absolute path into their machine. `ADAPTERS.md` §7's synthetic-fixture rule
+  covers this exactly; new shapes get added by hand, keys and types only.
+- **No adapter code changed**, no hook was installed, no `hooks.json` was written, and
+  `codex migrate-rollouts` was not run with `--apply`.
+- **No CHANGELOG line**, because nothing shipped. §8, the `parse.mjs` header and the README's Honest
+  limits all still say unverified, and per `ADAPTERS.md` §6.4 they come out together, in one commit,
+  when somebody has actually run it — and only as far as the run reached.
