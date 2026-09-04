@@ -471,7 +471,9 @@ test('app.js asks the renderer first, and only falls back when it cannot answer'
   );
   assert.match(body, /arrow: false/);
   // And `Scene` really does export it, so the preferred path is not dead code.
-  const scene = fs.readFileSync(path.join(ROOT, 'public', 'render', 'scene.js'), 'utf8');
+  // WP-22 follow-up: `anchorFor` is on `SceneHit`, one link of the chain
+  // `Scene` extends. The file list grew; the assertion did not.
+  const scene = fs.readFileSync(path.join(ROOT, 'public', 'render', 'scene-hit.js'), 'utf8');
   assert.match(scene, /\n {2}anchorFor\(target, id\) \{/);
 });
 

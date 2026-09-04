@@ -273,6 +273,7 @@ test('WP-22: no split module is over 900 lines', async () => {
     [path.join(root, 'render'), (f) => f.startsWith('plan') && f.endsWith('.js')],
     [root, (f) => f.startsWith('app') && f.endsWith('.js')],
     [root, (f) => f.startsWith('panel') && f.endsWith('.js')],
+    [path.join(root, 'render'), (f) => f.startsWith('scene') && f.endsWith('.js')],
   ];
   let checked = 0;
   for (const [dir, keep] of groups) {
@@ -284,5 +285,5 @@ test('WP-22: no split module is over 900 lines', async () => {
       checked++;
     }
   }
-  assert.ok(checked >= 32, `expected the whole split, saw ${checked} files`);
+  assert.ok(checked >= 41, `expected the whole split, saw ${checked} files`);
 });
