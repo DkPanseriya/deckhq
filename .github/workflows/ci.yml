@@ -109,7 +109,12 @@ jobs:
         with:
           node-version: 22
       - name: Check goldens
-        run: npm run goldens:check
+        # `--verbose` because the only thing worse than a gate that hangs is a
+        # gate that hangs silently: the script now names every stage with a
+        # timestamp, so the log says WHERE the time went (DEVIATIONS §126.3).
+        # The script's own budget is 6 minutes, inside the 8 below, so it
+        # always reaches its summary line and the job never has to kill it.
+        run: npm run goldens:check -- --verbose
       - name: Upload captures and diffs
         if: always()
         uses: actions/upload-artifact@v4
@@ -118,5 +123,12 @@ jobs:
           # has no committed set — the captures to commit as the first one.
           name: goldens-linux
           path: test/goldens/.out/
+          # `.out` is a DOTTED directory, and this action skips hidden paths by
+          # default. So every run that reached the SKIPPED path — which is the
+          # whole mechanism by which the first linux set was supposed to be
+          # generated — captured the PNGs, wrote them, and then uploaded
+          # nothing at all, reporting only "No files were found with the
+          # provided path". §126.4.
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14

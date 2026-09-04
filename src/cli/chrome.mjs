@@ -200,19 +200,62 @@ export async function waitForPageTarget(port, timeoutMs = TARGET_TIMEOUT_MS, die
 }
 
 /**
- * Minimal CDP client: send a command, await its reply by id.
- * @param {string} wsUrl
+ * How long one CDP command may go unanswered before it is given up on.
+ *
+ * Generous, because it is a hang guard and not a budget: a healthy
+ * `Page.captureScreenshot` of a 1600x1000 floor answers in tens of
+ * milliseconds, and the slowest legitimate command measured on a shared runner
+ * was under two seconds. What this bounds is the case where no answer is ever
+ * coming — see `send`.
  */
-export function connect(wsUrl) {
+export const CDP_COMMAND_TIMEOUT_MS = 60_000;
+
+/**
+ * Minimal CDP client: send a command, await its reply by id.
+ *
+ * Every command is bounded, in two independent ways, and neither is
+ * decoration (docs/DEVIATIONS.md §126.3):
+ *
+ *   - **The socket closing rejects everything still pending.** A renderer that
+ *     is OOM-killed, a browser that exits, a target that crashes — all of them
+ *     end as a closed WebSocket with no reply on the wire. Without this, every
+ *     in-flight promise simply stays pending, and `await client.send(...)`
+ *     becomes an unkillable wait with no output at all. That is the shape of a
+ *     hang that reads in CI as `cancelled`, which is the least informative
+ *     verdict there is.
+ *   - **A per-command deadline**, for the narrower case where the socket is
+ *     healthy and the answer is not coming anyway.
+ *
+ * @param {string} wsUrl
+ * @param {{timeoutMs?:number}} [opts]
+ */
+export function connect(wsUrl, opts = {}) {
+  const timeoutMs = opts.timeoutMs ?? CDP_COMMAND_TIMEOUT_MS;
   const ws = new WebSocket(wsUrl);
-  /** @type {Map<number, {resolve:Function, reject:Function}>} */
+  /** @type {Map<number, {resolve:Function, reject:Function, method:string, timer:any}>} */
   const pending = new Map();
   let nextId = 1;
+  /** @type {Error|null} */
+  let dead = null;
+
+  /** Fail everything still waiting, and refuse anything sent afterwards. */
+  const abandon = (reason) => {
+    if (dead) return;
+    dead = new Error(reason);
+    for (const [id, p] of pending) {
+      clearTimeout(p.timer);
+      pending.delete(id);
+      p.reject(new Error(`${reason} (waiting on ${p.method})`));
+    }
+  };
 
   const ready = new Promise((resolve, reject) => {
     ws.addEventListener('open', () => resolve(undefined));
     ws.addEventListener('error', (e) => reject(new Error(`CDP socket failed: ${e.message || e}`)));
   });
+
+  ws.addEventListener('close', () => abandon('the CDP socket closed'));
+  ws.addEventListener('error', () => abandon('the CDP socket failed'));
 
   ws.addEventListener('message', (ev) => {
     let msg;
@@ -223,6 +266,7 @@ export function connect(wsUrl) {
     }
     const p = msg.id != null && pending.get(msg.id);
     if (!p) return;
+    clearTimeout(p.timer);
     pending.delete(msg.id);
     if (msg.error) p.reject(new Error(`${msg.error.message} (${msg.method || ''})`));
     else p.resolve(msg.result);
@@ -236,13 +280,28 @@ export function connect(wsUrl) {
      * @returns {Promise<any>}
      */
     send(method, params = {}) {
+      if (dead) return Promise.reject(new Error(`${dead.message} (cannot send ${method})`));
       const id = nextId++;
       return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-        ws.send(JSON.stringify({ id, method, params }));
+        const timer = setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`CDP ${method} did not answer within ${timeoutMs} ms`));
+        }, timeoutMs);
+        if (typeof timer.unref === 'function') timer.unref();
+        pending.set(id, { resolve, reject, method, timer });
+        try {
+          ws.send(JSON.stringify({ id, method, params }));
+        } catch (err) {
+          clearTimeout(timer);
+          pending.delete(id);
+          reject(err);
+        }
       });
     },
-    close: () => ws.close(),
+    close: () => {
+      abandon('the CDP client was closed');
+      ws.close();
+    },
   };
 }
 

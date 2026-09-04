@@ -11,10 +11,25 @@
  *   npm run goldens          # regenerate test/goldens/<platform>/*.png
  *   npm run goldens:check    # compare, write diffs to test/goldens/.out/, exit 1 on a mismatch
  *
- *   node scripts/goldens.mjs [--check] [--only NAME] [--theme NAME] [--settle MS] [--keep]
+ *   node scripts/goldens.mjs [--check] [--only NAME] [--theme NAME] [--settle MS]
+ *                            [--keep] [--verbose] [--deadline S] [--budget S]
  *
  * `--keep` writes every capture to test/goldens/.out/, not only the ones that
  * failed; it is how the noise floor below was measured.
+ * `--verbose` prints one timestamped line per stage, which is what a CI log
+ * needs in order to say WHERE a run stopped rather than only that it did.
+ *
+ * WHY THERE ARE DEADLINES IN HERE AND NOT ONLY IN THE JOB
+ *   The job's `timeout-minutes` is a kill, not a diagnosis: GitHub records the
+ *   killed job as `cancelled`, one cancelled job makes the whole run
+ *   `cancelled`, and the log ends mid-sentence with nothing said about what it
+ *   was doing (DEVIATIONS §121, and §126.3 for the run this was written for —
+ *   eight minutes spent inside `demo.stop()`, and a log whose last line was a
+ *   passing capture). So every stage is named, every stage is bounded, and
+ *   both a per-capture deadline and a whole-run budget sit well under the job
+ *   timeout. Overrunning one prints the stage it was in and exits SKIPPED,
+ *   because a run that could not take a photograph has proved nothing about
+ *   the floor either way — only a pixel mismatch is a failure.
  *
  * HOW A CAPTURE IS MADE DETERMINISTIC
  *   - the demo floor is a pure function of the population name (fixed ids,
@@ -94,6 +109,22 @@ const THEME = opt('--theme', '');
 const SETTLE_MS = Number(opt('--settle', 1500));
 /** Write every capture to OUT_DIR, not only the ones that failed. */
 const KEEP = has('--keep');
+/** One timestamped line per stage, so a CI log says where a run stopped. */
+const VERBOSE = has('--verbose') || process.env.GOLDENS_VERBOSE === '1';
+/**
+ * How long one capture — boot, navigate, settle, screenshot, teardown — may
+ * take before it is abandoned as an environment problem. Measured at 4-7 s per
+ * capture on both a Windows laptop and the ubuntu runner, so 90 s is an order
+ * of magnitude of headroom and still leaves the whole run inside the budget
+ * below.
+ */
+const CAPTURE_DEADLINE_MS = Number(opt('--deadline', 90)) * 1000;
+/**
+ * How long the whole run may take. The CI job allows 8 minutes; this is 6, so
+ * the script always reaches its own summary line and the job never has to kill
+ * it. A killed job is recorded as `cancelled` and says nothing.
+ */
+const RUN_BUDGET_MS = Number(opt('--budget', 360)) * 1000;
 
 /** Every population `scripts/demo-floor.mjs --population` accepts. */
 const POPULATIONS = ['demo', 'empty', 'single', 'reference'];
@@ -145,6 +176,51 @@ const READY_TIMEOUT_MS = 30_000;
 
 /** @param {string} line */
 const say = (line) => process.stdout.write(`${line}\n`);
+
+/**
+ * The stage the run is in right now, and when it entered it.
+ *
+ * This exists so a deadline can say WHERE it expired. "the run timed out" is
+ * the same sentence for a demo that would not boot, a page target that never
+ * appeared, a floor that would not settle and a browser that stopped
+ * answering, and those are four different bugs with four different fixes.
+ * @type {{name:string, at:number}}
+ */
+let stage = { name: 'starting up', at: Date.now() };
+
+/** @param {string} name what the run is doing now. */
+function enter(name) {
+  stage = { name, at: Date.now() };
+  if (VERBOSE) say(`  [${new Date().toISOString()}] ${name}`);
+}
+
+/**
+ * Run `promise` with a deadline, and report the STAGE it was in when the
+ * deadline expired rather than only the fact of it.
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @param {string} what
+ * @returns {Promise<T>}
+ */
+function within(promise, ms, what) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const held = ((Date.now() - stage.at) / 1000).toFixed(1);
+      reject(
+        Object.assign(
+          new Error(
+            `${what} exceeded ${Math.round(ms / 1000)}s — stuck at "${stage.name}" for ${held}s`,
+          ),
+          { environmental: true },
+        ),
+      );
+    }, ms);
+    if (typeof timer.unref === 'function') timer.unref();
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
 
 // ------------------------------------------------------------------- guards
 
@@ -213,12 +289,46 @@ function startDemo(population, theme = 'default') {
     );
     let out = '';
     let settled = false;
-    /** @type {() => Promise<void>} */
+    /**
+     * Stop the demo, and do not wait forever for it to agree.
+     *
+     * The demo daemon shuts down gracefully on SIGTERM, and `close()` waits
+     * for `server.close()`, which waits for every open connection to end. An
+     * SSE stream never ends. So a browser still parked on this demo's page
+     * holds the shutdown open indefinitely — the caller navigates away first
+     * for exactly that reason — and this is the backstop for every other way
+     * a child can refuse to leave. SIGTERM, then SIGKILL, then give up and
+     * carry on: an unreaped demo on a CI runner that is about to be destroyed
+     * is not worth a hung gate. docs/DEVIATIONS.md §126.3.
+     * @type {() => Promise<void>}
+     */
     const stop = () =>
       new Promise((done) => {
         if (child.exitCode != null) return done();
-        child.once('exit', () => done());
-        child.kill();
+        let finished = false;
+        const end = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(hard);
+          clearTimeout(giveUp);
+          done();
+        };
+        child.once('exit', end);
+        const hard = setTimeout(() => {
+          try {
+            child.kill('SIGKILL');
+          } catch {
+            /* already gone */
+          }
+        }, 3000);
+        const giveUp = setTimeout(end, 8000);
+        if (typeof hard.unref === 'function') hard.unref();
+        if (typeof giveUp.unref === 'function') giveUp.unref();
+        try {
+          child.kill();
+        } catch {
+          end();
+        }
       });
     const timer = setTimeout(() => {
       if (settled) return;
@@ -285,8 +395,16 @@ async function waitForFloor(client) {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   let last = null;
   let stable = 0;
+  let polls = 0;
   while (Date.now() < deadline) {
     const state = await probe(client);
+    polls++;
+    // Every second or so, and only under --verbose: a 30 s wait with no output
+    // is indistinguishable from a hang, and "which of connected / plan /
+    // onboarding is false" is the answer that shortens the next run.
+    if (VERBOSE && polls % 4 === 1) {
+      say(`  [${new Date().toISOString()}]   probe ${polls}: ${JSON.stringify(state)}`);
+    }
     if (state && state.connected && !state.onboarding) {
       stable = last !== null && state.agents === last ? stable + 1 : 0;
       last = state.agents;
@@ -297,8 +415,11 @@ async function waitForFloor(client) {
     }
     await sleep(250);
   }
-  throw new Error(
-    `floor did not settle in ${READY_TIMEOUT_MS} ms (last probe: ${JSON.stringify(last)})`,
+  throw Object.assign(
+    new Error(
+      `floor did not settle in ${READY_TIMEOUT_MS} ms (last probe: ${JSON.stringify(last)})`,
+    ),
+    { environmental: true },
   );
 }
 
@@ -321,9 +442,22 @@ async function captureStill(client) {
     await sleep(500);
     const next = await shot();
     if (next.equals(prev)) return next;
+    if (VERBOSE) {
+      say(
+        `  [${new Date().toISOString()}]   screenshot ${attempt + 2} still differs (${prev.length} -> ${next.length} bytes)`,
+      );
+    }
     prev = next;
   }
-  throw new Error('the floor kept changing between screenshots; is reduced motion being honoured?');
+  // Environmental rather than a failure: everything this proves is that
+  // something on the page is animating, and the likeliest causes are the
+  // machine's, not the commit's — reduced-motion emulation not reaching a
+  // renderer, a blinking caret, a font still loading. A capture that could not
+  // be held still is not a pixel verdict, so it must not read as one.
+  throw Object.assign(
+    new Error('the floor kept changing between screenshots; is reduced motion being honoured?'),
+    { environmental: true },
+  );
 }
 
 /**
@@ -395,7 +529,15 @@ say(
   `goldens: ${CHECK ? 'checking' : 'regenerating'} ${captures.length} capture(s) on ${process.platform}, ${WIDTH}x${HEIGHT}, reduced motion, settle ${SETTLE_MS} ms`,
 );
 
+/** Captures that disagreed with their golden. These fail the build. */
 const failures = [];
+/**
+ * Captures that could not be taken at all — a demo that would not boot, a
+ * floor that would not settle, a browser that stopped answering, a deadline.
+ * None of them says anything about the pixels, so none of them is a failure;
+ * they are reported and the run exits SKIPPED. §87, §114 and §126.3.
+ */
+const unproven = [];
 let compared = 0;
 const run = withChrome(
   {
@@ -411,6 +553,7 @@ const run = withChrome(
     extraArgs: ['--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'],
   },
   async (client) => {
+    enter('emulating reduced motion');
     await client.send('Emulation.setEmulatedMedia', {
       features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
     });
@@ -418,44 +561,90 @@ const run = withChrome(
     for (const capture of captures) {
       const { name, population, theme } = capture;
       const t0 = Date.now();
+
+      const left = RUN_BUDGET_MS - (Date.now() - started);
+      if (left <= 5000) {
+        unproven.push(name);
+        say(`  SKIP ${name.padEnd(18)} the run budget of ${RUN_BUDGET_MS / 1000}s is spent`);
+        continue;
+      }
+
       // Inside the try, and with one retry: a demo that fails to boot is a
       // tooling flake, and it used to abort the whole run with a stack trace
       // instead of failing its own population. A gate that dies on the third
       // of four captures teaches people to ignore it.
       let demo = null;
       try {
-        try {
-          demo = await startDemo(population, theme);
-        } catch (first) {
-          say(`  .... ${name.padEnd(18)} did not boot (${first.message.split('\n')[0]}); retrying`);
-          demo = await startDemo(population, theme);
-        }
-        await client.send('Page.navigate', { url: demo.url });
-        const state = await waitForFloor(client);
-        const png = await captureStill(client);
-        const secs = ((Date.now() - t0) / 1000).toFixed(1);
+        await within(
+          (async () => {
+            enter(`booting the demo daemon for "${name}"`);
+            try {
+              demo = await startDemo(population, theme);
+            } catch (first) {
+              say(
+                `  .... ${name.padEnd(18)} did not boot (${first.message.split('\n')[0]}); retrying`,
+              );
+              enter(`booting the demo daemon for "${name}" (second attempt)`);
+              demo = await startDemo(population, theme);
+            }
 
-        if (CHECK) {
-          const verdict = check(name, png);
-          if (!verdict.ok) failures.push(name);
-          if (verdict.compared) compared++;
-          say(
-            `  ${verdict.ok ? 'ok  ' : 'FAIL'} ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
-          );
-        } else {
-          fs.mkdirSync(GOLDENS_DIR, { recursive: true });
-          const file = path.join(GOLDENS_DIR, `${name}.png`);
-          fs.writeFileSync(file, png);
-          const kb = Math.round(png.length / 1024);
-          say(
-            `  wrote ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${rel(file)}  ${kb} KB`,
+            enter(`navigating to ${demo.url}`);
+            await client.send('Page.navigate', { url: demo.url });
+
+            enter(`waiting for the floor to settle ("${name}")`);
+            const state = await waitForFloor(client);
+
+            enter(`screenshotting ("${name}")`);
+            const png = await captureStill(client);
+            const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
+            if (CHECK) {
+              const verdict = check(name, png);
+              if (!verdict.ok) failures.push(name);
+              if (verdict.compared) compared++;
+              say(
+                `  ${verdict.ok ? 'ok  ' : 'FAIL'} ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
+              );
+            } else {
+              fs.mkdirSync(GOLDENS_DIR, { recursive: true });
+              const file = path.join(GOLDENS_DIR, `${name}.png`);
+              fs.writeFileSync(file, png);
+              const kb = Math.round(png.length / 1024);
+              say(
+                `  wrote ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${rel(file)}  ${kb} KB`,
+              );
+            }
+          })(),
+          Math.min(CAPTURE_DEADLINE_MS, left),
+          `capture "${name}"`,
+        );
+      } catch (err) {
+        // A capture that could not be taken proves nothing about the floor, so
+        // it does not fail the build — but it must not be quiet either, and
+        // the SKIPPED summary at the end says the gate did not run.
+        unproven.push(name);
+        say(`  SKIP ${name.padEnd(18)} ${err.message}`);
+      } finally {
+        if (demo) {
+          // ORDER MATTERS, and this line is the whole of §126.3. The page is
+          // still holding this demo's `/api/events` SSE stream open. The demo
+          // shuts down through `daemon.close()`, which awaits `server.close()`,
+          // which waits for every open connection to end — and an SSE stream
+          // does not end. Killing the demo while the browser is still attached
+          // therefore deadlocked its SIGTERM handler and hung the whole run
+          // for as long as CI would let it. On Windows `child.kill()` is
+          // `TerminateProcess`, no handler runs, and none of this was ever
+          // visible; on linux and macOS it hung every time.
+          //
+          // So: let go of the page FIRST, then stop the demo. `about:blank`
+          // tears down the EventSource, the response ends, `server.close()`
+          // completes, and the child exits in milliseconds.
+          enter(`releasing the page and stopping the demo ("${name}")`);
+          await client.send('Page.navigate', { url: 'about:blank' }).catch(() => {});
+          await within(demo.stop(), 15_000, `stopping the demo for "${name}"`).catch((err) =>
+            say(`  .... ${name.padEnd(18)} ${err.message}`),
           );
         }
-      } catch (err) {
-        failures.push(name);
-        say(`  FAIL ${name.padEnd(18)} ${err.message}`);
-      } finally {
-        if (demo) await demo.stop();
       }
     }
   },
@@ -468,20 +657,37 @@ const run = withChrome(
 // forgiven — `CHROME_UNAVAILABLE` is set by `src/cli/chrome.mjs` and nothing
 // else — so a real capture failure still fails, loudly, as it must.
 try {
-  await run;
+  // The whole-run budget, outside the per-capture one. Chrome's own launch is
+  // inside it too, which is the one stage the per-capture deadline cannot see.
+  await within(run, RUN_BUDGET_MS, 'the goldens run');
 } catch (err) {
-  if (err?.code !== CHROME_UNAVAILABLE) throw err;
-  say(`goldens: could not start a browser: ${err.message}`);
-  say(
-    CHECK
-      ? 'goldens: SKIPPED (nothing checked) — this run proves nothing about the floor.'
-      : 'goldens: cannot regenerate.',
-  );
-  process.exit(CHECK ? 0 : 1);
+  if (err?.code === CHROME_UNAVAILABLE) {
+    say(`goldens: could not start a browser: ${err.message}`);
+    say(
+      CHECK
+        ? 'goldens: SKIPPED (nothing checked) — this run proves nothing about the floor.'
+        : 'goldens: cannot regenerate.',
+    );
+    process.exit(CHECK ? 0 : 1);
+  }
+  if (err?.environmental) {
+    // The run budget expired. Everything already captured is on disk and gets
+    // uploaded; say which stage ate the time, because that is the only thing
+    // that makes the next run shorter.
+    say(`goldens: ${err.message}`);
+    say(
+      CHECK
+        ? 'goldens: SKIPPED (the run did not finish) — this run proves nothing about the floor.'
+        : 'goldens: cannot regenerate.',
+    );
+    process.exit(CHECK ? 0 : 1);
+  }
+  throw err;
 }
 
 const total = ((Date.now() - started) / 1000).toFixed(1);
 if (failures.length) {
+  // A real disagreement with a committed golden. This, and only this, is red.
   say(
     `goldens: ${failures.length} of ${captures.length} failed (${failures.join(', ')}) in ${total}s`,
   );
@@ -489,7 +695,18 @@ if (failures.length) {
   process.exit(1);
 }
 if (!CHECK) {
+  if (unproven.length) {
+    say(`goldens: ${unproven.length} capture(s) could not be taken (${unproven.join(', ')})`);
+    say('goldens: cannot regenerate.');
+    process.exit(1);
+  }
   say(`goldens: regenerated in ${total}s`);
+} else if (unproven.length) {
+  say(
+    `goldens: SKIPPED in ${total}s — ${unproven.length} of ${captures.length} could not be captured (${unproven.join(', ')}).`,
+  );
+  say(`goldens: ${compared} compared and matching; the rest prove nothing about the floor.`);
+  if (fs.existsSync(OUT_DIR)) say(`goldens: what was captured is in ${rel(OUT_DIR)}`);
 } else if (compared === 0) {
   // Nothing was compared, so nothing is proven — say so rather than printing a
   // green line CI will read as protection it does not have.
