@@ -17,6 +17,11 @@
  *      a bill — is only true if it is true of the literal text on the screen,
  *      so the display strings are asserted here as text.
  */
+// A machine of our own, before anything under `src/` is loaded: several of
+// those modules resolve a path out of the environment while they evaluate.
+// `docs/DEVIATIONS.md` §123.
+import '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

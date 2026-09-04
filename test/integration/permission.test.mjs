@@ -14,32 +14,29 @@
  * decision at all. What it does NOT prove, and what no test can: that the
  * installed runtime accepts those bytes. That is the acceptance run, it is
  * still owed, and it needs `claude login` on the reference machine first.
+ *
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123),
+ * so the registry behind the route is scanning a temp root.
  */
+// First, and before anything under `src/`: it moves the machine.
+import { daemonScratch } from '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { startDaemon } from '../../src/daemon.mjs';
+const { startDaemon } = await import('../../src/daemon.mjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLIENT = path.resolve(HERE, '../../scripts/fake-permission-client.mjs');
 
 /** Start a daemon with an isolated state file and public dir. */
 async function withDaemon(opts, fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-permission-'));
-  const publicDir = path.join(dir, 'public');
-  await fs.mkdir(publicDir);
-  await fs.writeFile(path.join(publicDir, 'index.html'), 'floor');
-  const d = await startDaemon({
-    port: 0,
-    stateFile: path.join(dir, 'state.json'),
-    publicDir,
-    ...opts,
-  });
+  const { dir, stateFile, publicDir } = daemonScratch('permission-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir, ...opts });
   try {
     await fn(d);
   } finally {
@@ -170,11 +167,8 @@ test('nobody answers: the hold expires into no decision, and the terminal prompt
 });
 
 test('the daemon closing lets a waiting session go, deciding nothing', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-permission-'));
-  const publicDir = path.join(dir, 'public');
-  await fs.mkdir(publicDir);
-  await fs.writeFile(path.join(publicDir, 'index.html'), 'floor');
-  const d = await startDaemon({ port: 0, stateFile: path.join(dir, 'state.json'), publicDir });
+  const { dir, stateFile, publicDir } = daemonScratch('permission-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir });
   try {
     const running = fakeRuntime(d.port, ['--id', 'toolu_shutdown']);
     await waitForHold(d, 'toolu_shutdown');

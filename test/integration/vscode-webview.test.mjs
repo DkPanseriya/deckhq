@@ -15,22 +15,22 @@
  *      untouched. **No allowance for `vscode-webview://` was added, and this
  *      file asserts that a request actually carrying that origin is still
  *      refused** — because if one ever arrived, it would not be from us.
+ *
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123).
  */
+// First, and before anything under `src/`: it moves the machine.
+import { daemonScratch } from '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
-import os from 'node:os';
-import path from 'node:path';
 
-import { startDaemon } from '../../src/daemon.mjs';
+const { startDaemon } = await import('../../src/daemon.mjs');
 
 async function withDaemon(fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-vscode-'));
-  const publicDir = path.join(dir, 'public');
-  await fs.mkdir(publicDir);
-  await fs.writeFile(path.join(publicDir, 'index.html'), '<!doctype html>floor');
-  const d = await startDaemon({ port: 0, stateFile: path.join(dir, 'state.json'), publicDir });
+  const { dir, stateFile, publicDir } = daemonScratch('vscode-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir });
   try {
     await fn(d);
   } finally {

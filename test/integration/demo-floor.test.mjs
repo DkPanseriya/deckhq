@@ -10,28 +10,20 @@
  * The environment is pinned before `src/` is imported, because the Claude
  * adapter resolves `CLAUDE_CONFIG_DIR` at module load and the Codex adapter
  * reads `os.homedir()`, which on both platforms is an environment variable.
+ * `test/helpers/isolate.mjs` is that pin, shared with every other file that
+ * needs one (`docs/DEVIATIONS.md` §123); it also moves `%APPDATA%`, which this
+ * file used to leave pointing at the developer's own Claude desktop store.
  * `node --test` gives every file its own process, so this cannot leak into
  * another suite.
  */
+// First, and before anything under `src/`: it moves the machine.
+import { HOME as SANDBOX, PROJECTS_DIR, daemonScratch } from '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
-import process from 'node:process';
-
-// --------------------------------------------------------- an empty machine
-const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-demo-it-'));
-const CLAUDE_DIR = path.join(SANDBOX, 'claude');
-const PROJECTS_DIR = path.join(CLAUDE_DIR, 'projects');
-fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-
-process.env.CLAUDE_CONFIG_DIR = CLAUDE_DIR;
-// Codex has no config-dir override, so the home itself is moved. There is no
-// `~/.codex` under this one, so the adapter reports itself unavailable.
-process.env.HOME = SANDBOX;
-process.env.USERPROFILE = SANDBOX;
 
 const { startDaemon } = await import('../../src/daemon.mjs');
 const { DEMO_NOTE } = await import('../../src/core/demo-fixture.mjs');
@@ -39,11 +31,8 @@ const { deckFrom } = await import('../../src/cli/doctor.mjs');
 
 /** Start a daemon over the empty machine, with its own state file. */
 async function withDaemon(fn) {
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'deckhq-demo-state-'));
-  const publicDir = path.join(dir, 'public');
-  await fsp.mkdir(publicDir);
-  await fsp.writeFile(path.join(publicDir, 'index.html'), 'floor');
-  const d = await startDaemon({ port: 0, stateFile: path.join(dir, 'state.json'), publicDir });
+  const { dir, stateFile, publicDir } = daemonScratch('demo-state-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir });
   try {
     await fn(d);
   } finally {

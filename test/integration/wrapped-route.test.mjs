@@ -22,25 +22,20 @@
  * `test/integration/demo-floor.test.mjs` pins it and for the same reason: the
  * registry scans the host, and whether the floor comes back with the
  * developer's own projects on it, or with the actor floor an empty machine
- * gets, decided what this file asserted. `node --test` gives every file its own
- * process, so this cannot leak into another suite. §121.
+ * gets, decided what this file asserted. §121. That pin is now
+ * `test/helpers/isolate.mjs`, which covers the two variables this file left on
+ * the host — the desktop-app store and `~/.deckhq` — as well as the three it
+ * already set. §123. `node --test` gives every file its own process, so this
+ * cannot leak into another suite.
  */
+// First, and before anything under `src/`: it moves the machine.
+import { HOME as SANDBOX, scratchDir } from '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import process from 'node:process';
-
-// ---------------------------------------------------------- an empty machine
-const SANDBOX = fsSync.mkdtempSync(path.join(os.tmpdir(), 'deckhq-wrapped-home-'));
-fsSync.mkdirSync(path.join(SANDBOX, 'claude', 'projects'), { recursive: true });
-// The Claude adapter resolves `CLAUDE_CONFIG_DIR` at module load; Codex has no
-// override and reads the home itself, and finds no `~/.codex` under this one.
-process.env.CLAUDE_CONFIG_DIR = path.join(SANDBOX, 'claude');
-process.env.HOME = SANDBOX;
-process.env.USERPROFILE = SANDBOX;
 
 const { startDaemon } = await import('../../src/daemon.mjs');
 const { dayKey, projectKeyFor } = await import('../../src/core/ledger.mjs');
@@ -58,7 +53,7 @@ function mondayAt(ms = Date.now()) {
 }
 
 async function withDaemon(seed, fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-wrapped-'));
+  const dir = scratchDir('wrapped-');
   const publicDir = path.join(dir, 'public');
   const ledgerDir = path.join(dir, 'ledger');
   await fs.mkdir(publicDir);

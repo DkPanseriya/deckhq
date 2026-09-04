@@ -1,3 +1,8 @@
+// A machine of our own, before anything under `src/` is loaded: several of
+// those modules resolve a path out of the environment while they evaluate.
+// `docs/DEVIATIONS.md` §123.
+import '../helpers/isolate.mjs';
+
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -294,6 +299,12 @@ test('fixture: the later token_count event wins over the earlier one (last-wins,
   assert.deepEqual(usage, { inputTokens: 1800, outputTokens: 500, cachedInputTokens: 250 });
 });
 
+// The "no ~/.codex" in the four titles below is now a fact rather than a hope.
+// Codex has no config-dir override and derives its home from `os.homedir()`, so
+// until this file was isolated these tests asserted `false` about whatever
+// machine they ran on: true by luck here, and a hard failure on any developer
+// who had Codex installed. The isolate helper at the top of the file moves the
+// home, and there is no `.codex` under it. `docs/DEVIATIONS.md` §123.3.
 test('adapter.available(): resolves false on a machine with no ~/.codex, and never throws', async () => {
   await assert.doesNotReject(async () => {
     const result = await adapter.available();

@@ -19,6 +19,11 @@
  * `x'; rm -rf ~ #` therefore reached a shell that would have run it.
  */
 
+// A machine of our own, before anything under `src/` is loaded: several of
+// those modules resolve a path out of the environment while they evaluate.
+// `docs/DEVIATIONS.md` §123.
+import '../helpers/isolate.mjs';
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fsp from 'node:fs/promises';

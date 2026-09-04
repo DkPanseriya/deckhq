@@ -3,26 +3,29 @@
  *
  * These exercise the contract in docs/02-ARCHITECTURE.md §4, §5 and §9 — and,
  * above all, the product invariant in docs/01-PRODUCT.md §2.
+ *
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123).
+ * This file is the one §121.4 named: `INVARIANT: reading a conversation over
+ * HTTP never clears reviewSince` used to look for a `for_review` agent on the
+ * host and return without asserting anything when it did not find one, so what
+ * the file proved depended on what the developer happened to have open. It now
+ * plants the session it needs and asserts unconditionally.
  */
+// First, and before anything under `src/`: it moves the machine.
+import { daemonScratch, writeClaudeSession } from '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
-import os from 'node:os';
 import path from 'node:path';
-import { startDaemon } from '../../src/daemon.mjs';
+
+const { startDaemon } = await import('../../src/daemon.mjs');
 
 /** Start a daemon with an isolated state file and public dir. */
 async function withDaemon(fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-daemon-'));
-  const publicDir = path.join(dir, 'public');
-  await fs.mkdir(publicDir);
-  await fs.writeFile(path.join(publicDir, 'index.html'), 'floor');
-  const d = await startDaemon({
-    port: 0,
-    stateFile: path.join(dir, 'state.json'),
-    publicDir,
-  });
+  const { dir, stateFile, publicDir } = daemonScratch('daemon-');
+  const d = await startDaemon({ port: 0, stateFile, publicDir });
   try {
     await fn(d, dir);
   } finally {
@@ -143,24 +146,37 @@ test('SSE pushes an initial snapshot and keeps the stream open', async () => {
 });
 
 test('INVARIANT: reading a conversation over HTTP never clears reviewSince', async () => {
-  await withDaemon(async (d) => {
-    // Plant an agent in for_review by hand, the way a Stop hook would.
-    const registry = d.registry;
-    const before = registry.agents.find((a) => a.activityState === 'for_review');
-    if (!before) return; // no real for_review sessions on this machine; covered by unit tests
-
-    const reviewSince = before.reviewSince;
-    assert.ok(reviewSince, 'a for_review agent must carry reviewSince');
-
-    await fetch(d.url + 'api/conversation?id=' + encodeURIComponent(before.id));
-    await fetch(d.url + 'api/state');
-    await registry.refresh();
-
-    const after = registry.agents.find((a) => a.id === before.id);
-    assert.equal(after.reviewSince, reviewSince, 'reading must not touch reviewSince');
-    assert.equal(after.activityState, 'for_review');
-    assert.equal(after.ackState, 'active');
+  // A transcript with a finished assistant turn on it, in the isolated home:
+  // that is what puts an agent in `for_review`, and planting it is what makes
+  // the assertions below run every time rather than on the machines that
+  // happened to have one. §121.4.
+  const planted = writeClaudeSession({
+    sessionId: '33333333-3333-3333-3333-333333333333',
+    title: 'The one waiting on you',
+    project: 'review-me',
   });
+  try {
+    await withDaemon(async (d) => {
+      const registry = d.registry;
+      await registry.refresh();
+      const before = registry.agents.find((a) => a.activityState === 'for_review');
+      assert.ok(before, 'the planted session did not reach the floor in for_review');
+
+      const reviewSince = before.reviewSince;
+      assert.ok(reviewSince, 'a for_review agent must carry reviewSince');
+
+      await fetch(d.url + 'api/conversation?id=' + encodeURIComponent(before.id));
+      await fetch(d.url + 'api/state');
+      await registry.refresh();
+
+      const after = registry.agents.find((a) => a.id === before.id);
+      assert.equal(after.reviewSince, reviewSince, 'reading must not touch reviewSince');
+      assert.equal(after.activityState, 'for_review');
+      assert.equal(after.ackState, 'active');
+    });
+  } finally {
+    planted.remove();
+  }
 });
 
 test('settings round-trip and clamp the stall window', async () => {

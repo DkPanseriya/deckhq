@@ -9,19 +9,28 @@
  * that is free, refuses to start beside a DeckHQ that is already there, and
  * leaves an explicit `--port` exactly as given.
  *
- * `CLAUDE_CONFIG_DIR` and `DECKHQ_STATE_DIR` are read at import time by the
- * modules under test, so the throwaway machine is set up before the dynamic
- * imports below — the same shape as test/unit/hooks.test.mjs. Ports are
- * never fixed: every one is taken from the OS moments before it is used, so
- * the developer's own daemon on 4317 or 4400 is never in the way.
+ * The throwaway machine comes from `test/helpers/isolate.mjs`, imported before
+ * the dynamic imports below because `CLAUDE_CONFIG_DIR` and `DECKHQ_STATE_DIR`
+ * are read at module-evaluation time by the modules under test
+ * (`docs/DEVIATIONS.md` §123). Ports are never fixed: every one is taken from
+ * the OS moments before it is used, so the developer's own daemon on 4317 or
+ * 4400 is never in the way.
  */
+// First, and before anything under `src/`: it moves the machine.
+import {
+  CLAUDE_DIR,
+  DESKTOP_SESSIONS_DIR,
+  PROJECTS_DIR,
+  STATE_DIR,
+  scratchDir,
+} from '../helpers/isolate.mjs';
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,19 +39,10 @@ const ROOT_DIR = path.resolve(HERE, '../..');
 const BIN = path.join(ROOT_DIR, 'bin', 'deckhq.mjs');
 const FIXTURE = path.join(ROOT_DIR, 'test', 'fixtures', 'claude-sample.jsonl');
 
-const WORLD = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-hookport-'));
-const CLAUDE_DIR = path.join(WORLD, 'claude');
-const STATE_DIR = path.join(WORLD, 'state');
-const NO_DESKTOP = path.join(WORLD, 'no-desktop');
-process.env.CLAUDE_CONFIG_DIR = CLAUDE_DIR;
-process.env.DECKHQ_STATE_DIR = STATE_DIR;
-process.env.DECKHQ_DESKTOP_SESSIONS_DIR = NO_DESKTOP;
-delete process.env.DECKHQ_PORT;
-
 // One transcript, so Claude Code counts as a runtime IN USE: the header's
 // degraded flag is only reported for runtimes that have sessions, and the
 // banner these tests are about is that flag.
-const PROJECT_DIR = path.join(CLAUDE_DIR, 'projects', 'C--Dk-Projects-FixtureProj');
+const PROJECT_DIR = path.join(PROJECTS_DIR, 'C--Dk-Projects-FixtureProj');
 await fs.mkdir(PROJECT_DIR, { recursive: true });
 await fs.copyFile(FIXTURE, path.join(PROJECT_DIR, '11111111-1111-1111-1111-111111111111.jsonl'));
 
@@ -68,10 +68,9 @@ async function hooksAt(port) {
   assert.equal(await hooks.installedPort(), port);
 }
 
-let n = 0;
 /** Isolated state and public dir for one daemon. */
 async function daemonOpts() {
-  const dir = path.join(WORLD, `daemon-${n++}`);
+  const dir = scratchDir('daemon-');
   const publicDir = path.join(dir, 'public');
   await fs.mkdir(publicDir, { recursive: true });
   await fs.writeFile(path.join(publicDir, 'index.html'), 'floor');
@@ -185,7 +184,7 @@ test('the CLI turns that refusal into one line and a clean exit', async () => {
             ...process.env,
             CLAUDE_CONFIG_DIR: CLAUDE_DIR,
             DECKHQ_STATE_DIR: STATE_DIR,
-            DECKHQ_DESKTOP_SESSIONS_DIR: NO_DESKTOP,
+            DECKHQ_DESKTOP_SESSIONS_DIR: DESKTOP_SESSIONS_DIR,
             DECKHQ_PORT: '',
           },
         },
@@ -264,7 +263,3 @@ function portListening(port) {
     socket.once('error', () => resolve(false));
   });
 }
-
-test.after(async () => {
-  await fs.rm(WORLD, { recursive: true, force: true });
-});
