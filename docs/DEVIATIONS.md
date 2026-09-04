@@ -10402,3 +10402,144 @@ already-flaky failure in `claude-stream.test.mjs`'s timeout test, reproduced in 
 untouched here), and the arithmetic — `import.meta.dirname` is Node 20.11+, the fix is Node 12+ —
 points at the one line four times over. The CI run on this branch is the first real Node 18
 evidence.
+
+## 131. Three timing tests measured the machine, not the code — and one of them started its clock before its child
+
+Three tests read a wall clock and asserted on it. Each passes in isolation on a quiet machine and
+fails with a `npm run goldens:check` running beside it, which is not a property of anything they
+exist to prove. Two were named going in; the third was found by the runs meant to prove the other
+two, which is the argument for running the suite under load at all.
+
+### 131.1 WP-09 — the timeout test read a pid file the child had not written yet
+
+`test/unit/claude-stream.test.mjs`'s **"a turn that overruns its timeout is killed, and leaves
+nothing running"** (§117) failed under load with:
+
+```
+Error: ENOENT: no such file or directory, open '<tmp>\deckhq-timeout-XXXX\pid'
+```
+
+Reproduced on demand by putting the machine under 40 spinning processes on 18 cores and running the
+file: red every time, green every time on the same commit with the machine idle. §130 had already
+met it and recorded it as "unrelated and already-flaky".
+
+**The cause is where `send()` arms its timeout.** In `src/adapters/claude-code/adapter.mjs` the
+`setTimeout` is installed immediately after `spawnChild(...)` returns, so the budget covers Node's
+own startup as well as the turn:
+
+```js
+child = spawnChild(bin.command, argv, sendSpawnOptions(cwd, bin.env));
+...
+timer = setTimeout(() => { kill(); finish({ ok: false, error: `claude timed out after ...` }); }, timeoutMs);
+```
+
+That is right for the daemon — a turn that cannot even start is a turn that timed out — but it means
+a 300 ms budget on a loaded Windows box is spent before the fake CLI executes its first line. The
+kill lands on a child that has written nothing, and the test's read of the pid file is an ENOENT.
+Nothing about the killing was wrong: the test asserted on a file whose existence it had never
+established.
+
+**The fix starts that clock against a child that is demonstrably up**, through the `spawnFn` seam
+`send()` already exposes for exactly this class of substitution. The seam spawns precisely what
+`send` would have spawned and then holds — synchronously, so the timer cannot be armed behind its
+back — until the fake CLI's pid file has a pid in it, bounded at 20 s and asserted on. `Atomics.wait`
+is the sleep between looks rather than a spin, because the machine this exists for is by definition
+already busy. The 300 ms then measures the turn, which is the only thing the test claims.
+
+Three smaller corrections came with it, all of the same kind:
+
+- **The pid, not the file.** `fs.writeFileSync` is not atomic; an existence check can beat the bytes
+  and hand the reader an empty string, which becomes `NaN`, which reads as "not alive" for the wrong
+  reason. One `readPid()` answers 0 for both halves of "not yet", and the sibling ORPHAN test waits
+  on it instead of on `fs.existsSync`.
+- **The elapsed-time assertion now measures the timeout window**, from the moment the child was up,
+  rather than from before a startup that can itself take seconds under load.
+- **The "is it gone" retry is 15 s rather than 5 s.** Exit after a kill is asynchronous on Windows,
+  and a bounded retry that is too short is the same defect facing the other way.
+
+What the test proves is unchanged: an overrunning turn is killed, and the process it started is gone
+afterwards.
+
+### 131.2 WP-38 — the 20 ms budget is only measurable on a machine quiet enough to measure it
+
+`test/unit/statusline.test.mjs`'s **"the no-daemon path answers inside its 20 ms budget"** (§92)
+failed the same way, for a plainer reason. Measured here, same commit, same code:
+
+| machine                              | median of 9 runs |
+| ------------------------------------ | ---------------- |
+| idle                                 | 7–9 ms           |
+| the whole suite in parallel          | 27 ms            |
+| 40 spinning processes on 18 cores    | 105–133 ms       |
+
+The median-of-nine-after-a-warm-up it already took is the right shape and does not help: under
+contention **every** run is slow, so the median moves with the machine. Best-of-N does not help
+either — the fastest of 25 runs under load was 54 ms. `process.cpuUsage()` is unusable for it on
+Windows, where the scheduler tick makes a ~7 ms operation read as 0 ms or 15 ms and nothing between.
+
+**Deleting the assertion was not on the table** — it is WP-38's acceptance criterion and the only
+place the 20 ms lives. So the run now measures whether its own clock is worth reading, and says which
+reading it took. `unitCostMs()` times five read-and-parses of a fixed 200 KB JSON file: ~5–7 ms on
+this machine idle and with the whole suite running beside it, 160–244 ms under the spinners. Below
+`QUIET_UNIT_MS` (14 ms) the strict 20 ms applies exactly as before. Above it the machine is either
+slower than the one the budget was set on or busy, and the median is held to a deliberately loose
+250 ms ceiling whose failure message says so, names the measured unit cost, and states that the
+budget was not applied. A `t.diagnostic()` line prints all three numbers on every run, passing or
+not.
+
+Three things about that probe were learned the hard way, each by watching it get a reading wrong:
+
+- **It has to be the same KIND of work.** A CPU-only arithmetic loop was the first probe and is the
+  wrong one: the no-daemon path is a file read and a JSON parse, and under file and allocation
+  contention it slows down while a `Math.sqrt` loop barely does.
+- **It has to be measured in the same window.** Taken once after the nine runs, it caught a lull and
+  reported a quiet machine for a median of 19.36 ms — a pass by 0.64 ms taken while the machine was
+  busy. It is now interleaved: one probe after each run, median against median.
+- **It has to last about as long as its subject.** This is the one that is easy to miss. A single
+  1.4 ms parse is short enough that it usually completes inside one scheduling slice, so it read
+  "quiet" on a machine where the 57.79 ms call beside it was being descheduled constantly. Five
+  parses — about as long as the call — are exposed to the scheduler the same way the call is, and
+  the same machine then reads 160 ms.
+
+Two consequences, stated rather than hidden:
+
+- **The strict number is only asserted while the machine measures quiet.** That is the honest
+  reading: a wall-clock budget cannot be policed on a machine that cannot be measured to it. Eight
+  consecutive full `npm test` runs on this machine all took the strict branch (unit 4.6–6.8 ms,
+  median 3.7–5.0 ms), including the ones overlapping a `goldens:check`, so this is not a gate that
+  quietly swallows the budget in normal use.
+- **The loose ceiling is not decoration.** 250 ms is ~12× the budget and ~2× the worst reading ever
+  taken here, so an order-of-magnitude regression — the class a budget exists to catch — still fails
+  on any machine. CI needs no special case: a slower runner measures a larger unit cost and takes the
+  loose branch by the same rule, for the same stated reason.
+
+### 131.3 The third one, found by the runs that were supposed to prove the first two
+
+`test/unit/claude-desktop-cache.test.mjs`'s **"the whole store is read without blocking the event
+loop"** is the same defect a third time, and it is what turned one of the verification runs red —
+`longest event-loop block was 50.7 ms`, ceiling 50 ms, in a file this change does not otherwise
+touch. Reproduced on demand under the spinners on the parent commit, so it is not a consequence of
+anything above.
+
+A `setImmediate` chain measures the gap between turns, and that gap is the sum of two things: the
+loop being blocked by the read, which is what the test is about, and the operating system running
+something else, which is not. On a busy machine the second alone clears 50 ms.
+
+So the read is now **bracketed by two controls** — the same chain, for about the same duration, with
+nothing running underneath it — and the ceiling is `max(50, 2 × the worse control)`. On a quiet
+machine the controls are ~0 and the original 50 ms stands unchanged. On a busy one the assertion
+becomes what it always meant: the read must not block the loop materially longer than doing nothing
+blocks it. The failure message prints both numbers. The `worstGapDuring()` helper is the test's own
+old body, lifted out so the controls and the measurement are literally the same instrument.
+
+### 131.4 Evidence
+
+**Eleven** full runs on this branch, 1,713 tests, **0 failures** in every one. Two of them were taken
+with `npm run goldens:check` running in another shell for the whole of their duration, and it exited
+0 as well.
+
+Each of the three tests was also driven directly under 40 spinning processes on 18 cores — a ~2.2×
+oversubscription that makes this machine read about eight times slower — where each is red on the
+parent commit and green here. That load was used for diagnosis and is not part of the normal
+workflow; the reference machine belongs to someone who is using it. Reproducing the ENOENT does not
+need it, though: the failure is on the `readFile` of a file that was never written, and the parent
+commit's own §130 already records this test as flaky.

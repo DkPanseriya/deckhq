@@ -17,6 +17,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import os from 'node:os';
@@ -89,6 +90,50 @@ function alive(pid) {
     return true;
   } catch (err) {
     return !!err && err.code === 'EPERM';
+  }
+}
+
+/**
+ * The pid the fake CLI wrote, or 0 if it has not written one yet.
+ *
+ * Zero covers both halves of "not yet": the file missing, and the file there
+ * but still empty. `fs.writeFileSync` is not atomic, so a reader that only
+ * checks existence can get an empty string and turn it into `NaN`.
+ * @param {string} file
+ */
+function readPid(file) {
+  try {
+    const pid = Number(fs.readFileSync(file, 'utf8').trim());
+    return Number.isInteger(pid) && pid > 0 ? pid : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Block this thread until the fake CLI has written its pid, and answer with
+ * it — or with 0 if it never did.
+ *
+ * Synchronous on purpose, and used from inside `send`'s `spawnFn` seam.
+ * `send` arms its timeout the instant `spawnFn` returns, so the clock covers
+ * the child's startup as well as its run: under load a 300 ms budget fired
+ * before the fake CLI had executed its first line, the pid file was never
+ * written, and the test failed reading it (ENOENT) rather than on anything it
+ * proves. Holding the seam open until the pid lands starts that clock against
+ * a child that is demonstrably up, so the outcome no longer depends on how
+ * busy the machine is. `Atomics.wait` parks the thread between looks instead
+ * of spinning on it, which matters precisely on the loaded machine this
+ * exists for. docs/DEVIATIONS.md §131.
+ * @param {string} file @param {number} [timeoutMs]
+ */
+function awaitPidSync(file, timeoutMs = 20_000) {
+  const nap = new Int32Array(new SharedArrayBuffer(4));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const pid = readPid(file);
+    if (pid > 0) return pid;
+    if (Date.now() >= deadline) return 0;
+    Atomics.wait(nap, 0, 0, 10);
   }
 }
 
@@ -409,17 +454,33 @@ test('a turn that overruns its timeout is killed, and leaves nothing running', a
   const dir = await tmpDir('timeout');
   const pidFile = path.join(dir, 'pid');
   try {
-    const started = Date.now();
+    let pid = 0;
+    let armed = 0;
     const result = await adapter.send(SESSION, 'hello', {
       cwd: dir,
       bin: fakeBin({ mode: 'hang', dir }),
       timeoutMs: 300,
+      // The seam spawns exactly what `send` would have spawned; all it adds
+      // is the wait above, which keeps the 300 ms from being spent on Node's
+      // startup instead of on the turn it is supposed to cut short.
+      spawnFn: (command, args, options) => {
+        const child = spawn(command, args, options);
+        pid = awaitPidSync(pidFile);
+        armed = Date.now();
+        return child;
+      },
     });
+    assert.ok(pid > 0, 'the fake CLI never wrote its pid file');
     assert.equal(result.ok, false);
     assert.match(result.error, /timed out/);
-    assert.ok(Date.now() - started < 15_000, 'the timeout did not fire');
-    const pid = Number(await fsp.readFile(pidFile, 'utf8'));
-    assert.ok(await until(() => !alive(pid)), `pid ${pid} outlived its timeout`);
+    assert.ok(Date.now() - armed < 15_000, 'the timeout did not fire');
+    // A killed process is reaped asynchronously on Windows, so the pid can
+    // outlive the kill by a beat. Bounded, because "eventually gone" and
+    // "never goes" have to read differently.
+    assert.ok(
+      await until(() => !alive(pid), { timeoutMs: 15_000 }),
+      `pid ${pid} outlived its timeout`,
+    );
   } finally {
     await rmDir(dir);
   }
@@ -440,15 +501,20 @@ test('ORPHAN: aborting a send kills the child — a closing daemon leaves nothin
       timeoutMs: 60_000,
     });
 
-    assert.ok(await until(() => fs.existsSync(pidFile)), 'the child never started');
-    const pid = Number(await fsp.readFile(pidFile, 'utf8'));
+    // The pid, not merely the file: `writeFileSync` is not atomic, so an
+    // existence check can win the race against the bytes.
+    assert.ok(
+      await until(() => readPid(pidFile) > 0, { timeoutMs: 20_000 }),
+      'the child never started',
+    );
+    const pid = readPid(pidFile);
     assert.ok(alive(pid), 'the child was not running to begin with');
 
     controller.abort();
     const result = await turn;
     assert.equal(result.ok, false);
     assert.match(result.error, /cancelled/);
-    assert.ok(await until(() => !alive(pid)), `pid ${pid} is an orphan`);
+    assert.ok(await until(() => !alive(pid), { timeoutMs: 15_000 }), `pid ${pid} is an orphan`);
   } finally {
     await rmDir(dir);
   }

@@ -96,6 +96,28 @@ async function readsDuring(fn) {
   return { value, reads: desktopCacheStats.reads - before };
 }
 
+/**
+ * The longest gap between `setImmediate` turns while `fn` is in flight — the
+ * longest the daemon's HTTP server and SSE stream would have gone unserved —
+ * along with whatever `fn` answered.
+ */
+async function worstGapDuring(fn) {
+  let worst = 0;
+  let last = performance.now();
+  let stop = false;
+  const tick = () => {
+    const now = performance.now();
+    worst = Math.max(worst, now - last);
+    last = now;
+    if (!stop) setImmediate(tick);
+  };
+  setImmediate(tick);
+  const value = await fn();
+  await new Promise((r) => setImmediate(r));
+  stop = true;
+  return { worst, value };
+}
+
 // --------------------------------------------------------------------------
 
 test('every joinable file is read and keyed by cliSessionId', async () => {
@@ -586,22 +608,28 @@ test('the whole store is read without blocking the event loop', async () => {
     // The synchronous read this replaced stalled the loop for the whole call.
     // A setImmediate chain sees every turn, so the largest gap between turns
     // is the longest the daemon's HTTP server and SSE stream went unserved.
-    let worst = 0;
-    let last = performance.now();
-    let stop = false;
-    const tick = () => {
-      const now = performance.now();
-      worst = Math.max(worst, now - last);
-      last = now;
-      if (!stop) setImmediate(tick);
-    };
-    setImmediate(tick);
-    const map = await readDesktopSessions();
-    await new Promise((r) => setImmediate(r));
-    stop = true;
+    //
+    // A raw gap is not that number on its own, though: it also contains every
+    // millisecond the operating system spent running something else. Under a
+    // parallel `goldens:check` the chain alone clears 50 ms with nothing
+    // underneath it, which is how this test used to go red on a busy machine
+    // while the code it guards was innocent. So the read is bracketed by two
+    // controls — the same chain, the same duration, doing nothing — and the
+    // floor for the assertion is whichever of them saw the worse
+    // descheduling. docs/DEVIATIONS.md §131.3.
+    const idle = () => new Promise((r) => setTimeout(r, 25));
+    const before = await worstGapDuring(idle);
+    const read = await worstGapDuring(readDesktopSessions);
+    const after = await worstGapDuring(idle);
+    const control = Math.max(before.worst, after.worst);
+    const ceiling = Math.max(50, control * 2);
 
-    assert.equal(map.size, 24);
-    assert.ok(worst < 50, `longest event-loop block was ${worst.toFixed(1)} ms`);
+    assert.equal(read.value.size, 24);
+    assert.ok(
+      read.worst < ceiling,
+      `longest event-loop block was ${read.worst.toFixed(1)} ms, against ` +
+        `${control.toFixed(1)} ms for an idle loop on this machine (ceiling ${ceiling.toFixed(1)} ms)`,
+    );
   } finally {
     await cleanup(store);
   }
