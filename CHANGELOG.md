@@ -1284,6 +1284,24 @@ changes no user-owned field on the parent` — a parent standing in the office w
 - **The linux captures are actually uploaded now.** `test/goldens/.out/` is a dotted directory and
   `upload-artifact` skips hidden paths by default, so every run that captured the first linux set
   wrote it to disk and then uploaded nothing. `include-hidden-files: true`. §126.4.
+- **Three timing tests no longer measure the machine.** The WP-09 timeout test read the fake CLI's
+  pid file before the fake CLI had written it, because `send()` arms its timeout the instant the
+  spawn returns — so on a busy machine the 300 ms budget was spent on Node's startup, the kill
+  landed on a child that had said nothing, and the read was an `ENOENT`. It now holds `send`'s own
+  `spawnFn` seam open until the child has published its pid, so the clock starts against a process
+  that is demonstrably up, and it retries the "is it gone" check for 15 s because exit after a kill
+  is asynchronous on Windows. It proves exactly what it proved before. The WP-38 status-line budget
+  keeps its **20 ms** — deleting it was not an option — but each timed run is now paired with a
+  fixed read-and-parse of about the same duration, and the test says which reading it took: while
+  that probe stays under 14 ms the machine is quiet and the strict number applies as before; above
+  it the machine is slower or busy, the median is held to a loose 250 ms ceiling that still fails an
+  order-of-magnitude regression, and the failure message says the budget was not applied and why. A
+  diagnostic line prints all three numbers on every run. The third,
+  `claude-desktop-cache.test.mjs`'s event-loop check, was counting the operating system
+  descheduling the process as though it were the read blocking the loop; it now brackets the read
+  with two idle controls and holds it to `max(50 ms, 2× the worse control)`, which is what "does not
+  block the loop" meant all along. All three were red on a loaded machine; eleven consecutive full
+  1,713-test runs, two of them beside a `goldens:check`, are now green. §131.
 
 ### Packaging
 
