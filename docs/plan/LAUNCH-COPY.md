@@ -377,5 +377,14 @@ Re-take them with the same rule after any edit, and change the header in the sam
   Windows, macOS and Linux*; §6.3's gate is met as of those runs and must be re-checked against
   the newest run on the day of posting.
 - **Streamed replies are on `main`** (WP-09, `docs/DEVIATIONS.md` §117, `src/adapters/claude-code/stream.mjs`).
-  They stay out of the copy for the reason that still holds: the live run against a logged-in
-  `claude` is owed. Same for the permission card (§97).
+  ~~They stay out of the copy for the reason that still holds: the live run against a logged-in
+  `claude` is owed. Same for the permission card (§97).~~ **Superseded the same day: both live
+  runs happened** — `docs/DEVIATIONS.md` §133, against Claude Code 2.1.260 with a real login. The
+  permission card was answered from the panel with an allow and a deny and the session did both;
+  a reply was streamed in, 202 in 76 ms. Rule 11's condition is met, so **both may now be
+  mentioned** in the thread, the Show HN body and the listings.
+  Three constraints on how, all from §133: say **Allow / Deny**, and "Allow for this session
+  *when the runtime offers a rule*" — the live request offered none, so promising three buttons
+  would be over-claiming; say **Claude Code**, because no other runtime has been in the loop; and
+  do not imply the feature has been used in anger, because it has been proven once on one
+  machine. The README's honest-limits bullets are the wording to copy.
