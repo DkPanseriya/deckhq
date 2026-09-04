@@ -600,7 +600,7 @@
   own line work at ≥ 4.5:1 on every surface a room plate or an agent's name is drawn on. A theme
   that fails is refused at load, not reported afterwards. The Supporter pack
   ([`03`](docs/plan/03-BUSINESS-MODEL.md) §5) sells **more** themes later; it takes none away.
-  `docs/DEVIATIONS.md` §123.
+  `docs/DEVIATIONS.md` §125.
 - **`deckhq layout export > my-floor.json` / `deckhq layout import my-floor.json`**, and the same
   two from `⌘K`. A layout is the floor's arrangement as a file you own: the theme, the order the
   rooms are laid out in, which rooms are folded into the idle strip, and the two floor preferences
@@ -611,7 +611,7 @@
   field. It carries no room COORDINATES either, and that is stated rather than omitted — the floor
   sizes and places rooms from what is in them (§96, §106), so there is no position to pin; order
   is what a layout can move. Export works with or without a daemon; import needs one, for the
-  reason `ack` does. `GET`/`POST /api/layout`. `docs/DEVIATIONS.md` §123.
+  reason `ack` does. `GET`/`POST /api/layout`. `docs/DEVIATIONS.md` §125.
 
 ### Changed
 

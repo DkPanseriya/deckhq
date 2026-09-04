@@ -9415,7 +9415,7 @@ per-file helper still isolates every file that imports it, but a new file that f
 unnoticed until CI. Moving the canary into a reporter or a `globalSetup` hook would close that, and
 both are Node-version-gated in exactly the way `scripts/test.mjs` exists to avoid; the next move is
 that rather than a guess about it.
-## 123. WP-30 — a theme is a diff against the floor, and the seven colours it cannot reach
+## 125. WP-30 — a theme is a diff against the floor, and the seven colours it cannot reach
 
 **Spec:** `docs/plan/06-ENGINEERING-WORKPLAN.md` WP-30 — "Floor themes and importable/exportable
 layouts as JSON. **Ungated** in the free product; the Studio pack
@@ -9427,7 +9427,7 @@ Two shipped beside the default: **night shift** (the same office after hours) an
 (the floor as a drawing on a drafting table). `docs/media/theme-night-shift.png` and
 `docs/media/theme-blueprint.png` are the goldens themselves, unretouched.
 
-### 123.1 What a theme cannot change, and why it cannot rather than may not
+### 125.1 What a theme cannot change, and why it cannot rather than may not
 
 The brief's hard constraint is that a theme may not touch the seven state colours, the accent, or
 any contrast the tests measure. That is enforced **structurally**, not by review:
@@ -9439,7 +9439,7 @@ any contrast the tests measure. That is enforced **structurally**, not by review
 | `--focus` | same | **no** — and the theme's grounds must accommodate it, which is measured |
 | `--line-2` | same | **no** |
 | `PROJECT_IDENTITIES`, `AGENT_*`, `RARE_*`, `JACKET_COLORS`, `CROWN_GOLD` | `palette.js`, separate exports | **no** — §105's >= 70 sRGB bar is untouched because the tables are untouched |
-| the 86 material tokens | `PALETTE` | **only through eleven materials** — see §123.2 |
+| the 86 material tokens | `PALETTE` | **only through eleven materials** — see §125.2 |
 | eight chrome neutrals | `:root` | yes, as inline custom properties |
 
 A theme document is `{name, version, floor{…}, chrome{…}}` and nothing else. `FLOOR_KEYS` (11) and
@@ -9449,7 +9449,7 @@ look accepted and would ship. Every value must be `#rrggbb` — no `url()`, no `
 no font name — so a theme cannot fetch anything (the free core makes no outbound request, ever)
 and cannot change a letterform.
 
-### 123.2 Eleven materials, not eighty-six tokens
+### 125.2 Eleven materials, not eighty-six tokens
 
 `backdrop.js` reads 86 material tokens. A theme names eleven — wood, carpet, screed, ground, tile,
 wall, partition, desk, seat, plant, ink — and `materialTokensFor()` fans each out into the tone
@@ -9463,7 +9463,7 @@ building's finish — floors, walls, furniture, foliage, ink — and repainting 
 would make every theme a different product rather than the same office at a different hour.
 Asserted, so it stays true.
 
-### 123.3 The default theme is a RESET, and that is what keeps the goldens at 0 px
+### 125.3 The default theme is a RESET, and that is what keeps the goldens at 0 px
 
 `DEFAULT_FLOOR` states the shipped floor as a theme document so the picker can show it and
 `layout export` can name it. Applying it does **not** run the derivation: `applyFloorTheme`
@@ -9482,7 +9482,7 @@ them to the same values, so an untouched install has an untouched `style` attrib
 per-paint, and the only writes are `overridePalette()` and `resetPalette()` — both of which re-run
 the colour-discipline guard over the whole result.
 
-### 123.4 The crimson bar is 60, and it is measured against crimson alone
+### 125.4 The crimson bar is 60, and it is measured against crimson alone
 
 `assertMaterialDiscipline` (a function now, so a theme is held to the rule the shipped materials
 are) refuses a token that is, or comes within 60 in sRGB of, `#C0392B`. The first attempt held
@@ -9494,7 +9494,7 @@ material is held away from — the shipped floor's closest approach is `poolRail
 bar with room in it. The **chrome** is held to the same 60, checked in `assertThemeContrast`,
 because a surface that read as red would be the same failure one layer out.
 
-### 123.5 One contrast floor this product did not have before
+### 125.5 One contrast floor this product did not have before
 
 `palette.js`'s `plateInk` comment claimed ">= 4.68:1 against every wood tone and carpetBase",
 hand-verified. WP-30 made that a measurement and made it one every theme must pass — and then
@@ -9513,7 +9513,7 @@ Measured floors, every theme (default / night shift / blueprint): worst state on
 3.70 / 3.86 / 3.73, worst on `--surface` 3.13 / 3.32 / 3.10, `--muted` on `--surface-2`
 4.84 / 5.27 / 5.46, floor ink on its darkest ground 6.38 / 6.57 / 7.71.
 
-### 123.6 The theme reaches the floor on the change, not on the next snapshot
+### 125.6 The theme reaches the floor on the change, not on the next snapshot
 
 The floor is a **baked** bitmap. `planSignature` counts the theme, so a snapshot would eventually
 re-bake — but the floor is push-driven, and with nobody starting or finishing a session no
@@ -9527,7 +9527,7 @@ the reason §110.5 gives: both are CSS overlays on `.stage` with `mix-blend-mode
 the floor rather than a change in the renderer. They warm or dim whatever is underneath, which is
 now whatever the theme painted.
 
-### 123.7 A layout has no room positions to export, and says so
+### 125.7 A layout has no room positions to export, and says so
 
 WP-30 asks for "pinned room positions (if the plan supports pinning)". **It does not.** Rooms are
 not placed by coordinate: `public/render/plan.js` deals them into bands and treemaps each band by
@@ -9551,7 +9551,7 @@ not as a setting: it is a list, not a preference, and putting it in `DEFAULT_SET
 put an array through a sanitizer built for scalars. When pinning exists, the document grows a
 `positions` key and the version goes to 2.
 
-### 123.8 Refused whole, or not at all
+### 125.8 Refused whole, or not at all
 
 The acceptance criterion. `validateLayout` returns the whole document or one error naming the
 field, and the route writes nothing until it holds the whole document. A malformed file leaves the
@@ -9569,7 +9569,7 @@ the file underneath it would have its edit overwritten.
 directory, so a layout file names your project folders. `deckhq layout export` says so on stderr —
 stdout carries only the document, so `> my-floor.json` stays clean.
 
-### 123.9 Two decisions left open for the owner
+### 125.9 Two decisions left open for the owner
 
 1. **The room order has no interface.** A layout can carry one and the renderer honours it, but
    nothing in the product lets you drag a room. Today an order comes from a file somebody wrote or
