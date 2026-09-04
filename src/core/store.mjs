@@ -13,6 +13,7 @@ import { createLog } from './log.mjs';
 import { EDITOR_NAMES } from './editor.mjs';
 import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 import { DEFAULT_THEME_NAME, sanitizeThemeName } from './themes.mjs';
+import { sanitizeAvatarSetName } from './avatars.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -97,6 +98,10 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       name from `core/themes.mjs`, never a
  *                                       path and never a colour: the document
  *                                       lives in the build, not in state.json.
+ * @property {string} avatarSet          which avatar set the agents are dressed
+ *                                       from (WP-45), or `''` for the tables
+ *                                       this build ships. A name from an
+ *                                       installed pack, never a colour table.
  * @property {boolean} onboarded         first run is over
  */
 
@@ -157,6 +162,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // failure, and every theme this build offers has been measured
   // (`test/unit/state-visuals.test.mjs`).
   theme: DEFAULT_THEME_NAME,
+  // WP-45. Which avatar set the agents are dressed from, or `''` — the tables
+  // `public/render/palette.js` ships. A name and not a document, for the same
+  // reason `theme` is: a set that arrived through `state.json` would be a set
+  // nobody had held to the "no agent may wear a state colour" bar.
+  //
+  // Empty on every install, INCLUDING one with a pack installed. A face is
+  // the one thing in this product that must never change on its own
+  // (`appearanceRng`), so installing a pack offers a set and choosing one
+  // applies it; nothing happens because a file appeared in a directory.
+  avatarSet: '',
   onboarded: false,
 });
 
@@ -363,6 +378,7 @@ function sanitizeSettings(raw) {
   s.ledgerRetentionDays = clampRetentionDays(s.ledgerRetentionDays);
   s.lightsOutHour = clampLightsOutHour(s.lightsOutHour);
   s.theme = sanitizeThemeName(s.theme);
+  s.avatarSet = sanitizeAvatarSetName(s.avatarSet);
   s.postcardDay = sanitizeShownKey(s.postcardDay);
   s.wrappedShown = sanitizeShownKey(s.wrappedShown);
   for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);

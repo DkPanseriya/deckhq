@@ -14,7 +14,8 @@ import { readJson, sendError, sendJson } from '../server.mjs';
 import { DEFAULT_SETTINGS, MOTION_MODES, RESUME_TARGETS } from '../../core/store.mjs';
 import { rateCardVersion } from '../../core/rates.mjs';
 import { EDITOR_NAMES } from '../../core/editor.mjs';
-import { THEME_NAMES, isKnownTheme } from '../../core/themes.mjs';
+import { isKnownTheme, themeNames } from '../../core/themes.mjs';
+import { avatarSetByName, avatarSets } from '../../core/avatars.mjs';
 import { terminalIds } from '../../adapters/claude-code/terminals.mjs';
 
 /**
@@ -114,12 +115,31 @@ export function register(router, ctx) {
       // opaque keys the client writes and reads back. Only a string is a
       // candidate; the store drops anything that is not a short token.
       if ((k === 'postcardDay' || k === 'wrappedShown') && typeof v !== 'string') continue;
-      // WP-30. `theme` names a theme this BUILD ships; the store would fall
-      // back to `default` for anything else, which would leave the picker
-      // showing a theme the floor is not painted in. Reported here instead.
+      // WP-30. `theme` names a theme this build can paint — one it ships, or
+      // one an installed pack registered (WP-45). The store would fall back to
+      // `default` for anything else, which would leave the picker showing a
+      // theme the floor is not painted in. Reported here instead.
       if (k === 'theme') {
         if (!isKnownTheme(v)) {
-          return sendError(res, 400, `theme must be one of ${THEME_NAMES.join(', ')}`);
+          return sendError(res, 400, `theme must be one of ${themeNames().join(', ')}`);
+        }
+      }
+      // WP-45. `avatarSet` names a set an installed pack registered, or `""`
+      // for the tables this product ships. Same reasoning as `theme`: the
+      // store would silently fall back, and the picker would then show a set
+      // the agents are not dressed in.
+      if (k === 'avatarSet') {
+        const wanted = typeof v === 'string' ? v : null;
+        if (wanted === null) continue;
+        if (wanted !== '' && !avatarSetByName(wanted)) {
+          const names = avatarSets().map((s) => `"${s.name}"`);
+          return sendError(
+            res,
+            400,
+            names.length
+              ? `avatarSet must be "" or one of ${names.join(', ')}`
+              : 'avatarSet must be "": no installed pack offers an avatar set',
+          );
         }
       }
       patch[k] = v;

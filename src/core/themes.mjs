@@ -43,8 +43,12 @@ import {
   THEMES,
   THEME_NAMES,
   THEME_VERSION,
+  allThemes,
   assertThemeContrast,
+  clearPackThemes,
+  registerPackThemes,
   themeByName,
+  themeNames,
 } from '../../public/render/themes.js';
 
 export {
@@ -54,7 +58,11 @@ export {
   THEMES,
   THEME_NAMES,
   THEME_VERSION,
+  allThemes,
+  clearPackThemes,
+  registerPackThemes,
   themeByName,
+  themeNames,
 };
 
 /** A theme name: printable, short, and nothing that could be a path or a flag. */
@@ -187,9 +195,9 @@ export function sanitizeThemeName(v) {
 }
 
 /**
- * Is this a theme this build ships? The HTTP route uses it to reject an
- * unknown name with a message instead of storing the default behind the
- * caller's back.
+ * Is this a theme this build can paint — one it ships, or one an installed
+ * asset pack registered (WP-45)? The HTTP route uses it to reject an unknown
+ * name with a message instead of storing the default behind the caller's back.
  * @param {unknown} v
  */
 export function isKnownTheme(v) {

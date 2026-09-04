@@ -438,10 +438,101 @@ export const THEMES = Object.freeze(
 /** Every shipped theme's name, in picker order. @type {ReadonlyArray<string>} */
 export const THEME_NAMES = Object.freeze(THEMES.map((t) => t.name));
 
+// ------------------------------------------------------- themes from a pack
+
 /**
- * A shipped theme by name, or `null`. Case- and space-insensitive on the way
- * in, because `night shift`, `Night Shift` and `night-shift` are the same
- * request and only one of them is what the picker wrote.
+ * Themes that arrived from an installed asset pack (WP-45).
+ *
+ * A separate list rather than an append to `THEMES`, and that is the whole
+ * safety property of this seam: `THEMES` stays frozen, stays the shipped
+ * table, and stays what the goldens and `state-visuals.test.mjs` measure. A
+ * pack adds rows to a SECOND list that is empty on every install that has not
+ * bought one, and `clearPackThemes()` puts the product back exactly where it
+ * was — which is what makes "run the acceptance surface with and without the
+ * pack and diff" a thing a test can do in one process.
+ *
+ * @type {Array<{name:string, version:number, blurb?:string,
+ *   floor:Record<string,string>, chrome:Record<string,string>, pack:string}>}
+ */
+const PACK_THEMES = [];
+
+/**
+ * Add an installed pack's themes to the picker.
+ *
+ * Every document is held to `assertThemeContrast` HERE as well as in
+ * `src/core/packs.mjs`, because this is the last line before a theme can be
+ * painted and the renderer is the half that is loaded in a browser. A theme
+ * that fails is refused with its reason and the others are still added —
+ * `docs/DEVIATIONS.md` §125.9's open door, opened exactly this far.
+ *
+ * A pack may not shadow a shipped theme, or one another pack already
+ * registered: `settings.theme` stores a NAME, so two rows with one name would
+ * make which floor you got a function of load order.
+ *
+ * @param {string} packName
+ * @param {ReadonlyArray<any>} themes
+ * @returns {{added:string[], rejected:string[]}}
+ */
+export function registerPackThemes(packName, themes) {
+  /** @type {string[]} */
+  const added = [];
+  /** @type {string[]} */
+  const rejected = [];
+  for (const theme of themes || []) {
+    const name = String(theme?.name ?? '')
+      .trim()
+      .toLowerCase();
+    if (!name) {
+      rejected.push('a theme with no name');
+      continue;
+    }
+    if (THEME_NAMES.includes(name)) {
+      rejected.push(`"${name}" is a theme this build ships`);
+      continue;
+    }
+    if (PACK_THEMES.some((t) => t.name === name)) {
+      rejected.push(`"${name}" is already registered by another pack`);
+      continue;
+    }
+    try {
+      assertThemeContrast(theme);
+    } catch (err) {
+      rejected.push(`"${name}": ${(err && /** @type {any} */ (err).message) || err}`);
+      continue;
+    }
+    PACK_THEMES.push({ ...theme, name, pack: String(packName || '') });
+    added.push(name);
+  }
+  return { added, rejected };
+}
+
+/** Forget every pack theme. For the daemon's reload, and for tests. */
+export function clearPackThemes() {
+  PACK_THEMES.length = 0;
+}
+
+/**
+ * Every theme the picker may offer: what ships, then what a pack brought.
+ * Shipped first, always, so the default floor is the first row on every
+ * install whether or not anybody has bought anything.
+ * @returns {Array<any>}
+ */
+export function allThemes() {
+  return [...THEMES, ...PACK_THEMES];
+}
+
+/** Every offerable theme's name. @returns {string[]} */
+export function themeNames() {
+  return allThemes().map((t) => t.name);
+}
+
+/**
+ * A theme by name, or `null`. Case- and space-insensitive on the way in,
+ * because `night shift`, `Night Shift` and `night-shift` are the same request
+ * and only one of them is what the picker wrote.
+ *
+ * Shipped themes are searched first: a pack cannot get in front of one even
+ * if registration were ever to let it in.
  * @param {unknown} name
  */
 export function themeByName(name) {
@@ -449,7 +540,7 @@ export function themeByName(name) {
     .trim()
     .toLowerCase()
     .replace(/[\s_-]+/g, ' ');
-  return THEMES.find((t) => t.name === key) || null;
+  return THEMES.find((t) => t.name === key) || PACK_THEMES.find((t) => t.name === key) || null;
 }
 
 // --------------------------------------------------------------- the contract
