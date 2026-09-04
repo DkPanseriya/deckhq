@@ -521,6 +521,98 @@ export const LOUNGE_CLIPS = [
 /** Idle variations interleaved into `working` (§4.1, §4.3). */
 export const IDLE_VARIATIONS = ['drink', 'think', 'stretch'];
 
+// ------------------------------------------------------- the desk idle director
+
+/**
+ * How long an agent types between idle variations, in seconds.
+ *
+ * §4.1 says `drink` is "triggered occasionally during `working`" and `stretch`
+ * is an "occasional idle variation", and never said how occasional. Twenty to
+ * forty-five seconds is the band where a floor of eight working agents shows
+ * about one variation every few seconds somewhere on it — enough that the room
+ * is alive, rare enough per agent that it never reads as fidgeting.
+ *
+ * The floor of twenty is also what keeps a screenshot honest: nothing but
+ * `type` can be on screen for the first twenty seconds after a state change,
+ * which is longer than any capture this project takes.
+ */
+export const IDLE_TYPE_MIN_S = 20;
+export const IDLE_TYPE_MAX_S = 45;
+
+/**
+ * How the director weights what comes next. `type` is heavily favoured because
+ * a working agent is mostly working; the three variations share the rest.
+ * @type {Record<string, number>}
+ */
+export const IDLE_WEIGHTS = { type: 6, drink: 1, think: 1, stretch: 1 };
+
+/**
+ * WP-28's tendency: which clip a trait leans on, and nothing more.
+ *
+ * *"An agent tagged shell-heavy prefers the coffee clip, asks-often prefers the
+ * thinking cloud, expansive prefers typing bursts."* Every value here is a clip
+ * the agent already plays at its desk — this table cannot introduce one, and a
+ * tendency this map does not know is ignored rather than guessed at.
+ * @type {Record<string, string>}
+ */
+export const TENDENCY_CLIP = { coffee: 'drink', thinking: 'think', typing: 'type' };
+
+/** How much a tendency multiplies its clip's weight. */
+export const TENDENCY_WEIGHT = 3;
+
+/**
+ * The idle director for an agent sitting at its desk and working.
+ *
+ * Returns what to play next and for how long. It is a WEIGHTING, not a script:
+ * every clip it can name is in {@link IDLE_VARIATIONS} or is `type`, a
+ * tendency only changes how often one of them comes up, and the caller cancels
+ * the whole thing the moment the agent's real state changes — a hand going up
+ * is not something to be animated around (`public/render/agents.js`, `sync`).
+ * It is never called under `prefers-reduced-motion`.
+ *
+ * A trait therefore changes nothing except which of four existing animations
+ * an already-idle agent is a little more likely to play. That is the entire
+ * mechanical effect of WP-28, and it is why there is no setting for it.
+ *
+ * @param {() => number} rng a function returning a float in [0,1). Inject a
+ *   seeded one for deterministic tests.
+ * @param {{tendency?: string|null}} [opts]
+ * @returns {{ pick: () => { clip: string, holdS: number } }}
+ */
+export function makeIdleRotation(rng, opts = {}) {
+  const random = rng || Math.random;
+  const favoured = opts.tendency ? TENDENCY_CLIP[opts.tendency] || null : null;
+
+  /** @type {[string, number][]} */
+  const weighted = Object.entries(IDLE_WEIGHTS).map(([clip, w]) => [
+    clip,
+    clip === favoured ? w * TENDENCY_WEIGHT : w,
+  ]);
+  const total = weighted.reduce((sum, [, w]) => sum + w, 0);
+
+  return {
+    pick() {
+      let roll = random() * total;
+      let clip = weighted[weighted.length - 1][0];
+      for (const [name, w] of weighted) {
+        roll -= w;
+        if (roll < 0) {
+          clip = name;
+          break;
+        }
+      }
+      if (clip === 'type') {
+        return { clip, holdS: IDLE_TYPE_MIN_S + random() * (IDLE_TYPE_MAX_S - IDLE_TYPE_MIN_S) };
+      }
+      // A one-shot variation is held for exactly its own length; a looping one
+      // (`think`) is held for two cycles, which is long enough for the thought
+      // dots to rise twice and short enough that it never becomes the pose.
+      const { duration, loop } = CLIPS[clip];
+      return { clip, holdS: loop ? duration * 2 : duration };
+    },
+  };
+}
+
 // ------------------------------------------------------------- resolving t=0
 
 /**

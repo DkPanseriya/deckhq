@@ -49,7 +49,7 @@
 import { bakeBackdrop } from './backdrop.js';
 import { AgentRuntime, assignSeats } from './agents.js';
 import { computeTargetAspect } from './scene-camera.js';
-import { makeActivityRotation } from './clips.js';
+import { makeActivityRotation, makeIdleRotation } from './clips.js';
 import { SceneInput } from './scene-input.js';
 import { planSignature } from './scene-draw.js';
 
@@ -197,6 +197,19 @@ export class Scene extends SceneInput {
   }
 
   /**
+   * WP-28 · hand the runtime the idle tendencies from `GET /api/traits`.
+   *
+   * A hint about which of four existing idle clips an agent leans on while it
+   * is sitting there typing, and nothing else. It cannot move anybody, cannot
+   * change a state, and does not run under reduced motion. Safe to call with
+   * `null` — that is simply "no leans".
+   * @param {Record<string, string|null>|null} map
+   */
+  setTendencies(map) {
+    this._runtime.setTendencies(map);
+  }
+
+  /**
    * Re-bake the backdrop for the plan already in hand, and draw it (WP-30).
    *
    * A theme changes no geometry, so there is nothing to re-plan — but the
@@ -313,7 +326,12 @@ export class Scene extends SceneInput {
     if (this._running) return false;
     const dt = Math.min(0.25, Math.max(0, Number(dtSeconds) || 0));
     if (dt === 0) return false;
-    this._runtime.step(dt, { reduced: this._reduced, plan: this._plan, makeActivityRotation });
+    this._runtime.step(dt, {
+      reduced: this._reduced,
+      plan: this._plan,
+      makeActivityRotation,
+      makeIdleRotation,
+    });
     return true;
   }
 

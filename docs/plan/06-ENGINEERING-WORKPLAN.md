@@ -32,10 +32,11 @@ platforms, and someone other than its author has reviewed it.
 > published to the Marketplace), WP-35, WP-36, WP-37, WP-38, WP-39 (§113), WP-41 (subagents as
 > juniors, §120), WP-42, WP-43 (the workflow and the release job; **never run**), WP-44,
 > WP-45 (Supporter pack — **themes and avatar sets only**; replay and the rate-card editor ship
-> free in the core, price undecided, §129), WP-46, WP-47, WP-50, WP-51, WP-52, WP-53, WP-54, WP-55.
+> free in the core, price undecided, §129), WP-46, WP-47, WP-28 (agent traits, read-only;
+> hand-raise bands **unmeasured**, §133), WP-50, WP-51, WP-52, WP-53, WP-54, WP-55.
 >
 > **Not landed:** WP-12's focus camera (its character-scale floor landed inside WP-50/WP-55),
-> WP-23, WP-28, WP-32 (design landed as `docs/06-RELAY-DESIGN.md`, §127 — no code), WP-33, WP-34,
+> WP-23, WP-32 (design landed as `docs/06-RELAY-DESIGN.md`, §127 — no code), WP-33, WP-34,
 > WP-49, WP-56, WP-57 (its first item shipped with WP-39), WP-58.
 >
 > **`main` went red on Ubuntu and macOS** after WP-51 fixed the flaky Windows test — an unguarded

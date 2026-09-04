@@ -341,3 +341,94 @@ test('a thinking-only line mid-turn is not an ending', () => {
   const summary = parseSummary('', text, { id: 's', file: 'x', mtimeMs: 0 });
   assert.equal(summary.turnEnded, false);
 });
+
+// ---------------------------------------------------------------------------
+// WP-28 · the two tallies the trait line is computed from
+// ---------------------------------------------------------------------------
+
+/** One assistant turn, as the transcript writes it. */
+function traitTurn(id, at, blocks) {
+  return JSON.stringify({
+    type: 'assistant',
+    timestamp: at,
+    message: { id, role: 'assistant', stop_reason: 'tool_use', content: blocks },
+  });
+}
+
+const TALLY_LINES = [
+  traitTurn('m1', '2026-08-01T00:00:01.000Z', [
+    { type: 'text', text: 'x'.repeat(50) },
+    { type: 'tool_use', name: 'Bash', input: {} },
+  ]),
+  traitTurn('m2', '2026-08-01T00:00:02.000Z', [{ type: 'tool_use', name: 'Bash', input: {} }]),
+  traitTurn('m3', '2026-08-01T00:00:03.000Z', [
+    { type: 'text', text: 'y'.repeat(150) },
+    { type: 'tool_use', name: 'Read', input: {} },
+    { type: 'tool_use', name: 'Grep', input: {} },
+  ]),
+  traitTurn('m4', '2026-08-01T00:00:04.000Z', [
+    { type: 'text', text: 'z'.repeat(250) },
+    { type: 'tool_use', name: 'WebFetch', input: {} },
+    // Not one of the four classes, and deliberately uncounted: a class nobody
+    // can name is not a trait.
+    { type: 'tool_use', name: 'TodoWrite', input: {} },
+  ]),
+].join('\n');
+
+test('WP-28: the tool mix counts the four classes and ignores everything else', () => {
+  const summary = parseSummary('', TALLY_LINES, { id: 's', file: 'x', mtimeMs: 0 });
+  assert.deepEqual(summary.toolMix, { files: 1, shell: 2, web: 1, search: 1 });
+});
+
+test('WP-28: the reply median skips turns that only called a tool', () => {
+  const summary = parseSummary('', TALLY_LINES, { id: 's', file: 'x', mtimeMs: 0 });
+  // 50, 150, 250 — the median is the middle one. The tool-only turn is not a
+  // zero-length reply; counting its zero would drag the median toward "terse"
+  // in proportion to how much tool work the session did, which would make the
+  // verbosity trait a second, worse copy of the tool one.
+  assert.equal(summary.textMedian, 150);
+  assert.equal(summary.textTurns, 3);
+});
+
+test('WP-28: an overlapping head and tail does not count a turn twice', () => {
+  // A small file: `readHead` and `readTail` both return the whole thing, which
+  // is the case that already made the token totals need a dedup.
+  const both = parseSummary(TALLY_LINES, TALLY_LINES, { id: 's', file: 'x', mtimeMs: 0 });
+  const once = parseSummary('', TALLY_LINES, { id: 's', file: 'x', mtimeMs: 0 });
+  assert.deepEqual(both.toolMix, once.toolMix);
+  assert.equal(both.textTurns, once.textTurns);
+  assert.equal(both.textMedian, once.textMedian);
+});
+
+test("WP-28: a junior's tools and prose belong to the junior, not to its parent", () => {
+  const withJunior = [
+    TALLY_LINES,
+    JSON.stringify({
+      type: 'assistant',
+      timestamp: '2026-08-01T00:00:05.000Z',
+      isSidechain: true,
+      message: {
+        id: 'j1',
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'q'.repeat(9000) },
+          { type: 'tool_use', name: 'Bash', input: {} },
+        ],
+      },
+    }),
+  ].join('\n');
+  const parent = parseSummary('', withJunior, { id: 's', file: 'x', mtimeMs: 0 });
+  assert.deepEqual(parent.toolMix, { files: 1, shell: 2, web: 1, search: 1 });
+  assert.equal(parent.textTurns, 3);
+
+  // Read as the junior's OWN transcript, the same record is its own work.
+  const junior = parseSummary('', withJunior, { id: 'j', file: 'x', mtimeMs: 0, sidechain: true });
+  assert.equal(junior.toolMix.shell, 3);
+});
+
+test('WP-28: a transcript with nothing in it reports zeros rather than nothing', () => {
+  const summary = parseSummary('', '', { id: 's', file: 'x', mtimeMs: 0 });
+  assert.deepEqual(summary.toolMix, { files: 0, shell: 0, web: 0, search: 0 });
+  assert.equal(summary.textMedian, 0);
+  assert.equal(summary.textTurns, 0);
+});

@@ -10764,3 +10764,216 @@ parent commit and green here. That load was used for diagnosis and is not part o
 workflow; the reference machine belongs to someone who is using it. Reproducing the ENOENT does not
 need it, though: the failure is on the `readFile` of a file that was never written, and the parent
 commit's own §130 already records this test as flaky.
+
+## 133. WP-28 — the agent gets a character, and nothing in the product acts on it
+
+`docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §4 and `docs/plan/06-ENGINEERING-WORKPLAN.md`
+WP-28. Read-only traits, inferred from real behaviour, never trained, never affecting anything:
+how often it raises its hand, its tool mix, its verbosity, its model, and how long it has been
+here. One line, in the hover card and under the panel's identity area:
+
+> asks often · shell-heavy · terse · opus-5 · since 1 Sep
+
+Shipped as `src/core/traits.mjs`, a `GET /api/traits` route, one line in
+`public/app-tooltip.js` and one in the review card, and a weighting on a desk idle director that
+§4.1 has specified since the clips landed and that nothing had ever run.
+
+**The acceptance line that shaped every other decision:** *nothing here is a score on the human,
+and nothing here is a level on the agent.* Both halves are import rules and tests rather than
+comments. `traits.mjs` imports nothing at all — not `store.mjs`, not `ledger.mjs`, not
+`model.mjs` — so it cannot read `reviewSince` and cannot write `ackState` even by accident; the
+direction of the dependency IS the guarantee, exactly as §100 states it for the ledger.
+`test/unit/traits-invariant.test.mjs` drives a registry through a scan, two hook events and an
+action, takes the whole agent list and the entire ack map, computes every agent's traits, and
+deep-compares both again — and greps the module and its route for `store.mjs`, `setAck`,
+`reviewSince`, `needsInputSince`, `ackState` and `/api/ack`, so a later shortcut fails loudly.
+
+### 133.1 The vocabulary, and the two tests that guard it
+
+Twelve words, in one exported table, and there is no other way to add one:
+
+| Trait | Words |
+| --- | --- |
+| hand-raise | `asks often`, `asks sometimes`, `self-directed` |
+| tool mix | `files-heavy`, `shell-heavy`, `web-heavy`, `search-heavy`, `even mix` |
+| verbosity | `terse`, `measured`, `expansive` |
+| degraded | `new here` |
+
+Plus two facts that are not traits and have no definition: the model (`opus-5`) and the tenure
+(`since 1 Sep`).
+
+Each word carries a one-sentence definition, and the test reads the whole table rather than the
+copy it happens to have been written against: **no label contains a digit**, nothing in any label
+or definition contains `#` or any of eighteen superlatives and comparatives (`best`, `top `,
+`worst`, `rank`, `level`, `score`, `most`, `least`, `than`, `ahead`, `behind`, …), and the second
+person does not appear anywhere. `08` §1.1 rule 6 and `04` §5, turned into assertions, because
+copy protected only by a comment drifts. A separate test walks a computed line and asserts every
+part of it is either a word from the table, the model, or a `since <d> <Mon>` date.
+
+**The brief asked for a one-word label and its own examples are two words** (*"asks often"*,
+*"shell-heavy"*). The examples win: `asks often` is what the trait means and `frequent` is not.
+What "one word" was protecting is the length of the line, and that is protected instead by the
+label list being closed and by the panel line truncating rather than wrapping.
+
+### 133.2 What a "turn" is, and why it is not what the ledger has most of
+
+WP-28 asks for hand-raise frequency as *"needs_input entries per 10 turns"*. The ledger has no
+record called a turn. Two candidates:
+
+**`tokens` records** — one per scan that saw a session's token total move — are what the ledger
+holds most of (§100 measured 86 of them against 6 state transitions in a ten-minute run). They
+were rejected: a scan sees a total move several times inside one turn, so "turns" would have
+meant "polls that caught something", and the rate would have moved when the poll interval did.
+
+**Activity transitions into `for_review` or `needs_input`** are what shipped. A turn is a time the
+agent STOPPED, and it stopped either because it finished or because it wanted something. The
+numerator and the denominator are then counted over the same window, out of the same file, by the
+same rule, and the rate is bounded at ten by construction. `stalled` is deliberately not a stop:
+it is a clock running out, which is the opposite of the agent choosing to hand back. An `ack`
+transition is not one either — that is the user's own action, and counting it would put the human
+inside a number about the agent.
+
+The consequence is that the hand-raise trait measures the ledger's window and not the transcript's
+history: a session with two hundred turns on disk and a ledger a day old reports what the ledger
+saw. That is the honest answer for a trait that says "how it behaves", and it is why `turns` is on
+the wire beside the line.
+
+### 133.3 Where the tool mix and the verbosity come from, and the record kind that was not added
+
+Neither is in the ledger, and the obvious fix — a `tool` record per `PreToolUse` — was refused.
+§100 measured the ledger at 190 records and 46 KB for a ten-minute run of the real daemon; a busy
+day is a few hundred records. A record per tool call is thousands a day, which is an order of
+magnitude on a file the user keeps for ninety days, spent on an optional P3 grace note. The
+ledger's five kinds are unchanged.
+
+Both are counted instead where the transcript is already being read once per scan: `parseSummary`
+in `src/adapters/claude-code/parse.mjs`, in the loop that was already walking every assistant
+turn. It emits `toolMix` (four counters), `textMedian` and `textTurns`. That keeps standing rule 8
+— the tool-name table lives beside `toolSummary` in `hooks-summary.mjs`, because tool names are
+Claude Code's own vocabulary — and it means a benched session that this daemon has never seen run
+still has a tool mix, which an in-memory tally of live hook events could never have given it.
+
+Three details that are decisions rather than implementation:
+
+- **The tallies are deduped by message id.** On a small file the head and tail windows both return
+  the whole thing, which is the case that already forced the token totals to dedup. Without it a
+  short session counts every tool call twice.
+- **A turn that said nothing is not a short reply.** A tool-only turn is skipped rather than
+  counted as zero characters. Counting it would drag the median toward `terse` in proportion to
+  how much tool work the session did, which would have made the verbosity trait a second, worse
+  copy of the tool one.
+- **A junior's tools and prose are the junior's.** Sidechain records are excluded from a parent's
+  tallies and are the whole of a junior's own, the same split `lastText` already keeps.
+
+`CACHE_SCHEMA_VERSION` goes 1 → 2, which discards every persisted summary cache on the next start
+rather than migrating it — the file's own rule. `test/unit/claude-scan-cache.test.mjs` spelled the
+number out four times and failed on the bump; it now reads the constant, which is what it always
+meant.
+
+Neither number reaches the snapshot. They sit on the registry's observed record and come out
+through one read method, `registry.traitInput(id)`, which returns a copy. Four more fields on
+every agent in every SSE frame would have made the whole floor pay for a line that at most one
+surface asks for at a time.
+
+### 133.4 The bands: two measured, one not, and it is said which
+
+**Verbosity is measured.** Eighty real transcripts on the reference machine, 4 September: the
+median of per-session medians is **120 characters**, the quartiles are **92** and **171**, and the
+p90 is **1430**. The distribution is bimodal — a stream of one-line tool narrations around a few
+long answers — which is why the summary takes a median rather than a mean. `terse` is under 100,
+`expansive` is 250 and over, which splits that population into roughly a quarter, a half and a
+quarter rather than into three empty boxes and one full one.
+
+**The tool-mix bar is measured.** Over the 70 of those sessions with five or more classified
+calls, the leading class holds 0.53 at the tenth percentile and 0.69 at the median. The bar is
+**0.45**: the common case passes and `even mix` still means something. The observed leaders were
+`shell` (45 sessions) and `files` (25); `web` and `search` never led one, which is a fact about
+this machine and not a reason to drop the words.
+
+**The hand-raise bands are not measured, and they say so in the file.** The reference machine has
+no ledger old enough to take a distribution from — `~/.deckhq/ledger` does not exist on it. Three
+and one per ten are the obvious thirds of a rate that cannot exceed ten. The first machine with a
+month of ledger behind it should be looked at before they are defended.
+
+**Degraded is five stops.** Under that the line is `new here` **and nothing else** — not a trait
+line with two traits missing, and not a line carrying the model and the date, which would read as
+one. `08` §1.1 rule 11: a trait computed from four events is a claim nobody measured.
+
+### 133.5 The idle director: the clips §4.1 asked for, and the weighting on them
+
+`IDLE_VARIATIONS = ['drink', 'think', 'stretch']` has been exported from `clips.js` since the
+clips landed, with nothing importing it. §4.1 describes `drink` as "triggered occasionally during
+`working`" and `stretch` as an "occasional idle variation", and no director existed to trigger
+either. WP-28's *"a tendency in idle animation"* is that director, plus a weighting.
+
+`makeIdleRotation(rng, {tendency})` picks from `type`, `drink`, `think`, `stretch` at weights
+6/1/1/1; a tendency multiplies one of them by three. `shell-heavy` leans on `drink` — §4.1's
+coffee at the desk — `asks often` on `think`, which is the clip with the thought cloud, and
+`expansive` on `type`, which is a longer typing burst between variations. A tendency the table
+does not know is ignored rather than guessed at. Three rules hold, each with a test:
+
+1. **It can never introduce a clip.** Every name it can produce is `type` or one of the three.
+2. **Any real state change cancels it.** `sync` used to compare the state's clip against
+   `rec.clip`, which is what is ON SCREEN; with a 2.6-second `drink` there that would have snapped
+   every variation away on the next snapshot, several times a second. It now compares against
+   `rec.deskDesired` — what the agent's STATE asks for — so it fires on exactly the changes it
+   fired on before and only those, and the variation is discarded the instant one arrives. A hand
+   going up is never animated around.
+3. **Reduced motion is untouched.** The director sits below `step`'s existing reduced-motion
+   return, beside the lounge rotation it already stops.
+
+A working agent types for 20–45 s before the first variation can occur, and that window is reset by
+every state change — so nothing but `type` can be on screen in the seconds after one, which is
+also longer than any capture this project takes. **`npm run goldens:check`: 6 of 6, 0 px over
+tolerance, 0 px moved at all.**
+
+The record gets its own `idleRng`, seeded from the agent's seed with a different constant. Sharing
+`rng` would have meant that adding a variation at somebody's desk re-rolled every benched agent's
+lounge sequence — the same reason §105 gave for not reusing `hashString` for an appearance.
+
+### 133.6 There is no setting, because nothing acts
+
+`04` §4's line is *"never affecting anything"*, and it is met literally. A trait changes two
+strings and the weight on one of four animations an already-idle agent plays. It does not change
+a state, a placement, a colour, a count, an order, a notification, or anything the user can act
+on. A switch for it would be a switch for nothing, so there is none — and `traits()` recomputes on
+every read, so there is nothing persisted to switch off either.
+
+### 133.7 The demo floor's ledger fixture wrote an id that joined to nothing
+
+Found while taking the screenshot. `writeLedgerFixture` in `scripts/demo-write.mjs` wrote the raw
+transcript uuid as `sessionId`; the real writer records the product's own agent id,
+`runtime:uuid` (§100). So every per-session surface computed from the ledger matched no agent on
+the demo floor and silently showed nothing — WP-46's record line as well as this one. One line,
+fixed. No test used `--ledger-fixture`, and the goldens do not.
+
+### 133.8 Verified on the running floor
+
+`node scripts/demo-floor.mjs --ledger-fixture`, 28 agents, 26 of them with a real line and 2 still
+`new here`. In the panel: *"self-directed · measured · opus-5 · since 27 Aug"*, italic and muted,
+under the state chip and above `waiting 4h`. In the hover card, last: the title, the name, the
+project line, the state line, then *"self-directed · terse · opus-5 · since 27 Aug"*. Neither
+carried a tool word, and that is correct — the demo transcripts have no `tool_use` blocks in them
+— and neither said `asks often`, because the fixture writes no `needs_input` transitions. Both
+were read back off the live DOM as well as looked at.
+
+### 133.9 Acceptance
+
+**45 tests added, 1713 → 1758, 1757 passing and 1 skipped** (the pre-existing real-permission
+ledger variant, which has no POSIX uid on win32). Five files: `traits.test.mjs` (21, over
+synthetic ledgers and the whole vocabulary), `traits-idle.test.mjs` (13, the director and its
+cancellation), `traits-invariant.test.mjs` (3), `traits-route.test.mjs` (3 integration, against a
+real daemon, including a `PRIVACY:` check that no path and no second person reaches the response),
+and 5 in `claude-parse.test.mjs` for the two tallies. `npm run goldens:check` was run because this
+package touches `public/render/`: 6 of 6, 0 px.
+
+`public/app.js` was **three lines from WP-22's 900-line ceiling** and the tendency handler went
+over it. The handler moved to `app-floor.js`, which is where the floor's own wiring lives and
+where the explanation of what a tendency does belongs anyway; `app.js` carries one line and one
+import. It is at 899 now, which is a fact worth writing down: the next thing that reaches for
+`app.js` has one line of room and should split something instead.
+
+**Owed.** The hand-raise bands are unmeasured (133.4). The tool mix and verbosity are bounded by
+`parseSummary`'s head and tail windows, so on a transcript larger than the combined window they
+describe the ends of the conversation and not its middle — the same limit, and the same honesty
+about it, that the token totals already carry.

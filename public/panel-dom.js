@@ -77,6 +77,16 @@ export function buildPanelDom() {
   const metaEl = document.createElement('div');
   metaEl.className = 'panel-meta';
 
+  // WP-28 · the agent's traits, as one quiet line under the identity area:
+  // "asks often · shell-heavy · terse · opus-5 · since 1 Sep". Read-only,
+  // inferred from real behaviour, never trained and never affecting anything
+  // (docs/plan/04 §4). Every word in it is about the AGENT; the person
+  // reading it is never described, scored or counted (docs/plan/08 §1.1
+  // rule 6). The strings come off the daemon and are set with `textContent`.
+  const traitEl = document.createElement('div');
+  traitEl.className = 'panel-traits';
+  traitEl.hidden = true;
+
   // "waiting 1d 2h" — mono, live. The spec draws it in crimson; the
   // stylesheet's contrast rule forbids crimson small text, so the words stay
   // in ink and a crimson rule carries the colour (docs/DEVIATIONS.md, WP-08).
@@ -100,7 +110,7 @@ export function buildPanelDom() {
   recordEl.className = 'panel-record';
   recordEl.hidden = true;
 
-  top.append(identityRow, titleEl, metaEl, waitingEl, doingEl, recordEl);
+  top.append(identityRow, titleEl, metaEl, traitEl, waitingEl, doingEl, recordEl);
 
   // The scrolling body: WHAT IT SAID, the rest of the thread folded beneath
   // it, then WHAT CHANGED.
@@ -265,6 +275,7 @@ export function buildPanelDom() {
     closeBtn,
     titleEl,
     metaEl,
+    traitEl,
     waitingEl,
     doingEl,
     recordEl,

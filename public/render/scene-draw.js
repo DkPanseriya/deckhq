@@ -13,7 +13,7 @@
 import { buildPlan, floorPopulation, U } from './plan.js';
 import { bakeBackdrop } from './backdrop.js';
 import { drawCharacter, formatElapsed, labelBox } from './rig.js';
-import { sampleClip, makeActivityRotation } from './clips.js';
+import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, identityFor, appearanceFor } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
@@ -151,7 +151,12 @@ export class SceneDraw extends SceneHit {
     // next `requestAnimationFrame` with it, so one bad frame froze the floor
     // permanently and the user's only signal was that nothing moved any more.
     try {
-      this._runtime.step(dt, { reduced: this._reduced, plan: this._plan, makeActivityRotation });
+      this._runtime.step(dt, {
+        reduced: this._reduced,
+        plan: this._plan,
+        makeActivityRotation,
+        makeIdleRotation,
+      });
       this._draw();
     } catch (err) {
       if (!this._frameErrorLogged) {

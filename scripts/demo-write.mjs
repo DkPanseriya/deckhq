@@ -368,6 +368,7 @@ export function writeProjectDirs(root) {
  */
 export async function writeLedgerFixture(sessions) {
   const { dayKey, projectKeyFor } = await import('../src/core/ledger.mjs');
+  const { agentId } = await import('../src/core/model.mjs');
   const dir = path.join(STATE_DIR, 'ledger');
   fs.mkdirSync(dir, { recursive: true });
   const machineId = '0'.repeat(32);
@@ -386,6 +387,13 @@ export async function writeLedgerFixture(sessions) {
     list.push({ t, line });
     files.set(day, list);
   };
+
+  // The real writer records the product's OWN agent id — `runtime:uuid` — so
+  // that a record joins straight to an `Agent` (`docs/DEVIATIONS.md` §100).
+  // This fixture wrote the raw transcript id, which joins to nothing: every
+  // per-session surface computed from the ledger (WP-46's record line, WP-28's
+  // trait line) matched no agent on the demo floor and quietly showed nothing.
+  const agentIdOf = (s) => agentId('claude-code', s.id);
 
   const now = Date.now();
   const midnight = new Date(now);
@@ -413,7 +421,7 @@ export async function writeLedgerFixture(sessions) {
       if (first > now) return;
       push(first, {
         projectKey: key,
-        sessionId: s.id,
+        sessionId: agentIdOf(s),
         body: {
           kind: 'session',
           event: 'first_seen',
@@ -427,12 +435,12 @@ export async function writeLedgerFixture(sessions) {
         if (at > now) break;
         push(at, {
           projectKey: key,
-          sessionId: s.id,
+          sessionId: agentIdOf(s),
           body: { kind: 'state', dim: 'activity', from: 'ended', to: 'working' },
         });
         push(at + 60_000, {
           projectKey: key,
-          sessionId: s.id,
+          sessionId: agentIdOf(s),
           body: { kind: 'tokens', delta: 12_000 + ((i * 37 + n * 11) % 40) * 1000, cacheDelta: 0 },
         });
         // Finished, then discharged — an episode with both ends, which is what
@@ -441,14 +449,14 @@ export async function writeLedgerFixture(sessions) {
         if (done > now) break;
         push(done, {
           projectKey: key,
-          sessionId: s.id,
+          sessionId: agentIdOf(s),
           body: { kind: 'state', dim: 'activity', from: 'working', to: 'for_review' },
         });
         const cleared = done + (6 + ((i * 13 + n * 29) % 90)) * MINUTE;
         if (cleared > now) break;
         push(cleared, {
           projectKey: key,
-          sessionId: s.id,
+          sessionId: agentIdOf(s),
           body: { kind: 'state', dim: 'activity', from: 'for_review', to: 'ended' },
         });
         // Some of those clearings were a reply typed here rather than in a
@@ -457,7 +465,7 @@ export async function writeLedgerFixture(sessions) {
         if ((i + n + back) % 3 === 0) {
           push(cleared - 30_000, {
             projectKey: key,
-            sessionId: s.id,
+            sessionId: agentIdOf(s),
             body: { kind: 'send', chars: 120 + ((i * 17) % 200) },
           });
         }

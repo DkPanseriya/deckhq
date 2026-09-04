@@ -226,6 +226,31 @@ export class RegistrySnapshot extends RegistryBase {
     return this._observed.get(id)?.closedCleanly === true;
   }
 
+  /**
+   * WP-28. What `traits()` needs about one session that only the transcript
+   * can say: the model, the tool mix, and the median reply length.
+   *
+   * A READ, and a copy. It touches no ack state, and it is deliberately not
+   * on the snapshot: the trait line is a grace note that at most one surface
+   * asks for at a time, and putting four more fields on every agent in every
+   * SSE frame would make the whole floor pay for it.
+   *
+   * @param {string} id
+   * @returns {{model:string|null, toolMix:Record<string,number>, textMedian:number,
+   *   textTurns:number}|null} null for a session this process has not observed.
+   */
+  traitInput(id) {
+    const obs = this._observed.get(id);
+    if (!obs) return null;
+    const mix = obs.toolMix || { files: 0, shell: 0, web: 0, search: 0 };
+    return {
+      model: obs.model ?? null,
+      toolMix: { files: mix.files, shell: mix.shell, web: mix.web, search: mix.search },
+      textMedian: obs.textMedian || 0,
+      textTurns: obs.textTurns || 0,
+    };
+  }
+
   /** @param {string} runtime */
   _hooksInstalled(runtime) {
     return !!(this._hookStatus[runtime] && this._hookStatus[runtime].installed);

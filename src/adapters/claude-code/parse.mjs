@@ -32,6 +32,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { clampText } from '../../core/model.mjs';
 import { estimateCost } from '../../core/rates.mjs';
+import { toolClass } from './hooks-summary.mjs';
 
 /** Root of Claude Code's per-machine config. Overridable for tests/tooling. */
 export const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
@@ -277,6 +278,23 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
   // ever added exactly once regardless of how many times we see it.
   const seenAssistantMsgIds = new Set();
 
+  // WP-28. Two tallies over the assistant's own turns, for the read-only
+  // traits in `src/core/traits.mjs`: which kinds of tool this session reaches
+  // for, and how long its replies run. Both are counted HERE rather than
+  // anywhere downstream because both are read off the transcript, and reading
+  // a transcript is the adapter's job and nobody else's (standing rule 8).
+  //
+  // Deduped the same way the token totals are, and for the same reason: on a
+  // small file the head and tail windows overlap completely, so without this
+  // a short session would count every tool call twice. `usage` is not always
+  // present, so this cannot reuse `seenAssistantMsgIds` — a turn with no
+  // usage block would never be marked seen there.
+  /** @type {Record<'files'|'shell'|'web'|'search', number>} */
+  const toolMix = { files: 0, shell: 0, web: 0, search: 0 };
+  /** @type {number[]} */
+  const textLengths = [];
+  const seenTallyKeys = new Set();
+
   const scan = (text) => {
     for (const rec of jsonLines(text)) {
       const ts = typeof rec.timestamp === 'string' ? Date.parse(rec.timestamp) : NaN;
@@ -307,6 +325,36 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
           outputTokens += Number(usage.output_tokens) || 0;
           cacheReadTokens += Number(usage.cache_read_input_tokens) || 0;
           cacheWriteTokens += Number(usage.cache_creation_input_tokens) || 0;
+        }
+
+        // WP-28's two tallies. Primary-thread only, for the same reason the
+        // last-text below is: a junior's tools and a junior's prose are the
+        // junior's, and it has a transcript of its own to be read from.
+        if (primary(rec)) {
+          const key = msgId || (hasTs ? `t${ts}` : null);
+          if (!key || !seenTallyKeys.has(key)) {
+            if (key) seenTallyKeys.add(key);
+            const content = rec.message.content;
+            if (Array.isArray(content)) {
+              let textLen = 0;
+              for (const block of content) {
+                if (!block || typeof block !== 'object') continue;
+                if (block.type === 'text' && typeof block.text === 'string') {
+                  textLen += block.text.length;
+                } else if (block.type === 'tool_use') {
+                  const cls = toolClass(block.name);
+                  if (cls) toolMix[cls] += 1;
+                }
+              }
+              // A turn that said nothing is a tool call, not a short reply.
+              // Counting its zero would drag every median toward "terse" in
+              // proportion to how much tool work the session did, which would
+              // make the verbosity trait a second, worse copy of the tool one.
+              if (textLen > 0) textLengths.push(textLen);
+            } else if (typeof content === 'string' && content.length > 0) {
+              textLengths.push(content.length);
+            }
+          }
         }
 
         // Subagent traffic still counts toward token spend, but never wins
@@ -382,7 +430,34 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
     lastRole,
     lastText: clampText(lastText),
     turnEnded: turnHasEnded(tailText, sidechain),
+    // WP-28. Two numbers about how this session works, never about the person
+    // reading them. Both are approximations for the same reason the token
+    // totals above are: the head and tail windows do not span a large file's
+    // middle. `traits()` says how many turns it had to work with, and says
+    // "new here" rather than guessing when that is too few.
+    toolMix,
+    textMedian: median(textLengths),
+    textTurns: textLengths.length,
   };
+}
+
+/**
+ * The median of a list of lengths, 0 for an empty one.
+ *
+ * The median rather than the mean, deliberately: an assistant's reply lengths
+ * are bimodal — a stream of one-line "let me check that" narrations around a
+ * few long answers — and a mean of that describes neither half. On the
+ * reference machine's 80 transcripts the median of per-session medians is
+ * 120 characters and the p90 is 1430, which is the shape being described.
+ *
+ * @param {number[]} values
+ * @returns {number}
+ */
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
 }
 
 /**

@@ -36,6 +36,7 @@ const PANEL_PARTS = [
   'panel-actions.js',
   'panel-resume.js',
   'panel-records.js',
+  'panel-traits.js',
   'panel-composer.js',
   'panel-live.js',
   'panel.js',

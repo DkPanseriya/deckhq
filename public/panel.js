@@ -62,6 +62,7 @@
  *   panel-actions.js     the weighted buttons, ⋯ more, and 1/2/3
  *   panel-resume.js      resume in app / in terminal
  *   panel-records.js     WP-46's records line
+ *   panel-traits.js      WP-28's trait line
  *   panel-composer.js    the composer and the one send path
  *   panel-live.js        WP-09's live region and the panel's SSE connection
  * ============================================================================
@@ -88,6 +89,7 @@ import {
 import { createActionsPart } from './panel-actions.js';
 import { createResumePart, setResumeAppAvailable } from './panel-resume.js';
 import { createRecordsPart } from './panel-records.js';
+import { createTraitsPart } from './panel-traits.js';
 import { createComposerPart } from './panel-composer.js';
 import { createLivePart } from './panel-live.js';
 
@@ -110,10 +112,22 @@ export { juniorMetaFor, costLineParts, boardCostParts } from './panel-format.js'
  *   re-avatar" flow (WP15 task C.3) for the currently displayed agent.
  * @param {(id:string, hasDraft:boolean) => void} [opts.onDraftChange] the
  *   composer's unsent text for a session appeared or went away.
+ * @param {(map:Record<string,string|null>) => void} [opts.onTendencies] WP-28.
+ *   The floor's idle tendencies arrived with `GET /api/traits`. A hint about
+ *   which existing idle clip an agent leans on, and nothing else.
  */
 export function createPanel(opts) {
-  const { root, getSnapshot, toast, announce, onClosed, onNewAgent, onRename, onDraftChange } =
-    opts;
+  const {
+    root,
+    getSnapshot,
+    toast,
+    announce,
+    onClosed,
+    onNewAgent,
+    onRename,
+    onDraftChange,
+    onTendencies,
+  } = opts;
 
   /** The clock behind the "waiting 1d 2h" line, while the panel is open. */
   let waitingTimer = null;
@@ -165,6 +179,7 @@ export function createPanel(opts) {
   });
   const resume = createResumePart({ ...dom, getSnapshot, toast });
   const records = createRecordsPart({ ...dom });
+  const traits = createTraitsPart({ ...dom, onTendencies });
   const composer = createComposerPart({
     ...dom,
     root,
@@ -189,6 +204,7 @@ export function createPanel(opts) {
   const { performAction, pressNumberKey, agentFor, setMoreOpen } = actions;
   const { loadResumeTargets } = resume;
   const { loadTeamRecords, teamRecords } = records;
+  const { loadTraits, agentTraits } = traits;
   const { sendText, restoreComposer } = composer;
   const { beginLive, endLive, watchLive, closeLive } = live;
 
@@ -200,6 +216,7 @@ export function createPanel(opts) {
     renderActions: actions.renderActions,
     renderResume: resume.renderResume,
     renderRecordLine: records.renderRecordLine,
+    renderTraitLine: traits.renderTraitLine,
   });
   actions.wire({ pendingPermission, renderChrome, sendText, open });
   composer.wire({ renderDraftChip, agentFor, beginLive });
@@ -294,6 +311,7 @@ export function createPanel(opts) {
     loadChanges(id, snapshot?.scannedAt ?? null);
     loadResumeTargets(id);
     loadTeamRecords();
+    loadTraits();
     if (waitingTimer) clearInterval(waitingTimer);
     waitingTimer = setInterval(renderWaiting, WAITING_TICK_MS);
   }
@@ -368,6 +386,7 @@ export function createPanel(opts) {
     getSelectedId,
     hasDraft,
     teamRecords,
+    agentTraits,
     destroy,
   };
 }

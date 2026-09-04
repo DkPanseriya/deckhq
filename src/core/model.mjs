@@ -124,6 +124,14 @@ export { GONE_HOME_DAYS, isActiveAgent, isDeskAgent, isGoneHome, isSubagent, pla
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText
  * @property {boolean} [turnEnded]
+ * @property {Record<'files'|'shell'|'web'|'search', number>} [toolMix] WP-28.
+ *   How this session's tool calls split across the four classes, counted off
+ *   the transcript by the adapter. Absent for a runtime that cannot report it;
+ *   an absent mix is "not observed", never "no tool calls".
+ * @property {number} [textMedian]             WP-28. Median length, in
+ *   characters, of an assistant turn that said something. 0 when none did.
+ * @property {number} [textTurns]              WP-28. How many turns that
+ *   median was taken over, so a reader can tell a median from a single sample.
  * @property {boolean} [archived]              the desktop app's archive flag,
  *   stamped on by the adapter AFTER the summary cache has handed the summary
  *   out and never stored in it (docs/DEVIATIONS.md §46). It was being written
