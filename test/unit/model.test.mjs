@@ -267,24 +267,34 @@ test('WP-22: no split module is over 900 lines', async () => {
   const { readdir, readFile } = await import('node:fs/promises');
   const path = await import('node:path');
   const { fileURLToPath } = await import('node:url');
-  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'public');
+  const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const root = path.join(repo, 'public');
 
+  // [directory, filename prefix, how many modules that split produced].
+  // The WP-22 follow-up added the last groups; the ceiling itself, 900, has
+  // not moved.
   const groups = [
-    [path.join(root, 'render'), (f) => f.startsWith('plan') && f.endsWith('.js')],
-    [root, (f) => f.startsWith('app') && f.endsWith('.js')],
-    [root, (f) => f.startsWith('panel') && f.endsWith('.js')],
-    [path.join(root, 'render'), (f) => f.startsWith('scene') && f.endsWith('.js')],
-    [path.join(root, 'render'), (f) => f.startsWith('rig') && f.endsWith('.js')],
+    [path.join(root, 'render'), 'plan', 7],
+    [root, 'app', 11],
+    [root, 'panel', 14],
+    [path.join(root, 'render'), 'scene', 9],
+    [path.join(root, 'render'), 'rig', 7],
+    [path.join(repo, 'src', 'core'), 'ledger', 7],
   ];
   let checked = 0;
-  for (const [dir, keep] of groups) {
-    const files = (await readdir(dir)).filter(keep);
-    assert.ok(files.length >= 7, `${dir} did not split into the modules it should have`);
+  for (const [dir, prefix, min] of groups) {
+    const files = (await readdir(dir)).filter(
+      (f) => f.startsWith(prefix) && /\.m?js$/.test(f) && !f.endsWith('.test.mjs'),
+    );
+    assert.ok(
+      files.length >= min,
+      `${dir}/${prefix}* did not split into the modules it should have`,
+    );
     for (const f of files) {
       const lines = (await readFile(path.join(dir, f), 'utf8')).split('\n').length;
       assert.ok(lines <= 900, `${f} is ${lines} lines; WP-22's ceiling is 900`);
       checked++;
     }
   }
-  assert.ok(checked >= 48, `expected the whole split, saw ${checked} files`);
+  assert.ok(checked >= 55, `expected the whole split, saw ${checked} files`);
 });
