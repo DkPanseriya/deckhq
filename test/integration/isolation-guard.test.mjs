@@ -1,5 +1,5 @@
 /**
- * The guard on the guard. `docs/DEVIATIONS.md` §123.
+ * The guard on the guard. `docs/DEVIATIONS.md` §124.
  *
  * `scripts/test.mjs` plants a **canary home** for the whole run — an empty
  * machine in a temp directory, holding one transcript whose title is a string

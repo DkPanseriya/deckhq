@@ -25,7 +25,7 @@
  * gets, decided what this file asserted. §121. That pin is now
  * `test/helpers/isolate.mjs`, which covers the two variables this file left on
  * the host — the desktop-app store and `~/.deckhq` — as well as the three it
- * already set. §123. `node --test` gives every file its own process, so this
+ * already set. §124. `node --test` gives every file its own process, so this
  * cannot leak into another suite.
  */
 // First, and before anything under `src/`: it moves the machine.

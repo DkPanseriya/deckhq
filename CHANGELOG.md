@@ -1122,10 +1122,10 @@ changes no user-owned field on the parent` — a parent standing in the office w
   unmistakably-titled transcript on it, preloads an `fs` tripwire into every process, and **fails
   the run** if anything touches it — naming the function, the path and the frame. On a synthetic
   home of 3,000 transcripts the suite went from **199.1 s to 5.8 s**, and it is now flat: 5.8 s
-  against an empty home and 5.8 s against three thousand. §123.
+  against an empty home and 5.8 s against three thousand. §124.
 - **The `reviewSince` invariant asserts something now.** It used to look for a `for_review` agent on
   the host and `return` without asserting anything when it found none, so on most machines it was
-  green and empty. It plants the session it needs and runs its four assertions every time. §123.3.
+  green and empty. It plants the session it needs and runs its four assertions every time. §124.3.
 
 ### Packaging
 

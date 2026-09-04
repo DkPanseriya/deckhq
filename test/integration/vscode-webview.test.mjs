@@ -16,7 +16,7 @@
  *      file asserts that a request actually carrying that origin is still
  *      refused** — because if one ever arrived, it would not be from us.
  *
- * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123).
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §124).
  */
 // First, and before anything under `src/`: it moves the machine.
 import { daemonScratch } from '../helpers/isolate.mjs';

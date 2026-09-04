@@ -15,7 +15,7 @@
  * installed runtime accepts those bytes. That is the acceptance run, it is
  * still owed, and it needs `claude login` on the reference machine first.
  *
- * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123),
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §124),
  * so the registry behind the route is scanning a temp root.
  */
 // First, and before anything under `src/`: it moves the machine.

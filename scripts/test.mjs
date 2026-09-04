@@ -213,7 +213,7 @@ child.on('exit', (code, signal) => {
     process.stderr.write(
       `\nthe suite read outside its temp roots: ${audit.count} access(es) to the canary home.\n` +
         'a test that needs a home must import test/helpers/isolate.mjs first; ' +
-        'docs/DEVIATIONS.md §123.\n' +
+        'docs/DEVIATIONS.md §124.\n' +
         audit.lines.join('\n') +
         '\n',
     );

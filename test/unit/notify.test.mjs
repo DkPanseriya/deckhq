@@ -18,7 +18,7 @@
  */
 // A machine of our own, before anything under `src/` is loaded: several of
 // those modules resolve a path out of the environment while they evaluate.
-// `docs/DEVIATIONS.md` §123.
+// `docs/DEVIATIONS.md` §124.
 import '../helpers/isolate.mjs';
 
 import { test } from 'node:test';

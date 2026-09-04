@@ -1,6 +1,6 @@
 // A machine of our own, before anything under `src/` is loaded: several of
 // those modules resolve a path out of the environment while they evaluate.
-// `docs/DEVIATIONS.md` §123.
+// `docs/DEVIATIONS.md` §124.
 import '../helpers/isolate.mjs';
 
 import assert from 'node:assert/strict';
@@ -304,7 +304,7 @@ test('fixture: the later token_count event wins over the earlier one (last-wins,
 // until this file was isolated these tests asserted `false` about whatever
 // machine they ran on: true by luck here, and a hard failure on any developer
 // who had Codex installed. The isolate helper at the top of the file moves the
-// home, and there is no `.codex` under it. `docs/DEVIATIONS.md` §123.3.
+// home, and there is no `.codex` under it. `docs/DEVIATIONS.md` §124.3.
 test('adapter.available(): resolves false on a machine with no ~/.codex, and never throws', async () => {
   await assert.doesNotReject(async () => {
     const result = await adapter.available();

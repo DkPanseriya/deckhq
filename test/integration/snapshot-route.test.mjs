@@ -5,7 +5,7 @@
  * the product whose entire purpose is to put a file on disk, so what it
  * accepts is the whole of its security surface.
  *
- * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123),
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §124),
  * so the daemon behind these refusals is scanning a temp root rather than the
  * developer's transcripts.
  */
@@ -134,7 +134,7 @@ test('a snapshot at the 2 MB target goes through', async () => {
   });
 });
 
-// DELIBERATE HOST READ — the only one in the suite. `docs/DEVIATIONS.md` §123.5.
+// DELIBERATE HOST READ — the only one in the suite. `docs/DEVIATIONS.md` §124.5.
 // Everything else runs against a temp root, but the claim here is that the
 // office is named after *this machine*, so the machine's own name is the
 // expected value and there is nothing to inject. `os.hostname()` is a constant

@@ -4,7 +4,7 @@
  * These exercise the contract in docs/02-ARCHITECTURE.md §4, §5 and §9 — and,
  * above all, the product invariant in docs/01-PRODUCT.md §2.
  *
- * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123).
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §124).
  * This file is the one §121.4 named: `INVARIANT: reading a conversation over
  * HTTP never clears reviewSince` used to look for a `for_review` agent on the
  * host and return without asserting anything when it did not find one, so what

@@ -11,7 +11,7 @@
  * adapter resolves `CLAUDE_CONFIG_DIR` at module load and the Codex adapter
  * reads `os.homedir()`, which on both platforms is an environment variable.
  * `test/helpers/isolate.mjs` is that pin, shared with every other file that
- * needs one (`docs/DEVIATIONS.md` §123); it also moves `%APPDATA%`, which this
+ * needs one (`docs/DEVIATIONS.md` §124); it also moves `%APPDATA%`, which this
  * file used to leave pointing at the developer's own Claude desktop store.
  * `node --test` gives every file its own process, so this cannot leak into
  * another suite.

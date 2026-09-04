@@ -1,3 +1,5 @@
+// The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §124).
+import '../helpers/isolate.mjs';
 /**
  * OpenCode adapter — parsing, and degradation on a machine without it. WP-25.
  *

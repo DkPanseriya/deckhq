@@ -9266,7 +9266,7 @@ behaviour change, and the Wrapped tests are untouched — they import `countCatc
   them with Codex. Deliberate, and written down in `ADAPTERS.md` rule 6: §2.1's promise that a
   format break is a *single-file* fix is worth more than sixty duplicated lines, and it means a
   contributor copies one file and owns all of it without any chance of breaking another runtime.
-## 123. Test isolation — the suite had a home directory, and it was the developer's
+## 124. Test isolation — the suite had a home directory, and it was the developer's
 
 §121.4 left a debt with a number on it: whole-suite wall clock moved between 5 s and 68 s **on one
 commit**, because several tests scanned the real `~/.claude`, `~/.deckhq` and
@@ -9274,7 +9274,7 @@ commit**, because several tests scanned the real `~/.claude`, `~/.deckhq` and
 to have open at that moment. §121.1 pinned one file and said so: _"The others still read the host,
 and a timing claim about this suite is worth nothing until they do not."_ This is the others.
 
-### 123.1 What was actually reading the host, and how that was established
+### 124.1 What was actually reading the host, and how that was established
 
 Not by grep. A grep for `os.homedir()` finds the tests that say the word; it does not find the test
 that imports `src/core/rates.mjs`, which resolves `~/.deckhq/rates.json` while it evaluates. So the
@@ -9315,7 +9315,7 @@ the one anybody would have guessed:
    and **wrote into `~/.deckhq`**: a `.doctor-probe-<pid>` file, and a summary cache rebuilt from
    the developer's own sessions. That is the 60-second test, and it was in `test/unit`.
 
-### 123.2 The two mechanisms, and why the whole-suite guard is in the runner
+### 124.2 The two mechanisms, and why the whole-suite guard is in the runner
 
 **`test/helpers/isolate.mjs`**, imported first by a test file, is the per-file half. It creates a
 temp root, points `HOME`, `USERPROFILE`, `APPDATA`, `CLAUDE_CONFIG_DIR`, `DECKHQ_STATE_DIR` and
@@ -9348,7 +9348,7 @@ to `test/integration/isolation-guard.test.mjs` is the part the runner cannot che
 The negative control was run: removing the isolate import from `test/unit/codex-parse.test.mjs`
 fails the run with `1x … fsp.access :: …\home\.codex`.
 
-### 123.3 One assertion got stronger, and none got weaker
+### 124.3 One assertion got stronger, and none got weaker
 
 `INVARIANT: reading a conversation over HTTP never clears reviewSince` — the test §121.4 named —
 opened with:
@@ -9367,7 +9367,7 @@ runs the four assertions every time. The early return is gone.
 machine without `~/.codex` and would have failed outright on one with it. They are now true by
 construction.
 
-### 123.4 The measurements
+### 124.4 The measurements
 
 Wall clock over five consecutive `npm test` runs on the reference machine (Windows 11, Node 24),
 recorded twice for the unchanged tree because the first window is the whole point:
@@ -9402,7 +9402,7 @@ is the `NODE_OPTIONS` preload in every process.
 
 Tests went 1,525 → 1,527: the two in `isolation-guard`. Nothing was deleted or skipped.
 
-### 123.5 What still reads the host, deliberately
+### 124.5 What still reads the host, deliberately
 
 One thing, and it is not a home directory: `test/integration/snapshot-route.test.mjs` asserts
 `GET /api/about` reports `os.hostname()`. The office is named after the machine, that is the claim,

@@ -12,7 +12,7 @@
  * The throwaway machine comes from `test/helpers/isolate.mjs`, imported before
  * the dynamic imports below because `CLAUDE_CONFIG_DIR` and `DECKHQ_STATE_DIR`
  * are read at module-evaluation time by the modules under test
- * (`docs/DEVIATIONS.md` §123). Ports are never fixed: every one is taken from
+ * (`docs/DEVIATIONS.md` §124). Ports are never fixed: every one is taken from
  * the OS moments before it is used, so the developer's own daemon on 4317 or
  * 4400 is never in the way.
  */
