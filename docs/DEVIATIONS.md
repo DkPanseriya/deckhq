@@ -11843,3 +11843,36 @@ whatever GitHub counts that a character count does not.
 **What this does not do.** It does not shorten `CHANGELOG.md`, does not touch the `1.3.0` entry,
 and does not change the notes for any release whose section already fits. The release page is
 smaller than the changelog now, on purpose, and says where the rest is.
+
+### 138.3 The other blocker: two tests could be handed the same port
+
+`test/integration/daemon-hooks-port.test.mjs` took every port from a helper
+that bound port 0, read the number the OS chose, released it and returned it.
+Two calls a millisecond apart can be given **the same number**, because the
+first has already let go of it by the time the second asks — and this file
+calls it twice per test, for two ports it then needs to be different. When it
+happened, the stranger in "the hooks port held by something that is not
+DeckHQ" sat on the port the daemon had been asked for, the daemon correctly
+walked to the next one, and the assertion failed with an `actual`/`expected`
+pair one apart. Seen once during 1.3.0 prep, not reproduced in eight
+consecutive runs, and written up in the release checklist as a flake to re-run.
+It was not a flake. It was a race with a small window, and a race with a small
+window is a red CI run on somebody else's machine.
+
+**The fix is to reserve rather than to sample.** `takePort()` hands out ports
+from a batch of eight that were bound **all at once** and are still bound: the
+OS cannot hand out one number twice while every socket in the batch is open, so
+a batch is distinct by construction. A listener is closed at the moment its
+port is handed to its one caller — held until then, not released and hoped
+about — and every number handed out is remembered, so a later batch that
+happens to include one drops it rather than reissuing it. The reserved
+listeners are `unref`'d, so holding them cannot keep the process alive, and an
+`after` hook closes whatever was never used.
+
+The daemons that start on `port: 0` are unaffected and still let the OS choose:
+the reserved sockets are bound, so the OS will not choose one of them.
+
+**Every assertion in the file is unchanged.** One test is added — twenty ports
+in a row, across three batches, all distinct and all genuinely free when handed
+over — which is the property the other six have always rested on and never
+stated.

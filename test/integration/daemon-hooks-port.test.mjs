@@ -14,7 +14,8 @@
  * are read at module-evaluation time by the modules under test
  * (`docs/DEVIATIONS.md` §124). Ports are never fixed: every one is taken from
  * the OS moments before it is used, so the developer's own daemon on 4317 or
- * 4400 is never in the way.
+ * 4400 is never in the way — and every one is RESERVED first, so no two of
+ * them can be the same number (`docs/DEVIATIONS.md` §138.3).
  */
 // First, and before anything under `src/`: it moves the machine.
 import {
@@ -25,7 +26,7 @@ import {
   scratchDir,
 } from '../helpers/isolate.mjs';
 
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -49,17 +50,75 @@ await fs.copyFile(FIXTURE, path.join(PROJECT_DIR, '11111111-1111-1111-1111-11111
 const { startDaemon, DeckhqAlreadyRunningError } = await import('../../src/daemon.mjs');
 const hooks = await import('../../src/adapters/claude-code/hooks.mjs');
 
-/** A port the OS just handed out and released, so it is free right now. */
-function freePort() {
+// --- ports, reserved before they are handed out -----------------------------
+//
+// Bind port 0, read the number, release it, hand it back was the old helper,
+// and it is a race: two calls a millisecond apart can be given the SAME port,
+// because the first has already let go of it by the time the second asks. When
+// that happened, one test's stranger sat on the port another had asked the
+// daemon for, the daemon correctly walked to the next one, and the assertion
+// failed with an actual/expected pair one apart — seen once during 1.3.0 prep
+// and written up as a flake to re-run. `docs/DEVIATIONS.md` §138.3.
+//
+// So a batch is bound ALL AT ONCE and held: the OS cannot hand out one number
+// twice while every socket in the batch is still open, so the batch is distinct
+// by construction. A listener is released at the moment its port is handed to a
+// caller, and no port is ever handed out twice. Nothing in this file can ask
+// for a port another part of it is using.
+
+/** How many ports to reserve in one go. The file uses eight. */
+const RESERVE_BATCH = 8;
+/** Bound and waiting to be handed out. */
+let reserved = /** @type {{port: number, server: net.Server}[]} */ ([]);
+/** Every port this file has already handed out; none is ever reused. */
+const handedOut = new Set();
+
+/** One listener on an OS-chosen port, still bound when this resolves. */
+function holdEphemeral() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => {
+      // Held, but never a reason for the process to stay alive.
+      server.unref();
       const { port } = /** @type {net.AddressInfo} */ (server.address());
-      server.close(() => resolve(port));
+      resolve({ port, server });
     });
   });
 }
+
+/** @param {net.Server} server */
+function closeServer(server) {
+  return new Promise((resolve) => server.close(() => resolve(undefined)));
+}
+
+/** Reserve a batch, all bound at the same moment, so all distinct. */
+async function reservePorts() {
+  for (let attempt = 0; attempt < 5 && reserved.length === 0; attempt++) {
+    const batch = await Promise.all(Array.from({ length: RESERVE_BATCH }, () => holdEphemeral()));
+    for (const held of batch) {
+      // A number this file has already used is dropped rather than reissued.
+      if (handedOut.has(held.port)) await closeServer(held.server);
+      else reserved.push(held);
+    }
+  }
+  if (reserved.length === 0) throw new Error('could not reserve a port this file has not used');
+}
+
+/** A free port that no other test or fixture in this file will be given. */
+async function takePort() {
+  if (reserved.length === 0) await reservePorts();
+  const held = /** @type {{port: number, server: net.Server}} */ (reserved.pop());
+  handedOut.add(held.port);
+  // Free from here on, and free for exactly one caller.
+  await closeServer(held.server);
+  return held.port;
+}
+
+after(async () => {
+  await Promise.all(reserved.map((held) => closeServer(held.server)));
+  reserved = [];
+});
 
 /** Hooks freshly installed at `port`, and nothing else in the settings file. */
 async function hooksAt(port) {
@@ -92,8 +151,8 @@ async function capturingLog(fn) {
 // ---------------------------------------------------------------------------
 
 test('with no port named, the daemon listens where the installed hooks post, and says so once', async () => {
-  const hookPort = await freePort();
-  const requested = await freePort();
+  const hookPort = await takePort();
+  const requested = await takePort();
   assert.notEqual(hookPort, requested);
   await hooksAt(hookPort);
 
@@ -122,8 +181,8 @@ test('with no port named, the daemon listens where the installed hooks post, and
 });
 
 test('an explicit --port is honoured as given, and the header keeps its banner', async () => {
-  const hookPort = await freePort();
-  const explicit = await freePort();
+  const hookPort = await takePort();
+  const explicit = await takePort();
   await hooksAt(hookPort);
 
   // What bin/deckhq.mjs passes for `--port <explicit>`: no adoption.
@@ -148,7 +207,7 @@ test('the hooks port held by a DeckHQ daemon: refuse to start beside it, naming 
   const first = await startDaemon({ port: 0, ...(await daemonOpts()) });
   try {
     await hooksAt(first.port);
-    const requested = await freePort();
+    const requested = await takePort();
     const opts = await daemonOpts();
 
     await assert.rejects(
@@ -205,8 +264,8 @@ test('the CLI turns that refusal into one line and a clean exit', async () => {
 });
 
 test('the hooks port held by something that is not DeckHQ: fall back to the requested port', async () => {
-  const hookPort = await freePort();
-  const requested = await freePort();
+  const hookPort = await takePort();
+  const requested = await takePort();
   await hooksAt(hookPort);
 
   // A stranger on the hooks' port, answering 200 to everything with a body
@@ -236,12 +295,24 @@ test('the hooks port held by something that is not DeckHQ: fall back to the requ
 
 test('no hooks installed: the requested port, exactly as before', async () => {
   await fs.rm(hooks.SETTINGS_FILE, { force: true });
-  const requested = await freePort();
+  const requested = await takePort();
   const d = await startDaemon({ port: requested, adoptHooksPort: true, ...(await daemonOpts()) });
   try {
     assert.equal(d.port, requested);
   } finally {
     await d.close();
+  }
+});
+
+test('the port helper hands out distinct ports, and each one is free when it does', async () => {
+  // The property every test above rests on, and the one the old helper could
+  // not promise: twenty in a row, across three reservation batches, no repeat.
+  const ports = [];
+  for (let i = 0; i < 20; i++) ports.push(await takePort());
+  assert.equal(new Set(ports).size, ports.length, `a port was handed out twice: ${ports}`);
+  for (const port of ports) {
+    assert.ok(Number.isInteger(port) && port > 0 && port < 65_536, `not a port: ${port}`);
+    assert.equal(await portListening(port), false, `port ${port} was handed over still occupied`);
   }
 });
 

@@ -59,13 +59,12 @@ npm test
 All five must pass. `prepublishOnly` runs lint, typecheck and the suite again on the runner, but
 finding a failure here costs nothing and finding it after the tag wastes a version number.
 
-> **A known flake to re-run, not to ignore.** `test/integration/daemon-hooks-port.test.mjs` takes
-> two ports from a helper that binds port 0, reads the number and releases it — so two calls can
-> hand back the *same* port. When they do, the stranger in the test occupies the port the daemon
-> was asked for, the daemon correctly walks to the next one, and the assertion fails with an
-> `actual`/`expected` pair one apart. Seen once during 1.3.0 prep and not reproduced in eight
-> consecutive runs of that file. If a red suite is that test with adjacent port numbers, re-run;
-> anything else is real.
+> **The known flake is fixed — do not re-run a red suite.** `test/integration/daemon-hooks-port.test.mjs`
+> used to take its ports from a helper that binds port 0, reads the number and releases it, so two
+> calls could hand back the *same* port and the assertion would fail with an `actual`/`expected`
+> pair one apart. It now reserves a batch of ports bound all at once and releases each one only as
+> it is handed over, so no two ports in that file can be the same number
+> (`docs/DEVIATIONS.md` §138.3). There is no flake left to wave through: a red suite is real.
 
 ## 4. Confirm CI is green
 
@@ -128,10 +127,14 @@ step 5, stop and find out why.
 ### 7a. Check the release notes will fit — **resolved: the job caps the body, and the pre-check refuses an oversize one before publishing**
 
 ```sh
-node scripts/release/changelog-section.mjs --release-body --max-chars 120000 1.3.0 | wc -c
+node scripts/release/changelog-section.mjs --release-body --max-chars 120000 1.3.0 | node -e "
+  let s='';process.stdin.setEncoding('utf8').on('data',d=>s+=d).on('end',()=>{
+    const n=s.length;console.log(n,'characters',n>125000?'— TOO LONG':'— fits');});"
 ```
 
-Expect **99,848** and exit 0. Anything else, stop.
+Expect **`99848 characters — fits`** and exit 0. Anything else, stop. Count characters, not bytes:
+the notes are full of em dashes and `§`, so `wc -c` reads 702 bytes high and GitHub's cap is on
+characters.
 
 A GitHub Release body is capped at **125,000 characters** and the raw `1.3.0` section is
 **145,581** — 20,581 over. That is still true, and it no longer matters, because the `release` job

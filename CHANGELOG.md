@@ -6,6 +6,19 @@
 
 ## Unreleased
 
+### Testing
+
+- **The `daemon-hooks-port` flake was a race, and it is gone.** Every port in
+  `test/integration/daemon-hooks-port.test.mjs` came from a helper that bound port 0, read the
+  number and released it — so two calls a millisecond apart could be handed the **same** port, and
+  once were: the stranger in one test sat on the port the daemon had been asked for, the daemon
+  correctly walked to the next one, and the assertion failed with an `actual`/`expected` pair one
+  apart. Ports are now **reserved** instead: a batch of eight bound all at once, so the OS cannot
+  hand out one number twice, each listener released only at the moment its port is handed to its
+  one caller, and no number ever handed out twice. Every assertion in the file is unchanged, and
+  one is added — twenty ports in a row, all distinct and all free when handed over. The release
+  checklist no longer tells anybody to re-run that file. `docs/DEVIATIONS.md` §138.3.
+
 ### Packaging
 
 - **The GitHub Release body always fits, and the publish job refuses one that would not.** A
