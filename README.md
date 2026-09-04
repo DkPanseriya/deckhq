@@ -326,6 +326,10 @@ Everything is read locally and nothing leaves the machine.
 - `~/.deckhq/snapshots/` — only what `--capture-proof` writes, when you ask for it.
 - `~/.deckhq/daemon.json` — the port a running daemon bound, so a hook can find it. Removed on a
   clean shutdown; nothing you own is in it.
+- `~/.deckhq/rates.json` — your own prices, if you set any. Edit it in the settings sheet or in a
+  text editor; it merges over the shipped table one model at a time. Free, and it always was.
+- `~/.deckhq/packs/` — installed asset packs, one directory each. Colours and names only. Delete
+  the directory and you lose the extra themes and avatars and nothing else.
 - `~/.claude/settings.json` — **only with your explicit consent**, and only a tagged hook block.
 
 If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
@@ -484,6 +488,23 @@ half-applied. It does name your project folders, so read one before you send it 
 ![The floor in the night shift theme: the same office, cooler and dimmer, with the state colours unchanged](docs/media/theme-night-shift.png)
 
 ![The floor in the blueprint theme: drafting-table blue with white line work, and the state colours unchanged](docs/media/theme-blueprint.png)
+
+**Supporter pack: more themes and avatars; everything that captures, queues or acts is free.** A
+pack is a single signed file — `deckhq pack install <file>` copies it into `~/.deckhq/packs/` and a
+running DeckHQ picks it up within a second. It carries floor themes and avatar sets and nothing
+else: there is no key in its format for a tier, a licence, an expiry or a feature flag, and a test
+runs the whole API surface with and without a pack installed and diffs the responses, so capture,
+the six states, the queue and every action are provably identical either way. Every theme in a pack
+goes through the same schema and the same contrast gates as a theme DeckHQ ships — one that fails
+is dropped with its reason and the rest of the pack still installs — and every avatar colour is
+held the same distance from every state colour, so an agent can never wear a state. There is no
+account, no licence check and no network call anywhere in it; the only question DeckHQ ever asks
+about a pack is whether it was signed by the publisher key compiled into the build, and it answers
+that locally. `deckhq pack verify <file>` shows you what is in one before you install it, and
+`deckhq pack remove <name>` puts the floor back. `packs/supporter-sample/` in this repository is a
+real one, source and all.
+
+![The settings sheet's theme picker with a Supporter pack installed: the shipped themes and the pack's warehouse and garden beside them](docs/media/pack-picker.png)
 
 ## Options
 

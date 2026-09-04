@@ -9810,3 +9810,318 @@ is not, and neither can be reproduced here — 126.1's pipe is synchronous on Wi
 runner is what confirms it. 126.3's deadlock **was** reproduced here, directly and in both
 directions, but the SIGTERM path that triggers it in the wild does not exist on Windows, so that the
 goldens job now completes on ubuntu is also a CI-only fact.
+
+## 127. WP-45 — the Supporter pack carries themes and avatars, and two of the four things the plan put in it are free
+
+**Spec:** `docs/plan/08-PLAN-V2-100X.md` §9 WP-45 — "Signed asset pack loaded from `~/.deckhq/packs/`:
+themes (night shift, blueprint, warehouse), avatar sets, floor replay of a day from the ledger,
+rate-card editor. Loaded only if present. Nothing in it affects capture, the queue or any action,
+asserted by a test that runs the acceptance script with and without the pack and diffs the API
+responses." `08` §5 and `03-BUSINESS-MODEL.md` §5 price it at $29 once, month 1, as the price probe.
+
+Two of the four listed contents ship in the FREE core instead, and that is the first thing this
+entry records, because it is a deliberate refusal of the plan rather than an omission.
+
+### 127.1 The two free-core decisions, and the rule that forced them
+
+`08` §1.1 **rule 2**: _paid features are services you opt into, never gates._ §14 refuses "any
+paywall on capture, the queue or an action". Read together, the test is not "is this valuable" but
+**"is this a thing we make, or a thing the user already has?"**
+
+| Listed in the pack | Ships             | Why                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| More themes        | **in the pack**   | An asset. Somebody drew it. Nothing on the machine already contains it.                                                                                                                                                                                                                                                                                                                                                                   |
+| Avatar sets        | **in the pack**   | Same.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Floor replay       | **free**          | It is a reading of `~/.deckhq/ledger/`, which is a directory of text files in the user's own home, written by their own machine, describing their own work. Charging to look at it is a gate on data they already own. `deckhq stats`, the daily postcard and Wrapped all read the same files and are all free; replay being paid would have made the ledger's price depend on which window you opened it in.                                |
+| Rate-card editor   | **free**          | `~/.deckhq/rates.json` has existed since WP-26 (§111) and anybody can edit it in a text editor today. Selling a SHEET that edits it is not selling a feature; it is charging for the removal of an inconvenience we put there. And rule 7 — _cost is an estimate, never a bill_ — only holds if the person looking at a wrong number can correct it. A paid corrector leaves the unpaid user staring at a figure they can see is wrong and cannot fix. |
+
+So **what the pack actually carries is more themes and avatar sets**, and the pricing question the
+owner has to answer (§127.9) is now about a cosmetics pack rather than about a four-item bundle.
+The plan's revenue line does not change — nobody was going to buy WP-45 for a rate-card editor —
+but the sentence on the storefront does, and it is now one sentence: _more themes and avatars;
+everything that captures, queues or acts is free._
+
+The reasoning is not only in this file. `src/core/replay.mjs` and `src/http/routes/rates.mjs` each
+open with the argument, because the next person to wonder "why isn't this in the pack" will be
+reading the code.
+
+### 127.2 A pack is a file, and that is the whole enforcement model
+
+No account. No licence check. No activation call. No expiry. No egress of any kind. The only
+question this product ever asks about a pack is _"was this signed by the DeckHQ publisher key"_,
+and it answers it locally with `node:crypto`. Anyone holding the file can install it, on any
+machine, offline, for ever.
+
+That is a decision, not an oversight, and it follows from rule 2 plus the zero-egress promise:
+copy protection needs a server, and this product does not have one and will not get one. The
+signature is an **integrity** check, not a lock. A pack changes what the floor is painted in, so a
+tampered pack is a way to get unmeasured colours onto somebody's screen, and a pack downloaded
+from a storefront passes through places we do not control. `src/core/publisher-key.mjs` says all
+of this out loud, next to the key.
+
+**The key.** Ed25519, generated with `node:crypto` for this package. The PUBLIC half is
+`PUBLISHER_KEYS` in `src/core/publisher-key.mjs`, fingerprint `e0ebf0e74668277f`. The PRIVATE half
+is **not in this repository and never will be** — it was written outside the tree and handed to
+the owner to put in a password manager (§127.9 item 2). `PUBLISHER_KEYS` is a list rather than one
+key so a retired key can be replaced without every pack in the wild becoming unverifiable on
+upgrade day. `test/unit/packs.test.mjs` walks `src/`, `packs/`, `bin/` and `public/` and fails on a
+`-----BEGIN … PRIVATE KEY-----` block anywhere in any of them.
+
+### 127.3 The signature is over canonical JSON, and that is not a detail
+
+A signature over `JSON.stringify(doc)` would be a signature over whichever key order the
+producer's parser happened to emit. A pack that went through a formatter, a CDN that
+re-serialises JSON, or a human opening it in an editor would stop verifying while being
+byte-for-byte the same document. `canonicalJson()` sorts object keys, keeps array order, emits no
+whitespace, and **refuses** `undefined`, a function, a non-finite number and a cycle rather than
+dropping them — an omission would mean signing a document that is not the one on disk. A test
+round-trips a signed pack through a reviver that reverses every object's key order and it still
+verifies.
+
+The committed sample pack is proof rather than assertion: Prettier reformatted the signed artifact
+after it was signed, and `deckhq pack verify` still passes.
+
+### 127.4 Refused whole, or refused alone — and which is which
+
+The two halves are deliberate and they are the acceptance criterion for "themes go through
+`validateTheme` and the same contrast rules, rejected individually, not silently".
+
+**Refused whole** — nothing loads, one reason printed: unsigned, signed by an unknown key, edited
+after signing, over `MAX_PACK_BYTES` (256 kB), not JSON, wrong `kind` or `schema`, a bad `name`,
+`version` or `publisher`, or **any unknown top-level key**. The last one matters most: a pack that
+carried `tier`, `licence`, `entitlements` or `expiresAt` and had it silently ignored would look
+accepted and would ship. It is refused, and the message quotes rule 2. A test tries all six of
+those key names.
+
+**Refused alone** — the item is dropped with its reason and the rest of the pack still installs:
+one theme that fails `validateTheme`, fails `assertThemeContrast`, shadows a shipped theme name,
+or repeats another in the same pack; one avatar set that fails its colour discipline. One bad
+colour must not cost a customer the pack they paid for. The reasons come back on
+`GET /api/packs` as `rejected`, so a customer can see which part of a pack this build would not
+paint without reading a log.
+
+Signature **first**, then the envelope, then the contents. Nothing about a pack we did not publish
+is looked at, let alone loaded.
+
+### 127.5 The seam §125.9 left closed, opened exactly this far
+
+`docs/DEVIATIONS.md` §125.9 recorded the open door: _"`validateTheme` exists, is strict, and is
+tested, but nothing calls it on a user-supplied document… Accepting arbitrary theme documents means
+storing colours in `state.json`, and that is the point at which an unmeasured contrast failure
+could reach somebody's floor."_
+
+This package opens that door and keeps every property that made it safe to leave shut:
+
+- **Colours never reach `state.json`.** `settings.theme` still stores a NAME. The colours live in a
+  signed file in a directory of their own.
+- **A pack theme goes through the identical gate.** The same `validateTheme`, the same
+  `assertThemeContrast`, the same eleven floor materials and eight chrome neutrals, the same
+  crimson bar, the same cool-chrome rule. A pack cannot lower a bar; it can only bring documents
+  that clear one.
+- **It is gated twice, in two processes.** `src/core/packs.mjs` validates in Node, and
+  `public/render/themes.js`'s `registerPackThemes` re-runs `assertThemeContrast` in the browser —
+  because the renderer is the half that paints, and it defends itself.
+- **`THEMES` stays frozen and stays the shipped table.** A pack appends to a SECOND list,
+  `PACK_THEMES`, which is empty on every install that has not bought one. `themeByName` searches
+  the shipped table first. `clearPackThemes()` puts the product back exactly, which is what makes
+  "run the acceptance surface with and without the pack" a thing one process can do.
+- **A pack may not replace a shipped theme.** `settings.theme` stores a name, so two rows with one
+  name would make which floor you got a function of load order.
+
+The registry is a **projection of the directory**, never an accumulation: `currentPacks()` clears
+before it registers, so a removed pack's theme disappears on the same pass a new one appears. A
+test removes a pack directory and asserts the theme is gone from the picker.
+
+### 127.6 Avatar sets: what a pack can dress an agent in, and what it cannot
+
+An avatar set is **two colour tables** — `accents` (the waistband, and the colour a hat or scarf is
+made of) and `jackets` (the rare tailored yoke). Not a face. Hair silhouettes, builds, glyphs and
+the whole rarity model are geometry and rules in `rig.js` and `palette.js`; a pack cannot add a
+shape, only a colour to draw an existing shape in. That keeps a pack to data.
+
+Three rules, all measured against tables this product already ships:
+
+1. **≥ 70 sRGB from every state colour**, the same bar `palette.js` holds `AGENT_ACCENTS`,
+   `RARE_HAIR_COLORS` and `JACKET_COLORS` to. An agent must never wear a state. A test copies each
+   of the seven state colours into a set and asserts each is refused.
+2. **≥ 40 between two accents**, so two agents standing together read as two people at 16 px. 40 is
+   set under the shipped table's own tightest pair — `#9B7EDE` and `#C56BE8` at 47.2.
+3. **Jackets are exempt from rule 2, and a pale one is refused.** The first attempt held jackets to
+   the same mutual bar and it failed the table this product already ships: `#1B2E3F` and `#3A2350`
+   are 35.7 apart. Every dark garment colour lives in the same small corner of the cube, and a rule
+   that fails the shipped default is a rule about nothing — the same lesson §125.4 records for the
+   crimson bar. What jackets are held to instead is luminance ≤ 0.3, because a jacket is drawn over
+   a state-coloured torso and a pale one reads as the torso.
+
+**An avatar set is opt-in, and that is the load-bearing decision.** `appearanceRng`'s whole point
+is that a face never changes: the draw order is a contract, and appending to a pool re-rolls
+everybody. So `settings.avatarSet` is `''` on every install **including one with a pack
+installed**, empty means the shipped tables, and choosing "as they come" puts every face back
+byte for byte. Nothing happens because a file appeared in a directory. The Avatars row is not even
+drawn when no installed pack offers a set — a row with one option would be a row that advertises a
+purchase, and the settings sheet does not sell anything.
+
+The theme picker previews on hover; the avatar picker deliberately does **not**. Previewing a set
+would re-roll every face on the floor twice a second as the pointer moved, and a face that flickers
+is exactly what the fixed draw order exists to prevent.
+
+### 127.7 Floor replay: what it draws, and the two things it refuses to invent
+
+`reconstructQueue(records, t)` already answers "what needed you at `t`", exactly as the machine
+recorded it (§100, WP-17's acceptance criterion). A replay is that question asked across a day.
+
+- **Frames land on changes, not on a clock.** The queue only moves when a record says it moved, so
+  a frame is emitted at each timestamp that changes the answer and nowhere else. A quiet hour is
+  one frame. Measured on the demo fixture's synthetic ledger: **72 frames for one day, 19 sessions,
+  busiest frame eight in the queue at 15:32.** That keeps the response small, makes the scrub exact
+  rather than sampled, and — the reason it is done server-side at all — means the client needs no
+  copy of the fold, because `public/` may never import from `src/`.
+- **The window opens with what yesterday left behind.** A session that entered `for_review` on
+  Tuesday is still in Wednesday's queue, so the fold runs over the whole ledger and the first
+  frame is the queue as it was inherited, not an empty floor.
+- **A day that has not finished replays up to now**, never to midnight: a bar that ran three hours
+  past the last thing that happened would read as three hours of an empty office.
+- **It draws the QUEUE, and says so.** The ledger does not record where anybody sat, so the floor
+  under a replay is the needs-you queue and the rooms those sessions were in. The note under the
+  transport says it in one sentence — _"This is the needs-you queue as the ledger recorded it, not
+  a reconstruction of the whole floor"_ — rather than letting the picture imply more than the data
+  supports.
+- **It invents no numbers.** A ledger record carries no title, model, token count or cost, so a
+  replayed agent has none. `demo: true` is set for the same reason the actor floor sets it: nothing
+  on this floor is live, so nothing on it may raise a notification, play a sound, or count towards
+  the office-cleared moment.
+- **A path never reaches it.** A record carries `projectKey`, a hash. The route adds a key→name map
+  built from the cwds the registry already holds, so a project the ledger knows about but that has
+  no session on the floor stays a short slice of its hash. The same rule `/api/stats` follows.
+
+**60×**, so a working day is about twenty minutes — which is why there is a scrub bar and not just
+a play button: the interesting question about yesterday is _when did that pile up_, and that is
+answered by dragging. It does not loop; a replay that started again on its own would be an
+animation rather than a record of something that happened once.
+
+**THE INVARIANT.** There is no writer in `src/core/replay.mjs`, none in
+`src/http/routes/replay.mjs` (two GETs, asserted by counting them), and none in `public/replay.js`.
+`test/unit/replay.test.mjs` drives a whole day to the end against a ledger containing an
+acknowledgement and asserts `state.json` is byte-identical, the ledger file is byte-identical, and
+its mtime has not moved. Watching what happened cannot change what happened.
+
+While a replay is up the canvas belongs to it — `sceneOwner` in `app-state.js` — and **everything
+else stays live**: the deck, the panel, the queue strip, the header count and the notifications go
+on being true. Only the picture is looking at yesterday. That is a flag rather than an
+unsubscription on purpose.
+
+### 127.8 What the acceptance test actually diffs
+
+There is no standalone acceptance script in this repository, so the acceptance SURFACE is the
+daemon's API — what every client sees. `test/integration/pack-acceptance.test.mjs` runs the same
+scripted session against two real daemons on two real loopback ports, one with an empty packs
+directory and one with the sample pack installed: `GET /api/state`, then all six acknowledgement
+actions through `POST /api/ack` in an order each is legal in, then `/api/state` again, then
+`/api/settings`. Capture, the counts, every project, every agent's two states, every action's
+answer, and the whole settings object are compared as one deep-equal.
+
+Two things make it non-vacuous: the test asserts the pack really was loaded in the second run
+(`/api/packs` names it and its two themes) and really was not in the first, and it installs the
+**committed, signed** artifact through `installPack`, so it exercises the same verification path a
+customer's install does rather than a mocked one.
+
+The pack is signed with the real publisher key precisely so that no trust seam had to be added to
+the daemon for the test. A product whose signature check can be widened by a constructor option is
+a product whose signature check is decoration.
+
+### 127.9 Decisions this package leaves open for the owner
+
+1. **The price.** `08` §5 says $29 once and `03` §5 says the same. The pack it was priced for had
+   four things in it and now has two categories of asset. $29 for two themes and an avatar set is a
+   harder sentence to write than $29 for "themes, avatars, replay and a rate-card editor" was. The
+   options are: keep $29 and ship more themes in the pack before it goes on sale; drop the price;
+   or make it explicitly a tip jar with cosmetics attached, which is what `03` §5 already calls it
+   ("a tip jar with dignity") and which is the honest description of what it now is. **Not decided
+   here.** §127.1 changed what is in the box; what the box costs is the owner's call.
+2. **Key custody.** The private key was generated for this package and written to a file **outside
+   the repository**, on the reference machine, for the owner to move into a password manager and
+   then delete. Until that has happened, the signing key exists in exactly one place and nobody has
+   backed it up. Losing it means minting a new key, adding it to `PUBLISHER_KEYS` and re-issuing
+   every pack; leaking it means a third party can publish packs this build will load. Both are
+   recoverable, neither is free.
+3. **The storefront.** Nothing here sells anything. There is no purchase flow, no download page, no
+   link, and no mention of a price anywhere in the product or the README — the README paragraph
+   describes what a pack is and what it never does. Where the file is bought and how it is
+   delivered is unbuilt, and it is a decision (Gumroad, Lemon Squeezy, a GitHub Sponsors tier with
+   a manual send) rather than a package.
+4. **Pack updates.** `pack install` replaces a pack of the same name and says which version it
+   replaced. There is no update check, and there should not be one — it would be the first
+   outbound request this product ever made. How a customer learns that v1.1 exists is a storefront
+   question, not a product one.
+5. **`08` §5 and `03` §5 now overstate the pack.** Both list replay and the rate-card editor in it.
+   The plan documents are the orchestrator's; this entry is the record of the divergence, and the
+   two tables should be corrected when the plan is next revised.
+
+### What is tested
+
+`test/unit/packs.test.mjs` (24) — canonical JSON's key-order independence and its four refusals; a
+signature surviving a re-ordering round trip; a good signature naming the key that matched; the
+five refusal paths (unsigned, edited, unknown key, wrong algorithm, unusable base64); that the
+shipped key is public and that no PEM private-key block exists anywhere under `src/`, `packs/`,
+`bin/` or `public/`; that six different gate-shaped top-level keys are each refused with rule 2
+quoted; nine malformed envelopes; a bad theme refused alone with the pack still loading; a contrast
+failure refused with its measurement; a shipped-name collision and an in-pack duplicate; every state
+colour refused as an avatar accent; the accent mutual bar and the jacket exemption; a pale jacket;
+five malformed avatar sets; `loadPacks` refusing one pack without losing the others and catching a
+renamed directory; a missing directory as no packs; `installPack` writing nothing when verification
+fails, reporting the version it replaced, and `removePack`'s two refusals; `currentPacks`
+registering and `clearPacks` putting the product back; the registry as a projection rather than an
+accumulation; and both halves of the committed sample pack — that the source validates with nothing
+rejected and carries no signature, and that the signed artifact is canonically identical to it and
+verifies against the shipped key.
+
+`test/unit/pack-cli.test.mjs` (9) — the help's two promises; the exit codes (2 for usage, 1 for a
+bad pack, 0 for success); `build` refusing without a key and refusing a source that would not load
+before it signs anything; `verify` and `install` refusing an unsigned file and writing nothing;
+`list` on an empty directory; `remove`'s refusals; and the acceptance chain **build → verify →
+install → the theme is in the picker → remove puts it back**, including that the output carries no
+private key and that a pack signed with a test key is correctly refused by the CLI's own
+verification.
+
+`test/unit/replay.test.mjs` (14) — frames landing on changes and nowhere else; every frame being
+exactly `reconstructQueue`'s own answer; the window inheriting yesterday's queue; a day that has
+not finished stopping at now; thinning above `MAX_FRAMES` and saying so; a day that is not a day
+refused; `replayDays` ordering and its today/yesterday labels; the INVARIANT test above; the
+client's four pure functions — a frame becoming a drawable snapshot that invents no title, model,
+token count, cost or path, the scrub's binary search, the clock, and the note; that nothing in the
+replay path imports the pack loader; and that the replay routes are two GETs with no writer.
+
+`test/integration/pack-acceptance.test.mjs` (5) — the acceptance diff of §127.8; a pack theme being
+storable while an unknown one is still refused with the offerable list, a pack's avatar set being
+selectable while a non-existent one is refused, the stored theme surviving in `state.json` because
+packs load before the store, and removing the pack falling the floor back to the default;
+`/api/packs` reporting a pack that will not load rather than hiding it, with the daemon still
+serving a floor; the rate-card editor's five refusals with nothing written, its cache-price
+defaults, and clearing every row removing the file; and the replay routes over HTTP, including a
+400 for a day that is not one and a state file that is byte-identical after being watched.
+
+Plus `test/unit/settings-keys.test.mjs`, unchanged, which failed until `avatarSet` had a control in
+the sheet — the gate §94 put there doing its job.
+
+**Goldens:** six captures, all 0 px, all unchanged. `PACK_THEMES` is empty and the avatar pools are
+the shipped ones on every install with no pack, so the default floor and both shipped themes are
+byte-identical. **No `demo@warehouse` golden was added**, and the reason is structural rather than
+a decision: `scripts/goldens.mjs` derives its capture list from `THEME_NAMES`, the SHIPPED table,
+and validates `--theme` against it — a pack theme is not in that list and cannot be, because the
+goldens harness must describe what the build ships rather than what a machine happens to have
+installed. `scripts/demo-floor.mjs --pack <file> --theme warehouse` does work, and is how the
+screenshot below was taken; teaching the goldens harness to install a pack into its fixture and
+photograph it is a package of its own, and it would put a signed artifact on the critical path of
+the visual gate.
+
+**Screenshots:** `docs/media/pack-picker.png` — the settings sheet with the sample pack installed,
+showing five themes in the picker and the Avatars row that only exists because a pack brought one.
+Two more were taken and not committed: the floor painted in **warehouse** (dark concrete, plywood
+herringbone, light line work, every state colour unchanged) and the replay transport over a floor,
+both verified by eye on the reference machine. **Not photographed:** a mid-day replay frame with
+people on the floor. `scripts/capture-floor.mjs --click` calls `element.click()`, which does not
+move an `<input type="range">`, and `--press` has no escape for an arrow key — so the scrub cannot
+be driven from the capture harness. It was verified through the API instead (72 frames, eight in
+the queue at 15:32) and by the unit tests that assert every frame equals `reconstructQueue`'s own
+answer. The transport now takes focus when it opens, which is an accessibility improvement in its
+own right and would make an arrow-key escape enough if one is ever added.
