@@ -1,0 +1,11 @@
+{"sessionId":"7c9f1a20-3d4e-4b55-9a01-000000000001","projectHash":"demo-app","startTime":"2026-08-22T09:00:00.000Z","lastUpdated":"2026-08-22T09:04:10.000Z","kind":"main","directories":["C:\\Dk\\Projects\\demo-app"]}
+{"id":"m1","timestamp":"2026-08-22T09:00:05.000Z","type":"user","content":"Add a health check endpoint to the server."}
+{"id":"m2","timestamp":"2026-08-22T09:00:38.000Z","type":"gemini","model":"gemini-3-pro","content":[{"text":"I will add "},{"text":"a /healthz route."}],"tokens":{"input":4200,"output":180,"cached":1024,"thoughts":40,"tool":0,"total":5444}}
+{"id":"m3","timestamp":"2026-08-22T09:01:00.000Z","type":"info","content":"Context left: 84%"}
+{"id":"m4","timestamp":"2026-08-22T09:01:02.000Z","type":"gemini","model":"gemini-3-pro","content":[{"functionCall":{"name":"write_file","args":{"path":"server.js"}}}],"toolCalls":[{"id":"t1","name":"write_file","args":{"path":"server.js"},"status":"executing","timestamp":"2026-08-22T09:01:02.000Z"}]}
+{"id":"m5","timestamp":"2026-08-22T09:01:30.000Z","type":"user","content":[{"text":"this line is intentionally broken
+{"$set":{"summary":"Health check endpoint for the demo server"}}
+{"id":"m6","timestamp":"2026-08-22T09:02:00.000Z","type":"user","content":[{"text":"Also wire it into the readiness probe."}]}
+{"$rewindTo":"m3"}
+{"id":"m7","timestamp":"2026-08-22T09:03:40.000Z","type":"gemini","model":"gemini-3-pro","content":[{"text":"Done — "},{"inlineData":{"mimeType":"image/png","data":"AAAA"}},{"text":"/healthz is wired into the readiness probe."}],"toolCalls":[{"id":"t2","name":"write_file","args":{"path":"server.js"},"status":"success","timestamp":"2026-08-22T09:03:20.000Z"}],"thoughts":[{"subject":"Wiring","description":"probe first","timestamp":"2026-08-22T09:03:10.000Z"}],"tokens":{"input":6100,"output":240,"cached":2048,"thoughts":60,"tool":12,"total":8460}}
+{"id":"m8","timestamp":"2026-08-22T09:04:10.000Z","type":"warning","content":"Approaching the context limit."}
