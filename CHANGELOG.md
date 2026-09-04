@@ -665,6 +665,25 @@
   sizes and places rooms from what is in them (§96, §106), so there is no position to pin; order
   is what a layout can move. Export works with or without a daemon; import needs one, for the
   reason `ack` does. `GET`/`POST /api/layout`. `docs/DEVIATIONS.md` §125.
+- **Agents get a character, read off what they actually did.** One quiet line in the hover card
+  and under the review card's identity area — _"asks often · shell-heavy · terse · opus-5 · since
+  1 Sep"_ — computed on read from the event ledger and the session scan, and never written down
+  anywhere. Twelve words, each with a definition: how often it stops to ask, which of four kinds
+  of tool call it reaches for, how long its replies run, its model, and the day it was first seen.
+  **Nothing here is a level, a score or a rank, nothing is trained, nothing is earned, and nothing
+  in the product acts on it** — Two Point Hospital's permanent staff traits, without the morale
+  bar. A session with fewer than five observed stops behind it says `new here` and nothing else,
+  because four events are not a character. The verbosity and tool-mix bands were measured on 80
+  real transcripts rather than picked; the hand-raise bands were not, and `docs/DEVIATIONS.md`
+  §133 says so. There is no setting, because there is nothing to switch off. `GET /api/traits`.
+- **Working agents finally take a sip of coffee.** `03-VISUAL-SPEC.md` §4.1 has asked since the
+  clips landed for `drink` "occasionally during `working`" and `stretch` as an "occasional idle
+  variation", and nothing had ever played them. An agent sitting at its desk now types for
+  20–45 seconds and then stretches, thinks or reaches for its mug before going back to the
+  keyboard — and its traits tilt which one: a shell-heavy agent reaches for the coffee more often,
+  one that asks often thinks more often, one that writes long replies types for longer. **No new
+  clip, and any real state change cancels it instantly** — a hand going up is never animated
+  around — and none of it runs under `prefers-reduced-motion`. `docs/DEVIATIONS.md` §133.5.
 
 ### Changed
 
