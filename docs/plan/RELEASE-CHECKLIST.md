@@ -59,13 +59,12 @@ npm test
 All five must pass. `prepublishOnly` runs lint, typecheck and the suite again on the runner, but
 finding a failure here costs nothing and finding it after the tag wastes a version number.
 
-> **A known flake to re-run, not to ignore.** `test/integration/daemon-hooks-port.test.mjs` takes
-> two ports from a helper that binds port 0, reads the number and releases it — so two calls can
-> hand back the *same* port. When they do, the stranger in the test occupies the port the daemon
-> was asked for, the daemon correctly walks to the next one, and the assertion fails with an
-> `actual`/`expected` pair one apart. Seen once during 1.3.0 prep and not reproduced in eight
-> consecutive runs of that file. If a red suite is that test with adjacent port numbers, re-run;
-> anything else is real.
+> **The known flake is fixed — do not re-run a red suite.** `test/integration/daemon-hooks-port.test.mjs`
+> used to take its ports from a helper that binds port 0, reads the number and releases it, so two
+> calls could hand back the *same* port and the assertion would fail with an `actual`/`expected`
+> pair one apart. It now reserves a batch of ports bound all at once and releases each one only as
+> it is handed over, so no two ports in that file can be the same number
+> (`docs/DEVIATIONS.md` §138.3). There is no flake left to wave through: a red suite is real.
 
 ## 4. Confirm CI is green
 
@@ -125,35 +124,33 @@ This runs the full `prepublishOnly` gate and prints exactly what would be upload
 uploading it. **This is the last reversible step.** Read the output. If the file list differs from
 step 5, stop and find out why.
 
-### 7a. Check the release notes will fit — **this currently fails**
+### 7a. Check the release notes will fit — **resolved: the job caps the body, and the pre-check refuses an oversize one before publishing**
 
 ```sh
-node scripts/release/changelog-section.mjs 1.3.0 | node -e "
-  let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{
+node scripts/release/changelog-section.mjs --release-body --max-chars 120000 1.3.0 | node -e "
+  let s='';process.stdin.setEncoding('utf8').on('data',d=>s+=d).on('end',()=>{
     const n=s.length;console.log(n,'characters',n>125000?'— TOO LONG':'— fits');});"
 ```
 
-A GitHub Release body is capped at **125,000 characters**. The `1.3.0` section is **145,581** —
-20,581 over. `gh release create --notes-file` will be refused with a 422, and it will be refused in
-the `release` job, **after** the npm publish has already happened and cannot be taken back. The
-package would land on the registry with no release page and no assets, which is the exact failure
-1.1.0's post-mortem exists to prevent.
+Expect **`99848 characters — fits`** and exit 0. Anything else, stop. Count characters, not bytes:
+the notes are full of em dashes and `§`, so `wc -c` reads 702 bytes high and GitHub's cap is on
+characters.
 
-Nothing in the workflow catches this: the `publish` job runs `changelog-section.mjs` only to check
-that a section *exists*, never that it fits.
+A GitHub Release body is capped at **125,000 characters** and the raw `1.3.0` section is
+**145,581** — 20,581 over. That is still true, and it no longer matters, because the `release` job
+no longer sends the raw section. `changelog-section.mjs --release-body` sends the Highlights block
+whole, then the section's bullets in heading order to a budget of 100,000 characters — cut between
+bullets, never inside one — and a last line linking the full section in `CHANGELOG.md` at the tag
+(`…/blob/v1.3.0/CHANGELOG.md#130--2026-09-04`). A section that already fits is sent unchanged, with
+no link.
 
-Three ways out, and one of them has to be chosen before the tag:
+And the `publish` job runs **that same command** with `--max-chars 120000` **before** `npm publish`,
+not after: an oversize body, or a missing section, now fails the job while nothing has been
+published and failing costs nothing. The 422 that would have arrived after the registry was
+already written cannot arrive any more. `docs/DEVIATIONS.md` §138.
 
-1. **Trim the section** so the extract fits. 1.3.0 is nine packages' worth of entries and reads
-   like an engineering log; a release page is not that. The Highlights paragraph already carries
-   the release for a stranger.
-2. **Change what the release job sends** — the Highlights plus a link to `CHANGELOG.md` for the
-   rest. This is a change to `publish.yml` or `changelog-section.mjs` and needs its own tests.
-3. **Accept the failure**, let the publish go through, and cut the release page by hand with
-   shortened notes (see *Recovering a failed `release` job*). Cheapest to do, worst to look at:
-   the first observed run of WP-43's job would be a red one.
-
-Whichever is chosen, re-run the command above and get *fits* before tagging.
+If the command above prints a number over 120,000 or exits non-zero, the Highlights block itself
+has outgrown the budget — it is the one part never cut. Shorten it; do not raise the cap.
 
 ### 7b. Tag
 
@@ -184,7 +181,7 @@ Three jobs, in order, each gating the next:
 | Job       | What it does                                                                                     | If it fails                                                                                          |
 | --------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
 | `verify`  | lint, format check and the suite on nine OS × Node combinations                                  | Nothing was published. Fix, delete the tag, tag again.                                               |
-| `publish` | asserts the npm floor, refuses a tag/version mismatch, refuses a missing changelog section, publishes | If it fails **before** `npm publish`, nothing happened. If it fails during, check the registry first. |
+| `publish` | asserts the npm floor, refuses a tag/version mismatch, refuses a missing changelog section or a release body over 120,000 characters, publishes | If it fails **before** `npm publish`, nothing happened. If it fails during, check the registry first. |
 | `release` | downloads the published tarball, checks it against the registry's own sha512, builds the Windows zip, renders the manifests, creates the Release | The package is already on the registry and cannot be taken back. See below.                          |
 
 ## 9. Verify the registry
