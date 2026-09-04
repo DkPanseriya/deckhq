@@ -88,7 +88,7 @@ export function createHeaderPart(ctx) {
   /** Late-bound: the other parts' renderers, wired once panel.js has built
    * them all. Same identifiers the bodies below already used when they were
    * siblings inside one closure (docs/DEVIATIONS.md §122, rule 3). */
-  let renderPermission, renderActions, renderResume, renderRecordLine;
+  let renderPermission, renderActions, renderResume, renderRecordLine, renderTraitLine;
 
   let closeUpRaf = null;
   let closeUpStartTs = 0;
@@ -147,6 +147,9 @@ export function createHeaderPart(ctx) {
     }
     renderDraftChip();
     renderRecordLine();
+    // WP-28. One quiet line about the AGENT, under the identity area and above
+    // the live lines. Never about the reader (docs/plan/08 §1.1 rule 6).
+    renderTraitLine();
 
     // The state line: "✓ FOR REVIEW · orbital-api · main · opus-5".
     metaEl.textContent = '';
@@ -362,7 +365,7 @@ export function createHeaderPart(ctx) {
     startCloseUp,
     stopCloseUp,
     wire: (o) => {
-      ({ renderPermission, renderActions, renderResume, renderRecordLine } = o);
+      ({ renderPermission, renderActions, renderResume, renderRecordLine, renderTraitLine } = o);
     },
   };
 }

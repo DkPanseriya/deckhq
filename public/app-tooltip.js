@@ -126,6 +126,24 @@ export function showTooltip(agentId) {
     ),
   );
 
+  // WP-28's grace note: the agent's traits, as one line —
+  // "asks often · shell-heavy · terse · opus-5 · since 1 Sep". Read-only,
+  // inferred from real behaviour, and about the AGENT: there is no word in it
+  // for the person reading it, and nothing in it is a level or a rank
+  // (docs/plan/04 §4, docs/plan/08 §1.1 rule 6).
+  //
+  // It shares the panel's own five-minute cache rather than issuing a second
+  // fetch, for the reason the records line below gives: the card and the panel
+  // must not disagree while both are on screen, and a hover must never wait on
+  // the network. `null` until the first response resolves, which reads as
+  // "no line".
+  const traitLine = panel.agentTraits ? panel.agentTraits().lineFor(agent) : null;
+  if (traitLine) {
+    const traits = tooltipLine(traitLine);
+    traits.classList.add('tooltip-traits');
+    el.tooltip.appendChild(traits);
+  }
+
   // WP-46's grace note: the team's record, when this session or this room
   // holds one. Last, and in the same position the panel puts it in — a record
   // is context, never a call to action, and it never scores the reader

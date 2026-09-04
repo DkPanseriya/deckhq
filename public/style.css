@@ -987,6 +987,26 @@ button {
   text-overflow: ellipsis;
 }
 
+/* WP-28 · the agent's trait line, under the identity area in the panel and
+   under the identity tag in the hover card.
+
+   The quietest line in the header, on purpose: it is a character sketch, not
+   information the review needs, and it must never compete with the state
+   chip above it. Italic, muted, one line that truncates rather than wrapping
+   — five words is the whole of it, and a trait line that pushed the review
+   down the card would have started to be the point. It says nothing about
+   the person reading it (docs/plan/08 §1.1 rule 6). */
+.panel-traits,
+.tooltip-traits {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* WP-46 · the team's record line, when one of the records has this session or
    its room as its subject. Quieter than the tool line above it — it is a
    grace note, not information the review needs — and it wraps rather than
