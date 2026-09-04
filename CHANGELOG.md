@@ -1109,6 +1109,23 @@ changes no user-owned field on the parent` — a parent standing in the office w
   and one cancelled job makes the whole run `cancelled`** — which is why a run holding six genuine
   assertion failures reported as though something had superseded it. The concurrency group was never
   involved; `ci.yml` now says so where the timeout is set. §121.
+- **The suite no longer has a home directory, and a canary proves it.** Eighteen files were reading
+  the developer's own machine — four integration files scanned it outright through a real daemon,
+  the three §121 had already pinned were still reaching `%APPDATA%\Claude` and `~/.deckhq` through
+  the two fallbacks a moved home does not move, nine unit files loaded `~/.deckhq/rates.json` as
+  their rate card without a line of any of them mentioning a home, and one unit test spawned the
+  real `deckhq doctor`, scanned every transcript on the machine and wrote a probe file into
+  `~/.deckhq`. `test/helpers/isolate.mjs`, imported first, now points `HOME`, `USERPROFILE`,
+  `APPDATA`, `CLAUDE_CONFIG_DIR`, `DECKHQ_STATE_DIR` and `DECKHQ_DESKTOP_SESSIONS_DIR` at a fresh
+  temp root and removes it on exit, and deletes the four variables that change behaviour rather
+  than name a path. `npm test` plants an empty **canary home** for the whole run with one
+  unmistakably-titled transcript on it, preloads an `fs` tripwire into every process, and **fails
+  the run** if anything touches it — naming the function, the path and the frame. On a synthetic
+  home of 3,000 transcripts the suite went from **199.1 s to 5.8 s**, and it is now flat: 5.8 s
+  against an empty home and 5.8 s against three thousand. §123.
+- **The `reviewSince` invariant asserts something now.** It used to look for a `for_review` agent on
+  the host and `return` without asserting anything when it found none, so on most machines it was
+  green and empty. It plants the session it needs and runs its four assertions every time. §123.3.
 
 ### Packaging
 

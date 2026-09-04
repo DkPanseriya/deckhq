@@ -17,6 +17,11 @@
  * which is also what lets them count the reads that did and did not happen.
  */
 
+// A machine of our own, before anything under `src/` is loaded: several of
+// those modules resolve a path out of the environment while they evaluate.
+// `docs/DEVIATIONS.md` §123.
+import '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

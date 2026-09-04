@@ -20,6 +20,11 @@
  * Everything is driven through a fake registry: the real one reads the
  * machine's transcripts, which vary per machine and per hour.
  */
+// A machine of our own, before anything under `src/` is loaded. One test in
+// this file spawns the real binary, which scans whatever home it inherits;
+// this is what stops that being the developer's. `docs/DEVIATIONS.md` §123.
+import '../helpers/isolate.mjs';
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
@@ -1090,6 +1095,10 @@ test('the CLI actually exits, cleanly, with one JSON document on stdout', async 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
   const bin = path.join(root, 'bin', 'deckhq.mjs');
 
+  // The child inherits the isolated machine from the import at the top of this
+  // file, so what it reports on is an empty temp root rather than the
+  // developer's transcripts — which is what used to make this one test take
+  // most of a minute. §123.
   const { code, stdout, stderr } = await new Promise((resolve) => {
     execFile(
       process.execPath,

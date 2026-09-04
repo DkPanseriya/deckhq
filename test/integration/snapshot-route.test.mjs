@@ -4,7 +4,14 @@
  * The interesting assertions are all refusals. This is the only endpoint in
  * the product whose entire purpose is to put a file on disk, so what it
  * accepts is the whole of its security surface.
+ *
+ * The machine is pinned before `src/` is imported (`docs/DEVIATIONS.md` §123),
+ * so the daemon behind these refusals is scanning a temp root rather than the
+ * developer's transcripts.
  */
+// First, and before anything under `src/`: it moves the machine.
+import { daemonScratch } from '../helpers/isolate.mjs';
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
@@ -12,8 +19,8 @@ import os from 'node:os';
 import process from 'node:process';
 import path from 'node:path';
 
-import { startDaemon } from '../../src/daemon.mjs';
-import { MAX_SNAPSHOT_BYTES } from '../../src/http/routes/snapshot.mjs';
+const { startDaemon } = await import('../../src/daemon.mjs');
+const { MAX_SNAPSHOT_BYTES } = await import('../../src/http/routes/snapshot.mjs');
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -23,17 +30,9 @@ function fakePng(extra = 64) {
 }
 
 async function withDaemon(fn) {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-snap-'));
-  const publicDir = path.join(dir, 'public');
+  const { dir, stateFile, publicDir } = daemonScratch('snap-');
   const snapshotDir = path.join(dir, 'snapshots');
-  await fs.mkdir(publicDir);
-  await fs.writeFile(path.join(publicDir, 'index.html'), 'floor');
-  const d = await startDaemon({
-    port: 0,
-    stateFile: path.join(dir, 'state.json'),
-    publicDir,
-    snapshotDir,
-  });
+  const d = await startDaemon({ port: 0, stateFile, publicDir, snapshotDir });
   try {
     await fn(d, snapshotDir);
   } finally {
@@ -135,6 +134,13 @@ test('a snapshot at the 2 MB target goes through', async () => {
   });
 });
 
+// DELIBERATE HOST READ — the only one in the suite. `docs/DEVIATIONS.md` §123.5.
+// Everything else runs against a temp root, but the claim here is that the
+// office is named after *this machine*, so the machine's own name is the
+// expected value and there is nothing to inject. `os.hostname()` is a constant
+// -time read of a string, not a scan of a directory, so it costs the suite
+// nothing and cannot make one run disagree with the next. `DECKHQ_HOSTNAME` is
+// deleted by the isolate helper rather than pinned for exactly this reason.
 test('the hostname the strip is named after comes from /api/about', async () => {
   await withDaemon(async (d) => {
     const about = await (await fetch(d.url + 'api/about')).json();
