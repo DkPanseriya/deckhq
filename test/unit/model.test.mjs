@@ -263,7 +263,7 @@ test('placement() and derivePlacement() are the same function, not two copies', 
   }
 });
 
-test('WP-22: no plan or app module is over 900 lines', async () => {
+test('WP-22: no split module is over 900 lines', async () => {
   const { readdir, readFile } = await import('node:fs/promises');
   const path = await import('node:path');
   const { fileURLToPath } = await import('node:url');
@@ -272,6 +272,7 @@ test('WP-22: no plan or app module is over 900 lines', async () => {
   const groups = [
     [path.join(root, 'render'), (f) => f.startsWith('plan') && f.endsWith('.js')],
     [root, (f) => f.startsWith('app') && f.endsWith('.js')],
+    [root, (f) => f.startsWith('panel') && f.endsWith('.js')],
   ];
   let checked = 0;
   for (const [dir, keep] of groups) {
@@ -283,5 +284,5 @@ test('WP-22: no plan or app module is over 900 lines', async () => {
       checked++;
     }
   }
-  assert.ok(checked >= 18, `expected the whole split, saw ${checked} files`);
+  assert.ok(checked >= 32, `expected the whole split, saw ${checked} files`);
 });

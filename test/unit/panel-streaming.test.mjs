@@ -21,7 +21,30 @@ const PUBLIC = path.resolve(HERE, '../../public');
 
 /** @param {string} src */
 const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
-const panel = stripComments(fs.readFileSync(path.join(PUBLIC, 'panel.js'), 'utf8'));
+/**
+ * The WP-22 follow-up split the review card into fourteen modules, listed in
+ * the order the functions used to appear in the one file. Only this list
+ * changed: not one assertion below did.
+ */
+const PANEL_PARTS = [
+  'panel-rules.js',
+  'panel-format.js',
+  'panel-state.js',
+  'panel-dom.js',
+  'panel-header.js',
+  'panel-permission.js',
+  'panel-said.js',
+  'panel-changes.js',
+  'panel-actions.js',
+  'panel-resume.js',
+  'panel-records.js',
+  'panel-composer.js',
+  'panel-live.js',
+  'panel.js',
+];
+const panel = PANEL_PARTS.map((f) =>
+  stripComments(fs.readFileSync(path.join(PUBLIC, f), 'utf8')),
+).join('\n');
 
 /**
  * The body of a named function declaration, braces balanced. The parameter

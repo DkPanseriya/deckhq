@@ -18,6 +18,29 @@ const PUBLIC = path.resolve(HERE, '../../public');
 /** @param {string} src */
 const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
 
+/**
+ * The review card, which the WP-22 follow-up split into fourteen modules. The
+ * list is in the order the functions used to appear in the one file, so every
+ * "the body runs to the next declaration" slice below reads what it always
+ * read. Only this list changed: not one assertion in this file did.
+ */
+const PANEL_PARTS = [
+  'panel-rules.js',
+  'panel-format.js',
+  'panel-state.js',
+  'panel-dom.js',
+  'panel-header.js',
+  'panel-permission.js',
+  'panel-said.js',
+  'panel-changes.js',
+  'panel-actions.js',
+  'panel-resume.js',
+  'panel-records.js',
+  'panel-composer.js',
+  'panel-live.js',
+  'panel.js',
+];
+
 /** Every .js file under public/, recursively. */
 function clientFiles(dir = PUBLIC, out = []) {
   for (const name of fs.readdirSync(dir)) {
@@ -29,6 +52,9 @@ function clientFiles(dir = PUBLIC, out = []) {
 }
 
 const read = (file) => stripComments(fs.readFileSync(file, 'utf8'));
+
+/** The whole review card as one source, its parts in their original order. */
+const readPanel = () => PANEL_PARTS.map((f) => read(path.join(PUBLIC, f))).join('\n');
 
 /** The body of a top-level-in-createPanel `async function name(...) { ... }`. */
 function functionBody(src, name) {
@@ -58,23 +84,25 @@ function functionBodyOf(src, name) {
 
 test('INVARIANT: /api/ack is called from exactly one place in the client, performAction()', () => {
   const offenders = [];
+  let panelHits = 0;
   for (const file of clientFiles()) {
     const src = read(file);
     const hits = src.match(/\/api\/ack\b/g) || [];
     const rel = path.relative(PUBLIC, file).replace(/\\/g, '/');
-    if (rel === 'panel.js') {
-      assert.equal(hits.length, 1, `panel.js mentions /api/ack ${hits.length} times in code`);
-      const body = functionBody(src, 'performAction');
-      assert.match(body, /fetch\(\s*'\/api\/ack'/, 'the one call is inside performAction()');
+    if (PANEL_PARTS.includes(rel)) {
+      panelHits += hits.length;
     } else if (hits.length) {
       offenders.push(rel);
     }
   }
+  assert.equal(panelHits, 1, `the panel mentions /api/ack ${panelHits} times in code`);
+  const body = functionBody(readPanel(), 'performAction');
+  assert.match(body, /fetch\(\s*'\/api\/ack'/, 'the one call is inside performAction()');
   assert.deepEqual(offenders, [], 'these client files reach /api/ack outside panel.js');
 });
 
 test('INVARIANT: performAction() is reached only from explicit clicks and explicit keys', () => {
-  const panel = read(path.join(PUBLIC, 'panel.js'));
+  const panel = readPanel();
   // Every call site in panel.js sits inside an addEventListener('click') arrow
   // or inside pressNumberKey(). Render, open, refresh and load paths call none.
   for (const fn of [
@@ -145,7 +173,7 @@ test('INVARIANT: the permission card never reaches /api/ack, and answering is it
   // user is done with the session. Routing a permission decision through
   // performAction() would let it clear a review debt — an observed event
   // moving a user-owned state, which is the whole thing the invariant forbids.
-  const panel = read(path.join(PUBLIC, 'panel.js'));
+  const panel = readPanel();
 
   // Rendering a question is not answering it.
   const render = functionBodyOf(panel, 'renderPermission');
@@ -157,13 +185,15 @@ test('INVARIANT: the permission card never reaches /api/ack, and answering is it
   assert.doesNotMatch(answerFn, /performAction\(|\/api\/ack|acknowledge|reviewSince/);
 
   // Exactly one caller of the decide endpoint in the whole client.
+  let decideHits = 0;
   for (const file of clientFiles()) {
     const src = read(file);
     const hits = src.match(/\/api\/permission\/decide/g) || [];
     const rel = path.relative(PUBLIC, file).replace(/\\/g, '/');
-    if (rel === 'panel.js') assert.equal(hits.length, 1);
+    if (PANEL_PARTS.includes(rel)) decideHits += hits.length;
     else assert.equal(hits.length, 0, `${rel} answers permission prompts`);
   }
+  assert.equal(decideHits, 1);
 });
 
 test('INVARIANT: A / D / S only ever answer a card that is actually up', () => {
@@ -178,7 +208,7 @@ test('INVARIANT: A / D / S only ever answer a card that is actually up', () => {
   // The listener is the half that reads the DOM, so the guards are asserted
   // across both: each one must exist, and each one must be reachable from the
   // listener.
-  const panel = read(path.join(PUBLIC, 'panel.js'));
+  const panel = readPanel();
   const bodyFrom = (start) => {
     let i = panel.indexOf('{', start);
     let depth = 0;
@@ -239,7 +269,7 @@ test('SECURITY: no client module assigns innerHTML or builds HTML from strings',
 });
 
 test('2 Approve is a send, never an ack', () => {
-  const panel = read(path.join(PUBLIC, 'panel.js'));
+  const panel = readPanel();
   const approve = panel.slice(
     panel.indexOf('function approve('),
     panel.indexOf('function approve(') + 200,
