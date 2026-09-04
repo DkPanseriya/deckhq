@@ -1,10 +1,16 @@
 /**
  * Gemini CLI hook support. WP-24.
  *
- * **`supported: false`, and for a different reason than Codex's.**
+ * **`supported: false`, and originally for a different reason than Codex's.**
  *
- * Codex has no hook mechanism at all (`docs/DEVIATIONS.md` §8). Gemini CLI
- * does: a `hooks` block in `~/.gemini/settings.json`, with `BeforeTool`,
+ * When this was written, Codex was believed to have no hook mechanism at all
+ * (`docs/DEVIATIONS.md` §8) and this file was the first that could not reuse
+ * that sentence. WP-23a found the belief was wrong — Codex 0.153.1 has
+ * `hooks.json` and `PermissionRequest`, read out of the shipped binary
+ * (§136.3) — so the two notes now say the same KIND of thing for slightly
+ * different reasons, and neither claims a runtime lacks hooks.
+ *
+ * Gemini CLI's mechanism: a `hooks` block in `~/.gemini/settings.json`, with `BeforeTool`,
  * `AfterTool`, `BeforeAgent`, `AfterAgent`, `BeforeModel`,
  * `BeforeToolSelection`, `AfterModel`, `SessionStart`, `SessionEnd`,
  * `Notification` and `PreCompress`, each running a command and receiving

@@ -356,20 +356,42 @@ test('adapter identity: id and label match the contract', () => {
   assert.equal(typeof adapter.openInTerminal, 'function');
 });
 
-test('hooks: reports unsupported and describes the polling fallback', () => {
+test('hooks: unsupported, and honest about WHY — the runtime has them, DeckHQ does not use them', () => {
+  // WP-23a, docs/DEVIATIONS.md §136.3. This note used to say Codex "does not
+  // provide a way for DeckHQ to be notified when something happens in a
+  // session". In Codex 0.153.1 that is FALSE: the shipped binary carries
+  // `hooks.json`, `PermissionRequest`, `hook_event_name`, `hookSpecificOutput`
+  // and eight event names. A false statement about somebody else's product is
+  // what `08` §1.1 rule 11 forbids as firmly as a false one about ours, so the
+  // note now says what Gemini CLI's says: the mechanism exists and DeckHQ has
+  // not wired it up. `supported: false` stays until somebody writes a
+  // hooks.json on a real install and watches Codex read it back.
   assert.equal(hooks.supported, false);
   const plan = hooks.describe();
-  assert.equal(typeof plan.note, 'string');
-  assert.ok(
-    plan.note.includes('needs input') ||
-      plan.note.toLowerCase().includes('needs_input') ||
-      plan.note.length > 0,
-  );
   assert.deepEqual(plan.events, []);
+  assert.equal(typeof plan.note, 'string');
+
+  assert.match(plan.note, /does have a hooks mechanism/i);
+  assert.match(plan.note, /hooks\.json/);
+  assert.match(plan.note, /PermissionRequest/);
+  // The claim that is now false, in every spelling it could come back in.
+  assert.doesNotMatch(plan.note, /no hook mechanism/i);
+  assert.doesNotMatch(plan.note, /does not provide a way/i);
+  assert.doesNotMatch(plan.note, /cannot be observed/i);
+  // Why it is not wired up — and the reason is Codex's own, not Gemini's:
+  // there is no `http` hook type at all, so DeckHQ's block does not translate.
+  assert.match(plan.note, /no HTTP hook type/i);
+  // And it still has to explain the cost of not using them.
+  assert.match(plan.note, /needs input/i);
+  assert.match(plan.note, /stalled/i);
+  // The `file` field is what a consent screen would show, and there is nothing
+  // to show: it must not name a path DeckHQ has no intention of writing.
+  assert.match(plan.file, /does not install Codex hooks yet/i);
+  assert.equal(plan.json, '');
 });
 
 test('hooks: install/remove reject, installed() resolves false', async () => {
-  await assert.rejects(() => hooks.install());
-  await assert.rejects(() => hooks.remove());
+  await assert.rejects(() => hooks.install(), /does not install Codex hooks/i);
+  await assert.rejects(() => hooks.remove(), /nothing to remove/i);
   assert.equal(await hooks.installed(), false);
 });
