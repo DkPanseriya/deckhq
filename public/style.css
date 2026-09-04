@@ -1890,6 +1890,73 @@ button {
   font-size: 0.7rem;
   color: var(--muted);
 }
+
+/* WP-45 · the floor replay's transport bar.
+   Along the bottom of the stage rather than over the middle of it: the thing
+   you are here to watch is the floor, and a control that covered it would be
+   a control in the way of its own purpose. Free — it reads the ledger the
+   user already owns; see src/core/replay.mjs. */
+.replay {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 4;
+  width: min(38rem, calc(100% - 2rem));
+  padding: 0.7rem 0.9rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+}
+.replay-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+.replay-day {
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.replay-clock {
+  font-size: 0.95rem;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.replay-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.replay-scrub {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Keep the native control out of the browser's default blue: the one
+     saturated colour in this product is crimson and it is spoken for. */
+  accent-color: var(--ink-2);
+}
+.replay-btn {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  padding: 0.3rem 0.6rem;
+  color: var(--ink-2);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.replay-btn:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.replay-note {
+  margin: 0.45rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
 @media (prefers-reduced-motion: reduce) {
   :root:not([data-motion='no-preference']) .night-overlay {
     transition: none;
@@ -3097,6 +3164,90 @@ textarea.field-input {
 }
 .settings-hooks {
   margin-top: 0.6rem;
+}
+
+/* WP-45 · the rate-card editor.
+   Free, and it edits ~/.deckhq/rates.json — the file WP-26 already shipped and
+   anybody can open in a text editor. Every colour here is a token from the
+   measured ink and ground sets, because test/unit/state-visuals.test.mjs holds
+   every `.settings*` rule to them. */
+.settings-rates {
+  margin-top: 0.8rem;
+}
+.settings-rate-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.6rem 0;
+}
+.settings-rate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) repeat(4, minmax(0, 1fr)) auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+.settings-rate-row.is-head > span {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.settings-input {
+  width: 100%;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 0.74rem;
+  padding: 0.3rem 0.45rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.settings-input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.settings-rate-drop,
+.settings-btn {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  padding: 0.3rem 0.55rem;
+  color: var(--ink-2);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.settings-rate-drop:hover,
+.settings-btn:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.settings-btn[disabled] {
+  color: var(--muted);
+  cursor: default;
+}
+.settings-btn.is-primary:not([disabled]) {
+  color: var(--ink);
+  border-color: var(--ink-2);
+}
+.settings-rate-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.3rem;
+}
+.settings-note.is-error {
+  color: var(--ink);
+}
+
+@media (max-width: 620px) {
+  .settings-rate-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .settings-rate-row.is-head {
+    display: none;
+  }
 }
 
 @media (max-width: 620px) {
