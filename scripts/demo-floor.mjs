@@ -965,13 +965,14 @@ process.stdout.write(
  * How long a graceful shutdown gets before it is taken away from it.
  *
  * `daemon.close()` awaits `server.close()`, and `server.close()` does not
- * complete while any connection is still open — which an SSE stream, by
- * definition, always is. A browser sitting on the floor therefore holds this
- * process open forever on a signal. That is a real defect in `close()` and it
- * is owed a fix there (docs/DEVIATIONS.md §126.3); this is the backstop, and
- * it belongs here regardless, because a demo script that will not answer
- * Ctrl-C is its own bug. The fixture directory is still removed either way,
- * which is the one thing shutdown genuinely owes.
+ * complete while any request is still in flight — which an SSE stream, by
+ * definition, always is. A browser sitting on the floor therefore held this
+ * process open forever on a signal. That was a real defect in `close()` and it
+ * has been fixed there: `close()` ends its own event streams and returns in
+ * milliseconds with a browser attached (docs/DEVIATIONS.md §126.3, §127).
+ * This backstop stays regardless, because a demo script that will not answer
+ * Ctrl-C is its own bug whatever the reason, and the fixture directory is
+ * removed either way — which is the one thing shutdown genuinely owes.
  */
 const SHUTDOWN_GRACE_MS = 4000;
 

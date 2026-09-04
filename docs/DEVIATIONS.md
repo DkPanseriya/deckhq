@@ -9780,7 +9780,8 @@ fails on any of them: a set you cannot capture is not a set.
 was tests, `scripts/`, `src/cli/chrome.mjs` and the workflow. `closeAllConnections()` belongs inside
 the `server.close()` wait, after a grace period, exactly as `closeIdleConnections()` already is.
 Until then any embedder calling `close()` with a browser attached hangs, and only the demo script
-has a backstop.
+has a backstop. **Paid in §127**, which also ends the streams themselves rather than only cutting
+their sockets.
 
 ### 126.4 The linux captures were made, written, and uploaded nowhere
 
@@ -9940,3 +9941,104 @@ does not open** until the zero-egress, invariant, hostile-relay, privacy-capture
 relay-database-dump acceptance items have run green on the reference machine. A relay that turns
 out to be readable after fifty people have paid is not a bug, it is the end of the product's one
 real differentiator.
+## 127. `daemon.close()` — the stream the shutdown was waiting on was its own
+
+§126.3 ended on the word **Owed**: `daemon.close()` is genuinely wrong, the fix belongs in
+`src/daemon.mjs`, and that package touched everything except it. This is that fix.
+
+**The defect, measured rather than described.** Start a daemon on an isolated state file, open
+`/api/events` with a raw `http.request` — one browser parked on the floor — and call `close()`:
+
+```
+close(): TIMED OUT in 10004 ms      # bounded probe; unbounded, it never returns
+client stream ended: false
+```
+
+`close()` awaits `server.close()`, and `server.close()` completes when every connection has ended.
+An SSE response is a request **in flight, forever, by design**. §121 had already moved
+`closeIdleConnections()` inside that wait, which releases a keep-alive socket with no request on it
+and correctly will not touch a stream. The one call that would end a stream —
+`closeAllConnections()` — sat *after* the `await` it was meant to unblock, exactly where §121 found
+it and exactly where §121 left it, so it could never run. Two ordering bugs in one function; one
+was fixed and the one underneath it was not.
+
+The blast radius was already recorded: the goldens gate hung for eight minutes per run (§126.3), and
+any embedder calling `close()` with a page open hung outright. Only `scripts/demo-floor.mjs` had a
+backstop, and a backstop in one script is not a fixed `close()`.
+
+### What it does now
+
+Three changes, in shutdown order, none of them touching anything the user owns — permissions are
+still released first, before anything else, for the reason §97 gives.
+
+1. **The streams are ended, by the file that owns them.** Nothing outside
+   `src/http/routes/state.mjs` holds the `res` of an event stream, so nothing outside it can end
+   one. The route now keeps the set of open streams as the functions that end them and hands
+   `close()` a single `ctx.endEventStreams()` — the same seam `hooks.mjs` already uses for
+   `ctx.refreshHookStatus`. Each stream gets a final `id: N` / `event: bye` /
+   `data: {"reason":"shutdown"}` frame and then `res.end()`: the client learns the daemon is going
+   instead of watching a socket disappear, the page's existing `retry: 1000` reconnect logic is
+   untouched, and — the point — the request is no longer in flight.
+2. **`closeAllConnections()` moved inside the wait, behind a grace period.** `SHUTDOWN_GRACE_MS` is
+   500 ms. Everything on this server is loopback and small, and the one long-lived response is the
+   event stream, which is ended before the clock starts; what the grace protects is a request that
+   arrived in the last instant and a socket that finished its response but has not been reaped yet.
+   The timer is `unref`'d and cleared when `server.close()` calls back, so the fast path costs
+   nothing.
+3. **Both calls stay optional.** `closeIdleConnections()` and `closeAllConnections()` arrived in
+   Node 18.2/19 and this package's floor is Node 18, so both are `?.` calls. On 18.0/18.1 the
+   streams are still ended — that is ours and works everywhere — and only the last-instant socket
+   falls back to the old timeout behaviour.
+
+### Measured
+
+Same probe, same machine, three runs: **6 ms, 7 ms, 6 ms**, with the client reporting `event: bye`
+as the last frame and a clean end of stream. From "never" to single-digit milliseconds.
+
+### The test, and why it destroys its own socket
+
+`test/integration/daemon.test.mjs` gained two:
+
+- **`close() ends an open event stream instead of waiting forever for it`** opens a real SSE
+  connection with `http.request` (not `fetch`, which pools and can abort behind the test's back),
+  waits for the first `event: state`, asserts the stream is still open, then races `close()`
+  against a 5-second bound and asserts it returned in **under 2 s** — it returns in ~15 ms — and
+  that the client saw `event: bye` and an end of stream. Reverting either half of the fix fails it
+  in 6.4 s with `close() did not return within 5 s with a stream attached`.
+
+  It holds the request object outside the `try` and destroys it in the `finally` on purpose. Without
+  that, a regression does not fail the test — it leaves a test *file* that never exits, and a suite
+  that hangs instead of reporting is the exact failure §121.3 and §126.3 are both about: a job
+  killed by its timeout is recorded as `cancelled`, not `failed`. A defect this test exists to catch
+  must come back as an assertion.
+- **`close() releases what it owns in order, and the user-owned things first`** wraps
+  `permissions.shutdown`, `sends.shutdown`, `registry.stop`, `store.flush` and `ledger.close` on the
+  returned handle and asserts the call order, plus that `daemon.json` existed while the daemon ran
+  and is gone after. The order was a comment; it is now a test. (`notifier.stop` is not on the
+  returned handle and is not spied — the daemon-file assertion covers the step beside it.)
+
+### The backstops stay, and why
+
+Neither is removed, because neither was only about this bug:
+
+- `scripts/demo-floor.mjs`'s 4 s force-exit — a demo script that will not answer Ctrl-C is its own
+  bug whatever the cause, and the fixture directory has to come out either way.
+- `scripts/goldens.mjs`'s `stop()` escalation (SIGTERM, SIGKILL at 3 s, carry on at 8 s) — an
+  unreaped child on a runner that is about to be destroyed is not worth a hung gate, and a child can
+  refuse to leave for reasons that have nothing to do with `close()`.
+
+Both comments claimed the deadlock as a live, unfixed defect in `close()`; both now say it is fixed
+and why they remain. The goldens loop still navigates to `about:blank` before stopping a demo:
+releasing the page is one command and is the honest thing to do, and it is no longer load-bearing.
+
+### Proven, and not
+
+Proven on the reference machine (Windows, Node 24): the hang reproduced directly, in both
+directions, before and after; 6–7 ms with a stream attached; the new test fails on a reverted fix
+and passes on the fix. `lint`, `format:check`, `typecheck` and the full suite are clean with the
+isolation canary at zero.
+
+Not proven here: Node 18, which has no interpreter on this machine — the same honest gap §121 raised
+for the same function. The version boundary is documented (`closeIdleConnections` and
+`closeAllConnections` are 18.2/19) and both calls are optional, so the worst case on 18.0/18.1 is
+the old idle-socket timeout, never a hang on a stream.

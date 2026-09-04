@@ -48,6 +48,18 @@ const HOST = '127.0.0.1';
 const DEFAULT_PORT = 4317;
 
 /**
+ * How long a connection that is still mid-request gets, once shutdown has
+ * ended everything it owns, before it is taken away from it.
+ *
+ * Short on purpose. Everything on this server is loopback and small; the one
+ * long-lived response is the event stream, and `close()` ends those itself
+ * before the clock starts. What is left is a request that arrived in the last
+ * instant, and half a second is a generous read of "let it finish".
+ * `docs/DEVIATIONS.md` §127.
+ */
+const SHUTDOWN_GRACE_MS = 500;
+
+/**
  * Thrown by `startDaemon` when the port the installed hooks post to is already
  * held by another DeckHQ daemon. Starting a second one beside it would bind
  * the next port along and run degraded — every hook event would keep going to
@@ -430,31 +442,59 @@ export async function startDaemon(opts = {}) {
     // Never allowed to fail the shutdown: a measurement is not worth an
     // unclean exit, and `close()` already swallows its own write errors.
     await ledger.close().catch(() => {});
+
+    // Last of the things this daemon owns: the event streams it is holding
+    // open. `/api/events` is a request in flight, forever, by design — a
+    // browser parked on the floor has one, and so does every embedder that
+    // subscribed — and the wait below is a wait for every request to finish.
+    // Each gets a final `event: bye` and then `res.end()`, so the client sees
+    // the stream end rather than a socket disappear. See
+    // `src/http/routes/state.mjs` for the set this walks.
+    ctx.endEventStreams?.();
+
     // `server.close()` stops accepting and then waits for every connection to
-    // end — and a keep-alive connection with no request on it does not end. A
-    // browser tab holds one; so does anything using `fetch`, because undici
-    // pools its sockets. Node 19 made `close()` release those idle connections
-    // itself, and on 19 and later this call is a redundant second one. **Node
-    // 18 does not**, and there the wait runs until the server's own timers
-    // expire — `headersTimeout` 60 s plus `keepAliveTimeout` 5 s.
+    // end. Three kinds do not end on their own, and each is answered here.
     //
-    // That is the 64–65 s that every daemon test on the Node 18 matrix jobs
-    // spent in here, ~18 of them, past the job's 10-minute guard. A job the
-    // runner kills at its timeout is recorded as *cancelled*, and one
-    // cancelled job makes the whole run `cancelled` — which is how six real
-    // assertion failures came back under a heading that read like an
-    // infrastructure hiccup. `docs/DEVIATIONS.md` §121.
+    // **Idle keep-alive sockets.** A browser tab holds one; so does anything
+    // using `fetch`, because undici pools its sockets. Node 19 made `close()`
+    // release those itself, so there `closeIdleConnections()` is a redundant
+    // second call. **Node 18 does not**, and there the wait runs until the
+    // server's own timers expire — `headersTimeout` 60 s plus
+    // `keepAliveTimeout` 5 s. That is the 64–65 s that every daemon test on
+    // the Node 18 matrix jobs spent in here, ~18 of them, past the job's
+    // 10-minute guard, reported as a cancellation rather than as a failure.
+    // `docs/DEVIATIONS.md` §121 moved that call INSIDE the wait, where it can
+    // actually unblock the promise.
     //
-    // So the idle sockets are let go INSIDE the wait rather than after it.
-    // `closeAllConnections()` was already here and could never have helped: it
-    // ran after the promise it was meant to unblock. It stays as the backstop
-    // it was written to be, and `closeIdleConnections()` is the narrow one — a
-    // connection mid-request is left to finish.
+    // **Streams in flight.** §121 left this one: an SSE response is a request
+    // that never finishes, `closeIdleConnections()` correctly will not touch
+    // it, and `closeAllConnections()` — the one call that would — sat *after*
+    // the `await` it was meant to unblock, so it could never run. `close()`
+    // therefore never returned with a browser attached, which deadlocked the
+    // goldens gate for eight minutes (§126.3). The streams are ended above,
+    // and the call that was in the wrong place is now inside the wait too.
+    //
+    // **A socket that ended its response but has not gone quiet.** Which is
+    // why `closeAllConnections()` waits `SHUTDOWN_GRACE_MS` rather than firing
+    // at once: a request that arrived in the last instant is left to finish,
+    // and a socket that is merely slow to be reaped is not waited on forever.
+    // Both calls arrived in Node 18.2/19, so both are optional here (§127).
     await new Promise((resolve) => {
-      server.close(() => resolve(undefined));
+      // Armed before the close is asked for, so that the grace cannot be
+      // started late by a slow callback, and cleared the moment the server
+      // says it is done.
+      const grace = setTimeout(() => server.closeAllConnections?.(), SHUTDOWN_GRACE_MS);
+      if (typeof grace.unref === 'function') grace.unref();
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(grace);
+        resolve(undefined);
+      };
+      server.close(done);
       server.closeIdleConnections?.();
     });
-    server.closeAllConnections?.();
   }
 
   return { url, port, server, registry, store, ledger, permissions, sends, close };

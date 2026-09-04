@@ -293,13 +293,16 @@ function startDemo(population, theme = 'default') {
      * Stop the demo, and do not wait forever for it to agree.
      *
      * The demo daemon shuts down gracefully on SIGTERM, and `close()` waits
-     * for `server.close()`, which waits for every open connection to end. An
-     * SSE stream never ends. So a browser still parked on this demo's page
-     * holds the shutdown open indefinitely — the caller navigates away first
-     * for exactly that reason — and this is the backstop for every other way
-     * a child can refuse to leave. SIGTERM, then SIGKILL, then give up and
-     * carry on: an unreaped demo on a CI runner that is about to be destroyed
-     * is not worth a hung gate. docs/DEVIATIONS.md §126.3.
+     * for `server.close()`, which waits for every open connection to end. A
+     * browser still parked on this demo's page used to hold that open forever,
+     * because an SSE stream is a request in flight that never finishes;
+     * `close()` now ends its own streams and returns in milliseconds
+     * regardless (docs/DEVIATIONS.md §127). The caller still navigates away
+     * first — releasing the page is the honest thing to do and it is one
+     * command — and this stays as the backstop for every OTHER way a child can
+     * refuse to leave: SIGTERM, then SIGKILL, then give up and carry on. An
+     * unreaped demo on a CI runner that is about to be destroyed is not worth
+     * a hung gate. docs/DEVIATIONS.md §126.3.
      * @type {() => Promise<void>}
      */
     const stop = () =>
