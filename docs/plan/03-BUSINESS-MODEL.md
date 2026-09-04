@@ -167,15 +167,27 @@ increment. WP-49.
 
 ## 5. Third line: the Supporter pack (month 1, the price probe)
 
-**$29 one-time, on sale in month 1** so that something exists to buy before the December Wrapped
-moment. WP-45. Cosmetic and personal-power extras shipped as a signed asset pack *outside*
-the MIT core: floor themes (night shift, blueprint, warehouse), custom avatars and rooms,
-floor replay ("watch yesterday"), a rate-card editor.
+**Landed 4 Sep (WP-45, §129).** The pack ships as designed — a signed asset pack loaded from
+`~/.deckhq/packs/`, outside the MIT core — but it carries **two** of the four things this section
+originally priced it for: floor themes (night shift, blueprint, warehouse) and avatar sets. Floor
+replay ("watch yesterday") and the rate-card editor ship **free in the core** instead, because both
+are readings of files the user's own machine already writes — the ledger and `rates.json` — and
+rule 2 (§1) says a feature that reads the user's own files is a service, not a gate. Charging to
+look at your own ledger, or to correct a cost estimate you can already edit in a text editor, would
+have been the exact paywall this plan refuses.
 
-1–3% conversion at $30 one-time. Tens of thousands a year at best and no recurring base — but
-zero servers, no accounts, ships in a week, and it price-tests the audience before we build the
-relay. Treat it as a tip jar with dignity, and gate **nothing** that affects capture, the queue,
-or any action.
+**$29 one-time** was set for the original four-item bundle. It has not been re-set for a
+two-category cosmetics pack, and it is not decided here (§129.9): keep $29 and ship more themes
+first, drop the price, or make it explicitly a tip jar with cosmetics attached — which is the
+honest description of what it now is, and the description this section already reaches for below.
+There is also no storefront yet: no purchase flow, no download page, no price anywhere in the
+product or the README.
+
+1–3% conversion at $30 one-time, if the price holds. Tens of thousands a year at best and no
+recurring base — but zero servers, no accounts, ships in a week, and it price-tests the audience
+before we build the relay. Treat it as a tip jar with dignity, and gate **nothing** that affects
+capture, the queue, or any action — which now includes replay and the rate-card editor by name,
+not only by rule.
 
 ## 6. What we will never sell
 

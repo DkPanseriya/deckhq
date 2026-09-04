@@ -21,6 +21,8 @@ of it.
 | [06 · Engineering work plan](06-ENGINEERING-WORKPLAN.md) | 58 work packages with owners, dependencies, effort, acceptance criteria and what has landed | orchestrator |
 | [07 · Agent handovers](07-AGENT-HANDOVERS.md) | A copy-paste brief per agent, with what remains of its packages and the rules that reject a PR | orchestrator |
 | [Release checklist](RELEASE-CHECKLIST.md) | The by-hand steps for cutting a release, until WP-43 automates them | Product Manager |
+| [../06-RELAY-DESIGN.md](../06-RELAY-DESIGN.md) | WP-32/33/34: the relay protocol and its eight design decisions, what it refuses to claim, what is left for the owner. Design only, in `docs/`, not this directory — it is part of what DeckHQ **is** | Architect |
+| [../ADAPTERS.md](../ADAPTERS.md) | How to add a runtime: the `RuntimeAdapter` contract in practice, worked example, fixture convention, the honesty rule an adapter must state until run against real data | Writing or reviewing an adapter |
 
 ## The thesis in five lines
 
