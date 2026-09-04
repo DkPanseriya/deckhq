@@ -896,6 +896,38 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
 
 ### Fixed
 
+- **DeckHQ told people Codex was not installed while Codex was running in the next window.** The
+  Codex desktop app creates `~/.codex` and installs a complete `codex` CLI — 250 MB, the real thing
+  — at `%LOCALAPPDATA%\OpenAI\Codex\bin\<build-hash>\codex.exe`, and does **not** put it on `PATH`.
+  So "is Codex here" was true, the spawn was `ENOENT`, and the message blamed the install. DeckHQ
+  now finds the program: the `codexBin` setting if you pinned one, then `codex` on `PATH`, then the
+  app's bundled copy with the newest build hash — and `doctor` says which, `codex-cli 0.153.1
+(bundled with the app)`. "Are your transcripts readable" and "is there a program to send a turn
+  with" are two different questions and the report answers them separately: transcripts readable
+  with no binary is a note, not a failure, because the floor is entirely fine and only sending and
+  resuming are gone. When there is nothing to run, the message names every place that was looked in.
+  On Windows a `codex.cmd` shim is **not** chosen — Windows cannot start one without a shell, and
+  nothing that takes a session id from a request body is going near a shell — and `doctor` says so
+  rather than looking arbitrary. The macOS bundle paths are a guess and are labelled one: no macOS
+  machine has been in reach of this project. `docs/DEVIATIONS.md` §136.1.
+- **Old Codex sessions were disappearing from the floor, silently.** Codex compresses a rollout
+  journal that has sat untouched — about a week — to `<name>.jsonl.zst` and deletes the plain file.
+  DeckHQ's scan matched `.jsonl` and nothing else, so those sessions simply were not there, with no
+  error anywhere and no number missing from anything you could see. On Node 22.15 or newer they are
+  now read like any other session, with the same bounded head-and-tail discipline applied to the
+  decoded bytes. On older Node — this package supports 18 — they are **counted**, and the count is
+  said out loud in `doctor` and on the floor's banner: "3 compressed Codex sessions are not read on
+  Node < 22". Nothing about this was taken from a blog post: the compression worker, its file
+  suffix and its metrics are all in the shipped `codex.exe` 0.153.1. `docs/DEVIATIONS.md` §136.2.
+- **DeckHQ said Codex has no way to notify it, and Codex 0.153.1 does.** The hooks note claimed the
+  runtime provides no callback mechanism at all. That is false: `~/.codex/hooks.json`,
+  `PermissionRequest`, `hookSpecificOutput` and eight event names are all in the shipped binary. It
+  now says what the Gemini CLI note says — the mechanism exists, DeckHQ has not wired it up yet, and
+  here is what that costs you — plus the part that is Codex's own: there is no HTTP hook type at
+  all, so reaching DeckHQ needs a command hook that relays to it, which is its own piece of work.
+  Codex hooks stay off until somebody has written a `hooks.json` on a real install and watched Codex
+  read it back; DeckHQ does not write into another product's configuration on the strength of
+  something it has never tested. `docs/DEVIATIONS.md` §136.3.
 - **CI was red on every Node 18 job: four pack/replay tests found their repo root with an API
   Node 18 doesn't have.** `import.meta.dirname` shipped in Node 20.11; this package's floor is
   `>=18`, and there it is `undefined`, so `path.resolve(import.meta.dirname, ...)` threw before a
@@ -1425,6 +1457,19 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
 
 ### Known gaps
 
+- **The Codex adapter still has not read a session Codex wrote.** The Codex desktop app is on the
+  reference machine now, which is new, and three things were fixed because of it — the bundled
+  binary, compressed rollouts, and a hooks note that was false (`docs/DEVIATIONS.md` §136). **None
+  of those is the read path.** How a rollout file is interpreted is unchanged and still comes from
+  documentation and from the shipped binary's string table rather than from a file: whether
+  `token_count` is a running total or an increment, which record types are tool calls, and whether
+  `codex exec resume <id> --json <text>` parses with `--json` between the two positionals are all
+  exactly as unverified as they were. Nor has a compressed rollout that Codex itself produced been
+  read — the round trip is proved against one this project compressed. What is now true and was not:
+  the session directory layout, the `session_meta` shape and all three command forms have been
+  checked against `codex.exe` 0.153.1's own `--help` and string table, so the adapter is a
+  reasonable implementation of a real grammar rather than of a remembered one. It reports itself
+  correctly on a machine with no Codex and degrades without throwing.
 - **The Gemini CLI adapter has never met a real Gemini CLI.** `~/.gemini` does not exist on the
   reference machine. Every field name in it was read out of the `google-gemini/gemini-cli` source on
   2026-09-04 and pinned against a synthetic fixture; none of it has been checked against a profile a
