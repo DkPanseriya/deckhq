@@ -293,7 +293,7 @@
   real payload turned out to carry **no `tool_use_id`** — the field the build treated as its
   correlation key — so the fallback key it was given as a precaution is the normal path, and it
   now carries a serial so two parallel tool calls can never collide.
-  `docs/DEVIATIONS.md` §86, §97 and §133.
+  `docs/DEVIATIONS.md` §86, §97 and §134.
 - **DeckHQ now measures itself.** An append-only event ledger,
   `~/.deckhq/ledger/YYYY-MM-DD.jsonl`, one JSON object per line, written by the state machine as
   the floor moves: a session first seen, every activity and ack transition with its `from` and
@@ -607,7 +607,7 @@
   login: the 202 came back in **76 ms**, the first fragment of the reply reached the channel 6.7 s
   later and the whole turn closed at 10.6 s, the session's own transcript grew by the turn under
   the same session id, and no `claude` process was left behind when the daemon closed.
-  `docs/plan/05-GUI-UX-SPEC.md` §4.3, `docs/DEVIATIONS.md` §117 and §133.
+  `docs/plan/05-GUI-UX-SPEC.md` §4.3, `docs/DEVIATIONS.md` §117 and §134.
 - **A reply typed in a terminal appears in the open panel, without a poll.** The daemon watches
   the transcript of whichever session the panel has open — `fs.watch` with a one-second `stat`
   fallback, because `fs.watch` is unusable on some filesystems and is also blind to a transcript
@@ -1461,7 +1461,7 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   id, so something in it has to name which junior finished if a junior is to leave the floor the
   instant it stops rather than five minutes later — and this could not be checked, because
   driving a real `Task` call needs a run nobody has spent a turn on yet — the login that blocked
-  it is fixed (§133), the run is not. The reader therefore takes an explicit `agent_id` if there is one, a
+  it is fixed (§134), the run is not. The reader therefore takes an explicit `agent_id` if there is one, a
   `transcript_path` inside a `subagents/` directory if there is one, and **returns nothing rather
   than guessing** when there is neither — in which case the event does exactly what it has always
   done, and juniors still arrive and leave on their transcripts alone. Everything else about
@@ -1482,16 +1482,16 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   them against a published price list. Anthropic's rows were read off the pricing page on
   2026-09-04.
 - **`claude -p` cannot be used to reproduce the permission run.** The live run happened and is in
-  `docs/DEVIATIONS.md` §133, but print mode is the wrong surface: with no host to answer it, a
+  `docs/DEVIATIONS.md` §134, but print mode is the wrong surface: with no host to answer it, a
   tool call that would ask is **denied outright** and the `PermissionRequest` hook is never
   consulted at all. Reproducing needs either an interactive session or, as the run did,
   `--permission-prompt-tool stdio` with a host that stays silent. Nothing about the product
   changes — an interactive session always has a prompt surface — but anyone re-running the
-  acceptance should read §133.2 before spending a turn.
+  acceptance should read §134.2 before spending a turn.
 - **The panel has been answered by one runtime, on one machine, on one day.** Claude Code 2.1.260
   on Windows, two `Write` prompts, one allow and one deny. A `Bash` prompt, an MCP tool, a
   `requiresUserInteraction` tool and a request that actually carries an `addRules` suggestion have
-  all been tested against recorded payloads and none has been watched arriving. §133.4.
+  all been tested against recorded payloads and none has been watched arriving. §134.4.
 - **Codex cannot answer a permission prompt yet.** It has the same hook and the same response
   shape, but no `http` hook type at all, so it needs a `command` hook that reads the daemon's
   port and relays on stdin/stdout. That same hook is also the fallback for the two managed-settings

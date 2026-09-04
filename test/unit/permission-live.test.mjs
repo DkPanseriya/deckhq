@@ -1,7 +1,7 @@
 /**
  * The first real `PermissionRequest` this project has ever received, pinned.
  *
- * `docs/DEVIATIONS.md` §133. Every payload in
+ * `docs/DEVIATIONS.md` §134. Every payload in
  * `test/fixtures/permission-request-live.json` is a verbatim copy of what
  * Claude Code 2.1.260 POSTed to `POST /api/permission` on 4 September 2026,
  * with the scratch project's paths — and only those — rewritten. Nothing in
@@ -160,7 +160,7 @@ test('two live payloads arriving together get distinct keys and two held sockets
 });
 
 test('the two bodies the live runtime accepted, byte for byte', () => {
-  // Copied from the daemon's own log of the run (§133): these exact objects
+  // Copied from the daemon's own log of the run (§134): these exact objects
   // were serialised onto the held sockets, and the runtime turned the first
   // into a completed Write and the second into a tool_result reading
   // "Denied from DeckHQ." with no interrupt.

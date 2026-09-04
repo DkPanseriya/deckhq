@@ -28,7 +28,7 @@ const MAX_PAYLOAD = 512 * 1024;
  *
  * §86.2 read `tool_use_id` out of the installed build and called it "the
  * natural correlation key". The first real `PermissionRequest` this project
- * ever received — Claude Code 2.1.260, 4 September, `docs/DEVIATIONS.md` §133
+ * ever received — Claude Code 2.1.260, 4 September, `docs/DEVIATIONS.md` §134
  * — **carries no `tool_use_id` at all**, so every request falls back to the
  * key minted here. A key of `session:timestamp` alone is not enough for that
  * to be the normal path: an agent making parallel tool calls raises two hands
@@ -124,7 +124,7 @@ export function register(router, ctx) {
           ...request,
           runtime,
           // `tool_use_id` is the correlation key when there is one (§86.2).
-          // On the runtime measured in §133 there never is one, so the
+          // On the runtime measured in §134 there never is one, so the
           // fallback below is the normal path rather than the exception, and
           // it has to stay unique across requests that arrive together.
           id: request.id || `${request.sessionId}:${Date.now()}:${(fallbackSerial += 1)}`,
