@@ -28,6 +28,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const { buildReplay, readReplay, replayDays, MAX_FRAMES, REPLAY_SPEED } =
   await import('../../src/core/replay.mjs');
@@ -35,7 +36,8 @@ const { dayKey, dayStart, projectKeyFor, reconstructQueue } =
   await import('../../src/core/ledger.mjs');
 const { Store } = await import('../../src/core/store.mjs');
 
-const REPO = path.resolve(import.meta.dirname, '..', '..');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..', '..');
 const HOUR = 60 * 60 * 1000;
 const KEY = projectKeyFor('/work/api');
 

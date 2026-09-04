@@ -19,12 +19,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { generateKeyPairSync } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const { runPack } = await import('../../src/cli/pack.mjs');
 const packsCore = await import('../../src/core/packs.mjs');
 const { THEME_NAMES, themeByName, themeNames } = await import('../../src/core/themes.mjs');
 
-const REPO = path.resolve(import.meta.dirname, '..', '..');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..', '..');
 const SAMPLE = path.join(REPO, 'packs', 'supporter-sample');
 
 const pair = generateKeyPairSync('ed25519');

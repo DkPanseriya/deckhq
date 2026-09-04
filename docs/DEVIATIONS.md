@@ -10356,3 +10356,49 @@ be driven from the capture harness. It was verified through the API instead (72 
 the queue at 15:32) and by the unit tests that assert every frame equals `reconstructQueue`'s own
 answer. The transport now takes focus when it opens, which is an accessibility improvement in its
 own right and would make an arrow-key escape enough if one is ever added.
+
+## 130. Node 18 — four pack/replay tests computed their repo root with an API this package's floor does not have
+
+CI run 33842703295 failed every Node 18 job — nine other jobs on the same commit, Node 20 and 22
+across three platforms, were green. All four failures were the same error, in the four files WP-45
+and the replay work added:
+
+```
+TypeError [ERR_INVALID_ARG_TYPE]: The "paths[0]" argument must be of type string. Received undefined
+    at test/unit/packs.test.mjs, test/unit/pack-cli.test.mjs, test/unit/replay.test.mjs,
+       test/integration/pack-acceptance.test.mjs
+```
+
+Each file found its own repo root with `path.resolve(import.meta.dirname, '..', '..')`.
+`import.meta.dirname` (and its sibling `import.meta.filename`) shipped in Node 20.11 — this
+package's `engines.node` is `>=18`, and on 18 the property is simply `undefined`, so
+`path.resolve` throws before the file's first test runs. Node 20 and 22 never saw it, which is
+exactly how it merged: nothing in the CI matrix's other two legs could catch a defect that only
+exists on the oldest one.
+
+**The fix is the spelling the rest of the tree already uses.** Every other module that needs its
+own directory — `src/core/notify.mjs`, `src/daemon.mjs`, `scripts/goldens.mjs`,
+`scripts/test.mjs`, `test/integration/daemon-hooks-port.test.mjs`, and six more — does
+`path.dirname(fileURLToPath(import.meta.url))`, which has worked since Node 12. The four new files
+did not have a reason to differ; they just hadn't been run against the floor before this commit.
+Fixed by adding the `fileURLToPath` import and the one-line `HERE` each of those other files
+already has, in `test/unit/packs.test.mjs`, `test/unit/pack-cli.test.mjs`, `test/unit/replay.test.mjs`
+and `test/integration/pack-acceptance.test.mjs`. Nothing else in those files changed.
+
+A tree-wide grep for `import.meta.dirname`/`import.meta.filename`, and for four more APIs newer
+than Node 18 that this package's pack and replay code could plausibly have reached for
+(`Object.groupBy`, `Promise.withResolvers`, `Array.prototype.toSorted`, `fs.globSync`), found no
+other hits.
+
+**`test/unit/node18-floor.test.mjs` is the gate, in the shape `panel-invariant.test.mjs` and
+`settings-keys.test.mjs` already use for this class of defect** — it reads every source file under
+`src/`, `scripts/`, `packs/`, `plugin/` and `test/` and fails on any of those six APIs, so the next
+one lands as a red test on this machine rather than as a red Node 18 job discovered after a merge.
+
+**Unproven on the floor it names — RAISE.** No Node 18 interpreter is installed on the reference
+machine (it runs 24), so what is demonstrated here is the same thing §121.3 could demonstrate about
+its own Node-18-only fix: the change is inert everywhere else (1,713 tests, one unrelated and
+already-flaky failure in `claude-stream.test.mjs`'s timeout test, reproduced in isolation and
+untouched here), and the arithmetic — `import.meta.dirname` is Node 20.11+, the fix is Node 12+ —
+points at the one line four times over. The CI run on this branch is the first real Node 18
+evidence.
