@@ -65,6 +65,8 @@ import {
   hashString,
   mulberry32,
   ACTIVITY_PICK_ATTEMPTS,
+  IDLE_TYPE_MIN_S,
+  IDLE_TYPE_MAX_S,
   spotAt,
 } from './agents-core.js';
 import { planWalk, doorFor } from './agents-nav.js';
@@ -86,6 +88,33 @@ export * from './agents-activity.js';
 /** @typedef {import('./agents-core.js').WalkPoint} WalkPoint */
 /** @typedef {import('./agents-core.js').AgentLike} AgentLike */
 /** @typedef {import('./agents-core.js').AgentRecord} AgentRecord */
+
+/**
+ * Write down what this agent's real STATE says it should be doing at its desk,
+ * and cancel whatever idle variation the director was playing over the top of
+ * it (WP-28).
+ *
+ * This is the director rule in one function: **any real state change cancels
+ * it.** The trait weighting can put `drink` on screen for 2.6 s while an agent
+ * is typing; it can never keep a raised hand off the floor, delay one, or
+ * survive one. `deskDesired` is what `sync` compares against on every
+ * snapshot, so a variation is left alone while the state is unchanged and
+ * discarded the instant it is not.
+ *
+ * @param {AgentRecord} rec
+ * @param {string} placement
+ * @param {string|null} clip
+ */
+function setDeskDesired(rec, placement, clip) {
+  const desired = placement === 'desk' ? clip : null;
+  rec.deskDesired = desired;
+  rec.deskIdle.clip = null;
+  // Type for a full stretch before the first variation. That is what makes a
+  // state change read as work resuming, and it is why nothing but `type` can
+  // be on screen in the seconds after one.
+  rec.deskIdle.remaining =
+    desired === 'type' ? IDLE_TYPE_MIN_S + rec.idleRng() * (IDLE_TYPE_MAX_S - IDLE_TYPE_MIN_S) : 0;
+}
 
 export function samePoint(a, b) {
   if (a === b) return true;
@@ -111,6 +140,11 @@ export class AgentRuntime {
      * @type {Plan|null}
      */
     this._plan = null;
+    /**
+     * WP-28 · the last idle tendency map, so a session that arrives after the
+     * map does still gets its lean. @type {Record<string, string|null>|null}
+     */
+    this._tendencies = null;
   }
 
   /** @param {string} id @returns {AgentRecord} */
@@ -133,6 +167,22 @@ export class AgentRuntime {
         seed,
         rng: mulberry32(seed),
         rotation: { activity: null, remaining: 0, pairedWith: null },
+        // WP-28. The desk idle director's own state, and its own RNG stream.
+        // Its own, deliberately: sharing `rng` would mean that adding a
+        // variation at somebody's desk re-rolled every benched agent's lounge
+        // sequence, which is the same reason WP-20's appearance hash is not
+        // `hashString` (docs/DEVIATIONS.md §105).
+        //
+        // `deskDesired` is the clip the agent's real STATE asks for. The
+        // director may play something else over the top of it for a few
+        // seconds; the moment the state's own answer changes, `sync` cancels
+        // whatever is playing and the state wins. A hand going up is never
+        // animated around.
+        idleRng: mulberry32((seed ^ 0x9e3779b9) >>> 0),
+        deskDesired: /** @type {string|null} */ (null),
+        deskIdle: { clip: /** @type {string|null} */ (null), remaining: 0 },
+        /** @type {string|null} */
+        tendency: (this._tendencies && this._tendencies[id]) || null,
         initialised: false,
       };
       this._records.set(id, rec);
@@ -148,6 +198,23 @@ export class AgentRuntime {
   /** @returns {IterableIterator<AgentRecord>} */
   all() {
     return this._records.values();
+  }
+
+  /**
+   * WP-28 · which idle clip each agent leans on, keyed by agent id.
+   *
+   * A hint, and only a hint: an id with no entry, an unknown tendency word and
+   * an empty map all mean "no lean", and the director then weights the three
+   * variations evenly. It changes nothing about placement, state, or which
+   * clips exist — see `makeIdleRotation` in `./clips.js`.
+   *
+   * @param {Record<string, string|null>|null|undefined} map
+   */
+  setTendencies(map) {
+    for (const rec of this._records.values()) {
+      rec.tendency = (map && map[rec.id]) || null;
+    }
+    this._tendencies = map || null;
   }
 
   /** @returns {number} */
@@ -221,6 +288,7 @@ export class AgentRuntime {
         rec.seated = placement === 'desk' || placement === 'office';
         rec.clip = initialClipFor(agent, placement);
         rec.clipStartedAt = Date.now();
+        setDeskDesired(rec, placement, rec.clip);
         rec.initialised = true;
         continue;
       }
@@ -240,6 +308,7 @@ export class AgentRuntime {
           rec.placement = placement;
           rec.clip = initialClipFor(agent, placement);
           rec.clipStartedAt = Date.now();
+          setDeskDesired(rec, placement, rec.clip);
           if (placement !== 'lounge')
             rec.rotation = { activity: null, remaining: 0, pairedWith: null };
         }
@@ -252,6 +321,7 @@ export class AgentRuntime {
           const toPoint = { x: seat.x, y: seat.y, room: destRoom, door: doorFor(destRoom, doors) };
           rec.path = planWalk(fromPoint, toPoint, rooms, plan);
           rec.pendingClip = initialClipFor(agent, placement);
+          setDeskDesired(rec, placement, rec.pendingClip);
           rec.roomId = destRoom.id;
         } else {
           // A placement with no seats defined yet in the plan: hold position
@@ -268,8 +338,22 @@ export class AgentRuntime {
       } else if (rec.path.length === 0 && placement === 'desk') {
         // Same desk, but the activity state may have changed reaction (e.g. a hand goes up)
         // without a seat/placement change — reflect it immediately, no walk required.
+        //
+        // WP-28 moved the comparison from `rec.clip` to `rec.deskDesired`.
+        // `rec.clip` is what is ON SCREEN and the idle director may have put a
+        // 2.6 s `drink` there; comparing against it would have snapped every
+        // variation away on the next snapshot, which arrives several times a
+        // second. `deskDesired` is what the agent's STATE asks for, so this
+        // still fires on exactly the changes it fired on before — and only on
+        // those. The `else` restores the state's own clip whenever no
+        // variation is running, which is what the old comparison did for
+        // anything that had drifted.
         const desired = initialClipFor(agent, placement);
-        if (desired !== rec.clip) {
+        if (desired !== rec.deskDesired) {
+          rec.clip = desired;
+          rec.clipStartedAt = Date.now();
+          setDeskDesired(rec, placement, desired);
+        } else if (!rec.deskIdle.clip && desired !== rec.clip) {
           rec.clip = desired;
           rec.clipStartedAt = Date.now();
         }
@@ -287,7 +371,8 @@ export class AgentRuntime {
    * simulation, including activity rotation (VISUAL-SPEC §4.3, §10).
    * @param {number} dtSeconds
    * @param {{reduced?: boolean, plan?: Plan,
-   *   makeActivityRotation?: (rng: () => number) => {pick: (opts?: {partnerFree?: (activity:string)=>boolean}) => {activity:string, holdMs:number, degraded:boolean}}}} [opts]
+   *   makeActivityRotation?: (rng: () => number) => {pick: (opts?: {partnerFree?: (activity:string)=>boolean}) => {activity:string, holdMs:number, degraded:boolean}},
+   *   makeIdleRotation?: (rng: () => number, opts?: {tendency?: string|null}) => {pick: () => {clip:string, holdS:number}}}} [opts]
    *   `makeActivityRotation` was declared as a bare `Function`, which says
    *   nothing about what `pickNextActivityFromClips` then calls it with (WP-22).
    *   `makeActivityRotation`: the real factory from `./clips.js`, if the caller
@@ -304,6 +389,31 @@ export class AgentRuntime {
     }
 
     if (opts.reduced) return; // "lounge rotation stops" under reduced motion (VISUAL-SPEC §10)
+
+    // WP-28 · the desk idle director. §4.1 asks for `drink` "occasionally
+    // during working" and `stretch` as an "occasional idle variation";
+    // `IDLE_VARIATIONS` has named the three since the clips landed and nothing
+    // had ever played them. This is that, plus the one mechanical effect a
+    // trait has anywhere in the product: a weighting on which of four clips an
+    // already-idle agent is a little more likely to reach for.
+    //
+    // It runs only for an agent that is SEATED AT ITS DESK AND TYPING —
+    // `deskDesired === 'type'` — so a raised hand, a stall, a walk and a
+    // review are all untouched, and it is below the reduced-motion return, so
+    // under `prefers-reduced-motion` no variation is ever picked.
+    if (typeof opts.makeIdleRotation === 'function') {
+      for (const rec of records) {
+        if (rec.placement !== 'desk' || rec.path.length !== 0) continue;
+        if (rec.deskDesired !== 'type') continue;
+        rec.deskIdle.remaining -= dtSeconds;
+        if (rec.deskIdle.remaining > 0) continue;
+        const pick = opts.makeIdleRotation(rec.idleRng, { tendency: rec.tendency }).pick();
+        rec.clip = pick.clip;
+        rec.clipStartedAt = Date.now();
+        rec.deskIdle.clip = pick.clip === 'type' ? null : pick.clip;
+        rec.deskIdle.remaining = pick.holdS;
+      }
+    }
 
     // Who is standing where. Two things are read off this: whether a paired
     // activity has a partner to join, and whether a given SPOT is free.

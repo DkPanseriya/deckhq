@@ -65,6 +65,30 @@ async function registerPacks(body) {
 }
 
 /**
+ * WP-28 · hand the floor the idle tendencies that arrived with
+ * `GET /api/traits`.
+ *
+ * A tendency is a WEIGHTING on which of four clips an agent that is already
+ * sitting at its desk typing reaches for next — §4.1's `drink`, `think`,
+ * `stretch` or more `type`. It cannot introduce a clip, cannot move anybody,
+ * cannot change a state, is cancelled by any real state change, and does not
+ * run under `prefers-reduced-motion`. It is the only thing in the product that
+ * acts on a trait at all, which is why there is no setting for it.
+ *
+ * Never throws, and silently does nothing before the Scene exists: a trait is
+ * a grace note, and a floor that failed to come up because of one would be the
+ * tail wagging the dog.
+ * @param {Record<string, string|null>|null} map
+ */
+export function applyTendencies(map) {
+  try {
+    scene?.setTendencies?.(map);
+  } catch (err) {
+    console.debug('[deckhq] idle tendencies not applied', err);
+  }
+}
+
+/**
  * @param {{normaliseHit:(hit:unknown) => any, selectAgent:(id:string|null) => void,
  *   filterToProject:(id:string|null) => void, openNewAgentDialog:(id:string) => void,
  *   showWhiteboard:(id:string) => void, revealProjectFolder:(id:string) => Promise<void>,

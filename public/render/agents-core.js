@@ -86,6 +86,17 @@
  * @property {number} seed              32-bit hash of `id`
  * @property {() => number} rng         seeded PRNG, [0,1)
  * @property {{activity:string|null, remaining:number, pairedWith:string|null}} rotation
+ * @property {() => number} idleRng     WP-28. The desk idle director's own
+ *   seeded PRNG. Its own so that adding a variation at a desk cannot re-roll
+ *   anybody's lounge rotation.
+ * @property {string|null} deskDesired  WP-28. The clip this agent's real STATE
+ *   asks for at its desk, or null off a desk. The director may play a
+ *   variation over the top of it; a change to THIS cancels that.
+ * @property {{clip:string|null, remaining:number}} deskIdle  WP-28. The
+ *   variation currently playing over `deskDesired`, and how long is left of
+ *   the current hold.
+ * @property {string|null} tendency     WP-28. Which idle clip this agent leans
+ *   on, from `GET /api/traits`, or null. A weighting and nothing else.
  * @property {boolean} initialised
  * @property {string} [placement] what `derivePlacement()` said when this
  *   record was last synced. Written by `sync` and read by the rotation and
@@ -107,6 +118,17 @@ export const WALK_SPEED = 13;
 /** Activity rotation hold time, seconds (VISUAL-SPEC §4.3). */
 export const ROTATION_MIN_S = 45;
 export const ROTATION_MAX_S = 90;
+
+/**
+ * How long a working agent types between idle variations, seconds (WP-28).
+ * Mirrors `IDLE_TYPE_MIN_S`/`IDLE_TYPE_MAX_S` in `./clips.js` for the same
+ * reason `LOUNGE_CLIPS` is mirrored below: `agents.js` never imports
+ * `./clips.js` (see its header), and the director's first hold is set in
+ * `sync`, where the injected factory is not in hand. `test/unit/clips.test.mjs`
+ * asserts the two copies agree.
+ */
+export const IDLE_TYPE_MIN_S = 20;
+export const IDLE_TYPE_MAX_S = 45;
 
 /** Lounge clips (VISUAL-SPEC §4.2). Fallback for `LOUNGE_CLIPS` from `./clips.js`. */
 export const LOUNGE_CLIPS = [

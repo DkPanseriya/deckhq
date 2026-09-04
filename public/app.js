@@ -59,7 +59,7 @@ import {
 } from './app-header.js';
 import { noteMouse, showTooltip } from './app-tooltip.js';
 import { handleKeydown, handlePaletteKey, wireKeyboard } from './app-keys.js';
-import { loadRenderModules } from './app-floor.js';
+import { applyTendencies, loadRenderModules } from './app-floor.js';
 import {
   diffAndNotify,
   saveSetting,
@@ -418,6 +418,8 @@ setPanel(
       const a = latestSnapshot?.agents?.find((x) => x.id === id);
       if (a) a.hasDraft = hasDraft;
     },
+    // WP-28. The floor owns what an idle tendency means; see `applyTendencies`.
+    onTendencies: applyTendencies,
   }),
 );
 
