@@ -39,6 +39,7 @@ export const SETTINGS_KEYS = Object.freeze([
   'reducedMotion',
   'resumeIn',
   'lightsOutHour',
+  'theme',
 ]);
 
 const MIN_STALL_MIN = 2;
@@ -54,6 +55,32 @@ const MOTION_LABELS = {
   reduce: 'Always reduce',
   'no-preference': 'Always animate',
 };
+
+/**
+ * The theming port (WP-30), and its do-nothing default.
+ *
+ * The themes live in `render/themes.js`, which is a RENDERER module: `app.js`
+ * imports every one of those dynamically and defensively, because a build
+ * whose renderer failed to load must still show its header, its panel and its
+ * settings sheet. This file therefore does not import them at all — it is
+ * handed a small port by the composition root instead.
+ *
+ * That indirection buys a second thing, and it is the one that made it
+ * necessary rather than merely tidy: this module stays importable under
+ * `node --test`. `test/unit/settings-keys.test.mjs` imports `SETTINGS_KEYS`
+ * from here in Node, where there is no `document`, so a static import of
+ * anything that touches the DOM at module scope would break that gate.
+ *
+ * @typedef {object} Theming
+ * @property {() => Array<{name:string, blurb?:string}>} list the shipped themes
+ * @property {(name:string) => string} apply paint one, and return what landed
+ * @property {(theme:any) => string[]} swatches three colours that stand for one
+ */
+const NO_THEMING = Object.freeze({
+  list: () => [],
+  apply: (name) => name,
+  swatches: () => [],
+});
 
 /**
  * Apply the motion preference to the document. `system` removes the attribute
@@ -76,9 +103,19 @@ export function applyMotionPreference(mode) {
  * @param {(message:string, opts?:{isError?:boolean}) => void} opts.toast
  * @param {{renderInto:(host:HTMLElement)=>void, refresh?:()=>void}} opts.hooks the hook consent
  *   screen, embedded as this sheet's last section.
+ * @param {Theming} [opts.theming] WP-30. Absent means no Theme row, which is the
+ *   honest answer when the renderer did not load: there is nothing to pick between.
  */
 export function createSettingsUI(opts) {
   const { dialogEl, bodyEl, getSnapshot, toast, hooks } = opts;
+  const theming = opts.theming || NO_THEMING;
+  /** @returns {Array<{name:string, blurb?:string}>} */
+  const shippedThemes = () => {
+    const list = theming.list();
+    return Array.isArray(list) ? list : [];
+  };
+  /** @param {string} name @returns {string} */
+  const applyThemeSetting = (name) => theming.apply(name);
 
   /** @type {Record<string, any>} the settings as last confirmed by the daemon */
   let current = {};
@@ -104,6 +141,10 @@ export function createSettingsUI(opts) {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       current = body;
       applyMotionPreference(current.reducedMotion);
+      // WP-30. Paint the theme the daemon confirmed, not the one that was
+      // clicked: the store is the authority on what was stored, and a preview
+      // may currently be on top of a save that was refused.
+      applyThemeSetting(current.theme);
       render();
     } catch (err) {
       toast(`Could not save that setting: ${err.message}`, { isError: true });
@@ -250,6 +291,73 @@ export function createSettingsUI(opts) {
     return group;
   }
 
+  /**
+   * The theme picker (WP-30).
+   *
+   * A row of `aria-pressed` buttons, like every other choice in this sheet,
+   * with two differences that earn their code:
+   *
+   *   1. **Swatches.** Three dots per theme — the wood, the carpet, the
+   *      chrome. Drawn with `element.style`, deliberately NOT with a CSS rule:
+   *      `test/unit/state-visuals.test.mjs` holds every `.settings*` rule to
+   *      the measured ink and ground sets, and a stylesheet full of theme
+   *      colours would either break that test or force it to be relaxed. A
+   *      swatch is data, so it is set as data.
+   *   2. **Live preview.** Hovering or focusing a theme paints the whole
+   *      window in it and leaving puts it back, because a theme is the one
+   *      setting whose value you cannot read off a label. Preview NEVER
+   *      saves: leaving the sheet, or the row, restores what is stored.
+   *
+   * @param {string} value the stored theme
+   * @param {(next:string) => void} onChange
+   */
+  function themePicker(value, onChange) {
+    const list = shippedThemes();
+    const group = document.createElement('div');
+    group.className = 'picker settings-choice settings-themes';
+    group.setAttribute('role', 'group');
+    group.setAttribute('aria-label', 'Floor theme');
+
+    /** Put the window back on the theme that is actually stored. */
+    const restore = () => applyThemeSetting(value);
+
+    for (const theme of list) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'picker-btn settings-theme';
+      btn.setAttribute('aria-pressed', String(theme.name === value));
+      if (theme.blurb) btn.title = theme.blurb;
+
+      const dots = document.createElement('span');
+      dots.className = 'settings-theme-swatch';
+      dots.setAttribute('aria-hidden', 'true');
+      const colours = theming.swatches(theme) || [];
+      for (const colour of colours) {
+        const dot = document.createElement('i');
+        dot.style.background = colour;
+        dots.appendChild(dot);
+      }
+      const label = document.createElement('span');
+      label.textContent = theme.name;
+      btn.append(dots, label);
+
+      // Preview on the way in, the stored theme back on the way out. Pointer
+      // and keyboard both, so a keyboard user sees the same thing.
+      btn.addEventListener('pointerenter', () => applyThemeSetting(theme.name));
+      btn.addEventListener('focus', () => applyThemeSetting(theme.name));
+      btn.addEventListener('pointerleave', restore);
+      btn.addEventListener('blur', restore);
+      btn.addEventListener('click', () => {
+        if (theme.name !== value) onChange(theme.name);
+      });
+      group.appendChild(btn);
+    }
+    // A pointer that leaves the whole group without passing over a button —
+    // fast diagonal exits do this — would otherwise leave the preview on.
+    group.addEventListener('pointerleave', restore);
+    return group;
+  }
+
   /** @param {string} text */
   function readOnlyValue(text) {
     const span = document.createElement('span');
@@ -377,6 +485,18 @@ export function createSettingsUI(opts) {
       'The floor animates on purpose — an arrival is the product’s signature moment — but ' +
         'this window can be told to hold still regardless of what the system asks for.',
     );
+    // WP-30. Free, and it gates nothing: every theme this build ships is in
+    // this row for everybody. The Supporter pack (docs/plan/03 §5) sells MORE
+    // themes later; it does not take one away.
+    if (shippedThemes().length > 1) {
+      row(
+        s,
+        'Theme',
+        themePicker(current.theme || 'default', (next) => save({ theme: next })),
+        'Repaints the floor and the window around it. It never touches a state colour — ' +
+          'a raised hand is the same amber in every theme, and red still means one thing.',
+      );
+    }
     row(
       s,
       'Motion',
@@ -491,6 +611,12 @@ export function createSettingsUI(opts) {
   function close() {
     dialogEl.close();
   }
+
+  // Whatever a preview left on screen, the stored theme is what the window
+  // wears once the sheet is gone. Bound once, on the dialog itself, so it
+  // catches Escape and the backdrop as well as the close button — `render()`
+  // rebuilds the picker's buttons and would drop a listener bound to one.
+  dialogEl.addEventListener('close', () => applyThemeSetting(current.theme));
 
   return { open, close, isOpen: () => dialogEl.open };
 }

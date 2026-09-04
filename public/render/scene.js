@@ -570,6 +570,13 @@ function planSignature(snapshot) {
     `b${pop.benchedDrawn}`,
     `h${pop.goneHome.size}`,
     `g${letGo}`,
+    // WP-30. The theme changes no geometry at all — it repaints materials —
+    // but the backdrop is BAKED, so the only way a new floor colour reaches
+    // the screen is a re-bake, and `_rebuildPlan` is the only thing that
+    // bakes. Putting the theme in the signature is therefore not a hack: the
+    // signature's job is "does the baked bitmap still describe this
+    // snapshot", and after a theme change it does not.
+    `t${(snapshot && snapshot.settings && snapshot.settings.theme) || 'default'}`,
   ].join('~');
 }
 
@@ -701,6 +708,31 @@ export class Scene {
     }
 
     if (!this._running) this._draw(); // keep the floor current even if the loop is paused (hidden tab)
+  }
+
+  /**
+   * Re-bake the backdrop for the plan already in hand, and draw it (WP-30).
+   *
+   * A theme changes no geometry, so there is nothing to re-plan — but the
+   * floor is a BAKED bitmap, and a material that changed in `PALETTE` reaches
+   * the screen only when something bakes. `planSignature` counts the theme, so
+   * the next snapshot would eventually do it; "eventually" is the problem.
+   * The floor is push-driven: with nobody starting or finishing a session, no
+   * snapshot arrives, and choosing a theme would repaint the chrome instantly
+   * and leave the floor on the old one until the next thing happened. Measured
+   * on the demo floor before this existed.
+   *
+   * Cheap enough to call on a hover preview: one bake, the same one a re-plan
+   * already does, and `docs/02-ARCHITECTURE.md` §8 budgets it at under 400 ms
+   * for a floor far larger than any real one.
+   */
+  repaint() {
+    if (!this._plan) return;
+    this._backdrop = bakeBackdrop(this._plan, this._dpr);
+    // No cross-fade: the old bitmap is the same building in different paint,
+    // so fading between them reads as a flicker rather than as a change.
+    this._fadeFrom = null;
+    this._draw();
   }
 
   /**

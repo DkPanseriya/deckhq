@@ -15,6 +15,7 @@
  *   node scripts/demo-floor.mjs                    # start and print the URL
  *   node scripts/demo-floor.mjs --port N           # a different port (0 = any free port)
  *   node scripts/demo-floor.mjs --population NAME  # a different fixture, see POPULATIONS
+ *   node scripts/demo-floor.mjs --theme NAME       # a floor theme (WP-30), see THEME_NAMES
  *   node scripts/demo-floor.mjs --ledger-fixture   # + a synthetic week of ledger records,
  *                                                  #   so the day's card and Wrapped appear
  *
@@ -34,6 +35,7 @@ import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 
 import { CARDS_OFF } from '../public/postcard.js';
+import { THEME_NAMES, themeByName } from '../src/core/themes.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -42,6 +44,13 @@ const opt = (name, fallback) => {
 };
 const PORT = Number(opt('--port', 4499));
 const POPULATION = opt('--population', 'demo');
+/**
+ * WP-30. Which floor theme this demo starts in. It is written into the
+ * fixture's `state.json` rather than clicked in the settings sheet, for the
+ * same reason `onboarded` is: a capture script must not have to drive the
+ * interface to get the floor it wants to photograph.
+ */
+const THEME = opt('--theme', 'default');
 /**
  * WP-18 / WP-27. Write a synthetic ledger into the fixture's state directory
  * and let the day's card and Wrapped appear.
@@ -68,6 +77,10 @@ const LEDGER_FIXTURE = argv.includes('--ledger-fixture');
 const ROOT = path.join(
   os.tmpdir(),
   (POPULATION === 'demo' ? 'deckhq-demo' : `deckhq-demo-${POPULATION}`) +
+    // WP-30. A themed run gets its own fixture directory for the reason the
+    // ledger run does: this script's first act is to delete its own directory,
+    // so two demos sharing one would tear down each other's floor.
+    (THEME !== 'default' ? `-${THEME.replace(/[^a-z0-9]+/g, '-')}` : '') +
     (LEDGER_FIXTURE ? '-ledger' : ''),
 );
 const CLAUDE_DIR = path.join(ROOT, 'claude');
@@ -242,6 +255,12 @@ if (!POPULATIONS[POPULATION]) {
   );
   process.exit(2);
 }
+if (!themeByName(THEME)) {
+  process.stderr.write(`unknown theme "${THEME}"; one of: ${THEME_NAMES.join(', ')}
+`);
+  process.exit(2);
+}
+
 const SESSIONS = POPULATIONS[POPULATION]();
 
 /** A deterministic uuid-shaped id, so runs are reproducible. */
@@ -860,6 +879,10 @@ fs.writeFileSync(
         // markers off, which is how the cards' own screenshots are taken.
         postcardDay: LEDGER_FIXTURE ? '' : CARDS_OFF,
         wrappedShown: LEDGER_FIXTURE ? '' : CARDS_OFF,
+        // WP-30. `default` is written explicitly rather than omitted so the
+        // fixture states the theme it was built for, and a themed goldens
+        // capture differs from the plain one in exactly one value.
+        theme: themeByName(THEME).name,
       },
       ack,
     },
@@ -924,6 +947,7 @@ process.stdout.write(
     `  DeckHQ demo floor  ${url}`,
     '',
     `  population: ${POPULATION}`,
+    `  theme:    ${themeByName(THEME).name}`,
     `  fixture:  ${ROOT}`,
     `  projects: ${new Set(built.map((s) => s.project)).size}`,
     `  sessions: ${built.length}`,

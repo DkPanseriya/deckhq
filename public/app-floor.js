@@ -16,6 +16,7 @@
  */
 
 import {
+  applyThemeSetting,
   el,
   latestSnapshot,
   scene,
@@ -23,6 +24,7 @@ import {
   setPalette,
   setScene,
   setSceneModule,
+  setThemes,
 } from './app-state.js';
 import { showRendererError } from './app-header.js';
 
@@ -47,6 +49,15 @@ export async function loadRenderModules({
     setPalette(await import('./render/palette.js'));
   } catch (err) {
     console.debug('[deckhq] render/palette.js not available yet, using fallback colours', err);
+  }
+  try {
+    // WP-30. Loaded before the Scene, because the first bake has to happen in
+    // the theme the user chose: applying a theme after the backdrop is baked
+    // would show the default floor for one frame on every reload.
+    setThemes(await import('./render/themes.js'));
+    applyThemeSetting((latestSnapshot?.settings || {}).theme);
+  } catch (err) {
+    console.debug('[deckhq] render/themes.js not available yet, using the default theme', err);
   }
   try {
     setSceneModule(await import('./render/scene.js'));

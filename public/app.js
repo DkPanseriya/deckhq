@@ -26,6 +26,7 @@ import { wrappedDue } from './wrapped.js';
 import {
   FALLBACK_STATE_COLORS,
   announce,
+  applyThemeSetting,
   deckUI,
   el,
   findAgent,
@@ -42,6 +43,7 @@ import {
   setPanel,
   setSelectedId,
   sounds,
+  themes,
   toast,
 } from './app-state.js';
 import {
@@ -189,6 +191,11 @@ function handleSnapshot(snapshot) {
   // client state, so it is stamped onto each agent here for the renderer and
   // the deck to read. The daemon never sees drafts.
   for (const a of snapshot.agents || []) a.hasDraft = panel.hasDraft(a.id);
+  // WP-30. The theme is a setting, so it arrives with the snapshot and is
+  // applied BEFORE the floor is handed one: `planSignature` counts the theme,
+  // so `scene.setState` below re-bakes the backdrop in the new materials as
+  // part of the same update rather than a frame later.
+  applyThemeSetting((snapshot.settings || {}).theme);
   setLatestSnapshot(snapshot);
   renderHeader(snapshot);
   renderFloorState(snapshot);
@@ -455,6 +462,78 @@ async function settleFloor() {
   }
 }
 
+/**
+ * WP-30. Write the floor's arrangement to a file the user owns.
+ *
+ * A local download and nothing else: the daemon builds the document, the
+ * browser saves it, and no byte leaves the machine. The object URL is revoked
+ * on the next task so a long-lived tab does not accumulate blobs.
+ */
+async function exportLayout() {
+  try {
+    const res = await fetch('/api/layout');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const layout = await res.json();
+    const blob = new Blob(
+      [
+        `${JSON.stringify(layout, null, 2)}
+`,
+      ],
+      { type: 'application/json' },
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'deckhq-layout.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    toast(
+      `Layout saved: theme “${layout.theme}”, ${layout.rooms.length} room(s). ` +
+        'It names your project folders — it is not anonymous.',
+    );
+  } catch (err) {
+    toast(`Could not export the layout: ${err.message}`, { isError: true });
+  }
+}
+
+/**
+ * Apply a layout file.
+ *
+ * The file is parsed here only far enough to be valid JSON; the daemon is the
+ * one authority on whether it is a LAYOUT, so its refusal is what the user
+ * reads. A refused file changes nothing at all — see `src/http/routes/layout.mjs`.
+ */
+function importLayout() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/json,.json';
+  input.addEventListener('change', async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`that file is not JSON (${err.message})`);
+      }
+      const res = await fetch('/api/layout', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(parsed),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      const layout = body.layout || {};
+      toast(`Layout applied: theme “${layout.theme}”, ${(layout.rooms || []).length} room(s).`);
+    } catch (err) {
+      toast(`${err.message} Nothing was changed.`, { isError: true });
+    }
+  });
+  input.click();
+}
+
 async function refreshNow() {
   try {
     const res = await fetch('/api/refresh', { method: 'POST' });
@@ -594,6 +673,16 @@ const settingsUI = createSettingsUI({
   getSnapshot: () => latestSnapshot,
   toast,
   hooks: hooksUI,
+  // WP-30. The sheet is handed the themes rather than importing them: they
+  // live in `render/`, every import from there is dynamic and defensive, and
+  // the sheet has to stay importable in Node for `settings-keys.test.mjs`.
+  // Read through `themes` on each call, because the module arrives after this
+  // line runs — `loadRenderModules` is awaited later.
+  theming: {
+    list: () => (themes && Array.isArray(themes.THEMES) ? themes.THEMES : []),
+    apply: (name) => applyThemeSetting(name),
+    swatches: (theme) => (themes?.swatchesFor ? themes.swatchesFor(theme) : []),
+  },
 });
 
 el.settingsClose.addEventListener('click', () => el.settingsDialog.close());
@@ -626,6 +715,8 @@ const paletteUI = createPalette({
     resume: resumeSelected,
     settleFloor,
     refresh: refreshNow,
+    exportLayout,
+    importLayout,
     openSettings: () => settingsUI.open(),
     openHooks: () => settingsUI.open('hooks'),
     openOnboarding: showOnboarding,

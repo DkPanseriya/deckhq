@@ -15,6 +15,7 @@
  *   npx deckhq statusline one line for a status bar
  *   npx deckhq stats      what the floor did, from the local event ledger
  *   npx deckhq ledger     list, export and verify days of that ledger
+ *   npx deckhq layout     export or import the floor's arrangement
  *
  * With no --port, the daemon prefers the port the installed hooks already
  * post to, so a daemon and its hooks cannot drift apart by accident; if a
@@ -53,6 +54,7 @@ const SUBCOMMANDS = {
   open: async (rest) => (await import('../src/cli/deck.mjs')).runOpen(rest),
   stats: async (rest) => (await import('../src/cli/stats.mjs')).runStats(rest),
   ledger: async (rest) => (await import('../src/cli/ledger.mjs')).runLedger(rest),
+  layout: async (rest) => (await import('../src/cli/layout.mjs')).runLayout(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
@@ -92,6 +94,7 @@ async function main() {
         '       deckhq statusline [--json] [--install] [--remove]',
         '       deckhq stats [--days N] [--json]',
         '       deckhq ledger days | export [--signed] | verify <file>',
+        '       deckhq layout export | show | import <file>',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
@@ -114,6 +117,9 @@ async function main() {
         '                discharges and sends per day, tokens per project, and the',
         '                longest wait ever. From ~/.deckhq/ledger; no daemon needed.',
         '  ledger        the ledger itself: `days`, `export [--signed]`, `verify`.',
+        '  layout        the floor as a file: theme, room order, folded rooms and',
+        '                the two floor preferences. `export > my-floor.json`,',
+        '                `import my-floor.json`. Free, and gates nothing.',
         '',
         'Every command takes an id: the MK tag the deck prints, a name you gave,',
         'or any prefix of the session id.',

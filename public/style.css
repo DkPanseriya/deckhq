@@ -3050,6 +3050,32 @@ textarea.field-input {
   max-height: none;
   justify-content: flex-end;
 }
+/* WP-30 · the theme picker.
+   The swatch dots carry a theme's own colours, and those are set with
+   `element.style` in settings-ui.js rather than declared here on purpose:
+   test/unit/state-visuals.test.mjs holds every `.settings*` rule to the
+   measured ink and ground sets, and a stylesheet full of theme colours would
+   either fail that test or force it to be relaxed. A swatch is data. */
+.settings-themes {
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.settings-theme {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.settings-theme-swatch {
+  display: inline-flex;
+  gap: 2px;
+}
+.settings-theme-swatch i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
 .settings-range {
   flex: 0 0 auto;
   width: 9rem;

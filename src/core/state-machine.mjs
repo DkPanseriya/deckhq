@@ -257,6 +257,41 @@ function compareAgents(a, b) {
   return b.lastActivityAt - a.lastActivityAt || a.id.localeCompare(b.id);
 }
 
+/**
+ * Put the rooms in the order an imported layout asked for (WP-30).
+ *
+ * The floor has no room COORDINATES to restore — `public/render/plan.js` deals
+ * projects into bands and treemaps each band, so a room's place is a function
+ * of the order it arrives in and of how big its neighbours are
+ * (`docs/DEVIATIONS.md` §96, §106). Order is therefore the whole of what a
+ * layout can carry, and this is where it lands.
+ *
+ * Two rules, both chosen so an ordering can never lose a room:
+ *   - a project the order names keeps its position in the order;
+ *   - a project the order has never heard of — a repo opened since the layout
+ *     was written — follows, in the order the scan produced.
+ *
+ * An empty order (every install that has never imported a layout) returns the
+ * list untouched, which is what keeps the default floor's goldens at 0 px.
+ *
+ * @template {{id:string}} T
+ * @param {T[]} projects
+ * @param {string[]} order
+ * @returns {T[]}
+ */
+export function orderRooms(projects, order) {
+  if (!Array.isArray(order) || order.length === 0) return projects;
+  const rank = new Map(order.map((id, i) => [id, i]));
+  return projects
+    .map((p, i) => ({
+      p,
+      i,
+      rank: rank.has(p.id) ? /** @type {number} */ (rank.get(p.id)) : Infinity,
+    }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((entry) => entry.p);
+}
+
 export class Registry {
   /**
    * `identity` and `ledger` are destructured below and were never declared;
@@ -426,7 +461,10 @@ export class Registry {
       }
     }
     const todayTokens = this.ledger ? this.ledger.todayTokens() : {};
-    const projects = projectsOf(agents).map((p) => {
+    // WP-30. `roomOrder?.()` because a Registry is routinely constructed over
+    // a hand-rolled store stub in the test suite, and a snapshot must not
+    // depend on a method whose absence means "no imported layout" anyway.
+    const projects = orderRooms(projectsOf(agents), this.store.roomOrder?.() || []).map((p) => {
       // `hasDashboard` decides whether the room gets a screen to click, so it
       // is refreshed by the scan rather than probed per frame.
       const hasDashboard = this._dashboards.has(p.id);
@@ -649,6 +687,19 @@ export class Registry {
    */
   setProjectArchived(projectId, archived) {
     this.store.setProjectArchived(projectId, archived);
+    this._changed = true;
+    this._rebuild();
+    this._emitIfChanged();
+  }
+
+  /**
+   * The order the floor deals rooms in (WP-30). A view preference on exactly
+   * the same terms as `setProjectArchived` above: it moves rooms, it touches
+   * no session and it clears nothing.
+   * @param {string[]} ids project ids, in floor order
+   */
+  setRoomOrder(ids) {
+    this.store.setRoomOrder(ids);
     this._changed = true;
     this._rebuild();
     this._emitIfChanged();
