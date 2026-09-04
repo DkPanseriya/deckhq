@@ -1,0 +1,74 @@
+{
+  "kind": "deckhq.pack",
+  "schema": 1,
+  "name": "supporter-sample",
+  "version": "1.0.0",
+  "publisher": "DeckHQ",
+  "blurb": "Two more floors and a crew to walk them. The sample Supporter pack — themes and avatars only.",
+  "themes": [
+    {
+      "name": "warehouse",
+      "version": 1,
+      "blurb": "Poured concrete, plywood decking and steel racking, lit from a high roof.",
+      "floor": {
+        "wood": "#5B4E3E",
+        "carpet": "#3E4247",
+        "screed": "#35383D",
+        "ground": "#2C2F34",
+        "tile": "#43474D",
+        "wall": "#5A6068",
+        "partition": "#4A4F57",
+        "desk": "#5C5F66",
+        "seat": "#5A606A",
+        "plant": "#6E9E86",
+        "ink": "#EAEDF2"
+      },
+      "chrome": {
+        "bg": "#101216",
+        "surface": "#181b21",
+        "surface-2": "#212530",
+        "surface-3": "#2b3040",
+        "line": "#343a49",
+        "ink": "#e9ecf3",
+        "ink-2": "#b6bcca",
+        "muted": "#8b93a4"
+      }
+    },
+    {
+      "name": "garden",
+      "version": 1,
+      "blurb": "A conservatory: pale stone, moss underfoot, and everything in leaf.",
+      "floor": {
+        "wood": "#C8B394",
+        "carpet": "#CBD8C2",
+        "screed": "#D2D6CB",
+        "ground": "#DDE3D6",
+        "tile": "#E6EBE0",
+        "wall": "#F4F7F0",
+        "partition": "#DCE3D4",
+        "desk": "#CDBB9C",
+        "seat": "#F2F5EE",
+        "plant": "#4F8A52",
+        "ink": "#20301F"
+      },
+      "chrome": {
+        "bg": "#0f1512",
+        "surface": "#161d19",
+        "surface-2": "#1f2822",
+        "surface-3": "#29342c",
+        "line": "#333f38",
+        "ink": "#e9f1ec",
+        "ink-2": "#b4c2ba",
+        "muted": "#8b9a92"
+      }
+    }
+  ],
+  "avatars": [
+    {
+      "name": "warehouse crew",
+      "blurb": "Workwear brights: the same people, dressed for a colder building.",
+      "accents": ["#3FC1C9", "#7AD9F5", "#6C8BFF", "#B98CFF", "#FF7EC8", "#F5E663"],
+      "jackets": ["#20313D", "#3B2140", "#123A32", "#402A1E"]
+    }
+  ]
+}

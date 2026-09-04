@@ -24,10 +24,20 @@ import { register as registerPermission } from './http/routes/permission.mjs';
 import { register as registerStats } from './http/routes/stats.mjs';
 import { register as registerSnapshot } from './http/routes/snapshot.mjs';
 import { register as registerWrapped } from './http/routes/wrapped.mjs';
+import { register as registerPacks } from './http/routes/packs.mjs';
+import { register as registerReplay } from './http/routes/replay.mjs';
+import { register as registerRates } from './http/routes/rates.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { Ledger } from './core/ledger.mjs';
-import { DAEMON_FILE, LEDGER_DIR, STATE_FILE, migrateLegacyState } from './core/paths.mjs';
+import {
+  DAEMON_FILE,
+  LEDGER_DIR,
+  PACKS_DIR,
+  STATE_FILE,
+  migrateLegacyState,
+} from './core/paths.mjs';
+import { currentPacks } from './core/packs.mjs';
 import { clearDaemonFile, writeDaemonFile } from './core/daemon-file.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
@@ -202,12 +212,16 @@ function envHoldMs() {
 /**
  * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string,
  *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
- *           notify?: boolean, daemonFile?: string, snapshotDir?: string }} [opts]
+ *           notify?: boolean, daemonFile?: string, snapshotDir?: string,
+ *           packsDir?: string, ratesFile?: string }} [opts]
  *   `daemonFile` overrides where the bound port is published; it defaults to
  *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
  *   caller named no state file.
  *   `snapshotDir` overrides where `S` writes its PNGs (WP-14), for the same
  *   reason: a test must never write into the user's real `~/.deckhq`.
+ *   `packsDir` and `ratesFile` do the same for WP-45's asset packs and the
+ *   rate-card editor's override file: a test must never read the developer's
+ *   installed packs, and must never edit the developer's own rate card.
  *   `adoptHooksPort` is set by the CLI when the user named no port: the daemon
  *   may then prefer the port the installed hooks post to (see `adoptHooksPort`
  *   above). Tests and embedders that pass a port leave it unset.
@@ -229,6 +243,28 @@ export async function startDaemon(opts = {}) {
 
   // Carry over state written by a build that kept it inside the package.
   if (!opts.stateFile) migrateLegacyState(REPO_ROOT, log);
+
+  // WP-45. Packs are loaded BEFORE the store, and the order is the whole
+  // reason this line is here rather than beside the routes: `store.load()`
+  // sanitises `settings.theme` against the themes this build can paint, so a
+  // machine whose floor is painted in a pack's theme would silently fall back
+  // to the default on every start if the pack had not been registered yet.
+  //
+  // Never fatal. `currentPacks` does not throw, and a pack that will not load
+  // is one line in the log — the product that captures your sessions does not
+  // fail to start because a decoration is corrupt.
+  const packsDir = opts.packsDir || PACKS_DIR;
+  const packs = currentPacks({ dir: packsDir, force: true });
+  for (const bad of packs.errors) log.warn(`pack "${bad.name}" was not loaded: ${bad.error}`);
+  for (const pack of packs.packs) {
+    for (const line of pack.rejected) log.warn(`pack "${pack.name}" — ${line}`);
+  }
+  if (packs.packs.length) {
+    log.info(
+      `${packs.packs.length} pack(s) loaded: ${packs.packs.map((p) => `${p.name} ${p.version}`).join(', ')}`,
+    );
+  }
+
   const store = new Store(opts.stateFile || STATE_FILE);
   await store.load();
 
@@ -302,6 +338,14 @@ export async function startDaemon(opts = {}) {
     // Where `S` writes (WP-14). Overridable for the same reason `stateFile`
     // is: a test must never write into the user's real `~/.deckhq`.
     snapshotDir: opts.snapshotDir,
+    // WP-45. Where installed asset packs live. Overridable for the same
+    // reason `stateFile` is: a test must never read the developer's own.
+    packsDir,
+    // WP-45's rate-card editor writes here. Beside a caller's own state file
+    // when it named one, so a test never edits the developer's rate card.
+    ratesFile:
+      opts.ratesFile ||
+      (opts.stateFile ? path.join(path.dirname(opts.stateFile), 'rates.json') : undefined),
     port: null,
   };
   registerState(router, ctx);
@@ -315,6 +359,9 @@ export async function startDaemon(opts = {}) {
   registerDiff(router, ctx);
   registerPermission(router, ctx);
   registerSnapshot(router, ctx);
+  registerPacks(router, ctx);
+  registerReplay(router, ctx);
+  registerRates(router, ctx);
 
   const server = http.createServer((req, res) => {
     // A missing Host header, or one pointing anywhere but loopback, is not a

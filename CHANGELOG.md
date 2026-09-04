@@ -8,6 +8,59 @@
 
 ### Added
 
+- **The Supporter pack: more themes and avatars, and nothing else.** A pack is one signed JSON
+  file. `deckhq pack install <file>` copies it into `~/.deckhq/packs/<name>/pack.json` and a
+  running DeckHQ picks it up within a second, no restart. It carries floor themes and avatar sets;
+  there is no key in its format for a tier, a licence, an expiry or a feature flag, and one that
+  tried to carry a key like that is **refused rather than ignored**. `⌘K` → Settings → Floor now
+  shows the pack's themes beside the shipped ones, and an Avatars row appears only when a pack
+  actually offers a set — an install with no pack has no row and no advertisement. Choosing "as
+  they come" puts every face back exactly, and nothing changes because a file appeared in a
+  directory: the set is a setting, empty by default, because a face is the one thing in this
+  product that must never change on its own. `docs/DEVIATIONS.md` §127.
+- **`deckhq pack` — `build`, `verify`, `install`, `list`, `remove`.** No account, no licence check,
+  no activation, no update check and no network call anywhere in it; the only question DeckHQ ever
+  asks about a pack is whether it was signed by the Ed25519 publisher key compiled into the build,
+  and it answers that locally with `node:crypto` over the pack's canonical JSON. An unsigned pack,
+  one signed by a key this build does not know, or one edited after signing is refused **whole**
+  with its reason and nothing in it loads. A bad ITEM is refused **alone**: a theme that fails the
+  contrast gate is dropped with the measurement and the rest of the pack still installs, so one
+  bad colour cannot cost a customer the pack they paid for. `deckhq pack verify` prints what is
+  inside one before you install it.
+- **A pack cannot lower a bar.** Every theme in a pack goes through the same `validateTheme` and
+  the same `assertThemeContrast` a theme DeckHQ ships does — this is the door `docs/DEVIATIONS.md`
+  §125.9 left closed, opened exactly this far and no further. Every avatar colour is held to the
+  same ≥ 70 sRGB distance from every state colour that `public/render/palette.js` holds its own
+  tables to, so an agent can never wear a state, and a pale "jacket" that would read as the torso
+  under it is refused with its luminance. `packs/supporter-sample/` is a real pack with two extra
+  themes — **warehouse** (poured concrete and steel racking) and **garden** (a conservatory in
+  leaf) — plus one avatar set, committed as reviewable unsigned source beside the signed artifact
+  and a build script.
+- **Floor replay: watch yesterday. Free.** `⌘K` → "Watch yesterday" scrubs the floor through a day
+  of your own event ledger at 60×, so a working day is about twenty minutes and dragging the bar
+  is instant. Each frame is `reconstructQueue(records, t)` — the needs-you queue exactly as the
+  machine wrote it down, not a re-derivation — and frames land on changes rather than on a clock,
+  so a quiet hour is one frame and a busy day is a few dozen. It is **read-only**: there is no
+  writer anywhere in the path, no acknowledgement moves, the ledger file's modification time does
+  not change, and an `INVARIANT:` test drives a whole day to the end and asserts all three. The
+  deck, the panel, the header count and the notifications stay live the whole time; only the
+  canvas is looking at yesterday. The plan listed replay in the Supporter pack; it ships free,
+  because a feature that reads your own ledger cannot be sold without becoming a gate on data you
+  already own. §127.
+- **A rate-card editor in the settings sheet. Also free.** Settings → Data now edits
+  `~/.deckhq/rates.json` — your own prices per million tokens, merged over the shipped table one
+  model at a time, with the shipped model ids offered as completions and the cache columns showing
+  the multiplier that will be used if you leave them empty. A malformed row is refused whole with
+  the row named and nothing is written; clearing every row removes the file rather than leaving an
+  empty one behind that would claim the table is overridden for ever. There is no "fetch the
+  latest prices" button and there will not be one. The plan listed this in the pack too; it ships
+  free, because the file has existed since WP-26 and anybody can edit it in a text editor — and
+  because "cost is an estimate, never a bill" only holds if the person looking at a wrong number
+  can correct it. §127.
+- **`GET /api/packs`**, **`GET /api/replay/days`**, **`GET /api/replay?day=`**, and
+  **`GET`/`POST /api/rates`**. All loopback, all local, none of them egress. The replay routes are
+  two GETs and there is no writer among them, asserted.
+
 - **Two more runtimes: Gemini CLI and OpenCode.** Four now, on one floor, with correct attribution
   and no shared state: disabling or removing any one leaves the others fully working, and a runtime
   that is not installed contributes nothing and reports itself cleanly rather than erroring.

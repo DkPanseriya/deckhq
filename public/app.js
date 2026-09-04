@@ -26,6 +26,7 @@ import { wrappedDue } from './wrapped.js';
 import {
   FALLBACK_STATE_COLORS,
   announce,
+  applyAvatarSetting,
   applyThemeSetting,
   deckUI,
   el,
@@ -42,10 +43,12 @@ import {
   setLatestSnapshot,
   setPanel,
   setSelectedId,
+  setSceneOwner,
   sounds,
   themes,
   toast,
 } from './app-state.js';
+import { createReplay } from './replay.js';
 import {
   filterToProject,
   getNeedsYouQueue,
@@ -196,6 +199,10 @@ function handleSnapshot(snapshot) {
   // so `scene.setState` below re-bakes the backdrop in the new materials as
   // part of the same update rather than a frame later.
   applyThemeSetting((snapshot.settings || {}).theme);
+  // WP-45. Same reasoning one channel out: the avatar set is a setting, so it
+  // arrives with the snapshot, and applying it here means a set chosen in
+  // another tab reaches this one without a reload.
+  applyAvatarSetting((snapshot.settings || {}).avatarSet);
   setLatestSnapshot(snapshot);
   renderHeader(snapshot);
   renderFloorState(snapshot);
@@ -679,13 +686,60 @@ const settingsUI = createSettingsUI({
   // Read through `themes` on each call, because the module arrives after this
   // line runs — `loadRenderModules` is awaited later.
   theming: {
-    list: () => (themes && Array.isArray(themes.THEMES) ? themes.THEMES : []),
+    // `allThemes()` rather than `THEMES`: the picker offers what the product
+    // can paint, which is the shipped table plus whatever an installed pack
+    // registered (WP-45). `THEMES` stays the shipped table and stays frozen.
+    list: () =>
+      themes?.allThemes
+        ? themes.allThemes()
+        : themes && Array.isArray(themes.THEMES)
+          ? themes.THEMES
+          : [],
     apply: (name) => applyThemeSetting(name),
     swatches: (theme) => (themes?.swatchesFor ? themes.swatchesFor(theme) : []),
+  },
+  // WP-45. Empty on every install with no pack, and the sheet draws no row
+  // for an empty list — so nothing about this advertises a purchase.
+  avatars: {
+    list: () => (palette?.avatarSets ? palette.avatarSets() : []),
+    apply: (name) => applyAvatarSetting(name),
   },
 });
 
 el.settingsClose.addEventListener('click', () => el.settingsDialog.close());
+
+// WP-45. Floor replay, and it is FREE — it reads the ledger the user already
+// owns, and a feature that reads your own records cannot be sold (see
+// `src/core/replay.mjs`). It is a second view of the same Scene, not a second
+// renderer: the deck, the panel and the header stay live the whole time.
+const replayUI = createReplay({
+  rootEl: el.replay,
+  dayEl: el.replayDay,
+  clockEl: el.replayClock,
+  playEl: /** @type {HTMLButtonElement} */ (el.replayPlay),
+  scrubEl: /** @type {HTMLInputElement} */ (el.replayScrub),
+  closeEl: /** @type {HTMLButtonElement} */ (el.replayClose),
+  noteEl: el.replayNote,
+  getScene: () => scene,
+  getSnapshot: () => latestSnapshot,
+  toast,
+  onActiveChange: (active) => setSceneOwner(active ? 'replay' : 'live'),
+});
+
+// Escape closes the replay and hands the canvas back. Captured, and only
+// while the bar is up and no modal dialog is open: the replay is a region
+// rather than a dialog precisely so it traps nothing, which means Escape has
+// to be given to it explicitly rather than by the platform.
+document.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key !== 'Escape' || !replayUI.isOpen()) return;
+    if (document.querySelector('dialog[open]')) return;
+    event.preventDefault();
+    replayUI.close();
+  },
+  true,
+);
 
 const paletteUI = createPalette({
   dialogEl: el.paletteDialog,
@@ -724,6 +778,10 @@ const paletteUI = createPalette({
     // spend the automatic one, and being shown it on purpose does not mark a
     // day or a week as delivered.
     showPostcard: () => openPostcard({ manual: true }),
+    // WP-45. Free, and named for what it does. No accelerator: watching a day
+    // go by is not a two-keystroke everyday action, and a mis-typed one would
+    // take the floor away from the person looking at it.
+    watchYesterday: () => replayUI.open(),
     showWrapped: () => {
       const due = wrappedDue({ now: Date.now(), shownKey: '' });
       openWrapped(due.kind === 'annual' ? 'annual' : 'week', { manual: true });

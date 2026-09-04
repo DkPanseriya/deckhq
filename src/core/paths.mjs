@@ -68,6 +68,19 @@ export const CACHE_DIR = path.join(DATA_DIR, 'cache');
 export const LEDGER_DIR = path.join(DATA_DIR, 'ledger');
 
 /**
+ * Signed asset packs, one directory per pack (WP-45).
+ *
+ * Beside the state rather than inside the package for the reason at the top
+ * of this file: `npx deckhq` owns the package directory and is free to
+ * replace it, and a pack somebody paid for must survive an upgrade. It is not
+ * user-owned in the sense `state.json` is — a pack is a file that arrived from
+ * somewhere else and is re-installable — so deleting this directory costs the
+ * themes and avatars in it and nothing else. Nothing in here can affect
+ * capture, the queue or any action; see `src/core/packs.mjs`.
+ */
+export const PACKS_DIR = path.join(DATA_DIR, 'packs');
+
+/**
  * Where one runtime adapter's scan cache lives.
  *
  * The id is sanitised rather than trusted: it becomes a filename, and an

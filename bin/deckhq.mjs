@@ -16,6 +16,7 @@
  *   npx deckhq stats      what the floor did, from the local event ledger
  *   npx deckhq ledger     list, export and verify days of that ledger
  *   npx deckhq layout     export or import the floor's arrangement
+ *   npx deckhq pack       signed asset packs: more themes and avatar sets
  *
  * With no --port, the daemon prefers the port the installed hooks already
  * post to, so a daemon and its hooks cannot drift apart by accident; if a
@@ -55,6 +56,7 @@ const SUBCOMMANDS = {
   stats: async (rest) => (await import('../src/cli/stats.mjs')).runStats(rest),
   ledger: async (rest) => (await import('../src/cli/ledger.mjs')).runLedger(rest),
   layout: async (rest) => (await import('../src/cli/layout.mjs')).runLayout(rest),
+  pack: async (rest) => (await import('../src/cli/pack.mjs')).runPack(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
@@ -95,6 +97,7 @@ async function main() {
         '       deckhq stats [--days N] [--json]',
         '       deckhq ledger days | export [--signed] | verify <file>',
         '       deckhq layout export | show | import <file>',
+        '       deckhq pack build | verify | install | list | remove',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
@@ -120,6 +123,9 @@ async function main() {
         '  layout        the floor as a file: theme, room order, folded rooms and',
         '                the two floor preferences. `export > my-floor.json`,',
         '                `import my-floor.json`. Free, and gates nothing.',
+        '  pack          signed asset packs: more themes and avatar sets, and',
+        '                nothing else. `verify`, `install`, `list`, `remove`.',
+        '                No account, no licence check, no network. A pack is a file.',
         '',
         'Every command takes an id: the MK tag the deck prints, a name you gave,',
         'or any prefix of the session id.',

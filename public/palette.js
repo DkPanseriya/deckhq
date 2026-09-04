@@ -326,6 +326,25 @@ export function buildCommandEntries(ctx) {
       run: () => actions.showWrapped(),
     },
     {
+      // WP-45. The floor, scrubbed through a day of your own ledger at 60x.
+      //
+      // FREE, and in this list rather than behind a purchase on purpose: the
+      // plan put floor replay in the Supporter pack, and a feature that reads
+      // the user's own records cannot be sold without becoming a gate on data
+      // they already own (`08` §1.1 rule 2). The pack sells themes and
+      // avatars. See `src/core/replay.mjs` and DEVIATIONS §127.
+      //
+      // No accelerator: it takes the floor over, and a mis-typed key that
+      // takes the floor away from somebody mid-thought is worse than one more
+      // character of typing.
+      id: 'cmd:replay',
+      group: 'command',
+      label: 'Watch yesterday',
+      hint: 'the queue filling and emptying, from your ledger, at 60x',
+      keywords: ['replay', 'yesterday', 'history', 'day', 'rewind', 'playback', 'ledger', 'watch'],
+      run: () => actions.watchYesterday(),
+    },
+    {
       // WP-30. The layout is a file the user owns: theme, room order, folded
       // rooms and the two floor preferences. No accelerator — exporting is
       // not an everyday two-keystroke action, and a mis-typed one would put a

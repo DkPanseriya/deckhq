@@ -147,6 +147,14 @@ export const el = {
   nightcardRows: document.getElementById('nightcard-rows'),
   nightcardFoot: document.getElementById('nightcard-foot'),
   nightcardHint: document.getElementById('nightcard-hint'),
+  // WP-45. The floor replay's transport bar.
+  replay: document.getElementById('replay'),
+  replayDay: document.getElementById('replay-day'),
+  replayClock: document.getElementById('replay-clock'),
+  replayPlay: document.getElementById('replay-play'),
+  replayScrub: document.getElementById('replay-scrub'),
+  replayClose: document.getElementById('replay-close'),
+  replayNote: document.getElementById('replay-note'),
   liveRegion: document.getElementById('live-region'),
   toast: document.getElementById('toast'),
 };
@@ -225,8 +233,81 @@ export function setThemes(v) {
   themes = v;
 }
 
+/**
+ * What `/api/packs` said, once it has been asked (WP-45). `null` until then,
+ * so a caller can tell "no packs" from "not looked yet".
+ * @type {{packs:any[], avatarSets:any[]}|null}
+ */
+export let packs = null;
+
+/**
+ * Who is currently deciding what the canvas paints (WP-45).
+ *
+ * `'live'` — the snapshot stream, which is every second of every normal
+ * session. `'replay'` — the floor replay is scrubbing a day out of the
+ * ledger, and the arriving snapshots must NOT overwrite what it is drawing.
+ *
+ * A flag rather than unsubscribing from the stream, deliberately: the deck,
+ * the panel, the queue strip, the header count and the notifications go on
+ * being live and go on being true while you are watching yesterday. The only
+ * thing replay takes over is the picture.
+ * @type {'live'|'replay'}
+ */
+export let sceneOwner = 'live';
+
+/** @param {'live'|'replay'} v */
+export function setSceneOwner(v) {
+  sceneOwner = v;
+}
+
+/** @param {any} v */
+export function setPacks(v) {
+  packs = v;
+}
+
 /** The theme currently painted, so a repeat application costs one comparison. */
 let appliedTheme = 'default';
+
+/** The avatar set currently applied. `''` is the tables the product ships. */
+let appliedAvatarSet = '';
+
+/**
+ * Dress the floor from a named avatar set, or from the shipped tables (WP-45).
+ *
+ * The floor is re-baked on a CHANGE, and only on a change, for the same
+ * reason `applyThemeSetting` re-bakes: the floor is push-driven, so with
+ * nobody starting or finishing a session the new clothes would not appear
+ * until the next thing happened. A repeat application costs one comparison.
+ *
+ * Safe before (or without) `render/palette.js`: with no module there is
+ * nothing to dress, and the shipped tables are what the renderer would use
+ * anyway. A set that fails its colour discipline is reported and the floor
+ * stays in the shipped tables — the one thing this must never do is put an
+ * agent in a colour that could be read as a state.
+ *
+ * @param {unknown} name
+ * @returns {string} the set actually applied
+ */
+export function applyAvatarSetting(name) {
+  if (!palette?.applyAvatarSet) return '';
+  /** @type {string} */
+  let next = '';
+  try {
+    next = palette.applyAvatarSet(name);
+  } catch (err) {
+    console.error('[deckhq] that avatar set was refused; keeping the shipped faces', err);
+    try {
+      next = palette.applyAvatarSet('');
+    } catch {
+      next = '';
+    }
+  }
+  if (next !== appliedAvatarSet) {
+    appliedAvatarSet = next;
+    scene?.repaint?.();
+  }
+  return next;
+}
 
 /**
  * Paint a theme, floor and chrome together, and say which one landed.
