@@ -1352,6 +1352,14 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   the five-attacker threat table, what is deliberately not built, and the WP-32/33/34 build plan with
   its acceptance criteria. Design only: no code, nothing run, every third-party claim carrying a URL
   and a retrieval date and four of them labelled unverified. `docs/DEVIATIONS.md` §127.
+- **`docs/plan/LAUNCH-COPY.md` — the launch copy for waves 1 to 3, written and posted nowhere.** The
+  X thread, the Show HN title and body, the Claude Code plugin and VS Code Marketplace listings, the
+  awesome-list line, three reply templates, the two-sentence answer for each tool people will ask
+  about, and a pre-flight checklist that traces every number to the command that produced it. The
+  sample throughout is one real `doctor --share` run from 4 September, read line by line for
+  anything private before reuse. Nothing in it describes the permission approval, the streamed send,
+  the relay or any install route a green tag has not produced, and the three unverified adapters are
+  named as unverified. The retracted phrasings from `02` §3 are grepped for and absent.
 
 ### Known gaps
 
