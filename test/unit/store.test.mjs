@@ -398,6 +398,49 @@ test('editor: only a name on the allowlist is ever stored (WP-47)', async () => 
   }
 });
 
+test('codexBin: validated by SHAPE here, because core cannot look at the disk (WP-23a)', async () => {
+  const { dir, file } = await tmpFile();
+  try {
+    const store = new Store(file);
+    await store.load();
+    // Blank by default: "find it" — PATH, then the Codex desktop app's own
+    // bundled copy. docs/DEVIATIONS.md §136.1.
+    assert.equal(store.settings.codexBin, '');
+
+    store.setSettings({ codexBin: '  C:\\tools\\codex.exe  ' });
+    assert.equal(store.settings.codexBin, 'C:\\tools\\codex.exe', 'trimmed, and kept');
+
+    // This layer knows nothing about what is on this disk — the HTTP route
+    // does that check, and `adapters/codex/binary.mjs` does it again before
+    // the spawn. What it can refuse is a value that is not a path at all: a
+    // control character would be a value smuggling a second line into
+    // something that logs it, and a paste is not a program.
+    for (const hostile of [
+      'C:\\tools\\codex.exe\nrm -rf /',
+      `C:\\tools\\${String.fromCharCode(0)}codex.exe`,
+      'x'.repeat(2000),
+      42,
+      null,
+      {},
+    ]) {
+      store.setSettings({ codexBin: hostile });
+      assert.equal(store.settings.codexBin, '', `${JSON.stringify(hostile)} must not be stored`);
+    }
+
+    // Including one hand-written into state.json behind the daemon's back.
+    await fsp.writeFile(
+      file,
+      JSON.stringify({ version: 1, settings: { codexBin: 'a\rb' }, ack: {} }),
+      'utf8',
+    );
+    const reloaded = new Store(file);
+    await reloaded.load();
+    assert.equal(reloaded.settings.codexBin, '');
+  } finally {
+    await cleanup(dir);
+  }
+});
+
 test('goneHomeDays: the gone-home window is clamped, and 0 means "draw everybody"', async () => {
   const { dir, file } = await tmpFile();
   try {
