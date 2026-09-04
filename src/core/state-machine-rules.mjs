@@ -119,6 +119,18 @@ export function freshObserved(runtime) {
     // null, not 0: an unpriced session is one we have no rate for, and zero
     // would be a claim about the money (WP-26, `src/core/rates.mjs`).
     costEstimate: /** @type {number|null} */ (null),
+    /**
+     * WP-28. What the adapter counted while reading this session's own
+     * transcript: how its tool calls split across the four classes, and the
+     * median length of a reply that actually said something. Both are read
+     * off the summary and neither reaches the snapshot — the trait line is
+     * computed on read, by `GET /api/traits`, and nothing on the floor is
+     * drawn from these directly.
+     * @type {Record<'files'|'shell'|'web'|'search', number>}
+     */
+    toolMix: { files: 0, shell: 0, web: 0, search: 0 },
+    textMedian: 0,
+    textTurns: 0,
   };
 }
 

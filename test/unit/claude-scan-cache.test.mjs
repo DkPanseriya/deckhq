@@ -20,6 +20,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// Read rather than repeated: this number is BUMPED whenever `parseSummary`'s
+// output shape changes (WP-28 took it to 2), and a test that spelled it out
+// four times failed on the bump rather than on anything about caching.
+import { CACHE_SCHEMA_VERSION } from '../../src/core/summary-cache.mjs';
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ADAPTER = pathToFileURL(
   path.resolve(HERE, '../../src/adapters/claude-code/adapter.mjs'),
@@ -110,7 +115,7 @@ async function writeCache(world, payload) {
  */
 async function plantedCache(
   world,
-  { version = 1, mtimeShift = 0, sizeShift = 0, archived = undefined } = {},
+  { version = CACHE_SCHEMA_VERSION, mtimeShift = 0, sizeShift = 0, archived = undefined } = {},
 ) {
   const stat = await fsp.stat(world.transcript);
   await writeCache(
@@ -164,7 +169,7 @@ test('a cold start with no cache file scans normally and writes one', async () =
 
     assert.ok(fs.existsSync(world.cacheFile), 'the scan left a cache behind');
     const cached = JSON.parse(await fsp.readFile(world.cacheFile, 'utf8'));
-    assert.equal(cached.version, 1);
+    assert.equal(cached.version, CACHE_SCHEMA_VERSION);
     assert.equal(cached.runtime, 'claude-code');
     assert.deepEqual(Object.keys(cached.entries), [world.transcript]);
   } finally {
@@ -260,7 +265,7 @@ test('a corrupt cache file never prevents a scan, and is rebuilt', async () => {
     assert.equal(summaries[0].title, 'Final title');
 
     const rebuilt = JSON.parse(await fsp.readFile(world.cacheFile, 'utf8'));
-    assert.equal(rebuilt.version, 1);
+    assert.equal(rebuilt.version, CACHE_SCHEMA_VERSION);
     assert.deepEqual(Object.keys(rebuilt.entries), [world.transcript]);
   } finally {
     await cleanup(world);
@@ -276,7 +281,7 @@ test('a cache file from another schema version is discarded, not trusted', async
     assert.equal(summaries[0].title, 'Final title');
 
     const rewritten = JSON.parse(await fsp.readFile(world.cacheFile, 'utf8'));
-    assert.equal(rewritten.version, 1);
+    assert.equal(rewritten.version, CACHE_SCHEMA_VERSION);
   } finally {
     await cleanup(world);
   }

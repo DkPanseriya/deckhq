@@ -52,7 +52,7 @@ import process from 'node:process';
  * wrong data on the floor. Bump this whenever `parseSummary`'s output shape
  * or meaning changes.
  */
-export const CACHE_SCHEMA_VERSION = 1;
+export const CACHE_SCHEMA_VERSION = 2;
 
 /** Hard ceiling on entries kept. Well past any real machine's session count. */
 const MAX_ENTRIES = 2000;

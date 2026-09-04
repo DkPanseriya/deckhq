@@ -34,6 +34,51 @@ export const MAX_PATTERN = 40;
 export const FILE_TOOLS = new Set(['Edit', 'Read', 'Write', 'MultiEdit']);
 
 /**
+ * Which KIND of work a tool name is, for WP-28's tool mix.
+ *
+ * Four classes and no more, because the trait line has room for one word and
+ * because these are the four that a reader recognises without being told:
+ * `files`, `shell`, `web`, `search`. Anything else — an MCP tool, a Task, a
+ * TodoWrite — is `other` and is deliberately NOT counted toward the mix: a
+ * class nobody can name is not a trait, and inventing a fifth word for "the
+ * rest" would make the line longer without making it truer.
+ *
+ * The table lives HERE, beside {@link toolSummary}, because tool names are
+ * Claude Code's own vocabulary and nothing outside `src/adapters/` may know a
+ * runtime's format (`docs/02-ARCHITECTURE.md` §2, standing rule 8). Another
+ * adapter that grows traits brings its own table.
+ *
+ * @type {Record<string, 'files'|'shell'|'web'|'search'>}
+ */
+export const TOOL_CLASSES = {
+  Edit: 'files',
+  Read: 'files',
+  Write: 'files',
+  MultiEdit: 'files',
+  NotebookEdit: 'files',
+  Bash: 'shell',
+  BashOutput: 'shell',
+  KillShell: 'shell',
+  KillBash: 'shell',
+  WebFetch: 'web',
+  WebSearch: 'web',
+  Grep: 'search',
+  Glob: 'search',
+  LS: 'search',
+};
+
+/**
+ * The class of one tool name, or null when it is none of the four.
+ * @param {string} name
+ * @returns {'files'|'shell'|'web'|'search'|null}
+ */
+export function toolClass(name) {
+  return Object.prototype.hasOwnProperty.call(TOOL_CLASSES, String(name))
+    ? TOOL_CLASSES[name]
+    : null;
+}
+
+/**
  * One line of plain text, at most `max` characters.
  *
  * Hook payloads are text this project did not write: a command can contain

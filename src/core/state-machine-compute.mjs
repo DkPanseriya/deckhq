@@ -180,6 +180,21 @@ export class RegistryCompute extends RegistrySnapshot {
         obs.turnEnded = summary.turnEnded === true;
         obs.lastText = clampText(summary.lastText);
         obs.lastActivityAt = Math.max(obs.lastActivityAt || 0, summary.lastActivityAt || 0);
+        // WP-28. Copied, not referenced: a summary can come from the cache
+        // and handing the registry a live handle on a cached object is the
+        // bug `summary-cache.mjs` rule 3 exists to prevent. An adapter that
+        // reports neither leaves the zeros, and `traits()` reads zeros as
+        // "nothing observed" rather than as "nothing happened".
+        if (summary.toolMix && typeof summary.toolMix === 'object') {
+          obs.toolMix = {
+            files: Number(summary.toolMix.files) || 0,
+            shell: Number(summary.toolMix.shell) || 0,
+            web: Number(summary.toolMix.web) || 0,
+            search: Number(summary.toolMix.search) || 0,
+          };
+        }
+        obs.textMedian = Number(summary.textMedian) || 0;
+        obs.textTurns = Number(summary.textTurns) || 0;
       } else if (liveSession) {
         obs.title = obs.title || liveSession.name || '';
         obs.lastActivityAt = Math.max(obs.lastActivityAt || 0, liveSession.startedAt || 0);
