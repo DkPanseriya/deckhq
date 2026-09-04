@@ -28,6 +28,7 @@ import {
   parseSubagentTimes,
   subagentEvent,
 } from './parse.mjs';
+import { countCatchphrase } from './catchphrase.mjs';
 import { createStreamParser } from './stream.mjs';
 import * as hooksImpl from './hooks.mjs';
 import { readDesktopSessions } from './desktop.mjs';
@@ -1406,6 +1407,14 @@ export const adapter = {
   appAvailable,
   openInApp,
   openNewSession,
+  // WP-27, and the debt docs/DEVIATIONS.md §119.2 recorded: Wrapped's phrase
+  // count is a read of this runtime's transcripts, so it is adapter work by
+  // `08` §1.1 rule 8 — and it belongs HERE, on the adapter object, not in a
+  // per-runtime table in the registry. It sat in that table only because this
+  // file was held by WP-09 while WP-27 was written. §123 closes it: one line
+  // here, one line in `../index.mjs`, no behaviour change. An adapter that
+  // cannot count the phrase simply omits this method.
+  countCatchphrase,
   hooks: {
     supported: hooksImpl.supported,
     describe: hooksImpl.describe,

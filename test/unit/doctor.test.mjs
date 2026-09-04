@@ -43,6 +43,7 @@ import {
   runDoctor,
   tildify,
 } from '../../src/cli/doctor.mjs';
+import { getAdapters } from '../../src/adapters/index.mjs';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -106,6 +107,13 @@ function sessionsIn(n, cwd) {
 function registry(...adapters) {
   return { getAdapters: () => adapters };
 }
+
+/**
+ * The REAL registry, for the one test that is about the registry rather than
+ * about the report. Everything else uses fakes, because the real one reads
+ * this machine's transcripts and those vary per machine and per hour.
+ */
+const realAdapters = { getAdapters };
 
 const NOW = 1_700_000_000_000;
 
@@ -209,6 +217,40 @@ test('the report renders a row for every runtime in the registry, available or n
   assert.match(text, /hooks {11}installed, port 4317/);
   assert.match(text, /state {11}.*state\.json, writable/);
   assert.match(text, /egress {10}none\. no outbound sockets\./);
+});
+
+test('a THIRD and FOURTH runtime get their doctor rows from the real registry, with no doctor change', async () => {
+  // WP-24/25's acceptance criterion, asserted against the registry the product
+  // actually ships rather than against fakes: adding an adapter is one entry in
+  // `src/adapters/index.mjs` and nothing else. `doctor` never names a runtime,
+  // so a new one appears in the report by construction — and this is the test
+  // that keeps that true, because the cheap way to add a runtime is to
+  // special-case it somewhere, and nobody would notice for a release.
+  const report = await collect(realAdapters);
+
+  const ids = report.runtimes.map((r) => r.id);
+  assert.deepEqual(ids, ['claude-code', 'codex', 'gemini-cli', 'opencode']);
+  assert.deepEqual(
+    report.hooks.map((h) => h.runtime),
+    ids,
+    'the hooks table is built from the same registry, in the same order',
+  );
+
+  const text = renderReport(report, { home: '/home/x' });
+  for (const rt of report.runtimes) {
+    // Available or not, every registered runtime is on the page under its own
+    // label. Gemini CLI and OpenCode are absent on this machine, which is the
+    // interesting case: an adapter that contributes nothing must still be
+    // reported, or "DeckHQ does not see my sessions" has no diagnosis.
+    assert.match(text, new RegExp(rt.label.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.equal(rt.error, null, `${rt.id} reported an error on a machine without it`);
+  }
+
+  // And the share block, which is the launch asset, cannot silently drop one.
+  const share = renderShare(report, { home: '/home/x' });
+  for (const rt of report.runtimes) {
+    assert.match(share, new RegExp(rt.label.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
 });
 
 test('a version is printed when the adapter offers one, and omitted when it does not', async () => {

@@ -9,36 +9,25 @@
 
 import claudeCodeAdapter from './claude-code/adapter.mjs';
 import codexAdapter from './codex/adapter.mjs';
-import { countCatchphrase } from './claude-code/catchphrase.mjs';
+import geminiCliAdapter from './gemini-cli/adapter.mjs';
+import opencodeAdapter from './opencode/adapter.mjs';
 
-const REGISTRY = [claudeCodeAdapter, codexAdapter];
-
-/**
- * Optional per-runtime capabilities, keyed by adapter id. WP-27.
- *
- * Wrapped's derived stat is a count of one phrase across a window of
- * transcripts, and reading a transcript is adapter work by rule (`08` §1.1
- * rule 8) — so the code lives in `./claude-code/catchphrase.mjs`, inside the
- * adapter, and this table is only how the rest of the product reaches it
- * without importing a runtime-specific path.
- *
- * **It belongs on the adapter object itself**, beside `hooks.toolSummary` and
- * the rest, and it is here instead because `claude-code/adapter.mjs` was held
- * by another package (WP-09) while this one was written. Moving it is one line
- * in each file and no behaviour; `docs/DEVIATIONS.md` §119 records the debt so
- * it is a decision somebody made rather than a shape somebody found.
- *
- * A runtime with no entry simply contributes nothing, which is what Codex does
- * today: its transcripts have a different shape and nobody has measured the
- * phrase in them.
- * @type {Record<string, (o:any) => Promise<any>>}
- */
-const CATCHPHRASE_COUNTERS = {
-  'claude-code': countCatchphrase,
-};
+const REGISTRY = [claudeCodeAdapter, codexAdapter, geminiCliAdapter, opencodeAdapter];
 
 /**
  * Count Wrapped's phrase across every available runtime that can count it.
+ *
+ * WP-27's derived stat is a count of one phrase across a window of transcripts,
+ * and reading a transcript is adapter work by rule (`08` §1.1 rule 8) — so the
+ * counting lives inside each adapter and this function only sums what the
+ * available ones offer. An adapter that can count exposes an optional
+ * `countCatchphrase(opts)`; one that cannot simply omits it and contributes
+ * nothing, which is what Codex, Gemini CLI and OpenCode all do today (their
+ * transcripts have different shapes and nobody has measured the phrase in
+ * them). Until §123 this was a per-runtime table in this file rather than a
+ * method on the adapter object, because `claude-code/adapter.mjs` was held by
+ * WP-09 while WP-27 was written; `docs/DEVIATIONS.md` §119.2 recorded the debt
+ * and §123 pays it.
  *
  * Returns one total plus the per-runtime detail, and `supported: false` when
  * no available runtime can answer — which the card reads as "leave the line
@@ -59,10 +48,9 @@ export async function catchphraseCount(opts) {
     ms: 0,
   };
   for (const adapter of await availableAdapters()) {
-    const counter = CATCHPHRASE_COUNTERS[adapter.id];
-    if (!counter) continue;
+    if (typeof adapter.countCatchphrase !== 'function') continue;
     try {
-      const r = await counter(opts);
+      const r = await adapter.countCatchphrase(opts);
       out.supported = true;
       out.phrase = out.phrase || r.phrase;
       out.count += r.count;
