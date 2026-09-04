@@ -9624,3 +9624,189 @@ populated floor per theme rather than four: a theme changes no geometry, so phot
 population in every theme would be four times the Chrome time for one fact.
 
 **Screenshots:** `docs/media/theme-night-shift.png`, `docs/media/theme-blueprint.png`.
+
+## 126. CI — a fake CLI that exited out from under its own pipe, a cleanup reported as a product failure, and a gate that deadlocked on its own screenshot
+
+Three failures left on `main` after §125: two assertions on `test (macos-latest, 20)` and one
+`goldens` job that never finished. Eight of nine test jobs and `typecheck` were green on the same
+commit, which is the shape that makes these worth writing down — nothing here was a defect in what
+the tests were testing, and two of the three were invisible on the machine they were written on.
+
+### 126.1 `not ok 162` — the fake `claude` exited before its last line reached the pipe
+
+`send() streams the recorded turn out of a real child process` failed on macOS 20 with
+`claude produced no result event`, and passed on macOS 18, macOS 22, every Linux job and every
+Windows job. A test that fails on exactly one runner image reads as an image problem. It was not.
+
+`test/fixtures/fake-claude.mjs` replayed the recorded NDJSON transcript and then called
+`process.exit(0)`. Its flush helper looked careful —
+
+```js
+if (!process.stdout.write(text)) process.stdout.once('drain', resolve);
+else resolve();
+```
+
+— but that is a **backpressure** check, not a flush. `write()` returning `true` means only that the
+stream will accept more; it says nothing about whether the bytes have left the process. And
+`process.stdout` is a synchronous stream for a pipe **only on Windows**; on POSIX a pipe is
+asynchronous, so a `true` return routinely leaves data queued inside libuv. `process.exit()` then
+discards the queue. The transcript arrived truncated, the `result` line was never written, and
+`adapter.send()` reported exactly what it saw — which is `send()` behaving correctly over a child
+that lied about having finished.
+
+So Windows could never fail it, and Linux and macOS failed it only when the loss landed after the
+last `result` line rather than in the middle of a delta. That is a probability, not a platform: the
+same defect could have surfaced on any POSIX job on any commit.
+
+Two changes, both in the fixture:
+
+1. **The write callback is the completion signal.** `stream.write(text, cb)` fires when the chunk
+   has been handed to the OS. That is the "actual completion signal" a deterministic test needs;
+   `drain` and a timer are both guesses.
+2. **No `process.exit()` on any path that writes.** Every mode sets `process.exitCode` and lets the
+   process leave when its pipes are empty. A pending write keeps the loop alive, so this is not
+   slower — it is the same exit, taken at the right moment. `hang` is the one exemption: it writes
+   once and then deliberately never exits at all.
+
+The `crash` mode had the identical bug on **stderr** — `process.stderr.write(...)` then
+`process.exit(1)` — and the test that reads it asserts on the sentence. It had simply not lost the
+race yet.
+
+Pinned by a structural assertion rather than a behavioural one, because the behaviour cannot be
+reproduced on demand on the reference machine: `the fake CLI never exits out from under its own
+stdout` strips the comments and asserts no `process.exit(` survives on any writing path. A timing
+bug that only appears on one image every so often is not provable by running the test again; the
+rule it violates is.
+
+### 126.2 `not ok 689` — the ledger passed and its cleanup failed
+
+`a directory that cannot be written costs one warning, never a throw` failed on macOS 20 with:
+
+```
+ENOTEMPTY: directory not empty, rmdir '/var/folders/.../deckhq-ledger-f7re0Y'
+```
+
+Every assertion in the test had already passed. The throw came from the `finally` — `fs.rm`
+recursive is a readdir, then unlinks, then an rmdir, and on APFS the rmdir can arrive before the
+directory has settled and answer `ENOTEMPTY` for a directory whose contents were just removed.
+`fs.rm`'s `maxRetries` defaults to **0**, so the first such answer was fatal.
+
+This is the same class as §124's Windows `EBUSY`, and `test/unit/claude-stream.test.mjs` already had
+the retrying helper for it. `test/unit/ledger.test.mjs` did not. It does now — `maxRetries: 10,
+retryDelay: 100`, unconditional rather than platform-gated, because the two platforms reach the same
+error from different directions.
+
+**The chmod that was not there, and stays not there.** The obvious reading of "a directory that
+cannot be written" is a `chmod`, and the obvious fix is to inject the failure instead of relying on
+one. The test never used a `chmod`: it puts a **file** where the directory should be, so `mkdir` and
+`open` both fail with `ENOTDIR` — refused by the kernel on every platform, for every user including
+root. That is already the deterministic injection, and it is a better one than an `fs` seam, because
+it exercises the real `fs` calls the ledger actually makes. Adding a seam to `src/core/ledger.mjs`
+would have been product surface bought for a duplicate assertion.
+
+What the blocker cannot cover is the other shape: a directory that exists, is a directory, and whose
+write is refused. That is now a second test, and it runs **only where the refusal is real**. Not
+guessed from `process.platform` — `chmod` is a no-op on Windows, root ignores the mode bits, and
+overlay and network mounts honour the call and then let the write through anyway. So it probes:
+`process.getuid` must exist, must not be 0, and a 0500 directory must actually reject a write. If
+any of those is false it skips with the reason printed, rather than passing on a machine where it
+proved nothing. It restores the mode before cleanup, because a 0500 directory cannot have its
+contents unlinked and would have reproduced 126.2 on purpose.
+
+### 126.3 The `goldens` job — a screenshot that deadlocked the daemon it was photographing
+
+The job did not fail. It ran for eight minutes and was killed by `timeout-minutes`, which GitHub
+records as `cancelled` — the verdict §121 already warned reads like an infrastructure hiccup. The
+log's last line was a **passing** capture:
+
+```
+ok   demo       27 agents  4.6s  no linux goldens; capture left at test/goldens/.out/linux/demo.actual.png
+```
+
+and then nothing for eight minutes. Chrome was still alive at cleanup, so §114's "Chrome will not
+start" was fixed and had been replaced by something else.
+
+**The mechanism, established by a two-line experiment rather than by reading.** Start a daemon, open
+`/api/events` as the browser does, call `close()`: it does not return. Abort the stream first and
+call `close()`: it returns in 12 ms.
+
+`daemon.close()` awaits `server.close()`, and `server.close()` completes only when every open
+connection has ended. `closeIdleConnections()` is called inside that wait and releases keep-alive
+sockets with no request on them — but an SSE stream is a request **in flight**, forever, by design.
+`closeAllConnections()` is the one call that would end it, and it sits *after* the `await` it was
+meant to unblock, so it can never run. §121 fixed this exact ordering for idle sockets and the
+active-stream case survived it.
+
+The goldens loop then walked straight into it. Per capture: start demo N, navigate to it, screenshot
+it, and in the `finally`, kill demo N — **while the browser is still parked on its page holding its
+SSE stream open**. SIGTERM ran `demo-floor.mjs`'s graceful handler, `close()` never resolved, the
+child never exited, and `stop()`'s `child.once('exit')` never fired. The run hung on population 2
+and stayed there until CI killed it.
+
+On Windows `child.kill()` is `TerminateProcess`; no signal handler runs, the child dies instantly,
+and none of this was ever visible. Six captures at 0 px on a Windows laptop, an eight-minute hang on
+every POSIX runner, one script.
+
+Four changes, none of them in `src/daemon.mjs`:
+
+1. **Let go of the page before stopping the demo.** `Page.navigate` to `about:blank` tears down the
+   page's event-stream subscription, the response ends, `server.close()` completes, and the child
+   exits in milliseconds. This is the fix; the rest is so that the next hang is legible.
+2. **`stop()` escalates and gives up.** SIGTERM, SIGKILL at 3 s, carry on at 8 s. An unreaped demo on
+   a runner that is about to be destroyed is not worth a hung gate.
+3. **`demo-floor.mjs` force-exits after a 4 s grace.** A demo script that will not answer Ctrl-C is
+   its own bug regardless of who is killing it, and the fixture directory is still removed.
+4. **The CDP client bounds every command** (`src/cli/chrome.mjs`). `connect()` kept a map of pending
+   promises and rejected them on nothing at all: a closed socket, a crashed renderer or an exited
+   browser left every `await client.send(...)` pending forever, with no error and no output. The
+   socket closing now rejects everything outstanding **naming the command it was waiting on**, and
+   each command carries a 60 s deadline as a second bound.
+
+**Deadlines that say where, not just that.** `timeout-minutes` is a kill, not a diagnosis. So
+`scripts/goldens.mjs` now tracks the stage it is in — booting the demo, navigating, waiting for the
+floor to settle, screenshotting, releasing the page — and both a per-capture deadline (90 s;
+measured 4-7 s) and a whole-run budget (6 minutes, inside the job's 8) report **the stage and how
+long it had been in it**. `--verbose` prints one timestamped line per stage plus the readiness probe
+itself, so a log that stops says what it stopped on.
+
+**Skipped, not failed.** A capture that could not be taken says nothing about the pixels, so it no
+longer paints the build red: a boot failure, a floor that will not settle, a browser that stops
+answering and a deadline all land in `SKIPPED` with the reason and exit 0, and only a real pixel
+disagreement — or a missing golden inside an existing set — exits 1. That is §87 and §114's rule
+applied to the failures that had not been enumerated yet. Regeneration (`npm run goldens`) still
+fails on any of them: a set you cannot capture is not a set.
+
+**Owed.** `daemon.close()` is genuinely wrong and this package did not fix it — the touched surface
+was tests, `scripts/`, `src/cli/chrome.mjs` and the workflow. `closeAllConnections()` belongs inside
+the `server.close()` wait, after a grace period, exactly as `closeIdleConnections()` already is.
+Until then any embedder calling `close()` with a browser attached hangs, and only the demo script
+has a backstop.
+
+### 126.4 The linux captures were made, written, and uploaded nowhere
+
+`test/goldens/.out/` is a **dotted** directory, and `actions/upload-artifact@v4` skips hidden paths
+unless told otherwise. So every run that reached the SKIPPED path — the entire mechanism by which
+the first linux golden set was supposed to be produced — captured the PNGs, wrote them to disk, and
+then reported:
+
+```
+No files were found with the provided path: test/goldens/.out/. No artifacts will be uploaded.
+```
+
+`include-hidden-files: true`. One line, and the reason §87 said "its fresh captures are left in
+`test/goldens/.out/` so CI can hand them back as an artifact" has been untrue since it was written.
+
+### 126.5 What is proven, and what is not
+
+Proven on the reference machine: `npm run goldens:check` is **6 of 6 at 0 px** in 43.9 s, unchanged
+by any of this — the Windows argv, the flags and the settle window are byte-identical, which is what
+keeps the committed goldens valid. The suite is 1,657 passing and 1 skipped (the real-permission
+ledger variant, which correctly reports `no POSIX uid on win32`). The isolation canary is at zero.
+`lint`, `format:check` and `typecheck` are clean.
+
+Not proven until CI runs, and honestly so: 126.1 and 126.2 both failed on a macOS image this machine
+is not, and neither can be reproduced here — 126.1's pipe is synchronous on Windows and 126.2's
+`ENOTEMPTY` is an APFS timing artifact. The reasoning for each is above and stands on its own; the
+runner is what confirms it. 126.3's deadlock **was** reproduced here, directly and in both
+directions, but the SIGTERM path that triggers it in the wild does not exist on Windows, so that the
+goldens job now completes on ubuntu is also a CI-only fact.
