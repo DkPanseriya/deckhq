@@ -332,7 +332,7 @@ export function buildCommandEntries(ctx) {
       // plan put floor replay in the Supporter pack, and a feature that reads
       // the user's own records cannot be sold without becoming a gate on data
       // they already own (`08` §1.1 rule 2). The pack sells themes and
-      // avatars. See `src/core/replay.mjs` and DEVIATIONS §127.
+      // avatars. See `src/core/replay.mjs` and DEVIATIONS §129.
       //
       // No accelerator: it takes the floor over, and a mis-typed key that
       // takes the floor away from somebody mid-thought is worse than one more

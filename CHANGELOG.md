@@ -17,7 +17,7 @@
   actually offers a set — an install with no pack has no row and no advertisement. Choosing "as
   they come" puts every face back exactly, and nothing changes because a file appeared in a
   directory: the set is a setting, empty by default, because a face is the one thing in this
-  product that must never change on its own. `docs/DEVIATIONS.md` §127.
+  product that must never change on its own. `docs/DEVIATIONS.md` §129.
 - **`deckhq pack` — `build`, `verify`, `install`, `list`, `remove`.** No account, no licence check,
   no activation, no update check and no network call anywhere in it; the only question DeckHQ ever
   asks about a pack is whether it was signed by the Ed25519 publisher key compiled into the build,
@@ -46,7 +46,7 @@
   deck, the panel, the header count and the notifications stay live the whole time; only the
   canvas is looking at yesterday. The plan listed replay in the Supporter pack; it ships free,
   because a feature that reads your own ledger cannot be sold without becoming a gate on data you
-  already own. §127.
+  already own. §129.
 - **A rate-card editor in the settings sheet. Also free.** Settings → Data now edits
   `~/.deckhq/rates.json` — your own prices per million tokens, merged over the shipped table one
   model at a time, with the shipped model ids offered as completions and the cache columns showing
@@ -56,7 +56,7 @@
   latest prices" button and there will not be one. The plan listed this in the pack too; it ships
   free, because the file has existed since WP-26 and anybody can edit it in a text editor — and
   because "cost is an estimate, never a bill" only holds if the person looking at a wrong number
-  can correct it. §127.
+  can correct it. §129.
 - **`GET /api/packs`**, **`GET /api/replay/days`**, **`GET /api/replay?day=`**, and
   **`GET`/`POST /api/rates`**. All loopback, all local, none of them egress. The replay routes are
   two GETs and there is no writer among them, asserted.

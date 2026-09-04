@@ -10042,7 +10042,7 @@ Not proven here: Node 18, which has no interpreter on this machine — the same 
 for the same function. The version boundary is documented (`closeIdleConnections` and
 `closeAllConnections` are 18.2/19) and both calls are optional, so the worst case on 18.0/18.1 is
 the old idle-socket timeout, never a hang on a stream.
-## 127. WP-45 — the Supporter pack carries themes and avatars, and two of the four things the plan put in it are free
+## 129. WP-45 — the Supporter pack carries themes and avatars, and two of the four things the plan put in it are free
 
 **Spec:** `docs/plan/08-PLAN-V2-100X.md` §9 WP-45 — "Signed asset pack loaded from `~/.deckhq/packs/`:
 themes (night shift, blueprint, warehouse), avatar sets, floor replay of a day from the ledger,
@@ -10053,7 +10053,7 @@ responses." `08` §5 and `03-BUSINESS-MODEL.md` §5 price it at $29 once, month 
 Two of the four listed contents ship in the FREE core instead, and that is the first thing this
 entry records, because it is a deliberate refusal of the plan rather than an omission.
 
-### 127.1 The two free-core decisions, and the rule that forced them
+### 129.1 The two free-core decisions, and the rule that forced them
 
 `08` §1.1 **rule 2**: _paid features are services you opt into, never gates._ §14 refuses "any
 paywall on capture, the queue or an action". Read together, the test is not "is this valuable" but
@@ -10067,7 +10067,7 @@ paywall on capture, the queue or an action". Read together, the test is not "is 
 | Rate-card editor   | **free**          | `~/.deckhq/rates.json` has existed since WP-26 (§111) and anybody can edit it in a text editor today. Selling a SHEET that edits it is not selling a feature; it is charging for the removal of an inconvenience we put there. And rule 7 — _cost is an estimate, never a bill_ — only holds if the person looking at a wrong number can correct it. A paid corrector leaves the unpaid user staring at a figure they can see is wrong and cannot fix. |
 
 So **what the pack actually carries is more themes and avatar sets**, and the pricing question the
-owner has to answer (§127.9) is now about a cosmetics pack rather than about a four-item bundle.
+owner has to answer (§129.9) is now about a cosmetics pack rather than about a four-item bundle.
 The plan's revenue line does not change — nobody was going to buy WP-45 for a rate-card editor —
 but the sentence on the storefront does, and it is now one sentence: _more themes and avatars;
 everything that captures, queues or acts is free._
@@ -10076,7 +10076,7 @@ The reasoning is not only in this file. `src/core/replay.mjs` and `src/http/rout
 open with the argument, because the next person to wonder "why isn't this in the pack" will be
 reading the code.
 
-### 127.2 A pack is a file, and that is the whole enforcement model
+### 129.2 A pack is a file, and that is the whole enforcement model
 
 No account. No licence check. No activation call. No expiry. No egress of any kind. The only
 question this product ever asks about a pack is _"was this signed by the DeckHQ publisher key"_,
@@ -10093,12 +10093,12 @@ of this out loud, next to the key.
 **The key.** Ed25519, generated with `node:crypto` for this package. The PUBLIC half is
 `PUBLISHER_KEYS` in `src/core/publisher-key.mjs`, fingerprint `e0ebf0e74668277f`. The PRIVATE half
 is **not in this repository and never will be** — it was written outside the tree and handed to
-the owner to put in a password manager (§127.9 item 2). `PUBLISHER_KEYS` is a list rather than one
+the owner to put in a password manager (§129.9 item 2). `PUBLISHER_KEYS` is a list rather than one
 key so a retired key can be replaced without every pack in the wild becoming unverifiable on
 upgrade day. `test/unit/packs.test.mjs` walks `src/`, `packs/`, `bin/` and `public/` and fails on a
 `-----BEGIN … PRIVATE KEY-----` block anywhere in any of them.
 
-### 127.3 The signature is over canonical JSON, and that is not a detail
+### 129.3 The signature is over canonical JSON, and that is not a detail
 
 A signature over `JSON.stringify(doc)` would be a signature over whichever key order the
 producer's parser happened to emit. A pack that went through a formatter, a CDN that
@@ -10112,7 +10112,7 @@ verifies.
 The committed sample pack is proof rather than assertion: Prettier reformatted the signed artifact
 after it was signed, and `deckhq pack verify` still passes.
 
-### 127.4 Refused whole, or refused alone — and which is which
+### 129.4 Refused whole, or refused alone — and which is which
 
 The two halves are deliberate and they are the acceptance criterion for "themes go through
 `validateTheme` and the same contrast rules, rejected individually, not silently".
@@ -10134,7 +10134,7 @@ paint without reading a log.
 Signature **first**, then the envelope, then the contents. Nothing about a pack we did not publish
 is looked at, let alone loaded.
 
-### 127.5 The seam §125.9 left closed, opened exactly this far
+### 129.5 The seam §125.9 left closed, opened exactly this far
 
 `docs/DEVIATIONS.md` §125.9 recorded the open door: _"`validateTheme` exists, is strict, and is
 tested, but nothing calls it on a user-supplied document… Accepting arbitrary theme documents means
@@ -10163,7 +10163,7 @@ The registry is a **projection of the directory**, never an accumulation: `curre
 before it registers, so a removed pack's theme disappears on the same pass a new one appears. A
 test removes a pack directory and asserts the theme is gone from the picker.
 
-### 127.6 Avatar sets: what a pack can dress an agent in, and what it cannot
+### 129.6 Avatar sets: what a pack can dress an agent in, and what it cannot
 
 An avatar set is **two colour tables** — `accents` (the waistband, and the colour a hat or scarf is
 made of) and `jackets` (the rare tailored yoke). Not a face. Hair silhouettes, builds, glyphs and
@@ -10196,7 +10196,7 @@ The theme picker previews on hover; the avatar picker deliberately does **not**.
 would re-roll every face on the floor twice a second as the pointer moved, and a face that flickers
 is exactly what the fixed draw order exists to prevent.
 
-### 127.7 Floor replay: what it draws, and the two things it refuses to invent
+### 129.7 Floor replay: what it draws, and the two things it refuses to invent
 
 `reconstructQueue(records, t)` already answers "what needed you at `t`", exactly as the machine
 recorded it (§100, WP-17's acceptance criterion). A replay is that question asked across a day.
@@ -10241,7 +10241,7 @@ else stays live**: the deck, the panel, the queue strip, the header count and th
 on being true. Only the picture is looking at yesterday. That is a flag rather than an
 unsubscription on purpose.
 
-### 127.8 What the acceptance test actually diffs
+### 129.8 What the acceptance test actually diffs
 
 There is no standalone acceptance script in this repository, so the acceptance SURFACE is the
 daemon's API — what every client sees. `test/integration/pack-acceptance.test.mjs` runs the same
@@ -10260,7 +10260,7 @@ The pack is signed with the real publisher key precisely so that no trust seam h
 the daemon for the test. A product whose signature check can be widened by a constructor option is
 a product whose signature check is decoration.
 
-### 127.9 Decisions this package leaves open for the owner
+### 129.9 Decisions this package leaves open for the owner
 
 1. **The price.** `08` §5 says $29 once and `03` §5 says the same. The pack it was priced for had
    four things in it and now has two categories of asset. $29 for two themes and an avatar set is a
@@ -10268,7 +10268,7 @@ a product whose signature check is decoration.
    options are: keep $29 and ship more themes in the pack before it goes on sale; drop the price;
    or make it explicitly a tip jar with cosmetics attached, which is what `03` §5 already calls it
    ("a tip jar with dignity") and which is the honest description of what it now is. **Not decided
-   here.** §127.1 changed what is in the box; what the box costs is the owner's call.
+   here.** §129.1 changed what is in the box; what the box costs is the owner's call.
 2. **Key custody.** The private key was generated for this package and written to a file **outside
    the repository**, on the reference machine, for the owner to move into a password manager and
    then delete. Until that has happened, the signing key exists in exactly one place and nobody has
@@ -10322,7 +10322,7 @@ client's four pure functions — a frame becoming a drawable snapshot that inven
 token count, cost or path, the scrub's binary search, the clock, and the note; that nothing in the
 replay path imports the pack loader; and that the replay routes are two GETs with no writer.
 
-`test/integration/pack-acceptance.test.mjs` (5) — the acceptance diff of §127.8; a pack theme being
+`test/integration/pack-acceptance.test.mjs` (5) — the acceptance diff of §129.8; a pack theme being
 storable while an unknown one is still refused with the offerable list, a pack's avatar set being
 selectable while a non-existent one is refused, the stored theme surviving in `state.json` because
 packs load before the store, and removing the pack falling the floor back to the default;
