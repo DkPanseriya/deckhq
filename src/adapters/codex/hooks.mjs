@@ -34,13 +34,31 @@
  * report is not "this runtime cannot be observed", it is **"this runtime can
  * be observed and DeckHQ has not wired it up yet"**.
  *
+ * WP-23 tried to close that gap without writing anything into the user's
+ * `~/.codex`, and could not (`docs/DEVIATIONS.md` §137.7). MEASURED on
+ * 0.153.1, from a scratch repository, against the two routes that need no
+ * write to somebody else's home:
+ *
+ *   - a project-local `<repo>/.codex/hooks.json`, and
+ *   - the same table injected as a session flag, `-c hooks.SessionStart=[…]`,
+ *
+ * neither of which delivered a single event to a listener that logs every one
+ * it is handed — not `SessionStart`, not `UserPromptSubmit`. The binary
+ * explains why and offers a third route this run would not take: hooks carry a
+ * `trusted_hash` and a `--dangerously-bypass-hook-trust` flag, so a hook that
+ * has not been trusted through the interactive TUI does not run. And
+ * `codex exec` prints `approval: never`, so `PermissionRequest` has no trigger
+ * in the non-interactive surface at all. Whatever WP-58 turns out to be, it is
+ * not "write a hooks.json and poll".
+ *
  * `supported: false` **stays**, and it is not a formality:
  *
  *   1. Nobody has written a `hooks.json` on a real install and watched Codex
- *      read it back. `ADAPTERS.md` §5 is explicit that a documented mechanism
- *      you have never tested is still `supported: false`, and installing hooks
- *      **writes to a file the user owns** — the one class of mistake that
- *      breaks a working install of another product.
+ *      read it back — WP-23 tried the two routes above and got nothing.
+ *      `ADAPTERS.md` §5 is explicit that a documented mechanism you have never
+ *      tested is still `supported: false`, and installing hooks **writes to a
+ *      file the user owns** — the one class of mistake that breaks a working
+ *      install of another product.
  *   2. There is no `http` type, so DeckHQ's existing hook block does not
  *      translate: the daemon's hook route speaks Claude Code's payload
  *      spellings over HTTP, and a `command` hook that reads the daemon's port

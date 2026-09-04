@@ -106,14 +106,45 @@ than presented as an exact figure. `scanSessions` also sorts by parsed `lastActi
 than file mtime, because mtimes on the reference machine are disturbed by unrelated tooling and
 were wrong by up to 54 days.
 
-## 8. Codex support is implemented but unverified
+## 8. Codex support — verified for reading and replying, 4 Sep 2026; four things still are not
 
-Codex is not installed on the reference machine (`~/.codex` does not exist). The adapter is a
-real implementation written against the documented rollout-file conventions, with every field
-extraction trying several key aliases, but **no part of it has run against real Codex data**.
-`available()` returns `false` cleanly and every other method degrades without throwing. Its hooks
-report `supported: false`, so Codex sessions use the polling path and cannot distinguish
-`needs_input` from `stalled` — surfaced in the header.
+**Narrowed, not closed** (§137, `ADAPTERS.md` §6.4: partial verification narrows a warning, it does
+not delete it). The original text of this section — "no part of it has run against real Codex data"
+— stopped being true on **4 September 2026**, when the adapter was run against two real rollout
+journals written by codex-cli 0.153.1 on the reference Windows machine and a real turn was sent
+into one of them. The acceptance script is `docs/plan/CODEX-VERIFICATION.md` §6 and its results
+table is there.
+
+**Verified 4 Sep 2026** — each of these was measured, not reasoned about:
+
+- the session lands on the floor in a room named for its `cwd`, from a real `session_meta`;
+- the title is the prompt the user typed (after §137.2);
+- token and cache totals match the file, and match it across a resume (after §137.3);
+- the last message, the turn-ended boundary and the six-state mapping;
+- the `doctor` row, including `version()` reporting `codex-cli 0.153.1 (bundled with the app)`;
+- the `codex resume <id>` argv, against `codex resume --help`;
+- `send()`, through one real `codex exec resume <id> --json <text>` — the flag order parses, the
+  reply comes back, and the rollout grows in place rather than forking (after §137.4);
+- archiving moves a session's rollout out of `sessions/`, so it leaves the floor (§137.6);
+- a poll leaves a rollout's `mtime`, size and bytes untouched, and nothing under `~/.codex` is
+  modified by any read path (§137.8);
+- no cloud thread from `sqlite/codex-dev.db` reaches the floor (§137.9).
+
+**Still unverified**, and this is what keeps §8 open:
+
+1. **Compressed rollouts.** No file on the reference machine is old enough for Codex's compression
+   worker to have touched it, so §136.2's round trip is still proved only against a `.jsonl.zst`
+   this project produced.
+2. **`openInTerminal()` / `openNewSession()` for Codex.** No terminal window was opened. The argv
+   is asserted against `codex resume --help`; §9's standing objection applies.
+3. **`liveSessions()`.** Still `[]` by design — `codex agents` is a TUI with no `--json` — so Codex
+   liveness is the daemon's mtime inference, unchanged and untested against a running session.
+4. **Hooks.** `supported: false` stands, and §137.7 records the two routes that were tried and did
+   not deliver an event. Codex sessions therefore still use the polling path and cannot distinguish
+   `needs_input` from `stalled` — surfaced in the header.
+
+`available()` still returns `false` cleanly on a machine with no `~/.codex`, and every other method
+still degrades without throwing.
 
 ## 9. Unverified paths
 
@@ -11478,3 +11509,260 @@ archiving moves a session off the floor, and whether a poll leaves a rollout fil
 §8 stands, the `parse.mjs` header's "we have never observed it directly on this machine" stands, and
 the README's Honest limits line stands. Per `ADAPTERS.md` §6.4 they come out together, in one
 commit, when somebody has run it — and only as far as the run reached.
+
+## 137. WP-23 — the Codex adapter finally read a session Codex wrote, and four of its assumptions were wrong
+
+§136 ended by listing what still needed a real session. On **4 September 2026** there was one, and
+then two: the owner ran a task in the Codex desktop app against a scratch project, and this package
+created a second session with `codex exec` and resumed it. Both were written by **codex-cli
+0.153.1** on the reference Windows machine. The acceptance script is
+[`plan/CODEX-VERIFICATION.md` §6](plan/CODEX-VERIFICATION.md#6-wp-23-acceptance-checklist) and its
+results table lives there; this section is what the run found and what changed because of it.
+
+**The headline is not "it worked".** Five of the twelve checks passed untouched — the room, the
+model, the resume argv, the read-only promise, and the absence of cloud threads. **Four failed**,
+and every one of them was a number or a piece of text a user would have read and believed:
+
+| What the floor said | What was true |
+|---|---|
+| Every Codex session titled `<recommended_plugins> Here is a list of…` | The user typed "check what is this" |
+| A resumed session had spent 12 621 tokens | It had spent 25 231 |
+| A reply from the panel was 346 characters of JSON | Codex had said "OK" |
+| A session with no `cwd` would sit in a room called "Codex Desktop" | It should sit in `unknown` |
+
+Two of those had been sitting in `parse.mjs` since WP2 with a comment saying they were assumptions.
+That is the argument for `ADAPTERS.md` §6 stated as cheaply as it can be: the assumptions were
+written down, they were flagged, and three of the four were still wrong.
+
+**Cost and discipline.** Two real Codex turns were spent, both in a throwaway `git init` directory
+under the scratchpad — never in the DeckHQ tree, never in the owner's project. Everything under
+`~/.codex` was read-only except where Codex itself wrote (the two sessions this run created, and
+the archive in §137.6). No token, no credential and no installation identifier was read, and no
+conversation text from the owner's real session appears here beyond its title and its `cwd`.
+
+### 137.1 What the two rollouts actually contain
+
+**MEASURED.** The envelope is `{timestamp, ordinal, type, payload}` — `ordinal` is new since the
+format this file was written against. Record types across both files:
+
+```
+session_meta   event_msg/task_started   event_msg/thread_settings_applied
+response_item/message   world_state   turn_context   event_msg/item_completed
+response_item/reasoning   token_usage_record   event_msg/token_count
+event_msg/task_complete
+```
+
+Three of those — `world_state`, `token_usage_record`, and `event_msg/item_completed` — were not in
+`parse.mjs`'s shape list at all. None of them was harmful: `world_state` carries no role,
+`item_completed` repeats a message that already has its own `response_item` and is not read (had it
+been, every turn would have appeared twice), and `token_usage_record` is §137.3.
+
+`session_meta.payload` is `{session_id, id, timestamp, cwd, originator, cli_version, source,
+thread_source, model_provider, base_instructions, history_mode, context_window}`. `id` and
+`session_id` are both present, equal, and equal to the uuid in the filename — so
+`sessionIdFromFilename` and `extractSessionMeta` agree, which is the property `findSessionFile`
+relies on.
+
+**Checklist item 1 passed unchanged.** The desktop session appeared on the floor in a room named
+`0_Tool_OfflineKit`, from `session_meta.payload.cwd`, with `activityState: 'ended'`. The whole
+`cwd` → `SessionSummary.cwd` → room chain works, which was the single most valuable assertion in
+the list and the one nothing could have proved without a real file.
+
+### 137.2 The title was the context Codex injected, not the prompt the user typed
+
+**The defect.** A rollout's user-role records are not all things the user typed. Before the prompt,
+0.153.1 writes:
+
+| ordinal | role | `content_item_kinds` | size |
+|---|---|---|---|
+| 3 | `developer` | `generic.developer_instructions`, `host_skills.instructions`, `permissions.instructions`, … | ~22 KB |
+| 4 | **`user`** | `plugins.recommendations`, `environments.environment_context` | ~5 KB |
+| 7 | `user` | `user.text` | 19 bytes |
+
+`buildSessionSummary` takes the first user message as the title, so it took ordinal 4. Every Codex
+session on the floor — all six of them, from both the app and the CLI — was titled
+**`<recommended_plugins> Here is a list of plugins that are av…`**. `conversation()` had the same
+bug and opened the panel on the same blob: three messages where there were two.
+
+The `developer` record was already excluded, because `extractMessage` only accepts `user` and
+`assistant`. That is the only reason this was not worse.
+
+**The fix.** Each record declares what it is, in
+`payload.internal_chat_message_metadata_passthrough.content_item_kinds`, and a genuine prompt
+declares exactly `['user.text']`. `isInjectedUserContext()` drops a **user** record that carries
+the field and does not claim `user.text`. Three deliberate narrownesses, because a false positive
+here silently deletes somebody's message from their own conversation:
+
+- it never applies to an assistant record — MEASURED, those declare `['unknown']`;
+- it fires only when the field is present, so a rollout written before 0.153.1 added it is
+  unaffected;
+- it reads the declaration rather than sniffing the text for an `<xml>`-looking opening, which
+  would eventually eat a message _about_ XML.
+
+The OfflineKit session now reads **"check what is this"**, and the scratch ones read "reply OK".
+
+### 137.3 `total_token_usage` totals the process, not the thread
+
+**The measurement**, from the two-turn rollout this run created — the single most valuable thing
+the run produced, because a one-turn file cannot distinguish these at all:
+
+| field | turn 1 | turn 2 |
+|---|---|---|
+| `token_usage_record.turn_token_usage.input_tokens` | 12 589 | 12 603 |
+| `token_usage_record.usage.input_tokens` | 12 589 | 12 603 |
+| **`token_usage_record.thread_token_usage.input_tokens`** | **12 589** | **25 192** |
+| `event_msg token_count.info.total_token_usage.input_tokens` | 12 589 | 12 603 |
+| `event_msg token_count.info.last_token_usage.input_tokens` | 12 589 | 12 603 |
+
+`parse.mjs` preferred `info.total_token_usage` and took the last one in the file, on the written
+assumption that it was a cumulative running total. **It is cumulative for a process, not for a
+thread.** A session resumed by a fresh `codex exec` starts that counter again, so its "total" is
+its newest turn: the floor showed **12 621** tokens for a session that had spent **25 231**.
+
+Note what would have happened with the other reading. Had the adapter summed instead of taking the
+last — the alternative the header explicitly rejected — it would have got 12 589 + 12 603 = 25 192
+on the input side and been accidentally right, which is the sort of luck that makes a bug immortal.
+
+**The fix.** `extractUsage()` now returns a `scope`: `'thread'` for `thread_token_usage`, `'turn'`
+for everything else including the misleadingly-named `total_token_usage`. `buildSessionSummary`
+keeps the newest reading of each and prefers the thread-scoped one, rather than trusting file
+order — because the record order within a turn is `token_usage_record` then `token_count`, so
+last-wins would always pick the smaller number. Nothing is summed, then or now.
+
+The single-turn desktop session is unaffected: 20 295 + 150 = 20 445, which is exactly its
+`total_tokens`, and `cacheTokens` is 4 352 from `cached_input_tokens`. `costEstimate` is `0.044` —
+a real figure from the rate card and never `$0.00` (§111). It is worth saying plainly that the rate
+is not model-specific: `gpt-5.4-mini`, `gpt-5.6-luna` and `gpt-5.6-terra` all price identically
+today, which is a rate-card gap and not this section's.
+
+### 137.4 `codex exec --json` is a different schema from the rollout file
+
+`adapter.mjs` said the two were "assumed to share an event schema". **MEASURED, they do not.** A
+whole real run, verbatim in shape:
+
+```
+{"type":"thread.started","thread_id":"…"}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"OK"}}
+{"type":"turn.completed","usage":{"input_tokens":12603,"output_tokens":18,…}}
+```
+
+Dotted type names, an `item` rather than a `payload`, a flat `text` rather than a content-part
+array, and no `role` anywhere. `extractMessage()` returns null for every line of it, so
+`extractFinalAssistantText()` returned `''` and `runCodex` fell through to its
+`|| stdout.trim()` fallback. **`send()` reported success and handed the panel 346 characters of raw
+JSONL as the assistant's reply.**
+
+`extractExecEvent()` in `parse.mjs` is the reader for it, and `extractFinalAssistantText` tries it
+first and keeps the rollout extractors as a fallback, so a future build that unifies the two needs
+no change here. One more thing came out of the same measurement: a failed turn prints
+`{"type":"error",…}` / `{"type":"turn.failed",…}` **and still exits 0**, so `runCodex` now asks the
+stream for a verdict before calling an exit code a success.
+
+**Checklist item 5 otherwise passed.** `codex exec resume <SESSION_ID> --json <PROMPT>` parses with
+`--json` between the two positionals — clap accepts interspersed options, as §4.1 hoped — the reply
+came back in 5.8 s, and the rollout **grew in place**: 45 131 → 53 061 bytes, same file, same id,
+no fork. That last one is the property §9 checked for Claude Code and is the one that would have
+put a duplicate agent on the floor for every reply.
+
+### 137.5 `originator` is a client name and was a `cwd` fallback
+
+`extractSessionMeta` resolved `cwd` as `cwd → originator → workdir`. **MEASURED:** `originator` is
+`"Codex Desktop"` from the app and `"codex_exec"` from the CLI. It is the name of the program that
+opened the session and has never been a path.
+
+Nothing was wrong on the floor today, because both files carry a real `cwd`. But the fallback
+existed precisely for the file that does not, and on that file it would have created a room called
+**"Codex Desktop"** — `ADAPTERS.md`'s "`cwd` is what puts a session in a room — get it right or
+return `'unknown'`; never guess", failed in the one case the code was written for. `originator` is
+out of the chain.
+
+While there: `sessionIdFromFilename` stripped `.jsonl` only, so §136.2's compressed rollouts —
+`…-<uuid>.jsonl.zst` — no longer had the uuid at the end of the string and fell back to the whole
+filename as an id. Not reachable today, since there is no compressed rollout on this machine; fixed
+anyway, because §136.2 is what put the file on the floor for it to be wrong about.
+
+### 137.6 Archiving moves the file, and `session_index.jsonl` is not read
+
+**Item 6, second half. MEASURED.** `codex archive <id>` on a scratch session (never the owner's):
+`~/.codex/archived_sessions/` did not exist before and holds the rollout after, and
+`~/.codex/sessions/2026/09/04/` has one fewer file. The rollout is **physically moved**. The
+adapter walks `sessions/` only, so an archived session leaves the floor, and that is now a recorded
+decision rather than an inference. The observation was made from the CLI rather than the app's own
+UI; the store operation is the same one.
+
+**Item 10, decided.** `~/.codex/session_index.jsonl` exists on this machine and holds **one** entry
+against **five** rollout files on disk — it indexes the desktop app's threads and not `codex exec`
+sessions at all. **It is not read and must not be**: using it as the session source would have
+hidden four sessions out of five. It does carry a real `thread_name` (`"Inspect project contents"`
+for the OfflineKit session) where DeckHQ truncates a prompt and sets `hasCustomTitle: false`, so it
+is a title-quality opportunity for a later package — as an _enrichment_ of a directory walk, never
+a replacement for one, and with the same no-go reasoning as §7's SQLite plan.
+
+### 137.7 Hooks: two routes tried, neither delivered, `supported: false` stands
+
+The brief forbade writing `~/.codex/hooks.json`, which is the documented location and the one thing
+that would have settled this. Two routes that need no write into somebody else's home were tried
+instead, from the scratch repository, with a listener that logs **every** event it is handed:
+
+1. a project-local `<repo>/.codex/hooks.json` — the binary does carry `.codex/hooks` in its
+   discovery path list, alongside `.codex/config.toml` and `.codex/agents`;
+2. the same table injected as a session flag, `-c hooks.SessionStart=[{hooks=[{type="command",
+command="…"}]}]` — `session_flags` is one of the binary's own `HookSource` variants.
+
+**Neither delivered a single event** — not `SessionStart`, not `UserPromptSubmit` — across a
+successful turn and two sessions that started and then failed at the model call. The binary
+explains it and offers a third route this run would not take: hook entries carry a `trusted_hash`
+(`HookStateToml { enabled, trusted_hash }`) and there is a `--dangerously-bypass-hook-trust` flag
+"intended only for automation that already vets hook sources", so a hook that has not been trusted
+through the interactive TUI does not run. Separately, `codex exec` prints **`approval: never`**, so
+`PermissionRequest` has no trigger in the non-interactive surface at all.
+
+Two things were confirmed for WP-58's benefit, from the string table of the build that is
+installed. The file format is Claude-Code-shaped —
+
+```
+{ "hooks": { "PermissionRequest": [ { "matcher": "…",
+    "hooks": [ { "type": "command", "command": "…", "commandWindows": "…",
+                 "timeout": 20, "async": false, "statusMessage": "…",
+                 "additionalContextLimit": 0 } ] } ] } }
+```
+
+— with events `PreToolUse, PermissionRequest, PostToolUse, PreCompact, PostCompact, SessionStart,
+SessionEnd, UserPromptSubmit, SubagentStart, SubagentStop, Stop, Interrupt`. And of the four
+handler variants (`Command`, `McpTool`, `Prompt`, `Agent`), **only `Command` runs**: the binary
+carries `skipping prompt hook in …: prompt hooks are not supported yet`, the same for agent hooks,
+and `skipping MCP tool hook in …: … MCP hooks are not supported`. §86.6's option 2 is not merely
+the best route, it is the only one that exists.
+
+`hooks.mjs` is unchanged in behaviour and in its user-facing note; its rationale now records what
+was tried. **Item 11: not reachable under the constraints.**
+
+### 137.8 Read-only, checked twice
+
+**Item 8.** The OfflineKit rollout, before and after several poll cycles: size 69 725 both times,
+`mtime` and `ctime` identical, and the same SHA-256. `atime` moves, because reading a file is what
+this product does.
+
+**Item 12.** A listing of every entry under `~/.codex` with its size and mtime — **10 055
+entries** — taken before and after a window containing three distinct daemon scans and three
+`/api/conversation` opens: **byte-for-byte identical**, same SHA-256 (`8a6ef94d…`). Note what that
+window deliberately excludes: the two sessions this run created and the archive in §137.6 are
+Codex's own writes, caused on purpose, and folding them into the same comparison would have made
+the interesting question unanswerable. The isolated window is the one that means anything, and it
+is clean.
+
+**Item 9.** `sqlite/codex-dev.db`'s `local_thread_catalog` now holds **101** rows: 100 with
+`source_kind = 'chatgpt'` and `cwd IS NULL` — the owner's cloud threads — and one `vscode` row with
+a real `cwd`, which is the desktop session. **None of them reaches the floor**, and the reason is
+structural rather than lucky: `grep -rn 'node:sqlite' src/` is empty and nothing in the tree opens
+that file. §2.4's trap is still a trap and is still not sprung.
+
+### 137.9 What this does not close
+
+§8 narrows; it does not go away, and neither does the README's Honest limits line — it is rewritten
+to say exactly what was and was not exercised, which is what `ADAPTERS.md` §6.4 asks for. Four
+things are untouched by this run: a rollout Codex itself compressed, a terminal window opened for
+`codex resume`, `liveSessions()`, and hook delivery. The `parse.mjs` header's "we have never
+observed it directly on this machine" is gone, because it is no longer true; every shape in that
+list now says whether it was MEASURED or read from a binary.

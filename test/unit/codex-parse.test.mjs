@@ -73,12 +73,17 @@ test('extractSessionMeta: wrapped session_meta record resolves id/timestamp/cwd/
   assert.equal(meta.instructions, null);
 });
 
-test('extractSessionMeta: cwd falls back to originator, then workdir', () => {
+test('extractSessionMeta: cwd falls back to workdir, and NEVER to originator', () => {
+  // WP-23, `docs/DEVIATIONS.md` §137.5: this used to assert the opposite.
+  // MEASURED on codex-cli 0.153.1, `originator` is the client's name —
+  // 'Codex Desktop' from the app, 'codex_exec' from the CLI — so the fallback
+  // would have put a session in a room named after a program instead of
+  // returning `unknown`, which `ADAPTERS.md` requires.
   const viaOriginator = extractSessionMeta({
     type: 'session_meta',
-    payload: { id: 'x', originator: 'C:\\from\\originator' },
+    payload: { id: 'x', originator: 'Codex Desktop' },
   });
-  assert.equal(viaOriginator.cwd, 'C:\\from\\originator');
+  assert.equal(viaOriginator.cwd, null);
 
   const viaWorkdir = extractSessionMeta({
     type: 'session_meta',
@@ -202,16 +207,25 @@ test('extractUsage: nested info.total_token_usage with canonical keys', () => {
       },
     },
   };
+  // `scope: 'turn'` since WP-23: `total_token_usage` totals the CLI process,
+  // not the thread. `docs/DEVIATIONS.md` §137.3, and the thread-scoped case is
+  // in `codex-real-shapes.test.mjs`.
   assert.deepEqual(extractUsage(rec), {
     inputTokens: 100,
     outputTokens: 40,
     cachedInputTokens: 10,
+    scope: 'turn',
   });
 });
 
 test('extractUsage: probes alias keys (camelCase, cache_read/creation aliases)', () => {
   const rec = { usage: { inputTokens: 5, outputTokens: 2, cache_read_input_tokens: 1 } };
-  assert.deepEqual(extractUsage(rec), { inputTokens: 5, outputTokens: 2, cachedInputTokens: 1 });
+  assert.deepEqual(extractUsage(rec), {
+    inputTokens: 5,
+    outputTokens: 2,
+    cachedInputTokens: 1,
+    scope: 'turn',
+  });
 });
 
 test('extractUsage: returns null when nothing usage-shaped is present', () => {
@@ -296,7 +310,12 @@ test('fixture: the later token_count event wins over the earlier one (last-wins,
     const u = extractUsage(rec);
     if (u) usage = u;
   }
-  assert.deepEqual(usage, { inputTokens: 1800, outputTokens: 500, cachedInputTokens: 250 });
+  assert.deepEqual(usage, {
+    inputTokens: 1800,
+    outputTokens: 500,
+    cachedInputTokens: 250,
+    scope: 'turn',
+  });
 });
 
 // The "no ~/.codex" in the four titles below is now a fact rather than a hope.

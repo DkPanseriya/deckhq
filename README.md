@@ -382,14 +382,25 @@ undelivered install is visible instead of assumed to be fine.
 
 These are real, and listed here rather than discovered later.
 
-- **Codex, Gemini CLI and OpenCode support is unverified.** Three of the four adapters are
-  implemented against each runtime's documented on-disk format or published CLI, and **none of them
-  has ever run against real data**, because none of the three is installed on the development
-  machine. Each reports itself unavailable cleanly and degrades without throwing, and each says in
-  its own source which repository and which date its field names were read from. Treat DeckHQ as a
-  Claude Code tool until those adapters have been exercised end to end. If you use one of them,
-  telling us what broke is the single most useful thing you can do — `docs/ADAPTERS.md` §6 is the
-  rule that keeps this sentence here until somebody does.
+- **Gemini CLI and OpenCode support is unverified.** Both adapters are implemented against each
+  runtime's documented on-disk format or published CLI, and **neither has ever run against real
+  data**, because neither runtime is installed on the development machine. Each reports itself
+  unavailable cleanly and degrades without throwing, and each says in its own source which
+  repository and which date its field names were read from. If you use one of them, telling us what
+  broke is the single most useful thing you can do — `docs/ADAPTERS.md` §6 is the rule that keeps
+  this sentence here until somebody does.
+- **Codex support is verified for reading and replying, and not for anything else.** On 4 September
+  2026 the adapter was run against real Codex sessions — codex-cli 0.153.1 on Windows, one rollout
+  from the desktop app and one from `codex exec` — and a real reply was sent into a session with
+  `codex exec resume <id> --json <text>`. The room, the title, the token totals, the model, the
+  turn boundary and the `doctor` row are measured, and four defects found in that run are fixed.
+  Four things are still not: no rollout old enough to have been **compressed** by Codex has been
+  read, so that path is proved only against a file this project compressed itself; **"Open in
+  terminal" has never opened a window** for Codex — its command is asserted against
+  `codex resume --help` and no more; **Codex cannot report a running session**, because it offers
+  no machine-readable way to ask, so liveness is inferred from file mtime; and **DeckHQ installs no
+  Codex hooks**, so a Codex session waiting on your permission and one that has simply stopped look
+  the same. `docs/DEVIATIONS.md` §8 and §137.
 - **Neither Gemini CLI nor OpenCode can report a running session**, because neither runtime offers
   a way to ask: both list what is stored, not what has a process attached, and DeckHQ will not scan
   your process table to guess. They fall back to the same recency inference Codex uses. OpenCode's
