@@ -1282,6 +1282,11 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   Actions — because no workflow can turn it on for its own repository, and until that is done the
   deploy step fails while nothing else in the repository notices. **Unproven until a push runs
   it.**
+- **`docs/06-RELAY-DESIGN.md` — the relay's protocol and threat model, written before any of it is
+  built.** Pairing, the envelope, what the relay can and cannot see, multi-machine, push, self-hosting,
+  the five-attacker threat table, what is deliberately not built, and the WP-32/33/34 build plan with
+  its acceptance criteria. Design only: no code, nothing run, every third-party claim carrying a URL
+  and a retrieval date and four of them labelled unverified. `docs/DEVIATIONS.md` §127.
 
 ### Known gaps
 
