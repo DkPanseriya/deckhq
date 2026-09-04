@@ -302,6 +302,15 @@ Everything is read locally and nothing leaves the machine.
   megabytes, so DeckHQ never reads a whole one.
 - `claude agents --json` — which sessions are alive right now.
 - `~/.codex/sessions/**` — Codex rollout files, when Codex is installed.
+- `~/.gemini/tmp/**/chats/*.jsonl` — Gemini CLI sessions, when Gemini CLI is installed, in the same
+  bounded head-and-tail chunks. Plus `~/.gemini/projects.json`, which is the only place the working
+  directory of a Gemini session is recorded.
+- `opencode db`, `opencode session list` and `opencode export` — OpenCode keeps its sessions in a
+  SQLite database, so DeckHQ asks OpenCode for them rather than reading the file. **This runs the
+  `opencode` binary on your machine**, read-only, at most once a minute; it is named here because
+  it is the one runtime DeckHQ reads by running a program instead of opening a file. On an install
+  old enough to predate that database, its JSON session files under `~/.local/share/opencode` are
+  read directly instead.
 - `~/.claude/settings.json` — only if you opt into hooks, and only the block DeckHQ wrote.
 
 ## What it writes
@@ -358,10 +367,21 @@ undelivered install is visible instead of assumed to be fine.
 
 These are real, and listed here rather than discovered later.
 
-- **Codex support is unverified.** The adapter is implemented against documented rollout-file
-  conventions but has never run against real Codex data, because Codex is not installed on the
-  development machine. It reports itself unavailable cleanly and degrades without throwing. Treat
-  DeckHQ as a Claude Code tool until that adapter has been exercised end to end.
+- **Codex, Gemini CLI and OpenCode support is unverified.** Three of the four adapters are
+  implemented against each runtime's documented on-disk format or published CLI, and **none of them
+  has ever run against real data**, because none of the three is installed on the development
+  machine. Each reports itself unavailable cleanly and degrades without throwing, and each says in
+  its own source which repository and which date its field names were read from. Treat DeckHQ as a
+  Claude Code tool until those adapters have been exercised end to end. If you use one of them,
+  telling us what broke is the single most useful thing you can do — `docs/ADAPTERS.md` §6 is the
+  rule that keeps this sentence here until somebody does.
+- **Neither Gemini CLI nor OpenCode can report a running session**, because neither runtime offers
+  a way to ask: both list what is stored, not what has a process attached, and DeckHQ will not scan
+  your process table to guess. They fall back to the same recency inference Codex uses. OpenCode's
+  session list is also cached for a minute, so a session started while that cache is warm can take
+  up to 60 seconds to appear — the same trade Claude Code's live check already makes — and an
+  OpenCode session shows no message preview on the floor until you open it, because that text lives
+  somewhere it would be expensive to read on every poll.
 - **"Open in terminal" is verified on Windows only.** macOS knows Ghostty, iTerm2, Warp, kitty,
   WezTerm and Terminal.app; Linux honours `$TERMINAL` and then Alacritty, foot, kitty, WezTerm,
   GNOME Terminal, Konsole, Xfce Terminal and xterm. Every one of them is implemented against

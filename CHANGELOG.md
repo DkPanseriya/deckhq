@@ -8,6 +8,23 @@
 
 ### Added
 
+- **Two more runtimes: Gemini CLI and OpenCode.** Four now, on one floor, with correct attribution
+  and no shared state: disabling or removing any one leaves the others fully working, and a runtime
+  that is not installed contributes nothing and reports itself cleanly rather than erroring.
+  `deckhq doctor` grew two rows without `src/cli/doctor.mjs` changing at all, which is the property
+  the adapter interface exists for and there is now a test asserting it against the real registry.
+  Gemini CLI is read from its JSONL session files under `~/.gemini/tmp/<project>/chats/`, including
+  juniors; OpenCode through its own JSON-emitting commands — `opencode db`, `session list` and
+  `export` — because since v1.2.0 it keeps everything in a SQLite database, and DeckHQ has no
+  dependencies and would not guess at a byte layout when the runtime ships a supported interface.
+  Resume, new session and send are wired for both, as argv arrays with no shell anywhere.
+  **Both are unverified — see Known gaps.** `docs/DEVIATIONS.md` §123.
+- **`docs/ADAPTERS.md` — add a runtime without asking us.** The `RuntimeAdapter` contract with what
+  each method owes you, the seven stability rules, a worked example that adds a fictional runtime
+  end to end, the fixture convention, the checklist, and the honesty rule: an adapter is unverified
+  until it has been run against real data and has to say so in three places. Adding a runtime is
+  three files in one directory plus one line in the registry and one union member in `RuntimeId` —
+  nothing else in the product names a runtime.
 - **Lights out: one card at the end of the day.** At 22:00 — or as soon as the last live session
   ends, if the evening is already under way — the floor dims to night and a single card appears:
   _"Friday. 40 turns across 6 rooms. `orbital-api` shipped 6, `checkout-flow` waited 4h 3m. 6
@@ -1176,6 +1193,38 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
 
 ### Known gaps
 
+- **The Gemini CLI adapter has never met a real Gemini CLI.** `~/.gemini` does not exist on the
+  reference machine. Every field name in it was read out of the `google-gemini/gemini-cli` source on
+  2026-09-04 and pinned against a synthetic fixture; none of it has been checked against a profile a
+  human actually made. Two readings are flagged as guesses in `docs/DEVIATIONS.md` §123.5 and are
+  the first things to check: how per-message token counts should be combined into a session total
+  (`input` is taken as the largest value seen and `output` summed, because Gemini's `input` already
+  contains the conversation so far and summing would multiply it), and which tool-call statuses mean
+  "still running" — an unrecognised one reads as finished, so at worst a busy session looks idle for
+  one poll rather than a finished one being hidden from the queue forever. It reports itself
+  unavailable cleanly and degrades without throwing.
+- **The OpenCode adapter has never met a real OpenCode.** Neither the binary nor
+  `~/.local/share/opencode` is on the reference machine. It goes through OpenCode's own commands
+  rather than its SQLite file — that file is in WAL mode, so a hand-written page reader would
+  silently miss the newest sessions, which are the ones that matter — and the least certain shape in
+  it is the `opencode export` envelope, which is read shape-tolerantly for that reason. Two
+  narrower gaps, both deliberate: **a scan reports no last-message preview** (that text lives in a
+  separate table, one row per fragment, and fetching it on the poll path would cost a query the size
+  of the whole conversation; the panel fills it in the moment you open it), and the session roster is
+  **cached for 60 seconds**, so a session started while it is warm can take up to a minute to appear
+  — the same trade `claude agents --json` already makes. `docs/DEVIATIONS.md` §123.
+- **Neither Gemini CLI nor OpenCode can report a live session**, because neither runtime offers a
+  way to ask. Both list what is _stored_, not what has a process attached, and DeckHQ will not scan
+  the process table to guess. Both therefore take the same recency inference Codex does.
+- **DeckHQ installs no hooks for Gemini CLI or OpenCode**, so both share Codex's limitation: a
+  session waiting on your permission and one that has simply stopped look the same. Gemini CLI
+  genuinely has a hooks mechanism and DeckHQ says so rather than pretending it does not — it will
+  not write into your `~/.gemini/settings.json` on the strength of a documentation page it has never
+  been able to test. OpenCode has a plugin API instead, which means installing executable code, and
+  that deserves its own consent design. OpenCode does keep the turn boundary regardless: it records
+  when a turn finished, so that much is read rather than guessed.
+- **The rate card has no Gemini rows**, so a Gemini CLI session shows **no rate** rather than
+  `$0.00` — the same rule every unpriced model gets.
 - **The streamed send has never met a live `claude` either.** The flags were read out of
   `claude --help` on 2.1.231 and the envelopes were recorded from the real binary — which got as
   far as `401 OAuth access token has expired` before it could produce a reply — so the assistant
