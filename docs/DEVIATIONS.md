@@ -9089,3 +9089,153 @@ needs the same care those two got — a reading of what the file's parts share, 
 rule for the state between them, and a way to prove nothing moved. The ceiling
 test asserts the ceiling for the modules this package produced, and does not
 pretend to a ceiling the repository does not yet meet.
+
+## 123. Test isolation — the suite had a home directory, and it was the developer's
+
+§121.4 left a debt with a number on it: whole-suite wall clock moved between 5 s and 68 s **on one
+commit**, because several tests scanned the real `~/.claude`, `~/.deckhq` and
+`%APPDATA%\Claude`, and at least one took a different branch depending on what the machine happened
+to have open at that moment. §121.1 pinned one file and said so: _"The others still read the host,
+and a timing claim about this suite is worth nothing until they do not."_ This is the others.
+
+### 123.1 What was actually reading the host, and how that was established
+
+Not by grep. A grep for `os.homedir()` finds the tests that say the word; it does not find the test
+that imports `src/core/rates.mjs`, which resolves `~/.deckhq/rates.json` while it evaluates. So the
+suite was made to answer the question itself.
+
+`scripts/test.mjs` now plants a **canary home** for the run — an empty machine in a temp directory
+with one transcript on it, titled `DECKHQ-CANARY-HOME-DO-NOT-READ` — points `HOME`, `USERPROFILE`
+and `%APPDATA%` at it, **unsets** `CLAUDE_CONFIG_DIR`, `DECKHQ_STATE_DIR` and
+`DECKHQ_DESKTOP_SESSIONS_DIR` so each is derived from that home rather than skipped, and preloads
+`test/helpers/canary.cjs` into every process in the run via `NODE_OPTIONS`. That file wraps every
+`fs` entry point whose first argument is a path — both halves, because writing into the user's home
+is the same defect with a worse blast radius — and appends a record for any call naming a path
+inside the canary. The run then fails on a non-empty log, quoting the function, the path and the
+frame.
+
+The first run of it found **343 accesses across eighteen files**. Four kinds, and only the first was
+the one anybody would have guessed:
+
+1. **Four integration files scanned the home outright**, because they started a real daemon and the
+   registry scans whatever machine it is on: `daemon`, `permission`, `snapshot-route`,
+   `vscode-webview`.
+2. **The three files §121 had already pinned were still reading two paths each.** `demo-floor`,
+   `wrapped-route` and `daemon-hooks-port` set `CLAUDE_CONFIG_DIR` and the home, which is what
+   `os.homedir()` answers with — but `desktopSessionsDir()` falls back to
+   `%APPDATA%\Claude\claude-code-sessions`, which moving the home does not move, and `~/.deckhq`
+   was left where it was. Three files, correctly pinned against the hazard as it was understood,
+   still touching the developer's Claude desktop store on every run. This is why the pin is now one
+   shared module and not three copies of a good idea.
+3. **Nine unit files read `~/.deckhq/rates.json`** — `rates`, `records`, `notify`,
+   `ledger-invariant`, `state-machine`, `stats-cli`, `subagents`, `claude-parse`,
+   `claude-desktop-cache` — with no line in any of them mentioning a home. `src/core/rates.mjs`
+   computes `OVERRIDE_RATES_FILE` from `DATA_DIR` at module evaluation, and the override merges over
+   the built-in card by design (§111). A developer who had ever exercised that feature was running a
+   different rate card from CI, in every test that prices anything.
+4. **`test/unit/doctor.test.mjs` spawns the real binary** — `bin/deckhq.mjs doctor --json`, on
+   purpose, because §76 is about how a command _ends_ and only a real process can show that. It
+   inherited the real home, so one test in the unit suite scanned every transcript on the machine
+   and **wrote into `~/.deckhq`**: a `.doctor-probe-<pid>` file, and a summary cache rebuilt from
+   the developer's own sessions. That is the 60-second test, and it was in `test/unit`.
+
+### 123.2 The two mechanisms, and why the whole-suite guard is in the runner
+
+**`test/helpers/isolate.mjs`**, imported first by a test file, is the per-file half. It creates a
+temp root, points `HOME`, `USERPROFILE`, `APPDATA`, `CLAUDE_CONFIG_DIR`, `DECKHQ_STATE_DIR` and
+`DECKHQ_DESKTOP_SESSIONS_DIR` at directories inside it, and removes the root on exit. "First" is not
+style: `parse.mjs` resolves `CLAUDE_DIR`, `paths.mjs` resolves `DATA_DIR` and `rates.mjs` resolves
+`OVERRIDE_RATES_FILE` while they evaluate, and module bodies run in the order their `import`
+declarations appear. It also carries `writeClaudeSession()` and `daemonScratch()`, so a test that
+needs a session in a given state plants one rather than hoping for one.
+
+`DECKHQ_HOSTNAME`, `DECKHQ_PORT`, `DECKHQ_DEBUG` and `DECKHQ_PERMISSION_HOLD_MS` are **deleted**
+rather than pinned. None is a path; each changes behaviour; and a developer who exports one must not
+thereby be running a different suite from CI. Deleting rather than setting is also what keeps
+`the hostname the strip is named after comes from /api/about` honest — it asserts `os.hostname()`,
+and pinning the override would have turned it into a second test of the override.
+
+**The whole-suite guard is the runner's audit, not a test that re-runs the suite.** The brief asked
+for a test that runs the whole suite with a canary planted and asserts nothing read it. The runner
+makes exactly that assertion over exactly that ground, for every one of the 1,527 tests including
+the file somebody adds tomorrow, and it costs nothing, where a test spawning the suite inside the
+suite would have doubled a 6-second wall clock to cover the same ground a second time. What is left
+to `test/integration/isolation-guard.test.mjs` is the part the runner cannot check about itself:
+
+- **that the tripwire can fire** — a child is sent to read the canary, and the log is asserted to
+  have caught both a read of a file that exists and an attempt on one that does not, with a frame
+  attached. A guard nobody has seen fail is a guard nobody should trust.
+- **that the sentinel reaches no surface** — a real daemon is started over an isolated machine
+  holding exactly one planted session, and the canary title is asserted absent from the whole
+  snapshot, from the project list and from a conversation body.
+
+The negative control was run: removing the isolate import from `test/unit/codex-parse.test.mjs`
+fails the run with `1x … fsp.access :: …\home\.codex`.
+
+### 123.3 One assertion got stronger, and none got weaker
+
+`INVARIANT: reading a conversation over HTTP never clears reviewSince` — the test §121.4 named —
+opened with:
+
+```js
+const before = registry.agents.find((a) => a.activityState === 'for_review');
+if (!before) return; // no real for_review sessions on this machine; covered by unit tests
+```
+
+On a machine with nothing in `for_review` it asserted nothing at all, and isolating it would have
+made that the permanent state: green, vacuous, forever. It now plants a transcript with a finished
+assistant turn on it — which is what `for_review` means — asserts the agent reached the floor, and
+runs the four assertions every time. The early return is gone.
+
+`test/unit/codex-parse.test.mjs`'s three "on a Codex-free machine" tests were true by luck on a
+machine without `~/.codex` and would have failed outright on one with it. They are now true by
+construction.
+
+### 123.4 The measurements
+
+Wall clock over five consecutive `npm test` runs on the reference machine (Windows 11, Node 24),
+recorded twice for the unchanged tree because the first window is the whole point:
+
+| tree | min | median | max | red runs |
+| --- | --- | --- | --- | --- |
+| before, first window | 7.4 s | 7.6 s | **71.7 s** | **2 of 5** |
+| before, second window, same commit, one hour later | 5.9 s | 6.2 s | 6.2 s | 0 of 6 |
+| after | 6.0 s | 6.1 s | 6.4 s | 0 of 5 |
+
+The two "before" rows are the finding. Same commit, same laptop, one hour apart: a tenfold spread
+and two red runs in the first window, six clean 6-second runs in the second. **What changed in that
+hour was the home directory** — the machine was running agent sessions of its own, which is to say
+the input to the suite was being edited while the suite measured it. The failures in the first
+window were observed but not captured, and are recorded here as observed rather than explained;
+what replaces that guesswork is a controlled measurement of the same claim.
+
+The same suite, run against a synthetic home holding N Claude Code transcripts and nothing else
+varying:
+
+| home | before | after |
+| --- | --- | --- |
+| 0 sessions | 5.8 s | 5.8 s |
+| 600 sessions | 10.0 s | — |
+| 3,000 sessions | **199.1 s** | **5.8 s** |
+
+199.1 s to 5.8 s, and flat: 5.8 s at nothing and 5.8 s at three thousand. That is the property the
+package was for — the suite's cost is now a function of the suite. Both "after" figures are with the
+canary disabled (`--no-canary`), so the number is the per-file helper's alone rather than the
+runner's home substitution doing the work; with the canary on, the same run is 6.1 s, and the 0.3 s
+is the `NODE_OPTIONS` preload in every process.
+
+Tests went 1,525 → 1,527: the two in `isolation-guard`. Nothing was deleted or skipped.
+
+### 123.5 What still reads the host, deliberately
+
+One thing, and it is not a home directory: `test/integration/snapshot-route.test.mjs` asserts
+`GET /api/about` reports `os.hostname()`. The office is named after the machine, that is the claim,
+and a hostname is a constant-time read of a value the suite does not have to scan for. It is
+commented as the deliberate case, and it is the only one.
+
+Not fixed, and named rather than left to be found: **the guard only runs under `npm test`.** A
+developer running `node --test test/unit/foo.test.mjs` directly gets no canary and no audit — the
+per-file helper still isolates every file that imports it, but a new file that forgets to would go
+unnoticed until CI. Moving the canary into a reporter or a `globalSetup` hook would close that, and
+both are Node-version-gated in exactly the way `scripts/test.mjs` exists to avoid; the next move is
+that rather than a guess about it.
