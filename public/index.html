@@ -190,6 +190,36 @@
           <p class="nightcard-foot" id="nightcard-foot" hidden></p>
           <p class="nightcard-hint" id="nightcard-hint"></p>
         </div>
+
+        <!-- Floor replay (WP-45). Free, and it reads the ledger the user
+             already owns. Deliberately NOT a <dialog>: it is a transport bar
+             over a floor you are meant to be watching, so it must not trap
+             focus and must not stand the floor's keyboard map down. It is a
+             region with an accessible name, and Escape closes it. -->
+        <div class="replay" id="replay" role="region" aria-label="Floor replay" hidden>
+          <div class="replay-head">
+            <span class="replay-day" id="replay-day"></span>
+            <span class="replay-clock mono" id="replay-clock"></span>
+          </div>
+          <div class="replay-controls">
+            <button type="button" class="replay-btn" id="replay-play" aria-label="Play">
+              Play
+            </button>
+            <input
+              type="range"
+              class="replay-scrub"
+              id="replay-scrub"
+              min="0"
+              max="1000"
+              value="0"
+              aria-label="Scrub through the day"
+            />
+            <button type="button" class="replay-btn" id="replay-close" aria-label="Close replay">
+              Close
+            </button>
+          </div>
+          <p class="replay-note" id="replay-note"></p>
+        </div>
       </section>
 
       <aside class="panel" id="panel" aria-label="Session detail" hidden></aside>

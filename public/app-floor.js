@@ -16,17 +16,53 @@
  */
 
 import {
+  applyAvatarSetting,
   applyThemeSetting,
   el,
   latestSnapshot,
+  palette,
   scene,
   sceneModule,
+  setPacks,
   setPalette,
   setScene,
   setSceneModule,
   setThemes,
+  themes,
 } from './app-state.js';
 import { showRendererError } from './app-header.js';
+
+/**
+ * Register what an installed asset pack brought, in the browser (WP-45).
+ *
+ * The daemon has already done this in Node — that is how `settings.theme`
+ * survived being sanitised at start — but the two processes hold separate
+ * copies of the renderer's registries, so the page has to do it too. Both
+ * calls are the SAME functions the daemon called, with the same contrast and
+ * colour gates, so a theme that reaches the picker here is one that cleared
+ * every bar there.
+ *
+ * Never throws. A pack that will not register is a console line and a floor
+ * in the shipped themes.
+ *
+ * @param {{packs?:any[], avatarSets?:any[]}} body
+ * @returns {Promise<{packs:any[], avatarSets:any[]}>} what actually registered
+ */
+async function registerPacks(body) {
+  const packs = Array.isArray(body?.packs) ? body.packs : [];
+  for (const pack of packs) {
+    try {
+      const themeResult = themes?.registerPackThemes?.(pack.name, pack.themes || []);
+      const avatarResult = palette?.registerPackAvatarSets?.(pack.name, pack.avatars || []);
+      for (const line of [...(themeResult?.rejected || []), ...(avatarResult?.rejected || [])]) {
+        console.warn(`[deckhq] pack "${pack.name}": ${line}`);
+      }
+    } catch (err) {
+      console.warn(`[deckhq] pack "${pack.name}" could not be registered`, err);
+    }
+  }
+  return { packs, avatarSets: Array.isArray(body?.avatarSets) ? body.avatarSets : [] };
+}
 
 /**
  * @param {{normaliseHit:(hit:unknown) => any, selectAgent:(id:string|null) => void,
@@ -45,6 +81,16 @@ export async function loadRenderModules({
   runProjectDashboard,
   showTooltip,
 }) {
+  // WP-45. Started here rather than awaited here: what an installed pack
+  // brings is a fact about disk that only the daemon can read, and the two
+  // renderer imports below do not need it. Fetching it in parallel keeps a
+  // pack off the critical path of the first paint. Never fatal — an install
+  // with no pack, and one whose daemon is too old to have the route, both
+  // answer "no packs" and the floor comes up in the shipped themes.
+  const packsRequest = fetch('/api/packs')
+    .then((res) => (res.ok ? res.json() : { packs: [], avatarSets: [] }))
+    .catch(() => ({ packs: [], avatarSets: [] }));
+
   try {
     setPalette(await import('./render/palette.js'));
   } catch (err) {
@@ -55,7 +101,14 @@ export async function loadRenderModules({
     // the theme the user chose: applying a theme after the backdrop is baked
     // would show the default floor for one frame on every reload.
     setThemes(await import('./render/themes.js'));
+    // WP-45, and BEFORE the theme is applied for the same reason: a floor
+    // painted in a pack's theme must be painted in it on the first bake, not
+    // on the second. A pack registered here is registered in the browser
+    // exactly as the daemon registered it in Node — same function, same
+    // contrast gate, same refusals.
+    setPacks(await registerPacks(await packsRequest));
     applyThemeSetting((latestSnapshot?.settings || {}).theme);
+    applyAvatarSetting((latestSnapshot?.settings || {}).avatarSet);
   } catch (err) {
     console.debug('[deckhq] render/themes.js not available yet, using the default theme', err);
   }

@@ -20,6 +20,7 @@ import {
   projectFilter,
   scene,
   sceneModule,
+  sceneOwner,
   selectAgent,
   setProjectFilter,
 } from './app-state.js';
@@ -257,7 +258,11 @@ export function renderFloorState(snapshot) {
   el.canvas.hidden = !hasAgents;
   el.demoNote.hidden = !snapshot.demo || !hasAgents;
   if (snapshot.demo && snapshot.demoNote) el.demoNote.textContent = snapshot.demoNote;
-  if (scene) {
+  // WP-45. While the floor replay is scrubbing a day out of the ledger, the
+  // canvas belongs to it. Everything above this line still ran, so the header
+  // count, the queue strip and the deck are live and true the whole time —
+  // only the picture is looking at yesterday.
+  if (scene && sceneOwner === 'live') {
     try {
       scene.setState(snapshot);
     } catch (err) {
