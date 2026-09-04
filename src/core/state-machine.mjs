@@ -230,6 +230,10 @@ export class Registry extends RegistryHooks {
      * @type {Map<string, {eventsSeen:number, lastEventAt:number|null}>}
      */
     this._hookHealth = new Map();
+    // WP-23a. One sentence per runtime about what its last scan could not
+    // read, or null. Empty until the first scan, which is also what "we have
+    // not looked yet" should mean on the banner.
+    this._readLimits = {};
     this._startedAt = Date.now();
 
     /** @type {Set<(snapshot: ReturnType<Registry['snapshot']>) => void>} */

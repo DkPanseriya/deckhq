@@ -82,6 +82,9 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  * @property {string} approveText        what the panel's `2 Approve` sends
  * @property {string} editor             which editor "open in editor" launches (WP-47)
  * @property {string} terminal           pinned emulator id, or `auto` to detect (WP-04)
+ * @property {string} codexBin           the `codex` binary "send" and "resume" mean,
+ *                                       or `''` to find it: PATH first, then the
+ *                                       desktop app's bundled copy (WP-23a, §136.1)
  * @property {number} goneHomeDays       days of no activity after which a benched
  *                                       agent is not DRAWN on the floor (WP-50). A
  *                                       display filter only — see
@@ -135,6 +138,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // be wrong on any machine that later installs a different editor.
   editor: '',
   terminal: TERMINAL_AUTO,
+  // WP-23a. Which `codex` binary "send" and "resume" mean, for the machine
+  // where the answer is not "the one on PATH" — the Codex desktop app bundles
+  // a complete CLI at `%LOCALAPPDATA%\OpenAI\Codex\bin\<build-hash>\codex.exe`
+  // and does not put it on PATH (`docs/DEVIATIONS.md` §136.1). Blank means
+  // "find it": PATH first, then that bundled copy, newest build wins. This is
+  // the escape hatch for an install neither of those describes, and it is
+  // `editor`'s class of setting — a value that becomes a program — so it takes
+  // `editor`'s three layers: shape here, an existence check at the route, and
+  // one more check in `adapters/codex/binary.mjs` before anything is spawned.
+  codexBin: '',
   goneHomeDays: 7,
   // WP-17. Ninety days is a quarter: long enough for "falling week over week"
   // to mean something and for an annual Wrapped to have most of its material,
@@ -318,6 +331,37 @@ function sanitizeEditor(v) {
 }
 
 /**
+ * A path is at most this long before it stops being a path somebody typed and
+ * starts being a paste. Windows' extended-length limit is 32 767; anything
+ * near it in `state.json` is not a program.
+ */
+const MAX_CODEX_BIN = 1024;
+
+/**
+ * Which `codex` binary to run (WP-23a). Validated by SHAPE here, for the same
+ * reason `sanitizeTerminal` is: `core/` cannot know what is on this disk, and
+ * a hand-edited `state.json` is the one input nobody checked on the way in.
+ * The layer that CAN check — the HTTP route — refuses a path that is not an
+ * existing file, and `adapters/codex/binary.mjs` checks once more immediately
+ * before the spawn, so a binary deleted between the two is a reported failure
+ * rather than a silent fallback to a different program.
+ *
+ * A newline or a NUL would be a value smuggling a second line into somewhere
+ * that logs it; both are dropped whole rather than stripped, because a path
+ * containing one is not a path.
+ * @param {unknown} v
+ * @returns {string}
+ */
+function sanitizeCodexBin(v) {
+  const s = typeof v === 'string' ? v.trim() : '';
+  if (!s || s.length > MAX_CODEX_BIN) return DEFAULT_SETTINGS.codexBin;
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) < 32) return DEFAULT_SETTINGS.codexBin;
+  }
+  return s;
+}
+
+/**
  * How many days of silence make a benched agent stop being drawn (WP-50).
  * Clamped the same way as the stall window: an out-of-range or non-numeric
  * value is a hand-edited state.json or a stale build, and falls back to the
@@ -374,6 +418,7 @@ function sanitizeSettings(raw) {
   s.approveText = sanitizeApproveText(s.approveText);
   s.editor = sanitizeEditor(s.editor);
   s.terminal = sanitizeTerminal(s.terminal);
+  s.codexBin = sanitizeCodexBin(s.codexBin);
   s.goneHomeDays = clampGoneHomeDays(s.goneHomeDays);
   s.ledgerRetentionDays = clampRetentionDays(s.ledgerRetentionDays);
   s.lightsOutHour = clampLightsOutHour(s.lightsOutHour);

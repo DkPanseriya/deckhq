@@ -58,7 +58,7 @@ import { getAdapters } from '../../src/adapters/index.mjs';
  * A runtime adapter with only the surface `doctor` is allowed to touch.
  * @param {Partial<{id:string,label:string,available:boolean,sessions:any[],live:any[],
  *   hooksSupported:boolean,installed:boolean,port:number|null,version:string,
- *   scanThrows:string,blockedByPolicy:any,policyThrows:string}>} spec
+ *   scanThrows:string,blockedByPolicy:any,policyThrows:string,binary:any}>} spec
  */
 function fakeAdapter(spec = {}) {
   const {
@@ -74,6 +74,7 @@ function fakeAdapter(spec = {}) {
     scanThrows,
     blockedByPolicy,
     policyThrows,
+    binary,
   } = spec;
 
   const adapter = {
@@ -92,6 +93,10 @@ function fakeAdapter(spec = {}) {
     },
   };
   if (version !== undefined) adapter.version = async () => version;
+  // WP-23a. Optional on purpose, exactly like `blockedByPolicy` below: an
+  // adapter that does not resolve a program of its own simply does not have
+  // this method, and its row must read the way it always did.
+  if (binary !== undefined) adapter.describeBinary = async () => binary;
   // WP-56. Optional on purpose: a runtime whose hooks no policy can switch off
   // simply does not have this method, and the row must be unchanged for it.
   if (blockedByPolicy !== undefined || policyThrows) {
@@ -266,6 +271,144 @@ test('a version is printed when the adapter offers one, and omitted when it does
   const without = await collect(registry(fakeAdapter({})));
   assert.match(renderReport(without), /claude code {5}available/);
   assert.equal(without.runtimes[0].version, null);
+});
+
+// ---------------------------------------------------------------------------
+// WP-23a — which program the runtime would actually start
+// ---------------------------------------------------------------------------
+
+test('the row says HOW the binary was found: bundled with the app, on PATH, or pinned', async () => {
+  // docs/DEVIATIONS.md §136.1. On the reference machine the Codex desktop app
+  // bundles a complete CLI it does not put on PATH, so "available" was true of
+  // the transcripts and silent about the program — and `send` then reported
+  // "Codex is not installed" from a machine running Codex in another window.
+  const cases = [
+    ['bundled', /codex {11}codex-cli 0\.153\.1 {3}\(bundled with the app\)/],
+    ['path', /codex {11}codex-cli 0\.153\.1 {3}\(on PATH\)/],
+    ['pinned', /codex {11}codex-cli 0\.153\.1 {3}\(pinned\)/],
+  ];
+  for (const [source, pattern] of cases) {
+    const report = await collect(
+      registry(
+        fakeAdapter({
+          id: 'codex',
+          label: 'Codex',
+          hooksSupported: false,
+          version: 'codex-cli 0.153.1',
+          binary: { found: true, source, path: '/somewhere/codex', lookedIn: [], pinProblem: null },
+        }),
+      ),
+    );
+    assert.match(renderReport(report), pattern, source);
+  }
+});
+
+test('transcripts readable with no binary is a NOTE, not "not installed", and not a problem', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        id: 'codex',
+        label: 'Codex',
+        hooksSupported: false,
+        sessions: sessionsIn(4, '/repo'),
+        binary: {
+          found: false,
+          source: null,
+          path: null,
+          lookedIn: ['C:\\Users\\dev\\AppData\\Local\\OpenAI\\Codex\\bin'],
+          pinProblem: null,
+        },
+      }),
+    ),
+  );
+  const text = renderReport(report);
+  assert.match(text, /codex {11}transcripts readable; no codex binary found/);
+  // The floor is fine, so the report's verdict is fine: this is exit 0.
+  assert.equal(report.ok, true);
+  assert.deepEqual(report.problems, []);
+  assert.equal(report.notes.length, 1);
+  assert.match(report.notes[0], /not on PATH, and not in C:\\Users\\dev\\AppData/);
+  // And the sentence the whole package exists to kill never appears.
+  assert.ok(!/not installed/.test(text), text);
+});
+
+test('a pinned binary that is not a file IS a problem — the user asked for that one', async () => {
+  const report = await collect(
+    registry(
+      fakeAdapter({
+        id: 'codex',
+        label: 'Codex',
+        hooksSupported: false,
+        binary: {
+          found: false,
+          source: null,
+          path: null,
+          lookedIn: [],
+          pinProblem: '/opt/gone/codex',
+        },
+      }),
+    ),
+  );
+  assert.equal(report.ok, false);
+  assert.match(report.problems[0], /pinned binary \/opt\/gone\/codex is not a file/);
+  assert.match(renderReport(report), /codex {11}transcripts readable; the pinned codex binary/);
+});
+
+test('the codexBin setting is read off state.json and handed to the adapter', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  await fsp.writeFile(
+    stateFile,
+    JSON.stringify({ settings: { codexBin: 'D:\\tools\\codex.exe' } }),
+  );
+  /** @type {any[]} */
+  const seen = [];
+  const adapter = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  adapter.describeBinary = async (opts) => {
+    seen.push(opts);
+    return { found: true, source: 'pinned', path: opts.codexBin, lookedIn: [], pinProblem: null };
+  };
+  const report = await collect(registry(adapter), { state: { dataDir, stateFile } });
+  assert.deepEqual(seen, [{ codexBin: 'D:\\tools\\codex.exe' }]);
+  assert.equal(report.runtimes[0].binary.path, 'D:\\tools\\codex.exe');
+});
+
+test('sessions a runtime could not read are a note with a number, never silence', async () => {
+  // docs/DEVIATIONS.md §136.2. `walkSessionFiles()` dropped Codex's compressed
+  // rollouts because their names end `.jsonl.zst`, with no error anywhere —
+  // the failure mode being fixed here is not the missing sessions, it is that
+  // nothing said so.
+  const NOTE = '3 compressed Codex sessions are not read on Node < 22 (v18.20.4).';
+  const adapter = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  adapter.describeReadLimits = async () => NOTE;
+  const report = await collect(registry(adapter));
+
+  assert.equal(report.runtimes[0].readLimit, NOTE);
+  assert.ok(report.notes.includes(NOTE));
+  assert.match(renderReport(report), /· 3 compressed Codex sessions are not read/);
+  // Nothing is broken, so the verdict is not "broken".
+  assert.equal(report.ok, true);
+});
+
+test('an adapter that reads everything, or throws asking, reports no limit', async () => {
+  const quiet = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  quiet.describeReadLimits = async () => null;
+  const a = await collect(registry(quiet));
+  assert.equal(a.runtimes[0].readLimit, null);
+  assert.deepEqual(a.notes, []);
+
+  const angry = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  angry.describeReadLimits = async () => {
+    throw new Error('nope');
+  };
+  const b = await collect(registry(angry));
+  assert.equal(b.runtimes[0].readLimit, null);
+  assert.equal(b.ok, true);
+});
+
+test('an adapter with no describeBinary keeps the row it always had', async () => {
+  const report = await collect(registry(fakeAdapter({ version: '2.1.184' })));
+  assert.equal(report.runtimes[0].binary, null);
+  assert.match(renderReport(report), /claude code {5}2\.1\.184 on PATH/);
 });
 
 // ---------------------------------------------------------------------------
@@ -989,6 +1132,9 @@ test('--json emits one JSON document with a stable shape', async () => {
   assert.equal(parsed.share, null);
   assert.deepEqual(Object.keys(parsed.runtimes[0]).sort(), [
     'available',
+    // WP-23a: which program this runtime would start, and how it was found.
+    // Null for an adapter that resolves none, present either way.
+    'binary',
     'error',
     'finished',
     'id',
@@ -996,6 +1142,8 @@ test('--json emits one JSON document with a stable shape', async () => {
     'live',
     'liveReported',
     'projects',
+    // WP-23a: what the last scan could not read, in the runtime's own words.
+    'readLimit',
     'sessions',
     'version',
   ]);

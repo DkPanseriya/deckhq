@@ -15,7 +15,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { DATA_DIR } from '../core/paths.mjs';
-import { plural, describeDeck, ago, group } from './doctor-report.mjs';
+import { plural, describeDeck, describeRuntime, ago, group } from './doctor-report.mjs';
 
 // ---------------------------------------------------------------------------
 // The share block
@@ -139,7 +139,10 @@ export function renderShare(report, opts = {}) {
       lines.push(srow(name, 'not installed'));
       continue;
     }
-    lines.push(srow(name, rt.version ? `${rt.version} on PATH` : 'available'));
+    // WP-23a: the same sentence the report prints, and it names a source
+    // ("bundled with the app") rather than a path — nothing in it identifies
+    // this machine, and `redact()` below still runs over the whole block.
+    lines.push(srow(name, describeRuntime(rt)));
     lines.push(
       srow(
         'transcripts',

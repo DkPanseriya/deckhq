@@ -400,12 +400,16 @@ test('SECURITY: every process the Codex adapter starts is started with an argv a
     ['spawn'],
     'the Codex adapter should launch exactly one process, with spawn',
   );
-  assert.match(code, /spawn\('codex',\s*args,/, 'spawn must take a named argv array');
+  // WP-23a moved the program name from the literal `'codex'` to the binary
+  // `./binary.mjs` resolved, because the desktop app's bundled CLI is not on
+  // PATH (§136.1). It is still a NAME and a NAMED ARRAY — never a string that
+  // a shell would parse — which is what this assertion is for.
+  assert.match(code, /spawn\(command,\s*args,/, 'spawn must take a named argv array');
   assert.match(code, /await launchTerminal\(\{/, 'terminals must be opened by launchTerminal');
   // §99: a new session names its own command; it no longer borrows the resume
   // path, so `codex resume new` cannot come back by delegation.
   assert.ok(!/openInTerminal\('codex:new'/.test(code), 'openNewSession must not resume "new"');
-  assert.match(code, /command: codexNewSessionCommand\(opts\.instructions\)/);
+  assert.match(code, /command: codexNewSessionCommand\(opts\.instructions,/);
 });
 
 // ---------------------------------------------------------------------------

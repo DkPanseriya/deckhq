@@ -204,6 +204,12 @@ export function register(router, ctx) {
       .send(splitAgentId(id).sessionId, text, {
         cwd: agent.cwd,
         timeoutMs: SEND_TIMEOUT_MS,
+        // WP-23a. The `codex` binary the user pinned, if they did. Every
+        // adapter takes an options object it is free to ignore, and only the
+        // Codex one reads this — the alternative was an adapter reaching into
+        // `state.json`, which inverts the layering (`02-ARCHITECTURE.md` §2)
+        // exactly as `terminal` above would have.
+        codexBin: store.settings.codexBin,
         signal,
         onEvent: (event) => sends.publish(sendId, event),
       })
@@ -294,6 +300,7 @@ export function register(router, ctx) {
       await adapter.openNewSession(resolved, {
         instructions,
         terminal: store.settings.terminal,
+        codexBin: store.settings.codexBin,
       });
       queuePendingIdentity(resolved, body.name, body.avatar);
       // Pick the new session up as soon as the runtime writes its transcript.
@@ -376,6 +383,7 @@ export function register(router, ctx) {
       await adapter.openNewSession(resolved, {
         instructions,
         terminal: store.settings.terminal,
+        codexBin: store.settings.codexBin,
       });
       queuePendingIdentity(resolved, body.name, body.avatar);
       setTimeout(() => registry.refresh().catch(() => {}), 2500);
@@ -507,6 +515,7 @@ export function register(router, ctx) {
     try {
       await adapterFor(id).openInTerminal(splitAgentId(id).sessionId, agent.cwd, {
         terminal: store.settings.terminal,
+        codexBin: store.settings.codexBin,
       });
       return sendJson(res, 200, { ok: true });
     } catch (err) {
@@ -562,6 +571,7 @@ export function register(router, ctx) {
       } else {
         await adapter.openInTerminal(splitAgentId(id).sessionId, agent.cwd, {
           terminal: store.settings.terminal,
+          codexBin: store.settings.codexBin,
         });
       }
       return sendJson(res, 200, { ok: true, target });

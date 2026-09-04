@@ -11326,3 +11326,155 @@ a 1 841 672-byte WAL**. A main-file parser would confidently report an empty dat
 - **No CHANGELOG line**, because nothing shipped. §8, the `parse.mjs` header and the README's Honest
   limits all still say unverified, and per `ADAPTERS.md` §6.4 they come out together, in one commit,
   when somebody has actually run it — and only as far as the run reached.
+
+## 136. WP-23a — three defects the prep pass found, fixed before there was anything to break
+
+§135 surveyed the installed Codex desktop app and named three things that were wrong in the adapter
+**independently of what a real session turns out to look like**. All three are fixed here. **§8 is
+not closed and does not narrow**: no rollout file written by Codex has been read yet, the token
+arithmetic is still a hypothesis, and nothing in this package touched the read path's interpretation
+of the format. What changed is a binary lookup, a filename filter and a sentence.
+
+Everything under `~/.codex` stayed read-only. The only process started was `codex.exe --version`.
+
+### 136.1 `available()` said "installed", `send()` said "not installed", and both were about the wrong question
+
+**The defect.** `available()` answers `fsp.access('~/.codex')`, which is `ADAPTERS.md`'s documented
+pattern. On the reference machine that is now `true`. But the Codex desktop app installs a complete
+CLI at `%LOCALAPPDATA%\OpenAI\Codex\bin\<build-hash>\codex.exe` — `codex-cli 0.153.1`, 250 MB, the
+real thing — and does **not** put it on `PATH`. So `send()` passed its guard, `spawn('codex', …)`
+came back `ENOENT`, and `describeSpawnError` reported **"Codex is not installed"** to somebody who
+could see Codex running in another window.
+
+**What did not change.** `available()`. A second probe on the poll path is the cost §77 removed, and
+the question it answers is the right one for the read half: the rollout files are readable or they
+are not, and no process is involved. It now says so in its own words — **`available()` means
+"transcripts readable"** — which is the sentence that was missing rather than the behaviour.
+
+**What did.** `src/adapters/codex/binary.mjs` resolves the program, at the three moments that need
+one: `version()`, `send()` and resume. In order:
+
+1. **`settings.codexBin`**, a new setting. It is `editor`'s class of setting — a value that becomes
+   a program — so it takes `editor`'s three layers: shape in the store (`sanitizeCodexBin`, which
+   rejects a control character or a value over 1 024 characters), an **existence check at the HTTP
+   route**, which is the only layer that can look at the disk, and one more check in `binary.mjs`
+   immediately before the spawn. Sheet-exempt for `editor`'s reason, recorded in
+   `settings-keys.test.mjs`: blank means "work it out", which is right on every machine anyone has
+   run this on.
+2. **`codex` on `PATH`** — the durable install, and the one a user would expect to beat a copy
+   hidden inside an app.
+3. **The app's bundled copy, newest build hash first.** The hash directory changes when the app
+   updates and the old one is left behind, so "whichever `readdir` returned first" would pin DeckHQ
+   to the previous build — a defect that only appears after an update, which is the worst time.
+
+`doctor`'s runtime row says which one it found — **"bundled with the app" / "on PATH" / "pinned"** —
+and `version()` is the first implementation of the optional adapter method §72 left a hole for.
+Transcripts readable with no binary at all is a **note and exit 0**: the floor, the panel and the
+deck are entirely healthy and only `send` and resume are gone. A **pinned** path that has stopped
+being a file is a **problem**, because the user asked for that one.
+
+**A second, smaller thing was measured on the way.** `npm i -g @openai/codex` installs `codex`,
+`codex.ps1` and `codex.cmd` and no `.exe`, so on this machine `codex` **is** on `PATH` — as a batch
+shim. Node refuses to spawn a `.cmd` without a shell (`EINVAL`, CVE-2024-27980), which
+`core/editor.mjs` answers with `cmd.exe /d /s /c` and `windowsVerbatimArguments`. **This adapter
+cannot and must not**: a session id and a turn of user text reach `send()` from a request body
+(§28), and `codex-terminal.test.mjs` asserts this file contains no `cmd.exe`, no `shell: true` and
+nothing else that would parse them (§95). So the PATH search only ever **chooses** something it can
+start, the shim it walked past is carried out in `shimOnPath`, and `doctor` names it:
+
+```
+  codex           codex-cli 0.153.1   (bundled with the app)
+  · Codex is on your PATH as …\npm\codex.cmd, a batch shim Windows cannot start without a
+    shell. DeckHQ is using …\OpenAI\Codex\bin\c03fa83159064b45\codex.exe instead.
+```
+
+The route refuses a `.cmd`/`.bat` **pin** outright, where the user is told, rather than at the
+spawn, where they are not.
+
+**The macOS candidates are DOCS-only and are marked as such**, in the file, here, and in the
+CHANGELOG: `~/Library/Application Support/OpenAI/Codex/bin/<hash>/codex` (the mirror of the Windows
+layout, which is measured) and `/Applications/Codex.app/Contents/Resources/bin/codex`. No macOS
+machine has been in reach of this package (§9). If neither is right the failure is the honest one —
+"not found", with the places named — and `codexBin` fixes it in one POST. Linux has no Codex desktop
+app, so the search there is `PATH` and nothing else.
+
+**Tests** inject `env`, `platform`, `homedir`, `isFile`, `readdir` and `mtime`, so both platforms'
+searches and all four resolution orders run on one machine in one test run, and nothing depends on
+what happens to be installed on the runner.
+
+### 136.2 Compressed rollouts, and the number that was not being said
+
+**The defect.** `walkSessionFiles()` accepted a file only when its name ended `.jsonl`. Codex's CLI
+runs a background worker that rewrites an untouched rollout journal as Zstandard, verifies the copy
+decodes and deletes the plain file, so a compressed session left the floor with **no error
+anywhere**. Read out of `codex.exe` 0.153.1's own string table rather than from a blog: the literal
+`.jsonl.zst`, `rollout compression worker failed for`, and a metrics family
+`codex.rollout_compression.{run.duration_ms, file.source_bytes, file.duration_ms, materialize,
+temp_cleanup}`. The documented ~7-day threshold is the only part still a hypothesis.
+
+`zlib.zstdDecompressSync` arrived in **Node 22.15**; this package's floor is **Node 18** (§130) and
+`08` §1.1 rule 3 forbids the dependency that would fill the gap. So there are two correct behaviours
+and the choice between them is a **capability check, not a version comparison**:
+
+- **A Node with Zstandard reads them.** `readRolloutHead` / `readRolloutTail` keep the plain path's
+  head/tail discipline exactly — the same bound, the same `truncated` flag, applied to the decoded
+  bytes — so a compressed session is summarised from the same records a plain one would be.
+- **A Node without counts them, and the count is said out loud twice.** `doctor` prints
+  _"N compressed Codex sessions are not read on Node < 22 (v18.x.y), so they are not on the floor."_
+  and the floor's degraded banner prints the same sentence.
+
+**Two bounds a plain read does not need**, because a `.zst` decides its own output size unless it is
+told otherwise: 16 MB in and 64 MB out. `zlib` enforces the second by **refusing rather than
+truncating**, which is the right way round — a half-decoded JSONL would be silently wrong, and a
+refusal is countable. Everything corrupt, oversized or undecodable resolves to `null` and is
+skipped, the way a corrupt line already is; nothing here can throw a scan.
+
+**The banner, and the one existing mechanism it reuses.** `snapshot.degraded` was
+`Record<string, boolean>`, where `true` meant "state is inferred because no hooks are installed" and
+the banner's **Install hooks** button was the fix. A value may now also be **the runtime's own
+sentence**, carried whole rather than flattened, because "some of your sessions are missing" is not
+a sentence a banner can reconstruct from a boolean — and because installing hooks would not fix it.
+`normalizeDegraded()` already treated any truthy value as degraded, so the banner appears with no
+client change; `degradedNotes()` renders the strings into `#degraded-text`, an element that had been
+captured and never written since it was added, and the button is hidden when a sentence is the only
+reason the banner is up. The registry fills the map from an optional `describeReadLimits()` after
+each scan, and an adapter that throws asking is treated as having nothing to say.
+
+**Still unverified, and this is the honest limit of it:** no compressed rollout written by Codex
+itself has been read. The frame is Zstandard and the content is the same JSONL — both out of the
+binary — but that it is a **bare** zstd frame rather than a container is the assumption a real one
+will settle. The round-trip test compresses a synthetic rollout with `zstdCompressSync` and reads it
+back through the adapter's own readers, which proves the plumbing and not the format.
+
+### 136.3 The hooks note was a false statement about somebody else's product
+
+`src/adapters/codex/hooks.mjs` told the user Codex "does not provide a way for DeckHQ to be notified
+when something happens in a session". §135.3 established that is untrue of 0.153.1, out of the
+shipped binary: `hooks.json` (with `failed to parse hooks config` beside it), `PermissionRequest`,
+`hook_event_name`, `hookSpecificOutput`, and `SessionStart`, `SessionEnd`, `PreToolUse`,
+`PostToolUse`, `UserPromptSubmit`, `TurnStart`, `TurnEnd`, `Notification`.
+
+`ADAPTERS.md` §5 and `08` §1.1 rule 11 forbid that as firmly as a false statement about our own
+product, so the note now says what Gemini CLI's says (§123.4): the mechanism exists and DeckHQ has
+not wired it up. It also names the reason that is **Codex's own** rather than Gemini's — the hook
+types are `command` and `mcp_tool` only, with **no `http` type at all**, so DeckHQ's existing block
+does not translate and reaching the daemon needs a `command` hook that reads its port and relays on
+stdin/stdout. That is §86.6 option 2, unchanged since WP-19's spike, and it is WP-58.
+
+**`supported: false` stays**, and not as a formality. Nobody has written a `hooks.json` on a real
+install and watched Codex read it back, and installing hooks **writes to a file the user owns** —
+the one class of mistake that breaks a working install of another product. The test asserts what the
+note must say and, more usefully, the four spellings of the claim it must never make again. The
+Gemini CLI adapter's header and its test both cited Codex as "the runtime with no hooks"; both now
+say what actually happened, so no adapter in this tree makes that claim.
+
+### 136.4 What is still unverified, unchanged
+
+The WP-23 acceptance checklist in [`plan/CODEX-VERIFICATION.md`](plan/CODEX-VERIFICATION.md) is
+untouched except for items 7, 8 and 9, which are what this package is. Everything that needs a real
+session still needs one: the `cwd` → room chain, the title, whether `token_count` is cumulative,
+whether `exec resume <id> --json <text>` parses with `--json` between the two positionals, whether
+archiving moves a session off the floor, and whether a poll leaves a rollout file's `mtime` alone.
+§8 stands, the `parse.mjs` header's "we have never observed it directly on this machine" stands, and
+the README's Honest limits line stands. Per `ADAPTERS.md` §6.4 they come out together, in one
+commit, when somebody has run it — and only as far as the run reached.

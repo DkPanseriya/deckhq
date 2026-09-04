@@ -307,6 +307,38 @@ test('settings round-trip and clamp the stall window', async () => {
   });
 });
 
+test('codexBin must be a file that exists, and never a batch launcher', async () => {
+  // WP-23a, docs/DEVIATIONS.md §136.1. This is `editor`'s class of setting —
+  // its value becomes a program — and this route is the only layer that can
+  // look at the disk, so it is the layer that refuses. A rejected value is
+  // reported rather than silently defaulted, which is what the store would do.
+  await withDaemon(async (d, dir) => {
+    const post = (body) =>
+      fetch(d.url + 'api/settings', { method: 'POST', body: JSON.stringify(body) });
+
+    const missing = await post({ codexBin: path.join(dir, 'no-such-codex.exe') });
+    assert.equal(missing.status, 400);
+    assert.match((await missing.json()).error, /existing file/i);
+
+    const shim = path.join(dir, 'codex.cmd');
+    await fs.writeFile(shim, '@echo off\n');
+    const batch = await post({ codexBin: shim });
+    assert.equal(batch.status, 400);
+    assert.match((await batch.json()).error, /cannot be a \.cmd or \.bat/i);
+
+    const real = path.join(dir, 'codex-stand-in');
+    await fs.writeFile(real, 'not really a binary, but it is a file\n');
+    const ok = await post({ codexBin: real });
+    assert.equal(ok.status, 200);
+    assert.equal((await ok.json()).codexBin, real);
+
+    // And "" is always accepted: it means "find it".
+    const cleared = await post({ codexBin: '' });
+    assert.equal(cleared.status, 200);
+    assert.equal((await cleared.json()).codexBin, '');
+  });
+});
+
 test('hook status is reported per adapter, including unsupported ones', async () => {
   await withDaemon(async (d) => {
     const res = await fetch(d.url + 'api/hooks');

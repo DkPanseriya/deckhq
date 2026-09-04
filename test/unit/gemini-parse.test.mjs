@@ -511,10 +511,12 @@ test('hooks: unsupported, and honest about WHY — the runtime has them, DeckHQ 
   assert.equal(hooks.supported, false);
   const plan = hooks.describe(4317);
   assert.deepEqual(plan.events, []);
-  // Gemini CLI genuinely has a hooks mechanism. Reusing Codex's "this runtime
-  // provides no way to be notified" would be a false claim about somebody
-  // else's product, which `08` §1.1 rule 11 forbids as firmly as a false claim
-  // about ours.
+  // Gemini CLI genuinely has a hooks mechanism, so "this runtime provides no
+  // way to be notified" would be a false claim about somebody else's product,
+  // which `08` §1.1 rule 11 forbids as firmly as a false claim about ours.
+  // Codex's note said exactly that sentence until WP-23a found the same thing
+  // true of Codex 0.153.1 and removed it there too (`DEVIATIONS.md` §136.3),
+  // so no adapter in this tree makes that claim any more.
   assert.match(plan.note, /does have a hooks mechanism/i);
   assert.match(plan.note, /settings\.json/);
   assert.doesNotMatch(plan.note, /no hook mechanism/i);

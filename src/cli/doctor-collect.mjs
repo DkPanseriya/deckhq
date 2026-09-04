@@ -220,21 +220,43 @@ export function checkState({ stateFile, dataDir }) {
  * that its own view can see.
  * @param {any} adapter
  * @param {{maxAgeDays:number, limit:number}} scan
+ * @param {{pinnedBin?: string}} [opts] the binary this runtime's setting pins,
+ *   when it has one. Only Codex does (`codexBin`, WP-23a).
  */
-export async function collectRuntime(adapter, scan) {
+export async function collectRuntime(adapter, scan, opts = {}) {
+  const binOpts = { codexBin: opts.pinnedBin || '' };
   const row = {
     id: adapter.id,
     label: adapter.label,
     available: false,
     /**
-     * The runtime's own version string. Always null today: the adapter
-     * interface (docs/02-ARCHITECTURE.md §2) exposes no `version()`, and
-     * asking the runtime directly would mean spawning its CLI from outside an
-     * adapter, which the architecture forbids. Read through an optional
-     * method so this row fills itself in the day the interface grows one.
-     * See docs/DEVIATIONS.md §72.
+     * The runtime's own version string. Null unless the adapter implements the
+     * optional `version()` — asking the runtime directly would mean spawning
+     * its CLI from outside an adapter, which the architecture forbids, so this
+     * row fills itself in only for a runtime whose adapter has grown one. The
+     * Codex adapter is the first (WP-23a); see docs/DEVIATIONS.md §72, §136.1.
      */
     version: null,
+    /**
+     * WP-23a. Which program this runtime's adapter would actually start, and
+     * how it found it — `pinned`, `path` or `bundled`. Null for an adapter
+     * that does not report one, which is every adapter but Codex today, and
+     * `{found:false}` for a machine whose transcripts are readable while the
+     * binary is not there. That distinction is the whole of §136.1: `codex`
+     * bundled inside the desktop app and off PATH read as "not installed".
+     * @type {{found:boolean, source:string|null, path:string|null,
+     *         lookedIn:string[], pinProblem:string|null,
+     *         shimOnPath:string|null}|null}
+     */
+    binary: null,
+    /**
+     * WP-23a. One sentence about what this runtime's last scan could NOT read,
+     * or null. Codex's compressed rollouts on a Node with no Zstandard are the
+     * only one today (`docs/DEVIATIONS.md` §136.2). Read through an optional
+     * adapter method, so a runtime that cannot fail to read anything has none.
+     * @type {string|null}
+     */
+    readLimit: null,
     sessions: 0,
     projects: 0,
     live: 0,
@@ -252,8 +274,28 @@ export async function collectRuntime(adapter, scan) {
   if (!row.available) return row;
 
   try {
-    if (typeof adapter.version === 'function') {
-      const v = await adapter.version();
+    if (typeof adapter.describeBinary === 'function') {
+      const b = await adapter.describeBinary(binOpts);
+      row.binary = b
+        ? {
+            found: Boolean(b.found),
+            source: b.source || null,
+            path: b.path || null,
+            lookedIn: Array.isArray(b.lookedIn) ? b.lookedIn : [],
+            pinProblem: b.pinProblem || null,
+            shimOnPath: b.shimOnPath || null,
+          }
+        : null;
+    }
+  } catch {
+    row.binary = null; // never fail the report over a row it can do without
+  }
+
+  try {
+    // Skipped when the binary is known to be missing: `version()` would only
+    // resolve null, and a spawn nobody can win is a spawn not worth making.
+    if (typeof adapter.version === 'function' && (!row.binary || row.binary.found)) {
+      const v = await adapter.version(binOpts);
       row.version = typeof v === 'string' && v.trim() ? v.trim() : null;
     }
   } catch {
@@ -267,6 +309,16 @@ export async function collectRuntime(adapter, scan) {
     row.projects = new Set(list.map((s) => s && s.cwd).filter(Boolean)).size;
   } catch (err) {
     row.error = err?.message || String(err);
+  }
+
+  try {
+    // AFTER the scan: it describes the scan that just ran.
+    if (typeof adapter.describeReadLimits === 'function') {
+      const limit = await adapter.describeReadLimits();
+      row.readLimit = typeof limit === 'string' && limit.trim() ? limit.trim() : null;
+    }
+  } catch {
+    row.readLimit = null;
   }
 
   try {
@@ -309,14 +361,38 @@ export async function collectRuntime(adapter, scan) {
  * @returns {Promise<string>}
  */
 export async function readTerminalPin(stateFile) {
+  const pin = (await readSettings(stateFile)).terminal;
+  return typeof pin === 'string' && pin.trim() ? pin.trim() : TERMINAL_AUTO;
+}
+
+/**
+ * The persisted settings, or `{}` for every way a state file can be unusable.
+ *
+ * Same discipline as `readTerminalPin` above and for the same reason: `doctor`
+ * must not construct a `Store`, because a read-only command must not be able
+ * to create the state it is reporting on.
+ * @param {string} stateFile
+ * @returns {Promise<Record<string, any>>}
+ */
+export async function readSettings(stateFile) {
   try {
     const parsed = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
-    const pin = parsed?.settings?.terminal;
-    return typeof pin === 'string' && pin.trim() ? pin.trim() : TERMINAL_AUTO;
+    const settings = parsed?.settings;
+    return settings && typeof settings === 'object' ? settings : {};
   } catch {
-    return TERMINAL_AUTO;
+    return {};
   }
 }
+
+/**
+ * Which runtime each binary-pinning setting belongs to (WP-23a).
+ *
+ * One entry, and it is named here rather than guessed from the key so that
+ * `doctor` does not grow a rule like "a setting ending in `Bin`". A second
+ * runtime that pins a binary adds a line.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const BINARY_PIN_SETTINGS = Object.freeze({ codex: 'codexBin' });
 
 /**
  * One hooks row per adapter that supports hooks.
@@ -424,6 +500,7 @@ export function candidatePorts(hookPorts, explicit, published = null) {
  *   scan?: {maxAgeDays:number, limit:number},
  *   terminal?: (opts:any) => Promise<any>,
  *   terminalPin?: string,
+ *   settings?: Record<string, any>,
  * }} [opts]
  */
 export async function collectReport(opts = {}) {
@@ -437,7 +514,12 @@ export async function collectReport(opts = {}) {
   const findTerminal = opts.terminal || describeTerminal;
 
   const list = adapters.getAdapters();
-  const runtimes = await Promise.all(list.map((a) => collectRuntime(a, scan)));
+  const settings = opts.settings || (await readSettings(stateFile));
+  const runtimes = await Promise.all(
+    list.map((a) =>
+      collectRuntime(a, scan, { pinnedBin: settings[BINARY_PIN_SETTINGS[a.id]] || '' }),
+    ),
+  );
   const hooks = await Promise.all(list.map((a) => collectHooks(a, { probe })));
 
   // Find the daemon, if there is one. TCP-probe every candidate in parallel
@@ -565,6 +647,39 @@ export async function collectReport(opts = {}) {
   }
   for (const row of runtimes) {
     if (row.error) problems.push(`${row.label} reported an error: ${row.error}`);
+    // WP-23a. Sessions that exist and are not on the floor. A note and exit 0
+    // — nothing is broken and there is nothing to repair on this Node — but
+    // it is the number `walkSessionFiles` used to drop in silence, and the
+    // whole fix is that somebody can now see it (§136.2).
+    if (row.readLimit) notes.push(row.readLimit);
+    // WP-23a. Transcripts readable, no program to run: the floor is right and
+    // "send" and "resume" cannot work. A NOTE and not a problem — the read
+    // path, which is most of the product, is entirely healthy — but it must
+    // not be silent, because the sentence it replaces claimed the runtime was
+    // not installed at all (`docs/DEVIATIONS.md` §136.1).
+    // A `codex.cmd` on PATH that we walked past. Node cannot start a batch
+    // shim without a shell, and this adapter will not run one, so the report
+    // says which one it used and why rather than looking arbitrary.
+    if (row.available && row.binary && row.binary.found && row.binary.shimOnPath) {
+      notes.push(
+        `${row.label} is on your PATH as ${row.binary.shimOnPath}, a batch shim Windows cannot ` +
+          `start without a shell. DeckHQ is using ${row.binary.path} instead.`,
+      );
+    }
+    if (row.available && row.binary && !row.binary.found) {
+      if (row.binary.pinProblem) {
+        problems.push(
+          `${row.label}'s pinned binary ${row.binary.pinProblem} is not a file, so nothing ` +
+            'can be sent or resumed. Clear the setting to search PATH and the app bundle again.',
+        );
+      } else {
+        notes.push(
+          `${row.label} transcripts are readable, but no ${row.id} binary was found — not on ` +
+            `PATH${row.binary.lookedIn.length ? `, and not in ${row.binary.lookedIn.join(' or ')}` : ''}. ` +
+            'Sending a turn and resuming in a terminal need one; the floor does not.',
+        );
+      }
+    }
   }
 
   return {
