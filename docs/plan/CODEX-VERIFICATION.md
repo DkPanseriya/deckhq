@@ -1,10 +1,17 @@
 # WP-23 prep — verifying the Codex adapter against real data
 
-**Status: preparation only. Nothing in the adapter changed, and the adapter is still unverified.**
-[`DEVIATIONS.md` §8](../DEVIATIONS.md) stands, [`ADAPTERS.md` §6](../ADAPTERS.md#6-the-honesty-rule)
-still applies, and the README's Honest limits line is untouched. This document exists so that the
-run which closes §8 can be done in twenty minutes by somebody who is not holding all of this in
-their head.
+**Status: the run happened. Results are in [§6](#6-wp-23-acceptance-checklist).** On 4 September
+2026 the adapter was exercised against two real rollout journals and one real
+`codex exec resume … --json` turn; four defects were found and fixed, and
+[`DEVIATIONS.md` §8](../DEVIATIONS.md) is **narrowed rather than closed** — four things were not
+reached (compressed rollouts, an actual terminal window, `liveSessions()`, hook delivery), so
+[`ADAPTERS.md` §6](../ADAPTERS.md#6-the-honesty-rule) keeps a warning in the README.
+
+**Everything below §6 is the preparation pass, unchanged, and was written before any of that.**
+Where it says the app has not run a task yet, or that a reading is unchecked, read it as the state
+on the morning of the run — the results table says which of those hypotheses survived. It is left
+intact rather than edited into hindsight, because half its value is being the document that
+predicted what would break.
 
 Measured on the reference Windows machine (win32-arm64, Windows 11) on **4 September 2026**, after
 the owner installed the **OpenAI Codex desktop app, build `26.901.31953`**. Everything under
@@ -425,9 +432,37 @@ until §6 item 6 has been checked — archiving **moves the file**, and moving i
 
 ## 6. WP-23 acceptance checklist
 
-Run `node bin/deckhq.mjs doctor` and open the floor after step A. Each line is either satisfied or
-becomes a numbered defect; **the package is not done until every one has an answer, including the
-ones that turn out to be "no"**.
+**RUN, 4 September 2026.** codex-cli 0.153.1, Windows 11, against two real rollout journals — one
+written by the desktop app in `C:\Dk\Projects\0_Tool_OfflineKit`, one created by this run with
+`codex exec` in a throwaway repository under the scratchpad. **Two real Codex turns were spent**
+(`codex exec --json "reply OK"`, then `codex exec resume <id> --json "reply OK again"`); a third was
+budgeted and not needed. Full write-up in [`DEVIATIONS.md` §137](../DEVIATIONS.md).
+
+| # | Check | Result | Where |
+|---|---|---|---|
+| 1 | Session on the floor, in its own room, not `unknown` | **PASS** — room `0_Tool_OfflineKit`, `cwd` from `session_meta`, state `ended` | §137.1 |
+| 2 | Title is the first user prompt | **FAILED, fixed** — was `<recommended_plugins> Here is a list…` on every session; now "check what is this" | §137.2 |
+| 3 | Token and cache totals are real and plausible | **FAILED, fixed** — a resumed session reported 12 621 against a true 25 231; `costEstimate` 0.044, never `$0.00` | §137.3 |
+| 4 | State, turn-ended, six-state mapping | **PASS**, and improved — the rollout does carry `task_started`/`task_complete`, so the boundary is read rather than guessed | §137.1 |
+| 5 | `doctor` row | **PASS** — `codex  codex-cli 0.153.1  (bundled with the app)`, 1 session across 1 project, plus the npm-shim note | §2.5, §136.1 |
+| 6 | `resume` argv, asserted against `--help` (no window opened) | **PASS** — `codex resume [OPTIONS] [SESSION_ID] [PROMPT]` matches `['codex','resume',<id>]` exactly | §4.1 |
+| 7 | `send()` — one real `exec resume <id> --json <text>` | **PASS on argv and transport, FAILED on the reply** — the flag order parses, the answer returns in 5.8 s, the rollout grows in place (45 131 → 53 061 B, same file); but the exec event schema is not the rollout schema and the panel got raw JSONL. Fixed | §137.4 |
+| 8 | Archive | **MEASURED** — `codex archive <id>` on a scratch session physically MOVES the rollout to `~/.codex/archived_sessions/`, so it leaves the floor. The owner's session was not archived; the app's own UI was not driven | §137.6 |
+| 9 | A poll leaves `mtime` untouched | **PASS** — size, `mtime`, `ctime` and SHA-256 identical across poll cycles | §137.8 |
+| 10 | Zero cloud threads on the floor | **PASS** — 100 `cwd IS NULL` chatgpt rows in `codex-dev.db`, none on the floor; nothing in `src/` opens SQLite at all | §137.8 |
+| 11 | Is `session_index.jsonl` used? | **DECIDED: no.** 1 entry against 5 rollout files — desktop threads only. Using it would have hidden four sessions out of five | §137.6 |
+| 12 | Hooks — `PermissionRequest` command-hook delivery | **NOT REACHABLE.** `~/.codex` writes were forbidden; a project-local `.codex/hooks.json` and a `-c hooks.*` session flag both delivered nothing, because hooks need a persisted trust hash and `codex exec` runs with `approval: never`. WP-58 unchanged | §137.7 |
+| 13 | Nothing under `~/.codex` modified | **PASS** — 10 055 entries with sizes and mtimes, identical hash before and after a window of three scans and three panel opens | §137.8 |
+
+One defect outside the numbered list, found while checking item 1: `originator` was a `cwd`
+fallback and is a client name (`'Codex Desktop'`, `'codex_exec'`), so a session with no `cwd` would
+have been filed in a room named after a program. §137.5.
+
+---
+
+The original checklist follows, unchanged. Run `node bin/deckhq.mjs doctor` and open the floor after
+step A. Each line is either satisfied or becomes a numbered defect; **the package is not done until
+every one has an answer, including the ones that turn out to be "no"**.
 
 1. **The session is on the floor.** One Codex agent appears, in a room named for the scratch
    project — **not** in `unknown`. This is the `cwd` chain (`session_meta.payload.cwd` →

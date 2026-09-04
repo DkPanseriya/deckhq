@@ -694,6 +694,23 @@
 
 ### Changed
 
+- **The Codex adapter has read sessions Codex wrote.** Two real rollout journals from codex-cli
+  0.153.1 on Windows — one from the desktop app, one from `codex exec` — and one real
+  `codex exec resume <id> --json <text>` sent from DeckHQ itself. The room, the session id, the
+  model, the resume argv and the six-state mapping all held; four things did not and are in Fixed.
+  Two smaller results worth having: archiving a Codex session **moves** its rollout out of
+  `~/.codex/sessions` into `~/.codex/archived_sessions`, so the session leaves the floor — that is
+  now a recorded decision rather than an accident — and `~/.codex/session_index.jsonl` is
+  deliberately **not** read, because it indexed 1 of the 5 sessions on disk and using it would have
+  hidden the other four. Nothing under `~/.codex` was modified by any of it: a listing of all
+  10 055 entries with their sizes and mtimes hashes identically before and after a window
+  containing three poll cycles and three panel opens. `docs/DEVIATIONS.md` §137,
+  `docs/plan/CODEX-VERIFICATION.md` §6.
+- **Whether a Codex turn has ended is read rather than guessed.** A rollout brackets every turn
+  with `task_started` and `task_complete`, which this package had assumed it did not — so
+  `turnEnded` was "the assistant spoke last", which reads a session as finished for the whole time
+  it is running a tool after its last sentence. The boundary is used where the file carries one and
+  the old test remains for the files that do not.
 - **The building is the size of what is in it.** The floor drew the right rooms and then measured
   them wrong: the envelope was built to the window's shape and the treemap stretched whatever
   rooms there were to tile it, so one active project got an 88 x 67 room for a two-seat table —
@@ -896,6 +913,33 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
 
 ### Fixed
 
+- **Every Codex session on the floor was called `<recommended_plugins> Here is a list of…`.** Codex
+  writes context of its own into a rollout ahead of the prompt — a `developer` record of house
+  rules, then a `user` record holding `<recommended_plugins>` and `<environment_context>` — and
+  "the title is the first user message" took the wrong one, in both the desktop app's rollouts and
+  the CLI's. The panel opened on the same 5 KB blob. Each record says what it is
+  (`content_item_kinds`, `['user.text']` for a real prompt), so DeckHQ reads the declaration rather
+  than the text: the OfflineKit session on the reference machine now reads **"check what is this"**,
+  and its conversation is two messages instead of three. `docs/DEVIATIONS.md` §137.2.
+- **A resumed Codex session reported half the tokens it had spent.** `token_count`'s
+  `total_token_usage` totals the CLI _process_, not the conversation, so a session resumed by a
+  fresh `codex exec` reported its newest turn as its lifetime total — measured, 12 621 against a
+  true 25 231. Codex does write the real figure, as `thread_token_usage` on its
+  `token_usage_record`, and DeckHQ now prefers it wherever it appears instead of trusting the last
+  number in the file. Nothing is summed, then or now: both are running totals.
+  `docs/DEVIATIONS.md` §137.3.
+- **Replying to a Codex session from the panel answered with a wall of JSON.** `codex exec --json`
+  does not speak the rollout file's schema — it emits `{"type":"item.completed","item":{"type":
+"agent_message","text":"…"}}`, where the rollout would carry a `payload` with a content-part
+  array — so DeckHQ recognised none of it, fell through to "print whatever came out", and put the
+  raw event stream in the panel as the assistant's reply. It now reads the exec schema, and reads
+  the stream's own error events too, so a turn that failed is reported as a failure rather than
+  arriving as a blob. `docs/DEVIATIONS.md` §137.4.
+- **A Codex session with no working directory would have been filed in a room named after a
+  program.** The `cwd` fallback chain ended `cwd → originator → workdir`, and `originator` is the
+  name of the client that opened the session — `Codex Desktop`, `codex_exec` — never a path. It is
+  out of the chain; a session with no `cwd` reads `unknown`, which is what `docs/ADAPTERS.md`
+  requires. `docs/DEVIATIONS.md` §137.5.
 - **DeckHQ told people Codex was not installed while Codex was running in the next window.** The
   Codex desktop app creates `~/.codex` and installs a complete `codex` CLI — 250 MB, the real thing
   — at `%LOCALAPPDATA%\OpenAI\Codex\bin\<build-hash>\codex.exe`, and does **not** put it on `PATH`.
@@ -1457,19 +1501,19 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
 
 ### Known gaps
 
-- **The Codex adapter still has not read a session Codex wrote.** The Codex desktop app is on the
-  reference machine now, which is new, and three things were fixed because of it — the bundled
-  binary, compressed rollouts, and a hooks note that was false (`docs/DEVIATIONS.md` §136). **None
-  of those is the read path.** How a rollout file is interpreted is unchanged and still comes from
-  documentation and from the shipped binary's string table rather than from a file: whether
-  `token_count` is a running total or an increment, which record types are tool calls, and whether
-  `codex exec resume <id> --json <text>` parses with `--json` between the two positionals are all
-  exactly as unverified as they were. Nor has a compressed rollout that Codex itself produced been
-  read — the round trip is proved against one this project compressed. What is now true and was not:
-  the session directory layout, the `session_meta` shape and all three command forms have been
-  checked against `codex.exe` 0.153.1's own `--help` and string table, so the adapter is a
-  reasonable implementation of a real grammar rather than of a remembered one. It reports itself
-  correctly on a machine with no Codex and degrades without throwing.
+- **What the Codex run did not reach.** The read path and `send()` have now been exercised against
+  real rollouts (see Fixed), which leaves four things still unverified rather than the whole
+  adapter. **No compressed rollout Codex itself produced has been read** — no session on the
+  reference machine is old enough to have been compressed, so that round trip is still proved only
+  against one this project compressed. **No terminal has been launched**: "Open in terminal" is
+  asserted argv-for-argv against `codex resume --help`, which proves the command is the one Codex
+  documents and not that the window opens in the right session. **`liveSessions()` still returns
+  `[]` by design** — `codex agents` is a TUI with no `--json`, so a Codex session's liveness is
+  inferred from file mtime like Gemini CLI's and OpenCode's. And **DeckHQ still installs no Codex
+  hooks**: WP-23 tried the two routes that need no write into `~/.codex` — a project-local
+  `.codex/hooks.json` and a `-c hooks.*` session flag — and neither delivered an event, because
+  hooks carry a trust hash that only the interactive TUI can grant and `codex exec` runs with
+  `approval: never`. `docs/DEVIATIONS.md` §137.
 - **The Gemini CLI adapter has never met a real Gemini CLI.** `~/.gemini` does not exist on the
   reference machine. Every field name in it was read out of the `google-gemini/gemini-cli` source on
   2026-09-04 and pinned against a synthetic fixture; none of it has been checked against a profile a

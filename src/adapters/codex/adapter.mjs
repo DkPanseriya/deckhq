@@ -5,10 +5,19 @@
  * no Codex at all — `available()` resolves false, and every other method
  * degrades to an empty/failed result rather than throwing. That was the
  * reference build machine's own situation until 4 September 2026, when the
- * Codex desktop app was installed on it (`docs/DEVIATIONS.md` §135); the read
- * path has still never been checked against a session somebody actually had,
- * so §8 stands and this file is still written and reasoned about rather than
- * exercised end to end.
+ * Codex desktop app was installed on it (`docs/DEVIATIONS.md` §135).
+ *
+ * On the same day this was finally run against real sessions — WP-23,
+ * `docs/DEVIATIONS.md` §137, results table in
+ * `docs/plan/CODEX-VERIFICATION.md` §6. `scanSessions`, `conversation`,
+ * `version`, `describeBinary` and `send` (through a real
+ * `codex exec resume <id> --json <text>`) were all exercised against
+ * codex-cli 0.153.1 on Windows, and the room, the id, the resume argv and the
+ * read-only promise all held. Four things did not, and are fixed here and in
+ * `./parse.mjs`: the token total, the title, the exec event schema, and the
+ * `originator` fallback. `liveSessions`, `openInTerminal` and `openNewSession`
+ * remain unexercised — nothing launched a terminal — so §8 is narrowed rather
+ * than deleted.
  *
  * The app's arrival did settle one thing this file had wrong. `~/.codex`
  * existing and `codex` being runnable are two different questions, because the
@@ -45,6 +54,7 @@ import { hooks } from './hooks.mjs';
 import {
   HEAD_BYTES,
   TAIL_BYTES,
+  extractExecEvent,
   extractMessage,
   extractModelHint,
   extractSessionMeta,
@@ -57,6 +67,7 @@ import {
   readRolloutTail,
   sessionIdFromFilename,
   truncateTitle,
+  turnBoundary,
 } from './parse.mjs';
 
 /** Bound on how many file heads we are willing to open for an id lookup. */
@@ -255,8 +266,12 @@ async function buildSessionSummary(filePath, mtimeMs) {
   let lastRole = null;
   let lastText = '';
   let lastMsgAt = null;
-  let usage = null;
+  /** The newest reading of each scope; see parse.mjs shape list §7. */
+  let threadUsage = null;
+  let turnUsage = null;
   let model = null;
+  /** The newest turn boundary seen, or null when the tail carried none. */
+  let boundary = null;
 
   for (const rec of tailRecords) {
     if (!meta) {
@@ -271,10 +286,19 @@ async function buildSessionSummary(filePath, mtimeMs) {
       if (!firstUserText && msg.role === 'user') firstUserText = msg.text;
     }
     const u = extractUsage(rec);
-    if (u) usage = u; // last one wins: assumed cumulative, see parse.mjs
+    // Last one of each scope wins; they are running totals, never summed.
+    if (u && u.scope === 'thread') threadUsage = u;
+    else if (u) turnUsage = u;
     const m2 = extractModelHint(rec);
     if (m2) model = m2;
+    const b = turnBoundary(rec);
+    if (b) boundary = b;
   }
+
+  // A thread total beats a turn total whenever the file has one: on a resumed
+  // session the turn total is the newest turn and the thread total is the
+  // conversation (parse.mjs shape list §7).
+  const usage = threadUsage || turnUsage;
 
   const filename = path.basename(filePath);
   const sessionId = (meta && meta.id) || sessionIdFromFilename(filename);
@@ -304,10 +328,12 @@ async function buildSessionSummary(filePath, mtimeMs) {
     }),
     lastRole,
     lastText: clampText(lastText),
-    // The codex rollout format carries no per-record tool boundaries to read
-    // the way the Claude Code transcript does, so this stays the old, weaker
-    // test: the assistant having spoken last.
-    turnEnded: lastRole === 'assistant',
+    // MEASURED (WP-23): the rollout DOES carry turn boundaries — every turn is
+    // bracketed by `task_started` / `task_complete`. So when the tail has one,
+    // read it. The old, weaker test — the assistant having spoken last — is
+    // kept for the rollouts that carry no boundary at all, where it is still
+    // the best available guess.
+    turnEnded: boundary ? boundary === 'ended' : lastRole === 'assistant',
   };
 }
 
@@ -477,9 +503,16 @@ async function conversation(id, { maxMessages } = {}) {
 }
 
 /**
- * Pull the last assistant message out of a `codex exec --json` event stream,
- * reusing the same shape-tolerant parsing as the on-disk rollout format
- * (they are assumed to share an event schema).
+ * Pull the last assistant message out of a `codex exec --json` event stream.
+ *
+ * This used to run the stream through the ROLLOUT extractors, on the written
+ * assumption that the two shared an event schema. MEASURED (WP-23,
+ * `parse.mjs` shape list §10): they do not, and none of the rollout shapes
+ * matched a single line of a real `codex exec --json` run — so `send()`
+ * succeeded and handed the panel the raw JSONL as the assistant's reply.
+ *
+ * The exec schema is read first and the rollout schema kept as a fallback, so
+ * a future build that unifies them needs no change here.
  * @param {string} stdout
  * @returns {string}
  */
@@ -489,8 +522,34 @@ function extractFinalAssistantText(stdout) {
   for (const line of lines) {
     const rec = parseLine(line);
     if (!rec) continue;
+    const ev = extractExecEvent(rec);
+    if (ev) {
+      if (ev.kind === 'assistant') last = ev.text;
+      continue;
+    }
     const msg = extractMessage(rec);
     if (msg && msg.role === 'assistant' && msg.text) last = msg.text;
+  }
+  return last;
+}
+
+/**
+ * The failure a `codex exec --json` stream reported, if it reported one.
+ *
+ * MEASURED: `exec` can print `{"type":"error",…}` / `{"type":"turn.failed",…}`
+ * and still exit 0, so an exit code alone is not enough to know whether a turn
+ * worked. Reading the stream's own verdict means a failed turn is reported as
+ * a failure instead of arriving in the panel as a JSON blob.
+ * @param {string} stdout
+ * @returns {string}
+ */
+function extractExecError(stdout) {
+  let last = '';
+  for (const line of linesFromChunk(stdout)) {
+    const rec = parseLine(line);
+    if (!rec) continue;
+    const ev = extractExecEvent(rec);
+    if (ev && ev.kind === 'error') last = ev.text;
   }
   return last;
 }
@@ -568,11 +627,23 @@ function runCodex(args, { cwd, timeoutMs, command = CODEX_COMMAND } = {}) {
       stderr += chunk.toString('utf8');
     });
     child.on('close', (code) => {
-      if (code === 0) {
-        finish({ ok: true, text: extractFinalAssistantText(stdout) || stdout.trim() });
-      } else {
+      if (code !== 0) {
         finish({ ok: false, error: stderr.trim() || `codex exited with code ${code}` });
+        return;
       }
+      const text = extractFinalAssistantText(stdout);
+      if (text) {
+        finish({ ok: true, text });
+        return;
+      }
+      // Exit 0 with no assistant message: `codex exec` reports a failed turn in
+      // its own event stream, so ask the stream before calling this a success.
+      const failure = extractExecError(stdout);
+      if (failure) {
+        finish({ ok: false, error: failure });
+        return;
+      }
+      finish({ ok: true, text: stdout.trim() });
     });
   });
 }
