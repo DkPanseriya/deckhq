@@ -26,6 +26,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { generateKeyPairSync } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 const packs = await import('../../src/core/packs.mjs');
 const { THEMES, THEME_NAMES, themeByName, themeNames } = await import('../../src/core/themes.mjs');
@@ -33,7 +34,8 @@ const { avatarSetByName, avatarSets } = await import('../../src/core/avatars.mjs
 const { STATE_COLORS } = await import('../../public/render/palette.js');
 const { PUBLISHER_KEYS } = await import('../../src/core/publisher-key.mjs');
 
-const REPO = path.resolve(import.meta.dirname, '..', '..');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..', '..');
 
 /** A publisher key of our own, so no test needs the real private half. */
 const pair = generateKeyPairSync('ed25519');

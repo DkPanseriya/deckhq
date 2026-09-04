@@ -44,11 +44,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const { startDaemon } = await import('../../src/daemon.mjs');
 const packsCore = await import('../../src/core/packs.mjs');
 
-const REPO = path.resolve(import.meta.dirname, '..', '..');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..', '..');
 const SAMPLE_DIR = path.join(REPO, 'packs', 'supporter-sample');
 const SAMPLE_SIGNED = path.join(SAMPLE_DIR, 'supporter-sample-1.0.0.deckhq-pack.json');
 

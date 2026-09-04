@@ -861,6 +861,15 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
 
 ### Fixed
 
+- **CI was red on every Node 18 job: four pack/replay tests found their repo root with an API
+  Node 18 doesn't have.** `import.meta.dirname` shipped in Node 20.11; this package's floor is
+  `>=18`, and there it is `undefined`, so `path.resolve(import.meta.dirname, ...)` threw before a
+  test in the file could run. `test/unit/packs.test.mjs`, `test/unit/pack-cli.test.mjs`,
+  `test/unit/replay.test.mjs` and `test/integration/pack-acceptance.test.mjs` now use
+  `path.dirname(fileURLToPath(import.meta.url))`, the form the rest of the tree already uses.
+  `test/unit/node18-floor.test.mjs` now greps `src/`, `scripts/`, `packs/`, `plugin/` and `test/`
+  for that API and five more newer than Node 18, so the next one fails here instead of on the
+  Node 18 leg. `docs/DEVIATIONS.md` §130.
 - **A daemon with a browser attached can now be shut down at all.** `close()` awaits
   `server.close()`, which waits for every request to finish, and `/api/events` is a request in
   flight **forever, by design** — so one page parked on the floor meant `close()` never returned.
