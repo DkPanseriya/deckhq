@@ -9810,3 +9810,133 @@ is not, and neither can be reproduced here — 126.1's pipe is synchronous on Wi
 runner is what confirms it. 126.3's deadlock **was** reproduced here, directly and in both
 directions, but the SIGTERM path that triggers it in the wild does not exist on Windows, so that the
 goldens job now completes on ubuntu is also a CI-only fact.
+
+## 127. WP-32 design — the relay is a router that cannot read, and the eight decisions that made it one
+
+`docs/06-RELAY-DESIGN.md`. A document, not code: no file under `src/`, `public/` or `test/` was
+touched, nothing here has been run, and per `08` §1.1 rule 11 every sentence about a third-party
+API in that document is a hypothesis carrying a URL and a retrieval date until day 1 of WP-32
+measures it.
+
+The numbering follows the blueprint docs (`01`–`05`, then `ADAPTERS.md`), because the relay is a
+protocol the product has to hold to for years and not a growth bet — the `plan/` directory is for
+what DeckHQ becomes, and this is part of what it *is*.
+
+### 127.1 Why a design document at all, before ten days of building
+
+`06-ENGINEERING-WORKPLAN.md` WP-32 is three lines and a pointer to `03-BUSINESS-MODEL.md` §3. §3 is
+a business section: it names five binding constraints and promises a threat model without
+containing one. Ten days is not enough to design a cryptographic protocol and build it, and the two
+claims the tier is sold on — *the relay cannot read anything* and *the free product still makes
+zero outbound connections* — are the kind that become false by accident during implementation and
+stay false because nobody wrote down what they meant. So the constraints are now a table with an
+enforcement point per row (§1), and each of the eight decisions below is settled before anyone
+opens an editor.
+
+### 127.2 The eight decisions
+
+1. **One floor key, not a key per device pair.** A phone paired in October must read a day file
+   written in September; pairwise keys mean re-encrypting 90 days of history per new device on a
+   machine that may be off, and eight keys for four machines and two phones. The cost is stated
+   rather than hidden: any device holding the floor key reads everything, so a lost phone is a
+   floor-wide event, and revocation therefore rotates the key automatically instead of leaving it
+   to a user who would not know to.
+
+2. **AES-256-GCM, and therefore a deterministic nonce, and therefore a reservation window.** The
+   zero-dependency rule (`08` §1.1 r3) makes the AEAD the intersection of `node:crypto` and
+   WebCrypto. WebCrypto does not list ChaCha20-Poly1305 and neither offers XChaCha20, so the AEAD
+   is AES-256-GCM with a 96-bit nonce — far too short to pick at random for a long-lived key. The
+   nonce is `epoch ‖ seq`, which makes the sequence number safety-critical rather than a
+   convenience: a repeat leaks the XOR of two plaintexts and the GCM authentication subkey. The
+   daemon therefore reserves 1,000 sequence numbers to disk before spending any, so a crash can
+   lose numbers and can never reuse one. This is the sharpest consequence of a rule that was
+   written for a completely different reason.
+
+3. **A six-digit confirmation at pairing is mandatory and cannot be skipped.** The QR carries the
+   daemon's public key over the user's own screen, which the relay cannot touch; the phone's key
+   comes back *through the relay*, which could substitute its own and sit in the middle from that
+   moment on. The short authentication string is the only thing that closes it. A "skip" button, a
+   "trust this device" checkbox or an automatic match would make the relay able to read everything
+   — the one thing the product cannot survive being wrong about.
+
+4. **The invariant crosses the wire as four named enforcement points, not as a promise.** A daemon
+   **never accepts state from the wire**: an inbound `snapshot/*` is dropped and counted, and only
+   `action`, `send`, `permission/decide` and `control/*` are processed, only for sessions this
+   machine owns, only after an Ed25519 signature verifies against a device currently in the list.
+   The phone has no write path at all — rendering, scrolling, opening a card, receiving a push and
+   tapping a notification send nothing. Actions carry a client-minted `actionId` behind a
+   10-minute LRU so a replay acknowledges without re-applying. All four get `INVARIANT:` tests, in
+   the style of §97's and §100's.
+
+5. **Ownership, not merge, for multi-machine.** Each daemon is the sole authority for its own
+   machine's sessions, so one floor from N daemons is a *union* and a union has no conflicts — no
+   vector clocks, no last-writer-wins, no story for two machines disagreeing about whether you
+   acknowledged something. `agentId` is already globally unique and the ledger already carries
+   `machineId` (§100), so the substrate was in place before the design needed it. Rooms merge on
+   `projectKey`, which means the same absolute path on two machines is one room and two different
+   paths are two rooms with a machine suffix on the plate when — and only when — the names collide.
+
+6. **The relay is the push application server, so it must never be handed plaintext.** RFC 8291
+   already hides a push payload from Google, Apple and Mozilla, but it hides nothing from the
+   application server, which is us. Default is an opaque 16-byte wake token and the service worker
+   fetches and decrypts the real notification; because Chrome and Edge require `userVisibleOnly`, a
+   worker that cannot reach the relay in 4 s shows a generic fallback rather than failing silently.
+   The optional mode encrypts the body under the floor key a second time and hands the relay a blob
+   — 512 bytes inside the 3,993 that survive RFC 8188/8291 framing in the 4,096 a push service must
+   support. §101's interruption budget is enforced on the phone, which is the only party that knows
+   what this user has already seen, with a relay-side rate limit underneath because a limit that
+   lives only in a client is a limit a bug removes.
+
+7. **The deck carries `deckOrder` on the wire, which is a deliberate departure from §103.1.** That
+   entry rejected sending the queue order in the snapshot payload, for three reasons that were all
+   about the local client. None of them holds for a phone that cannot import `src/` or `public/`,
+   and a third hand-written copy of the ordering rule in a separate PWA codebase is exactly the
+   drift §103.1 exists to prevent. So `groupRows()`'s order rides in the envelope, and the existing
+   two-implementation equality test grows a third sequence.
+
+8. **`POST /api/open` is never relayed.** Spawning a terminal on a machine you are not sitting at
+   is not a feature, it is a remote-execution primitive with a friendly name.
+
+### 127.3 What the document refuses to claim
+
+Three properties are named as absent rather than argued away: **no forward secrecy** (device
+identity keys are long-lived, so a recorded stream plus a later key compromise decrypts that epoch
+— mitigated partially by 30-day rotation and a 7-day queue, and a double ratchet is refused in §11
+with its reason), **no metadata privacy** (the relay sees rooms, devices, timings and size buckets,
+and traffic padding was refused as a battery cost to obscure what the account's existence already
+implies), and **no protection from the user's own compromised machine**, which is out of scope
+honestly rather than narrowed by marketing.
+
+Four third-party claims could not be settled from primary documentation and are labelled
+`UNVERIFIED` in place: that `crypto.diffieHellman()` accepts X25519 key objects on the project's
+Node floor; that WebCrypto's `X25519` is present on all four target browsers (MDN lists the
+algorithm with an explicit per-browser caveat); the same for `Ed25519`; and that Safari on iOS
+delivers a push a service worker can decrypt with a non-extractable IndexedDB key while the app is
+backgrounded. Day 1 of WP-32 and day 1 of WP-33 are spikes that turn each into a measurement or a
+redesign. §101's deviation 4 is the standing lesson — the PWA's installability was recorded as
+working when only its manifest had been checked.
+
+### 127.4 Open for the owner
+
+Hosting provider (Cloudflare Durable Objects fits the room shape and hibernation billing, but
+*"code updates disconnect all WebSockets"* and §9's self-hostable reference server has to be plain
+Node anyway — the recommendation is one Node server behind Cloudflare rather than two
+implementations); the domain, since `relay.deckhq.dev` is assumed throughout and not registered;
+the pricing-page copy, specifically whether *"the relay can see when you are working and how much"*
+sits above the fold, which the Architect's position says it should; the server licence
+(FSL-1.1-Apache-2.0 recommended, BUSL-1.1 the conservative alternative, with the client half MIT
+either way); VAPID key custody and rotation; whether relay retention stays coupled to the ledger's
+90 days; confirmation that `machineId` may travel encrypted to the user's own devices, which §100
+decision 6 flagged for the owner when nothing sent it anywhere; and whether `osNotify` should
+default on once a phone exists, which §101 §5 left open pending exactly this.
+
+### 127.5 Acceptance
+
+There is nothing to accept yet, and that is the point of the entry. `npm run format:check` passes —
+`docs/` is in `.prettierignore`, so the document is prose the formatter never touches, and the
+check was run rather than assumed. No test count moved. No golden moved. The P4 gate in
+`03-BUSINESS-MODEL.md` §7 is unchanged, with one addition the design makes of itself: **the alpha
+does not open** until the zero-egress, invariant, hostile-relay, privacy-capture and
+relay-database-dump acceptance items have run green on the reference machine. A relay that turns
+out to be readable after fifty people have paid is not a bug, it is the end of the product's one
+real differentiator.
