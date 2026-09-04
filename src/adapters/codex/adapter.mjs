@@ -1,13 +1,20 @@
 /**
  * Codex runtime adapter. Implements `RuntimeAdapter` (docs/02-ARCHITECTURE.md §2).
  *
- * CRITICAL: Codex is not installed on the reference build machine — `~/.codex`
- * does not exist there (CONTRACTS.md). Every exported method here must be safe
- * to call in that situation: `available()` resolves false, and every other
- * method degrades to an empty/failed result rather than throwing. The same
- * code must also be a correct, complete implementation for a machine where
- * Codex *is* present — it is written and reasoned about as such, just never
- * exercised end-to-end here.
+ * CRITICAL: every exported method here must be safe to call on a machine with
+ * no Codex at all — `available()` resolves false, and every other method
+ * degrades to an empty/failed result rather than throwing. That was the
+ * reference build machine's own situation until 4 September 2026, when the
+ * Codex desktop app was installed on it (`docs/DEVIATIONS.md` §135); the read
+ * path has still never been checked against a session somebody actually had,
+ * so §8 stands and this file is still written and reasoned about rather than
+ * exercised end to end.
+ *
+ * The app's arrival did settle one thing this file had wrong. `~/.codex`
+ * existing and `codex` being runnable are two different questions, because the
+ * app installs a complete CLI it does not put on `PATH` — so `available()`
+ * answers the first (transcripts readable) and `./binary.mjs` answers the
+ * second, at the three moments that need a program. §136.1.
  *
  * All Codex-specific file-format knowledge lives in ./parse.mjs. This file
  * only does I/O (directory walking, bounded reads, child-process spawning)
@@ -32,6 +39,7 @@ import path from 'node:path';
 import { agentId, clampText, splitAgentId } from '../../core/model.mjs';
 import { estimateCost } from '../../core/rates.mjs';
 import { launchTerminal } from '../../core/terminals.mjs';
+import { CODEX_COMMAND, describeMissingBinary, resolveCodexBinary } from './binary.mjs';
 import { hooks } from './hooks.mjs';
 import {
   HEAD_BYTES,
@@ -69,6 +77,18 @@ let availableCache = null;
 
 /**
  * Is Codex present on this machine? Cheap, cached, never throws.
+ *
+ * **This answers "are transcripts readable", and nothing else** (WP-23a,
+ * `docs/DEVIATIONS.md` §136.1). `~/.codex` is where the rollout files live, so
+ * its presence is exactly the condition for the read path — the scan, the
+ * conversation, the floor — and no process is needed for any of it.
+ *
+ * It is deliberately NOT a claim that the `codex` program exists. The Codex
+ * desktop app creates `~/.codex` and installs a CLI it does not put on `PATH`,
+ * so those two questions have different answers on a real machine. The write
+ * path (`version()`, `send()`, resume) asks the second one for itself, through
+ * `./binary.mjs`; adding a second probe here would put it on the poll path,
+ * which is the cost §77 removed.
  * @returns {Promise<boolean>}
  */
 async function available() {
@@ -400,10 +420,17 @@ function extractFinalAssistantText(stdout) {
   return last;
 }
 
-/** @param {unknown} err */
-function describeSpawnError(err) {
+/**
+ * @param {unknown} err
+ * @param {string} command the path we actually tried to start
+ */
+function describeSpawnError(err, command) {
   if (err && typeof err === 'object' && /** @type {any} */ (err).code === 'ENOENT') {
-    return 'Codex is not installed';
+    // This used to say "Codex is not installed", which was false on the one
+    // machine that had Codex: the app's bundled CLI is not on PATH, so the
+    // spawn failed and the message blamed the install (§136.1). It now names
+    // the path that was not there, which is a fact rather than a diagnosis.
+    return `codex binary not found at ${command}`;
   }
   return (err && /** @type {any} */ (err).message) || 'failed to spawn codex';
 }
@@ -412,21 +439,26 @@ function describeSpawnError(err) {
  * Spawn `codex` with an argv array (never a shell string) and collect its
  * result. Always resolves — a missing binary, a non-zero exit, or a timeout
  * all produce `{ok:false, error}` rather than a rejection.
+ *
+ * `command` is the resolved program (`./binary.mjs`), NOT the bare name: on a
+ * machine where only the desktop app's bundled copy exists there is nothing
+ * called `codex` for the OS to find. It defaults to the bare name so a caller
+ * that has already decided (the terminal launchers) can still say so.
  * @param {string[]} args
- * @param {{cwd?:string, timeoutMs?:number}} [opts]
+ * @param {{cwd?:string, timeoutMs?:number, command?:string}} [opts]
  * @returns {Promise<import('../../core/model.mjs').SendResult>}
  */
-function runCodex(args, { cwd, timeoutMs } = {}) {
+function runCodex(args, { cwd, timeoutMs, command = CODEX_COMMAND } = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn('codex', args, {
+      child = spawn(command, args, {
         cwd: cwd || undefined,
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (err) {
-      resolve({ ok: false, error: describeSpawnError(err) });
+      resolve({ ok: false, error: describeSpawnError(err, command) });
       return;
     }
 
@@ -453,7 +485,7 @@ function runCodex(args, { cwd, timeoutMs } = {}) {
       }, timeoutMs);
     }
 
-    child.on('error', (err) => finish({ ok: false, error: describeSpawnError(err) }));
+    child.on('error', (err) => finish({ ok: false, error: describeSpawnError(err, command) }));
     child.stdout?.on('data', (chunk) => {
       stdout += chunk.toString('utf8');
     });
@@ -470,22 +502,92 @@ function runCodex(args, { cwd, timeoutMs } = {}) {
   });
 }
 
-/** Cached across the process lifetime once determined. */
-let resumeSupportCache = null;
+/**
+ * Cached across the process lifetime once determined, per binary: a user who
+ * pins a different `codexBin` mid-run gets that binary's answer, not the one
+ * before it.
+ * @type {Map<string, Promise<boolean>>}
+ */
+const resumeSupportCache = new Map();
 
 /**
  * Detect whether the installed `codex exec` subcommand supports resuming a
  * session (added in later Codex CLI versions). Falls back to false — a
  * fresh, non-resumed turn — when detection fails for any reason.
+ * @param {string} command
  * @returns {Promise<boolean>}
  */
-async function detectResumeSupport() {
-  if (resumeSupportCache === null) {
-    resumeSupportCache = runCodex(['exec', '--help'], { timeoutMs: 5000 })
+async function detectResumeSupport(command) {
+  let found = resumeSupportCache.get(command);
+  if (!found) {
+    found = runCodex(['exec', '--help'], { timeoutMs: 5000, command })
       .then((res) => `${res.text || ''} ${res.error || ''}`.toLowerCase().includes('resume'))
       .catch(() => false);
+    resumeSupportCache.set(command, found);
   }
-  return resumeSupportCache;
+  return found;
+}
+
+/**
+ * Which `codex` this machine means, and how it was found. Synchronous, does
+ * not spawn, and never throws — `doctor` reads it to say "bundled with the
+ * app" / "on PATH" / "pinned" rather than the bare "available" that hid the
+ * whole of §136.1.
+ * @param {{codexBin?: string}} [opts] the `codexBin` setting, when the caller
+ *   has one. The adapter never reads `state.json` itself.
+ * @returns {{found:boolean, source:'pinned'|'path'|'bundled'|null, path:string|null,
+ *            lookedIn:string[], pinProblem:string|null, shimOnPath:string|null}}
+ */
+function describeBinary(opts = {}) {
+  const bin = resolveCodexBinary({ pinned: opts.codexBin });
+  return {
+    found: Boolean(bin.command),
+    source: bin.source,
+    path: bin.command,
+    lookedIn: bin.bundleDirs,
+    pinProblem: bin.pinProblem,
+    shimOnPath: bin.shimOnPath,
+  };
+}
+
+/**
+ * Cached per resolved binary, for the same reason as `resumeSupportCache`.
+ * @type {Map<string, Promise<string|null>>}
+ */
+const versionCache = new Map();
+
+/**
+ * The installed Codex CLI's own version string, e.g. `codex-cli 0.153.1`.
+ *
+ * The adapter interface's optional `version()` (`docs/DEVIATIONS.md` §72),
+ * which `doctor` has read through since it was written and which no adapter
+ * has ever implemented. It is implementable here now only because the binary
+ * is resolvable at all: on a machine where the desktop app bundles the CLI
+ * off `PATH`, `spawn('codex', ['--version'])` was `ENOENT`.
+ *
+ * Never throws, never fails a report: no binary, a non-zero exit or a timeout
+ * all resolve `null`.
+ * @param {{codexBin?: string}} [opts]
+ * @returns {Promise<string|null>}
+ */
+async function version(opts = {}) {
+  const bin = resolveCodexBinary({ pinned: opts.codexBin });
+  if (!bin.command) return null;
+  const command = bin.command;
+  let found = versionCache.get(command);
+  if (!found) {
+    found = runCodex(['--version'], { timeoutMs: 5000, command })
+      .then((res) => {
+        if (!res.ok) return null;
+        const first = String(res.text || '')
+          .split('\n')[0]
+          .trim();
+        return first || null;
+      })
+      .catch(() => null);
+    versionCache.set(command, found);
+  }
+  return found;
 }
 
 /**
@@ -509,11 +611,17 @@ export function codexExecArgs({ sessionId, text, canResume }) {
  * The argv for resuming one session in an interactive terminal. Pure, for the
  * same reason as `codexExecArgs`. Handed to `launchTerminal()` as `command`,
  * which distributes it into whichever emulator's own argv the machine has.
+ *
+ * `command` is the resolved binary (§136.1). It defaults to the bare name,
+ * which is still the right answer for a terminal: the emulator starts a login
+ * shell whose `PATH` may well differ from the daemon's, so "we could not find
+ * it" is not the same as "the user's shell cannot".
  * @param {string} sessionId
+ * @param {string} [command]
  * @returns {string[]}
  */
-export function codexResumeCommand(sessionId) {
-  return ['codex', 'resume', String(sessionId)];
+export function codexResumeCommand(sessionId, command = CODEX_COMMAND) {
+  return [command, 'resume', String(sessionId)];
 }
 
 /**
@@ -523,28 +631,37 @@ export function codexResumeCommand(sessionId) {
  * element to `spawn()`, or one single-quoted word inside the wrapper script.
  * Pure and exported for the same reason as the two above.
  * @param {unknown} [instructions]
+ * @param {string} [command] the resolved binary — see `codexResumeCommand`
  * @returns {string[]}
  */
-export function codexNewSessionCommand(instructions) {
+export function codexNewSessionCommand(instructions, command = CODEX_COMMAND) {
   const prompt = String(instructions || '').trim();
-  return prompt ? ['codex', prompt] : ['codex'];
+  return prompt ? [command, prompt] : [command];
 }
 
 /**
  * Send a turn into a Codex session via its non-interactive exec surface.
+ * Two failures, and they are not the same failure. No `~/.codex` at all means
+ * Codex really is not installed. `~/.codex` with no runnable `codex` means the
+ * transcripts are readable and there is no program to send a turn with — which
+ * is the shape a Codex desktop install actually has, and which this method
+ * reported as "Codex is not installed" until §136.1.
  * @param {string} id
  * @param {string} text
- * @param {{cwd?:string, timeoutMs?:number}} [opts] optional at runtime: the
- *   `= {}` default means a bare call is legal (WP-22).
+ * @param {{cwd?:string, timeoutMs?:number, codexBin?:string}} [opts] optional at
+ *   runtime: the `= {}` default means a bare call is legal (WP-22).
  * @returns {Promise<import('../../core/model.mjs').SendResult>}
  */
-async function send(id, text, { cwd, timeoutMs } = {}) {
+async function send(id, text, { cwd, timeoutMs, codexBin } = {}) {
   if (!(await available())) return { ok: false, error: 'Codex is not installed' };
+
+  const bin = resolveCodexBinary({ pinned: codexBin });
+  if (!bin.command) return { ok: false, error: describeMissingBinary(bin) };
 
   const { sessionId } = splitAgentId(id);
   let canResume = false;
   try {
-    canResume = await detectResumeSupport();
+    canResume = await detectResumeSupport(bin.command);
   } catch {
     canResume = false;
   }
@@ -552,9 +669,9 @@ async function send(id, text, { cwd, timeoutMs } = {}) {
   const args = codexExecArgs({ sessionId, text, canResume });
 
   try {
-    return await runCodex(args, { cwd, timeoutMs });
+    return await runCodex(args, { cwd, timeoutMs, command: bin.command });
   } catch (err) {
-    return { ok: false, error: describeSpawnError(err) };
+    return { ok: false, error: describeSpawnError(err, bin.command) };
   }
 }
 
@@ -582,18 +699,20 @@ async function send(id, text, { cwd, timeoutMs } = {}) {
  * `openNewSession` below, which does throw.
  * @param {string} id
  * @param {string} cwd
- * @param {{terminal?: string}} [opts] `terminal` is the user's pinned
- *   emulator from settings (`auto` when they have not pinned one). The HTTP
- *   route passes it; a caller that does not gets detection.
+ * @param {{terminal?: string, codexBin?: string}} [opts] `terminal` is the
+ *   user's pinned emulator from settings (`auto` when they have not pinned
+ *   one), `codexBin` the pinned binary. The HTTP route passes both; a caller
+ *   that does not gets detection and the bare `codex` name.
  * @returns {Promise<void>}
  */
 async function openInTerminal(id, cwd, opts = {}) {
   if (!(await available())) return;
   const { sessionId } = splitAgentId(id);
+  const bin = resolveCodexBinary({ pinned: opts.codexBin });
 
   try {
     await launchTerminal({
-      command: codexResumeCommand(sessionId),
+      command: codexResumeCommand(sessionId, bin.command || CODEX_COMMAND),
       cwd,
       sessionId,
       prefix: 'codex-resume',
@@ -624,14 +743,15 @@ async function openInTerminal(id, cwd, opts = {}) {
  * Tried: …" is more useful than a silent nothing. That is also what the
  * Claude Code adapter does.
  * @param {string} cwd absolute path to an existing directory
- * @param {{instructions?: string, terminal?: string}} [opts] an optional
- *   first prompt, and the user's pinned emulator from settings
+ * @param {{instructions?: string, terminal?: string, codexBin?: string}} [opts]
+ *   an optional first prompt, the user's pinned emulator, and the pinned binary
  * @returns {Promise<void>}
  */
 async function openNewSession(cwd, opts = {}) {
   if (!(await available())) throw new Error('Codex is not installed');
+  const bin = resolveCodexBinary({ pinned: opts.codexBin });
   await launchTerminal({
-    command: codexNewSessionCommand(opts.instructions),
+    command: codexNewSessionCommand(opts.instructions, bin.command || CODEX_COMMAND),
     cwd,
     prefix: 'codex-new',
     pin: opts.terminal,
@@ -642,6 +762,8 @@ export const adapter = {
   id: 'codex',
   label: 'Codex',
   available,
+  version,
+  describeBinary,
   liveSessions,
   scanSessions,
   conversation,

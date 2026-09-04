@@ -115,6 +115,14 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // answered it is `deckhq --notify` and a POST to /api/settings, not a
   // toggle somebody flips without reading it.
   //
+  // `codexBin` (WP-23a, docs/DEVIATIONS.md §136.1) is exempt on exactly
+  // `editor`'s terms, and it is the reason `editor` was written down as a rule
+  // rather than an exception: blank means "work it out" — PATH, then the Codex
+  // desktop app's own bundled copy — which is the right answer on every
+  // machine anyone has run this on. It exists for the install neither of those
+  // describes, and until somebody has one it is a POST to /api/settings, not a
+  // row asking people to find a binary they do not need to find.
+  //
   // `postcardDay` (WP-18) and `wrappedShown` (WP-27) are the eighth and ninth,
   // and they are exempt for `onboarded`'s reason exactly: they are facts, not
   // preferences. They record which day's card and which week's Wrapped have
@@ -127,6 +135,7 @@ test('the settings sheet offers every setting a person can meaningfully change',
     'onboarded',
     'editor',
     'terminal',
+    'codexBin',
     'goneHomeDays',
     'ledgerRetentionDays',
     'osNotify',

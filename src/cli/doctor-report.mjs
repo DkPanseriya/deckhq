@@ -76,7 +76,7 @@ export function renderReport(report, opts = {}) {
       lines.push(row(name, 'not installed'));
       continue;
     }
-    lines.push(row(name, rt.version ? `${rt.version} on PATH` : 'available'));
+    lines.push(row(name, describeRuntime(rt)));
     lines.push(
       row(
         'transcripts',
@@ -128,6 +128,38 @@ export function renderReport(report, opts = {}) {
   for (const note of report.notes) lines.push(`  · ${note}`);
 
   return lines.join('\n') + '\n';
+}
+
+/**
+ * How the runtime's own line reads: which program was found, and how.
+ *
+ * WP-23a. The row used to be the bare word `available`, which on a machine
+ * with the Codex desktop app was true of the transcripts and silent about the
+ * fact that the CLI was 250 MB inside an app directory and unreachable
+ * (`docs/DEVIATIONS.md` §136.1). Every phrase names a check that ran: a
+ * setting that is stored, a binary on `PATH`, a file in the app's own bundle
+ * directory — the same discipline as `describeTerminalRow` below.
+ *
+ * An adapter that reports no binary at all keeps the old wording exactly, so
+ * this changes nothing for a runtime whose adapter has not grown one.
+ * @param {any} rt
+ * @returns {string}
+ */
+export function describeRuntime(rt) {
+  if (!rt.binary) return rt.version ? `${rt.version} on PATH` : 'available';
+  if (!rt.binary.found) {
+    return rt.binary.pinProblem
+      ? `transcripts readable; the pinned ${rt.id} binary is not a file`
+      : `transcripts readable; no ${rt.id} binary found`;
+  }
+  const how =
+    {
+      pinned: 'pinned',
+      path: 'on PATH',
+      bundled: 'bundled with the app',
+    }[rt.binary.source] || null;
+  const what = rt.version || 'found';
+  return how ? `${what}   (${how})` : what;
 }
 
 /**

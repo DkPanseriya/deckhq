@@ -7,6 +7,7 @@
  * docs/02-ARCHITECTURE.md §5; docs/plan/05-GUI-UX-SPEC.md §5.4 for the sheet
  * these routes serve.
  */
+import fs from 'node:fs';
 import os from 'node:os';
 import process from 'node:process';
 
@@ -92,6 +93,38 @@ export function register(router, ctx) {
           return sendError(res, 400, `editor must be one of ${EDITOR_NAMES.join(', ')}, or ""`);
         }
         patch[k] = name;
+        continue;
+      }
+      // `codexBin` (WP-23a) is `editor`'s class of setting — a value that
+      // becomes a program — so it gets `editor`'s treatment one layer further
+      // on: this is the only layer that can look at the disk, so this is the
+      // layer that refuses a path which is not an existing file. `""` means
+      // "find it" (PATH, then the desktop app's bundled copy) and is always
+      // accepted. A rejected value is reported, not silently defaulted.
+      // `docs/DEVIATIONS.md` §136.1.
+      if (k === 'codexBin') {
+        if (typeof v !== 'string') continue;
+        const wanted = v.trim();
+        if (wanted) {
+          try {
+            if (!fs.statSync(wanted).isFile()) throw new Error('not a file');
+          } catch {
+            return sendError(res, 400, 'codexBin must be the path to an existing file, or ""');
+          }
+          // A `.cmd`/`.bat` cannot be started without a shell (Node throws
+          // EINVAL — CVE-2024-27980) and DeckHQ will not run one for a value
+          // that reaches a spawn beside a session id. Refused HERE, where the
+          // user is told, rather than at the spawn, where they are not.
+          if (/\.(cmd|bat)$/i.test(wanted)) {
+            return sendError(
+              res,
+              400,
+              'codexBin cannot be a .cmd or .bat launcher — Windows cannot start one without ' +
+                'a shell. Point it at codex.exe instead.',
+            );
+          }
+        }
+        patch[k] = wanted;
         continue;
       }
       // And for `terminal`: this is the only layer that can know which
