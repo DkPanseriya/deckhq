@@ -110,11 +110,22 @@ saving in the day. `3` benches. Everything rarer — mark for review, let go, re
 recall, rehire — sits behind `⋯ more`. The cost estimate is one quiet line at the bottom, which is
 where an estimate belongs.
 
+When a session stops to ask before it runs something, you can answer the permission prompt from
+the panel: a card appears above **what it said** with the tool and its literal input, and
+**Allow** / **Deny** on `A` / `D` — plus **Allow for this session** on `S` when the runtime hands
+over a rule to reuse. The terminal prompt stays live the whole time, so a closed DeckHQ can never
+block anybody.
+
 **`2 Approve` is a send, never an acknowledgement.** It posts the reply exactly as typing it would,
 and the review is discharged when the runtime records your turn — never by the client deciding it
 has been dealt with. The one rule above holds here too. Anything you leave unsent in the composer
 is kept per session and shows as a `draft` chip, because an unfinished reply is that agent's queue
 being held by you.
+
+**Replies stream in.** The composer comes back the instant the turn is accepted rather than when
+the model has finished thinking, and the answer fills the panel a fragment at a time under **what
+it said** — with a line for each tool the agent picks up — instead of arriving in one block at the
+end.
 
 The heading over the diff names the **project**, never the agent: where several agents share one
 repository a working-tree diff cannot be attributed to any one of them, and the panel will not
@@ -401,6 +412,18 @@ These are real, and listed here rather than discovered later.
   file, with no restart. A model the table has no row for reads **no rate** rather than `$0.00`:
   we would rather show you nothing than a number we made up. The Codex/OpenAI rows are flagged
   `unverified` in the file, because we have not checked them against a published price list.
+- **Answering a permission prompt from the panel has been proven once, against one runtime.**
+  Claude Code 2.1.260 on Windows, 4 September 2026: a real session raised two prompts, the panel's
+  endpoint allowed one and denied the other, and the runtime did both and carried on. That is one
+  runtime, one machine, one tool. A `Bash` prompt, an MCP tool, and a request that offers a
+  reusable rule for **Allow for this session** are all covered by tests against recorded payloads
+  and none of them has been watched arriving — and the real request carried no rule at all, so
+  expect two buttons more often than three. Codex, Gemini CLI and OpenCode cannot be answered from
+  the panel at all.
+- **A streamed reply has been watched once, on the same machine and the same day.** The turn was
+  accepted in 76 ms, the reply arrived in fragments, and the session's own transcript recorded it
+  like any other turn. A long turn, a turn that fails halfway, and a turn that calls tools have
+  all been driven through a stand-in process rather than a live model.
 - **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.

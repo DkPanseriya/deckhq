@@ -272,25 +272,28 @@
   from the stylesheet's own palette by `scripts/make-pwa-icons.mjs`, so no binary in this
   repository is one nobody can regenerate, and a test fails on any host in the manifest or the
   worker that is not this machine.
-- **A permission prompt can be answered from the panel — not yet proven against a live session.**
-  DeckHQ now installs a ninth hook, `PermissionRequest`, and it is the only one in the block the
-  runtime waits on: when a tool call is about to ask your permission in the terminal, the request
-  is held open on `POST /api/permission` for up to ten minutes while a card appears above WHAT IT
-  SAID with the tool, its literal input, and **Allow** / **Deny** / **Allow for session** on
-  `A` / `D` / `S`. "Allow for session" sends back the runtime's own rule with its destination
-  rewritten to `session`, so nothing is ever written into your settings files. DeckHQ never
-  allows anything by itself, never answers on a timer, never aborts a turn, and never touches
-  `ackState` — five named `INVARIANT:` tests, one per never. The terminal prompt stays live the
-  whole time: if nobody answers, if the daemon is closed, or if you answer in the terminal first,
-  the terminal is what decides, so a closed DeckHQ can never block a session. The consent screen
-  says all of that in its own paragraph before anything is written.
-  **The acceptance run is still owed.** No real `PermissionRequest` has ever reached this code:
-  the CLI's login on the reference machine is expired, so no tool call could be provoked. What
-  exists is 38 tests and a scripted stand-in for the runtime's hook client
-  (`scripts/fake-permission-client.mjs`) that sends the real payload to the real route and
-  asserts the exact bytes that come back. Until a live session raises a prompt, has it answered
-  from the panel, and carries on, this feature is not accepted and stays out of the README, the
-  tweet and the pricing page. `docs/DEVIATIONS.md` §86 and §97.
+- **A permission prompt can be answered from the panel. Run live on 4 September.** DeckHQ now
+  installs a ninth hook, `PermissionRequest`, and it is the only one in the block the runtime
+  waits on: when a tool call is about to ask your permission in the terminal, the request is held
+  open on `POST /api/permission` for up to ten minutes while a card appears above WHAT IT SAID
+  with the tool, its literal input, and **Allow** / **Deny** on `A` / `D` — plus **Allow for
+  session** on `S` when the runtime hands over a rule to reuse, which is less often than it
+  sounds. "Allow for session" sends back the runtime's own rule with its destination rewritten to
+  `session`, so nothing is ever written into your settings files. DeckHQ never allows anything by
+  itself, never answers on a timer, never aborts a turn, and never touches `ackState` — five named
+  `INVARIANT:` tests, one per never. The terminal prompt stays live the whole time: if nobody
+  answers, if the daemon is closed, or if you answer in the terminal first, the terminal is what
+  decides, so a closed DeckHQ can never block a session. The consent screen says all of that in
+  its own paragraph before anything is written.
+  **The acceptance run happened on 4 September 2026**, against Claude Code 2.1.260 with a real
+  login: a session raised two `Write` prompts, the panel's own endpoint answered one **allow** and
+  one **deny**, the allowed file was written, the denied one came back to the model as
+  `Denied from DeckHQ.` without the turn being aborted, and the session carried on and summarised
+  what had happened. The allow was answered in 19 ms and the card left the floor 28 ms later. The
+  real payload turned out to carry **no `tool_use_id`** — the field the build treated as its
+  correlation key — so the fallback key it was given as a precaution is the normal path, and it
+  now carries a serial so two parallel tool calls can never collide.
+  `docs/DEVIATIONS.md` §86, §97 and §133.
 - **DeckHQ now measures itself.** An append-only event ledger,
   `~/.deckhq/ledger/YYYY-MM-DD.jsonl`, one JSON object per line, written by the state machine as
   the floor moves: a session first seen, every activity and ack transition with its `from` and
@@ -600,7 +603,11 @@
   markdown from the transcript. A turn that fails puts your text back in the composer — and never
   over the top of something you have typed since. Every fragment reaches the screen through
   `textContent`: half a fenced block is not a fenced block, and the client still has no
-  `innerHTML` at all. `docs/plan/05-GUI-UX-SPEC.md` §4.3, `docs/DEVIATIONS.md` §117.
+  `innerHTML` at all. **Run live on 4 September 2026** against Claude Code 2.1.260 with a real
+  login: the 202 came back in **76 ms**, the first fragment of the reply reached the channel 6.7 s
+  later and the whole turn closed at 10.6 s, the session's own transcript grew by the turn under
+  the same session id, and no `claude` process was left behind when the daemon closed.
+  `docs/plan/05-GUI-UX-SPEC.md` §4.3, `docs/DEVIATIONS.md` §117 and §133.
 - **A reply typed in a terminal appears in the open panel, without a poll.** The daemon watches
   the transcript of whichever session the panel has open — `fs.watch` with a one-second `stat`
   fallback, because `fs.watch` is unusable on some filesystems and is also blind to a transcript
@@ -1450,18 +1457,11 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   when a turn finished, so that much is read rather than guessed.
 - **The rate card has no Gemini rows**, so a Gemini CLI session shows **no rate** rather than
   `$0.00` — the same rule every unpriced model gets.
-- **The streamed send has never met a live `claude` either.** The flags were read out of
-  `claude --help` on 2.1.231 and the envelopes were recorded from the real binary — which got as
-  far as `401 OAuth access token has expired` before it could produce a reply — so the assistant
-  deltas and the tool call in the fixture are reconstructed from the event vocabulary in the
-  binary itself rather than watched arriving. Everything downstream is proved against that
-  recording through a real child process. The remaining step is one `claude login` and one real
-  reply, and it is the same login the permission card is waiting on. `docs/DEVIATIONS.md` §117.
 - **Nobody has watched a real `SubagentStop` payload.** The event fires on the parent's session
   id, so something in it has to name which junior finished if a junior is to leave the floor the
   instant it stops rather than five minutes later — and this could not be checked, because
-  driving a real `Task` call needs a `claude -p` run and the reference machine's login is expired
-  (the same wall §86.1 hit). The reader therefore takes an explicit `agent_id` if there is one, a
+  driving a real `Task` call needs a run nobody has spent a turn on yet — the login that blocked
+  it is fixed (§133), the run is not. The reader therefore takes an explicit `agent_id` if there is one, a
   `transcript_path` inside a `subagents/` directory if there is one, and **returns nothing rather
   than guessing** when there is neither — in which case the event does exactly what it has always
   done, and juniors still arrive and leave on their transcripts alone. Everything else about
@@ -1481,12 +1481,17 @@ site/build.mjs`, the site suite again against the bytes about to be published, t
   hand-typed tier carried, flagged as such in the file, and nothing in this project has checked
   them against a published price list. Anthropic's rows were read off the pricing page on
   2026-09-04.
-- **The permission feature has never met a live session.** Everything downstream of the runtime is
-  tested and screenshotted; the runtime itself has not been in the loop once, because `claude`'s
-  stored login on the reference machine is expired and re-authenticating is an interactive browser
-  flow. The remaining step is one `claude login`, one session raising a real prompt, and one
-  press of Allow. Until then the response bytes are verified against a schema read out of the
-  installed binary rather than against the binary's behaviour. `docs/DEVIATIONS.md` §86.1, §97.5.
+- **`claude -p` cannot be used to reproduce the permission run.** The live run happened and is in
+  `docs/DEVIATIONS.md` §133, but print mode is the wrong surface: with no host to answer it, a
+  tool call that would ask is **denied outright** and the `PermissionRequest` hook is never
+  consulted at all. Reproducing needs either an interactive session or, as the run did,
+  `--permission-prompt-tool stdio` with a host that stays silent. Nothing about the product
+  changes — an interactive session always has a prompt surface — but anyone re-running the
+  acceptance should read §133.2 before spending a turn.
+- **The panel has been answered by one runtime, on one machine, on one day.** Claude Code 2.1.260
+  on Windows, two `Write` prompts, one allow and one deny. A `Bash` prompt, an MCP tool, a
+  `requiresUserInteraction` tool and a request that actually carries an `addRules` suggestion have
+  all been tested against recorded payloads and none has been watched arriving. §133.4.
 - **Codex cannot answer a permission prompt yet.** It has the same hook and the same response
   shape, but no `http` hook type at all, so it needs a `command` hook that reads the daemon's
   port and relays on stdin/stdout. That same hook is also the fallback for the two managed-settings

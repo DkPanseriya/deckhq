@@ -24,6 +24,22 @@ import { readJson, sendError, sendJson } from '../server.mjs';
 const MAX_PAYLOAD = 512 * 1024;
 
 /**
+ * Serial number behind the fallback request key, and the reason it exists.
+ *
+ * §86.2 read `tool_use_id` out of the installed build and called it "the
+ * natural correlation key". The first real `PermissionRequest` this project
+ * ever received — Claude Code 2.1.260, 4 September, `docs/DEVIATIONS.md` §133
+ * — **carries no `tool_use_id` at all**, so every request falls back to the
+ * key minted here. A key of `session:timestamp` alone is not enough for that
+ * to be the normal path: an agent making parallel tool calls raises two hands
+ * milliseconds apart, and two requests landing in the same millisecond would
+ * collide, which `Permissions.hold()` resolves by superseding — releasing the
+ * first socket with `{}` and dropping its card. A counter makes the key
+ * unique whatever the clock does.
+ */
+let fallbackSerial = 0;
+
+/**
  * @param {import('../server.mjs').Router} router
  * @param {{registry:any, adapters:any, permissions:any, log:any}} ctx
  */
@@ -107,10 +123,11 @@ export function register(router, ctx) {
         {
           ...request,
           runtime,
-          // `tool_use_id` is the natural correlation key (§86.2). A payload
-          // without one still gets a card, under a key of our own, rather
-          // than being dropped.
-          id: request.id || `${request.sessionId}:${Date.now()}`,
+          // `tool_use_id` is the correlation key when there is one (§86.2).
+          // On the runtime measured in §133 there never is one, so the
+          // fallback below is the normal path rather than the exception, and
+          // it has to stay unique across requests that arrive together.
+          id: request.id || `${request.sessionId}:${Date.now()}:${(fallbackSerial += 1)}`,
         },
         res,
       );

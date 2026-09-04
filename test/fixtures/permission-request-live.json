@@ -1,0 +1,50 @@
+[
+  {
+    "session_id": "efbe52e9-e69d-446f-8a14-93e1f3e41a10",
+    "transcript_path": "C:\\home\\.claude\\projects\\C--scratch-live-project\\efbe52e9-e69d-446f-8a14-93e1f3e41a10.jsonl",
+    "cwd": "C:\\scratch\\live-project",
+    "scratchpad_dir": "C:\\scratch\\C--scratch-live-project\\efbe52e9-e69d-446f-8a14-93e1f3e41a10\\scratchpad",
+    "prompt_id": "2f0aec15-5d68-49e8-aef4-b267ca18e2bf",
+    "permission_mode": "default",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "C:\\scratch\\live-project\\live-run-1.txt",
+      "content": "deckhq-live-run-1\n"
+    },
+    "permission_suggestions": [
+      {
+        "type": "setMode",
+        "mode": "acceptEdits",
+        "destination": "session"
+      }
+    ]
+  },
+  {
+    "session_id": "efbe52e9-e69d-446f-8a14-93e1f3e41a10",
+    "transcript_path": "C:\\home\\.claude\\projects\\C--scratch-live-project\\efbe52e9-e69d-446f-8a14-93e1f3e41a10.jsonl",
+    "cwd": "C:\\scratch\\live-project",
+    "scratchpad_dir": "C:\\scratch\\C--scratch-live-project\\efbe52e9-e69d-446f-8a14-93e1f3e41a10\\scratchpad",
+    "prompt_id": "2f0aec15-5d68-49e8-aef4-b267ca18e2bf",
+    "permission_mode": "default",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PermissionRequest",
+    "tool_name": "Write",
+    "tool_input": {
+      "file_path": "C:\\scratch\\live-project\\live-run-2.txt",
+      "content": "deckhq-live-run-2\n"
+    },
+    "permission_suggestions": [
+      {
+        "type": "setMode",
+        "mode": "acceptEdits",
+        "destination": "session"
+      }
+    ]
+  }
+]
