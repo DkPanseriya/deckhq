@@ -11,7 +11,7 @@
  *   npm run goldens          # regenerate test/goldens/<platform>/*.png
  *   npm run goldens:check    # compare, write diffs to test/goldens/.out/, exit 1 on a mismatch
  *
- *   node scripts/goldens.mjs [--check] [--only NAME] [--settle MS] [--keep]
+ *   node scripts/goldens.mjs [--check] [--only NAME] [--theme NAME] [--settle MS] [--keep]
  *
  * `--keep` writes every capture to test/goldens/.out/, not only the ones that
  * failed; it is how the noise floor below was measured.
@@ -75,6 +75,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { CHROME_UNAVAILABLE, findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
+import { THEME_NAMES } from '../src/core/themes.mjs';
 import { decodePng, diffImages, encodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,12 +89,40 @@ const opt = (name, fallback) => {
 
 const CHECK = has('--check');
 const ONLY = opt('--only', '');
+/** Capture only this theme's set. `--theme night-shift` or `--theme "night shift"`. */
+const THEME = opt('--theme', '');
 const SETTLE_MS = Number(opt('--settle', 1500));
 /** Write every capture to OUT_DIR, not only the ones that failed. */
 const KEEP = has('--keep');
 
 /** Every population `scripts/demo-floor.mjs --population` accepts. */
 const POPULATIONS = ['demo', 'empty', 'single', 'reference'];
+
+/**
+ * The captures this gate takes: the four default-theme populations, plus one
+ * `demo` floor per shipped theme (WP-30).
+ *
+ * A theme changes no geometry — it repaints baked materials — so photographing
+ * every population in every theme would be four times the Chrome time for one
+ * fact. One populated floor per theme is what proves a theme reaches the bake,
+ * and it is the capture that would catch the failure that actually matters: a
+ * derivation that leaves a material unreadable, or a theme that quietly does
+ * not apply at all.
+ *
+ * A themed capture's golden is `<population>@<theme>.png`. The default theme's
+ * files keep their bare names, so this package adds files and renames none —
+ * which is what lets the existing goldens stay at 0 px.
+ *
+ * @type {ReadonlyArray<{name:string, population:string, theme:string}>}
+ */
+const CAPTURES = [
+  ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
+  ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
+    name: `demo@${theme.replace(/\s+/g, '-')}`,
+    population: 'demo',
+    theme,
+  })),
+];
 
 export const WIDTH = 1600;
 export const HEIGHT = 1000;
@@ -134,12 +163,24 @@ if (!chromePath) {
   process.exit(CHECK ? 0 : 1);
 }
 
-const populations = ONLY ? [ONLY] : POPULATIONS;
-for (const name of populations) {
-  if (!POPULATIONS.includes(name)) {
-    say(`goldens: unknown population "${name}"; one of: ${POPULATIONS.join(', ')}`);
+if (THEME) {
+  const wanted = THEME.replace(/[\s_-]+/g, ' ').toLowerCase();
+  if (!THEME_NAMES.includes(wanted)) {
+    say(`goldens: unknown theme "${THEME}"; one of: ${THEME_NAMES.join(', ')}`);
     process.exit(2);
   }
+}
+const wantedTheme = THEME ? THEME.replace(/[\s_-]+/g, ' ').toLowerCase() : '';
+const captures = CAPTURES.filter(
+  (c) =>
+    (!ONLY || c.name === ONLY || c.population === ONLY) &&
+    (!wantedTheme || c.theme === wantedTheme),
+);
+if (captures.length === 0) {
+  say(
+    `goldens: nothing matches --only "${ONLY}" --theme "${THEME}". Captures: ${CAPTURES.map((c) => c.name).join(', ')}`,
+  );
+  process.exit(2);
 }
 
 if (CHECK && !fs.existsSync(GOLDENS_DIR)) {
@@ -156,16 +197,18 @@ function rel(p) {
 }
 
 /**
- * Start one demo population on a free port and resolve with its URL and a
- * function that stops it. The demo script is run as a child so each
- * population gets its own process environment and fixture directory.
+ * Start one demo population, in one theme, on a free port, and resolve with
+ * its URL and a function that stops it. The demo script is run as a child so
+ * each capture gets its own process environment and fixture directory —
+ * including its own state.json, which is where the theme is written (WP-30).
  * @param {string} population
+ * @param {string} [theme]
  */
-function startDemo(population) {
+function startDemo(population, theme = 'default') {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [DEMO_SCRIPT, '--population', population, '--port', '0'],
+      [DEMO_SCRIPT, '--population', population, '--theme', theme, '--port', '0'],
       { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
     );
     let out = '';
@@ -349,7 +392,7 @@ function check(name, actualPng) {
 
 const started = Date.now();
 say(
-  `goldens: ${CHECK ? 'checking' : 'regenerating'} ${populations.length} population(s) on ${process.platform}, ${WIDTH}x${HEIGHT}, reduced motion, settle ${SETTLE_MS} ms`,
+  `goldens: ${CHECK ? 'checking' : 'regenerating'} ${captures.length} capture(s) on ${process.platform}, ${WIDTH}x${HEIGHT}, reduced motion, settle ${SETTLE_MS} ms`,
 );
 
 const failures = [];
@@ -372,7 +415,8 @@ const run = withChrome(
       features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
     });
 
-    for (const name of populations) {
+    for (const capture of captures) {
+      const { name, population, theme } = capture;
       const t0 = Date.now();
       // Inside the try, and with one retry: a demo that fails to boot is a
       // tooling flake, and it used to abort the whole run with a stack trace
@@ -381,10 +425,10 @@ const run = withChrome(
       let demo = null;
       try {
         try {
-          demo = await startDemo(name);
+          demo = await startDemo(population, theme);
         } catch (first) {
-          say(`  .... ${name.padEnd(10)} did not boot (${first.message.split('\n')[0]}); retrying`);
-          demo = await startDemo(name);
+          say(`  .... ${name.padEnd(18)} did not boot (${first.message.split('\n')[0]}); retrying`);
+          demo = await startDemo(population, theme);
         }
         await client.send('Page.navigate', { url: demo.url });
         const state = await waitForFloor(client);
@@ -396,7 +440,7 @@ const run = withChrome(
           if (!verdict.ok) failures.push(name);
           if (verdict.compared) compared++;
           say(
-            `  ${verdict.ok ? 'ok  ' : 'FAIL'} ${name.padEnd(10)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
+            `  ${verdict.ok ? 'ok  ' : 'FAIL'} ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
           );
         } else {
           fs.mkdirSync(GOLDENS_DIR, { recursive: true });
@@ -404,12 +448,12 @@ const run = withChrome(
           fs.writeFileSync(file, png);
           const kb = Math.round(png.length / 1024);
           say(
-            `  wrote ${name.padEnd(10)} ${state.agents} agents  ${secs}s  ${rel(file)}  ${kb} KB`,
+            `  wrote ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${rel(file)}  ${kb} KB`,
           );
         }
       } catch (err) {
         failures.push(name);
-        say(`  FAIL ${name.padEnd(10)} ${err.message}`);
+        say(`  FAIL ${name.padEnd(18)} ${err.message}`);
       } finally {
         if (demo) await demo.stop();
       }
@@ -439,7 +483,7 @@ try {
 const total = ((Date.now() - started) / 1000).toFixed(1);
 if (failures.length) {
   say(
-    `goldens: ${failures.length} of ${populations.length} failed (${failures.join(', ')}) in ${total}s`,
+    `goldens: ${failures.length} of ${captures.length} failed (${failures.join(', ')}) in ${total}s`,
   );
   if (CHECK) say(`goldens: actual captures and diff images are in ${rel(OUT_DIR)}`);
   process.exit(1);
@@ -452,6 +496,6 @@ if (!CHECK) {
   say(`goldens: SKIPPED in ${total}s — no ${process.platform} goldens to compare against.`);
   say(`goldens: the captures in ${rel(OUT_DIR)} are the set to commit.`);
 } else {
-  const skipped = populations.length - compared;
+  const skipped = captures.length - compared;
   say(`goldens: all ${compared} match in ${total}s${skipped ? ` (${skipped} skipped)` : ''}`);
 }

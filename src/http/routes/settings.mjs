@@ -14,6 +14,7 @@ import { readJson, sendError, sendJson } from '../server.mjs';
 import { DEFAULT_SETTINGS, MOTION_MODES, RESUME_TARGETS } from '../../core/store.mjs';
 import { rateCardVersion } from '../../core/rates.mjs';
 import { EDITOR_NAMES } from '../../core/editor.mjs';
+import { THEME_NAMES, isKnownTheme } from '../../core/themes.mjs';
 import { terminalIds } from '../../adapters/claude-code/terminals.mjs';
 
 /**
@@ -113,6 +114,14 @@ export function register(router, ctx) {
       // opaque keys the client writes and reads back. Only a string is a
       // candidate; the store drops anything that is not a short token.
       if ((k === 'postcardDay' || k === 'wrappedShown') && typeof v !== 'string') continue;
+      // WP-30. `theme` names a theme this BUILD ships; the store would fall
+      // back to `default` for anything else, which would leave the picker
+      // showing a theme the floor is not painted in. Reported here instead.
+      if (k === 'theme') {
+        if (!isKnownTheme(v)) {
+          return sendError(res, 400, `theme must be one of ${THEME_NAMES.join(', ')}`);
+        }
+      }
       patch[k] = v;
     }
     if (Object.keys(patch).length === 0) return sendError(res, 400, 'No known settings in body');

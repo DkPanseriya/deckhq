@@ -12,6 +12,7 @@ import path from 'node:path';
 import { createLog } from './log.mjs';
 import { EDITOR_NAMES } from './editor.mjs';
 import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
+import { DEFAULT_THEME_NAME, sanitizeThemeName } from './themes.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -92,6 +93,10 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       `YYYY-MM-DD`, or empty (WP-18)
  * @property {string} wrappedShown       which Wrapped has been shown — `2026-W36`
  *                                       or `2026-annual`, or empty (WP-27)
+ * @property {string} theme              which floor theme is painted (WP-30). A
+ *                                       name from `core/themes.mjs`, never a
+ *                                       path and never a colour: the document
+ *                                       lives in the build, not in state.json.
  * @property {boolean} onboarded         first run is over
  */
 
@@ -144,6 +149,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // WP-27. Which Wrapped has already been shown — `2026-W36` for a week,
   // `2026-annual` for the year. Same reason as `postcardDay`.
   wrappedShown: '',
+  // WP-30. Which floor theme is painted. `default` is the floor as it ships,
+  // and every shipped theme is free — the Supporter pack
+  // (`docs/plan/03-BUSINESS-MODEL.md` §5) sells MORE themes later and gates
+  // nothing here. A name and not a document: a state.json that could carry
+  // colours would be a state.json that could carry an unmeasured contrast
+  // failure, and every theme this build offers has been measured
+  // (`test/unit/state-visuals.test.mjs`).
+  theme: DEFAULT_THEME_NAME,
   onboarded: false,
 });
 
@@ -349,6 +362,7 @@ function sanitizeSettings(raw) {
   s.goneHomeDays = clampGoneHomeDays(s.goneHomeDays);
   s.ledgerRetentionDays = clampRetentionDays(s.ledgerRetentionDays);
   s.lightsOutHour = clampLightsOutHour(s.lightsOutHour);
+  s.theme = sanitizeThemeName(s.theme);
   s.postcardDay = sanitizeShownKey(s.postcardDay);
   s.wrappedShown = sanitizeShownKey(s.wrappedShown);
   for (const key of BOOLEAN_SETTINGS) s[key] = Boolean(s[key]);
@@ -360,6 +374,37 @@ function sanitizeSettings(raw) {
   }
   return /** @type {Settings} */ (s);
 }
+
+/**
+ * WP-30's room order, coerced into range. Anything that is not a project slug
+ * is dropped, duplicates collapse to the first mention, and the list is capped
+ * — the same discipline as every sanitizer above, for the same reason: this
+ * value reaches the renderer, and a hand-edited `state.json` is the one input
+ * nobody validated on the way in.
+ *
+ * `MAX_ROOM_ORDER` is `core/layout.mjs`'s `MAX_ROOMS`, restated rather than
+ * imported: the store is the bottom of the dependency graph and importing the
+ * layout document's schema into it to borrow one integer would invert that for
+ * no gain. `test/unit/layout-io.test.mjs` asserts the two agree.
+ * @param {unknown} v
+ * @returns {string[]}
+ */
+function sanitizeRoomOrder(v) {
+  if (!Array.isArray(v)) return [];
+  /** @type {string[]} */
+  const out = [];
+  for (const raw of v) {
+    if (typeof raw !== 'string') continue;
+    const id = raw.trim();
+    if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(id) || out.includes(id)) continue;
+    out.push(id);
+    if (out.length >= MAX_ROOM_ORDER) break;
+  }
+  return out;
+}
+
+/** See `sanitizeRoomOrder`. */
+const MAX_ROOM_ORDER = 512;
 
 /**
  * A hand-edited or absent machine id reads back as absent, and the getter
@@ -388,6 +433,12 @@ function defaultData() {
     // preference — it never affects what is captured or what any agent is
     // doing, and an id in here that no longer exists is harmless.
     archivedProjects: {},
+    // WP-30. The order the floor deals rooms in, as project ids. Empty on
+    // every install that has never imported a layout, and empty means "the
+    // order the scan produced" — which is why an untouched floor is laid out
+    // byte for byte as it always was. A view preference like the line above:
+    // it moves rooms, it never touches a session.
+    layout: { rooms: [] },
   };
 }
 
@@ -411,6 +462,9 @@ function normalize(parsed) {
   const archivedProjects = isPlainObject(parsed.archivedProjects)
     ? { ...parsed.archivedProjects }
     : {};
+  const layout = {
+    rooms: sanitizeRoomOrder(isPlainObject(parsed.layout) ? parsed.layout.rooms : []),
+  };
   return {
     version: 1,
     seededAt: typeof parsed.seededAt === 'number' ? parsed.seededAt : null,
@@ -419,6 +473,7 @@ function normalize(parsed) {
     ack,
     identity,
     archivedProjects,
+    layout,
   };
 }
 
@@ -639,6 +694,31 @@ export class Store {
   /** @returns {string[]} */
   archivedProjects() {
     return Object.keys(this._data.archivedProjects);
+  }
+
+  /**
+   * The order the floor deals rooms in, as project ids (WP-30).
+   *
+   * Empty is the normal answer and means "however the scan ordered them".
+   * Ids that no longer exist are kept rather than pruned: a repo you have not
+   * opened this week is not a repo you have deleted, and pruning would make an
+   * imported layout decay every time you did not run something.
+   * @returns {string[]}
+   */
+  roomOrder() {
+    return [...this._data.layout.rooms];
+  }
+
+  /**
+   * Set that order. Sanitised here as well as at the route, on the same terms
+   * as every other value in this file: a hand-edited `state.json` cannot put a
+   * path, a duplicate or ten thousand entries into a list the renderer reads.
+   * @param {unknown} ids
+   */
+  setRoomOrder(ids) {
+    this._data.layout.rooms = sanitizeRoomOrder(ids);
+    this.save();
+    return this.roomOrder();
   }
 
   /** @returns {Record<string, AckRecord>} */

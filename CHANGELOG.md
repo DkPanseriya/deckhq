@@ -586,6 +586,32 @@
   `docs/plan/01-AUDIT.md` F21 named: `placement()` in `src/core/model.mjs` reads `subagent` and
   its signature did not say so, while `derivePlacement()` — its copy on the other side of the
   boundary — always did. `docs/DEVIATIONS.md` §122.
+- **Floor themes, free and gating nothing.** Two beside the default: **night shift**, the same
+  office after hours — cooler, dimmer, lights low — and **blueprint**, the floor as a drawing on a
+  drafting table, in white line work on blue. `⌘K` → Settings → Floor → Theme, a row of swatches
+  that repaints the whole window while you hover it and puts it back when you leave. A theme is a
+  JSON document of eleven floor materials and eight chrome neutrals, validated by a schema in
+  `src/core/themes.mjs`: allowlisted keys only, `#rrggbb` values only, no URL, no font, no
+  gradient. **The seven state colours, the crimson accent and the fourteen project identities are
+  not themeable, and not by policy — there is no key in the allowlist that names one.** A raised
+  hand is the same amber in every theme, and red still means one thing. Every shipped theme is
+  re-measured against every WCAG floor this product already held itself to — state ≥ 3:1 on its
+  grounds, text ≥ 4.5:1, the focus ring ≥ 3:1 — plus a new one WP-30 had to invent: the floor's
+  own line work at ≥ 4.5:1 on every surface a room plate or an agent's name is drawn on. A theme
+  that fails is refused at load, not reported afterwards. The Supporter pack
+  ([`03`](docs/plan/03-BUSINESS-MODEL.md) §5) sells **more** themes later; it takes none away.
+  `docs/DEVIATIONS.md` §123.
+- **`deckhq layout export > my-floor.json` / `deckhq layout import my-floor.json`**, and the same
+  two from `⌘K`. A layout is the floor's arrangement as a file you own: the theme, the order the
+  rooms are laid out in, which rooms are folded into the idle strip, and the two floor preferences
+  — `goneHomeDays` and `lightsOutHour`. It carries no session, no transcript, no acknowledgement
+  and no name, so it cannot touch a user-owned state. **A malformed file is refused whole**: the
+  document is validated before the first write, and a bad one leaves the theme, the room order,
+  the folded rooms and both preferences exactly as it found them, with one sentence naming the
+  field. It carries no room COORDINATES either, and that is stated rather than omitted — the floor
+  sizes and places rooms from what is in them (§96, §106), so there is no position to pin; order
+  is what a layout can move. Export works with or without a daemon; import needs one, for the
+  reason `ack` does. `GET`/`POST /api/layout`. `docs/DEVIATIONS.md` §123.
 
 ### Changed
 
@@ -910,6 +936,22 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
 
 ### Testing
 
+- **Every contrast floor in the product is now measured against every shipped theme.**
+  `test/unit/state-visuals.test.mjs` used to read `public/style.css`'s `:root` and nothing else,
+  which is one theme's worth of proof; it is parametrised over the theme table, so adding a theme
+  adds its own state, text, focus, colour-discipline and line-work assertions rather than adding
+  an unmeasured floor. Two more suites beside it: `themes.test.mjs` (20) drives the schema's
+  refusals — an unknown key, a `url()`, a font name, a `#fff`, a wrong version, a half-stated
+  document, a theme that fails a contrast floor, and a near-miss on the reserved crimson — and
+  proves the default theme is a byte-exact reset of `PALETTE` (which is what keeps its goldens at
+  0 px), that a theme reaches the material tokens `backdrop.js` actually paints with, and that
+  nothing that carries meaning is ever written to the root element. `layout-io.test.mjs` (21)
+  refuses fourteen malformed layouts one at a time and asserts each changes nothing, drives the
+  CLI's refusal path with a `post` that records whether it was ever called, and round-trips a good
+  one through a real `Store` and back off disk. **The goldens gate the themes too**: one extra
+  populated capture per shipped theme (`demo@night-shift`, `demo@blueprint`), taken through the
+  same demo fixture with a new `--theme` flag on `scripts/demo-floor.mjs` and
+  `scripts/goldens.mjs`. Six captures, all at 0 px.
 - **The streamed send is proved against a recorded stream and a fake CLI that really is a
   process.** `test/fixtures/claude-stream-json.ndjson` and its error twin carry a turn of
   `--output-format stream-json`; the error one is a real run of Claude Code 2.1.231 verbatim, the

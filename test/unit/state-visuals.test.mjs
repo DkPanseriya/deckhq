@@ -12,6 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STATE_COLORS } from '../../public/render/palette.js';
+import { CHROME_KEYS, GROUND_KEYS, THEMES } from '../../public/render/themes.js';
 import { CLIPS, clipForState } from '../../public/render/clips.js';
 import { ACTIVITY_STATES, ACK_STATES } from '../../src/core/model.mjs';
 
@@ -512,6 +513,173 @@ test('the header is a headline, not a toolbar', () => {
   assert.match(header[0], /id="palette-btn"/);
   for (const gone of ['show-letgo-toggle', 'settle-btn', 'hook-status-btn', 'refresh-btn']) {
     assert.doesNotMatch(header[0], new RegExp(gone), `${gone} is back in the header`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// WP-30. THE SAME FLOORS, FOR EVERY THEME.
+//
+// Every measurement above is taken against `public/style.css`'s `:root`, which
+// is the DEFAULT theme and nothing else. A theme moves those grounds, and it
+// moves every ratio measured above with them — a theme that shipped unmeasured
+// would be the one way this feature could undo the product's accessibility
+// promise.
+//
+// The rule from WP-06 is unchanged and now applies per theme: **the ground
+// moves, never the state colour.** A theme cannot reach a state colour at all
+// (none is in `FLOOR_KEYS` or `CHROME_KEYS`), so the only thing a failing
+// theme can do about a failure is move its own neutrals.
+//
+// These re-run the assertions above against each theme's own tokens rather
+// than calling `assertThemeContrast`: that function is the PRODUCT's guard and
+// this is the check on it, and a test that called the thing it was testing
+// would pass whatever either of them did.
+// ---------------------------------------------------------------------------
+
+/**
+ * One theme's tokens, with the default's filled in behind it.
+ * @param {any} theme
+ */
+function themeTokens(theme) {
+  const base = THEMES.find((t) => t.name === 'default');
+  return {
+    chrome: { ...base.chrome, ...theme.chrome },
+    floor: { ...base.floor, ...theme.floor },
+  };
+}
+
+test('WP-30: more than one theme ships, and the default is one of them', () => {
+  // Without this, every parametrised test below would pass vacuously the day
+  // somebody emptied the table.
+  assert.ok(THEMES.length >= 3, `only ${THEMES.length} theme(s) ship`);
+  assert.ok(
+    THEMES.some((t) => t.name === 'default'),
+    'the default theme is gone from the table',
+  );
+});
+
+test("WP-30: the default theme is public/style.css's :root, exactly", () => {
+  // The picker's "default" row must select the chrome that actually ships. If
+  // these drift, choosing "default" would repaint the window in something
+  // nobody wrote down.
+  const t = readTokens();
+  const base = THEMES.find((theme) => theme.name === 'default');
+  for (const key of CHROME_KEYS) {
+    assert.equal(
+      base.chrome[key].toLowerCase(),
+      t[key],
+      `the default theme's --${key} has drifted from style.css`,
+    );
+  }
+});
+
+for (const theme of THEMES) {
+  test(`CONTRAST [${theme.name}]: every state colour clears 3:1 on the chrome ground`, () => {
+    const { chrome } = themeTokens(theme);
+    for (const ground of ['bg', 'surface']) {
+      for (const [state, colour] of Object.entries(STATE_COLORS)) {
+        const ratio = contrastRatio(colour, chrome[ground]);
+        assert.ok(
+          ratio >= 3,
+          `${state} (${colour}) is ${ratio.toFixed(2)}:1 on --${ground} (${chrome[ground]}) ` +
+            `in "${theme.name}"; needs >= 3:1. Move the theme's ground, never the state colour.`,
+        );
+      }
+    }
+  });
+
+  test(`CONTRAST [${theme.name}]: text clears 4.5:1 on every ground it lands on`, () => {
+    const { chrome } = themeTokens(theme);
+    for (const ground of ['bg', 'surface']) {
+      for (const ink of ['ink', 'ink-2']) {
+        const ratio = contrastRatio(chrome[ink], chrome[ground]);
+        assert.ok(
+          ratio >= 4.5,
+          `--${ink} is ${ratio.toFixed(2)}:1 on --${ground} in "${theme.name}"`,
+        );
+      }
+    }
+    // `--muted` sets normal-size text on three grounds — the test above proves
+    // that is still true of the stylesheet, and this holds every theme to it.
+    for (const ground of ['bg', 'surface', 'surface-2']) {
+      const ratio = contrastRatio(chrome.muted, chrome[ground]);
+      assert.ok(ratio >= 4.5, `--muted is ${ratio.toFixed(2)}:1 on --${ground} in "${theme.name}"`);
+    }
+  });
+
+  test(`CONTRAST [${theme.name}]: the focus ring and the accent are untouched and still clear`, () => {
+    // `--focus`, `--accent` and `--accent-ink` are NOT themeable, which is the
+    // point of this test: their literals come from the stylesheet, and it is
+    // the theme's grounds that have to accommodate them.
+    const t = readTokens();
+    const { chrome } = themeTokens(theme);
+    for (const ground of ['bg', 'surface', 'surface-2', 'surface-3']) {
+      const ratio = contrastRatio(t.focus, chrome[ground]);
+      assert.ok(ratio >= 3, `--focus is ${ratio.toFixed(2)}:1 on --${ground} in "${theme.name}"`);
+    }
+    assert.ok(contrastRatio(t.focus, t.accent) >= 3);
+    assert.ok(contrastRatio(t['accent-ink'], t.accent) >= 4.5);
+  });
+
+  test(`CONTRAST [${theme.name}]: the floor's line work clears 4.5:1 on every ground`, () => {
+    // `palette.js`'s `plateInk` comment claimed ">= 4.68:1 against every wood
+    // tone and carpetBase", hand-verified. WP-30 makes that a measurement, and
+    // makes it one every theme has to pass: a theme that darkened the floor
+    // without lightening its ink would leave every room plate unreadable and
+    // nothing else in this suite would have noticed.
+    const { floor } = themeTokens(theme);
+    for (const ground of GROUND_KEYS) {
+      const ratio = contrastRatio(floor.ink, floor[ground]);
+      assert.ok(
+        ratio >= 4.5,
+        `the ${theme.name} floor's ink (${floor.ink}) is ${ratio.toFixed(2)}:1 on the ` +
+          `${ground} (${floor[ground]}); a room plate has to be readable`,
+      );
+    }
+  });
+
+  test(`COLOUR DISCIPLINE [${theme.name}]: no themed colour is, or approaches, the accent`, () => {
+    // Crimson means "standing in your office" and a theme may not spend it, in
+    // either table. 60 in sRGB distance is the bar `palette.js` holds a
+    // material to; the chrome is held to it too, because a surface that read
+    // as red would be the same failure one layer out.
+    const { chrome, floor } = themeTokens(theme);
+    /** @param {string} h */
+    const channels = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const crimson = channels(STATE_COLORS.for_review);
+    for (const [table, tokens] of Object.entries({ floor, chrome })) {
+      for (const [key, colour] of Object.entries(tokens)) {
+        const c = channels(colour);
+        const d = Math.hypot(c[0] - crimson[0], c[1] - crimson[1], c[2] - crimson[2]);
+        assert.ok(
+          d >= 60,
+          `"${theme.name}" sets ${table}.${key} to ${colour}, which is ${d.toFixed(1)} from the ` +
+            'reserved crimson. Nothing decorative may approach it.',
+        );
+      }
+    }
+  });
+
+  test(`[${theme.name}] the state colours, the accent and the identities are not themeable`, () => {
+    // The structural half of the promise: it is not that a theme is checked
+    // for these, it is that a theme has nowhere to put them.
+    const named = [...Object.keys(theme.floor), ...Object.keys(theme.chrome)];
+    for (const key of named) {
+      assert.ok(
+        !/^(state|accent|focus|identity|hair|skin)/i.test(key),
+        `"${theme.name}" has a key called ${key}, which is not a themeable surface`,
+      );
+    }
+  });
+}
+
+test('the state colours, the accent and the focus ring are outside every allowlist', () => {
+  for (const key of CHROME_KEYS) {
+    assert.ok(!key.startsWith('state-'), `a state token (${key}) is in the chrome allowlist`);
+    assert.notEqual(key, 'accent');
+    assert.notEqual(key, 'accent-ink');
+    assert.notEqual(key, 'focus');
+    assert.notEqual(key, 'line-2');
   }
 });
 

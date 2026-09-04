@@ -197,6 +197,14 @@ export let scene = null;
 export let sceneModule = null;
 /** @type {any} the whole ./render/palette.js module namespace, if loaded */
 export let palette = null;
+/**
+ * The whole ./render/themes.js module namespace, if loaded (WP-30). Held here
+ * for the same reason `palette` is: it is a renderer module, its import is
+ * dynamic and defensive, and a build without it must still show a floor — in
+ * the default theme, which is what the stylesheet already paints.
+ * @type {any}
+ */
+export let themes = null;
 let toastTimer = null;
 let lastAnnounced = '';
 
@@ -211,6 +219,56 @@ export function setSceneModule(v) {
 /** @param {any} v */
 export function setPalette(v) {
   palette = v;
+}
+/** @param {any} v */
+export function setThemes(v) {
+  themes = v;
+}
+
+/** The theme currently painted, so a repeat application costs one comparison. */
+let appliedTheme = 'default';
+
+/**
+ * Paint a theme, floor and chrome together, and say which one landed.
+ *
+ * Safe before (or without) `render/themes.js`: with no module there is nothing
+ * to repaint and the stylesheet's own `:root` is already the default theme, so
+ * this is a no-op rather than a failure. A theme that throws its contrast
+ * guard is reported and the floor stays on the default — the one thing this
+ * must never do is leave the window painted in a theme nobody measured.
+ *
+ * The floor is re-baked here, on the change, rather than left to the next
+ * snapshot. `planSignature` does count the theme, so a snapshot would
+ * eventually do it — but the floor is push-driven, and with nobody starting or
+ * finishing a session no snapshot arrives. Before this, choosing a theme
+ * repainted the chrome instantly and left the floor on the old paint until the
+ * next thing happened, which was measured on the demo floor and is exactly the
+ * kind of defect a unit test cannot see.
+ *
+ * @param {unknown} name
+ * @returns {string} the theme actually applied
+ */
+export function applyThemeSetting(name) {
+  if (!themes) return 'default';
+  /** @returns {string} */
+  const paint = () => {
+    try {
+      return themes.applyTheme(name, document.documentElement);
+    } catch (err) {
+      console.error('[deckhq] that theme was refused; staying on the default', err);
+      try {
+        return themes.applyTheme('default', document.documentElement);
+      } catch {
+        return 'default';
+      }
+    }
+  };
+  const next = paint();
+  if (next !== appliedTheme) {
+    appliedTheme = next;
+    scene?.repaint?.();
+  }
+  return next;
 }
 
 /**

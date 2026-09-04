@@ -326,6 +326,26 @@ export function buildCommandEntries(ctx) {
       run: () => actions.showWrapped(),
     },
     {
+      // WP-30. The layout is a file the user owns: theme, room order, folded
+      // rooms and the two floor preferences. No accelerator — exporting is
+      // not an everyday two-keystroke action, and a mis-typed one would put a
+      // download in somebody's downloads folder.
+      id: 'cmd:layout-export',
+      group: 'command',
+      label: 'Export layout',
+      hint: 'theme, room order and floor preferences, as a file',
+      keywords: ['layout', 'theme', 'save', 'download', 'json', 'backup', 'share', 'floor'],
+      run: () => actions.exportLayout(),
+    },
+    {
+      id: 'cmd:layout-import',
+      group: 'command',
+      label: 'Import layout',
+      hint: 'apply one — a bad file is refused whole',
+      keywords: ['layout', 'theme', 'load', 'open', 'json', 'restore', 'floor'],
+      run: () => actions.importLayout(),
+    },
+    {
       id: 'cmd:settings',
       group: 'command',
       label: 'Settings',

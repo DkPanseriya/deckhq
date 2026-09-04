@@ -47,9 +47,20 @@ const RESERVED_CRIMSON = STATE_COLORS.for_review;
  * name says what it paints, not just what colour it is, so backdrop.js reads
  * like a materials list rather than a swatch book.
  *
- * @type {Readonly<Record<string, string>>}
+ * WP-30 made this object THEMABLE, and that cost it its `Object.freeze`.
+ * `DEFAULT_PALETTE` below is the frozen original — the one true default, and
+ * what `resetPalette()` restores — and `PALETTE` is the live object every
+ * renderer already reads. Themes reach it through `overridePalette()` and
+ * never by assignment, and both entry points re-run the colour-discipline
+ * guards at the bottom of this file, so a theme that tried to paint a floor
+ * in the reserved crimson throws where it is applied rather than on the
+ * floor. Nothing in `STATE_COLORS`, `PROJECT_IDENTITIES` or the appearance
+ * tables below is reachable from a theme by construction: they are separate
+ * exports and no themed key names one.
+ *
+ * @type {Record<string, string>}
  */
-export const PALETTE = Object.freeze({
+const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   // ---- herringbone wood floor (office + lounge), four tone variations ----
   woodHerringboneA: '#CBA87A',
   woodHerringboneB: '#BE9868',
@@ -220,21 +231,119 @@ export const PALETTE = Object.freeze({
   managerTie: '#3E5C6B',
 });
 
-// ---- runtime colour-discipline guard --------------------------------------
-// Crimson may exist exactly once in this module: as STATE_COLORS.for_review.
-// If it ever appears in a material/furniture token, fail loudly at import
-// time rather than let a decorative red creep onto the floor.
-(function assertNoDecorativeCrimson() {
+/**
+ * The materials as shipped, frozen. The floor's one true default: a theme is
+ * a diff against this, and `resetPalette()` is how you get back to it exactly
+ * — which is what keeps the default theme's goldens at 0 px.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const DEFAULT_PALETTE = Object.freeze({ ...BASE_PALETTE });
+
+/**
+ * The live materials list. Every renderer reads properties off this object at
+ * paint time, so replacing a value here changes the next bake and nothing
+ * else. See `BASE_PALETTE` above for why it is not frozen.
+ * @type {Record<string, string>}
+ */
+export const PALETTE = { ...BASE_PALETTE };
+
+/**
+ * How close, in sRGB channel distance, a material may come to the reserved
+ * crimson. The shipped floor's own closest approach is `poolRail` at 87, so
+ * 60 is a real bar with room in it rather than a number chosen to pass.
+ *
+ * It is measured against crimson ALONE, and that is deliberate. The floor is
+ * warm wood and warm grey, and `let_go` (`#BDB7AA`) is warm grey too — the
+ * default herringbone sits 52 from it — so a distance rule over all seven
+ * states would fail the floor this product already ships. Crimson is the one
+ * colour that must mean exactly one thing, and it is the one a material is
+ * held away from.
+ */
+const CRIMSON_MIN_DISTANCE = 60;
+
+/** @param {string} hex @returns {[number,number,number]|null} */
+function channelsOf(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(String(hex).trim());
+  if (!m) return null;
+  return /** @type {[number,number,number]} */ (
+    [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16))
+  );
+}
+
+/**
+ * The colour discipline, as a function rather than as a one-shot IIFE, so a
+ * theme is held to the same rule the shipped materials are.
+ *
+ * Two clauses, and each has a reason rather than a taste:
+ *
+ *   1. **No crimson, ever.** `#C0392B` means "standing in your office" and
+ *      nothing else may wear it (VISUAL-SPEC §5). A literal match catches the
+ *      obvious case.
+ *   2. **No near-miss on crimson**, at `CRIMSON_MIN_DISTANCE`. Clause 1 alone
+ *      would let a theme paint the carpet `#C13A2C`, which is the same
+ *      failure with one bit of deniability.
+ *
+ * @param {Record<string, string>} tokens
+ * @param {string} where what to name in the error
+ */
+export function assertMaterialDiscipline(tokens, where = 'PALETTE') {
   const crimson = RESERVED_CRIMSON.toLowerCase();
-  for (const [name, value] of Object.entries(PALETTE)) {
-    if (typeof value === 'string' && value.toLowerCase().includes(crimson)) {
+  for (const [name, value] of Object.entries(tokens)) {
+    if (typeof value !== 'string') continue;
+    if (value.toLowerCase().includes(crimson)) {
       throw new Error(
-        `palette.js: PALETTE.${name} uses the reserved crimson (${RESERVED_CRIMSON}). ` +
+        `palette.js: ${where}.${name} uses the reserved crimson (${RESERVED_CRIMSON}). ` +
           'Crimson is reserved for for_review and primary actions only — see VISUAL-SPEC §5.',
       );
     }
+    const rgb = channelsOf(value);
+    if (!rgb) continue; // rgba()/gradient strings carry no flat colour to measure
+    const red = /** @type {[number,number,number]} */ (channelsOf(RESERVED_CRIMSON));
+    const d = Math.hypot(rgb[0] - red[0], rgb[1] - red[1], rgb[2] - red[2]);
+    if (d < CRIMSON_MIN_DISTANCE) {
+      throw new Error(
+        `palette.js: ${where}.${name} (${value}) is only ${d.toFixed(1)} from the ` +
+          `reserved crimson (${RESERVED_CRIMSON}); nothing decorative may approach ` +
+          'the one colour that means "standing in your office" — see VISUAL-SPEC §5.',
+      );
+    }
   }
-})();
+}
+
+/**
+ * Apply a theme's material tokens over the defaults. Only keys the default
+ * palette already has may be written — a theme cannot invent a token, and it
+ * cannot reach a state colour, an identity colour or the accent, because none
+ * of those is in this object. The whole result is re-checked, so a theme is
+ * refused at the moment it is applied rather than on the floor.
+ *
+ * @param {Record<string, string>} tokens
+ */
+export function overridePalette(tokens) {
+  /** @type {Record<string, string>} */
+  const next = { ...DEFAULT_PALETTE };
+  for (const [name, value] of Object.entries(tokens || {})) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_PALETTE, name)) {
+      throw new Error(`palette.js: no material token named "${name}"`);
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      throw new Error(`palette.js: material token "${name}" must be a colour string`);
+    }
+    next[name] = value;
+  }
+  assertMaterialDiscipline(next, 'theme');
+  Object.assign(PALETTE, next);
+}
+
+/** Put every material back exactly as it shipped. */
+export function resetPalette() {
+  Object.assign(PALETTE, DEFAULT_PALETTE);
+}
+
+// ---- runtime colour-discipline guard --------------------------------------
+// The shipped materials are held to the same rule a theme is, at import time,
+// so a decorative red cannot creep onto the floor from either direction.
+assertMaterialDiscipline(DEFAULT_PALETTE, 'PALETTE');
 
 // ---------------------------------------------------------------------------
 // Per-project appearance (CONTRACTS-WP15.md §2).

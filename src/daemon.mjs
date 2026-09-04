@@ -17,6 +17,7 @@ import { register as registerState } from './http/routes/state.mjs';
 import { register as registerActions } from './http/routes/actions.mjs';
 import { register as registerHooks } from './http/routes/hooks.mjs';
 import { register as registerSettings } from './http/routes/settings.mjs';
+import { register as registerLayout } from './http/routes/layout.mjs';
 import { register as registerChanges } from './http/routes/changes.mjs';
 import { register as registerDiff } from './http/routes/diff.mjs';
 import { register as registerPermission } from './http/routes/permission.mjs';
@@ -297,6 +298,7 @@ export async function startDaemon(opts = {}) {
   registerActions(router, ctx);
   registerHooks(router, ctx);
   registerSettings(router, ctx);
+  registerLayout(router, ctx);
   registerChanges(router, ctx);
   registerDiff(router, ctx);
   registerPermission(router, ctx);
