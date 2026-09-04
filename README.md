@@ -446,6 +446,25 @@ never the only way to get to anything. Whenever something is waiting, a strip of
 header carries the queue's shape without leaving the floor at all: oldest on the left, and it
 stays there.
 
+## Themes, and the floor as a file
+
+The floor comes in three finishes, all free and none of them gated: the default warm office,
+**night shift** — the same office after hours, cooler and dimmer — and **blueprint**, the floor as
+a drawing on a drafting table, in white line work on blue. `⌘K` → Settings → Floor → Theme, and
+hovering a swatch repaints the whole window so you can see it before you choose it. A theme
+repaints materials and neutrals and nothing else: **the six state colours never move**, so a
+raised hand is the same amber in every theme and red still means one thing, and every theme is
+measured against the same contrast floors before it can be selected — a theme that failed one
+would be refused rather than shipped. `deckhq layout export > my-floor.json` writes the
+arrangement — the theme, the room order, which rooms are folded into the idle strip, and the two
+floor preferences — and `deckhq layout import my-floor.json` applies it. It carries no session, no
+transcript and no acknowledgement, and a malformed file is refused whole with the reason, never
+half-applied. It does name your project folders, so read one before you send it anywhere.
+
+![The floor in the night shift theme: the same office, cooler and dimmer, with the state colours unchanged](docs/media/theme-night-shift.png)
+
+![The floor in the blueprint theme: drafting-table blue with white line work, and the state colours unchanged](docs/media/theme-blueprint.png)
+
 ## Options
 
 ```bash
