@@ -25,7 +25,7 @@ export function register(router, ctx) {
    * `server.close()` waits for every request to finish. So a browser parked
    * on the floor made a graceful shutdown wait for a stream that would never
    * end on its own: `close()` simply did not return (`docs/DEVIATIONS.md`
-   * §126.3, §127). Nothing outside this file can end one, because nothing
+   * §126.3, §128). Nothing outside this file can end one, because nothing
    * outside this file holds the `res`. So this file keeps the set, and hands
    * shutdown one function to call.
    * @type {Set<() => void>}

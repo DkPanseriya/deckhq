@@ -152,7 +152,7 @@ test('close() ends an open event stream instead of waiting forever for it', asyn
   // With a browser parked on the floor `close()` simply did not return —
   // measured here at >10 s and unbounded before the fix, 9 ms after it. That
   // deadlocked the goldens gate for eight minutes and hung any embedder.
-  // `docs/DEVIATIONS.md` §126.3, §127.
+  // `docs/DEVIATIONS.md` §126.3, §128.
   const { dir, stateFile, publicDir } = daemonScratch('daemon-sse-close-');
   const d = await startDaemon({ port: 0, stateFile, publicDir });
   // A raw request, not `fetch`: nothing pools it, nothing aborts it, and it

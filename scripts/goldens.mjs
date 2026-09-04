@@ -297,7 +297,7 @@ function startDemo(population, theme = 'default') {
      * browser still parked on this demo's page used to hold that open forever,
      * because an SSE stream is a request in flight that never finishes;
      * `close()` now ends its own streams and returns in milliseconds
-     * regardless (docs/DEVIATIONS.md §127). The caller still navigates away
+     * regardless (docs/DEVIATIONS.md §128). The caller still navigates away
      * first — releasing the page is the honest thing to do and it is one
      * command — and this stays as the backstop for every OTHER way a child can
      * refuse to leave: SIGTERM, then SIGKILL, then give up and carry on. An

@@ -819,7 +819,7 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   a page learns the daemon is going instead of watching a socket disappear. Both Node calls stay
   optional, because the floor is Node 18 and they arrived in 18.2. This deadlocked the goldens gate
   for eight minutes a run and hung any embedder; only the demo script had a backstop, and the
-  backstops stay because none of them was only about this. `docs/DEVIATIONS.md` §127.
+  backstops stay because none of them was only about this. `docs/DEVIATIONS.md` §128.
 - **Thirty-two type defects the JSDoc had been hiding.** Every one was live and invisible to 1,520
   tests: `Settings` was three keys short of `DEFAULT_SETTINGS`, `SessionSummary` never declared
   the `archived` flag the adapter stamps onto it, `public/render/plan.js`'s `Room` was missing the

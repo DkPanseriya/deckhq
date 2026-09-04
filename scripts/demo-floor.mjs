@@ -969,7 +969,7 @@ process.stdout.write(
  * definition, always is. A browser sitting on the floor therefore held this
  * process open forever on a signal. That was a real defect in `close()` and it
  * has been fixed there: `close()` ends its own event streams and returns in
- * milliseconds with a browser attached (docs/DEVIATIONS.md §126.3, §127).
+ * milliseconds with a browser attached (docs/DEVIATIONS.md §126.3, §128).
  * This backstop stays regardless, because a demo script that will not answer
  * Ctrl-C is its own bug whatever the reason, and the fixture directory is
  * removed either way — which is the one thing shutdown genuinely owes.

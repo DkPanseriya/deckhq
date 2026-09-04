@@ -9780,7 +9780,7 @@ fails on any of them: a set you cannot capture is not a set.
 was tests, `scripts/`, `src/cli/chrome.mjs` and the workflow. `closeAllConnections()` belongs inside
 the `server.close()` wait, after a grace period, exactly as `closeIdleConnections()` already is.
 Until then any embedder calling `close()` with a browser attached hangs, and only the demo script
-has a backstop. **Paid in §127**, which also ends the streams themselves rather than only cutting
+has a backstop. **Paid in §128**, which also ends the streams themselves rather than only cutting
 their sockets.
 
 ### 126.4 The linux captures were made, written, and uploaded nowhere
@@ -9941,7 +9941,7 @@ does not open** until the zero-egress, invariant, hostile-relay, privacy-capture
 relay-database-dump acceptance items have run green on the reference machine. A relay that turns
 out to be readable after fifty people have paid is not a bug, it is the end of the product's one
 real differentiator.
-## 127. `daemon.close()` — the stream the shutdown was waiting on was its own
+## 128. `daemon.close()` — the stream the shutdown was waiting on was its own
 
 §126.3 ended on the word **Owed**: `daemon.close()` is genuinely wrong, the fix belongs in
 `src/daemon.mjs`, and that package touched everything except it. This is that fix.

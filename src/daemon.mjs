@@ -55,7 +55,7 @@ const DEFAULT_PORT = 4317;
  * long-lived response is the event stream, and `close()` ends those itself
  * before the clock starts. What is left is a request that arrived in the last
  * instant, and half a second is a generous read of "let it finish".
- * `docs/DEVIATIONS.md` §127.
+ * `docs/DEVIATIONS.md` §128.
  */
 const SHUTDOWN_GRACE_MS = 500;
 
@@ -478,7 +478,7 @@ export async function startDaemon(opts = {}) {
     // why `closeAllConnections()` waits `SHUTDOWN_GRACE_MS` rather than firing
     // at once: a request that arrived in the last instant is left to finish,
     // and a socket that is merely slow to be reaped is not waited on forever.
-    // Both calls arrived in Node 18.2/19, so both are optional here (§127).
+    // Both calls arrived in Node 18.2/19, so both are optional here (§128).
     await new Promise((resolve) => {
       // Armed before the close is asked for, so that the grace cannot be
       // started late by a slow callback, and cleared the moment the server
