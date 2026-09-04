@@ -10402,7 +10402,7 @@ already-flaky failure in `claude-stream.test.mjs`'s timeout test, reproduced in 
 untouched here), and the arithmetic — `import.meta.dirname` is Node 20.11+, the fix is Node 12+ —
 points at the one line four times over. The CI run on this branch is the first real Node 18
 evidence.
-## 130. WP-22 follow-up — the ten files it named, the four that crossed the line since, and the four shapes a split can take
+## 131. WP-22 follow-up — the ten files it named, the four that crossed the line since, and the four shapes a split can take
 
 §122 split `plan.js` and `app.js` and then did something better than declare
 victory: it listed, in a table, the ten files still over the 900-line ceiling

@@ -866,7 +866,7 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   and the demo script. Behaviour is unchanged and that is checked rather than asserted: every
   declaration was matched character for character in exactly one new module, every source line
   accounted for, and the goldens moved **0 px at all** on all six populations after each split.
-  The ceiling test now covers all one hundred and six modules the two packages produced together. `docs/DEVIATIONS.md` §130.
+  The ceiling test now covers all one hundred and six modules the two packages produced together. `docs/DEVIATIONS.md` §131.
 
 ### Fixed
 
