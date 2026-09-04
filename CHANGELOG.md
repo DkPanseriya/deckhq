@@ -1301,7 +1301,7 @@ changes no user-owned field on the parent` — a parent standing in the office w
   descheduling the process as though it were the read blocking the loop; it now brackets the read
   with two idle controls and holds it to `max(50 ms, 2× the worse control)`, which is what "does not
   block the loop" meant all along. All three were red on a loaded machine; eleven consecutive full
-  1,713-test runs, two of them beside a `goldens:check`, are now green. §131.
+  1,713-test runs, two of them beside a `goldens:check`, are now green. §132.
 
 ### Packaging
 

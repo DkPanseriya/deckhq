@@ -616,7 +616,7 @@ test('the whole store is read without blocking the event loop', async () => {
     // while the code it guards was innocent. So the read is bracketed by two
     // controls — the same chain, the same duration, doing nothing — and the
     // floor for the assertion is whichever of them saw the worse
-    // descheduling. docs/DEVIATIONS.md §131.3.
+    // descheduling. docs/DEVIATIONS.md §132.3.
     const idle = () => new Promise((r) => setTimeout(r, 25));
     const before = await worstGapDuring(idle);
     const read = await worstGapDuring(readDesktopSessions);

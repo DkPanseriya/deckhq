@@ -267,7 +267,7 @@ const BUDGET_MS = 20;
  *
  * A CPU-only loop was tried here first and is the wrong probe: it does not
  * move with the file and allocation contention that actually slows this path.
- * docs/DEVIATIONS.md §131.
+ * docs/DEVIATIONS.md §132.
  */
 const QUIET_UNIT_MS = 14;
 

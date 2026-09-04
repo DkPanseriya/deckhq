@@ -123,7 +123,7 @@ function readPid(file) {
  * a child that is demonstrably up, so the outcome no longer depends on how
  * busy the machine is. `Atomics.wait` parks the thread between looks instead
  * of spinning on it, which matters precisely on the loaded machine this
- * exists for. docs/DEVIATIONS.md §131.
+ * exists for. docs/DEVIATIONS.md §132.
  * @param {string} file @param {number} [timeoutMs]
  */
 function awaitPidSync(file, timeoutMs = 20_000) {

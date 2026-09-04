@@ -10624,14 +10624,14 @@ Two more of the same shape in `state-machine.mjs` and
   doing two things is how a repository ends up with a hundred modules nobody
   can name.
 
-## 131. Three timing tests measured the machine, not the code — and one of them started its clock before its child
+## 132. Three timing tests measured the machine, not the code — and one of them started its clock before its child
 
 Three tests read a wall clock and asserted on it. Each passes in isolation on a quiet machine and
 fails with a `npm run goldens:check` running beside it, which is not a property of anything they
 exist to prove. Two were named going in; the third was found by the runs meant to prove the other
 two, which is the argument for running the suite under load at all.
 
-### 131.1 WP-09 — the timeout test read a pid file the child had not written yet
+### 132.1 WP-09 — the timeout test read a pid file the child had not written yet
 
 `test/unit/claude-stream.test.mjs`'s **"a turn that overruns its timeout is killed, and leaves
 nothing running"** (§117) failed under load with:
@@ -10681,7 +10681,7 @@ Three smaller corrections came with it, all of the same kind:
 What the test proves is unchanged: an overrunning turn is killed, and the process it started is gone
 afterwards.
 
-### 131.2 WP-38 — the 20 ms budget is only measurable on a machine quiet enough to measure it
+### 132.2 WP-38 — the 20 ms budget is only measurable on a machine quiet enough to measure it
 
 `test/unit/statusline.test.mjs`'s **"the no-daemon path answers inside its 20 ms budget"** (§92)
 failed the same way, for a plainer reason. Measured here, same commit, same code:
@@ -10733,7 +10733,7 @@ Two consequences, stated rather than hidden:
   on any machine. CI needs no special case: a slower runner measures a larger unit cost and takes the
   loose branch by the same rule, for the same stated reason.
 
-### 131.3 The third one, found by the runs that were supposed to prove the first two
+### 132.3 The third one, found by the runs that were supposed to prove the first two
 
 `test/unit/claude-desktop-cache.test.mjs`'s **"the whole store is read without blocking the event
 loop"** is the same defect a third time, and it is what turned one of the verification runs red —
@@ -10752,7 +10752,7 @@ becomes what it always meant: the read must not block the loop materially longer
 blocks it. The failure message prints both numbers. The `worstGapDuring()` helper is the test's own
 old body, lifted out so the controls and the measurement are literally the same instrument.
 
-### 131.4 Evidence
+### 132.4 Evidence
 
 **Eleven** full runs on this branch, 1,713 tests, **0 failures** in every one. Two of them were taken
 with `npm run goldens:check` running in another shell for the whole of their duration, and it exited
