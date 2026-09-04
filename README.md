@@ -250,8 +250,8 @@ your settings file is copied to `~/.deckhq/backups/` first, the entry is tagged,
 deletes only the entry DeckHQ wrote. A status line you configured yourself is reported and left
 exactly where it is.
 
-It assumes `deckhq` is on your `PATH` — a global install, Homebrew, winget or scoop; `npx` does not
-leave one behind. `--command "<something else>"` writes a different command. The installed entry
+It assumes `deckhq` is on your `PATH`, which today means a global install (`npm i -g deckhq`);
+`npx` does not leave one behind. `--command "<something else>"` writes a different command. The installed entry
 refreshes every 5 seconds, matching the floor's own poll, and `--interval 0` leaves it
 event-driven instead.
 
@@ -279,7 +279,11 @@ claude plugin marketplace add ./deckhq   # a clone on disk works the same way
 That is the whole setup. The plugin brings:
 
 - **The hooks**, all eight events, without touching your `settings.json` at all — installing the
-  plugin _is_ the consent, and uninstalling takes them with it.
+  plugin _is_ the consent, and uninstalling takes them with it. The ninth hook,
+  `PermissionRequest`, is **not** among them, so a permission prompt cannot be answered from the
+  panel on this route: that one is an `http` hook carrying a port, and the plugin's hooks
+  deliberately carry none. Install the hooks from the floor's header instead if you want the
+  permission card — and if you do, remove one route or the other, per the note below.
 - **The daemon, started on your first session.** An `async` `SessionStart` hook checks whether one
   is already running and starts one if not, detached and without opening a browser. Ten terminals
   opened at once start exactly one daemon between them.
@@ -294,10 +298,13 @@ and the hook command looks it up on each event, so a daemon that moved to anothe
 receiving everything — the reinstall banner has nothing to warn you about on this route.
 
 Two things it needs from your machine. `node` must be on the `PATH` Claude Code runs hooks with,
-and `deckhq` must be findable for the `SessionStart` start to work — a global install, Homebrew,
-winget or scoop; `npx` leaves no binary behind, and the plugin will not fetch one, because DeckHQ
-makes no outbound network calls of any kind. Without `deckhq` on the `PATH` the plugin still
-delivers events to a daemon you started yourself; it just cannot start one for you.
+and `deckhq` must be findable for the `SessionStart` start to work — today that means a global
+install (`npm i -g deckhq`); `npx` leaves no binary behind, and the plugin will not fetch one,
+because DeckHQ makes no outbound network calls of any kind. The release job attaches Homebrew,
+winget and scoop manifests to a tagged release, so those routes exist as generated files rather
+than as anything somebody has installed with: that job has never run. Without `deckhq` on the
+`PATH` the plugin still delivers events to a daemon you started yourself; it just cannot start one
+for you.
 
 If you had already installed the hooks from the floor's header, remove them there after installing
 the plugin. Both routes work, but together they deliver every event twice.
@@ -430,7 +437,8 @@ These are real, and listed here rather than discovered later.
   reusable rule for **Allow for this session** are all covered by tests against recorded payloads
   and none of them has been watched arriving — and the real request carried no rule at all, so
   expect two buttons more often than three. Codex, Gemini CLI and OpenCode cannot be answered from
-  the panel at all.
+  the panel at all. It also needs the hooks installed from the floor's header: the Claude Code
+  plugin carries eight events and `PermissionRequest` is not one of them.
 - **A streamed reply has been watched once, on the same machine and the same day.** The turn was
   accepted in 76 ms, the reply arrived in fragments, and the session's own transcript recorded it
   like any other turn. A long turn, a turn that fails halfway, and a turn that calls tools have

@@ -6,6 +6,25 @@
 
 ## Unreleased
 
+## 1.3.0 — 2026-09-04
+
+### Highlights
+
+The panel became a review surface: what the agent said, rendered as markdown, what changed on
+disk, and three weighted actions. Replies stream in as they are written, and a permission prompt
+raised in the terminal can be answered — Allow or Deny — from the panel; both were run live
+against Claude Code on 4 September 2026. The floor is generated from the people on it rather than
+the repositories on disk: a room exists because somebody is in it. Every agent arrives with a
+face, a name and a rarity — most are common, about one in a hundred legendary. A queue strip sits
+under the header, `Tab` swaps the floor for the same queue as a table, and notifications reach a
+closed tab. An append-only event ledger records what the floor did; `deckhq stats`, the day's
+postcard and a weekly Wrapped all read it, computed on the machine and sent nowhere. DeckHQ
+installs as a Claude Code plugin, ships a VS Code extension, and prints both a status line and a
+terminal deck. Three floor themes are free; the Supporter pack adds more themes and avatars and
+takes nothing away. The Codex adapter is verified against real Codex sessions; Gemini CLI and
+OpenCode remain unverified. Node 18 or newer, zero dependencies, CI green on Linux, macOS and
+Windows.
+
 ### Added
 
 - **The Supporter pack: more themes and avatars, and nothing else.** A pack is one signed JSON
