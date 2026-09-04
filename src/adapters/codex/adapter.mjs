@@ -35,6 +35,7 @@ import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 
 import { agentId, clampText, splitAgentId } from '../../core/model.mjs';
 import { estimateCost } from '../../core/rates.mjs';
@@ -48,10 +49,12 @@ import {
   extractModelHint,
   extractSessionMeta,
   extractUsage,
+  hasZstd,
+  isCompressedRollout,
   linesFromChunk,
   parseLine,
-  readHead,
-  readTail,
+  readRolloutHead,
+  readRolloutTail,
   sessionIdFromFilename,
   truncateTitle,
 } from './parse.mjs';
@@ -118,13 +121,33 @@ async function liveSessions() {
 }
 
 /**
- * Recursively collect `.jsonl` file paths under `root`, bounded by depth.
+ * Recursively collect rollout file paths under `root`, bounded by depth.
  * Missing or unreadable directories are treated as empty, never thrown.
+ *
+ * **Two kinds of rollout, and the defect that named the second** (§136.2).
+ * Codex compresses an untouched journal to `<name>.jsonl.zst` and deletes the
+ * plain file, so a filter of `.endsWith('.jsonl')` dropped the session from
+ * the floor with no error anywhere — a wrong number, silently, and the ones
+ * that vanished were the oldest.
+ *
+ * On a Node with Zstandard the compressed ones are read like any other. On
+ * this package's Node 18 floor they cannot be, so they are COUNTED: `skipped`
+ * is what `doctor` and the floor's banner say out loud, and a number nobody
+ * can see is the only version of this that is not allowed.
+ *
+ * Exported so both branches can be driven over a real directory from one test
+ * run — the capability is a property of the Node the suite happens to be on,
+ * and a branch that only runs on somebody's laptop is not tested.
+ *
  * @param {string} root
- * @returns {Promise<string[]>}
+ * @param {{readCompressed?: boolean}} [opts]
+ * @returns {Promise<{files: string[], skipped: number}>}
  */
-async function walkSessionFiles(root) {
-  const out = [];
+export async function walkSessionFiles(root, opts = {}) {
+  const canRead = opts.readCompressed ?? hasZstd();
+  /** @type {string[]} */
+  const files = [];
+  let skipped = 0;
   /** @param {string} dir @param {number} depth */
   async function walk(dir, depth) {
     if (depth > MAX_WALK_DEPTH) return;
@@ -138,13 +161,63 @@ async function walkSessionFiles(root) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(full, depth + 1);
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.jsonl')) {
-        out.push(full);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      if (isCompressedRollout(entry.name)) {
+        if (canRead) files.push(full);
+        else skipped++;
+      } else if (entry.name.toLowerCase().endsWith('.jsonl')) {
+        files.push(full);
       }
     }
   }
   await walk(root, 0);
-  return out;
+  return { files, skipped };
+}
+
+/**
+ * How many compressed rollouts the last scan could not read, and therefore did
+ * not put on the floor. Zero on every machine that can decompress them.
+ *
+ * Module state rather than a return value because it has to survive the trip
+ * to a surface `scanSessions()` does not talk to: `doctor` prints it, and the
+ * registry hands it to the floor's degraded banner. It is only ever written by
+ * a completed scan.
+ */
+let lastSkippedCompressed = 0;
+
+/**
+ * The sentence for `n` unread compressed rollouts, or null for none.
+ *
+ * Pure, and exported, because it is the one part of this that a Node with
+ * Zstandard can never produce for itself: on this machine `n` is always zero,
+ * so the wording of the branch the Node 18 floor actually takes would
+ * otherwise be asserted nowhere.
+ * @param {number} n
+ * @param {string} [nodeVersion]
+ * @returns {string|null}
+ */
+export function describeCompressedGap(n, nodeVersion = process.version) {
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const are = n === 1 ? 'session is' : 'sessions are';
+  return (
+    `${n} compressed Codex ${are} not read on Node < 22 (${nodeVersion}), so ` +
+    `${n === 1 ? 'it is' : 'they are'} not on the floor. Node 22.15 or newer reads them.`
+  );
+}
+
+/**
+ * One sentence about what this adapter could not read, or null when there is
+ * nothing to say — which is the case on every Node ≥ 22.15 and on every
+ * machine with no compressed rollouts yet.
+ *
+ * Read by `src/core/state-machine-snapshot.mjs` into the snapshot's `degraded`
+ * map, which is what puts it on the floor's banner, and by `doctor`.
+ * @returns {string|null}
+ */
+function describeReadLimits() {
+  return describeCompressedGap(lastSkippedCompressed);
 }
 
 /**
@@ -155,7 +228,7 @@ async function walkSessionFiles(root) {
  * @returns {Promise<import('../../core/model.mjs').SessionSummary>}
  */
 async function buildSessionSummary(filePath, mtimeMs) {
-  const head = await readHead(filePath, HEAD_BYTES);
+  const head = await readRolloutHead(filePath, HEAD_BYTES);
   const headRecords = linesFromChunk(head.text, { dropLastPartial: head.truncated })
     .map(parseLine)
     .filter(Boolean);
@@ -174,7 +247,7 @@ async function buildSessionSummary(filePath, mtimeMs) {
     if (meta && firstUserText) break;
   }
 
-  const tail = await readTail(filePath, TAIL_BYTES);
+  const tail = await readRolloutTail(filePath, TAIL_BYTES);
   const tailRecords = linesFromChunk(tail.text, { dropFirstPartial: tail.truncated })
     .map(parseLine)
     .filter(Boolean);
@@ -251,7 +324,9 @@ async function scanSessions({ maxAgeDays, limit } = {}) {
 
   let files;
   try {
-    files = await walkSessionFiles(sessionsDir());
+    const walked = await walkSessionFiles(sessionsDir());
+    files = walked.files;
+    lastSkippedCompressed = walked.skipped;
   } catch {
     return [];
   }
@@ -316,7 +391,7 @@ async function newestOf(files) {
 async function findSessionFile(sessionId) {
   let files;
   try {
-    files = await walkSessionFiles(sessionsDir());
+    files = (await walkSessionFiles(sessionsDir())).files;
   } catch {
     return null;
   }
@@ -338,7 +413,7 @@ async function findSessionFile(sessionId) {
 
   for (const { file } of stated.slice(0, MAX_ID_LOOKUP_SCAN)) {
     try {
-      const head = await readHead(file, HEAD_BYTES);
+      const head = await readRolloutHead(file, HEAD_BYTES);
       const lines = linesFromChunk(head.text, { dropLastPartial: head.truncated });
       for (const line of lines) {
         const rec = parseLine(line);
@@ -374,7 +449,7 @@ async function conversation(id, { maxMessages } = {}) {
 
   let tail;
   try {
-    tail = await readTail(file, TAIL_BYTES);
+    tail = await readRolloutTail(file, TAIL_BYTES);
   } catch {
     return [];
   }
@@ -764,6 +839,7 @@ export const adapter = {
   available,
   version,
   describeBinary,
+  describeReadLimits,
   liveSessions,
   scanSessions,
   conversation,

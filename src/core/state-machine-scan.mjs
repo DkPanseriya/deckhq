@@ -139,6 +139,22 @@ export class RegistryScan extends RegistryCompute {
         this.log.warn(`scanSessions failed for adapter ${adapter.id}`, err);
       }
 
+      // WP-23a. What that scan could NOT read, in the runtime's own words —
+      // Codex's compressed rollouts on a Node with no Zstandard today
+      // (`docs/DEVIATIONS.md` §136.2). Read AFTER the scan, because it
+      // describes the scan that just happened. Optional: an adapter that
+      // cannot fail to read anything simply does not have the method, and a
+      // throwing one must never be able to fail a refresh.
+      try {
+        const limit =
+          typeof adapter.describeReadLimits === 'function'
+            ? await adapter.describeReadLimits()
+            : null;
+        this._readLimits[adapter.id] = typeof limit === 'string' && limit ? limit : null;
+      } catch {
+        this._readLimits[adapter.id] = null;
+      }
+
       try {
         const l = await adapter.liveSessions();
         for (const item of l) live.push(item);

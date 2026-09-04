@@ -249,6 +249,14 @@ export async function collectRuntime(adapter, scan, opts = {}) {
      *         shimOnPath:string|null}|null}
      */
     binary: null,
+    /**
+     * WP-23a. One sentence about what this runtime's last scan could NOT read,
+     * or null. Codex's compressed rollouts on a Node with no Zstandard are the
+     * only one today (`docs/DEVIATIONS.md` §136.2). Read through an optional
+     * adapter method, so a runtime that cannot fail to read anything has none.
+     * @type {string|null}
+     */
+    readLimit: null,
     sessions: 0,
     projects: 0,
     live: 0,
@@ -301,6 +309,16 @@ export async function collectRuntime(adapter, scan, opts = {}) {
     row.projects = new Set(list.map((s) => s && s.cwd).filter(Boolean)).size;
   } catch (err) {
     row.error = err?.message || String(err);
+  }
+
+  try {
+    // AFTER the scan: it describes the scan that just ran.
+    if (typeof adapter.describeReadLimits === 'function') {
+      const limit = await adapter.describeReadLimits();
+      row.readLimit = typeof limit === 'string' && limit.trim() ? limit.trim() : null;
+    }
+  } catch {
+    row.readLimit = null;
   }
 
   try {
@@ -629,6 +647,11 @@ export async function collectReport(opts = {}) {
   }
   for (const row of runtimes) {
     if (row.error) problems.push(`${row.label} reported an error: ${row.error}`);
+    // WP-23a. Sessions that exist and are not on the floor. A note and exit 0
+    // — nothing is broken and there is nothing to repair on this Node — but
+    // it is the number `walkSessionFiles` used to drop in silence, and the
+    // whole fix is that somebody can now see it (§136.2).
+    if (row.readLimit) notes.push(row.readLimit);
     // WP-23a. Transcripts readable, no program to run: the floor is right and
     // "send" and "resume" cannot work. A NOTE and not a problem — the read
     // path, which is most of the product, is entirely healthy — but it must

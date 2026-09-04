@@ -151,6 +151,27 @@ export function normalizeDegraded(degraded) {
   return [];
 }
 
+/** What the banner says when the only reason it is up is uninstalled hooks. */
+export const DEGRADED_HOOKS_TEXT = 'Install hooks for exact state';
+
+/**
+ * The sentences in `snapshot.degraded`, if any.
+ *
+ * WP-23a. A value in that map is `true` — "state is inferred, install hooks"
+ * — or a SPECIFIC thing the runtime could not read, as a sentence the runtime
+ * wrote. Today that is Codex's compressed rollouts on a Node with no
+ * Zstandard (`docs/DEVIATIONS.md` §136.2): sessions genuinely missing from the
+ * floor, which the boolean banner had no way to say and which installing
+ * hooks would not fix. So the string is shown as written and the "Install
+ * hooks" button is hidden when it is the only reason the banner is up.
+ * @param {unknown} degraded
+ * @returns {string[]}
+ */
+export function degradedNotes(degraded) {
+  if (!degraded || typeof degraded !== 'object' || Array.isArray(degraded)) return [];
+  return Object.values(degraded).filter((v) => typeof v === 'string' && v.trim());
+}
+
 /** A short local summary, used as a fallback when Scene.describeFloor is unavailable. @param {any} s */
 export function localDescribeFloor(s) {
   if (!s) return 'Floor loading.';
@@ -221,7 +242,17 @@ export function renderHeader(snapshot) {
   // WP-16 · end
 
   const degradedRuntimes = normalizeDegraded(snapshot.degraded);
+  const degradedNoted = degradedNotes(snapshot.degraded);
   el.degradedBanner.hidden = degradedRuntimes.length === 0;
+  // WP-23a. A runtime that named what it could not read says so in its own
+  // words; otherwise the banner keeps the sentence it has always had. The
+  // button offers the only fix the banner knows, so it goes away when nothing
+  // the banner is reporting would be fixed by installing hooks.
+  el.degradedText.textContent = degradedNoted.length
+    ? degradedNoted.join(' · ')
+    : DEGRADED_HOOKS_TEXT;
+  el.degradedLink.hidden =
+    degradedNoted.length > 0 && degradedNoted.length === degradedRuntimes.length;
 
   // A store that cannot write is quietly throwing away every acknowledgement
   // as soon as the daemon restarts. Never let that be silent.

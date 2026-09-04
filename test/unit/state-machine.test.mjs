@@ -180,6 +180,42 @@ test('poll path: live + assistant spoke last -> for_review, reviewSince set, deg
   assert.equal(registry.snapshot().degraded['claude-code'], true);
 });
 
+test('degraded: a runtime that names what it could not read gets its SENTENCE, not a flag', async () => {
+  // WP-23a, docs/DEVIATIONS.md §136.2. `true` means "state is inferred,
+  // install hooks" and the banner's button is the fix. A string means specific
+  // sessions are missing from the floor — which a boolean cannot say and which
+  // installing hooks would not fix — so it is carried whole and takes
+  // precedence. The client hides the button when a string is the only reason.
+  const NOTE = '3 compressed Codex sessions are not read on Node < 22 (v18.20.4).';
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'assistant' })],
+    live: [makeLive('a')],
+  });
+  adapter.describeReadLimits = async () => NOTE;
+  const registry = new Registry({ store: fakeStore(), adapters: [adapter] });
+  await registry.refresh();
+
+  assert.equal(registry.snapshot().degraded['claude-code'], NOTE);
+});
+
+test('degraded: an adapter with no describeReadLimits, or a throwing one, is unchanged', async () => {
+  const throwing = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'assistant' })],
+    live: [makeLive('a')],
+  });
+  throwing.describeReadLimits = async () => {
+    throw new Error('nope');
+  };
+  const registry = new Registry({ store: fakeStore(), adapters: [throwing] });
+  await registry.refresh();
+  assert.equal(registry.snapshot().degraded['claude-code'], true);
+
+  // And an empty string is "nothing to say", not a sentence.
+  throwing.describeReadLimits = async () => '';
+  await registry.refresh();
+  assert.equal(registry.snapshot().degraded['claude-code'], true);
+});
+
 test('poll path: live + user spoke last -> working', async () => {
   const adapter = makeAdapter('claude-code', {
     summaries: [makeSummary('a', { lastRole: 'user' })],

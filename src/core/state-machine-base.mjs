@@ -39,6 +39,8 @@ export class RegistryBase {
   _hookStatus;
   /** @type {any} */ // per-runtime hook health
   _hookHealth;
+  /** @type {Record<string, string|null>} */ // WP-23a: what each last scan could NOT read
+  _readLimits;
   /** @type {any} */ // WP-19's open questions, by session
   _pendingPermissions;
   /** @type {any} */ // WP-41 juniors seen to have stopped

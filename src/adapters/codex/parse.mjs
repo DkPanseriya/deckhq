@@ -61,12 +61,22 @@
  * 7. A model hint, probed on turn_context payloads (payload.model) and on any
  *    record carrying a top-level or payload-level `model` string.
  *
+ * 8. A rollout journal Codex has COMPRESSED: the same JSONL, Zstandard-framed,
+ *    named `rollout-<ISO>-<uuid>.jsonl.zst`. A background worker in the CLI
+ *    rewrites an untouched journal (documented at roughly seven days), checks
+ *    the copy decodes, and deletes the plain file — so this is not an archive
+ *    format, it is the SAME session a week later. Read out of the installed
+ *    `codex.exe` 0.153.1 rather than from a blog: the binary carries the
+ *    literal `.jsonl.zst`, `rollout compression worker failed for`, and a
+ *    metrics family `codex.rollout_compression.*`. `docs/DEVIATIONS.md` §136.2.
+ *
  * A line that fails JSON.parse, or an object that matches none of the above,
  * is simply skipped by the caller (see extractMessage/extractUsage/
  * extractSessionMeta all returning null) — never thrown.
  */
 
 import { open, stat } from 'node:fs/promises';
+import zlib from 'node:zlib';
 
 /** Maximum bytes read from the start of a file (title / meta discovery). */
 export const HEAD_BYTES = 256 * 1024;
@@ -138,6 +148,142 @@ export async function readTail(filePath, maxBytes = TAIL_BYTES) {
   } finally {
     await fh.close();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Compressed rollouts (§136.2)
+// ---------------------------------------------------------------------------
+
+/** What Codex names a rollout journal once its compression worker has been. */
+export const COMPRESSED_SUFFIX = '.jsonl.zst';
+
+/**
+ * The largest compressed rollout this will open at all. Zstandard's ratio on
+ * JSONL is comfortably better than 10:1, so 16 MB compressed is a very large
+ * session — and the bound exists so that a file which is not what its name
+ * says cannot be read into memory whole before anything notices.
+ */
+export const MAX_COMPRESSED_BYTES = 16 * 1024 * 1024;
+
+/**
+ * And the largest thing it will decompress TO. A decompression bomb is the
+ * one hazard a plain read does not have: the bounded reads elsewhere in this
+ * file are bounded because the caller says how many bytes to take, and a
+ * `.zst` decides that for itself unless it is told otherwise. `zlib` enforces
+ * this by refusing rather than by truncating, which is the right way round —
+ * a half-decoded JSONL would be silently wrong, and a refusal is countable.
+ */
+export const MAX_DECOMPRESSED_BYTES = 64 * 1024 * 1024;
+
+/** @param {string} name @returns {boolean} */
+export function isCompressedRollout(name) {
+  return String(name).toLowerCase().endsWith(COMPRESSED_SUFFIX);
+}
+
+/**
+ * Can this Node decompress Zstandard?
+ *
+ * `zlib.zstdDecompressSync` arrived in Node 22.15 / 23.8. This package's floor
+ * is Node 18 (`package.json` `engines`, `docs/DEVIATIONS.md` §130) and
+ * `08-PLAN-V2-100X.md` §1.1 rule 3 forbids taking a dependency to fill the
+ * gap, so the answer is a capability check and two behaviours, not a version
+ * comparison: a runtime that has it reads compressed rollouts, one that does
+ * not counts them and says so. Injectable so both branches are exercised from
+ * one test run on one machine.
+ * @param {{zstdDecompressSync?: unknown}} [z]
+ * @returns {boolean}
+ */
+export function hasZstd(z = zlib) {
+  return typeof z?.zstdDecompressSync === 'function';
+}
+
+/**
+ * The whole of a compressed rollout, as bytes, or null when it cannot be read
+ * — no zstd on this Node, a file bigger than the bound, a frame that does not
+ * decode, or an output past {@link MAX_DECOMPRESSED_BYTES}. Never throws: the
+ * caller counts a null and carries on, exactly as it does for a corrupt line.
+ *
+ * Compressed rollouts are the OLD ones by construction, so this is a cold
+ * path: a session is compressed only after about a week untouched.
+ *
+ * @param {string} filePath
+ * @param {{zlib?: any, maxCompressedBytes?: number, maxDecompressedBytes?: number}} [opts]
+ * @returns {Promise<{buf: Buffer, compressedSize: number}|null>}
+ */
+export async function readCompressed(filePath, opts = {}) {
+  const z = opts.zlib || zlib;
+  if (!hasZstd(z)) return null;
+  const maxIn = opts.maxCompressedBytes ?? MAX_COMPRESSED_BYTES;
+  const maxOut = opts.maxDecompressedBytes ?? MAX_DECOMPRESSED_BYTES;
+
+  let size;
+  try {
+    size = (await stat(filePath)).size;
+  } catch {
+    return null;
+  }
+  if (size === 0 || size > maxIn) return null;
+
+  let raw;
+  const fh = await open(filePath, 'r');
+  try {
+    raw = Buffer.alloc(size);
+    await fh.read(raw, 0, size, 0);
+  } catch {
+    return null;
+  } finally {
+    await fh.close();
+  }
+
+  try {
+    return { buf: z.zstdDecompressSync(raw, { maxOutputLength: maxOut }), compressedSize: size };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `readHead` for either kind of rollout: the plain seek when the file is
+ * `.jsonl`, and the same slice of the decoded bytes when it is `.jsonl.zst`.
+ *
+ * The head/tail discipline is identical either way — the same bound, the same
+ * `truncated` flag, so the caller's partial-line handling does not change and
+ * a compressed session is summarised from exactly the records a plain one
+ * would be.
+ * @param {string} filePath
+ * @param {number} [maxBytes]
+ * @param {{zlib?: any, maxCompressedBytes?: number, maxDecompressedBytes?: number}} [opts]
+ * @returns {Promise<{text:string, truncated:boolean, size:number}>}
+ */
+export async function readRolloutHead(filePath, maxBytes = HEAD_BYTES, opts = {}) {
+  if (!isCompressedRollout(filePath)) return readHead(filePath, maxBytes);
+  const got = await readCompressed(filePath, opts);
+  if (!got) return { text: '', truncated: false, size: 0 };
+  const len = Math.min(got.buf.length, maxBytes);
+  return {
+    text: got.buf.subarray(0, len).toString('utf8'),
+    truncated: got.buf.length > maxBytes,
+    size: got.buf.length,
+  };
+}
+
+/**
+ * `readTail` for either kind of rollout. See {@link readRolloutHead}.
+ * @param {string} filePath
+ * @param {number} [maxBytes]
+ * @param {{zlib?: any, maxCompressedBytes?: number, maxDecompressedBytes?: number}} [opts]
+ * @returns {Promise<{text:string, truncated:boolean, size:number}>}
+ */
+export async function readRolloutTail(filePath, maxBytes = TAIL_BYTES, opts = {}) {
+  if (!isCompressedRollout(filePath)) return readTail(filePath, maxBytes);
+  const got = await readCompressed(filePath, opts);
+  if (!got) return { text: '', truncated: false, size: 0 };
+  const start = Math.max(0, got.buf.length - maxBytes);
+  return {
+    text: got.buf.subarray(start).toString('utf8'),
+    truncated: start > 0,
+    size: got.buf.length,
+  };
 }
 
 /**

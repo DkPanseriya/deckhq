@@ -372,6 +372,39 @@ test('the codexBin setting is read off state.json and handed to the adapter', as
   assert.equal(report.runtimes[0].binary.path, 'D:\\tools\\codex.exe');
 });
 
+test('sessions a runtime could not read are a note with a number, never silence', async () => {
+  // docs/DEVIATIONS.md §136.2. `walkSessionFiles()` dropped Codex's compressed
+  // rollouts because their names end `.jsonl.zst`, with no error anywhere —
+  // the failure mode being fixed here is not the missing sessions, it is that
+  // nothing said so.
+  const NOTE = '3 compressed Codex sessions are not read on Node < 22 (v18.20.4).';
+  const adapter = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  adapter.describeReadLimits = async () => NOTE;
+  const report = await collect(registry(adapter));
+
+  assert.equal(report.runtimes[0].readLimit, NOTE);
+  assert.ok(report.notes.includes(NOTE));
+  assert.match(renderReport(report), /· 3 compressed Codex sessions are not read/);
+  // Nothing is broken, so the verdict is not "broken".
+  assert.equal(report.ok, true);
+});
+
+test('an adapter that reads everything, or throws asking, reports no limit', async () => {
+  const quiet = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  quiet.describeReadLimits = async () => null;
+  const a = await collect(registry(quiet));
+  assert.equal(a.runtimes[0].readLimit, null);
+  assert.deepEqual(a.notes, []);
+
+  const angry = fakeAdapter({ id: 'codex', label: 'Codex', hooksSupported: false });
+  angry.describeReadLimits = async () => {
+    throw new Error('nope');
+  };
+  const b = await collect(registry(angry));
+  assert.equal(b.runtimes[0].readLimit, null);
+  assert.equal(b.ok, true);
+});
+
 test('an adapter with no describeBinary keeps the row it always had', async () => {
   const report = await collect(registry(fakeAdapter({ version: '2.1.184' })));
   assert.equal(report.runtimes[0].binary, null);
@@ -1109,6 +1142,8 @@ test('--json emits one JSON document with a stable shape', async () => {
     'live',
     'liveReported',
     'projects',
+    // WP-23a: what the last scan could not read, in the runtime's own words.
+    'readLimit',
     'sessions',
     'version',
   ]);

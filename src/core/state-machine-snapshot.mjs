@@ -73,7 +73,7 @@ export class RegistrySnapshot extends RegistryBase {
    * makes "run `claude` and a real one walks in" true within one poll rather
    * than after a reload.
    *
-   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean>, scannedAt: number|null, demo?: boolean, demoNote?: string}}
+   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean|string>, scannedAt: number|null, demo?: boolean, demoNote?: string}}
    */
   snapshot() {
     if (this._agents.length === 0 && this._scannedAt !== null) {
@@ -174,13 +174,29 @@ export class RegistrySnapshot extends RegistryBase {
    * permanently, including after Claude Code's hooks were installed. A
    * runtime with no sessions has nothing to report inaccurately, and a
    * runtime that cannot support hooks cannot be improved by installing them.
+   *
+   * **A value may be `true` or a SENTENCE** (WP-23a). `true` is the original
+   * meaning and the only one the banner had: state is inferred because no
+   * hooks are installed, and the banner's "Install hooks" button is the fix.
+   * A string is a specific thing this runtime could not read — today only
+   * Codex's compressed rollouts on a Node with no Zstandard
+   * (`docs/DEVIATIONS.md` §136.2) — and it is carried whole rather than
+   * flattened to a flag, because "some of your sessions are missing" is not a
+   * sentence a banner can reconstruct from a boolean. It takes precedence: it
+   * names a cause, and hooks would not fix it.
+   * @returns {Record<string, boolean|string>}
    */
   _degraded() {
-    /** @type {Record<string, boolean>} */
+    /** @type {Record<string, boolean|string>} */
     const out = {};
     const inUse = new Set(this._agents.map((a) => a.runtime));
     for (const adapter of this.adapters) {
       if (!inUse.has(adapter.id)) continue;
+      const limit = this._readLimits ? this._readLimits[adapter.id] : null;
+      if (typeof limit === 'string' && limit) {
+        out[adapter.id] = limit;
+        continue;
+      }
       const status = this._hookStatus[adapter.id];
       if (status && status.supported === false) continue;
       out[adapter.id] = !this._hooksInstalled(adapter.id);
