@@ -369,3 +369,13 @@ Unicode code points, which is what X and Hacker News count. Each section's state
 copy in it — the posts, the title, the body, the listings, the templates, the answers — and not the
 notes around them; §6's own count is the whole section, because the whole section is the artifact.
 Re-take them with the same rule after any edit, and change the header in the same commit.
+
+## 7. Orchestrator corrections, 4 September (evening)
+
+- **CI is green on all nine OS × Node combinations plus the type gate and the Ubuntu goldens
+  job** — runs 33837465769, 33838638427 and 33838763899 on `main`. Post 4 may say *tested on
+  Windows, macOS and Linux*; §6.3's gate is met as of those runs and must be re-checked against
+  the newest run on the day of posting.
+- **Streamed replies are on `main`** (WP-09, `docs/DEVIATIONS.md` §117, `src/adapters/claude-code/stream.mjs`).
+  They stay out of the copy for the reason that still holds: the live run against a logged-in
+  `claude` is owed. Same for the permission card (§97).
