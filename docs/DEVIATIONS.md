@@ -11766,3 +11766,80 @@ things are untouched by this run: a rollout Codex itself compressed, a terminal 
 `codex resume`, `liveSessions()`, and hook delivery. The `parse.mjs` header's "we have never
 observed it directly on this machine" is gone, because it is no longer true; every shape in that
 list now says whether it was MEASURED or read from a binary.
+
+## 138. Release body cap — the 1.3.0 notes were 20,581 characters too long, and the job that would have found out had already published
+
+`docs/plan/RELEASE-CHECKLIST.md` step 7a found it before the tag did: a GitHub Release body is
+capped at **125,000 characters** and the `## 1.3.0` section is **145,581** (145,580 plus the
+newline the script writes). `gh release create --notes-file` refuses an oversize body with a 422,
+and the only place that call happens is the `release` job — which runs **after** `publish`, which
+runs `npm publish`. The order matters more than the number: the failure would have landed with
+1.3.0 already on the registry and unrecoverable, leaving a published version with no release page,
+no Windows zip and no Homebrew, winget or scoop manifests. That is 1.1.0's post-mortem again with a
+different cause.
+
+Nothing in `publish.yml` caught it, and not by oversight: the pre-check ran
+`changelog-section.mjs` only to prove a section *exists*, and it did exist. Its output went to
+`/dev/null`, so its size was never a thing anybody looked at.
+
+Step 7a offered three ways out. **The second was taken** — change what the release job sends,
+rather than trimming a changelog nine packages wrote or accepting a red job on WP-43's first
+observed run. The changelog is the record and stays whole; the release page is a front door and
+does not have to be the record.
+
+### 138.1 `--release-body`: Highlights whole, then bullets until the budget, then the link
+
+`scripts/release/changelog-section.mjs --release-body <version>` builds a body that cannot be too
+long:
+
+1. **The Highlights block in full.** Everything from the start of the section to the second `###`
+   heading — the paragraph a stranger reads. It is never cut, and it is the one thing that would
+   make a truncated release page still worth opening.
+2. **Then the section's bullets, in heading order,** to a budget of **100,000 characters**. A
+   heading is emitted only when a bullet under it is emitted too, so a `### Testing` with nothing
+   beneath it never appears. The cut lands **between bullets, never inside one**: a bullet is its
+   `- ` line plus every continuation under it, including the ones prettier wrapped back to column 0
+   because the line began with a code span — nine such lines exist in the 1.3.0 section, and a
+   parser that assumed continuations are indented would have sliced four bullets in half.
+3. **Then one last line**, after a blank one:
+   `Full notes for this release: https://github.com/DkPanseriya/deckhq/blob/v1.3.0/CHANGELOG.md#130--2026-09-04`
+
+A section already inside the budget is returned **exactly as it is, with no link** — 1.2.0 and
+every release before it produce the same bytes they always did, and the link only appears when
+there is something behind it to go and read.
+
+**The anchor is computed the way GitHub computes it**, because a link to the wrong fragment is
+worse than no link: lower case, drop everything that is not a letter, number, mark, connector or
+hyphen, then spaces become hyphens. `1.3.0 — 2026-09-04` loses both dots and the em dash, and the
+two spaces that surrounded the dash become **two** hyphens: `130--2026-09-04`. The heading is read
+from the changelog rather than assembled from the version, so a date the entry does not carry
+cannot end up in the anchor.
+
+**MEASURED, 1.3.0:** section 145,580 characters in, body **99,847** out (99,848 written) — under
+the 100,000 budget, 25,153 under GitHub's cap. **5 of 9 headings** and **126 of 188 bullets** made
+it: Highlights, Added, Changed, Fixed and Performance whole or in part; Testing, Packaging,
+Repository and Known gaps live behind the link.
+
+### 138.2 The pre-check moved to before the publish, and now checks the size
+
+The `publish` job's step runs **the same command the `release` job will run**, with
+`--max-chars 120000`, and its exit code gates `npm publish`:
+
+```sh
+node scripts/release/changelog-section.mjs --release-body --max-chars 120000 "${GITHUB_REF_NAME#v}" > /dev/null
+```
+
+`--max-chars` makes the script exit **1** when what it produced is longer than the number given,
+after writing nothing to stdout — so a caller redirecting into `dist/notes.md` gets an empty file
+and a failed step rather than a truncated one. A missing section still exits 1 with the message it
+always had; both failures now happen in the job where failing costs nothing.
+
+**Three numbers, deliberately different.** The builder spends 100,000; the pre-check refuses past
+120,000; GitHub refuses past 125,000. The 20,000 between the first two is room for a Highlights
+block that grows past the budget on its own — that block is never cut, so it is the one input that
+can push the body over, and the pre-check is what catches it. The 5,000 between the last two is for
+whatever GitHub counts that a character count does not.
+
+**What this does not do.** It does not shorten `CHANGELOG.md`, does not touch the `1.3.0` entry,
+and does not change the notes for any release whose section already fits. The release page is
+smaller than the changelog now, on purpose, and says where the rest is.

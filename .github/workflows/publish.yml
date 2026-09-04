@@ -117,11 +117,20 @@ jobs:
           echo "tag=$TAG package.json=$PKG npm=$(npm --version)"
           test "$TAG" = "$PKG"
 
-      - name: Refuse to publish a version with no changelog section
+      - name: Refuse to publish a version whose release notes are missing or will not fit
         # The release job turns `## X.Y.Z` in CHANGELOG.md into the release
         # notes. Finding it missing after the publish would leave a version on
         # the registry with no release page and no way back; find it now.
-        run: node scripts/release/changelog-section.mjs "${GITHUB_REF_NAME#v}" > /dev/null
+        #
+        # And find it now if the notes are too long, too. A GitHub Release body
+        # is capped at 125,000 characters; 1.3.0's section is 145,581, so
+        # `gh release create --notes-file` would have been refused with a 422 in
+        # the release job — after this job had already published. This is the
+        # exact command that job runs, held to 120,000 characters, and it fails
+        # here where failing still costs nothing. `docs/DEVIATIONS.md` §138.
+        run: |
+          node scripts/release/changelog-section.mjs \
+            --release-body --max-chars 120000 "${GITHUB_REF_NAME#v}" > /dev/null
 
       - name: Publish
         # No token, and no --provenance: trusted publishing supplies both.
@@ -210,7 +219,11 @@ jobs:
             --out dist
 
       - name: Release notes from CHANGELOG.md
-        run: node scripts/release/changelog-section.mjs "${GITHUB_REF_NAME#v}" > dist/notes.md
+        # `--release-body`, so a section too long for a release body arrives as
+        # its Highlights, as many bullets as fit, and a link to the rest. The
+        # publish job already ran this same command and refused to publish a
+        # body over 120,000 characters, so the 422 that would land here cannot.
+        run: node scripts/release/changelog-section.mjs --release-body "${GITHUB_REF_NAME#v}" > dist/notes.md
 
       - name: Create the GitHub Release
         # A re-run after a partial failure meets a release that already

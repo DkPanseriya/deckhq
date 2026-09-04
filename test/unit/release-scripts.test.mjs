@@ -7,7 +7,15 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { changelogSection } from '../../scripts/release/changelog-section.mjs';
+import {
+  GITHUB_RELEASE_BODY_LIMIT,
+  PRECHECK_MAX_CHARS,
+  RELEASE_BODY_BUDGET,
+  changelogSection,
+  githubAnchor,
+  releaseBody,
+  sectionChunks,
+} from '../../scripts/release/changelog-section.mjs';
 import {
   WINGET_ID,
   releaseMeta,
@@ -87,6 +95,206 @@ test('changelog-section.mjs CLI prints the section and exits 1 when it is missin
   const missing = spawnSync(process.execPath, [script, '99.0.0'], { cwd: ROOT, encoding: 'utf8' });
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /no "## 99\.0\.0" section/);
+});
+
+// --- the release body that always fits (docs/DEVIATIONS.md §138) ------------
+
+const SCRIPT = path.join(ROOT, 'scripts', 'release', 'changelog-section.mjs');
+const CHANGELOG = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8');
+
+/** A changelog with a Highlights paragraph and, after it, 300 kB of bullets. */
+function hugeChangelog() {
+  const headings = [
+    'Added',
+    'Changed',
+    'Fixed',
+    'Performance',
+    'Testing',
+    'Packaging',
+    'Repository',
+  ];
+  const lines = [
+    '# Changelog',
+    '',
+    '## 9.9.9 — 2026-01-02',
+    '',
+    '### Highlights',
+    '',
+    'The paragraph a stranger reads. It is short, and it is never cut.',
+    '',
+  ];
+  let n = 0;
+  for (const heading of headings) {
+    lines.push(`### ${heading}`, '');
+    for (let i = 0; i < 15; i++) {
+      n += 1;
+      lines.push(
+        `- **${heading} ${n}.** ${`the body of bullet ${n}. `.padEnd(2800, 'x')}`,
+        `  a continuation line under bullet ${n}, indented as prettier leaves it.`,
+        // The shape prettier produces when a wrapped line starts with a code
+        // span: a continuation that is not indented at all.
+        `\`a continuation wrapped back to column 0\` under bullet ${n}.`,
+      );
+    }
+    lines.push('');
+  }
+  lines.push('## 1.0.0', '', '- the release before it', '');
+  return { markdown: lines.join('\n'), bullets: n };
+}
+
+test('githubAnchor() slugs a heading the way GitHub does', () => {
+  // The heading 1.3.0 actually ships under: the dots go, the em dash goes, and
+  // the two spaces around it become two hyphens.
+  assert.equal(githubAnchor('1.3.0 — 2026-09-04'), '130--2026-09-04');
+  assert.equal(githubAnchor('1.2.0'), '120');
+  assert.equal(githubAnchor('[1.1.0] - 2026-08-30'), '110---2026-08-30');
+  assert.equal(githubAnchor('Known gaps'), 'known-gaps');
+  assert.equal(githubAnchor('  Mixed CASE, punctuation!  '), 'mixed-case-punctuation');
+  assert.equal(githubAnchor('a_b'), 'a_b', 'underscores survive');
+
+  // And it is the anchor the real section's heading gets.
+  const heading = CHANGELOG.split('\n').find((l) => /^## 1\.3\.0/.test(l));
+  assert.ok(heading, 'CHANGELOG.md has a 1.3.0 heading');
+  assert.equal(githubAnchor(heading.replace(/^##\s+/, '')), '130--2026-09-04');
+});
+
+test('a section already inside the budget is passed through whole, with no link', () => {
+  const body = releaseBody(SAMPLE, '1.2.0');
+  assert.equal(body, changelogSection(SAMPLE, '1.2.0'));
+  assert.ok(!/Full notes for this release/.test(body), 'nothing to link to: it is all here');
+  assert.equal(releaseBody(SAMPLE, '9.9.9'), null, 'a missing section is still null');
+});
+
+test('a 300 kB section becomes a body inside the budget, cut between bullets, ending in the link', () => {
+  const { markdown, bullets } = hugeChangelog();
+  const full = changelogSection(markdown, '9.9.9');
+  assert.ok(full.length > 300_000, `the fixture is only ${full.length} characters`);
+
+  const body = releaseBody(markdown, '9.9.9', { repoUrl: 'https://github.com/DkPanseriya/deckhq' });
+  assert.ok(
+    body.length <= RELEASE_BODY_BUDGET,
+    `${body.length} characters is over the ${RELEASE_BODY_BUDGET} budget`,
+  );
+  assert.ok(body.length < GITHUB_RELEASE_BODY_LIMIT);
+
+  const link =
+    'Full notes for this release: ' +
+    'https://github.com/DkPanseriya/deckhq/blob/v9.9.9/CHANGELOG.md#999--2026-01-02';
+  assert.ok(body.endsWith(`\n\n${link}`), `body ends with:\n${body.slice(-200)}`);
+
+  // The Highlights block, whole and first.
+  assert.match(
+    body,
+    /^### Highlights\n\nThe paragraph a stranger reads\. It is short, and it is never cut\.\n/,
+  );
+
+  // Every bullet that made it is a whole bullet from the source, and they are
+  // a prefix of the source's bullets in the order the headings appear.
+  const kept = sectionChunks(body.slice(0, body.length - link.length - 2)).filter(
+    (c) => c.kind === 'bullet',
+  );
+  assert.ok(kept.length > 0 && kept.length < bullets, `${kept.length} of ${bullets} bullets kept`);
+  for (const chunk of kept)
+    assert.ok(full.includes(chunk.text), `a bullet was cut:\n${chunk.text}`);
+  const sourceBullets = sectionChunks(full).filter((c) => c.kind === 'bullet');
+  assert.deepEqual(
+    kept.map((c) => c.text),
+    sourceBullets.slice(0, kept.length).map((c) => c.text),
+    'the bullets kept are the first ones, in heading order',
+  );
+
+  // And the headings above them came too, in order, with none left dangling.
+  const rows = body.split('\n');
+  const headings = rows.filter((l) => /^### /.test(l));
+  assert.equal(headings[0], '### Highlights');
+  assert.deepEqual(headings, [...new Set(headings)], 'no heading appears twice');
+  assert.ok(headings.length > 1 && headings.length < 8, `${headings.length} headings kept`);
+  for (let i = 0; i < rows.length; i++) {
+    if (!/^### /.test(rows[i])) continue;
+    const next = rows.slice(i + 1).find((line) => line.trim() !== '');
+    assert.ok(
+      next && !/^### /.test(next) && !next.startsWith('Full notes'),
+      `${rows[i]} was kept with nothing under it`,
+    );
+  }
+});
+
+test('the real 1.3.0 release body fits, and the pre-check the publish job runs says so', () => {
+  const body = releaseBody(CHANGELOG, '1.3.0');
+  const full = changelogSection(CHANGELOG, '1.3.0');
+  console.log(
+    `[release body] 1.3.0: section ${full.length} chars -> body ${body.length} chars ` +
+      `(budget ${RELEASE_BODY_BUDGET}, pre-check ${PRECHECK_MAX_CHARS}, GitHub ${GITHUB_RELEASE_BODY_LIMIT})`,
+  );
+  assert.ok(body.length <= RELEASE_BODY_BUDGET, `${body.length} characters is over budget`);
+  assert.match(
+    body,
+    /\nFull notes for this release: https:\/\/github\.com\/DkPanseriya\/deckhq\/blob\/v1\.3\.0\/CHANGELOG\.md#130--2026-09-04$/,
+  );
+
+  // The exact command .github/workflows/publish.yml runs before `npm publish`.
+  const precheck = spawnSync(
+    process.execPath,
+    [SCRIPT, '--release-body', '--max-chars', String(PRECHECK_MAX_CHARS), pkg.version],
+    { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
+  );
+  assert.equal(precheck.status, 0, precheck.stderr);
+  assert.ok(precheck.stdout.length <= PRECHECK_MAX_CHARS);
+});
+
+test('the pre-check exits 1 on an oversize body, and 1 on a missing section', async () => {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'deckhq-notes-'));
+  try {
+    const file = path.join(dir, 'CHANGELOG.md');
+    fs.writeFileSync(file, hugeChangelog().markdown);
+
+    // A body over the limit fails the job, and says by how much.
+    const over = spawnSync(
+      process.execPath,
+      [SCRIPT, '--release-body', '--max-chars', '1000', '9.9.9', file],
+      { cwd: ROOT, encoding: 'utf8' },
+    );
+    assert.equal(over.status, 1, 'an oversize release body must fail the publish job');
+    assert.match(over.stderr, /release body for 9\.9\.9 is \d+ characters, over the 1000/);
+    assert.equal(over.stdout, '', 'and nothing is written for a caller to redirect into a file');
+
+    // Under it, the same command is quiet and successful.
+    const under = spawnSync(
+      process.execPath,
+      [SCRIPT, '--release-body', '--max-chars', String(PRECHECK_MAX_CHARS), '9.9.9', file],
+      { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
+    );
+    assert.equal(under.status, 0, under.stderr);
+    assert.ok(under.stdout.length <= PRECHECK_MAX_CHARS);
+
+    // A missing section is still the older failure, with the older message.
+    const missing = spawnSync(process.execPath, [SCRIPT, '--release-body', '4.5.6', file], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    });
+    assert.equal(missing.status, 1);
+    assert.match(missing.stderr, /no "## 4\.5\.6" section/);
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('publish.yml runs the capped command before the publish, and for the notes', () => {
+  const yml = fs.readFileSync(path.join(ROOT, '.github', 'workflows', 'publish.yml'), 'utf8');
+  const precheck = yml.indexOf('--release-body --max-chars 120000');
+  const publish = yml.indexOf('run: npm publish --access public');
+  assert.ok(precheck > 0, 'the publish job pre-checks the release body');
+  assert.ok(precheck < publish, 'and it does so BEFORE npm publish');
+  assert.match(
+    yml,
+    /changelog-section\.mjs --release-body "\$\{GITHUB_REF_NAME#v\}" > dist\/notes\.md/,
+  );
+  assert.match(yml, /--notes-file dist\/notes\.md/);
+  assert.equal(
+    PRECHECK_MAX_CHARS,
+    120_000,
+    'the number in the workflow and the number here are one number',
+  );
 });
 
 // --- manifests --------------------------------------------------------------

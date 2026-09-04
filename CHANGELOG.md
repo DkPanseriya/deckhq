@@ -6,6 +6,24 @@
 
 ## Unreleased
 
+### Packaging
+
+- **The GitHub Release body always fits, and the publish job refuses one that would not.** A
+  release body is capped at 125,000 characters and the `1.3.0` section is 145,581, so
+  `gh release create --notes-file` would have been refused with a 422 in the `release` job — after
+  `npm publish` had already put the version on the registry and could not take it back.
+  `scripts/release/changelog-section.mjs --release-body` now builds a body that cannot be too long:
+  the Highlights block whole, then the section's bullets in heading order to a budget of 100,000
+  characters, cut between bullets and never inside one, then a last line linking the full section
+  in `CHANGELOG.md` at the tag — with the fragment computed the way GitHub slugs a heading, so
+  `1.3.0 — 2026-09-04` is `#130--2026-09-04`. A section already inside the budget is passed through
+  unchanged, with no link, so every earlier release produces the same notes it always did. 1.3.0
+  measures 145,580 characters in, **99,847 out**: Highlights, Added, Changed, Fixed and Performance
+  on the page, the rest a click away. The `publish` job runs that same command with
+  `--max-chars 120000` **before** `npm publish` and fails there if the body is oversize or the
+  section is missing, so the only failure left is one that costs nothing.
+  `docs/DEVIATIONS.md` §138.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights
