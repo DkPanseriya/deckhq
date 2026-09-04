@@ -35,7 +35,7 @@ import http from 'node:http';
 import { execFileSync } from 'node:child_process';
 
 import { CARDS_OFF } from '../public/postcard.js';
-import { THEME_NAMES, themeByName } from '../src/core/themes.mjs';
+import { themeByName, themeNames } from '../src/core/themes.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -67,6 +67,19 @@ const THEME = opt('--theme', 'default');
  * of the week.
  */
 const LEDGER_FIXTURE = argv.includes('--ledger-fixture');
+/**
+ * WP-45. A signed asset pack to install into the fixture before the floor
+ * comes up, so a demo can be photographed in one of its themes and its
+ * settings sheet can be photographed offering them.
+ *
+ *     node scripts/demo-floor.mjs --pack packs/supporter-sample/supporter-sample-1.0.0.deckhq-pack.json --theme warehouse
+ *
+ * It goes into the FIXTURE's state directory, never the real one: this script
+ * exists so that nothing real ends up in a committed screenshot, and the
+ * inverse is just as important — a demo must not install anything into the
+ * developer's own `~/.deckhq`.
+ */
+const PACK_FILE = opt('--pack', '');
 
 // Each population gets its own fixture directory, so a goldens run cannot
 // tear down the floor somebody is looking at in `npm run demo`. A run with the
@@ -81,6 +94,7 @@ const ROOT = path.join(
     // ledger run does: this script's first act is to delete its own directory,
     // so two demos sharing one would tear down each other's floor.
     (THEME !== 'default' ? `-${THEME.replace(/[^a-z0-9]+/g, '-')}` : '') +
+    (PACK_FILE ? '-pack' : '') +
     (LEDGER_FIXTURE ? '-ledger' : ''),
 );
 const CLAUDE_DIR = path.join(ROOT, 'claude');
@@ -255,8 +269,12 @@ if (!POPULATIONS[POPULATION]) {
   );
   process.exit(2);
 }
-if (!themeByName(THEME)) {
-  process.stderr.write(`unknown theme "${THEME}"; one of: ${THEME_NAMES.join(', ')}
+// WP-45. With `--pack` the theme is checked LATER, after the pack has been
+// installed into the fixture — a pack's themes are only nameable once they are
+// registered, so `--theme warehouse` is a valid request with a pack and an
+// error without one.
+if (!PACK_FILE && !themeByName(THEME)) {
+  process.stderr.write(`unknown theme "${THEME}"; one of: ${themeNames().join(', ')}
 `);
   process.exit(2);
 }
@@ -808,6 +826,37 @@ fs.mkdirSync(STATE_DIR, { recursive: true });
 writeClaudeShim();
 writeSettings();
 
+// WP-45. The pack goes in after the reset above wiped the fixture and before
+// the theme is written into `state.json`, because a pack theme is only a name
+// this build knows once the pack is registered. Into the FIXTURE's state
+// directory, never the real one: this script exists so that nothing real ends
+// up in a committed screenshot, and the inverse matters just as much — a demo
+// must not install anything into the developer's own `~/.deckhq`.
+let packNote = null;
+if (PACK_FILE) {
+  const { currentPacks, installPack } = await import('../src/core/packs.mjs');
+  const packsDir = path.join(STATE_DIR, 'packs');
+  const installed = installPack(fs.readFileSync(PACK_FILE), { dir: packsDir });
+  if ('error' in installed) {
+    process.stderr.write(`could not install ${PACK_FILE}: ${installed.error}
+`);
+    process.exit(2);
+  } else {
+    // An `else` rather than an early exit, because `types/node.d.ts` is a
+    // hand-written stub and does not type `process.exit` as `never`, so the
+    // checker cannot narrow past it (WP-22's lesson: the annotation is what
+    // stops a drift, and working around it here would be working around the
+    // checker).
+    const loaded = currentPacks({ dir: packsDir, force: true });
+    packNote = `${installed.pack.name} ${installed.pack.version} — ${loaded.themes.join(', ') || 'no themes'}`;
+    if (!themeByName(THEME)) {
+      process.stderr.write(`unknown theme "${THEME}"; one of: ${themeNames().join(', ')}
+`);
+      process.exit(2);
+    }
+  }
+}
+
 // The projects live inside the fixture too, so the review card can read real
 // working trees (see writeProjectDirs) and nothing on the real disk is touched.
 const root = path.join(ROOT, 'code');
@@ -911,6 +960,13 @@ const { startDaemon } = await import('../src/daemon.mjs');
 const { url, port, close } = await startDaemon({
   port: PORT,
   stateFile: path.join(STATE_DIR, 'state.json'),
+  // WP-45. `PACKS_DIR` was resolved from the real home when `src/core/paths.mjs`
+  // was first imported — which is before this script points `DECKHQ_STATE_DIR`
+  // at its fixture — so the daemon has to be told where the fixture's packs
+  // are. Passing it unconditionally is also what stops a demo from ever
+  // reading, or photographing, whatever the developer happens to have
+  // installed in their own `~/.deckhq/packs`.
+  packsDir: path.join(STATE_DIR, 'packs'),
 });
 
 // Install hooks through the real consent-gated endpoint, AFTER the listener is
@@ -948,6 +1004,7 @@ process.stdout.write(
     '',
     `  population: ${POPULATION}`,
     `  theme:    ${themeByName(THEME).name}`,
+    ...(packNote ? [`  pack:     ${packNote}`] : []),
     `  fixture:  ${ROOT}`,
     `  projects: ${new Set(built.map((s) => s.project)).size}`,
     `  sessions: ${built.length}`,
