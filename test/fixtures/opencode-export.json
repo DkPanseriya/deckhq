@@ -1,0 +1,76 @@
+{
+  "session": {
+    "id": "ses_01HZX000000000000000000001",
+    "directory": "C:\\Dk\\Projects\\demo-app",
+    "title": "Add a health check endpoint to the server"
+  },
+  "messages": [
+    {
+      "info": {
+        "id": "msg_001",
+        "sessionID": "ses_01HZX000000000000000000001",
+        "role": "user",
+        "time": { "created": 1787648400000 }
+      },
+      "parts": [
+        { "id": "prt_001", "type": "text", "text": "Add a health check endpoint to the server." }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_002",
+        "sessionID": "ses_01HZX000000000000000000001",
+        "role": "assistant",
+        "modelID": "claude-opus-5",
+        "providerID": "anthropic",
+        "time": { "created": 1787648420000, "completed": 1787648450000 },
+        "path": { "cwd": "C:\\Dk\\Projects\\demo-app", "root": "C:\\Dk\\Projects\\demo-app" }
+      },
+      "parts": [
+        { "id": "prt_002", "type": "step-start" },
+        { "id": "prt_003", "type": "reasoning", "text": "probe wiring first" },
+        { "id": "prt_004", "type": "text", "text": "I will add " },
+        {
+          "id": "prt_005",
+          "type": "tool",
+          "tool": "write",
+          "state": { "status": "completed", "input": { "filePath": "server.js" } }
+        },
+        { "id": "prt_006", "type": "text", "text": "a /healthz route." }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_003",
+        "sessionID": "ses_01HZX000000000000000000001",
+        "role": "assistant",
+        "modelID": "claude-opus-5",
+        "time": { "created": 1787648460000, "completed": 1787648470000 }
+      },
+      "parts": [
+        {
+          "id": "prt_007",
+          "type": "tool",
+          "tool": "bash",
+          "state": { "status": "completed", "input": { "command": "npm test" } }
+        }
+      ]
+    },
+    {
+      "info": {
+        "id": "msg_004",
+        "sessionID": "ses_01HZX000000000000000000001",
+        "role": "assistant",
+        "modelID": "claude-opus-5",
+        "time": { "created": 1787648600000, "completed": 1787648620000 }
+      },
+      "parts": [
+        {
+          "id": "prt_008",
+          "type": "text",
+          "text": "Done — /healthz is wired into the readiness probe."
+        }
+      ]
+    }
+  ]
+}

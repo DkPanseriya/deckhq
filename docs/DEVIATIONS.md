@@ -9089,3 +9089,180 @@ needs the same care those two got — a reading of what the file's parts share, 
 rule for the state between them, and a way to prove nothing moved. The ceiling
 test asserts the ceiling for the modules this package produced, and does not
 pretend to a ceiling the repository does not yet meet.
+
+## 123. WP-24/25 — two runtimes read from their documentation, and the SQLite file nobody parsed
+
+Gemini CLI and OpenCode are now adapters, `ADAPTERS.md` is written, and the debt §119.2 recorded is
+paid. Four runtimes are registered; `doctor` grew two rows and `src/cli/doctor.mjs` was not touched.
+1525 tests to 1592.
+
+**Neither runtime is installed on this machine, and neither adapter has ever run against real
+data.** That is the same position §8 put Codex in, taken deliberately again, and §123.7 says what
+would close it. Checked read-only on 4 September 2026: `gemini --version` and `opencode --version`
+both `command not found`; `~/.gemini`, `~/.config`, `~/.local/share/opencode`,
+`%APPDATA%/opencode` and `%LOCALAPPDATA%/opencode` all absent. `~/.local/share` exists and contains
+one directory, `claude`. So: **nothing was verified on disk here. Everything below was read from
+published source and documentation on 4 September 2026**, and every claim in it is a hypothesis
+under §1.1 rule 11 until somebody runs it.
+
+### 123.1 What each runtime stores, and where
+
+**Gemini CLI** (`google-gemini/gemini-cli`, `main`, 4 Sep 2026). Home is `~/.gemini`, with
+`GEMINI_CLI_HOME` overriding the *parent* rather than the directory — the CLI's `homedir()` wrapper
+returns it in place of `os.homedir()` and still appends `.gemini`. Sessions are JSONL at
+`~/.gemini/tmp/<projectId>/chats/session-<timestamp>-<shortId>.jsonl`, and a junior's at
+`chats/<parentSessionId>/<sessionId>.jsonl`. The first line is metadata; the rest are message
+records with `type: 'user'|'gemini'|'info'|'error'|'warning'`, plus `{$set:{…}}` partial metadata
+updates and `{$rewindTo:<id>}` markers.
+
+Two things in that layout cost real work:
+
+- **The documentation is out of date in a load-bearing way.** It describes the per-project
+  directory as a `<project_hash>`; the source has replaced the hash with a **slug**. The field is
+  still *named* `projectHash` in the record, which is how the stale docs survive. It matters because
+  a slug can be resolved to an absolute path through `~/.gemini/projects.json` and a sha256 cannot
+  be reversed at all. An adapter that believed the docs would report `cwd: 'unknown'` for every
+  session and put the whole runtime in one nameless room. Both forms are handled —
+  `projectDirLooksLegacy` tells them apart by shape (64 hex characters) and a legacy directory
+  honestly reports `unknown` rather than guessing.
+- **The session file does not contain the working directory.** `cwd` is resolved *out of band*, by
+  inverting `projects.json`. A slug claiming two paths is dropped rather than picked between: a
+  wrong cwd puts an agent in somebody else's project, which is worse than an honest `unknown`.
+
+**OpenCode** (`anomalyco/opencode`, `dev`, 4 Sep 2026 — the repository moved from `sst/opencode`).
+The data directory is `$XDG_DATA_HOME` or `~/.local/share`, then `opencode`, with **no Windows
+special case**: a Windows install puts it under the user profile at `.local/share`, not `%APPDATA%`.
+Guessing `%APPDATA%` would have reported "not installed" on every Windows machine that has it.
+
+Since **v1.2.0 (14 Feb 2026) everything is one SQLite database**, `opencode.db`, and the two older
+flat-JSON layouts are migrated into it and **left on disk**.
+
+### 123.2 The SQLite file is not parsed, and that is the decision
+
+The brief allowed a minimal read-only SQLite page reader "only if the schema is simple and
+documented". It was refused, and not on effort:
+
+1. **The database runs in WAL mode.** Recent writes live in `opencode.db-wal` until a checkpoint
+   folds them into the main file. A reader that parsed only the main file would systematically miss
+   **the newest sessions** — precisely the ones this product exists to show, and the failure would
+   be silent rather than loud. Correctness needs b-tree pages *and* the WAL index *and* overflow
+   chains: a dependency's worth of code (§1.1 rule 3 forbids the dependency, which is the whole
+   reason the question came up) that could not be tested on a machine with no OpenCode on it.
+2. **§2.1 already answers it**: *prefer supported surfaces over file parsing wherever both exist*.
+   OpenCode ships three that emit JSON — `opencode db "<sql>" --format json`, `opencode session
+   list --format json`, and `opencode export <id>`. That is the same shape as `claude agents
+   --json`: a supported interface rather than a guess at a byte layout.
+
+So the adapter shells out, in three tiers, each a fallback for the one before: the SQL queries (full
+shape — tokens, cost, model, parent, archive flag), then `session list` (documented and stable but
+thin: no tokens, no model, root sessions only), then the legacy JSON files. The SQL lives in
+`parse.mjs` with the rest of the format knowledge, as two exported constants; both are read-only
+`SELECT`s taking **no parameters at all**, and a test asserts they contain no placeholder — `opencode
+db` runs whatever it is handed, and the only safe way to use it is to hand it a constant.
+
+**The legacy files are read last and only when the CLI answered nothing**, which is the point rather
+than an optimisation: v1.2.0 migrated them and did not delete them, so on an upgraded install they
+are stale copies of sessions the database already holds. Reading them unconditionally would put
+every migrated session on the floor **twice** — once current, once frozen at the migration.
+
+### 123.3 The roster is cached for 60 s, because §77 already paid for this lesson
+
+Every read the OpenCode adapter performs is a child process. That is the price of going through the
+runtime's own commands, and uncached on a 5 s poll it would reintroduce **exactly** the cost §77
+removed for Claude Code, where `claude agents --json` on every poll was ~12% of a core at idle. So
+`scanSessions` holds its roster for `ROSTER_TTL_MS = 60_000` — the same figure as the Claude Code
+live probe, deliberately, since the two answer the same question on the same loop. `opts` is applied
+to a copy of the cached roster, so two callers with different windows share one set of spawns; the
+timestamp is stamped *after* the work returns, so a slow or failed collection cannot make the next
+call think it has a fresh answer; a failed collection keeps the last good roster rather than
+emptying the floor; and `send()` invalidates it, because a reply we caused is the one case the TTL
+would otherwise hide for a minute. Accepted deviation, identical in shape to §77's: a session that
+starts while the roster is warm shows up to 60 s late.
+
+The Gemini CLI adapter needs none of this — it reads files, bounded head and tail, like Codex.
+
+### 123.4 Hooks: `supported: false` twice, for two different reasons, and neither is Codex's
+
+§8 could say truthfully that Codex has **no** hook mechanism. Neither of these can, and reusing that
+sentence would be a false statement about somebody else's product — which §1.1 rule 11 forbids as
+firmly as a false statement about ours. There are tests asserting each note says the right thing and
+that Gemini CLI's does **not** claim the runtime lacks hooks.
+
+- **Gemini CLI has a real hooks system** — `BeforeTool`, `AfterTool`, `BeforeAgent`, `AfterAgent`,
+  `SessionStart`, `SessionEnd`, `Notification` and more, configured in `~/.gemini/settings.json`,
+  each running a command that receives `session_id`, `transcript_path`, `cwd` and `hook_event_name`
+  on stdin. It is not wired up because installing hooks **writes to a file the user owns**, and
+  nothing written here could ever have been read back by the runtime it is for. Writing into
+  somebody's real `settings.json` on the strength of a documentation page, with no way to check the
+  result, is the one class of mistake this codebase cannot make quietly: it breaks a working install
+  of another product. The daemon's hook route also speaks Claude Code's payload spellings
+  (`toolSummary`, `permissionRequest`, `subagentEvent`), so a second event vocabulary is a package
+  the size of WP-58, not a paragraph in this one.
+- **OpenCode has no shell-command hooks at all**, but it does have a **plugin API**: a JavaScript
+  module in `.opencode/plugin/` receiving typed events. Installing that means writing *executable
+  code* into a config directory. The consent screen this interface is built around shows the user
+  the JSON that will be written; "a JavaScript file that will run inside your agent" is a different
+  consent conversation and deserves a package that designs it.
+
+Both therefore poll, and cannot distinguish `needs_input` from `stalled`. **OpenCode keeps the turn
+boundary anyway**, which is worth recording because it is better than any other runtime here: it
+stamps `time.completed` on an assistant message, so `turnEnded` is **read** rather than inferred
+from "the assistant spoke last".
+
+### 123.5 Two readings of the format that are guesses, and are marked as such
+
+Named because they are the first things to check against a real install, not buried in a diff.
+
+- **Gemini CLI token arithmetic.** Tokens are recorded per model message and `input` is the whole
+  prompt for that turn — which already contains the conversation so far. Summing would count the
+  history once per turn and report a number several times too large. So `input` and `cached` take
+  the **largest** value seen and `output` is **summed**. That is a hypothesis about the format's
+  semantics; if `input` turns out to be incremental, the max undercounts. Bounded by the tail window
+  either way, which the README's Honest limits already states.
+- **Gemini CLI pending tool statuses.** The `ToolCallRecord.status` enum members were not read off
+  the source, so `PENDING_TOOL_STATUS` is a **deny list** of plausible in-flight spellings rather
+  than an allow list of terminal ones. An unknown status therefore reads as *finished*, which at
+  worst calls a busy session idle for one poll. The opposite default would hide a finished session
+  from the review queue forever, and the queue is the product.
+
+One thing that is **not** a guess, and was a real bug caught by writing the test: a Gemini model turn
+whose content is only a `functionCall` carries no text, so `extractMessage` correctly refuses it —
+showing it would put a `[tool: …]` artefact in the panel. But it is still the model taking a turn.
+Reading `turnEnded` off the last *message* would call a session with a running tool call idle and
+put a working agent in the review queue. `turnRole()` exists to separate "who took the last turn"
+from "who said the last thing", and there is a named test for it.
+
+### 123.6 §119.2 is closed
+
+`countCatchphrase` was in a per-runtime table in `src/adapters/index.mjs` because
+`claude-code/adapter.mjs` was held by WP-09 while WP-27 was written. It is now a method on the
+adapter object beside `hooks`, and `catchphraseCount()` asks
+`typeof adapter.countCatchphrase === 'function'` instead of reading a table. One line each side, no
+behaviour change, and the Wrapped tests are untouched — they import `countCatchphrase` from
+`catchphrase.mjs` directly, which is why the move was safe to make without them.
+
+### 123.7 What is still owed
+
+- **Run both against a real install.** Until then §6 of `ADAPTERS.md` applies: the `parse.mjs`
+  headers, this entry and the README's Honest limits all say unverified, and whoever verifies
+  deletes all three in the same commit. A stale "unverified" is its own kind of dishonesty.
+- The three shapes most likely to be wrong, in order: OpenCode's `export` envelope (the
+  least-documented thing either adapter touches, read shape-tolerantly for that reason), Gemini
+  CLI's token semantics (§123.5), and whether `gemini --resume <id> -p <text>` is actually accepted
+  — the flags are not documented as mutually exclusive, but only `--resume`/`--session-id` and
+  `-p`/`-i` are documented as pairs that conflict, which is an argument from silence.
+- **OpenCode reports no `lastText` on a scan**, deliberately. Message text lives in a separate
+  `part` table, one row per fragment, and pulling it on the poll path would mean a query whose size
+  is the whole conversation rather than one row per session. The panel fills it in from
+  `conversation()` the moment it is opened, which is the only place it is read at full length.
+  Recorded as a known gap in the changelog rather than left to be discovered. Gemini CLI has no such
+  gap — it reads the file.
+- Neither runtime has a live-session surface, so both take the daemon's mtime/recency inference.
+  `gemini --list-sessions` and `opencode session list` report what is *stored*, not what has a
+  process attached, and we do not scan the process table to guess.
+- The rate card has no rows for Gemini models, so a Gemini session's `costEstimate` is `null` —
+  **no rate**, never `$0.00`, which is §111's rule working as intended.
+- Both adapters duplicate `readHead`/`readTail`/`linesFromChunk`/`parseLine` rather than sharing
+  them with Codex. Deliberate, and written down in `ADAPTERS.md` rule 6: §2.1's promise that a
+  format break is a *single-file* fix is worth more than sixty duplicated lines, and it means a
+  contributor copies one file and owns all of it without any chance of breaking another runtime.

@@ -29,7 +29,13 @@ export { GONE_HOME_DAYS, isActiveAgent, isDeskAgent, isGoneHome, isSubagent, pla
 /** @typedef {'working'|'needs_input'|'stalled'|'for_review'|'ended'} ActivityState */
 /** @typedef {'active'|'benched'|'let_go'} AckState */
 /** @typedef {'desk'|'office'|'lounge'|'let_go'} Placement */
-/** @typedef {'claude-code'|'codex'} RuntimeId */
+/**
+ * Every runtime DeckHQ has an adapter for. Widened by WP-24/25; the registry in
+ * `src/adapters/index.mjs` is the list of record and this union has to keep up
+ * with it, because an id that is not in here is a type error at every site that
+ * builds a summary. Nothing outside `src/adapters/` may act on which one it is.
+ * @typedef {'claude-code'|'codex'|'gemini-cli'|'opencode'} RuntimeId
+ */
 
 /**
  * What a session is doing right now, from `PreToolUse` (WP-52).

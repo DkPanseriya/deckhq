@@ -1,0 +1,59 @@
+[
+  {
+    "id": "ses_01HZX000000000000000000001",
+    "project_id": "prj_demo",
+    "workspace_id": "wsp_demo",
+    "parent_id": null,
+    "slug": "add-a-health-check",
+    "directory": "C:\\Dk\\Projects\\demo-app",
+    "path": "C:\\Dk\\Projects\\demo-app",
+    "title": "Add a health check endpoint to the server",
+    "version": "1.4.2",
+    "cost": 0.0412,
+    "tokens_input": 6100,
+    "tokens_output": 420,
+    "tokens_reasoning": 60,
+    "tokens_cache_read": 2048,
+    "tokens_cache_write": 512,
+    "model": "claude-opus-5",
+    "agent": "build",
+    "time_created": 1787648400000,
+    "time_updated": 1787648620000,
+    "time_compacting": null,
+    "time_archived": null,
+    "an_unknown_future_column": "ignored rather than fatal"
+  },
+  {
+    "id": "ses_01HZX000000000000000000002",
+    "project_id": "prj_demo",
+    "parent_id": "ses_01HZX000000000000000000001",
+    "directory": "C:\\Dk\\Projects\\demo-app",
+    "title": "Junior: check the readiness probe wiring",
+    "cost": 0.0021,
+    "tokens_input": 900,
+    "tokens_output": 60,
+    "tokens_cache_read": 0,
+    "tokens_cache_write": 0,
+    "model": "{\"id\":\"claude-opus-5\",\"providerID\":\"anthropic\"}",
+    "time_created": 1787648500000,
+    "time_updated": 1787648560000
+  },
+  {
+    "id": "ses_01HZX000000000000000000003",
+    "project_id": "prj_other",
+    "parent_id": null,
+    "directory": "/home/x/other-project",
+    "title": "Rename the config loader",
+    "tokens_input": "1200",
+    "tokens_output": "80",
+    "tokens_cache_read": -1,
+    "model": "",
+    "time_created": 1787300000000,
+    "time_updated": 1787310000000,
+    "time_archived": 1787400000000
+  },
+  {
+    "project_id": "prj_broken",
+    "title": "a row with no id is refused rather than guessed at"
+  }
+]

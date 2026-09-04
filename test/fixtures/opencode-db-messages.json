@@ -1,0 +1,27 @@
+[
+  {
+    "session_id": "ses_01HZX000000000000000000001",
+    "time_created": 1787648620000,
+    "data": "{\"role\":\"assistant\",\"time\":{\"created\":1787648600000,\"completed\":1787648620000},\"modelID\":\"claude-opus-5\",\"providerID\":\"anthropic\",\"path\":{\"cwd\":\"C:\\\\Dk\\\\Projects\\\\demo-app\",\"root\":\"C:\\\\Dk\\\\Projects\\\\demo-app\"},\"cost\":0.0412,\"tokens\":{\"input\":6100,\"output\":420,\"reasoning\":60,\"cache\":{\"read\":2048,\"write\":512}}}"
+  },
+  {
+    "session_id": "ses_01HZX000000000000000000001",
+    "time_created": 1787648590000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1787648590000},\"model\":{\"providerID\":\"anthropic\",\"modelID\":\"claude-opus-5\"}}"
+  },
+  {
+    "session_id": "ses_01HZX000000000000000000002",
+    "time_created": 1787648560000,
+    "data": "{\"role\":\"assistant\",\"time\":{\"created\":1787648550000},\"modelID\":\"claude-opus-5\",\"providerID\":\"anthropic\",\"path\":{\"cwd\":\"C:\\\\Dk\\\\Projects\\\\demo-app\",\"root\":\"C:\\\\Dk\\\\Projects\\\\demo-app\"}}"
+  },
+  {
+    "session_id": "ses_01HZX000000000000000000003",
+    "time_created": 1787310000000,
+    "data": "{\"role\":\"user\",\"time\":{\"created\":1787310000000}}"
+  },
+  {
+    "session_id": "ses_01HZX000000000000000000009",
+    "time_created": 1787300000000,
+    "data": "{not valid json at all"
+  }
+]
