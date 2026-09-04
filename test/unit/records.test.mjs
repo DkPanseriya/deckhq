@@ -443,7 +443,12 @@ test('the hover card carries the record line, off the panel’s own stats cache'
   const app = stripComments(
     fs.readFileSync(path.resolve(HERE, '../../public/app-tooltip.js'), 'utf8'),
   );
-  const panel = stripComments(fs.readFileSync(path.resolve(HERE, '../../public/panel.js'), 'utf8'));
+  // WP-22 follow-up: the records line is `panel-records.js` now, and the cache
+  // it exports still leaves the panel through `panel.js`. Both are read, so
+  // the file list grew and the assertions below did not.
+  const panel = ['panel-records.js', 'panel.js']
+    .map((f) => stripComments(fs.readFileSync(path.resolve(HERE, `../../public/${f}`), 'utf8')))
+    .join('\n');
 
   assert.match(app, /import \{ recordLineFor \} from '\.\/records\.js';/);
   const tooltip = block(app, 'function showTooltip(');

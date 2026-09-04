@@ -10402,3 +10402,224 @@ already-flaky failure in `claude-stream.test.mjs`'s timeout test, reproduced in 
 untouched here), and the arithmetic — `import.meta.dirname` is Node 20.11+, the fix is Node 12+ —
 points at the one line four times over. The CI run on this branch is the first real Node 18
 evidence.
+## 130. WP-22 follow-up — the ten files it named, the four that crossed the line since, and the four shapes a split can take
+
+§122 split `plan.js` and `app.js` and then did something better than declare
+victory: it listed, in a table, the ten files still over the 900-line ceiling
+it had set for the two it was asked to. This package is that list, plus four
+files that crossed 900 in the packages between (`hooks.mjs`, `settings-ui.js`,
+`palette.js`, `packs.mjs`) and one that was never in the glob §122 looked at
+(`scripts/demo-floor.mjs`).
+
+Fifteen files, 20,651 lines, became **84 modules**. Nothing in the product
+behaves differently, and that is checked rather than asserted.
+
+### Before and after
+
+| file | was | is | modules | all of them |
+| --- | --- | --- | --- | --- |
+| `public/panel.js` | 2,422 | 373 | 14 | 3,099 |
+| `public/render/scene.js` | 1,985 | 378 | 9 | 2,263 |
+| `public/render/rig.js` | 1,716 | 448 | 7 | 1,916 |
+| `src/core/ledger.mjs` | 1,556 | 500 | 7 | 1,682 |
+| `src/core/state-machine.mjs` | 1,517 | 319 | 7 | 1,870 |
+| `public/render/backdrop.js` | 1,491 | 220 | 6 | 1,664 |
+| `src/adapters/claude-code/adapter.mjs` | 1,453 | 93 | 6 | 1,548 |
+| `src/cli/doctor.mjs` | 1,281 | 110 | 4 | 1,344 |
+| `public/render/agents.js` | 1,183 | 483 | 5 | 1,324 |
+| `src/adapters/claude-code/hooks.mjs` | 1,159 | 224 | 4 | 1,235 |
+| `scripts/demo-floor.mjs` | 1,052 | 348 | 4 | 1,142 |
+| `src/core/terminals.mjs` | 990 | 250 | 3 | 1,065 |
+| `public/settings-ui.js` | 965 | 493 | 4 | 1,081 |
+| `public/render/palette.js` | 954 | 199 | 4 | 1,018 |
+| `src/core/packs.mjs` | 927 | 321 | 4 | 1,005 |
+
+The right-hand column is larger than the left in every row, by about 13%.
+That is the price and it is worth naming: a module costs a header saying what
+it is for, an import list, and a re-export. **The largest file in the
+repository that is not a test is now `public/app.js` at 897 lines**, and it
+was 897 before this package started.
+
+### The four shapes, and which files took which
+
+**1. A flat list of declarations — the `plan.js` case.** `rig.js`,
+`ledger.mjs`, `packs.mjs`, `terminals.mjs`, `doctor.mjs`, `adapter.mjs`,
+`hooks.mjs`, `agents.js`, `palette.js` and `demo-floor.mjs` are all lists of
+top-level functions. Whole declarations moved, doc comments with them, and the
+only edit inside one was the `export` keyword on its first line. **Not one
+function body changed in any of these ten.**
+
+**2. A class — `Scene` (1,386 lines of one file) and `Registry` (1,206).** A
+class body cannot be cut in half in JavaScript. Two ways out:
+
+- `Object.assign(Klass.prototype, methods)`, with each group an object
+  literal. Method bodies stay byte-identical at the same indentation, and
+  `Object.getOwnPropertyDescriptors` keeps a getter a getter. It was tried
+  first and abandoned: the type checker cannot follow it. `this._draw()`
+  inside `setState()` becomes `Property '_draw' does not exist`, and there is
+  no way to answer that except `@ts-ignore`, of which this repository has
+  **zero** (§122).
+- **A chain of base classes**, which the type checker does follow:
+
+      SceneBase -> SceneLod -> SceneCamera -> SceneLabels -> SceneHit
+        -> SceneDraw -> SceneInput -> Scene
+
+      RegistryBase -> RegistrySnapshot -> RegistryCompute -> RegistryScan
+        -> RegistryHooks -> Registry
+
+  The order is not taste. It is the class's own call graph, computed rather
+  than guessed: `_characterScale()` calls `_scale()`, so LOD sits above the
+  camera; `setZoom()` calls `_draw()` while `_draw()` calls `_cameraParams()`,
+  so the public zoom API moved to sit with the wheel handler that is its only
+  caller inside the file. **Nothing in either chain calls upwards.** Where a
+  method would have had to, it moved down instead — which is why
+  `state-machine-scan.mjs` holds the three settings writes that ask for a
+  rebuild, and `scene-draw.js` holds `_rebuildPlan`.
+
+  A chain needs the instance fields declared somewhere every link can see
+  them, because the constructor that assigns them is in the last link. Hence
+  `scene-base.js` (34 fields) and `state-machine-base.mjs` (23). A field
+  declaration with no initialiser is `undefined` until the constructor runs,
+  which is what "not yet assigned" already meant. **They are also the first
+  written-down list of what either object holds** — 1,386 and 1,206 lines and
+  neither had one.
+
+  Cost, stated: **one line per class.** `super()`, which a derived constructor
+  requires. 49 of Scene's 50 method bodies and 33 of Registry's 34 are
+  character-for-character identical; the two exceptions are the two
+  constructors, each of which gained that line and a comment saying why.
+
+**3. A closure — `createPanel()` (1,990 lines) and `createSettingsUI()`
+(844).** Every inner function closes over the same mutable locals, so a part
+module cannot simply take them. §122's three rules for `app.js` are the
+answer, applied one level down:
+
+- The DOM is a builder (`buildPanelDom()`) whose result is spread into each
+  part's `ctx`. It is a function rather than module-scope constants because
+  three test suites import `public/panel.js` under `node --test` for its pure
+  re-exports and there is no `document` there.
+- Cross-part calls are handed in through a `wire()` into `let`s with the
+  identifiers the bodies already used — `app-keys.js`'s `wireKeyboard()`
+  pattern (§122 rule 3).
+- Shared mutable state is live bindings with a setter each (§122 rule 2).
+  `panel-state.js` holds the two facts every part needs — which session, and
+  the agent being shown — and every other piece of state lives in the one part
+  that owns it: the diffs in `panel-changes.js`, the answer-in-flight flag in
+  `panel-permission.js`, WP-09's streaming turn in `panel-live.js`.
+
+  Cost, stated: **23 lines in `panel.js`, 4 in `settings-ui.js`.** Every one of
+  them is the same edit, `x = v` becoming `setX(v)`. 126 of the panel's 146
+  declarations are byte-identical; the other twenty are the state declarations
+  that moved to module scope, three helpers that gained `export`, and the five
+  functions holding those 23 lines.
+
+  **The panel is a singleton by construction, and that is what licenses module
+  state.** It registers a `document` keydown listener and gives its composer
+  the fixed id `panel-input`. A second `createPanel()` was never possible.
+
+**4. A `switch` — `paintProp()` in `backdrop.js`.** 970 of `backdrop.js`'s
+1,491 lines were one switch over thirty-five prop kinds, inside a 1,041-line
+function. It is three switches now, one per room the props belong to, **case
+for case and line for line including every `break`**: each is wrapped in a
+function whose `default` answers `false`, so `paintProp` tries the next group,
+and whose `return true` after the switch says this group drew it. The neutral
+block that used to be the `default` is the branch taken when none of the three
+knew the kind. `paintProp` keeps the frame — the clip to a prop's own
+footprint plus `PROP_BLEED`, the facing, the two-pass `local` shadow, and the
+contact shadow underneath — and hands `local` to each group rather than
+letting it be rebuilt, so no prop's shadow changed.
+
+### How each split was proved, not asserted
+
+Three checks, run on every one of the fifteen:
+
+1. **Every top-level declaration appears character for character in exactly
+   one new module.** §122's pass, rerun:
+
+   | file | declarations matched |
+   | --- | --- |
+   | `hooks.mjs` | 47/47 |
+   | `demo-floor.mjs` | 46/46 |
+   | `adapter.mjs` | 44/44 |
+   | `palette.js` | 43/43 |
+   | `ledger.mjs` | 40/40 |
+   | `packs.mjs` | 37/37 |
+   | `agents.js`, `doctor.mjs` | 35/35 |
+   | `terminals.mjs` | 29/29 |
+   | `rig.js` | 87/90 — the three are one `const` statement whose extra declarators the scanner reads as part of the next line |
+   | `scene.js` | 49/50 method bodies; the fiftieth is the constructor's `super()` |
+   | `state-machine.mjs` | 33/34 method bodies; the same |
+   | `panel.js` | 126/146; see shape 3 above |
+
+2. **Every distinct source line still exists, the same number of times.** A
+   second, cruder check that catches what the first cannot: a block of
+   straight-line code between two declarations, dropped. It caught exactly
+   that once — `palette.js`'s `assertAppearanceCannotImpersonateAState()`, a
+   42-line import-time guard sitting past the last declaration in the file,
+   which the first draft of that split silently dropped. Tests and goldens
+   both stayed green without it, because a guard that throws only on a
+   violation is invisible until somebody violates it. It is in
+   `palette-avatars.js` now, beside the pools it checks, and still fails at
+   import time.
+
+3. **The goldens, after every single commit.** `0 px moved at all`, six
+   populations, fifteen times. That is what makes this an unusually
+   well-covered refactor: the floor is drawn by `scene.js`, `rig.js`,
+   `backdrop.js`, `agents.js`, `palette.js` and `plan.js`, it is populated by
+   `demo-floor.mjs` and served by the daemon that `state-machine.mjs`,
+   `adapter.mjs` and `ledger.mjs` are, and the demo floor draws twenty-six of
+   `paintProp`'s thirty-five prop kinds. A pixel is a claim about all of it.
+
+### What changed in the tests, and what did not
+
+Nine test files read one of these as source. **In every one, only the file
+list changed. Not one assertion did**, with the single exception noted below.
+
+`test/unit/panel-invariant.test.mjs` is the important one: it is the client
+half of THE INVARIANT (docs/01-PRODUCT.md §2). It carries a `PANEL_PARTS`
+array of fourteen filenames now, in the order the functions used to appear in
+the one file so that every "the body runs to the next declaration" slice still
+reads what it always read, and it concatenates them. Two counts that were
+per-file are sums across those fourteen now — `/api/ack` appears once in the
+panel, `/api/permission/decide` once — which is the same claim about the same
+code. `performAction()` is still the only caller of POST `/api/ack` in the
+whole client.
+
+One declaration was reordered rather than moved: `approveText` and `approve`
+sit before `pressNumberKey` in `panel-actions.js` now. The invariant test
+reads 200 characters from `function approve(` and asserts they contain no
+`performAction`; with `approve` last in its module, those 200 characters ran
+into the module's `return { ... performAction ... }`. Reordering two whole
+declarations was the honest fix. Changing the assertion was not.
+
+The ceiling test — `test/unit/model.test.mjs`, "WP-22: no split module is over
+900 lines" — grew from two groups to seventeen and carries a per-group module
+count now rather than one number for every group, because a split that
+produced three modules is as complete as one that produced fourteen. **The
+ceiling itself, 900, has not moved.** It checks 106 files.
+
+### Four JSDoc annotations changed, and why
+
+`doctor-report.mjs` and `doctor-share.mjs` describe their parameter as
+`Awaited<ReturnType<typeof collectReport>>`. `collectReport` moved to
+`doctor-collect.mjs`, and importing it for a type alone is an unused import to
+eslint and a required one to `tsc`. They say
+`ReturnType<typeof import('./doctor-collect.mjs').collectReport>` now — which
+is what §122 did to `agents.js`'s duplicated typedefs, for the same reason.
+Two more of the same shape in `state-machine.mjs` and
+`state-machine-snapshot.mjs`.
+
+### What is NOT here
+
+- **No behaviour change anywhere.** Not one bug fixed in passing, not one dead
+  branch deleted, not one name improved. Everything found while reading 20,651
+  lines that would be worth changing is worth changing in a package that can
+  be reviewed as a change.
+- **`public/app.js` is 897 lines and was not touched.** It is under the
+  ceiling. §122 built it that way deliberately and it has not drifted.
+- **The files between 700 and 900** — `app.js`, `plan-service.js`, `plan.js`,
+  `deck.js`, `store.mjs`, `palette.js` (the browser one), `minifloor.js` and
+  the rest — are left alone. The ceiling is 900; a file under it is not a
+  defect, and splitting one because it is large rather than because it is
+  doing two things is how a repository ends up with a hundred modules nobody
+  can name.

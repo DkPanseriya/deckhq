@@ -36,6 +36,29 @@ const PUBLIC = path.resolve(HERE, '../../public');
 const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
 const read = (name) => stripComments(fs.readFileSync(path.join(PUBLIC, name), 'utf8'));
 
+/**
+ * The WP-22 follow-up split the review card into fourteen modules, listed in
+ * the order the functions used to appear in the one file. Only this list
+ * changed: not one assertion below did.
+ */
+const PANEL_PARTS = [
+  'panel-rules.js',
+  'panel-format.js',
+  'panel-state.js',
+  'panel-dom.js',
+  'panel-header.js',
+  'panel-permission.js',
+  'panel-said.js',
+  'panel-changes.js',
+  'panel-actions.js',
+  'panel-resume.js',
+  'panel-records.js',
+  'panel-composer.js',
+  'panel-live.js',
+  'panel.js',
+];
+const readPanel = () => PANEL_PARTS.map(read).join('\n');
+
 /** A pending permission with a session-scoped rule to offer. */
 const PENDING = {
   id: 'req-1',
@@ -127,7 +150,7 @@ test('nothing is decided from a missing event or a missing context', () => {
 // ------------------------------------------------------------ the wiring
 
 test('the panel’s listener asks the rule and does nothing else', () => {
-  const panel = read('panel.js');
+  const panel = readPanel();
   // One decision point. A second `switch (e.key)` in the listener is how the
   // two implementations drift apart again.
   assert.match(panel, /const decision = permissionKeyDecision\(e, \{/);

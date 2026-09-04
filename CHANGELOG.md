@@ -858,6 +858,15 @@ a bill · rate card 2026-09-04` — every snapshot already carried `rateCardVers
   `derivePlacement` is now the same function object as `placement` rather than a copy of it.
   Proven on both routes: `GET /floor-rule.js` serves 200, the live page imports it and answers,
   and `GET /../src/core/model.mjs` still 404s. `docs/DEVIATIONS.md` §122.
+- **No file in this repository is over 900 lines any more.** WP-22 split `plan.js` and `app.js`
+  and named ten more files it had not been asked to; this finishes the list, and four others that
+  had crossed the line since. Fifteen files, 20,651 lines, became eighty-four modules — the review card,
+  the scene, the rig, the ledger, the backdrop, the state machine, the Claude Code adapter and its
+  hooks, the doctor, the packs, the terminals, the palette, the agents runtime, the settings sheet
+  and the demo script. Behaviour is unchanged and that is checked rather than asserted: every
+  declaration was matched character for character in exactly one new module, every source line
+  accounted for, and the goldens moved **0 px at all** on all six populations after each split.
+  The ceiling test now covers all one hundred and six modules the two packages produced together. `docs/DEVIATIONS.md` §130.
 
 ### Fixed
 

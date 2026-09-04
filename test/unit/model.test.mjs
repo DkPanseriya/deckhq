@@ -263,25 +263,49 @@ test('placement() and derivePlacement() are the same function, not two copies', 
   }
 });
 
-test('WP-22: no plan or app module is over 900 lines', async () => {
+test('WP-22: no split module is over 900 lines', async () => {
   const { readdir, readFile } = await import('node:fs/promises');
   const path = await import('node:path');
   const { fileURLToPath } = await import('node:url');
-  const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'public');
+  const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const root = path.join(repo, 'public');
 
+  // [directory, filename prefix, how many modules that split produced].
+  // The WP-22 follow-up added the last groups; the ceiling itself, 900, has
+  // not moved.
   const groups = [
-    [path.join(root, 'render'), (f) => f.startsWith('plan') && f.endsWith('.js')],
-    [root, (f) => f.startsWith('app') && f.endsWith('.js')],
+    [path.join(root, 'render'), 'plan', 7],
+    [root, 'app', 11],
+    [root, 'panel', 14],
+    [path.join(root, 'render'), 'scene', 9],
+    [path.join(root, 'render'), 'rig', 7],
+    [path.join(repo, 'src', 'core'), 'ledger', 7],
+    [path.join(root, 'render'), 'backdrop', 6],
+    [path.join(root, 'render'), 'agents', 5],
+    [path.join(root, 'render'), 'palette', 4],
+    [path.join(repo, 'src', 'core'), 'packs', 4],
+    [path.join(repo, 'src', 'core'), 'terminals', 3],
+    [path.join(repo, 'src', 'cli'), 'doctor', 4],
+    [path.join(repo, 'src', 'adapters', 'claude-code'), 'adapter', 6],
+    [path.join(repo, 'src', 'adapters', 'claude-code'), 'hooks', 4],
+    [path.join(repo, 'src', 'core'), 'state-machine', 7],
+    [root, 'settings-ui', 4],
+    [path.join(repo, 'scripts'), 'demo', 4],
   ];
   let checked = 0;
-  for (const [dir, keep] of groups) {
-    const files = (await readdir(dir)).filter(keep);
-    assert.ok(files.length >= 7, `${dir} did not split into the modules it should have`);
+  for (const [dir, prefix, min] of groups) {
+    const files = (await readdir(dir)).filter(
+      (f) => f.startsWith(prefix) && /\.m?js$/.test(f) && !f.endsWith('.test.mjs'),
+    );
+    assert.ok(
+      files.length >= min,
+      `${dir}/${prefix}* did not split into the modules it should have`,
+    );
     for (const f of files) {
       const lines = (await readFile(path.join(dir, f), 'utf8')).split('\n').length;
       assert.ok(lines <= 900, `${f} is ${lines} lines; WP-22's ceiling is 900`);
       checked++;
     }
   }
-  assert.ok(checked >= 18, `expected the whole split, saw ${checked} files`);
+  assert.ok(checked >= 106, `expected the whole split, saw ${checked} files`);
 });

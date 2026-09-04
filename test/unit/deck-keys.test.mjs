@@ -32,6 +32,29 @@ const stripComments = (src) => src.replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm,
 const read = (name) => stripComments(fs.readFileSync(path.join(PUBLIC, name), 'utf8'));
 
 /**
+ * The WP-22 follow-up split the review card into fourteen modules, listed in
+ * the order the functions used to appear in the one file. Only this list
+ * changed: not one assertion below did.
+ */
+const PANEL_PARTS = [
+  'panel-rules.js',
+  'panel-format.js',
+  'panel-state.js',
+  'panel-dom.js',
+  'panel-header.js',
+  'panel-permission.js',
+  'panel-said.js',
+  'panel-changes.js',
+  'panel-actions.js',
+  'panel-resume.js',
+  'panel-records.js',
+  'panel-composer.js',
+  'panel-live.js',
+  'panel.js',
+];
+const readPanel = () => PANEL_PARTS.map(read).join('\n');
+
+/**
  * The `handleKeydown` body, comments stripped. WP-22 moved the map out of
  * `app.js` into `app-keys.js`; the map itself is unchanged, so only the file
  * this reads moved with it (`docs/DEVIATIONS.md` §122).
@@ -183,7 +206,7 @@ test('INVARIANT: the deck acts through the panel and never touches /api/ack', ()
 });
 
 test('the panel accepts a target row without opening it', () => {
-  const panel = read('panel.js');
+  const panel = readPanel();
   assert.match(panel, /async function performAction\(action, targetId\)/);
   assert.match(panel, /function pressNumberKey\(key, targetId\)/);
   // `1 Reply` is the one that has to open: a reply needs somewhere to type,

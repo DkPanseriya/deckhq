@@ -55,6 +55,28 @@ import {
 import { BODY_HEIGHT_U } from '../../public/render/rig.js';
 import { juniorMetaFor } from '../../public/panel.js';
 
+/**
+ * The WP-22 follow-up split the review card into fourteen modules, listed in
+ * the order the functions used to appear in the one file. Only this list
+ * changed: not one assertion below did.
+ */
+const PANEL_PARTS = [
+  'panel-rules.js',
+  'panel-format.js',
+  'panel-state.js',
+  'panel-dom.js',
+  'panel-header.js',
+  'panel-permission.js',
+  'panel-said.js',
+  'panel-changes.js',
+  'panel-actions.js',
+  'panel-resume.js',
+  'panel-records.js',
+  'panel-composer.js',
+  'panel-live.js',
+  'panel.js',
+];
+
 // ---------------------------------------------------------------------------
 // Synthetic fixtures, shaped like the files measured on the reference machine.
 // ---------------------------------------------------------------------------
@@ -1071,10 +1093,11 @@ test('a junior is drawn smaller than its parent, but never below the legibility 
 });
 
 test('the panel offers a junior no action, no composer and no resume link', () => {
-  const src = readFileSync(new URL('../../public/panel.js', import.meta.url), 'utf8').replace(
-    /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm,
-    '$1',
-  );
+  const src = PANEL_PARTS.map((f) =>
+    readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'),
+  )
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
   // Three refusals, each in the one function that would otherwise build the
   // thing: the weighted row and the composer, the resume links, and the
   // number keys that are the row's shortcuts. Read from source for the same
@@ -1103,10 +1126,11 @@ test('the panel builds its junior line from `juniorMetaFor` and nowhere else', (
   // `panel-invariant.test.mjs`): read the source. A second, hand-rolled copy
   // of this string is exactly the drift `docs/DEVIATIONS.md` §96 decision 3 is
   // about.
-  const src = readFileSync(new URL('../../public/panel.js', import.meta.url), 'utf8').replace(
-    /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm,
-    '$1',
-  );
+  const src = PANEL_PARTS.map((f) =>
+    readFileSync(new URL(`../../public/${f}`, import.meta.url), 'utf8'),
+  )
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
   assert.match(src, /juniorMetaFor\(a, getSnapshot\(\)\)/, 'the meta row calls it');
   assert.equal(
     (src.match(/junior of /g) || []).length,

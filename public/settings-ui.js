@@ -21,7 +21,23 @@
  *
  * Every value the daemon supplies — the state path, a hook's JSON — is
  * written with `textContent`.
+ *
+ * ============================================================================
+ * WP-22 follow-up · this file is the sheet itself: the one write path, the
+ * section order, and open/close. Three modules carry the rest:
+ *
+ *   settings-ui-state.js    the settings the daemon confirmed, and /api/about
+ *   settings-ui-widgets.js  the controls: section, row, toggle, number,
+ *                           choice, theme picker, avatar picker
+ *   settings-ui-rates.js    WP-45's rate-card editor
+ * ============================================================================
  */
+
+import { current, about, setCurrent, setAbout } from './settings-ui-state.js';
+import { createSettingsWidgets } from './settings-ui-widgets.js';
+import { createRatesSection } from './settings-ui-rates.js';
+
+export { current, about } from './settings-ui-state.js';
 
 /**
  * Exactly the settings keys this sheet and the palette write. Asserted
@@ -43,15 +59,15 @@ export const SETTINGS_KEYS = Object.freeze([
   'avatarSet',
 ]);
 
-const MIN_STALL_MIN = 2;
-const MAX_STALL_MIN = 120;
-const MIN_POLL_S = 1;
-const MAX_POLL_S = 60;
+export const MIN_STALL_MIN = 2;
+export const MAX_STALL_MIN = 120;
+export const MIN_POLL_S = 1;
+export const MAX_POLL_S = 60;
 /** WP-18. Any hour of the day is legal; the store clamps to this range. */
-const MIN_LIGHTS_OUT = 0;
-const MAX_LIGHTS_OUT = 23;
+export const MIN_LIGHTS_OUT = 0;
+export const MAX_LIGHTS_OUT = 23;
 
-const MOTION_LABELS = {
+export const MOTION_LABELS = {
   system: 'Follow the system',
   reduce: 'Always reduce',
   'no-preference': 'Always animate',
@@ -77,7 +93,7 @@ const MOTION_LABELS = {
  * @property {(name:string) => string} apply paint one, and return what landed
  * @property {(theme:any) => string[]} swatches three colours that stand for one
  */
-const NO_THEMING = Object.freeze({
+export const NO_THEMING = Object.freeze({
   list: () => [],
   apply: (name) => name,
   swatches: () => [],
@@ -99,13 +115,13 @@ const NO_THEMING = Object.freeze({
  * @property {(name:string) => string} apply  dress the floor, and return what landed
  * @typedef {Avatars} AvatarsPort
  */
-const NO_AVATARS = Object.freeze({
+export const NO_AVATARS = Object.freeze({
   list: () => [],
   apply: (name) => name,
 });
 
 /** How many override rows the editor will draw. The route's own cap. */
-const MAX_RATE_ROWS = 200;
+export const MAX_RATE_ROWS = 200;
 
 /**
  * Apply the motion preference to the document. `system` removes the attribute
@@ -150,11 +166,6 @@ export function createSettingsUI(opts) {
     return Array.isArray(list) ? list : [];
   };
 
-  /** @type {Record<string, any>} the settings as last confirmed by the daemon */
-  let current = {};
-  /** @type {{statePath?:string, rateCardVersion?:string}} */
-  let about = {};
-
   // ------------------------------------------------------------ networking
 
   /**
@@ -172,7 +183,7 @@ export function createSettingsUI(opts) {
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      current = body;
+      setCurrent(body);
       applyMotionPreference(current.reducedMotion);
       // WP-30. Paint the theme the daemon confirmed, not the one that was
       // clicked: the store is the authority on what was stored, and a preview
@@ -189,271 +200,27 @@ export function createSettingsUI(opts) {
     try {
       const res = await fetch('/api/about');
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      about = await res.json();
+      setAbout(await res.json());
     } catch (err) {
-      about = {};
+      setAbout({});
       console.debug('[deckhq] could not read /api/about', err);
     }
   }
 
   // ------------------------------------------------------------ small parts
 
-  /** @param {string} title @param {string} [note] */
-  function section(title, note) {
-    const wrap = document.createElement('section');
-    wrap.className = 'settings-section';
-    const h3 = document.createElement('h3');
-    h3.className = 'settings-heading';
-    h3.textContent = title;
-    wrap.appendChild(h3);
-    if (note) {
-      const p = document.createElement('p');
-      p.className = 'settings-note';
-      p.textContent = note;
-      wrap.appendChild(p);
-    }
-    return wrap;
-  }
-
-  /**
-   * One labelled row. The label is a real `<label>` bound to its control
-   * wherever the control is a native input; toggle rows use a button with
-   * `aria-pressed` and carry the label as its accessible name.
-   * @param {HTMLElement} host
-   * @param {string} label
-   * @param {HTMLElement} control
-   * @param {string} [note]
-   */
-  function row(host, label, control, note) {
-    const div = document.createElement('div');
-    div.className = 'settings-row';
-    const text = document.createElement('div');
-    text.className = 'settings-row-text';
-    const name = document.createElement('span');
-    name.className = 'settings-label';
-    name.textContent = label;
-    text.appendChild(name);
-    if (note) {
-      const n = document.createElement('span');
-      n.className = 'settings-note';
-      n.textContent = note;
-      text.appendChild(n);
-    }
-    div.append(text, control);
-    host.appendChild(div);
-    return div;
-  }
-
-  /**
-   * @param {string} label the accessible name, since the visible label is a
-   *   sibling rather than a wrapper
-   * @param {boolean} on
-   * @param {(next:boolean) => void} onChange
-   */
-  function toggle(label, on, onChange) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn settings-toggle';
-    btn.setAttribute('aria-pressed', String(on));
-    btn.setAttribute('aria-label', label);
-    btn.textContent = on ? 'On' : 'Off';
-    btn.addEventListener('click', () => onChange(!on));
-    return btn;
-  }
-
-  /**
-   * @param {object} spec
-   * @param {string} spec.label
-   * @param {number} spec.value
-   * @param {number} spec.min
-   * @param {number} spec.max
-   * @param {string} spec.unit
-   * @param {(next:number) => void} spec.onChange
-   */
-  function numberField(spec) {
-    const wrap = document.createElement('div');
-    wrap.className = 'settings-number';
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.className = 'field-input';
-    input.min = String(spec.min);
-    input.max = String(spec.max);
-    input.step = '1';
-    input.value = String(spec.value);
-    input.setAttribute('aria-label', `${spec.label}, in ${spec.unit}`);
-    // 'change', not 'input': one write when the field is done, not one per
-    // keystroke, each of which would be clamped and re-rendered under the
-    // caret.
-    input.addEventListener('change', () => {
-      const n = Number(input.value);
-      if (!Number.isFinite(n)) return render();
-      spec.onChange(Math.min(spec.max, Math.max(spec.min, Math.round(n))));
-    });
-    const unit = document.createElement('span');
-    unit.className = 'settings-unit';
-    unit.textContent = spec.unit;
-    wrap.append(input, unit);
-    return wrap;
-  }
-
-  /**
-   * A row of `aria-pressed` buttons rather than a `<select>`: a native
-   * select's popup is OS-drawn and on several platforms an unavoidable white
-   * box, which is the one thing this interface refuses everywhere else.
-   * @param {string} label
-   * @param {{value:string,label:string}[]} options
-   * @param {string} value
-   * @param {(next:string) => void} onChange
-   */
-  function choice(label, options, value, onChange) {
-    const group = document.createElement('div');
-    group.className = 'picker settings-choice';
-    group.setAttribute('role', 'group');
-    group.setAttribute('aria-label', label);
-    for (const opt of options) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'picker-btn';
-      btn.setAttribute('aria-pressed', String(opt.value === value));
-      btn.textContent = opt.label;
-      btn.addEventListener('click', () => {
-        if (opt.value !== value) onChange(opt.value);
-      });
-      group.appendChild(btn);
-    }
-    return group;
-  }
-
-  /**
-   * The theme picker (WP-30).
-   *
-   * A row of `aria-pressed` buttons, like every other choice in this sheet,
-   * with two differences that earn their code:
-   *
-   *   1. **Swatches.** Three dots per theme — the wood, the carpet, the
-   *      chrome. Drawn with `element.style`, deliberately NOT with a CSS rule:
-   *      `test/unit/state-visuals.test.mjs` holds every `.settings*` rule to
-   *      the measured ink and ground sets, and a stylesheet full of theme
-   *      colours would either break that test or force it to be relaxed. A
-   *      swatch is data, so it is set as data.
-   *   2. **Live preview.** Hovering or focusing a theme paints the whole
-   *      window in it and leaving puts it back, because a theme is the one
-   *      setting whose value you cannot read off a label. Preview NEVER
-   *      saves: leaving the sheet, or the row, restores what is stored.
-   *
-   * @param {string} value the stored theme
-   * @param {(next:string) => void} onChange
-   */
-  function themePicker(value, onChange) {
-    const list = shippedThemes();
-    const group = document.createElement('div');
-    group.className = 'picker settings-choice settings-themes';
-    group.setAttribute('role', 'group');
-    group.setAttribute('aria-label', 'Floor theme');
-
-    /** Put the window back on the theme that is actually stored. */
-    const restore = () => applyThemeSetting(value);
-
-    for (const theme of list) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'picker-btn settings-theme';
-      btn.setAttribute('aria-pressed', String(theme.name === value));
-      if (theme.blurb) btn.title = theme.blurb;
-
-      const dots = document.createElement('span');
-      dots.className = 'settings-theme-swatch';
-      dots.setAttribute('aria-hidden', 'true');
-      const colours = theming.swatches(theme) || [];
-      for (const colour of colours) {
-        const dot = document.createElement('i');
-        dot.style.background = colour;
-        dots.appendChild(dot);
-      }
-      const label = document.createElement('span');
-      label.textContent = theme.name;
-      btn.append(dots, label);
-
-      // Preview on the way in, the stored theme back on the way out. Pointer
-      // and keyboard both, so a keyboard user sees the same thing.
-      btn.addEventListener('pointerenter', () => applyThemeSetting(theme.name));
-      btn.addEventListener('focus', () => applyThemeSetting(theme.name));
-      btn.addEventListener('pointerleave', restore);
-      btn.addEventListener('blur', restore);
-      btn.addEventListener('click', () => {
-        if (theme.name !== value) onChange(theme.name);
-      });
-      group.appendChild(btn);
-    }
-    // A pointer that leaves the whole group without passing over a button —
-    // fast diagonal exits do this — would otherwise leave the preview on.
-    group.addEventListener('pointerleave', restore);
-    return group;
-  }
-
-  /**
-   * The avatar-set picker (WP-45).
-   *
-   * A theme's swatch is three dots because a theme is a building; a set's
-   * swatch is its accents, because a set is what the people in it are
-   * wearing. There is deliberately NO live preview here, and that is the one
-   * way this row differs from the theme row above it: previewing a set would
-   * re-roll every face on the floor twice a second as the pointer moved, and
-   * a face that flickers is precisely what `appearanceRng`'s fixed draw order
-   * exists to prevent. A set is applied when it is chosen.
-   *
-   * The first row is always "As they come" — the tables DeckHQ ships. It is
-   * not a downgrade and it is never taken away: removing the pack that
-   * brought a set puts everybody back in it.
-   *
-   * @param {string} value
-   * @param {(next:string) => void} onChange
-   */
-  function avatarPicker(value, onChange) {
-    const group = document.createElement('div');
-    group.className = 'picker settings-choice settings-themes';
-    group.setAttribute('role', 'group');
-    group.setAttribute('aria-label', 'Avatar set');
-
-    const options = [
-      { name: '', blurb: 'The faces DeckHQ ships.', accents: [] },
-      ...availableAvatarSets(),
-    ];
-    for (const set of options) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'picker-btn settings-theme';
-      btn.setAttribute('aria-pressed', String(set.name === value));
-      if (set.blurb) btn.title = set.blurb;
-
-      const dots = document.createElement('span');
-      dots.className = 'settings-theme-swatch';
-      dots.setAttribute('aria-hidden', 'true');
-      // Three, like a theme's, so the two rows read as the same kind of
-      // control rather than one of them being a colour chart.
-      for (const colour of (set.accents || []).slice(0, 3)) {
-        const dot = document.createElement('i');
-        dot.style.background = colour;
-        dots.appendChild(dot);
-      }
-      const label = document.createElement('span');
-      label.textContent = set.name || 'as they come';
-      btn.append(dots, label);
-      btn.addEventListener('click', () => {
-        if (set.name !== value) onChange(set.name);
-      });
-      group.appendChild(btn);
-    }
-    return group;
-  }
-
-  /** @param {string} text */
-  function readOnlyValue(text) {
-    const span = document.createElement('span');
-    span.className = 'settings-readonly mono';
-    span.textContent = text;
-    return span;
-  }
+  const widgets = createSettingsWidgets({
+    theming,
+    shippedThemes,
+    applyThemeSetting,
+    availableAvatarSets,
+  });
+  const { section, row, toggle, numberField, choice, themePicker, avatarPicker, readOnlyValue } =
+    widgets;
+  const rates = createRatesSection({ toast });
+  const { renderRateEditor, loadRates } = rates;
+  widgets.wire({ render });
+  rates.wire({ render });
 
   // --------------------------------------------------------------- sections
 
@@ -653,245 +420,6 @@ export function createSettingsUI(opts) {
     host.appendChild(s);
   }
 
-  // --------------------------------------------------- the rate-card editor
-  //
-  // WP-45, and FREE — `src/http/routes/rates.mjs` carries the argument. The
-  // short version: `~/.deckhq/rates.json` has existed since WP-26 and anybody
-  // can edit it in a text editor, so selling a sheet that edits it would be
-  // charging for the removal of an inconvenience we put there. And rule 7 —
-  // cost is an estimate, never a bill — only holds if the person looking at a
-  // wrong number can correct it.
-  //
-  // Prices are edited PER MILLION TOKENS in this sheet, whatever `per` the
-  // file says, because one unit means one column heading and a table with two
-  // scales in it is a table nobody can read. A loaded row quoted per some
-  // other unit is converted for display and written back per million; that is
-  // arithmetic, not a change of meaning, and it is the only rewriting this
-  // editor does.
-
-  /** @type {any} the last `/api/rates` response */
-  let rateCard = null;
-  /** @type {any[]|null} the rows being edited, kept across re-renders */
-  let rateDraft = null;
-  /** Has anything been typed since the last load or save? */
-  let rateDirty = false;
-  /** @type {string} what the last save said, shown under the table */
-  let rateStatus = '';
-
-  const PER_MILLION = 1e6;
-
-  /** One override row as the editor holds it: strings, because inputs are. */
-  function toDraft(rate) {
-    const per = Number(rate.per) > 0 ? Number(rate.per) : PER_MILLION;
-    const scale = PER_MILLION / per;
-    /** @param {unknown} n */
-    const at = (n) =>
-      n == null || n === '' ? '' : String(Math.round(Number(n) * scale * 1e6) / 1e6);
-    return {
-      match: String(rate.match || ''),
-      input: at(rate.input),
-      output: at(rate.output),
-      cacheRead: at(rate.cacheRead),
-      cacheWrite: at(rate.cacheWrite),
-    };
-  }
-
-  async function loadRates() {
-    try {
-      const res = await fetch('/api/rates');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      rateCard = await res.json();
-      rateDraft = (rateCard.override.rates || []).map(toDraft);
-      rateDirty = false;
-    } catch (err) {
-      rateCard = null;
-      rateDraft = null;
-      console.debug('[deckhq] could not read /api/rates', err);
-    }
-  }
-
-  async function saveRates() {
-    const rows = (rateDraft || [])
-      // A row with nothing typed in it is not an error, it is a row somebody
-      // added and changed their mind about. Dropped, silently, on save.
-      .filter((r) => r.match.trim() || r.input.trim() || r.output.trim())
-      .map((r) => ({
-        match: r.match.trim().toLowerCase(),
-        input: r.input.trim() === '' ? null : Number(r.input),
-        output: r.output.trim() === '' ? null : Number(r.output),
-        cacheRead: r.cacheRead.trim() === '' ? undefined : Number(r.cacheRead),
-        cacheWrite: r.cacheWrite.trim() === '' ? undefined : Number(r.cacheWrite),
-        per: PER_MILLION,
-      }));
-    try {
-      const res = await fetch('/api/rates', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ version: rateCard?.override?.version || '', rates: rows }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      rateStatus = body.removed
-        ? 'Your overrides were removed. Costs are quoted from the shipped table again.'
-        : `Saved. Costs are now quoted from “${body.version}”.`;
-      await loadRates();
-      // The cost line on the floor and in the panel reads the rate card the
-      // daemon holds, and the daemon re-reads the file within a second — so
-      // there is nothing to push here, only something to say.
-      toast(rateStatus);
-      render();
-    } catch (err) {
-      toast(`That rate card was refused: ${err.message}`, { isError: true });
-    }
-  }
-
-  /**
-   * @param {HTMLElement} host
-   */
-  function renderRateEditor(host) {
-    if (!rateCard) return;
-    const wrap = document.createElement('div');
-    wrap.className = 'settings-rates';
-
-    const note = document.createElement('p');
-    note.className = 'settings-note';
-    note.textContent =
-      'Your own prices, in US dollars per million tokens. A row here replaces one model’s ' +
-      'price and leaves every other one alone; “match” is a model id or the start of one, and ' +
-      'the longest match wins. Leave the two cache columns empty to use the published ' +
-      'multipliers. This is still an estimate and never a bill.';
-    wrap.appendChild(note);
-
-    const path = document.createElement('p');
-    path.className = 'settings-note mono';
-    path.textContent = rateCard.overrideFile;
-    wrap.appendChild(path);
-
-    if (rateCard.override.error) {
-      const bad = document.createElement('p');
-      bad.className = 'settings-note is-error';
-      bad.textContent = `That file could not be read as a rate card (${rateCard.override.error}), so nothing in it is being used. Saving here replaces it.`;
-      wrap.appendChild(bad);
-    }
-
-    const table = document.createElement('div');
-    table.className = 'settings-rate-table';
-    table.setAttribute('role', 'group');
-    table.setAttribute('aria-label', 'Rate card overrides');
-
-    const head = document.createElement('div');
-    head.className = 'settings-rate-row is-head';
-    for (const label of ['Model', 'In', 'Out', 'Cache read', 'Cache write', '']) {
-      const cell = document.createElement('span');
-      cell.textContent = label;
-      head.appendChild(cell);
-    }
-    table.appendChild(head);
-
-    // The shipped table's ids, offered as completions. A user correcting a
-    // price almost always wants a model the built-in card already names, and
-    // retyping `claude-opus-5` from memory is how a typo becomes a silently
-    // unmatched row.
-    const list = document.createElement('datalist');
-    list.id = 'settings-rate-models';
-    for (const rate of rateCard.builtin.rates || []) {
-      const opt = document.createElement('option');
-      opt.value = rate.match;
-      list.appendChild(opt);
-    }
-    wrap.appendChild(list);
-
-    (rateDraft || []).forEach((draft, i) => {
-      const line = document.createElement('div');
-      line.className = 'settings-rate-row';
-
-      const match = document.createElement('input');
-      match.type = 'text';
-      match.className = 'settings-input mono';
-      match.value = draft.match;
-      match.placeholder = 'claude-opus-5';
-      match.setAttribute('aria-label', `Model for row ${i + 1}`);
-      match.setAttribute('list', 'settings-rate-models');
-      match.addEventListener('input', () => {
-        draft.match = match.value;
-        rateDirty = true;
-      });
-      line.appendChild(match);
-
-      for (const key of ['input', 'output', 'cacheRead', 'cacheWrite']) {
-        const field = document.createElement('input');
-        field.type = 'number';
-        field.min = '0';
-        field.step = '0.01';
-        field.className = 'settings-input';
-        field.value = draft[key];
-        field.setAttribute('aria-label', `${key} price for row ${i + 1}`);
-        if (key === 'cacheRead' || key === 'cacheWrite') {
-          const base = Number(draft.input);
-          // The placeholder is the number that WILL be used if this is left
-          // empty, not a hint: a blank cache column is a real price.
-          field.placeholder = Number.isFinite(base)
-            ? String(Math.round(base * (key === 'cacheRead' ? 0.1 : 1.25) * 1e4) / 1e4)
-            : 'auto';
-        }
-        field.addEventListener('input', () => {
-          draft[key] = field.value;
-          rateDirty = true;
-        });
-        line.appendChild(field);
-      }
-
-      const drop = document.createElement('button');
-      drop.type = 'button';
-      drop.className = 'settings-rate-drop';
-      drop.textContent = 'Remove';
-      drop.setAttribute('aria-label', `Remove row ${i + 1}`);
-      drop.addEventListener('click', () => {
-        rateDraft?.splice(i, 1);
-        rateDirty = true;
-        render();
-      });
-      line.appendChild(drop);
-      table.appendChild(line);
-    });
-
-    wrap.appendChild(table);
-
-    const actions = document.createElement('div');
-    actions.className = 'settings-rate-actions';
-
-    const add = document.createElement('button');
-    add.type = 'button';
-    add.className = 'settings-btn';
-    add.textContent = 'Add a price';
-    add.disabled = (rateDraft || []).length >= MAX_RATE_ROWS;
-    add.addEventListener('click', () => {
-      rateDraft = rateDraft || [];
-      rateDraft.push({ match: '', input: '', output: '', cacheRead: '', cacheWrite: '' });
-      rateDirty = true;
-      render();
-    });
-
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.className = 'settings-btn is-primary';
-    save.textContent = rateDirty ? 'Save prices' : 'Saved';
-    save.disabled = !rateDirty;
-    save.addEventListener('click', () => saveRates());
-
-    actions.append(add, save);
-    wrap.appendChild(actions);
-
-    if (rateCard.overridden) {
-      const state = document.createElement('p');
-      state.className = 'settings-note';
-      state.textContent = `Every cost on the floor is currently quoted from “${rateCard.version}”.`;
-      wrap.appendChild(state);
-    }
-
-    host.appendChild(wrap);
-  }
-
   /**
    * The hook consent screen, built once and re-appended rather than rebuilt:
    * it fetches `/api/hooks` for itself, and every save in a section above it
@@ -931,7 +459,7 @@ export function createSettingsUI(opts) {
    *   is how the palette's "Install hooks" and the degraded banner arrive.
    */
   async function open(focusSection = null) {
-    current = { ...(getSnapshot()?.settings || {}) };
+    setCurrent({ ...(getSnapshot()?.settings || {}) });
     render();
     // Hook status is a live fact — installed, wrong port, events arriving —
     // so it is re-read every time the sheet opens, not once per page load.
