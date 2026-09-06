@@ -61,6 +61,8 @@ const SUBCOMMANDS = {
   layout: async (rest) => (await import('../src/cli/layout.mjs')).runLayout(rest),
   pack: async (rest) => (await import('../src/cli/pack.mjs')).runPack(rest),
   app: async (rest) => (await import('../src/cli/app.mjs')).runApp(rest),
+  shortcut: async (rest) => (await import('../src/cli/shortcut.mjs')).runShortcut(rest),
+  autostart: async (rest) => (await import('../src/cli/shortcut.mjs')).runAutostart(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
