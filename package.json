@@ -27,7 +27,6 @@
   },
   "license": "MIT",
   "author": "Darshak Panseriya",
-  "funding": "https://github.com/sponsors/DkPanseriya",
   "type": "module",
   "publishConfig": {
     "access": "public"

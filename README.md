@@ -640,6 +640,14 @@ above, and **network egress of any kind**.
 
 Security policy in [`SECURITY.md`](SECURITY.md).
 
+## Support
+
+DeckHQ is free, MIT, and built by one person. If it saves you time and you want to support the
+work, the best help is a bug report with `deckhq doctor` output, or telling one colleague. If you
+would rather send something, write to the author at the address in `package.json` and ask for a
+private channel (PayPal or similar); there is no official sponsorship programme, on purpose, and
+nothing in the product changes either way.
+
 ## Licence
 
 MIT. See [CHANGELOG.md](CHANGELOG.md) for what changed and when.

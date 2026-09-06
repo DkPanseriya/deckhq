@@ -1488,6 +1488,9 @@ changes no user-owned field on the parent` — a parent standing in the office w
 
 ### Repository
 
+- **The Sponsors button is gone.** `package.json` no longer names a GitHub Sponsors profile that was
+  never enrolled, and the README gains a Support section that asks for bug reports first and
+  offers a private channel on request. No official sponsorship programme, on purpose.
 - **The README leads with the product instead of 450 words about it.** The pitch, `npx deckhq`,
   the hero GIF, then `npx deckhq doctor` with a real run and one sentence on why its fourth line
   is the number nobody else counts. Everything below the fold is the copy that was already there.
