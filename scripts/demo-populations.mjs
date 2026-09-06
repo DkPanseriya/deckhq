@@ -175,6 +175,29 @@ export const POPULATIONS = {
   empty: () => [],
   /** One project, one agent, working. The smallest floor that has a room. */
   single: () => [['orbital-api', 'Rate limiter for the public API', 'working', 0.5, 0.4]],
+  /**
+   * THREE ACTIVE REPOS, one person at a desk in each, a few benched and two
+   * repos nobody is in (WP-59b).
+   *
+   * The owner's own floor, in miniature, and the shape that showed WP-59's
+   * defect: three rooms is the smallest count a row cannot be split evenly
+   * into, so the packer dealt it two-and-one and drew the lone room a third of
+   * a band wide with the rest of that row as bare floor. Photographed as a
+   * golden because it is a LAYOUT case rather than a drawing one — nothing in
+   * it is new furniture, and no other population in this file has an odd
+   * number of rooms above one.
+   */
+  three: () => [
+    ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
+    ['orbital-api', 'Backfill the events table', 'for_review', 5.2, 1.6],
+    ['orbital-api', 'Postgres connection pool exhaustion', 'benched', 66, 0.7],
+    ['checkout-flow', 'Apple Pay in the express lane', 'needs_input', 1.2, 2.2],
+    ['checkout-flow', 'Tax rounding off by a cent', 'benched', 58, 0.5],
+    ['design-system', 'Token pipeline to Figma', 'working', 0.8, 1.3],
+    ['design-system', 'Storybook a11y violations', 'benched', 47, 0.4],
+    ['data-pipeline', 'Backfill 2024 events', 'benched', 63, 1.4],
+    ['infra-terraform', 'Move state to a remote backend', 'benched', 55, 0.6],
+  ],
   reference: referenceSessions,
 };
 

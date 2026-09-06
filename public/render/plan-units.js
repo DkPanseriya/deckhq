@@ -243,36 +243,87 @@ export const ASPECT_TOLERANCE = 0.15;
 export const ASPECT_SETTLE = 0.05;
 
 /**
- * The most of the envelope the plan will let become open floor in order to
- * take the stage's shape (WP-59).
+ * The most of a BAND OF ROOMS the plan will let become open floor (WP-59b).
  *
- * WP-55 refused to buy shape at all: the envelope was summed from its rooms
- * and whatever the stage had left over was ground outside the building. On the
- * reference machine that drew a 57 x 55 U building on a 1920 x 1080 stage —
- * 45% of the width, dark studio ground either side, which is what `08`'s
- * "the floor is the product" cannot afford. Open floor INSIDE the building is
- * an open-plan office; ground outside it is a small picture. So the plan now
- * spends width — on the directory's columns, on the room band, on the service
- * column — up to this ceiling, and stops there rather than drawing a hangar.
+ * WP-59 stated this over the whole envelope at 0.28 and that is the number
+ * that let the defect through: the service column is nearly half the building
+ * on a floor with a full lounge, and the column is never open floor, so a
+ * working side that was HALF empty still scored 25% and passed. The owner's
+ * floor drew three rooms down the left of the band with the right 55% of it
+ * bare — a narrow column of rooms beside an empty lot — and every bound the
+ * plan had was satisfied.
  *
- * §106 decision 6 held the same quantity under 20% as a consequence of the
- * rooms being sized to their contents. It is a BUDGET now, and five points
- * larger, which is the whole of what WP-59 spends.
+ * So the budget is stated where the eye reads it: in the band, against the
+ * band. A bay at the end of a row of rooms is the whole of what this measures,
+ * 12% is about one room's width in a five-room row, and the search treats an
+ * arrangement past it as illegal rather than merely untidy. Anything the band
+ * cannot honestly fill goes to the strip's columns or to the service column
+ * instead, and what is left over lands below the band as `__open__`, where it
+ * is bounded by `FLOOR_OPEN_MAX` rather than hidden inside a room.
  */
-export const OPEN_FLOOR_MAX = 0.28;
+export const OPEN_FLOOR_MAX = 0.12;
 
 /**
- * The most a room's cell may be wider than the footprint its furniture needs
- * (WP-59).
+ * The most of the whole envelope that may be open floor (WP-59b).
+ *
+ * `OPEN_FLOOR_MAX` above is the band's budget and is the one that shapes the
+ * picture; this is the backstop on the rest — chiefly `__open__`, the open
+ * plan under the rooms and the strip on a floor whose service column is taller
+ * than its working side has anything to put in. WP-59's single 0.28 did both
+ * jobs and did neither well.
+ *
+ * IT IS TWELVE POINTS LOOSER THAN §139's, AND THAT IS THE PRICE OF THE OTHER
+ * TWO CHANGES rather than a change of mind. Three one-desk rooms laid ACROSS a
+ * band fill it at the area `ROOM_FILL_MAX` allows them and no more, so the
+ * emptiness that used to be spread down the side of every row as bays now
+ * lands in one piece below them. It is the same floor area either way; what
+ * moved is where it is. And it buys the picture the owner was owed: on his
+ * machine at 1920 x 1080 the building goes from 65% of the window to 80% of
+ * it, because the alternative to open plan INSIDE the building is dark ground
+ * OUTSIDE it, which is §139's own argument and is worth no less here.
+ *
+ * It is a ceiling and not a target: the search takes the tightest arrangement
+ * of the ones that are the window's shape (`better`), so a floor with enough
+ * in it to fill itself still does.
+ */
+export const FLOOR_OPEN_MAX = 0.4;
+
+/**
+ * The most a room's cell may be wider — and, since WP-59b, deeper — than the
+ * footprint its furniture needs.
  *
  * One room can only be so wide: a two-seat table in a cell three times its own
  * width is the bare-carpet defect §106 exists to remove, whatever shape the
- * window is. `ROOM_FILL_MAX` bounds the AREA and is what usually bites; this
- * bounds the axis, so a band cannot be flattened into a gallery to chase an
- * aspect ratio. Past it the width goes to the directory's columns and the
- * service column instead.
+ * window is. `ROOM_FILL_MAX` bounds the AREA and is what usually bites; these
+ * bound the axes, so a band cannot be flattened into a gallery to chase an
+ * aspect ratio, nor stood on end to fill a tall one. Past them the width goes
+ * to the directory's columns and the service column instead.
+ *
+ * WP-59 bounded only the width, because only the width could grow: the band's
+ * depth was pinned to `BAND_STRETCH_MAX`. WP-59b lets a room grow into its
+ * cell on both axes before any open floor is drawn, so the second bound is no
+ * longer implied by the first and is said out loud.
  */
 export const ROOM_WIDTH_STRETCH_MAX = 1.6;
+export const ROOM_HEIGHT_STRETCH_MAX = 1.6;
+
+/**
+ * The most of the building the service column may take, once the working band
+ * holds more than one room (WP-59b).
+ *
+ * The floor's subject is the rooms with people in them. A reception and a
+ * lounge either side of a single project room can honestly be most of the
+ * picture — there is nothing else on that floor — but three active repos
+ * beside a 46 U column that leaves them 46 U is a plan reporting the lounge as
+ * the product. The column is a lever the envelope search likes to pull,
+ * because a wider column is a SHORTER one and therefore a wider building; this
+ * is the point past which it may not.
+ *
+ * Stated on the service column rather than on the working side because the
+ * column is the thing being chosen: the spine between them is four units of
+ * circulation that serves both.
+ */
+export const SERVICE_COLUMN_MAX = 0.4;
 
 /**
  * Depths the envelope search may lay a band of rooms at, as a multiple of the
@@ -280,12 +331,13 @@ export const ROOM_WIDTH_STRETCH_MAX = 1.6;
  *
  * A band holds a fixed amount of furniture, so making it shallower makes it
  * wider — the one lever the working floor has for taking the shape of a wide
- * window without any room being given floor it does not fill. `1.15` is
- * `BAND_STRETCH_MAX`, the deepest a band may be; `0.9` is as shallow as it
- * goes, which is about what the furniture itself occupies once
- * `WORKING_HEADROOM` is spread over both axes.
+ * window without any room being given floor it does not fill. `0.9` is as
+ * shallow as it goes, which is about what the furniture itself occupies once
+ * `WORKING_HEADROOM` is spread over both axes; `BAND_STRETCH_MAX` is the
+ * deepest, and WP-59b raised it because a room may now grow into its cell on
+ * the depth axis too.
  */
-export const BAND_DEPTHS = Object.freeze([1.15, 1.05, 0.95, 0.9]);
+export const BAND_DEPTHS = Object.freeze([1.25, 1.15, 1.05, 0.95, 0.9]);
 
 /**
  * Width of the circulation corridors, in units.
@@ -502,8 +554,13 @@ export const WORKING_HEADROOM = 0.25;
  * plus this must keep a room under `1 / (1 - 0.35)` of its natural footprint,
  * which is what "no room more than 35% bare carpet" means. Past it the floor
  * stops pretending and draws open circulation (`__open__`).
+ *
+ * WP-59b raised it from 1.15 to 1.25. `WORKING_HEADROOM` is spread over both
+ * axes as `sqrt(1.25)`, so a band laid at 1.25 gives every cell 1.4 times the
+ * depth its rooms need — one hair under `ROOM_FILL_MAX`, which is the area
+ * bound the sentence above is actually about, and which still bites first.
  */
-export const BAND_STRETCH_MAX = 1.15;
+export const BAND_STRETCH_MAX = 1.25;
 
 /**
  * The most floor a room may be given relative to the footprint its furniture

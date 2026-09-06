@@ -18,7 +18,6 @@
  * they", and that is all.
  */
 
-import { squarify } from './plan-packing.js';
 import {
   CORRIDOR,
   HEIGHT_BAND_RATIO,
@@ -52,18 +51,26 @@ export function createWorkingFloor(projectRooms, naturalOf) {
   });
 
   /**
-   * Deal the projects into bands: rows of rooms of SIMILAR DEPTH, each row
-   * carrying roughly the same total width.
+   * Deal the projects into bands — the GRID the working floor is laid on.
    *
-   * Depth first, and it is not a preference. A row is as deep as its deepest
-   * room, so a one-table room sharing a row with a fifteen-desk project is
-   * given a cell twice the depth its desks need and the difference is drawn as
-   * carpet — the defect this package exists to remove, one level down. A room
-   * more than `HEIGHT_BAND_RATIO` shallower than the row it would join starts a
-   * new row instead, whatever the requested row count.
+   * ACROSS FIRST, AND ONLY THEN DOWN (WP-59b). A grid of `rowCount` rows holds
+   * `ceil(n / rowCount)` rooms in each, so two projects go side by side, three
+   * go three across, four go two by two, and a room is stacked under another
+   * only once the row above it is full. WP-59 dealt by cumulative WIDTH
+   * instead — a row was closed when its rooms had used up `totalW / rowCount`
+   * — which is the same answer for a floor of similar rooms and the wrong one
+   * for the floor the owner actually has: three one-desk repos came out as a
+   * row of two and a row of one, and the lone room could honestly take only a
+   * third of the band, so the rest of it was drawn as bare floor. A row that
+   * cannot be filled is not a row; the fix is to not cut it.
    *
-   * Width second, because within a row the cells are shared out by width and a
-   * row much wider than its neighbour leaves the difference as a bay.
+   * The DEPTH rule is untouched and still overrides the count, because it is
+   * the one thing a row cannot absorb. A row is as deep as its deepest room,
+   * so a one-table room sharing a row with a fifteen-desk project is given a
+   * cell twice the depth its desks need and the difference is drawn as carpet
+   * — the defect §106 exists to remove, one level down. A room more than
+   * `HEIGHT_BAND_RATIO` shallower than the row it would join starts a new row
+   * instead, whatever the requested row count.
    *
    * @param {number} rowCount rows to aim for; the depth rule may take more
    */
@@ -80,15 +87,31 @@ export function createWorkingFloor(projectRooms, naturalOf) {
     const order = weights
       .map((weight, i) => ({ weight, i, w: naturalOf(i).w, h: naturalOf(i).h }))
       .sort((a, b) => b.h - a.h || b.w - a.w || a.i - b.i);
-    const totalW = order.reduce((a, it) => a + it.w, 0) || 1;
-    const perBand = totalW / Math.max(1, rowCount);
+    const perCount = Math.max(1, Math.ceil(order.length / Math.max(1, rowCount)));
+    const perWidth = order.reduce((a, it) => a + it.w, 0) / Math.max(1, rowCount);
     /** @type {{weight:number,i:number,w:number,h:number}[][]} */
     const bands = [];
     let current = null;
     let acc = 0;
     for (const item of order) {
       const tooShallow = current && current[0].h > item.h * HEIGHT_BAND_RATIO;
-      const full = current && bands.length < rowCount && acc + item.w / 2 > perBand;
+      // A row is full when it holds its share of the rooms OR its share of the
+      // width, whichever comes first. The count is what makes the grid a grid
+      // on a floor of similar rooms; the width is what keeps a twenty-one desk
+      // project from sharing a row with three one-desk ones and leaving the
+      // row below it two thirds empty.
+      //
+      // `bands.length < rowCount` is load-bearing and is why the two rules can
+      // be used together at all. They do not close a row at the same moment —
+      // twelve rooms over two, and the width rule closes the first row after
+      // five while the count rule would have taken six — so without the guard
+      // the second row closes at its sixth room and a THIRD row opens holding
+      // the last one, which can then honestly take a third of the band. Only
+      // the depth rule below may take more rows than were asked for.
+      const full =
+        current &&
+        bands.length < rowCount &&
+        (current.length >= perCount || acc + item.w / 2 > perWidth);
       if (!current || tooShallow || full) {
         current = [];
         bands.push(current);
@@ -102,7 +125,7 @@ export function createWorkingFloor(projectRooms, naturalOf) {
 
   /**
    * Lay the project rooms into `rect` as `rowCount` bands separated by ONE
-   * corridor each, every band squarified so its rooms tile it exactly.
+   * corridor each, each band one row of rooms tiling it exactly.
    *
    * This is a double-loaded corridor plan, which is what an office floor of
    * this shape actually is: a service core down one side, a spine beside it,
@@ -116,14 +139,10 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    * Lay one band's rooms into its rectangle.
    *
    * ONE ROW, full depth, widths in proportion to what each room needs. A band
-   * is only as deep as its deepest room now (see `attempt`), so a row is the
-   * shape the rooms actually want and every cell comes out at the band's depth
-   * — which is what stops the squarifier stacking two rooms into a half-depth
-   * cell that neither of their tables fits in.
-   *
-   * The squarified treemap is still the answer when a band is carrying more
-   * rooms than one row can hold without cutting them below the width their
-   * desks need; then a second row inside the band beats a row of splinters.
+   * is only as deep as its deepest room (see `attempt`), so a row is the shape
+   * the rooms actually want and every cell comes out at the band's depth —
+   * which is what stops two rooms being stacked into a half-depth cell that
+   * neither of their tables fits in.
    *
    * @param {{weight:number,i:number}[]} band
    * @param {{x:number,y:number,w:number,h:number}} rect
@@ -132,22 +151,28 @@ export function createWorkingFloor(projectRooms, naturalOf) {
     // Shared out by WIDTH, not by area. The cells are all the band's depth, so
     // width is the only degree of freedom left and giving it out by area hands
     // a deep room its neighbour's floor.
-    const total = band.reduce((a, item) => a + Math.max(1e-6, naturalOf(item.i).w), 0) || 1;
-    /** @type {{x:number,y:number,w:number,h:number}[]} */
-    const row = [];
-    let x = rect.x;
-    band.forEach((item, k) => {
-      const w =
-        k === band.length - 1 ? rect.x + rect.w - x : (naturalOf(item.i).w / total) * rect.w;
-      row.push({ x, y: rect.y, w, h: rect.h });
-      x += w;
-    });
-    const fits = row.every((cell, k) => cell.w >= naturalOf(band[k].i).w - 0.01);
-    if (fits) return row;
-    return squarify(
-      band.map((item, k) => ({ weight: item.weight, i: k })),
-      rect,
-    );
+    const rowOf = (items, r) => {
+      const total = items.reduce((a, item) => a + Math.max(1e-6, naturalOf(item.i).w), 0) || 1;
+      /** @type {{x:number,y:number,w:number,h:number}[]} */
+      const row = [];
+      let x = r.x;
+      items.forEach((item, k) => {
+        const w = k === items.length - 1 ? r.x + r.w - x : (naturalOf(item.i).w / total) * r.w;
+        row.push({ x, y: r.y, w, h: r.h });
+        x += w;
+      });
+      return row;
+    };
+    // ONE ROW, ALWAYS (WP-59b). WP-55 fell back to a squarified treemap when
+    // the rooms would not stand side by side in the width the band had, which
+    // stacked two of them into a half-depth cell and handed one of them two
+    // and a half times the width its desks need — the bare-carpet defect, made
+    // by the code that exists to prevent it. There is nothing to fall back TO:
+    // a band is only ever short of width when the whole working floor is, and
+    // `buildPlan`'s fit loop reads exactly that off these cells and grows the
+    // floor until it is not. Stacking is `dealBands`'s job and its alone, and
+    // it stacks a row only when the row above is full.
+    return rowOf(band, rect);
   };
 
   /**
@@ -194,26 +219,78 @@ export function createWorkingFloor(projectRooms, naturalOf) {
   };
 
   /**
-   * The floor the ROOMS take of a working side laid `rowCount` bands deep in
-   * `workingW x bandHTotal` — the same arithmetic `attempt` below performs,
-   * stated once so the envelope search can cost a layout before committing to
-   * it. Everything else in that rectangle is open floor.
+   * What a working side laid `rowCount` bands deep in `workingW x bandHTotal`
+   * would cost — the same arithmetic `attempt` below performs, stated once so
+   * the envelope search can price a layout before committing to it.
+   *
+   *   `area`     the floor the ROOMS take. Everything else is open floor.
+   *   `bandSkew` how much SHORTER the shortest row of rooms is than the
+   *              longest, as a fraction of the longest. This is the empty lot,
+   *              and it is what `OPEN_FLOOR_MAX` bounds.
+   *
+   *              Relative, and that is the whole of the thinking. The obvious
+   *              measure — each row's bay against the working side's full
+   *              width — cannot tell the defect from the honest case, because
+   *              the two are the same shape: a working side is wider than its
+   *              rooms whenever the DIRECTORY STRIP asked for more width than
+   *              they did, and on the reference machine (one small room, a
+   *              seventeen-line board under it) that is every arrangement
+   *              there is. Bounding it absolutely squeezed that floor to the
+   *              width of its one room and drew a 1.24:1 building on a 1.60:1
+   *              window. What is actually wrong in the owner's picture is that
+   *              one ROW is a third the length of the row above it — three
+   *              repos dealt two-and-one — and no grid has to do that. Row
+   *              against row is the comparison that says so.
+   *   `bandOpen` the worst row's bay against the WHOLE width of the working
+   *              side. Not a legality — see `bandSkew` — but a preference, and
+   *              a real one: of two arrangements the same shape, the one whose
+   *              rooms reach further across their row is the better picture.
+   *              It is what chooses between laying the band shallow and wide
+   *              or deep and narrow once the envelope is settled.
+   *   `gridErr`  how far this grid's cells are from the shape its rooms want,
+   *              as a mean |log| ratio over the rooms. A row of three in a
+   *              band deep enough for two rows gives cells a third as wide as
+   *              they are deep; the search reads this and takes the other
+   *              grid. Zero when every cell is the shape of the room in it.
    */
-  const roomsAreaFor = (rowCount, workingW, bandHTotal) => {
+  const costWorkingFloor = (rowCount, workingW, bandHTotal) => {
+    const none = { area: 0, bandOpen: 0, bandSkew: 0, gridErr: 0 };
     const bands = bandsOf(rowCount);
-    if (!bands.length || workingW <= 0 || bandHTotal <= 0) return 0;
+    if (!bands.length || workingW <= 0 || bandHTotal <= 0) return none;
     const usableH = bandHTotal - CORRIDOR * (bands.length - 1);
-    if (usableH <= 0) return 0;
+    if (usableH <= 0) return none;
     const bandNaturalH = bands.map((band) =>
       band.reduce((a, item) => Math.max(a, naturalOf(item.i).h), 1),
     );
     const totalNaturalH = bandNaturalH.reduce((a, b) => a + b, 0) || 1;
     let area = 0;
+    let widest = 0;
+    let narrowest = Infinity;
+    let bandOpen = 0;
+    let gridErr = 0;
+    let counted = 0;
     bands.forEach((band, r) => {
       const bandH = (usableH * bandNaturalH[r]) / totalNaturalH;
-      area += bandWidthFor(band, bandH, workingW) * bandH;
+      const w = bandWidthFor(band, bandH, workingW);
+      area += w * bandH;
+      widest = Math.max(widest, w);
+      narrowest = Math.min(narrowest, w);
+      bandOpen = Math.max(bandOpen, Math.max(0, (workingW - w) / Math.max(1e-6, workingW)));
+      // The cell every room in this band would be given, against the shape the
+      // room itself wants. Both are ratios, so the comparison is a log.
+      const cellW = w / band.length;
+      for (const item of band) {
+        const nat = naturalOf(item.i);
+        gridErr += Math.abs(Math.log(cellW / bandH / Math.max(1e-6, nat.w / nat.h)));
+        counted++;
+      }
     });
-    return area;
+    return {
+      area,
+      bandOpen,
+      bandSkew: Math.max(0, (widest - narrowest) / Math.max(1e-6, widest)),
+      gridErr: counted ? gridErr / counted : 0,
+    };
   };
 
   const layWorkingFloor = (rect, rowCount) => {
@@ -346,8 +423,8 @@ export function createWorkingFloor(projectRooms, naturalOf) {
       bandCache.clear();
       shapeCache.clear();
     },
+    costWorkingFloor,
     layWorkingFloor,
-    roomsAreaFor,
     workingShape,
   };
 }

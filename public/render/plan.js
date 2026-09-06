@@ -68,6 +68,7 @@ import {
   CORRIDOR,
   DEFAULT_ASPECT,
   DOOR_WIDTH,
+  FLOOR_OPEN_MAX,
   MARGIN,
   MAX_WORKING_ROWS,
   MIN_PROJECT_ROOM_W,
@@ -80,6 +81,7 @@ import {
   PLATE_BAND,
   ROOM_ASPECT_MAX,
   ROOM_PAD,
+  SERVICE_COLUMN_MAX,
   SERVICE_MAX_W,
   SERVICE_W_STEP,
   clamp,
@@ -89,29 +91,75 @@ import { isDeskAgent } from '../floor-rule.js';
 // ------------------------------------------------------------------ the plan
 
 /**
- * Is envelope `a` a better answer to this stage than envelope `b` (WP-59)?
+ * Is envelope `a` a better answer to this stage than envelope `b` (WP-59,
+ * reordered by WP-59b)?
  *
  * In order, and the order is the design:
  *
- *   1. **Legal first.** An arrangement whose open floor is past
- *      `OPEN_FLOOR_MAX` is a hangar; it is only ever taken when nothing else
- *      is available.
+ *   1. **Legal first, and there are two budgets.** A band of rooms past
+ *      `OPEN_FLOOR_MAX` is a row that could not be filled — the empty lot
+ *      beside the rooms, which is the defect — and is worth twice a building
+ *      past `FLOOR_OPEN_MAX`, which is merely a hangar. WP-59 had one bound,
+ *      over the whole envelope; the band's is WP-59b's, and it is the one that
+ *      shapes the picture.
+ *   1a. **Then, ONLY between two illegal arrangements, by how much.** A flag
+ *      alone is what made a monster of this rank once: on a floor where
+ *      nothing is inside both budgets every candidate is equally illegal, the
+ *      rank collapses, and the next one picks whichever hangar is closest to
+ *      the window's shape — twelve rooms in one row 226 units wide with 76% of
+ *      the building open floor, which is a real arrangement this search
+ *      returned. Between two LEGAL arrangements the excess is zero for both
+ *      and this decides nothing, which is the point: a floor inside its budget
+ *      has already paid, and making it compete on tightness again is how a
+ *      tiny building beats one that fills the window.
  *   2. **The shape of the window.** `miss` is how far past `ASPECT_SETTLE`
  *      the envelope's aspect sits, so every arrangement already close enough
  *      ties here and competes on the rest.
- *   3. **The least empty of those.** Among floors that are the right shape,
- *      the tightest one — which is the WP-55 rule, unchanged, now applied
- *      inside the band rather than instead of it.
- *   4. **Then closest to the shape, then smallest.** Both pure tie-breaks, and
+ *   3. **The subject of the floor.** Of the arrangements that are the window's
+ *      shape, one whose service column has taken more than
+ *      `SERVICE_COLUMN_MAX` is a picture of a lounge with some work going on
+ *      beside it, and loses to one that has not.
+ *
+ *      BELOW the shape, and that is a decision rather than an oversight. A
+ *      WIDER column is a SHORTER one — the reception and the lounge pack into
+ *      fewer, longer rows — so a narrower column makes a TALLER building, and
+ *      a floor with two small rooms beside a full lounge that is forced to
+ *      keep its column under 40% comes out 0.85:1 on a 1.6:1 window, which is
+ *      47% of it. Measured, at three stages, over every population in
+ *      `floor-integrity.test.mjs`: ranking this above the shape cost four of
+ *      them between 23 and 33 points of coverage. So the rule holds wherever
+ *      it is free — which on the owner's floor is everywhere, because there
+ *      the widest column the search wants is 37.6% — and gives way where the
+ *      price is the window.
+ *   4. **How far across its row each row of rooms reaches.** `bandOpen`, the
+ *      absolute measure the legality above could not be: of two arrangements
+ *      the same shape, the one whose rooms reach further across the working
+ *      side. It is what decides between laying the band shallow and wide or
+ *      deep and narrow, and on the owner's floor it is 24% of the row against
+ *      12% (WP-59b).
+ *   5. **The grid the rooms want.** Of what is left, the grid whose cells are
+ *      closest to the shape the rooms themselves are — three across rather
+ *      than three stacked, `2 x 2` rather than a row of four in a band deep
+ *      enough for two (WP-59b).
+ *   6. **The least empty of those.** WP-55's rule, unchanged.
+ *   7. **Then closest to the shape, then smallest.** Both pure tie-breaks, and
  *      the last one is there so the search is a function of its inputs rather
  *      than of the order the loops happen to run in.
  *
- * @param {{illegal:number, miss:number, open:number, aspectErr:number, W:number, H:number}} a
- * @param {{illegal:number, miss:number, open:number, aspectErr:number, W:number, H:number}} b
+ * @param {{illegal:number, overrun:number, miss:number, cramped:number,
+ *   bandOpen:number, gridErr:number, open:number, aspectErr:number,
+ *   W:number, H:number}} a
+ * @param {{illegal:number, overrun:number, miss:number, cramped:number,
+ *   bandOpen:number, gridErr:number, open:number, aspectErr:number,
+ *   W:number, H:number}} b
  */
 function better(a, b) {
   if (a.illegal !== b.illegal) return a.illegal < b.illegal;
+  if (a.illegal > 0 && Math.abs(a.overrun - b.overrun) > 1e-4) return a.overrun < b.overrun;
   if (Math.abs(a.miss - b.miss) > 1e-4) return a.miss < b.miss;
+  if (a.cramped !== b.cramped) return a.cramped < b.cramped;
+  if (Math.abs(a.bandOpen - b.bandOpen) > 1e-3) return a.bandOpen < b.bandOpen;
+  if (Math.abs(a.gridErr - b.gridErr) > 1e-3) return a.gridErr < b.gridErr;
   if (Math.abs(a.open - b.open) > 1e-4) return a.open < b.open;
   if (Math.abs(a.aspectErr - b.aspectErr) > 1e-4) return a.aspectErr < b.aspectErr;
   return a.W * a.H < b.W * b.H - 1e-6;
@@ -297,7 +345,7 @@ export function buildPlan(projects, agents, opts = {}) {
   // may be laid, and what the whole of it measures. Its own module since
   // WP-59 (`plan-envelope.js`), which is a closure over `naturalOf` because a
   // room’s natural size changes under the fit loop below.
-  const { invalidateBands, layWorkingFloor, roomsAreaFor, workingShape } = createWorkingFloor(
+  const { costWorkingFloor, invalidateBands, layWorkingFloor, workingShape } = createWorkingFloor(
     projectRooms,
     naturalOf,
   );
@@ -333,7 +381,8 @@ export function buildPlan(projects, agents, opts = {}) {
     // What of this envelope nobody stands on: the working side less its rooms
     // and its strip. The service column fills its own side exactly (see below)
     // and the spine is a route, so neither is open floor.
-    const filled = roomsAreaFor(rowCount, workingW, bandH) + workingW * dirH;
+    const cost = costWorkingFloor(rowCount, workingW, bandH);
+    const filled = cost.area + workingW * dirH;
     const open = Math.max(0, (workingW * H - filled) / Math.max(1e-6, W * H));
     return {
       measured,
@@ -342,7 +391,19 @@ export function buildPlan(projects, agents, opts = {}) {
       dirH,
       bandH,
       open,
-      rowCount: shape.rows || rowCount,
+      // How much shorter the shortest row of rooms is than the longest — the
+      // empty lot, measured row against row (WP-59b; see `costWorkingFloor`).
+      bandSkew: cost.bandSkew,
+      bandOpen: cost.bandOpen,
+      gridErr: cost.gridErr,
+      // The rows this candidate ASKED FOR, which is what `layWorkingFloor`
+      // must be given back: `bandsOf` is keyed on the request, and the deal it
+      // returns may hold more bands than that because the depth rule split one
+      // (WP-59b). Handing back `shape.rows` — the bands the deal came out with
+      // — re-deals the floor to a different grid from the one that was costed,
+      // and a request for one row of four came back as three bands with the
+      // last of them two thirds empty.
+      rowCount,
       workingW,
       shape,
     };
@@ -357,7 +418,8 @@ export function buildPlan(projects, agents, opts = {}) {
   // the window scored exactly as well as one that filled it and the tie-break
   // picked the smaller. WP-59 makes the aspect the objective and the open floor
   // the price: the search takes the arrangement closest to the stage's shape
-  // whose open floor stays inside `OPEN_FLOOR_MAX`, and among the ones that are
+  // whose open floor stays inside its budgets — `OPEN_FLOOR_MAX` on a row of
+  // rooms and `FLOOR_OPEN_MAX` on the building — and among the ones that are
   // already close enough (`ASPECT_SETTLE`) it takes the tightest.
   //
   // Nothing here stretches a room. Every candidate is a real layout: a wider
@@ -369,34 +431,48 @@ export function buildPlan(projects, agents, opts = {}) {
   const dirWidths = directoryProjects.length ? directoryWidths(directoryProjects.length) : [0];
   const bandDepths = projectRooms.length ? BAND_DEPTHS : [BAND_STRETCH_MAX];
   const settled = Math.log(1 + ASPECT_SETTLE);
-  let best = null;
-  for (let sw = OFFICE_MIN_W; sw <= SERVICE_MAX_W; sw += SERVICE_W_STEP) {
-    for (let rows = 1; rows <= maxRows; rows++) {
-      for (const dirW of dirWidths) {
-        for (const bandDepth of bandDepths) {
-          const candidate = envelopeFor(sw, rows, dirW, bandDepth);
-          const aspectErr = Math.abs(Math.log(candidate.W / candidate.H / targetAspect));
-          // How far past `ASPECT_SETTLE` this shape is. Inside that band,
-          // zero: a floor already the shape of the window has nothing left to
-          // buy, and what it competes on is how little of itself is empty.
-          const miss = Math.max(0, aspectErr - settled);
-          // An arrangement that would turn a quarter of the building into open
-          // floor is a hangar, not an office. It is ranked below every legal
-          // one and kept only in case nothing is legal.
-          const illegal = candidate.open > OPEN_FLOOR_MAX ? 1 : 0;
-          const scored = { ...candidate, aspectErr, miss, illegal };
-          if (!best || better(scored, best)) best = scored;
+  const search = () => {
+    let best = null;
+    for (let sw = OFFICE_MIN_W; sw <= SERVICE_MAX_W; sw += SERVICE_W_STEP) {
+      for (let rows = 1; rows <= maxRows; rows++) {
+        for (const dirW of dirWidths) {
+          for (const bandDepth of bandDepths) {
+            const candidate = envelopeFor(sw, rows, dirW, bandDepth);
+            const aspectErr = Math.abs(Math.log(candidate.W / candidate.H / targetAspect));
+            // How far past `ASPECT_SETTLE` this shape is. Inside that band,
+            // zero: a floor already the shape of the window has nothing left
+            // to buy, and what it competes on is how little of itself is
+            // empty.
+            const miss = Math.max(0, aspectErr - settled);
+            // The two emptiness budgets, as a flag and as a quantity. A row of
+            // rooms that could not be filled is the empty lot beside them and
+            // is the defect, so it is worth twice a building that is merely
+            // emptier overall than `FLOOR_OPEN_MAX`. `overrun` is the same two
+            // facts as a magnitude, and `better` reads it only when both
+            // arrangements are already illegal.
+            const illegal =
+              (candidate.bandSkew > OPEN_FLOOR_MAX ? 2 : 0) +
+              (candidate.open > FLOOR_OPEN_MAX ? 1 : 0);
+            const overrun =
+              2 * Math.max(0, candidate.bandSkew - OPEN_FLOOR_MAX) +
+              Math.max(0, candidate.open - FLOOR_OPEN_MAX);
+            // And a service column that has taken more than its share of a
+            // floor whose subject is the rooms. Only once there is more than
+            // one room: a reception, a lounge and a single two-desk project
+            // honestly IS mostly service, and saying otherwise would draw the
+            // one room three times the size its desks need.
+            const cramped =
+              projectRooms.length >= 2 && candidate.measured.w > candidate.W * SERVICE_COLUMN_MAX
+                ? 1
+                : 0;
+            const scored = { ...candidate, aspectErr, miss, illegal, overrun, cramped };
+            if (!best || better(scored, best)) best = scored;
+          }
         }
       }
     }
-  }
-  const chosen = best || envelopeFor(OFFICE_MIN_W, 1, 0, BAND_STRETCH_MAX);
-
-  office = chosen.measured.office;
-  lounge = chosen.measured.lounge;
-  const serviceW = chosen.measured.w;
-  const serviceX = 0;
-  const workingX = serviceW + CORRIDOR;
+    return best || envelopeFor(OFFICE_MIN_W, 1, 0, BAND_STRETCH_MAX);
+  };
 
   // ---- the working floor, and the floor's final size.
   //
@@ -406,52 +482,85 @@ export function buildPlan(projects, agents, opts = {}) {
   // changes what a room needs, so the fit is checked and the building grows
   // until every room holds its own furniture — the one thing the plan may
   // never get wrong, since a desk outside its room is a desk on the corridor.
-  let H = chosen.H;
-  let workingW = chosen.workingW;
-  let W = workingX + workingW;
-  let laid = { cells: [], corridors: [] };
-  /** Height the directory strip takes off the bottom of the working side. */
-  let dirH = 0;
-  /**
-   * Height the ROOMS take of the working side.
-   *
-   * Not the whole of it. Where the service column is taller than the rooms
-   * need — one small project beside a reception and a lounge — the rooms may
-   * absorb the difference only up to `BAND_STRETCH_MAX`; past that the floor
-   * says so with open circulation rather than painting more carpet nobody
-   * stands on. Carpet with nothing on it is the defect; ground is not.
-   */
-  let bandH = chosen.bandH;
-  for (let pass = 0; pass < 8; pass++) {
-    // Rebuilding a room changes what its furniture needs, so the deal the
-    // bands were cut from is stale the moment the previous pass touched one.
-    invalidateBands();
-    W = workingX + workingW;
-    dirH = directoryHeight(directoryProjects.length, workingW);
-    bandH = Math.min(bandH, Math.max(1, H - dirH));
-    laid = projectRooms.length
-      ? layWorkingFloor({ x: workingX, y: 0, w: workingW, h: bandH }, chosen.rowCount)
-      : { cells: [], corridors: [] };
-    let worstW = 1;
-    let worstH = 1;
-    projectRooms.forEach((pr, i) => {
-      const cell = laid.cells[i];
-      if (!cell) return;
-      const project = activeProjects[i];
-      // The shape the DESK CLUSTER has to fill, which is the cell less the
-      // clearance the walls and the plate take — not the cell's own aspect.
-      const interiorAspect =
-        Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, cell.h - ROOM_PAD * 2 - PLATE_BAND);
-      projectRooms[i] = buildProjectRoom(project, desksIn(project), interiorAspect, cell);
-      const natural = naturalOf(i);
-      worstW = Math.max(worstW, natural.w / cell.w);
-      worstH = Math.max(worstH, natural.h / cell.h);
-    });
-    if (worstW <= 1.0005 && worstH <= 1.0005) break;
-    workingW *= Math.min(worstW, 1.25);
-    bandH *= Math.min(worstH, 1.25);
-    H = Math.max(H, bandH + dirH);
-  }
+  //
+  // `bandH` is the height the ROOMS take of the working side, and not the
+  // whole of it. Where the service column is taller than the rooms need — one
+  // small project beside a reception and a lounge — the rooms may absorb the
+  // difference only up to `BAND_STRETCH_MAX`; past that the floor says so with
+  // open circulation rather than painting more carpet nobody stands on. Carpet
+  // with nothing on it is the defect; ground is not.
+  const settle = (chosen) => {
+    const workingX = chosen.measured.w + CORRIDOR;
+    let H = chosen.H;
+    let workingW = chosen.workingW;
+    let W = workingX + workingW;
+    let laid = { cells: [], corridors: [] };
+    let dirH = 0;
+    let bandH = chosen.bandH;
+    for (let pass = 0; pass < 8; pass++) {
+      // Rebuilding a room changes what its furniture needs, so the deal the
+      // bands were cut from is stale the moment the previous pass touched one.
+      invalidateBands();
+      W = workingX + workingW;
+      dirH = directoryHeight(directoryProjects.length, workingW);
+      bandH = Math.min(bandH, Math.max(1, H - dirH));
+      laid = projectRooms.length
+        ? layWorkingFloor({ x: workingX, y: 0, w: workingW, h: bandH }, chosen.rowCount)
+        : { cells: [], corridors: [] };
+      let worstW = 1;
+      let worstH = 1;
+      projectRooms.forEach((pr, i) => {
+        const cell = laid.cells[i];
+        if (!cell) return;
+        const project = activeProjects[i];
+        // The shape the DESK CLUSTER has to fill, which is the cell less the
+        // clearance the walls and the plate take — not the cell's own aspect.
+        const interiorAspect =
+          Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, cell.h - ROOM_PAD * 2 - PLATE_BAND);
+        projectRooms[i] = buildProjectRoom(project, desksIn(project), interiorAspect, cell);
+        const natural = naturalOf(i);
+        worstW = Math.max(worstW, natural.w / cell.w);
+        worstH = Math.max(worstH, natural.h / cell.h);
+      });
+      if (worstW <= 1.0005 && worstH <= 1.0005) break;
+      workingW *= Math.min(worstW, 1.25);
+      bandH *= Math.min(worstH, 1.25);
+      H = Math.max(H, bandH + dirH);
+    }
+    return { H, W, workingW, workingX, laid, dirH, bandH };
+  };
+
+  // ---- THE SEARCH IS RUN TWICE, AND THE SECOND ONE IS THE ANSWER (WP-59b).
+  //
+  // Every candidate above is priced from `naturalOf(i)` — what a room's
+  // furniture needs — and on the first pass those are the sizes `buildProjectRoom`
+  // came up with before anything had been laid anywhere: a bid at the shape a
+  // room WANTS, which for a fifteen-desk project is 32 x 28 U. The fit loop
+  // then rebuilds it into the cell it was given and the same project comes out
+  // 32 x 18. The search was therefore answering a question about a different
+  // floor from the one that gets drawn, and on a twelve-room machine it showed:
+  // the deep first bid put the big project in a band of its own, every
+  // multi-row arrangement was priced as though it left a half-empty row, and
+  // the search took a single row of twelve rooms 226 U wide with 58% of the
+  // building open floor.
+  //
+  // So: search, settle, and search again with what settling produced. The
+  // second answer is stable because the rooms are — a room rebuilt into a cell
+  // of roughly the right shape stays roughly that shape — and the whole of it
+  // costs one more pass of arithmetic over a plan that is rebuilt when the
+  // FLOOR changes, not per frame.
+  invalidateBands();
+  settle(search());
+  invalidateBands();
+  const chosen = search();
+  const fitted = settle(chosen);
+
+  office = chosen.measured.office;
+  lounge = chosen.measured.lounge;
+  const serviceW = chosen.measured.w;
+  const serviceX = 0;
+  const { workingX, laid, dirH, W, bandH } = fitted;
+  let { H } = fitted;
 
   // ---- the service column fills its side of the floor exactly.
   //
@@ -551,18 +660,26 @@ export function buildPlan(projects, agents, opts = {}) {
     zones: [],
   }));
 
-  // THE DIRECTORY STRIP, along the bottom edge of the working floor.
+  // THE DIRECTORY STRIP, DIRECTLY UNDER THE ROOMS.
   //
-  // It shares its walls with the rooms above it: a strip of corridor between a
-  // room and a board on the wall below it would be a gap in the floor, and the
-  // working side already has exactly one piece of circulation in it by design.
+  // It shares its walls with them: a strip of corridor between a room and a
+  // board on the wall below it would be a gap in the floor, and the working
+  // side has exactly one piece of circulation in it by design.
+  //
+  // It used to be pinned to the BOTTOM EDGE instead, which said the same thing
+  // on a floor with no slack and something else entirely on one with a lot:
+  // WP-59's open band opened up BETWEEN the rooms and the strip, so the two
+  // pieces of content on the working side sat at opposite ends of it with a
+  // hole in the middle — the gap this comment forbids, in the one case that
+  // could produce it. The rooms and the strip are the content; they go
+  // together at the top, and the open floor is the margin under them (WP-59b).
   const directory =
     directoryProjects.length > 0 && workingWidth > 1 && dirH > 0
       ? buildDirectory(directoryProjects, { w: workingWidth, h: dirH })
       : null;
   if (directory) {
     directory.x = workingX;
-    directory.y = H - dirH;
+    directory.y = projectRooms.length ? bandH : 0;
   }
 
   // WHATEVER THE ROOMS DO NOT NEED IS OPEN FLOOR, NOT A BIGGER ROOM.
@@ -572,9 +689,10 @@ export function buildPlan(projects, agents, opts = {}) {
   // is taller than its one project room needs somewhere for the difference to
   // go. Before WP-55 the rooms swallowed it and drew it as carpet. This is
   // circulation — walkable-looking floor with nothing on it, which is what it
-  // honestly is — sitting between the rooms and the directory strip.
-  const slackY = projectRooms.length ? bandH : 0;
-  const slackH = Math.max(0, H - dirH - slackY);
+  // honestly is — sitting under both the rooms and the directory strip, at the
+  // bottom edge of the working side (WP-59b; see the strip above).
+  const slackY = (projectRooms.length ? bandH : 0) + dirH;
+  const slackH = Math.max(0, H - slackY);
   const emptyBand =
     workingWidth > 1 && slackH > 0.01
       ? [
@@ -720,9 +838,12 @@ export { formatTokens, payrollLine } from './plan-rooms.js';
 export {
   ASPECT_TOLERANCE,
   DIRECTORY_MAX_H,
+  FLOOR_OPEN_MAX,
   OPEN_FLOOR_MAX,
   PLATE_BAND,
+  ROOM_HEIGHT_STRETCH_MAX,
   ROOM_WIDTH_STRETCH_MAX,
+  SERVICE_COLUMN_MAX,
   U,
 } from './plan-units.js';
 export {

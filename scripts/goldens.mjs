@@ -131,11 +131,18 @@ const CAPTURE_DEADLINE_MS = Number(opt('--deadline', 90)) * 1000;
  */
 const RUN_BUDGET_MS = Number(opt('--budget', 360)) * 1000;
 
-/** Every population `scripts/demo-floor.mjs --population` accepts. */
-const POPULATIONS = ['demo', 'empty', 'single', 'reference'];
+/**
+ * Every population `scripts/demo-floor.mjs --population` accepts.
+ *
+ * `three` is WP-59b's: three active repos is the smallest room count a row
+ * cannot be split evenly into, and it is the shape that showed the packer
+ * dealing two-and-one and drawing the lone room beside two thirds of a bare
+ * band.
+ */
+const POPULATIONS = ['demo', 'empty', 'single', 'three', 'reference'];
 
 /**
- * The captures this gate takes: the four default-theme populations, plus one
+ * The captures this gate takes: the five default-theme populations, plus one
  * `demo` floor per shipped theme (WP-30).
  *
  * A theme changes no geometry — it repaints baked materials — so photographing
