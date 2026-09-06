@@ -14,7 +14,16 @@
  */
 
 import { placement } from '../floor-rule.js';
-import { hashString, JUNIOR_OFFSET, JUNIOR_BACK, OVERFLOW_RING_R, spotAt } from './agents-core.js';
+import {
+  hashString,
+  JUNIOR_BACK,
+  JUNIOR_OFFSET,
+  JUNIOR_PACKS,
+  JUNIOR_PAD,
+  JUNIOR_ROW,
+  OVERFLOW_RING_R,
+  spotAt,
+} from './agents-core.js';
 
 /** @typedef {import('./agents-core.js').Room} Room */
 /** @typedef {import('./agents-core.js').Door} Door */
@@ -102,6 +111,120 @@ export function assignHashed(agents, seats, result) {
       overflow: true,
     });
   });
+}
+
+/**
+ * How far a point may travel along `u` before it leaves `rect`, less `pad`.
+ *
+ * A ray-box clip, and it has to be one rather than a width: a junior's row
+ * runs along the way its parent FACES turned a quarter, which on a chat spot
+ * in a lounge is vertical and at a desk is horizontal, and on an overflow ring
+ * is neither.
+ * @param {{x:number,y:number}} p @param {{x:number,y:number}} u
+ * @param {{x:number,y:number,w:number,h:number}} rect @param {number} pad
+ */
+function reachInside(p, u, rect, pad) {
+  const lo = { x: rect.x + pad, y: rect.y + pad };
+  const hi = { x: rect.x + rect.w - pad, y: rect.y + rect.h - pad };
+  let t = Infinity;
+  for (const k of /** @type {const} */ (['x', 'y'])) {
+    if (Math.abs(u[k]) < 1e-9) {
+      if (p[k] < lo[k] - 1e-9 || p[k] > hi[k] + 1e-9) return 0;
+      continue;
+    }
+    t = Math.min(t, ((u[k] > 0 ? hi[k] : lo[k]) - p[k]) / u[k]);
+  }
+  return Number.isFinite(t) ? Math.max(0, t) : 0;
+}
+
+/**
+ * WHERE A SENIOR'S JUNIORS STAND — inside the room, always (WP-59d).
+ *
+ * WP-41 put the first junior one seat pitch to its parent's left, the second
+ * the same to its right, the third further left, and so on outwards for ever.
+ * That is right for the two or three a senior usually has and wrong the moment
+ * it is sixteen: on the owner's own floor a benched senior with sixteen
+ * juniors drew a packed row forty units wide along the lounge's bottom wall,
+ * half of it OUTSIDE the lounge and over the corridor beside it. A body drawn
+ * outside the room it belongs to is the one thing the floor may never do, and
+ * it is the same defect as a desk on a corridor.
+ *
+ * So the row wraps. The rule is unchanged where it fits — alternating sides,
+ * outwards, one seat pitch apart, which is what keeps the two-junior case in
+ * `demo`'s room to the unit — and where the wall arrives, the next junior
+ * starts a RANK behind rather than walking through it. If the ranks run out
+ * too, `JUNIOR_PACKS` closes the gaps a step at a time; nothing is ever
+ * dropped, because a junior is a session and a session nobody draws is one
+ * somebody has to go looking for.
+ *
+ * @param {{x:number,y:number,angle?:number}} anchor the parent's own seat
+ * @param {{x:number,y:number,w:number,h:number}|null} room the room it is in
+ * @param {number} n how many juniors
+ * @returns {{x:number,y:number}[]} one position per junior, in order
+ */
+export function juniorSpots(anchor, room, n) {
+  const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
+  // The seat's `angle` is the way its occupant FACES, so "along the desk" is
+  // that direction turned a quarter, and "behind" is the reverse of it.
+  const along = { x: Math.cos(angle + Math.PI / 2), y: Math.sin(angle + Math.PI / 2) };
+  const back = { x: -Math.cos(angle), y: -Math.sin(angle) };
+  const left = { x: -along.x, y: -along.y };
+  const lay = (pitch, row, gap) => {
+    const perSide = room
+      ? [
+          Math.floor(reachInside(anchor, left, room, JUNIOR_PAD) / pitch),
+          Math.floor(reachInside(anchor, along, room, JUNIOR_PAD) / pitch),
+        ]
+      : [n, n];
+    const ranks = room
+      ? Math.max(1, Math.floor((reachInside(anchor, back, room, JUNIOR_PAD) - gap) / row) + 1)
+      : n;
+    // Alternating sides, outwards, skipping a side that has run out of wall.
+    /** @type {number[]} */
+    const offsets = [];
+    for (let step = 1; offsets.length < perSide[0] + perSide[1]; step++) {
+      if (step <= perSide[0]) offsets.push(-step);
+      if (step <= perSide[1]) offsets.push(step);
+      if (step > perSide[0] && step > perSide[1]) break;
+    }
+    return offsets.length * ranks >= n ? { offsets, ranks, pitch, row, gap } : null;
+  };
+  let plan = null;
+  for (const shrink of JUNIOR_PACKS) {
+    plan = lay(JUNIOR_OFFSET * shrink, JUNIOR_ROW * shrink, JUNIOR_BACK * shrink);
+    if (plan) break;
+  }
+  // Nowhere at all: a room too small to hold them at the tightest pitch. The
+  // last rung is still the best answer there is, and the clamp below keeps
+  // every one of them inside the walls.
+  if (!plan) {
+    const last = JUNIOR_PACKS[JUNIOR_PACKS.length - 1];
+    plan = {
+      offsets: [-1, 1],
+      ranks: 1,
+      pitch: JUNIOR_OFFSET * last,
+      row: JUNIOR_ROW * last,
+      gap: JUNIOR_BACK * last,
+    };
+  }
+  const per = Math.max(1, plan.offsets.length);
+  /** @type {{x:number,y:number}[]} */
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const offset = plan.offsets[i % per] ?? (i % 2 === 0 ? -1 : 1);
+    const depth = plan.gap + Math.floor(i / per) * plan.row;
+    const x = anchor.x + along.x * offset * plan.pitch + back.x * depth;
+    const y = anchor.y + along.y * offset * plan.pitch + back.y * depth;
+    out.push(
+      room
+        ? {
+            x: Math.min(Math.max(x, room.x + JUNIOR_PAD), room.x + room.w - JUNIOR_PAD),
+            y: Math.min(Math.max(y, room.y + JUNIOR_PAD), room.y + room.h - JUNIOR_PAD),
+          }
+        : { x, y },
+    );
+  }
+  return out;
 }
 
 /**
@@ -199,34 +322,33 @@ export function assignSeats(plan, agents) {
   // WP-41, last: the juniors, once every senior has a seat to stand beside.
   // Deterministic — sorted by id, alternating left and right — so the same
   // three juniors line up the same way on every push and nobody shuffles.
+  //
+  // WP-59d: INSIDE THE ROOM THE PARENT IS IN, whichever room that is. The row
+  // wraps at the walls rather than walking through them (`juniorSpots`), which
+  // is the whole of the fix for a benched senior with sixteen juniors drawing
+  // half of them outside the lounge.
+  const roomAt = (p) =>
+    ((plan && plan.rooms) || []).find(
+      (r) =>
+        r.kind !== 'corridor' &&
+        p.x >= r.x - 0.01 &&
+        p.x <= r.x + r.w + 0.01 &&
+        p.y >= r.y - 0.01 &&
+        p.y <= r.y + r.h + 0.01,
+    ) || null;
   for (const [parentId, list] of juniorsByParent) {
     const anchor = result.get(parentId);
+    // A junior whose parent is not on the floor at all: it went home, it was
+    // let go, or the scan caught the junior a poll before its parent. Nothing
+    // to stand beside, so nothing is drawn — `sync` drops the record for the
+    // same reason it drops an archived session, rather than parking a body on
+    // the floor's origin.
+    if (!anchor) continue;
     const ordered = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const spots = juniorSpots(anchor, roomAt(anchor), ordered.length);
+    const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
     ordered.forEach((junior, i) => {
-      if (!anchor) {
-        // A junior whose parent is not on the floor at all: it went home, it
-        // was let go, or the scan caught the junior a poll before its parent.
-        // Nothing to stand beside, so nothing is drawn — `sync` drops the
-        // record for the same reason it drops an archived session, rather
-        // than parking a body on the floor's origin.
-        return;
-      }
-      // Alternate sides, working outwards: 1st on the parent's left, 2nd on
-      // its right, 3rd further left, and so on.
-      const step = Math.floor(i / 2) + 1;
-      const side = i % 2 === 0 ? -1 : 1;
-      const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
-      // The seat's `angle` is the way its occupant FACES, so "along the desk"
-      // is that direction turned a quarter turn.
-      const alongX = Math.cos(angle + Math.PI / 2);
-      const alongY = Math.sin(angle + Math.PI / 2);
-      result.set(junior.id, {
-        x: anchor.x + alongX * side * step * JUNIOR_OFFSET - Math.cos(angle) * JUNIOR_BACK,
-        y: anchor.y + alongY * side * step * JUNIOR_OFFSET - Math.sin(angle) * JUNIOR_BACK,
-        angle,
-        kind: anchor.kind,
-        junior: true,
-      });
+      result.set(junior.id, { ...spots[i], angle, kind: anchor.kind, junior: true });
     });
   }
   // Archived sessions are off the floor entirely — no room, no seat, nothing

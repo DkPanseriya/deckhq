@@ -18,6 +18,7 @@
 
 import {
   ASPECT_SETTLE,
+  ASPECT_TOLERANCE,
   FLOOR_OPEN_MAX,
   OPEN_FLOOR_MAX,
   SERVICE_COLUMN_MAX,
@@ -32,7 +33,7 @@ const SETTLED = Math.log(1 + ASPECT_SETTLE);
  *
  * @param {{W:number, H:number, bandSkew:number, open:number, workOpen:number,
  *   pack:number, bandOpen:number, gridErr:number,
- *   measured:{w:number}}} candidate
+ *   serviceShare:number}} candidate
  * @param {number} targetAspect the stage's shape
  * @param {number} roomCount project rooms on this floor
  */
@@ -57,7 +58,13 @@ export function score(candidate, targetAspect, roomCount) {
   // a lounge and a single two-desk project honestly IS mostly service, and
   // saying otherwise would draw the one room three times the size its desks
   // need.
-  const cramped = roomCount >= 2 && candidate.measured.w > candidate.W * SERVICE_COLUMN_MAX ? 1 : 0;
+  //
+  // Stated as the AREA share since WP-59d, because arrangement B's service
+  // rooms are two ends of two rows rather than one full-height column. On a
+  // column the two are the same number — a column spans the building's height,
+  // so its area share IS its width share — which is what lets one rank serve
+  // both arrangements without moving any floor the column ever chose.
+  const cramped = roomCount >= 2 && candidate.serviceShare > SERVICE_COLUMN_MAX ? 1 : 0;
   // And how much of the WORKING SIDE nobody stands on, past its own budget
   // (WP-59c). Inside the budget it is zero for every candidate, so a floor
   // that fills its own side has already paid and competes on the rest — the
@@ -162,4 +169,63 @@ export function better(a, b) {
   if (Math.abs(a.open - b.open) > 1e-4) return a.open < b.open;
   if (Math.abs(a.aspectErr - b.aspectErr) > 1e-4) return a.aspectErr < b.aspectErr;
   return a.W * a.H < b.W * b.H - 1e-6;
+}
+
+/** How much less open floor makes one arrangement a different answer. */
+const OPEN_SETTLE = 0.02;
+
+/**
+ * Is ARRANGEMENT `a` a better answer to this stage than arrangement `b`
+ * (WP-59d)?
+ *
+ * A different question from `better`, and a much shorter one. `better` ranks
+ * two candidates of the SAME shape, where a dozen things are comparable
+ * because everything else about them is the same; this ranks two floors that
+ * are not the same building at all — a service column beside a working side
+ * against a reception over a lounge — and almost nothing carries across.
+ *
+ * Three ranks, in this order:
+ *
+ *   1. **Is it the shape of the window at all?** `ASPECT_TOLERANCE` is
+ *      §139's ACCEPTANCE — 15% off the stage's ratio, which is 87% of its
+ *      width — and it is used here exactly as it is used there: as a bar to
+ *      clear, not as a thing to chase. An arrangement that clears it beats one
+ *      that does not, whatever either leaves open, because a building that
+ *      does not fill the window is the regression WP-59 exists to have fixed
+ *      and no amount of tidiness inside a small building buys it back.
+ *      Measured, at three stages over the fifteen populations: without this
+ *      rank a reference floor came out 1.07:1 on a 1.78:1 window — 60% of it —
+ *      with a working side that was admirably full.
+ *   2. **The open floor.** Between two arrangements that both clear the bar,
+ *      or two that both miss it, this is the whole of why there is a second
+ *      arrangement: §141 left 43% of the owner's working side as open plan
+ *      with every lever at its stop, and the only thing that could have fixed
+ *      it was a different shape. `OPEN_SETTLE` is the band inside which two
+ *      arrangements are the same answer — two points, a tenth of the gap this
+ *      exists to close — so a floor does not refold itself to buy a rounding.
+ *   3. **And then the shape** (§139), for the two that are equally full.
+ *
+ * Ranks 2 and 3 are the opposite way round from `better`'s, and deliberately.
+ * Inside one arrangement the shape leads all the way, because a column that
+ * chases fill buys it by making the building narrower than the window.
+ * BETWEEN two arrangements that are both the window's shape there is no such
+ * trade: a two-row building is not a narrower one, it is a differently folded
+ * one, and the fill is the only reason to prefer it.
+ *
+ * @param {{workOpen:number, aspectErr:number}} a
+ * @param {{workOpen:number, aspectErr:number}} b
+ */
+export function betterArrangement(a, b) {
+  const bar = Math.log(1 + ASPECT_TOLERANCE);
+  const offShape = (c) => (c.aspectErr > bar + 1e-9 ? 1 : 0);
+  if (offShape(a) !== offShape(b)) return offShape(a) < offShape(b);
+  // 1b. AND, BETWEEN TWO THAT BOTH MISS IT, one that misses it by a whole
+  // tolerance more still loses. Without this the second rank does the same
+  // damage inside the exemption that the first rank exists to prevent outside
+  // it: on a floor neither arrangement can shape, a 0.98:1 building with a
+  // full working side beat a 1.51:1 one, and covered 55% of a 1.78:1 window
+  // against 95%.
+  if (Math.abs(a.aspectErr - b.aspectErr) > bar) return a.aspectErr < b.aspectErr;
+  if (Math.abs(a.workOpen - b.workOpen) > OPEN_SETTLE) return a.workOpen < b.workOpen;
+  return a.aspectErr < b.aspectErr - 1e-4;
 }

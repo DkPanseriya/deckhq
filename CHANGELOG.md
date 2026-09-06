@@ -8,6 +8,39 @@
 
 ### Fixed
 
+- **A wide window gets a second floor plan, instead of a room with a bare block in it.** The floor
+  had one shape — a service column down the left, the rooms and the idle strip beside it — and on
+  a real floor at 1920x1080 that shape could not be filled: a reception with nine waiting above a
+  lounge holding twenty-three benched agents is seventy units tall, four one-desk repos and a
+  fourteen-line board want thirty between them, and after every lever the last fix pulled, **43%
+  of the working side was still open plan**. The gap is arithmetic and no amount of stretching
+  closes it — so the plan can now fold the same rooms a different way. On a window at least 1.45:1
+  whose column would leave more than 15% of its working side open, the envelope search also lays
+  the floor as **two rows**: the reception beside the project rooms across the top, one corridor
+  wall to wall, and the lounge beside the idle strip along the bottom. Both rows fill the same
+  width, so there is no side of the building left over to be open floor. The reception is laid on
+  its side for it — waiting area along its width, desk at one end, the same room reflected rather
+  than a second layout — and the lounge is wide and short with its clusters and its benched
+  population spread along the width. The two arrangements are ranked by whether they are the
+  window's shape at all, then by open floor, then by shape; below either gate nothing changes and
+  a tall or square window still gets the column. On the owner's own machine the working side goes
+  from **52% open to 6%** at 1920x1080 and from 48% to 8% at 2560x1440, with the building covering
+  99% of the width instead of 96%. Across the sixteen test populations, eight of them move to two
+  rows and every one of those goes from **44-54% open to 0-14%**; the seven that do not move are
+  drawn exactly as before. `plan.arrangement` says which shape a floor was laid in, and a `wide`
+  golden — the same three-repo fixture as `three`, photographed on a 1920x1080 window — gates the
+  new one. `docs/DEVIATIONS.md` §142.
+
+- **Sixteen juniors were drawn outside the lounge.** A senior with juniors has them standing
+  beside it, one seat pitch further out for each — which is right for the two or three a senior
+  usually has, and on the owner's floor put a packed row of **sixteen labelled bodies forty units
+  wide along the lounge's bottom wall, half of them outside the room** and over the corridor. A
+  junior's row wraps at the wall now: the next one starts a rank behind rather than walking
+  through it, and if the ranks run out too the gaps close a step at a time. Nothing is ever
+  dropped — a junior is a session, and a session nobody draws is one somebody has to go looking
+  for — and a junior with two or three siblings stands exactly where it did. A junior's room is
+  its parent's, wherever that is. `docs/DEVIATIONS.md` §142.
+
 - **The working side fills its own height, instead of ending in a bare block.** The building took
   the shape of the window and the rooms filled the row they were laid in, and the floor _under_
   them was still nobody's problem: on a real floor at 1920x1080, the project rooms across the top

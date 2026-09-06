@@ -198,6 +198,36 @@ export const JUNIOR_OFFSET = 2.6;
 export const JUNIOR_BACK = 2.8;
 
 /**
+ * How far behind the row in front of it the next RANK of juniors stands
+ * (WP-59d).
+ *
+ * One body's clearance, the same figure `JUNIOR_BACK` is: a rank is the row
+ * behind, and two people one behind the other are two people.
+ */
+export const JUNIOR_ROW = 2.8;
+
+/**
+ * Clear floor a junior keeps inside the walls of the room it is standing in.
+ *
+ * Half a body and a little: a position is a body's CENTRE, so a junior packed
+ * exactly onto the wall is a junior drawn half outside it.
+ */
+export const JUNIOR_PAD = 1.4;
+
+/**
+ * How much tighter the juniors may be packed when the room will not hold them
+ * at their own pitch (WP-59d).
+ *
+ * Walked loosest first and stopped at the first rung that fits, exactly like
+ * `LOUNGE_PACKS`, and for the same reason: nothing is removed and nobody is
+ * dropped at any setting — a junior is a session and a session that is not
+ * drawn is a session somebody has to go looking for. What closes is the gap
+ * between them, and a junior is drawn at `JUNIOR_SCALE` of its parent, so half
+ * a senior's pitch is still a body's width apart.
+ */
+export const JUNIOR_PACKS = Object.freeze([1, 0.8, 0.65, 0.5, 0.4]);
+
+/**
  * The `index`-th place on a seat, spread ALONG the furniture (perpendicular to
  * the way its occupants face). A single-capacity spot is its own only place.
  * @param {PlacedSeat} seat
