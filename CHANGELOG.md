@@ -8,6 +8,26 @@
 
 ### Fixed
 
+- **The rooms fill the working floor, side by side.** The building took the shape of the window
+  and filled it, and then drew the rooms with people in them down the left of it: on a real floor
+  at 1920x1080, three active repos dealt into rows of two and one, each about 40% of the working
+  band's width, the right 55% of that band bare, and the building covering 65% of the window with
+  the reception-and-lounge column taking 46% of it. It read as a narrow column of rooms beside an
+  empty lot. The cause was that the open-floor budget was measured over the **whole building**,
+  where a service column that is never open floor paid for a working side that was half empty. It
+  is measured **per row of rooms** now, at 12%, and the packer lays rooms **across** the band
+  before it stacks them — two side by side, three three across, four two by two, stacking only
+  once a row is full. A room grows into its cell on both axes rather than only in width, the
+  directory strip stands directly under the rooms instead of at the far edge with a hole between
+  them, the service column is held to 40% of the building wherever that does not cost the window's
+  shape, and the envelope search runs a second time once the rooms have settled to their real
+  sizes — without which it was pricing a floor that never gets drawn. On the owner's floor the
+  building goes from **65% to 80%** of a 1920x1080 window, the worst row's bay from **67% to 12%**,
+  and the working band's share of the width from **50% to 59%**. Nothing is stretched to get
+  there: 35% bare carpet in a room is unchanged and every cell stays inside 1.6x its furniture on
+  both axes. A `three` population — three active repos, one at a desk in each — joins the goldens,
+  because three is the smallest room count a row cannot be split evenly into and no other fixture
+  had one. `docs/DEVIATIONS.md` §140.
 - **The building fills the window again.** This is a regression of feel against `1.2.0` and it
   shipped in `1.3.0`, so it is said plainly: on a real floor — one active project, a reception, a
   lounge and an idle strip — the building covered **45% of the width of a 1920x1080 window** and

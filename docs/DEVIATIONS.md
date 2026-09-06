@@ -12093,3 +12093,186 @@ The check is green against fresh captures on all six at 0 px over tolerance and
 `reference.png` read back: the building spans 92% of the frame's width and the
 full height, the reception's plate, the project room's three plate lines and all
 nineteen directory lines are inside it, and nothing is clipped at any edge.
+
+## 140. WP-59b — the rooms were a column beside an empty lot
+
+§139 (WP-59) made the building take the shape of the window and fill it, and it
+did. What it did not do is fill the WORKING SIDE of that building, and on the
+owner's own machine at 1920 x 1080 the result was a picture nobody would ship:
+the three active repos — `1_Project_DeckHQ`, `career-ops`, `1_Project_WardrobeAI`
+— were dealt into rows of two and one down the LEFT of the working band, each
+about 40% of its width, with the right 55% of the band drawn as bare open floor
+and the idle strip spanning the full width underneath. The building covered 65%
+of the window and the reception-and-lounge column took 46% of the building. It
+read as a narrow column of rooms beside an empty lot.
+
+Every bound §139 wrote was satisfied while that was on screen, and the reason is
+the whole of this entry: **`OPEN_FLOOR_MAX` was stated over the whole envelope.**
+The service column is nearly half of that building and is never open floor, so a
+working side that was HALF EMPTY still scored 25% against a 28% budget and
+passed. A bay is not read against a building. It is read against the row of
+rooms it is at the end of.
+
+### What changed
+
+**1. The packer lays rooms ACROSS the band first.** `dealBands` closed a row
+when its rooms had used up `totalW / rowCount` of cumulative width, which is the
+same answer as counting for a floor of similar rooms and the wrong one for three
+identical repos: two, and then one that could honestly take a third of a band. A
+row is full now when it holds `ceil(n / rows)` of the rooms OR its share of the
+width, whichever comes first — so two go side by side, three go three across,
+four go two by two, and a room is stacked under another only once the row above
+it is full. The width half stays because it is what keeps a twenty-one desk
+project out of a row with three one-desk ones. Both are guarded by
+`bands.length < rowCount`, which is load-bearing: the two rules do not close a
+row at the same moment, and without the guard twelve rooms over two rows came
+out as three rows with one room in the last of them.
+
+**2. A row is measured against the row beside it, not against the building.**
+`OPEN_FLOOR_MAX` is **0.12** and is the BAND's budget. The obvious way to state
+it — each row's bay against the working side's full width — cannot tell the
+defect from the honest case, because the two are the same shape: a working side
+is wider than its rooms whenever the directory strip asked for more width than
+they did, and on §139's reference machine (one small room, a seventeen-line
+board under it) that is every arrangement there is. Bounding it absolutely
+squeezed that floor to the width of its one room and drew a 1.24:1 building on a
+1.60:1 window. So the search's legality is `bandSkew` — how much shorter the
+shortest row is than the longest — and the absolute measure is kept as a
+PREFERENCE one rank below the window's shape, where it chooses between laying a
+band shallow and wide or deep and narrow. On the owner's floor that preference
+is worth 12% of the row against 24%.
+
+**3. A room grows into its cell on both axes.** §139 bounded only the width,
+because only the width could grow: `BAND_STRETCH_MAX` pinned the depth at 1.15.
+It is 1.25 now, and `ROOM_HEIGHT_STRETCH_MAX` (1.6) says the axis bound out loud
+beside `ROOM_WIDTH_STRETCH_MAX`. Neither usually bites — `ROOM_FILL_MAX` is the
+area bound and still does — which is exactly what a backstop is for.
+
+**4. The search runs twice.** Every candidate is priced from `naturalOf(i)`, and
+on the first pass those are the sizes `buildProjectRoom` produced before anything
+had been laid anywhere: a bid at the shape a room WANTS, which for a fifteen-desk
+project is 32 x 28 U. The fit loop then rebuilds it into its cell and the same
+project comes out 32 x 18. The search was answering a question about a different
+floor from the one that gets drawn, and on a twelve-room machine it showed — the
+deep first bid put the big project in a band of its own, every multi-row
+arrangement was priced as though it left a half-empty row, and the search took
+**one row of twelve rooms 226 U wide with 76% of the building open floor**. So:
+search, settle, search again with what settling produced. The second answer is
+stable, because a room rebuilt into a cell of roughly the right shape stays
+roughly that shape. `buildPlan` goes from 23 ms to 41 ms on the owner's floor,
+on a plan that is rebuilt when the FLOOR changes and not per frame.
+
+**5. `layBand` never stacks.** WP-55 fell back to a squarified treemap when a
+row's rooms would not stand side by side in the width the band had. That is how,
+once the deal changed, a room ended up **2.2x the width its desks need at 56%
+bare carpet** — the bare-carpet defect, produced by the code that exists to
+prevent it. There is nothing to fall back TO: a band is only ever short of width
+when the whole working floor is, and the fit loop reads exactly that off the
+cells and grows the floor until it is not. Stacking is `dealBands`'s job and its
+alone.
+
+**6. `rowCount` is the rows the candidate ASKED for.** `envelopeFor` returned
+`shape.rows` — the bands the deal came out with, which the depth rule can make
+more of — and `layWorkingFloor` was then handed a different number from the one
+that had been costed. A request for one row of four came back as three bands
+with the last of them two thirds empty. Latent since §139; WP-59b's count rule
+made it visible.
+
+**7. The strip stands under the rooms, and the open floor under both.** The
+directory strip was pinned to the building's bottom edge, which says the right
+thing on a floor with no slack in it and something else on one with a lot:
+§139's open band opened up BETWEEN the rooms and the strip, so the two pieces of
+content on the working side sat at opposite ends of it with a hole in the middle
+— which is the gap the strip's own comment has forbidden since WP-50. The
+content goes together at the top; the open floor is the margin under it.
+
+**8. `SERVICE_COLUMN_MAX` is 0.40, and it ranks BELOW the window's shape.** A
+WIDER column is a SHORTER one — the reception and the lounge pack into fewer,
+longer rows — so a narrower column makes a TALLER building. Ranked above the
+shape, a floor with two small rooms beside a full lounge comes out 0.85:1 on a
+1.60:1 window, and four of the fifteen test populations lose between 23 and 33
+points of coverage. So the rule holds wherever it is free, which on the owner's
+floor is everywhere: the column lands at 37.6% of the building, and the working
+band at 59% of it — 62% counting the four units of spine that serve both.
+
+### What it costs, said plainly
+
+**`FLOOR_OPEN_MAX` is 0.40, twelve points looser than §139's 0.28.** Three
+one-desk rooms laid ACROSS a band fill it at the area `ROOM_FILL_MAX` allows and
+no more, so the emptiness that used to be spread down the side of every row as
+bays now lands in one piece below them. It is the same floor area either way;
+what moved is where it is. And it buys the picture the owner was owed, because
+the alternative to open plan INSIDE the building is dark ground OUTSIDE it —
+§139's own argument, and worth no less here. `the working floor is circulation
+and rooms, and mostly rooms` moves with it, from a bare 20% to
+`FLOOR_OPEN_MAX - 0.01`, and still says the thing it is for: the twelve-room
+floor spends no more than any other.
+
+### Measured
+
+Building size in units; `cover` is the fraction of the stage's width the
+building covers; `band` is the worst row's bay as a fraction of the working
+side; `work` is the working band's share of the building's width. The owner's
+floor is his real one, read from the running daemon and rebuilt from the same
+state; the others are `scripts/demo-populations.mjs` at the goldens' 1600 x 1000.
+
+| floor | before | cover | band | work | after | cover | band | work |
+|---|---|---|---|---|---|---|---|---|
+| **owner's, 1920x1080** | 100 x 76 (1.32:1) | **65%** | **67%** | **50%** | **122 x 76 (1.61:1)** | **80%** | **12%** | **59%** |
+| owner's, 1600x1000 | 100 x 76 | 72% | 67% | 50% | 122 x 76 | **88%** | **12%** | 59% |
+| owner's, 2560x1440 | 100 x 76 | 67% | 67% | 50% | 122 x 76 | **83%** | **12%** | 59% |
+| demo | 101 x 59 (1.71:1) | 93% | 34% | 50% | 121 x 64 (1.87:1) | **100%** | **11%** | **70%** |
+| three (new) | — | — | — | — | 100 x 59 (1.70:1) | 93% | **0%** | 50% |
+| reference | 100 x 59 (1.70:1) | 92% | 67% | 50% | 104 x 59 (1.76:1) | **96%** | 60% | 52% |
+| single | 67 x 55 (1.22:1) | 67% | 1% | 25% | 67 x 55 (1.22:1) | 67% | 0% | 25% |
+| empty | 50 x 55 (0.92:1) | 50% | 0% | — | 50 x 55 (0.92:1) | 50% | 0% | — |
+
+`reference` keeps its 60%, and that is the case §139 shipped and this package
+deliberately did not break: ONE room and a seventeen-line board cannot fill a
+row between them, and the alternative is the 1.24:1 building above. Per room,
+the owner's floor goes from three rooms at 33% of the working width in TWO rows
+to three at 29% in ONE row — the same rooms, laid across, with the band 88%
+full instead of 33%.
+
+Over the fifteen `floor-integrity.test.mjs` populations at three stages: worst
+row-against-row skew **16%** (a twenty-one desk project's own row, which cannot
+be longer), worst whole-floor open plan **39%**, worst bare carpet in a room
+**30%**, widest cell **1.43x** its furniture and deepest **1.29x** — both well
+inside the 1.6 axis bounds.
+
+### Tests
+
+`floor-integrity.test.mjs` gains a `threeRooms` population — three active repos,
+one at a desk in each, a few benched, three repos nobody is in — because THREE
+is the point: it is the smallest room count a row cannot be split evenly into,
+and no other population in that file has an odd number of rooms above one. Three
+new properties, each over every population at every stage:
+
+1. **a row of rooms fills its band, or every room in it is already as large as
+   it may be.** The escape clause is the other half of the rule rather than a
+   weakening of it: a band holding one twenty-one desk project cannot fill a
+   working side as wide as three one-desk rooms need, because `ROOM_FILL_MAX`
+   will not let that one room have the floor, and giving it the floor anyway is
+   the bare-carpet defect §106 removed. ONE room at its cap stops the row,
+   because the cap binds on the SHALLOWEST room in it.
+2. **the working side is the wider half once it holds three rooms.**
+3. **the rooms and the strip stand together, and the open floor is under them.**
+
+`a room is never given floor to chase the shape of a window` now states the
+DEPTH bound as well as the width one. No `INVARIANT:` test was touched and
+nothing was deleted.
+
+### Goldens
+
+`three` is a committed golden, `test/goldens/win32/three.png`. It is a LAYOUT
+case rather than a drawing one — nothing in it is new furniture — and it is the
+shape this package exists to fix, so it is the capture that would catch the
+regression coming back. All five populations and both themed captures were
+regenerated; `--check` is green on all seven at **0 px over tolerance and 0 px
+moved at all**, the same noise floor §106 and §139 measured.
+
+Read back: `three.png` shows the three rooms side by side across the whole
+working band with no bay at the end of it, the idle strip immediately under
+them, and the open plan below both. On the owner's real floor at 1920 x 1080 the
+same picture: three rooms across, the strip under them, the building at 80% of
+the window and the service column at 37.6% of it.
