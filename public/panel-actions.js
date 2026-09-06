@@ -19,6 +19,7 @@ import {
   ACTION_LABELS,
   DEFAULT_APPROVE_TEXT,
   DEMO_REFUSAL,
+  fireQuestion,
   legalActions,
   optimisticPatch,
   thirdAction,
@@ -219,6 +220,18 @@ export function createActionsPart(ctx) {
     // row as much as for the panel's own: the whole floor is actors.
     if (getSnapshot()?.demo) return toast(DEMO_REFUSAL);
 
+    // WP-61 · one question before firing, and only before firing.
+    //
+    // `bench` is reversible with the same key that did it, so it asks nothing.
+    // Firing takes the agent off the floor, and the ⋯ menu is a list of small
+    // buttons a millimetre apart — the one place in this card where the wrong
+    // one is easy to hit. The composer already stops a mid-turn send this way
+    // (`sendText`), so this is the card's existing pattern rather than a new
+    // one. It says what firing does NOT do, because that is the part nobody
+    // can see: the conversation is kept, and DeckHQ writes nothing into the
+    // runtime's own store (docs/DEVIATIONS.md §46, §143).
+    if (action === 'let_go' && !confirmFire(agent)) return;
+
     // Only the panel's own row has anything to patch optimistically; a deck
     // row's feedback is the next snapshot, which is 250 ms away.
     const inPanel = id === currentId && Boolean(displayedAgent);
@@ -244,7 +257,9 @@ export function createActionsPart(ctx) {
           ? `Benched. ${name} is in the lounge.`
           : action === 'recall'
             ? `Recalled. ${name} is back on the floor.`
-            : `${ACTION_LABELS[action]} — done`,
+            : action === 'let_go'
+              ? `Fired. ${name} is off the floor.`
+              : `${ACTION_LABELS[action]} — done`,
       );
       announce(`${name}: ${ACTION_LABELS[action].toLowerCase()}`);
     } catch (err) {
@@ -253,6 +268,24 @@ export function createActionsPart(ctx) {
         renderChrome();
       }
       toast(`Could not ${ACTION_LABELS[action].toLowerCase()}: ${err.message}`, { isError: true });
+    }
+  }
+
+  /**
+   * Ask the one question, through the same `window.confirm` the composer's
+   * mid-turn guard uses. A host with no modal at all — some embedders take
+   * `confirm` away entirely — must not be a host where firing silently does
+   * nothing, so an absent dialog lets the explicit button press stand; a
+   * dialog that is there and says no stops it.
+   * @param {any} agent
+   */
+  function confirmFire(agent) {
+    const ask = /** @type {any} */ (globalThis).confirm;
+    if (typeof ask !== 'function') return true;
+    try {
+      return Boolean(ask.call(globalThis, fireQuestion(who(agent))));
+    } catch {
+      return true;
     }
   }
 

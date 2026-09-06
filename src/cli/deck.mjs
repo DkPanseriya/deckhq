@@ -434,7 +434,7 @@ const LS_HELP = [
   '       deckhq waiting [--json] [--no-color] [--port <n>]',
   '',
   '  --json       the same rows as JSON',
-  '  --all        include benched and let-go agents',
+  '  --all        include benched and fired agents',
   '  --no-color   no ANSI, whatever the terminal is (NO_COLOR is honoured too)',
   '  --port <n>   also look for a running DeckHQ on this port',
   '  --help       this message',

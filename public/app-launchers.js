@@ -155,7 +155,7 @@ export function showWhiteboard(projectId) {
   tile('In your office', stats.inOffice, stats.inOffice ? 'needs' : undefined);
   tile('Benched', stats.benched);
   tile('Finished', stats.ended);
-  if (stats.archived) tile('Archived', stats.archived);
+  if (stats.archived) tile('Fired', stats.archived);
   // Compact on the tiles: a nine-digit cache figure does not fit one, and the
   // exact number is not what a board is for. The per-session rows below carry
   // the full figures.

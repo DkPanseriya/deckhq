@@ -84,7 +84,7 @@ import {
 
 // -------------------------------------------------------------- app state
 /**
- * Whether let-go agents are reachable right now. A VIEW toggle, not a stored
+ * Whether fired agents are reachable right now. A VIEW toggle, not a stored
  * setting: the header used to write `settings.showLetGo` and nothing ever
  * read it (docs/DEVIATIONS.md §58). "Am I looking at removed sessions" is a
  * property of this tab, so it lives here and resets on reload. Flipped from
@@ -810,7 +810,7 @@ const paletteUI = createPalette({
     toggleRedaction,
     toggleLetGoVisible: () => {
       letGoVisible = !letGoVisible;
-      toast(letGoVisible ? 'Let-go agents are reachable from ⌘K' : 'Let-go agents hidden again');
+      toast(letGoVisible ? 'Fired agents are reachable from ⌘K' : 'Fired agents hidden again');
     },
   },
 });

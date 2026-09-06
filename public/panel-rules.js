@@ -17,7 +17,7 @@ export const STATE_LABELS = {
   stalled: 'Stalled',
   for_review: 'For review',
   benched: 'Benched',
-  let_go: 'Let go',
+  let_go: 'Fired',
   ended: 'Ended',
 };
 
@@ -67,9 +67,32 @@ export const ACTION_LABELS = {
   review: 'Mark for review',
   bench: 'Bench',
   recall: 'Recall',
-  let_go: 'Let go',
+  let_go: 'Fire',
   rehire: 'Rehire',
 };
+
+/**
+ * The one line asked before an agent is fired (WP-61).
+ *
+ * Two sentences and no more: what is about to happen, and the part of it
+ * nobody can see — that the conversation is kept and stays reachable. It is
+ * about the agent, never about the reader: no "are you sure", no warning
+ * about losing work, nothing in the second person with an implication of
+ * fault (`docs/plan/04-ENGAGEMENT-AND-GAMIFICATION.md` §5,
+ * `docs/plan/08-PLAN-V2-100X.md` §1.1 rule 6).
+ *
+ * "Archives" here means DeckHQ's own record and nothing else. Firing writes
+ * `ackState` in `~/.deckhq/state.json`; it never writes the runtime's archive
+ * flag or any file under `~/.claude` or `~/.codex` (docs/DEVIATIONS.md §46).
+ * The copy says "kept" rather than "archived" for exactly that reason.
+ *
+ * Pure, so `test/unit/panel-close.test.mjs` can assert the words without a
+ * DOM. The caller asks the question.
+ * @param {string} name what the agent is called
+ */
+export function fireQuestion(name) {
+  return `Fire ${name}? The chat is kept and stays reachable from ⌘K → Show fired.`;
+}
 
 /**
  * Which of the six ACK_ACTIONS are legal from an agent's current state.

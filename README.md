@@ -80,14 +80,14 @@ goes idle the item is "complete" and disappears. That is the bug this product ex
 
 ## The six states
 
-| State         | What it means                                      | Where the agent is       | What you see                                           |
-| ------------- | -------------------------------------------------- | ------------------------ | ------------------------------------------------------ |
-| `working`     | Live and producing output                          | Its project desk         | Typing, occasional coffee                              |
-| `needs_input` | Live, blocked on a question or a permission prompt | **Stays at its desk**    | **Raises a hand**, pulsing ring                        |
-| `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                         |
-| `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Standing in the waiting area with a waiting-time badge |
-| `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                     |
-| `let_go`      | Off the floor                                      | Hidden                   | Hidden; reachable from `⌘K` → "Show let-go agents"     |
+| State         | What it means                                      | Where the agent is       | What you see                                                                       |
+| ------------- | -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------- |
+| `working`     | Live and producing output                          | Its project desk         | Typing, occasional coffee                                                          |
+| `needs_input` | Live, blocked on a question or a permission prompt | **Stays at its desk**    | **Raises a hand**, pulsing ring                                                    |
+| `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                                                     |
+| `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Standing in the waiting area with a waiting-time badge                             |
+| `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                                                 |
+| `let_go`      | Off the floor                                      | Hidden                   | **Fired** — off the floor; the chat is kept and reachable from `⌘K` → "Show fired" |
 
 **The two "needs you" signals are deliberately different.** A raised hand at a desk means _I am
 mid-task and blocked_. A person standing in your office means _I finished; review this_. Those
@@ -106,7 +106,7 @@ working tree**, read straight from git as `+142  −18  3 files` over a row per 
 Then three actions, weighted rather than equal. `1 Reply` focuses the composer. `2 Approve` sends
 an affirmative — `"Yes, go ahead."` by default, configurable — and is the only filled button on
 the screen, because it is the commonest reply in this workflow and one keystroke is the largest
-saving in the day. `3` benches. Everything rarer — mark for review, let go, rename, new agent,
+saving in the day. `3` benches. Everything rarer — mark for review, fire, rename, new agent,
 recall, rehire — sits behind `⋯ more`. The cost estimate is one quiet line at the bottom, which is
 where an estimate belongs.
 
@@ -176,7 +176,7 @@ $ deckhq ack MK1.1
 ```
 
 Oldest first, finished turns and raised hands above stalls. `deckhq ls` shows the same table plus
-everyone else who is working, `--all` adds the benched and the let go, and `--json` gives either as
+everyone else who is working, `--all` adds the benched and the fired, and `--json` gives either as
 data. `NO_COLOR`, a pipe or `--no-color` turns the ANSI off.
 
 `<id>` is the tag in the `ID` column, a name you gave an agent, or any prefix of the session id.
