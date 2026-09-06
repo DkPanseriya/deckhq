@@ -15,9 +15,12 @@ import {
   CHAIR,
   LOUNGE_GAP,
   LOUNGE_MAX_GAMES,
+  LOUNGE_PACKS,
   MARGIN,
   MINGLE_PITCH,
+  MINGLE_PITCH_MIN,
   MINGLE_ROW,
+  MINGLE_ROW_MIN,
   OFFICE_CHAIR_PITCH,
   OFFICE_CHAIR_ROW,
   OFFICE_GROWTH_H,
@@ -400,8 +403,19 @@ export function buildOffice(waitingCount, fit) {
  * @param {number} benchedCount agents actually drawn in here
  * @param {{w:number,h:number}} [fit] the interior this room has been given
  * @param {number} [goneHomeCount] benched, not drawn; carried on the plate
+ * @param {number} [pack] how tightly the clusters and the standing band are
+ *   laid, `1` being the room as it has always been laid and `LOUNGE_PACKS`'s
+ *   last entry the densest (WP-59c). NOTHING is removed at any setting and no
+ *   furniture changes size: the gaps between the clusters close and the
+ *   benched stand closer together, which is the whole of it. The service
+ *   column sets the building's height, so this is what stops a lounge
+ *   dictating an empty lot on the working side.
  */
-export function buildLounge(benchedCount, fit, goneHomeCount = 0) {
+export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
+  const packing = clamp(Number(pack) || 1, LOUNGE_PACKS[LOUNGE_PACKS.length - 1], 1);
+  const gap = LOUNGE_GAP * packing;
+  const minglePitch = Math.max(MINGLE_PITCH_MIN, MINGLE_PITCH * packing);
+  const mingleRow = Math.max(MINGLE_ROW_MIN, MINGLE_ROW * packing);
   /** @type {Prop[]} */
   const props = [];
   /** @type {Zone[]} */
@@ -711,7 +725,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0) {
   const budget = Number.isFinite(budgetW)
     ? budgetW
     : Math.max(...blocks.map((b) => b.w)) * Math.max(1, Math.round(Math.sqrt(blocks.length)));
-  const flow = shelfPack(blocks, LOUNGE_GAP, budget);
+  const flow = shelfPack(blocks, gap, budget);
   blocks.forEach((b, i) => b.place(flow.out[i].x, flow.out[i].y));
 
   // Standing conversations need no furniture, so they take the promenade
@@ -726,21 +740,21 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0) {
   const missing = Math.max(0, benchedCount - seated);
   if (missing > 0) {
     const bandW = Math.min(furniture.w, budgetW);
-    const perRow = Math.max(2, 2 * Math.floor(bandW / (MINGLE_PITCH * 2)));
+    const perRow = Math.max(2, 2 * Math.floor(bandW / (minglePitch * 2)));
     const rows = Math.ceil(missing / perRow);
-    const bandY = furniture.y + furniture.h + LOUNGE_GAP;
+    const bandY = furniture.y + furniture.h + gap;
     zones.push({
       id: 'lounge-mingle',
       x: furniture.x,
       y: bandY - 1.2,
       w: furniture.w,
-      h: rows * MINGLE_ROW + 2.4,
+      h: rows * mingleRow + 2.4,
     });
     let made = 0;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c + 1 < perRow && made < missing; c += 2) {
-        const bx = furniture.x + 1.2 + c * MINGLE_PITCH;
-        const by = bandY + r * MINGLE_ROW;
+        const bx = furniture.x + 1.2 + c * minglePitch;
+        const by = bandY + r * mingleRow;
         const a = `lounge-chat-${r}-${c}a`;
         const b = `lounge-chat-${r}-${c}b`;
         spots.push({ id: a, kind: 'chat', x: bx, y: by, angle: 0, capacity: 1, partnerOf: b });
