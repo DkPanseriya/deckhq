@@ -24,11 +24,18 @@ import {
   buildPlan,
   floorPopulation,
   isGoneHome,
+  ASPECT_TOLERANCE,
   GONE_HOME_DAYS,
   DIRECTORY_MAX_H,
+  OPEN_FLOOR_MAX,
   PLATE_BAND,
+  ROOM_WIDTH_STRETCH_MAX,
 } from '../../public/render/plan.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
+// `scene.js` imports cleanly under plain Node (see the note at the foot of
+// it), so the stage's own aspect is asked of the code the app uses rather
+// than restated here.
+import { computeTargetAspect } from '../../public/render/scene.js';
 import { counts } from '../../src/core/model.mjs';
 
 const EPS = 1e-6;
@@ -152,6 +159,16 @@ const POPULATIONS = [
 ];
 
 const ASPECTS = [1.2, 1.6, 1.78, 2.06, 2.2];
+
+/**
+ * The stages WP-59 is measured on: the goldens' window, and the two the owner
+ * actually reported the building shrinking in.
+ */
+const STAGES = [
+  [1600, 1000],
+  [1920, 1080],
+  [2560, 1440],
+];
 
 // ------------------------------------------------------------ the one frame
 
@@ -863,8 +880,21 @@ test('the building is the sum of its parts, not the shape of the window', () => 
   const one = planFor({ projects: [2], benched: 2 });
   const many = planFor({ projects: [4, 4, 4, 4, 4, 4], benched: 2 });
   assert.ok(
-    many.width > one.width * 1.4,
+    many.width > one.width * 1.3,
     `six projects (${many.width.toFixed(0)} U) should make a much wider building than one (${one.width.toFixed(0)} U)`,
+  );
+  // WP-59 moved this number from 1.4 to 1.3 and it is worth saying why, because
+  // the direction is the opposite of the one §106 was defending. A floor with
+  // one room now spends what a wide window offers on its service column and on
+  // open plan rather than leaving it as ground, so the SMALL floor got wider —
+  // not the large one. What §106's rule is actually about is the rooms, and
+  // that is unchanged and asserted here directly: the six-project floor has six
+  // rooms' worth of rooms in it.
+  const roomArea = (plan) =>
+    plan.rooms.filter((r) => r.kind === 'project').reduce((a, r) => a + r.w * r.h, 0);
+  assert.ok(
+    roomArea(many) > roomArea(one) * 4,
+    `six project rooms (${roomArea(many).toFixed(0)} U²) should hold far more than one (${roomArea(one).toFixed(0)} U²)`,
   );
 
   // And the envelope really is the sum: the working side is exactly what is
@@ -880,6 +910,95 @@ test('the building is the sum of its parts, not the shape of the window', () => 
       Math.abs(right - plan.width) < 0.01,
       'the working side reaches the building line exactly',
     );
+  }
+});
+
+// ---------------------------------- WP-59: the building fills the window
+
+/**
+ * Can this floor's contents be the shape of this stage at all?
+ *
+ * The question the plan is asked, stated so the test can ask it too rather
+ * than trust the answer. To be the stage's shape at the height it came out,
+ * the envelope would have to be `H * stageAspect` wide; the rooms it holds
+ * would then cover `roomsArea / (W * H)` of it, and everything else would be
+ * open floor. Under `1 - OPEN_FLOOR_MAX` that arrangement is a hangar and the
+ * plan is right to refuse it — a reception, a lounge and one two-desk room
+ * cannot fill a 2560 x 1440 window however they are laid out, and pretending
+ * otherwise is the bare-carpet defect §106 removed, one level up.
+ *
+ * Conservative on purpose: it is a necessary condition, not a sufficient one,
+ * so a floor it exempts might still have had an arrangement. Every population
+ * that is NOT exempt is held to the fill target exactly.
+ */
+function couldTakeShape(plan, stageAspect) {
+  const roomsArea = plan.rooms
+    .filter((r) => r.kind !== 'corridor')
+    .reduce((a, r) => a + r.w * r.h, 0);
+  const wantW = plan.height * stageAspect;
+  return roomsArea / Math.max(1e-6, wantW * plan.height) >= 1 - OPEN_FLOOR_MAX;
+}
+
+test('the building is the shape of the window, wherever its contents allow', () => {
+  // The first half of WP-59's defect. §106 summed the envelope from its rooms
+  // and spent the stage's shape only on the band count and the service
+  // column's width — two choices a floor with one active repo does not have —
+  // so the reference machine came out 57 x 55 U (1.04:1) whatever window it was
+  // drawn in, and 45% of a 1920 x 1080 stage was dark ground.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const [stageW, stageH] of STAGES) {
+      const stageAspect = computeTargetAspect(stageW, stageH);
+      const plan = buildPlan(projects, agents, {
+        stage: { w: stageW, h: stageH },
+        now: NOW,
+      });
+      if (!couldTakeShape(plan, stageAspect)) continue;
+      const aspect = plan.width / plan.height;
+      const off = Math.abs(Math.log(aspect / stageAspect));
+      assert.ok(
+        off <= Math.log(1 + ASPECT_TOLERANCE) + EPS,
+        `${JSON.stringify(spec)} at ${stageW}x${stageH}: the building is ${aspect.toFixed(2)}:1 ` +
+          `on a ${stageAspect.toFixed(2)}:1 stage, ${((Math.exp(off) - 1) * 100).toFixed(0)}% off`,
+      );
+    }
+  }
+});
+
+test('a room is never given floor to chase the shape of a window', () => {
+  // The bound that keeps the two halves above honest. Widening the envelope is
+  // allowed to spend the strip's columns, the service column's width and open
+  // plan; it is NOT allowed to spend a room, which is where §106 found the
+  // defect in the first place. `no room is more than 35% bare carpet` above
+  // states the area bound over every aspect; this states the axis bound over
+  // every STAGE, which is the case WP-59 introduced.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const [stageW, stageH] of STAGES) {
+      const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
+      for (const room of plan.rooms) {
+        if (room.kind !== 'project' || !room.natural) continue;
+        assert.ok(
+          room.w <= room.natural.w * ROOM_WIDTH_STRETCH_MAX + EPS,
+          `${room.id} at ${stageW}x${stageH} is ${room.w.toFixed(1)} U wide for furniture ` +
+            `needing ${room.natural.w.toFixed(1)} U`,
+        );
+        assert.ok(
+          bareCarpet(room) <= 0.35 + EPS,
+          `${room.id} at ${stageW}x${stageH} is ${(bareCarpet(room) * 100).toFixed(0)}% bare carpet`,
+        );
+      }
+      // And the open floor it does spend stays inside its budget.
+      const open = plan.rooms
+        .filter((r) => r.kind === 'corridor' && r.thoroughfare === false)
+        .reduce((a, r) => a + r.w * r.h, 0);
+      const share = open / (plan.width * plan.height);
+      assert.ok(
+        share <= OPEN_FLOOR_MAX + EPS,
+        `${JSON.stringify(spec)} at ${stageW}x${stageH}: ${(share * 100).toFixed(0)}% ` +
+          `of the floor is open floor nobody stands on`,
+      );
+    }
   }
 });
 

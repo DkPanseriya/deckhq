@@ -36,6 +36,8 @@
  *   plan-rooms.js    a project's room, and the idle strip's lines
  *   plan-service.js  the office and the lounge
  *   plan-nav.js      walls, corridor centrelines, doors
+ *   plan-envelope.js the working floor: bands, band widths, what it measures
+ *                    (WP-59, which took this file past the 900-line ceiling)
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, and `src/core/model.mjs`
@@ -48,18 +50,24 @@
 
 import { floorPopulation } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
+import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
-import { squarify } from './plan-packing.js';
-import { buildDirectory, buildProjectRoom, directoryHeight } from './plan-rooms.js';
+import {
+  buildDirectory,
+  buildProjectRoom,
+  directoryHeight,
+  directoryWidths,
+} from './plan-rooms.js';
 import { buildLounge, buildOffice, seatOffice } from './plan-service.js';
 import {
   ASPECT_MAX,
   ASPECT_MIN,
+  ASPECT_SETTLE,
+  BAND_DEPTHS,
   BAND_STRETCH_MAX,
   CORRIDOR,
   DEFAULT_ASPECT,
   DOOR_WIDTH,
-  HEIGHT_BAND_RATIO,
   MARGIN,
   MAX_WORKING_ROWS,
   MIN_PROJECT_ROOM_W,
@@ -68,19 +76,46 @@ import {
   OFFICE_MAX_W,
   OFFICE_MIN_W,
   OFFICE_SURPLUS_SHARE,
+  OPEN_FLOOR_MAX,
   PLATE_BAND,
-  PROJECT_ASPECT_LIMIT,
   ROOM_ASPECT_MAX,
-  ROOM_FILL_MAX,
   ROOM_PAD,
   SERVICE_MAX_W,
   SERVICE_W_STEP,
-  WORKING_HEADROOM,
   clamp,
 } from './plan-units.js';
 import { isDeskAgent } from '../floor-rule.js';
 
 // ------------------------------------------------------------------ the plan
+
+/**
+ * Is envelope `a` a better answer to this stage than envelope `b` (WP-59)?
+ *
+ * In order, and the order is the design:
+ *
+ *   1. **Legal first.** An arrangement whose open floor is past
+ *      `OPEN_FLOOR_MAX` is a hangar; it is only ever taken when nothing else
+ *      is available.
+ *   2. **The shape of the window.** `miss` is how far past `ASPECT_SETTLE`
+ *      the envelope's aspect sits, so every arrangement already close enough
+ *      ties here and competes on the rest.
+ *   3. **The least empty of those.** Among floors that are the right shape,
+ *      the tightest one — which is the WP-55 rule, unchanged, now applied
+ *      inside the band rather than instead of it.
+ *   4. **Then closest to the shape, then smallest.** Both pure tie-breaks, and
+ *      the last one is there so the search is a function of its inputs rather
+ *      than of the order the loops happen to run in.
+ *
+ * @param {{illegal:number, miss:number, open:number, aspectErr:number, W:number, H:number}} a
+ * @param {{illegal:number, miss:number, open:number, aspectErr:number, W:number, H:number}} b
+ */
+function better(a, b) {
+  if (a.illegal !== b.illegal) return a.illegal < b.illegal;
+  if (Math.abs(a.miss - b.miss) > 1e-4) return a.miss < b.miss;
+  if (Math.abs(a.open - b.open) > 1e-4) return a.open < b.open;
+  if (Math.abs(a.aspectErr - b.aspectErr) > 1e-4) return a.aspectErr < b.aspectErr;
+  return a.W * a.H < b.W * b.H - 1e-6;
+}
 
 /**
  * Build the whole floor.
@@ -93,13 +128,24 @@ import { isDeskAgent } from '../floor-rule.js';
  *
  * @param {ProjectLike[]} projects
  * @param {AgentLike[]} agents
- * @param {{ targetAspect?: number, goneHomeDays?: number, now?: number }} [opts]
+ * @param {{ targetAspect?: number, stage?: {w:number, h:number},
+ *   goneHomeDays?: number, now?: number }} [opts]
  *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test
- *   and a golden can both be a pure function of their fixture.
+ *   and a golden can both be a pure function of their fixture. `stage` is the
+ *   canvas the floor will be drawn on, in pixels (WP-59); it is only ever read
+ *   for its SHAPE, and `targetAspect` is the same number stated directly. Pass
+ *   either.
  * @returns {Plan}
  */
 export function buildPlan(projects, agents, opts = {}) {
-  const targetAspect = clamp(Number(opts.targetAspect) || DEFAULT_ASPECT, ASPECT_MIN, ASPECT_MAX);
+  const stage = opts.stage;
+  const stageAspect =
+    stage && Number(stage.w) > 0 && Number(stage.h) > 0 ? Number(stage.w) / Number(stage.h) : 0;
+  const targetAspect = clamp(
+    Number(opts.targetAspect) || stageAspect || DEFAULT_ASPECT,
+    ASPECT_MIN,
+    ASPECT_MAX,
+  );
   const list = Array.isArray(agents) ? agents : [];
   const pop = floorPopulation(list, { now: opts.now, goneHomeDays: opts.goneHomeDays });
   const waitingCount = pop.waiting;
@@ -228,6 +274,16 @@ export function buildPlan(projects, agents, opts = {}) {
     // floor in a lounge is a lounge, and the alternative is a strip of
     // circulation beside it doing the same job less honestly.
     l.room.w = colW;
+    // AND IT KEEPS ITS PROPORTION (WP-59). The reception has always floored its
+    // own height at `IN_W / ROOM_ASPECT_MAX` — a 2:1 reception reads as a
+    // corridor with a desk at one end — and the lounge did not, because until
+    // the envelope search could spend width on the service column nothing ever
+    // asked it to be wide. Now something does: the column at 46 U with twelve
+    // benched in it packed to a 19 U lounge, which is a 2.4:1 room. Saying it
+    // here rather than in `buildLounge` keeps it beside the width it is a
+    // proportion OF, and makes the column self-limiting — a wider column is a
+    // taller one, and a taller column stops being what a wide stage wants.
+    l.room.h = Math.max(l.room.h, colW / ROOM_ASPECT_MAX);
     got = { w: colW, office: o, lounge: l, h: o.room.h + l.room.h };
     serviceCache.set(key, got);
     return got;
@@ -237,291 +293,104 @@ export function buildPlan(projects, agents, opts = {}) {
   const naturalOf = (i) =>
     projectRooms[i].room.natural || { w: projectRooms[i].room.w, h: projectRooms[i].room.h };
 
-  /**
-   * How much floor each project is worth, relative to the others.
-   *
-   * Exactly its furniture's own footprint — a twenty-one desk project earns
-   * more room than a one desk project, in the ratio their desks actually need.
-   * WP-50 clamped this ratio to stop a very large repo turning its neighbours
-   * into splinters, which was necessary while the weights came from session
-   * counts and the cell had no relation to the furniture in it. Now that every
-   * room is BUILT at its natural size (WP-55), a clamp here is a room given
-   * less floor than its desks occupy, which the fit loop then has to buy back
-   * by growing the whole building.
-   */
-  const weights = projectRooms.map((_, i) => {
-    const n = naturalOf(i);
-    return Math.max(1, n.w * n.h);
-  });
+  // The working floor — how the rooms are dealt into bands, how wide a band
+  // may be laid, and what the whole of it measures. Its own module since
+  // WP-59 (`plan-envelope.js`), which is a closure over `naturalOf` because a
+  // room’s natural size changes under the fit loop below.
+  const { invalidateBands, layWorkingFloor, roomsAreaFor, workingShape } = createWorkingFloor(
+    projectRooms,
+    naturalOf,
+  );
 
   /**
-   * Deal the projects into bands: rows of rooms of SIMILAR DEPTH, each row
-   * carrying roughly the same total width.
+   * The whole envelope implied by one arrangement: the service column, the
+   * spine, and the working floor beside them.
    *
-   * Depth first, and it is not a preference. A row is as deep as its deepest
-   * room, so a one-table room sharing a row with a fifteen-desk project is
-   * given a cell twice the depth its desks need and the difference is drawn as
-   * carpet — the defect this package exists to remove, one level down. A room
-   * more than `HEIGHT_BAND_RATIO` shallower than the row it would join starts a
-   * new row instead, whatever the requested row count.
-   *
-   * Width second, because within a row the cells are shared out by width and a
-   * row much wider than its neighbour leaves the difference as a bay.
-   *
-   * @param {number} rowCount rows to aim for; the depth rule may take more
-   */
-  const bandsOf = (rowCount) => {
-    const order = weights
-      .map((weight, i) => ({ weight, i, w: naturalOf(i).w, h: naturalOf(i).h }))
-      .sort((a, b) => b.h - a.h || b.w - a.w || a.i - b.i);
-    const totalW = order.reduce((a, it) => a + it.w, 0) || 1;
-    const perBand = totalW / Math.max(1, rowCount);
-    /** @type {{weight:number,i:number,w:number,h:number}[][]} */
-    const bands = [];
-    let current = null;
-    let acc = 0;
-    for (const item of order) {
-      const tooShallow = current && current[0].h > item.h * HEIGHT_BAND_RATIO;
-      const full = current && bands.length < rowCount && acc + item.w / 2 > perBand;
-      if (!current || tooShallow || full) {
-        current = [];
-        bands.push(current);
-        acc = 0;
-      }
-      current.push(item);
-      acc += item.w;
-    }
-    return bands;
-  };
-
-  /**
-   * Lay the project rooms into `rect` as `rowCount` bands separated by ONE
-   * corridor each, every band squarified so its rooms tile it exactly.
-   *
-   * This is a double-loaded corridor plan, which is what an office floor of
-   * this shape actually is: a service core down one side, a spine beside it,
-   * and working bays either side of a single cross corridor. There is no other
-   * circulation on the working floor — rooms share their walls.
-   *
-   * @param {{x:number,y:number,w:number,h:number}} rect
-   * @param {number} rowCount
-   */
-  /**
-   * Lay one band's rooms into its rectangle.
-   *
-   * ONE ROW, full depth, widths in proportion to what each room needs. A band
-   * is only as deep as its deepest room now (see `attempt`), so a row is the
-   * shape the rooms actually want and every cell comes out at the band's depth
-   * — which is what stops the squarifier stacking two rooms into a half-depth
-   * cell that neither of their tables fits in.
-   *
-   * The squarified treemap is still the answer when a band is carrying more
-   * rooms than one row can hold without cutting them below the width their
-   * desks need; then a second row inside the band beats a row of splinters.
-   *
-   * @param {{weight:number,i:number}[]} band
-   * @param {{x:number,y:number,w:number,h:number}} rect
-   */
-  const layBand = (band, rect) => {
-    // Shared out by WIDTH, not by area. The cells are all the band's depth, so
-    // width is the only degree of freedom left and giving it out by area hands
-    // a deep room its neighbour's floor.
-    const total = band.reduce((a, item) => a + Math.max(1e-6, naturalOf(item.i).w), 0) || 1;
-    /** @type {{x:number,y:number,w:number,h:number}[]} */
-    const row = [];
-    let x = rect.x;
-    band.forEach((item, k) => {
-      const w =
-        k === band.length - 1 ? rect.x + rect.w - x : (naturalOf(item.i).w / total) * rect.w;
-      row.push({ x, y: rect.y, w, h: rect.h });
-      x += w;
-    });
-    const fits = row.every((cell, k) => cell.w >= naturalOf(band[k].i).w - 0.01);
-    if (fits) return row;
-    return squarify(
-      band.map((item, k) => ({ weight: item.weight, i: k })),
-      rect,
-    );
-  };
-
-  const layWorkingFloor = (rect, rowCount) => {
-    /** @type {{x:number,y:number,w:number,h:number}[]} */
-    const empty = new Array(projectRooms.length);
-    if (!projectRooms.length || rect.w <= 0 || rect.h <= 0) {
-      return { cells: empty, corridors: [] };
-    }
-
-    const attempt = (rows) => {
-      const cells = new Array(projectRooms.length);
-      const corridors = [];
-      const bands = bandsOf(rows);
-      const n = bands.length;
-      const usableH = rect.h - CORRIDOR * (n - 1);
-      if (usableH <= 0) return null;
-      // A BAND IS AS DEEP AS ITS DEEPEST ROOM NEEDS, not a fixed share of the
-      // working floor. Splitting the height evenly gave a band of one-table
-      // rooms the same depth as a band holding a fifteen-desk project, so its
-      // cells came out three times taller than wide and the plan gave up its
-      // two-band layout rather than draw the splinters.
-      const bandNaturalH = bands.map((band) =>
-        band.reduce((a, item) => Math.max(a, naturalOf(item.i).h), 1),
-      );
-      const totalNaturalH = bandNaturalH.reduce((a, b) => a + b, 0) || 1;
-      const bandHs = bandNaturalH.map((nh) => (usableH * nh) / totalNaturalH);
-      let bandY = rect.y;
-      bands.forEach((band, r) => {
-        const bandH = bandHs[r];
-        const y = bandY;
-        bandY += bandH + CORRIDOR;
-        // A BAND TAKES THE WIDTH ITS ROOMS NEED, NOT THE WIDTH IT IS OFFERED.
-        //
-        // Bands rarely hold the same number of rooms — five projects split
-        // three and two — and the narrower band used to stretch its rooms
-        // across the whole working floor anyway: on the demo floor that was two
-        // rooms at 53% bare carpet beside three at 34%. A band is now capped at
-        // the area its rooms may honestly fill (`ROOM_FILL_MAX`), and what it
-        // does not take is open floor at the end of the band.
-        //
-        // The cap is stated on the SHALLOWEST room in the band, because that is
-        // the one whose cell is furthest past what its furniture needs: every
-        // cell is `bandH` deep, so a room `h` deep is `bandH / h` over before
-        // the width is even shared out.
-        let naturalW = 0;
-        let shallowest = Infinity;
-        for (const item of band) {
-          const nat = naturalOf(item.i);
-          naturalW += nat.w;
-          shallowest = Math.min(shallowest, nat.h);
-        }
-        const w = Math.min(
-          rect.w,
-          Math.max(1, Math.min(naturalW, rect.w), (naturalW * ROOM_FILL_MAX * shallowest) / bandH),
-        );
-        const laid = layBand(band, { x: rect.x, y, w, h: bandH });
-        band.forEach((item, k) => {
-          cells[item.i] = laid[k];
-        });
-        if (rect.w - w > 0.01) {
-          corridors.push({ x: rect.x + w, y, w: rect.w - w, h: bandH, bay: true });
-        }
-        if (r < n - 1) corridors.push({ x: rect.x, y: y + bandH, w: rect.w, h: CORRIDOR });
-      });
-      let worst = 1;
-      for (const c of cells) {
-        if (!c || c.w <= 0 || c.h <= 0) return null;
-        worst = Math.max(worst, c.w / c.h, c.h / c.w);
-      }
-      return { cells, corridors, worst };
-    };
-
-    // Two bands is the plan. It only gives way when two bands would leave a
-    // room that is no longer a room — with three rooms on a wide floor,
-    // splitting them two-and-one leaves the lone one spanning the whole width
-    // — and then only if one band actually does better.
-    const two = attempt(rowCount);
-    const one = rowCount > 1 ? attempt(1) : null;
-    const pick =
-      two && two.worst <= PROJECT_ASPECT_LIMIT
-        ? two
-        : one && (!two || one.worst < two.worst)
-          ? one
-          : two || one;
-    if (!pick) return { cells: empty, corridors: [] };
-    return { cells: pick.cells, corridors: pick.corridors };
-  };
-
-  /**
-   * The rectangle the working floor's rooms want, at their natural sizes.
-   *
-   * THE BUILDING IS THE SIZE OF WHAT IS IN IT (WP-55). The floor used to be
-   * built to the STAGE's shape exactly — `W = targetAspect * H`, with `H`
-   * pinned to the service column — and the treemap then stretched whatever
-   * rooms there were to tile the remainder. With one active project that made
-   * an 88 x 67 room for a two-seat table: the plan was reporting the window's
-   * shape back to itself and calling the difference carpet. The working side is
-   * now measured from its rooms and the envelope summed from its parts; a small
-   * floor comes out small, and `fitToWindow` draws it larger.
-   *
-   * @param {number} rowCount
-   */
-  const workingShape = (rowCount) => {
-    const bands = bandsOf(rowCount);
-    if (!bands.length) return { w: 0, h: 0, rows: 0 };
-    // Circulation the working side keeps beyond its furniture: people walk
-    // between the desks, and the treemap spends it as margin inside each room
-    // rather than as corridor between them. Spread over both axes so the rect
-    // keeps the shape its rooms asked for.
-    const pad = Math.sqrt(1 + WORKING_HEADROOM);
-    let w = 0;
-    let h = 0;
-    for (const band of bands) {
-      let bandW = 0;
-      let bandH = 0;
-      for (const item of band) {
-        const n = naturalOf(item.i);
-        bandW += n.w;
-        bandH = Math.max(bandH, n.h);
-      }
-      // A band is as deep as its deepest room and as wide as its rooms laid
-      // side by side, both with the working side's circulation spread over
-      // them: people walk between the desks, and it is spent as margin inside
-      // each room rather than as corridor between them.
-      w = Math.max(w, bandW * pad);
-      h += bandH * pad;
-    }
-    return { w, h: h + CORRIDOR * (bands.length - 1), rows: bands.length };
-  };
-
-  /**
-   * The whole envelope implied by one service-column width: the service column,
-   * the spine, and the working floor its rooms need, side by side.
+   * FOUR CHOICES, AND EVERY ONE OF THEM IS HONEST (WP-59). WP-55 gave the
+   * search two — the service column's width and the number of working bands —
+   * and pinned the working side's width to the footprint its rooms happened to
+   * need. On a machine with one active repo that is about seventeen units, so
+   * the envelope came out very nearly square whatever the window was, and the
+   * rest of a 1920 x 1080 stage was ground. The other two are the strip's
+   * column count and the depth the room band is laid at; between them they are
+   * the difference between a 57 U building and a 90 U one, with nothing
+   * stretched and nothing invented.
    *
    * @param {number} sw service-column width
+   * @param {number} rowCount bands of project rooms
+   * @param {number} dirW the width the idle-projects strip is asking for
+   * @param {number} bandDepth multiple of the depth the rooms need
    */
-  const envelopeFor = (sw, rowCount) => {
+  const envelopeFor = (sw, rowCount, dirW, bandDepth) => {
     const measured = measureService(sw);
     const shape = workingShape(rowCount);
     const hasWorkingSide = projectRooms.length > 0 || directoryProjects.length > 0;
-    const workingW = hasWorkingSide ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
+    const bandH = projectRooms.length ? shape.h * bandDepth : 0;
+    const workingW = hasWorkingSide ? Math.max(shape.w, dirW, MIN_PROJECT_ROOM_W) : 0;
     const dirH = directoryHeight(directoryProjects.length, workingW);
-    const H = Math.max(measured.h, shape.h + dirH, MARGIN * 4);
+    const H = Math.max(measured.h, bandH + dirH, MARGIN * 4);
     const W = measured.w + CORRIDOR + workingW;
-    return { measured, W, H, dirH, rowCount: shape.rows || rowCount, workingW, shape };
+    // What of this envelope nobody stands on: the working side less its rooms
+    // and its strip. The service column fills its own side exactly (see below)
+    // and the spine is a route, so neither is open floor.
+    const filled = roomsAreaFor(rowCount, workingW, bandH) + workingW * dirH;
+    const open = Math.max(0, (workingW * H - filled) / Math.max(1e-6, W * H));
+    return {
+      measured,
+      W,
+      H,
+      dirH,
+      bandH,
+      open,
+      rowCount: shape.rows || rowCount,
+      workingW,
+      shape,
+    };
   };
 
-  // Pick the column width and the number of working bands whose floor draws
-  // largest on this stage. A floor is drawn at `min(stageW / W, stageH / H)`,
-  // and the stage's aspect is the target, so that is the same as minimising
-  // `max(W / targetAspect, H)`.
+  // ---- PICK THE ARRANGEMENT THAT IS THE SHAPE OF THE WINDOW.
   //
-  // Both are real choices again now that the envelope is not pinned to the
-  // stage's shape: a wider service column shelf-packs the lounge into fewer,
-  // shorter rows, and more bands make the working floor deeper and narrower.
-  // This is where the floor still takes the shape of the screen — by choosing
-  // between honest layouts, rather than by stretching one to fit.
+  // WP-55 minimised `max(W / targetAspect, H)`, which is "draw largest on this
+  // stage" and was the right objective while the envelope could only be one
+  // shape. It is the wrong one now: on a stage the building already fits into,
+  // every candidate is drawn at the same scale, so a floor half the width of
+  // the window scored exactly as well as one that filled it and the tie-break
+  // picked the smaller. WP-59 makes the aspect the objective and the open floor
+  // the price: the search takes the arrangement closest to the stage's shape
+  // whose open floor stays inside `OPEN_FLOOR_MAX`, and among the ones that are
+  // already close enough (`ASPECT_SETTLE`) it takes the tightest.
+  //
+  // Nothing here stretches a room. Every candidate is a real layout: a wider
+  // service column shelf-packs the lounge into fewer, shorter rows; more bands
+  // make the working floor deeper and narrower; more strip columns turn a
+  // seventeen-line board into a three-column one; a shallower band lays the
+  // same desks in a wider row.
   const maxRows = Math.max(1, Math.min(projectRooms.length, MAX_WORKING_ROWS));
+  const dirWidths = directoryProjects.length ? directoryWidths(directoryProjects.length) : [0];
+  const bandDepths = projectRooms.length ? BAND_DEPTHS : [BAND_STRETCH_MAX];
+  const settled = Math.log(1 + ASPECT_SETTLE);
   let best = null;
   for (let sw = OFFICE_MIN_W; sw <= SERVICE_MAX_W; sw += SERVICE_W_STEP) {
     for (let rows = 1; rows <= maxRows; rows++) {
-      const candidate = envelopeFor(sw, rows);
-      const cost = Math.max(candidate.W / targetAspect, candidate.H);
-      // Ties are common — the service column often sets `H` on its own. They
-      // are broken first by whichever layout leaves the least open floor INSIDE
-      // the building, because that is the defect, and only then by whichever
-      // envelope is closest to the stage's shape. Ground outside the building
-      // is not a defect; a bay inside it is.
-      const usable = Math.max(0, candidate.H - candidate.dirH);
-      const slack = Math.max(0, usable - Math.min(usable, candidate.shape.h * BAND_STRETCH_MAX));
-      const aspectErr = Math.abs(Math.log(candidate.W / candidate.H / targetAspect));
-      const better =
-        !best ||
-        cost < best.cost - 0.01 ||
-        (cost < best.cost + 0.01 &&
-          (slack < best.slack - 0.01 || (slack < best.slack + 0.01 && aspectErr < best.aspectErr)));
-      if (better) best = { ...candidate, cost, slack, aspectErr };
+      for (const dirW of dirWidths) {
+        for (const bandDepth of bandDepths) {
+          const candidate = envelopeFor(sw, rows, dirW, bandDepth);
+          const aspectErr = Math.abs(Math.log(candidate.W / candidate.H / targetAspect));
+          // How far past `ASPECT_SETTLE` this shape is. Inside that band,
+          // zero: a floor already the shape of the window has nothing left to
+          // buy, and what it competes on is how little of itself is empty.
+          const miss = Math.max(0, aspectErr - settled);
+          // An arrangement that would turn a quarter of the building into open
+          // floor is a hangar, not an office. It is ranked below every legal
+          // one and kept only in case nothing is legal.
+          const illegal = candidate.open > OPEN_FLOOR_MAX ? 1 : 0;
+          const scored = { ...candidate, aspectErr, miss, illegal };
+          if (!best || better(scored, best)) best = scored;
+        }
+      }
     }
   }
-  const chosen = best || envelopeFor(OFFICE_MIN_W, 1);
+  const chosen = best || envelopeFor(OFFICE_MIN_W, 1, 0, BAND_STRETCH_MAX);
 
   office = chosen.measured.office;
   lounge = chosen.measured.lounge;
@@ -552,8 +421,11 @@ export function buildPlan(projects, agents, opts = {}) {
    * says so with open circulation rather than painting more carpet nobody
    * stands on. Carpet with nothing on it is the defect; ground is not.
    */
-  let bandH = projectRooms.length ? chosen.shape.h * BAND_STRETCH_MAX : 0;
+  let bandH = chosen.bandH;
   for (let pass = 0; pass < 8; pass++) {
+    // Rebuilding a room changes what its furniture needs, so the deal the
+    // bands were cut from is stale the moment the previous pass touched one.
+    invalidateBands();
     W = workingX + workingW;
     dirH = directoryHeight(directoryProjects.length, workingW);
     bandH = Math.min(bandH, Math.max(1, H - dirH));
@@ -845,7 +717,14 @@ export function buildPlan(projects, agents, opts = {}) {
 export { resolveAnchors, tableSizesFor } from './plan-anchors.js';
 export { shelfPack, squarify, tileRows } from './plan-packing.js';
 export { formatTokens, payrollLine } from './plan-rooms.js';
-export { DIRECTORY_MAX_H, PLATE_BAND, U } from './plan-units.js';
+export {
+  ASPECT_TOLERANCE,
+  DIRECTORY_MAX_H,
+  OPEN_FLOOR_MAX,
+  PLATE_BAND,
+  ROOM_WIDTH_STRETCH_MAX,
+  U,
+} from './plan-units.js';
 export {
   GONE_HOME_DAYS,
   floorPopulation,
