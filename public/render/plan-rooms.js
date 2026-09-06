@@ -31,8 +31,10 @@ import {
   PLANT_GAP,
   PLANT_SIZE,
   PLATE_BAND,
+  ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
   RUG_MAX_OVER_CLUSTER,
+  RUG_MAX_OVER_COLUMN,
   RUG_ROOM_INSET,
   SEAT_PITCH,
   TABLE_GAP,
@@ -100,14 +102,28 @@ export function payrollLine(project) {
  * @param {number} count
  * @param {number} width the strip's outer width, in units
  */
-export function directoryGrid(count, width) {
+export function directoryGrid(count, width, wantCols = 0) {
   if (count <= 0) return { cols: 0, rows: 0 };
   const inner = Math.max(0, width - MARGIN * 2);
   // As many columns as fit a readable line, and then as many rows as those
   // columns need. Past the row cap the columns narrow and the names ellipsise
   // instead — a repo you cannot see is a repo you cannot start an agent in, so
   // a project is never dropped whatever the count.
-  let cols = Math.max(1, Math.floor(inner / DIRECTORY_COL_W));
+  const fits = Math.max(1, Math.floor(inner / DIRECTORY_COL_W));
+  // FEWER COLUMNS THAN FIT, WHEN THE STRIP IS ASKED FOR THEM (WP-59c).
+  //
+  // The same lines in a taller board, and it costs nothing: the column count
+  // is not a property of the width, it is a choice inside it, and a wider
+  // column is a more readable line rather than a worse one (`colW` below is
+  // capped at `DIRECTORY_COL_MAX_W` either way). Step (b) of `plan.js`'s fill
+  // order spends it — once the rooms are as deep as they may honestly be and
+  // the working side is still short of its height, the strip takes the next
+  // of it by standing its lines up instead of laying them out.
+  //
+  // Never MORE than fit: a column narrower than `DIRECTORY_COL_W` is a line
+  // whose name is ellipsised to nothing, which is the one thing this strip
+  // exists not to do.
+  let cols = wantCols > 0 ? Math.max(1, Math.min(fits, Math.round(wantCols))) : fits;
   let rows = Math.ceil(count / cols);
   if (rows > DIRECTORY_MAX_ROWS) {
     rows = DIRECTORY_MAX_ROWS;
@@ -117,8 +133,8 @@ export function directoryGrid(count, width) {
 }
 
 /** How many rows of lines a directory of `count` projects needs in `width`. */
-export function directoryRows(count, width) {
-  return directoryGrid(count, width).rows;
+export function directoryRows(count, width, wantCols = 0) {
+  return directoryGrid(count, width, wantCols).rows;
 }
 
 /**
@@ -173,9 +189,37 @@ export function directoryWidths(count) {
 }
 
 /** The height a directory of `count` projects takes in `width`. */
-export function directoryHeight(count, width) {
-  const rows = directoryRows(count, width);
+export function directoryHeight(count, width, wantCols = 0) {
+  const rows = directoryRows(count, width, wantCols);
   return rows === 0 ? 0 : PLATE_BAND + rows * DIRECTORY_LINE_H + DIRECTORY_PAD;
+}
+
+/**
+ * Every column count the strip could honestly be laid in at `width`, widest
+ * board first — which is shortest first (WP-59c).
+ *
+ * The ladder step (b) of `plan.js`'s fill order walks. One entry per DISTINCT
+ * row count: asking for four columns and for five is the same board whenever
+ * both round to the same number of rows, and a search that cannot tell them
+ * apart would rather have the wider column.
+ *
+ * @param {number} count idle repos
+ * @param {number} width the strip's outer width, in units
+ * @returns {number[]} column counts, most first
+ */
+export function directoryColumns(count, width) {
+  if (count <= 0) return [0];
+  const most = directoryGrid(count, width).cols;
+  /** @type {number[]} */
+  const out = [];
+  let lastRows = 0;
+  for (let cols = most; cols >= 1; cols--) {
+    const rows = directoryGrid(count, width, cols).rows;
+    if (rows === lastRows) continue;
+    lastRows = rows;
+    out.push(cols);
+  }
+  return out;
 }
 
 /**
@@ -199,10 +243,13 @@ export function directoryHeight(count, width) {
  *
  * @param {{id:string,name:string,sessionCount:number,lastActivityAt:number}[]} projects
  * @param {{w:number,h:number}} fit the strip the packer has reserved
+ * @param {number} [wantCols] the column count the envelope search settled on
+ *   (WP-59c). The SAME number `directoryHeight` was asked for, or the strip is
+ *   built to a different board from the one the building was sized around.
  * @returns {Room}
  */
-export function buildDirectory(projects, fit) {
-  const grid = directoryGrid(projects.length, fit.w);
+export function buildDirectory(projects, fit, wantCols = 0) {
+  const grid = directoryGrid(projects.length, fit.w, wantCols);
   const rows = Math.max(1, grid.rows);
   // The SAME column count the strip was measured with. Deriving it back from
   // the row count instead put six columns in a strip one column wide, which is
@@ -281,6 +328,26 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   const sizes = tableSizesFor(Math.max(1, deskCount));
   const blocks = sizes.map((s) => tableBlockSize(s));
   const flow = flowBlocks(blocks, TABLE_GAP, targetAspect);
+
+  // THE WALL FURNITURE SPREADS TO THE WALL IT IS ON (WP-59c).
+  //
+  // A room the service column made deep — see `plan.js`'s fill order, step
+  // (a) — has more wall than its desks asked for, and a 5.2 U whiteboard at
+  // the top of a 40 U wall is a postage stamp with thirty units of nothing
+  // under it. The board and the shelf are the two things in here that are
+  // ON a wall and can honestly take more of it, so they do; the rug takes the
+  // floor (below), and the planting takes the corners it always did, which is
+  // already a function of the room's size. What none of them do is multiply:
+  // there is one board, one shelf and one rug however tall the room gets.
+  //
+  // Measured off the CELL rather than off the finished room, because the
+  // finished room is what this function is deciding. `run` is the wall from
+  // under the plate to the floor; the fixtures leave the last of it for the
+  // corner planting.
+  const wallRun = Math.max(0, (fit && fit.h > 0 ? fit.h : 0) - PLATE_BAND);
+  const wallRoom = Math.max(0, wallRun - FIXTURE_TOP - CORNER_PLANT_INSET - 2.4);
+  const shelfH = clamp(wallRun * 0.22, 3.6, Math.max(3.6, wallRoom * 0.45));
+  const boardH = clamp(wallRun * 0.4, WHITEBOARD_H, Math.max(WHITEBOARD_H, wallRoom));
 
   let remaining = Math.max(1, deskCount);
   sizes.forEach((seatCount, i) => {
@@ -393,7 +460,7 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
       kind: 'shelf',
       id: 'shelf',
       w: 1.2,
-      h: 3.6,
+      h: shelfH,
       angle: 0,
       x: firstTable.x,
       y: firstTable.y,
@@ -408,7 +475,8 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
         angle: 0,
         x: firstTable.x,
         y: firstTable.y,
-        anchor: { type: 'wall', side: 'E', along: FIXTURE_TOP + 3.6 + 0.8, inset: 0.3 },
+        // Under the shelf, whatever the shelf turned out to be.
+        anchor: { type: 'wall', side: 'E', along: FIXTURE_TOP + shelfH + 0.8, inset: 0.3 },
       });
     }
     // The project's whiteboard, on the WEST wall facing the room. Every
@@ -420,7 +488,7 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
       // Deeper than a board is thick: the rect has to contain the face the
       // painter projects into the room (see backdrop.js's `whiteboard` case).
       w: 2.4,
-      h: WHITEBOARD_H,
+      h: boardH,
       angle: 0,
       x: firstTable.x,
       y: firstTable.y,
@@ -496,10 +564,14 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
     const clusterW = cluster.w + 1.6;
     const clusterH = cluster.h + 1.6;
     const rugW = clamp(w - RUG_ROOM_INSET * 2, clusterW, clusterW * RUG_MAX_OVER_CLUSTER);
+    // Deeper on a room the service column made deep (WP-59c). Nothing ever
+    // made a room WIDER than the plan chose, so the width keeps the old
+    // ceiling and only the depth gets the looser one.
+    const stretched = h > naturalH * ROOM_HEIGHT_STRETCH_MAX + 0.01;
     const rugH = clamp(
       h - PLATE_BAND - RUG_ROOM_INSET * 2,
       clusterH,
-      clusterH * RUG_MAX_OVER_CLUSTER,
+      clusterH * (stretched ? RUG_MAX_OVER_COLUMN : RUG_MAX_OVER_CLUSTER),
     );
     props.unshift({
       kind: 'rug',

@@ -8,6 +8,30 @@
 
 ### Fixed
 
+- **The working side fills its own height, instead of ending in a bare block.** The building took
+  the shape of the window and the rooms filled the row they were laid in, and the floor _under_
+  them was still nobody's problem: on a real floor at 1920x1080, the project rooms across the top
+  of the working side, the idle strip beneath them, and then an open-plan block of about 40% of
+  the building running to the bottom edge. The service column sets the building's height — a
+  reception with nine waiting above a lounge holding twenty-three benched agents is seventy units
+  tall — and nothing beside it grew to meet that. The open-floor budget is measured **on the
+  working side against itself** now, and the side fills itself in a fixed order before any of it
+  is drawn as open plan: the **rooms grow deeper** first, past the old 1.6x depth cap where the
+  column forced it, with the rug, the planting, the whiteboard and the shelf spreading into the
+  space and never a second row of desks; then the **idle strip stands its lines up** into fewer,
+  taller columns, up to a quarter of the side; then the **lounge packs denser** — closer clusters,
+  benched agents a body apart — so the column comes down to meet the rooms rather than dictating
+  an empty lot beside them. The reception is not touched, and a lounge is only ever packed when it
+  buys the fill. On the owner's floor the working side goes from **63% open to 43%**, and across
+  the fifteen test populations at three window sizes from a worst of 90% to 86%, or **75% to 67%**
+  on any floor with a room in it. The building covers **100% of the long axis** of a 1920x1080
+  window where several floors were at 77–85%. A room the column stretched may be 45% bare carpet
+  instead of 35% — bought deliberately, because the alternative was a bare block three times the
+  room's own area — and every other bound is unchanged. It does **not** reach the 10% it aims at
+  on any real floor, and `docs/DEVIATIONS.md` §141 says why in numbers: four repos with one desk
+  each and a fourteen-line board cannot fill the height a full lounge asks for, and the remaining
+  levers all cost either the window's shape or a room. `docs/DEVIATIONS.md` §141.
+
 - **The rooms fill the working floor, side by side.** The building took the shape of the window
   and filled it, and then drew the rooms with people in them down the left of it: on a real floor
   at 1920x1080, three active repos dealt into rows of two and one, each about 40% of the working

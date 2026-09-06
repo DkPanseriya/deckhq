@@ -12276,3 +12276,217 @@ working band with no bay at the end of it, the idle strip immediately under
 them, and the open plan below both. On the owner's real floor at 1920 x 1080 the
 same picture: three rooms across, the strip under them, the building at 80% of
 the window and the service column at 37.6% of it.
+
+## 141. WP-59c — the lounge set the height and nothing beside it grew to meet it
+
+§139 made the building the shape of the window and fill it. §140 made the rooms
+fill the row they are laid in. Neither made the WORKING SIDE fill its own
+height, and the owner's floor at 1920 x 1080 shows exactly what that looks
+like: three project rooms across the top of the working side, the idle strip
+under them, and then a bare open-plan block of about 40% of the building's area
+running to the bottom edge. Every bound the plan had was satisfied. §140 wrote
+in this file that the block "may not survive his eye". It did not. His own
+words were "not full screen wide and very cramped".
+
+**The cause is one sentence.** THE SERVICE COLUMN SETS THE BUILDING'S HEIGHT.
+A reception with nine waiting and a lounge holding twenty-three benched agents
+is seventy-odd units tall; the four project rooms and the fourteen-line board
+beside it want about thirty-five between them; and nothing in §139 or §140 made
+the working side do anything about the difference. `OPEN_FLOOR_MAX` bounds a
+BAY beside a row and says nothing about the floor UNDER it. `FLOOR_OPEN_MAX`
+bounds the whole envelope, where a service column that is never open floor pays
+for a working side that is half empty — which is the defect §140 named, one
+axis over. This is the third statement of the same budget.
+
+### `WORKING_OPEN_MAX`, and the order the side may fill itself in
+
+**0.10, measured on the working side against itself** — the rooms and the strip
+against the whole rectangle from the spine to the building line. The order is
+`fillOrder` in `plan-envelope.js`, and the order IS the design: everything that
+is content goes first, and open plan is what is left when the content has run
+out.
+
+| step | lever | bound |
+|---|---|---|
+| **(a)** | the rooms grow DEEPER, past `ROOM_HEIGHT_STRETCH_MAX` where the column forces it, and `buildProjectRoom` re-lays the furniture into the depth | `ROOM_FILL_COLUMN_MAX`, 42% bare carpet against a 45% acceptance |
+| **(b)** | the strip stands its lines up: FEWER columns, more rows, the same repos | `DIRECTORY_SIDE_MAX`, 25% of the side |
+| **(c)** | the service column comes DOWN to meet them, by packing the lounge denser | `LOUNGE_PACKS`, to half the gaps and one body of standing room |
+| **(d)** | and only then open plan | `WORKING_OPEN_MAX` |
+
+**(a) is an AREA bound and not an axis one, and that is the whole of why it
+works.** §140's `ROOM_HEIGHT_STRETCH_MAX` pinned a cell at 1.6x its furniture's
+depth, which on a floor whose column is twice as tall as its rooms binds long
+before anything is full. The depth ceiling is `bandDepthCeiling` now — the exact
+inverse of `bandWidthFor`, so the two cannot disagree about the same room — and
+what stops it is the bare carpet. `ROOM_WIDTH_STRETCH_MAX` is untouched at 1.6:
+nothing ever made a room wider than the plan chose.
+
+**The ten points are bought, and they are spent on furniture.** A room the
+column stretched has more wall than its desks asked for, so the whiteboard and
+the shelf grow with it — a 5.2 U board at the top of a forty-unit wall is a
+postage stamp — the rug takes the depth up to `RUG_MAX_OVER_COLUMN` rather than
+`RUG_MAX_OVER_CLUSTER`, and the corner planting goes to the corners as it
+always did. What it never does is deal a SECOND ROW OF DESKS: `settle` caps the
+aspect it flows the tables to at the depth the plan would have chosen, because
+desks equal agents at desks (`08` B6) and inventing one to fill a lounge's
+height is the oldest defect in `plan-rooms.js` wearing a new hat.
+
+**(c) is a search axis rather than a step of `fillOrder`**, because it changes
+the height the other two are measured against. `better` gains two ranks:
+`spare` — how far past `WORKING_OPEN_MAX` the side is — and then the LOOSEST
+lounge that does the job, so a lounge is only ever packed to fill the floor
+beside it. Both sit BELOW the window's shape and below `SERVICE_COLUMN_MAX`,
+and both deliberately: above the shape they would buy fill with the window,
+which is the regression §139 exists to have fixed; above `cramped` they would
+buy it by making the working side NARROWER, which is a fat service column and
+is the picture §140 removed. The ladder is walked loosest first and stops the
+moment an arrangement fills its side, so a floor that was never short of height
+is laid exactly as it was before this package. The office is not touched at any
+rung: it is the room the product is about, and its queue is not a density
+problem.
+
+### What it did not do, said plainly
+
+**IT DOES NOT REACH 10% ON ANY REAL FLOOR, AND THE REASON IS ARITHMETIC RATHER
+THAN EFFORT.** On the owner's machine at 1920 x 1080, after all four levers:
+
+- the rooms are at 42% bare carpet — `bandDepthCeiling`, saturated;
+- the strip is thirteen repos in two columns of seven, 22% of the side against
+  the 25% cap, and the next rung down its ladder is one column of thirteen at
+  35%;
+- the lounge is on `LOUNGE_PACKS`'s last rung, 0.5;
+- and 43% of the working side is still open plan.
+
+That working side is 67 x 72 U. Its rooms may honestly hold 1,790 U² of it and
+its strip 1,050, which is 59% between them; the other 41% is the difference
+between a lounge holding twenty-three benched agents and four repos with one
+desk each in them. Closing it would need one of three things and this package
+may have none of them: a bare-carpet bound past 45%, a strip past a quarter of
+the side, or a building 1.2:1 on a 1.78:1 window — which is `FILL_MIN_LONG` at
+67%, and §139's coverage targets stand. The number is what the contents allow.
+
+So the test asserts the bound WITH ITS ESCAPE, in §140's own shape: **the
+working side is filled, or everything on it is already as large as it may be.**
+A room at its cap stops the band, because the cap binds on the shallowest room
+in it and its deeper neighbours are under-filled by exactly as much as they are
+deeper. A strip is on the last rung its allowance reaches, and the ladder is
+rungs rather than lines — eight repos go 2, 3, 4 and then 8 rows, with nothing
+in between, so a board well under its allowance can still be as tall as it may
+be. A lounge is at its densest unless the building is already the window's
+shape, which is the one thing ranked above the fill. A floor that fails it is a
+floor with a lever still up, and there is no third answer in which the working
+side is half empty and the plan had nothing it could have done.
+
+### Measured
+
+The owner's floor is his real one, read from a daemon started on this branch
+with `DECKHQ_STATE_DIR` pointed at a copy of `~/.deckhq`; the rest are
+`floor-integrity.test.mjs`'s fifteen populations, one stage each here and all
+three in the test. `open` is the working side's own open floor; `cover` is
+width / height of the stage. `pack` is the lounge rung taken, `(a)` whether the
+column stretched the rooms.
+
+| floor | stage | before | open | cover | after | open | cover | pack | (a) |
+|---|---|---|---|---|---|---|---|---|---|
+| **owner's** | 1600x1000 | 134x83 (1.61:1) | **62%** | 100% / 100% | 132x79 (1.67:1) | **48%** | 96% / 100% | 0.5 | yes |
+| **owner's** | 1920x1080 | 136x76 (1.79:1) | **63%** | 100% / 100% | **134x72 (1.86:1)** | **43%** | 96% / 100% | 0.5 | yes |
+| **owner's** | 2560x1440 | 136x76 (1.79:1) | **63%** | 100% / 100% | 134x72 (1.86:1) | **43%** | 96% / 100% | 0.5 | yes |
+| empty | 1600x1000 | 50x55 (0.92:1) | 0% | 100% / 57% | 50x55 (0.92:1) | 0% | 100% / 57% | 1 | no |
+| empty, 60 waiting | 1920x1080 | 50x65 (0.77:1) | 0% | 100% / 43% | 50x65 (0.77:1) | 0% | 100% / 43% | 1 | no |
+| empty, 3 benched | 2560x1440 | 50x59 (0.85:1) | 0% | 100% / 48% | 50x59 (0.85:1) | 0% | 100% / 48% | 1 | no |
+| `[1]` | 1920x1080 | 67x55 (1.22:1) | 65% | 100% / 69% | 65x52 (1.24:1) | **52%** | 100% / 70% | 0.5 | yes |
+| `[1]`, 1 waiting | 1920x1080 | 67x55 (1.22:1) | 65% | 100% / 69% | 65x52 (1.24:1) | **52%** | 100% / 70% | 0.5 | yes |
+| `[3,1]` | 1920x1080 | 84x59 (1.42:1) | 68% | 100% / 80% | 84x55 (1.51:1) | **54%** | 100% / **85%** | 0.5 | yes |
+| `[5]` | 1920x1080 | 70x59 (1.19:1) | 64% | 100% / 67% | 70x55 (1.26:1) | **50%** | 100% / **71%** | 0.5 | yes |
+| `[8,2]` | 1920x1080 | 90x59 (1.52:1) | 64% | 100% / 85% | 90x55 (1.62:1) | **50%** | 100% / **91%** | 0.5 | yes |
+| `[21,5,3,1]` | 1920x1080 | 102x58 (1.74:1) | 29% | 100% / 98% | 104x56 (1.86:1) | **14%** | 95% / **100%** | 0.65 | yes |
+| twelve rooms | 1920x1080 | 152x84 (1.81:1) | 50% | 98% / 100% | 150x81 (1.86:1) | **32%** | 96% / 100% | 0.5 | yes |
+| `[1]` + 3 idle | 1920x1080 | 100x59 (1.70:1) | 75% | 100% / 95% | 96x55 (1.74:1) | **67%** | 100% / **98%** | 0.5 | yes |
+| `[2,1]` + 8 idle | 1920x1080 | 111x76 (1.46:1) | 72% | 100% / 82% | **124x71 (1.74:1)** | **60%** | 100% / **98%** | 0.5 | yes |
+| no rooms, 2 idle | 1920x1080 | 89x59 (1.51:1) | 90% | 100% / 85% | 92x55 (1.67:1) | 86% | 100% / **94%** | 0.5 | no |
+| reference | 1920x1080 | 107x78 (1.37:1) | 74% | 100% / 77% | **122x75 (1.62:1)** | **67%** | 100% / **91%** | 0.65 | yes |
+| three | 1920x1080 | 96x55 (1.74:1) | 51% | 100% / 98% | 96x54 (1.77:1) | **35%** | 100% / **100%** | 0.5 | yes |
+
+Over all sixteen floors at all three stages: worst working-side open floor
+**86%**, and **67%** on any floor with a room in it, down from 90% and 75%;
+worst whole-floor open **40%**, unchanged, because the floor it is worst on has
+no rooms at all to grow; worst bare carpet **42%**, inside the 45% the looser
+bound allows and reached only where `plan.working.roomsStretched` says the
+column made it; worst coverage **95%** of the short side and **100%** of the
+long, against §139's 88% and 80%. Coverage is BETTER nearly everywhere and
+worse nowhere that matters: five points of the short axis on four floors bought
+back between six and twenty-one points of the long one.
+
+`no rooms, 2 idle` is the honest floor of the set, and worth naming. A
+reception, a lounge and a two-line board have no arrangement that fills a
+column; the escape clause carries it exactly — no rooms to stretch, a strip
+already in one column of two, and a lounge on its last rung.
+
+### `plan.working`, and a second `plan-*` module
+
+`buildPlan` returns a `working` record: the side's width, its open fraction,
+whether the column stretched its rooms, the strip's column count, the lounge
+rung, and the units of open plan under both. It is a RECORD and not a claim —
+`floor-integrity.test.mjs` re-derives every number from `plan.rooms` and
+asserts they agree, because a plan that could report a full working side while
+drawing an empty one would be a worse defect than the one this package fixes.
+It is also the only way to tell a column-forced stretch from a chosen one: a
+room 1.54x its natural depth is inside `ROOM_HEIGHT_STRETCH_MAX` and past
+`ROOM_FILL_MAX` at the same time, so the geometry alone cannot say which bound
+it is under.
+
+The search's two new ranks took `plan.js` past §122's 900-line ceiling for the
+second time; §139 was the first. `plan-search.js` is §131's **shape 1, pure
+functions**, because that is what a comparator is: `score` turns one candidate
+into the numbers the order is expressed over and `better` is the order, and
+neither reads a room, a plan or a closure. `fillOrder` went the other way, into
+`plan-envelope.js`, which is where the working side already lives — that module
+now imports `plan-rooms.js` for the strip's ladder, which is the one thing it
+knows about the strip and is why its header no longer claims to know nothing
+about it. `plan.js` is 885 lines.
+
+### Two existing tests moved, and one existing helper
+
+`no room is more than 35% bare carpet` is now
+`no room is more than 35% bare carpet, or 45% where the column stretched it`,
+and it names the case it used in its own failure message. `a room is never
+given floor to chase the shape of a window` states the depth bound the same
+way. Both read `plan.working.roomsStretched` rather than guessing, and the new
+test asserts the record against the floor in both directions: a plan that says
+it did not stretch its rooms may not hold one past `ROOM_FILL_MAX`, and one
+that says it did must hold one.
+
+**`couldTakeShape` gained a second necessary condition, and it is a defect this
+package would otherwise have caused.** §139's exemption asks whether a floor's
+contents could cover a stage-shaped envelope `H * stageAspect` wide. WP-59c
+makes buildings SHORTER — the rooms grow into the column and the lounge comes
+down to meet them — so `H` falls, `wantW` falls with it, and floors that were
+exempt on area stopped being exempt while being no wider and no better shaped
+than before: `[3,1]` went from 1.42:1 to 1.51:1 on a 1.78:1 window and started
+FAILING a test it had passed at 1.42. The extra width has to come from
+somewhere, and there are exactly two places: the service column, which stops at
+`OFFICE_MAX_W`, and the strip's column count, which a floor with no idle repos
+does not have. A floor holding both at their stop is as wide as it will ever
+be, whatever its area says. `honestArea` is the same argument inside the first
+condition — floor a room was given because the column was tall, or a lounge was
+padded to fill one, is not coverage that could have been width.
+
+No `INVARIANT:` test was touched and nothing was deleted.
+
+### Goldens
+
+All seven regenerated. Read back at 1600 x 1000:
+
+`three.png` shows the three rooms across the working band at about twice the
+depth they had, each with a rug and a whiteboard grown to match, the strip
+immediately under them, and the open plan below both. Nothing is clipped at any
+edge and no room has a second row of desks in it.
+
+`reference.png` shows the case §140 shipped on purpose and this package did not
+change: ONE room, a nineteen-line board, and a bay beside the room that is
+about half the row — because one two-desk project cannot fill a working side as
+wide as a two-column board needs, and giving it that width anyway is the
+bare-carpet defect §106 removed. What DID change is the room's depth, which now
+runs the whole band rather than a third of it, and the strip under it, which
+stands its lines in two columns of ten. The building went from 1.37:1 to 1.52:1
+on that stage and from 86% to 95% of its width.

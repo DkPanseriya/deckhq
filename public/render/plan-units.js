@@ -194,6 +194,22 @@
  * @property {Set<string>} hidden agent ids the plan draws nobody for
  * @property {Set<string>} goneHome the subset of `hidden` that went home
  * @property {Room|null} directory the idle-projects strip, when there is one
+ * @property {WorkingSide} working what the working side did with the height
+ *   the service column gave it (WP-59c)
+ */
+
+/**
+ * @typedef {object} WorkingSide
+ * @property {number} x the working side's left edge, in units
+ * @property {number} w its width
+ * @property {number} open the fraction of it nobody stands on
+ * @property {boolean} roomsStretched (a) — the rooms were made deeper than the
+ *   plan would have chosen, to meet the service column
+ * @property {number} stripCols (b) — columns the idle strip was laid in, `0`
+ *   when there is no strip
+ * @property {number} loungePack (c) — how tightly the lounge was packed; `1`
+ *   is the room untouched
+ * @property {number} openH (d) — the open plan left under both, in units
  */
 
 /** Pixels per unit at scale 1. */
@@ -308,6 +324,68 @@ export const ROOM_WIDTH_STRETCH_MAX = 1.6;
 export const ROOM_HEIGHT_STRETCH_MAX = 1.6;
 
 /**
+ * The most of the WORKING SIDE that may be open floor (WP-59c).
+ *
+ * The third statement of the same budget, and the first one measured where
+ * the eye actually reads it. §139 stated it over the whole envelope, which
+ * the service column — never open floor, and half the building — paid for.
+ * §140 stated it over a ROW of rooms, which caught the bay beside them and
+ * said nothing at all about the floor UNDER them: on the owner's machine the
+ * three rooms filled their row, the strip filled its width, and the bottom
+ * 40% of the building was one bare open-plan block, because the lounge set
+ * the height and nothing on the working side grew to meet it. Every bound the
+ * plan had was satisfied. He called it "not full screen wide and very
+ * cramped", and §140 admitted in writing that the block "may not survive his
+ * eye". It did not.
+ *
+ * So: the working side, against itself, rooms and strip against its whole
+ * rectangle. `FLOOR_OPEN_MAX` and `OPEN_FLOOR_MAX` are both still stated and
+ * both still asserted; this is the one that shapes the picture now, and the
+ * order the plan is allowed to fill it in is `plan.js`'s `envelopeFor` —
+ * rooms first, then the strip, then a denser lounge, and only then this.
+ */
+export const WORKING_OPEN_MAX = 0.1;
+
+/**
+ * The bare-carpet bound for a room the SERVICE COLUMN made tall (WP-59c).
+ *
+ * §106's 35% is the bound on a room the plan chose to stretch, and it stands.
+ * This is the bound on a room that was stretched by something outside the
+ * working side altogether: a lounge holding twenty-four benched agents is
+ * seventy units tall, and the rooms beside it are given that height whether
+ * their desks want it or not. The choice there is between a room 45% of whose
+ * floor is clear — a large room, which is a thing offices have — and a room of
+ * the right size with a bare open-plan block under it three times its area,
+ * which is the picture this package exists to remove.
+ *
+ * `1 / 0.58` — 42%, with three points in hand against the 45% the integrity
+ * test asserts, exactly as `ROOM_FILL_MAX` keeps five against §106's 35%. A
+ * cap set at the number the test checks is a cap every floor lands exactly on,
+ * and then one rounding away from red.
+ *
+ * It applies ONLY where the column forced the depth, never where
+ * the search merely preferred it, and `buildProjectRoom` re-lays the room's
+ * furniture to the space rather than leaving the desks adrift in it — the rug
+ * grows, the plants take the corners, the whiteboard and the shelf spread down
+ * the walls. What it never does is deal a second row of desks: desks equal
+ * agents at desks (`08` B6), and inventing one to fill a room would be the
+ * oldest defect in this file wearing a new hat.
+ */
+export const ROOM_FILL_COLUMN_MAX = 1 / 0.58;
+
+/**
+ * The most of the working side's height the idle strip may take (WP-59c).
+ *
+ * Step (b) of the fill order. Once the rooms are as deep as they may honestly
+ * be and the working side is still short, the strip takes the next of it — by
+ * using FEWER columns and more rows, which is the same lines in a taller
+ * board and costs nothing but the shape of the board. It is capped because a
+ * strip is a strip: past a quarter of the working side, seventeen idle repos
+ * start to read as the subject of the floor rather than as its footnote.
+ */
+export const DIRECTORY_SIDE_MAX = 0.25;
+
+/**
  * The most of the building the service column may take, once the working band
  * holds more than one room (WP-59b).
  *
@@ -419,7 +497,12 @@ export const DIRECTORY_MAX_H = PLATE_BAND + DIRECTORY_MAX_ROWS * DIRECTORY_LINE_
  */
 export const FIXTURE_TOP = 0.6;
 
-/** How much of a project room's west wall its whiteboard takes. */
+/**
+ * How much of a project room's west wall its whiteboard takes, at the least.
+ * It grows with the wall (WP-59c) — a 5.2 U board at the top of a wall the
+ * service column made forty units tall is a postage stamp with nothing under
+ * it — and `plan-rooms.js` leaves the last of the wall for the corner planting.
+ */
 export const WHITEBOARD_H = 5.2;
 
 /** How far a corner plant sits from the two walls it stands between. */
@@ -442,6 +525,19 @@ export const RUG_ROOM_INSET = 4;
  * is what the rest of this package does.
  */
 export const RUG_MAX_OVER_CLUSTER = 1.6;
+
+/**
+ * The same ceiling for a room the SERVICE COLUMN made deep (WP-59c).
+ *
+ * "Make the room smaller" is the honest answer to a room the plan CHOSE to
+ * stretch, and it is not available for one the column stretched: the building
+ * is as tall as its lounge, the room beside it is given that height, and the
+ * choice is between a rug under the desks and bare carpet under them. So the
+ * rug is allowed further down the depth axis only, and only there — the width
+ * still stops at `RUG_MAX_OVER_CLUSTER`, because nothing ever made the room
+ * wider than the plan chose.
+ */
+export const RUG_MAX_OVER_COLUMN = 2.6;
 
 /**
  * Clear floor a project room keeps between its desk cluster and its walls.
@@ -503,6 +599,30 @@ export const OFFICE_SURPLUS_SHARE = 0.55;
 export const LOUNGE_GAP = 2;
 export const MINGLE_PITCH = 2.4;
 export const MINGLE_ROW = 2.4;
+
+/**
+ * How close the lounge's furniture may be pushed when the working side beside
+ * it is short of height (WP-59c, step (c) of the fill order).
+ *
+ * A LOUNGE MAY NOT DICTATE AN EMPTY LOT BESIDE IT. The service column sets the
+ * building's height, and the height a lounge asks for is a function of how
+ * loosely its clusters are shelf-packed and how far apart the benched agents
+ * stand — neither of which is furniture, and both of which an office adjusts
+ * without anybody calling it cramped. So when the rooms and the strip together
+ * still cannot reach the column's height, the column comes down to meet them:
+ * the ladder below is the multiplier on `LOUNGE_GAP` and on the standing band's
+ * pitch, tried loosest first, and the search takes a denser lounge only when it
+ * actually buys the fill (see `better`). The office is not touched at all — it
+ * is the room the product is about, and its queue is not a density problem.
+ *
+ * The pitch has its own floor because the gap has a meaning the gap-multiplier
+ * does not know: `MINGLE_*_MIN` is one body and the clear width beside it, so
+ * two benched agents at the densest setting stand next to each other rather
+ * than inside each other.
+ */
+export const LOUNGE_PACKS = Object.freeze([1, 0.8, 0.65, 0.5]);
+export const MINGLE_PITCH_MIN = 2;
+export const MINGLE_ROW_MIN = 2;
 
 /** Most games tables the lounge will ever lay out. */
 export const LOUNGE_MAX_GAMES = 5;
