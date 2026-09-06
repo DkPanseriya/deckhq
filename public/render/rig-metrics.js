@@ -126,12 +126,24 @@ export const ICON_MIN_PX = LEGIBILITY_MIN_PX.icon;
 export const BADGE_MIN_PX = LEGIBILITY_MIN_PX.badge;
 
 /**
+ * The largest a name label is ever set (WP-59).
+ *
+ * A label is an identifier, not a headline: 11 px is the floor §6.2 states and
+ * 14 px is a comfortable UI size, and between them is the whole useful range.
+ * It needed saying once the fit ceiling rose to a 72 px body — `u * 0.62` at
+ * that scale is nearly 18 px, which puts a session's name in larger type than
+ * the room plate above it and turns a floor of eight agents into eight
+ * captions.
+ */
+export const LABEL_MAX_PX = 14;
+
+/**
  * The point size a name label is set in at character scale `u`. Exported so
  * the legibility test measures the size the rig actually uses.
  * @param {number} u
  */
 export function labelFontSize(u) {
-  return Math.max(LABEL_MIN_PX, u * 0.62);
+  return Math.min(LABEL_MAX_PX, Math.max(LABEL_MIN_PX, u * 0.62));
 }
 
 // -------------------------------------------------------------- text/format

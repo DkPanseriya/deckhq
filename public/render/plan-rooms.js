@@ -21,6 +21,7 @@ import {
   DIRECTORY_COL_MAX_W,
   DIRECTORY_COL_W,
   DIRECTORY_LINE_H,
+  DIRECTORY_MAX_COLS,
   DIRECTORY_MAX_ROWS,
   DIRECTORY_PAD,
   FIXTURE_TOP,
@@ -118,6 +119,57 @@ export function directoryGrid(count, width) {
 /** How many rows of lines a directory of `count` projects needs in `width`. */
 export function directoryRows(count, width) {
   return directoryGrid(count, width).rows;
+}
+
+/**
+ * Every strip width worth asking the envelope search about (WP-59).
+ *
+ * The strip's column count is one of the three things the plan spends a wide
+ * window on, and it is the honest one: seventeen idle repos in one narrow
+ * column is a board nobody can read, and the same seventeen across three
+ * columns is a board and a wider building. `directoryGrid` derives the column
+ * count BACK from the width it is given, so a request has to be stated as a
+ * width the grid will agree with. Per column count that is a RANGE — from the
+ * narrowest width that yields `cols` columns to one hair short of the width
+ * that would earn another — and the range is sampled rather than only its ends,
+ * because the width inside it is the finest adjustment the envelope has and it
+ * all goes to the lines.
+ *
+ * Returned smallest first, so a search that breaks ties by open floor picks
+ * the tightest strip that does the job.
+ *
+ * @param {number} count idle repos
+ * @returns {number[]} candidate outer widths, in units
+ */
+export function directoryWidths(count) {
+  if (count <= 0) return [0];
+  /** @type {number[]} */
+  const out = [];
+  for (let cols = 1; cols <= Math.min(count, DIRECTORY_MAX_COLS); cols++) {
+    // Past the point where a column holds one line, another column is not a
+    // distinct request — it is the same board with a wider gap in it.
+    if (cols > 1 && Math.ceil(count / (cols - 1)) <= 1) break;
+    const min = MARGIN * 2 + cols * DIRECTORY_COL_W;
+    // One hair short of the width that would earn another column, capped at
+    // what a readable line is worth: a column wider than `DIRECTORY_COL_MAX_W`
+    // puts a repo's name at one end of the building and its numbers at the
+    // other.
+    const max = Math.min(
+      MARGIN * 2 + (cols + 1) * DIRECTORY_COL_W - 0.01,
+      MARGIN * 2 + cols * DIRECTORY_COL_MAX_W,
+    );
+    // Sampled, not only its ends: the width INSIDE a column count is the
+    // finest adjustment the envelope has, and on the reference machine four
+    // units of column width is the difference between a floor that is the
+    // shape of the window and one that is not. The lines get the width; it is
+    // never spent as a gap.
+    const steps = 4;
+    for (let k = 0; k <= steps && max > min + 0.01; k++) {
+      out.push(min + ((max - min) * k) / steps);
+    }
+    if (max <= min + 0.01) out.push(min);
+  }
+  return out;
 }
 
 /** The height a directory of `count` projects takes in `width`. */

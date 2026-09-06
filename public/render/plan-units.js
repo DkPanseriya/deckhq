@@ -219,6 +219,75 @@ export const ASPECT_MAX = 2.2;
 export const DEFAULT_ASPECT = 1.7;
 
 /**
+ * How far the envelope's aspect may sit from the stage's before the floor is
+ * no longer "the shape of the window" (WP-59).
+ *
+ * It is the fill target said as a ratio. A floor narrower than its stage is
+ * drawn to the stage's HEIGHT, so the fraction of the stage's width it covers
+ * is exactly `planAspect / stageAspect`; 15% off the shape is 87% of the
+ * width, which is the margin `docs/DEVIATIONS.md` §139 measures.
+ */
+export const ASPECT_TOLERANCE = 0.15;
+
+/**
+ * How close to the stage's shape is close enough for the search to stop
+ * chasing it (WP-59).
+ *
+ * `ASPECT_TOLERANCE` is the acceptance — what a floor may be judged on.
+ * This is tighter, and the difference between them is the margin the
+ * acceptance has: inside this band the envelope search stops buying shape and
+ * takes the TIGHTEST arrangement instead, which is WP-55's rule applied where
+ * it still holds. Aiming at exactly the acceptance would land every floor on
+ * the edge of it, which is a test that passes and a picture that is 13% short.
+ */
+export const ASPECT_SETTLE = 0.05;
+
+/**
+ * The most of the envelope the plan will let become open floor in order to
+ * take the stage's shape (WP-59).
+ *
+ * WP-55 refused to buy shape at all: the envelope was summed from its rooms
+ * and whatever the stage had left over was ground outside the building. On the
+ * reference machine that drew a 57 x 55 U building on a 1920 x 1080 stage —
+ * 45% of the width, dark studio ground either side, which is what `08`'s
+ * "the floor is the product" cannot afford. Open floor INSIDE the building is
+ * an open-plan office; ground outside it is a small picture. So the plan now
+ * spends width — on the directory's columns, on the room band, on the service
+ * column — up to this ceiling, and stops there rather than drawing a hangar.
+ *
+ * §106 decision 6 held the same quantity under 20% as a consequence of the
+ * rooms being sized to their contents. It is a BUDGET now, and five points
+ * larger, which is the whole of what WP-59 spends.
+ */
+export const OPEN_FLOOR_MAX = 0.28;
+
+/**
+ * The most a room's cell may be wider than the footprint its furniture needs
+ * (WP-59).
+ *
+ * One room can only be so wide: a two-seat table in a cell three times its own
+ * width is the bare-carpet defect §106 exists to remove, whatever shape the
+ * window is. `ROOM_FILL_MAX` bounds the AREA and is what usually bites; this
+ * bounds the axis, so a band cannot be flattened into a gallery to chase an
+ * aspect ratio. Past it the width goes to the directory's columns and the
+ * service column instead.
+ */
+export const ROOM_WIDTH_STRETCH_MAX = 1.6;
+
+/**
+ * Depths the envelope search may lay a band of rooms at, as a multiple of the
+ * depth its rooms need (WP-59).
+ *
+ * A band holds a fixed amount of furniture, so making it shallower makes it
+ * wider — the one lever the working floor has for taking the shape of a wide
+ * window without any room being given floor it does not fill. `1.15` is
+ * `BAND_STRETCH_MAX`, the deepest a band may be; `0.9` is as shallow as it
+ * goes, which is about what the furniture itself occupies once
+ * `WORKING_HEADROOM` is spread over both axes.
+ */
+export const BAND_DEPTHS = Object.freeze([1.15, 1.05, 0.95, 0.9]);
+
+/**
  * Width of the circulation corridors, in units.
  *
  * A central spine runs the full height of the building between the service
@@ -270,6 +339,18 @@ export const DIRECTORY_COL_MAX_W = 28;
  * columns hold their width, up to this cap.
  */
 export const DIRECTORY_MAX_ROWS = 18;
+
+/**
+ * The most columns the envelope search will ever ask the strip for (WP-59).
+ *
+ * The strip's column count is one of the levers the plan spends a wide window
+ * on, and without a bound the ladder of candidate widths grows with the number
+ * of idle repos — sixty of them is sixty column counts to try, on a search that
+ * runs on every re-plan. Six columns is already a board the width of the
+ * working floor; past that the strip stops being a strip, which the integrity
+ * test asserts separately.
+ */
+export const DIRECTORY_MAX_COLS = 6;
 export const DIRECTORY_PAD = 1;
 
 /**
@@ -345,7 +426,7 @@ export const OFFICE_GROWTH_W = 0.8;
 export const OFFICE_GROWTH_H = 0.55;
 
 export const OFFICE_MIN_W = 22;
-export const OFFICE_MAX_W = 38;
+export const OFFICE_MAX_W = 46;
 export const OFFICE_MAX_H = 36;
 
 /** Pitch between two people sitting on the same sofa run. */

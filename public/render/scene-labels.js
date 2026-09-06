@@ -33,6 +33,36 @@ export const FONT_MONO =
   "'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace";
 
 /**
+ * THE PLATE SCALES WITH THE PLAN (WP-59).
+ *
+ * A room plate used to be set in fixed pixels — 12.5 px of name over 11 px of
+ * data — which was right while the floor could only ever be drawn between
+ * `MIN_SCALE` and a 44 px body. WP-59 raised the fit ceiling so a small floor
+ * reaches the bottom of a 1440 px window, and at that scale a fixed 12.5 px
+ * name is a caption on a door twice the size it was designed for: the plate
+ * stops reading as part of the room and starts reading as an annotation
+ * floating over it.
+ *
+ * So the plate is set in UNITS OF THE FLOOR with the old pixel sizes as its
+ * floor. `PLATE_BASE_SCALE` is the px-per-unit at which those sizes are
+ * exactly right, which is where the fit ceiling used to sit; below it nothing
+ * changes, and above it every measurement in the plate — type, leading, the
+ * hit rect — grows together, up to `PLATE_MAX_GROWTH`.
+ */
+export const PLATE_BASE_SCALE = 17.5;
+export const PLATE_MAX_GROWTH = 1.6;
+
+/**
+ * How much larger than its stated size a plate is set, at world scale
+ * `worldScale` px per unit. Pure, and exported so the scale test can ask.
+ * @param {number} worldScale
+ */
+export function plateScaleFor(worldScale) {
+  const s = Number(worldScale) || 0;
+  return Math.min(PLATE_MAX_GROWTH, Math.max(1, s / PLATE_BASE_SCALE));
+}
+
+/**
  * Resolve overlapping name labels for one frame (tech-lead review finding 1,
  * docs/DEVIATIONS.md "Findings from review": labels collide with desk
  * furniture and with each other at L1). `items` should already be in the
@@ -219,10 +249,14 @@ export class SceneLabels extends SceneCamera {
     const lines = this._plateLinesFor(room);
     // A plate belongs to its room and must not spill over the corridor into
     // the neighbour: clamp it to the room's own width and ellipsise instead.
-    const roomW = room.w * camera.zoom * camera.U;
-    const maxW = Math.max(60, roomW - 12);
-    const x = topLeft.x + 6;
-    const titleY = topLeft.y + 16;
+    const worldScale = camera.zoom * camera.U;
+    const roomW = room.w * worldScale;
+    // Every measurement below is stated at `PLATE_BASE_SCALE` and multiplied
+    // by this, so the plate keeps its proportion to the door it is on.
+    const k = plateScaleFor(worldScale);
+    const maxW = Math.max(60 * k, roomW - 12 * k);
+    const x = topLeft.x + 6 * k;
+    const titleY = topLeft.y + 16 * k;
 
     ctx.save();
     // The 2D context is shared with the rig, which can leave textAlign at
@@ -243,11 +277,11 @@ export class SceneLabels extends SceneCamera {
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
 
-    ctx.font = `700 12.5px ${FONT_UI}`;
+    ctx.font = `700 ${(12.5 * k).toFixed(2)}px ${FONT_UI}`;
     const title = ellipsise(ctx, lines[0], maxW);
     const titleW = ctx.measureText(title).width;
     ctx.strokeStyle = PALETTE.plateHalo;
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3 * k;
     ctx.strokeText(title, x, titleY);
     ctx.fillStyle = PALETTE.plateInk;
     ctx.fillText(title, x, titleY);
@@ -255,12 +289,12 @@ export class SceneLabels extends SceneCamera {
     let dataW = 0;
     let dataY = titleY;
     if (lines[1]) {
-      dataY = titleY + 15;
-      ctx.font = `600 11px ${FONT_MONO}`;
+      dataY = titleY + 15 * k;
+      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
       const data = ellipsise(ctx, lines[1], maxW);
       dataW = ctx.measureText(data).width;
       ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 2.6;
+      ctx.lineWidth = 2.6 * k;
       ctx.strokeText(data, x, dataY);
       ctx.fillStyle = PALETTE.plateInkSecondary;
       ctx.fillText(data, x, dataY);
@@ -275,12 +309,12 @@ export class SceneLabels extends SceneCamera {
     let payWidth = 0;
     let payY = dataY;
     if (lines[2]) {
-      payY = dataY + 14;
-      ctx.font = `600 11px ${FONT_MONO}`;
+      payY = dataY + 14 * k;
+      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
       const pay = ellipsise(ctx, lines[2], maxW);
       payWidth = ctx.measureText(pay).width;
       ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 2.6;
+      ctx.lineWidth = 2.6 * k;
       ctx.strokeText(pay, x, payY);
       ctx.fillStyle = PALETTE.plateInkSecondary;
       ctx.fillText(pay, x, payY);
@@ -291,8 +325,8 @@ export class SceneLabels extends SceneCamera {
     // (VISUAL-SPEC §8) — the hit rect now wraps the text itself rather than
     // a drawn plate. Every line that was drawn is inside it, the payroll line
     // included: a plate you can read is a plate you can click.
-    const top = titleY - 12;
-    const bottom = (lines[2] ? payY : lines[1] ? dataY : titleY) + 4;
+    const top = titleY - 12 * k;
+    const bottom = (lines[2] ? payY : lines[1] ? dataY : titleY) + 4 * k;
     this._plateRects.push({
       x,
       y: top,
