@@ -147,6 +147,23 @@ test('WP-62: the page declares a theme colour, and it is the manifest own', () =
   assert.equal(meta[1].toLowerCase(), String(manifest.theme_color).toLowerCase());
 });
 
+test('WP-62: the install prompt is deferred, offered once, and never a dead end', () => {
+  const header = read('public', 'app-header.js');
+  // Chrome shows its own infobar over the floor unless the page takes the
+  // event; and a deferred prompt can be used exactly once.
+  assert.match(header, /beforeinstallprompt/);
+  assert.match(header, /event\.preventDefault\(\)/);
+  assert.match(header, /installPrompt = null;\s*\n\s*try \{/);
+  assert.match(header, /appinstalled/);
+  assert.equal((header.match(/WP-62 · begin/g) || []).length, 1);
+  assert.equal((header.match(/WP-62 · end/g) || []).length, 1);
+
+  // The palette row exists whatever the browser does, and says the one command
+  // that works everywhere when there is no offer to take.
+  assert.match(header, /deckhq shortcut --install/);
+  assert.match(read('public', 'palette.js'), /id: 'cmd:install-app'/);
+});
+
 test('WP-62: the manifest is a standalone app with a 512 icon', () => {
   const manifest = JSON.parse(read('public', 'manifest.webmanifest'));
   assert.equal(manifest.display, 'standalone');

@@ -183,6 +183,23 @@ export async function openPostcard(opts = {}) {
  * @param {'week'|'annual'} kind
  * @param {{manual?:boolean, key?:string}} [opts]
  */
+/**
+ * The palette's "Wrapped" row: the week, or the year from 1 December.
+ *
+ * WP-62 moved this the four lines from `app.js`, which had reached WP-22's
+ * 900-line ceiling. It belongs here anyway — "which Wrapped is this" is
+ * `wrappedDue()`'s answer and `maybeShowNightCard` below already asks it, so
+ * the automatic card and the asked-for one now read the same line of code
+ * rather than two copies of it.
+ *
+ * `manual: true`: being shown a card on purpose does not spend the automatic
+ * one, and does not mark a week as delivered.
+ */
+export function openWrappedNow() {
+  const due = wrappedDue({ now: Date.now(), shownKey: '' });
+  return openWrapped(due.kind === 'annual' ? 'annual' : 'week', { manual: true });
+}
+
 export async function openWrapped(kind, opts = {}) {
   if (cardLoading) return;
   cardLoading = true;
