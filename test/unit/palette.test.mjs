@@ -251,8 +251,11 @@ test('the show-let-go command is a view toggle, and says which way it is', () =>
   const on = buildCommandEntries(ctx({ letGoVisible: true })).find(
     (e) => e.id === 'cmd:show-let-go',
   );
-  assert.equal(off.label, 'Show let-go agents');
-  assert.equal(on.label, 'Hide let-go agents');
+  // WP-61 renamed the words and not the wiring: the id is still
+  // `cmd:show-let-go` and the state is still `let_go`, because both are
+  // addresses (docs/DEVIATIONS.md §143).
+  assert.equal(off.label, 'Show fired');
+  assert.equal(on.label, 'Hide fired');
   const { actions, called } = stubActions();
   buildCommandEntries({ ...ctx(), actions })
     .find((e) => e.id === 'cmd:show-let-go')

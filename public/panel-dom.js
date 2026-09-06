@@ -68,7 +68,11 @@ export function buildPanelDom() {
   closeBtn.className = 'icon-btn';
   closeBtn.setAttribute('aria-label', 'Close panel');
   closeBtn.textContent = '✕';
-  closeBtn.addEventListener('click', () => close());
+  // No listener here. `close` is `panel.js`'s local function and there is no
+  // such binding in this module, so a `close()` written here does not fail to
+  // resolve — it resolves to `window.close`, and the tab goes with the card
+  // (docs/DEVIATIONS.md §143). `panel.js` registers the real one, as the
+  // header above says it does.
   identityRow.append(closeupWrap, mkChip, draftChip, identitySpacer, renameBtn, closeBtn);
 
   const titleEl = document.createElement('h2');

@@ -6,7 +6,43 @@
 
 ## Unreleased
 
+### Changed
+
+- **"Let go" is called Fire.** The action in `⋯ more` and in the palette is **Fire**; the state is
+  **Fired**; the palette's view toggle is **Show fired** / **Hide fired**; the toast says
+  `Fired. Ada is off the floor.`; the panel header says `fired`; the project whiteboard's count
+  tile says `Fired` where it said `Archived`; and `deckhq ls --all` includes "benched and fired
+  agents". **The ack state is still `let_go`** — nothing migrates, no ledger record changes, no new
+  action exists, and the palette row keeps its id. Ids and states are addresses; only the words
+  moved. Firing now asks one line first, through the same `window.confirm` the composer already
+  uses before sending into a live mid-turn session: `Fire Ada? The chat is kept and stays reachable
+from ⌘K → Show fired.` It says **kept** rather than **archived** because that is what is true —
+  the conversation stays readable from the panel through the fired view, and DeckHQ writes nothing
+  into the runtime's own store, no archive flag and no file under `~/.claude` or `~/.codex`.
+  `bench` and `recall` are not made to ask; only firing is expensive to hit by accident. The one
+  surface left saying "let go" is the room plate the floor _draws_ — changing a string on the
+  canvas moves every golden, so it waits for a package that regenerates them.
+  `docs/DEVIATIONS.md` §143.2.
+
 ### Fixed
+
+- **Closing the agent panel no longer closes the browser tab.** The ✕ on the review card had two
+  click listeners: `panel.js`'s, which closes the card, and one left behind in `panel-dom.js` by
+  the fourteen-module split, written `() => close()`. `close` is `panel.js`'s local function and
+  `panel-dom.js` has no binding of that name, so the identifier did not fail to resolve — it
+  resolved to the global, `window.close`, and the tab went with the card. Nothing caught it:
+  `close(): void` is in `lib.dom.d.ts` so the typechecker was happy, it is a browser global so
+  eslint was happy, and the panel closed correctly the whole time from the other listener, so
+  every screenshot looked right. It only bit tabs Blink permits a script to close — one opened
+  straight at a URL, which is what `deckhq` does when it opens the browser, what `deckhq open`
+  does, and what the VS Code extension frames — so navigating to the floor from anywhere else hid
+  it. Reproduced over CDP before the fix (page targets 1 → 0) and again after (1 → 1) with
+  `scripts/repro-panel-close.mjs`, which also drives `Escape`, a click on the floor, `J`/`K` then
+  `Escape` and the palette's close: none of those was ever implicated. The fix is the deleted
+  line. `test/unit/panel-close.test.mjs` is the gate, in two halves — the card built against a DOM
+  stub whose `close`, `open`, `print`, `stop` and `history` navigations are counters and every
+  close path driven, and a static read of every client module that fails a bare call to one of
+  those globals in a file that declares no binding of that name. `docs/DEVIATIONS.md` §143.1.
 
 - **The working side fills its own height, instead of ending in a bare block.** The building took
   the shape of the window and the rooms filled the row they were laid in, and the floor _under_

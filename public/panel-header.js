@@ -177,7 +177,7 @@ export function createHeaderPart(ctx) {
     }
     if (a.ackState === 'let_go') {
       metaEl.appendChild(separator());
-      metaEl.appendChild(textNode('let go'));
+      metaEl.appendChild(textNode('fired'));
     }
     // WP-41. Which way the relationship runs, said in words on whichever end
     // of it the user is looking at: "junior of Rosa" on the junior, and

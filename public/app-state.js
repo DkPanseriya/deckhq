@@ -57,7 +57,7 @@ export const STATE_LABELS = {
   stalled: 'Stalled',
   for_review: 'For review',
   benched: 'Benched',
-  let_go: 'Let go',
+  let_go: 'Fired',
   ended: 'Ended',
 };
 

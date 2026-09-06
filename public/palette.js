@@ -83,7 +83,7 @@ const ACTION_LABELS = {
   review: 'Mark for review',
   bench: 'Bench',
   recall: 'Recall',
-  let_go: 'Let go',
+  let_go: 'Fire',
   rehire: 'Rehire',
 };
 
@@ -94,7 +94,7 @@ const STATE_LABELS = {
   stalled: 'Stalled',
   for_review: 'For review',
   benched: 'Benched',
-  let_go: 'Let go',
+  let_go: 'Fired',
   ended: 'Ended',
 };
 
@@ -403,14 +403,19 @@ export function buildCommandEntries(ctx) {
     {
       // A view toggle, not a stored setting. The old header wrote
       // `settings.showLetGo` and nothing ever read it (docs/DEVIATIONS.md
-      // §58); "am I looking at let-go agents right now" is a property of this
+      // §58); "am I looking at fired agents right now" is a property of this
       // tab, not of the machine, so it lives in memory and resets on reload.
+      //
+      // WP-61 renamed the words, not the wiring: the id stays `cmd:show-let-go`
+      // and the state stays `let_go`, because both are addresses rather than
+      // copy (docs/DEVIATIONS.md §143). The old vocabulary lives on in the
+      // keywords, so somebody who learned "let go" still finds this row.
       id: 'cmd:show-let-go',
       group: 'command',
-      label: letGoVisible ? 'Hide let-go agents' : 'Show let-go agents',
+      label: letGoVisible ? 'Hide fired' : 'Show fired',
       hint: letGoVisible ? 'currently shown' : 'off the floor, reachable from here',
       accel: 'l',
-      keywords: ['archived', 'removed', 'letgo', 'let go'],
+      keywords: ['archived', 'removed', 'fired', 'letgo', 'let go'],
       run: () => actions.toggleLetGoVisible(),
     },
   ];
