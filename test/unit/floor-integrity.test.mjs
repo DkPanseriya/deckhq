@@ -32,10 +32,18 @@ import {
   ROOM_WIDTH_STRETCH_MAX,
 } from '../../public/render/plan.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
-// `scene.js` imports cleanly under plain Node (see the note at the foot of
-// it), so the stage's own aspect is asked of the code the app uses rather
-// than restated here.
-import { computeTargetAspect } from '../../public/render/scene.js';
+// The fit is the other half of WP-59 and the two only mean anything together:
+// an envelope the shape of the window that the camera then refuses to grow
+// into it is the same picture as a small building. `scene.js` imports cleanly
+// under plain Node (see the note at the foot of it), so the fill arithmetic is
+// asked here rather than restated.
+import {
+  computeFill,
+  computeTargetAspect,
+  FILL_MIN_LONG,
+  FILL_MIN_SHORT,
+  GROUND_MARGIN_MAX,
+} from '../../public/render/scene.js';
 import { counts } from '../../src/core/model.mjs';
 
 const EPS = 1e-6;
@@ -960,6 +968,46 @@ test('the building is the shape of the window, wherever its contents allow', () 
         off <= Math.log(1 + ASPECT_TOLERANCE) + EPS,
         `${JSON.stringify(spec)} at ${stageW}x${stageH}: the building is ${aspect.toFixed(2)}:1 ` +
           `on a ${stageAspect.toFixed(2)}:1 stage, ${((Math.exp(off) - 1) * 100).toFixed(0)}% off`,
+      );
+    }
+  }
+});
+
+test('the building fills the window, and the ground is a margin rather than a mat', () => {
+  // The second half. WP-55 stopped the fit at a 44 px character, so even a
+  // floor of the right shape stopped growing at two thirds of a 2560 x 1440
+  // stage. The cap is 72 px now and the acceptance is stated on the picture
+  // rather than on the body: what fraction of the window the building covers.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const [stageW, stageH] of STAGES) {
+      const stageAspect = computeTargetAspect(stageW, stageH);
+      const plan = buildPlan(projects, agents, {
+        stage: { w: stageW, h: stageH },
+        now: NOW,
+      });
+      const fill = computeFill(plan.width, plan.height, stageW, stageH);
+      // Past the cap the floor stops growing on purpose and the rest of the
+      // window is the studio ground the building stands on (`05` §2.2).
+      if (fill.capped) continue;
+      // Every real stage is landscape, so the shorter side is the height.
+      const short = stageW >= stageH ? fill.coverH : fill.coverW;
+      const long = stageW >= stageH ? fill.coverW : fill.coverH;
+      const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
+      assert.ok(
+        short >= FILL_MIN_SHORT - EPS,
+        `${where}: the building covers ${(short * 100).toFixed(0)}% of the short side`,
+      );
+      // The margin is the fill target said the other way round, and it is the
+      // one the eye actually reads: a band of ground down one side.
+      assert.ok(
+        (1 - short) / 2 <= GROUND_MARGIN_MAX + EPS,
+        `${where}: ${(((1 - short) / 2) * 100).toFixed(0)}% of ground per side on the short axis`,
+      );
+      if (!couldTakeShape(plan, stageAspect)) continue;
+      assert.ok(
+        long >= FILL_MIN_LONG - EPS,
+        `${where}: the building covers ${(long * 100).toFixed(0)}% of the long side`,
       );
     }
   }

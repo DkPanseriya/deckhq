@@ -11876,3 +11876,220 @@ the reserved sockets are bound, so the OS will not choose one of them.
 in a row, across three batches, all distinct and all genuinely free when handed
 over — which is the property the other six have always rested on and never
 stated.
+
+## 139. WP-59 — the building was the size of what is in it, and the window was the size of the screen
+
+`docs/DEVIATIONS.md` §106 (WP-55) fixed the floor's worst defect: the envelope
+was built to the window's shape and the treemap stretched whatever rooms there
+were to tile the remainder, so one active project came out as an 88 x 67 U room
+holding a two-seat table and 55% of the screen was pale carpet with nothing on
+it. The building is the size of what is in it now. That was right, and it went
+one step too far in the other direction.
+
+The owner's own floor, photographed: one active project, two service rooms and
+an idle strip, at **1920 x 1080 the building covered 45% of the width** and at
+**2560 x 1440 about 35%**, centred, dark studio ground either side. It is a
+regression of FEEL against 1.2.0 and it shipped in 1.3.0, so this is a `Fixed`
+entry and it says so plainly.
+
+**Two causes, one each side of the static-file boundary.**
+
+1. §106's envelope search had two choices — the service column's width and the
+   number of working bands — and a floor with one active repo has neither. So
+   the envelope came out 56.8 x 54.5 U (**1.04:1**) whatever window it was
+   drawn in, and everything the stage had left over was ground.
+2. `fitToWindow` stopped scaling once a character body would exceed §106's
+   44 px cap. Even a floor of the right shape therefore stopped growing at two
+   thirds of a 1440 px stage. Nothing was wrong with that picture; it was
+   simply small, on a screen the user had given the whole of.
+
+### What it measures now
+
+Stage sizes, not window sizes — the canvas is the window less the header, so a
+1920 x 1080 window is about a 1920 x 950 stage. Coverage is the `width x height`
+fraction of the stage the building occupies; the character figure is a body's
+height in screen pixels at that fit.
+
+| population | stage | before: envelope | coverage | body | after: envelope | coverage | body |
+|---|---|---|---|---|---|---|---|
+| reference | 1600 x 1000 | 56.8 x 54.5 (1.04:1) | 62% x 95% | 44.0 px | **92.5 x 59.0 (1.57:1)** | **98% x 100%** | 42.7 px |
+| reference | 1920 x 1080 | 56.8 x 54.5 (1.04:1) | **52% x 88%** | 44.0 px | **100.0 x 59.0 (1.70:1)** | **95% x 100%** | 46.2 px |
+| reference | 2560 x 1440 | 56.8 x 54.5 (1.04:1) | **39% x 66%** | 44.0 px | **100.0 x 59.0 (1.70:1)** | **95% x 100%** | 61.6 px |
+| demo | 1600 x 1000 | 88.5 x 55.6 (1.59:1) | 97% x 97% | 44.0 px | **92.5 x 55.6 (1.66:1)** | **100% x 96%** | 43.6 px |
+| demo | 1920 x 1080 | 92.5 x 55.6 (1.66:1) | 84% x 90% | 44.0 px | **94.5 x 55.6 (1.70:1)** | **96% x 100%** | 48.9 px |
+| demo | 2560 x 1440 | 92.5 x 55.6 (1.66:1) | **63% x 67%** | 44.0 px | **94.5 x 55.6 (1.70:1)** | **96% x 100%** | 65.2 px |
+
+On the owner's actual window — 1920 x 1080 including the header, so a 2.02:1
+stage — the reference floor goes from **45% to 84%** of the width and from 88%
+to the full height. It does not reach 2.02:1, and that is content, not a bug: a
+reception, a lounge, one two-desk room and seventeen directory lines is about
+4,000 U² of building, and a 2:1 envelope tall enough to hold the service column
+would be 7,000. The rest of that stage stays ground, which is `05` §2.2's own
+metaphor and the honest answer.
+
+### Part one: the aspect follows the window
+
+`buildPlan` takes a `stage: {w, h}` as well as a `targetAspect` — the same
+measurement, and the plan still only ever reads it for its shape — and the
+envelope search gains two choices to go with §106's two:
+
+**3. The idle strip's column count.** `directoryWidths` enumerates every width
+the strip can honestly ask for: per column count, from the narrowest width that
+yields that many columns to one hair short of the width that would earn
+another, sampled between. On the reference machine that is the difference
+between a 17-line column 11.8 U wide — which §106 called "17 readable lines"
+and which is not readable — and **two columns of 22.5 U lines** in a building
+43 U wider. The width goes to the lines; it is never spent as a gap.
+
+**4. The depth the room band is laid at.** A band holds a fixed amount of
+furniture, so a shallower band is a wider one. `BAND_DEPTHS` is the ladder,
+from `BAND_STRETCH_MAX` down to about what the furniture itself occupies.
+
+**The objective changed, and that is the heart of it.** §106 minimised
+`max(W / targetAspect, H)` — "draw largest on this stage" — which was the right
+objective while the envelope could only be one shape. It is the wrong one once
+it can be several: on a stage the building already fits inside, every candidate
+is drawn at the same scale, so a floor half the width of the window scored
+exactly as well as one that filled it, and the tie-break took the smaller.
+
+The objective is the aspect now, and the price is open floor:
+
+| rank | rule |
+|---|---|
+| 1 | an arrangement whose open floor is past `OPEN_FLOOR_MAX` is a hangar, and is only taken when nothing else is available |
+| 2 | closest to the stage's shape, with everything inside `ASPECT_SETTLE` tying |
+| 3 | of those, the least empty — §106's rule, applied inside the band rather than instead of it |
+| 4 | then closest to the shape, then smallest, so the answer is a function of its inputs and not of the loop order |
+
+Two constants rather than one, and the difference between them is the point:
+`ASPECT_TOLERANCE` (15%) is the ACCEPTANCE, `ASPECT_SETTLE` (5%) is where the
+search stops chasing. Aiming at exactly the acceptance lands every floor on the
+edge of it, which is a test that passes and a picture that is 13% short.
+
+**What it is NOT allowed to spend.** A room. `ROOM_WIDTH_STRETCH_MAX` caps a
+cell at 1.6x the width its furniture needs, and `ROOM_FILL_MAX` still caps the
+area — which is what usually bites first, so the axis bound is a backstop
+against a band being flattened into a gallery to chase a ratio. §106's
+"no room more than 35% bare carpet" is asserted unchanged, and now over the
+three stage sizes as well as the five aspects.
+
+**What it IS allowed to spend, in order.** The strip's columns, which are
+content. The service column's width, which is rooms — `OFFICE_MAX_W` goes from
+38 to 46 U, and the lounge now floors its own height at
+`colW / ROOM_ASPECT_MAX` exactly as the reception always has, so a wider column
+is a taller one and the lever is self-limiting rather than producing the
+46 x 19 U (2.4:1) lounge the first attempt did. Then open plan, up to
+`OPEN_FLOOR_MAX`.
+
+**`OPEN_FLOOR_MAX` is 0.28, and it supersedes §106 decision 6's 20%.** That 20%
+was an observation — it was what fell out of sizing rooms to their contents —
+and it is a budget now. It was measured against the picture rather than chosen:
+at 0.20 the reference building covers 71% of a real 1920 x 1080 window, at 0.25
+81%, at 0.28 **84%**, and past that the working side starts reading as a car
+park rather than as open plan. `floor-integrity.test.mjs` asserts the budget
+over every population at every stage; §106's own 20% assertion on the
+twelve-project floor is untouched and still passes, because a floor with twelve
+rooms in it never needs to buy anything.
+
+### Part two: the fit fills the window
+
+`BODY_MAX_PX` goes from **44 to 72**. It is not a taste number: 72 px of body is
+what a 55-unit-tall building needs to reach the bottom of a 1440 px stage, and
+the ceiling exists to stop a floor being magnified past its own window, not to
+stop it reaching it.
+
+Three things had to move with it, because at that scale everything sized in
+fixed pixels stops being part of the drawing:
+
+- **Labels are 11-14 px.** `labelFontSize` was `max(11, u * 0.62)`, which at a
+  72 px body is nearly 18 — a session's name in larger type than the room plate
+  above it. `LABEL_MAX_PX` closes the range at the top.
+- **Plates scale with the plan.** A room plate was a fixed 12.5 px name over an
+  11 px data line. `plateScaleFor` sets it in units of the floor with those
+  sizes as its floor: `PLATE_BASE_SCALE` (17.5 px per unit) is exactly where
+  the old fit ceiling sat, so below it nothing changes at all, and above it the
+  type, the leading and the hit rect grow together up to `PLATE_MAX_GROWTH`.
+  The idle strip's lines are plate text on the floor and take the same scale.
+- **The fill is arithmetic, not an eyeball.** `computeFill` is the one place
+  "how large is the building drawn" is computed; `_recomputeFitScale` calls it
+  and so does the test, rather than a second copy of the clamp.
+
+`FILL_MIN_SHORT` (88%) and `FILL_MIN_LONG` (80%) are the acceptance, and they
+are stated per axis because the two are not symmetric: a floor is fitted to
+whichever dimension binds first, so one axis is always full and the other is
+short by exactly the aspect mismatch. 88% of the short axis is the same
+sentence as **6% of ground per side**, which is what the eye actually reads,
+and the test asserts it in both forms.
+
+### The tests, and the one that had to say "when content allows"
+
+`floor-integrity.test.mjs` gains three, each over all fourteen populations AND
+the three stage sizes:
+
+1. **the building is the shape of the window, wherever its contents allow**
+2. **the building fills the window, and the ground is a margin rather than a mat**
+3. **a room is never given floor to chase the shape of a window**
+
+The second and third are unconditional except for the cap. The first cannot be:
+a reception, an empty lounge and nothing else is a column, and no arrangement
+of a column is 2.2:1. So the test computes the exemption itself rather than
+trusting the plan to declare it — `couldTakeShape` asks what fraction of an
+`H * stageAspect` by `H` envelope this floor's rooms would actually cover, and
+exempts the floor only when that is under `1 - OPEN_FLOOR_MAX`. It is a
+NECESSARY condition and not a sufficient one, so it is conservative in the
+direction that keeps the test honest: every population it does not exempt is
+held to the bound exactly. Of the fourteen, the three empty-floor shapes and the
+smallest single-room ones are exempt at some stages; every other one passes.
+
+**One existing assertion moved, and the direction is the opposite of the one
+§106 was defending.** `the building is the sum of its parts` required a
+six-project floor to be 1.4x the width of a one-project floor; it is 1.39x now,
+because the SMALL floor got wider — it spends what a wide window offers on its
+service column and on open plan rather than leaving it as ground. The constant
+is 1.3, and a second assertion is added that states what §106's rule is actually
+about and is unchanged by any of this: six project rooms hold more than four
+times the room area of one. No `INVARIANT:` test was touched.
+
+### A seventh `plan-*` module
+
+The search's two new axes took `plan.js` to 1,044 lines, past §122's 900-line
+ceiling, which `model.test.mjs` holds. `plan-envelope.js` is §131's **shape 3, a
+closure**, and it had to be: every function in it — the band deal, the band
+width, the working shape — reads `naturalOf(i)`, what a room's furniture needs
+at the size it was last built, and `buildPlan`'s fit loop rebuilds each room to
+the cell it was given. A module of pure functions taking the rooms as an
+argument would be handed them on every call and its two caches would have
+nothing to key on. `createWorkingFloor(projectRooms, naturalOf)` closes over
+both, and `invalidateBands()` is the one line the fit loop owes it — a call
+rather than a time-to-live, because the caller knows exactly when a room moved
+and nothing else does. `plan.js` is 750 lines; every body moved unchanged but
+for the two spaces of indentation.
+
+### `--stage WxH`
+
+WP-59's defect only shows on a stage the building has room to be small in, and
+the goldens are taken at 1600 x 1000 where the reference floor was already at
+62% of the width. `scripts/goldens.mjs --stage 1920x1080` photographs the same
+populations on a different window; the capture goes to `test/goldens/.out/` as
+`<name>@1920x1080.actual.png`, nothing compares it, and it is not committed. A
+second committed set would be a golden no CI job takes, and §87's tolerance and
+noise floor were measured at one size — a second set would have to earn its own.
+`--check --stage` is refused rather than reporting a size mismatch that says
+nothing about the floor.
+
+### Goldens
+
+Regenerated as the last step. **All six move, `empty` included**, and that is
+worth saying because §106 called `empty` the control that stays byte-identical.
+It is not one for this package and could not be: the fixture's machine has two
+idle repos on it, so it draws a plan with a directory strip rather than the
+onboarding screen, and both halves of WP-59 reach a plan. What §106 meant by
+"the control" was a floor with nobody on it, which is a control against changes
+to the PEOPLE; this package changes the building.
+
+The check is green against fresh captures on all six at 0 px over tolerance and
+**0 px moved at all**, the same noise floor §106 measured.
+
+`reference.png` read back: the building spans 92% of the frame's width and the
+full height, the reception's plate, the project room's three plate lines and all
+nineteen directory lines are inside it, and nothing is clipped at any edge.

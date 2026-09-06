@@ -17,7 +17,13 @@ import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, identityFor, appearanceFor } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
-import { FONT_UI, FONT_MONO, ellipsise, resolveLabelCollisions } from './scene-labels.js';
+import {
+  FONT_UI,
+  FONT_MONO,
+  ellipsise,
+  plateScaleFor,
+  resolveLabelCollisions,
+} from './scene-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import {
   colorForAgent,
@@ -114,6 +120,13 @@ export class SceneDraw extends SceneHit {
         : null;
     this._plan = buildPlan(this._snapshot.projects || [], agents, {
       targetAspect,
+      // The stage the floor is about to be drawn on (WP-59). `targetAspect` is
+      // this same measurement clamped, and is still what the plan reasons
+      // with; handing over the box as well is what lets a caller that has one
+      // pass it rather than deriving the ratio itself, and what makes the
+      // "does the building fill the window" question askable of `buildPlan`
+      // in a test with no canvas.
+      stage: { w: this._viewW, h: this._viewH },
       goneHomeDays: (this._snapshot.settings || {}).goneHomeDays,
     });
     this._backdrop = bakeBackdrop(this._plan, this._dpr);
@@ -517,6 +530,9 @@ export class SceneDraw extends SceneHit {
     const entries = room.entries || [];
     if (!entries.length) return;
     const u = U * camera.zoom;
+    // The strip's lines are plate text on the floor, so they grow with the
+    // plan exactly as a room plate does (WP-59, `plateScaleFor`).
+    const k = plateScaleFor(u);
     const byId = new Map((this._snapshot.projects || []).map((p) => [p.id, p]));
 
     ctx.save();
@@ -529,7 +545,7 @@ export class SceneDraw extends SceneHit {
       const at = worldToScreen({ x: entry.x, y: entry.y }, camera);
       const lineH = entry.h * u;
       const midY = at.y + lineH / 2;
-      const maxW = Math.max(24, entry.w * u - 10);
+      const maxW = Math.max(24 * k, entry.w * u - 10 * k);
 
       // A hairline under each line, so a column of names reads as a list
       // rather than as loose text lying on the floor.
@@ -547,20 +563,20 @@ export class SceneDraw extends SceneHit {
         : '';
       const stat = `${sessions}${last ? ` · ${last}` : ''}`;
 
-      ctx.font = `600 11px ${FONT_MONO}`;
+      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
       const statW = ctx.measureText(stat).width;
-      ctx.font = `600 12px ${FONT_UI}`;
-      const name = ellipsise(ctx, entry.name, Math.max(16, maxW - statW - 10));
+      ctx.font = `600 ${(12 * k).toFixed(2)}px ${FONT_UI}`;
+      const name = ellipsise(ctx, entry.name, Math.max(16 * k, maxW - statW - 10 * k));
       const nameW = ctx.measureText(name).width;
       ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 3 * k;
       ctx.strokeText(name, at.x, midY);
       ctx.fillStyle = PALETTE.plateInk;
       ctx.fillText(name, at.x, midY);
 
-      ctx.font = `600 11px ${FONT_MONO}`;
+      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
       ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 2.6;
+      ctx.lineWidth = 2.6 * k;
       ctx.strokeText(stat, at.x + maxW - statW, midY);
       ctx.fillStyle = PALETTE.plateInkSecondary;
       ctx.fillText(stat, at.x + maxW - statW, midY);

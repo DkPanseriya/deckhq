@@ -6,6 +6,29 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The building fills the window again.** This is a regression of feel against `1.2.0` and it
+  shipped in `1.3.0`, so it is said plainly: on a real floor — one active project, a reception, a
+  lounge and an idle strip — the building covered **45% of the width of a 1920x1080 window** and
+  about 35% of a 2560x1440 one, centred, with dark ground either side. `1.2.0` filled the frame.
+  Two causes, both introduced by the fix that made the floor the size of what is in it: the
+  envelope search had only two choices (the service column's width and the band count) and a floor
+  with one active repo has neither, so the plan came out 1.04:1 whatever window it was drawn in;
+  and the fit stopped scaling at a 44 px character, so even a floor of the right shape stopped
+  growing at two thirds of a 1440 px stage. The search now chooses the **idle strip's column
+  count** and the **depth of the room band** as well, and takes the arrangement closest to the
+  window's shape rather than the smallest one that fits; the fit ceiling is **72 px**, with name
+  labels held to 11-14 px and room plates set in units of the floor so they grow with it. On the
+  reference floor the coverage goes from 52% x 88% to **95% x 100%** at 1920x1080 and from
+  39% x 66% to **95% x 100%** at 2560x1440; on the demo floor from 63% x 67% to **96% x 100%** at
+  2560x1440. Nothing is stretched to get there: a room's cell is still capped at 1.6x the width its
+  furniture needs and at 35% bare carpet, the extra width goes to the directory's lines and to the
+  service column's rooms, and what is left is drawn as open plan inside the building rather than as
+  ground outside it. Where the contents genuinely cannot make the window's shape — a machine with
+  nothing running, or one small room — the floor stays the shape it honestly is and the rest is
+  ground. `docs/DEVIATIONS.md` §139.
+
 ### Testing
 
 - **The `daemon-hooks-port` flake was a race, and it is gone.** Every port in

@@ -108,6 +108,63 @@ export function computeFitScale(planW, planH, viewW, viewH) {
   return Math.min(vw / pw, vh / ph);
 }
 
+/**
+ * THE FILL TARGET (WP-59).
+ *
+ * `05` §3.1 asked for the floor to fill the stage with no letterbox band wider
+ * than 8 px. WP-55 superseded that deliberately — the building is the size of
+ * what is in it, and there is ground around it — and then went too far: on the
+ * owner's own machine the building covered 45% of a 1920 x 1080 window and 35%
+ * of a 2560 x 1440 one, centred in dark ground. Ground is a mount, not a
+ * mat.
+ *
+ * So there is a number again, and it is stated per axis because the two are
+ * not symmetric: a floor is fitted to whichever of the stage's dimensions
+ * binds first, so one axis is always full and the other is short by exactly
+ * the difference between the building's aspect and the stage's.
+ *
+ *   - `FILL_MIN_SHORT` — the stage's shorter side (its height, on every real
+ *     window). This is the axis the floor is normally fitted to, so 88% is
+ *     really "the scale is not being held back", and its complement is the
+ *     6%-a-side margin below.
+ *   - `FILL_MIN_LONG` — the longer side, where the shortfall is the aspect
+ *     mismatch `plan.js` is allowed to leave when the content cannot make the
+ *     window's shape (`ASPECT_TOLERANCE`).
+ *
+ * Both are conditional on the cap: past `CHAR_MAX_PX_PER_UNIT` the floor stops
+ * growing on purpose, and what is left is ground.
+ */
+export const FILL_MIN_SHORT = 0.88;
+export const FILL_MIN_LONG = 0.8;
+/** Ground left on the short axis, per side, when the fill target is met. */
+export const GROUND_MARGIN_MAX = (1 - FILL_MIN_SHORT) / 2;
+
+/**
+ * How much of a `viewW x viewH` stage a `planW x planH` floor actually covers,
+ * and whether the character cap is what stopped it.
+ *
+ * The one place this arithmetic is written. `_recomputeFitScale` clamps the
+ * same way, and `floor-integrity.test.mjs` asks this rather than repeating it —
+ * a second copy of "how large is the building drawn" is exactly the kind of
+ * pair `docs/DEVIATIONS.md` §106 lists as five of this project's bugs.
+ *
+ * @param {number} planW @param {number} planH @param {number} viewW @param {number} viewH
+ * @returns {{scale:number, fit:number, coverW:number, coverH:number, capped:boolean}}
+ */
+export function computeFill(planW, planH, viewW, viewH) {
+  const fit = computeFitScale(planW, planH, viewW, viewH);
+  const scale = clamp(fit, MIN_SCALE, Math.max(MIN_SCALE, CHAR_MAX_PX_PER_UNIT));
+  const vw = Math.max(1, Number(viewW) || 0);
+  const vh = Math.max(1, Number(viewH) || 0);
+  return {
+    scale,
+    fit,
+    coverW: (Math.max(0, Number(planW) || 0) * scale) / vw,
+    coverH: (Math.max(0, Number(planH) || 0) * scale) / vh,
+    capped: fit > CHAR_MAX_PX_PER_UNIT + 1e-9,
+  };
+}
+
 export class SceneCamera extends SceneLod {
   // ---------------------------------------------------------------- camera
 
@@ -135,15 +192,17 @@ export class SceneCamera extends SceneLod {
     }
     const viewW = this._viewW;
     const viewH = this._viewH;
-    const fit = this._plan ? computeFitScale(this._plan.width, this._plan.height, viewW, viewH) : U;
-
     // Fitting is preferred and is what happens for any normal number of
     // projects. But a floor can only be shrunk so far before a room stops
     // being readable, and past that point squeezing more projects in serves
     // nobody. Below MIN_SCALE the floor stops shrinking and the user pans
     // instead; above CHAR_MAX_PX_PER_UNIT it stops GROWING and the rest of the
-    // viewport is the studio ground the building stands on (WP-55).
-    this._fitScale = clamp(fit, MIN_SCALE, Math.max(MIN_SCALE, CHAR_MAX_PX_PER_UNIT));
+    // viewport is the studio ground the building stands on (WP-55) — a ceiling
+    // WP-59 raised from a 44 px body to 72, because at 44 the building stopped
+    // at two thirds of a 1440 px stage and the rest was ground.
+    this._fitScale = this._plan
+      ? computeFill(this._plan.width, this._plan.height, viewW, viewH).scale
+      : U;
     this._clampCamera();
   }
 

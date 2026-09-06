@@ -56,20 +56,25 @@ export const MIN_SCALE = 7.5;
 export const CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
 
 /**
- * THE FIT HAS A CEILING TOO (WP-55).
+ * THE FIT HAS A CEILING TOO (WP-55), AND IT WAS SET TOO LOW (WP-59).
  *
- * The building is the size of what is in it now, so a quiet machine's floor is
- * genuinely small — one room, a reception and a lounge — and fitting that to a
- * 2560 x 1440 window would draw eighty-pixel people in a diagram blown up like a
- * poster. Past this the floor stops growing and the leftover viewport is the
- * studio ground the building stands on (`05` §2.2), which is what the drop
- * shadow under the envelope is for.
+ * The building is the size of what is in it, so a quiet machine's floor is
+ * genuinely small — one room, a reception and a lounge — and there has to be
+ * some point past which blowing it up stops helping. WP-55 put that point at
+ * 44 px of body and it turned out to be the second half of the defect §139
+ * exists to fix: on a 2560 x 1440 stage the reference floor stopped growing at
+ * 66% of the stage's height with a third of the window left as dark ground.
+ * Nothing was wrong with the picture at that scale — it was simply small, on a
+ * screen the user had given the whole of.
  *
- * 44 px is a little under three times the 16 px legibility floor: a body still
- * reads as a person at a glance and its label still sits under it rather than
- * beside a giant.
+ * 72 px is four and a half times the 16 px legibility floor. It is what a
+ * 55-unit-tall building needs to reach the bottom of a 1440 px stage, which is
+ * the number this constant is actually FOR: the ceiling exists to stop a floor
+ * being magnified past its own window, not to stop it reaching it. Labels are
+ * held to 11-14 px separately (`labelFontSize`) so a body this size still
+ * carries a name rather than a banner.
  */
-export const BODY_MAX_PX = 44;
+export const BODY_MAX_PX = 72;
 
 /** The largest px-per-unit the floor is ever drawn at. See `BODY_MAX_PX`. */
 export const CHAR_MAX_PX_PER_UNIT = BODY_MAX_PX / BODY_HEIGHT_U;

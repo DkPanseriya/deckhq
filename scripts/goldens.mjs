@@ -12,7 +12,12 @@
  *   npm run goldens:check    # compare, write diffs to test/goldens/.out/, exit 1 on a mismatch
  *
  *   node scripts/goldens.mjs [--check] [--only NAME] [--theme NAME] [--settle MS]
- *                            [--keep] [--verbose] [--deadline S] [--budget S]
+ *                            [--stage WxH] [--keep] [--verbose]
+ *                            [--deadline S] [--budget S]
+ *
+ * `--stage 1920x1080` photographs the floor on a window other than the one the
+ * committed goldens were taken in (WP-59). The capture lands in
+ * test/goldens/.out/ and nothing compares it; it exists to be looked at.
  *
  * `--keep` writes every capture to test/goldens/.out/, not only the ones that
  * failed; it is how the noise floor below was measured.
@@ -155,8 +160,39 @@ const CAPTURES = [
   })),
 ];
 
-export const WIDTH = 1600;
-export const HEIGHT = 1000;
+/**
+ * The stage every committed golden is photographed on. One size, so a golden
+ * is a comparison rather than a coincidence.
+ */
+export const DEFAULT_WIDTH = 1600;
+export const DEFAULT_HEIGHT = 1000;
+
+/**
+ * `--stage 1920x1080` — photograph the floor on a different window (WP-59).
+ *
+ * WP-59's defect only shows on a stage the building has room to be small in:
+ * at 1600 x 1000 the reference floor was already covering 62% of the width, and
+ * at 1920 x 1080 it was 52%. A gate that can only see one window size cannot be
+ * asked whether the fix held on the others, so the size is a flag.
+ *
+ * A capture at a non-default stage is written to `test/goldens/.out/` and named
+ * with the stage — `reference@1920x1080.actual.png` — rather than into the
+ * committed set, and nothing compares it. It is a photograph to LOOK at.
+ * Committing one would be a second golden of the same floor that no CI job
+ * takes and that would rot the moment anything moved; the tolerance and the
+ * noise floor in §87 were measured at one size, and a second set would have to
+ * earn its own.
+ */
+const stageArg = opt('--stage', '');
+const stageMatch = /^(\d{3,5})\s*[x×]\s*(\d{3,5})$/i.exec(String(stageArg).trim());
+if (stageArg && !stageMatch) {
+  process.stderr.write(`goldens: --stage wants WxH, e.g. --stage 1920x1080 (got "${stageArg}")\n`);
+  process.exit(2);
+}
+export const WIDTH = stageMatch ? Number(stageMatch[1]) : DEFAULT_WIDTH;
+export const HEIGHT = stageMatch ? Number(stageMatch[2]) : DEFAULT_HEIGHT;
+/** True when this run is photographing a window the goldens were not taken in. */
+const OFF_STAGE = WIDTH !== DEFAULT_WIDTH || HEIGHT !== DEFAULT_HEIGHT;
 /**
  * A channel has to move by more than this (of 255) for the pixel to count.
  * 8 is eight times the measured noise amplitude and keeps 91% of the weakest
@@ -247,6 +283,14 @@ if (THEME) {
   }
 }
 const wantedTheme = THEME ? THEME.replace(/[\s_-]+/g, ' ').toLowerCase() : '';
+if (CHECK && OFF_STAGE) {
+  // A golden taken at 1600 x 1000 and a capture taken at 1920 x 1080 are two
+  // pictures of two things. Comparing them reports a size mismatch, which says
+  // nothing about the floor and everything about the flags.
+  process.stderr.write('goldens: --check compares against the committed stage; drop --stage\n');
+  process.exit(2);
+}
+
 const captures = CAPTURES.filter(
   (c) =>
     (!ONLY || c.name === ONLY || c.population === ONLY) &&
@@ -609,8 +653,16 @@ const run = withChrome(
                 `  ${verdict.ok ? 'ok  ' : 'FAIL'} ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
               );
             } else {
-              fs.mkdirSync(GOLDENS_DIR, { recursive: true });
-              const file = path.join(GOLDENS_DIR, `${name}.png`);
+              // A capture at a stage the goldens were not taken in never joins
+              // the committed set — see `--stage`. It goes to `.out/`, which is
+              // gitignored, so `npm run goldens -- --stage 1920x1080` is safe to
+              // run without leaving the set half one size and half another.
+              const dir = OFF_STAGE ? OUT_DIR : GOLDENS_DIR;
+              fs.mkdirSync(dir, { recursive: true });
+              const file = path.join(
+                dir,
+                OFF_STAGE ? `${name}@${WIDTH}x${HEIGHT}.actual.png` : `${name}.png`,
+              );
               fs.writeFileSync(file, png);
               const kb = Math.round(png.length / 1024);
               say(
