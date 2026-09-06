@@ -12490,3 +12490,155 @@ bare-carpet defect §106 removed. What DID change is the room's depth, which now
 runs the whole band rather than a third of it, and the strip under it, which
 stands its lines in two columns of ten. The building went from 1.37:1 to 1.52:1
 on that stage and from 86% to 95% of its width.
+
+## 143. WP-61 — the ✕ resolved to `window.close`, and "let go" became "Fire"
+
+Two owner-reported panel items. They share a file and nothing else, so they are
+recorded separately.
+
+### 143.1 The close button closed the tab
+
+**Reported:** closing the agent side panel closes the whole Chrome tab.
+
+**Reproduced before anything was changed**, with `scripts/repro-panel-close.mjs`
+— a demo floor on a free port in its own temp fixture, a headless Chrome driven
+over CDP, and every close path in turn. Output, on `main`:
+
+    close paths (window-closing APIs replaced by counters):
+      the ✕ button             REACHED window.close()
+      Escape                   ok
+      a click on the floor     ok
+      J/K then Escape          ok
+      the palette's close      ok
+
+    the ✕ button again, nothing shimmed:
+      page targets 1 -> 0 — THE TAB CLOSED
+
+**The cause is one line, and it is not a typo.** `public/panel-dom.js` built the
+✕ button and registered a listener on it:
+
+    closeBtn.addEventListener('click', () => close());
+
+`close` is `createPanel()`'s own local function in `public/panel.js`. There is
+no such binding in `panel-dom.js`. So the identifier did not fail to resolve —
+in a module, an unqualified name that no scope declares is looked up on the
+global object, and `close` is there, as `window.close`. Clicking ✕ called it.
+
+It arrived in `b59a638`, the §131 split. The DOM-building block moved out of
+`createPanel()` whole and the listener travelled with it, which is exactly the
+one thing that split was not supposed to move: `panel-dom.js`'s own header says
+so — _"The three listeners that reach back into the panel's own behaviour are
+NOT here: rename and close are registered by `panel.js`"_ — and `panel.js` does
+register the real one, on the same button, three lines after `buildPanelDom()`
+returns. So the panel closed correctly, from `panel.js`'s listener, and the tab
+died beside it from `panel-dom.js`'s. **The visible behaviour was right, which
+is why no screenshot ever showed it.**
+
+**Nothing in the toolchain could have caught it as written.** `tsc` is happy:
+`close(): void` is declared in `lib.dom.d.ts`, and `public/tsconfig.json` has
+the DOM lib. eslint is happy: `close` is a browser global, so `no-undef` has
+nothing to say. The unit suite is happy: no test built the card and pressed
+that button. The goldens are happy: the floor is a canvas and the panel is not
+in them. It took a real browser to see it, which is `08` §1.1 rule 11 again.
+
+**Why it only bites some tabs.** Blink refuses `window.close()` with _"Scripts
+may close only the windows that were opened by them"_ when the frame has more
+than one back/forward entry. A tab opened straight at a URL has exactly one —
+which is what `deckhq` does when it opens the browser, what WP-42's `deckhq
+open` does, and what WP-31's webview frame does. Navigate to the floor from
+somewhere else first and the call is refused and the bug is invisible. The
+reproduction script therefore puts the URL on Chrome's command line rather than
+navigating to it from `about:blank`; the first draft did the latter and the tab
+survived, which would have been the wrong answer.
+
+**The fix is to delete the line**, leaving the comment that says why there is
+none. `panel.js`'s listener is untouched. No other close path was ever
+implicated: `Escape`, a click on the floor and `J`/`K` then `Escape` all arrive
+at `selectAgent(null)` → `panel.close()`, and the palette's close is the
+palette's own dialog.
+
+**Two gates, in `test/unit/panel-close.test.mjs`.** The first builds the card
+against a DOM stub whose `close`, `open`, `print`, `stop` and three `history`
+navigations are counters, opens it, and drives every close path plus every
+button the open card offers; all seven counters must be zero. The second reads
+every `.js` under `public/` with comments and string literals blanked, and
+fails a bare call to one of those globals in a module that declares no binding
+of that name — the same mistake in a module the first test never instantiates.
+Both were run against the reverted fix and both fail on it.
+
+Blanking the comments is not decoration. Half the panel's module headers
+contain the words "never called from `open()`", and a first draft of the static
+check reported four false offenders on that alone. A static test that cries
+wolf is a static test somebody deletes.
+
+### 143.2 "Let go" is called Fire
+
+The user-facing word is **Fire** (the action) and **Fired** (the state).
+**The ack state is still `let_go`.** No migration, no new action, no new
+mutation path: `ACK_STATES` is unchanged, `act('let_go')` is unchanged, every
+ledger record ever written still reads `let_go`, `optimisticPatch` still writes
+it, and the palette row is still `cmd:show-let-go`. Ids and states are
+addresses; only the words moved. `test/unit/fire-vocabulary.test.mjs` asserts
+both halves — that the id did not move, and that no string a person reads says
+"let go" any more.
+
+Renamed: the `⋯ more` menu item and the palette action (`ACTION_LABELS`, in
+both copies of that table — `panel-rules.js` and `palette.js`), the state label
+in all three copies of `STATE_LABELS` (`panel-rules.js`, `palette.js`,
+`app-state.js`), the panel header's state word ("fired"), the palette's view
+toggle (**Show fired** / **Hide fired**), the toast that follows it, the
+whiteboard's count tile (`Archived` → `Fired`), `deckhq ls --all`'s help line,
+the README's six-state table row and its two other mentions, and the site's
+model page.
+
+**Two strings deliberately keep the old words.** The palette row's search
+keywords still carry `let go` and `letgo`, so somebody who learned the product
+under the old name still finds the row; and the row's id is still
+`cmd:show-let-go`, because renaming an id is a data change wearing a copy
+change's clothes. Both are named in the test's allowlist with those reasons.
+
+**One surface was not renamed, and it is the one on the canvas.** The room
+plate the floor draws still reads `1 let go · archived`
+(`public/render/scene-labels.js`). Changing a string the renderer paints moves
+every golden, `public/render/` was being edited by another package while this
+one ran, and a pixel diff attributed to a word change is a bad trade. It is the
+only remaining "let go" a person can see, and
+`test/unit/fire-vocabulary.test.mjs` excludes `public/render/` by name with
+this reason rather than skipping it silently.
+
+**One question before firing, and no undo.** The brief allowed either; the
+panel already had a confirm pattern — `sendText()` asks `window.confirm` before
+sending into a live mid-turn session — so this is that pattern, not a new one.
+`fireQuestion()` is a pure function in `panel-rules.js` so the words can be
+asserted without a DOM:
+
+    Fire Ada? The chat is kept and stays reachable from ⌘K → Show fired.
+
+Two sentences: what happens, and the part nobody can see. It says **kept**
+rather than **archived** on purpose. "Archives the chat" means DeckHQ's own
+record — the agent leaves the floor and its conversation stays readable from
+the panel through the fired view. DeckHQ does not write the runtime's archive
+flag and does not write any file under `~/.claude` or `~/.codex`; §46 runs the
+other way, from the app's flag into `let_go`, never back. A confirm that
+claimed otherwise would be the product lying about what it touches. There is
+nothing in the second person and no "are you sure" (`08` §1.1 rule 6,
+`04` §5), and a test asserts that.
+
+`bench` and `recall` are **not** made to ask. Bench is reversible with the key
+that did it; the question is bought by the ⋯ menu being a column of small
+buttons a millimetre apart, where the wrong one is easy to hit, and only firing
+is expensive to hit wrongly.
+
+The confirm goes through `performAction()` like everything else — it is a guard
+inside the single funnel, not a second path to `/api/ack` (`08` §1.1 rule 1).
+**A host with no `confirm` at all fires anyway.** Some embedders remove it;
+turning an explicit button press into a silent no-op there would be worse than
+not asking. Whether VS Code's webview frame allows a modal in a nested
+same-origin iframe is **not verified** — the extension frames the floor on its
+own `http://127.0.0.1` origin (§104), so it should behave as a page, but no run
+was made in a real editor.
+
+**No `deckhq fire`.** There is no let-go command in the CLI to alias — `ack`
+and `bench` are the only two subcommands that write — so adding one would be a
+new mutation path, which the brief refuses. A test asserts `bin/deckhq.mjs`
+still calls `runAct` with exactly `acknowledge` and `bench`.
