@@ -139,6 +139,23 @@ test('the page links the manifest', () => {
   assert.match(read('public', 'index.html'), /rel="manifest" href="\.\/manifest\.webmanifest"/);
 });
 
+test('WP-62: the page declares a theme colour, and it is the manifest own', () => {
+  const html = read('public', 'index.html');
+  const meta = html.match(/<meta name="theme-color" content="(#[0-9a-fA-F]{6})"/);
+  assert.ok(meta, 'index.html must carry a theme-color meta — the app window paints its frame');
+  const manifest = JSON.parse(read('public', 'manifest.webmanifest'));
+  assert.equal(meta[1].toLowerCase(), String(manifest.theme_color).toLowerCase());
+});
+
+test('WP-62: the manifest is a standalone app with a 512 icon', () => {
+  const manifest = JSON.parse(read('public', 'manifest.webmanifest'));
+  assert.equal(manifest.display, 'standalone');
+  const big = manifest.icons.find((i) => i.sizes === '512x512');
+  assert.ok(big, 'Chrome offers Install only against an icon of at least 512');
+  assert.equal(big.type, 'image/png');
+  assert.match(String(big.purpose), /\bany\b/);
+});
+
 test('the client registers the worker and badges the count', () => {
   // WP-22 moved renderHeader — and with it WP-16's whole client footprint —
   // into app-header.js. The block is one block still; it is in the file the

@@ -4,6 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>DeckHQ</title>
+    <!-- WP-62 · the app window's own chrome. Chrome paints the title bar of an
+         installed PWA, and an `--app=` window's frame on some platforms, with
+         this colour; without it the frame is white above a near-black floor.
+         Kept equal to the manifest's `theme_color` and to style.css's `--bg`. -->
+    <meta name="theme-color" content="#131419" />
     <!-- WP-16 · one line: an installed DeckHQ can badge the dock with the
          needs-you count while every window is closed. public/sw.js. -->
     <link rel="manifest" href="./manifest.webmanifest" />
