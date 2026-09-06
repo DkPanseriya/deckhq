@@ -44,6 +44,9 @@ import {
   DIRECTORY_PAD,
   LOUNGE_PACKS,
   OFFICE_MAX_W,
+  OFFICE_ROW_ASPECT_MAX,
+  OFFICE_SEAT_PITCH,
+  SERVICE_W_STEP,
 } from '../../public/render/plan-units.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
 // The fit is the other half of WP-59 and the two only mean anything together:
@@ -93,8 +96,14 @@ function agent(id, over = {}) {
  * `idleProjects` are repos with sessions and nobody active — the shape WP-50
  * turns into directory lines. `goneHome` are benched agents whose last
  * activity is well past the window, which the lounge must not size itself to.
+ * `juniors` are WP-41's subagents: `[parentId, count]`, standing beside the
+ * agent that spawned them wherever that agent is. They are the population
+ * WP-59d's second defect needs — sixteen of them beside a BENCHED senior drew
+ * a packed row along the lounge's bottom wall with half of it outside the
+ * room.
  * @param {{projects?: number[], waiting?: number, benched?: number,
- *   letGo?: number, idleProjects?: number[], goneHome?: number}} spec
+ *   letGo?: number, idleProjects?: number[], goneHome?: number,
+ *   juniors?: [string, number][]}} spec
  */
 function floor(spec) {
   const sizes = spec.projects ?? [3];
@@ -148,6 +157,18 @@ function floor(spec) {
   for (let k = 0; k < (spec.letGo ?? 0); k++) {
     agents.push(agent(`g${k}`, { ackState: 'let_go', activityState: 'ended' }));
   }
+  for (const [parentId, count] of spec.juniors ?? []) {
+    const parent = agents.find((a) => a.id === parentId);
+    for (let k = 0; k < count; k++) {
+      agents.push(
+        agent(`${parentId}j${k}`, {
+          projectId: parent ? parent.projectId : 'p0',
+          subagent: true,
+          parentId,
+        }),
+      );
+    }
+  }
   return { projects, agents };
 }
 
@@ -191,7 +212,39 @@ const POPULATIONS = [
     benched: 6,
     waiting: 3,
   },
+  {
+    // WP-59d: THE OWNER'S OWN FLOOR. One busy project and three one-desk ones,
+    // a thirteen-line board, a queue of nine and a lounge holding twenty-three
+    // benched agents beside twenty-four who have gone home. It is the shape
+    // §141 proved a COLUMN cannot fill — after every lever in the fill order,
+    // 43% of his working side was still open plan — and it is the shape the
+    // second arrangement exists for.
+    projects: [8, 1, 1, 1],
+    idleProjects: [7, 4, 4, 3, 2, 2, 2, 1, 1, 1, 1, 1, 1],
+    benched: 23,
+    waiting: 9,
+    goneHome: 24,
+  },
 ];
+
+/**
+ * The same floor with WP-41's juniors on it: sixteen beside a BENCHED senior,
+ * two beside somebody at a desk, one beside an agent waiting in the office.
+ *
+ * Its own fixture rather than a sixteenth population, because juniors are
+ * counted as agents at desks (`08` B6, and `desksIn` in `plan.js`) — sixteen
+ * of them make their parent's project a twenty-desk room beside three one-desk
+ * ones, which is a floor about table sizes rather than about the thing these
+ * two tests are for.
+ */
+const JUNIORS = {
+  ...POPULATIONS[POPULATIONS.length - 1],
+  juniors: /** @type {[string, number][]} */ ([
+    ['b0', 16],
+    ['p1-0', 2],
+    ['w0', 1],
+  ]),
+};
 
 const ASPECTS = [1.2, 1.6, 1.78, 2.06, 2.2];
 
@@ -338,6 +391,11 @@ test('every agent stands inside the room its placement names', () => {
     for (const a of agents) {
       if (a.ackState === 'let_go') continue; // off the floor entirely
       if (plan.hidden.has(a.id)) continue; // went home, or a desk with no room
+      // A junior's room is its PARENT's, wherever that is, so
+      // `derivePlacement` — which answers `desk` for one standing in a lounge
+      // — cannot name it. `no agent is drawn outside the room it stands in`
+      // below is the same property asked the way a junior can answer it.
+      if (a.subagent === true) continue;
       const seat = seats.get(a.id);
       const room = roomFor(a);
       assert.ok(room, `${a.id}: no room for placement ${derivePlacement(a)}`);
@@ -511,8 +569,17 @@ test('the reception grows with its queue and never becomes a corridor', () => {
     const size = office.w * office.h;
     assert.ok(size >= previous - 1e-6, `the reception shrank going from ${waiting} waiting`);
     previous = size;
+    // A ROOM IN A ROW IS WIDER, and that is the shape it is for (WP-59d).
+    // `ROOM_ASPECT_MAX` is the bound on a reception whose desk is at the top
+    // and whose queue runs down both sides of it; the row reception's waiting
+    // area runs along its width with the desk at one end, and what stops it
+    // there is `OFFICE_ROW_ASPECT_MAX`.
     const aspect = office.w / office.h;
-    assert.ok(aspect >= 0.6 && aspect <= 1.8 + 1e-6, `reception aspect ${aspect} is out of band`);
+    const max = plan.arrangement === 'two-rows' ? OFFICE_ROW_ASPECT_MAX : 1.8;
+    assert.ok(
+      aspect >= 0.6 && aspect <= max + 1e-6,
+      `reception aspect ${aspect} is out of band for a ${plan.arrangement} floor`,
+    );
     // Everyone in the queue still gets a seat in it.
     assert.equal(plan.officeSeats.length, waiting);
   }
@@ -544,24 +611,41 @@ test('an idle repo costs a directory line, never a room', () => {
 
 test('the reception sofas form one continuous C, corner to corner', () => {
   // Three runs that stop short of each other read as three separate benches.
+  //
+  // WP-59d: A ROW RECEPTION IS THE SAME C ON ITS SIDE. `buildOfficeRow`
+  // reflects the whole room in the diagonal, so the west run lies along the
+  // north wall, the back run down the east one, and the ids move with the
+  // walls they name. The relationship asserted here is the one that matters
+  // and it is the same either way, so it is stated on the axis the runs
+  // actually lie on rather than twice.
   for (const waiting of [1, 9, 25]) {
     const { projects, agents } = floor({ projects: [3], waiting });
     const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
     const by = (id) => office.props.find((p) => p.id === id);
-    const west = by('wait-sofa-w');
-    const east = by('wait-sofa-e');
-    const back = by('wait-sofa-s');
-    assert.ok(west && east && back, 'the reception needs all three runs');
+    const upright = Boolean(by('wait-sofa-w'));
+    const first = by(upright ? 'wait-sofa-w' : 'wait-sofa-n');
+    const second = by(upright ? 'wait-sofa-e' : 'wait-sofa-s');
+    const back = by(upright ? 'wait-sofa-s' : 'wait-sofa-e');
+    assert.ok(first && second && back, 'the reception needs all three runs');
+    // `along` is the axis the two side runs lie on; the back run closes them.
+    const lo = (p) => (upright ? p.y : p.x);
+    const size = (p) => (upright ? p.h : p.w);
+    const across = (p) => (upright ? p.x : p.y);
+    const thick = (p) => (upright ? p.w : p.h);
     // The side runs come down to meet the back run.
     assert.ok(
-      Math.abs(west.y + west.h - back.y) < 0.01,
-      `the west run stops ${(back.y - (west.y + west.h)).toFixed(2)} U short of the back run`,
+      Math.abs(lo(first) + size(first) - lo(back)) < 0.01,
+      `the first run stops ${(lo(back) - (lo(first) + size(first))).toFixed(2)} U short of the back`,
     );
-    assert.ok(Math.abs(east.y + east.h - back.y) < 0.01, 'the east run does not meet the back run');
+    assert.ok(
+      Math.abs(lo(second) + size(second) - lo(back)) < 0.01,
+      'the second run does not meet the back run',
+    );
     // And the back run spans exactly between them.
     assert.ok(
-      Math.abs(back.x - (west.x + west.w)) < 0.01 && Math.abs(back.x + back.w - east.x) < 0.01,
+      Math.abs(across(back) - (across(first) + thick(first))) < 0.01 &&
+        Math.abs(across(back) + thick(back) - across(second)) < 0.01,
       'the back run does not span between the two side runs',
     );
   }
@@ -581,16 +665,14 @@ test('the working floor is bands of rooms with one shared corridor between each'
   });
   const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
-  const spine = plan.rooms.find((r) => r.id === '__spine__');
-  const workingX = spine.x + spine.w;
-  const workingW = plan.width - workingX;
+  const { workingW } = roomBands(plan);
 
   const crossing = plan.rooms
     .filter(
       (r) =>
         r.kind === 'corridor' &&
         r.id !== '__spine__' &&
-        r.id !== '__open__' &&
+        !r.id.startsWith('__open') &&
         r.w >= workingW - 0.01,
     )
     .sort((a, b) => a.y - b.y);
@@ -655,7 +737,6 @@ test('the working floor is circulation and rooms, and mostly rooms', () => {
   // so a floor whose service column is taller than its rooms need, or whose
   // bands are not the same width, has floor left over — and open floor is what
   // that honestly is. What must still hold is that it stays a minority.
-  const spine = plan.rooms.find((r) => r.id === '__spine__');
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
   const total = plan.width * plan.height;
   // The spine and the cross corridors are structure — the routes people walk.
@@ -677,27 +758,61 @@ test('the working floor is circulation and rooms, and mostly rooms', () => {
   );
 
   // And the rooms in a band share their walls: every project room's left edge
-  // meets either the spine or another room's right.
+  // meets the working side's own left edge — the spine in a column, the
+  // reception in a row (WP-59d) — or another room's right.
+  const workingX = plan.working.x;
   for (const r of rooms) {
     const meets =
-      Math.abs(r.x - (spine.x + spine.w)) < 0.01 ||
+      Math.abs(r.x - workingX) < 0.01 ||
       rooms.some((o) => o !== r && Math.abs(o.x + o.w - r.x) < 0.01);
     assert.ok(meets, `${r.id} has a gap on its left rather than a shared wall`);
   }
 });
 
-test('the service column has no empty strip beside either of its rooms', () => {
+test('the service rooms have no empty strip beside either of them', () => {
+  // In a COLUMN the two service rooms are one width and the spine is against
+  // them. In TWO ROWS they are the left ends of two rows (WP-59d) and are two
+  // different widths on purpose — the reception is as wide as the rooms beside
+  // it leave it and the lounge as wide as the strip does — so the sentence
+  // this test is actually about is stated per row: each row is FULL, wall to
+  // wall, with nothing between its two halves. A lobby is a room-shaped piece
+  // of nothing either way.
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
     const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+    const spine = plan.rooms.find((r) => r.id === '__spine__');
+    if (plan.arrangement === 'two-rows') {
+      assert.ok(office.x === 0 && lounge.x === 0, 'both rows start at the building line');
+      // The spine runs between the rows, wall to wall, with the reception
+      // above it and the lounge below.
+      assert.ok(
+        Math.abs(spine.y - (office.y + office.h)) < 0.01 &&
+          Math.abs(spine.y + spine.h - lounge.y) < 0.01 &&
+          Math.abs(spine.w - plan.width) < 0.01,
+        'the corridor between the rows does not span between them',
+      );
+      // And each row fills the width: nothing is left over beside either half.
+      const rowEnd = (y, h) =>
+        plan.rooms
+          .filter((r) => r.y < y + h - 0.01 && r.y + r.h > y + 0.01)
+          .reduce((a, r) => Math.max(a, r.x + r.w), 0);
+      assert.ok(
+        Math.abs(rowEnd(office.y, office.h) - plan.width) < 0.01,
+        'row one does not reach the building line',
+      );
+      assert.ok(
+        Math.abs(rowEnd(lounge.y, lounge.h) - plan.width) < 0.01,
+        'row two does not reach the building line',
+      );
+      continue;
+    }
     assert.ok(
       Math.abs(office.w - lounge.w) < 0.01,
       `the lounge is ${lounge.w.toFixed(1)} wide and the reception ${office.w.toFixed(1)}`,
     );
     // Nothing sits between the column and the spine.
-    const spine = plan.rooms.find((r) => r.id === '__spine__');
     if (!spine) continue;
     assert.ok(
       Math.abs(spine.x - office.w) < 0.01,
@@ -966,14 +1081,20 @@ test('the building is the sum of its parts, not the shape of the window', () => 
   );
 
   // And the envelope really is the sum: the working side is exactly what is
-  // left after the service column and the spine.
+  // left after the service rooms and the corridor between them.
   for (const plan of [one, many]) {
     const office = plan.rooms.find((r) => r.kind === 'office');
     const spine = plan.rooms.find((r) => r.id === '__spine__');
+    const x = plan.working.x;
     const right = plan.rooms
-      .filter((r) => r.x >= spine.x + spine.w - 0.01)
-      .reduce((a, r) => Math.max(a, r.x + r.w), spine.x + spine.w);
-    assert.ok(Math.abs(spine.x - office.w) < 0.01, 'the spine sits against the service column');
+      .filter((r) => r.x >= x - 0.01)
+      .reduce((a, r) => Math.max(a, r.x + r.w), x);
+    assert.ok(
+      plan.arrangement === 'two-rows'
+        ? Math.abs(x - office.w) < 0.01
+        : Math.abs(spine.x - office.w) < 0.01 && Math.abs(x - (spine.x + spine.w)) < 0.01,
+      'the working side does not start where the service rooms end',
+    );
     assert.ok(
       Math.abs(right - plan.width) < 0.01,
       'the working side reaches the building line exactly',
@@ -1021,7 +1142,17 @@ function couldTakeShape(plan, stageAspect) {
   // stopped being, while being no wider and no better shaped than before.
   const office = plan.rooms.find((r) => r.kind === 'office');
   const strip = plan.rooms.find((r) => r.kind === 'directory');
-  return Boolean(strip) || !office || office.w < OFFICE_MAX_W - 0.01;
+  // The reception's stop is `OFFICE_MAX_W` in a column and, in a row, that
+  // plus a seat pitch a head for the queue whose sofas run along its width
+  // (WP-59d, `searchRows`). Re-derived here rather than read off the plan:
+  // `plan.officeSeats.length` IS the queue. The row cap is not on the ladder —
+  // the search walks widths in `SERVICE_W_STEP` from `OFFICE_MIN_W` — so what
+  // "at its stop" means there is that there was no next rung inside it.
+  const cap =
+    plan.arrangement === 'two-rows'
+      ? OFFICE_MAX_W + plan.officeSeats.length * OFFICE_SEAT_PITCH - SERVICE_W_STEP
+      : OFFICE_MAX_W;
+  return Boolean(strip) || !office || office.w < cap - 0.01;
 }
 
 /**
@@ -1219,9 +1350,11 @@ test('a room is never given floor to chase the shape of a window', () => {
  * @param {import('../../public/render/plan.js').Plan} plan
  */
 function roomBands(plan) {
-  const spine = plan.rooms.find((r) => r.id === '__spine__');
-  const workingX = spine ? spine.x + spine.w : 0;
-  const workingW = plan.width - workingX;
+  // The rectangle the rooms are laid in: everything right of the spine in a
+  // column, and everything right of the reception in row one of a two-row plan
+  // (WP-59d). `plan.working` records both, and `workingSide` below re-derives
+  // it from the drawn floor rather than trusting it.
+  const workingW = plan.working.w;
   /** @type {Map<string, {y:number, h:number, rooms:object[]}>} */
   const byRow = new Map();
   for (const room of plan.rooms) {
@@ -1301,12 +1434,46 @@ test('the working side is the wider half once it holds three rooms', () => {
     for (const [stageW, stageH] of STAGES) {
       const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
       const office = plan.rooms.find((r) => r.kind === 'office');
-      const spine = plan.rooms.find((r) => r.id === '__spine__');
-      const workingW = plan.width - (spine.x + spine.w);
+      const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+      const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
+      // IN TWO ROWS THE COMPARISON IS AN AREA (WP-59d), because the service
+      // rooms are the ends of two rows rather than one full-height column and
+      // a width no longer stands for either of them. Same sentence, same
+      // bound: the rooms with people in them are the subject of the floor.
+      if (plan.arrangement === 'two-rows') {
+        // IN A ROW THE COMPARISON IS ROW ONE'S (WP-59d). The lounge is UNDER
+        // the rooms and takes nothing from them; what can crowd them is the
+        // reception beside them, and the bound on that is the same
+        // `SERVICE_COLUMN_MAX`, measured the same way — a share of the width
+        // they are laid across.
+        assert.ok(
+          plan.width - office.w > office.w,
+          `${where}: ${(plan.width - office.w).toFixed(1)} U of rooms beside a ` +
+            `${office.w.toFixed(1)} U reception`,
+        );
+        // HALF, not `SERVICE_COLUMN_MAX`, and the difference is what is being
+        // measured. That constant is stated on a COLUMN — the office and the
+        // lounge together, down the side of the rooms — and a row's reception
+        // is one of those two. Held to 40% instead of to half, the owner's own
+        // floor could not reach the shape of his window: the width was there,
+        // in a reception 46% of a row whose rooms were still the wider half.
+        assert.ok(
+          office.w < plan.width / 2,
+          `${where}: the reception is ${((office.w / plan.width) * 100).toFixed(0)}% of its row`,
+        );
+        // And the room below it is not free either: the lounge and the strip
+        // share row two, and the strip may not take the larger half of it.
+        assert.ok(
+          lounge.w >= plan.width - lounge.w,
+          `${where}: the strip takes more of row two than the lounge`,
+        );
+        continue;
+      }
+      const workingW = plan.width - plan.working.x;
       assert.ok(
         workingW > office.w,
-        `${JSON.stringify(spec)} at ${stageW}x${stageH}: ${workingW.toFixed(1)} U of working ` +
-          `side beside a ${office.w.toFixed(1)} U service column`,
+        `${where}: ${workingW.toFixed(1)} U of working side beside a ` +
+          `${office.w.toFixed(1)} U service column`,
       );
       // And the column stays under its own bound wherever the shape allowed
       // the search to hold it there, which is what `SERVICE_COLUMN_MAX` is.
@@ -1315,7 +1482,7 @@ test('the working side is the wider half once it holds three rooms', () => {
       // 43%, because the alternative column is 8 units narrower and 14 taller.
       assert.ok(
         office.w / plan.width <= SERVICE_COLUMN_MAX + 0.05,
-        `${JSON.stringify(spec)} at ${stageW}x${stageH}: the service column is ` +
+        `${where}: the service column is ` +
           `${((office.w / plan.width) * 100).toFixed(0)}% of the building`,
       );
     }
@@ -1335,19 +1502,34 @@ test('the rooms and the strip stand together, and the open floor is under them',
       const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
       const strip = plan.rooms.find((r) => r.kind === 'directory');
       if (!strip) continue;
-      const open = plan.rooms.find((r) => r.id === '__open__');
+      const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
+      // IN TWO ROWS THE STRIP STANDS BESIDE THE LOUNGE (WP-59d), at the TOP of
+      // row two with its own open floor under it, which is the same sentence
+      // about the same two things: the content is together against a wall and
+      // the open floor is the margin under it, never between them.
+      const opens = plan.rooms.filter((r) => r.id.startsWith('__open'));
+      if (plan.arrangement === 'two-rows') {
+        const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+        assert.ok(
+          Math.abs(strip.y - lounge.y) < 0.01 && Math.abs(strip.x - (lounge.x + lounge.w)) < 0.01,
+          `${where}: the strip does not share the lounge's wall at the top of its row`,
+        );
+        for (const open of opens) {
+          assert.ok(
+            open.y >= strip.y + strip.h - 0.01 || open.y + open.h <= strip.y + 0.01,
+            `${where}: open floor sits beside the strip rather than under it`,
+          );
+        }
+        continue;
+      }
       const rooms = plan.rooms.filter((r) => r.kind === 'project');
       const bottom = rooms.reduce((a, r) => Math.max(a, r.y + r.h), 0);
       assert.ok(
         strip.y <= bottom + 0.01,
-        `${JSON.stringify(spec)} at ${stageW}x${stageH}: the strip starts ` +
-          `${(strip.y - bottom).toFixed(1)} U below the last room`,
+        `${where}: the strip starts ${(strip.y - bottom).toFixed(1)} U below the last room`,
       );
-      if (open) {
-        assert.ok(
-          open.y >= strip.y + strip.h - 0.01,
-          `${JSON.stringify(spec)} at ${stageW}x${stageH}: open floor sits above the strip`,
-        );
+      for (const open of opens) {
+        assert.ok(open.y >= strip.y + strip.h - 0.01, `${where}: open floor sits above the strip`);
       }
     }
   }
@@ -1367,14 +1549,45 @@ test('the rooms and the strip stand together, and the open floor is under them',
  * @param {import('../../public/render/plan.js').Plan} plan
  */
 function workingSide(plan) {
-  const spine = plan.rooms.find((r) => r.id === '__spine__');
-  const x = spine ? spine.x + spine.w : 0;
-  const w = Math.max(0, plan.width - x);
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
   const strip = plan.rooms.find((r) => r.kind === 'directory');
   const taken = rooms.reduce((a, r) => a + r.w * r.h, 0) + (strip ? strip.w * strip.h : 0);
+  if (plan.arrangement === 'two-rows') {
+    // TWO CORNERS RATHER THAN ONE SIDE (WP-59d). The rooms take the right of
+    // row one and the strip the right of row two, and what is being measured
+    // is the same thing either way: the part of the building that holds
+    // content, less what the content takes. Derived from the rooms that were
+    // DRAWN — the corridor between the rows is the row divide, and each row's
+    // own rectangle is what its content is measured against.
+    const spine = plan.rooms.find((r) => r.id === '__spine__');
+    const office = plan.rooms.find((r) => r.kind === 'office');
+    const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+    const x = office.x + office.w;
+    const w = Math.max(0, plan.width - x);
+    const area = w * office.h + (strip ? (plan.width - (lounge.x + lounge.w)) * lounge.h : 0);
+    return {
+      x,
+      w,
+      rooms,
+      strip,
+      area,
+      spine,
+      open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0,
+    };
+  }
+  const spine = plan.rooms.find((r) => r.id === '__spine__');
+  const x = spine ? spine.x + spine.w : 0;
+  const w = Math.max(0, plan.width - x);
   const area = w * plan.height;
-  return { x, w, rooms, strip, area, open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0 };
+  return {
+    x,
+    w,
+    rooms,
+    strip,
+    area,
+    spine,
+    open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0,
+  };
 }
 
 test('the working side is filled, or everything on it is already as large as it may be', () => {
@@ -1436,8 +1649,17 @@ test('the working side is filled, or everything on it is already as large as it 
       const atCap = side.rooms.some(
         (r) => bareCarpet(r) >= cap - 0.005 || r.w >= r.natural.w * ROOM_WIDTH_STRETCH_MAX - EPS,
       );
+      // OR THERE IS NOTHING LEFT FOR THEM TO GROW INTO (WP-59d). A two-row
+      // plan's rooms are laid in ROW ONE, not down the whole side, so a band
+      // that reaches the bottom of its own row is as large as it may be
+      // whatever its bare carpet says — the open floor being complained about
+      // is then in row two's corner, which is the strip's clause below and not
+      // theirs.
+      const rowFull =
+        plan.arrangement === 'two-rows' &&
+        side.rooms.every((r) => r.y + r.h >= plan.rooms.find((o) => o.kind === 'office').h - 0.01);
       assert.ok(
-        side.rooms.length === 0 || atCap,
+        side.rooms.length === 0 || atCap || rowFull,
         `${where}: the working side is ${(side.open * 100).toFixed(0)}% open and no room in it ` +
           `is at its cap (${side.rooms
             .map((r) => `${r.id} ${(bareCarpet(r) * 100).toFixed(0)}%`)
@@ -1462,13 +1684,21 @@ test('the working side is filled, or everything on it is already as large as it 
         const nextH = nextRows
           ? PLATE_BAND + nextRows * DIRECTORY_LINE_H + DIRECTORY_PAD
           : Infinity;
+        // The allowance is a quarter of the BUILDING in a column. In two rows
+        // it is that or the strip's own natural height, whichever is more,
+        // and never past the row the lounge set — the row's depth is not the
+        // strip's choice, so it may fill it, and it may not exceed it.
+        const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+        const allowance =
+          plan.arrangement === 'two-rows'
+            ? Math.min(lounge.h, Math.max(side.strip.h, plan.height * DIRECTORY_SIDE_MAX))
+            : plan.height * DIRECTORY_SIDE_MAX;
         assert.ok(
-          nextH > plan.height * DIRECTORY_SIDE_MAX + EPS,
+          nextH > allowance + EPS,
           `${where}: the working side is ${(side.open * 100).toFixed(0)}% open and the strip ` +
             `is ${side.strip.h.toFixed(1)} U in ${rows} rows, with a ` +
             `${nextRows}-row board at ${nextH.toFixed(1)} U inside its ` +
-            `${(plan.height * DIRECTORY_SIDE_MAX).toFixed(1)} U allowance — it could have ` +
-            `stood its lines up`,
+            `${allowance.toFixed(1)} U allowance — it could have stood its lines up`,
         );
       }
       // (c) the lounge is at its densest — unless there is nobody in it to
@@ -1525,6 +1755,123 @@ test('nothing on the working side is drawn outside the room it belongs to', () =
             `${where}: the strip's line for ${e.id} is drawn outside the strip`,
           );
         }
+      }
+    }
+  }
+});
+
+test('no agent is drawn outside the room it stands in, juniors included', () => {
+  // WP-59d, AND IT IS THE ONE THE OWNER SAW. §141 added "nothing on the
+  // working side is drawn outside the room it belongs to", which is about
+  // furniture and about the strip's lines; this is the same sentence about
+  // PEOPLE, which is where it was actually being broken. On his own floor a
+  // benched senior with sixteen juniors drew them in one row forty units wide
+  // along the lounge's bottom wall — sixteen labelled bodies, half of them
+  // over the corridor outside the lounge — because WP-41 stood each junior one
+  // seat pitch further out than the last and nothing ever asked where the wall
+  // was.
+  //
+  // A JUNIOR'S ROOM IS ITS PARENT'S. That is the whole of WP-41's rule
+  // ("a junior is only ever beside its parent") and it is why this cannot be
+  // asked of `derivePlacement`, which answers `desk` for a junior standing in
+  // a lounge beside a benched senior.
+  const PAD = 0.5;
+  for (const spec of [...POPULATIONS, JUNIORS]) {
+    const { projects, agents } = floor(spec);
+    const byId = new Map(agents.map((a) => [a.id, a]));
+    for (const [stageW, stageH] of STAGES) {
+      const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
+      const seats = assignSeats(plan, agents);
+      const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
+      const roomFor = (a) => {
+        if (a.subagent === true) {
+          const parent = byId.get(String(a.parentId));
+          return parent ? roomFor(parent) : null;
+        }
+        const p = derivePlacement(a);
+        if (p === 'desk')
+          return plan.rooms.find((r) => r.kind === 'project' && r.id === a.projectId);
+        if (p === 'office') return plan.rooms.find((r) => r.kind === 'office');
+        return plan.rooms.find((r) => r.kind === 'lounge');
+      };
+      for (const a of agents) {
+        const seat = seats.get(a.id);
+        if (!seat) continue; // let go, gone home, or a junior with no parent drawn
+        const room = roomFor(a);
+        assert.ok(room, `${where}: ${a.id} has a seat and no room`);
+        assert.ok(
+          seat.x >= room.x - PAD &&
+            seat.x <= room.x + room.w + PAD &&
+            seat.y >= room.y - PAD &&
+            seat.y <= room.y + room.h + PAD,
+          `${where}: ${a.id}${a.subagent ? ' (junior)' : ''} stands at ` +
+            `${seat.x.toFixed(1)},${seat.y.toFixed(1)}, outside ${room.id} ` +
+            `(${room.x.toFixed(1)},${room.y.toFixed(1)} ${room.w.toFixed(1)}x${room.h.toFixed(1)})`,
+        );
+      }
+    }
+  }
+});
+
+test("the lounge's packed row of juniors is inside the lounge", () => {
+  // The same property, stated on the one case it was broken in, so a
+  // regression names itself. Sixteen juniors beside a benched senior: they are
+  // all drawn, all in the lounge, and no two of them are in the same place.
+  const { projects, agents } = floor(JUNIORS);
+  for (const [stageW, stageH] of STAGES) {
+    const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
+    const seats = assignSeats(plan, agents);
+    const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+    const juniors = agents.filter((a) => a.parentId === 'b0');
+    assert.equal(juniors.length, 16, 'the fixture has to hold the row that broke');
+    const seen = new Set();
+    for (const j of juniors) {
+      const seat = seats.get(j.id);
+      assert.ok(seat, `${j.id} is not drawn at all`);
+      assert.ok(
+        seat.x >= lounge.x &&
+          seat.x <= lounge.x + lounge.w &&
+          seat.y >= lounge.y &&
+          seat.y <= lounge.y + lounge.h,
+        `${j.id} stands at ${seat.x.toFixed(1)},${seat.y.toFixed(1)}, outside the ` +
+          `${lounge.w.toFixed(1)}x${lounge.h.toFixed(1)} lounge at ` +
+          `${lounge.x.toFixed(1)},${lounge.y.toFixed(1)} (${stageW}x${stageH})`,
+      );
+      const key = `${seat.x.toFixed(2)}:${seat.y.toFixed(2)}`;
+      assert.ok(!seen.has(key), `two juniors are standing at ${key}`);
+      seen.add(key);
+    }
+  }
+});
+
+test('the plan says which arrangement it was laid in, and the floor agrees', () => {
+  // WP-59d. `plan.arrangement` is a RECORD, like `plan.working` before it, and
+  // it is re-derived here rather than trusted: a column has its spine running
+  // down between two rooms of one width, and two rows have it running across
+  // between a reception above and a lounge below.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const [stageW, stageH] of STAGES) {
+      const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
+      const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
+      assert.ok(
+        plan.arrangement === 'column' || plan.arrangement === 'two-rows',
+        `${where}: the plan does not say how it was laid`,
+      );
+      const spine = plan.rooms.find((r) => r.id === '__spine__');
+      const office = plan.rooms.find((r) => r.kind === 'office');
+      const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+      if (plan.arrangement === 'two-rows') {
+        assert.ok(spine.w > spine.h, `${where}: a two-row plan's corridor runs across it`);
+        assert.ok(office.y < spine.y && lounge.y >= spine.y, `${where}: the rows are not stacked`);
+        // And the second arrangement is only ever taken on a wide stage.
+        assert.ok(
+          plan.targetAspect >= 1.45 - EPS,
+          `${where}: a ${plan.targetAspect.toFixed(2)}:1 stage is a column's`,
+        );
+      } else {
+        assert.ok(spine.h >= spine.w, `${where}: a column's corridor runs down it`);
+        assert.ok(Math.abs(office.w - lounge.w) < 0.01, `${where}: the column is not one width`);
       }
     }
   }

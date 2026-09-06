@@ -127,6 +127,9 @@
  *   its plate. `PLATE_BAND` on every room that carries one.
  * @property {{w:number, h:number}} [natural] what this room's own contents need,
  *   before the packer gives it a cell (WP-55, docs/DEVIATIONS.md §106).
+ * @property {boolean} [landscape] the reception, laid on its side for a row
+ *   (WP-59d): the waiting area runs along its width and the desk is at one
+ *   end. `seatOffice` reads it to walk the runs in queue order.
  * @property {boolean} [thoroughfare] a corridor nobody routes down when false.
  * @property {{x:number,y:number}} [door] where an occupant leaves the room, set
  *   by `assignDoors` once the nav graph exists.
@@ -196,7 +199,13 @@
  * @property {Room|null} directory the idle-projects strip, when there is one
  * @property {WorkingSide} working what the working side did with the height
  *   the service column gave it (WP-59c)
+ * @property {Arrangement} arrangement which shape the envelope search chose
+ *   (WP-59d): `column` is the service column beside the working side, which
+ *   every floor before this package was laid as; `two-rows` is the office
+ *   beside the rooms over the lounge beside the strip.
  */
+
+/** @typedef {'column'|'two-rows'} Arrangement */
 
 /**
  * @typedef {object} WorkingSide
@@ -384,6 +393,121 @@ export const ROOM_FILL_COLUMN_MAX = 1 / 0.58;
  * start to read as the subject of the floor rather than as its footnote.
  */
 export const DIRECTORY_SIDE_MAX = 0.25;
+
+/**
+ * THE SECOND ARRANGEMENT (WP-59d), and the two conditions it is tried under.
+ *
+ * §141 proved by arithmetic that a service COLUMN cannot fill a wide window
+ * beside one-desk rooms: a reception over a lounge holding twenty-three
+ * benched agents is seventy units tall, four one-desk rooms and a fourteen-line
+ * board want about thirty between them, and every lever in the fill order
+ * together left 43% of the owner's working side as open plan. The remaining
+ * 41% "is the difference between a lounge holding twenty-three benched agents
+ * and four repos with one desk each in them" — a statement about the SHAPE the
+ * service rooms are laid in, not about how much floor there is.
+ *
+ * So there is a second shape. Arrangement B lays the building as TWO ROWS —
+ * the office beside the rooms, the lounge beside the strip, one corridor
+ * between them — which turns the same furniture through ninety degrees and
+ * lets a wide window be filled by a wide reception and a wide lounge rather
+ * than by rooms that have nothing to grow into.
+ *
+ * It is tried only where both of these hold, and both are necessary:
+ *
+ *   - `ROWS_ASPECT_MIN` — the stage is at least this wide for its height. A
+ *     tall or square window is exactly what a column is for, and stacking two
+ *     rows in one would make a building wider than the screen.
+ *   - `ROWS_OPEN_MIN` — arrangement A would leave at least this much of its
+ *     working side as open plan. A floor whose column already fills its side
+ *     is not a floor with a problem, and re-arranging it would move a picture
+ *     nobody complained about.
+ *
+ * Below the trigger the plan is laid exactly as WP-59c left it, and the search
+ * for B is not even run.
+ */
+export const ROWS_ASPECT_MIN = 1.45;
+export const ROWS_OPEN_MIN = 0.15;
+
+/**
+ * The reception, laid on its side (WP-59d).
+ *
+ * In arrangement B the reception is the wide end of a row rather than the top
+ * of a column: the waiting area runs along its width and the desk stands at
+ * one end. It is the SAME room — `buildOfficeRow` transposes what
+ * `buildOffice` lays out, so the C of sofas, the well, the rug and every
+ * anchor are the ones §57 measured — and these are the two bounds that change
+ * with the axis it is laid on.
+ *
+ * `OFFICE_ROW_MAX_W` is the widest the search will ever ASK for, and the
+ * search may not ask for all of it: the reception in a row is `OFFICE_MAX_W`
+ * — as wide as it may be in a column — plus one `OFFICE_SEAT_PITCH` for every
+ * person waiting in it, because the C of sofas runs along its width and a
+ * queue is exactly what a wider reception buys. Without that the envelope
+ * search found the easiest way to fill a wide window: an empty reception
+ * ninety units across, which is a hall.
+ *
+ * What it may still be handed is a wider ROW, and that is not the same thing:
+ * both rows fill one width, so a reception beside narrow rooms is as wide as
+ * the lounge and the strip below it make it. A room padded to its row is
+ * furnished to its row — `buildOffice` lays the seating into whatever it is
+ * given — and the alternative is a strip of nothing at the end of row one,
+ * which is the one thing the service side has never done.
+ *
+ * `OFFICE_ROW_MAX_DEPTH` is `OFFICE_MAX_W` read on the other axis — how deep
+ * a row may make the reception — and it is larger for the same reason.
+ */
+export const OFFICE_ROW_MAX_W = 96;
+export const OFFICE_ROW_MAX_DEPTH = 60;
+
+/**
+ * Widest a reception may be for its depth once it is laid in a row (WP-59d).
+ *
+ * `ROOM_ASPECT_MAX` (1.8) is the bound on a room that could have been either
+ * shape, and a row office could not: it is as wide as the row leaves it and as
+ * deep as the row is. "A 2:1 reception reads as a corridor with a desk at one
+ * end" was written about a room whose desk is at the TOP; this one's desk is
+ * at the end by design, which is what a long reception actually looks like.
+ * The bound is still here because past about three to one the waiting area
+ * stops reading as a room at all.
+ */
+export const OFFICE_ROW_ASPECT_MAX = 3.2;
+
+/**
+ * And the same bound on the lounge at the end of the other row (WP-59d).
+ *
+ * §139 gave the column lounge the reception's own rule — "a wider column is a
+ * taller one, and the lever is self-limiting" — because a lounge shelf-packed
+ * into a wide budget comes out as a gallery: eighty units of row two with a
+ * television at one end and a pool table at the other is 4.2:1, which is a
+ * corridor with sofas in it. The floor under its height is the same sentence
+ * read on the row's axis, and it is self-limiting for the same reason: a wider
+ * row is a taller building, and a taller building stops being the shape a wide
+ * window wants.
+ */
+export const LOUNGE_ROW_ASPECT_MAX = 3.2;
+
+/**
+ * The narrowest the lounge may be laid in a row (WP-59d).
+ *
+ * Its widest block — the living room, 15 U — plus the margin either side. A
+ * lounge narrower than its own furniture is a lounge with furniture drawn
+ * outside it, which is the defect this package fixes at the other end (the
+ * juniors' packed row); the strip gives up the width instead.
+ */
+export const LOUNGE_ROW_MIN_W = 20;
+
+/**
+ * The most of its ROW the idle strip may take (WP-59d).
+ *
+ * `DIRECTORY_SIDE_MAX` is the same sentence about the other axis — a strip
+ * past a quarter of the side stops being a footnote — and in a row the axis
+ * that can run away is the width: `directoryWidths` will happily ask for two
+ * columns of twenty-eight units for a board with two lines on it, and with
+ * nothing to stop it that board takes three quarters of the row and leaves the
+ * lounge a cupboard. Under half, and the lounge is the larger half of its own
+ * row whatever the strip asks for.
+ */
+export const DIRECTORY_ROW_MAX_SHARE = 0.45;
 
 /**
  * The most of the building the service column may take, once the working band

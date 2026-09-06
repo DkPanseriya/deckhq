@@ -25,9 +25,12 @@ import {
   CORRIDOR,
   DIRECTORY_SIDE_MAX,
   HEIGHT_BAND_RATIO,
+  PLATE_BAND,
   PROJECT_ASPECT_LIMIT,
   ROOM_FILL_COLUMN_MAX,
   ROOM_FILL_MAX,
+  ROOM_HEIGHT_STRETCH_MAX,
+  ROOM_PAD,
   ROOM_WIDTH_STRETCH_MAX,
   WORKING_HEADROOM,
 } from './plan-units.js';
@@ -528,8 +531,105 @@ export function createWorkingFloor(projectRooms, naturalOf) {
     return { bandH: rooms, dirH, dirCols, forced };
   };
 
+  /**
+   * LAY THE COLUMN ARRANGEMENT — the working floor, and the floor's final
+   * size.
+   *
+   * The rooms are laid into their cells and REBUILT to the shape of the cell
+   * they were given, so a project's tables flow to that shape rather than
+   * being laid out square and centred in something that is not. Rebuilding
+   * changes what a room needs, so the fit is checked and the building grows
+   * until every room holds its own furniture — the one thing the plan may
+   * never get wrong, since a desk outside its room is a desk on the corridor.
+   *
+   * `bandH` is the height the ROOMS take of the working side, and not the
+   * whole of it. Where the service column is taller than the rooms need — one
+   * small project beside a reception and a lounge — the rooms may absorb the
+   * difference only up to `BAND_STRETCH_MAX`; past that the floor says so with
+   * open circulation rather than painting more carpet nobody stands on. Carpet
+   * with nothing on it is the defect; ground is not.
+   *
+   * It lives here rather than in `plan.js` since WP-59d, beside the fill order
+   * it re-runs and opposite `plan-rows.js`'s `layRows`, which is the same loop
+   * for the other arrangement. What it takes from `plan.js` is the one step
+   * that file owns: how to rebuild a project's room into the cell it was given.
+   *
+   * @param {any} chosen the candidate envelope the search settled on
+   * @param {(i:number, cell:{w:number,h:number}, aspect:number) => void} rebuild
+   * @param {number} idle idle repos the strip has to list
+   */
+  const layColumn = (chosen, rebuild, idle) => {
+    const workingX = chosen.measured.w + CORRIDOR;
+    let H = chosen.H;
+    let workingW = chosen.workingW;
+    let W = workingX + workingW;
+    let laid = { cells: [], corridors: [] };
+    let dirH = 0;
+    let dirCols = chosen.dirCols;
+    let forced = chosen.forced;
+    let bandH = chosen.bandH;
+    let asked = chosen.asked ?? chosen.bandH;
+    for (let pass = 0; pass < 8; pass++) {
+      // Rebuilding a room changes what its furniture needs, so the deal the
+      // bands were cut from is stale the moment the previous pass touched one.
+      bandCache.clear();
+      shapeCache.clear();
+      W = workingX + workingW;
+      // THE FILL ORDER, AGAIN, AGAINST THE FLOOR THAT IS ACTUALLY BEING LAID
+      // (WP-59c). `envelopeFor` ran it over what the rooms wanted; the fit
+      // loop has since rebuilt them into their cells, so the rooms are a
+      // different size and the answer has to be asked again. Asked through the
+      // same function, so the two can be wrong together but never differently.
+      const order = fillOrder(chosen.rowCount, workingW, H, Math.min(asked, Math.max(1, H)), idle);
+      dirH = order.dirH;
+      dirCols = order.dirCols;
+      forced = order.forced;
+      bandH = Math.min(order.bandH, Math.max(1, H - dirH));
+      laid = projectRooms.length
+        ? layWorkingFloor(
+            { x: workingX, y: 0, w: workingW, h: bandH },
+            chosen.rowCount,
+            forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
+          )
+        : { cells: [], corridors: [] };
+      let worstW = 1;
+      let worstH = 1;
+      projectRooms.forEach((pr, i) => {
+        const cell = laid.cells[i];
+        if (!cell) return;
+        // The shape the DESK CLUSTER has to fill, which is the cell less the
+        // clearance the walls and the plate take — not the cell's own aspect.
+        //
+        // AND NEVER DEEPER THAN A ROOM THE PLAN WOULD HAVE CHOSEN (WP-59c).
+        // A column-forced cell is depth the desks did not ask for, and flowing
+        // the tables into it deals a SECOND ROW OF DESKS to fill a lounge's
+        // height. Desks equal agents at desks (`08` B6); the extra depth goes
+        // to the rug, the planting and the wall furniture instead, which is
+        // what `buildProjectRoom` spreads into it.
+        const natural0 = naturalOf(i);
+        const flowH = Math.min(cell.h, natural0.h * ROOM_HEIGHT_STRETCH_MAX);
+        const interiorAspect =
+          Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, flowH - ROOM_PAD * 2 - PLATE_BAND);
+        rebuild(i, cell, interiorAspect);
+        const natural = naturalOf(i);
+        worstW = Math.max(worstW, natural.w / cell.w);
+        worstH = Math.max(worstH, natural.h / cell.h);
+      });
+      if (worstW <= 1.0005 && worstH <= 1.0005) break;
+      workingW *= Math.min(worstW, 1.25);
+      asked *= Math.min(worstH, 1.25);
+      H = Math.max(H, asked + dirH);
+    }
+    return { H, W, workingW, workingX, laid, dirH, dirCols, bandH, forced };
+  };
+
   return {
     bandsOf,
+    layColumn,
+    // The depth ladder's ceiling, exported since WP-59d: arrangement B grows
+    // its rooms into the row its reception set, which is step (a) of the same
+    // fill order read on the other axis, and there is one copy of the rule.
+    bandDepthCeiling,
     fillOrder,
     /**
      * Forget the deal and the measurement.

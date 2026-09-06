@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, formatTokens, payrollLine, U } from '../../public/render/plan.js';
+import { OFFICE_ROW_ASPECT_MAX } from '../../public/render/plan-units.js';
 
 const EPS = 1e-6;
 // docs/DEVIATIONS.md §12: 05-LAYOUT-REWORK.md §2.2's [1.60, 1.78] clamp and
@@ -258,10 +259,17 @@ test('§3.8 a 21-session project seats every session, and every room in its plan
     // A corridor is deliberately long and thin — that is what a corridor is.
     // The aspect band governs zones people work in.
     if (r.kind === 'corridor') continue;
+    // AND A ROOM LAID IN A ROW IS WIDER (WP-59d). `ROOM_ASPECT_MAX` is the
+    // bound on a room that could have been either shape; the reception and the
+    // lounge in arrangement B are the ends of two rows and are as wide as the
+    // row makes them, with the waiting area along the width and the desk at
+    // one end. `OFFICE_ROW_ASPECT_MAX` is where that stops reading as a room.
+    const inRow = plan.arrangement === 'two-rows' && (r.kind === 'office' || r.kind === 'lounge');
+    const max = inRow ? OFFICE_ROW_ASPECT_MAX : 1.8;
     const aspect = r.w / r.h;
     assert.ok(
-      aspect >= 0.6 - EPS && aspect <= 1.8 + EPS,
-      `${r.id} aspect ${aspect} falls outside [0.6, 1.8]`,
+      aspect >= 0.6 - EPS && aspect <= max + EPS,
+      `${r.id} aspect ${aspect} falls outside [0.6, ${max}] (${plan.arrangement})`,
     );
   }
 });

@@ -15,6 +15,42 @@ import { CORRIDOR, clamp } from './plan-units.js';
 /** @typedef {import('./plan-units.js').Room} Room */
 
 /**
+ * One piece of circulation, as a room.
+ *
+ * Every corridor rectangle on the floor is this shape — the spine, the cross
+ * corridors between bands, the bays at the end of a short row and the open
+ * plan under the content — and before WP-59d there were three copies of the
+ * same fourteen-line literal in `plan.js`, which is two more than a plan with
+ * two arrangements can keep in step.
+ *
+ * `thoroughfare` is the one field that matters and it is not decoration:
+ * `buildNavLines` routes down a corridor only when it is true. Open floor is
+ * walkable-LOOKING and is not a route — there is nothing in it to walk to, and
+ * a line down a dead end is a line the graph can never leave.
+ *
+ * @param {{id:string, x:number, y:number, w:number, h:number,
+ *   thoroughfare?:boolean}} rect
+ * @returns {Room}
+ */
+export function corridorRoom(rect) {
+  return {
+    kind: 'corridor',
+    id: rect.id,
+    name: '',
+    x: rect.x,
+    y: rect.y,
+    w: rect.w,
+    h: rect.h,
+    thoroughfare: rect.thoroughfare !== false,
+    walls: 'partial',
+    floor: 'circulation',
+    plateLines: ['', ''],
+    props: [],
+    zones: [],
+  };
+}
+
+/**
  * Derive the wall segments from the zone rectangles.
  *
  * Walls belong to the FLOOR, not to a room: two zones either side of a
@@ -93,10 +129,20 @@ export function buildNavLines(rooms, W, H) {
   /** @type {NavLine[]} */
   const lines = [];
   const spine = rooms.find((r) => r.id === '__spine__');
-  const spineC = spine ? spine.x + spine.w / 2 : null;
+  // THE SPINE'S OWN SHAPE SAYS WHICH WAY IT RUNS, exactly as every other
+  // corridor's does below. It is vertical between a service column and a
+  // working side, and horizontal between two rows (WP-59d) — and in the second
+  // case there is nothing for a cross corridor to be, because a row of rooms
+  // that needed one would be two rows and `plan-rows.js` refuses to lay it.
+  const spineVertical = !spine || spine.h >= spine.w;
+  const spineC = spine ? (spineVertical ? spine.x + spine.w / 2 : spine.y + spine.h / 2) : null;
 
   if (spine) {
-    lines.push({ id: spine.id, axis: 'v', c: spineC, min: spine.y, max: spine.y + spine.h });
+    lines.push(
+      spineVertical
+        ? { id: spine.id, axis: 'v', c: spineC, min: spine.y, max: spine.y + spine.h }
+        : { id: spine.id, axis: 'h', c: spineC, min: spine.x, max: spine.x + spine.w },
+    );
   }
 
   for (const r of rooms) {
@@ -123,8 +169,10 @@ export function buildNavLines(rooms, W, H) {
       continue;
     }
     const c = r.y + r.h / 2;
-    // Extended left to the spine centreline so the graph is connected.
-    const min = spineC !== null ? Math.min(spineC, r.x) : r.x;
+    // Extended left to the spine centreline so the graph is connected — only
+    // where that centreline is an x at all, which it is not when the spine
+    // itself is horizontal.
+    const min = spineVertical && spineC !== null ? Math.min(spineC, r.x) : r.x;
     lines.push({ id: r.id, axis: 'h', c, min, max: Math.min(W, r.x + r.w) });
   }
 

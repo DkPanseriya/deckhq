@@ -122,13 +122,24 @@ test('the corridor in the shot is the spine, clipped to the office band', () => 
   const drawn = composed.rooms.find((r) => r.kind === 'corridor');
 
   assert.equal(drawn.id, '__spine__');
-  // The spine runs the whole height of the building; only the stretch past
-  // your door belongs in a 320x200 window.
-  assert.ok(spine.h > office.h + 1, 'fixture is not exercising the clip');
-  assert.equal(drawn.h, office.h);
-  assert.equal(drawn.y, office.y);
-  // And it is beside the office, not over it.
-  assert.ok(drawn.x >= office.x + office.w - 1e-6);
+  // The spine spans the whole building; only the stretch past your door
+  // belongs in a 320x200 window. WHICH WAY it spans is the arrangement's
+  // (WP-59d): a column's spine runs down the side of the office and a
+  // two-row plan's runs along under it, and the clip follows the corridor's
+  // own rectangle either way.
+  if (spine.h >= spine.w) {
+    assert.ok(spine.h > office.h + 1, 'fixture is not exercising the clip');
+    assert.equal(drawn.h, office.h);
+    assert.equal(drawn.y, office.y);
+    // And it is beside the office, not over it.
+    assert.ok(drawn.x >= office.x + office.w - 1e-6);
+  } else {
+    assert.ok(spine.w > office.w + 1, 'fixture is not exercising the clip');
+    assert.equal(drawn.w, office.w);
+    assert.equal(drawn.x, office.x);
+    // And it is under the office, not across it.
+    assert.ok(drawn.y >= office.y + office.h - 1e-6);
+  }
 });
 
 test('the shot is exactly the union of the rooms it drew, and the viewport is that plus a margin', () => {

@@ -87,11 +87,32 @@ function nowMs() {
  * down to reach you, so it is the one in the shot. It is found by geometry
  * rather than by id so a plan that names it something else still works, and
  * `__spine__` only breaks the tie.
+ *
+ * SINCE WP-59d THE PLAN IS ASKED FIRST. Arrangement B puts the office at the
+ * left end of the TOP ROW with the spine running horizontally underneath it,
+ * so "beside" finds the open floor at the end of that row instead — a dead end
+ * nobody walks down. `assignDoors` has already worked out which corridor the
+ * office's own door opens onto and written it down as `navEntry`, and that is
+ * the answer to the question this function is asking whichever way the
+ * building is folded. The geometry below stays as the fallback.
  * @param {any} plan
- * @param {{x:number,y:number,w:number,h:number}} office
+ * @param {{x:number,y:number,w:number,h:number,navEntry?:{x:number,y:number}}} office
  */
 function corridorBeside(plan, office) {
   const rooms = (plan && plan.rooms) || [];
+  const entry = office.navEntry;
+  const onto = entry
+    ? rooms.find(
+        (r) =>
+          r &&
+          r.kind === 'corridor' &&
+          entry.x >= r.x - 0.01 &&
+          entry.x <= r.x + r.w + 0.01 &&
+          entry.y >= r.y - 0.01 &&
+          entry.y <= r.y + r.h + 0.01,
+      )
+    : null;
+  if (onto) return onto;
   const touching = rooms.filter((r) => {
     if (!r || r.kind !== 'corridor') return false;
     // Overlaps the office's own band, and starts within a unit of one of its
@@ -163,19 +184,25 @@ export function composeMiniFrame(frame, view) {
   ];
   const corridor = corridorBeside(plan, office);
   if (corridor) {
-    // Only the stretch of it that runs past your door. The spine is the full
-    // height of the building; the lounge half of it is not this window's
-    // business and would halve the scale everything else is drawn at.
-    const top = Math.max(corridor.y, office.y);
-    const bottom = Math.min(corridor.y + corridor.h, office.y + office.h);
-    if (bottom > top) {
+    // Only the stretch of it that runs past your door. The spine spans the
+    // whole building — its height in a column, its width in two rows — and the
+    // far end of it is not this window's business and would halve the scale
+    // everything else is drawn at. Clipped along whichever way it runs, which
+    // its own rectangle says (WP-59d).
+    const vertical = corridor.h >= corridor.w;
+    const lo = Math.max(vertical ? corridor.y : corridor.x, vertical ? office.y : office.x);
+    const hi = Math.min(
+      vertical ? corridor.y + corridor.h : corridor.x + corridor.w,
+      vertical ? office.y + office.h : office.x + office.w,
+    );
+    if (hi > lo) {
       rooms.push({
         id: corridor.id,
         kind: 'corridor',
-        x: corridor.x,
-        y: top,
-        w: corridor.w,
-        h: bottom - top,
+        x: vertical ? corridor.x : lo,
+        y: vertical ? lo : corridor.y,
+        w: vertical ? corridor.w : hi - lo,
+        h: vertical ? hi - lo : corridor.h,
       });
     }
   }

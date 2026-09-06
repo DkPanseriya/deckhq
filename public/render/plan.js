@@ -34,13 +34,17 @@
  *   plan-packing.js  flow, shelf, squarify, tileRows — rectangles into a rect
  *   plan-anchors.js  resolveAnchors, translateContents, the table sizes
  *   plan-rooms.js    a project's room, and the idle strip's lines
- *   plan-service.js  the office and the lounge
+ *   plan-office.js   the reception, upright and on its side (WP-59d)
+ *   plan-service.js  the lounge
  *   plan-nav.js      walls, corridor centrelines, doors
  *   plan-envelope.js the working floor: bands, band widths, what it measures,
- *                    and what it does with the height the column gave it
- *                    (WP-59, which took this file past the 900-line ceiling)
- *   plan-search.js   how the envelope search ranks two arrangements (WP-59c,
- *                    which took it past the ceiling a second time)
+ *                    what it does with the height the column gave it, and how
+ *                    a column is laid (WP-59, which took this file past the
+ *                    900-line ceiling)
+ *   plan-search.js   how the envelope search ranks two candidates, and two
+ *                    arrangements (WP-59c, which took it past a second time)
+ *   plan-rows.js     arrangement B: the office beside the rooms over the
+ *                    lounge beside the strip (WP-59d, and a third time)
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, and `src/core/model.mjs`
@@ -53,15 +57,17 @@
 import { floorPopulation } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
-import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
+import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
 import {
   buildDirectory,
   buildProjectRoom,
   directoryHeight,
   directoryWidths,
 } from './plan-rooms.js';
-import { better, score } from './plan-search.js';
-import { buildLounge, buildOffice, seatOffice } from './plan-service.js';
+import { createRowFloor } from './plan-rows.js';
+import { better, betterArrangement, score } from './plan-search.js';
+import { buildOffice, buildOfficeRow, seatOffice } from './plan-office.js';
+import { buildLounge } from './plan-service.js';
 import {
   ASPECT_MAX,
   ASPECT_MIN,
@@ -79,12 +85,11 @@ import {
   OFFICE_MAX_W,
   OFFICE_MIN_W,
   OFFICE_SURPLUS_SHARE,
-  PLATE_BAND,
   ROOM_ASPECT_MAX,
   ROOM_FILL_COLUMN_MAX,
   ROOM_FILL_MAX,
-  ROOM_HEIGHT_STRETCH_MAX,
-  ROOM_PAD,
+  ROWS_ASPECT_MIN,
+  ROWS_OPEN_MIN,
   SERVICE_MAX_W,
   SERVICE_W_STEP,
   WORKING_OPEN_MAX,
@@ -216,20 +221,18 @@ export function buildPlan(projects, agents, opts = {}) {
     lastActivityAt: pop.lastActivity.get(idOf(p)) ?? Number(p.lastActivityAt) ?? 0,
   }));
 
-  // ---- THE FLOOR IS THREE BANDS, and their shares are the design.
+  // ---- THE SERVICE COLUMN, and the share of the floor it takes.
   //
-  //   service   ~32%  the user's office above the lounge
-  //   working   ~65%  the project rooms, which are what the product is for
+  // Roughly a third: the user's office above the lounge, with the project
+  // rooms — what the product is for — beside them. Earlier revisions let each
+  // side ask for what its contents wanted and then tried to reconcile the
+  // result, which is how a machine whose sessions are nearly all benched ended
+  // up giving 58% of its floor to a reception, a lounge and a room full of
+  // archived sessions, and 13% to the rooms with people working in them.
   //
-  // Everything below follows from that. Earlier revisions let each band ask
-  // for what its contents wanted and then tried to reconcile the result, which
-  // is how a machine whose sessions are nearly all benched ended up with 58%
-  // of its floor given to a reception, a lounge and a room full of archived
-  // sessions, and 13% to the rooms with people working in them.
-  //
-  // The service column is what sets the scale: it holds a roughly fixed amount
-  // of furniture, so once its width is chosen the rest of the floor follows
-  // from the shares. The search below picks that width.
+  // The column is what sets the scale: it holds a roughly fixed amount of
+  // furniture, so once its width is chosen the rest follows. The search below
+  // picks that width.
   const serviceCache = new Map();
   const measureService = (sw, pack = 1) => {
     const key = Math.round(sw);
@@ -278,8 +281,24 @@ export function buildPlan(projects, agents, opts = {}) {
   // may be laid, and what the whole of it measures. Its own module since
   // WP-59 (`plan-envelope.js`), which is a closure over `naturalOf` because a
   // room’s natural size changes under the fit loop below.
-  const { costWorkingFloor, fillOrder, invalidateBands, layWorkingFloor, workingShape } =
-    createWorkingFloor(projectRooms, naturalOf);
+  const workingFloor = createWorkingFloor(projectRooms, naturalOf);
+  const { costWorkingFloor, fillOrder, invalidateBands, layColumn, workingShape } = workingFloor;
+
+  // THE SECOND ARRANGEMENT (WP-59d): the office beside the rooms over the
+  // lounge beside the strip. Its own module for the same reason the working
+  // floor is one — every measurement in it reads `naturalOf`, which the fit
+  // loop changes underneath it — and handed the two service rooms as BUILDERS
+  // rather than as furniture, because a row's reception and a row's lounge are
+  // the same two rooms laid at other sizes.
+  const rowFloor = createRowFloor({
+    projectRooms,
+    naturalOf,
+    idle: directoryProjects.length,
+    waiting: waitingCount,
+    floor: workingFloor,
+    office: (w, depth) => buildOfficeRow(waitingCount, { w, h: depth }),
+    lounge: (w, h, pack) => buildLounge(benchedCount, { w, h }, goneHomeCount, pack),
+  });
 
   /**
    * The whole envelope implied by one arrangement: the service column, the
@@ -356,6 +375,12 @@ export function buildPlan(projects, agents, opts = {}) {
       forced,
       open,
       workOpen,
+      // The share of the building the service rooms take (WP-59d). A column
+      // spans the height, so its area share and its width share are one
+      // number and this is the width one stated exactly; arrangement B's two
+      // row-ends have to say it as an area, and `score` reads the same field
+      // for both.
+      serviceShare: measured.w / Math.max(1e-6, W),
       // How much shorter the shortest row of rooms is than the longest — the
       // empty lot, measured row against row (WP-59b; see `costWorkingFloor`).
       bandSkew: cost.bandSkew,
@@ -426,91 +451,17 @@ export function buildPlan(projects, agents, opts = {}) {
     return best || envelopeFor(OFFICE_MIN_W, 1, 0, BAND_STRETCH_MAX, 1);
   };
 
-  // ---- the working floor, and the floor's final size.
-  //
-  // The rooms are laid into their cells and REBUILT to the shape of the cell
-  // they were given, so a project's tables flow to that shape rather than
-  // being laid out square and centred in something that is not. Rebuilding
-  // changes what a room needs, so the fit is checked and the building grows
-  // until every room holds its own furniture — the one thing the plan may
-  // never get wrong, since a desk outside its room is a desk on the corridor.
-  //
-  // `bandH` is the height the ROOMS take of the working side, and not the
-  // whole of it. Where the service column is taller than the rooms need — one
-  // small project beside a reception and a lounge — the rooms may absorb the
-  // difference only up to `BAND_STRETCH_MAX`; past that the floor says so with
-  // open circulation rather than painting more carpet nobody stands on. Carpet
-  // with nothing on it is the defect; ground is not.
-  const settle = (chosen) => {
-    const workingX = chosen.measured.w + CORRIDOR;
-    let H = chosen.H;
-    let workingW = chosen.workingW;
-    let W = workingX + workingW;
-    let laid = { cells: [], corridors: [] };
-    let dirH = 0;
-    let dirCols = chosen.dirCols;
-    let forced = chosen.forced;
-    let bandH = chosen.bandH;
-    let asked = chosen.asked ?? chosen.bandH;
-    for (let pass = 0; pass < 8; pass++) {
-      // Rebuilding a room changes what its furniture needs, so the deal the
-      // bands were cut from is stale the moment the previous pass touched one.
-      invalidateBands();
-      W = workingX + workingW;
-      // THE FILL ORDER, AGAIN, AGAINST THE FLOOR THAT IS ACTUALLY BEING LAID
-      // (WP-59c). `envelopeFor` ran it over what the rooms wanted; the fit
-      // loop has since rebuilt them into their cells, so the rooms are a
-      // different size and the answer has to be asked again. Asked through the
-      // same function, so the two can be wrong together but never differently.
-      const order = fillOrder(
-        chosen.rowCount,
-        workingW,
-        H,
-        Math.min(asked, Math.max(1, H)),
-        directoryProjects.length,
-      );
-      dirH = order.dirH;
-      dirCols = order.dirCols;
-      forced = order.forced;
-      bandH = Math.min(order.bandH, Math.max(1, H - dirH));
-      laid = projectRooms.length
-        ? layWorkingFloor(
-            { x: workingX, y: 0, w: workingW, h: bandH },
-            chosen.rowCount,
-            forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
-          )
-        : { cells: [], corridors: [] };
-      let worstW = 1;
-      let worstH = 1;
-      projectRooms.forEach((pr, i) => {
-        const cell = laid.cells[i];
-        if (!cell) return;
-        const project = activeProjects[i];
-        // The shape the DESK CLUSTER has to fill, which is the cell less the
-        // clearance the walls and the plate take — not the cell's own aspect.
-        //
-        // AND NEVER DEEPER THAN A ROOM THE PLAN WOULD HAVE CHOSEN (WP-59c).
-        // A column-forced cell is depth the desks did not ask for, and flowing
-        // the tables into it deals a SECOND ROW OF DESKS to fill a lounge's
-        // height. Desks equal agents at desks (`08` B6); the extra depth goes
-        // to the rug, the planting and the wall furniture instead, which is
-        // what `buildProjectRoom` spreads into it.
-        const natural0 = naturalOf(i);
-        const flowH = Math.min(cell.h, natural0.h * ROOM_HEIGHT_STRETCH_MAX);
-        const interiorAspect =
-          Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, flowH - ROOM_PAD * 2 - PLATE_BAND);
-        projectRooms[i] = buildProjectRoom(project, desksIn(project), interiorAspect, cell);
-        const natural = naturalOf(i);
-        worstW = Math.max(worstW, natural.w / cell.w);
-        worstH = Math.max(worstH, natural.h / cell.h);
-      });
-      if (worstW <= 1.0005 && worstH <= 1.0005) break;
-      workingW *= Math.min(worstW, 1.25);
-      asked *= Math.min(worstH, 1.25);
-      H = Math.max(H, asked + dirH);
-    }
-    return { H, W, workingW, workingX, laid, dirH, dirCols, bandH, forced };
-  };
+  // Both fit loops live with the arrangement they lay — `layColumn` in
+  // `plan-envelope.js`, `layRows` in `plan-rows.js` — and both need the one
+  // step this file owns: rebuilding a project's room into a cell.
+  const rebuildInto = (i, cell, aspect) =>
+    (projectRooms[i] = buildProjectRoom(
+      activeProjects[i],
+      desksIn(activeProjects[i]),
+      aspect,
+      cell,
+    ));
+  const settle = (chosen) => layColumn(chosen, rebuildInto, directoryProjects.length);
 
   // ---- THE SEARCH IS RUN TWICE, AND THE SECOND ONE IS THE ANSWER (WP-59b).
   //
@@ -521,10 +472,8 @@ export function buildPlan(projects, agents, opts = {}) {
   // then rebuilds it into the cell it was given and the same project comes out
   // 32 x 18. The search was therefore answering a question about a different
   // floor from the one that gets drawn, and on a twelve-room machine it showed:
-  // the deep first bid put the big project in a band of its own, every
-  // multi-row arrangement was priced as though it left a half-empty row, and
-  // the search took a single row of twelve rooms 226 U wide with 58% of the
-  // building open floor.
+  // the deep first bid put the big project in a band of its own, and the search
+  // took a single row of twelve rooms 226 U wide with 58% of it open floor.
   //
   // So: search, settle, and search again with what settling produced. The
   // second answer is stable because the rooms are — a room rebuilt into a cell
@@ -534,15 +483,43 @@ export function buildPlan(projects, agents, opts = {}) {
   invalidateBands();
   settle(search());
   invalidateBands();
-  const chosen = search();
-  const fitted = settle(chosen);
+  let chosen = search();
 
-  office = chosen.measured.office;
-  lounge = chosen.measured.lounge;
-  const serviceW = chosen.measured.w;
-  const serviceX = 0;
-  const { workingX, laid, dirH, dirCols, W, bandH, forced } = fitted;
+  // ---- AND THEN THE SECOND ARRANGEMENT, WHERE THE FIRST ONE CANNOT FILL
+  // ITSELF (WP-59d).
+  //
+  // Two conditions, and each is a refusal to move a picture nobody complained
+  // about. A tall or square stage is exactly what a column is for; a floor
+  // whose column fills its own working side has no problem for a second shape
+  // to solve. Below either, nothing below runs and the plan is WP-59c's.
+  let rows =
+    targetAspect >= ROWS_ASPECT_MIN && chosen.workOpen > ROWS_OPEN_MIN
+      ? rowFloor.searchRows({ targetAspect, bandDepths, dirWidths, rebuild: rebuildInto })
+      : null;
+  if (rows) {
+    // The rooms have been laid to the row arrangement's cells to price it, so
+    // whichever arrangement wins, the loser's numbers are now about a floor
+    // that no longer exists — ask again.
+    invalidateBands();
+    if (!betterArrangement(rows, chosen)) {
+      rows = null;
+      chosen = search();
+    }
+  }
+
+  // The floor, laid. The two arrangements return two different records — a
+  // column has a working side and a spine width, two rows have a row height
+  // each — and everything below reads the fields its own branch put there,
+  // which is why this is the one place the two are the same variable.
+  const fitted = /** @type {any} */ (rows ? rowFloor.layRows(rows, rebuildInto) : settle(chosen));
+  const { laid, dirH, dirCols, W, bandH } = fitted;
+  const forced = fitted.forced;
   let { H } = fitted;
+  office = rows ? fitted.office : chosen.measured.office;
+  lounge = rows ? fitted.lounge : chosen.measured.lounge;
+  const serviceW = rows ? fitted.ow : chosen.measured.w;
+  const serviceX = 0;
+  const workingX = rows ? fitted.ow : fitted.workingX;
 
   // ---- the service column fills its side of the floor exactly.
   //
@@ -551,8 +528,23 @@ export function buildPlan(projects, agents, opts = {}) {
   // left as a strip: a lobby is a room-shaped piece of nothing, and this plan
   // has exactly two pieces of circulation in it — the spine and the cross
   // corridor — by design.
+  if (rows) {
+    // TWO ROWS, AND EACH ONE FILLS ITS WIDTH (WP-59d). Both service rooms were
+    // built at the size they are drawn at — see `layRows` — so there is
+    // nothing to reconcile here and nothing to pad: the reception is the left
+    // end of row one, the lounge the left end of row two, and the corridor
+    // between them is the whole nav graph.
+    office.room.x = serviceX;
+    office.room.y = 0;
+    office.room.w = fitted.ow;
+    office.room.h = fitted.h1;
+    lounge.room.x = serviceX;
+    lounge.room.y = fitted.h1 + CORRIDOR;
+    lounge.room.w = fitted.loungeW;
+    lounge.room.h = fitted.h2;
+  }
   const loungeNaturalH = lounge.room.h;
-  const columnSurplus = Math.max(0, H - (office.room.h + loungeNaturalH));
+  const columnSurplus = rows ? 0 : Math.max(0, H - (office.room.h + loungeNaturalH));
   // The reception takes a share of it, up to the point where it would stop
   // being a room; the lounge takes the rest, because open floor reads as a
   // lounge and reads as dead space anywhere else.
@@ -560,32 +552,37 @@ export function buildPlan(projects, agents, opts = {}) {
   // the room the product is about — the one that answers "is anything waiting
   // on me" — and on a machine where nearly every session is benched the lounge
   // would otherwise have four times its height simply by having more in it.
-  const officeH = clamp(
-    Math.max(office.room.h + columnSurplus * OFFICE_SURPLUS_SHARE, H * OFFICE_COLUMN_MIN),
-    office.room.h,
-    Math.max(office.room.h, serviceW / OFFICE_ASPECT_MIN),
-  );
+  const officeH = rows
+    ? fitted.h1
+    : clamp(
+        Math.max(office.room.h + columnSurplus * OFFICE_SURPLUS_SHARE, H * OFFICE_COLUMN_MIN),
+        office.room.h,
+        Math.max(office.room.h, serviceW / OFFICE_ASPECT_MIN),
+      );
 
-  office = buildOffice(waitingCount, { w: serviceW, h: officeH });
-  office.room.x = serviceX;
-  office.room.y = 0;
-  office.room.w = serviceW;
-  office.room.h = officeH;
+  if (!rows) {
+    office = buildOffice(waitingCount, { w: serviceW, h: officeH });
+    office.room.x = serviceX;
+    office.room.y = 0;
+    office.room.w = serviceW;
+    office.room.h = officeH;
 
-  lounge.room.x = serviceX;
-  lounge.room.w = serviceW;
-  lounge.room.y = officeH;
-  lounge.room.h = Math.max(loungeNaturalH, H - officeH);
+    lounge.room.x = serviceX;
+    lounge.room.w = serviceW;
+    lounge.room.y = officeH;
+    lounge.room.h = Math.max(loungeNaturalH, H - officeH);
 
-  // The column is the height of what it holds. Giving the reception a floor of
-  // the column can push the two past the building; the building grows to match
-  // rather than the rooms overlapping. The working side keeps the room band it
-  // was given and the extra becomes open floor, so growing the column can never
-  // reach back into a room and turn the difference into carpet.
-  const columnH = officeH + lounge.room.h;
-  if (columnH > H + 0.01) H = columnH;
+    // The column is the height of what it holds. Giving the reception a floor
+    // of the column can push the two past the building; the building grows to
+    // match rather than the rooms overlapping. The working side keeps the room
+    // band it was given and the extra becomes open floor, so growing the
+    // column can never reach back into a room and turn the difference into
+    // carpet.
+    const columnH = officeH + lounge.room.h;
+    if (columnH > H + 0.01) H = columnH;
+  }
 
-  const workingWidth = Math.max(0, W - workingX);
+  const workingWidth = rows ? fitted.roomsW : Math.max(0, W - workingX);
 
   // ---- the working floor: bands of squarified rooms, one corridor between.
   //
@@ -603,44 +600,29 @@ export function buildPlan(projects, agents, opts = {}) {
     room.h = cell.h;
   });
 
-  // The spine: the one vertical corridor, between the service column and the
-  // working floor.
-  const spine = {
-    kind: /** @type {'corridor'} */ ('corridor'),
+  // THE SPINE: the one corridor everything opens onto.
+  //
+  // In a column it is VERTICAL, between the service column and the working
+  // floor. In two rows it is HORIZONTAL and wall to wall, between row one and
+  // row two (WP-59d) — the same thing said on the other axis, and the same
+  // one piece of circulation: every room in row one takes a door on its
+  // bottom edge and every room in row two on its top edge.
+  const spine = corridorRoom({
     id: '__spine__',
-    name: '',
-    x: serviceW,
-    y: 0,
-    w: CORRIDOR,
-    h: H,
-    walls: /** @type {'partial'} */ ('partial'),
-    floor: /** @type {'circulation'} */ ('circulation'),
-    plateLines: /** @type {[string, string]} */ (['', '']),
-    props: [],
-    zones: [],
-  };
+    x: rows ? 0 : serviceW,
+    y: rows ? fitted.h1 : 0,
+    w: rows ? W : CORRIDOR,
+    h: rows ? CORRIDOR : H,
+  });
 
   // And the cross corridor, or corridors if the working floor ever grows past
-  // two bands. A cross corridor is a thoroughfare; there is nothing else to
-  // walk on. A BAY — the open floor at the end of a band whose rooms did not
-  // need the whole width — is not: it is a dead end beside the rooms, and
-  // treating it as a route would put a second vertical line beside the spine
-  // that the graph can never reach.
-  const crossCorridors = laid.corridors.map((c, i) => ({
-    kind: /** @type {'corridor'} */ ('corridor'),
-    thoroughfare: !c.bay,
-    id: c.bay ? `__bay-${i}__` : `__corridor-${i}__`,
-    name: '',
-    x: c.x,
-    y: c.y,
-    w: c.w,
-    h: c.h,
-    walls: /** @type {'partial'} */ ('partial'),
-    floor: /** @type {'circulation'} */ ('circulation'),
-    plateLines: /** @type {[string, string]} */ (['', '']),
-    props: [],
-    zones: [],
-  }));
+  // two bands. A cross corridor is a thoroughfare; a BAY — the open floor at
+  // the end of a band whose rooms did not need the whole width — is not: it is
+  // a dead end beside the rooms, and a route down it is one the graph can
+  // never leave.
+  const crossCorridors = laid.corridors.map((c, i) =>
+    corridorRoom({ ...c, id: c.bay ? `__bay-${i}__` : `__corridor-${i}__`, thoroughfare: !c.bay }),
+  );
 
   // THE DIRECTORY STRIP, DIRECTLY UNDER THE ROOMS.
   //
@@ -651,17 +633,21 @@ export function buildPlan(projects, agents, opts = {}) {
   // It used to be pinned to the BOTTOM EDGE instead, which said the same thing
   // on a floor with no slack and something else entirely on one with a lot:
   // WP-59's open band opened up BETWEEN the rooms and the strip, so the two
-  // pieces of content on the working side sat at opposite ends of it with a
-  // hole in the middle — the gap this comment forbids, in the one case that
-  // could produce it. The rooms and the strip are the content; they go
+  // pieces of content sat at opposite ends of the working side with a hole in
+  // the middle — the gap this comment forbids. They are the content; they go
   // together at the top, and the open floor is the margin under them (WP-59b).
+  //
+  // IN TWO ROWS IT STANDS BESIDE THE LOUNGE INSTEAD (WP-59d), at the top of
+  // row two, which is the same sentence: it shares a wall with the room next
+  // to it, and what it does not need of its own corner is open floor under it.
+  const stripW = rows ? fitted.stripW : workingWidth;
   const directory =
-    directoryProjects.length > 0 && workingWidth > 1 && dirH > 0
-      ? buildDirectory(directoryProjects, { w: workingWidth, h: dirH }, dirCols)
+    directoryProjects.length > 0 && stripW > 1 && dirH > 0
+      ? buildDirectory(directoryProjects, { w: stripW, h: dirH }, dirCols)
       : null;
   if (directory) {
-    directory.x = workingX;
-    directory.y = projectRooms.length ? bandH : 0;
+    directory.x = rows ? fitted.loungeW : workingX;
+    directory.y = rows ? fitted.h1 + CORRIDOR : projectRooms.length ? bandH : 0;
   }
 
   // WHATEVER THE ROOMS DO NOT NEED IS OPEN FLOOR, NOT A BIGGER ROOM.
@@ -670,34 +656,36 @@ export function buildPlan(projects, agents, opts = {}) {
   // side to be something rather than a hole; and a floor whose service column
   // is taller than its one project room needs somewhere for the difference to
   // go. Before WP-55 the rooms swallowed it and drew it as carpet. This is
-  // circulation — walkable-looking floor with nothing on it, which is what it
-  // honestly is — sitting under both the rooms and the directory strip, at the
-  // bottom edge of the working side (WP-59b; see the strip above).
+  // circulation, under both the rooms and the strip (WP-59b, above).
+  //
+  // IN TWO ROWS THERE ARE TWO OF THEM, one per row, and each is under the
+  // content of its own row rather than at the bottom of the building: what
+  // row one's rooms did not need of their row's depth, and what row two's
+  // strip did not need of its own (WP-59d).
+  // Open floor is NOT a route: there is nothing in it to walk to, and a
+  // full-height band beside the spine is a second parallel line the graph can
+  // never reach.
+  const open = (id, x, y, w, h) =>
+    w > 1 && h > 0.01 ? [corridorRoom({ id, x, y, w, h, thoroughfare: false })] : [];
   const slackY = (projectRooms.length ? bandH : 0) + dirH;
-  const slackH = Math.max(0, H - slackY);
-  const emptyBand =
-    workingWidth > 1 && slackH > 0.01
-      ? [
-          {
-            kind: /** @type {'corridor'} */ ('corridor'),
-            // Open floor, not a route: there is nothing in this bay to walk
-            // to, and a full-height band beside the spine is a second parallel
-            // vertical line the graph can never reach.
-            thoroughfare: false,
-            id: '__open__',
-            name: '',
-            x: workingX,
-            y: slackY,
-            w: workingWidth,
-            h: slackH,
-            walls: /** @type {'partial'} */ ('partial'),
-            floor: /** @type {'circulation'} */ ('circulation'),
-            plateLines: /** @type {[string, string]} */ (['', '']),
-            props: [],
-            zones: [],
-          },
-        ]
-      : [];
+  const emptyBand = rows
+    ? [
+        ...open(
+          '__open-rooms__',
+          workingX,
+          projectRooms.length ? bandH : 0,
+          workingWidth,
+          fitted.h1 - (projectRooms.length ? bandH : 0),
+        ),
+        ...open(
+          '__open-strip__',
+          fitted.loungeW,
+          fitted.h1 + CORRIDOR + dirH,
+          fitted.stripW,
+          fitted.h2 - dirH,
+        ),
+      ]
+    : open('__open__', workingX, slackY, workingWidth, Math.max(0, H - slackY));
 
   const rooms = [
     office.room,
@@ -716,12 +704,10 @@ export function buildPlan(projects, agents, opts = {}) {
   // anchor then resolves against the same corner the coordinates were written
   // from. There is no second, content-relative frame to fall out of step.
   const place = (room, movable) => {
-    // A project room is given a cell by the treemap and rebuilt to its shape,
-    // but the two never match to the unit. Its furniture is centred in the
-    // result rather than pushed into a corner — safe here, and only here,
-    // because a project room carries no wall-anchored props: its shelf and
-    // screen are attached to the desks, so nothing resolves against the room's
-    // edges.
+    // A project room is given a cell and rebuilt to its shape, but the two
+    // never match to the unit. Its furniture is centred in the result rather
+    // than pushed into a corner — safe here, and only here, because a project
+    // room carries no wall-anchored props.
     const band = room.plateBand ?? 0;
     const slackX = room.natural ? Math.max(0, room.w - room.natural.w) / 2 : 0;
     const slackY = room.natural ? Math.max(0, room.h - room.natural.h) / 2 : 0;
@@ -791,7 +777,14 @@ export function buildPlan(projects, agents, opts = {}) {
   // `floor-integrity.test.mjs` re-derives all of them rather than trusting
   // this — a plan that could report a full working side while drawing an empty
   // one would be a worse defect than the one this package fixes.
-  const workingArea = Math.max(0, workingWidth) * H;
+  //
+  // IN TWO ROWS THE SAME SENTENCE IS ABOUT TWO CORNERS (WP-59d): the rooms'
+  // share of row one and the strip's share of row two. It is the identical
+  // measure — the parts of the building that hold content, less what the
+  // content takes — read on a building folded differently.
+  const workingArea = rows
+    ? workingWidth * fitted.h1 + fitted.stripW * fitted.h2
+    : Math.max(0, workingWidth) * H;
   const takenArea =
     projectRooms.reduce((a, pr) => a + pr.room.w * pr.room.h, 0) +
     (directory ? directory.w * directory.h : 0);
@@ -805,15 +798,18 @@ export function buildPlan(projects, agents, opts = {}) {
     /** (b) — the strip's columns, and what it would have taken unasked. */
     stripCols: directory ? dirCols : 0,
     /** (c) — how tightly the lounge was packed; 1 is the room untouched. */
-    loungePack: chosen.measured.pack ?? 1,
-    /** (d) — the open plan left under both, in units. */
-    openH: Math.max(0, H - ((projectRooms.length ? bandH : 0) + dirH)),
+    loungePack: (rows ? rows.pack : chosen.measured.pack) ?? 1,
+    /** (d) — the open plan left under the content, in units. */
+    openH: rows
+      ? Math.max(0, fitted.h1 - (projectRooms.length ? bandH : 0)) + Math.max(0, fitted.h2 - dirH)
+      : Math.max(0, H - ((projectRooms.length ? bandH : 0) + dirH)),
   };
 
   return {
     width: W,
     height: H,
     targetAspect,
+    arrangement: /** @type {'column'|'two-rows'} */ (rows ? 'two-rows' : 'column'),
     working,
     rooms,
     walls,

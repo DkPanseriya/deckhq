@@ -156,10 +156,21 @@ const POPULATIONS = ['demo', 'empty', 'single', 'three', 'reference'];
  * files keep their bare names, so this package adds files and renames none —
  * which is what lets the existing goldens stay at 0 px.
  *
- * @type {ReadonlyArray<{name:string, population:string, theme:string}>}
+ * A capture may name its own STAGE (WP-59d). `wide` is the `three` population
+ * on a 1920 x 1080 window rather than the 1600 x 1000 one every other capture
+ * uses, and it is a committed golden because the floor has two ARRANGEMENTS
+ * now and the second one is only ever chosen on a wide stage: without it the
+ * whole of `plan-rows.js` is outside the gate, and the picture the owner
+ * actually looks at is the one nothing photographs. It is the same fixture as
+ * `three`, so the pair is also the clearest statement of what the arrangement
+ * choice does — one floor, two windows, two buildings.
+ *
+ * @type {ReadonlyArray<{name:string, population:string, theme:string,
+ *   stage?:{w:number, h:number}}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
+  { name: 'wide', population: 'three', theme: 'default', stage: { w: 1920, h: 1080 } },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
     population: 'demo',
@@ -580,7 +591,9 @@ function check(name, actualPng) {
 
 const started = Date.now();
 say(
-  `goldens: ${CHECK ? 'checking' : 'regenerating'} ${captures.length} capture(s) on ${process.platform}, ${WIDTH}x${HEIGHT}, reduced motion, settle ${SETTLE_MS} ms`,
+  `goldens: ${CHECK ? 'checking' : 'regenerating'} ${captures.length} capture(s) on ` +
+    `${process.platform}, ${OFF_STAGE ? `${WIDTH}x${HEIGHT} (every capture)` : `${DEFAULT_WIDTH}x${DEFAULT_HEIGHT} unless the capture says otherwise`}` +
+    `, reduced motion, settle ${SETTLE_MS} ms`,
 );
 
 /** Captures that disagreed with their golden. These fail the build. */
@@ -615,6 +628,14 @@ const run = withChrome(
     for (const capture of captures) {
       const { name, population, theme } = capture;
       const t0 = Date.now();
+      // THE STAGE THIS CAPTURE IS TAKEN ON. `--stage` overrides every capture,
+      // because a run that asks for one window means it; otherwise a capture
+      // may name its own and the rest take the committed default. The viewport
+      // is emulated rather than the window resized, which is what `withChrome`
+      // does for the default size too — one mechanism, so a 1920 x 1080
+      // capture and a 1600 x 1000 one differ in nothing but their numbers.
+      const shotW = OFF_STAGE ? WIDTH : (capture.stage?.w ?? DEFAULT_WIDTH);
+      const shotH = OFF_STAGE ? HEIGHT : (capture.stage?.h ?? DEFAULT_HEIGHT);
 
       const left = RUN_BUDGET_MS - (Date.now() - started);
       if (left <= 5000) {
@@ -642,6 +663,14 @@ const run = withChrome(
               demo = await startDemo(population, theme);
             }
 
+            enter(`sizing the stage to ${shotW}x${shotH} ("${name}")`);
+            await client.send('Emulation.setDeviceMetricsOverride', {
+              width: shotW,
+              height: shotH,
+              deviceScaleFactor: 1,
+              mobile: false,
+            });
+
             enter(`navigating to ${demo.url}`);
             await client.send('Page.navigate', { url: demo.url });
 
@@ -668,7 +697,7 @@ const run = withChrome(
               fs.mkdirSync(dir, { recursive: true });
               const file = path.join(
                 dir,
-                OFF_STAGE ? `${name}@${WIDTH}x${HEIGHT}.actual.png` : `${name}.png`,
+                OFF_STAGE ? `${name}@${shotW}x${shotH}.actual.png` : `${name}.png`,
               );
               fs.writeFileSync(file, png);
               const kb = Math.round(png.length / 1024);

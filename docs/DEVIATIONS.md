@@ -12642,3 +12642,390 @@ was made in a real editor.
 and `bench` are the only two subcommands that write — so adding one would be a
 new mutation path, which the brief refuses. A test asserts `bin/deckhq.mjs`
 still calls `runAct` with exactly `acknowledge` and `bench`.
+## 142. WP-59d — the second arrangement, and the sixteen juniors drawn outside the lounge
+
+§141 (WP-59c) ended with an admission and an arithmetic proof: the working
+side did not reach the 10% open floor it aims at on any real floor, "and the
+reason is arithmetic rather than effort". After all four levers — the rooms at
+their bare-carpet cap, the strip on the last rung its allowance reaches, the
+lounge at its densest — **43% of the owner's working side was still open plan**.
+The floor it left is the one this package replaces: a tall service column down
+the left, a shallow band of four one-desk rooms across the top of the rest, the
+idle strip under them, and a bare block filling the bottom two fifths.
+
+The proof holds, and it is a proof about ONE SHAPE. A reception over a lounge
+holding twenty-three benched agents is seventy units tall; four one-desk rooms
+and a fourteen-line board want about thirty between them; and nothing that can
+be done to the rooms closes a forty-unit gap. What the proof does not say — and
+§141 did not ask — is whether the lounge has to be BESIDE the rooms at all.
+
+**It does not.** There are two shapes a floor of these parts can take, and this
+package builds the second one and lets the envelope search choose:
+
+    A, the column (WP-55 .. WP-59c)      B, two rows (this package)
+    +--------+---------------------+     +----------+--------------------+
+    | office | rooms               |     | office   | rooms, across      |
+    |        +---------------------+     +----------+--------------------+
+    +--------+ strip               |     |        one corridor           |
+    | lounge +---------------------+     +---------------+---------------+
+    |        | THE BLOCK           |     | lounge        | strip         |
+    +--------+---------------------+     +---------------+---------------+
+
+Row one is the reception beside the project rooms, row two the lounge beside
+the idle strip, and one corridor runs wall to wall between them. Both rows fill
+the same width, so the building's height is row one plus the corridor plus row
+two and there is no side of it left over to be open floor. The reception is
+laid on its side — waiting area along its width, desk at one end — and the
+lounge is wide and short, its clusters and its benched population packed along
+the width rather than stacked down a column.
+
+### What it is worth, on the floor it was written for
+
+The owner's own machine, read from a daemon started on this branch with
+`DECKHQ_STATE_DIR` pointed at a copy of `~/.deckhq`: thirty repos, four of them
+with somebody in them, 101 sessions, 47 benched, 38 waiting on him.
+
+| stage | before | open | cover | body | after | open | cover | body |
+|---|---|---|---|---|---|---|---|---|
+| **1920 x 1080** | 139.2 x 71.4 (1.95:1) | **52%** | 96% / 100% | 33.8 px | **125.1 x 62.4 (2.00:1)** | **6%** | **99% / 100%** | 38.7 px |
+| **2560 x 1440** | 128.0 x 71.4 (1.79:1) | **48%** | 97% / 100% | 49.4 px | **121.1 x 65.0 (1.86:1)** | **8%** | **100% / 99%** | 53.6 px |
+
+`open` is the working side against itself, WP-59c's own measure; `cover` is
+width / height of the stage; `body` is a character's height in screen pixels.
+The captures are `after-59d-1920.png` and `after-59d-2560.png`.
+
+### The sixteen test populations, at three stages
+
+`floor-integrity.test.mjs`'s populations, before and after, `open` being the
+same working-side measure and `cover` the two axes of the stage. A floor whose
+arrangement did not change is a floor the search left alone, and there are
+eight of them: the three empty ones, the two biggest, and the three that are
+one room — or none — beside a board of idle repos.
+
+| population | stage | before | open | cover | after | open | cover |
+|---|---|---|---|---|---|---|---|
+| `[]` (x3, all stages) | all | column | 0% | 43-57% / 100% | column, unchanged | 0% | unchanged |
+| `[1]` | 1600x1000 | column | 52% | 77% / 100% | **two-rows** | **0%** | **80% / 100%** |
+| `[1]` | 1920x1080 | column | 52% | 70% / 100% | **two-rows** | **0%** | **72% / 100%** |
+| `[1]` | 2560x1440 | column | 52% | 70% / 100% | **two-rows** | **0%** | 70% / 97% |
+| `[1]`, 1 waiting | 1920x1080 | column | 52% | 70% / 100% | **two-rows** | **0%** | **73% / 100%** |
+| `[3,1]` | 1600x1000 | column | 54% | 95% / 100% | **two-rows** | **0%** | 92% / 100% |
+| `[3,1]` | 1920x1080 | column | 54% | 85% / 100% | **two-rows** | **0%** | 83% / 100% |
+| `[5]` | 1920x1080 | column | 50% | 71% / 100% | **two-rows** | **0%** | **74% / 100%** |
+| `[8,2]` | 1600x1000 | column | 49% | 96% / 100% | **two-rows** | **0%** | **100% / 100%** |
+| `[8,2]` | 1920x1080 | column | 50% | 91% / 100% | **two-rows** | **0%** | **94% / 100%** |
+| `[21,5,3,1]` | all | column | 14-17% | 100% / 95% | column, unchanged | 14-17% | unchanged |
+| twelve rooms | all | column | 32-38% | 100% / 96% | column, unchanged | 32-38% | unchanged |
+| `[1]` + 3 idle | all | column | 61-67% | 96-98% / 100% | column, unchanged | 61-67% | unchanged |
+| `[2,1]` + 8 idle | 1600x1000 | column | 44% | 96% / 100% | **two-rows** | **4%** | **100% / 98%** |
+| `[2,1]` + 8 idle | 1920x1080 | column | 49% | 99% / 100% | **two-rows** | **4%** | 92% / 100% |
+| no rooms, 2 idle | all | column | 86% | 94-96% / 100% | column, unchanged | 86% | unchanged |
+| `[3]` + 17 idle | all | column | 42-47% | 96-97% / 100% | column, unchanged | 42-47% | unchanged |
+| `three` + 3 idle | 1600x1000 | column | 32% | 100% / 95% | **two-rows** | **12%** | 100% / 97% |
+| `three` + 3 idle | 1920x1080 | column | 35% | 100% / 100% | **two-rows** | **14%** | 95% / 100% |
+| owner's shape | 1920x1080 | column | 47% | 97% / 100% | **two-rows** | **9%** | 96% / 100% |
+
+The character figure is 27-72 px across the set and unchanged in kind: the fit
+is WP-59's and this package did not touch it.
+
+**Four populations lose a little coverage and every one of them is a trade the
+acceptance already allows.** `[3,1]` at 1600 x 1000 goes from 95% of the width
+to 92%, and its working side from 54% open to nothing at all. `ASPECT_TOLERANCE`
+is 15% and is the ACCEPTANCE (§139); an arrangement is allowed to spend inside
+it, and this is what spending it buys.
+
+### How the search chooses, and the two gates before it
+
+`buildPlan` searches the column exactly as WP-59c left it, and then — only if
+BOTH of these hold — searches the second arrangement as well:
+
+| gate | value | why |
+|---|---|---|
+| the stage's shape | `ROWS_ASPECT_MIN`, 1.45 | a tall or square window is exactly what a column is for, and two rows stacked in one would be wider than the screen |
+| what the column left | `ROWS_OPEN_MIN`, 0.15 | a floor whose column fills its own working side has no problem for a second shape to solve, and re-arranging it would move a picture nobody complained about |
+
+Below either gate nothing new runs and the plan is byte for byte the one WP-59c
+produced — which is what the seven unchanged populations above are.
+
+`betterArrangement` in `plan-search.js` is the comparison, and it is a much
+shorter one than `better`: two floors of different shapes have almost nothing
+comparable about them.
+
+| rank | rule |
+|---|---|
+| 1 | **is it the window's shape at all** — `ASPECT_TOLERANCE`, used as a bar to clear rather than a thing to chase |
+| 1b | and between two that both miss it, one that misses by a whole tolerance MORE still loses |
+| 2 | **the open floor**, which is the whole reason there is a second arrangement, with `OPEN_SETTLE` (2%) as the band inside which the two are the same answer |
+| 3 | then the shape, for two that are equally full |
+
+Ranks 2 and 3 are the opposite way round from `better`'s, deliberately. Inside
+one arrangement the shape leads all the way, because a column that chases fill
+buys it by making the building narrower than the window — the regression §139
+exists to have fixed. Between two arrangements that are both the window's
+shape there is no such trade: a two-row building is not a narrower one, it is a
+differently folded one, and the fill is the only reason to prefer it.
+
+**Rank 1b was measured into existence.** Without it, on a floor neither shape
+can fit, `[3,1]` at 1920 x 1080 came out **0.98:1 on a 1.78:1 window** — 55% of
+its width — with an admirably full working side, beating a 1.51:1 column at
+95%. The second rank was doing inside the exemption exactly what the first rank
+exists to prevent outside it.
+
+### One row of rooms, always
+
+The corridor between the rows is the whole nav graph: every room in row one
+takes a door on its bottom edge, every room in row two on its top edge, and one
+line is trivially connected. A SECOND band of rooms inside row one would need
+an aisle of its own to reach that corridor — a third piece of circulation this
+plan has never had, and one that would run PARALLEL to the corridor it was
+trying to meet, which is a graph in two pieces.
+
+So a floor whose rooms will not stand in one row is not offered this
+arrangement at all: `dealBands`'s depth rule (`HEIGHT_BAND_RATIO`) is the
+judge, because a room much shallower than the one it would share a row with is
+the bare-carpet defect one level down. That is why the twelve-room floor and
+the `[21,5,3,1]` one are untouched above — and it is not a loss, because a
+building wide enough for twelve rooms in one row is nowhere near the shape of
+any window.
+
+`buildNavLines` reads the spine's own rectangle for its direction now, exactly
+as it already did for every other corridor. Vertical between a column and its
+working side, horizontal between two rows.
+
+### The reception, laid on its side
+
+`buildOfficeRow` does not lay out a second reception. It asks `buildOffice` for
+the room it would have laid in the TRANSPOSED box and reflects the result in
+the diagonal — every coordinate, every angle, every anchor and the three sofa
+runs' own names, which move with the walls they are named for (the west run
+lies along the north wall of a row office, and is called `wait-sofa-n` there).
+
+That is a decision about risk. The portrait reception is the most carefully
+measured room in the file — the three runs form one continuous C corner to
+corner (§57), the rug reaches the seating it belongs to, the water cooler
+stands on the side table at the head of the west run — and `layout-anchors.test.mjs`
+holds every one of those relationships to 2 U. A second hand-written layout is
+a second set of them to get right and to keep right; a reflection cannot get
+them wrong, because it is the same numbers read on the other axis.
+
+Three bounds change with the axis, and all three are the same sentence about a
+room laid the other way up:
+
+- **`OFFICE_ROW_ASPECT_MAX` is 3.2.** `ROOM_ASPECT_MAX` (1.8) is the bound on a
+  reception whose desk is at the top and whose queue runs down both sides;
+  "a 2:1 reception reads as a corridor with a desk at one end" was written
+  about that room. This one's desk IS at the end, by design.
+- **The queue grows the WIDTH, not the depth.** `OFFICE_GROWTH_W` and
+  `OFFICE_GROWTH_H` are per-head growth on a portrait room's two axes; in a row
+  the C of sofas runs along the width, so both are spent there and the depth is
+  exactly what the row asks for. Left alone, nine waiting agents made the
+  reception eight units DEEPER — eight units the rooms beside it could not use
+  and drew as open floor under themselves, which took the owner's floor from 9%
+  open to 23%.
+- **The search may not ask for more width than the queue is worth**:
+  `OFFICE_MAX_W` plus one `OFFICE_SEAT_PITCH` a head, capped at
+  `OFFICE_ROW_MAX_W`. Without it the envelope search found the cheapest way to
+  fill a wide window, which was an empty reception ninety units across — a
+  hall. A wider ROW may still hand it more, and that is not the same thing:
+  both rows fill one width, and a room padded to its row is furnished to its
+  row.
+
+### What each row may spend, and the one bound that had to be re-derived
+
+| bound | value | on |
+|---|---|---|
+| the rooms are the wider half of row one | half, at three rooms or more | a refusal in `searchRows`, not a preference |
+| `DIRECTORY_ROW_MAX_SHARE` | 0.45 | the strip's share of row two |
+| `LOUNGE_ROW_MIN_W` | 20 U | the narrowest a lounge may be laid |
+| `LOUNGE_ROW_ASPECT_MAX` | 3.2, and never past `ROOM_FILL_MAX` of its own contents | the lounge's proportion |
+
+**`SERVICE_COLUMN_MAX` is deliberately NOT the bound on row one, and the
+difference is what the two measure.** That constant is stated on a COLUMN —
+the office and the lounge together, down the side of the rooms — and a row's
+reception is one of those two. Held to 40% instead of to half, the owner's own
+floor could not reach the shape of his window: the width was there, in a
+reception 46% of a row whose rooms were still the wider half of it. Half is
+`the working side is the wider half once it holds three rooms` — §140's own
+acceptance — used as a refusal, because a reception that has taken more than
+half of row one cannot be argued back down by anything ranked below it.
+
+The strip's share needed its own bound for the same reason one axis over:
+`directoryWidths` will cheerfully ask for two columns of twenty-eight units for
+a board with two lines on it, and with nothing to stop it that board took three
+quarters of row two and left the lounge a cupboard.
+
+**And the lounge fills the width it is given.** Its benched population stands
+along the ROOM's promenade rather than along its furniture — in a column the
+two are the same number and in a row they are not, and a ninety-unit lounge
+whose blocks came out sixty stood its whole benched population in the left two
+thirds of itself. That is one line in `buildLounge` and it is the only change
+this package makes to a room's contents.
+
+### The sixteen juniors, drawn outside the lounge
+
+The second defect in this package is not about the envelope at all, and it is
+the one that is plainest in a photograph: on the owner's floor at 1920 x 1080,
+sixteen junior badges — `MK3.2j1` .. `MK3.2j16` — in one packed row along the
+lounge's bottom wall, forty units wide, with half of them OUTSIDE the lounge
+and over the corridor beside it.
+
+WP-41 put the first junior one seat pitch to its parent's left, the second the
+same to its right, the third further left, and so on outwards for ever. That is
+right for the two or three a senior usually has and wrong the moment it is
+sixteen, and nothing in it ever asked where the wall was. **A body drawn
+outside the room it belongs to is the same defect as a desk on a corridor**,
+and §141's own new test — "nothing on the working side is drawn outside the
+room it belongs to" — is about furniture and about the strip's lines, which is
+where it was not being broken.
+
+`juniorSpots` in `agents-seats.js` is the fix, and the rule is unchanged where
+it fits: alternating sides, outwards, one seat pitch apart, which is what keeps
+the `demo` floor's two juniors exactly where they were. Where the WALL arrives,
+the next junior starts a RANK behind rather than walking through it; if the
+ranks run out too, `JUNIOR_PACKS` closes the gaps a step at a time. Nothing is
+ever dropped, because a junior is a session and a session nobody draws is one
+somebody has to go looking for.
+
+Which room is "its room" is the one thing worth stating: **a junior's room is
+its PARENT's**, wherever that is. `derivePlacement` answers `desk` for a junior
+standing in a lounge beside a benched senior (WP-41: "a junior is only ever
+beside its parent"), so the question cannot be asked of it, and the room is
+found from the parent's own seat instead.
+
+### Tests
+
+`floor-integrity.test.mjs` gains a sixteenth population — **the owner's own
+floor**: one busy project and three one-desk ones, a thirteen-line board, a
+queue of nine, twenty-three benched and twenty-four gone home — and three
+properties, each over every population at every stage:
+
+1. **no agent is drawn outside the room it stands in, juniors included.** The
+   same sentence §141 wrote about furniture, asked about people, which is where
+   it was being broken.
+2. **the lounge's packed row of juniors is inside the lounge.** The property
+   above, stated on the one case that broke it, so a regression names itself:
+   sixteen juniors beside a benched senior, all drawn, all inside, no two in
+   the same place.
+3. **the plan says which arrangement it was laid in, and the floor agrees.**
+   `plan.arrangement` is a RECORD, like `plan.working` before it, and it is
+   re-derived rather than trusted: a column has its spine running down between
+   two service rooms of one width; two rows have it running across between a
+   reception above and a lounge below.
+
+The junior population is a fixture of its own rather than a sixteenth entry in
+`POPULATIONS`, and the reason is `08` B6: juniors are agents at desks, so
+sixteen of them make their parent's project a twenty-desk room beside three
+one-desk ones — a floor about table sizes rather than about the thing those two
+tests are for.
+
+**Six existing properties are now asked per arrangement.** None of them was
+weakened; each states the same thing about a building folded the other way, and
+says so in its own comment:
+
+| test | in a column | in two rows |
+|---|---|---|
+| the reception grows with its queue and never becomes a corridor | aspect in [0.6, 1.8] | up to `OFFICE_ROW_ASPECT_MAX` |
+| the reception sofas form one continuous C | the west, south and east runs | the north, east and south runs |
+| the service rooms have no empty strip beside either of them | one column width, spine against it | each ROW full, wall to wall |
+| the building is the sum of its parts | the working side starts at the spine | it starts at the reception |
+| the working side is the wider half once it holds three rooms | the column under `SERVICE_COLUMN_MAX` | the reception under half of row one |
+| the rooms and the strip stand together | the strip under the rooms | the strip beside the lounge, open floor under it |
+
+`couldTakeShape` — §139's exemption, tightened by §141 — gains the row
+reception's own stop: `OFFICE_MAX_W` plus the queue, less one `SERVICE_W_STEP`,
+because that cap is not on the ladder the search walks and "at its stop" there
+means there was no next rung inside it.
+
+No `INVARIANT:` test was touched and nothing was deleted.
+
+### Two more `plan-*` modules, and one file that stopped being one thing
+
+`plan-rows.js` is the arrangement — §131's **shape 3, a closure**, for the same
+reason `plan-envelope.js` is one: every measurement in it reads `naturalOf(i)`,
+what a room's furniture needs at the size it was last built, and the fit loop
+rebuilds that underneath it. It is handed the two service rooms as BUILDERS
+rather than as furniture, because a row's reception and a row's lounge are the
+same two rooms laid at other sizes.
+
+`plan-office.js` is the reception, and WP-59d is the package that made that
+split true. `plan-service.js`'s own header said the office and the lounge "are
+one module because they are one column of the building — sized together,
+stacked together". In arrangement B they are not: they are the left ends of two
+rows, at different widths, at different depths, on different axes.
+
+`plan.js` stayed under `model.test.mjs`'s 900-line ceiling by giving each
+arrangement's fit loop to the module that lays it — `layColumn` moved into
+`plan-envelope.js` beside the fill order it re-runs, opposite `layRows` — and by
+moving the fourteen-line corridor literal it held three copies of into
+`plan-nav.js` as `corridorRoom`. It is 881 lines.
+
+`buildPlan` over the sixteen populations at three stages costs 1-248 ms with a
+median of 15, against 2-178 ms and a median of 12 before. The tail is the four
+floors with eight or more idle repos, where the strip's ladder is long and both
+searches walk it; a plan is rebuilt when the FLOOR changes rather than per
+frame, and the fade covers the difference. The row search is bounded by the
+reception's queue-derived ladder and stops walking the strip's widths the
+moment the row stops growing with them.
+
+### Goldens
+
+`wide.png` joins the committed set: the `three` population on a **1920 x 1080**
+window rather than the 1600 x 1000 one every other capture uses. It is a
+committed golden and not a `--stage` capture, because the floor has two
+ARRANGEMENTS now and the second one is only ever chosen on a wide stage —
+without it the whole of `plan-rows.js` is outside the gate, and the picture the
+owner actually looks at is the one nothing photographs. §139 refused a second
+set of the same size for a good reason ("a golden no CI job takes"); this is
+one capture that CI does take, and it is the same fixture as `three`, so the
+pair is also the clearest statement of what the arrangement choice does: one
+floor, two windows, two buildings.
+
+A capture may name its own stage now (`CAPTURES`), and the viewport is emulated
+for every capture rather than only for the odd one out — the same mechanism
+`withChrome` already used for the default size, so 1920 x 1080 and 1600 x 1000
+differ in nothing but their numbers. `--stage` still overrides every capture,
+because a run that asks for one window means it.
+
+All eight regenerated, and **five of the seven that existed still show a
+column**, which is the gate doing its job rather than a shortfall:
+
+| golden | stage | arrangement |
+|---|---|---|
+| `demo` (and both themed) | 1600 x 1000 | column — six rooms in two bands, and no band would stand in one row |
+| `empty` | 1600 x 1000 | column — no rooms to lay in a row |
+| `single` | 1600 x 1000 | column — one room and a two-line board, which is §141's own honest floor |
+| `reference` | 1600 x 1000 | column — one room and a nineteen-line board, unchanged from §141 |
+| `three` | 1600 x 1000 | **two rows** |
+| `wide` (new) | **1920 x 1080** | **two rows** |
+
+Read back:
+
+`wide.png` is the picture this package is for. The reception fills the top left
+with its queue on the sofas along its width and the desk at the end of it; the
+three project rooms stand across the rest of that row; the corridor runs wall
+to wall under both; and the lounge and the idle strip fill the bottom row.
+Nothing is clipped at any edge.
+
+`three.png` is the same three repos on the goldens' own 1600 x 1000 window and
+is two rows as well — the gate is about what the column LEAVES, not only about
+how wide the stage is, and a three-room floor beside a lounge leaves the same
+block at either size. What differs between the two captures is the proportion,
+and each is its own window's: **86.3 x 48.9 U (1.77:1) on a 1.84:1 stage** and
+**94.3 x 48.8 U (1.93:1) on a 2.02:1 one**, both inside `ASPECT_SETTLE`, at 12%
+and 15% of their working side open. The pair is the clearest statement of what
+the arrangement does — one fixture, two windows, two buildings.
+
+`reference.png` is the case §141 shipped and this package deliberately did not
+touch: the reception over the lounge down the left, one room and a nineteen-line
+board beside them, and the bay at the end of the room's row that §140 explains
+— one two-desk project cannot fill a working side as wide as a two-column board
+needs. Its arrangement is unchanged because two rows could not be that window's
+shape either, and the rank that says so is rank 1.
+
+`demo.png` also carries the junior fix, and carries it invisibly: `design-system`
+holds a senior with two juniors, and both stand exactly where WP-41 put them —
+one seat pitch left, one right — because the rule only changes where the wall
+arrives.
+
+The check is green on all eight at 0 px over tolerance and 0 px moved at all,
+the same noise floor §106, §139 and §140 each measured.
