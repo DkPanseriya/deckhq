@@ -1050,7 +1050,7 @@ test('every other room plate is still exactly two lines', () => {
   assert.deepEqual(dir, ['Directory', '2 repos · nobody in']);
 
   const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
-  assert.deepEqual(letGo, ['Archive', '1 let go · archived']);
+  assert.deepEqual(letGo, ['Archive', '1 fired']);
 });
 
 test('a room the snapshot has nothing to say about falls back to its own plate', () => {

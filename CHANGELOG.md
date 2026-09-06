@@ -20,9 +20,10 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   the conversation stays readable from the panel through the fired view, and DeckHQ writes nothing
   into the runtime's own store, no archive flag and no file under `~/.claude` or `~/.codex`.
   `bench` and `recall` are not made to ask; only firing is expensive to hit by accident. The one
-  surface left saying "let go" is the room plate the floor _draws_ — changing a string on the
-  canvas moves every golden, so it waits for a package that regenerates them.
-  `docs/DEVIATIONS.md` §143.2.
+  surface left saying "let go" was the room plate the floor _draws_ — changing a string on the
+  canvas moves every golden, so it waited for a package that regenerates them. That package is
+  WP-60: the plate now says `N fired`, and `test/unit/fire-vocabulary.test.mjs` no longer excludes
+  `public/render/`. `docs/DEVIATIONS.md` §143.2, §145.4.
 
 ### Fixed
 

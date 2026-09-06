@@ -98,20 +98,22 @@ function literals(src) {
 }
 
 /**
- * The surfaces this package owns. `public/render/` is NOT here and that is
- * deliberate: the room plate the floor draws still reads "1 let go ·
- * archived", and changing a string the canvas paints moves the goldens. It is
- * the one surface WP-61 left behind, named in docs/DEVIATIONS.md §143 rather
- * than quietly skipped.
+ * The surfaces this package owns.
+ *
+ * `public/render/` USED TO BE EXCLUDED (WP-61), because the one plate the
+ * canvas still painted read "1 let go · archived" and changing a string the
+ * canvas paints moves the goldens. WP-60 regenerates them, so the exclusion is
+ * gone and the renderer is held to the same vocabulary as everything else —
+ * which is the whole point of a rule about words a person reads: a surface
+ * that is exempt from it is a surface where the old words come back.
  */
 const OWNED = ['public', 'src/cli', 'bin'];
 
-/** Every `.js`/`.mjs` under `dir`, minus `public/render`. */
+/** Every `.js`/`.mjs` under `dir`. */
 function sources(dir, out = /** @type {string[]} */ ([])) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (path.relative(ROOT, full).replace(/\\/g, '/') === 'public/render') continue;
       sources(full, out);
     } else if (/\.m?js$/.test(entry.name)) out.push(full);
   }

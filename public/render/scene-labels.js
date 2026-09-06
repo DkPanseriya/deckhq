@@ -187,7 +187,12 @@ export function plateLinesFor(room, snapshot, plan) {
   if (room.kind === 'let_go') {
     const c = snap.counts || {};
     const n = c.letGo || 0;
-    return [room.name, n === 1 ? '1 let go · archived' : `${n} let go · archived`];
+    // WP-61 renamed the action, the state, the toast and the panel header, and
+    // left this one plate saying "let go · archived" because a string the
+    // canvas paints moves the goldens (§143.2). WP-60 regenerates them, so it
+    // moves here too — and `archived` goes with it, because WP-61's own
+    // sentence is that the conversation is KEPT rather than archived.
+    return [room.name, `${n} fired`];
   }
   return fallback();
 }
