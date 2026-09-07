@@ -15,20 +15,19 @@
  *
  * Nothing here knows about the service column or the envelope. It is asked
  * "lay these rooms in this rectangle", "how big are they" and — since WP-59c —
- * "what do you do with a height the column gave you", which is the one place
- * the strip is mentioned at all: the fill order spends the strip's rows on the
- * working side's height, so it has to know how tall a board of `n` repos is.
+ * "what do you do with a height the column gave you". It used to have to know
+ * how tall a board of `n` idle repos was, because the fill order spent the
+ * strip's rows on the working side's height; WP-60 took the strip off the
+ * floor, and this module no longer knows that idle repos exist at all.
  */
 
-import { directoryColumns, directoryHeight } from './plan-rooms.js';
 import {
+  CELL_OCCUPANCY_RATIO_MAX,
   CORRIDOR,
-  DIRECTORY_SIDE_MAX,
   HEIGHT_BAND_RATIO,
   PLATE_BAND,
   PROJECT_ASPECT_LIMIT,
   ROOM_FILL_COLUMN_MAX,
-  ROOM_FILL_MAX,
   ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
   ROOM_WIDTH_STRETCH_MAX,
@@ -39,8 +38,11 @@ import {
  * @param {{room: import('./plan-units.js').Room}[]} projectRooms
  * @param {(i:number) => {w:number,h:number}} naturalOf what room `i`'s
  *   furniture needs, read fresh every time because the fit loop rebuilds it
+ * @param {(i:number) => number} [occupancyOf] how many agents are at desks in
+ *   room `i` — what its cell's WIDTH is shared out by since WP-60, and a
+ *   different question from what its furniture happens to measure
  */
-export function createWorkingFloor(projectRooms, naturalOf) {
+export function createWorkingFloor(projectRooms, naturalOf, occupancyOf = () => 1) {
   /**
    * How much floor each project is worth, relative to the others.
    *
@@ -156,16 +158,66 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    * @param {{x:number,y:number,w:number,h:number}} rect
    */
   const layBand = (band, rect) => {
-    // Shared out by WIDTH, not by area. The cells are all the band's depth, so
-    // width is the only degree of freedom left and giving it out by area hands
-    // a deep room its neighbour's floor.
+    // SHARED OUT BY OCCUPANCY, AND THE ROW IS FILLED (WP-60).
+    //
+    // It used to be shared by what each room's FURNITURE measured, which on the
+    // owner's floor gave a twenty-four session project the same width as the
+    // three one-session rooms beside it: a one-desk room's furniture is very
+    // nearly a twenty-four-desk room's once both have a rug, a whiteboard and
+    // their corner planting, so the measure the row was dealt by could barely
+    // tell them apart. Desks are agents at desks (`08` B6), and they are what
+    // actually differs.
+    //
+    // `CELL_OCCUPANCY_RATIO_MAX` is the bound: unclamped, twenty-four to one is
+    // a hall beside three cupboards, and a cupboard cannot hold a desk and the
+    // clearance round it. Every cell still takes the band's full depth and the
+    // row still tiles `rect` exactly — the last cell takes the remainder, so
+    // rounding cannot open a seam.
     const rowOf = (items, r) => {
-      const total = items.reduce((a, item) => a + Math.max(1e-6, naturalOf(item.i).w), 0) || 1;
+      // WHAT EACH ROOM MUST HAVE, FIRST. A cell narrower than the room's own
+      // furniture is a desk on the corridor, and it is also the thing that
+      // makes the building wider than the window: the fit loop reads the
+      // shortfall off these cells and grows the whole working side until the
+      // WORST of them fits, so a pure occupancy share means the SMALLEST room
+      // sets the scale for everybody. Dealt strictly by occupancy, the owner's
+      // floor came out 2.03:1 on a 1.78:1 window — 88% of its height — because
+      // three one-desk rooms each had to be given a sixth of a row.
+      const base = items.map((item) => Math.max(1e-6, naturalOf(item.i).w));
+      const needed = base.reduce((a, w) => a + w, 0);
+      // AND THE SURPLUS GOES WHERE THE PEOPLE ARE. Whatever the row has beyond
+      // what its rooms need is shared by OCCUPANCY — desks, which are agents at
+      // desks (`08` B6) — so a twenty-four session project grows into the width
+      // its neighbours did not need and a one-session project does not.
+      const weights = items.map((item) => Math.max(1e-6, occupancyOf(item.i)));
+      const totalWeight = weights.reduce((a, w) => a + w, 0) || 1;
+      const surplus = Math.max(0, r.w - needed);
+      let want = base.map((b, k) => b + (weights[k] / totalWeight) * surplus);
+
+      // AND NO CELL IS MORE THAN `CELL_OCCUPANCY_RATIO_MAX` OF ITS NEIGHBOUR.
+      // Twenty-four to one is a hall beside three cupboards at any real width,
+      // and a cupboard cannot hold a desk and the clearance round it. Applied
+      // after the share rather than to the weights, because it is a statement
+      // about the CELLS a person looks at, not about the arithmetic behind
+      // them. The excess is handed back to the rooms that are under the cap, in
+      // the same proportion, so the row still tiles exactly.
+      const cap = Math.min(...want) * CELL_OCCUPANCY_RATIO_MAX;
+      const over = want.reduce((a, w) => a + Math.max(0, w - cap), 0);
+      if (over > 1e-9) {
+        const under = want.map((w) => Math.max(0, cap - w));
+        const room = under.reduce((a, w) => a + w, 0);
+        want = want.map((w, k) =>
+          w > cap ? cap : w + (room > 1e-9 ? (under[k] / room) * Math.min(over, room) : 0),
+        );
+      }
+
+      const total = want.reduce((a, w) => a + w, 0) || 1;
       /** @type {{x:number,y:number,w:number,h:number}[]} */
       const row = [];
       let x = r.x;
       items.forEach((item, k) => {
-        const w = k === items.length - 1 ? r.x + r.w - x : (naturalOf(item.i).w / total) * r.w;
+        // The last cell takes the remainder, so rounding cannot open a seam
+        // between two rooms that are supposed to share a wall.
+        const w = k === items.length - 1 ? r.x + r.w - x : (want[k] / total) * r.w;
         row.push({ x, y: r.y, w, h: r.h });
         x += w;
       });
@@ -184,73 +236,60 @@ export function createWorkingFloor(projectRooms, naturalOf) {
   };
 
   /**
-   * How wide a band of rooms may be laid, given the depth it is being laid at
-   * and the width on offer.
+   * How wide a band of rooms is laid: THE WIDTH IT WAS OFFERED (WP-60).
    *
-   * A BAND TAKES THE WIDTH ITS ROOMS NEED, NOT THE WIDTH IT IS OFFERED.
+   * This used to be the place a row gave width back. A band was capped at the
+   * area its rooms could honestly fill (`ROOM_FILL_MAX`) and at the width one
+   * room could honestly be (`ROOM_WIDTH_STRETCH_MAX`), and what it did not take
+   * was drawn as a BAY of open floor at the end of the row. The reasoning was
+   * §106's: carpet with nothing on it is the defect, and a room stretched to
+   * fill a row it did not earn is carpet.
    *
-   * Bands rarely hold the same number of rooms — five projects split three and
-   * two — and the narrower band used to stretch its rooms across the whole
-   * working floor anyway: on the demo floor that was two rooms at 53% bare
-   * carpet beside three at 34%. A band is capped at the area its rooms may
-   * honestly fill (`ROOM_FILL_MAX`) and, since WP-59, at the width one room may
-   * honestly be (`ROOM_WIDTH_STRETCH_MAX`); what it does not take is open floor
-   * at the end of the band.
+   * WP-60 answers the same worry the other way, because the owner asked for the
+   * other way: "remaining project room size make it dynamic and full size for
+   * live projects". A row of rooms that stops short leaves a bay, and a bay is
+   * carpet too — carpet that is not even inside a room, so nothing can ever be
+   * put on it. What changed is that the room can now SPEND the width: the cells
+   * are dealt by occupancy so the big room takes most of it, and
+   * `buildProjectRoom` grows the rug, the board, the shelf and the planting
+   * into whatever it is given rather than leaving the desks adrift.
    *
-   * The area cap is stated on the SHALLOWEST room in the band, because that is
-   * the one whose cell is furthest past what its furniture needs: every cell is
-   * `bandH` deep, so a room `h` deep is `bandH / h` over before the width is
-   * even shared out. Which is also why a SHALLOWER band is a WIDER one, and why
-   * the envelope search has a band depth to choose (WP-59).
+   * The bare-carpet fraction is still measured — `plan.working.bareCarpet` —
+   * and is now a REPORTED METRIC rather than a limit. A number the plan states
+   * and the integrity test reads is worth more than a bound that bought its
+   * tidiness with a hole in the floor.
    *
-   * @param {{weight:number,i:number}[]} band
-   * @param {number} bandH the depth the band is being laid at
+   * @param {{weight:number,i:number}[]} _band @param {number} _bandH
    * @param {number} availW the working floor's width
-   * @param {number} [fillMax] the bare-carpet bound in force — `ROOM_FILL_MAX`
-   *   (30%) normally, and `ROOM_FILL_COLUMN_MAX` (45%) for a band the SERVICE
-   *   COLUMN made deep (WP-59c). It has to be passed rather than assumed here,
-   *   because the depth and the width are two ends of one bound: raise the cap
-   *   for the depth and forget it for the width, and the band answers a deeper
-   *   row by narrowing itself — trading the open floor under the rooms for a
-   *   bay beside them, which is the defect §140 removed.
    */
-  const bandWidthFor = (band, bandH, availW, fillMax = ROOM_FILL_MAX) => {
-    let naturalW = 0;
-    let shallowest = Infinity;
-    for (const item of band) {
-      const nat = naturalOf(item.i);
-      naturalW += nat.w;
-      shallowest = Math.min(shallowest, nat.h);
-    }
-    return Math.min(
-      availW,
-      naturalW * ROOM_WIDTH_STRETCH_MAX,
-      Math.max(
-        1,
-        Math.min(naturalW, availW),
-        (naturalW * fillMax * shallowest) / Math.max(1e-6, bandH),
-      ),
-    );
-  };
+  const bandWidthFor = (_band, _bandH, availW) => availW;
 
   /**
    * The DEEPEST the working side's rooms may honestly be laid, given the width
-   * they have to fill (WP-59c, step (a) of `plan.js`'s fill order).
+   * they have to fill (WP-59c, step (a) of the fill order).
    *
-   * The exact inverse of `bandWidthFor`, and it has to be exact or the two
-   * disagree about the same room. A band laid at depth `d` and width `w` gives
-   * its shallowest room `(w / naturalW) * (d / shallowest)` times the floor its
-   * furniture needs; `fillMax` is the most of that a room may have. So the
-   * deepest that band may be laid at the width it actually wants is
+   * WP-60 CHANGED THE WIDTH AND LEFT THIS ALONE, and the asymmetry is the
+   * decision. A row of rooms now fills its width edge to edge — the cells are
+   * dealt by occupancy and `bandWidthFor` hands back everything it is offered
+   * — because the width a row is offered is the width its own rooms asked for,
+   * so filling it costs almost nothing and the alternative was a bay of floor
+   * outside every room.
    *
-   *     d ≤ fillMax * shallowest * naturalW / min(availW, naturalW * 1.6)
+   * The DEPTH is a different quantity. In a column it is set by the service
+   * column — a reception over a lounge holding twenty-three benched agents is
+   * seventy units tall — and it has nothing to do with what the rooms need. A
+   * band told to fill it drew four rooms at 89% bare carpet on the owner's own
+   * floor, which is a desk in a ballroom: the defect §106 removed, rebuilt by
+   * the code meant to remove its opposite. So the depth keeps its bound, and
+   * the height a column cannot fill is answered where §142 answered it — by
+   * folding the building into two rows, where the rooms' depth is the
+   * reception's rather than the lounge's.
    *
-   * and the working side's ceiling is the tightest of those, shared out in the
-   * same proportion `attempt` shares the height in. §140's
-   * `ROOM_HEIGHT_STRETCH_MAX` is deliberately NOT applied here: a room may grow
-   * past 1.6x its natural depth to meet the column, because the alternative is
-   * the bare block under it, and what stops it instead is the area — which is
-   * what "45% bare carpet" is a statement about.
+   * The exact inverse of the width bound as it stood before WP-60, and it has
+   * to be exact or the two disagree about the same room. A band laid at depth
+   * `d` and width `w` gives its shallowest room `(w / naturalW) * (d /
+   * shallowest)` times the floor its furniture needs; `fillMax` is the most of
+   * that a room may have.
    *
    * @param {number} rowCount
    * @param {number} availW the working floor's width
@@ -315,7 +354,7 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    *              they are deep; the search reads this and takes the other
    *              grid. Zero when every cell is the shape of the room in it.
    */
-  const costWorkingFloor = (rowCount, workingW, bandHTotal, fillMax = ROOM_FILL_MAX) => {
+  const costWorkingFloor = (rowCount, workingW, bandHTotal) => {
     const none = { area: 0, bandOpen: 0, bandSkew: 0, gridErr: 0 };
     const bands = bandsOf(rowCount);
     if (!bands.length || workingW <= 0 || bandHTotal <= 0) return none;
@@ -333,7 +372,7 @@ export function createWorkingFloor(projectRooms, naturalOf) {
     let counted = 0;
     bands.forEach((band, r) => {
       const bandH = (usableH * bandNaturalH[r]) / totalNaturalH;
-      const w = bandWidthFor(band, bandH, workingW, fillMax);
+      const w = bandWidthFor(band, bandH, workingW);
       area += w * bandH;
       widest = Math.max(widest, w);
       narrowest = Math.min(narrowest, w);
@@ -355,7 +394,7 @@ export function createWorkingFloor(projectRooms, naturalOf) {
     };
   };
 
-  const layWorkingFloor = (rect, rowCount, fillMax = ROOM_FILL_MAX) => {
+  const layWorkingFloor = (rect, rowCount) => {
     /** @type {{x:number,y:number,w:number,h:number}[]} */
     const empty = new Array(projectRooms.length);
     if (!projectRooms.length || rect.w <= 0 || rect.h <= 0) {
@@ -386,7 +425,7 @@ export function createWorkingFloor(projectRooms, naturalOf) {
         bandY += bandH + CORRIDOR;
         // See `bandWidthFor`: the band takes the width its rooms need, not the
         // width it is offered, and the difference is a bay of open floor.
-        const w = bandWidthFor(band, bandH, rect.w, fillMax);
+        const w = bandWidthFor(band, bandH, rect.w);
         const laid = layBand(band, { x: rect.x, y, w, h: bandH });
         band.forEach((item, k) => {
           cells[item.i] = laid[k];
@@ -485,50 +524,52 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    *
    *   (a) the rooms grow DEEPER, past `ROOM_HEIGHT_STRETCH_MAX` if the column
    *       forces it, until the shallowest of them is at `ROOM_FILL_COLUMN_MAX`
-   *       — 45% bare carpet, five points past the bound on a stretch the plan
-   *       merely preferred, and `buildProjectRoom` re-lays the furniture into
-   *       the depth rather than leaving the desks adrift in it;
-   *   (b) the strip stands its lines up — fewer columns, more rows, the same
-   *       repos — up to `DIRECTORY_SIDE_MAX` of the side;
-   *   (c) the service column comes DOWN to meet them, by packing the lounge
+   *       — and `buildProjectRoom` re-lays the furniture into the depth rather
+   *       than leaving the desks adrift in it. The bound stays on the DEPTH
+   *       (WP-60 removed it from the width): a column's height is the lounge's
+   *       and has nothing to do with the rooms, so a band told to fill it is a
+   *       desk in a ballroom. The height a column cannot fill is answered by
+   *       folding the building instead (§142);
+   *   (b) the service column comes DOWN to meet them, by packing the lounge
    *       denser. That is the `pack` axis of the search rather than a step
    *       here, because it changes the height this function is measuring
    *       against; `better` takes the loosest lounge that does the job.
-   *   (d) and only then open plan, which `WORKING_OPEN_MAX` bounds.
+   *   (c) and only then open plan, which `WORKING_OPEN_MAX` bounds.
    *
-   * Returns the band depth and the strip's column count that (a) and (b)
-   * settle on, so `envelopeFor` and `settle` cannot answer differently.
+   * THERE USED TO BE A STEP BETWEEN (a) AND (b): the idle strip stood its lines
+   * up — fewer columns, more rows, the same repos — to spend some of the height
+   * the column had handed over. WP-60 took the strip off the floor, and with it
+   * the only lever on this side that was not a room. What that leaves is a
+   * shorter order and a plainer sentence: the rooms take the height, and what
+   * they cannot take is open plan.
+   *
+   * Returns the band depth (a) settles on, so `envelopeFor` and `settle` cannot
+   * answer differently.
    *
    * @param {number} rowCount @param {number} workingW @param {number} H
    * @param {number} bandH the depth this candidate asked its band to be laid at
-   * @param {number} idle idle repos the strip has to list
    */
-  const fillOrder = (rowCount, workingW, H, bandH, idle) => {
-    let dirCols = 0;
-    let dirH = idle ? directoryHeight(idle, workingW, 0) : 0;
+  const fillOrder = (rowCount, workingW, H, bandH) => {
     let rooms = bandH;
-    // (a) the rooms first.
-    if (projectRooms.length && rooms + dirH < H - 1e-6) {
+    // (a) the rooms, and there is nothing else on this side to be second.
+    //
+    // ALL OF IT, SINCE WP-60. This used to stop at `bandDepthCeiling` — the
+    // inverse of the bare-carpet bound — so the rooms grew down into the
+    // column's height only as far as 45% bare carpet allowed and the rest was
+    // the open-plan block §141 measured at 43% of the owner's working side.
+    // The bound is a reported metric now (`plan.working.bareCarpet`), so what
+    // is left is the plainest possible rule: the rooms are as deep as the side
+    // they are on.
+    if (projectRooms.length && rooms < H - 1e-6) {
       const ceiling = bandDepthCeiling(rowCount, workingW, ROOM_FILL_COLUMN_MAX);
-      rooms = Math.max(rooms, Math.min(H - dirH, ceiling));
-    }
-    // (b) then the strip, in as few columns as the allowance will carry.
-    if (idle && rooms + dirH < H - 1e-6) {
-      const allowance = Math.min(H - rooms, H * DIRECTORY_SIDE_MAX);
-      for (const cols of directoryColumns(idle, workingW)) {
-        const h = directoryHeight(idle, workingW, cols);
-        if (h > dirH && h <= allowance + 1e-6) {
-          dirH = h;
-          dirCols = cols;
-        }
-      }
+      rooms = Math.max(rooms, Math.min(H, ceiling));
     }
     // A room deeper than the search asked for is a room the COLUMN stretched,
     // and it is the one case the looser bare-carpet bound applies to. Said as
     // a comparison rather than as a flag because the same comparison is what
     // the integrity test makes of the finished floor.
     const forced = rooms > bandH + 1e-6;
-    return { bandH: rooms, dirH, dirCols, forced };
+    return { bandH: rooms, forced };
   };
 
   /**
@@ -556,16 +597,13 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    *
    * @param {any} chosen the candidate envelope the search settled on
    * @param {(i:number, cell:{w:number,h:number}, aspect:number) => void} rebuild
-   * @param {number} idle idle repos the strip has to list
    */
-  const layColumn = (chosen, rebuild, idle) => {
+  const layColumn = (chosen, rebuild) => {
     const workingX = chosen.measured.w + CORRIDOR;
     let H = chosen.H;
     let workingW = chosen.workingW;
     let W = workingX + workingW;
     let laid = { cells: [], corridors: [] };
-    let dirH = 0;
-    let dirCols = chosen.dirCols;
     let forced = chosen.forced;
     let bandH = chosen.bandH;
     let asked = chosen.asked ?? chosen.bandH;
@@ -580,17 +618,11 @@ export function createWorkingFloor(projectRooms, naturalOf) {
       // loop has since rebuilt them into their cells, so the rooms are a
       // different size and the answer has to be asked again. Asked through the
       // same function, so the two can be wrong together but never differently.
-      const order = fillOrder(chosen.rowCount, workingW, H, Math.min(asked, Math.max(1, H)), idle);
-      dirH = order.dirH;
-      dirCols = order.dirCols;
+      const order = fillOrder(chosen.rowCount, workingW, H, Math.min(asked, Math.max(1, H)));
       forced = order.forced;
-      bandH = Math.min(order.bandH, Math.max(1, H - dirH));
+      bandH = Math.min(order.bandH, Math.max(1, H));
       laid = projectRooms.length
-        ? layWorkingFloor(
-            { x: workingX, y: 0, w: workingW, h: bandH },
-            chosen.rowCount,
-            forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
-          )
+        ? layWorkingFloor({ x: workingX, y: 0, w: workingW, h: bandH }, chosen.rowCount)
         : { cells: [], corridors: [] };
       let worstW = 1;
       let worstH = 1;
@@ -618,9 +650,9 @@ export function createWorkingFloor(projectRooms, naturalOf) {
       if (worstW <= 1.0005 && worstH <= 1.0005) break;
       workingW *= Math.min(worstW, 1.25);
       asked *= Math.min(worstH, 1.25);
-      H = Math.max(H, asked + dirH);
+      H = Math.max(H, asked);
     }
-    return { H, W, workingW, workingX, laid, dirH, dirCols, bandH, forced };
+    return { H, W, workingW, workingX, laid, bandH, forced };
   };
 
   return {

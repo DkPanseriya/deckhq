@@ -21,6 +21,8 @@ import { createPalette } from './palette.js';
 import { createDeckUI } from './deck.js';
 import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
+import { createIdlePopover } from './idle-projects.js';
+import { exportLayout, importLayout } from './app-layout.js';
 import { createClearedTracker } from './office-cleared.js';
 import {
   FALLBACK_STATE_COLORS,
@@ -220,6 +222,9 @@ function handleSnapshot(snapshot) {
   if (!first && !snapshot.demo) diffAndNotify(snapshot);
   else setPrevActivityStates(new Map(snapshot.agents.map((a) => [a.id, a.activityState])));
   deckUI?.render();
+  // WP-60. The idle chip is a count off this same snapshot, so it is repainted
+  // where every other count is rather than on a clock of its own.
+  idleProjects.refresh();
   // The office-cleared moment (WP-15). The actor floor is excluded for the
   // same reason it fires no notifications: nothing on it was ever really
   // waiting, so nothing on it can really be cleared.
@@ -478,71 +483,6 @@ async function settleFloor() {
  * browser saves it, and no byte leaves the machine. The object URL is revoked
  * on the next task so a long-lived tab does not accumulate blobs.
  */
-async function exportLayout() {
-  try {
-    const res = await fetch('/api/layout');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const layout = await res.json();
-    const blob = new Blob(
-      [
-        `${JSON.stringify(layout, null, 2)}
-`,
-      ],
-      { type: 'application/json' },
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'deckhq-layout.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-    toast(
-      `Layout saved: theme “${layout.theme}”, ${layout.rooms.length} room(s). ` +
-        'It names your project folders — it is not anonymous.',
-    );
-  } catch (err) {
-    toast(`Could not export the layout: ${err.message}`, { isError: true });
-  }
-}
-
-/**
- * Apply a layout file.
- *
- * The file is parsed here only far enough to be valid JSON; the daemon is the
- * one authority on whether it is a LAYOUT, so its refusal is what the user
- * reads. A refused file changes nothing at all — see `src/http/routes/layout.mjs`.
- */
-function importLayout() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'application/json,.json';
-  input.addEventListener('change', async () => {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch (err) {
-        throw new Error(`that file is not JSON (${err.message})`);
-      }
-      const res = await fetch('/api/layout', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(parsed),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      const layout = body.layout || {};
-      toast(`Layout applied: theme “${layout.theme}”, ${(layout.rooms || []).length} room(s).`);
-    } catch (err) {
-      toast(`${err.message} Nothing was changed.`, { isError: true });
-    }
-  });
-  input.click();
-}
-
 async function refreshNow() {
   try {
     const res = await fetch('/api/refresh', { method: 'POST' });
@@ -725,8 +665,36 @@ const replayUI = createReplay({
   getScene: () => scene,
   getSnapshot: () => latestSnapshot,
   toast,
-  onActiveChange: (active) => setSceneOwner(active ? 'replay' : 'live'),
+  onActiveChange: (active) => {
+    setSceneOwner(active ? 'replay' : 'live');
+    // WP-60. The transport bar is bottom-centred and on a narrow stage its
+    // right edge arrives in the idle chip's corner, so the chip stands down
+    // while it is up. `refresh` reads `replayUI.isOpen()` for itself; this is
+    // only what tells it the answer has changed.
+    idleProjects.refresh();
+  },
 });
+
+// WP-60 · the idle projects — begin ------------------------------------------
+//
+// The repos nobody is working in. This was a column of names drawn permanently
+// down the bottom-right of the canvas; it is a chip and a popover now, because
+// on a machine with any history that column was the largest thing on a floor
+// that is supposed to be about who IS working. See `public/idle-projects.js`.
+//
+// A row goes to `filterToProject`, which is exactly what a click on one of the
+// old canvas lines did: it scopes the queue and the panel to that repo and
+// lands on its most overdue session. NOT `jumpToProject` — that toasts "Nobody
+// is in that room right now" for precisely the repos this list is made of.
+const idleProjects = createIdlePopover({
+  chipEl: el.idleChip,
+  popoverEl: el.idlePopover,
+  listEl: el.idleList,
+  getSnapshot: () => latestSnapshot,
+  onActivate: (projectId) => filterToProject(projectId),
+  isSuppressed: () => replayUI.isOpen(),
+});
+// WP-60 · the idle projects — end --------------------------------------------
 
 // Escape closes the replay and hands the canvas back. Captured, and only
 // while the bar is up and no modal dialog is open: the replay is a region
@@ -763,6 +731,10 @@ const paletteUI = createPalette({
     newAgent: startNewAgent,
     newProject: openNewProject,
     floatOffice, // WP-39
+    // WP-60. Opens rather than toggles: arriving here means the person typed
+    // the name of the thing they want on screen, and a command that could
+    // close what it is named after would be a coin flip.
+    idleProjects: () => idleProjects.open(),
     rename: openIdentityDialog,
     // The palette never calls /api/ack itself: it hands the action to the
     // panel's performAction(), the single funnel in the client. THE
@@ -824,6 +796,7 @@ wireKeyboard({
   saveCard,
   takeSnapshot,
   floatOffice,
+  toggleIdleProjects: () => idleProjects.toggle(),
   paletteUI,
 });
 document.addEventListener('keydown', handlePaletteKey);

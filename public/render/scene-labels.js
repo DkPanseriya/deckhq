@@ -180,14 +180,15 @@ export function plateLinesFor(room, snapshot, plan) {
       goneHome > 0 ? `${drawn} benched · ${goneHome} went home` : `${drawn} benched`,
     ];
   }
-  if (room.kind === 'directory') {
-    const n = (room.entries || []).length;
-    return [room.name, `${n} repo${n === 1 ? '' : 's'} · nobody in`];
-  }
   if (room.kind === 'let_go') {
     const c = snap.counts || {};
     const n = c.letGo || 0;
-    return [room.name, n === 1 ? '1 let go · archived' : `${n} let go · archived`];
+    // WP-61 renamed the action, the state, the toast and the panel header, and
+    // left this one plate saying "let go · archived" because a string the
+    // canvas paints moves the goldens (§143.2). WP-60 regenerates them, so it
+    // moves here too — and `archived` goes with it, because WP-61's own
+    // sentence is that the conversation is KEPT rather than archived.
+    return [room.name, `${n} fired`];
   }
   return fallback();
 }
@@ -229,6 +230,106 @@ export function resolveLabelCollisions(items) {
   }
 
   return result;
+}
+
+/**
+ * WP-60. WHICH WAITING BADGES MAY BE DRAWN, AND WHAT STANDS FOR THE ONES THAT
+ * MAY NOT.
+ *
+ * On the owner's own floor at 1920 x 1080 the office wall carried seven
+ * crimson pills in one row — `3d 2d 21h 2d 3h 2d 2h 1h 58m 1h 55m 20m` — each
+ * one overlapping its neighbour into a band of digits that says nothing. Every
+ * number in it was true and none of them was readable, which is the worst way
+ * for a floor to be wrong: it looks like data.
+ *
+ * THE RULE. A badge is drawn only where it does not collide with a neighbour's
+ * badge. The colliding ones are not nudged and not stacked — there is nowhere
+ * for a pill above a seated row to go, and `resolveLabelCollisions` above
+ * already proves what happens when everything in the waiting area claims an
+ * exemption at once — they are REPLACED BY ONE PILL at the row's start, which
+ * says the two things the seven pills were between them saying: how many are
+ * waiting, and how long the worst of them has been.
+ *
+ * NOTHING IS HIDDEN BY THIS. Each person keeps their state icon and their
+ * name, which is what says WHO is waiting; the panel and the queue strip still
+ * carry every individual time, to the minute, and this is the only surface
+ * where those times were ever unreadable. A badge is a glance, not a record.
+ *
+ * A ROW is a set of badges whose boxes overlap VERTICALLY, which on a seated
+ * queue is exactly the people sharing a run of sofa. Two rows of waiting agents
+ * one above the other are two independent problems and get two independent
+ * answers, because a pill for the row above cannot say anything true about the
+ * row below.
+ *
+ * Pure, and takes boxes rather than a canvas, so `scene-math.test.mjs` can hold
+ * the rule without a DOM — the same contract `resolveLabelCollisions` has.
+ *
+ * @param {{id:string, x:number, y:number, w:number, h:number, ms:number}[]} items
+ *   `x,y,w,h`: the badge pill's screen-space box (`badgeBox` in `rig.js`).
+ *   `ms`: how long that agent has been waiting, for the aggregate's `oldest`.
+ * @returns {{drawn:Set<string>, pills:{x:number,y:number,count:number,oldest:number}[]}}
+ *   `drawn` is the ids that keep their own badge. Each pill is a row's
+ *   aggregate: `x` is its LEFT edge — the row's start — and `y` its top.
+ */
+export function resolveBadgeCollisions(items) {
+  /** @type {Set<string>} */
+  const drawn = new Set();
+  /** @type {{x:number,y:number,count:number,oldest:number}[]} */
+  const pills = [];
+  if (!items || items.length === 0) return { drawn, pills };
+
+  // Down the wall first, then along it. `records` reaches here sorted by world
+  // y, which is not the same order — a row of sofa is one world y but several
+  // screen ones once the seats are at different depths — so the rows are cut
+  // here from the boxes that will actually be drawn.
+  const sorted = [...items].sort((a, b) => a.y - b.y || a.x - b.x);
+  /** @type {typeof sorted[]} */
+  const rows = [];
+  let bottom = -Infinity;
+  for (const it of sorted) {
+    // A new row starts where a badge clears the ones above it outright. The
+    // running bottom is the SHALLOWEST of the row so far, so one tall pill
+    // cannot swallow the row under it.
+    if (!rows.length || it.y >= bottom) {
+      rows.push([it]);
+      bottom = it.y + it.h;
+    } else {
+      rows[rows.length - 1].push(it);
+      bottom = Math.min(bottom, it.y + it.h);
+    }
+  }
+
+  for (const row of rows) {
+    row.sort((a, b) => a.x - b.x);
+    // COLLIDING MEANS TOUCHING EITHER NEIGHBOUR, not merely following one that
+    // was kept. A badge with clear air on both sides is readable wherever it
+    // stands and keeps its own number; the run of seven that touch each other
+    // are all of them unreadable, which is why all seven go into the pill and
+    // it says "7 waiting" rather than "6".
+    const hits = row.map(
+      (it, i) =>
+        (i > 0 && row[i - 1].x + row[i - 1].w > it.x) ||
+        (i < row.length - 1 && it.x + it.w > row[i + 1].x),
+    );
+    /** @type {typeof row} */
+    const colliding = [];
+    row.forEach((it, i) => {
+      if (hits[i]) colliding.push(it);
+      else drawn.add(it.id);
+    });
+    if (!colliding.length) continue;
+    pills.push({
+      // The row's START, and left-aligned there: the pill is wider than the
+      // badge it replaces and everything to its right is a slot this pass just
+      // emptied, so it grows into space nothing else wants.
+      x: colliding[0].x,
+      y: Math.min(...colliding.map((it) => it.y)),
+      count: colliding.length,
+      oldest: Math.max(...colliding.map((it) => it.ms || 0)),
+    });
+  }
+
+  return { drawn, pills };
 }
 
 export class SceneLabels extends SceneCamera {

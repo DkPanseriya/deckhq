@@ -18,9 +18,14 @@
  *     | the office    | the project rooms, across     |  row 1
  *     +---------------+-------------------------------+
  *     |            one corridor, wall to wall         |
- *     +-----------------------+-----------------------+
- *     | the lounge            | the idle strip        |  row 2
- *     +-----------------------+-----------------------+
+ *     +-----------------------------------------------+
+ *     | the lounge, the whole width                   |  row 2
+ *     +-----------------------------------------------+
+ *
+ * ROW TWO USED TO BE SHARED with a strip of idle repos down its right
+ * (WP-59d). WP-60 took that strip off the floor and made it a popover, so the
+ * lounge is the whole of row two: full width, short, and no corner of open
+ * floor beside it that nothing stands on.
  *
  * The reception is WIDE and not tall — its waiting area runs along its width
  * and its desk is at one end (`buildOfficeRow`) — and the lounge is wide and
@@ -45,13 +50,11 @@
  * loop rebuilds that underneath it.
  */
 
-import { directoryColumns, directoryHeight, directoryWidths } from './plan-rooms.js';
 import { better, score } from './plan-search.js';
 import {
   CORRIDOR,
-  DIRECTORY_ROW_MAX_SHARE,
-  DIRECTORY_SIDE_MAX,
   LOUNGE_PACKS,
+  ROOM_FILL_COLUMN_MAX,
   LOUNGE_ROW_ASPECT_MAX,
   LOUNGE_ROW_MIN_W,
   MARGIN,
@@ -62,7 +65,6 @@ import {
   OFFICE_ROW_MAX_W,
   OFFICE_SEAT_PITCH,
   PLATE_BAND,
-  ROOM_FILL_COLUMN_MAX,
   ROOM_FILL_MAX,
   ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
@@ -79,16 +81,23 @@ import {
  * @param {(w:number, depth:number) => {room: Room, officeSeats: any[]}} deps.office
  *   the reception laid on its side, that wide and at least that deep
  * @param {(w:number, h:number, pack:number) => {room: Room, loungeSpots: any[]}} deps.lounge
- * @param {number} deps.idle idle repos the strip has to list
  * @param {number} deps.waiting agents in the reception's queue
  * @param {ReturnType<typeof import('./plan-envelope.js').createWorkingFloor>} deps.floor
  */
 export function createRowFloor(deps) {
-  const { projectRooms, naturalOf, office, idle, waiting, floor } = deps;
+  const { projectRooms, naturalOf, office, waiting, floor } = deps;
   const { bandDepthCeiling, bandsOf, costWorkingFloor, layWorkingFloor, workingShape } = floor;
 
   /**
    * Can this floor be laid in two rows at all?
+   *
+   * A FLOOR WITH NO PROJECT ROOMS CANNOT (WP-60). Row one is the reception
+   * BESIDE the rooms; with no rooms it is the reception alone above the lounge,
+   * which is a column — the same building, described twice. WP-59d let this
+   * through because `ROWS_OPEN_MIN` never offered an empty floor the second
+   * search in the first place; WP-60 removed that gate, and an empty floor
+   * promptly refolded itself into a 1.51:1 hall with a sixty-seat reception in
+   * it. Nobody had complained about that floor.
    *
    * ONE ROW OF ROOMS, and `dealBands` is the judge of it: its DEPTH rule
    * (`HEIGHT_BAND_RATIO`) starts a new row for a room much shallower than the
@@ -97,10 +106,7 @@ export function createRowFloor(deps) {
    * floor it splits has no single row, and there is nothing this module could
    * honestly do about that — so it says no, and the column takes it.
    */
-  const oneRow = () => projectRooms.length === 0 || bandsOf(1).length === 1;
-
-  /** The narrowest board this many idle repos can honestly be laid in. */
-  const minDirW = idle ? Math.min(...directoryWidths(idle)) : 0;
+  const oneRow = () => projectRooms.length > 0 && bandsOf(1).length === 1;
 
   /**
    * The lounge at the end of row two, and the two things a row asks of it that
@@ -176,35 +182,40 @@ export function createRowFloor(deps) {
    * The whole envelope implied by one two-row arrangement, or `null` where
    * this floor cannot be laid in two rows.
    *
-   * The choices are the same four the column has, less the band count (there
-   * is one) and read on different axes: how wide the reception is, how deep
-   * the rooms are laid, how wide the strip asks to be, and how densely the
-   * lounge is packed.
+   * The choices are the same three the column has, less the band count (there
+   * is one) and read on different axes: how wide the reception is, how deep the
+   * rooms are laid, and how densely the lounge is packed. There was a fourth —
+   * how wide the idle strip asked to be — and WP-60 took it away with the
+   * strip.
    *
    * @param {number} askedW the width asked of the reception
    * @param {number} bandDepth multiple of the depth the rooms need
-   * @param {number} dirW the width the idle-projects strip is asking for
    * @param {number} pack how densely the lounge is laid (WP-59c step (c))
    */
-  const envelopeFor = (askedW, bandDepth, dirW, pack) => {
+  const envelopeFor = (askedW, bandDepth, pack) => {
     const shape = workingShape(1);
     const roomsW = projectRooms.length ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
     const asked = projectRooms.length ? shape.h * bandDepth : 0;
     const row = rowOne(askedW, roomsW, asked);
     if (!row) return null;
-    const back = rowTwo(row.W, dirW, pack, row.h1);
+    const back = rowTwo(row.W, pack);
     const { W, h1, bandH, forced, ow } = row;
     const H = h1 + CORRIDOR + back.h2;
 
-    const cost = costWorkingFloor(1, roomsW, bandH, forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX);
+    const cost = costWorkingFloor(1, roomsW, bandH);
     // WHAT NOBODY STANDS ON, measured against the same thing the column
-    // measures it against: the parts of the building that hold the rooms and
-    // the strip. The reception and the lounge fill their own halves of their
-    // rows exactly — each is given its row's depth and lays its furniture into
-    // it — so neither is open floor, which is the identical treatment
-    // `plan.js`'s `envelopeFor` gives the service column.
-    const filled = cost.area + back.stripW * back.dirH;
-    const workArea = roomsW * h1 + back.stripW * back.h2;
+    // measures it against: the part of the building that holds the rooms. The
+    // reception fills its own end of row one and the lounge fills the whole of
+    // row two — each is given its row's depth and lays its furniture into it —
+    // so neither is open floor, which is the identical treatment `plan.js`'s
+    // `envelopeFor` gives the service column.
+    //
+    // ROW TWO IS NO LONGER IN IT AT ALL (WP-60). It used to be, because the
+    // idle strip took the right of it and a strip is content with a corner of
+    // open floor under it; the lounge is now the whole row, and a lounge is a
+    // room that fills its own rectangle rather than a side to be filled.
+    const filled = cost.area;
+    const workArea = roomsW * h1;
     const workOpen = workArea > 1e-6 ? Math.max(0, (workArea - filled) / workArea) : 0;
     return {
       arrangement: /** @type {const} */ ('two-rows'),
@@ -218,7 +229,6 @@ export function createRowFloor(deps) {
       forced,
       pack,
       rowCount: 1,
-      dirW,
       askedW,
       ...back,
       open: Math.max(0, (workArea - filled) / Math.max(1e-6, W * H)),
@@ -253,17 +263,18 @@ export function createRowFloor(deps) {
    */
   const rowOne = (askedW, roomsW, asked) => {
     // BOTH ROWS FILL ONE WIDTH, so row one is as wide as row two needs it to
-    // be — the strip's own ladder plus the narrowest a lounge may be — and the
-    // reception absorbs the difference exactly as the lounge absorbs row two's.
-    // Row two's NEED, not its appetite: the narrowest board this many repos
-    // can honestly be laid in, beside the narrowest a lounge may be. What the
-    // strip ASKED for is spent inside the row (see `rowTwo`) rather than added
-    // to the building, because a board with two lines on it will happily ask
-    // for two columns of twenty-eight and the reception is what would pay for
-    // them — a hall, to widen a footnote.
+    // be — which since WP-60 is the narrowest a lounge may be laid, and nothing
+    // else. The reception absorbs the difference exactly as the lounge absorbs
+    // row two's.
+    //
+    // Row two used to ask for more: the narrowest board its idle repos could
+    // honestly take, beside that same minimum lounge. What the strip ASKED for
+    // was spent inside the row rather than added to the building, because a
+    // board with two lines on it will happily ask for two columns of
+    // twenty-eight and the reception is what would have paid for them — a hall,
+    // to widen a footnote. With the strip gone, so is the whole question.
     const w1 = Math.max(OFFICE_MIN_W, askedW) + roomsW;
-    const w2 = idle ? LOUNGE_ROW_MIN_W + minDirW : 0;
-    const owWanted = Math.max(w1, w2) - roomsW;
+    const owWanted = Math.max(w1, LOUNGE_ROW_MIN_W) - roomsW;
     let front = measureFront(owWanted, 0);
     let h1 = Math.max(front.room.h, asked, MARGIN * 4);
     // A row deeper than a reception can be is not a row this arrangement can
@@ -273,50 +284,51 @@ export function createRowFloor(deps) {
     front = measureFront(Math.max(owWanted, front.room.w), h1);
     h1 = Math.max(h1, front.room.h);
     const ow = front.room.w;
+    // THE ROOMS TAKE THE WHOLE OF ROW ONE'S DEPTH (WP-60).
+    //
+    // WP-59d capped this at the bare-carpet ceiling like the column's, and the
+    // cap is wrong HERE for the reason it is right there. A column's height is
+    // the lounge's and has nothing to do with the rooms, so filling it makes a
+    // ballroom; row one's depth is the RECEPTION's, which is a room-sized
+    // number by construction (`OFFICE_ROW_MAX_DEPTH`, and the queue that sets
+    // it). A band shallower than the reception beside it is a strip of nothing
+    // under the rooms — the one thing the service side has never drawn — and
+    // it is the whole of the open floor this arrangement had left.
+    //
+    // `bandDepthCeiling` is still asked, because `forced` — "the plan stretched
+    // these rooms past the depth it would have chosen", which the integrity
+    // test reads — is exactly the comparison against it. A flag raised for
+    // nothing is worse than no flag.
+    const bandH = projectRooms.length ? h1 : 0;
     const ceiling = projectRooms.length ? bandDepthCeiling(1, roomsW, ROOM_FILL_COLUMN_MAX) : 0;
-    const bandH = projectRooms.length ? Math.min(h1, Math.max(asked, ceiling)) : 0;
-    return { ow, h1, W: ow + roomsW, bandH, forced: bandH > asked + 1e-6 };
+    return { ow, h1, W: ow + roomsW, bandH, forced: bandH > Math.max(asked, ceiling) + 1e-6 };
   };
 
   /**
-   * ROW TWO: the lounge, and the idle strip beside it.
+   * ROW TWO: the lounge, the whole width.
    *
-   * The strip takes the width its own ladder asked for and the lounge takes
-   * the rest, with the lounge's floor on that being its widest block — a
-   * lounge narrower than its own furniture would draw that furniture outside
-   * itself. Then step (b): the strip stands its lines up into the row the
-   * lounge set, up to `DIRECTORY_SIDE_MAX` of the building or its own natural
-   * height, whichever is more. The row's depth is not the strip's choice, so
-   * it may fill it; what it may not do is become the subject of the floor,
-   * which is what the cap is for.
+   * It used to be shared with the idle strip down its right (WP-59d), which
+   * took the width its own ladder asked for and left the lounge the rest, with
+   * a corner of open floor under it. WP-60 took the strip off the floor, and
+   * what is left is the plainest room in the building: the lounge is given the
+   * row's full width and lays its clusters and its benched population along it.
+   *
+   * ITS HEIGHT IS STILL ITS OWN (§106). The row's depth is what the lounge's
+   * contents need at that width, not a target it is padded to — see `lounge`
+   * above, where the proportion is held only AS FAR AS THE CONTENTS REACH. A
+   * lounge padded past `ROOM_FILL_MAX` of what is in it is the bare-carpet
+   * defect §106 removed, and on a wide row the padding on offer is enormous.
+   * Which is exactly what WP-60 wants of it: row two takes what its benched
+   * population is worth, and row one's rooms get the rest of the building.
    */
-  const rowTwo = (W, dirW, pack, h1) => {
-    const stripW = idle
-      ? Math.max(0, Math.min(dirW, W - LOUNGE_ROW_MIN_W, W * DIRECTORY_ROW_MAX_SHARE))
-      : 0;
-    const loungeW = W - stripW;
-    const back = lounge(loungeW, 0, pack);
-    let dirCols = 0;
-    let dirH = stripW > 0 ? directoryHeight(idle, stripW, 0) : 0;
-    const h2 = Math.max(back.room.h, dirH, MARGIN * 4);
-    if (stripW > 0) {
-      const allowance = Math.min(h2, Math.max(dirH, (h1 + CORRIDOR + h2) * DIRECTORY_SIDE_MAX));
-      for (const cols of directoryColumns(idle, stripW)) {
-        const h = directoryHeight(idle, stripW, cols);
-        if (h > dirH && h <= allowance + 1e-6) {
-          dirH = h;
-          dirCols = cols;
-        }
-      }
-    }
-    // Once the row is narrower than the strip asked for, every wider request
-    // is the same row: the search reads this and stops walking the ladder.
-    return { stripW, loungeW, h2, dirH, dirCols, stripClamped: stripW < dirW - 1e-6 };
+  const rowTwo = (W, pack) => {
+    const back = lounge(W, 0, pack);
+    return { loungeW: W, h2: Math.max(back.room.h, MARGIN * 4) };
   };
 
   /**
    * Lay one two-row candidate for real: the rooms into row one's band, the
-   * strip into row two's corner, and the fit loop over both.
+   * lounge across row two, and the fit loop over both.
    *
    * The same shape as `plan.js`'s `settle`, and for the same reason — a room
    * rebuilt to the cell it was given needs a different amount of floor from
@@ -334,11 +346,7 @@ export function createRowFloor(deps) {
       floor.invalidateBands();
       row = rowOne(chosen.askedW, roomsW, asked) || row;
       laid = projectRooms.length
-        ? layWorkingFloor(
-            { x: row.ow, y: 0, w: roomsW, h: row.bandH },
-            1,
-            row.forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
-          )
+        ? layWorkingFloor({ x: row.ow, y: 0, w: roomsW, h: row.bandH }, 1)
         : { cells: [], corridors: [] };
       let worstW = 1;
       let worstH = 1;
@@ -362,7 +370,7 @@ export function createRowFloor(deps) {
       asked *= Math.min(worstH, 1.25);
     }
 
-    const back = rowTwo(row.W, chosen.dirW, chosen.pack, row.h1);
+    const back = rowTwo(row.W, chosen.pack);
     return {
       W: row.W,
       H: row.h1 + CORRIDOR + back.h2,
@@ -397,7 +405,7 @@ export function createRowFloor(deps) {
    * exists.
    *
    * @param {{targetAspect:number, bandDepths:readonly number[],
-   *   dirWidths:number[], rebuild:(i:number, cell:any, aspect:number)=>void}} opts
+   *   rebuild:(i:number, cell:any, aspect:number)=>void}} opts
    */
   const searchRows = (opts) => {
     if (!oneRow()) return null;
@@ -414,9 +422,8 @@ export function createRowFloor(deps) {
       for (const pack of LOUNGE_PACKS) {
         for (let ow = OFFICE_MIN_W; ow <= owMax; ow += SERVICE_W_STEP) {
           for (const bandDepth of opts.bandDepths) {
-            for (const dirW of opts.dirWidths) {
-              const candidate = envelopeFor(ow, bandDepth, dirW, pack);
-              if (!candidate) continue;
+            const candidate = envelopeFor(ow, bandDepth, pack);
+            if (candidate) {
               const scored = score(candidate, opts.targetAspect, projectRooms.length);
               // AND THE ROOMS ARE THE WIDER HALF OF ROW ONE, once there are
               // three of them.
@@ -435,9 +442,6 @@ export function createRowFloor(deps) {
               // still the wider half of it.
               if (projectRooms.length >= 3 && candidate.ow >= candidate.W / 2) continue;
               if (!found || better(scored, found)) found = scored;
-              // The ladder is ascending and the row has stopped growing with
-              // it, so every wider request from here is this same candidate.
-              if (candidate.stripClamped) break;
             }
           }
         }

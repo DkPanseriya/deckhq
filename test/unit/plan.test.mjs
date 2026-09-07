@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, formatTokens, payrollLine, U } from '../../public/render/plan.js';
+import { idleProjectsOf } from '../../public/floor-rule.js';
 import { OFFICE_ROW_ASPECT_MAX } from '../../public/render/plan-units.js';
 
 const EPS = 1e-6;
@@ -652,12 +653,14 @@ function mkProject(id, sessions, active, archived = false) {
   };
 }
 
-test('a repo with no active agents gets a directory line, not a room', () => {
+test('a repo with no active agents leaves the floor, and turns up in the idle list', () => {
   // After a settle, most repos have every agent benched: desks, chairs, a
   // plant and nobody in them. On a real machine that was eleven of thirteen
-  // rooms, which is a lot of floor spent on nothing. They are now ONE strip
-  // with one line each (`08` B6), and the rooms that remain are the ones
-  // somebody is actually in.
+  // rooms, which is a lot of floor spent on nothing (`08` B6). WP-50 folded
+  // them into ONE strip with a line each; WP-60 took the strip off the floor
+  // as well, because a repo nobody is in is a thing the user looks up rather
+  // than a thing the building has to hold. The rooms that remain are the ones
+  // somebody is actually in, and the floor costs nothing for the rest.
   const plan = buildPlan(
     [mkProject('busy', 4, 2), mkProject('idle', 4, 0)],
     [
@@ -674,16 +677,25 @@ test('a repo with no active agents gets a directory line, not a room', () => {
     'an idle repo gets no room of its own',
   );
 
-  const directory = plan.rooms.find((r) => r.kind === 'directory');
-  assert.ok(directory, 'the idle repo needs somewhere to be listed');
+  // NOT A STRIP EITHER (WP-60). The floor has no room of any kind for it.
   assert.deepEqual(
-    directory.entries.map((e) => e.id),
-    ['idle'],
-    'the strip lists exactly the idle repos',
+    plan.rooms.filter((r) => r.kind === 'directory'),
+    [],
+    'the idle repos are a popover now; nothing on the canvas lists them',
   );
-  assert.ok(
-    directory.h < busy.h,
-    `the strip is ${directory.h.toFixed(1)} U tall and the room ${busy.h.toFixed(1)} U — it is meant to cost a plate, not a room`,
+
+  // AND IT IS STILL LISTED, by the one rule the floor and the list share. A
+  // repo that fell out of both would be a repo the user cannot reach.
+  assert.deepEqual(
+    idleProjectsOf({
+      projects: [mkProject('busy', 4, 2), mkProject('idle', 4, 0)],
+      agents: [
+        { id: 'a', ackState: 'active', activityState: 'working', projectId: 'busy' },
+        { id: 'b', ackState: 'benched', activityState: 'ended', projectId: 'idle' },
+      ],
+    }).map((e) => e.id),
+    ['idle'],
+    'the list carries exactly the repos the floor gave no room',
   );
 });
 
@@ -711,25 +723,36 @@ test('desks equal the agents at them, not the sessions on disk', () => {
   assert.equal(plan2.seats.get('p').length, 2);
 });
 
-test('the directory strip lists every idle repo and never drops one', () => {
+test('the idle list carries every idle repo and never drops one', () => {
+  // WP-50's rule, asked of the list rather than of the strip: a repo you
+  // cannot see is a repo you cannot start an agent in. The strip's own version
+  // of this was about lines staying inside a board and could be broken by
+  // geometry; the list's cannot, which is most of why WP-60 moved it.
   const projects = Array.from({ length: 24 }, (_, i) => mkProject(`idle-${i}`, i + 1, 0));
   projects.push(mkProject('busy', 2, 1));
   const agents = [{ id: 'a', ackState: 'active', activityState: 'working', projectId: 'busy' }];
+
+  const listed = idleProjectsOf({ projects, agents });
+  assert.equal(listed.length, 24, '24 idle repos');
+  assert.equal(new Set(listed.map((e) => e.id)).size, 24, 'every line is a different repo');
+  for (const entry of listed) {
+    assert.equal(typeof entry.name, 'string');
+    assert.ok(entry.sessionCount > 0, `${entry.id} has no session count to show`);
+  }
+
+  // AND NONE OF THEM COSTS FLOOR, at any shape of window.
   for (const aspect of [1.2, 1.6, 2.2]) {
     const plan = buildPlan(projects, agents, { targetAspect: aspect });
-    const directory = plan.rooms.find((r) => r.kind === 'directory');
-    assert.equal(directory.entries.length, 24, `24 idle repos, ${aspect}:1`);
-    const ids = new Set(directory.entries.map((e) => e.id));
-    assert.equal(ids.size, 24, 'every line is a different repo');
-    for (const e of directory.entries) {
-      assert.ok(
-        e.x >= directory.x - 0.01 &&
-          e.y >= directory.y - 0.01 &&
-          e.x + e.w <= directory.x + directory.w + 0.01 &&
-          e.y + e.h <= directory.y + directory.h + 0.01,
-        `${e.id}'s line is outside the strip`,
-      );
-    }
+    assert.deepEqual(
+      plan.rooms.filter((r) => r.kind === 'directory'),
+      [],
+      `24 idle repos still built a strip at ${aspect}:1`,
+    );
+    assert.deepEqual(
+      plan.rooms.filter((r) => r.kind === 'project').map((r) => r.id),
+      ['busy'],
+      `an idle repo earned a room at ${aspect}:1`,
+    );
   }
 });
 
@@ -746,28 +769,44 @@ test('an archived repo leaves the floor, but only while it is idle', () => {
     'archived and idle: off the floor entirely',
   );
   assert.ok(
-    !(plan.directory ? plan.directory.entries : []).some((e) => e.id === 'gone'),
-    'and not in the directory either — archived is archived',
+    !idleProjectsOf({
+      projects: [mkProject('gone', 3, 0, true), mkProject('woken', 3, 1, true)],
+      agents,
+    }).some((e) => e.id === 'gone'),
+    'and not in the idle list either — archived is archived',
   );
   const woken = plan.rooms.find((r) => r.id === 'woken');
   assert.ok(woken && woken.kind === 'project', 'archived but working: the room pops back open');
 });
 
-test('the directory strip packs, places and gets a door like any other room', () => {
-  const plan = buildPlan(
-    [mkProject('a', 2, 1), mkProject('b', 3, 0), mkProject('c', 5, 0)],
-    [{ id: 'x', ackState: 'active', activityState: 'working', projectId: 'a' }],
-    {},
+test('the floor and the idle list are one rule asked twice, never two rules', () => {
+  // WP-60's own risk, stated directly. The strip was drawn by the plan from
+  // the plan's own `isIdle`, so there was one answer by construction. The list
+  // is HTML built from the snapshot, so there are now two callers — and a rule
+  // about who is on the floor with two implementations is a floor and a list
+  // that can disagree about the same repo. `splitProjectsByOccupancy` in
+  // `floor-rule.js` is the one copy; this is the test that it stays one.
+  const projects = [mkProject('a', 2, 1), mkProject('b', 3, 0), mkProject('c', 5, 0)];
+  const agents = [{ id: 'x', ackState: 'active', activityState: 'working', projectId: 'a' }];
+
+  const plan = buildPlan(projects, agents, {});
+  const drawn = plan.rooms
+    .filter((r) => r.kind === 'project')
+    .map((r) => r.id)
+    .sort();
+  const listed = idleProjectsOf({ projects, agents })
+    .map((e) => e.id)
+    .sort();
+
+  assert.deepEqual(drawn, ['a'], 'only the repo somebody is in earns a room');
+  assert.deepEqual(listed, ['b', 'c'], 'the two nobody is in are in the list');
+  // Every visible repo is in exactly one of the two, which is the property
+  // that actually matters: none listed twice, and none lost between them.
+  assert.deepEqual(
+    [...drawn, ...listed].sort(),
+    ['a', 'b', 'c'],
+    'a repo is on the floor or in the list, never both and never neither',
   );
-  const directory = plan.rooms.find((r) => r.kind === 'directory');
-  assert.ok(directory, 'two idle repos need a strip');
-  assert.ok(directory.w > 0 && directory.h > 0, 'the strip collapsed to nothing');
-  assert.ok(directory.door, 'the strip is a rectangle in the tiling like any other');
-  assert.ok(
-    directory.x >= 0 && directory.y >= 0 && directory.x + directory.w <= plan.width + 0.01,
-    'the strip escaped the floor',
-  );
-  assert.deepEqual(directory.entries.map((e) => e.id).sort(), ['b', 'c']);
 });
 
 // ------------------------------------------------- WP-22: the split holds
@@ -784,8 +823,12 @@ test('plan.js still exports every name it exported before the split', async () =
   // The list the rest of the tree imports, verbatim from before WP-22 split
   // the file. A name that leaves this module breaks `scene.js`, `minifloor.js`
   // or one of six test files, none of which import a `plan-*.js` directly.
+  //
+  // `DIRECTORY_MAX_H` used to be on it — the tallest the idle strip could ever
+  // be, exported so the integrity test could assert the cap the strip was
+  // actually built against. WP-60 removed the strip, so the constant it capped
+  // no longer exists to be exported.
   const expected = [
-    'DIRECTORY_MAX_H',
     'GONE_HOME_DAYS',
     'PLATE_BAND',
     'U',

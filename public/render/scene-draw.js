@@ -12,18 +12,12 @@
 
 import { buildPlan, floorPopulation, U } from './plan.js';
 import { bakeBackdrop } from './backdrop.js';
-import { drawCharacter, formatElapsed, labelBox } from './rig.js';
+import { badgeBox, drawBadge, drawCharacter, formatElapsed, labelBox } from './rig.js';
 import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
-import { PALETTE, identityFor, appearanceFor } from './palette.js';
+import { PALETTE, STATE_COLORS, identityFor, appearanceFor } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
-import {
-  FONT_UI,
-  FONT_MONO,
-  ellipsise,
-  plateScaleFor,
-  resolveLabelCollisions,
-} from './scene-labels.js';
+import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import {
   colorForAgent,
@@ -35,6 +29,30 @@ import {
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
+
+/**
+ * How long this agent has been waiting on the user, or `null` where it is not
+ * waiting at all — which is the same thing as "has no waiting badge".
+ *
+ * One copy since WP-60, because two passes now ask it: the collision pass that
+ * measures every badge in the frame, and the character draw that paints one.
+ * Two copies of this condition is how a badge comes to be measured and not
+ * drawn, or drawn and not measured.
+ *
+ * The badge is crimson, and crimson means "standing in your office"
+ * (VISUAL-SPEC section 5). A benched agent keeps its `for_review`
+ * activityState — bench only moves `ackState` — so without the `ackState`
+ * guard the badge would follow it into the lounge and put red on the floor
+ * where nothing is waiting on the user.
+ *
+ * @param {{ackState?:string, activityState?:string, reviewSince?:number|null}} agent
+ * @returns {number|null} milliseconds waited
+ */
+function waitingBadgeMs(agent) {
+  if (agent.ackState !== 'active' || agent.activityState !== 'for_review') return null;
+  if (!agent.reviewSince) return null;
+  return Date.now() - agent.reviewSince;
+}
 
 /**
  * A structural signature of the plan: the project set plus each project's
@@ -308,8 +326,55 @@ export class SceneDraw extends SceneHit {
       labelPlan = resolveLabelCollisions(items);
     }
 
+    // WAITING-BADGE COLLISION PASS (WP-60), the same shape as the label pass
+    // above and for the same reason: seven crimson pills along one office wall
+    // overlapped into a band of digits, and a pill can only stay out of its
+    // neighbour's way if something measured both before either was drawn.
+    //
+    // The gate is the one `_drawCharacterAt` uses, asked once here so the two
+    // cannot disagree about which badges exist this frame.
+    let badgePlan = null;
+    if (lod >= 1 && this._scale() >= BADGE_MIN_PX_PER_UNIT) {
+      const items = [];
+      for (const rec of records) {
+        const agent = this._agentsById.get(rec.id);
+        const ms = agent ? waitingBadgeMs(agent) : null;
+        if (ms === null) continue;
+        const s = worldToScreen(rec, camera);
+        // A junior is drawn smaller, so its badge is a smaller box. Measured
+        // at the scale it will be drawn at, exactly as the label pass does.
+        const u = agent.subagent === true ? characterScaleFor(this._scale() * JUNIOR_SCALE) : charU;
+        const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
+        items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
+      }
+      badgePlan = resolveBadgeCollisions(items);
+    }
+
     for (const rec of records) {
-      this._drawCharacterAt(rec, camera, lod, labelPlan);
+      this._drawCharacterAt(rec, camera, lod, labelPlan, badgePlan);
+    }
+
+    // The aggregate pills, over the characters whose own badges they replace.
+    // After the loop rather than inside it: a pill stands for a whole row, so
+    // it belongs to no one character and must not be painted under the next
+    // body along.
+    if (badgePlan) {
+      for (const pill of badgePlan.pills) {
+        const text = `${pill.count} waiting · oldest ${formatElapsed(pill.oldest)}`;
+        // `drawBadge` centres its pill on `ox` and hangs it a fixed distance
+        // ABOVE `oy`, because that is what a badge over a character is. This
+        // pill's box is already decided, so both are inverted through the same
+        // measurement rather than re-derived — one copy of the offset.
+        const probe = badgeBox(ctx, 0, 0, charU, text);
+        drawBadge(
+          ctx,
+          pill.x + probe.w / 2,
+          pill.y - probe.y,
+          charU,
+          text,
+          STATE_COLORS.for_review,
+        );
+      }
     }
 
     this._plateRects = [];
@@ -325,14 +390,13 @@ export class SceneDraw extends SceneHit {
         // the office and lounge have neither a project to launch nor a
         // whiteboard.
         if (room.kind === 'project') this._drawRoomFixtures(room, camera);
-        if (room.kind === 'directory') this._drawDirectory(room, camera);
       }
     }
 
     ctx.restore();
   }
 
-  _drawCharacterAt(rec, camera, lod, labelPlan) {
+  _drawCharacterAt(rec, camera, lod, labelPlan, badgePlan) {
     const ctx = this.ctx;
     const agent = this._agentsById.get(rec.id);
     if (!agent) return;
@@ -392,13 +456,18 @@ export class SceneDraw extends SceneHit {
     // rather than a taste call — and it is asked of the WORLD scale, because
     // the pitch between two seats is a fact about the floor, not about how
     // large the people standing on them are drawn.
+    //
+    // AND ONLY WHERE IT CAN BE READ BESIDE ITS NEIGHBOURS (WP-60). The gate
+    // above is about the floor's scale and this one is about the row: a badge
+    // that collides with the badge next to it is replaced by one aggregate
+    // pill for the whole row, drawn once in `_draw`. The icon and the name are
+    // untouched — suppressing a badge says "the times are on the plate and in
+    // the panel", never "this person is not waiting".
+    const waitingMs =
+      lod >= 1 && this._scale() >= BADGE_MIN_PX_PER_UNIT ? waitingBadgeMs(agent) : null;
     const badge =
-      lod >= 1 &&
-      this._scale() >= BADGE_MIN_PX_PER_UNIT &&
-      agent.ackState === 'active' &&
-      agent.activityState === 'for_review' &&
-      agent.reviewSince
-        ? formatElapsed(Date.now() - agent.reviewSince)
+      waitingMs !== null && (!badgePlan || badgePlan.drawn.has(rec.id))
+        ? formatElapsed(waitingMs)
         : null;
 
     // Project identity (CONTRACTS-WP15.md §2): hair, a small clothing accent
@@ -513,83 +582,5 @@ export class SceneDraw extends SceneHit {
       cy: s.y,
       r: Math.max(PLUS_HIT_RADIUS_PX, armLen * 1.7),
     });
-  }
-
-  /**
-   * The idle-projects directory (`plan.js`'s `buildDirectory`, `08` B6).
-   *
-   * One line per repo nobody is in: name, session count, last activity. Drawn
-   * live rather than baked, because the last two change on every push and a
-   * re-bake is ~190 ms. Each line registers a plate rect, so clicking it does
-   * exactly what clicking a room plate does — scope the panel to that project.
-   * @param {import('./plan.js').Room} room
-   * @param {{zoom:number,panX:number,panY:number,U:number}} camera
-   */
-  _drawDirectory(room, camera) {
-    const ctx = this.ctx;
-    const entries = room.entries || [];
-    if (!entries.length) return;
-    const u = U * camera.zoom;
-    // The strip's lines are plate text on the floor, so they grow with the
-    // plan exactly as a room plate does (WP-59, `plateScaleFor`).
-    const k = plateScaleFor(u);
-    const byId = new Map((this._snapshot.projects || []).map((p) => [p.id, p]));
-
-    ctx.save();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.miterLimit = 2;
-
-    for (const entry of entries) {
-      const at = worldToScreen({ x: entry.x, y: entry.y }, camera);
-      const lineH = entry.h * u;
-      const midY = at.y + lineH / 2;
-      const maxW = Math.max(24 * k, entry.w * u - 10 * k);
-
-      // A hairline under each line, so a column of names reads as a list
-      // rather than as loose text lying on the floor.
-      ctx.strokeStyle = PALETTE.partitionEdge;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(at.x, Math.round(at.y + lineH) - 0.5);
-      ctx.lineTo(at.x + maxW, Math.round(at.y + lineH) - 0.5);
-      ctx.stroke();
-
-      const project = byId.get(entry.id);
-      const sessions = project ? project.sessionCount : entry.sessionCount;
-      const last = entry.lastActivityAt
-        ? formatElapsed(Math.max(0, Date.now() - entry.lastActivityAt))
-        : '';
-      const stat = `${sessions}${last ? ` · ${last}` : ''}`;
-
-      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
-      const statW = ctx.measureText(stat).width;
-      ctx.font = `600 ${(12 * k).toFixed(2)}px ${FONT_UI}`;
-      const name = ellipsise(ctx, entry.name, Math.max(16 * k, maxW - statW - 10 * k));
-      const nameW = ctx.measureText(name).width;
-      ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 3 * k;
-      ctx.strokeText(name, at.x, midY);
-      ctx.fillStyle = PALETTE.plateInk;
-      ctx.fillText(name, at.x, midY);
-
-      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
-      ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 2.6 * k;
-      ctx.strokeText(stat, at.x + maxW - statW, midY);
-      ctx.fillStyle = PALETTE.plateInkSecondary;
-      ctx.fillText(stat, at.x + maxW - statW, midY);
-
-      this._plateRects.push({
-        x: at.x,
-        y: at.y,
-        w: Math.max(nameW, maxW),
-        h: lineH,
-        kind: 'project',
-        id: entry.id,
-      });
-    }
-    ctx.restore();
   }
 }

@@ -113,7 +113,24 @@ export function drawSelectionRing(ctx, ox, oy, u) {
   ctx.stroke();
 }
 
-export function drawBadge(ctx, ox, oy, u, text, color) {
+/**
+ * The badge pill's box in screen space, without drawing anything.
+ *
+ * The same measure-then-paint split {@link labelBox} has, and split out for the
+ * same reason (WP-60): a badge can only be kept out of its neighbour's way if
+ * something knows how wide both of them will be BEFORE either is drawn, and
+ * that pass runs once for the whole frame rather than per character.
+ *
+ * @param {{font:string, measureText:(text:string)=>{width:number}}} ctx
+ *   only `.font` (assigned) and `.measureText` are read, so a plain stub with
+ *   those two members is enough — which is what the unit test uses.
+ * @param {number} ox character origin x (screen px); the pill is centred on it
+ * @param {number} oy character origin y (screen px)
+ * @param {number} u px per plan unit at the CHARACTER scale
+ * @param {string} text
+ * @returns {{fontPx:number, x:number, y:number, w:number, h:number}}
+ */
+export function badgeBox(ctx, ox, oy, u, text) {
   const fontPx = Math.max(BADGE_MIN_PX, u * 0.7);
   ctx.font = monoFont(fontPx);
   const padX = u * 0.35;
@@ -121,14 +138,22 @@ export function drawBadge(ctx, ox, oy, u, text, color) {
   // The pill grows with its text, so a floored font must not be drawn into an
   // unfloored box: at a tight fit scale the glyphs stood proud of the badge.
   const h = Math.max(u * 1.05, fontPx * 1.5);
-  const topY = oy - u * 2.35 - h;
+  return { fontPx, x: ox - w / 2, y: oy - u * 2.35 - h, w, h };
+}
+
+export function drawBadge(ctx, ox, oy, u, text, color) {
+  const box = badgeBox(ctx, ox, oy, u, text);
+  // `badgeBox` already set it; re-assert before drawing, exactly as `drawLabel`
+  // does, so a caller that measured several badges between the two cannot have
+  // left another size in place.
+  ctx.font = monoFont(box.fontPx);
   ctx.fillStyle = color;
-  roundRectFill(ctx, ox - w / 2, topY, w, h, h * 0.32);
+  roundRectFill(ctx, box.x, box.y, box.w, box.h, box.h * 0.32);
   ctx.save();
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, ox, topY + h / 2 + h * 0.04);
+  ctx.fillText(text, box.x + box.w / 2, box.y + box.h / 2 + box.h * 0.04);
   ctx.restore();
 }
 

@@ -33,7 +33,7 @@
  *   plan-units.js    the shapes and every dimension
  *   plan-packing.js  flow, shelf, squarify, tileRows — rectangles into a rect
  *   plan-anchors.js  resolveAnchors, translateContents, the table sizes
- *   plan-rooms.js    a project's room, and the idle strip's lines
+ *   plan-rooms.js    a project's room
  *   plan-office.js   the reception, upright and on its side (WP-59d)
  *   plan-service.js  the lounge
  *   plan-nav.js      walls, corridor centrelines, doors
@@ -44,7 +44,7 @@
  *   plan-search.js   how the envelope search ranks two candidates, and two
  *                    arrangements (WP-59c, which took it past a second time)
  *   plan-rows.js     arrangement B: the office beside the rooms over the
- *                    lounge beside the strip (WP-59d, and a third time)
+ *                    lounge (WP-59d, and a third time)
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, and `src/core/model.mjs`
@@ -54,16 +54,11 @@
  * so no import anywhere had to change.
  */
 
-import { floorPopulation } from '../floor-rule.js';
+import { floorPopulation, splitProjectsByOccupancy } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
-import {
-  buildDirectory,
-  buildProjectRoom,
-  directoryHeight,
-  directoryWidths,
-} from './plan-rooms.js';
+import { buildProjectRoom } from './plan-rooms.js';
 import { createRowFloor } from './plan-rows.js';
 import { better, betterArrangement, score } from './plan-search.js';
 import { buildOffice, buildOfficeRow, seatOffice } from './plan-office.js';
@@ -86,10 +81,7 @@ import {
   OFFICE_MIN_W,
   OFFICE_SURPLUS_SHARE,
   ROOM_ASPECT_MAX,
-  ROOM_FILL_COLUMN_MAX,
-  ROOM_FILL_MAX,
   ROWS_ASPECT_MIN,
-  ROWS_OPEN_MIN,
   SERVICE_MAX_W,
   SERVICE_W_STEP,
   WORKING_OPEN_MAX,
@@ -137,18 +129,6 @@ export function buildPlan(projects, agents, opts = {}) {
   const goneHomeCount = pop.goneHome.size;
 
   const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
-  /**
-   * The counts a project is planned from.
-   *
-   * Read off the AGENTS, which is the whole point of B6. The fallback matters
-   * only for a caller that hands `buildPlan` a project it gave no agents for:
-   * the plan cannot invent people it was not given, so the project record's
-   * own counts are then the only thing to go on.
-   */
-  const activeIn = (p) =>
-    pop.known.has(idOf(p))
-      ? (pop.active.get(idOf(p)) ?? 0)
-      : (p.activeCount ?? p.sessionCount ?? 0);
   const desksIn = (p) =>
     Math.max(
       1,
@@ -157,27 +137,25 @@ export function buildPlan(projects, agents, opts = {}) {
         : (p.activeCount ?? p.sessionCount ?? 0),
     );
 
-  // Which repos are worth floor space.
+  // WHICH REPOS ARE WORTH FLOOR SPACE — `splitProjectsByOccupancy`, and the
+  // rule itself is in `floor-rule.js` since WP-60 rather than here.
   //
-  //   an active agent      -> a room, with desks for the agents at them
-  //   nobody, not archived -> one line in the directory strip
-  //   nobody, archived     -> off the floor entirely
+  // It moved because a second caller appeared. The idle repos used to be a
+  // STRIP the plan drew, so the plan was the only thing that could ask; they
+  // are a popover now — HTML, off the canvas, built from the snapshot — and a
+  // rule about who is on the floor with two implementations is a floor and a
+  // list that can disagree about the same repo.
   //
-  // An active agent always wins, which is what makes archiving safe: a project
-  // the user archived comes back by itself the moment somebody starts working
-  // in that repo, rather than hiding them.
-  const isIdle = (p) => activeIn(p) === 0;
-  const visible = (Array.isArray(projects) ? projects : []).filter(
-    (p) => (p.sessionCount ?? 0) > 0 && !(isIdle(p) && p.archived),
-  );
-  const activeProjects = visible.filter((p) => !isIdle(p));
-  const idleProjects = visible.filter(isIdle);
+  // Only the ACTIVE half is read here. A repo nobody is in earns no room, no
+  // strip and no bare carpet on the working side: it is a line in a list the
+  // user opens when they want it, which is the whole of WP-60.
+  const { active: activeProjects } = splitProjectsByOccupancy(projects, pop);
 
   // ---- who the floor draws nobody for.
   //
   // Two display filters, both of which leave `ackState` exactly as the user
   // set it: an agent who went home, and an agent sitting at a desk in a
-  // project that has no room. The strip's line — name, sessions, last
+  // project that has no room. The idle list's line — name, sessions, last
   // activity — is what stands for the second group, and the door plate for the
   // first. `assignSeats` and `AgentRuntime#sync` read this set rather than
   // re-deriving it, so there is one answer to "is this person on the floor"
@@ -212,14 +190,6 @@ export function buildPlan(projects, agents, opts = {}) {
   // keeps every room in a band the same depth.
   /** @type {{room: Room, seats: Seat[]}[]} */
   const projectRooms = activeProjects.map((p) => buildProjectRoom(p, desksIn(p), ROOM_ASPECT_MAX));
-
-  /** One directory line per idle project. */
-  const directoryProjects = idleProjects.map((p) => ({
-    id: idOf(p),
-    name: String(p.name ?? p.projectName ?? idOf(p)),
-    sessionCount: p.sessionCount ?? 0,
-    lastActivityAt: pop.lastActivity.get(idOf(p)) ?? Number(p.lastActivityAt) ?? 0,
-  }));
 
   // ---- THE SERVICE COLUMN, and the share of the floor it takes.
   //
@@ -281,7 +251,27 @@ export function buildPlan(projects, agents, opts = {}) {
   // may be laid, and what the whole of it measures. Its own module since
   // WP-59 (`plan-envelope.js`), which is a closure over `naturalOf` because a
   // room’s natural size changes under the fit loop below.
-  const workingFloor = createWorkingFloor(projectRooms, naturalOf);
+  // OCCUPANCY IS WHAT A CELL'S WIDTH IS SHARED OUT BY (WP-60), and it is the
+  // SESSION COUNT rather than the desks.
+  //
+  // The two are different questions and only one of them is about how much
+  // floor a project is worth. `desksIn` is agents AT DESKS RIGHT NOW (`08` B6),
+  // which is what the room's furniture is built from and must stay that way —
+  // a desk nobody is at is the oldest defect in this file. But on the owner's
+  // own machine every one of his active repos had exactly one agent at a desk
+  // and the rest finished or benched, so dealt by desks the row came out as
+  // four cells of one width — with `24 sessions` written on the plate of the
+  // first and `4 sessions` on the last. The number the eye correlates the
+  // room's size with is the one written on its door.
+  //
+  // So: the FURNITURE is desks and the FLOOR is sessions. A project with
+  // twenty-four sessions in it is a project twenty-four things have happened
+  // in this week, and it earns more room than one with a single session
+  // whether or not both happen to have one agent typing at this instant.
+  // `CELL_OCCUPANCY_RATIO_MAX` keeps the disparity inside three either way.
+  const workingFloor = createWorkingFloor(projectRooms, naturalOf, (i) =>
+    Math.max(1, activeProjects[i].sessionCount ?? desksIn(activeProjects[i])),
+  );
   const { costWorkingFloor, fillOrder, invalidateBands, layColumn, workingShape } = workingFloor;
 
   // THE SECOND ARRANGEMENT (WP-59d): the office beside the rooms over the
@@ -293,7 +283,6 @@ export function buildPlan(projects, agents, opts = {}) {
   const rowFloor = createRowFloor({
     projectRooms,
     naturalOf,
-    idle: directoryProjects.length,
     waiting: waitingCount,
     floor: workingFloor,
     office: (w, depth) => buildOfficeRow(waitingCount, { w, h: depth }),
@@ -304,53 +293,39 @@ export function buildPlan(projects, agents, opts = {}) {
    * The whole envelope implied by one arrangement: the service column, the
    * spine, and the working floor beside them.
    *
-   * FOUR CHOICES, AND EVERY ONE OF THEM IS HONEST (WP-59). WP-55 gave the
+   * THREE CHOICES, AND EVERY ONE OF THEM IS HONEST (WP-59). WP-55 gave the
    * search two — the service column's width and the number of working bands —
    * and pinned the working side's width to the footprint its rooms happened to
    * need. On a machine with one active repo that is about seventeen units, so
    * the envelope came out very nearly square whatever the window was, and the
-   * rest of a 1920 x 1080 stage was ground. The other two are the strip's
-   * column count and the depth the room band is laid at; between them they are
-   * the difference between a 57 U building and a 90 U one, with nothing
-   * stretched and nothing invented.
+   * rest of a 1920 x 1080 stage was ground. The third is the depth the room
+   * band is laid at; between them they are the difference between a 57 U
+   * building and a 90 U one, with nothing stretched and nothing invented.
+   *
+   * There was a FOURTH — the idle strip's column count — and WP-60 took it
+   * away with the strip. A board of repos nobody is in was never a reason to
+   * make the building a different shape.
    *
    * @param {number} sw service-column width
    * @param {number} rowCount bands of project rooms
-   * @param {number} dirW the width the idle-projects strip is asking for
    * @param {number} bandDepth multiple of the depth the rooms need
    * @param {number} pack how densely the lounge is laid (WP-59c, step (c))
    */
-  const envelopeFor = (sw, rowCount, dirW, bandDepth, pack) => {
+  const envelopeFor = (sw, rowCount, bandDepth, pack) => {
     const measured = measureService(sw, pack);
     const shape = workingShape(rowCount);
-    const hasWorkingSide = projectRooms.length > 0 || directoryProjects.length > 0;
     const asked = projectRooms.length ? shape.h * bandDepth : 0;
-    const workingW = hasWorkingSide ? Math.max(shape.w, dirW, MIN_PROJECT_ROOM_W) : 0;
+    const workingW = projectRooms.length ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
     // The height the working side has to fill is the COLUMN's, and the fill
     // order above is what it may do about it (WP-59c).
-    const H = Math.max(
-      measured.h,
-      asked + directoryHeight(directoryProjects.length, workingW),
-      MARGIN * 4,
-    );
-    const { bandH, dirH, dirCols, forced } = fillOrder(
-      rowCount,
-      workingW,
-      H,
-      asked,
-      directoryProjects.length,
-    );
+    const H = Math.max(measured.h, asked, MARGIN * 4);
+    const { bandH, forced } = fillOrder(rowCount, workingW, H, asked);
     const W = measured.w + CORRIDOR + workingW;
-    // What of this envelope nobody stands on: the working side less its rooms
-    // and its strip. The service column fills its own side exactly (see below)
-    // and the spine is a route, so neither is open floor.
-    const cost = costWorkingFloor(
-      rowCount,
-      workingW,
-      bandH,
-      forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
-    );
-    const filled = cost.area + workingW * dirH;
+    // What of this envelope nobody stands on: the working side less its rooms.
+    // The service column fills its own side exactly (see below) and the spine
+    // is a route, so neither is open floor.
+    const cost = costWorkingFloor(rowCount, workingW, bandH);
+    const filled = cost.area;
     const workingArea = workingW * H;
     const open = Math.max(0, (workingArea - filled) / Math.max(1e-6, W * H));
     // The same emptiness read against the side it is ON rather than against
@@ -362,8 +337,6 @@ export function buildPlan(projects, agents, opts = {}) {
       pack,
       W,
       H,
-      dirH,
-      dirCols,
       bandH,
       // The depth this candidate ASKED its band to be laid at, before the fill
       // order grew it. `settle` needs the question and not only the answer:
@@ -414,22 +387,18 @@ export function buildPlan(projects, agents, opts = {}) {
   //
   // Nothing here stretches a room. Every candidate is a real layout: a wider
   // service column shelf-packs the lounge into fewer, shorter rows; more bands
-  // make the working floor deeper and narrower; more strip columns turn a
-  // seventeen-line board into a three-column one; a shallower band lays the
-  // same desks in a wider row.
+  // make the working floor deeper and narrower; a shallower band lays the same
+  // desks in a wider row.
   const maxRows = Math.max(1, Math.min(projectRooms.length, MAX_WORKING_ROWS));
-  const dirWidths = directoryProjects.length ? directoryWidths(directoryProjects.length) : [0];
   const bandDepths = projectRooms.length ? BAND_DEPTHS : [BAND_STRETCH_MAX];
   const searchAt = (pack) => {
     let best = null;
     for (let sw = OFFICE_MIN_W; sw <= SERVICE_MAX_W; sw += SERVICE_W_STEP) {
       for (let rows = 1; rows <= maxRows; rows++) {
-        for (const dirW of dirWidths) {
-          for (const bandDepth of bandDepths) {
-            const candidate = envelopeFor(sw, rows, dirW, bandDepth, pack);
-            const scored = score(candidate, targetAspect, projectRooms.length);
-            if (!best || better(scored, best)) best = scored;
-          }
+        for (const bandDepth of bandDepths) {
+          const candidate = envelopeFor(sw, rows, bandDepth, pack);
+          const scored = score(candidate, targetAspect, projectRooms.length);
+          if (!best || better(scored, best)) best = scored;
         }
       }
     }
@@ -448,7 +417,7 @@ export function buildPlan(projects, agents, opts = {}) {
       if (found && (!best || better(found, best))) best = found;
       if (best && best.workOpen <= WORKING_OPEN_MAX + 1e-6) break;
     }
-    return best || envelopeFor(OFFICE_MIN_W, 1, 0, BAND_STRETCH_MAX, 1);
+    return best || envelopeFor(OFFICE_MIN_W, 1, BAND_STRETCH_MAX, 1);
   };
 
   // Both fit loops live with the arrangement they lay — `layColumn` in
@@ -461,7 +430,7 @@ export function buildPlan(projects, agents, opts = {}) {
       aspect,
       cell,
     ));
-  const settle = (chosen) => layColumn(chosen, rebuildInto, directoryProjects.length);
+  const settle = (chosen) => layColumn(chosen, rebuildInto);
 
   // ---- THE SEARCH IS RUN TWICE, AND THE SECOND ONE IS THE ANSWER (WP-59b).
   //
@@ -485,16 +454,31 @@ export function buildPlan(projects, agents, opts = {}) {
   invalidateBands();
   let chosen = search();
 
-  // ---- AND THEN THE SECOND ARRANGEMENT, WHERE THE FIRST ONE CANNOT FILL
-  // ITSELF (WP-59d).
+  // ---- AND THEN THE SECOND ARRANGEMENT (WP-59d), ON EVERY WIDE STAGE
+  // (WP-60).
   //
-  // Two conditions, and each is a refusal to move a picture nobody complained
-  // about. A tall or square stage is exactly what a column is for; a floor
-  // whose column fills its own working side has no problem for a second shape
-  // to solve. Below either, nothing below runs and the plan is WP-59c's.
+  // ONE condition now, and it is the one that was always a statement about the
+  // picture rather than about a number: a tall or square stage is exactly what
+  // a column is for, and two rows stacked in one would be wider than the
+  // screen.
+  //
+  // The second condition was `ROWS_OPEN_MIN` — try the fold only where the
+  // column left more than 15% of its own working side open — and WP-60 made it
+  // a trap. A column's rooms now fill their row's WIDTH edge to edge, so the
+  // open floor it reports collapsed towards zero on almost every population;
+  // the gate then read that as "this floor has no problem to solve" and never
+  // ran the second search, on floors whose column was answering the lounge's
+  // height with four rooms at 89% bare carpet. The emptiness had not gone
+  // anywhere. It had moved inside the rooms, where the gate could not see it.
+  //
+  // So the two arrangements are both searched and `betterArrangement` chooses,
+  // which is what it is for. The cost is one more pass of arithmetic on a plan
+  // that is rebuilt when the FLOOR changes rather than per frame, and the
+  // benefit is that a floor is folded whenever folding it is the better
+  // picture rather than whenever a proxy said it might be.
   let rows =
-    targetAspect >= ROWS_ASPECT_MIN && chosen.workOpen > ROWS_OPEN_MIN
-      ? rowFloor.searchRows({ targetAspect, bandDepths, dirWidths, rebuild: rebuildInto })
+    targetAspect >= ROWS_ASPECT_MIN
+      ? rowFloor.searchRows({ targetAspect, bandDepths, rebuild: rebuildInto })
       : null;
   if (rows) {
     // The rooms have been laid to the row arrangement's cells to price it, so
@@ -512,7 +496,7 @@ export function buildPlan(projects, agents, opts = {}) {
   // each — and everything below reads the fields its own branch put there,
   // which is why this is the one place the two are the same variable.
   const fitted = /** @type {any} */ (rows ? rowFloor.layRows(rows, rebuildInto) : settle(chosen));
-  const { laid, dirH, dirCols, W, bandH } = fitted;
+  const { laid, W, bandH } = fitted;
   const forced = fitted.forced;
   let { H } = fitted;
   office = rows ? fitted.office : chosen.measured.office;
@@ -624,67 +608,25 @@ export function buildPlan(projects, agents, opts = {}) {
     corridorRoom({ ...c, id: c.bay ? `__bay-${i}__` : `__corridor-${i}__`, thoroughfare: !c.bay }),
   );
 
-  // THE DIRECTORY STRIP, DIRECTLY UNDER THE ROOMS.
-  //
-  // It shares its walls with them: a strip of corridor between a room and a
-  // board on the wall below it would be a gap in the floor, and the working
-  // side has exactly one piece of circulation in it by design.
-  //
-  // It used to be pinned to the BOTTOM EDGE instead, which said the same thing
-  // on a floor with no slack and something else entirely on one with a lot:
-  // WP-59's open band opened up BETWEEN the rooms and the strip, so the two
-  // pieces of content sat at opposite ends of the working side with a hole in
-  // the middle — the gap this comment forbids. They are the content; they go
-  // together at the top, and the open floor is the margin under them (WP-59b).
-  //
-  // IN TWO ROWS IT STANDS BESIDE THE LOUNGE INSTEAD (WP-59d), at the top of
-  // row two, which is the same sentence: it shares a wall with the room next
-  // to it, and what it does not need of its own corner is open floor under it.
-  const stripW = rows ? fitted.stripW : workingWidth;
-  const directory =
-    directoryProjects.length > 0 && stripW > 1 && dirH > 0
-      ? buildDirectory(directoryProjects, { w: stripW, h: dirH }, dirCols)
-      : null;
-  if (directory) {
-    directory.x = rows ? fitted.loungeW : workingX;
-    directory.y = rows ? fitted.h1 + CORRIDOR : projectRooms.length ? bandH : 0;
-  }
-
   // WHATEVER THE ROOMS DO NOT NEED IS OPEN FLOOR, NOT A BIGGER ROOM.
   //
   // Two cases, one band. A floor with no rooms at all still needs its working
   // side to be something rather than a hole; and a floor whose service column
   // is taller than its one project room needs somewhere for the difference to
-  // go. Before WP-55 the rooms swallowed it and drew it as carpet. This is
-  // circulation, under both the rooms and the strip (WP-59b, above).
+  // go. Before WP-55 the rooms swallowed it and drew it as carpet.
   //
-  // IN TWO ROWS THERE ARE TWO OF THEM, one per row, and each is under the
-  // content of its own row rather than at the bottom of the building: what
-  // row one's rooms did not need of their row's depth, and what row two's
-  // strip did not need of its own (WP-59d).
+  // IN TWO ROWS IT IS UNDER ROW ONE'S ROOMS rather than at the bottom of the
+  // building (WP-59d). Row two has none of its own since WP-60: the strip that
+  // used to take the right of it is gone, so the lounge is the whole row.
+  //
   // Open floor is NOT a route: there is nothing in it to walk to, and a
   // full-height band beside the spine is a second parallel line the graph can
   // never reach.
   const open = (id, x, y, w, h) =>
     w > 1 && h > 0.01 ? [corridorRoom({ id, x, y, w, h, thoroughfare: false })] : [];
-  const slackY = (projectRooms.length ? bandH : 0) + dirH;
+  const slackY = projectRooms.length ? bandH : 0;
   const emptyBand = rows
-    ? [
-        ...open(
-          '__open-rooms__',
-          workingX,
-          projectRooms.length ? bandH : 0,
-          workingWidth,
-          fitted.h1 - (projectRooms.length ? bandH : 0),
-        ),
-        ...open(
-          '__open-strip__',
-          fitted.loungeW,
-          fitted.h1 + CORRIDOR + dirH,
-          fitted.stripW,
-          fitted.h2 - dirH,
-        ),
-      ]
+    ? open('__open-rooms__', workingX, slackY, workingWidth, fitted.h1 - slackY)
     : open('__open__', workingX, slackY, workingWidth, Math.max(0, H - slackY));
 
   const rooms = [
@@ -693,7 +635,6 @@ export function buildPlan(projects, agents, opts = {}) {
     ...crossCorridors,
     ...emptyBand,
     ...projectRooms.map((pr) => pr.room),
-    ...(directory ? [directory] : []),
     lounge.room,
   ];
 
@@ -736,11 +677,6 @@ export function buildPlan(projects, agents, opts = {}) {
     place(pr.room, pr.seats);
     seats.set(pr.room.id, pr.seats);
   }
-  // The strip's lines ride `place`'s translation like any other movable, so
-  // they land under the strip's own plate band rather than in a frame of their
-  // own that could drift from it.
-  if (directory) place(directory, directory.entries);
-
   const walls = deriveWalls(rooms, W, H);
 
   // The walkable network. Agents are confined to it — see buildNavLines.
@@ -778,31 +714,48 @@ export function buildPlan(projects, agents, opts = {}) {
   // this — a plan that could report a full working side while drawing an empty
   // one would be a worse defect than the one this package fixes.
   //
-  // IN TWO ROWS THE SAME SENTENCE IS ABOUT TWO CORNERS (WP-59d): the rooms'
-  // share of row one and the strip's share of row two. It is the identical
-  // measure — the parts of the building that hold content, less what the
-  // content takes — read on a building folded differently.
-  const workingArea = rows
-    ? workingWidth * fitted.h1 + fitted.stripW * fitted.h2
-    : Math.max(0, workingWidth) * H;
-  const takenArea =
-    projectRooms.reduce((a, pr) => a + pr.room.w * pr.room.h, 0) +
-    (directory ? directory.w * directory.h : 0);
+  // IN TWO ROWS IT IS ROW ONE (WP-59d, narrowed by WP-60): the part of the
+  // building beside the reception that holds the rooms. Row two used to be in
+  // it as well, because the idle strip took the right of it and a strip is
+  // content; with the strip gone the lounge IS row two, and a lounge is a room
+  // that fills its own rectangle rather than a side to be filled.
+  const workingArea = rows ? workingWidth * fitted.h1 : Math.max(0, workingWidth) * H;
+  const takenArea = projectRooms.reduce((a, pr) => a + pr.room.w * pr.room.h, 0);
+  // THE BARE CARPET, REPORTED (WP-60).
+  //
+  // `ROOM_FILL_MAX` used to be a LIMIT: a band of rooms stopped short of its
+  // row rather than let its shallowest room past 30% bare carpet, and what it
+  // did not take was drawn as a bay. That bought its tidiness with a hole in
+  // the floor — the bay is carpet too, and carpet nothing can ever be put on
+  // because it is not inside a room. The rooms fill their row now and this is
+  // the number that says what it cost: the worst room's bare fraction, stated
+  // where the integrity test and anyone reading a floor can both find it.
+  //
+  // A metric rather than a bound, and the difference is the whole of WP-60's
+  // second half. A bound refuses a floor; a metric describes one, and a floor
+  // that has to be described is a floor somebody can argue with.
+  const bare = projectRooms.map((pr) => {
+    const n = pr.room.natural || { w: pr.room.w, h: pr.room.h };
+    return 1 - (n.w * n.h) / Math.max(1e-6, pr.room.w * pr.room.h);
+  });
   const working = {
     x: workingX,
     w: Math.max(0, workingWidth),
     /** The fraction of the working side nobody stands on. */
     open: workingArea > 1e-6 ? Math.max(0, (workingArea - takenArea) / workingArea) : 0,
+    /**
+     * The worst room's bare carpet — floor inside a room that its furniture
+     * does not occupy. Reported, never enforced (WP-60).
+     */
+    bareCarpet: bare.length ? Math.max(...bare) : 0,
     /** (a) — the rooms were made deeper than the plan would have chosen. */
     roomsStretched: Boolean(forced),
-    /** (b) — the strip's columns, and what it would have taken unasked. */
-    stripCols: directory ? dirCols : 0,
-    /** (c) — how tightly the lounge was packed; 1 is the room untouched. */
+    /** (b) — how tightly the lounge was packed; 1 is the room untouched. */
     loungePack: (rows ? rows.pack : chosen.measured.pack) ?? 1,
-    /** (d) — the open plan left under the content, in units. */
+    /** (c) — the open plan left under the content, in units. */
     openH: rows
-      ? Math.max(0, fitted.h1 - (projectRooms.length ? bandH : 0)) + Math.max(0, fitted.h2 - dirH)
-      : Math.max(0, H - ((projectRooms.length ? bandH : 0) + dirH)),
+      ? Math.max(0, fitted.h1 - (projectRooms.length ? bandH : 0))
+      : Math.max(0, H - (projectRooms.length ? bandH : 0)),
   };
 
   return {
@@ -824,7 +777,6 @@ export function buildPlan(projects, agents, opts = {}) {
     // `AgentRuntime#sync` read it rather than deciding again.
     hidden,
     goneHome: pop.goneHome,
-    directory,
   };
 }
 
@@ -843,8 +795,6 @@ export { shelfPack, squarify, tileRows } from './plan-packing.js';
 export { formatTokens, payrollLine } from './plan-rooms.js';
 export {
   ASPECT_TOLERANCE,
-  DIRECTORY_MAX_H,
-  DIRECTORY_SIDE_MAX,
   FLOOR_OPEN_MAX,
   OPEN_FLOOR_MAX,
   PLATE_BAND,
@@ -872,7 +822,6 @@ export {
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
 /** @typedef {import('./plan-units.js').Wall} Wall */
-/** @typedef {import('./plan-units.js').DirectoryEntry} DirectoryEntry */
 /** @typedef {import('./plan-units.js').Room} Room */
 /** @typedef {import('./plan-units.js').Seat} Seat */
 /** @typedef {import('./plan-units.js').LoungeSpot} LoungeSpot */

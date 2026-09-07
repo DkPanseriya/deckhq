@@ -28,11 +28,13 @@ import {
   plateLinesFor,
   CHAR_MIN_PX_PER_UNIT,
 } from '../../public/render/scene.js';
+import { resolveBadgeCollisions } from '../../public/render/scene-labels.js';
 import { buildPlan } from '../../public/render/plan.js';
 import {
   truncateLabel,
   labelBox,
   labelFontSize,
+  badgeBox,
   BODY_HEIGHT_U,
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
@@ -621,6 +623,174 @@ test('resolveLabelCollisions: a kept label placed first still forces later non-k
   assert.ok(normal === null || normal.offsetY > 0, 'the non-kept label must move or be dropped');
 });
 
+// ------------------------- WP-60: waiting badges do not pile up on each other
+
+/** A badge box, spelled out, so a test reads as geometry rather than as data. */
+function badge(id, x, w, ms, y = 0, h = 10) {
+  return { id, x, y, w, h, ms };
+}
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
+
+test('resolveBadgeCollisions: badges with clear air between them all keep their own number', () => {
+  const { drawn, pills } = resolveBadgeCollisions([
+    badge('a', 0, 30, 5 * MIN),
+    badge('b', 50, 30, 9 * MIN),
+    badge('c', 100, 30, 2 * MIN),
+  ]);
+  assert.deepEqual([...drawn].sort(), ['a', 'b', 'c']);
+  assert.deepEqual(pills, [], 'nothing collided, so nothing needs standing in for');
+});
+
+test('resolveBadgeCollisions: a row that overlaps becomes ONE pill at the row start', () => {
+  // The owner's office wall, in miniature: seven pills 40 wide at a 12 pitch,
+  // which is the picture WP-60 is about — "3d 2d 21h 2d 3h 2d 2h ...".
+  const items = [
+    badge('w0', 100, 40, 4 * DAY + 10 * HOUR),
+    badge('w1', 112, 40, 3 * DAY),
+    badge('w2', 124, 40, 2 * DAY + 21 * HOUR),
+    badge('w3', 136, 40, 2 * DAY + 3 * HOUR),
+    badge('w4', 148, 40, 2 * DAY + 2 * HOUR),
+    badge('w5', 160, 40, HOUR + 58 * MIN),
+    badge('w6', 172, 40, 20 * MIN),
+  ];
+  const { drawn, pills } = resolveBadgeCollisions(items);
+  assert.equal(drawn.size, 0, 'not one of seven overlapping badges is readable');
+  assert.equal(pills.length, 1, 'one row, one pill');
+  // It says how many, and how long the worst of them — the two facts the seven
+  // pills were between them carrying.
+  assert.equal(pills[0].count, 7);
+  assert.equal(pills[0].oldest, 4 * DAY + 10 * HOUR);
+  // AT THE ROW'S START, and left-aligned there: it grows into the slots this
+  // pass just emptied rather than over the room beside it.
+  assert.equal(pills[0].x, 100);
+  assert.equal(pills[0].y, 0);
+});
+
+test('resolveBadgeCollisions: a badge with room on both sides is kept while the crowd beside it aggregates', () => {
+  const { drawn, pills } = resolveBadgeCollisions([
+    badge('crowd-0', 0, 40, 3 * DAY),
+    badge('crowd-1', 20, 40, DAY),
+    badge('alone', 300, 40, 5 * MIN),
+  ]);
+  assert.deepEqual([...drawn], ['alone'], 'a readable badge is never taken away');
+  assert.equal(pills.length, 1);
+  assert.equal(pills[0].count, 2, 'the pill counts the ones it replaced, not the whole floor');
+  assert.equal(pills[0].oldest, 3 * DAY);
+});
+
+test('resolveBadgeCollisions: two rows are two problems and get two answers', () => {
+  const { drawn, pills } = resolveBadgeCollisions([
+    badge('top-0', 0, 40, DAY, 0, 10),
+    badge('top-1', 20, 40, 2 * DAY, 0, 10),
+    badge('low-0', 0, 40, HOUR, 40, 10),
+    badge('low-1', 20, 40, 2 * HOUR, 40, 10),
+  ]);
+  assert.equal(drawn.size, 0);
+  assert.equal(pills.length, 2, 'a pill for one row cannot say anything true about the other');
+  const [top, low] = pills.sort((a, b) => a.y - b.y);
+  assert.equal(top.oldest, 2 * DAY);
+  assert.equal(low.oldest, 2 * HOUR);
+});
+
+test('resolveBadgeCollisions: nothing waiting is not a pill saying zero', () => {
+  assert.deepEqual(resolveBadgeCollisions([]), { drawn: new Set(), pills: [] });
+});
+
+test("WP-60: the owner's office wall reads — no two waiting badges are drawn overlapping", () => {
+  // THE FLOOR THE DEFECT WAS PHOTOGRAPHED ON. Seven agents waiting in the
+  // reception of the owner's own shape, at the stage he reported it on, with
+  // the badges measured through the same `badgeBox` the renderer paints from
+  // and a stubbed ctx standing in for the canvas (the technique `labelBox`'s
+  // own test uses — no DOM, per the work order).
+  const now = 1_800_000_000_000;
+  const ctx = { font: '', measureText: (text) => ({ width: text.length * 7 }) };
+  const projects = [];
+  const agents = [];
+  [8, 1, 1, 1].forEach((n, i) => {
+    projects.push({ id: `p${i}`, name: `p${i}`, sessionCount: n, tokens: 1000, needsYou: 0 });
+    for (let k = 0; k < n; k++) {
+      agents.push({
+        id: `p${i}-${k}`,
+        projectId: `p${i}`,
+        activityState: 'working',
+        ackState: 'active',
+        lastActivityAt: now - MIN,
+      });
+    }
+  });
+  // The queue itself: seven, oldest four days and ten hours, exactly the run
+  // that overlapped into "3d 2d 21h 2d 3h 2d 2h ..." in the capture.
+  const waits = [
+    4 * DAY + 10 * HOUR,
+    3 * DAY,
+    2 * DAY + 21 * HOUR,
+    2 * DAY + 3 * HOUR,
+    2 * DAY + 2 * HOUR,
+    HOUR + 58 * MIN,
+    20 * MIN,
+  ];
+  waits.forEach((ms, k) => {
+    agents.push({
+      id: `w${k}`,
+      projectId: 'p0',
+      activityState: 'for_review',
+      ackState: 'active',
+      reviewSince: now - ms,
+      lastActivityAt: now - ms,
+    });
+  });
+
+  const plan = buildPlan(projects, agents, { stage: { w: 1920, h: 1080 }, now });
+  const scale = computeFitScale(plan.width, plan.height, 1920, 1080);
+  const camera = cameraAt(scale);
+  const u = characterScaleFor(scale);
+  assert.ok(plan.officeSeats.length >= waits.length, 'the reception seats its whole queue');
+
+  const items = plan.officeSeats.slice(0, waits.length).map((seat, k) => {
+    const s = worldToScreen(seat, camera);
+    const box = badgeBox(ctx, s.x, s.y, u, '4d 10h');
+    return { id: `w${k}`, x: box.x, y: box.y, w: box.w, h: box.h, ms: waits[k] };
+  });
+
+  const { drawn, pills } = resolveBadgeCollisions(items);
+  const boxes = items.filter((it) => drawn.has(it.id));
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i];
+      const b = boxes[j];
+      const hit = a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+      assert.ok(!hit, `${a.id} and ${b.id} are drawn on top of each other`);
+    }
+  }
+  // THE RUN ALONG THE WALL IS THE ONE THAT COLLIDES. The agent at the desk and
+  // the one seat with air around it keep their own numbers; the packed run does
+  // not. That the split happens at all is the test — the exact membership is a
+  // fact about the reception's seat pitch, which is `plan-office.js`'s to
+  // change.
+  assert.ok(pills.length >= 1, 'the packed run along the wall must not be drawn as seven pills');
+
+  // AND NOBODY IS LOST. Every badge that was taken away is inside a pill, and
+  // the pills between them count exactly the ones that were.
+  const aggregated = pills.reduce((a, p) => a + p.count, 0);
+  assert.equal(
+    drawn.size + aggregated,
+    waits.length,
+    'a suppressed badge with nothing standing in for it is a person the floor stopped mentioning',
+  );
+
+  // AND EACH PILL CARRIES THE LONGEST WAIT IT REPLACED — the number that makes
+  // the debt visible, which is the whole reason a badge is drawn at all.
+  const suppressed = items.filter((it) => !drawn.has(it.id));
+  assert.equal(
+    Math.max(...pills.map((p) => p.oldest)),
+    Math.max(...suppressed.map((it) => it.ms)),
+    'the pill is quieter than the badges it replaced, never less true',
+  );
+});
+
 // ------------------------------------------------ frozen pane + overflow scroll
 //
 // The office and lounge stay pinned to the left edge while the working floor
@@ -1043,14 +1213,8 @@ test('every other room plate is still exactly two lines', () => {
   });
   assert.deepEqual(lounge, ['Lounge', '3 benched · 1 went home']);
 
-  const dir = plateLinesFor(
-    { kind: 'directory', id: '__dir__', name: 'Directory', entries: [{}, {}] },
-    snapshot,
-  );
-  assert.deepEqual(dir, ['Directory', '2 repos · nobody in']);
-
   const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
-  assert.deepEqual(letGo, ['Archive', '1 let go · archived']);
+  assert.deepEqual(letGo, ['Archive', '1 fired']);
 });
 
 test('a room the snapshot has nothing to say about falls back to its own plate', () => {

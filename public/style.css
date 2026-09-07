@@ -2351,7 +2351,12 @@ button {
 .stage.is-deck > #floor-canvas,
 .stage.is-deck > .floor-skeleton,
 .stage.is-deck > .empty-state,
-.stage.is-deck > .tooltip {
+.stage.is-deck > .tooltip,
+/* WP-60. The idle chip and its list are corners of the FLOOR, so they go with
+   it: the deck is the whole queue in a table and a chip floating over its
+   bottom-right would be one more thing lying on top of a scrolling surface. */
+.stage.is-deck > .idle-chip,
+.stage.is-deck > .idle-popover {
   display: none !important;
 }
 
@@ -3447,3 +3452,174 @@ textarea.field-input {
   content: '· ';
 }
 /* WP-09 · the reply arriving — end ----------------------------------------- */
+
+/* WP-60 · the idle-projects chip and its list — begin --------------------
+   The repos nobody is working in used to be drawn ON THE FLOOR: a column of
+   names down the bottom-right of the canvas, permanently, every line of it
+   saying the same thing. On a machine with any history that column was the
+   largest single object on a floor whose whole subject is who IS working, and
+   it could not be dismissed, tabbed to, or read by a screen reader.
+
+   So it is chrome now. One quiet chip in the corner carrying the count — which
+   is the part worth glancing at — and a popover with the names, which is the
+   part you ask for. The chip is deliberately the least contrasty thing on the
+   stage: it is a fact about absence, and it must never compete with a room.
+
+   GEOMETRY, and why it is stated in CSS rather than measured in script. The
+   popover is pinned to the same right edge as the chip and grows upward from
+   just above it, with `max-width` and `max-height` written against the stage's
+   own box. That keeps it inside the stage at every window size without a
+   single `getBoundingClientRect` — a measured popover has to re-measure on
+   resize, on scroll and on every re-render, and each of those is a frame where
+   it can be in the wrong place.
+
+   z-index 5: above `.nightcard` and `.replay` at 4, below `.tooltip` at 40 and
+   `.whiteboard-scrim` at 60. The chip also stands down entirely while the
+   replay bar is open — that is `isSuppressed` in the module, because `.replay`
+   is bottom-centred and on a narrow stage its right edge reaches this corner.
+
+   `public/idle-projects.js`, docs/DEVIATIONS.md §145. */
+
+.idle-chip {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 5;
+  padding: 0.2rem 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.idle-chip:hover,
+.idle-chip[aria-expanded='true'] {
+  color: var(--ink-2);
+  border-color: var(--line-2);
+}
+
+.idle-popover {
+  position: absolute;
+  right: 0.75rem;
+  /* Clear of the chip, which is one line of 0.7rem type plus its padding and
+     border. Stated as a length rather than anchored to the chip's measured
+     height so the two cannot drift apart by a pixel at a fractional zoom. */
+  bottom: 2.6rem;
+  z-index: 5;
+  width: max-content;
+  min-width: 13rem;
+  /* Leftward as far as it needs and no further: the stage minus a margin on
+     each side, so a long repo name ellipsises instead of leaving the floor. */
+  max-width: min(22rem, calc(100% - 1.5rem));
+  max-height: min(20rem, calc(100% - 4.5rem));
+  overflow-y: auto;
+  padding: 0.5rem 0.4rem 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  animation: idle-popover-in var(--t-fast);
+}
+@keyframes idle-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.idle-popover-title,
+.idle-popover-foot {
+  margin: 0;
+  padding: 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.6;
+}
+.idle-popover-title {
+  padding-bottom: 0.3rem;
+}
+.idle-popover-foot {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+
+.idle-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.idle-list:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.idle-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.22rem 0.55rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.idle-row.is-active {
+  background: var(--surface-2);
+}
+
+/* The name gives up its width first, and gives it up by ellipsis rather than by
+   the script cutting the string: the whole name stays in the accessibility tree
+   and in anything the reader copies. */
+.idle-row-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+}
+.idle-row.is-active .idle-row-name {
+  color: var(--ink);
+}
+
+/* Sessions and time since, in the mono the floor drew them in, tabular so a
+   column of them lines up. */
+.idle-row-stat {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.68rem;
+}
+
+/* docs/03-VISUAL-SPEC.md §10. The list is information; its four-pixel rise is
+   decoration, and the person who asked for less motion still wants the names. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .idle-popover {
+    animation: none;
+  }
+  :root:not([data-motion='no-preference']) .idle-chip {
+    transition: none;
+  }
+}
+[data-motion='reduce'] .idle-popover {
+  animation: none;
+}
+[data-motion='reduce'] .idle-chip {
+  transition: none;
+}
+/* WP-60 · the idle-projects chip and its list — end ---------------------- */

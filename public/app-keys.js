@@ -40,6 +40,8 @@ let saveCard = () => {};
 let takeSnapshot = () => {};
 /** @type {() => void} */
 let floatOffice = () => {};
+/** @type {() => void} */
+let toggleIdleProjects = () => {};
 /** @type {any} */
 let paletteUI = null;
 
@@ -48,7 +50,7 @@ let paletteUI = null;
  * listeners are registered.
  * @param {{dismissCard:() => boolean, hideWhiteboard:() => void,
  *   toggleRedaction:() => void, saveCard:() => void, takeSnapshot:() => void,
- *   floatOffice:() => void, paletteUI:any}} actions
+ *   floatOffice:() => void, toggleIdleProjects:() => void, paletteUI:any}} actions
  */
 export function wireKeyboard(actions) {
   ({
@@ -58,6 +60,7 @@ export function wireKeyboard(actions) {
     saveCard,
     takeSnapshot,
     floatOffice,
+    toggleIdleProjects,
     paletteUI,
   } = actions);
 }
@@ -203,6 +206,15 @@ export function handleKeydown(e) {
     case 'p':
     case 'P':
       floatOffice();
+      break;
+    // WP-60's idle projects: the repos nobody is working in. They used to be
+    // drawn permanently down the corner of the floor and are a popover now, so
+    // there has to be a key that opens one without a mouse. Pressed again it
+    // closes, exactly as the chip's own click does — the list is one thing with
+    // one toggle, not two ways in and one way out.
+    case 'i':
+    case 'I':
+      toggleIdleProjects();
       break;
     default:
       return;

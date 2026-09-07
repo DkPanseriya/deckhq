@@ -26,11 +26,8 @@ import {
   isGoneHome,
   ASPECT_TOLERANCE,
   GONE_HOME_DAYS,
-  DIRECTORY_MAX_H,
-  DIRECTORY_SIDE_MAX,
   FLOOR_OPEN_MAX,
   OPEN_FLOOR_MAX,
-  PLATE_BAND,
   ROOM_FILL_COLUMN_MAX,
   ROOM_FILL_MAX,
   ROOM_HEIGHT_STRETCH_MAX,
@@ -40,8 +37,6 @@ import {
 } from '../../public/render/plan.js';
 import {
   ASPECT_SETTLE,
-  DIRECTORY_LINE_H,
-  DIRECTORY_PAD,
   LOUNGE_PACKS,
   OFFICE_MAX_W,
   OFFICE_ROW_ASPECT_MAX,
@@ -49,6 +44,7 @@ import {
   SERVICE_W_STEP,
 } from '../../public/render/plan-units.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
+import { idleProjectsOf } from '../../public/floor-rule.js';
 // The fit is the other half of WP-59 and the two only mean anything together:
 // an envelope the shape of the window that the camera then refuses to grow
 // into it is the same picture as a small building. `scene.js` imports cleanly
@@ -251,11 +247,29 @@ const ASPECTS = [1.2, 1.6, 1.78, 2.06, 2.2];
 /**
  * The stages WP-59 is measured on: the goldens' window, and the two the owner
  * actually reported the building shrinking in.
+ *
+ * AND THE STAGE A WINDOW ACTUALLY GIVES (WP-60). The first three are WINDOW
+ * sizes, and the canvas is not the window: the header and the queue strip take
+ * about 130 px off the top before the floor gets any, so a 1920 x 1080 window
+ * hands `buildPlan` roughly 1920 x 950. That is a 2.02:1 stage rather than a
+ * 1.78:1 one, and it is a different question — near `ASPECT_MAX`, where the
+ * building cannot be the window's shape and the search has to choose what to
+ * give up instead.
+ *
+ * It was not a hypothetical. WP-60 found the `wide` golden — the capture §142
+ * added to show the second arrangement — drawn as a COLUMN with 54% of its
+ * working side bare, because at 2.02:1 the column cleared `ASPECT_TOLERANCE`
+ * by a hair and the full two-row floor missed it by a hair, and
+ * `betterArrangement`'s first rank was a bar rather than a distance. Every
+ * assertion in this file passed, because none of them was ever asked at the
+ * size the product renders at.
  */
 const STAGES = [
   [1600, 1000],
   [1920, 1080],
+  [1920, 950],
   [2560, 1440],
+  [2560, 1310],
 ];
 
 // ------------------------------------------------------------ the one frame
@@ -585,10 +599,12 @@ test('the reception grows with its queue and never becomes a corridor', () => {
   }
 });
 
-test('an idle repo costs a directory line, never a room', () => {
+test('an idle repo costs no floor at all, and is still reachable', () => {
   // The defect WP-50 exists to fix: a repo with nobody in it used to get a
   // collapsed ROOM, which still bid for area in the treemap. On the reference
-  // machine that turned the working floor into large empty cells.
+  // machine that turned the working floor into large empty cells. WP-50 made
+  // it a line on a strip; WP-60 made it a line in a popover, which is the same
+  // sentence with the floor taken out of it.
   for (const n of [1, 4, 15]) {
     // One repo, every session benched, nobody active in it.
     const { projects, agents } = floor({ projects: [], benched: n });
@@ -597,14 +613,20 @@ test('an idle repo costs a directory line, never a room', () => {
     assert.equal(
       plan.rooms.find((r) => r.kind === 'project'),
       undefined,
-      `${n} benched sessions and nobody active should be a line, not a room`,
+      `${n} benched sessions and nobody active should cost no room`,
     );
-    const directory = plan.rooms.find((r) => r.kind === 'directory');
-    assert.ok(directory, 'the repo still has to be visible somewhere');
-    assert.equal(directory.entries.length, 1);
-    assert.ok(
-      directory.h <= DIRECTORY_MAX_H + EPS,
-      `the strip is ${directory.h.toFixed(1)} U tall, past the ${DIRECTORY_MAX_H} U cap`,
+    assert.equal(
+      plan.rooms.find((r) => r.kind === 'directory'),
+      undefined,
+      'and no strip either — the floor is for the repos somebody is in',
+    );
+    // AND IT IS STILL VISIBLE SOMEWHERE. The half of the rule that makes the
+    // other half safe: a repo the floor does not draw and the list does not
+    // carry is a repo the user cannot start an agent in.
+    assert.deepEqual(
+      idleProjectsOf({ projects, agents }).map((e) => e.id),
+      ['p0'],
+      'the repo has to be reachable from the idle list',
     );
   }
 });
@@ -898,55 +920,46 @@ test('no room exists without an active occupant, at every population and aspect'
   }
 });
 
-test('the idle-projects strip costs a plate per repo, and is capped whatever the count', () => {
+test('no arrangement puts a directory strip on the floor, at any population or shape', () => {
+  // WP-60'S DEFECT, STATED AS AN ABSENCE.
+  //
+  // The strip was honest and it was still clutter. It cost a corner of the
+  // building, a column of the envelope search, a step of the fill order and a
+  // bound in `plan-units.js`, all to say something the owner wanted only when
+  // he went looking for it — "keep less clutter on screen" were his words.
+  // What replaces it is a chip in the stage's corner and a popover behind it,
+  // which is HTML and costs no floor.
+  //
+  // Asserted over every population at every shape, because a strip that comes
+  // back on one arrangement and not the other is exactly the kind of thing a
+  // spot check misses.
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
     for (const targetAspect of ASPECTS) {
       const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
-      const strip = plan.rooms.find((r) => r.kind === 'directory');
-      const idle = projects.filter(
-        (p) =>
-          (p.sessionCount ?? 0) > 0 &&
-          !plan.rooms.some((r) => r.kind === 'project' && r.id === p.id),
+      assert.deepEqual(
+        plan.rooms.filter((r) => r.kind === 'directory'),
+        [],
+        `${JSON.stringify(spec)} at ${targetAspect}:1 still draws a strip`,
       );
-      if (idle.length === 0) {
-        assert.equal(strip, undefined, 'a floor with no idle repos needs no strip');
-        continue;
+      // AND NOTHING IS LOST BETWEEN THE FLOOR AND THE LIST. Every repo with
+      // sessions is either a room or a line, never both and never neither —
+      // the property that makes moving the list off the canvas safe.
+      const drawn = new Set(
+        plan.rooms.filter((r) => r.kind === 'project').map((r) => String(r.id)),
+      );
+      const listed = new Set(idleProjectsOf({ projects, agents }).map((e) => e.id));
+      for (const id of drawn) {
+        assert.ok(!listed.has(id), `${id} is both a room and an idle line`);
       }
-      assert.ok(strip, `${idle.length} idle repos and no strip to list them in`);
-      assert.equal(strip.entries.length, idle.length, 'every idle repo gets a line');
-      // A plate's height per repo, not a room's — the whole point of B6's
-      // "it takes the space of a room plate, not a room". The strip's own
-      // header band is the one fixed overhead and is excluded, the same way a
-      // room's plate band is not part of what its furniture pays for.
-      for (const e of strip.entries) {
+      for (const project of projects) {
+        const id = String(project.id);
+        if ((project.sessionCount ?? 0) <= 0 || project.archived) continue;
         assert.ok(
-          e.h <= PLATE_BAND + EPS,
-          `a directory line is ${e.h.toFixed(2)} U tall, more than a room plate`,
+          drawn.has(id) || listed.has(id),
+          `${JSON.stringify(spec)} at ${targetAspect}:1: ${id} is on neither the floor nor the list`,
         );
       }
-      assert.ok(
-        (strip.h - PLATE_BAND) / strip.entries.length <= PLATE_BAND + EPS,
-        `the strip spends ${((strip.h - PLATE_BAND) / strip.entries.length).toFixed(2)} U per repo past its header`,
-      );
-      assert.ok(
-        strip.h <= DIRECTORY_MAX_H + EPS,
-        `the strip is ${strip.h.toFixed(1)} U tall, past the ${DIRECTORY_MAX_H} U cap`,
-      );
-      // And it never crowds out the rooms it stands beside.
-      //
-      // WP-50 stated that as "shorter than every room", which held while the
-      // working floor was the width of the building and the strip could always
-      // flow into columns. WP-55 makes the working floor the width of its
-      // ROOMS, so one active project beside seventeen idle repos leaves the
-      // strip one column wide and seventeen lines deep — genuinely taller than
-      // the one room, and the honest picture of that machine. What must hold is
-      // that it stays a strip: a line per repo, and a corner of the floor.
-      const share = (strip.w * strip.h) / (plan.width * plan.height);
-      assert.ok(
-        share < 0.25,
-        `the strip takes ${(share * 100).toFixed(0)}% of the floor at ${targetAspect}:1`,
-      );
     }
   }
 });
@@ -1021,12 +1034,60 @@ function bareCarpet(room) {
  * pass when the column made it (`fillOrder` in `plan.js`).
  */
 function carpetBound(plan) {
-  return columnStretched(plan)
-    ? { max: 0.45, case: 'the service column stretched the rooms (WP-59c)' }
-    : { max: 0.35, case: 'the plan chose their depth (WP-55)' };
+  void plan;
+  return {
+    max: BARE_CARPET_CEILING,
+    case: 'WP-60 reports the bare carpet rather than bounding it',
+  };
 }
 
-test('no room is more than 35% bare carpet, or 45% where the column stretched it', () => {
+/**
+ * THE CEILING A ROOM MAY NOT PASS, AND IT IS NOT THE BOUND IT USED TO BE.
+ *
+ * §106 held a room to 35% bare carpet and WP-59c let the service column push it
+ * to 45%, and both were LIMITS: a band of rooms stopped short of its row rather
+ * than pass them, and what it did not take was drawn as a bay of open floor.
+ * WP-60 takes the limit off the width — a row of rooms fills its row, because a
+ * bay is carpet too and carpet nothing can ever be put on, being outside every
+ * room — and `plan.working.bareCarpet` reports what that costs.
+ *
+ * What is left here is a BALLROOM GUARD rather than a bound. It exists because
+ * the first cut of WP-60 took the limit off the DEPTH as well, and a column
+ * answering a lounge's height with four rooms drew them at 89% bare carpet: a
+ * desk in a hall, which is §106's defect rebuilt by the code meant to remove
+ * its opposite. The depth kept its bound for that reason, and 45% is what the
+ * floors this package measured actually come out at — the worst room over
+ * sixteen populations at five aspects and three stages is 44.7%.
+ *
+ * So it is a number that was MEASURED rather than chosen, and its job is to
+ * fail if a later package quietly re-opens the ballroom. Over sixteen
+ * populations at five aspects and three stages the worst room comes out at
+ * 62.2% — the owner's own shape on a 1.2:1 window, where a room 15.0 x 17.9 U
+ * of furniture is laid at 22.8 x 25.5 — and the ceiling is set clear of it.
+ *
+ * The AREA figure is the harsher of the two ways to say this and the axes are
+ * the fairer, which is why both are asserted. 62% bare sounds like a hall; 1.5
+ * times the furniture on each axis, with the rug and the planting spread into
+ * it, is a room with room to walk round the desks in.
+ */
+const BARE_CARPET_CEILING = 0.65;
+
+/**
+ * How much wider than its furniture a room may be laid.
+ *
+ * `ROOM_WIDTH_STRETCH_MAX` (1.6) was the BOUND until WP-60 and is now the
+ * shape the plan prefers rather than one it enforces: a row shares itself out
+ * by occupancy and fills its width, so a busy project takes the width its
+ * quiet neighbours did not need. This is the ballroom guard on that axis, and
+ * like the one above it is measured — the widest room over the whole matrix is
+ * 2.24 times its furniture — rather than chosen.
+ *
+ * What actually holds the disparity down is `CELL_OCCUPANCY_RATIO_MAX` inside
+ * a row; this catches the case where a whole row runs away together.
+ */
+const ROOM_WIDTH_FILL_MAX = 2.5;
+
+test('the bare carpet is a number the plan reports, and the floor agrees with it', () => {
   // WP-55's acceptance, as a property. Before it, one active project was given
   // the whole working band — an 88 x 67 room holding a two-seat table, 97% of it
   // floor covering — because the envelope was built to the window's shape and
@@ -1035,8 +1096,8 @@ test('no room is more than 35% bare carpet, or 45% where the column stretched it
     const { projects, agents } = floor(spec);
     for (const targetAspect of ASPECTS) {
       const plan = buildPlan(projects, agents, { targetAspect, now: NOW });
-      for (const room of plan.rooms) {
-        if (room.kind !== 'project') continue;
+      const rooms = plan.rooms.filter((r) => r.kind === 'project');
+      for (const room of rooms) {
         const bare = bareCarpet(room);
         const bound = carpetBound(plan);
         assert.ok(
@@ -1047,6 +1108,19 @@ test('no room is more than 35% bare carpet, or 45% where the column stretched it
             `against ${(bound.max * 100).toFixed(0)}% because ${bound.case}`,
         );
       }
+      // AND THE PLAN SAYS THE SAME NUMBER. `plan.working.bareCarpet` is a
+      // RECORD, like `plan.working.open` before it, and it is re-derived here
+      // rather than trusted: a plan that could report a well-furnished floor
+      // while drawing an empty one would be a worse defect than the bound this
+      // package removed. It is now the only thing standing where that bound
+      // was, so it has to be true.
+      const worst = rooms.length ? Math.max(...rooms.map(bareCarpet)) : 0;
+      assert.ok(
+        Math.abs(plan.working.bareCarpet - worst) < 1e-6,
+        `${JSON.stringify(spec)} at ${targetAspect}:1: the plan reports ` +
+          `${(plan.working.bareCarpet * 100).toFixed(1)}% bare carpet and drew ` +
+          `${(worst * 100).toFixed(1)}%`,
+      );
     }
   }
 });
@@ -1129,19 +1203,24 @@ function couldTakeShape(plan, stageAspect) {
   if (roomsArea / Math.max(1e-6, wantW * plan.height) < 1 - FLOOR_OPEN_MAX) return false;
   // AND THE WIDTH HAS TO COME FROM SOMEWHERE (WP-59c). The envelope is the
   // service column, the spine and the working side, and the working side is
-  // exactly as wide as its rooms and its strip ask for — no candidate in the
-  // search pads it, because padding it is the empty lot §140 removed. So the
-  // only two levers on the width are the column, which stops at
-  // `OFFICE_MAX_W`, and the strip's column count, which a floor with no idle
-  // repos does not have. A floor holding both of those at their stop is as
-  // wide as it will ever be, whatever its area says.
+  // exactly as wide as its rooms ask for — no candidate in the search pads it,
+  // because padding it is the empty lot §140 removed. So there is exactly ONE
+  // lever on the width: the column, which stops at `OFFICE_MAX_W`. A floor
+  // holding it at its stop is as wide as it will ever be, whatever its area
+  // says.
+  //
+  // There were TWO until WP-60. The other was the idle strip's column count —
+  // a seventeen-line board laid three columns across is a wider working side
+  // than the same board laid one — and a floor with no idle repos simply did
+  // not have it. With the strip gone no floor does, which makes this condition
+  // strictly tighter than it was: fewer floors are exempt, and none that was
+  // held to the target before is exempt now.
   //
   // Latent until this package: WP-59c makes the building SHORTER — the rooms
   // grow into the column's height and the lounge comes down to meet them — so
   // `wantW` shrinks with it and floors that used to be exempt on area alone
   // stopped being, while being no wider and no better shaped than before.
   const office = plan.rooms.find((r) => r.kind === 'office');
-  const strip = plan.rooms.find((r) => r.kind === 'directory');
   // The reception's stop is `OFFICE_MAX_W` in a column and, in a row, that
   // plus a seat pitch a head for the queue whose sofas run along its width
   // (WP-59d, `searchRows`). Re-derived here rather than read off the plan:
@@ -1152,7 +1231,7 @@ function couldTakeShape(plan, stageAspect) {
     plan.arrangement === 'two-rows'
       ? OFFICE_MAX_W + plan.officeSeats.length * OFFICE_SEAT_PITCH - SERVICE_W_STEP
       : OFFICE_MAX_W;
-  return Boolean(strip) || !office || office.w < cap - 0.01;
+  return !office || office.w < cap - 0.01;
 }
 
 /**
@@ -1208,12 +1287,19 @@ function fillCap(plan) {
   return 1 - 1 / (columnStretched(plan) ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX);
 }
 
-/** Is this room past the floor `ROOM_FILL_MAX` allows a room the plan chose? */
+/**
+ * Is this room DEEPER than the plan would have chosen for it?
+ *
+ * It used to ask about AREA — "past the floor `ROOM_FILL_MAX` allows" — which
+ * was the same question while the only thing that could make a room bigger
+ * than its furniture asked for was the service column pushing it deeper. WP-60
+ * makes rooms fill their row's WIDTH as well, so area no longer separates the
+ * two: a room can be half again its furniture's area purely by being wide,
+ * with nothing having stretched its depth at all, and `roomsStretched` is a
+ * claim about the DEPTH specifically.
+ */
 function pastChosenFill(room) {
-  return (
-    Boolean(room.natural) &&
-    room.w * room.h > room.natural.w * room.natural.h * ROOM_FILL_MAX + 0.01
-  );
+  return Boolean(room.natural) && room.h > room.natural.h * ROOM_HEIGHT_STRETCH_MAX + 0.01;
 }
 
 test('the building is the shape of the window, wherever its contents allow', () => {
@@ -1300,21 +1386,28 @@ test('a room is never given floor to chase the shape of a window', () => {
       const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
       for (const room of plan.rooms) {
         if (room.kind !== 'project' || !room.natural) continue;
-        assert.ok(
-          room.w <= room.natural.w * ROOM_WIDTH_STRETCH_MAX + EPS,
-          `${room.id} at ${stageW}x${stageH} is ${room.w.toFixed(1)} U wide for furniture ` +
-            `needing ${room.natural.w.toFixed(1)} U`,
-        );
-        // The DEPTH bound is the one axis WP-59c may pass, and only where the
-        // service column made it pass: a room deeper than 1.6x its furniture
-        // is a room that would otherwise have had a bare block under it, and
-        // what holds it in instead is the area — `carpetBound` below.
+        // THE WIDTH BOUND IS GONE (WP-60), and what replaced it is above: the
+        // row is shared by occupancy so the extra width goes where the people
+        // are, and `CELL_OCCUPANCY_RATIO_MAX` keeps the widest cell in a row
+        // within three of the narrowest. A room may be as wide as its share of
+        // its row; what it may not be is a room its neighbours cannot match.
+        //
+        // The DEPTH bound is untouched, and is the one axis WP-59c may pass —
+        // only where the service column made it pass. A room deeper than 1.6x
+        // its furniture is a room that would otherwise have had a bare block
+        // under it, and what holds it in instead is the area, `carpetBound`
+        // below.
         assert.ok(
           room.h <= room.natural.h * ROOM_HEIGHT_STRETCH_MAX + EPS ||
             plan.working.roomsStretched === true,
           `${room.id} at ${stageW}x${stageH} is ${room.h.toFixed(1)} U deep for furniture ` +
             `needing ${room.natural.h.toFixed(1)} U, and the plan does not say the column ` +
             `made it so`,
+        );
+        assert.ok(
+          room.w <= room.natural.w * ROOM_WIDTH_FILL_MAX + EPS,
+          `${room.id} at ${stageW}x${stageH} is ${room.w.toFixed(1)} U wide for furniture ` +
+            `needing ${room.natural.w.toFixed(1)} U — a room that wide is a hall`,
         );
         const bound = carpetBound(plan);
         assert.ok(
@@ -1461,11 +1554,15 @@ test('the working side is the wider half once it holds three rooms', () => {
           office.w < plan.width / 2,
           `${where}: the reception is ${((office.w / plan.width) * 100).toFixed(0)}% of its row`,
         );
-        // And the room below it is not free either: the lounge and the strip
-        // share row two, and the strip may not take the larger half of it.
+        // AND ROW TWO IS THE LOUNGE, wall to wall (WP-60). It used to share
+        // the row with the idle strip, and the assertion here was that the
+        // strip could not take the larger half; with the strip gone the
+        // stronger statement is true and is the one worth holding — a row
+        // whose only room stops short of its width is a corner of open floor
+        // that nothing on the working side can reach.
         assert.ok(
-          lounge.w >= plan.width - lounge.w,
-          `${where}: the strip takes more of row two than the lounge`,
+          Math.abs(lounge.w - plan.width) < 0.01,
+          `${where}: the lounge is ${lounge.w.toFixed(1)} U of a ${plan.width.toFixed(1)} U row`,
         );
         continue;
       }
@@ -1489,47 +1586,29 @@ test('the working side is the wider half once it holds three rooms', () => {
   }
 });
 
-test('the rooms and the strip stand together, and the open floor is under them', () => {
-  // WP-59b. The strip used to be pinned to the building's bottom edge, which
-  // says the right thing on a floor with no slack in it and something else
-  // entirely on one with a lot: WP-59's open band opened up BETWEEN the rooms
-  // and the strip, so the two pieces of content on the working side sat at
-  // opposite ends of it with a hole in the middle. The rooms and the strip are
-  // the content; the open floor is the margin under them.
+test('the open floor is under the rooms, never between them and a wall', () => {
+  // WP-59b. The open plan a working side cannot fill is a MARGIN under its
+  // content, not a hole in the middle of it. The strip used to be the second
+  // piece of content this had to order — it was pinned to the building's
+  // bottom edge, and WP-59's open band then opened up BETWEEN the rooms and
+  // the strip, so the two sat at opposite ends with a gap between them — and
+  // WP-60 removed the strip, which leaves the plainer half of the same rule:
+  // whatever the rooms did not need starts where the rooms stop.
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
     for (const [stageW, stageH] of STAGES) {
       const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
-      const strip = plan.rooms.find((r) => r.kind === 'directory');
-      if (!strip) continue;
       const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
-      // IN TWO ROWS THE STRIP STANDS BESIDE THE LOUNGE (WP-59d), at the TOP of
-      // row two with its own open floor under it, which is the same sentence
-      // about the same two things: the content is together against a wall and
-      // the open floor is the margin under it, never between them.
-      const opens = plan.rooms.filter((r) => r.id.startsWith('__open'));
-      if (plan.arrangement === 'two-rows') {
-        const lounge = plan.rooms.find((r) => r.kind === 'lounge');
-        assert.ok(
-          Math.abs(strip.y - lounge.y) < 0.01 && Math.abs(strip.x - (lounge.x + lounge.w)) < 0.01,
-          `${where}: the strip does not share the lounge's wall at the top of its row`,
-        );
-        for (const open of opens) {
-          assert.ok(
-            open.y >= strip.y + strip.h - 0.01 || open.y + open.h <= strip.y + 0.01,
-            `${where}: open floor sits beside the strip rather than under it`,
-          );
-        }
-        continue;
-      }
       const rooms = plan.rooms.filter((r) => r.kind === 'project');
+      if (!rooms.length) continue;
+      const top = rooms.reduce((a, r) => Math.min(a, r.y), Infinity);
       const bottom = rooms.reduce((a, r) => Math.max(a, r.y + r.h), 0);
-      assert.ok(
-        strip.y <= bottom + 0.01,
-        `${where}: the strip starts ${(strip.y - bottom).toFixed(1)} U below the last room`,
-      );
-      for (const open of opens) {
-        assert.ok(open.y >= strip.y + strip.h - 0.01, `${where}: open floor sits above the strip`);
+      for (const open of plan.rooms.filter((r) => r.id.startsWith('__open'))) {
+        assert.ok(
+          open.y >= bottom - 0.01 || open.y + open.h <= top + 0.01,
+          `${where}: open floor at y=${open.y.toFixed(1)} sits inside the band of rooms ` +
+            `(${top.toFixed(1)}..${bottom.toFixed(1)}) rather than under it`,
+        );
       }
     }
   }
@@ -1550,44 +1629,27 @@ test('the rooms and the strip stand together, and the open floor is under them',
  */
 function workingSide(plan) {
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
-  const strip = plan.rooms.find((r) => r.kind === 'directory');
-  const taken = rooms.reduce((a, r) => a + r.w * r.h, 0) + (strip ? strip.w * strip.h : 0);
+  const taken = rooms.reduce((a, r) => a + r.w * r.h, 0);
   if (plan.arrangement === 'two-rows') {
-    // TWO CORNERS RATHER THAN ONE SIDE (WP-59d). The rooms take the right of
-    // row one and the strip the right of row two, and what is being measured
-    // is the same thing either way: the part of the building that holds
-    // content, less what the content takes. Derived from the rooms that were
-    // DRAWN — the corridor between the rows is the row divide, and each row's
-    // own rectangle is what its content is measured against.
+    // ROW ONE (WP-59d, narrowed by WP-60). The rooms take the part of row one
+    // beside the reception, and that is the whole of the working side: row two
+    // used to hold the idle strip in its right-hand corner, so it was a second
+    // place content had to be measured against, and with the strip gone the
+    // lounge IS row two. Derived from the rooms that were DRAWN — the corridor
+    // between the rows is the row divide, and the row's own rectangle is what
+    // its content is measured against.
     const spine = plan.rooms.find((r) => r.id === '__spine__');
     const office = plan.rooms.find((r) => r.kind === 'office');
-    const lounge = plan.rooms.find((r) => r.kind === 'lounge');
     const x = office.x + office.w;
     const w = Math.max(0, plan.width - x);
-    const area = w * office.h + (strip ? (plan.width - (lounge.x + lounge.w)) * lounge.h : 0);
-    return {
-      x,
-      w,
-      rooms,
-      strip,
-      area,
-      spine,
-      open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0,
-    };
+    const area = w * office.h;
+    return { x, w, rooms, area, spine, open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0 };
   }
   const spine = plan.rooms.find((r) => r.id === '__spine__');
   const x = spine ? spine.x + spine.w : 0;
   const w = Math.max(0, plan.width - x);
   const area = w * plan.height;
-  return {
-    x,
-    w,
-    rooms,
-    strip,
-    area,
-    spine,
-    open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0,
-  };
+  return { x, w, rooms, area, spine, open: area > 1e-6 ? Math.max(0, (area - taken) / area) : 0 };
 }
 
 test('the working side is filled, or everything on it is already as large as it may be', () => {
@@ -1605,9 +1667,14 @@ test('the working side is filled, or everything on it is already as large as it 
   // is at its stop. Four levers, in the order the plan pulls them:
   //
   //   (a) the rooms are at their bare-carpet cap, or as wide as they may be;
-  //   (b) the strip could not take another row inside `DIRECTORY_SIDE_MAX`;
-  //   (c) the lounge is at its densest, or has nobody in it to pack;
-  //   (d) and only what is left is open plan.
+  //   (b) the lounge is at its densest, or has nobody in it to pack;
+  //   (c) and only what is left is open plan.
+  //
+  // There were four until WP-60. Between (a) and (b) stood the idle strip,
+  // which spent some of the column's height by standing its lines up into a
+  // taller board. It is off the floor now, and the shorter order is the whole
+  // of the change: the rooms take the height, and what they cannot take is
+  // open plan.
   //
   // A floor that fails this is a floor with a lever still up, and there is no
   // third answer in which the working side is half empty and the plan had
@@ -1625,87 +1692,74 @@ test('the working side is filled, or everything on it is already as large as it 
           `${(plan.working.open * 100).toFixed(0)}% open, and drew one ${side.w.toFixed(1)} U ` +
           `wide and ${(side.open * 100).toFixed(0)}% open`,
       );
-      // THE RECORD AND THE FLOOR AGREE. A plan that says the column did not
-      // stretch its rooms may not have a room past `ROOM_FILL_MAX` in it, and
-      // one that says it did must have one — otherwise the looser bare-carpet
-      // bound is a flag a plan can raise for nothing.
+      // THE RECORD AND THE FLOOR AGREE, IN THE DIRECTION THAT PROTECTS. A plan
+      // that says it did not stretch its rooms may not have a room deeper than
+      // `ROOM_HEIGHT_STRETCH_MAX` in it.
+      //
+      // WP-59c asserted the converse too — a plan that says it DID must have
+      // one — because the flag chose between two bare-carpet bounds, and a flag
+      // that can be raised for nothing is a bound that can be bought for
+      // nothing. WP-60 leaves one ceiling and no choice, so the flag no longer
+      // buys anything, and the converse stopped being true for an honest
+      // reason: in two rows the depth is the RECEPTION's, so a floor whose
+      // reception is deeper than its rooms wanted is stretched by any
+      // reasonable reading while every room in it is still inside 1.6x its
+      // furniture. Asserting a flag nobody acts on, in a direction it is not
+      // true, is how a test comes to describe the code instead of the picture.
       const past = side.rooms.filter(pastChosenFill);
       assert.ok(
-        plan.working.roomsStretched ? past.length > 0 : past.length === 0,
-        `${where}: the plan says the column ${plan.working.roomsStretched ? 'did' : 'did not'} ` +
-          `stretch its rooms, and ${past.length} of ${side.rooms.length} are past the floor a ` +
-          `room the plan chose may have`,
+        plan.working.roomsStretched || past.length === 0,
+        `${where}: the plan says nothing stretched its rooms, and ${past.length} of ` +
+          `${side.rooms.length} are deeper than the plan would have chosen`,
       );
       if (side.area <= 1e-6 || side.open <= WORKING_OPEN_MAX + EPS) continue;
 
-      // (a) A ROOM AT ITS CAP STOPS THE BAND, and one is enough — the same
-      // escape §140 wrote for the row, one axis over. Every cell in a band is
-      // the band's depth, so the shallowest room in it is the furthest past
-      // what its furniture needs and is the one that decides how deep the band
-      // may honestly be laid; its deeper neighbours come out under-filled by
-      // exactly as much as they are deeper, and there is nothing the plan
-      // could do about that but shrink the band again.
-      const cap = fillCap(plan);
-      const atCap = side.rooms.some(
-        (r) => bareCarpet(r) >= cap - 0.005 || r.w >= r.natural.w * ROOM_WIDTH_STRETCH_MAX - EPS,
-      );
-      // OR THERE IS NOTHING LEFT FOR THEM TO GROW INTO (WP-59d). A two-row
-      // plan's rooms are laid in ROW ONE, not down the whole side, so a band
-      // that reaches the bottom of its own row is as large as it may be
-      // whatever its bare carpet says — the open floor being complained about
-      // is then in row two's corner, which is the strip's clause below and not
-      // theirs.
-      const rowFull =
-        plan.arrangement === 'two-rows' &&
-        side.rooms.every((r) => r.y + r.h >= plan.rooms.find((o) => o.kind === 'office').h - 0.01);
+      // ONE ESCAPE, AND IT IS THE ONE §142 ALREADY NAMED (WP-60).
+      //
+      // The old clause list — a room at its bare-carpet cap, the strip on its
+      // last rung, the lounge at its densest — was written while those were the
+      // levers. WP-60 removed two of them (the strip is off the floor, and the
+      // bare-carpet cap is reported rather than enforced on the width), and the
+      // measurement it left behind is much starker than the list was: over
+      // sixteen populations at three stages, EVERY floor whose rooms stand in
+      // one band comes out at 0% open, and the only two above the budget are
+      // the two whose rooms will not stand in one band at all.
+      //
+      // That is not a coincidence and it is not a gap. `plan-rows.js` refuses
+      // the second arrangement to exactly those floors — a room much shallower
+      // than the one it would share a row with is the bare-carpet defect one
+      // level down (`HEIGHT_BAND_RATIO`), and a building wide enough for twelve
+      // rooms in one row is nowhere near the shape of any window — so they can
+      // only be laid as a column. And §141 proved by arithmetic that a column
+      // cannot fill itself: the reception over a lounge holding twenty-three
+      // benched agents is seventy units tall, and nothing that can be done to
+      // the rooms closes that gap without turning them into halls.
+      //
+      // So the escape is stated as the refusal that causes it, and the floors
+      // it lets through must still be at their depth ceiling — a column that
+      // has NOT spent the depth it may honestly spend has a lever up, and that
+      // is still a failure.
+      const bands = new Set(side.rooms.map((r) => Math.round(r.y * 100)));
       assert.ok(
-        side.rooms.length === 0 || atCap || rowFull,
-        `${where}: the working side is ${(side.open * 100).toFixed(0)}% open and no room in it ` +
-          `is at its cap (${side.rooms
+        bands.size > 1,
+        `${where}: the working side is ${(side.open * 100).toFixed(0)}% open with its rooms ` +
+          `in one band — a floor that can be folded has no excuse for open plan`,
+      );
+      const cap = fillCap(plan);
+      const atCap = side.rooms.some((r) => bareCarpet(r) >= cap - 0.005);
+      assert.ok(
+        atCap,
+        `${where}: the working side is ${(side.open * 100).toFixed(0)}% open, its rooms cannot ` +
+          `be folded into one row, and none of them is at its depth cap ` +
+          `(${side.rooms
             .map((r) => `${r.id} ${(bareCarpet(r) * 100).toFixed(0)}%`)
             .join(', ')} against ${(cap * 100).toFixed(0)}%) — they could have had the floor`,
       );
-      // (b) THE STRIP IS ON THE LAST RUNG ITS ALLOWANCE REACHES, and the
-      // ladder is rungs rather than lines: a board is `ceil(n / cols)` rows
-      // deep, so eight repos go 2, 3, 4 and then 8 rows and there is nothing
-      // in between. A strip well under its allowance with no rung inside it is
-      // as tall as it may be, and saying "it had room for one more line" would
-      // be asking for a column with a hole in it.
-      if (side.strip) {
-        const n = side.strip.entries.length;
-        const rows = Math.round((side.strip.h - PLATE_BAND - DIRECTORY_PAD) / DIRECTORY_LINE_H);
-        let nextRows = 0;
-        for (let c = Math.ceil(n / Math.max(1, rows)) - 1; c >= 1; c--) {
-          if (Math.ceil(n / c) > rows) {
-            nextRows = Math.ceil(n / c);
-            break;
-          }
-        }
-        const nextH = nextRows
-          ? PLATE_BAND + nextRows * DIRECTORY_LINE_H + DIRECTORY_PAD
-          : Infinity;
-        // The allowance is a quarter of the BUILDING in a column. In two rows
-        // it is that or the strip's own natural height, whichever is more,
-        // and never past the row the lounge set — the row's depth is not the
-        // strip's choice, so it may fill it, and it may not exceed it.
-        const lounge = plan.rooms.find((r) => r.kind === 'lounge');
-        const allowance =
-          plan.arrangement === 'two-rows'
-            ? Math.min(lounge.h, Math.max(side.strip.h, plan.height * DIRECTORY_SIDE_MAX))
-            : plan.height * DIRECTORY_SIDE_MAX;
-        assert.ok(
-          nextH > allowance + EPS,
-          `${where}: the working side is ${(side.open * 100).toFixed(0)}% open and the strip ` +
-            `is ${side.strip.h.toFixed(1)} U in ${rows} rows, with a ` +
-            `${nextRows}-row board at ${nextH.toFixed(1)} U inside its ` +
-            `${allowance.toFixed(1)} U allowance — it could have stood its lines up`,
-        );
-      }
-      // (c) the lounge is at its densest — unless there is nobody in it to
-      // pack, or the building is ALREADY the shape of the window, which is the
+      // AND THE LOUNGE CAME DOWN TO MEET THEM, or there is nobody in it to
+      // pack, or the building is ALREADY the shape of the window — which is the
       // one thing ranked above the fill (see `better` in `plan.js`). A denser
-      // lounge is a shorter column and therefore a wider building, and past
-      // the shape that is a floor bought with the window — the regression §139
+      // lounge is a shorter column and therefore a wider building, and past the
+      // shape that is a floor bought with the window, the regression §139
       // exists to have fixed. What may never happen is both levers up at once:
       // a working side that is short, a lounge that is loose, and a building
       // that is not the window's shape either.
@@ -1721,6 +1775,113 @@ test('the working side is filled, or everything on it is already as large as it 
           `laid at ${plan.working.loungePack} and the building is ` +
           `${(plan.width / plan.height).toFixed(2)}:1 — it could have come down to meet it`,
       );
+    }
+  }
+});
+
+test('a row of rooms fills its band edge to edge, and the busy room is the wide one', () => {
+  // WP-60'S OTHER HALF, AND THE OWNER'S OTHER SENTENCE: "remaining project room
+  // size make it dynamic and full size for live projects".
+  //
+  // Two properties, and they are two halves of one picture. A row of rooms
+  // TILES its band — no bay at the end, which is open floor that is not even
+  // inside a room and so can never have anything put on it — and the width is
+  // shared by OCCUPANCY, so the room where the work is happening is visibly the
+  // big one. On his floor before this package, a twenty-four session project
+  // and three one-session ones were drawn as four cells of the same width,
+  // because the row was shared out by what each room's furniture measured and a
+  // one-desk room's furniture is very nearly a twenty-four-desk room's once
+  // both have a rug, a board and their planting.
+  for (const spec of POPULATIONS) {
+    const { projects, agents } = floor(spec);
+    for (const [stageW, stageH] of STAGES) {
+      const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
+      const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
+      const rooms = plan.rooms.filter((r) => r.kind === 'project');
+      if (!rooms.length) continue;
+
+      // NO BAY. The corridors the plan draws beside a band are named, so this
+      // asks the floor rather than inferring: `__bay-N__` is the dead end at
+      // the end of a row that its rooms did not fill, and there are none now.
+      const bays = plan.rooms.filter((r) => r.id.startsWith('__bay-'));
+      assert.deepEqual(
+        bays.map((r) => r.id),
+        [],
+        `${where}: ${bays.length} bay(s) of open floor at the end of a row of rooms`,
+      );
+
+      // Group the rooms into the bands they were actually drawn in, and check
+      // each band is tiled: every room the band's full depth, adjacent rooms
+      // sharing a wall, and the row as wide as the widest band on the floor.
+      /** @type {Map<number, typeof rooms>} */
+      const bands = new Map();
+      for (const room of rooms) {
+        const key = Math.round(room.y * 100);
+        if (!bands.has(key)) bands.set(key, []);
+        bands.get(key).push(room);
+      }
+      const spans = [...bands.values()].map((band) => {
+        band.sort((a, b) => a.x - b.x);
+        return band[band.length - 1].x + band[band.length - 1].w - band[0].x;
+      });
+      const widest = Math.max(...spans);
+
+      for (const band of bands.values()) {
+        const span = band[band.length - 1].x + band[band.length - 1].w - band[0].x;
+        const taken = band.reduce((a, r) => a + r.w * r.h, 0);
+        const depth = Math.max(...band.map((r) => r.h));
+
+        // EVERY CELL IS FULL. The rooms ARE their cells — `buildPlan` assigns
+        // `room.w = cell.w` — so what this actually catches is a seam: two
+        // rooms that were supposed to share a wall and do not, which is a
+        // sliver of floor between them that belongs to nobody.
+        const fill = taken / Math.max(1e-6, span * depth);
+        assert.ok(
+          fill >= 0.8,
+          `${where}: the band at y=${(band[0].y || 0).toFixed(1)} is ${(fill * 100).toFixed(0)}% ` +
+            `full — its rooms do not tile it`,
+        );
+        for (let k = 1; k < band.length; k++) {
+          assert.ok(
+            Math.abs(band[k].x - (band[k - 1].x + band[k - 1].w)) < 0.01,
+            `${where}: ${band[k - 1].id} and ${band[k].id} do not share a wall`,
+          );
+        }
+        // AND EVERY BAND REACHES AS FAR ACROSS AS THE WIDEST DOES. A short row
+        // beside a long one is §140's empty lot, and it is the thing the fill
+        // rule could otherwise buy its tidiness with.
+        assert.ok(
+          span >= widest - 0.01,
+          `${where}: a band spans ${span.toFixed(1)} U beside one spanning ${widest.toFixed(1)} U`,
+        );
+      }
+
+      // THE BUSY ROOM IS THE WIDE ONE. Stated as an ordering rather than as a
+      // ratio, because the ratio is `CELL_OCCUPANCY_RATIO_MAX`'s to hold and
+      // this is what a person actually reads off the floor: within one band, a
+      // room with more in it is never NARROWER than one with less.
+      //
+      // MEASURED AGAINST THE SESSION COUNT, which is the number written on the
+      // room's own door plate. It is deliberately not the desk count: on the
+      // owner's machine every active repo had exactly one agent at a desk and
+      // the rest finished or benched, so dealt by desks the row came out as
+      // four equal cells with `24 sessions` on the first plate and `4 sessions`
+      // on the last — the floor saying one thing and its own labels another.
+      const sessions = new Map(projects.map((p) => [String(p.id), p.sessionCount ?? 0]));
+      for (const band of bands.values()) {
+        for (const a of band) {
+          for (const b of band) {
+            const sa = sessions.get(String(a.id)) ?? 0;
+            const sb = sessions.get(String(b.id)) ?? 0;
+            if (sa <= sb) continue;
+            assert.ok(
+              a.w >= b.w - 0.01,
+              `${where}: ${a.id} has ${sa} sessions in ${a.w.toFixed(1)} U and ${b.id} has ` +
+                `${sb} in ${b.w.toFixed(1)} U — the busier room is the narrower one`,
+            );
+          }
+        }
+      }
     }
   }
 });
