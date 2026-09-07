@@ -13029,3 +13029,278 @@ arrives.
 
 The check is green on all eight at 0 px over tolerance and 0 px moved at all,
 the same noise floor §106, §139 and §140 each measured.
+
+## 145. WP-60 — the idle repos leave the floor, the live rooms take what they left, and seven badges become one
+
+Three sentences from the owner, and a fourth thing WP-61 had already written
+down and deferred:
+
+> "make the idle project list in right bottom corner as a pop up list, when
+> hovered or clicked then only opens, keep less clutter on screen"
+
+> "remaining project room size make it dynamic and full size for live projects"
+
+and, from the capture he sent with them, a row of seven crimson pills along the
+office wall reading `3d 2d 21h 2d 3h 2d 2h 1h 58m 1h 55m 20m` — every number
+true and not one of them readable.
+
+### 145.1 The idle strip leaves the floor
+
+§96 gave a repo nobody is in "one directory strip along one edge", and WP-50
+built it: one line per repo — name, session count, last activity — instead of
+the collapsed ROOM each of them used to get, which still bid for area in the
+treemap and turned the reference machine's working floor into large empty cells
+with a plate each (`08` B6).
+
+It was honest and it was still clutter. On the owner's machine it was fourteen
+names down the bottom-right of a building that is supposed to be about who IS
+working, and it cost:
+
+| what | where |
+|---|---|
+| a corner of the building | `plan.js`'s `directory`, `plan-rows.js`'s `rowTwo` |
+| a dimension of the envelope search | `dirWidths` in both arrangements |
+| step (b) of the fill order | `fillOrder` in `plan-envelope.js` |
+| seven constants and a room kind | `plan-units.js` |
+| three painters | `backdrop.js`, `_drawDirectory`, the `directory` plate |
+
+All of it is gone. What replaces it is a `<button class="idle-chip">14 idle</button>`
+fixed to the stage's bottom-right — mono, quiet, and absent entirely at zero —
+and a popover behind it listing exactly what the strip listed. It opens on a
+150 ms hover of the chip, on a click, on `I`, or from the palette's "Idle
+projects"; it closes on Escape, on a click outside, or on the pointer leaving
+both the chip and the popover. A list opened deliberately is PINNED and ignores
+the leave timer, because clicking to keep something open should not mean "until
+I move the mouse".
+
+A row does what a click on a strip line did: `filterToProject`, which scopes the
+queue and the panel to that repo and lands on its most overdue session.
+Deliberately not `jumpToProject`, which toasts "Nobody is in that room right
+now" — for precisely the repos this list is made of.
+
+**One rule, asked twice.** The strip was drawn by the plan from the plan's own
+`isIdle`, so there was one answer by construction. The list is HTML built from
+the snapshot, so there are two callers now, and a rule about who is on the floor
+with two implementations is a floor and a list that can disagree about the same
+repo. `splitProjectsByOccupancy` moved to `public/floor-rule.js` — the file
+whose whole job is the rule rather than the drawing, and which the client and
+`src/core/model.mjs` already share — and `idleProjectsOf` is the
+snapshot-shaped convenience over it. `floor-integrity` holds the property over
+every population at every shape: **a repo with sessions is a room or a line,
+never both and never neither.**
+
+`public/app.js` was at 899 lines of WP-22's 900 and the chip was the line that
+broke it, so `exportLayout` and `importLayout` are now `public/app-layout.js`.
+That is WP-22's own remedy applied where it was asked for, rather than the
+ceiling being raised.
+
+### 145.2 The live rooms take what the strip left
+
+Five changes, and the last two were found in a photograph rather than in a
+number.
+
+**(1) A row of rooms fills its row.** `bandWidthFor` used to cap a band at the
+area its rooms could honestly fill and at the width one room could honestly be,
+and what it did not take was drawn as a BAY at the end of the row. The reasoning
+was §106's — carpet with nothing on it is the defect — and it answers itself the
+wrong way: a bay is carpet too, and carpet nothing can ever be put on, because
+it is not inside a room. There is no `__bay-N__` on any floor this package
+measured.
+
+**(2) The width is shared by the session count.** It used to be shared by what
+each room's FURNITURE measured, which drew the owner's twenty-four session
+project the same width as the three one-session rooms beside it — a one-desk
+room's furniture is very nearly a twenty-four-desk room's once both have a rug,
+a board and their planting.
+
+Sessions rather than DESKS, and the difference was photographed. `desksIn` is
+agents at desks right now (`08` B6), which is what the room's furniture is built
+from and must stay that way. But on the owner's machine every active repo has
+exactly one agent at a desk and the rest finished or benched — his header reads
+`0 at desk` — so dealt by desks the row came out as equal cells with
+`24 sessions` written on the first plate and `4 sessions` on the last: the floor
+saying one thing and its own labels another. **The furniture is desks; the floor
+is sessions.**
+
+Each room takes its own natural width FIRST and only the surplus is shared by
+occupancy. Dealt strictly by occupancy the owner's floor came out 2.03:1 on a
+1.78:1 window — 88% of its height — because the fit loop grows the whole working
+side until the WORST cell fits, so three one-desk rooms each needing a sixth of
+a row set the scale for everybody. Natural-first it is 1.77:1 at 99% and 100%.
+`CELL_OCCUPANCY_RATIO_MAX` (3) then holds the widest cell in a row within three
+of the narrowest, because twenty-four to one is a hall beside three cupboards
+and a cupboard cannot hold a desk and the clearance round it.
+
+**(3) The bare-carpet bound is reported on the WIDTH only** — and the "only" was
+bought with a bad picture. The first cut of this package took the bound off both
+axes, and a column answered its lounge's height by growing four rooms until they
+were **89% bare carpet**: a desk in a ballroom, which is §106's own defect
+rebuilt by the code meant to remove its opposite. The two axes are not the same
+quantity. A row's width is what its own rooms asked for, so filling it costs
+almost nothing; a column's HEIGHT is the lounge's and has nothing to do with the
+rooms at all. So the depth keeps `ROOM_FILL_COLUMN_MAX`, and the height a column
+cannot fill is answered where §142 answered it — by folding the building.
+`plan.working.bareCarpet` is the record, and the integrity test re-derives it
+rather than trusting it.
+
+**(4) The second arrangement is searched on every wide stage.** `ROWS_OPEN_MIN`
+— fold only where the column left 15% of its working side open — became a trap
+the moment (1) landed: the column's reported open floor collapsed towards zero,
+the gate read that as "this floor has no problem to solve", and floors whose
+column was answering a lounge's height with ballrooms were never offered the
+fold. The emptiness had not gone anywhere. It had moved inside the rooms, where
+the gate could not see it. A floor with no project rooms is refused the fold
+outright, because row one is the reception BESIDE the rooms and with no rooms it
+is a column described twice — which is what let an empty floor refold itself
+into a 1.51:1 hall with a sixty-seat reception in it.
+
+**(5) `betterArrangement`'s first rank is a distance rather than a bar**, and
+this one was found in a golden. §142 wrote it as a flag: inside
+`ASPECT_TOLERANCE` or outside it, and an arrangement that cleared the bar beat
+one that did not, whatever either left open. Regenerating `wide` — the capture
+§142 added to SHOW the second arrangement — produced **a column with 54% of its
+working side bare**. At the stage a 1920 x 1080 window actually gives the column
+came out 1.81:1, a hair inside the tolerance, and the completely full two-row
+floor came out 1.72:1, a hair outside. Four and a half points of coverage,
+bought with fifty-four points of bare floor.
+
+What was rank 1b is now the whole of the rank: an arrangement that misses the
+shape by a WHOLE TOLERANCE more still loses. That keeps the case the bar was
+measured for — §142's 1.07:1 against 1.51:1 on a 1.78:1 window is 0.51 against
+0.16 in log error, more than a tolerance apart, and is still refused — and lets
+a floor that is nearly the right shape and completely full beat one that is
+exactly the right shape and half empty. A bar is the right instrument when the
+thing on the other side of it is a hangar; it is the wrong one when both
+arrangements are the window's shape to within a few points, which is the
+ordinary case and was never the case it was measured on.
+
+**And the test suite had never asked at the size the product renders at.** Every
+assertion in `floor-integrity.test.mjs` passed on that broken floor, because
+`STAGES` held WINDOW sizes and the canvas is not the window — the header and the
+queue strip take about 130 px off the top before the floor gets any, so a
+1920 x 1080 window hands `buildPlan` roughly 1920 x 950, which is a 2.02:1 stage
+rather than a 1.78:1 one. `STAGES` now carries both.
+
+### What it is worth, on the floor it was written for
+
+The owner's own machine, read from a daemon started on this branch with
+`DECKHQ_STATE_DIR` pointed at a copy of `~/.deckhq`: twenty-eight repos, three
+of them with somebody in them, ninety-nine sessions, twenty-two benched drawn,
+twenty-five gone home, eight waiting on him.
+
+| stage | before | open | cover | after | open | cover | worst room |
+|---|---|---|---|---|---|---|---|
+| **1920 x 1080** | 115.4 x 65.0 (1.77:1) | 9% | 99% / 100% | **115.4 x 65.0 (1.77:1)** | **0%** | **99% / 100%** | 45% bare |
+| **2560 x 1440** | 115.4 x 65.0 (1.77:1) | 8% | 99% / 100% | **115.4 x 65.0 (1.77:1)** | **0%** | **99% / 100%** | 45% bare |
+
+`open` is the working side against itself, §141's own measure. The captures are
+`after-60-1920.png` and `after-60-2560.png`.
+
+The working side, over `floor-integrity`'s sixteen populations at the goldens'
+stage and the two the owner reported:
+
+| population | before | after |
+|---|---|---|
+| owner's shape | 9% / 8% | **0%** at every stage |
+| `three` + 3 idle | 14% / 12% | **0%** |
+| `[8,2]`, `[3,1]`, `[5]`, `[1]`, `[2,1]` + 8 idle, `[3]` + 17 idle | 0-4% | **0%** |
+| `[21,5,3,1]` | 14-17% | **7%** |
+| twelve rooms | 32-38% | 32-38%, unchanged |
+
+**Every floor whose rooms stand in one band is at 0%.** The only two above the
+budget are the only two whose rooms will not stand in one band at all, which
+`plan-rows.js` refuses the fold to on purpose — a room much shallower than the
+one it would share a row with is the bare-carpet defect one level down, and a
+building wide enough for twelve rooms in one row is nowhere near the shape of
+any window. §141 proved by arithmetic that a column cannot fill itself. So the
+integrity test's escape clause is now that refusal stated directly, in place of
+the three-lever list §141 wrote: **a floor that CAN be folded and is still open
+plan fails, with no third answer.** `WORKING_OPEN_MAX` is 5%, from 10%.
+
+### 145.3 Seven badges become one
+
+On the owner's floor at 1920 x 1080 the reception wall carried seven crimson
+pills in one row, each overlapping its neighbour into a band of digits that says
+nothing. Every number in it was true and none of them was readable, which is the
+worst way for a floor to be wrong: it looks like data.
+
+**The rule.** A badge is drawn only where it does not collide with a neighbour's
+badge. Colliding badges are not nudged and not stacked — there is nowhere for a
+pill above a seated row to go, and `resolveLabelCollisions` beside it already
+records what happens when everything in the waiting area claims an exemption at
+once — they are replaced by ONE pill at the row's start: `7 waiting · oldest 3d 16h`.
+
+Colliding means TOUCHING EITHER NEIGHBOUR rather than merely following one that
+was kept, so a badge with clear air on both sides keeps its own number. On the
+owner's floor that is exactly the split the picture wants: the agent at the
+reception desk keeps `5d 2h`, and the packed run along the wall becomes one
+pill. A ROW is a set of badges whose boxes overlap VERTICALLY; two rows of
+waiting agents are two independent problems and get two independent answers.
+
+**Nothing is hidden by this.** Each person keeps their state icon and their
+name, which is what says WHO is waiting; the room plate, the panel and the queue
+strip still carry every individual time, to the minute. A badge is a glance, not
+a record — and this is the only surface where those times were ever unreadable.
+
+`rig.js` gains `badgeBox`, the measure half of a measure-then-paint split — the
+same one `labelBox` has, and split for the same reason: a badge can only stay
+out of its neighbour's way if something measured both before either was drawn.
+`resolveBadgeCollisions` in `scene-labels.js` is the rule, pure and taking boxes
+rather than a canvas, so it is testable with no DOM. The pills are painted after
+the character loop, because a pill stands for a whole row and must not be
+painted under the next body along.
+
+The office door plate still says `8 waiting · oldest 5d 2h` while the pill says
+`7 waiting · oldest 3d 16h`, and the two are different numbers on purpose: the
+plate is the ROOM's — everybody waiting in it — and the pill is the ROW's, the
+ones whose own badges it replaced. The agent at the desk is in the first and not
+the second.
+
+### 145.4 The plate says "fired"
+
+WP-61 renamed the action, the state, the toast, the panel header and the CLI,
+and named the one surface it left behind (§143.2): the door plate the canvas
+paints, which still read `1 let go · archived`. The reason it was left is that
+changing a string the canvas paints moves every golden, and the fix was
+explicitly deferred to "a package that regenerates them". This is that package.
+
+The plate says `N fired`. `archived` goes with "let go", because WP-61's own
+sentence is that the conversation is KEPT and reachable rather than archived, and
+the plate was the last place claiming otherwise. `test/unit/fire-vocabulary.test.mjs`
+no longer skips `public/render/` — a vocabulary rule with an exempt surface is a
+rule the old words come back through.
+
+The blast radius of un-excluding was exactly one line. Every other `let go` in
+`public/render/` is a `//` comment (blanked before the literals are extracted) or
+an identifier — `letGoSpots`, `letGoAgents`, the `'let_go'` ack state, which the
+rule's own `/let[ -]go/i` does not match because it is an address and not a word
+anybody reads. And no golden moved for it: no plan builds a room of kind
+`let_go` at all, so the branch is reachable only from `scene-math.test.mjs`.
+
+### Tests
+
+`floor-integrity.test.mjs` keeps its thirty-nine properties and gains a
+fortieth — **a row of rooms tiles its band edge to edge, with no bay, no seam,
+no band shorter than its neighbour, and within a band a room with more sessions
+in it is never the narrower one.** Six of the existing ones changed what they
+say rather than how hard they say it:
+
+| test | was | is |
+|---|---|---|
+| an idle repo | costs a directory line, never a room | costs no floor at all, and is still in the list |
+| the strip | a plate per repo, capped whatever the count | no arrangement puts one on the floor, at any population or shape |
+| bare carpet | 35%, or 45% where the column stretched it | a number the plan reports and the floor agrees with, under a measured ceiling |
+| a room's width | at most `ROOM_WIDTH_STRETCH_MAX` | at most a measured ballroom guard; the ratio inside a row is the real bound |
+| the open floor | is under the rooms and the strip, never between them | is under the rooms, never between them and a wall |
+| the working side | filled, or four levers are at their stop | filled, unless its rooms cannot be folded into one row |
+
+`scene-math.test.mjs` gains six for the badge rule — the four shapes of it
+(clear air, a packed run, a lone badge beside a crowd, two rows), the empty
+case, and the owner's own shape at 1920 x 1080 through the same `badgeBox` the
+renderer paints from. `idle-projects.test.mjs` is twelve against a hand-rolled
+stub document, including one that fails if any string reaches the DOM through
+`innerHTML`. No `INVARIANT:` test was touched and nothing was deleted.
+
+All eight goldens moved, and `wide` moved twice: once for the floor, and once
+more after (5) above turned the first regeneration's column back into the two
+rows it exists to photograph.

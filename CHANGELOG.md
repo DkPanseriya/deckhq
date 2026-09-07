@@ -8,6 +8,25 @@
 
 ### Changed
 
+- **The idle projects left the floor.** The repos nobody is in were a strip of names drawn
+  permanently down one edge of the building — fourteen of them on a machine with any history,
+  which made them the largest single thing on a floor that is about who _is_ working. They are a
+  chip in the stage's bottom corner now (`14 idle`, gone entirely at zero) with a popover behind
+  it, and the popover lists exactly what the strip listed: name, session count, last activity.
+  It opens on a 150 ms hover of the chip, a click, `I`, or **⌘K → Idle projects**; it closes on
+  Escape, a click outside, or the pointer leaving both. A row scopes the queue and the panel to
+  that repo, which is what clicking a strip line always did. The floor keeps no space for it at
+  all: no strip, no room kind, no column in the envelope search, no step in the fill order.
+  `docs/DEVIATIONS.md` §145.1.
+- **The rooms of live projects fill the working side, and the busy one is the wide one.** A row of
+  rooms used to stop short of its row rather than let a room past a bare-carpet bound, and what it
+  did not take was drawn as a bay of open floor beside the rooms — floor that is not inside any
+  room, so nothing can ever be put on it. The row is filled now and its width is shared by
+  **session count**, so a 24-session project is visibly larger than a 1-session one (within 3:1,
+  and never narrower than its own furniture needs). The bare carpet inside a room is reported
+  rather than bounded. On the owner's own machine the working side goes from 9% open to **0%** at
+  1920 × 1080 and 8% to **0%** at 2560 × 1440, with the building covering 99–100% of both axes.
+  Every test floor whose rooms stand in one band is now at 0%. `docs/DEVIATIONS.md` §145.2.
 - **"Let go" is called Fire.** The action in `⋯ more` and in the palette is **Fire**; the state is
   **Fired**; the palette's view toggle is **Show fired** / **Hide fired**; the toast says
   `Fired. Ada is off the floor.`; the panel header says `fired`; the project whiteboard's count
@@ -27,6 +46,19 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Fixed
 
+- **Waiting badges no longer pile up into an unreadable row.** On a packed reception wall the
+  crimson time pills overlapped into a band of digits — `3d 2d 21h 2d 3h 2d 2h 1h 58m 1h 55m 20m`
+  — every number true and not one of them readable. A badge is now drawn only where it does not
+  collide with a neighbour's; the ones that do are replaced by a single pill at the row's start,
+  `7 waiting · oldest 3d 16h`. A badge with clear air on both sides keeps its own number, so the
+  agent at the desk still shows their time while the crowd along the wall aggregates. Nobody is
+  hidden: every person keeps their state icon and their name, and the room plate, the panel and
+  the queue strip still carry every individual time to the minute. `docs/DEVIATIONS.md` §145.3.
+- **The room plate says "fired".** The one surface WP-61 left saying "let go" was the door plate
+  the canvas paints, deferred because changing a string on the canvas moves every golden. This
+  release regenerates them, so the plate reads `N fired` — `archived` goes too, because the
+  conversation is kept and reachable rather than archived — and `test/unit/fire-vocabulary.test.mjs`
+  no longer excludes `public/render/`. `docs/DEVIATIONS.md` §145.4.
 - **Closing the agent panel no longer closes the browser tab.** The ✕ on the review card had two
   click listeners: `panel.js`'s, which closes the card, and one left behind in `panel-dom.js` by
   the fourteen-module split, written `() => close()`. `close` is `panel.js`'s local function and
