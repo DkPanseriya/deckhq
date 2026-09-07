@@ -37,6 +37,7 @@ import { sendError, sendJson } from '../server.mjs';
 import { projectKeyFor, readAll, windowDigest } from '../../core/ledger.mjs';
 import { catchphraseCount } from '../../adapters/index.mjs';
 import { rateCardVersion } from '../../core/rates.mjs';
+import { now as clockNow } from '../../core/clock.mjs';
 
 /** The two windows a Wrapped is ever about. */
 export const WRAPPED_KINDS = /** @type {const} */ (['week', 'annual']);
@@ -160,7 +161,7 @@ export function register(router, ctx) {
       return sendError(res, 400, `kind must be one of ${WRAPPED_KINDS.join(', ')}`);
     }
     const rawAt = url.searchParams.get('at');
-    let at = Date.now();
+    let at = clockNow();
     if (rawAt != null && rawAt !== '') {
       const n = Number(rawAt);
       if (!Number.isFinite(n)) return sendError(res, 400, 'at must be a timestamp in ms');

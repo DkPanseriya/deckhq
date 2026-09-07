@@ -50,6 +50,7 @@
  * exactly where it was. Watching what happened cannot change what happened.
  */
 import { dayKey, dayStart, listDays, readAll, reconstructQueue } from './ledger.mjs';
+import { now as clockNow } from './clock.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -95,7 +96,7 @@ export function buildReplay(records, opts) {
   const day = String(opts?.day || '');
   const from = dayStart(day);
   if (!Number.isFinite(from)) throw new Error(`"${day}" is not a YYYY-MM-DD day`);
-  const now = opts?.now ?? Date.now();
+  const now = opts?.now ?? clockNow();
   // A day that has not finished replays up to now, not up to midnight: a
   // scrub bar that ran three hours past the last thing that happened would
   // read as three hours of an empty office.
@@ -169,7 +170,7 @@ export function buildReplay(records, opts) {
  * @returns {Promise<Array<{day:string, from:number, label:string}>>}
  */
 export async function replayDays(dir, opts = {}) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const today = dayKey(now);
   const yesterday = dayKey(now - DAY_MS);
   const days = await listDays(dir);

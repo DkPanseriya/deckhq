@@ -161,6 +161,12 @@ if (canary) {
   delete env.DECKHQ_PORT;
   delete env.DECKHQ_DEBUG;
   delete env.DECKHQ_PERMISSION_HOLD_MS;
+  // WP-63. Not a path either, and removed for the same reason `DECKHQ_HOSTNAME`
+  // is: the suite asserts that an unpinned daemon's snapshot carries the real
+  // clock, and an override exported in the developer's shell must not be what
+  // decides whether that passes. A test that wants a pinned clock sets it
+  // itself, for its own process or its own child.
+  delete env.DECKHQ_NOW;
 }
 
 /** @returns {{count:number, lines:string[]}} what the run touched, if anything. */

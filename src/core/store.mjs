@@ -14,6 +14,7 @@ import { EDITOR_NAMES } from './editor.mjs';
 import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 import { DEFAULT_THEME_NAME, sanitizeThemeName } from './themes.mjs';
 import { sanitizeAvatarSetName } from './avatars.mjs';
+import { now as clockNow } from './clock.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -724,7 +725,7 @@ export class Store {
       needsInputSince: null,
       updatedAt: 0,
     };
-    const next = { ...prev, ...(patch || {}), updatedAt: Date.now() };
+    const next = { ...prev, ...(patch || {}), updatedAt: clockNow() };
     this._data.ack[id] = next;
     this.save();
     return { ...next };

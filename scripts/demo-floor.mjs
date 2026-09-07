@@ -16,6 +16,7 @@
  *   node scripts/demo-floor.mjs --port N           # a different port (0 = any free port)
  *   node scripts/demo-floor.mjs --population NAME  # a different fixture, see POPULATIONS
  *   node scripts/demo-floor.mjs --theme NAME       # a floor theme (WP-30), see THEME_NAMES
+ *   node scripts/demo-floor.mjs --now ISO          # pin the clock (WP-63), for a capture
  *   node scripts/demo-floor.mjs --ledger-fixture   # + a synthetic week of ledger records,
  *                                                  #   so the day's card and Wrapped appear
  *
@@ -26,6 +27,14 @@
  * ages and token counts are all derived from the session's index, never from
  * the clock or a random source. That is what lets `scripts/goldens.mjs`
  * photograph each one and compare the pixels against a committed golden.
+ *
+ * WP-63 finished that sentence. Ages were derived from the index AND from the
+ * clock — `Date.now() - ageHours` — so the pixels of "2d 7h" were a function
+ * of the day the capture ran and a golden matched only on the day it was
+ * taken. Every timestamp here is now seeded relative to `NOW`
+ * (`demo-args.mjs`), a single reading of the injectable clock, and a capture
+ * pins that clock with `--now` / `DECKHQ_NOW` so the whole floor — fixture,
+ * daemon and the `now` it serves the browser — sits at one fixed instant.
  *
  * ============================================================================
  * WP-22 follow-up · this file is the run: bring the fixture up, start a real
@@ -50,6 +59,8 @@ import {
   HOUR,
   LEDGER_FIXTURE,
   MINUTE,
+  NOW,
+  NOW_FIXED,
   PACK_FILE,
   POPULATION,
   PORT,
@@ -194,13 +205,13 @@ const ack = {};
 const WAITS = [26 * HOUR, 4 * HOUR, 40 * MINUTE, 7 * MINUTE];
 let waitIndex = 0;
 for (const s of built) {
-  if (s.state === 'benched') ack[s.agentId] = { state: 'benched', updatedAt: Date.now() };
-  else if (s.state === 'let_go') ack[s.agentId] = { state: 'let_go', updatedAt: Date.now() };
+  if (s.state === 'benched') ack[s.agentId] = { state: 'benched', updatedAt: NOW };
+  else if (s.state === 'let_go') ack[s.agentId] = { state: 'let_go', updatedAt: NOW };
   else if (s.state === 'for_review') {
     ack[s.agentId] = {
       state: 'active',
-      reviewSince: Date.now() - WAITS[waitIndex++ % WAITS.length],
-      updatedAt: Date.now(),
+      reviewSince: NOW - WAITS[waitIndex++ % WAITS.length],
+      updatedAt: NOW,
     };
   }
 }
@@ -209,7 +220,7 @@ fs.writeFileSync(
   JSON.stringify(
     {
       version: 1,
-      seededAt: Date.now(),
+      seededAt: NOW,
       // `onboarded` keeps the first-run dialog off a floor that exists to be
       // photographed; the capture scripts used to have to dismiss it.
       settings: {
@@ -244,6 +255,30 @@ if (LEDGER_FIXTURE) ledgerFixture = await writeLedgerFixture(built);
 
 process.env.CLAUDE_CONFIG_DIR = CLAUDE_DIR;
 process.env.DECKHQ_STATE_DIR = STATE_DIR;
+// WP-63. THE HOME, and everything derived from it that is not `CLAUDE_CONFIG_DIR`.
+//
+// `CLAUDE_CONFIG_DIR` moves one runtime. It was the only one this script moved,
+// and DeckHQ has had four since WP-23: the Codex adapter resolves
+// `~/.codex` from `os.homedir()`, Gemini CLI resolves `~/.gemini` (or
+// `GEMINI_CLI_HOME`), OpenCode resolves `~/.local/share`, and the Claude
+// desktop store falls back to `%APPDATA%\Claude`. So a demo floor on a machine
+// whose owner uses Codex came up with the OWNER'S OWN SESSIONS standing on it,
+// beside the actors — measured on the reference machine: five real sessions in
+// two real repositories, one of them named in the idle chip.
+//
+// That is this script's founding rule broken twice over. Real project names
+// and real session titles were reachable from a committed screenshot, and the
+// goldens were a function of what their owner had been working on that week
+// rather than of the population — which is the same defect as the clock, from
+// the other side, and would have gone on failing `goldens:check` after the
+// clock was fixed. `test/helpers/isolate.mjs` documents this exact list and
+// why each entry is on it; this is the same move, for the same reason, at the
+// last moment before `src/daemon.mjs` is imported and the adapters read it.
+process.env.HOME = ROOT;
+process.env.USERPROFILE = ROOT;
+process.env.APPDATA = path.join(ROOT, 'AppData', 'Roaming');
+process.env.GEMINI_CLI_HOME = ROOT;
+process.env.DECKHQ_DESKTOP_SESSIONS_DIR = path.join(ROOT, 'desktop-sessions');
 // The office snapshot names the office after the machine (WP-14), and this
 // script exists so that nothing real ends up in a committed screenshot. A
 // machine name is somebody's real something, so it is invented here too.
@@ -300,6 +335,7 @@ process.stdout.write(
     '',
     `  population: ${POPULATION}`,
     `  theme:    ${themeByName(THEME).name}`,
+    ...(NOW_FIXED ? [`  clock:    pinned to ${new Date(NOW).toISOString()} (DECKHQ_NOW)`] : []),
     ...(packNote ? [`  pack:     ${packNote}`] : []),
     `  fixture:  ${ROOT}`,
     `  projects: ${new Set(built.map((s) => s.project)).size}`,

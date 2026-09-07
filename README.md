@@ -647,6 +647,7 @@ npx deckhq --version
 | `DECKHQ_PORT`        | Default port, if `--port` is not given                                      |
 | `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`                          |
 | `DECKHQ_HOSTNAME`    | What the office is called in a snapshot. Default: the machine's own name    |
+| `DECKHQ_NOW`         | _Tests and demos._ Pin the clock to an ISO instant. No effect when unset    |
 | `DECKHQ_DEBUG`       | Verbose logging                                                             |
 
 The daemon outlives the browser tab on purpose. Closing the tab does not stop state accruing —

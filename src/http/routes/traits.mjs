@@ -32,6 +32,7 @@
 import { sendError, sendJson } from '../server.mjs';
 import { readAll } from '../../core/ledger.mjs';
 import { traits } from '../../core/traits.mjs';
+import { now as clockNow } from '../../core/clock.mjs';
 
 /**
  * @param {import('../server.mjs').Router} router
@@ -63,7 +64,7 @@ export function register(router, ctx) {
       }
 
       const agents = registry?.snapshot?.().agents || [];
-      const now = Date.now();
+      const now = clockNow();
       /** @type {Record<string, any>} */
       const out = {};
       for (const agent of agents) {

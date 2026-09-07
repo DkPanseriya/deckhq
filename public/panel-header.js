@@ -23,6 +23,7 @@ import {
 } from './panel-format.js';
 import { currentId, displayedAgent } from './panel-state.js';
 import { textNode, separator } from './panel-dom.js';
+import { now as clockNow } from './clock.js';
 
 /** Fallback copy of docs/03-VISUAL-SPEC.md §5; see app.js for the same note. */
 const FALLBACK_STATE_COLORS = {
@@ -221,7 +222,7 @@ export function createHeaderPart(ctx) {
       return;
     }
     waitingEl.hidden = false;
-    waitingEl.textContent = `waiting ${formatElapsed(Date.now() - since)}`;
+    waitingEl.textContent = `waiting ${formatElapsed(clockNow() - since)}`;
   }
 
   /**

@@ -83,6 +83,7 @@ import {
   runProjectDashboard,
   showWhiteboard,
 } from './app-launchers.js';
+import { adoptSnapshotClock, now as clockNow } from './clock.js';
 
 // -------------------------------------------------------------- app state
 /**
@@ -192,6 +193,12 @@ el.nightcard.addEventListener('click', () => dismissCard());
 /** @param {any} snapshot */
 function handleSnapshot(snapshot) {
   const first = latestSnapshot === null;
+  // WP-63. The clock, before anything reads a time out of this snapshot. On
+  // any ordinary floor this pins nothing and every surface goes on reading
+  // `Date.now()`; under `DECKHQ_NOW` it is what stops the ages drifting with
+  // the calendar, which is what made the goldens a photograph of the day they
+  // were taken rather than of the floor. See `public/clock.js`.
+  adoptSnapshotClock(snapshot);
   // "Your draft" (docs/plan/08 §3.5): an unsent reply held in the composer is
   // client state, so it is stamped onto each agent here for the renderer and
   // the deck to read. The daemon never sees drafts.
@@ -229,7 +236,7 @@ function handleSnapshot(snapshot) {
   // same reason it fires no notifications: nothing on it was ever really
   // waiting, so nothing on it can really be cleared.
   if (!snapshot.demo) {
-    const cleared = clearedTracker.update(snapshot, Date.now());
+    const cleared = clearedTracker.update(snapshot, clockNow());
     if (cleared.fire) celebrateOfficeCleared(cleared.line);
   }
   // Lights out (WP-18) and Wrapped (WP-27). Checked on every snapshot rather

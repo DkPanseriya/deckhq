@@ -29,6 +29,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { DAEMON_FILE } from './paths.mjs';
+import { now as clockNow } from './clock.mjs';
 
 /**
  * Record this daemon's bound address. Called once, after the listener is up.
@@ -46,7 +47,7 @@ export function writeDaemonFile(opts) {
     port: Number(opts.port),
     url: String(opts.url || ''),
     pid: opts.pid ?? process.pid,
-    startedAt: opts.now ?? Date.now(),
+    startedAt: opts.now ?? clockNow(),
   };
   const tmp = `${file}.${record.pid}.tmp`;
   try {

@@ -49,6 +49,7 @@ import { projectKeyFor } from './ledger.mjs';
 
 import { RegistryCompute } from './state-machine-compute.mjs';
 import { SCAN_MAX_AGE_DAYS, SCAN_LIMIT, TICK_INTERVAL_MS } from './state-machine-rules.mjs';
+import { now as clockNow } from './clock.mjs';
 
 export class RegistryScan extends RegistryCompute {
   /**
@@ -167,12 +168,12 @@ export class RegistryScan extends RegistryCompute {
     this._lastLive = live;
 
     try {
-      await seedIfNeeded(this.store, summaries, Date.now());
+      await seedIfNeeded(this.store, summaries, clockNow());
     } catch (err) {
       this.log.error('seeding failed', err);
     }
 
-    this._scannedAt = Date.now();
+    this._scannedAt = clockNow();
     this._syncArchived(summaries);
     this._rebuild();
     await this._refreshDashboards();
@@ -341,7 +342,7 @@ export class RegistryScan extends RegistryCompute {
 
     this._tickTimer = setInterval(() => {
       try {
-        this.tick(Date.now());
+        this.tick(clockNow());
       } catch (err) {
         this.log.error('tick failed', err);
       }

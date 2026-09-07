@@ -132,6 +132,7 @@ import { projectKeyFor } from './ledger.mjs';
 
 import { RegistryHooks } from './state-machine-hooks.mjs';
 import { LEGAL_FROM } from './state-machine-rules.mjs';
+import { now as clockNow } from './clock.mjs';
 
 export * from './state-machine-rules.mjs';
 export * from './state-machine-base.mjs';
@@ -234,7 +235,7 @@ export class Registry extends RegistryHooks {
     // read, or null. Empty until the first scan, which is also what "we have
     // not looked yet" should mean on the banner.
     this._readLimits = {};
-    this._startedAt = Date.now();
+    this._startedAt = clockNow();
 
     /** @type {Set<(snapshot: ReturnType<Registry['snapshot']>) => void>} */
     this._subscribers = new Set();
@@ -274,7 +275,7 @@ export class Registry extends RegistryHooks {
       );
     }
 
-    const now = Date.now();
+    const now = clockNow();
     switch (action) {
       case 'acknowledge': {
         this.store.setAck(id, { reviewSince: null, needsInputSince: null });

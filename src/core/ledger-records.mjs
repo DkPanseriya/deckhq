@@ -13,6 +13,7 @@
 
 import { dayKey, dayStart, finiteNumber } from './ledger-record.mjs';
 import { reviewEpisodes, percentile } from './ledger-stats.mjs';
+import { now as clockNow } from './clock.mjs';
 
 // ---------------------------------------------------------------------------
 // WP-46 — team records
@@ -128,7 +129,7 @@ export function isTurn(rec) {
  * @param {{now?:number}} [opts]
  */
 export function records(recordList, opts = {}) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const list = Array.isArray(recordList) ? recordList : [];
 
   let firstT = null;

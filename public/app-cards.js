@@ -31,6 +31,7 @@ import {
   snapshotFonts,
 } from './app-snapshot.js';
 import { saveSetting } from './app-notify.js';
+import { now as clockNow } from './clock.js';
 
 //
 // WP-18 (the daily postcard) and WP-27 (Wrapped). One surface, two fillings;
@@ -149,7 +150,7 @@ export async function openPostcard(opts = {}) {
   if (cardLoading) return;
   cardLoading = true;
   try {
-    const now = Date.now();
+    const now = clockNow();
     // The card is about the local day, so the window starts at local midnight
     // — the same boundary the ledger rolls on (`docs/DEVIATIONS.md` §100
     // decision 2), which is what makes the two agree.
@@ -171,7 +172,7 @@ export async function openPostcard(opts = {}) {
     if (!opts.manual) await saveSetting({ postcardDay: opts.day || copy.day });
   } catch (err) {
     console.debug('[deckhq] the day’s card could not be built', err);
-    cardRetryAfter = Date.now() + 60_000;
+    cardRetryAfter = clockNow() + 60_000;
     if (opts.manual) toast('Could not read the ledger for today’s card.', { isError: true });
   } finally {
     cardLoading = false;
@@ -196,7 +197,7 @@ export async function openPostcard(opts = {}) {
  * one, and does not mark a week as delivered.
  */
 export function openWrappedNow() {
-  const due = wrappedDue({ now: Date.now(), shownKey: '' });
+  const due = wrappedDue({ now: clockNow(), shownKey: '' });
   return openWrapped(due.kind === 'annual' ? 'annual' : 'week', { manual: true });
 }
 
@@ -213,7 +214,7 @@ export async function openWrapped(kind, opts = {}) {
     if (!opts.manual) await saveSetting({ wrappedShown: body.key || opts.key || '' });
   } catch (err) {
     console.debug('[deckhq] Wrapped could not be built', err);
-    cardRetryAfter = Date.now() + 60_000;
+    cardRetryAfter = clockNow() + 60_000;
     if (opts.manual) toast('Could not read the ledger for Wrapped.', { isError: true });
   } finally {
     cardLoading = false;
@@ -230,7 +231,7 @@ export function maybeShowNightCard() {
   if (openCard || cardLoading || !latestSnapshot) return;
   // The actors are not real sessions, so their day is not a day (WP-13).
   if (latestSnapshot.demo) return;
-  const now = Date.now();
+  const now = clockNow();
   if (now < cardRetryAfter) return;
   const settings = latestSnapshot.settings || {};
 

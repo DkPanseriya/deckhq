@@ -30,6 +30,7 @@ import {
 } from './parse.mjs';
 import { readDesktopSessions } from './desktop.mjs';
 import { RUNTIME_ID, mapWithConcurrency, noteScanEvidence } from './adapter-live.mjs';
+import { now as clockNow } from '../../core/clock.mjs';
 
 /**
  * Every top-level session file directly under a project directory:
@@ -315,7 +316,7 @@ export async function scanSessions({ maxAgeDays, limit }) {
   // missing or unusable one simply leaves every lookup below a miss, which is
   // exactly the behaviour before it existed.
   const [all] = await Promise.all([listSessionFiles(), summaryCache.load()]);
-  const cutoff = Date.now() - maxAgeDays * 86400_000;
+  const cutoff = clockNow() - maxAgeDays * 86400_000;
   const candidates = all
     .filter((f) => f.mtimeMs >= cutoff)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
@@ -403,7 +404,7 @@ export async function scanSessions({ maxAgeDays, limit }) {
   // and limit that bound the sessions bound their juniors, and so a machine
   // with nothing running pays one filter and no directory reads at all.
   try {
-    out.push(...(await scanSubagents(candidates, Date.now())));
+    out.push(...(await scanSubagents(candidates, clockNow())));
   } catch (err) {
     // A junior is a decoration on a floor that has to draw without one.
     console.error('[claude-code] subagent scan failed:', err && err.message ? err.message : err);

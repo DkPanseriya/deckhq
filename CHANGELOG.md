@@ -233,6 +233,49 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   one is added — twenty ports in a row, all distinct and all free when handed over. The release
   checklist no longer tells anybody to re-run that file. `docs/DEVIATIONS.md` §138.3.
 
+- **The goldens stopped drifting with the calendar.** A committed golden PNG matched only on the
+  day it was captured: the demo fixture seeded its timestamps against the real clock and the
+  browser drew every age against the real clock, so `goldens:check` on any later day failed on
+  clock-derived **text** — hundreds of pixels over tolerance inside two age strings, on a floor in
+  which nothing had moved. That noise hid every real regression behind it, and
+  `docs/DEVIATIONS.md` §144 had already declined to fix it once. There is now **one injectable
+  clock**: `src/core/clock.mjs` for the daemon, `public/clock.js` for the browser, and
+  `DECKHQ_NOW=<ISO instant>` to pin it — an environment override in the shape `DECKHQ_STATE_DIR`
+  already established, with **no code path at all when it is absent** (`now()` with nothing set is
+  `Date.now()` and nothing else, and a test asserts an unpinned daemon's snapshot clock is within
+  a second of the wall clock). Every snapshot now carries `now` and `nowFixed`, and the 21 places
+  in `public/` that formatted an age off their own `Date.now()` read them instead. The two fields
+  rather than one are deliberate: a **live** `now` is a sample that is already stale when it
+  arrives, so freezing on it would make the panel's per-second waiting line advance in poll-sized
+  jumps; only a **pinned** one stops the client dead. 54 call sites moved in all; throttles, cache
+  TTLs, deadlines, retry backoff, temp filenames and — emphatically — the `signedAt` on a ledger
+  export or a pack signature were left on `Date.now()`, because an attestation an environment
+  variable can forge is not one. The demo fixture reads the clock **once** and seeds everything
+  relative to it, `scripts/goldens.mjs` pins every capture to a fixed epoch, and `npm run demo`
+  passes nothing and is unchanged. All eight goldens regenerated and re-checked at **0 px over
+  tolerance and 0 px moved at all**. `docs/DEVIATIONS.md` §146.
+
+- **The demo floor was scanning its owner's real home, and no longer is.** Found while proving the
+  clock: `scripts/demo-floor.mjs` moved `CLAUDE_CONFIG_DIR` and nothing else, but DeckHQ has had
+  four runtimes since WP-23 and three of them resolve their store from `os.homedir()`. On a machine
+  whose owner uses Codex the demo floor came up with **five of the owner's real sessions in two of
+  their real repositories** standing on it beside the fixture's own, one of them named in the idle
+  chip — so real project names were reachable from a committed screenshot, and the goldens were a
+  function of what their owner had been working on that week. The demo now moves `HOME`,
+  `USERPROFILE`, `APPDATA`, `GEMINI_CLI_HOME` and `DECKHQ_DESKTOP_SESSIONS_DIR` into its own
+  fixture, which is the list `test/helpers/isolate.mjs` has documented for the test suite since
+  §124 and which the demo had never been given. `docs/DEVIATIONS.md` §146.5.
+
+- **Two new test files for the clock.** `test/integration/demo-clock.test.mjs` runs the real
+  `scripts/demo-floor.mjs` — the same child the goldens harness spawns — twice, at two pinned
+  instants a day apart, and asserts the two snapshots are the same floor once every timestamp is
+  expressed relative to that snapshot's own `now`; and, the assertion that matters more, that with
+  no override the daemon serves the wall clock and pins nothing. `test/unit/clock.test.mjs` covers
+  both halves: a blank, malformed or absent override is ignored rather than obeyed, the
+  environment is re-read so one process can hold two instants, and a live `now` does not freeze
+  the client while a pinned one does. `scripts/test.mjs` deletes `DECKHQ_NOW` from the canary
+  environment, for the reason it already deletes `DECKHQ_HOSTNAME`.
+
 ### Packaging
 
 - **The GitHub Release body always fits, and the publish job refuses one that would not.** A
