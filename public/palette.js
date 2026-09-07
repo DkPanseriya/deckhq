@@ -271,6 +271,25 @@ export function buildCommandEntries(ctx) {
       run: () => actions.openHooks(),
     },
     {
+      // WP-62. Chrome fires `beforeinstallprompt` on a floor it considers
+      // installable and offers nothing visible until the page asks; this is
+      // the asking. On a browser that never fired it — Firefox, Safari, a
+      // window that is already an installed app — this row is still here and
+      // still useful, because it then says the one command that gets a real
+      // Desktop and Start Menu icon instead. A row that appears and
+      // disappears depending on a browser event would be a row nobody can
+      // find twice.
+      //
+      // No accelerator: installing is a once-ever action, and the accelerators
+      // are for the two-keystroke everyday ones.
+      id: 'cmd:install-app',
+      group: 'command',
+      label: 'Install as app',
+      hint: 'its own window, its own icon, no tab strip',
+      keywords: ['pwa', 'desktop', 'shortcut', 'icon', 'standalone', 'window', 'taskbar', 'dock'],
+      run: () => actions.installApp(),
+    },
+    {
       id: 'cmd:refresh',
       group: 'command',
       label: 'Refresh',

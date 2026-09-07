@@ -23,6 +23,7 @@ import {
   sceneOwner,
   selectAgent,
   setProjectFilter,
+  toast,
 } from './app-state.js';
 
 /**
@@ -339,3 +340,91 @@ function registerServiceWorker() {
 
 registerServiceWorker();
 // WP-16 · end ---------------------------------------------------------------
+
+// WP-62 · begin ------------------------------------------------- INSTALL
+//
+// The palette's "Install as app" row. Chrome decides on its own that a page
+// is installable and then fires `beforeinstallprompt` — and shows the user
+// nothing until the page asks. A page that never asks is a page Chrome will
+// install only through a menu three levels deep, which is the same as not at
+// all.
+//
+// Everything here is a no-op in a browser that does not fire the event, and
+// the palette's row says so: it falls back to naming `deckhq shortcut
+// --install`, which is the only route to a real Desktop and Start Menu icon
+// anyway. docs/DEVIATIONS.md §144.
+
+/** @type {any} the deferred prompt, while Chrome is holding one for us */
+let installPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  // Without this, Chrome shows its own mini-infobar over the floor.
+  event.preventDefault();
+  installPrompt = event;
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+});
+
+/** Is this window already the installed app, rather than a tab? */
+export function isStandalone() {
+  try {
+    return Boolean(
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      window.matchMedia?.('(display-mode: window-controls-overlay)').matches ||
+      // Safari's own flag, which is not in `lib.dom.d.ts` because it is not
+      // in any specification. Read defensively for the same reason.
+      /** @type {any} */ (window.navigator).standalone === true,
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ask Chrome to install the floor, if it is holding an offer.
+ *
+ * A deferred prompt can be used exactly once, so it is cleared before it is
+ * shown rather than after: a second click while the dialog is up would
+ * otherwise throw, and the row would look broken.
+ *
+ * @returns {Promise<{prompted:boolean, outcome:string|null}>}
+ */
+export async function installAsApp() {
+  const event = installPrompt;
+  if (!event) return { prompted: false, outcome: null };
+  installPrompt = null;
+  try {
+    await event.prompt();
+    const choice = await event.userChoice;
+    return { prompted: true, outcome: choice?.outcome ?? null };
+  } catch {
+    return { prompted: false, outcome: null };
+  }
+}
+
+/**
+ * The palette's "Install as app" row, end to end.
+ *
+ * Never a dead end. A browser that is making no offer is told the one command
+ * that works everywhere — a row that said "your browser cannot do this" and
+ * stopped would be worse than no row.
+ *
+ */
+export async function installApp(say = toast) {
+  if (isStandalone()) {
+    say('This window already is the app.');
+    return;
+  }
+  const result = await installAsApp();
+  if (result.prompted) {
+    say(
+      result.outcome === 'accepted'
+        ? 'Installed. DeckHQ has its own icon now.'
+        : 'Not installed. ⌘K → Install as app whenever you want it.',
+    );
+    return;
+  }
+  say('No install offer here — run `deckhq shortcut --install` for a Desktop icon.');
+}
+// WP-62 · end ---------------------------------------------------------------

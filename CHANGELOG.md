@@ -6,6 +6,52 @@
 
 ## Unreleased
 
+### Added
+
+- **`deckhq app` — the floor in a window of its own.** One command: it reuses the DeckHQ you
+  already have running (the port you named, the one a running daemon published in
+  `~/.deckhq/daemon.json`, the one your installed hooks post to, then 4317 upward) and starts one
+  in the background if none answers, then opens the floor in **Chrome or Edge in application
+  mode** — no tab strip, no address bar, its own taskbar button, and its own browser profile under
+  `~/.deckhq/app-profile` so the window keeps its size and position and never shares your tabs or
+  extensions. A machine with no Chromium-family browser falls back to your default browser and
+  says so in one line. Closing the window costs nothing; the daemon outlives it. The browser is
+  deliberately **not** spawned with `windowsHide` — that option puts `SW_HIDE` in the child's
+  `STARTUPINFO` and Chrome reads `nCmdShow` from there for its first window, which on the
+  reference machine produced a whole browser with renderers, a GPU process and no window at all.
+  `index.html` gains a `theme-color` matching the manifest, which already declared `standalone`
+  and a 512 icon. `docs/DEVIATIONS.md` §144.1–2.
+
+- **`deckhq shortcut --install|--remove` — DeckHQ on your Desktop and in your Start Menu.** Both
+  shortcuts run `deckhq app`, with an icon generated at install time from the PNG the package
+  already ships (a PNG-to-ICO wrapper over the format's own ability to embed one: no decode, no
+  resample, no dependency). Same consent discipline as the hooks and the status line: run it
+  without `--yes` and it prints every path, what each one is for, and the exact command each will
+  run, and changes nothing. Every file carries a tag and the paths are recorded in
+  `~/.deckhq/installed.json`; `--remove` deletes only files that still **prove** they are ours —
+  the shortcut's own description, a tag line, or, for a copied icon that can hold no tag, its exact
+  bytes — and reports anything that no longer does rather than deleting it. A `DeckHQ.lnk` that is
+  not ours is refused, never replaced or backed up. Directories the install created are removed
+  too; a Desktop folder that was already there is not. The Desktop and Start Menu paths are asked
+  of Windows rather than guessed, because a machine with OneDrive folder backup keeps its Desktop
+  somewhere `%USERPROFILE%\Desktop` does not name. `docs/DEVIATIONS.md` §144.4–7.
+
+- **`deckhq autostart --install|--remove` — the daemon, quietly, when you log in.** The daemon
+  only: no window, nothing on your screen at login, just somewhere for your hooks to post from the
+  moment you are logged in. Same consent, same tag, same removal.
+
+- **`⌘K` → Install as app.** Takes Chrome's own install offer when Chrome is making one, and
+  otherwise names `deckhq shortcut --install`, which works on any browser. The row is always
+  there — one that appeared and disappeared with a browser event would be a row nobody can find
+  twice.
+
+  **Windows is the platform all of this was run on**, screenshot and all
+  (`docs/media/app-window.png`). The macOS `~/Applications/DeckHQ.app` bundle and
+  `dev.deckhq.daemon.plist` LaunchAgent, and the Linux `deckhq.desktop` entries, are written from
+  Apple's and freedesktop.org's documentation and **have never been executed** — the command
+  prints `NOT RUN ON THIS PLATFORM` above the file list there, every time. The macOS icon is a PNG
+  rather than an `.icns`, because converting one means shelling out to `iconutil`.
+
 ### Changed
 
 - **"Let go" is called Fire.** The action in `⋯ more` and in the palette is **Fire**; the state is

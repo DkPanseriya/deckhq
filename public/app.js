@@ -22,7 +22,6 @@ import { createDeckUI } from './deck.js';
 import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
 import { createClearedTracker } from './office-cleared.js';
-import { wrappedDue } from './wrapped.js';
 import {
   FALLBACK_STATE_COLORS,
   announce,
@@ -52,6 +51,7 @@ import { createReplay } from './replay.js';
 import {
   filterToProject,
   getNeedsYouQueue,
+  installApp,
   renderFloorState,
   renderHeader,
   renderProjectFilterChip,
@@ -71,7 +71,7 @@ import {
   dismissCard,
   maybeShowNightCard,
   openPostcard,
-  openWrapped,
+  openWrappedNow,
   saveCard,
 } from './app-cards.js';
 import { openIdentityDialog, openNewAgentDialog, openNewProject } from './app-dialogs.js';
@@ -775,6 +775,7 @@ const paletteUI = createPalette({
     importLayout,
     openSettings: () => settingsUI.open(),
     openHooks: () => settingsUI.open('hooks'),
+    installApp, // WP-62 — Chrome's own offer, or the one command that always works
     openOnboarding: showOnboarding,
     // WP-18 / WP-27. Both are `manual: true`: asking for the card does not
     // spend the automatic one, and being shown it on purpose does not mark a
@@ -784,10 +785,7 @@ const paletteUI = createPalette({
     // go by is not a two-keystroke everyday action, and a mis-typed one would
     // take the floor away from the person looking at it.
     watchYesterday: () => replayUI.open(),
-    showWrapped: () => {
-      const due = wrappedDue({ now: Date.now(), shownKey: '' });
-      openWrapped(due.kind === 'annual' ? 'annual' : 'week', { manual: true });
-    },
+    showWrapped: openWrappedNow,
     setNotifications,
     // One keystroke from the palette mutes globally, and it persists
     // (WP-15, `05` §8). Turning it *on* plays the chime once, because a

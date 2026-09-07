@@ -46,6 +46,7 @@ function stubActions() {
     'openSettings',
     'openHooks',
     'openOnboarding',
+    'installApp',
     'setNotifications',
     'setSound',
     'toggleLetGoVisible',

@@ -13029,3 +13029,257 @@ arrives.
 
 The check is green on all eight at 0 px over tolerance and 0 px moved at all,
 the same noise floor §106, §139 and §140 each measured.
+
+## 144. WP-62 — the floor as an application, and four things Windows only tells you if you run it
+
+WP-62's brief is one sentence: *launch DeckHQ like an app, no terminal, no extra steps*. What
+shipped is three commands — `deckhq app`, `deckhq shortcut`, `deckhq autostart` — a palette row,
+and a README section. What is worth writing down is not the commands. It is that **four of the
+decisions in them were made by a machine rather than by reading anything**, and that each one
+produced a failure that looked like something else entirely.
+
+### 1. The container, and why a tab is the wrong one
+
+`08` §1.1 rule 5 scores every feature against §1.2: does it reduce the time the user must spend
+looking at DeckHQ per unit of agent output? A browser tab does not. It has no taskbar button, no
+icon of its own, no remembered geometry, and no way back to it except finding it among forty
+others — so the floor is either buried or kept in front of everything, and the second is the
+failure mode §1.2 names by name.
+
+`deckhq app` opens Chrome or Edge with `--app=<url>`: no tab strip, no address bar, its own
+taskbar button, and a title taken from the page. Two decisions inside that:
+
+**Its own profile, under the state dir.** `--user-data-dir=~/.deckhq/app-profile`. Sharing the
+user's default profile means inheriting every extension and every logged-in session, and — the
+part that actually bites — Chrome then treats the app window as one more window of an
+already-running instance, so the process exits immediately and the geometry is stored in a profile
+the user's own browsing keeps rewriting. Its own profile is what makes "the window keeps its size
+and position" true rather than hoped for. It is also what made §2 below reproducible: Chrome
+remembers a window's show state **per profile**, so the first hidden window kept coming back
+minimised until the profile was deleted.
+
+**The browser discovery is the one that already existed.** `src/cli/chrome.mjs`'s `findChrome()`,
+which `doctor --capture-proof` and the README capture already share. Two lists of where Chrome
+lives would drift, and that list is the part that goes stale first.
+
+### 2. `windowsHide` hid the window we were trying to open
+
+The daemon is spawned `detached: true, stdio: 'ignore'`, `unref()`'d — and on Windows `detached`
+gives it its own console, so `windowsHide: true` goes with it. The obvious thing is to pass the
+same three options when spawning the browser. Measured on the reference machine, that produces:
+
+```
+chrome.exe --app=http://127.0.0.1:4499/ ...   started, pid 70560
+  + crashpad-handler, gpu-process, network service, storage service, 3 renderers
+EnumWindows: no window at all.   MainWindowHandle: 0.   Responding: True
+```
+
+The identical argv typed by hand produced a window titled `(7) DeckHQ` in under a second.
+
+`windowsHide` sets `STARTF_USESHOWWINDOW` with `SW_HIDE` in the child's `STARTUPINFO`, and Chrome
+takes `nCmdShow` from `STARTUPINFO` for its **first window**. So the flag that hides a console also
+hides an application window, and the whole browser comes up correctly and invisibly. The browser
+spawn drops the flag; the daemon spawn keeps it; `test/unit/app-window.test.mjs` has a named
+`REGRESSION:` test, because this is not a thing anybody reading the diff would question.
+
+### 3. The same flag one level up: a `.lnk`'s window style is inherited
+
+`deckhq shortcut --install` writes a `.lnk` whose target is `node.exe`. A console flashing in the
+middle of the screen is exactly the "extra step" this package deletes, so the first version set the
+shortcut's `WindowStyle` to 7 (minimised). The result, launching that real Desktop shortcut:
+
+```
+Start-Process DeckHQ.lnk  ->  window "(7) DeckHQ"  ->  IsIconic(hwnd) = True
+```
+
+A `.lnk`'s window style becomes `wShowWindow` in the launched process's `STARTUPINFO`, and it is
+inherited down the whole tree — so minimising the console minimised the Chrome window the console
+went on to open. The same mechanism as §2, arriving from the shell instead of from `spawn`.
+
+The shortcut is therefore **normal (1)**, and the console is visible for the second or so
+`deckhq app` lives. That is a real cost and it is stated in the consent screen rather than hidden:
+Windows has no windowless host for `node.exe`, and getting one means shipping a `.vbs` shim, which
+is a second executable file whose only job is to launch the first.
+
+**Autostart keeps 7, and there it is right**, because the login entry runs `deckhq app
+--no-window` — which finds or starts a *detached* daemon and exits. That daemon is spawned with
+`windowsHide`, which sets `SW_HIDE` **explicitly** and therefore beats the inherited style. So the
+only thing minimised is a console that lives for a second at login, and the daemon that outlives it
+has no window at all. A bare `--no-open` would have been simpler and wrong: that command **is** the
+daemon, so its console would sit on the taskbar for the whole session.
+
+### 4. Nothing DeckHQ holds goes on a PowerShell command line — stronger than §101, not a departure from it
+
+A `.lnk` is a binary format with no documented writer outside COM, so Windows has to be asked.
+§101 established the rule: `-File` with named parameters, never `-Command`, because `-Command`
+appends argument values to the *script text*. This package found two more things about `-File`
+that §101 did not reach, both by running it:
+
+1. **An empty-string argument is dropped from the command line entirely.** `-IconLocation ""
+   -Description "d"` arrives as `-IconLocation -Description`, and PowerShell binds the *name*
+   `-Description` as the icon location. The reported error was
+   `Missing an argument for parameter 'IconLocation'`.
+2. **A `.lnk`'s `Arguments` field is itself a quoted command line** — `"C:\…\deckhq.mjs" "app"` —
+   so passing it as a parameter puts double quotes through Node's win32 quoting and then through
+   `-File`'s own parsing, and the two do not agree about them. The reported error was
+   `Parameter set cannot be resolved using the specified named parameters`, which names neither the
+   parameter nor the reason.
+
+Fixing (1) alone would not fix (2), and an escaping scheme across two parsers is exactly the class
+of thing §28 exists to refuse. So `-Action create` takes **`-SpecFile`**: a JSON document DeckHQ
+writes under its own state directory and deletes afterwards. No value the package holds — not a
+path, not a description, not a command line — is on a command line at all. `shortcutSpec()` is pure
+and the whole document is asserted.
+
+A third, unrelated, and equally invisible one: **`Split-Path -LiteralPath X -Parent` cannot resolve
+its parameter set in Windows PowerShell 5.1** and throws the same opaque message as (2).
+`[System.IO.Path]::GetDirectoryName` has no parameter sets to resolve, and that is what the script
+uses.
+
+### 5. The ICO, without decoding anything
+
+An ICO is barely a format: a six-byte header, sixteen bytes per image, then the images — and since
+Vista an entry's payload may be **a PNG, byte for byte**. So `src/core/ico.mjs` reads the width and
+height out of each PNG's IHDR and concatenates. About 130 lines, no decode, no resample, no
+dependency (`08` §1.1 rule 3).
+
+The one wart: an entry's width and height are **single bytes**, and `0` means "256 or larger, read
+the image's own header". A 512 PNG therefore *cannot* be declared as 512; every converter writes
+the sentinel. So the file carries **two** entries — 512 with the sentinel, and 192 declared exactly
+— and the small-icon case, the 16x16 in a Start Menu list, is served by the 192 where the sentinel
+plays no part. Measured on Windows 11: the written 10,271-byte file loads as a 512x512
+`System.Drawing.Icon`, and `ExtractAssociatedIcon` on the written `.lnk` returns a 32x32, so the
+shell resolved it through the shortcut.
+
+### 6. The consent discipline, and the two places it is stricter than the status line's
+
+Same shape as `deckhq statusline --install` (§92) and the hooks (`02-ARCHITECTURE.md` §6): print
+every path and what each is for, write nothing without `--yes`, tag what we write, `--remove` takes
+ours and only ours. Two differences, both because these are *new files in shared folders* rather
+than edits to a config file:
+
+**Nothing is backed up, because there is nothing of the user's to back up.** A `DeckHQ.lnk` that
+already exists and is not ours is **refused** — the whole plan stops before anything is written —
+rather than copied aside and replaced. Backing up a file we did not create is the thing the
+discipline forbids, not a softer version of it. Run for real: with a foreign `DeckHQ.lnk` planted
+at the target path, the command exited non-zero having written no icon, no second shortcut and no
+record.
+
+**Removal needs a live proof, not just the record.** `<state dir>/installed.json` names the paths,
+and each one must *still* prove it is ours: the `.lnk`'s own Description, an `X-DeckHQ-Tag=` line
+in a text file, or — for a copied icon, which can hold no tag — its exact SHA-256. A file somebody
+has replaced with their own is reported and left standing. The record is a claim about the past;
+`--remove` has to be sure about the present.
+
+**And directories are recorded too.** The first version pruned "any empty parent" after deleting a
+file, which would delete a user's real Desktop folder on the day they happened to have nothing else
+on it. `apply()` now records exactly the directories it had to create, and removal prunes those,
+only while they are empty. A test plants a pre-existing `applications/` directory and asserts it is
+still there afterwards; another fills a directory we did create and asserts that one survives too.
+
+### 7. The Windows folders are asked, not guessed
+
+`%USERPROFILE%\Desktop` is a guess, and on the reference machine it is the **wrong** one:
+
+```
+shortcut.ps1 -Action folders
+  -> {"desktop":"C:\\Users\\samco\\OneDrive\\Desktop", ...}
+```
+
+A machine with OneDrive folder backup on keeps its Desktop somewhere else entirely, and writing to
+the guess puts an icon on a desktop Explorer no longer draws. So the plan asks Windows
+(`[Environment]::GetFolderPath`) and falls back to the guess only when that fails.
+`DECKHQ_DESKTOP_DIR`, `DECKHQ_START_MENU_DIR` and `DECKHQ_STARTUP_DIR` outrank both — an escape
+hatch for an unusual machine, and the seam that let every live run in this package write into
+`%TEMP%` instead of the owner's real Desktop.
+
+### 8. app.js was at the ceiling, and the gate charged for it
+
+`public/app.js` was 899 lines against WP-22's hard 900 (`test/unit/model.test.mjs`), so the palette
+action did not fit. That is the gate working: the next thing added to app.js has to move something
+out. What moved is the four lines of "which Wrapped is this" policy, into `app-cards.js` as
+`openWrappedNow()` beside `maybeShowNightCard`, which already asks `wrappedDue()` the same
+question — so the automatic card and the asked-for one now read one line of code instead of two
+copies of it, and `palette.js`'s comment that there is one definition of it becomes true. app.js
+ends at 897.
+
+### 9. What was run, and what was not
+
+**Run on Windows 11, for real:**
+
+- `deckhq app --port 4499` against a demo daemon: window opened, `PrintWindow` capture in
+  `docs/media/app-window.png` — the real title bar reading `(7) DeckHQ` with the DeckHQ mark, no
+  tab strip, no address bar (`08` §1.1 rule 10). The capture is at the display's own 2x, which is
+  why `SetProcessDPIAware` is in the capture script: without it `GetWindowRect` reports logical
+  pixels while `PrintWindow` renders physical ones, and you get the top-left quarter.
+- `deckhq app` reusing a daemon **somebody else had started** — the npx daemon already on 4317 on
+  this machine — rather than starting a second one beside it.
+- `shortcut --install` with no `--yes` (printed, wrote nothing), then `--install --yes` into
+  `%TEMP%`-overridden Desktop and Start Menu folders, then launching the written Desktop shortcut
+  into a real app window, then `--remove --yes` deleting exactly those three paths and the
+  directories it had created and nothing else.
+- A foreign `DeckHQ.lnk` planted at the target path: refused, with nothing written anywhere.
+- `autostart --install --yes` and `--remove --yes` into a `%TEMP%` Startup folder; the written
+  shortcut read back through `WScript.Shell` for its target, arguments, description and style.
+- The ICO through `[System.Drawing.Icon]` and `ExtractAssociatedIcon`, as above.
+- The palette row against the live demo floor: present under "install", and clicking it with no
+  offer outstanding produces exactly the one-line hint.
+
+**Written from documentation and never executed** — `08` §1.1 rule 11, so hypotheses: the macOS
+`~/Applications/DeckHQ.app` bundle and its `dev.deckhq.daemon.plist` LaunchAgent, the macOS
+`open -na <bundle> --args` form of the app window, and the Linux `deckhq.desktop` entries under
+`~/.local/share/applications` and `~/.config/autostart`. Each is asserted as data in
+`test/unit/launcher.test.mjs` under a test name beginning `DOCS-ONLY`, and `deckhq shortcut
+--install` prints **NOT RUN ON THIS PLATFORM** above the file list on those two platforms, every
+time. The macOS icon is a PNG rather than an `.icns`, because converting one means shelling out to
+`iconutil`; the command says so in the plan rather than leaving Finder's generic icon unexplained.
+
+### 10. What the owner decides
+
+1. **Whether autostart should ever be offered by the product rather than only by the CLI.** It is a
+   command and nothing more today: no banner, no settings row, no prompt. A floor that asks to
+   start itself at login is a floor asking for a commitment, and §1.2 is not obviously on its side.
+2. **Chrome or Edge.** The order comes from `findChrome()`'s existing list, which prefers Chrome
+   and falls back to Edge. On a machine where Edge is the browser in use, the app window is a
+   second browser's worth of memory. `CHROME_PATH` fixes it per machine; a `settings.appBrowser`
+   would fix it properly.
+3. **The console flash on the Desktop shortcut** (§3). It can be removed by shipping a `.vbs` shim,
+   and that is a second executable file in the package whose only job is to launch the first.
+
+### 11. Acceptance
+
+`test/unit/app-window.test.mjs` (27) and `test/unit/launcher.test.mjs` (42), neither of which
+starts a browser, a daemon or a PowerShell, plus three added to `test/unit/pwa.test.mjs`:
+
+- the exact argv for the app window on Windows, Linux and macOS, asserted whole against an injected
+  platform, plus the `open -na <bundle>` form and the bundle-less fallback;
+- `SECURITY:` only loopback is ever handed to a browser, and a non-loopback daemon URL is refused
+  with nothing spawned;
+- daemon reuse versus spawn: the port order (named, published, hooks, then the walk), a listening
+  stranger that is not a DeckHQ, the detached spawn's exact options, and a daemon that never
+  answered being reported with its pid rather than killed;
+- `REGRESSION:` the browser is never spawned with `windowsHide` (§2);
+- the ICO: header, type, ordering, the sentinel, every offset landing inside the file, a truncated
+  or mistyped file reading as no ICO, and `writeIco` returning null rather than throwing;
+- the plan for each of the three platforms as data, with `DOCS-ONLY` in the name of each unrun one;
+- `SECURITY:` the shortcut's fields as a spec document, and the refusal of a value carrying a
+  quote, a backtick or a control character;
+- the consent gate in both directions: `--install` and `--remove` without `--yes` change nothing, a
+  docs-only platform prints its warning **above** the file list, neither flag or both is a usage
+  error, and the install/remove round trip;
+- tag and record idempotence, a corrupt record reading as empty, a foreign file refused, a recorded
+  file that lost its tag left standing, a directory that already existed never removed, and a
+  directory we created but somebody else filled left alone;
+- the page's `theme-color` equal to the manifest's, the manifest still `standalone` with its 512
+  icon, and the install prompt deferred, offered once, and never a dead end.
+
+1844 tests to 1916. Lint, format and both typechecks clean.
+
+`npm run goldens:check` is **unaffected by this package, and that is measured rather than
+reasoned**: all seven populations fail identically on the commit before it and on the commit after
+it — 806/827/660 pixels over tolerance, the same counts to the pixel — and the diff images show the
+difference confined to the two age strings in the "Idle projects" list, which are a function of the
+clock rather than of any code here. The client changes are a `<meta name="theme-color">`, one
+palette row and one delimited block in `app-header.js`, none of which paints on the canvas the
+goldens photograph. **The goldens are stale against the clock and were stale before this work**;
+re-baking them is somebody's package, not this one.

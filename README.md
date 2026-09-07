@@ -138,6 +138,69 @@ The furniture works too. A room's shelf opens that project's folder; its screen 
 project's dashboard script. The object is the verb, and it lives in the room the project lives in,
 so there is nothing to hunt for in a menu.
 
+## Run it like an app
+
+Three commands. The first is the one you want.
+
+```bash
+deckhq app                        # the floor in a window of its own
+deckhq shortcut --install --yes   # + a Desktop and Start Menu icon for it
+deckhq autostart --install --yes  # + the daemon, quietly, when you log in
+```
+
+![The DeckHQ floor in a Chrome application window on Windows 11: its own title bar reading "(7) DeckHQ" with the DeckHQ mark, no tab strip and no address bar, the queue strip along the top and the office below it](docs/media/app-window.png)
+
+`deckhq app` reuses the DeckHQ you already have running — the port you named, the one a running
+daemon published in `~/.deckhq/daemon.json`, the one your installed hooks post to, then 4317
+upward — and starts one in the background if none answers. Then it opens the floor in **Chrome or
+Edge in application mode**: no tab strip, no address bar, its own taskbar button, and its own
+browser profile under `~/.deckhq/app-profile`, so the window keeps its size and position and never
+shares your tabs or your extensions. A machine with no Chromium-family browser falls back to your
+default browser and says so in one line. Closing the window costs nothing — the daemon outlives it,
+which is the whole point.
+
+`deckhq shortcut --install` writes `DeckHQ.lnk` to your Desktop and to your Start Menu, both
+pointing at `deckhq app`, with an icon generated at install time from the PNG this package already
+ships. `deckhq autostart --install` writes one entry to your Startup folder that starts the
+**daemon** — no window, nothing on your screen at login, just somewhere for the hooks to post from
+the moment you are logged in.
+
+Both take the same discipline as the hooks and the status line: **run them without `--yes` first**
+and they print every path they would write, what each one is for, and the exact command each will
+run, and change nothing.
+
+```
+$ deckhq shortcut --install
+
+  This would put DeckHQ on this machine by writing 3 file(s):
+
+    C:\Users\you\.deckhq\icons\deckhq.ico
+      the icon, wrapped from the PNG DeckHQ already ships
+    C:\Users\you\OneDrive\Desktop\DeckHQ.lnk
+      the Desktop icon
+    C:\Users\you\AppData\Roaming\...\Start Menu\Programs\DeckHQ.lnk
+      the Start Menu entry — this is what the Start search finds
+```
+
+Every file DeckHQ writes carries a tag, and the paths are recorded in `~/.deckhq/installed.json`.
+`--remove --yes` deletes those and nothing else: each one has to still prove it is ours — the
+shortcut's own description, a tag line in a text file, or, for a copied icon that can hold no tag,
+its exact bytes — and one that no longer does is reported and left where it is. A `DeckHQ.lnk` you
+put there yourself is refused rather than replaced, and nothing you did not create is ever backed
+up or overwritten. Directories the install had to create are removed too; a Desktop folder that
+was already there is not.
+
+From inside the floor, `⌘K` → **Install as app** takes Chrome's own install offer when Chrome is
+making one, and otherwise names the `deckhq shortcut --install` above.
+
+**Windows is the platform this was run on**, screenshot and all. The macOS bundle
+(`~/Applications/DeckHQ.app`, and `~/Library/LaunchAgents/dev.deckhq.daemon.plist` for autostart)
+and the Linux desktop entries (`~/.local/share/applications/deckhq.desktop` and
+`~/.config/autostart/deckhq.desktop`) are written from Apple's and freedesktop.org's documentation
+and **have never been executed on a machine** — the command says so above the file list, every
+time. The macOS icon is a PNG rather than an `.icns`, because converting one means shelling out to
+`iconutil` and this package has no dependencies to spend.
+
 ## More on `deckhq doctor`
 
 One command that says what DeckHQ actually knows about this machine, and whether the parts that
@@ -348,6 +411,13 @@ Everything is read locally and nothing leaves the machine.
   text editor; it merges over the shipped table one model at a time. Free, and it always was.
 - `~/.deckhq/packs/` — installed asset packs, one directory each. Colours and names only. Delete
   the directory and you lose the extra themes and avatars and nothing else.
+- `~/.deckhq/app-profile/` — the browser profile `deckhq app` gives its own window, so it keeps
+  its size and position and never shares your tabs. Delete it and the next window opens fresh.
+- `~/.deckhq/icons/deckhq.ico` and `~/.deckhq/installed.json` — **only after
+  `deckhq shortcut --install --yes`**: the icon, and the record of exactly which paths DeckHQ
+  wrote so `--remove` can take back those and nothing else.
+- Your Desktop, Start Menu and Startup folders — **only with your explicit consent**, and only the
+  tagged files `deckhq shortcut` and `deckhq autostart` name before they write them.
 - `~/.claude/settings.json` — **only with your explicit consent**, and only a tagged hook block.
 
 If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
@@ -558,6 +628,9 @@ npx deckhq doctor         # the environment report above
 npx deckhq waiting        # the queue, in the terminal
 npx deckhq statusline     # the queue, as one line
 npx deckhq stats          # what the floor did, from the local ledger
+npx deckhq app            # the floor in a window of its own
+npx deckhq shortcut       # a Desktop and Start Menu icon for that window
+npx deckhq autostart      # the daemon, at login, with no window
 npx deckhq --version
 ```
 
@@ -587,10 +660,10 @@ toast. It is off unless you ask — `--notify` turns it on for one run and write
 falls back to the badge in silence. Verified on Windows; the macOS and Linux commands are
 asserted in the test suite and have not been run on those platforms.
 
-DeckHQ is also installable as an app. Install it from the browser's address bar and the dock or
-taskbar icon carries the needs-you count with every window closed. The service worker that makes
-that possible caches nothing and intercepts nothing — a cached floor would lie about who is
-waiting.
+DeckHQ is also installable as an app — `deckhq app`, or `⌘K` → Install as app, or your browser's
+address bar. The dock or taskbar icon then carries the needs-you count with every window closed.
+The service worker that makes that possible caches nothing and intercepts nothing — a cached floor
+would lie about who is waiting. See [Run it like an app](#run-it-like-an-app).
 
 ## Per-project actions
 

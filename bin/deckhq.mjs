@@ -17,6 +17,9 @@
  *   npx deckhq ledger     list, export and verify days of that ledger
  *   npx deckhq layout     export or import the floor's arrangement
  *   npx deckhq pack       signed asset packs: more themes and avatar sets
+ *   npx deckhq app        the floor in a window of its own, daemon and all
+ *   npx deckhq shortcut   a Desktop and Start Menu icon for that window
+ *   npx deckhq autostart  start the daemon when you log in
  *
  * With no --port, the daemon prefers the port the installed hooks already
  * post to, so a daemon and its hooks cannot drift apart by accident; if a
@@ -57,6 +60,9 @@ const SUBCOMMANDS = {
   ledger: async (rest) => (await import('../src/cli/ledger.mjs')).runLedger(rest),
   layout: async (rest) => (await import('../src/cli/layout.mjs')).runLayout(rest),
   pack: async (rest) => (await import('../src/cli/pack.mjs')).runPack(rest),
+  app: async (rest) => (await import('../src/cli/app.mjs')).runApp(rest),
+  shortcut: async (rest) => (await import('../src/cli/shortcut.mjs')).runShortcut(rest),
+  autostart: async (rest) => (await import('../src/cli/shortcut.mjs')).runAutostart(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
@@ -98,6 +104,9 @@ async function main() {
         '       deckhq ledger days | export [--signed] | verify <file>',
         '       deckhq layout export | show | import <file>',
         '       deckhq pack build | verify | install | list | remove',
+        '       deckhq app [--port N]',
+        '       deckhq shortcut --install [--yes] | --remove [--yes]',
+        '       deckhq autostart --install [--yes] | --remove [--yes]',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
@@ -126,6 +135,14 @@ async function main() {
         '  pack          signed asset packs: more themes and avatar sets, and',
         '                nothing else. `verify`, `install`, `list`, `remove`.',
         '                No account, no licence check, no network. A pack is a file.',
+        '  app           the floor in a window of its own: reuse or start the daemon,',
+        '                then open it in Chrome or Edge with no tab strip and no',
+        '                address bar. WP-62.',
+        '  shortcut      --install puts DeckHQ on your Desktop and in your Start Menu,',
+        '                pointing at `deckhq app`. --remove takes back only what it',
+        '                wrote. Neither writes anything without --yes.',
+        '  autostart     --install starts the daemon (no window) when you log in.',
+        '                --remove takes it out again. Same consent, same discipline.',
         '',
         'Every command takes an id: the MK tag the deck prints, a name you gave,',
         'or any prefix of the session id.',
