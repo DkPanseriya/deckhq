@@ -129,6 +129,7 @@ import {
   finiteNumber,
 } from './ledger-record.mjs';
 import { parseRecords } from './ledger-read.mjs';
+import { now as clockNow } from './clock.mjs';
 
 export * from './ledger-record.mjs';
 export * from './ledger-read.mjs';
@@ -156,7 +157,7 @@ export class Ledger {
     this._timers = opts.timers || { setTimeout, clearTimeout };
     this.flushIntervalMs = opts.flushIntervalMs ?? FLUSH_INTERVAL_MS;
     this.maxBuffered = opts.maxBuffered ?? MAX_BUFFERED;
-    this._now = opts.now || (() => Date.now());
+    this._now = opts.now || clockNow;
 
     /** @type {string[]} serialised lines waiting to be written */
     this._buffer = [];

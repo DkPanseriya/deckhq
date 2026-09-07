@@ -11,6 +11,8 @@
  * re-exports `permissionKeyDecision` so every existing import still resolves.
  */
 
+import { now as clockNow } from './clock.js';
+
 export const STATE_LABELS = {
   working: 'Working',
   needs_input: 'Hands up',
@@ -201,7 +203,7 @@ export function permissionKeyDecision(e, ctx) {
  * @param {string} action
  */
 export function optimisticPatch(agent, action) {
-  const now = Date.now();
+  const now = clockNow();
   switch (action) {
     case 'acknowledge':
       return { ...agent, activityState: 'working', reviewSince: null, needsInputSince: null };

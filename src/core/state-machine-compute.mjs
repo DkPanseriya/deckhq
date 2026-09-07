@@ -48,6 +48,7 @@ import { splitAgentId, projectIdFromCwd, projectNameFromCwd, clampText } from '.
 
 import { RegistrySnapshot } from './state-machine-snapshot.mjs';
 import { freshObserved, toAgentId, endedOr, compareAgents } from './state-machine-rules.mjs';
+import { now as clockNow } from './clock.mjs';
 
 export class RegistryCompute extends RegistrySnapshot {
   /**
@@ -287,7 +288,7 @@ export class RegistryCompute extends RegistrySnapshot {
         obs.activityState = obs.turnEnded === true ? 'ended' : 'working';
       }
       if (!junior && obs.activityState === 'for_review') {
-        this._markForReview(id, obs.lastActivityAt || Date.now());
+        this._markForReview(id, obs.lastActivityAt || clockNow());
       }
 
       // A junior is never benched, never let go and never acknowledged: the

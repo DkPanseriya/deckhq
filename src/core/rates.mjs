@@ -46,6 +46,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DATA_DIR } from './paths.mjs';
+import { now as clockNow } from './clock.mjs';
 
 /** The table that ships in the package. In `files` via `src/`. */
 export const BUILTIN_RATES_FILE = path.join(
@@ -336,7 +337,7 @@ export function loadRateCard(opts = {}) {
   const builtinFile = opts.builtinFile || BUILTIN_RATES_FILE;
   const overrideFile = opts.overrideFile || OVERRIDE_RATES_FILE;
   const maxAgeMs = opts.maxAgeMs ?? RECHECK_MS;
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const key = `${builtinFile} ${overrideFile}`;
 
   const cached = CACHE.get(key);

@@ -21,6 +21,8 @@
  * messages) are rendered with `textContent`, never `innerHTML`.
  */
 
+import { now as clockNow } from './clock.js';
+
 const GAIN_COPY =
   'With hooks installed, DeckHQ knows exact, instant state the moment it changes — ' +
   'no polling delay. Two states become distinguishable that otherwise are not: ' +
@@ -61,9 +63,9 @@ function deliveryNote(adapter) {
   const seen = Number(adapter.eventsSeen || 0);
   if (seen > 0) {
     const last = Number(adapter.lastEventAt || 0);
-    return `Receiving events — ${seen} so far, most recent ${ago(Date.now() - last)}.`;
+    return `Receiving events — ${seen} so far, most recent ${ago(clockNow() - last)}.`;
   }
-  const up = Date.now() - Number(adapter.daemonStartedAt || Date.now());
+  const up = clockNow() - Number(adapter.daemonStartedAt || clockNow());
   if (up < QUIET_HOOK_MS) return 'Installed. Waiting for the first event.';
   return (
     'Installed, but no hook events have arrived since DeckHQ started. If sessions are ' +

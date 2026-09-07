@@ -51,6 +51,7 @@ import { idleProjectsOf } from './floor-rule.js';
 // eight lines of `formatElapsed` here instead would be a second implementation
 // of a format, which is the drift `floor-rule.js`'s own header is about.
 import { formatElapsed } from './render/rig-metrics.js';
+import { now as clockNow } from './clock.js';
 
 /**
  * How long the pointer must rest on the chip before the list opens.
@@ -296,7 +297,7 @@ export function createIdlePopover(opts) {
   /** @param {boolean} pin */
   function show(pin) {
     cancelTimers();
-    const now = Date.now();
+    const now = clockNow();
     if (!readProjects(now)) return;
     active = 0;
     paint(now);
@@ -440,7 +441,7 @@ export function createIdlePopover(opts) {
   return {
     /** A new snapshot arrived, or the replay bar opened or closed. */
     refresh() {
-      const now = Date.now();
+      const now = clockNow();
       if (!readProjects(now)) return close();
       if (shown) paint(now);
     },

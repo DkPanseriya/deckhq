@@ -12,6 +12,7 @@
 
 import { recordLineFor } from './records.js';
 import { STATE_LABELS, el, findAgent, formatNumber, palette, panel } from './app-state.js';
+import { now as clockNow } from './clock.js';
 
 let lastMouse = { x: 0, y: 0 };
 
@@ -117,7 +118,7 @@ export function showTooltip(agentId) {
   );
 
   const elapsedMs =
-    Date.now() - (agent.reviewSince ?? agent.needsInputSince ?? agent.lastActivityAt ?? Date.now());
+    clockNow() - (agent.reviewSince ?? agent.needsInputSince ?? agent.lastActivityAt ?? clockNow());
   const elapsedMin = Math.max(0, Math.round(elapsedMs / 60000));
   el.tooltip.appendChild(
     tooltipLine(

@@ -12,6 +12,7 @@
 
 import { ACK_STATES, ACTIVITY_STATES, NEEDS_YOU_STATES } from './model.mjs';
 import { DAY_MS, dayKey, finiteNumber } from './ledger-record.mjs';
+import { now as clockNow } from './clock.mjs';
 
 // ---------------------------------------------------------------------------
 // Replay
@@ -51,7 +52,7 @@ export function isAck(s) {
  */
 export function fold(records, opts = {}) {
   const until = opts.until ?? Infinity;
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   /** @type {Map<string, any>} */
   const state = new Map();
   /** @type {any[]} */
@@ -179,7 +180,7 @@ export function reconstructQueue(records, t) {
  *                  end:number|null, ms:number}>}
  */
 export function reviewEpisodes(records, opts = {}) {
-  return fold(records, { now: opts.now ?? Date.now() }).episodes;
+  return fold(records, { now: opts.now ?? clockNow() }).episodes;
 }
 
 /**
@@ -209,7 +210,7 @@ export function percentile(values, p) {
  * @param {{now?:number, since?:number}} [opts]
  */
 export function computeStats(records, opts = {}) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const since = finiteNumber(opts.since) ?? now - 30 * DAY_MS;
   const list = Array.isArray(records) ? records : [];
   const episodes = reviewEpisodes(list, { now });

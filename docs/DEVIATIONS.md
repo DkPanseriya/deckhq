@@ -13557,3 +13557,215 @@ stub document, including one that fails if any string reaches the DOM through
 All eight goldens moved, and `wide` moved twice: once for the floor, and once
 more after (5) above turned the first regeneration's column back into the two
 rows it exists to photograph.
+## 146. WP-63 — the goldens were a photograph of the day they were taken
+
+§87 states the harness's founding claim in one sentence: **"Every fixture value
+is a pure function of the population name — no clock, no random source."** It
+was false, and §144 is the receipt. That package changed a `<meta>` tag, one
+palette row and one delimited block in `app-header.js`, none of which paints on
+the canvas — and `goldens:check` failed on all seven populations, identically,
+on the commit before it and on the commit after it, 806/827/660 pixels over
+tolerance to the pixel. The diff images put every one of those pixels inside
+two age strings. §144 wrote it down and declined it: _"The goldens are stale
+against the clock and were stale before this work; re-baking them is somebody's
+package, not this one."_
+
+This is that package. It is also the package that found out the clock was only
+half of it.
+
+### 146.1 What was actually wrong
+
+The demo fixture seeded every timestamp as `Date.now() - <age>` and the browser
+rendered every age as `Date.now() - <timestamp>`. Two clocks, both real, and
+the subtraction between them is stable — which is why this survived so long.
+What is _not_ stable is any age that does not come from that pair: a repo's
+"last active" is the newest transcript in it measured against the moment you
+looked, and a transcript written eight days ago by a run that has since been
+thrown away is eight days old today and nine tomorrow.
+
+Measured on the reference machine, the same idle row under the two clocks:
+
+| row               | against the pinned instant | against the wall clock, six days later |
+| ----------------- | -------------------------- | -------------------------------------- |
+| `infra-terraform` | `1 · 2d 7h`                | `1 · 8d 3h`                            |
+
+`2d 7h` is the string the workplan names, and it is the string the fixture was
+designed to produce. `8d 3h` is what a check on any later day compared against
+it. The gate then reported hundreds of pixels over tolerance for a floor in
+which nothing had moved — which is the failure mode that costs a visual gate
+its authority, because the next person to see it red learns to look away.
+
+### 146.2 One clock, and the two words the design turns on
+
+`src/core/clock.mjs` and `public/clock.js`. `DECKHQ_NOW=<ISO instant>` pins the
+daemon's clock, in the shape `DECKHQ_STATE_DIR` already established: an
+environment override, no flag, no setting, and — the whole point — **no code
+path at all when it is absent**, because `now()` with nothing set is
+`Date.now()` and nothing else.
+
+The daemon puts two fields on every snapshot: `now`, and `nowFixed`.
+
+**Why not just `now`.** The obvious design is one field, and the client freezes
+on whatever arrives. It is wrong, and the reason is worth writing down because
+it looks like a simplification. A live daemon's `now` is a **sample**: it is
+taken when the snapshot is built, it is a few hundred milliseconds old when it
+lands, and the next one is a poll away. A client that froze on it would make
+the panel's per-second `waiting …` line advance in poll-sized jumps and the
+queue strip's elapsed times stutter — a real regression on every real floor, in
+exchange for nothing, since no real floor needs a pinned clock. A **pinned**
+`now` is the opposite: the client must stop dead on it or the capture is not
+reproducible. One boolean tells them apart, so the live path is byte-for-byte
+the behaviour that was there before and the pinned path is exact.
+
+**Why the environment is re-read rather than resolved at load.** `paths.mjs`
+resolves its override once, which is right for a path — read once, handed to a
+hundred `path.join`s. A clock is read continuously, and a test has to be able
+to move it between two calls in one process. So the raw string is compared on
+every call and re-parsed only when it changes: one environment lookup and one
+string comparison, and `test/unit/clock.test.mjs` can hold two instants at
+once. A value that is set and unreadable prints one line and falls back —
+silently obeying the real clock while looking pinned is the failure that costs
+an hour.
+
+### 146.3 What moved onto the clock, and what deliberately did not
+
+**54 call sites** — 25 in `src/`, 21 in `public/`, 8 in the demo's fixture
+writers — across 36 files. The rule was not "every `Date.now()`", which would
+have been a much worse change:
+
+| moved                                                                                                                       | left on `Date.now()`                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| instants written into a snapshot (`reviewSince`, `scannedAt`, ack `updatedAt`, the daemon's `startedAt`)                     | throttles — the notifier's, the sound's                                                     |
+| comparisons that turn one of those into a state or an age (`counts`, gone-home, the scan cutoff, subagent freshness, `tick`) | cache TTLs — the live-session probe, `/api/traits`, team records, the summary cache          |
+| every client surface that formats an age or a time                                                                          | request deadlines, retry backoff                                                            |
+| the ledger's own clock, and the day windows read off it                                                                     | temp and backup filenames                                                                   |
+|                                                                                                                             | **`signedAt` on a ledger export and on a pack signature**                                   |
+
+That last row is the one with teeth. A signature is an attestation about the
+real world, and an attestation an environment variable can forge is not one.
+`ledger-sign.mjs` and `packs-sign.mjs` keep `Date.now()` and always will.
+
+Also unmoved on purpose: the animation clocks in `render/agents.js`,
+`scene-agent.js` and `minifloor.js`. They are `performance.now()` with a
+`Date.now()` fallback, they measure the _frame_, and pinning them would stop
+the floor rather than freeze its labels.
+
+**One module refused the import, correctly.** `public/floor-rule.js` is the
+shared rule both sides load, and `test/unit/model.test.mjs` asserts in so many
+words that it _imports nothing_ — "so it can never pull either side into the
+other by accident". The first pass gave it `import { now } from './clock.js'`
+and the invariant caught it within the minute, which is exactly what that test
+is for. The clock is handed **in** from `scene-draw.js` instead, at both the
+plan and the plan-signature call, so the two ask the gone-home question of one
+instant rather than two.
+
+### 146.4 The demo fixture reads the clock ONCE
+
+`scripts/demo-args.mjs` exports `NOW`, a single reading, and every timestamp in
+the fixture is relative to it. Before this the build called `Date.now()` about
+a dozen times while writing itself — per transcript, per junior, per ack
+record, per ledger day — so a slow build seeded its own sessions milliseconds
+apart and no two runs agreed exactly. `DEMO_EPOCH` is `2026-09-01T09:00:00Z`,
+and `scripts/goldens.mjs` puts it in every capture child's environment rather
+than reading it from its own, so a developer who exports `DECKHQ_NOW` cannot
+move the goldens.
+
+`npm run demo` passes nothing and is unchanged: real clock, ages that tick,
+`stalled` after two minutes exactly as the banner promises. A pinned floor
+cannot produce `stalled` at all — the stall window never elapses — which is the
+one behaviour the override takes away, and it takes it away from a capture that
+was already photographing that session as `working` because it settles in 1.5 s.
+
+**The fixture directory is deliberately NOT keyed to the instant.** That was
+the obvious next line and it is wrong: project identities come from these
+paths, the carpet grain is seeded from those identities (§87's 3 September
+regeneration is the entry for exactly that), so a path that moved with the
+clock would make the floor's own texture a function of the instant — the
+coupling this package exists to cut, reintroduced one layer down.
+
+### 146.5 The second defect, which the clock would not have fixed
+
+With the clock pinned and the floor still not reproducible, the snapshot said
+why:
+
+```
+runtimes  [ 'claude-code', 'codex' ]
+projects  … codex-scratch | sessions=4
+          … 0_Tool_OfflineKit | sessions=1
+idle chip "3 idle"
+```
+
+**The demo floor was scanning its owner's real home.** `demo-floor.mjs` moved
+`CLAUDE_CONFIG_DIR` and nothing else, and DeckHQ has had four runtimes since
+WP-23: the Codex adapter resolves `~/.codex` from `os.homedir()`, Gemini CLI
+resolves `~/.gemini`, OpenCode resolves `~/.local/share`, and the Claude
+desktop store falls back to `%APPDATA%\Claude`. So on any machine whose owner
+uses Codex, the demo floor came up with **five real sessions in two real
+repositories** standing on it beside the fixture's own — and one of the real
+project names was in the idle chip.
+
+That breaks this script's founding rule in both directions at once. Real
+project names and real session titles were reachable from a committed
+screenshot, and the goldens were a function of what their owner had been doing
+that week rather than of the population — the same defect as the clock, from
+the other side, and it would have gone on failing `goldens:check` after the
+clock was fixed. `test/helpers/isolate.mjs` had documented this exact list and
+why each entry is on it, for the test suite, since §124; the demo had never
+been given it. It has it now, set at the last moment before `src/daemon.mjs` is
+imported and the adapters read it.
+
+| | before | after |
+| ---------------------------- | ------------------------------ | ---------------------------- |
+| runtimes on the demo floor | `claude-code`, `codex` | `claude-code` |
+| projects | 8, two of them the owner's | 6, all of them the fixture's |
+| the idle chip | `3 idle` | `1 idle` |
+| agents in the snapshot | 33 | 28 |
+
+### 146.6 Measured
+
+Regenerated once, then checked. Eight captures, `win32`:
+
+| | over tolerance | moved at all |
+| --------- | -------------- | ------------ |
+| all eight | **0 px** | **0 px** |
+
+Zero pixels moved _at all_ — not the 36 of §87's measured noise floor, on any
+of the eight. That is one run and is recorded as an observation rather than a
+claim: §87 measured that strip as a bistable rounding in a single header blend
+whose direction flips between runs, and one green run is not evidence it has
+gone for good. It is worth writing down because if it holds, the number §87
+built its tolerance around has changed, and the tolerance should be
+re-measured before anybody trusts it at 8 again.
+
+What this run does **not** prove is the thing the package is for: that a check
+on a **later day** passes. Both runs happened within a minute of each other on
+7 September, and there is no way to run the second one tomorrow inside this
+package. The cross-day claim rests on the two tests below and on the ages
+themselves being pinned, which was verified in a real browser against a real
+pinned floor — client clock `2026-09-01T09:00:00Z`, wall clock
+`2026-09-07T05:56Z`, and the idle row reading `2d 7h`.
+
+### 146.7 The two tests
+
+`test/integration/demo-clock.test.mjs` is the proof, and it runs the real
+thing: `scripts/demo-floor.mjs`, the same child the goldens harness spawns,
+real fixture on disk, real daemon, real state machine — twice, at two pinned
+instants **a day apart** — and asserts the two snapshots are the same floor
+once every timestamp is expressed relative to that snapshot's own `now`, which
+is exactly the quantity every age on the screen is drawn from. The rebasing
+rule is structural rather than a list of field names ("any integer past 2001 in
+milliseconds is a timestamp"), because a list would go stale the first time
+somebody added a timestamp, and going stale would mean the test quietly stopped
+covering it.
+
+The second test in that file is the one that matters more, and it is the
+negative: **with no override the daemon serves the wall clock and pins
+nothing** — `nowFixed` is not true and `now` is within a second of `Date.now()`.
+`test/unit/clock.test.mjs` says the same thing eight more ways across both
+halves, including that a blank, malformed or absent value is ignored rather
+than obeyed, and that a _live_ `now` does not freeze the client while a pinned
+one does.
+
+`scripts/test.mjs` deletes `DECKHQ_NOW` from the canary environment, for the
+reason it already deletes `DECKHQ_HOSTNAME`: a variable exported in a
+developer's shell must not decide what the suite asserts.

@@ -26,6 +26,7 @@ import {
   isNeedsYouAgent,
   nowMs,
 } from './scene-agent.js';
+import { now as clockNow } from '../clock.js';
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
@@ -51,7 +52,7 @@ export const REPLAN_FADE_MS = 260;
 function waitingBadgeMs(agent) {
   if (agent.ackState !== 'active' || agent.activityState !== 'for_review') return null;
   if (!agent.reviewSince) return null;
-  return Date.now() - agent.reviewSince;
+  return clockNow() - agent.reviewSince;
 }
 
 /**
@@ -71,6 +72,12 @@ export function planSignature(snapshot) {
   // agent crossing the gone-home window, both change the geometry without
   // changing a single session count.
   const pop = floorPopulation(agents, {
+    // WP-63. `floor-rule.js` may import nothing — it is the one module both
+    // sides load, and `test/unit/model.test.mjs` enforces that — so the clock
+    // is handed IN here rather than read there. It decides who has gone home,
+    // which is geometry, so a signature computed against a different instant
+    // than the floor it describes would re-bake the backdrop for nothing.
+    now: clockNow(),
     goneHomeDays: (snapshot && snapshot.settings && snapshot.settings.goneHomeDays) ?? undefined,
   });
   // The floor's GEOMETRY depends on more than the project set. The lounge
@@ -145,6 +152,9 @@ export class SceneDraw extends SceneHit {
       // "does the building fill the window" question askable of `buildPlan`
       // in a test with no canvas.
       stage: { w: this._viewW, h: this._viewH },
+      // WP-63, and the same reason as in `planSignature` above: the plan and
+      // its signature have to be asking the gone-home question of one clock.
+      now: clockNow(),
       goneHomeDays: (this._snapshot.settings || {}).goneHomeDays,
     });
     this._backdrop = bakeBackdrop(this._plan, this._dpr);

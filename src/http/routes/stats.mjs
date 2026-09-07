@@ -43,6 +43,7 @@ import {
   records as teamRecords,
   windowDigest,
 } from '../../core/ledger.mjs';
+import { now as clockNow } from '../../core/clock.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_WINDOW_MS = 30 * DAY_MS;
@@ -58,7 +59,7 @@ export function register(router, ctx) {
     const ledger = ctx.ledger;
     if (!ledger) return sendError(res, 503, 'The ledger is not running');
 
-    const now = Date.now();
+    const now = clockNow();
     const raw = url.searchParams.get('since');
     let since = now - DEFAULT_WINDOW_MS;
     if (raw != null && raw !== '') {

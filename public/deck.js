@@ -42,6 +42,8 @@
  * `innerHTML` in this file.
  */
 
+import { now as clockNow } from './clock.js';
+
 // ---------------------------------------------------------------- ordering
 
 /**
@@ -289,7 +291,7 @@ export function rowLabel(agent, now) {
  * @param {{createElement:(tag:string)=>any}} doc
  */
 export function buildChip(agent, opts, doc) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const start = waitStart(agent);
   const elapsedMs = start ? Math.max(0, now - start) : 0;
 
@@ -383,7 +385,7 @@ const COLUMNS = [
  * @param {{createElement:(tag:string)=>any}} doc
  */
 function buildRow(agent, opts, doc) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const start = waitStart(agent);
   const elapsedMs = start ? Math.max(0, now - start) : 0;
 
@@ -749,7 +751,7 @@ export function createDeckUI(opts) {
 
   function render() {
     const queue = getQueue();
-    const now = Date.now();
+    const now = clockNow();
 
     stripEl.hidden = queue.length === 0;
     syncChips(queue, now, getSelectedId());
@@ -781,7 +783,7 @@ export function createDeckUI(opts) {
     // and a panel opening on `J` would reflow the column the deck sits beside
     // on every keystroke. A panel already open follows the cursor.
     onSelect(next.id, { openPanel: !deckOpen });
-    announce?.(rowLabel(next, Date.now()));
+    announce?.(rowLabel(next, clockNow()));
     syncSelection();
   }
 

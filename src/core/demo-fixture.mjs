@@ -29,6 +29,7 @@
  */
 
 import { counts as countsOf, projects as projectsOf } from './model.mjs';
+import { fixedNow, now as clockNow } from './clock.mjs';
 
 const MINUTE = 60_000;
 
@@ -104,7 +105,7 @@ function demoCwd(project) {
  *   and `demoNote`
  */
 export function buildDemoSnapshot(opts = {}) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
 
   /** @type {Map<string, number>} project slug -> its MK number, in first-seen order */
   const projectMks = new Map();
@@ -187,6 +188,13 @@ export function buildDemoSnapshot(opts = {}) {
     degraded: {},
     writeError: opts.writeError ?? null,
     scannedAt: opts.scannedAt ?? null,
+    /**
+     * The clock the actors' ages were computed against, so the browser reads
+     * one instant rather than its own (WP-63). `nowFixed` says whether it is
+     * pinned by `DECKHQ_NOW` — see `src/core/clock.mjs` and `public/clock.js`.
+     */
+    now,
+    nowFixed: fixedNow() !== null,
     /**
      * The flag every consumer keys off. It is on the snapshot rather than
      * inferred from the ids because "is this floor real" is a question the

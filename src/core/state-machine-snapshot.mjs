@@ -14,6 +14,7 @@
  */
 
 import { counts, projects as projectsOf } from './model.mjs';
+import { fixedNow, now as clockNow } from './clock.mjs';
 import { projectKeyFor } from './ledger.mjs';
 import { buildDemoSnapshot } from './demo-fixture.mjs';
 import { rateCardVersion } from './rates.mjs';
@@ -73,11 +74,12 @@ export class RegistrySnapshot extends RegistryBase {
    * makes "run `claude` and a real one walks in" true within one poll rather
    * than after a reload.
    *
-   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean|string>, scannedAt: number|null, demo?: boolean, demoNote?: string}}
+   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean|string>, scannedAt: number|null, now: number, nowFixed: boolean, demo?: boolean, demoNote?: string}}
    */
   snapshot() {
     if (this._agents.length === 0 && this._scannedAt !== null) {
       return buildDemoSnapshot({
+        now: clockNow(),
         settings: this.store.settings,
         takenNames: this.identity ? this.identity.takenNames() : [],
         hooks: { ...this._hookStatus },
@@ -95,6 +97,7 @@ export class RegistrySnapshot extends RegistryBase {
    * @returns {any}
    */
   _realSnapshot() {
+    const at = clockNow();
     // WP-41. Two passes, because a junior's tag is its PARENT's tag with a
     // suffix and the parent may sort after it. Seniors first, then the
     // juniors against the records the first pass produced.
@@ -148,7 +151,7 @@ export class RegistrySnapshot extends RegistryBase {
       // The gone-home window reaches `counts` for the same reason it reaches
       // the renderer: `counts.drawn` describes what the floor shows, and what
       // the floor shows depends on it (WP-55).
-      counts: counts(agents, { goneHomeDays: this.store.settings.goneHomeDays }),
+      counts: counts(agents, { now: at, goneHomeDays: this.store.settings.goneHomeDays }),
       settings: this.store.settings,
       takenNames: this.identity ? this.identity.takenNames() : [],
       hooks: { ...this._hookStatus },
@@ -162,6 +165,12 @@ export class RegistrySnapshot extends RegistryBase {
       // for a string that is already in every snapshot.
       rateCardVersion: rateCardVersion(),
       scannedAt: this._scannedAt,
+      // WP-63. The clock every surface that draws an age reads, so the floor,
+      // the strip, the panel and the plates agree with each other and with
+      // the daemon rather than each asking the browser separately.
+      // `nowFixed` is true only under `DECKHQ_NOW`; see `src/core/clock.mjs`.
+      now: at,
+      nowFixed: fixedNow() !== null,
     };
   }
 

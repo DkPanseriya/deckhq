@@ -11,6 +11,7 @@
  */
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { DEFAULT_PORT } from '../../adapters/claude-code/hooks.mjs';
+import { now as clockNow } from '../../core/clock.mjs';
 
 /**
  * @param {import('../server.mjs').Router} router
@@ -252,7 +253,7 @@ function normaliseHookPayload(p, toolSummary, subagentEvent) {
     message: String(p.message || ''),
     tool,
     subagent,
-    at: Date.now(),
+    at: clockNow(),
     payload: p,
   };
 }

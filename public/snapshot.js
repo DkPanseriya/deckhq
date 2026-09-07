@@ -32,6 +32,8 @@
  * "redact" that leaves every project name legible on the floor above it.
  */
 
+import { now as clockNow } from './clock.js';
+
 /** The wordmark. No watermark beyond this (§3.2). */
 export const WORDMARK = 'deckhq.dev';
 
@@ -156,7 +158,7 @@ function startOfDay(now) {
  * @param {{hostname?: string, now?: number, redact?: boolean}} [opts]
  */
 export function snapshotModel(snapshot, opts = {}) {
-  const now = opts.now ?? Date.now();
+  const now = opts.now ?? clockNow();
   const source = opts.redact ? redactSnapshot(snapshot) : snapshot || {};
   const agents = source.agents || [];
   const counts = source.counts || {};

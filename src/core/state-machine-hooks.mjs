@@ -45,6 +45,7 @@
 
 import { RegistryScan } from './state-machine-scan.mjs';
 import { toAgentId, endedOr } from './state-machine-rules.mjs';
+import { now as clockNow } from './clock.mjs';
 
 export class RegistryHooks extends RegistryScan {
   /**
@@ -56,7 +57,7 @@ export class RegistryHooks extends RegistryScan {
   applyHook(event) {
     const runtime = event.runtime;
     const id = toAgentId(runtime, event.sessionId);
-    const now = typeof event.at === 'number' ? event.at : Date.now();
+    const now = typeof event.at === 'number' ? event.at : clockNow();
     const obs = this._ensureObserved(id, runtime, event.cwd);
 
     const health = this._hookHealth.get(runtime) || { eventsSeen: 0, lastEventAt: null };

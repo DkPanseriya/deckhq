@@ -23,6 +23,7 @@ import {
   isSubagent,
   placement,
 } from '../../public/floor-rule.js';
+import { now as clockNow } from './clock.mjs';
 
 export { GONE_HOME_DAYS, isActiveAgent, isDeskAgent, isGoneHome, isSubagent, placement };
 
@@ -278,7 +279,7 @@ export function needsYou(agent) {
  * @param {{now?:number, goneHomeDays?:number}} [opts]
  */
 export function counts(agents, opts = {}) {
-  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
+  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : clockNow();
   const goneHomeDays = opts.goneHomeDays ?? GONE_HOME_DAYS;
 
   let handsUp = 0;

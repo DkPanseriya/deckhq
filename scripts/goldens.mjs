@@ -38,7 +38,12 @@
  *
  * HOW A CAPTURE IS MADE DETERMINISTIC
  *   - the demo floor is a pure function of the population name (fixed ids,
- *     titles, ages and token counts; no clock, no random source);
+ *     titles, ages and token counts; no random source);
+ *   - and no CLOCK either, since WP-63: every capture runs with `DECKHQ_NOW`
+ *     pinned to `DEMO_EPOCH`, so the fixture is seeded against that instant,
+ *     the daemon serves it as the snapshot's `now`, and every age the client
+ *     draws — "2d 7h", "oldest 4d 10h", the waiting badges, the idle list —
+ *     is a fixed string rather than a photograph of the day the capture ran;
  *   - a fixed 1600x1000 viewport at device scale 1;
  *   - `prefers-reduced-motion: reduce` is emulated, which the renderer honours
  *     by drawing one static pose per state, snapping walks to their end point
@@ -96,6 +101,7 @@ import { fileURLToPath } from 'node:url';
 
 import { CHROME_UNAVAILABLE, findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
 import { THEME_NAMES } from '../src/core/themes.mjs';
+import { DEMO_EPOCH } from './demo-args.mjs';
 import { decodePng, diffImages, encodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -347,7 +353,16 @@ function startDemo(population, theme = 'default') {
     const child = spawn(
       process.execPath,
       [DEMO_SCRIPT, '--population', population, '--theme', theme, '--port', '0'],
-      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] },
+      {
+        cwd: ROOT,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // WP-63. The clock, pinned for the whole child: the fixture seeds
+        // every timestamp against it and the daemon serves it to the browser,
+        // so a golden stops being a photograph of the day it was taken. It is
+        // set here rather than left to the environment so that a developer who
+        // happens to export `DECKHQ_NOW` cannot move the goldens.
+        env: { ...process.env, DECKHQ_NOW: DEMO_EPOCH },
+      },
     );
     let out = '';
     let settled = false;

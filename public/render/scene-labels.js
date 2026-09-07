@@ -19,6 +19,7 @@ import { PALETTE } from './palette.js';
 import { formatElapsed } from './rig.js';
 import { worldToScreen } from './agents.js';
 import { SceneCamera } from './scene-camera.js';
+import { now as clockNow } from '../clock.js';
 
 // Name-label collision resolution (tech-lead review finding 1,
 // docs/DEVIATIONS.md "Findings from review"): how many extra candidate
@@ -159,7 +160,7 @@ export function plateLinesFor(room, snapshot, plan) {
     let oldest = 0;
     for (const a of snap.agents || []) {
       if (a.ackState === 'active' && a.activityState === 'for_review' && a.reviewSince) {
-        oldest = Math.max(oldest, Date.now() - a.reviewSince);
+        oldest = Math.max(oldest, clockNow() - a.reviewSince);
       }
     }
     const suffix = waiting > 0 && oldest > 0 ? ` · oldest ${formatElapsed(oldest)}` : '';

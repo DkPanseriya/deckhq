@@ -16,7 +16,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 
-import { BIN_DIR, CLAUDE_DIR, HOUR, MINUTE, PROJECTS_DIR, STATE_DIR } from './demo-args.mjs';
+import { BIN_DIR, CLAUDE_DIR, HOUR, MINUTE, NOW, PROJECTS_DIR, STATE_DIR } from './demo-args.mjs';
+import { now as clockNow } from '../src/core/clock.mjs';
 
 /** A deterministic uuid-shaped id, so runs are reproducible. */
 export function fakeId(n) {
@@ -49,7 +50,7 @@ export function writeTranscript({ id, cwd, title, ageHours, tokensM, finished })
   const dir = path.join(PROJECTS_DIR, slugForCwd(cwd));
   fs.mkdirSync(dir, { recursive: true });
 
-  const end = Date.now() - ageHours * HOUR;
+  const end = NOW - ageHours * HOUR;
   const at = (offsetMs) => new Date(end + offsetMs).toISOString();
   const base = { cwd, gitBranch: 'main', sessionId: id, version: '2.0.0' };
 
@@ -154,7 +155,7 @@ export function writeSubagent({ parentId, cwd, junior }) {
   const transcript = path.join(dir, `agent-${junior.agentId}.jsonl`);
   JUNIOR_FILES.push(transcript);
 
-  const end = Date.now() - junior.ageMinutes * MINUTE;
+  const end = NOW - junior.ageMinutes * MINUTE;
   const at = (offsetMs) => new Date(end + offsetMs).toISOString();
   // `sessionId` is the PARENT's id on every record — verified on this machine:
   // a subagent transcript never carries an id of its own in that field, only
@@ -242,7 +243,10 @@ export const JUNIOR_FILES = [];
 export function keepJuniorsWorking() {
   if (!JUNIOR_FILES.length) return null;
   const beat = () => {
-    const now = new Date();
+    // The model's clock, not the machine's: under `DECKHQ_NOW` the adapter
+    // measures a junior's freshness against the pinned instant, so the beat
+    // has to stamp that same instant or every junior reads as long gone.
+    const now = new Date(clockNow());
     for (const file of JUNIOR_FILES) {
       try {
         fs.utimesSync(file, now, now);
@@ -395,7 +399,7 @@ export async function writeLedgerFixture(sessions) {
   // trait line) matched no agent on the demo floor and quietly showed nothing.
   const agentIdOf = (s) => agentId('claude-code', s.id);
 
-  const now = Date.now();
+  const now = NOW;
   const midnight = new Date(now);
   midnight.setHours(0, 0, 0, 0);
 
