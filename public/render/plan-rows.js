@@ -54,6 +54,7 @@ import { better, score } from './plan-search.js';
 import {
   CORRIDOR,
   LOUNGE_PACKS,
+  ROOM_FILL_COLUMN_MAX,
   LOUNGE_ROW_ASPECT_MAX,
   LOUNGE_ROW_MIN_W,
   MARGIN,
@@ -64,7 +65,6 @@ import {
   OFFICE_ROW_MAX_W,
   OFFICE_SEAT_PITCH,
   PLATE_BAND,
-  ROOM_FILL_COLUMN_MAX,
   ROOM_FILL_MAX,
   ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
@@ -91,6 +91,14 @@ export function createRowFloor(deps) {
   /**
    * Can this floor be laid in two rows at all?
    *
+   * A FLOOR WITH NO PROJECT ROOMS CANNOT (WP-60). Row one is the reception
+   * BESIDE the rooms; with no rooms it is the reception alone above the lounge,
+   * which is a column — the same building, described twice. WP-59d let this
+   * through because `ROWS_OPEN_MIN` never offered an empty floor the second
+   * search in the first place; WP-60 removed that gate, and an empty floor
+   * promptly refolded itself into a 1.51:1 hall with a sixty-seat reception in
+   * it. Nobody had complained about that floor.
+   *
    * ONE ROW OF ROOMS, and `dealBands` is the judge of it: its DEPTH rule
    * (`HEIGHT_BAND_RATIO`) starts a new row for a room much shallower than the
    * one it would share with, whatever row count it was asked for, because a
@@ -98,7 +106,7 @@ export function createRowFloor(deps) {
    * floor it splits has no single row, and there is nothing this module could
    * honestly do about that — so it says no, and the column takes it.
    */
-  const oneRow = () => projectRooms.length === 0 || bandsOf(1).length === 1;
+  const oneRow = () => projectRooms.length > 0 && bandsOf(1).length === 1;
 
   /**
    * The lounge at the end of row two, and the two things a row asks of it that
@@ -194,7 +202,7 @@ export function createRowFloor(deps) {
     const { W, h1, bandH, forced, ow } = row;
     const H = h1 + CORRIDOR + back.h2;
 
-    const cost = costWorkingFloor(1, roomsW, bandH, forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX);
+    const cost = costWorkingFloor(1, roomsW, bandH);
     // WHAT NOBODY STANDS ON, measured against the same thing the column
     // measures it against: the part of the building that holds the rooms. The
     // reception fills its own end of row one and the lounge fills the whole of
@@ -276,9 +284,24 @@ export function createRowFloor(deps) {
     front = measureFront(Math.max(owWanted, front.room.w), h1);
     h1 = Math.max(h1, front.room.h);
     const ow = front.room.w;
+    // THE ROOMS TAKE THE WHOLE OF ROW ONE'S DEPTH (WP-60).
+    //
+    // WP-59d capped this at the bare-carpet ceiling like the column's, and the
+    // cap is wrong HERE for the reason it is right there. A column's height is
+    // the lounge's and has nothing to do with the rooms, so filling it makes a
+    // ballroom; row one's depth is the RECEPTION's, which is a room-sized
+    // number by construction (`OFFICE_ROW_MAX_DEPTH`, and the queue that sets
+    // it). A band shallower than the reception beside it is a strip of nothing
+    // under the rooms — the one thing the service side has never drawn — and
+    // it is the whole of the open floor this arrangement had left.
+    //
+    // `bandDepthCeiling` is still asked, because `forced` — "the plan stretched
+    // these rooms past the depth it would have chosen", which the integrity
+    // test reads — is exactly the comparison against it. A flag raised for
+    // nothing is worse than no flag.
+    const bandH = projectRooms.length ? h1 : 0;
     const ceiling = projectRooms.length ? bandDepthCeiling(1, roomsW, ROOM_FILL_COLUMN_MAX) : 0;
-    const bandH = projectRooms.length ? Math.min(h1, Math.max(asked, ceiling)) : 0;
-    return { ow, h1, W: ow + roomsW, bandH, forced: bandH > asked + 1e-6 };
+    return { ow, h1, W: ow + roomsW, bandH, forced: bandH > Math.max(asked, ceiling) + 1e-6 };
   };
 
   /**
@@ -323,11 +346,7 @@ export function createRowFloor(deps) {
       floor.invalidateBands();
       row = rowOne(chosen.askedW, roomsW, asked) || row;
       laid = projectRooms.length
-        ? layWorkingFloor(
-            { x: row.ow, y: 0, w: roomsW, h: row.bandH },
-            1,
-            row.forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
-          )
+        ? layWorkingFloor({ x: row.ow, y: 0, w: roomsW, h: row.bandH }, 1)
         : { cells: [], corridors: [] };
       let worstW = 1;
       let worstH = 1;

@@ -217,14 +217,32 @@ const OPEN_SETTLE = 0.02;
  */
 export function betterArrangement(a, b) {
   const bar = Math.log(1 + ASPECT_TOLERANCE);
-  const offShape = (c) => (c.aspectErr > bar + 1e-9 ? 1 : 0);
-  if (offShape(a) !== offShape(b)) return offShape(a) < offShape(b);
-  // 1b. AND, BETWEEN TWO THAT BOTH MISS IT, one that misses it by a whole
-  // tolerance more still loses. Without this the second rank does the same
-  // damage inside the exemption that the first rank exists to prevent outside
-  // it: on a floor neither arrangement can shape, a 0.98:1 building with a
-  // full working side beat a 1.51:1 one, and covered 55% of a 1.78:1 window
-  // against 95%.
+  // 1. THE SHAPE, AS A DISTANCE RATHER THAN AS A BAR (WP-60).
+  //
+  // §142 wrote this rank as a FLAG — inside `ASPECT_TOLERANCE` or outside it,
+  // and an arrangement that cleared the bar beat one that did not whatever
+  // either left open. WP-60 measured what that costs on a floor where the two
+  // arrangements land either side of the line: the `three` population on the
+  // stage a 1920 x 1080 window actually gives (1920 x 950 once the header and
+  // the queue strip are taken off, so 2.02:1). The column came out 1.81:1 —
+  // inside the tolerance — with 54% OF ITS WORKING SIDE OPEN PLAN, and two
+  // rows came out 1.72:1, a hair outside, and completely full. The flag took
+  // the column: four and a half points of coverage, bought with fifty-four
+  // points of bare floor, which is the picture §141 exists to have removed.
+  //
+  // So the bar is gone and what was 1b is the whole of this rank: an
+  // arrangement that misses the window's shape by a WHOLE TOLERANCE more than
+  // the other still loses, and inside that margin the fill decides. That keeps
+  // the case the bar was written for — §142 measured a reference floor coming
+  // out 1.07:1 on a 1.78:1 window against a 1.51:1 alternative, and 0.51
+  // against 0.16 in log error is more than a whole tolerance apart, so it is
+  // still refused — while letting a floor that is nearly the right shape and
+  // completely full beat one that is exactly the right shape and half empty.
+  //
+  // A bar is the right instrument when the thing on the other side of it is a
+  // hangar. It is the wrong one when both arrangements are the shape of the
+  // window to within a few points, which is the ordinary case and was never
+  // the case it was measured on.
   if (Math.abs(a.aspectErr - b.aspectErr) > bar) return a.aspectErr < b.aspectErr;
   if (Math.abs(a.workOpen - b.workOpen) > OPEN_SETTLE) return a.workOpen < b.workOpen;
   return a.aspectErr < b.aspectErr - 1e-4;

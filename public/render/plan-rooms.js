@@ -23,6 +23,7 @@ import {
   CHAIR_GAP,
   CORNER_PLANT_INSET,
   FIXTURE_TOP,
+  ROOM_WIDTH_STRETCH_MAX,
   MIN_PROJECT_ROOM_H,
   MIN_PROJECT_ROOM_W,
   PLANT_GAP,
@@ -134,6 +135,11 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   // finished room is what this function is deciding. `run` is the wall from
   // under the plate to the floor; the fixtures leave the last of it for the
   // corner planting.
+  // The board and the shelf stand on the EAST and WEST walls, so what they may
+  // take is the room's DEPTH however wide the cell is. A wider room spreads
+  // through its rug, its planting and the clearance around the desks instead —
+  // there is one board and one shelf however large the room gets, which is what
+  // keeps a big room reading as a room rather than as a wall of fixtures.
   const wallRun = Math.max(0, (fit && fit.h > 0 ? fit.h : 0) - PLATE_BAND);
   const wallRoom = Math.max(0, wallRun - FIXTURE_TOP - CORNER_PLANT_INSET - 2.4);
   const shelfH = clamp(wallRun * 0.22, 3.6, Math.max(3.6, wallRoom * 0.45));
@@ -353,15 +359,32 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   if (zones.length) {
     const clusterW = cluster.w + 1.6;
     const clusterH = cluster.h + 1.6;
-    const rugW = clamp(w - RUG_ROOM_INSET * 2, clusterW, clusterW * RUG_MAX_OVER_CLUSTER);
-    // Deeper on a room the service column made deep (WP-59c). Nothing ever
-    // made a room WIDER than the plan chose, so the width keeps the old
-    // ceiling and only the depth gets the looser one.
-    const stretched = h > naturalH * ROOM_HEIGHT_STRETCH_MAX + 0.01;
+    // THE RUG SPREADS ON BOTH AXES (WP-60).
+    //
+    // WP-59c gave the DEPTH the looser ceiling, because the service column was
+    // the only thing that ever made a room bigger than the plan chose and it
+    // could only make it deeper. WP-60's cells are dealt by occupancy and fill
+    // their row, so a busy project is now routinely much WIDER than its desks
+    // asked for as well — and a rug that stops at 1.6x the cluster in a room
+    // laid at 2.5x is a mat in the middle of a floor, which is the composition
+    // §106 removed one axis over.
+    //
+    // Each axis is judged on its own: a room stretched only in width keeps the
+    // tight ceiling on its depth, and the reverse. `RUG_ROOM_INSET` still holds
+    // the rug clear of the walls so the corner planting and the wall fixtures
+    // keep floor of their own, and past the looser ceiling the extra floor is
+    // honestly bare rather than painted as a rug nothing stands on.
+    const wideStretched = w > naturalW * ROOM_WIDTH_STRETCH_MAX + 0.01;
+    const deepStretched = h > naturalH * ROOM_HEIGHT_STRETCH_MAX + 0.01;
+    const rugW = clamp(
+      w - RUG_ROOM_INSET * 2,
+      clusterW,
+      clusterW * (wideStretched ? RUG_MAX_OVER_COLUMN : RUG_MAX_OVER_CLUSTER),
+    );
     const rugH = clamp(
       h - PLATE_BAND - RUG_ROOM_INSET * 2,
       clusterH,
-      clusterH * (stretched ? RUG_MAX_OVER_COLUMN : RUG_MAX_OVER_CLUSTER),
+      clusterH * (deepStretched ? RUG_MAX_OVER_COLUMN : RUG_MAX_OVER_CLUSTER),
     );
     props.unshift({
       kind: 'rug',

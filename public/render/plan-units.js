@@ -196,6 +196,10 @@
  * @property {number} x the working side's left edge, in units
  * @property {number} w its width
  * @property {number} open the fraction of it nobody stands on
+ * @property {number} bareCarpet the worst room's bare fraction — floor inside
+ *   a room its furniture does not occupy. REPORTED, never enforced (WP-60):
+ *   `ROOM_FILL_MAX` used to stop a band short of its row rather than let this
+ *   rise, which bought tidiness with a bay of open floor beside the rooms.
  * @property {boolean} roomsStretched (a) — the rooms were made deeper than the
  *   plan would have chosen, to meet the service column
  * @property {number} loungePack (b) — how tightly the lounge was packed; `1`
@@ -339,7 +343,7 @@ export const ROOM_HEIGHT_STRETCH_MAX = 1.6;
  * order the plan is allowed to fill it in is `plan.js`'s `envelopeFor` —
  * rooms first, then the strip, then a denser lounge, and only then this.
  */
-export const WORKING_OPEN_MAX = 0.1;
+export const WORKING_OPEN_MAX = 0.05;
 
 /**
  * The bare-carpet bound for a room the SERVICE COLUMN made tall (WP-59c).
@@ -367,6 +371,30 @@ export const WORKING_OPEN_MAX = 0.1;
  * oldest defect in this file wearing a new hat.
  */
 export const ROOM_FILL_COLUMN_MAX = 1 / 0.58;
+
+/**
+ * HOW UNEQUAL TWO CELLS IN ONE ROW MAY BE (WP-60).
+ *
+ * The owner's floor has a twenty-four session project beside three one-session
+ * ones, and it drew four cells of the same width: the row shared itself out by
+ * what each room's FURNITURE needed, and a one-desk room's furniture is very
+ * nearly a twenty-four-desk room's once both have a rug, a board and their
+ * planting. So the room where all the work is happening was the same size as
+ * the three where almost none is.
+ *
+ * The cells are shared out by OCCUPANCY now — desks, which are agents at desks
+ * (`08` B6) — and this is the bound on it. Unclamped, twenty-four against one
+ * is a cell twenty-four times the width of its neighbour, which is not a room
+ * any more: at the widths a real stage gives a row of four that is a hall
+ * beside three cupboards, and a cupboard cannot hold a desk, a chair and the
+ * clearance around them. Three to one is the widest a row can be dealt while
+ * every cell in it is still recognisably a room.
+ *
+ * It is a RATIO WITHIN A ROW rather than an absolute size, because that is the
+ * comparison a person actually makes: the eye reads the big room as the busy
+ * one by seeing it next to the small ones.
+ */
+export const CELL_OCCUPANCY_RATIO_MAX = 3;
 
 /**
  * THE SECOND ARRANGEMENT (WP-59d), and the two conditions it is tried under.

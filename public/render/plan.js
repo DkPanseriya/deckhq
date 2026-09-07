@@ -81,10 +81,7 @@ import {
   OFFICE_MIN_W,
   OFFICE_SURPLUS_SHARE,
   ROOM_ASPECT_MAX,
-  ROOM_FILL_COLUMN_MAX,
-  ROOM_FILL_MAX,
   ROWS_ASPECT_MIN,
-  ROWS_OPEN_MIN,
   SERVICE_MAX_W,
   SERVICE_W_STEP,
   WORKING_OPEN_MAX,
@@ -254,7 +251,27 @@ export function buildPlan(projects, agents, opts = {}) {
   // may be laid, and what the whole of it measures. Its own module since
   // WP-59 (`plan-envelope.js`), which is a closure over `naturalOf` because a
   // room’s natural size changes under the fit loop below.
-  const workingFloor = createWorkingFloor(projectRooms, naturalOf);
+  // OCCUPANCY IS WHAT A CELL'S WIDTH IS SHARED OUT BY (WP-60), and it is the
+  // SESSION COUNT rather than the desks.
+  //
+  // The two are different questions and only one of them is about how much
+  // floor a project is worth. `desksIn` is agents AT DESKS RIGHT NOW (`08` B6),
+  // which is what the room's furniture is built from and must stay that way —
+  // a desk nobody is at is the oldest defect in this file. But on the owner's
+  // own machine every one of his active repos had exactly one agent at a desk
+  // and the rest finished or benched, so dealt by desks the row came out as
+  // four cells of one width — with `24 sessions` written on the plate of the
+  // first and `4 sessions` on the last. The number the eye correlates the
+  // room's size with is the one written on its door.
+  //
+  // So: the FURNITURE is desks and the FLOOR is sessions. A project with
+  // twenty-four sessions in it is a project twenty-four things have happened
+  // in this week, and it earns more room than one with a single session
+  // whether or not both happen to have one agent typing at this instant.
+  // `CELL_OCCUPANCY_RATIO_MAX` keeps the disparity inside three either way.
+  const workingFloor = createWorkingFloor(projectRooms, naturalOf, (i) =>
+    Math.max(1, activeProjects[i].sessionCount ?? desksIn(activeProjects[i])),
+  );
   const { costWorkingFloor, fillOrder, invalidateBands, layColumn, workingShape } = workingFloor;
 
   // THE SECOND ARRANGEMENT (WP-59d): the office beside the rooms over the
@@ -307,12 +324,7 @@ export function buildPlan(projects, agents, opts = {}) {
     // What of this envelope nobody stands on: the working side less its rooms.
     // The service column fills its own side exactly (see below) and the spine
     // is a route, so neither is open floor.
-    const cost = costWorkingFloor(
-      rowCount,
-      workingW,
-      bandH,
-      forced ? ROOM_FILL_COLUMN_MAX : ROOM_FILL_MAX,
-    );
+    const cost = costWorkingFloor(rowCount, workingW, bandH);
     const filled = cost.area;
     const workingArea = workingW * H;
     const open = Math.max(0, (workingArea - filled) / Math.max(1e-6, W * H));
@@ -442,15 +454,30 @@ export function buildPlan(projects, agents, opts = {}) {
   invalidateBands();
   let chosen = search();
 
-  // ---- AND THEN THE SECOND ARRANGEMENT, WHERE THE FIRST ONE CANNOT FILL
-  // ITSELF (WP-59d).
+  // ---- AND THEN THE SECOND ARRANGEMENT (WP-59d), ON EVERY WIDE STAGE
+  // (WP-60).
   //
-  // Two conditions, and each is a refusal to move a picture nobody complained
-  // about. A tall or square stage is exactly what a column is for; a floor
-  // whose column fills its own working side has no problem for a second shape
-  // to solve. Below either, nothing below runs and the plan is WP-59c's.
+  // ONE condition now, and it is the one that was always a statement about the
+  // picture rather than about a number: a tall or square stage is exactly what
+  // a column is for, and two rows stacked in one would be wider than the
+  // screen.
+  //
+  // The second condition was `ROWS_OPEN_MIN` — try the fold only where the
+  // column left more than 15% of its own working side open — and WP-60 made it
+  // a trap. A column's rooms now fill their row's WIDTH edge to edge, so the
+  // open floor it reports collapsed towards zero on almost every population;
+  // the gate then read that as "this floor has no problem to solve" and never
+  // ran the second search, on floors whose column was answering the lounge's
+  // height with four rooms at 89% bare carpet. The emptiness had not gone
+  // anywhere. It had moved inside the rooms, where the gate could not see it.
+  //
+  // So the two arrangements are both searched and `betterArrangement` chooses,
+  // which is what it is for. The cost is one more pass of arithmetic on a plan
+  // that is rebuilt when the FLOOR changes rather than per frame, and the
+  // benefit is that a floor is folded whenever folding it is the better
+  // picture rather than whenever a proxy said it might be.
   let rows =
-    targetAspect >= ROWS_ASPECT_MIN && chosen.workOpen > ROWS_OPEN_MIN
+    targetAspect >= ROWS_ASPECT_MIN
       ? rowFloor.searchRows({ targetAspect, bandDepths, rebuild: rebuildInto })
       : null;
   if (rows) {
@@ -694,11 +721,33 @@ export function buildPlan(projects, agents, opts = {}) {
   // that fills its own rectangle rather than a side to be filled.
   const workingArea = rows ? workingWidth * fitted.h1 : Math.max(0, workingWidth) * H;
   const takenArea = projectRooms.reduce((a, pr) => a + pr.room.w * pr.room.h, 0);
+  // THE BARE CARPET, REPORTED (WP-60).
+  //
+  // `ROOM_FILL_MAX` used to be a LIMIT: a band of rooms stopped short of its
+  // row rather than let its shallowest room past 30% bare carpet, and what it
+  // did not take was drawn as a bay. That bought its tidiness with a hole in
+  // the floor — the bay is carpet too, and carpet nothing can ever be put on
+  // because it is not inside a room. The rooms fill their row now and this is
+  // the number that says what it cost: the worst room's bare fraction, stated
+  // where the integrity test and anyone reading a floor can both find it.
+  //
+  // A metric rather than a bound, and the difference is the whole of WP-60's
+  // second half. A bound refuses a floor; a metric describes one, and a floor
+  // that has to be described is a floor somebody can argue with.
+  const bare = projectRooms.map((pr) => {
+    const n = pr.room.natural || { w: pr.room.w, h: pr.room.h };
+    return 1 - (n.w * n.h) / Math.max(1e-6, pr.room.w * pr.room.h);
+  });
   const working = {
     x: workingX,
     w: Math.max(0, workingWidth),
     /** The fraction of the working side nobody stands on. */
     open: workingArea > 1e-6 ? Math.max(0, (workingArea - takenArea) / workingArea) : 0,
+    /**
+     * The worst room's bare carpet — floor inside a room that its furniture
+     * does not occupy. Reported, never enforced (WP-60).
+     */
+    bareCarpet: bare.length ? Math.max(...bare) : 0,
     /** (a) — the rooms were made deeper than the plan would have chosen. */
     roomsStretched: Boolean(forced),
     /** (b) — how tightly the lounge was packed; 1 is the room untouched. */
