@@ -15,15 +15,14 @@
  *
  * Nothing here knows about the service column or the envelope. It is asked
  * "lay these rooms in this rectangle", "how big are they" and — since WP-59c —
- * "what do you do with a height the column gave you", which is the one place
- * the strip is mentioned at all: the fill order spends the strip's rows on the
- * working side's height, so it has to know how tall a board of `n` repos is.
+ * "what do you do with a height the column gave you". It used to have to know
+ * how tall a board of `n` idle repos was, because the fill order spent the
+ * strip's rows on the working side's height; WP-60 took the strip off the
+ * floor, and this module no longer knows that idle repos exist at all.
  */
 
-import { directoryColumns, directoryHeight } from './plan-rooms.js';
 import {
   CORRIDOR,
-  DIRECTORY_SIDE_MAX,
   HEIGHT_BAND_RATIO,
   PLATE_BAND,
   PROJECT_ASPECT_LIMIT,
@@ -488,47 +487,38 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    *       — 45% bare carpet, five points past the bound on a stretch the plan
    *       merely preferred, and `buildProjectRoom` re-lays the furniture into
    *       the depth rather than leaving the desks adrift in it;
-   *   (b) the strip stands its lines up — fewer columns, more rows, the same
-   *       repos — up to `DIRECTORY_SIDE_MAX` of the side;
-   *   (c) the service column comes DOWN to meet them, by packing the lounge
+   *   (b) the service column comes DOWN to meet them, by packing the lounge
    *       denser. That is the `pack` axis of the search rather than a step
    *       here, because it changes the height this function is measuring
    *       against; `better` takes the loosest lounge that does the job.
-   *   (d) and only then open plan, which `WORKING_OPEN_MAX` bounds.
+   *   (c) and only then open plan, which `WORKING_OPEN_MAX` bounds.
    *
-   * Returns the band depth and the strip's column count that (a) and (b)
-   * settle on, so `envelopeFor` and `settle` cannot answer differently.
+   * THERE USED TO BE A STEP BETWEEN (a) AND (b): the idle strip stood its lines
+   * up — fewer columns, more rows, the same repos — to spend some of the height
+   * the column had handed over. WP-60 took the strip off the floor, and with it
+   * the only lever on this side that was not a room. What that leaves is a
+   * shorter order and a plainer sentence: the rooms take the height, and what
+   * they cannot take is open plan.
+   *
+   * Returns the band depth (a) settles on, so `envelopeFor` and `settle` cannot
+   * answer differently.
    *
    * @param {number} rowCount @param {number} workingW @param {number} H
    * @param {number} bandH the depth this candidate asked its band to be laid at
-   * @param {number} idle idle repos the strip has to list
    */
-  const fillOrder = (rowCount, workingW, H, bandH, idle) => {
-    let dirCols = 0;
-    let dirH = idle ? directoryHeight(idle, workingW, 0) : 0;
+  const fillOrder = (rowCount, workingW, H, bandH) => {
     let rooms = bandH;
-    // (a) the rooms first.
-    if (projectRooms.length && rooms + dirH < H - 1e-6) {
+    // (a) the rooms, and there is nothing else on this side to be second.
+    if (projectRooms.length && rooms < H - 1e-6) {
       const ceiling = bandDepthCeiling(rowCount, workingW, ROOM_FILL_COLUMN_MAX);
-      rooms = Math.max(rooms, Math.min(H - dirH, ceiling));
-    }
-    // (b) then the strip, in as few columns as the allowance will carry.
-    if (idle && rooms + dirH < H - 1e-6) {
-      const allowance = Math.min(H - rooms, H * DIRECTORY_SIDE_MAX);
-      for (const cols of directoryColumns(idle, workingW)) {
-        const h = directoryHeight(idle, workingW, cols);
-        if (h > dirH && h <= allowance + 1e-6) {
-          dirH = h;
-          dirCols = cols;
-        }
-      }
+      rooms = Math.max(rooms, Math.min(H, ceiling));
     }
     // A room deeper than the search asked for is a room the COLUMN stretched,
     // and it is the one case the looser bare-carpet bound applies to. Said as
     // a comparison rather than as a flag because the same comparison is what
     // the integrity test makes of the finished floor.
     const forced = rooms > bandH + 1e-6;
-    return { bandH: rooms, dirH, dirCols, forced };
+    return { bandH: rooms, forced };
   };
 
   /**
@@ -556,16 +546,13 @@ export function createWorkingFloor(projectRooms, naturalOf) {
    *
    * @param {any} chosen the candidate envelope the search settled on
    * @param {(i:number, cell:{w:number,h:number}, aspect:number) => void} rebuild
-   * @param {number} idle idle repos the strip has to list
    */
-  const layColumn = (chosen, rebuild, idle) => {
+  const layColumn = (chosen, rebuild) => {
     const workingX = chosen.measured.w + CORRIDOR;
     let H = chosen.H;
     let workingW = chosen.workingW;
     let W = workingX + workingW;
     let laid = { cells: [], corridors: [] };
-    let dirH = 0;
-    let dirCols = chosen.dirCols;
     let forced = chosen.forced;
     let bandH = chosen.bandH;
     let asked = chosen.asked ?? chosen.bandH;
@@ -580,11 +567,9 @@ export function createWorkingFloor(projectRooms, naturalOf) {
       // loop has since rebuilt them into their cells, so the rooms are a
       // different size and the answer has to be asked again. Asked through the
       // same function, so the two can be wrong together but never differently.
-      const order = fillOrder(chosen.rowCount, workingW, H, Math.min(asked, Math.max(1, H)), idle);
-      dirH = order.dirH;
-      dirCols = order.dirCols;
+      const order = fillOrder(chosen.rowCount, workingW, H, Math.min(asked, Math.max(1, H)));
       forced = order.forced;
-      bandH = Math.min(order.bandH, Math.max(1, H - dirH));
+      bandH = Math.min(order.bandH, Math.max(1, H));
       laid = projectRooms.length
         ? layWorkingFloor(
             { x: workingX, y: 0, w: workingW, h: bandH },
@@ -618,9 +603,9 @@ export function createWorkingFloor(projectRooms, naturalOf) {
       if (worstW <= 1.0005 && worstH <= 1.0005) break;
       workingW *= Math.min(worstW, 1.25);
       asked *= Math.min(worstH, 1.25);
-      H = Math.max(H, asked + dirH);
+      H = Math.max(H, asked);
     }
-    return { H, W, workingW, workingX, laid, dirH, dirCols, bandH, forced };
+    return { H, W, workingW, workingX, laid, bandH, forced };
   };
 
   return {

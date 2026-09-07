@@ -253,6 +253,19 @@ export function buildCommandEntries(ctx) {
       run: () => actions.floatOffice(),
     },
     {
+      // WP-60. The repos nobody is working in. They used to be a column drawn
+      // permanently down the corner of the floor; they are a popover now, and a
+      // thing that only ever appears on hover needs a name somewhere it can be
+      // found. `i` is the everyday route, the same way `P` is for the office.
+      id: 'cmd:idle-projects',
+      group: 'command',
+      label: 'Idle projects',
+      hint: 'the repos nobody is working in — I',
+      accel: 'i',
+      keywords: ['repo', 'repos', 'idle', 'nobody', 'projects', 'list'],
+      run: () => actions.idleProjects(),
+    },
+    {
       id: 'cmd:settle',
       group: 'command',
       label: 'Settle floor',

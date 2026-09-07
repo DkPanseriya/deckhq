@@ -160,6 +160,42 @@
           hidden
         ></div>
 
+        <!-- The idle projects (WP-60). This was a column of repo names drawn
+             down the bottom-right of the canvas, permanently, every line of it
+             saying "nobody is working here" — the largest thing on the floor of
+             a machine with any history. It is a chip and a popover now: the
+             count is what you glance at, the names are what you ask for, on
+             hover, on click, or on `I`. Deliberately NOT a <dialog>: the floor's
+             keyboard map stands down entirely while a modal one is open, and
+             this list is something you look at the floor through. Built by
+             public/idle-projects.js; this is only its shell. -->
+        <button
+          type="button"
+          class="idle-chip"
+          id="idle-chip"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+          aria-controls="idle-popover"
+          hidden
+        ></button>
+        <div
+          class="idle-popover"
+          id="idle-popover"
+          role="dialog"
+          aria-labelledby="idle-popover-title"
+          hidden
+        >
+          <p class="idle-popover-title" id="idle-popover-title">Nobody is working in these</p>
+          <ul
+            class="idle-list"
+            id="idle-list"
+            role="listbox"
+            tabindex="-1"
+            aria-label="Idle projects"
+          ></ul>
+          <p class="idle-popover-foot">Up and down to move · Enter to open · Esc to close</p>
+        </div>
+
         <!-- The office-cleared line (WP-15, §9). One sentence, three seconds,
              gone. Sits over the floor because that is what it is about. -->
         <p class="office-cleared" id="office-cleared" hidden aria-hidden="true"></p>

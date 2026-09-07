@@ -147,6 +147,10 @@ export const el = {
   nightcardRows: document.getElementById('nightcard-rows'),
   nightcardFoot: document.getElementById('nightcard-foot'),
   nightcardHint: document.getElementById('nightcard-hint'),
+  // WP-60. The idle-projects chip in the stage's corner, and its popover.
+  idleChip: document.getElementById('idle-chip'),
+  idlePopover: document.getElementById('idle-popover'),
+  idleList: document.getElementById('idle-list'),
   // WP-45. The floor replay's transport bar.
   replay: document.getElementById('replay'),
   replayDay: document.getElementById('replay-day'),

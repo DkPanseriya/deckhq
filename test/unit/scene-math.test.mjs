@@ -1213,12 +1213,6 @@ test('every other room plate is still exactly two lines', () => {
   });
   assert.deepEqual(lounge, ['Lounge', '3 benched · 1 went home']);
 
-  const dir = plateLinesFor(
-    { kind: 'directory', id: '__dir__', name: 'Directory', entries: [{}, {}] },
-    snapshot,
-  );
-  assert.deepEqual(dir, ['Directory', '2 repos · nobody in']);
-
   const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
   assert.deepEqual(letGo, ['Archive', '1 fired']);
 });

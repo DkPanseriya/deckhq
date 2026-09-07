@@ -17,14 +17,7 @@ import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, identityFor, appearanceFor } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
-import {
-  FONT_UI,
-  FONT_MONO,
-  ellipsise,
-  plateScaleFor,
-  resolveBadgeCollisions,
-  resolveLabelCollisions,
-} from './scene-labels.js';
+import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import {
   colorForAgent,
@@ -397,7 +390,6 @@ export class SceneDraw extends SceneHit {
         // the office and lounge have neither a project to launch nor a
         // whiteboard.
         if (room.kind === 'project') this._drawRoomFixtures(room, camera);
-        if (room.kind === 'directory') this._drawDirectory(room, camera);
       }
     }
 
@@ -590,83 +582,5 @@ export class SceneDraw extends SceneHit {
       cy: s.y,
       r: Math.max(PLUS_HIT_RADIUS_PX, armLen * 1.7),
     });
-  }
-
-  /**
-   * The idle-projects directory (`plan.js`'s `buildDirectory`, `08` B6).
-   *
-   * One line per repo nobody is in: name, session count, last activity. Drawn
-   * live rather than baked, because the last two change on every push and a
-   * re-bake is ~190 ms. Each line registers a plate rect, so clicking it does
-   * exactly what clicking a room plate does — scope the panel to that project.
-   * @param {import('./plan.js').Room} room
-   * @param {{zoom:number,panX:number,panY:number,U:number}} camera
-   */
-  _drawDirectory(room, camera) {
-    const ctx = this.ctx;
-    const entries = room.entries || [];
-    if (!entries.length) return;
-    const u = U * camera.zoom;
-    // The strip's lines are plate text on the floor, so they grow with the
-    // plan exactly as a room plate does (WP-59, `plateScaleFor`).
-    const k = plateScaleFor(u);
-    const byId = new Map((this._snapshot.projects || []).map((p) => [p.id, p]));
-
-    ctx.save();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.miterLimit = 2;
-
-    for (const entry of entries) {
-      const at = worldToScreen({ x: entry.x, y: entry.y }, camera);
-      const lineH = entry.h * u;
-      const midY = at.y + lineH / 2;
-      const maxW = Math.max(24 * k, entry.w * u - 10 * k);
-
-      // A hairline under each line, so a column of names reads as a list
-      // rather than as loose text lying on the floor.
-      ctx.strokeStyle = PALETTE.partitionEdge;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(at.x, Math.round(at.y + lineH) - 0.5);
-      ctx.lineTo(at.x + maxW, Math.round(at.y + lineH) - 0.5);
-      ctx.stroke();
-
-      const project = byId.get(entry.id);
-      const sessions = project ? project.sessionCount : entry.sessionCount;
-      const last = entry.lastActivityAt
-        ? formatElapsed(Math.max(0, Date.now() - entry.lastActivityAt))
-        : '';
-      const stat = `${sessions}${last ? ` · ${last}` : ''}`;
-
-      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
-      const statW = ctx.measureText(stat).width;
-      ctx.font = `600 ${(12 * k).toFixed(2)}px ${FONT_UI}`;
-      const name = ellipsise(ctx, entry.name, Math.max(16 * k, maxW - statW - 10 * k));
-      const nameW = ctx.measureText(name).width;
-      ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 3 * k;
-      ctx.strokeText(name, at.x, midY);
-      ctx.fillStyle = PALETTE.plateInk;
-      ctx.fillText(name, at.x, midY);
-
-      ctx.font = `600 ${(11 * k).toFixed(2)}px ${FONT_MONO}`;
-      ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = 2.6 * k;
-      ctx.strokeText(stat, at.x + maxW - statW, midY);
-      ctx.fillStyle = PALETTE.plateInkSecondary;
-      ctx.fillText(stat, at.x + maxW - statW, midY);
-
-      this._plateRects.push({
-        x: at.x,
-        y: at.y,
-        w: Math.max(nameW, maxW),
-        h: lineH,
-        kind: 'project',
-        id: entry.id,
-      });
-    }
-    ctx.restore();
   }
 }

@@ -1,12 +1,16 @@
 /**
- * The rooms a project earns: its own room, or one line in the idle strip.
+ * The room a project earns.
  *
  * Split out of `plan.js` by WP-22. `buildProjectRoom` is where `08` B6's rule
  * becomes furniture — desks equal to the agents at them, a table per eight
  * people, and a `natural` footprint that is what the room's contents need
  * rather than what the packer has to spare (`docs/DEVIATIONS.md` §106).
- * `buildDirectory` is the other end of the same rule: a project with nobody in
- * it is a legible line, not an empty room.
+ *
+ * THE OTHER END OF THAT RULE USED TO LIVE HERE TOO. A project with nobody in it
+ * earned `buildDirectory` — one legible line on a strip along the working
+ * side's edge, rather than an empty room (§96). WP-60 took the strip off the
+ * floor: a repo nobody is in is now a line in a popover the user opens, so it
+ * costs no floor at all and this module builds one kind of thing.
  *
  * The two plate-line formatters live here because this is the only place that
  * writes a plate. `plan.js` re-exports both.
@@ -18,14 +22,7 @@ import {
   CHAIR,
   CHAIR_GAP,
   CORNER_PLANT_INSET,
-  DIRECTORY_COL_MAX_W,
-  DIRECTORY_COL_W,
-  DIRECTORY_LINE_H,
-  DIRECTORY_MAX_COLS,
-  DIRECTORY_MAX_ROWS,
-  DIRECTORY_PAD,
   FIXTURE_TOP,
-  MARGIN,
   MIN_PROJECT_ROOM_H,
   MIN_PROJECT_ROOM_W,
   PLANT_GAP,
@@ -47,7 +44,6 @@ import {
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
 /** @typedef {import('./plan-units.js').Wall} Wall */
-/** @typedef {import('./plan-units.js').DirectoryEntry} DirectoryEntry */
 /** @typedef {import('./plan-units.js').Room} Room */
 /** @typedef {import('./plan-units.js').Seat} Seat */
 
@@ -94,212 +90,6 @@ export function payrollLine(project) {
 }
 
 // ------------------------------------------------------------ project zones
-
-/**
- * How many rows of lines a directory of `count` projects needs in `width`.
- * Pulled out because the envelope search has to know the strip's height
- * before the strip itself can be built.
- * @param {number} count
- * @param {number} width the strip's outer width, in units
- */
-export function directoryGrid(count, width, wantCols = 0) {
-  if (count <= 0) return { cols: 0, rows: 0 };
-  const inner = Math.max(0, width - MARGIN * 2);
-  // As many columns as fit a readable line, and then as many rows as those
-  // columns need. Past the row cap the columns narrow and the names ellipsise
-  // instead — a repo you cannot see is a repo you cannot start an agent in, so
-  // a project is never dropped whatever the count.
-  const fits = Math.max(1, Math.floor(inner / DIRECTORY_COL_W));
-  // FEWER COLUMNS THAN FIT, WHEN THE STRIP IS ASKED FOR THEM (WP-59c).
-  //
-  // The same lines in a taller board, and it costs nothing: the column count
-  // is not a property of the width, it is a choice inside it, and a wider
-  // column is a more readable line rather than a worse one (`colW` below is
-  // capped at `DIRECTORY_COL_MAX_W` either way). Step (b) of `plan.js`'s fill
-  // order spends it — once the rooms are as deep as they may honestly be and
-  // the working side is still short of its height, the strip takes the next
-  // of it by standing its lines up instead of laying them out.
-  //
-  // Never MORE than fit: a column narrower than `DIRECTORY_COL_W` is a line
-  // whose name is ellipsised to nothing, which is the one thing this strip
-  // exists not to do.
-  let cols = wantCols > 0 ? Math.max(1, Math.min(fits, Math.round(wantCols))) : fits;
-  let rows = Math.ceil(count / cols);
-  if (rows > DIRECTORY_MAX_ROWS) {
-    rows = DIRECTORY_MAX_ROWS;
-    cols = Math.ceil(count / rows);
-  }
-  return { cols, rows };
-}
-
-/** How many rows of lines a directory of `count` projects needs in `width`. */
-export function directoryRows(count, width, wantCols = 0) {
-  return directoryGrid(count, width, wantCols).rows;
-}
-
-/**
- * Every strip width worth asking the envelope search about (WP-59).
- *
- * The strip's column count is one of the three things the plan spends a wide
- * window on, and it is the honest one: seventeen idle repos in one narrow
- * column is a board nobody can read, and the same seventeen across three
- * columns is a board and a wider building. `directoryGrid` derives the column
- * count BACK from the width it is given, so a request has to be stated as a
- * width the grid will agree with. Per column count that is a RANGE — from the
- * narrowest width that yields `cols` columns to one hair short of the width
- * that would earn another — and the range is sampled rather than only its ends,
- * because the width inside it is the finest adjustment the envelope has and it
- * all goes to the lines.
- *
- * Returned smallest first, so a search that breaks ties by open floor picks
- * the tightest strip that does the job.
- *
- * @param {number} count idle repos
- * @returns {number[]} candidate outer widths, in units
- */
-export function directoryWidths(count) {
-  if (count <= 0) return [0];
-  /** @type {number[]} */
-  const out = [];
-  for (let cols = 1; cols <= Math.min(count, DIRECTORY_MAX_COLS); cols++) {
-    // Past the point where a column holds one line, another column is not a
-    // distinct request — it is the same board with a wider gap in it.
-    if (cols > 1 && Math.ceil(count / (cols - 1)) <= 1) break;
-    const min = MARGIN * 2 + cols * DIRECTORY_COL_W;
-    // One hair short of the width that would earn another column, capped at
-    // what a readable line is worth: a column wider than `DIRECTORY_COL_MAX_W`
-    // puts a repo's name at one end of the building and its numbers at the
-    // other.
-    const max = Math.min(
-      MARGIN * 2 + (cols + 1) * DIRECTORY_COL_W - 0.01,
-      MARGIN * 2 + cols * DIRECTORY_COL_MAX_W,
-    );
-    // Sampled, not only its ends: the width INSIDE a column count is the
-    // finest adjustment the envelope has, and on the reference machine four
-    // units of column width is the difference between a floor that is the
-    // shape of the window and one that is not. The lines get the width; it is
-    // never spent as a gap.
-    const steps = 4;
-    for (let k = 0; k <= steps && max > min + 0.01; k++) {
-      out.push(min + ((max - min) * k) / steps);
-    }
-    if (max <= min + 0.01) out.push(min);
-  }
-  return out;
-}
-
-/** The height a directory of `count` projects takes in `width`. */
-export function directoryHeight(count, width, wantCols = 0) {
-  const rows = directoryRows(count, width, wantCols);
-  return rows === 0 ? 0 : PLATE_BAND + rows * DIRECTORY_LINE_H + DIRECTORY_PAD;
-}
-
-/**
- * Every column count the strip could honestly be laid in at `width`, widest
- * board first — which is shortest first (WP-59c).
- *
- * The ladder step (b) of `plan.js`'s fill order walks. One entry per DISTINCT
- * row count: asking for four columns and for five is the same board whenever
- * both round to the same number of rows, and a search that cannot tell them
- * apart would rather have the wider column.
- *
- * @param {number} count idle repos
- * @param {number} width the strip's outer width, in units
- * @returns {number[]} column counts, most first
- */
-export function directoryColumns(count, width) {
-  if (count <= 0) return [0];
-  const most = directoryGrid(count, width).cols;
-  /** @type {number[]} */
-  const out = [];
-  let lastRows = 0;
-  for (let cols = most; cols >= 1; cols--) {
-    const rows = directoryGrid(count, width, cols).rows;
-    if (rows === lastRows) continue;
-    lastRows = rows;
-    out.push(cols);
-  }
-  return out;
-}
-
-/**
- * The idle-projects directory: one strip, one line per repo nobody is in.
- *
- * A project whose agents are all benched, archived or finished used to get a
- * collapsed ROOM — a plate with a footprint, which still bid for area in the
- * treemap. On the reference machine that spent most of the working floor on
- * rooms with nobody in them (`08` B6). It is a DIRECTORY now: a strip along
- * the bottom of the working floor carrying, per project, its name, its session
- * count and how long ago anything happened in it, each line a click target
- * that opens the panel exactly as a room plate does.
- *
- * Deliberately still ON the floor rather than hidden: the repo exists, and
- * being able to see it — and start an agent in it — is the point. Only an
- * explicit archive removes a project from view altogether.
- *
- * The lines are laid out here, in the room's own frame, and drawn live by
- * `scene.js`: their text is session counts and elapsed times, which change on
- * every push, and re-baking the backdrop for that would cost ~190 ms a frame.
- *
- * @param {{id:string,name:string,sessionCount:number,lastActivityAt:number}[]} projects
- * @param {{w:number,h:number}} fit the strip the packer has reserved
- * @param {number} [wantCols] the column count the envelope search settled on
- *   (WP-59c). The SAME number `directoryHeight` was asked for, or the strip is
- *   built to a different board from the one the building was sized around.
- * @returns {Room}
- */
-export function buildDirectory(projects, fit, wantCols = 0) {
-  const grid = directoryGrid(projects.length, fit.w, wantCols);
-  const rows = Math.max(1, grid.rows);
-  // The SAME column count the strip was measured with. Deriving it back from
-  // the row count instead put six columns in a strip one column wide, which is
-  // how seventeen idle repos came to be drawn on top of each other.
-  const cols = Math.max(1, grid.cols);
-  const inner = Math.max(1, fit.w - MARGIN * 2);
-  // Columns share the strip evenly, but a column wider than a line needs is a
-  // line with its name at one end of the building and its numbers at the
-  // other. One idle repo gets a readable line, not a full-width one.
-  const colW = Math.min(inner / cols, DIRECTORY_COL_MAX_W);
-
-  // Local frame, exactly like a prop: (0, 0) is the room's top-left and the
-  // interior starts below the plate band, which `place` adds. Writing the
-  // band in here as well would be the two-frames defect in miniature.
-  /** @type {DirectoryEntry[]} */
-  const entries = projects.map((p, i) => ({
-    ...p,
-    // Column-major: reading down a column then across is how a directory
-    // board is read, and it keeps a project in the same place when the strip
-    // gains a row rather than reshuffling every line.
-    x: MARGIN + Math.floor(i / rows) * colW,
-    y: (i % rows) * DIRECTORY_LINE_H,
-    w: colW,
-    h: DIRECTORY_LINE_H,
-  }));
-
-  /** @type {Room} */
-  return {
-    kind: 'directory',
-    id: '__directory__',
-    name: 'Idle projects',
-    x: 0,
-    y: 0,
-    w: fit.w,
-    h: fit.h,
-    walls: 'partial',
-    // Circulation, not carpet: nobody works here, and painting it as a room
-    // material made a strip with no furniture in it read as one more empty
-    // room — which is the exact defect this strip exists to remove.
-    floor: 'circulation',
-    plateLines: [
-      'Idle projects',
-      `${projects.length} repo${projects.length === 1 ? '' : 's'} · nobody in`,
-    ],
-    props: [],
-    zones: [],
-    plateBand: PLATE_BAND,
-    entries,
-  };
-}
 
 /**
  * Lay out one project's tables, chairs and plant in local coordinates.

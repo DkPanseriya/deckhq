@@ -184,16 +184,6 @@ export function bakeBackdrop(plan, dpr = 1) {
     }
 
     paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh);
-
-    // The idle-projects directory is a board on the floor, not a room with the
-    // lights off: nobody is in any of the repos it lists, so it is dimmed as a
-    // whole rather than given the ambient light a room in use gets.
-    if (room.kind === 'directory') {
-      ctx.save();
-      ctx.fillStyle = PALETTE.roomDimmed;
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.restore();
-    }
   }
 
   // Walls, from the floor's own wall list. Two zones either side of a

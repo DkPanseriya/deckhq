@@ -180,10 +180,6 @@ export function plateLinesFor(room, snapshot, plan) {
       goneHome > 0 ? `${drawn} benched · ${goneHome} went home` : `${drawn} benched`,
     ];
   }
-  if (room.kind === 'directory') {
-    const n = (room.entries || []).length;
-    return [room.name, `${n} repo${n === 1 ? '' : 's'} · nobody in`];
-  }
   if (room.kind === 'let_go') {
     const c = snap.counts || {};
     const n = c.letGo || 0;

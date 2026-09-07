@@ -91,22 +91,8 @@
  */
 
 /**
- * One idle project's line in the directory strip. Local to the strip's own
- * frame until `place` translates it, exactly like a prop.
- * @typedef {object} DirectoryEntry
- * @property {string} id project id
- * @property {string} name
- * @property {number} sessionCount
- * @property {number} lastActivityAt ms epoch, 0 when unknown
- * @property {number} x
- * @property {number} y
- * @property {number} w
- * @property {number} h
- */
-
-/**
  * @typedef {object} Room
- * @property {'office'|'project'|'lounge'|'corridor'|'directory'} kind
+ * @property {'office'|'project'|'lounge'|'corridor'} kind
  * @property {string} id
  * @property {string} name
  * @property {number} x
@@ -122,7 +108,6 @@
  * @property {Zone[]} zones
  * @property {'wood'|'carpet'|'tile'|'circulation'} floor
  * @property {{x:number,y:number,w:number,h:number}} [kitchenZone]
- * @property {DirectoryEntry[]} [entries] the directory strip only
  * @property {number} [plateBand] height reserved across the top of the room for
  *   its plate. `PLATE_BAND` on every room that carries one.
  * @property {{w:number, h:number}} [natural] what this room's own contents need,
@@ -196,7 +181,6 @@
  * @property {Door[]} doors
  * @property {Set<string>} hidden agent ids the plan draws nobody for
  * @property {Set<string>} goneHome the subset of `hidden` that went home
- * @property {Room|null} directory the idle-projects strip, when there is one
  * @property {WorkingSide} working what the working side did with the height
  *   the service column gave it (WP-59c)
  * @property {Arrangement} arrangement which shape the envelope search chose
@@ -214,11 +198,13 @@
  * @property {number} open the fraction of it nobody stands on
  * @property {boolean} roomsStretched (a) — the rooms were made deeper than the
  *   plan would have chosen, to meet the service column
- * @property {number} stripCols (b) — columns the idle strip was laid in, `0`
- *   when there is no strip
- * @property {number} loungePack (c) — how tightly the lounge was packed; `1`
+ * @property {number} loungePack (b) — how tightly the lounge was packed; `1`
  *   is the room untouched
- * @property {number} openH (d) — the open plan left under both, in units
+ * @property {number} openH (c) — the open plan left under the rooms, in units
+ *
+ * There used to be a `stripCols` between (a) and (b) — the columns the idle
+ * strip had been laid in — because the strip standing its lines up was a step
+ * of the fill order. WP-60 took the strip off the floor and the step with it.
  */
 
 /** Pixels per unit at scale 1. */
@@ -383,18 +369,6 @@ export const WORKING_OPEN_MAX = 0.1;
 export const ROOM_FILL_COLUMN_MAX = 1 / 0.58;
 
 /**
- * The most of the working side's height the idle strip may take (WP-59c).
- *
- * Step (b) of the fill order. Once the rooms are as deep as they may honestly
- * be and the working side is still short, the strip takes the next of it — by
- * using FEWER columns and more rows, which is the same lines in a taller
- * board and costs nothing but the shape of the board. It is capped because a
- * strip is a strip: past a quarter of the working side, seventeen idle repos
- * start to read as the subject of the floor rather than as its footnote.
- */
-export const DIRECTORY_SIDE_MAX = 0.25;
-
-/**
  * THE SECOND ARRANGEMENT (WP-59d), and the two conditions it is tried under.
  *
  * §141 proved by arithmetic that a service COLUMN cannot fill a wide window
@@ -497,19 +471,6 @@ export const LOUNGE_ROW_ASPECT_MAX = 3.2;
 export const LOUNGE_ROW_MIN_W = 20;
 
 /**
- * The most of its ROW the idle strip may take (WP-59d).
- *
- * `DIRECTORY_SIDE_MAX` is the same sentence about the other axis — a strip
- * past a quarter of the side stops being a footnote — and in a row the axis
- * that can run away is the width: `directoryWidths` will happily ask for two
- * columns of twenty-eight units for a board with two lines on it, and with
- * nothing to stop it that board takes three quarters of the row and leaves the
- * lounge a cupboard. Under half, and the lounge is the larger half of its own
- * row whatever the strip asks for.
- */
-export const DIRECTORY_ROW_MAX_SHARE = 0.45;
-
-/**
  * The most of the building the service column may take, once the working band
  * holds more than one room (WP-59b).
  *
@@ -564,56 +525,24 @@ export const PLANT_SIZE = 2;
 export const PLANT_GAP = 0.4;
 
 /**
- * THE DIRECTORY STRIP — where a project with nobody in it goes.
+ * THE IDLE-PROJECTS STRIP USED TO BE HERE — where a project with nobody in it
+ * went (§96, WP-50).
  *
- * An idle project used to get a collapsed ROOM, which still bid for area in
- * the treemap; on the reference machine that turned most of the working floor
- * into large empty cells with a plate each (`08` B6). It now costs one LINE in
- * a single strip along the bottom of the working floor: name, session count,
- * last activity, and the same click target a room plate has.
+ * An idle project first got a collapsed ROOM, which still bid for area in the
+ * treemap; on the reference machine that turned most of the working floor into
+ * large empty cells with a plate each (`08` B6). WP-50 made it one LINE on a
+ * single strip along one edge of the working floor — name, session count, last
+ * activity — with `DIRECTORY_LINE_H`, `DIRECTORY_COL_W`, `DIRECTORY_MAX_ROWS`
+ * and four more constants deciding how a board of them was laid.
  *
- * The lines flow into columns so the strip stays a strip. `DIRECTORY_MAX_ROWS`
- * is the cap that keeps it one: past it the columns get narrower and the text
- * ellipsises, but a project is never dropped from the directory — a repo you
- * cannot see is a repo you cannot start an agent in.
+ * WP-60 took the strip off the floor altogether. The owner's words were "keep
+ * less clutter on screen": fourteen repos nobody is in were taking a corner of
+ * the building, a column of the envelope search, and a step of the fill order,
+ * to say something the user wanted only when they went looking for it. They are
+ * a popover now (`public/idle-projects.js`), so they cost no floor, no
+ * constants and no search dimension — and the rooms with people in them get
+ * the space back.
  */
-export const DIRECTORY_LINE_H = 1.6;
-export const DIRECTORY_COL_W = 15;
-export const DIRECTORY_COL_MAX_W = 28;
-/**
- * The most rows the strip is allowed, however narrow the working side.
- *
- * WP-50 set this at three and let the COLUMNS overflow instead: past three
- * rows the columns narrowed and the names ellipsised. That works while the
- * working floor is the width of the building, and WP-55 made the working floor
- * the width of its ROOMS — one active project is about seventeen units across,
- * which is one column, and seventeen idle repos then arrived stacked six deep
- * in a strip with room for three. A line has a minimum readable width; a strip
- * has a whole working side to grow down. So the rows give way now and the
- * columns hold their width, up to this cap.
- */
-export const DIRECTORY_MAX_ROWS = 18;
-
-/**
- * The most columns the envelope search will ever ask the strip for (WP-59).
- *
- * The strip's column count is one of the levers the plan spends a wide window
- * on, and without a bound the ladder of candidate widths grows with the number
- * of idle repos — sixty of them is sixty column counts to try, on a search that
- * runs on every re-plan. Six columns is already a board the width of the
- * working floor; past that the strip stops being a strip, which the integrity
- * test asserts separately.
- */
-export const DIRECTORY_MAX_COLS = 6;
-export const DIRECTORY_PAD = 1;
-
-/**
- * The tallest the whole directory may ever be, however many idle repos there
- * are: its own plate band plus `DIRECTORY_MAX_ROWS` lines. Exported so the
- * integrity test asserts the cap the strip is actually built against rather
- * than a second copy of the arithmetic.
- */
-export const DIRECTORY_MAX_H = PLATE_BAND + DIRECTORY_MAX_ROWS * DIRECTORY_LINE_H + DIRECTORY_PAD;
 
 /**
  * Where the shelf and the dashboard screen start down a project room's east

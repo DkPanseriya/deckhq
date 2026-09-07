@@ -177,7 +177,7 @@ export function floorPopulation(agents, opts = {}) {
   const known = new Set();
   /** @type {Set<string>} */
   const goneHome = new Set();
-  /** Newest activity per project — the directory strip's third column. */
+  /** Newest activity per project — the idle list's third column. */
   const lastActivity = new Map();
 
   const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
@@ -202,4 +202,76 @@ export function floorPopulation(agents, opts = {}) {
   }
 
   return { now, goneHomeDays, waiting, benchedDrawn, goneHome, active, desks, known, lastActivity };
+}
+
+/**
+ * WHICH REPOS ARE ON THE FLOOR, AND WHICH ARE ONLY IN THE LIST (`08` B6).
+ *
+ *   an active agent      -> a room, with desks for the agents at them
+ *   nobody, not archived -> one line in the idle list
+ *   nobody, archived     -> off the floor and out of the list entirely
+ *
+ * An active agent always wins, which is what makes archiving safe: a project
+ * the user archived comes back by itself the moment somebody starts working in
+ * that repo, rather than hiding them.
+ *
+ * ONE COPY, HERE, SINCE WP-60. It used to be three lines inside `buildPlan`,
+ * which was right while the only thing that could ask was the strip the plan
+ * drew. The idle list is a popover now — HTML, off the canvas, built from the
+ * snapshot rather than from the plan — so a second caller exists, and a rule
+ * about who is on the floor with two implementations is a floor and a list that
+ * can disagree about the same repo. It lives in this file for the reason
+ * everything else here does: it is the rule, not the drawing.
+ *
+ * @param {{id?:string, projectId?:string, name?:string, projectName?:string,
+ *   sessionCount?:number, activeCount?:number, archived?:boolean,
+ *   lastActivityAt?:number}[]} projects
+ * @param {ReturnType<typeof floorPopulation>} pop
+ * @returns {{active: any[], idle: {id:string, name:string, sessionCount:number,
+ *   lastActivityAt:number}[]}}
+ *   `active` are the project records that earn a room, in the order given;
+ *   `idle` are the list's own lines, already reduced to what a line says.
+ */
+export function splitProjectsByOccupancy(projects, pop) {
+  const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
+  // The counts a project is judged by are read off the AGENTS, which is the
+  // whole point of B6. The fallback matters only for a caller that hands over a
+  // project it gave no agents for: the rule cannot invent people it was not
+  // given, so the project record's own counts are then the only thing to go on.
+  const activeIn = (p) =>
+    pop.known.has(idOf(p))
+      ? (pop.active.get(idOf(p)) ?? 0)
+      : (p.activeCount ?? p.sessionCount ?? 0);
+  const isIdle = (p) => activeIn(p) === 0;
+  const visible = (Array.isArray(projects) ? projects : []).filter(
+    (p) => (p.sessionCount ?? 0) > 0 && !(isIdle(p) && p.archived),
+  );
+  return {
+    active: visible.filter((p) => !isIdle(p)),
+    idle: visible.filter(isIdle).map((p) => ({
+      id: idOf(p),
+      name: String(p.name ?? p.projectName ?? idOf(p)),
+      sessionCount: p.sessionCount ?? 0,
+      lastActivityAt: pop.lastActivity.get(idOf(p)) ?? Number(p.lastActivityAt) ?? 0,
+    })),
+  };
+}
+
+/**
+ * The idle list, from a snapshot alone.
+ *
+ * The convenience the DOM side actually wants: it holds a snapshot and nothing
+ * else, and going through `floorPopulation` by hand at every call site is how
+ * one of them ends up passing different options from the floor.
+ *
+ * @param {{projects?:any[], agents?:FloorAgent[], settings?:{goneHomeDays?:number}}} snapshot
+ * @param {{now?:number}} [opts]
+ */
+export function idleProjectsOf(snapshot, opts = {}) {
+  const snap = snapshot || {};
+  const pop = floorPopulation(snap.agents || [], {
+    now: opts.now,
+    goneHomeDays: (snap.settings || {}).goneHomeDays,
+  });
+  return splitProjectsByOccupancy(snap.projects || [], pop).idle;
 }
