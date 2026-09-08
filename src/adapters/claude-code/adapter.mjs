@@ -13,6 +13,7 @@
  *   adapter-send.mjs   one conversation, and sending a turn into it
  *   adapter-watch.mjs  WP-09's tail watch
  *   adapter-open.mjs   resume in a terminal, in the app, or start a new one
+ *   adapter-mcp.mjs    WP-64's MCP server list, for `doctor`
  * ============================================================================
  */
 
@@ -24,12 +25,14 @@ import { scanSessions } from './adapter-scan.mjs';
 import { conversation, send } from './adapter-send.mjs';
 import { watchConversation } from './adapter-watch.mjs';
 import { appAvailable, openInApp, openInTerminal, openNewSession } from './adapter-open.mjs';
+import { describeMcpServers } from './adapter-mcp.mjs';
 
 export * from './adapter-live.mjs';
 export * from './adapter-scan.mjs';
 export * from './adapter-send.mjs';
 export * from './adapter-watch.mjs';
 export * from './adapter-open.mjs';
+export * from './adapter-mcp.mjs';
 
 export const adapter = {
   id: RUNTIME_ID,
@@ -55,6 +58,10 @@ export const adapter = {
   // here, one line in `../index.mjs`, no behaviour change. An adapter that
   // cannot count the phrase simply omits this method.
   countCatchphrase,
+  // WP-64. Optional, exactly like `version()` and `describeBinary()`: `doctor`
+  // prints an MCP row only for a runtime whose adapter has grown one, so no
+  // report and no registry names a runtime to get it.
+  describeMcpServers,
   hooks: {
     supported: hooksImpl.supported,
     describe: hooksImpl.describe,

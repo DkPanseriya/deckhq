@@ -66,6 +66,18 @@ interface RuntimeAdapter {
   version?(): Promise<string | null>;
   countCatchphrase?(opts: { since: number; until?: number }): Promise<CatchphraseCount>;
   watchConversation?(...): ...;
+  // WP-64. What `doctor`'s "mcp servers" row prints. Omit it and there is no
+  // row at all for your runtime — which is right, and is not the same thing as
+  // a row that says zero. Never throw, never spawn without a timeout, and
+  // never return a server's target: a target can be a URL with a token in it.
+  describeMcpServers?(): Promise<{
+    checked: boolean;
+    source: 'cli' | 'session' | null;
+    reason: string | null;
+    servers: { name: string; status: string }[];
+    connected: number;
+    failed: number;
+  }>;
 }
 ```
 

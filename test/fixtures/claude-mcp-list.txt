@@ -1,0 +1,6 @@
+Checking MCP server health…
+
+fixture-notes: node C:\fixture\notes-server\index.js - ✔ Connected
+fixture-mail: https://mcp.example.invalid/sse (HTTP) - ✔ Connected
+fixture-weather: https://weather.example.invalid/mcp (HTTP) - ✗ Failed to connect
+fixture-broken-line-with-no-status

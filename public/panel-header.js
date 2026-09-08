@@ -24,6 +24,7 @@ import {
 import { currentId, displayedAgent } from './panel-state.js';
 import { textNode, separator } from './panel-dom.js';
 import { now as clockNow } from './clock.js';
+import { humaniseToolSummary } from './mcp-tool-name.js';
 
 /** Fallback copy of docs/03-VISUAL-SPEC.md §5; see app.js for the same note. */
 const FALLBACK_STATE_COLORS = {
@@ -236,10 +237,18 @@ export function createHeaderPart(ctx) {
     if (!summary) {
       doingEl.hidden = true;
       doingEl.textContent = '';
+      doingEl.removeAttribute('title');
       return;
     }
     doingEl.hidden = false;
-    doingEl.textContent = `doing: ${summary}`;
+    // WP-64. `mcp__gmail__send` reads `Gmail · send` here, the same as it does
+    // in the bubble on the floor — and the raw id goes on the tooltip, because
+    // it is the string a user would search their MCP config for. Every other
+    // tool's summary is unchanged, so this adds a tooltip and nothing else.
+    const shown = humaniseToolSummary(tool.name, summary);
+    doingEl.textContent = `doing: ${shown}`;
+    if (shown !== summary) doingEl.title = summary;
+    else doingEl.removeAttribute('title');
   }
 
   function renderDraftChip() {

@@ -1141,6 +1141,9 @@ test('--json emits one JSON document with a stable shape', async () => {
     'label',
     'live',
     'liveReported',
+    // WP-64: this runtime's MCP servers and whether they answered, or null for
+    // an adapter that cannot report them. Present either way, like `binary`.
+    'mcp',
     'projects',
     // WP-23a: what the last scan could not read, in the runtime's own words.
     'readLimit',

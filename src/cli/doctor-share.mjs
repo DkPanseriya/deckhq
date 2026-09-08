@@ -166,6 +166,8 @@ export function renderShare(report, opts = {}) {
           : `${group(rt.sessions)}`,
       ),
     );
+    // WP-64. Counts and a verdict; no names, and structurally no targets.
+    if (rt.mcp) lines.push(srow('mcp servers', describeMcpForShare(rt.mcp)));
   }
 
   lines.push(srow('waiting on you', describeDeck(report.deck, report.generatedAt)));
@@ -191,6 +193,33 @@ export function renderShare(report, opts = {}) {
   lines.push(PITCH);
 
   return '```\n' + redact(lines.join('\n'), opts) + '\n```\n';
+}
+
+/**
+ * The MCP row for the share block — WP-64.
+ *
+ * TWO THINGS THIS MUST NOT CARRY, and how each is prevented.
+ *
+ *   - **A server's target.** A target is a command line or a URL, and a URL
+ *     can carry a token in its query string or its host. It is prevented
+ *     structurally rather than by redaction: `parseMcpList` in the adapter
+ *     never returns the target, so there is nothing in the report to print.
+ *   - **A server's name.** Allowed by the letter of the requirement and
+ *     dropped anyway, because the share block is assembled from counts and
+ *     fixed phrases and nothing else (see `renderShare`'s header), and a
+ *     server name is a fact about the person's toolchain that a count already
+ *     answers. `deckhq doctor` prints the failed ones locally, which is where
+ *     a name is actually useful.
+ *
+ * @param {any} mcp
+ */
+export function describeMcpForShare(mcp) {
+  if (!mcp.checked) return 'not checked';
+  const total = mcp.connected + mcp.failed;
+  if (total === 0) return 'none configured';
+  return mcp.failed > 0
+    ? `${group(mcp.connected)} connected, ${group(mcp.failed)} failed`
+    : `${group(mcp.connected)} connected`;
 }
 
 /**

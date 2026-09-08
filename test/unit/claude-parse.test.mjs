@@ -432,3 +432,55 @@ test('WP-28: a transcript with nothing in it reports zeros rather than nothing',
   assert.equal(summary.textMedian, 0);
   assert.equal(summary.textTurns, 0);
 });
+
+// ---------------------------------------------------------- MCP (WP-64)
+
+test('WP-64: a session with no init event has NO mcpServers field at all', async () => {
+  const { head, tail } = await readFixture();
+  const summary = summarise(head, tail);
+  // Absent, not empty. "This session never told us" is a different claim from
+  // "this session had no MCP servers", and the fixture — like every real
+  // transcript sampled on this machine — makes the first one.
+  assert.equal('mcpServers' in summary, false);
+  assert.equal(parseSummary('', '', { id: 's', file: 'x', mtimeMs: 0 }).mcpServers, undefined);
+});
+
+test('WP-64: a transcript that DOES carry an init event fills the field from it', () => {
+  const init = JSON.stringify({
+    type: 'system',
+    subtype: 'init',
+    session_id: 'sess-1',
+    tools: ['Bash', 'mcp__fixture-notes__search'],
+    mcp_servers: [
+      { name: 'fixture-notes', status: 'connected' },
+      { name: 'fixture-weather', status: 'failed' },
+    ],
+  });
+  const turn = JSON.stringify({
+    type: 'user',
+    timestamp: '2026-08-01T00:00:01.000Z',
+    message: { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+  });
+  const summary = parseSummary([init, turn].join('\n'), '', { id: 's', file: 'x', mtimeMs: 0 });
+  assert.deepEqual(summary.mcpServers, [
+    { name: 'fixture-notes', status: 'connected' },
+    { name: 'fixture-weather', status: 'failed' },
+  ]);
+  // The init event must not be mistaken for conversation, or for activity.
+  assert.equal(summary.lastRole, 'user');
+});
+
+test('WP-64: the tail wins over the head, because a resumed session re-inits', () => {
+  const one = JSON.stringify({
+    type: 'system',
+    subtype: 'init',
+    mcp_servers: [{ name: 'old', status: 'connected' }],
+  });
+  const two = JSON.stringify({
+    type: 'system',
+    subtype: 'init',
+    mcp_servers: [{ name: 'new', status: 'connected' }],
+  });
+  const summary = parseSummary(one, two, { id: 's', file: 'x', mtimeMs: 0 });
+  assert.deepEqual(summary.mcpServers, [{ name: 'new', status: 'connected' }]);
+});

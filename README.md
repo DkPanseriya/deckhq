@@ -193,6 +193,24 @@ was already there is not.
 From inside the floor, `⌘K` → **Install as app** takes Chrome's own install offer when Chrome is
 making one, and otherwise names the `deckhq shortcut --install` above.
 
+### One theme for one tab: `?theme=`
+
+The floor's URL takes `?theme=<id>` — `http://127.0.0.1:4317/?theme=night%20shift` — and it is
+**for that tab only**. Nothing is written to `~/.deckhq/state.json`, the settings picker still
+shows and still previews the theme you chose, and closing the tab is the whole of undoing it. An id
+this build does not have is ignored and your own theme is painted, so the parameter is safe in a
+link somebody else sends you. The ids are the names in the theme picker: `default`, `night shift`,
+`blueprint`, plus anything an installed pack registered; separators and case are forgiving, so
+`?theme=night-shift` finds it.
+
+It is there so a screenshot can be in another paint without touching your settings, which is what
+`scripts/capture-floor.mjs` uses it for:
+
+```bash
+node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ \
+  --theme "night shift" --out docs/media/floor-night.png
+```
+
 **Windows is the platform this was run on**, screenshot and all. The macOS bundle
 (`~/Applications/DeckHQ.app`, and `~/Library/LaunchAgents/dev.deckhq.daemon.plist` for autostart)
 and the Linux desktop entries (`~/.local/share/applications/deckhq.desktop` and
@@ -218,6 +236,15 @@ scripting, and `--capture-proof` writes a PNG of the comparison.
 
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
+
+The `mcp servers` row is the runtime's own health check, quoted. `deckhq doctor` runs
+`claude mcp list` once, with a ten-second budget, and prints what it printed —
+`3 connected, 1 failed (weather)`, naming the ones that failed because those are the ones you can
+go and look at. DeckHQ opens no socket to an MCP server itself, and it never stores or prints a
+server's target: a target is a command line or a URL and a URL can carry a token, so only the name
+and the status are ever read. A machine with no `claude` on your `PATH` reads
+`not checked: claude is not on PATH` rather than a zero — "we could not ask" and "you have none"
+are different facts, and `doctor` never fails because of this row either way.
 
 ## The deck, in your terminal
 
@@ -513,6 +540,16 @@ These are real, and listed here rather than discovered later.
   accepted in 76 ms, the reply arrived in fragments, and the session's own transcript recorded it
   like any other turn. A long turn, a turn that fails halfway, and a turn that calls tools have
   all been driven through a stand-in process rather than a live model.
+- **MCP server status is only ever as good as `claude mcp list`.** DeckHQ never connects to an MCP
+  server — it asks the runtime, once, and quotes the answer. So "connected" means the runtime said
+  so at the moment `doctor` ran, and a server that fails on the next tool call was still connected
+  in that report. On a machine where the CLI cannot be run the row says `not checked` and why,
+  never a count. Only the `Connected` line has been read off a real machine; the failure line is
+  Claude Code's documented wording and has not been seen here. The other half of this — an MCP
+  server list stored **per session** — reads the `system`/`init` event, and **no transcript on the
+  development machine carries one**: sixty were sampled and the field was absent from every one,
+  so a session's `mcpServers` is absent rather than empty, which is the honest of the two.
+  `docs/DEVIATIONS.md` §147.
 - **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.

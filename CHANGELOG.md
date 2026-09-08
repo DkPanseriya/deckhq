@@ -52,6 +52,33 @@
   prints `NOT RUN ON THIS PLATFORM` above the file list there, every time. The macOS icon is a PNG
   rather than an `.icns`, because converting one means shelling out to `iconutil`.
 
+- **`deckhq doctor` has an MCP servers row.** For each runtime whose adapter can answer — Claude
+  Code today, and any other whose adapter grows the method — the report says
+  `3 connected, 1 failed (weather)` and names where the answer came from. The source is
+  `claude mcp list`, spawned with an argv array and a ten-second timeout, so the verdict is the
+  runtime's own health check and DeckHQ still opens no socket to an MCP server. A machine without
+  the CLI falls back to the newest session's own `init` event, and a machine with neither reads
+  `not checked: claude is not on PATH` — never a zero, because "we could not ask" and "you have
+  none" are different facts. `doctor` never fails over this row. `docs/DEVIATIONS.md` §147.
+
+- **An MCP tool says what it is on the floor.** `mcp__gmail__send` is drawn as `Gmail · send` in
+  the bubble above an agent's head and on the panel's `doing:` line, with the raw id kept on that
+  line's tooltip. Nothing is renamed beyond upper-casing the server's first letter: the server is
+  the name you gave it and the tool is the tool's own name. Every non-MCP tool's bubble is
+  unchanged, character for character.
+
+- **A session records the MCP servers its own `init` event named.** When a Claude Code transcript
+  carries `{"type":"system","subtype":"init"}` — which is the shape its `stream-json` output
+  emits, and which no transcript sampled on the reference machine carried — the summary gains
+  `mcpServers`, with each status exactly as the runtime spelled it. When the event is absent the
+  field is absent: "not observed" is not "none".
+
+- **`?theme=<id>` on the floor's URL, for that tab only.** A known theme id repaints the floor and
+  the chrome without touching `state.json`, without changing what the settings picker shows, and
+  without surviving the tab. An id this build does not have is ignored, so the parameter is safe
+  in a link a stranger sends. `scripts/capture-floor.mjs --theme "night shift"` uses it, which is
+  what it was built for: a screenshot in another paint that leaves no setting to put back.
+
 ### Changed
 
 - **The idle projects left the floor.** The repos nobody is in were a strip of names drawn
