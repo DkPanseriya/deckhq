@@ -13770,88 +13770,6 @@ one does.
 reason it already deletes `DECKHQ_HOSTNAME`: a variable exported in a
 developer's shell must not decide what the suite asserts.
 
-## 148. Studio — the office you can start from an idea, without the floor ever showing work that did not happen
-
-`docs/07-STUDIO-DESIGN.md`. A document, not code: no file under `src/`, `public/` or `test/` was
-touched, nothing in it has been run, and per `08` §1.1 rule 11 every sentence about what a runtime
-does under Studio is a hypothesis until a machine measures it. §147 belongs to a concurrent agent
-and is not renumbered here.
-
-The numbering follows the blueprint docs (`01`–`06`, then `ADAPTERS.md`) rather than `plan/`, for
-the reason §127 gives for the relay: the `plan/` directory is for what DeckHQ becomes, and an
-opt-in mode with its own on-disk artefacts, its own consent and its own endpoints is part of what
-it *is*.
-
-### 148.1 The brief, and the one thing that could have gone wrong
-
-The owner's direction was: keep the office as the base product, and add a path for someone who
-arrives with an idea rather than with a repository full of sessions — grill it into a plan, suggest
-the experts, create the office, the board, the handovers and the tracking, so the work stays on
-course. Every product in this category that has tried it has answered with an **orchestrator over a
-fictional roster**: named characters, a simulated task feed, a dashboard whose motion is generated
-rather than observed. That is the one thing DeckHQ cannot ship, because the floor's whole claim is
-that what is on it is real.
-
-So the design's first sentence is a refusal: **everything Studio spawns is a real runtime session,
-discovered by the ordinary scan and read back through the ordinary adapters.** There is no second
-data path, no Studio-private session list, and no code path that may write a message, a token count
-or a progress value that did not come from an adapter or a file on disk. That is invariant 2 of the
-document's §9, and it has a named test.
-
-### 148.2 The six decisions
-
-1. **The board column is user-owned, exactly as `ackState` is.** This is the invariant
-   (`01-PRODUCT.md` §2) applied to a new field, and it is the decision that makes a kanban
-   trustworthy rather than decorative. An observed event — a session ending, a test passing, a file
-   appearing, a budget being spent — writes a **flag** on the card and never moves it. A column
-   changes on the user dragging or pressing, or on a handover the user has accepted in the review
-   card, and on nothing else. Every competing product auto-advances a card when the process exits,
-   which is the same bug the queue exists to fix, one layer up.
-
-2. **The handover is a file the agent writes because its brief asked it to.** Not a hook, not a
-   protocol, not a tool call: `.deckhq/studio/handovers/<cardId>.md`, watched by the same file-watch
-   plumbing that already tails a transcript. The mechanism is legible to the user, works on every
-   runtime including the three with no hooks, and degrades to "the agent did not write one" rather
-   than to a wrong answer.
-
-3. **Consent for `.deckhq/studio/` is the shortcut installer's consent, not a new one.** The
-   directory is outside the state directory, so `src/core/launcher.mjs`'s discipline applies whole:
-   print every path first, write nothing without `--yes` or a click, tag what is written, record
-   it, and remove only what still proves it is ours. It is granted once per project and never
-   inferred from another; a path resolving outside the directory is refused rather than clamped,
-   which is what `runAction()` already does for project actions.
-
-4. **Hire spawns through `openNewSession`, and the brief is named rather than carried.** The
-   instruction argument is one argv element naming `.deckhq/studio/briefs/<role>.md`, because a
-   brief is long and a prompt is an argument. Identity persists through `queuePendingIdentity()`
-   and the existing MK/given-name assignment, so a hired role is the same character on the board,
-   the floor and the deck — with one limit stated rather than hidden: a face is a pure function of
-   the session id (§105), so a role fired and hired again is a new face under the same role name.
-
-5. **The budget stop is honest about what it cannot do.** A per-card cap moves the card to
-   `blocked` — the single system write to a column, allowed because it is a stop and not progress —
-   refuses to send that session further work, and posts one message asking it to stop and write a
-   handover. **It does not kill the process.** A session opened in a terminal is not the daemon's
-   child, there is no supervisor, and `SendHub.shutdown()` already records at §115 what a parent
-   can and cannot promise about a child. A product that claimed to stop an agent it cannot signal
-   would be lying, and the design says so in place rather than in a footnote.
-
-6. **Drift flags are opinions and are labelled as such.** The PM pass is the planner session
-   re-reading the blueprint, the board and recent handovers; its output surfaces as review cards
-   and chips. It cannot move a column, reassign a role or stop a session. A model's judgement about
-   scope is worth showing and is not worth acting on unattended.
-
-### 148.3 What the design does not claim
-
-Three gaps are named rather than argued away. **No worktree launcher exists today** — nothing in
-`src/` runs `git worktree` at all, so WP-68 builds it, and the argv discipline (§28, §95, §98)
-applies to a role name the same way it applies to a session id. **Codex, Gemini CLI and OpenCode
-all expose `openNewSession` and none has ever opened a terminal from this project** (§8, §91, §123,
-§137), so a role hired on one is marked *unverified launch* and the card names what cannot be known
-— a Codex role cannot raise a permission card at all until WP-58. And **the whole document is
-unbuilt**: six packages, WP-66 to WP-71, are in `docs/plan/08-PLAN-V2-100X.md` §9 with testable
-acceptance criteria, the owner's decisions are in §13.20, and nothing about Studio goes in the
-README, the site or a tweet until one of those criteria has been met on a machine.
 ## 147. WP-64 — the tool that said `mcp__gmail__send`, and the servers nobody could see
 
 Two halves, one subject. An MCP server is the part of a coding agent's setup
@@ -14034,3 +13952,86 @@ would be a layout-format change wearing a query parameter's clothes.
   four here does. Guessing at a smarter split would be worse than saying so.
 - **`?theme=` is not on the deck, the mini-floor or the replay.** One parameter,
   one surface, and the surface is the one `capture-floor` photographs.
+
+## 148. Studio — the office you can start from an idea, without the floor ever showing work that did not happen
+
+`docs/07-STUDIO-DESIGN.md`. A document, not code: no file under `src/`, `public/` or `test/` was
+touched, nothing in it has been run, and per `08` §1.1 rule 11 every sentence about what a runtime
+does under Studio is a hypothesis until a machine measures it. §147 belongs to a concurrent agent
+and is not renumbered here.
+
+The numbering follows the blueprint docs (`01`–`06`, then `ADAPTERS.md`) rather than `plan/`, for
+the reason §127 gives for the relay: the `plan/` directory is for what DeckHQ becomes, and an
+opt-in mode with its own on-disk artefacts, its own consent and its own endpoints is part of what
+it *is*.
+
+### 148.1 The brief, and the one thing that could have gone wrong
+
+The owner's direction was: keep the office as the base product, and add a path for someone who
+arrives with an idea rather than with a repository full of sessions — grill it into a plan, suggest
+the experts, create the office, the board, the handovers and the tracking, so the work stays on
+course. Every product in this category that has tried it has answered with an **orchestrator over a
+fictional roster**: named characters, a simulated task feed, a dashboard whose motion is generated
+rather than observed. That is the one thing DeckHQ cannot ship, because the floor's whole claim is
+that what is on it is real.
+
+So the design's first sentence is a refusal: **everything Studio spawns is a real runtime session,
+discovered by the ordinary scan and read back through the ordinary adapters.** There is no second
+data path, no Studio-private session list, and no code path that may write a message, a token count
+or a progress value that did not come from an adapter or a file on disk. That is invariant 2 of the
+document's §9, and it has a named test.
+
+### 148.2 The six decisions
+
+1. **The board column is user-owned, exactly as `ackState` is.** This is the invariant
+   (`01-PRODUCT.md` §2) applied to a new field, and it is the decision that makes a kanban
+   trustworthy rather than decorative. An observed event — a session ending, a test passing, a file
+   appearing, a budget being spent — writes a **flag** on the card and never moves it. A column
+   changes on the user dragging or pressing, or on a handover the user has accepted in the review
+   card, and on nothing else. Every competing product auto-advances a card when the process exits,
+   which is the same bug the queue exists to fix, one layer up.
+
+2. **The handover is a file the agent writes because its brief asked it to.** Not a hook, not a
+   protocol, not a tool call: `.deckhq/studio/handovers/<cardId>.md`, watched by the same file-watch
+   plumbing that already tails a transcript. The mechanism is legible to the user, works on every
+   runtime including the three with no hooks, and degrades to "the agent did not write one" rather
+   than to a wrong answer.
+
+3. **Consent for `.deckhq/studio/` is the shortcut installer's consent, not a new one.** The
+   directory is outside the state directory, so `src/core/launcher.mjs`'s discipline applies whole:
+   print every path first, write nothing without `--yes` or a click, tag what is written, record
+   it, and remove only what still proves it is ours. It is granted once per project and never
+   inferred from another; a path resolving outside the directory is refused rather than clamped,
+   which is what `runAction()` already does for project actions.
+
+4. **Hire spawns through `openNewSession`, and the brief is named rather than carried.** The
+   instruction argument is one argv element naming `.deckhq/studio/briefs/<role>.md`, because a
+   brief is long and a prompt is an argument. Identity persists through `queuePendingIdentity()`
+   and the existing MK/given-name assignment, so a hired role is the same character on the board,
+   the floor and the deck — with one limit stated rather than hidden: a face is a pure function of
+   the session id (§105), so a role fired and hired again is a new face under the same role name.
+
+5. **The budget stop is honest about what it cannot do.** A per-card cap moves the card to
+   `blocked` — the single system write to a column, allowed because it is a stop and not progress —
+   refuses to send that session further work, and posts one message asking it to stop and write a
+   handover. **It does not kill the process.** A session opened in a terminal is not the daemon's
+   child, there is no supervisor, and `SendHub.shutdown()` already records at §115 what a parent
+   can and cannot promise about a child. A product that claimed to stop an agent it cannot signal
+   would be lying, and the design says so in place rather than in a footnote.
+
+6. **Drift flags are opinions and are labelled as such.** The PM pass is the planner session
+   re-reading the blueprint, the board and recent handovers; its output surfaces as review cards
+   and chips. It cannot move a column, reassign a role or stop a session. A model's judgement about
+   scope is worth showing and is not worth acting on unattended.
+
+### 148.3 What the design does not claim
+
+Three gaps are named rather than argued away. **No worktree launcher exists today** — nothing in
+`src/` runs `git worktree` at all, so WP-68 builds it, and the argv discipline (§28, §95, §98)
+applies to a role name the same way it applies to a session id. **Codex, Gemini CLI and OpenCode
+all expose `openNewSession` and none has ever opened a terminal from this project** (§8, §91, §123,
+§137), so a role hired on one is marked *unverified launch* and the card names what cannot be known
+— a Codex role cannot raise a permission card at all until WP-58. And **the whole document is
+unbuilt**: six packages, WP-66 to WP-71, are in `docs/plan/08-PLAN-V2-100X.md` §9 with testable
+acceptance criteria, the owner's decisions are in §13.20, and nothing about Studio goes in the
+README, the site or a tweet until one of those criteria has been met on a machine.
