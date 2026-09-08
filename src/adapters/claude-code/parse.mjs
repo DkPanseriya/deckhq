@@ -200,6 +200,156 @@ function lastCustomTitle(text) {
   return found;
 }
 
+// ------------------------------------------------------------ MCP (WP-64)
+
+/**
+ * How many MCP servers one session may be recorded as having. A bound, not a
+ * belief: the list comes off a record this project did not write, and a
+ * summary that is cached to disk must not be able to grow without one.
+ */
+export const MAX_MCP_SERVERS = 64;
+
+/** Longest server name kept. Anything longer is a name nobody typed. */
+export const MAX_MCP_NAME = 80;
+
+/**
+ * The MCP servers a `system` / `init` record names, or null.
+ *
+ * WHERE THIS RECORD COMES FROM, AND WHERE IT DOES NOT. Claude Code emits
+ * `{"type":"system","subtype":"init", …}` as the first line of
+ * `--output-format stream-json` (the shape is recorded in ./stream.mjs's
+ * header, from the real binary), and its documented fields include
+ * `tools: string[]` and `mcp_servers: {name, status}[]`.
+ *
+ * It is NOT in the transcripts on this machine. Sixty `.jsonl` files under
+ * `~/.claude/projects` were sampled on 8 September 2026 and not one carried a
+ * record with `subtype: "init"` (`docs/DEVIATIONS.md` §147). So this parser is
+ * written against the documented event and wired into `parseSummary`, and the
+ * field it fills is ABSENT rather than empty on every session here — which is
+ * the whole rule: a session says what its own transcript said, and invents
+ * nothing when the transcript said nothing.
+ *
+ * Defensive like everything else in this file: a record of the wrong shape, a
+ * server that is not an object, a missing status — each is skipped, never
+ * thrown on, and `status` is kept as the runtime spelled it because deciding
+ * that `"failed"` and `"needs-auth"` are the same thing is not this parser's
+ * call to make.
+ *
+ * @param {any} rec one parsed transcript/stream record
+ * @returns {{name:string, status:string}[]|null} null when this record is not
+ *   an init event, or carries no `mcp_servers` array at all.
+ */
+export function mcpServersFromInit(rec) {
+  if (!rec || typeof rec !== 'object') return null;
+  if (rec.type !== 'system' || rec.subtype !== 'init') return null;
+  const list = rec.mcp_servers;
+  if (!Array.isArray(list)) return null;
+  /** @type {{name:string, status:string}[]} */
+  const out = [];
+  for (const entry of list) {
+    if (out.length >= MAX_MCP_SERVERS) break;
+    if (!entry || typeof entry !== 'object') continue;
+    const name = clampOneLine(entry.name, MAX_MCP_NAME);
+    if (!name) continue;
+    out.push({ name, status: clampOneLine(entry.status, MAX_MCP_NAME) });
+  }
+  return out;
+}
+
+/**
+ * One printable line of at most `max` characters, or ''. Same discipline as
+ * `oneLine()` in ./hooks.mjs and ./stream.mjs, and for the same reason: a
+ * server name is text this project did not write, and it can carry newlines,
+ * ANSI escapes or a bidi override.
+ * @param {unknown} value
+ * @param {number} max
+ */
+function clampOneLine(value, max) {
+  const text = String(value ?? '')
+    .replace(/\p{C}/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.length > max ? text.slice(0, max - 1) + '…' : text;
+}
+
+/**
+ * The LAST init record's MCP server list across the given chunks, or null.
+ *
+ * Physical order decides "last", the way `lastCustomTitle` does and for the
+ * same reason: an init record carries no timestamp of its own.
+ * @param {string[]} texts
+ * @returns {{name:string, status:string}[]|null}
+ */
+export function lastMcpServers(texts) {
+  /** @type {{name:string, status:string}[]|null} */
+  let found = null;
+  for (const text of texts) {
+    for (const rec of jsonLines(text)) {
+      const servers = mcpServersFromInit(rec);
+      if (servers) found = servers;
+    }
+  }
+  return found;
+}
+
+/**
+ * Every line of `claude mcp list` that names a server, as `{name, status}`.
+ *
+ * MEASURED, on 8 September 2026, by running `claude mcp list` on this machine
+ * (claude on PATH, four servers configured). The real output is:
+ *
+ *     Checking MCP server health…
+ *
+ *     <name>: <target> - ✔ Connected
+ *
+ * and the documented failure line is `<name>: <target> (HTTP) - ✗ Failed to
+ * connect`. The connected line is measured; the failed line is Claude Code's
+ * documented wording and has NOT been seen here (`docs/DEVIATIONS.md` §147),
+ * which is why the status test is "does the tail begin with the word
+ * connected" rather than a match on a particular glyph — `✔` and `✓` are not
+ * the same character and neither is load-bearing.
+ *
+ * WHAT IT DELIBERATELY THROWS AWAY. The `<target>` between the name and the
+ * status is a command line or a URL, and a URL can carry a token in a query
+ * string or a subdomain. It is never returned, never stored and never
+ * rendered, so no later change to a report can leak one: the only way to print
+ * a target is to write new code that reads it, and there is none to read.
+ *
+ * The name is everything before the first `": "`. A server whose own name
+ * contains `": "` would split early; none of the four here does, and guessing
+ * would be worse than saying so.
+ *
+ * @param {string} text raw stdout
+ * @returns {{servers:{name:string,status:string}[], connected:number, failed:number}}
+ */
+export function parseMcpList(text) {
+  /** @type {{name:string, status:string}[]} */
+  const servers = [];
+  let connected = 0;
+  let failed = 0;
+  for (const raw of String(text ?? '').split('\n')) {
+    if (servers.length >= MAX_MCP_SERVERS) break;
+    // Colour codes, in case the CLI ever decides a pipe deserves them.
+    const line = raw.replace(/\[[0-9;]*m/g, '').trim();
+    if (!line) continue;
+    const dash = line.lastIndexOf(' - ');
+    if (dash === -1) continue;
+    const head = line.slice(0, dash);
+    const colon = head.indexOf(': ');
+    if (colon <= 0) continue;
+    const name = clampOneLine(head.slice(0, colon), MAX_MCP_NAME);
+    if (!name) continue;
+    const verdict = line.slice(dash + 3).trim();
+    // The glyph, when there is one, is one character and a space.
+    const words = verdict.replace(/^[^\p{L}]+/u, '');
+    const ok = /^connected\b/i.test(words);
+    servers.push({ name, status: ok ? 'connected' : 'failed' });
+    if (ok) connected += 1;
+    else failed += 1;
+  }
+  return { servers, connected, failed };
+}
+
 /**
  * First record across the given chunks (searched in order) matching `pred`.
  * @param {string[]} texts
@@ -409,6 +559,12 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
 
   const lastActivityAt = Number.isFinite(newestTs) ? newestTs : mtimeMs;
 
+  // WP-64. The MCP servers this session's own init event named, if it carried
+  // one. The head is searched first because init is the first line of a
+  // session; the tail is searched too, and wins, only because a `--continue`
+  // appends to the same file and its init is then the later truth.
+  const mcpServers = lastMcpServers([headText, tailText]);
+
   return {
     id,
     runtime: 'claude-code',
@@ -438,6 +594,11 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
     toolMix,
     textMedian: median(textLengths),
     textTurns: textLengths.length,
+    // WP-64. Present only when the transcript said so. An absent field is
+    // "this session never told us", which is not the same claim as "this
+    // session had no MCP servers" — and on every transcript this machine has,
+    // it is the true one.
+    ...(mcpServers ? { mcpServers } : {}),
   };
 }
 

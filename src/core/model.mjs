@@ -133,6 +133,13 @@ export { GONE_HOME_DAYS, isActiveAgent, isDeskAgent, isGoneHome, isSubagent, pla
  *   characters, of an assistant turn that said something. 0 when none did.
  * @property {number} [textTurns]              WP-28. How many turns that
  *   median was taken over, so a reader can tell a median from a single sample.
+ * @property {{name:string, status:string}[]} [mcpServers] WP-64. The MCP
+ *   servers this session's own `system`/`init` event named, with the status
+ *   that event gave each one, verbatim. ABSENT when no such event was in the
+ *   transcript — which is every session on the reference machine, because
+ *   Claude Code emits the event on its `stream-json` output and not into the
+ *   `.jsonl` (`docs/DEVIATIONS.md` §147). An absent field is "not observed",
+ *   never "no MCP servers", and nothing derives one from the other.
  * @property {boolean} [archived]              the desktop app's archive flag,
  *   stamped on by the adapter AFTER the summary cache has handed the summary
  *   out and never stored in it (docs/DEVIATIONS.md §46). It was being written
