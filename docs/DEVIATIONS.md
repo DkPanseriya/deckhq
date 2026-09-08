@@ -14036,6 +14036,11 @@ unbuilt**: six packages, WP-66 to WP-71, are in `docs/plan/08-PLAN-V2-100X.md` �
 acceptance criteria, the owner's decisions are in §13.20, and nothing about Studio goes in the
 README, the site or a tweet until one of those criteria has been met on a machine.
 
+**Since.** WP-66 was built on 8 September 2026 — §150 — so the third gap is partly closed: the
+README now says what exists (the store and the consent) and what does not (everything that runs).
+The first two stand unchanged. No worktree launcher exists, and no Codex, Gemini CLI or OpenCode
+terminal has ever been opened by this project.
+
 ## 149. WP-72 — the floor had no light, and every room was printed on it
 
 Three sentences of `docs/03-VISUAL-SPEC.md` promise a photograph: "real materials, real furniture,
@@ -14278,3 +14283,128 @@ What the PNGs actually show, since §1.1 rule 10 is that nothing ships without o
   sits a room's width from the seam, and a name is drawn where its agent sits, which the desk
   cluster keeps clear of the walls. A 3× crop of the `night shift` office before and after this
   package is indistinguishable except where the neighbouring room's carpet begins.
+
+## 150. WP-66 — the directory Studio may write in, and the one door a card moves through
+
+`docs/07-STUDIO-DESIGN.md` §3, §5, §9, §10. The first Studio package: `src/studio/` (paths, the
+three schemas, the store, consent, the budget funnel), `src/http/routes/studio.mjs`,
+`src/cli/studio.mjs`, and four named invariant tests. **No UI, no spawn, no planner** — those are
+WP-67 to WP-71 — and nothing in `public/` changed, so there are no goldens to regenerate. `enable`
+creates a directory and a record; after that, nothing runs.
+
+40 tests were added: `test/unit/studio-store.test.mjs` (16), `test/integration/studio-route.test.mjs`
+(12), `test/unit/studio-cli.test.mjs` (9) and `test/unit/studio-invariant.test.mjs` (3). The suite
+is 2044 tests, 2043 passing and one platform skip that predates this package.
+
+### 150.1 The four acceptance criteria, and how each is proved
+
+**(1) `enable` without `confirm` writes nothing and returns every path it would write.** Proved by
+hashing the entire project tree — every path and every byte — before and after the request and
+comparing the two digests. Checking that one expected file is absent would pass a route that wrote
+a different one; a tree hash cannot.
+
+**(2) A write resolving outside `<project>/.deckhq/studio/` is refused with the offending path.**
+Three shapes, three tests: `..`, an absolute path, and a **symlink**. The symlink case is the
+reason there are two checks rather than one — `handovers/c7.md`, with `handovers` replaced by a
+link, resolves *inside* the directory as a string, so the string check passes it and only the
+filesystem check catches it. `resolveInside()` therefore resolves the deepest **existing** ancestor
+through `realpath` and asks again. It refuses; it never clamps, for the reason `runAction()`
+refuses a script outside its own repository: a clamp turns "this path is wrong" into "this path is
+now a different path" and writes somewhere nobody asked for. On Windows the test makes a junction
+rather than a directory symlink, because a symlink there needs a privilege a test runner does not
+have.
+
+**(3) `disable --yes` removes only tagged files and names the rest.** It removes exactly
+`README.md`, and the response lists the blueprint, the board, the rules, the briefs and the
+handovers as `kept`, because those are the user's. §11.3's decision that `.deckhq/studio/` is not
+gitignored is the same decision from the other side: it is a plan a team should be able to commit,
+so DeckHQ does not delete it.
+
+**(4) No write to `card.column` outside the two funnels.** A static test reads every `.mjs` under
+`src/studio/` and `src/http/`, strips comments, and collects every place a `column` property is
+given a value in the three shapes this codebase can express one (`x.column =`, `x['column'] =`,
+`column:` in an object literal). The result is compared against a map with a reason on every entry:
+the schema normaliser (which *copies* a value `validateBoard` has already checked), `blockForBudget`,
+and the two writes in the card route. A second assertion reads `budget.mjs` and fails if any of the
+other five column names appears in it at all.
+
+### 150.2 Where the code had to differ from the design, and why
+
+1. **`projectKey` is the ledger's 16 hex characters, not a full SHA-256.** §5.1's schema says
+   "sha-256 of the normalised cwd", which `src/core/ledger-record.mjs`'s `projectKeyFor()` already
+   is — truncated to 16. Reusing it rather than adding a second hash of the same string means a
+   board card and a ledger record name the same project with the same token, which is exactly what
+   WP-71's per-card fold has to join on. A separate full-length hash would have been a second
+   identifier for one thing, and a join nobody could make.
+
+2. **`permissionPolicy` needed a vocabulary the design does not give.** §3's table names the field;
+   nothing says what may be in it. Three words: `ask`, `allowlist`, `plan`. They are **descriptive
+   and not enforced**, which §9 already settles — `allowedTools` is a line in the brief rather than
+   something DeckHQ imposes on the runtime, and the permission card governs tool use for a hired
+   agent as for any other session. An unknown value is refused with the field named rather than
+   coerced, so a roster from a later build fails loudly instead of quietly becoming `ask`.
+
+3. **`enable` writes one file, and the consent screen lists seven.** §3 step 1 says the screen
+   prints the three files, `briefs/`, `handovers/` and `rules.md`; step 3 says the daemon writes
+   `README.md`. Both, therefore: the six it may write later are on the screen marked `(later)`,
+   because a consent screen that showed only today's write would be asking for less than it means.
+
+4. **One `installed.json` surface per project.** `writeRecord()` replaces one surface's entries
+   wholesale, so a single `studio` surface would have made enabling a second project erase the
+   first one's record. Each project gets `studio:<projectKey>`. Two things changed in
+   `src/core/launcher-apply.mjs` to allow it: `remove()`'s `surface` widened from the two literals
+   to a string, and `isOurs()` gained an optional `tag`, so Studio's marker
+   (`deckhq:installed-by-deckhq-studio`) is what its own files are proved by. A `README.md`
+   claiming the shortcut installer's tag would be a file that lies about where it came from, which
+   is the one thing a tag exists to prevent. Nothing else about the four proofs changed, and the
+   shortcut tests pass untouched.
+
+5. **The corrupt-file discipline is adapted rather than copied, and the adaptation is the point.**
+   `Store.load()` backs a corrupt `state.json` up and starts from defaults, because nothing but
+   DeckHQ writes that file. **These files are the user's** — edited by hand, committed, reviewed in
+   a diff — so a `board.json` that does not parse is REPORTED, with the path in the document and
+   the line in the file, and left exactly where it is. A test asserts that reading a broken board
+   leaves the directory byte for byte as it found it. The bytes are moved to `<file>.corrupt-<ts>`
+   only at the moment a write would otherwise overwrite them.
+
+6. **The line number is counted, not parsed.** `JSON.parse` throws positions away, and a
+   position-preserving parser is a parser, which is a dependency and a different package. The
+   validator counts occurrences of the failing key in the raw text. That is exact for a file this
+   store wrote — it writes one key per line — and a minified document reports line 1, which is
+   where the whole object is and is therefore honest rather than wrong.
+
+7. **`op: 'edit'` carrying a column is refused, not ignored.** The design says the card route is
+   the only column writer; it does not say how the route separates an edit from a move. A request
+   that meant to move a card and was silently answered with "I changed the title" is how a board
+   stops being trustworthy, so a column moves on `op: 'move'` alone and an edit that carries one is
+   a 400 naming the verb to use.
+
+8. **The CLI needs a running daemon.** `deckhq studio enable <dir>` prints and posts; it does not
+   edit `state.json` itself. That is `deckhq layout import`'s reason rather than a new one: a live
+   daemon holds `state.json` in memory and saves it on a debounce, so a CLI that wrote the grant
+   underneath it would have the grant overwritten by the next save. With no daemon it prints one
+   line and exits 2. The **wording** is `deckhq shortcut`'s, word for word — the path list, "Nothing
+   was changed. Run it again with --yes", and "Left alone — no longer carries the DeckHQ marker, so
+   it is not ours to delete".
+
+9. **`blockForBudget()` ships with no caller, on purpose.** §8's hard stop needs a per-card ledger
+   fold and a clock on a column move, both of which are WP-71. What exists now is the single named
+   doorway WP-71 will use, so the invariant is provable *before* the feature that needs it is
+   written rather than after. It sets `blocked` and nothing else, appends one flag, and answers
+   `moved: false` on a card that is already blocked — so a repeated pass cannot post a second
+   message. It kills nothing, and its header says so where somebody will read it.
+
+10. **`ctx.dataDir`.** The daemon context gained one field, derived from `stateFile` the way
+    `ratesFile` and `daemonFile` already are. Without it a test daemon would record its writes in
+    the developer's own `~/.deckhq/installed.json` — the file `deckhq shortcut --remove` reads and
+    acts on.
+
+### 150.3 What is not here
+
+No `public/` change, no `.gitignore` entry (§11.3), nothing written to `~/.claude`, `~/.codex` or
+any settings file, no process spawned, and no socket opened but the loopback one the CLI uses to
+reach the daemon. `/api/studio/plan`, `/hire` and `/handover` answer **501** with one line naming
+the package that adds them, and a test asserts the body is one line and one key.
+`/api/studio/tracking` answers `{ cards: [], note: 'no data' }`, and a test asserts **no digit
+appears anywhere in the response** — not even a zero, which is §7's refusal and the same one the
+rate card already makes for a model it cannot price.

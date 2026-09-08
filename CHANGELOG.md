@@ -79,6 +79,39 @@
   in a link a stranger sends. `scripts/capture-floor.mjs --theme "night shift"` uses it, which is
   what it was built for: a screenshot in another paint that leaves no setting to put back.
 
+- **Studio, off everywhere, and this is its foundation.** Studio is the opt-in "idea to office"
+  mode: a plan, a roster and a six-column board that live in your own repository at
+  `<project>/.deckhq/studio/`. This release ships the store, the schemas, the consent and the
+  endpoints. **Nothing runs yet** — no planner session, no worktree, no spawn, and no tab. What
+  exists is the directory, its rules and the way to take it back out.
+
+- **`deckhq studio enable <dir>` and `deckhq studio disable <dir>`.** The consent discipline is
+  `deckhq shortcut`'s, unchanged: run either without `--yes` and it prints every path, what each
+  one is for, and changes nothing. `enable --yes` writes one file — `.deckhq/studio/README.md`,
+  carrying a marker on its first line — records the path in `~/.deckhq/installed.json` and the
+  grant in `state.json`. `disable --yes` deletes only files that still carry that marker and
+  **names everything it left alone**: your blueprint, your board, your rules, your briefs and your
+  handovers are yours, and they are not gitignored either, because a plan is something a team
+  should be able to commit. Consent is per project and is never inferred from another. Both
+  commands need a running DeckHQ, for the reason `deckhq layout import` does.
+
+- **`/api/studio`, `/api/studio/enable`, `/disable`, `/roster`, `/card` and `/tracking`.** Loopback
+  only, behind the same cross-site guard as every other route. `POST /api/studio/card` is the only
+  thing in the product that moves a card between columns, and a card's column obeys the same rule
+  `ackState` does: **no observed event may move it.** An edit that carries a column is refused
+  rather than quietly ignored, and a static test fails the build if a second column writer ever
+  appears. `/api/studio/tracking` answers `no data` and no number at all — not even a zero — until
+  there is a ledger fold behind it. `/plan`, `/hire` and `/handover` answer 501 with one line
+  naming the package that adds them.
+
+- **The three files are validated and refused whole, with the path and the line.** A `board.json`
+  with a column this build cannot draw reports `cards[2].column (line 41)` rather than quietly
+  moving the card to the backlog. A file that does not parse is reported and **left exactly where
+  it is** — these are files you edit, not files DeckHQ owns — and its bytes are kept even when a
+  later write replaces it. A path that resolves outside `.deckhq/studio/`, by `..`, by being
+  absolute or through a symlink, is refused with the offending path rather than clamped back
+  inside. `docs/DEVIATIONS.md` §150.
+
 ### Changed
 
 - **The floor has one light, and every shadow on it agrees.** A key light in the upper left,
