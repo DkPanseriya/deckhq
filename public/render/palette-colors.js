@@ -19,6 +19,47 @@
  */
 
 /**
+ * THE FLOOR HAS ONE LIGHT (WP-72).
+ *
+ * A key light in the UPPER LEFT, stated here as the unit vector every shadow
+ * on this floor travels along — down and to the right, at 45°. It is a
+ * DIRECTION and not a position, because the camera is orthographic top-down
+ * (docs/03-VISUAL-SPEC.md §1): a point light would make the shadow at one end
+ * of a 90-unit building fall the other way from the shadow at the other end,
+ * and nothing in a plan view reads as a mistake faster than that.
+ *
+ * Everything that casts reads it: a prop's two-pass shadow and its contact
+ * shadow (`backdrop-paint.js`), a wall's drop shadow (`backdrop-floor.js`),
+ * a room slab's shadow onto the screed, and the building's own shadow onto
+ * the ground (`scene-draw.js`, `minifloor.js`). One vector, so nothing on the
+ * floor can be lit from somewhere else.
+ *
+ * 45° exactly, so `dist * LIGHT_DIR` is `(d, d)` for `d = dist / √2` and the
+ * offsets the floor shipped with before this package — a contact shadow at
+ * `(2, 2)`, a wall at `(2, 2)`, a prop at `(3, 3)` — are reproduced to the
+ * pixel by naming the distance along the ray rather than the drop down the
+ * page.
+ *
+ * @type {Readonly<{x:number, y:number}>}
+ */
+export const LIGHT_DIR = Object.freeze({ x: Math.SQRT1_2, y: Math.SQRT1_2 });
+
+/**
+ * How far a project room's carpet is moved toward that project's identity
+ * colour (WP-72). Six per cent: enough that two rooms side by side are
+ * different rooms at a glance, far too little to be a colour anybody would
+ * name. The identity ring on the agent is the signal; this is the room
+ * agreeing with it.
+ *
+ * It is a hard ceiling rather than a taste setting because the carpet is a
+ * GROUND — room plates, agent names and the in-room "+" are drawn on it — and
+ * `themes.js`'s `assertThemeContrast` measures the WASHED carpet against every
+ * theme's ink for all fourteen identities. Raising this number moves a floor
+ * every one of those measurements is taken against.
+ */
+export const CARPET_IDENTITY_WASH = 0.06;
+
+/**
  * State -> colour, verbatim from docs/03-VISUAL-SPEC.md §5.
  *
  * COLOUR DISCIPLINE: `#C0392B` (crimson) is reserved for `for_review` and
@@ -108,6 +149,40 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    */
   floorGround: '#E3DED4',
   floorDropShadow: 'rgba(0, 0, 0, 0.55)',
+  /**
+   * The light the ground catches beside the building, and loses as it leaves
+   * it (WP-72). A very gentle radial falloff centred on the envelope: this
+   * where the floor ends, nothing at the furthest corner of the window.
+   *
+   * IT LIGHTS RATHER THAN DARKENS, and that is a measurement rather than a
+   * preference. The first cut of this darkened outward, which is the obvious
+   * reading of "darker away from the building" — and it moved the ground by
+   * one channel count on the `wide` capture, because the ground the building
+   * actually stands on is the chrome's `--bg` at `#131419` and there is no
+   * darker to go. Same ramp, same direction, stated from the lit end: the
+   * ground beside the slab is lifted and falls away to the page's own black.
+   *
+   * Cool, and colder than the floor, so the studio keeps the temperature
+   * `docs/DEVIATIONS.md` §69 gave it — the warm thing in this window is the
+   * building.
+   */
+  groundFalloff: 'rgba(126, 134, 158, 0.16)',
+
+  /**
+   * A room is a SLAB (WP-72). Two tokens say so:
+   *
+   *   `slabEdge`   the darker rim inside the room's two light-away sides —
+   *                south and east, since the key light is upper-left. It is the
+   *                thickness of the slab, seen from directly above.
+   *   `slabShadow` the soft shadow that rim casts outward, onto the screed
+   *                between rooms and across a shared partition.
+   *
+   * Same warm dark family as `wallAmbientOcclusion` and `shadowDeep`: the rim
+   * and the wall's own occlusion band meet at every corner, and two different
+   * darks meeting there reads as a smudge rather than as a corner.
+   */
+  slabEdge: 'rgba(70, 58, 42, 0.22)',
+  slabShadow: 'rgba(55, 45, 32, 0.30)',
 
   /** Wash over a project room nobody is working in. */
   roomDimmed: 'rgba(58, 48, 38, 0.10)',
@@ -347,6 +422,74 @@ export function overridePalette(tokens) {
 /** Put every material back exactly as it shipped. */
 export function resetPalette() {
   Object.assign(PALETTE, DEFAULT_PALETTE);
+}
+
+/**
+ * Blend two `#rrggbb` colours, `t` of the way from `a` to `b`.
+ *
+ * A second copy of `themes.js`'s `mix`, and deliberately: that one is part of
+ * the theme DERIVATION and lives with the rest of it, while this one is
+ * reachable from a renderer that must not import the theme machinery to paint
+ * a carpet. Both are three lines of the same arithmetic; the alternative is a
+ * renderer that depends on the module that repaints it.
+ *
+ * Returns `a` unchanged if either colour is not a flat `#rrggbb` — a themed
+ * token is validated on the way in, so this is the branch a malformed pack
+ * takes rather than one that ever runs in the product.
+ *
+ * @param {string} a @param {string} b @param {number} t 0 is all `a`, 1 all `b`
+ * @returns {string}
+ */
+export function mixHex(a, b, t) {
+  const x = channelsOf(a);
+  const y = channelsOf(b);
+  if (!x || !y) return a;
+  const k = Math.min(1, Math.max(0, Number(t) || 0));
+  return `#${x
+    .map((n, i) =>
+      Math.round(n + (y[i] - n) * k)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+/**
+ * The carpet a project room is actually painted in (WP-72): the theme's carpet
+ * moved `CARPET_IDENTITY_WASH` of the way toward that project's identity
+ * colour.
+ *
+ * One function, called by the renderer that paints it and by the contrast test
+ * that measures it, so the surface the suite proves readable is the surface the
+ * bake puts on the floor.
+ *
+ * @param {string} carpet the theme's carpet, `#rrggbb`
+ * @param {string|null|undefined} tint the project's identity accent
+ * @param {number} [amount]
+ * @returns {string}
+ */
+export function washedCarpet(carpet, tint, amount = CARPET_IDENTITY_WASH) {
+  if (!tint) return carpet;
+  return mixHex(carpet, tint, Math.min(CARPET_IDENTITY_WASH, amount));
+}
+
+/**
+ * The same colour at zero alpha — the far stop of a soft band or a gradient
+ * that has to fade into nothing rather than into a colour.
+ *
+ * Stated as a function because a gradient whose transparent stop is a
+ * DIFFERENT hue (`rgba(0,0,0,0)` against a warm shadow, say) interpolates
+ * through that hue in premultiplied space and leaves a grey bloom along the
+ * band — which is the banding this exists to avoid.
+ *
+ * @param {string} colour
+ * @returns {string}
+ */
+export function fadedOut(colour) {
+  const m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i.exec(String(colour));
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},0)`;
+  const ch = channelsOf(colour);
+  return ch ? `rgba(${ch[0]},${ch[1]},${ch[2]},0)` : 'rgba(0,0,0,0)';
 }
 
 /** sRGB distance between two `#rrggbb` colours. @param {string} a @param {string} b */

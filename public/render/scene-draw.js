@@ -11,10 +11,15 @@
  */
 
 import { buildPlan, floorPopulation, U } from './plan.js';
-import { bakeBackdrop } from './backdrop.js';
+import {
+  bakeBackdrop,
+  setLightShadow,
+  ENVELOPE_SHADOW_BLUR_PX,
+  ENVELOPE_SHADOW_DIST_PX,
+} from './backdrop.js';
 import { badgeBox, drawBadge, drawCharacter, formatElapsed, labelBox } from './rig.js';
 import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
-import { PALETTE, STATE_COLORS, identityFor, appearanceFor } from './palette.js';
+import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceFor } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
 import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.js';
@@ -30,6 +35,15 @@ import { now as clockNow } from '../clock.js';
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
+
+/**
+ * Where the ground's falloff starts, as a fraction of the building's own
+ * half-diagonal (WP-72). Under 1, so the ramp begins under the floor and the
+ * ground beside the building is already descending — at 1 the whole margin
+ * beside a wide building sits at full strength and the wash ends in a straight
+ * line where the canvas does.
+ */
+export const GROUND_FALLOFF_INNER = 0.7;
 
 /**
  * How long this agent has been waiting on the user, or `null` where it is not
@@ -167,6 +181,59 @@ export class SceneDraw extends SceneHit {
     this.canvas.style.cursor = this._pannable() ? 'grab' : '';
   }
 
+  /**
+   * The ground's radial falloff, as a paint (WP-72).
+   *
+   * Darker away from the building: transparent at the envelope's own corner
+   * radius, `PALETTE.groundFalloff` at whichever corner of the window is
+   * furthest from the building's centre — so the darkest point of the wash is
+   * always as far from the floor as the window goes, whatever shape the
+   * building came out and wherever it is sitting.
+   *
+   * MEMOISED, because everything it depends on changes on a resize or a
+   * re-plan and on nothing else. A `CanvasGradient` is an object the context
+   * compiles once; rebuilding it sixty times a second to describe a picture
+   * that has not moved is the per-frame cost this package promised not to add.
+   * The key carries the palette token as well as the geometry, so a theme
+   * change repaints it — the theme is what `groundFalloff` comes from.
+   *
+   * @param {number} viewW @param {number} viewH
+   * @param {number} x @param {number} y @param {number} w @param {number} h
+   * @returns {CanvasGradient|null}
+   */
+  _groundFalloff(viewW, viewH, x, y, w, h) {
+    const colour = PALETTE.groundFalloff;
+    const key = `${Math.round(viewW)}x${Math.round(viewH)}|${Math.round(x)},${Math.round(
+      y,
+    )},${Math.round(w)},${Math.round(h)}|${colour}`;
+    if (this._groundWash && this._groundWash.key === key) return this._groundWash.paint;
+    const ctx = this.ctx;
+    if (!ctx || !colour) return null;
+    const cx = x + w / 2;
+    const cy = y + h / 2;
+    // The furthest corner of the window from the building's centre. Using the
+    // window's own diagonal instead would put the darkest stop off-screen on
+    // an off-centre floor and flatten the whole wash.
+    const outer = Math.max(
+      1,
+      Math.hypot(cx, cy),
+      Math.hypot(viewW - cx, cy),
+      Math.hypot(cx, viewH - cy),
+      Math.hypot(viewW - cx, viewH - cy),
+    );
+    // The ramp starts INSIDE the building, at `GROUND_FALLOFF_INNER` of its
+    // half-diagonal, so the ground beside it is already part-way down the
+    // gradient rather than sitting at full strength in a flat band that ends
+    // in a seam at the edge of the canvas. Everything before that point is
+    // covered by the envelope anyway.
+    const inner = Math.min((Math.hypot(w, h) / 2) * GROUND_FALLOFF_INNER, outer * 0.98);
+    const paint = ctx.createRadialGradient(cx, cy, inner, cx, cy, outer);
+    paint.addColorStop(0, colour);
+    paint.addColorStop(1, fadedOut(colour));
+    this._groundWash = { key, paint };
+    return paint;
+  }
+
   // -------------------------------------------------------------- frame loop
 
   _startLoop() {
@@ -250,10 +317,33 @@ export class SceneDraw extends SceneHit {
       const shadowY = camera.panY;
       const shadowW = this._plan.width * U * camera.zoom;
       const shadowH = this._plan.height * U * camera.zoom;
+
+      // THE GROUND FALLS AWAY FROM THE BUILDING (WP-72). One radial gradient,
+      // transparent where the floor ends and `groundFalloff` at the furthest
+      // corner of the window, painted BEFORE the envelope so the building and
+      // its shadow land on top of it. It is what makes the ground a surface
+      // the building is standing on rather than a backing colour it happens to
+      // be cut out of.
+      //
+      // The gradient object is built once per camera and reused (see
+      // `_groundFalloff`), so what this costs per frame is one composite of a
+      // cached paint — the same class of cost as the envelope fill below,
+      // which has always been here. It cannot be baked: the bake IS the
+      // envelope, and this is by definition the part outside it.
+      const wash = this._groundFalloff(viewW, viewH, shadowX, shadowY, shadowW, shadowH);
+      if (wash) {
+        ctx.save();
+        ctx.fillStyle = wash;
+        ctx.fillRect(0, 0, viewW, viewH);
+        ctx.restore();
+      }
+
       ctx.save();
-      ctx.shadowColor = PALETTE.floorDropShadow;
-      ctx.shadowBlur = 26;
-      ctx.shadowOffsetY = 8;
+      setLightShadow(ctx, {
+        blur: ENVELOPE_SHADOW_BLUR_PX,
+        dist: ENVELOPE_SHADOW_DIST_PX,
+        color: PALETTE.floorDropShadow,
+      });
       ctx.fillStyle = PALETTE.floorGround;
       ctx.fillRect(shadowX, shadowY, shadowW, shadowH);
       ctx.restore();

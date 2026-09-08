@@ -420,6 +420,13 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
     y: 0,
     w,
     h,
+    // WP-72: the room's carpet is washed toward this project's identity
+    // colour, and `identityFor` is a pure function of the MK number. Carried
+    // on the room rather than looked up in the bake, because the bake is
+    // handed a plan and nothing else — a renderer that had to reach back to
+    // the snapshot for a colour would be a renderer that could be handed a
+    // plan it cannot paint.
+    projectMk: project.projectMk,
     plateBand: PLATE_BAND,
     // What the furniture actually needs. The tiler may widen a project room to
     // fill its row; `place` uses this to centre the desks in the result rather

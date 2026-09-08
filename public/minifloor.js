@@ -34,6 +34,7 @@
 
 import { U } from './render/plan.js';
 import { PALETTE, identityFor, appearanceFor } from './render/palette.js';
+import { setLightShadow } from './render/backdrop.js';
 import { drawCharacter } from './render/rig.js';
 import { sampleClip } from './render/clips.js';
 import { lodForZoom } from './render/agents.js';
@@ -356,11 +357,18 @@ export function drawMiniFrame(ctx, composed, opts) {
   // The building stands ON the ground and casts a shadow onto it, exactly as
   // the main floor's envelope does — that is what makes the slack read as
   // "the floor ends here" rather than as a gap.
+  //
+  // And it is lit from the same place (WP-72): this window shows the SAME
+  // baked bitmap the floor does, so every shadow inside it already falls
+  // down-right. A building shadow that dropped straight down would be the one
+  // light in the picture that disagreed with all the others.
   const ground = toScreen(shot);
   ctx.save();
-  ctx.shadowColor = PALETTE.floorDropShadow;
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetY = 3;
+  setLightShadow(ctx, {
+    blur: 12,
+    dist: 3 * Math.SQRT2,
+    color: PALETTE.floorDropShadow,
+  });
   ctx.fillStyle = PALETTE.floorGround;
   ctx.fillRect(ground.x, ground.y, ground.w, ground.h);
   ctx.restore();

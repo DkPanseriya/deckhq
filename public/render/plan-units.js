@@ -29,6 +29,9 @@
  * @property {string} [name]
  * @property {string} [projectName]
  * @property {number} [sessionCount]
+ * @property {number} [projectMk] the MK number this project's identity colour
+ *   is derived from (CONTRACTS-WP15.md §1). Assigned once and persisted, which
+ *   is what lets WP-72 tint the room's carpet with it.
  * @property {number} [tokens]
  * @property {number} [needsYou]
  * @property {boolean} [hasDashboard] the project has a runnable dashboard
@@ -107,6 +110,10 @@
  * @property {Prop[]} props
  * @property {Zone[]} zones
  * @property {'wood'|'carpet'|'tile'|'circulation'} floor
+ * @property {number} [projectMk] project rooms only: the MK number this
+ *   project's identity colour is derived from, which is what tints its carpet
+ *   (WP-72). Absent on every other kind of room, and `identityFor` is total,
+ *   so a room whose MK has not resolved yet still paints.
  * @property {{x:number,y:number,w:number,h:number}} [kitchenZone]
  * @property {number} [plateBand] height reserved across the top of the room for
  *   its plate. `PLATE_BAND` on every room that carries one.
