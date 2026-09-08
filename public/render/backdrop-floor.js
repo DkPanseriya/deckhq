@@ -9,8 +9,15 @@
  * here runs in the frame loop (docs/02-ARCHITECTURE.md §8).
  */
 
-import { PALETTE } from './palette.js';
-import { roundRect } from './backdrop-paint.js';
+import { fadedOut, PALETTE, washedCarpet } from './palette.js';
+import {
+  roundRect,
+  setLightShadow,
+  ROOM_SLAB_EDGE_PX,
+  ROOM_SLAB_SHADOW_BLUR_PX,
+  ROOM_SLAB_SHADOW_DIST_PX,
+  WALL_SHADOW_DIST_PX,
+} from './backdrop-paint.js';
 
 // ------------------------------------------------------------- materials
 
@@ -53,12 +60,26 @@ export function paintHerringbone(ctx, x, y, w, h, rng) {
   ctx.restore();
 }
 
-/** Woven carpet, warm grey, fine two-tone noise. */
-export function paintCarpet(ctx, x, y, w, h, rng) {
+/**
+ * Woven carpet, warm grey, fine two-tone noise.
+ *
+ * `tint` is the identity colour of the project whose room this is, or nothing
+ * for the circulation that happens to be carpeted (WP-72). The carpet moves
+ * `CARPET_IDENTITY_WASH` — six per cent — of the way toward it and no further:
+ * the room agrees with the ring on the agent sitting in it, and the surface is
+ * still a carpet. The NOISE is untouched, so the weave stays one material
+ * across the whole floor and only its ground shifts.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {() => number} rng
+ * @param {string|null} [tint]
+ */
+export function paintCarpet(ctx, x, y, w, h, rng, tint = null) {
   ctx.save();
   roundRect(ctx, x, y, w, h, 2);
   ctx.clip();
-  ctx.fillStyle = PALETTE.carpetBase;
+  ctx.fillStyle = washedCarpet(PALETTE.carpetBase, tint);
   ctx.fillRect(x, y, w, h);
   const dots = Math.min(6000, Math.round(w * h * 0.6));
   for (let i = 0; i < dots; i++) {
@@ -142,6 +163,97 @@ export function paintRoomAmbientOcclusion(ctx, x, y, w, h) {
   ctx.restore();
 }
 
+// ------------------------------------------------------------- the room slab
+
+/**
+ * Cast a room's own shadow onto the floor AROUND it (WP-72).
+ *
+ * A room is a slab laid on the screed, and this is the shadow its rim throws.
+ * It is what a partitioned project room never had: a partition is waist height
+ * and correctly casts nothing (VISUAL-SPEC §6), so a row of project rooms was
+ * a set of carpets printed on one continuous surface, with a 2.5 px line
+ * between them doing all the work of saying they were separate rooms.
+ *
+ * THE SHADOW IS DRAWN WITHOUT DRAWING THE SHAPE. The room's own carpet must
+ * not be darkened — the plate, the names and the "+" are read on it, and
+ * `assertThemeContrast` measures the ink against the carpet, not against the
+ * carpet under its own shadow. So the context is clipped to everything EXCEPT
+ * the room (one even-odd path: the whole bitmap, then the room), the room's
+ * rect is filled opaque, and the fill itself is clipped away. What survives is
+ * exactly the part of the blur that landed outside.
+ *
+ * It is called after every floor material is down, so the shadow lands on the
+ * neighbour a room shares a partition with as well as on the circulation
+ * between bands — which is the case the acceptance criterion names, and the
+ * one a room-at-a-time pass would have painted over.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {number} canvasW @param {number} canvasH the bake, in baked pixels
+ */
+export function castRoomShadow(ctx, x, y, w, h, canvasW, canvasH) {
+  if (w <= 0 || h <= 0) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, canvasW, canvasH);
+  ctx.rect(x, y, w, h);
+  ctx.clip('evenodd');
+  setLightShadow(ctx, {
+    blur: ROOM_SLAB_SHADOW_BLUR_PX,
+    dist: ROOM_SLAB_SHADOW_DIST_PX,
+    color: PALETTE.slabShadow,
+  });
+  // Opaque, and never seen: the clip above removes every pixel of it. Only
+  // `shadowColor` reaches the floor, and only where the blur put it.
+  ctx.fillStyle = '#000000';
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * The slab's own thickness, seen from directly above (WP-72).
+ *
+ * A darker band inside the room's two LIGHT-AWAY sides — south and east, since
+ * the key light is upper-left. The other two sides already carry
+ * `paintRoomAmbientOcclusion`'s wall band, which is a different statement
+ * (a wall standing above the floor occludes the light reaching the corner) and
+ * a different shape (26 px, very soft), so the four edges together read as a
+ * lit slab rather than as a room outlined in dark.
+ *
+ * The band fades INWARD from the edge rather than sitting as a hard stripe:
+ * a stripe on a herringbone floor at fit scale aliases into the plank seams,
+ * and the gradient's far stop is `slabEdge` at zero alpha rather than a
+ * transparent black, so nothing interpolates through a hue the floor does not
+ * have.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ */
+export function paintRoomSlabEdge(ctx, x, y, w, h) {
+  const band = Math.min(ROOM_SLAB_EDGE_PX, w / 2, h / 2);
+  if (band <= 0) return;
+  const near = fadedOut(PALETTE.slabEdge);
+  ctx.save();
+  roundRect(ctx, x, y, w, h, 2);
+  ctx.clip();
+
+  const east = ctx.createLinearGradient(x + w - band, y, x + w, y);
+  east.addColorStop(0, near);
+  east.addColorStop(1, PALETTE.slabEdge);
+  ctx.fillStyle = east;
+  ctx.fillRect(x + w - band, y, band, h);
+
+  const south = ctx.createLinearGradient(x, y + h - band, x, y + h);
+  south.addColorStop(0, near);
+  south.addColorStop(1, PALETTE.slabEdge);
+  ctx.fillStyle = south;
+  ctx.fillRect(x, y + h - band, w, band);
+
+  ctx.restore();
+}
+
 // -------------------------------------------------------------- walls/doors
 
 /**
@@ -178,9 +290,14 @@ export function paintWallSegment(ctx, wall, u) {
   } else {
     ctx.fillStyle = PALETTE.wallFill;
     ctx.strokeStyle = PALETTE.wallEdge;
-    ctx.shadowColor = 'rgba(60,52,44,0.28)';
-    ctx.shadowBlur = 7;
-    ctx.shadowOffsetY = 2;
+    // The same light as everything else on this floor (WP-72). At 45° this is
+    // the (2, 2) the wall already shipped with, plus the horizontal component
+    // it was missing.
+    setLightShadow(ctx, {
+      blur: 7,
+      dist: WALL_SHADOW_DIST_PX,
+      color: 'rgba(60,52,44,0.28)',
+    });
   }
 
   /** @param {number} a @param {number} b */

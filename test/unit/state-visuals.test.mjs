@@ -11,7 +11,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STATE_COLORS } from '../../public/render/palette.js';
+import {
+  CARPET_IDENTITY_WASH,
+  PROJECT_IDENTITIES,
+  STATE_COLORS,
+  washedCarpet,
+} from '../../public/render/palette.js';
 import { CHROME_KEYS, GROUND_KEYS, THEMES } from '../../public/render/themes.js';
 import { CLIPS, clipForState } from '../../public/render/clips.js';
 import { ACTIVITY_STATES, ACK_STATES } from '../../src/core/model.mjs';
@@ -634,6 +639,63 @@ for (const theme of THEMES) {
         ratio >= 4.5,
         `the ${theme.name} floor's ink (${floor.ink}) is ${ratio.toFixed(2)}:1 on the ` +
           `${ground} (${floor[ground]}); a room plate has to be readable`,
+      );
+    }
+  });
+
+  test(`CONTRAST [${theme.name}]: the ink clears 4.5:1 on all 14 WASHED carpets`, () => {
+    // WP-72. A project room's carpet is not `floor.carpet`: it is that colour
+    // moved `CARPET_IDENTITY_WASH` toward the project's identity accent, and
+    // the room plate, every agent's name and the in-room "+" are read on the
+    // WASH. Fourteen identities times three themes is forty-two grounds, which
+    // is forty-two more than a screenshot per theme can be eyeballed against.
+    //
+    // The blend is recomputed here rather than imported, for the same reason
+    // the rest of this block re-implements `assertThemeContrast`: a test that
+    // called the product's own function would agree with it whatever it did.
+    const { floor } = themeTokens(theme);
+    const ch = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const mix = (a, b, t) =>
+      '#' +
+      ch(a)
+        .map((n, i) =>
+          Math.round(n + (ch(b)[i] - n) * t)
+            .toString(16)
+            .padStart(2, '0'),
+        )
+        .join('');
+    assert.ok(CARPET_IDENTITY_WASH <= 0.06, `the wash is ${CARPET_IDENTITY_WASH}, over the 6% bar`);
+    assert.equal(PROJECT_IDENTITIES.length, 14, 'the identity table changed size');
+    for (const identity of PROJECT_IDENTITIES) {
+      const washed = mix(floor.carpet, identity.accent, CARPET_IDENTITY_WASH);
+      // The product paints exactly this colour.
+      assert.equal(washed, washedCarpet(floor.carpet, identity.accent));
+      const ratio = contrastRatio(floor.ink, washed);
+      assert.ok(
+        ratio >= 4.5,
+        `the ${theme.name} floor's ink (${floor.ink}) is ${ratio.toFixed(2)}:1 on the carpet ` +
+          `washed toward ${identity.accent} (${washed}); a room plate has to be readable in ` +
+          'every room, not in the average one',
+      );
+    }
+  });
+
+  test(`COLOUR DISCIPLINE [${theme.name}]: no washed carpet approaches the accent`, () => {
+    // The other half: a floor may not arrive at crimson by being tinted. The
+    // identities stop well short of the red band by construction (palette.js)
+    // and the wash is six per cent of the way there, so this has an enormous
+    // margin — which is the point of measuring it rather than arguing it.
+    const { floor } = themeTokens(theme);
+    const channels = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+    const crimson = channels(STATE_COLORS.for_review);
+    for (const identity of PROJECT_IDENTITIES) {
+      const washed = washedCarpet(floor.carpet, identity.accent);
+      const c = channels(washed);
+      const d = Math.hypot(c[0] - crimson[0], c[1] - crimson[1], c[2] - crimson[2]);
+      assert.ok(
+        d >= 60,
+        `"${theme.name}" washed toward ${identity.accent} lands on ${washed}, ${d.toFixed(1)} ` +
+          'from the reserved crimson',
       );
     }
   });

@@ -57,6 +57,8 @@ export class SceneBase {
   _fixtureRects;
   /** @type {any} */ // the outgoing backdrop during a replan cross-fade
   _fadeFrom;
+  /** @type {{key:string, paint:CanvasGradient}|null} */ // WP-72's ground falloff, built once per camera
+  _groundWash;
   /** @type {number} */ // when that fade began
   _fadeStartedAt;
   /** @type {number|null} */ // the animation frame handle

@@ -30,7 +30,7 @@
  * ============================================================================
  */
 
-import { PALETTE } from './palette.js';
+import { identityFor, PALETTE } from './palette.js';
 import {
   U_DEFAULT,
   roundRect,
@@ -38,6 +38,7 @@ import {
   drawContactShadow,
   makeCanvas,
   PROP_BLEED,
+  PROP_SHADOW_DIST_PX,
   seededRng,
 } from './backdrop-paint.js';
 import {
@@ -46,6 +47,8 @@ import {
   paintTile,
   paintCirculation,
   paintRoomAmbientOcclusion,
+  paintRoomSlabEdge,
+  castRoomShadow,
   paintWallSegment,
   paintDoorSwing,
 } from './backdrop-floor.js';
@@ -101,7 +104,7 @@ function paintProp(ctx, prop, u) {
   ctx.rotate(prop.angle || 0);
 
   const local = (fn) => {
-    withShadow(ctx, () => fn(ctx), { blur: 8, oy: 3 });
+    withShadow(ctx, () => fn(ctx), { blur: 8, dist: PROP_SHADOW_DIST_PX });
     fn(ctx);
   };
 
@@ -173,10 +176,17 @@ export function bakeBackdrop(plan, dpr = 1) {
       continue;
     }
 
+    // WP-72: a project room's carpet is washed six per cent toward that
+    // project's identity colour, so two rooms side by side are two rooms
+    // before anybody has read a plate. Derived from `projectMk` — the number
+    // that is assigned once and persisted (CONTRACTS-WP15.md §1) — so it is
+    // the same wash under the same room on every machine and every rebake,
+    // and it is the same colour the agents in it are already wearing.
+    const tint = room.kind === 'project' ? identityFor(room.projectMk).accent : null;
     if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng);
     else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh);
     else if (room.floor === 'circulation') paintCirculation(ctx, rx, ry, rw, rh);
-    else paintCarpet(ctx, rx, ry, rw, rh, rng);
+    else paintCarpet(ctx, rx, ry, rw, rh, rng, tint);
 
     if (room.kitchenZone) {
       const kz = room.kitchenZone;
@@ -184,6 +194,28 @@ export function bakeBackdrop(plan, dpr = 1) {
     }
 
     paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh);
+  }
+
+  // EVERY ROOM IS A SLAB ON THE SCREED (WP-72).
+  //
+  // A second pass, after every floor material is down and before the walls go
+  // on, and the order is the point twice over. After the materials, because a
+  // room's shadow falls on its NEIGHBOUR — across the circulation between two
+  // bands, and across the partition it shares with the room beside it — and a
+  // room-at-a-time pass would have had the next room's carpet painted over it.
+  // Before the walls, because a wall is a thing standing ON the slab and its
+  // own shadow belongs on top of the slab's, not under it.
+  //
+  // Corridors are excluded: the screed IS the ground here. A slab edge on a
+  // corridor would be the floor casting a shadow onto itself.
+  for (const room of plan.rooms) {
+    if (room.kind === 'corridor') continue;
+    const rx = room.x * u;
+    const ry = room.y * u;
+    const rw = room.w * u;
+    const rh = room.h * u;
+    castRoomShadow(ctx, rx, ry, rw, rh, wpx, hpx);
+    paintRoomSlabEdge(ctx, rx, ry, rw, rh);
   }
 
   // Walls, from the floor's own wall list. Two zones either side of a

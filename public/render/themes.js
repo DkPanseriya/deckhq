@@ -44,7 +44,14 @@
  * the schema that validates an imported document lives.
  */
 
-import { DEFAULT_PALETTE, overridePalette, resetPalette, STATE_COLORS } from './palette.js';
+import {
+  DEFAULT_PALETTE,
+  overridePalette,
+  PROJECT_IDENTITIES,
+  resetPalette,
+  STATE_COLORS,
+  washedCarpet,
+} from './palette.js';
 
 /** The theme every install starts on, and the one the goldens are shot in. */
 export const DEFAULT_THEME_NAME = 'default';
@@ -262,6 +269,15 @@ export function materialTokensFor(theme) {
     partitionFill: partition,
     partitionEdge: shade(partition, -0.14),
     doorSwingArc: alpha(ink, 0.45),
+
+    // ---- the room slab (WP-72) ----
+    // The rim comes off the WALL, the same source as `wallAmbientOcclusion`
+    // above, because the two meet at every corner of every room and two
+    // different darks meeting there reads as a smudge. The shadow it throws
+    // comes off the SCREED it lands on, so a dark floor gets a shadow it can
+    // still show rather than black on near-black.
+    slabEdge: alpha(shade(wall, -0.75), 0.22),
+    slabShadow: alpha(shade(screed, -0.7), 0.3),
 
     // ---- rugs ----
     // A rug is derived from the CARPET, not from the foliage it borrows its
@@ -593,6 +609,22 @@ export function assertThemeContrast(theme) {
   for (const key of GROUND_KEYS) {
     need(contrastRatio(floor.ink, floor[key]), 4.5, `floor ink on the ${key}`);
   }
+  // AND ON THE CARPET A PROJECT ROOM IS ACTUALLY PAINTED IN (WP-72).
+  //
+  // The carpet token is not the surface: a project room's carpet is washed six
+  // per cent toward that project's identity colour, and the room plate, the
+  // agents' names and the in-room "+" are all read on the WASH. Fourteen
+  // identities means fourteen grounds per theme that `floor.carpet` alone
+  // cannot speak for, and eyeballing one screenshot per theme would have
+  // measured three of the forty-two.
+  for (const identity of PROJECT_IDENTITIES) {
+    const washed = washedCarpet(floor.carpet, identity.accent);
+    need(
+      contrastRatio(floor.ink, washed),
+      4.5,
+      `floor ink on the carpet washed toward ${identity.accent} (${washed})`,
+    );
+  }
   // And on the derived surfaces a LABEL can land on. An agent's name is drawn
   // where the agent stands, which is very often on a rug, a desk or a seat —
   // surfaces a theme does not name and therefore could not otherwise be held
@@ -615,7 +647,24 @@ export function assertThemeContrast(theme) {
   // never passes through that function, and a surface that read as red would
   // be the same failure one layer out.
   const crimson = rgb(STATE_COLORS.for_review);
-  for (const [table, tokens] of Object.entries({ floor, chrome })) {
+  // The washed carpets are held to the same bar and named the same way. A
+  // theme is free to choose a carpet; it is not free to choose one that,
+  // washed toward an identity it cannot see, arrives at the accent.
+  /** @type {Array<[string, Record<string,string>]>} */
+  const tables = [
+    ['floor', floor],
+    ['chrome', chrome],
+    [
+      'washed carpet',
+      Object.fromEntries(
+        PROJECT_IDENTITIES.map((identity) => [
+          identity.accent,
+          washedCarpet(floor.carpet, identity.accent),
+        ]),
+      ),
+    ],
+  ];
+  for (const [table, tokens] of tables) {
     for (const [key, colour] of Object.entries(tokens)) {
       const c = rgb(colour);
       const d = Math.hypot(c[0] - crimson[0], c[1] - crimson[1], c[2] - crimson[2]);
