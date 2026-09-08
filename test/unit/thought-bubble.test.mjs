@@ -9,7 +9,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { drawCharacter, makePose, toolBubbleBox, toolIconKind } from '../../public/render/rig.js';
+import {
+  drawCharacter,
+  makePose,
+  toolBubbleBox,
+  toolBubbleText,
+  toolIconKind,
+} from '../../public/render/rig.js';
 import { STATE_COLORS } from '../../public/render/palette.js';
 
 // ---------------------------------------------------------------- fake ctx
@@ -190,6 +196,21 @@ test('no tool means nothing new is drawn: the bubble is opt-in', () => {
   const before = render({});
   const after = render({ tool: null });
   assert.equal(after.calls.length, before.calls.length);
+});
+
+// -------------------------------------------------------- MCP tools (WP-64)
+
+test('WP-64: an MCP tool is drawn as `Server · tool`, not as its raw id', () => {
+  const { texts } = render({ tool: { name: 'mcp__gmail__send', summary: 'mcp__gmail__send' } });
+  assert.ok(texts.includes('Gmail · send'), `got ${texts.join('|')}`);
+  assert.equal(texts.includes('mcp__gmail__send'), false, 'the raw id reached the floor');
+});
+
+test('WP-64: every other tool keeps the adapter’s summary, character for character', () => {
+  assert.equal(toolBubbleText({ name: 'Bash', summary: SUMMARY }), SUMMARY);
+  assert.equal(toolBubbleText({ name: 'Read', summary: 'Read src/foo.ts' }), 'Read src/foo.ts');
+  assert.equal(toolBubbleText(null), '');
+  assert.equal(toolBubbleText({}), '');
 });
 
 test('drawCharacter with a tool does not throw at any LOD, with or without other chrome', () => {

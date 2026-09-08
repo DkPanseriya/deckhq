@@ -11,6 +11,7 @@
 import { TAU, CLOUD_FILL, CLOUD_EDGE, DOT_COLOR, sansFont } from './rig-metrics.js';
 import { roundRectFill, roundRectStroke } from './rig-pose.js';
 import { PALETTE } from './palette.js';
+import { humaniseToolSummary } from '../mcp-tool-name.js';
 
 // -------------------------------------------------------- the tool bubble
 //
@@ -57,6 +58,25 @@ export function toolIconKind(name) {
     default:
       return 'other';
   }
+}
+
+/**
+ * What the bubble should actually SAY for one `CurrentTool` — WP-64.
+ *
+ * For every tool a runtime names itself this is the adapter's summary
+ * unchanged, so nothing on an ordinary floor moves by a pixel. For an MCP tool
+ * the raw id (`mcp__gmail__send`) becomes `Gmail · send`: the id is three
+ * underscores and a repeated word, and the bubble is one line above a head.
+ *
+ * The raw id is not lost — the panel's `doing:` line keeps it on its tooltip.
+ * A canvas has nowhere to hang one, which is exactly why the panel does.
+ *
+ * @param {{name?:string, summary?:string}|null|undefined} tool
+ * @returns {string}
+ */
+export function toolBubbleText(tool) {
+  if (!tool) return '';
+  return humaniseToolSummary(tool.name, tool.summary);
 }
 
 /**

@@ -73,7 +73,7 @@ import {
   drawSuitAccents,
 } from './rig-traits.js';
 import { drawCueBehind, drawPropFront, drawIcon, drawDots } from './rig-props.js';
-import { toolIconKind, drawToolBubble, drawToolIcon } from './rig-bubble.js';
+import { toolIconKind, drawToolBubble, drawToolIcon, toolBubbleText } from './rig-bubble.js';
 
 export * from './rig-metrics.js';
 export * from './rig-pose.js';
@@ -397,7 +397,9 @@ export function drawCharacter(ctx, pose, opts) {
   if (opts.icon) {
     drawIcon(ctx, ox, oy, u, opts.icon, color, pose.ringPhase);
   } else if (showTool && lod >= 1 && !reduced) {
-    drawToolBubble(ctx, ox, oy, u, tool.summary);
+    // WP-64: an MCP tool's raw id reads `Gmail · send` here. Every other
+    // tool's summary is the adapter's, unchanged.
+    drawToolBubble(ctx, ox, oy, u, toolBubbleText(tool));
   } else if (showTool) {
     // L0, or reduced motion at any LOD: the class, not the sentence.
     drawToolIcon(ctx, ox, oy, u, toolIconKind(tool.name));
