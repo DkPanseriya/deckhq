@@ -101,6 +101,9 @@ export function renderReport(report, opts = {}) {
           : floor,
       ),
     );
+    // WP-64. Only for a runtime whose adapter can answer; no row at all for
+    // one that cannot, rather than a row that says nothing.
+    if (rt.mcp) lines.push(row('mcp servers', describeMcp(rt.mcp)));
     if (rt.error) lines.push(row('', `error: ${rt.error}`));
   }
 
@@ -160,6 +163,40 @@ export function describeRuntime(rt) {
     }[rt.binary.source] || null;
   const what = rt.version || 'found';
   return how ? `${what}   (${how})` : what;
+}
+
+/**
+ * The MCP row — WP-64.
+ *
+ * Counts, and nothing but counts, of lines something actually printed. The
+ * status is the RUNTIME's verdict: `claude mcp list` pings each server itself
+ * and DeckHQ opens no socket to any of them, so this row is a quotation and
+ * says whose it is. Where it came from is named for the same reason every
+ * other phrase in this file names a check that ran.
+ *
+ * "not checked" is a real answer and never a zero. A machine with no `claude`
+ * on PATH has an unknown number of MCP servers, not none, and the two would be
+ * printed identically by any row that reported a count here.
+ *
+ * The failed servers are named because that is the actionable half — you
+ * cannot go and look at a server whose name you were not told. The connected
+ * ones are a count: the row is a health check, not an inventory.
+ * @param {any} mcp
+ */
+export function describeMcp(mcp) {
+  if (!mcp.checked) return `not checked: ${mcp.reason || 'the runtime did not answer'}`;
+  const total = mcp.connected + mcp.failed;
+  const via =
+    mcp.source === 'session' ? "   (from the newest session's init event)" : '   (claude mcp list)';
+  if (total === 0) return `none configured${via}`;
+  const parts = [`${group(mcp.connected)} connected`];
+  if (mcp.failed > 0) {
+    const names = mcp.servers
+      .filter((/** @type {any} */ s) => s.status !== 'connected')
+      .map((/** @type {any} */ s) => s.name);
+    parts.push(`${group(mcp.failed)} failed${names.length ? ` (${names.join(', ')})` : ''}`);
+  }
+  return parts.join(', ') + via;
 }
 
 /**

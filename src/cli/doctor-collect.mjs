@@ -257,6 +257,17 @@ export async function collectRuntime(adapter, scan, opts = {}) {
      * @type {string|null}
      */
     readLimit: null,
+    /**
+     * WP-64. This runtime's MCP servers and whether they answered, or null for
+     * an adapter that cannot report them — which is every adapter but Claude
+     * Code today. `{checked:false}` is a real answer and the common one: it
+     * means the runtime's own list could not be obtained, which is NOT the
+     * same fact as "no MCP servers are configured", and the row says so.
+     * @type {{checked:boolean, source:string|null, reason:string|null,
+     *         servers:{name:string,status:string}[], connected:number,
+     *         failed:number}|null}
+     */
+    mcp: null,
     sessions: 0,
     projects: 0,
     live: 0,
@@ -300,6 +311,28 @@ export async function collectRuntime(adapter, scan, opts = {}) {
     }
   } catch {
     row.version = null; // never fail the report over a cosmetic field
+  }
+
+  try {
+    // WP-64. One spawn of the runtime's own `mcp list`, bounded at 5 s inside
+    // the adapter. Never fails the report: a row DeckHQ could not fill says
+    // "not checked", which is the only honest thing it can say.
+    if (typeof adapter.describeMcpServers === 'function') {
+      const mcp = await adapter.describeMcpServers();
+      row.mcp =
+        mcp && typeof mcp === 'object'
+          ? {
+              checked: Boolean(mcp.checked),
+              source: mcp.source || null,
+              reason: mcp.reason || null,
+              servers: Array.isArray(mcp.servers) ? mcp.servers : [],
+              connected: Number(mcp.connected) || 0,
+              failed: Number(mcp.failed) || 0,
+            }
+          : null;
+    }
+  } catch {
+    row.mcp = null;
   }
 
   try {
