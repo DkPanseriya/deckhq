@@ -2,15 +2,19 @@
 
 **WP-66 · WP-67 · WP-68 · WP-69 · WP-70 · WP-71**
 
-**Date:** 8 September 2026 · **Owner:** Architect · **Status:** design of record. No code exists.
-Nothing here has been run.
+**Date:** 8 September 2026 · **Owner:** Architect · **Status:** design of record. **WP-66 is built**
+(`docs/DEVIATIONS.md` §150): the store, the three schemas, the consent and the endpoints that need
+no spawn. WP-67 to WP-71 are unbuilt, and every sentence below about what a runtime does under
+Studio remains a hypothesis until a machine measures it (`08` §1.1 rule 11). Where this document
+and the code disagree, §150.2 names the difference and its reason.
 
 **Binding sources, in precedence order:** `docs/01-PRODUCT.md` §2 · `docs/plan/08-PLAN-V2-100X.md`
 §1.1 rules 1–11 · `docs/02-ARCHITECTURE.md` §2, §5, §9 · `docs/ADAPTERS.md` §6 ·
 `docs/06-RELAY-DESIGN.md` (the format this follows).
 
-**The name.** "Studio" is a working name; the alternatives are **Workshop** and **Bureau**, owner's
-pick — it renames `.deckhq/studio/`, `/api/studio/*` and one tab, and nothing else depends on it.
+**The name.** **Settled: Studio.** The owner approved it on 8 September 2026 with every default in
+§11, before WP-66 wrote a directory name. The alternatives were **Workshop** and **Bureau**; the
+name decides `.deckhq/studio/`, `/api/studio/*` and one tab, and nothing else depends on it.
 
 ---
 
@@ -84,6 +88,12 @@ answers in the composer. It produces three files under `<project>/.deckhq/studio
 | `roster.json` | Roles: `name`, `purpose`, `systemPrompt`, `allowedTools`, `permissionPolicy`, `budget` |
 | `board.json` | Cards (§5.1) |
 
+**As built (WP-66).** `permissionPolicy` is one of `ask`, `allowlist` or `plan` — a vocabulary this
+document did not give, chosen in `src/studio/schema.mjs` and **descriptive, not enforced**: §9 is
+what settles that, and the permission card still governs tool use. `blueprint.md` carries no front
+matter, and the validator refuses one; the reason is in `schema.mjs`'s header. An unknown value in
+either file is refused with its path and its line, never coerced.
+
 **That is outside the state directory, so it needs consent, granted once per project, exactly as
 `deckhq shortcut` grants it** (`src/core/launcher.mjs`, `02-ARCHITECTURE.md` §6):
 
@@ -133,7 +143,7 @@ Six columns: **Backlog, Ready, In progress, Review, Done, Blocked.**
 ```jsonc
 {
   "version": 1,
-  "projectKey": "<sha-256 of the normalised cwd>",
+  "projectKey": "1f4a9c3e7b20d581", // `projectKeyFor()` — see below
   "cards": [
     {
       "id": "c7",
@@ -152,6 +162,11 @@ Six columns: **Backlog, Ready, In progress, Review, Done, Blocked.**
   ]
 }
 ```
+
+**As built (WP-66).** `projectKey` is `src/core/ledger-record.mjs`'s `projectKeyFor()` — a SHA-256
+of the same normalised cwd, truncated to 16 hex characters — rather than a full digest, so that a
+card and a ledger record name one project with one token and §7's per-card fold has something to
+join on. `docs/DEVIATIONS.md` §150.2 item 1.
 
 ### 5.2 The column is user-owned state
 
@@ -177,6 +192,16 @@ Loopback only; cross-site refused by the guard already in `src/daemon.mjs` (§28
 | `POST` | `/api/studio/card` | Create, edit, or **move** a card. The only column writer |
 | `POST` | `/api/studio/handover` | `{ cardId, decision: 'accept'\|'bounce', note }` |
 | `GET` | `/api/studio/tracking?project=` | §7's numbers |
+
+**As built (WP-66).** Everything above that needs no spawn exists: `GET /api/studio`, `enable`,
+`disable`, `roster`, `card` and `tracking`. `plan`, `hire` and `handover` answer **501** with one
+line naming the package that adds them, so the surface is complete and honest rather than
+half-present. `tracking` answers `{ cards: [], note: "no data" }` and contains no digit at all
+until WP-71 has a ledger fold behind it.
+
+`POST /api/studio/card` takes `{ cwd, op, ... }` with `op` one of `create`, `edit` or `move`. A
+column moves on `move` alone; an `edit` that carries a column is **refused** with the verb named,
+rather than being quietly ignored (§150.2 item 7).
 
 ### 5.4 The tab
 
@@ -249,7 +274,10 @@ use** for hired agents as for any session, and a role's `allowedTools` is a line
 rather than something DeckHQ enforces on the runtime — the card says which is which; **no
 telemetry**.
 
-New invariants, each with a named test:
+New invariants, each with a named test. **1 and 4 have theirs** — WP-66 shipped
+`test/unit/studio-invariant.test.mjs`, which reads the source rather than the behaviour, so it
+fails on a writer or a session list somebody adds tomorrow. 2 and 3 land with the packages that
+create the thing they are about (WP-67 and WP-68).
 
 1. **A card's column is user-owned.** No observed event moves it. The single exception is §8's
    budget stop, asserted to reach `blocked` and no other column.
@@ -265,7 +293,7 @@ New invariants, each with a named test:
 Continuing `08` §9. The last package on `main` here is WP-63; WP-64 and WP-65 are reserved for work
 in flight. Sizes are S/M/L, not days: none of this has been estimated against a running prototype.
 
-### WP-66 · Studio store, schema, consent, endpoints · `AR` · M · P3 · depends on —
+### WP-66 · Studio store, schema, consent, endpoints · `AR` · M · P3 · depends on — · **DONE**
 
 `src/studio/` and `src/http/routes/studio.mjs`: three schemas, the consent record, §5.3's
 endpoints. No UI, no spawn, no planner.
@@ -273,6 +301,17 @@ endpoints. No UI, no spawn, no planner.
 write; (2) a write resolving outside `<project>/.deckhq/studio/` is refused with the offending
 path, tested with `..` and a symlink; (3) `disable --yes` removes only tagged files and names the
 rest; (4) a static test finds no write to `card.column` outside `/api/studio/card` and §8's stop.
+
+**Done, 8 September 2026.** All four met, each by a named test:
+`test/integration/studio-route.test.mjs` hashes the whole project tree before and after a describe
+(1) and proves `disable` keeps the board, the blueprint and the handovers (3);
+`test/unit/studio-store.test.mjs` covers `..`, an absolute path and a symlink (2), and
+`test/unit/studio-invariant.test.mjs` reads `src/studio/` and `src/http/` and fails on a second
+column writer (4). Also shipped: `deckhq studio enable|disable <dir> [--yes]`,
+`state.json`'s `studio.consent[projectKey]`, a per-project `installed.json` surface, and
+`blockForBudget()` as §8's funnel with no caller until WP-71. `public/` is untouched, so there are
+no goldens. **Nothing runs.** Ten places where the code had to differ from this document are
+recorded in `docs/DEVIATIONS.md` §150.2 with their reasons.
 
 ### WP-67 · Grill — the planner session and its artefacts · `AB` · M · P3 · after WP-66
 
@@ -323,8 +362,12 @@ spawns real sessions is all three.
 
 ## 11. Open questions for the owner
 
+**All eight were decided on 8 September 2026: the owner approved every recommended default, and
+the name is Studio.** They are kept here with their reasoning, because the reasoning is what a
+later package has to honour. `docs/plan/08-PLAN-V2-100X.md` §13.20 records the decision.
+
 1. **The name.** Studio, Workshop or Bureau. *Default: Studio, settled before WP-66 writes a
-   directory name.*
+   directory name.* **Decided: Studio.**
 2. **Where worktrees live.** *Default: `<state dir>/worktrees/<project>-<role>`, so removal knows
    what it made and the user's repository gains no untracked directory.*
 3. **Whether `.deckhq/studio/` is gitignored by default.** *Default: no — it is a plan a team

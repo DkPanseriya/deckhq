@@ -20,6 +20,7 @@
  *   npx deckhq app        the floor in a window of its own, daemon and all
  *   npx deckhq shortcut   a Desktop and Start Menu icon for that window
  *   npx deckhq autostart  start the daemon when you log in
+ *   npx deckhq studio     enable or disable Studio for one project
  *
  * With no --port, the daemon prefers the port the installed hooks already
  * post to, so a daemon and its hooks cannot drift apart by accident; if a
@@ -63,6 +64,7 @@ const SUBCOMMANDS = {
   app: async (rest) => (await import('../src/cli/app.mjs')).runApp(rest),
   shortcut: async (rest) => (await import('../src/cli/shortcut.mjs')).runShortcut(rest),
   autostart: async (rest) => (await import('../src/cli/shortcut.mjs')).runAutostart(rest),
+  studio: async (rest) => (await import('../src/cli/studio.mjs')).runStudio(rest),
 };
 
 const subcommand = argv[0] && !argv[0].startsWith('-') ? argv[0] : null;
@@ -107,6 +109,7 @@ async function main() {
         '       deckhq app [--port N]',
         '       deckhq shortcut --install [--yes] | --remove [--yes]',
         '       deckhq autostart --install [--yes] | --remove [--yes]',
+        '       deckhq studio enable | disable <dir> [--yes]',
         '',
         '  --port <n>    loopback port (default 4317, or wherever installed hooks post)',
         '  --no-open     do not open a browser',
@@ -143,6 +146,10 @@ async function main() {
         '                wrote. Neither writes anything without --yes.',
         '  autostart     --install starts the daemon (no window) when you log in.',
         '                --remove takes it out again. Same consent, same discipline.',
+        '  studio        the opt-in "idea to office" mode, per project. `enable <dir>`',
+        '                lets DeckHQ write inside <dir>/.deckhq/studio/; `disable <dir>`',
+        '                removes only what it wrote and names the rest. Neither writes',
+        '                anything without --yes. Off everywhere until you say otherwise.',
         '',
         'Every command takes an id: the MK tag the deck prints, a name you gave,',
         'or any prefix of the session id.',

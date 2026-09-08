@@ -446,9 +446,42 @@ Everything is read locally and nothing leaves the machine.
 - Your Desktop, Start Menu and Startup folders — **only with your explicit consent**, and only the
   tagged files `deckhq shortcut` and `deckhq autostart` name before they write them.
 - `~/.claude/settings.json` — **only with your explicit consent**, and only a tagged hook block.
+- `<project>/.deckhq/studio/` — **only with your explicit consent**, per project, and only after
+  `deckhq studio enable`. See below.
 
 If a write ever fails, DeckHQ says so in the header rather than losing your acknowledgements
 quietly.
+
+## Studio
+
+Studio is the opt-in "idea to office" mode, per project: a plan, a roster and a six-column board
+that live in your own repository, and — eventually — one real coding session per role, found by
+the same scan as everything else. It is **off everywhere** and does nothing until you enable it
+for a directory.
+
+**What exists today is the store and the consent, and nothing runs.** No planner, no worktree, no
+spawn, no board tab. Enabling a project creates a directory and a record; that is all it does.
+
+```bash
+deckhq studio enable  ./my-project          # print every path it would write, change nothing
+deckhq studio enable  ./my-project --yes    # write one file, and record the grant
+deckhq studio disable ./my-project --yes    # take back only what DeckHQ wrote
+```
+
+`enable --yes` writes exactly one file — `<project>/.deckhq/studio/README.md`, carrying a marker on
+its first line — and records the path in `~/.deckhq/installed.json` and the grant in
+`~/.deckhq/state.json`. Everything else in that directory, when it arrives, is **yours**: the
+blueprint, the roster, the board, your coding rules, the briefs and the handovers. It is not
+gitignored, because a plan is something a team should be able to commit.
+
+`disable --yes` deletes only files that still carry the marker, and **names everything it left
+alone**. A path that would resolve outside `.deckhq/studio/` — by `..`, by being absolute, or
+through a symlink — is refused with the offending path rather than quietly clamped back inside.
+Consent is per project and is never inferred from another.
+
+One rule is already fixed, and it is the same rule the queue runs on: **a card's column is yours.**
+No session ending, no test passing, no file appearing and no budget being spent moves a card. They
+flag it; you move it. The design is `docs/07-STUDIO-DESIGN.md`.
 
 ## Hooks are optional and reversible
 
@@ -668,6 +701,7 @@ npx deckhq stats          # what the floor did, from the local ledger
 npx deckhq app            # the floor in a window of its own
 npx deckhq shortcut       # a Desktop and Start Menu icon for that window
 npx deckhq autostart      # the daemon, at login, with no window
+npx deckhq studio enable  # Studio, for one project, with your consent
 npx deckhq --version
 ```
 

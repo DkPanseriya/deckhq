@@ -28,11 +28,13 @@ import { register as registerWrapped } from './http/routes/wrapped.mjs';
 import { register as registerPacks } from './http/routes/packs.mjs';
 import { register as registerReplay } from './http/routes/replay.mjs';
 import { register as registerRates } from './http/routes/rates.mjs';
+import { register as registerStudio } from './http/routes/studio.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { Ledger } from './core/ledger.mjs';
 import {
   DAEMON_FILE,
+  DATA_DIR,
   LEDGER_DIR,
   PACKS_DIR,
   STATE_FILE,
@@ -347,6 +349,12 @@ export async function startDaemon(opts = {}) {
     ratesFile:
       opts.ratesFile ||
       (opts.stateFile ? path.join(path.dirname(opts.stateFile), 'rates.json') : undefined),
+    // WP-66. Where `installed.json` — the record of every file DeckHQ wrote
+    // outside its own directory — lives. Derived from `stateFile` for the same
+    // reason `ratesFile` and `daemonFile` are: a test daemon must never record
+    // its writes in the developer's own `~/.deckhq/installed.json`, because
+    // `deckhq shortcut --remove` reads that file and acts on what it says.
+    dataDir: opts.stateFile ? path.dirname(opts.stateFile) : DATA_DIR,
     port: null,
   };
   registerState(router, ctx);
@@ -364,6 +372,7 @@ export async function startDaemon(opts = {}) {
   registerPacks(router, ctx);
   registerReplay(router, ctx);
   registerRates(router, ctx);
+  registerStudio(router, ctx);
 
   const server = http.createServer((req, res) => {
     // A missing Host header, or one pointing anywhere but loopback, is not a
