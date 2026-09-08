@@ -307,13 +307,21 @@ export function digestOf(file) {
  * A file that does not exist answers `false`, not an error: `--remove` run
  * twice must be quiet the second time.
  *
+ * `deps.tag` is the marker a `tag`-proof file must carry, and it defaults to
+ * this module's own. WP-66 passes Studio's, because `.deckhq/studio/README.md`
+ * is removed by `deckhq studio disable` rather than by `deckhq shortcut
+ * --remove` — a file that claimed the shortcut installer's tag would be a file
+ * that lies about where it came from, which is the one thing a tag exists to
+ * prevent. Nothing else about the four proofs changes.
+ *
  * @param {string} file
- * @param {{dataDir?:string, exec?:typeof execFile, powershell?:string,
+ * @param {{dataDir?:string, exec?:typeof execFile, powershell?:string, tag?:string,
  *          entry?:{proof?:string, digest?:string}|null}} [deps]
  * @returns {Promise<boolean>}
  */
 export async function isOurs(file, deps = {}) {
   const dataDir = deps.dataDir || DATA_DIR;
+  const tag = deps.tag || TAG;
   let stat;
   try {
     stat = fs.statSync(file);
@@ -332,14 +340,14 @@ export async function isOurs(file, deps = {}) {
 
   if (file.toLowerCase().endsWith('.lnk')) {
     const info = await inspectShortcut(file, deps);
-    return Boolean(info && String(info.description || '').includes(TAG));
+    return Boolean(info && String(info.description || '').includes(tag));
   }
 
   try {
     // The tag is always in the first few hundred bytes of the files we write;
     // reading the whole of a small text file is simpler than a windowed read
     // and these are never large.
-    return fs.readFileSync(file, 'utf8').includes(TAG);
+    return fs.readFileSync(file, 'utf8').includes(tag);
   } catch {
     return false;
   }
@@ -383,7 +391,7 @@ export function writeIco(opts) {
  * consent discipline forbids.
  *
  * @param {import('./launcher.mjs').Plan} plan
- * @param {{dataDir?:string, exec?:typeof execFile, powershell?:string,
+ * @param {{dataDir?:string, exec?:typeof execFile, powershell?:string, tag?:string,
  *          now?:number}} [deps]
  * @returns {Promise<{written:string[], skipped:string[], icon:any, dirs:string[]}>}
  */
@@ -492,8 +500,12 @@ function missingAncestors(file) {
  * `Contents/MacOS` — is pruned upward only while it is empty and only while it
  * is still inside the directory the plan created.
  *
- * @param {'shortcut'|'autostart'} surface
- * @param {{dataDir?:string, exec?:typeof execFile, powershell?:string}} [deps]
+ * `surface` is a string rather than the two literals it used to be: WP-66 adds
+ * one surface per Studio-enabled project (`studio:<projectKey>`), so that
+ * enabling a second project cannot disturb the first one's record.
+ *
+ * @param {string} surface
+ * @param {{dataDir?:string, exec?:typeof execFile, powershell?:string, tag?:string}} [deps]
  * @returns {Promise<{removed:string[], missing:string[], foreign:string[]}>}
  */
 export async function remove(surface, deps = {}) {

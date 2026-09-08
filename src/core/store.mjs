@@ -469,6 +469,38 @@ function sanitizeRoomOrder(v) {
 const MAX_ROOM_ORDER = 512;
 
 /**
+ * WP-66's per-project Studio grants, coerced into range.
+ *
+ * `studio.consent[projectKey] = { grantedAt, root }`, exactly as
+ * `docs/07-STUDIO-DESIGN.md` §3 step 3 specifies. Consent is per project and
+ * is never inferred from another, so this is a map and not a boolean, and a
+ * key that is not a project key — a hand-edited `state.json`, a value from a
+ * build that hashed differently — is dropped rather than carried: a grant this
+ * build cannot match to a directory is a grant it must not act on.
+ *
+ * The `root` is kept beside the key because the key is a hash and cannot be
+ * read back into a path. It is what `GET /api/studio` shows the user and what
+ * `disable` names; it is never used to decide whether a write is allowed —
+ * that is `src/studio/paths.mjs`'s job, from the directory the request names.
+ *
+ * @param {unknown} v
+ * @returns {Record<string, {grantedAt:number, root:string}>}
+ */
+function sanitizeStudioConsent(v) {
+  if (!isPlainObject(v)) return {};
+  /** @type {Record<string, {grantedAt:number, root:string}>} */
+  const out = {};
+  for (const [key, raw] of Object.entries(v)) {
+    if (!/^[0-9a-f]{16}$/.test(key) || !isPlainObject(raw)) continue;
+    const grantedAt = Number(/** @type {any} */ (raw).grantedAt);
+    const root = typeof (/** @type {any} */ (raw).root) === 'string' ? raw.root : '';
+    if (!root || root.length > MAX_CODEX_BIN) continue;
+    out[key] = { grantedAt: Number.isFinite(grantedAt) ? grantedAt : 0, root };
+  }
+  return out;
+}
+
+/**
  * A hand-edited or absent machine id reads back as absent, and the getter
  * mints a new one. WP-48: 32 hex characters of `randomBytes`, nothing derived
  * from the machine — not its name, not its MAC, not its user. A random id is
@@ -501,6 +533,11 @@ function defaultData() {
     // byte for byte as it always was. A view preference like the line above:
     // it moves rooms, it never touches a session.
     layout: { rooms: [] },
+    // WP-66. Which projects have granted Studio permission to write inside
+    // `<project>/.deckhq/studio/`, and when. Empty on every install: Studio is
+    // opt-in per project and disabled is the default everywhere
+    // (`docs/07-STUDIO-DESIGN.md` §1). See `sanitizeStudioConsent`.
+    studio: { consent: {} },
   };
 }
 
@@ -527,6 +564,9 @@ function normalize(parsed) {
   const layout = {
     rooms: sanitizeRoomOrder(isPlainObject(parsed.layout) ? parsed.layout.rooms : []),
   };
+  const studio = {
+    consent: sanitizeStudioConsent(isPlainObject(parsed.studio) ? parsed.studio.consent : {}),
+  };
   return {
     version: 1,
     seededAt: typeof parsed.seededAt === 'number' ? parsed.seededAt : null,
@@ -536,6 +576,7 @@ function normalize(parsed) {
     identity,
     archivedProjects,
     layout,
+    studio,
   };
 }
 
@@ -781,6 +822,63 @@ export class Store {
     this._data.layout.rooms = sanitizeRoomOrder(ids);
     this.save();
     return this.roomOrder();
+  }
+
+  /**
+   * Every project that has enabled Studio, as `projectKey → { grantedAt, root }`
+   * (WP-66). A copy: consent is written by exactly one path — `enable` — and a
+   * caller that could mutate the map in place would be a second one.
+   * @returns {Record<string, {grantedAt:number, root:string}>}
+   */
+  studioConsent() {
+    /** @type {Record<string, {grantedAt:number, root:string}>} */
+    const out = {};
+    for (const [key, rec] of Object.entries(this._data.studio.consent)) out[key] = { ...rec };
+    return out;
+  }
+
+  /**
+   * The grant for one project, or null. Null is the answer on every install
+   * that has not enabled Studio, which is all of them by default.
+   * @param {string} projectKey
+   * @returns {{grantedAt:number, root:string}|null}
+   */
+  studioConsentFor(projectKey) {
+    const rec = this._data.studio.consent[String(projectKey || '')];
+    return rec ? { ...rec } : null;
+  }
+
+  /**
+   * Record a grant. Called from `src/studio/consent.mjs` and nowhere else: the
+   * grant and the tagged file are written together or not at all.
+   * @param {string} projectKey
+   * @param {{grantedAt:number, root:string}} record
+   */
+  grantStudioConsent(projectKey, record) {
+    const key = String(projectKey || '');
+    if (!/^[0-9a-f]{16}$/.test(key)) return null;
+    const next = {
+      grantedAt: Number(record?.grantedAt) || clockNow(),
+      root: String(record?.root || ''),
+    };
+    if (!next.root) return null;
+    this._data.studio.consent[key] = next;
+    this.save();
+    return { ...next };
+  }
+
+  /**
+   * Take one back. Deletes the key rather than storing `false`, for the reason
+   * `setProjectArchived` deletes rather than stores: a record of every project
+   * ever disabled is a growing list nobody asked for.
+   * @param {string} projectKey
+   */
+  revokeStudioConsent(projectKey) {
+    const key = String(projectKey || '');
+    if (!(key in this._data.studio.consent)) return false;
+    delete this._data.studio.consent[key];
+    this.save();
+    return true;
   }
 
   /** @returns {Record<string, AckRecord>} */
