@@ -13769,3 +13769,186 @@ one does.
 `scripts/test.mjs` deletes `DECKHQ_NOW` from the canary environment, for the
 reason it already deletes `DECKHQ_HOSTNAME`: a variable exported in a
 developer's shell must not decide what the suite asserts.
+
+## 147. WP-64 — the tool that said `mcp__gmail__send`, and the servers nobody could see
+
+Two halves, one subject. An MCP server is the part of a coding agent's setup
+that is configured once and then invisible: it is not in the transcript, not on
+the floor, and not in `doctor`. When one stops answering, the agent quietly
+loses a third of its tools and the session looks exactly the same. This package
+makes the servers sayable in three places and the tools readable in two, and it
+declines to say anything in the places where the only available answer would be
+a guess.
+
+### 147.1 What was measured first, and what it cost the design
+
+Both halves started from a documented claim, and rule 11 (`08` §1.1) says a
+claim in anyone's documentation is a hypothesis until measured on a machine.
+Both hypotheses were measured on 8 September 2026, and one of them was wrong.
+
+**`claude mcp list`, run here.** Real output, real binary, four servers
+configured:
+
+```
+Checking MCP server health…
+
+<name>: <target> - ✔ Connected
+```
+
+The glyph is `✔` (U+2714), not the `✓` the docs are usually written with; the
+ellipsis is `…`, not three dots. Neither is load-bearing in the parser, and
+that is the point of having run it: `parseMcpList` decides "connected" by
+testing whether the words after the separator begin with `connected`, so it
+survives a glyph change, a colour code and a locale that spells the tick
+differently. The documented failure line — `<name>: <target> (HTTP) - ✗ Failed
+to connect` — has **not** been seen on this machine, so it is in the fixture as
+Claude Code's documented wording and is labelled as such in `parse.mjs`.
+
+**And a third thing measured, after the row was built.** The package specified
+a five-second budget for that spawn, which is what every other spawn in this
+adapter uses. The first real `deckhq doctor` run on this machine printed
+`not checked: claude mcp list did not answer within 5s` — on the machine with
+the servers. Three consecutive timed runs: **5383 ms, 6279 ms, 6145 ms**. The
+command opens a connection to every server it has, so it costs whatever the
+slowest of your servers costs, and five seconds was a budget set from the shape
+of the other spawns rather than from this one. It is ten seconds now, and the
+`doctor` row on this machine reads `4 connected   (claude mcp list)`. This is
+the deviation from the brief, and the measurement is the reason for it.
+
+**The `system`/`init` event, looked for here.** The documented init message
+carries `tools: string[]` and `mcp_servers: {name, status}[]`, and
+`stream.mjs`'s header already records the envelope from the real binary. The
+hypothesis was that a transcript carries it too. **Sixty `.jsonl` files under
+`~/.claude/projects` were sampled and not one did** — the single file that
+matched a grep for `mcp_servers` matched inside a `toolUseResult`, not in an
+init record.
+
+So the field this package adds to `SessionSummary` is, on the machine that
+wrote it, always absent. That is not a failure of the feature; it is the
+feature working. The parser is wired into `parseSummary` and fills `mcpServers`
+when a transcript carries the event, and **omits the key entirely** when it
+does not — because an empty array would say "this session had no MCP servers",
+which is a claim about the user's configuration that nothing here has any
+evidence for. `test/unit/claude-parse.test.mjs` asserts the absence with
+`'mcpServers' in summary === false`, which is the assertion that would fail if
+somebody later "tidied" it into a default.
+
+### 147.2 The `doctor` row, and the one thing it will not print
+
+`describeMcpServers()` is an OPTIONAL adapter method, the fifth of its kind
+after `version()`, `describeBinary()`, `describeReadLimits()` and
+`countCatchphrase()`. `doctor` prints the row for a runtime whose adapter has
+one and prints no row at all for a runtime that has not — so no line in
+`doctor` names a runtime, and `test/unit/doctor.test.mjs`'s registry test keeps
+being the thing that proves it.
+
+The row's four states, and why each is worded as it is:
+
+| state                                | prints                                                |
+| ------------------------------------ | ----------------------------------------------------- |
+| the CLI answered                     | `3 connected, 1 failed (weather)   (claude mcp list)`  |
+| the CLI did not, a session did       | `2 connected   (from the newest session's init event)` |
+| the CLI answered, nothing configured | `none configured   (claude mcp list)`                  |
+| neither                              | `not checked: claude is not on PATH`                   |
+
+The last row is the one that matters. **"Not checked" is never a zero.** A
+machine with no `claude` on `PATH` has an unknown number of MCP servers, and a
+row that reported `0 connected` there would be indistinguishable from a machine
+whose four servers are all down — which is precisely the failure this row
+exists to surface. The three reasons are told apart (`ENOENT`, `killed`, a
+non-zero exit) because they are three different things to go and fix.
+
+**The target is never read.** A server's target is a command line or a URL, and
+a URL can carry a token in its query string or its host. `parseMcpList` returns
+`{name, status}` and nothing else, so there is no target anywhere in the report
+for a later change to leak: the guarantee is structural, not a redaction pass
+that somebody has to remember to run. `test/unit/mcp-servers.test.mjs` asserts
+the absence of the fixture's hosts, schemes and command from the parse result.
+
+**`--share` goes further than it was asked to.** The requirement was that the
+share block carry no targets or URLs, and that names and statuses were
+permissible. It carries counts only — `3 connected, 1 failed` — because
+`renderShare`'s founding discipline is that the block is assembled from counts
+and fixed phrases and nothing else, and because a server name is a fact about
+somebody's toolchain that a count already answers for the purpose the block
+serves. The failed servers ARE named by `deckhq doctor` locally, where a name
+is actionable and the text is not going anywhere. A test asserts a distinctive
+server name does not appear in a rendered share block.
+
+### 147.3 `mcp__gmail__send` → `Gmail · send`
+
+The floor was drawing the raw id. Three underscores and a repeated word, one
+line above a head, in a bubble that is 150 px wide at its widest.
+
+`parseMcpToolName` splits at the FIRST `__` after the `mcp__` prefix, so a
+single underscore is legal in both halves (`ccd_session`, `create_issue`) and a
+tool name containing a double underscore stays whole. The label is
+`Server · tool`, and the **only** cosmetic liberty is upper-casing the server's
+first character. No underscore-to-space rewriting, no title casing of every
+word, no dictionary of nicer names for servers we happen to recognise: the
+server is the name the user typed into their own config and the tool is the
+tool's own name, and rewriting either would be this project inventing text —
+the same rule that already forbids the bubble from ever showing a string that
+is not a prefix of the summary it was handed.
+
+The raw id is not lost. The panel's `doing:` line keeps it on its `title`
+attribute, which is also why the humanising had to reach the panel and not only
+the canvas: a canvas has nowhere to hang a tooltip, so the surface that does
+had to be the one that keeps the id.
+
+Every non-MCP tool is returned unchanged, character for character. That is
+asserted rather than assumed (`thought-bubble.test.mjs`), and it is what keeps
+the goldens from moving.
+
+**Where the pure function lives, and why it is not where it was asked to be.**
+The request named `src/core/mcp-tool-name.mjs`. The implementation is
+`public/mcp-tool-name.js` and `src/core/mcp-tool-name.mjs` re-exports it,
+because §122's static-file boundary is enforced by a type gate: `public/` may
+never import from `src/`, and the label is drawn on the floor. This is the same
+direction `src/core/themes.mjs` takes with `public/render/themes.js` and
+`src/core/identity.mjs` with `public/names.js` — the fifth `public/` module
+reachable from Node. The unit test imports the `src/core/` path deliberately,
+so the re-export is covered too.
+
+### 147.4 `?theme=<id>`, and the `?layout=` that was not written
+
+`public/url-options.js` is pure — it is handed a query string rather than
+reading `location` — and `pickSessionTheme` is the whole rule: a value that
+`themeByName` resolves wins over `settings.theme`; anything else is **ignored**,
+which means the setting is painted, not the default. Ignoring rather than
+refusing is what makes the parameter safe to put in a link somebody else wrote:
+the worst a stranger's URL can do to this floor is nothing.
+
+Nothing is persisted. It is not written back through `/api/settings`, the
+settings picker still shows and still previews the stored theme, and closing
+the tab is the whole of undoing it. It is applied at the two SETTING-derived
+call sites (`app.js`'s snapshot handler and `app-floor.js`'s first bake) and
+not inside `applyThemeSetting`, so the picker's hover preview still previews.
+
+`scripts/capture-floor.mjs --theme` merges the parameter into `--url` through
+`URL` rather than by concatenation, so an address that already has a query
+string keeps it. It is the reason the feature exists: a shot in another paint
+that leaves no setting to put back and no state file touched.
+
+**`?layout=` was not implemented, deliberately.** The brief allowed skipping it
+if layouts had no ids, and they have none: `src/core/layout.mjs` is a document
+you export to a file and import from one (`deckhq layout export|import`), keyed
+by nothing — there is no id namespace for a URL to name, and inventing one
+would be a layout-format change wearing a query parameter's clothes.
+
+### 147.5 Accepted limits
+
+- **The MCP status is only ever as good as `claude mcp list`.** DeckHQ does not
+  connect to an MCP server, so "connected" means the runtime said so when
+  asked, at that moment, and a server that fails on the next tool call will
+  still have been connected here. Said in the README's Honest limits.
+- **The failure line is unmeasured.** A connected line has been read off this
+  machine; a failed one has not. The parser handles both and only one of them
+  is evidence.
+- **The session fallback has never fired.** No transcript here carries an init
+  event, so the `source: 'session'` path is covered by unit tests against a
+  synthetic record and by nothing else.
+- **A server whose own name contains `": "` would split early.** None of the
+  four here does. Guessing at a smarter split would be worse than saying so.
+- **`?theme=` is not on the deck, the mini-floor or the replay.** One parameter,
+  one surface, and the surface is the one `capture-floor` photographs.
