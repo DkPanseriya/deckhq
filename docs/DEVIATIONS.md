@@ -14035,3 +14035,246 @@ all expose `openNewSession` and none has ever opened a terminal from this projec
 unbuilt**: six packages, WP-66 to WP-71, are in `docs/plan/08-PLAN-V2-100X.md` §9 with testable
 acceptance criteria, the owner's decisions are in §13.20, and nothing about Studio goes in the
 README, the site or a tweet until one of those criteria has been met on a machine.
+
+## 149. WP-72 — the floor had no light, and every room was printed on it
+
+Three sentences of `docs/03-VISUAL-SPEC.md` promise a photograph: "real materials, real furniture,
+soft shadows, warm light", and "every furniture item carries a soft contact shadow. Shadows are what
+make a flat render read as a photograph rather than a diagram." The floor kept the letter of that
+and missed the point of it. There were shadows everywhere; there was no light anywhere.
+
+### 149.1 What was actually wrong
+
+**Four painters, four lights, all of them directly overhead.** Every place in the renderer that cast
+a shadow set `shadowOffsetY` and left `shadowOffsetX` at its default of zero:
+
+| painter | before |
+| ------- | ------ |
+| a prop's drop shadow (`backdrop.js`'s `local`) | `blur 8, oy 3` |
+| a prop's contact ellipse (`backdrop-paint.js`) | centre `+2, +2`, by literal |
+| a full-height wall (`backdrop-floor.js`) | `blur 7, oy 2` |
+| the building on its ground (`scene-draw.js`) | `blur 26, oy 8` |
+| the same, in the floating mini-floor | `blur 12, oy 3` |
+
+`shadowOffsetX = 0` is not "no horizontal component". It is a statement that the light is directly
+above the page, made once per painter by omission — and the contact ellipse, the one shadow placed
+by hand rather than blurred by the context, disagreed with all of them at `+2, +2`. A floor whose
+props are lit from the top and whose contact shadows are lit from the upper left is a floor with two
+suns, and it is the reason the render reads as a diagram with soft edges rather than as a
+photograph.
+
+**And a room was not a thing.** Rooms in a band share their walls — `plan-envelope.js`'s `rowOf`
+lays each cell at `x += w` with no gap at all — and a project room's walls are `partial`, so
+`deriveWalls` emits them as `partition`, and a partition is waist height and correctly casts nothing
+(`03-VISUAL-SPEC.md` §6). The whole of what separated two project rooms on the owner's floor was a
+2.5 px line. Everything else about them was identical: the same carpet token, the same noise seed
+domain, the same rug. Six rooms across the working band read as one continuous carpet with five
+lines drawn on it, which is exactly the "grid, not a plan" §1 says the renderer is not.
+
+**And the ground was a backing colour.** `scene-draw.js` filled the envelope with `floorGround` and
+gave it a drop shadow, which is right, and then stopped: outside the shadow's 26 px of blur the page
+was a flat `#131419` to the corners of the window. On a `wide` capture — where the building covers
+85% of the width and none of the height — that is a building sitting in a void rather than on a
+surface.
+
+### 149.2 One light, and where its number lives
+
+`LIGHT_DIR` in `public/render/palette-colors.js`:
+
+```js
+export const LIGHT_DIR = Object.freeze({ x: Math.SQRT1_2, y: Math.SQRT1_2 });
+```
+
+A **key light in the upper left**, stated as the unit vector every shadow travels along — down and
+to the right, at 45°. It is a direction and not a position, and that is forced rather than chosen:
+the camera is orthographic top-down (§1 is binding), so a point light would put the shadow at one
+end of a ninety-unit building on the opposite side from the shadow at the other end, and nothing in
+a plan view reads as a mistake faster.
+
+Every offset in the renderer is now a **distance along that ray** rather than a drop down the page.
+That is the whole of the first acceptance criterion, and it is structural rather than a convention:
+a length on a ray cannot pick its own direction. `setLightShadow(ctx, {blur, dist, color})` is the
+only place in `public/` that writes `shadowOffsetX` or `shadowOffsetY`, and
+`test/unit/lighting.test.mjs` reads every file under `public/render/` plus `minifloor.js` and
+`snapshot.js` and fails if a second one ever does.
+
+**45° exactly, so the floor loses nothing it already had.** Each distance is stated as `n · √2`, and
+`(n√2)·LIGHT_DIR` is `(n, n)`:
+
+| what | distance along the ray | offset |
+| ---- | ---------------------- | ------ |
+| a prop's drop shadow | `3√2` = 4.243 | `(3, 3)` |
+| a prop's contact ellipse | `2√2` = 2.828 | `(2, 2)` |
+| a full-height wall | `2√2` = 2.828 | `(2, 2)` |
+| the building, and the mini-floor's | `8√2` / `3√2` | `(8, 8)` / `(3, 3)` |
+| a room slab (new) | `5` | `(3.54, 3.54)` |
+
+Every vertical drop the floor shipped with is reproduced to the pixel, and the contact ellipse comes
+out at exactly the `+2, +2` its literal used to hard-code. The floor gained a horizontal component
+and lost nothing.
+
+### 149.3 A room is a slab
+
+Two painters in `backdrop-floor.js`, run as one pass in `bakeBackdrop` after every floor material is
+down and before the walls go on.
+
+**`paintRoomSlabEdge` — the rim.** A darker band inside the room's two **light-away** sides, which
+for an upper-left key are south and east. `ROOM_SLAB_EDGE_PX = 6`, in baked pixels at `U_DEFAULT`.
+
+The acceptance criterion asks for **≥ 3 px at fit scale**, and fit scale is not one number: the
+camera clamps it to `[MIN_SCALE, CHAR_MAX_PX_PER_UNIT]` (`computeFill`), so a rim of `n` baked pixels
+is `n / U_DEFAULT × scale` on screen and the binding case is the smallest a floor is ever drawn.
+`6 / 14 × 7.5 = 3.21 px`. Five would have given 2.68 and failed at the bottom of the range while
+passing on every capture in the gate, which is why the test derives it from `MIN_SCALE` rather than
+measuring a golden.
+
+The other two sides keep `paintRoomAmbientOcclusion`'s 26 px wall band, which is a different
+statement (a wall standing above the floor occludes the light reaching the corner) with a different
+shape. Four edges dark in one flat tone would have read as a room outlined in ink; a crisp 6 px rim
+on two sides against a soft 26 px gradient on the other two reads as a lit slab. The rim fades
+inward rather than sitting as a stripe, and its far stop is `slabEdge` **at zero alpha** rather than
+a transparent black — a gradient whose transparent end is a different hue interpolates through that
+hue in premultiplied space and leaves a grey bloom along the band. `fadedOut()` in
+`palette-colors.js` exists for that and nothing else.
+
+**`castRoomShadow` — what the rim throws.** `blur 10`, `dist 5`, `PALETTE.slabShadow`. Two decisions
+in it are worth writing down.
+
+*It is drawn without drawing the shape.* The room's own carpet must not be darkened — the plate, the
+agent names and the in-room "+" are read on it, and `assertThemeContrast` measures the ink against
+the carpet, not against the carpet under its own shadow. So the context is clipped to everything
+**except** the room (one even-odd path: the whole bitmap, then the room), the room's rect is filled
+opaque, and the fill is clipped away. What survives is exactly the part of the blur that landed
+outside.
+
+*It runs after every floor is down, not room by room.* A room's shadow falls on its **neighbour** —
+across the circulation between two bands, and across the partition it shares with the room beside it
+— and the partition case is the one the acceptance criterion names. A room-at-a-time pass would have
+had the next room's carpet painted straight over it.
+
+**It must not eat the circulation.** A shadow reaches its offset plus its blur: `5 + 10 = 15` baked
+pixels. `CORRIDOR` is 4 units, which is `4 × 14 = 56` baked pixels, and only the up-light room of a
+facing pair casts into the gap — so the bar is half of it, 28, and the test asserts against
+`CORRIDOR` rather than against 56 so that widening the corridor cannot silently narrow the margin.
+15 is 27% of the gap. Measured on the regenerated `demo` capture, the shadow under a working-band
+room fades out well before the middle of the cross corridor and the lounge's north edge beneath it
+is untouched.
+
+### 149.4 Six per cent of a colour
+
+`CARPET_IDENTITY_WASH = 0.06`. A project room's carpet is moved that far toward
+`identityFor(room.projectMk).accent` — the same colour the agents sitting in it already wear, and a
+pure function of an MK number that is assigned once and persisted (`CONTRACTS-WP15.md` §1), so it is
+the same wash under the same room on every machine and every rebake. The room carries `projectMk`
+now; the bake is handed a plan and nothing else, and a renderer that had to reach back to the
+snapshot for a colour would be a renderer that could be handed a plan it cannot paint.
+
+Six and not ten. The number is a **ceiling** rather than a setting, because the carpet is a GROUND:
+`washedCarpet()` clamps to it, and the surface the suite proves readable is the surface the bake
+puts on the floor, because both call the one function.
+
+**Measured, in all three themes, over all fourteen identities:**
+
+| theme | carpet | ink on the bare carpet | worst washed | worst crimson distance |
+| ----- | ------ | ---------------------- | ------------ | ---------------------- |
+| default | `#E4DFD3` | 10.70:1 | **9.79:1** (`#4C40BF` → `#dbd5d2`) | 229.9 |
+| night shift | `#3A3E46` | 8.98:1 | **8.03:1** (`#B5BF40` → `#414646`) | 130.5 |
+| blueprint | `#1F4266` | 9.54:1 | **8.58:1** (`#40BFB1` → `#214a6b`) | 163.2 |
+
+The bars are 4.5:1 and 60. At ten per cent the worst would have been 7.47:1 — still passing, which
+is the point: six was not chosen because ten failed, it was chosen because six is the most you can
+spend and still have a carpet rather than a colour, and the guard exists so that the next person to
+raise it finds out what it costs.
+
+Both halves are now in the product's own gate. `themes.js`'s `assertThemeContrast` holds the
+**washed** carpet to 4.5:1 against the theme's ink and to 60 from crimson, for all fourteen, so a
+pack theme is refused at registration rather than on the floor. `state-visuals.test.mjs` re-measures
+the same forty-two combinations with its own copy of the blend, because that file's whole discipline
+is that it checks the product's guard rather than calling it.
+
+### 149.5 The ground, and the measurement that turned it round
+
+The building's own shadow now falls along `LIGHT_DIR` like everything else, and the ground carries a
+gentle radial falloff — `groundFalloff`, centred on the envelope, starting at
+`GROUND_FALLOFF_INNER = 0.7` of the building's half-diagonal (under the floor, so the wash is
+already descending where the ground becomes visible and does not end in a straight line at the edge
+of the canvas) and reaching zero at whichever corner of the window is furthest from the building's
+centre.
+
+**It lights rather than darkens, and that is a deviation from the number this package was given.**
+The instruction says "darker away from the building", and the first cut did exactly that: a
+transparent-to-`rgba(10,10,14,0.16)` ramp outward. Sampled on the regenerated `wide` capture, at the
+left edge of the window, mid-height:
+
+| | before this package | with the darkening falloff | with the lighting falloff |
+| --- | --- | --- | --- |
+| window edge (`x = 2`) | `rgb(19,20,25)` | `rgb(20,21,26)` | `rgb(23,24,30)` |
+| beside the building (`x = 100`) | `rgb(19,20,25)` | `rgb(19,20,25)` | `rgb(27,29,36)` |
+
+One channel count, in the wrong direction, for the whole feature. The reason is that the ground the
+building actually stands on is not `floorGround` — that token is painted **exactly** under the
+envelope — but the chrome's `--bg` at `#131419`, and there is no darker to go. So the ramp is stated
+from its lit end instead: `rgba(126, 134, 158, 0.16)`, cool and colder than the floor so the studio
+keeps the temperature §69 gave it, strongest beside the building and fading to the page's own black.
+Same ramp, same direction, same sentence — the ground **is** darker away from the building — and it
+is now visible.
+
+### 149.6 Baked, still, and what is not baked
+
+The rim, the room shadows and the carpet wash are inside `bakeBackdrop`, which runs once per plan
+change and never per frame (`02-ARCHITECTURE.md` §8). Nothing in the pass reads a clock or a random
+source — the WP-63 rule (§146) — so a re-bake of the same plan in the same theme is pixel-identical,
+and `test/unit/lighting.test.mjs` asserts that over the three backdrop modules with their comments
+stripped, because every one of them explains in prose that it does not call `Math.random()`.
+
+**One thing is not baked, and it cannot be.** The ground's falloff is by definition the part of the
+picture outside the envelope, and the envelope is what the bake *is*: `bakeBackdrop` returns a
+bitmap of exactly `plan.width × U` by `plan.height × U`, and `minifloor.js` crops sub-rectangles out
+of it on the assumption that its origin is the plan's. Baking a margin would have changed that
+contract for every consumer to save one composite. So the gradient object is built once per camera
+and memoised on a key carrying the viewport, the envelope and the palette token
+(`SceneDraw._groundFalloff`), and what the frame costs is one fill of a cached paint — the same class
+of cost as the envelope fill beside it, which has been in `_draw` since WP-55.
+
+Nothing here moves, so `prefers-reduced-motion` (§10) is untouched: there is no motion to reduce.
+
+### 149.7 What the goldens moved, and what they showed
+
+Eight captures regenerated on Windows, and `goldens:check` green at 0 px against the new set. How
+far each moved from the set before this package, at the harness's own channel tolerance of 8:
+
+| capture | over tolerance | moved at all |
+| ------- | -------------- | ------------ |
+| `demo` | 284,864 (17.80%) | 466,884 of 1,600,000 |
+| `empty` | 154,627 (9.66%) | 351,173 |
+| `single` | 292,321 (18.27%) | 602,410 |
+| `three` | 160,343 (10.02%) | 385,127 |
+| `reference` | 262,497 (16.41%) | 561,732 |
+| `wide` | 252,261 (12.17%) | 625,642 of 2,073,600 |
+| `demo@night-shift` | 84,779 (5.30%) | 461,329 |
+| `demo@blueprint` | 124,533 (7.78%) | 460,519 |
+
+`single` and `wide` move most because they are the two captures with real ground around the
+building; the themed pair move least because their carpets are dark and a six per cent wash of a
+dark colour is a smaller move than the same wash of a pale one.
+
+What the PNGs actually show, since §1.1 rule 10 is that nothing ships without one:
+
+- **`three`, `demo`** — the working band now reads as separate rooms. Where six project rooms were
+  one continuous carpet with five 2.5 px lines on it, each pair is a dark rim, the partition, and
+  the neighbour's carpet under a soft shadow. The room plates are unaffected: a plate sits at its
+  room's top-left with its own halo, and the seam is a full room-width to its left.
+- **`wide`** — the building floats. The ground beside it runs `rgb(27,29,36)` and falls to
+  `rgb(23,24,30)` at the window's edge, with the envelope's own shadow darkening the first few
+  pixels beside the floor. No seam at the top of the canvas: the strip above it is `--surface`
+  `#1a1c23` and the canvas's first row measures `rgb(21,23,27)`.
+- **`demo@night-shift`, `demo@blueprint`** — the derived `slabEdge` and `slabShadow` land: the rim
+  comes off the theme's wall so it agrees with the ambient-occlusion band at every corner, and the
+  shadow comes off the screed it falls on so a dark floor gets a shadow it can still show rather
+  than black on near-black. The carpet washes are legible as difference and illegible as colour,
+  which is the whole intention.
+- No shadow crosses a label. The two places that could — a room's cast shadow landing on the
+  neighbour's plate, and the rim landing on a name — were both looked at at 4× and 8×: the plate
+  sits a room's width from the seam, and a name is drawn where its agent sits, which the desk
+  cluster keeps clear of the walls. A 3× crop of the `night shift` office before and after this
+  package is indistinguishable except where the neighbouring room's carpet begins.

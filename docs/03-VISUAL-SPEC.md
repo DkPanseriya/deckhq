@@ -202,6 +202,35 @@ round, with a border inset), potted plants at three scales.
 Every furniture item carries a soft contact shadow. Shadows are what make a flat render read as a
 photograph rather than a diagram.
 
+### 6.1 Light
+
+**One key light, in the upper left.** It is a *direction* and not a position — the camera is
+orthographic (§1), so a point light would make the shadow at one end of a ninety-unit building fall
+the other way from the shadow at the other end. Stated once as `LIGHT_DIR` in
+`public/render/palette-colors.js`, at 45°, and read by everything that casts. Every shadow offset in
+the renderer is a distance *along* that ray, never a drop down the page, so nothing on this floor
+can be lit from anywhere else; `setLightShadow()` is the only place `shadowOffsetX`/`shadowOffsetY`
+are written, and `test/unit/lighting.test.mjs` reads the renderer's own source to keep it so.
+
+What casts, from the smallest thing to the largest:
+
+| Thing | Shadow |
+|---|---|
+| **Furniture** | The two-pass drop shadow every prop already had (3 px along the ray), plus the contact ellipse where it meets the floor (2 px). |
+| **Full-height walls** | 2 px, blurred 7. A **partition** is waist height and still casts nothing — it stays subordinate to a real wall (§6). |
+| **A room** | A room is a **slab**. A 6 px rim inside its two light-away sides (south and east), and one soft shadow — 5 px along the ray, blurred 10 — thrown outward onto the circulation between bands and across the partition it shares with the room beside it. Its own carpet is never darkened: a plate is read on it. The ambient-occlusion band where wall meets floor stays on the other two sides, so the four edges together read as a lit slab rather than as a room outlined in dark. |
+| **The building** | One soft shadow onto the studio ground, 8 px along the ray, blurred 26. The ground beside it is lifted by a gentle radial falloff that fades to the page's own ground at the furthest corner of the window, so the envelope reads as a slab lying on a surface rather than as a shape cut out of the background. |
+
+A project room's carpet also takes a **six per cent wash** toward that project's identity colour
+(§5's discipline is untouched: the wash is nowhere near crimson, and it is measured rather than
+asserted — `assertThemeContrast` holds the washed carpet to 4.5:1 against every theme's ink for all
+fourteen identities).
+
+All of it is baked into the backdrop with everything else in this section — once per plan change,
+never per frame — and none of it moves, so `prefers-reduced-motion` (§10) is unaffected. The one
+exception is the ground's falloff, which is outside the envelope the bake *is*; it is one memoised
+gradient. `docs/DEVIATIONS.md` §149.
+
 ## 7. Labels and chrome
 
 - **Room plates:** a small rounded white card at the room's top-left with the room name and one

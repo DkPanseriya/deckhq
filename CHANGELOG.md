@@ -81,6 +81,43 @@
 
 ### Changed
 
+- **The floor has one light, and every shadow on it agrees.** A key light in the upper left,
+  stated once as `LIGHT_DIR` in `public/render/palette-colors.js` and read by everything that
+  casts: a prop's drop shadow, its contact shadow, a wall, a room, and the building itself. Every
+  one of them used to set only how far its shadow fell **down** the page and leave the sideways
+  component at zero, which is a light directly overhead — one per painter, by omission. Offsets
+  are now a distance along the ray, so the floor gains the horizontal component it never had and
+  keeps every vertical drop it already shipped with, to the pixel. `setLightShadow()` is the only
+  place a shadow offset is written, and a test reads the renderer's own source to keep it that
+  way. `docs/DEVIATIONS.md` §149.
+
+- **Every room stands on the floor rather than being printed on it.** A room is a slab now: a
+  6 px rim inside its two light-away sides (south and east), and one soft shadow thrown outward
+  onto the circulation between bands and across the partition it shares with the room next door.
+  Partitioned project rooms had no wall shadow at all — a partition is waist height and correctly
+  casts nothing — so a row of them read as carpets printed on one continuous surface with a
+  2.5 px line between them. The shadow reaches 15 px, against 56 px of circulation, so the gap
+  between two rooms is still a floor. All of it is baked with the rest of the backdrop: no
+  per-frame cost, and nothing in it moves, so `prefers-reduced-motion` is unaffected.
+
+- **A project room's carpet carries its project's colour, at six per cent.** Enough that two rooms
+  side by side are two rooms before you have read a plate, far too little to be a colour anybody
+  would name — and it is the same identity colour the agents sitting in it already wear, derived
+  from the persisted MK number, so it is the same wash on every machine and every rebake. The
+  carpet is a ground that room plates, agent names and the in-room "+" are read on, so the guard
+  moved with it: `assertThemeContrast` now measures the **washed** carpet against the theme's ink
+  for all fourteen identities, and `state-visuals.test.mjs` re-measures all forty-two
+  identity × theme combinations independently. The worst is 8.03:1 against a 4.5:1 bar, and the
+  closest approach to the reserved crimson is 130 against a bar of 60.
+
+- **The building floats over the studio ground.** Its own shadow now falls along the same light as
+  everything else, and the ground beside it is lifted by a gentle radial falloff that fades to the
+  page's own black at the furthest corner of the window. The first cut of this darkened outward,
+  which is the obvious reading — and it moved the ground by one channel count, because the ground
+  the building stands on is `--bg` at `#131419` and there is no darker to go. The floating
+  mini-floor inherits the whole pass: it blits the same baked bitmap, and its building shadow now
+  falls the same way.
+
 - **The idle projects left the floor.** The repos nobody is in were a strip of names drawn
   permanently down one edge of the building — fourteen of them on a machine with any history,
   which made them the largest single thing on a floor that is about who _is_ working. They are a
@@ -248,6 +285,17 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/unit/lighting.test.mjs` — the parts of a lighting pass that can be measured.** Eighteen
+  cases: that `LIGHT_DIR` is a unit vector pointing down-right, that no shadow offsets up or left
+  at any distance and that they all share one direction rather than merely one sign, that the four
+  distances the product casts at reproduce the drops the floor already had, that `backdrop-paint.js`
+  is the only file in `public/` that writes a shadow offset at all, that the slab rim is ≥ 3 px on
+  screen at the smallest fit scale the camera allows, that a room's shadow reaches under half the
+  `CORRIDOR` between two rooms, that the rim lands on the south and east sides and never leaves the
+  room, that a room's shadow is clipped out of its own carpet, and that the wash is at most six per
+  cent and is a pure function of the MK number. `state-visuals.test.mjs` gains two cases per theme
+  for the washed carpets. The goldens carry what none of this can: eight captures regenerated.
 
 - **The `daemon-hooks-port` flake was a race, and it is gone.** Every port in
   `test/integration/daemon-hooks-port.test.mjs` came from a helper that bound port 0, read the
