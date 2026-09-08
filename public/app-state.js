@@ -1,4 +1,5 @@
 import { createSounds } from './sound.js';
+import { pickSessionTheme } from './url-options.js';
 
 /**
  * The wiring every part of the client shares: the DOM it draws into, the
@@ -311,6 +312,32 @@ export function applyAvatarSetting(name) {
     scene?.repaint?.();
   }
   return next;
+}
+
+/**
+ * Which theme THIS TAB should paint — WP-64.
+ *
+ * `?theme=<id>` on the floor's URL wins over the stored setting, for this tab
+ * and this tab only: nothing is written back to `state.json`, the picker still
+ * shows the stored theme, and closing the tab is the whole of undoing it. It
+ * exists so a capture run, a screenshot or a second window can be in a
+ * different paint without touching what the user chose.
+ *
+ * An id this build does not have is ignored and the setting is used, which is
+ * what makes the parameter safe to put in a link: the worst a stranger's URL
+ * can do to this floor is nothing. The validity test is `themeByName`, so a
+ * pack's theme counts and `?theme=night-shift` finds `night shift`.
+ *
+ * Before `render/themes.js` has loaded there is nothing to validate against,
+ * so the setting is returned unchanged — the caller runs again once the module
+ * is in (see `app-floor.js`).
+ *
+ * @param {unknown} settingTheme what `settings.theme` says
+ * @returns {unknown} the name to paint
+ */
+export function sessionTheme(settingTheme) {
+  if (!themes?.themeByName) return settingTheme;
+  return pickSessionTheme(location.search, settingTheme, themes.themeByName);
 }
 
 /**

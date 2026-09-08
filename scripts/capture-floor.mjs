@@ -31,7 +31,41 @@ const opt = (name, fallback) => {
   return i !== -1 && argv[i + 1] ? argv[i + 1] : fallback;
 };
 
-const URL_ = opt('--url', 'http://127.0.0.1:4499/');
+/**
+ * A theme to photograph the floor in, for this run only — WP-64.
+ *
+ * It is passed as `?theme=<id>` on the URL, which the floor honours for the
+ * tab and never writes back to `state.json` (`public/url-options.js`). So a
+ * shot in another paint costs nothing and leaves nothing behind: no setting to
+ * put back, no state file touched, and the demo floor the next run opens is
+ * the one this run found.
+ *
+ * An id this build does not have is ignored by the floor, so a typo produces
+ * the ordinary floor rather than a failed run.
+ *
+ *   node scripts/capture-floor.mjs --url http://127.0.0.1:4499/ \
+ *     --theme "night shift" --out docs/media/floor-night.png
+ */
+const THEME = opt('--theme', '');
+
+/**
+ * The floor's URL with `?theme=` merged in, if one was asked for. Merged
+ * through `URL` rather than concatenated so an address that already carries a
+ * query string keeps it.
+ * @param {string} base @param {string} theme
+ */
+function withTheme(base, theme) {
+  if (!theme) return base;
+  try {
+    const url = new URL(base);
+    url.searchParams.set('theme', theme);
+    return url.toString();
+  } catch {
+    return base;
+  }
+}
+
+const URL_ = withTheme(opt('--url', 'http://127.0.0.1:4499/'), THEME);
 const OUT = path.resolve(opt('--out', 'docs/media/floor.png'));
 const WIDTH = Number(opt('--width', 1600));
 const HEIGHT = Number(opt('--height', 900));

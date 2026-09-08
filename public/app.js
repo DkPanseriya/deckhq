@@ -45,6 +45,7 @@ import {
   setPanel,
   setSelectedId,
   setSceneOwner,
+  sessionTheme,
   sounds,
   themes,
   toast,
@@ -207,7 +208,9 @@ function handleSnapshot(snapshot) {
   // applied BEFORE the floor is handed one: `planSignature` counts the theme,
   // so `scene.setState` below re-bakes the backdrop in the new materials as
   // part of the same update rather than a frame later.
-  applyThemeSetting((snapshot.settings || {}).theme);
+  // WP-64: `?theme=<id>` overrides the setting for this tab only, and an id
+  // this build does not have is ignored. Nothing is written back.
+  applyThemeSetting(sessionTheme((snapshot.settings || {}).theme));
   // WP-45. Same reasoning one channel out: the avatar set is a setting, so it
   // arrives with the snapshot, and applying it here means a set chosen in
   // another tab reaches this one without a reload.

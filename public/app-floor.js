@@ -27,6 +27,7 @@ import {
   setPalette,
   setScene,
   setSceneModule,
+  sessionTheme,
   setThemes,
   themes,
 } from './app-state.js';
@@ -131,7 +132,7 @@ export async function loadRenderModules({
     // exactly as the daemon registered it in Node — same function, same
     // contrast gate, same refusals.
     setPacks(await registerPacks(await packsRequest));
-    applyThemeSetting((latestSnapshot?.settings || {}).theme);
+    applyThemeSetting(sessionTheme((latestSnapshot?.settings || {}).theme));
     applyAvatarSetting((latestSnapshot?.settings || {}).avatarSet);
   } catch (err) {
     console.debug('[deckhq] render/themes.js not available yet, using the default theme', err);
