@@ -294,6 +294,18 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   section is missing, so the only failure left is one that costs nothing.
   `docs/DEVIATIONS.md` §138.
 
+### Documentation
+
+- **`docs/07-STUDIO-DESIGN.md` — Studio, the design of record for an opt-in mode that turns an idea
+  into a real office.** A document, not code: nothing under `src/`, `public/` or `test/` was
+  touched and nothing in it has been run. Idea → grill → blueprint → roster → hire → board →
+  work → handover → review → track → drift, where every step reuses a surface that already exists
+  and every session Studio spawns is a real runtime session read back through the adapters — so
+  the floor never shows work that did not happen. A card's column is user-owned in the way
+  `ackState` is: an observed event may flag a card and may never move it. Work packages WP-66 to
+  WP-71 are in `docs/plan/08-PLAN-V2-100X.md` §9 and the owner's decisions in §13.20.
+  `docs/DEVIATIONS.md` §148.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights
