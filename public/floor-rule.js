@@ -45,6 +45,37 @@
 export const ON_THE_FLOOR = Object.freeze(['working', 'needs_input', 'stalled', 'for_review']);
 
 /**
+ * THE STATES THAT KEEP A DESK IN A PROJECT ROOM (WP-78).
+ *
+ * The owner, 14 September: _"Only live working agents are on desks in the
+ * project rooms. Everyone else is in the lounge area, so I can clearly see
+ * which sessions are active at the moment."_ A room full of desks only answers
+ * "who is working right now" if the only people at them are working right now.
+ *
+ * `stalled` is the ONE exception, and it is deliberate rather than an
+ * oversight: a stalled session is `working` that has gone quiet past the stall
+ * window (`01-PRODUCT.md` §4.2), it is still live, and it may produce its next
+ * line a second from now. Standing it up and walking it to the lounge would
+ * make the floor flicker on a timer rather than on an event, and it would have
+ * to walk back. It keeps its desk, its slump and its stall badge.
+ */
+export const AT_DESK_STATES = Object.freeze(['working', 'stalled']);
+
+/**
+ * THE STATES THAT PUT A SESSION IN THE USER'S OFFICE (WP-78).
+ *
+ * The two "needs you" signals `01-PRODUCT.md` §4.2 names — blocked on a
+ * question or a permission request (`needs_input`), and finished a turn and
+ * awaiting review (`for_review`). Both need the user and nobody else, so both
+ * wait where the user is. They stay visibly different once they are there: a
+ * raised hand is still a raised hand.
+ *
+ * `01-PRODUCT.md` §4.2 said `needs_input` "stays at its desk"; that sentence is
+ * superseded by this list. `docs/DEVIATIONS.md` §153.
+ */
+export const WAITING_STATES = Object.freeze(['needs_input', 'for_review']);
+
+/**
  * Days of no activity after which a benched session is not drawn on the floor.
  * `settings.goneHomeDays`; the same default `store.mjs` carries.
  */
@@ -82,8 +113,22 @@ export function isSubagent(agent) {
 /**
  * Placement is derived, never stored. `docs/02-ARCHITECTURE.md` §3.1.
  *
- * A session that is not running still sits at its project desk. Only an
- * explicit bench moves it to the lounge.
+ * THREE ZONES, AND ONE QUESTION EACH (WP-78):
+ *
+ *   desk    is this session working for me right now?      `AT_DESK_STATES`
+ *   office  is this session waiting on me right now?       `WAITING_STATES`
+ *   lounge  everything else — ended, benched, gone home
+ *
+ * It used to be "a session that is not running still sits at its project desk;
+ * only an explicit bench moves it to the lounge", which made a project room a
+ * register of everything that had ever run in that repo. On the reference
+ * machine that was 21 bodies at desks over one working session, and the room
+ * the product is for stopped answering the question the product is for.
+ *
+ * SELECTING A SESSION MOVES NOBODY. Placement reads `ackState` and
+ * `activityState` and nothing else — there is no `selected` here to read, and
+ * the panel's selection is a ring on the floor (`03-VISUAL-SPEC.md` §8), never
+ * a walk. Being *waiting* is what walks an agent to the manager's desk.
  *
  * @param {FloorAgent} agent
  * @returns {'desk'|'office'|'lounge'|'let_go'}
@@ -96,8 +141,10 @@ export function placement(agent) {
   // waiting area would queue work nobody can discharge.
   if (isSubagent(agent)) return 'desk';
   if (agent.ackState === 'benched') return 'lounge';
-  if (agent.activityState === 'for_review') return 'office';
-  return 'desk';
+  const state = agent.activityState;
+  if (/** @type {readonly string[]} */ (WAITING_STATES).includes(state)) return 'office';
+  if (/** @type {readonly string[]} */ (AT_DESK_STATES).includes(state)) return 'desk';
+  return 'lounge';
 }
 
 /**
@@ -115,14 +162,53 @@ export function isActiveAgent(agent) {
 /**
  * Does this agent occupy a DESK in its project's room?
  *
- * Everything `placement()` calls `desk`: active, and not standing in the
- * office. That includes an `ended` session sitting at its own desk — it is
- * drawn whenever its project has a room, and it is what "desks equal agents at
- * desks" counts.
+ * Everything `placement()` calls `desk`, which since WP-78 is working, stalled
+ * and every junior standing beside its parent — and no longer an `ended`
+ * session, which is in the lounge. It is what "desks equal agents at desks"
+ * counts and what sizes a project room's tables.
  * @param {FloorAgent} agent
  */
 export function isDeskAgent(agent) {
-  return !!agent && agent.ackState === 'active' && agent.activityState !== 'for_review';
+  return !!agent && agent.ackState === 'active' && placement(agent) === 'desk';
+}
+
+/**
+ * Is this agent waiting on the user, at the manager's desk?
+ *
+ * The office population, stated once so the plan, the counts and the plate
+ * cannot each derive it. A junior is never here (see `placement`).
+ * @param {FloorAgent} agent
+ */
+export function isWaitingAgent(agent) {
+  return !!agent && agent.ackState === 'active' && placement(agent) === 'office';
+}
+
+/**
+ * When this agent started waiting on the user, as a ms epoch.
+ *
+ * The office queue is ordered oldest first (`03-VISUAL-SPEC.md` §7, WP-78's
+ * "oldest wait nearest"), and since WP-78 the queue holds both waiting states,
+ * so there are two clocks to read rather than one. Each state reads its own —
+ * `reviewSince` for a finished turn, `needsInputSince` for a raised hand — and
+ * an agent whose timestamp the adapter could not supply sorts to the BACK
+ * rather than the front: an unknown wait is not evidence of a long one.
+ *
+ * Returns `Infinity` for anybody who is not waiting at all, so a caller may
+ * sort a mixed list without filtering it first.
+ *
+ * @param {FloorAgent & {reviewSince?: number|null, needsInputSince?: number|null}} agent
+ * @returns {number}
+ */
+export function waitingSince(agent) {
+  if (!agent) return Infinity;
+  const at =
+    agent.activityState === 'for_review'
+      ? agent.reviewSince
+      : agent.activityState === 'needs_input'
+        ? agent.needsInputSince
+        : null;
+  const n = Number(at);
+  return Number.isFinite(n) && n > 0 ? n : Infinity;
 }
 
 /**
@@ -173,6 +259,8 @@ export function floorPopulation(agents, opts = {}) {
   const active = new Map();
   /** @type {Map<string, number>} */
   const desks = new Map();
+  /** Active sessions the lounge holds, per project (WP-78). @type {Map<string, number>} */
+  const resting = new Map();
   /** Project ids the agent list actually mentions. See `buildPlan`. */
   const known = new Set();
   /** @type {Set<string>} */
@@ -196,12 +284,28 @@ export function floorPopulation(agents, opts = {}) {
       continue;
     }
     if (a.ackState !== 'active') continue;
-    if (a.activityState === 'for_review') waiting++;
+    if (isWaitingAgent(a)) waiting++;
     if (pid && isActiveAgent(a)) bump(active, pid);
     if (pid && isDeskAgent(a)) bump(desks, pid);
+    // WP-78. An active session that is neither at a desk nor at the manager's
+    // desk is resting in the lounge — `ended`, almost always. Counted PER
+    // PROJECT because whether it is drawn at all still depends on whether its
+    // project earned a room (`buildPlan`), which is not knowable here.
+    if (placement(a) === 'lounge') bump(resting, pid);
   }
 
-  return { now, goneHomeDays, waiting, benchedDrawn, goneHome, active, desks, known, lastActivity };
+  return {
+    now,
+    goneHomeDays,
+    waiting,
+    benchedDrawn,
+    goneHome,
+    active,
+    desks,
+    resting,
+    known,
+    lastActivity,
+  };
 }
 
 /**

@@ -135,6 +135,8 @@
  * @property {number} x
  * @property {number} y
  * @property {number} angle radians; the occupant faces this direction
+ * @property {boolean} [standing] WP-78: a place in the office queue, which has
+ *   no chair under it. The rig draws its occupant on its feet.
  */
 
 /**
@@ -671,6 +673,64 @@ export const OFFICE_SEAT_PITCH = 2.6;
 /** Grid of the reception's overflow chairs. */
 export const OFFICE_CHAIR_PITCH = 3.2;
 export const OFFICE_CHAIR_ROW = 2.8;
+
+/**
+ * THE VISITOR CHAIRS AT THE MANAGER'S DESK (WP-78).
+ *
+ * The owner, 14 September: _"Nobody sits by default in front of the manager;
+ * everybody is waiting on the sofa. Only the agent I open walks up to the
+ * manager desk."_ — said about a floor where the one guest chair was filled by
+ * whoever happened to be at the head of the queue and the rest sat on sofas
+ * around the walls. He wants the opposite: the people who are *waiting on him*
+ * at his desk, and the sofas for nobody.
+ *
+ * So there is a ROW of chairs across the front of the desk rather than one, and
+ * how many is a function of the desk the room actually got — `OFFICE_MIN_W`
+ * gives a 8.8 U desk and two chairs, and anything from 24 U up gives three.
+ * Between `MIN` and `MAX` and nothing else: a fourth chair is a boardroom, and
+ * a room the user reads first should not look like a meeting.
+ */
+export const OFFICE_VISITOR_MIN = 2;
+export const OFFICE_VISITOR_MAX = 3;
+
+/**
+ * HOW FAR APART TWO PEOPLE WAIT, and why it is not the seat pitch.
+ *
+ * `OFFICE_SEAT_PITCH` (2.6) is how close two bodies may be drawn on one sofa.
+ * A person in the waiting area is not only a body: they carry a waiting badge
+ * above the head and a name label below it (`03-VISUAL-SPEC.md` §7), and that
+ * stack is roughly four units tall. The reception is also the one room the
+ * packer may lay on its side (`buildOfficeRow`), so a row of chairs that is
+ * horizontal on one floor is vertical on the next — and at 2.6 the vertical
+ * case drew each name through the badge of the person behind them.
+ *
+ * So both pitches here clear the whole stack rather than the body, and the
+ * queue runs along the well's LONGER axis so it spreads rather than stacks.
+ */
+export const OFFICE_VISITOR_PITCH = 6.4;
+export const OFFICE_QUEUE_PITCH = 3.8;
+export const OFFICE_QUEUE_ROW = 6.4;
+
+/**
+ * The reception interior from which the manager's desk earns a THIRD chair.
+ * Below it, two — a room at `OFFICE_MIN_W` has no width to spare once the sofa
+ * runs have taken theirs.
+ */
+export const OFFICE_VISITOR_THIRD = 26;
+
+/**
+ * How many chairs stand at the manager's desk in a reception this wide.
+ *
+ * A pure function of the room's own interior width, so the plan, the tests and
+ * the docs cannot each have their own answer, and so the same floor produces
+ * the same chairs on every rebuild. It is the INTERIOR rather than the desk
+ * because the desk is itself derived from the interior, and one derivation is
+ * easier to keep honest than two.
+ * @param {number} interiorW
+ */
+export function visitorChairCount(interiorW) {
+  return Number(interiorW) >= OFFICE_VISITOR_THIRD ? OFFICE_VISITOR_MAX : OFFICE_VISITOR_MIN;
+}
 
 /**
  * How much of the column's leftover height the reception takes before the

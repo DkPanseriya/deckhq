@@ -15,17 +15,30 @@
  */
 
 import {
+  AT_DESK_STATES,
   GONE_HOME_DAYS,
   ON_THE_FLOOR,
+  WAITING_STATES,
   isActiveAgent,
   isDeskAgent,
   isGoneHome,
   isSubagent,
+  isWaitingAgent,
   placement,
 } from '../../public/floor-rule.js';
 import { now as clockNow } from './clock.mjs';
 
-export { GONE_HOME_DAYS, isActiveAgent, isDeskAgent, isGoneHome, isSubagent, placement };
+export {
+  AT_DESK_STATES,
+  GONE_HOME_DAYS,
+  WAITING_STATES,
+  isActiveAgent,
+  isDeskAgent,
+  isGoneHome,
+  isSubagent,
+  isWaitingAgent,
+  placement,
+};
 
 /** @typedef {'working'|'needs_input'|'stalled'|'for_review'|'ended'} ActivityState */
 /** @typedef {'active'|'benched'|'let_go'} AckState */
@@ -310,6 +323,8 @@ export function counts(agents, opts = {}) {
   let drawnAtDesk = 0;
   let finished = 0;
   let drawnBenched = 0;
+  let drawnResting = 0;
+  let drawnWaiting = 0;
   let wentHome = 0;
 
   for (const a of agents) {
@@ -330,10 +345,22 @@ export function counts(agents, opts = {}) {
     else if (!junior && a.activityState === 'stalled') stalled++;
     else if (!junior && a.activityState === 'for_review') forReview++;
     if (a.activityState === 'working') working++;
-    if (placement(a) !== 'desk') continue;
-    atDesk++;
-    if (activeProjects.has(String(a.projectId ?? ''))) drawnAtDesk++;
-    else finished++;
+    // WP-78. One walk through the three zones, off the one rule. `finished` is
+    // no longer "a desk in a repo nobody is in" — an `ended` session is in the
+    // lounge now — but it still counts exactly the people the floor has
+    // nowhere to draw: an active session whose project earned no room.
+    const where = placement(a);
+    const hasRoom = activeProjects.has(String(a.projectId ?? ''));
+    if (where === 'desk') {
+      atDesk++;
+      if (hasRoom) drawnAtDesk++;
+      else finished++;
+    } else if (where === 'office') {
+      drawnWaiting++;
+    } else if (where === 'lounge') {
+      if (hasRoom) drawnResting++;
+      else finished++;
+    }
   }
 
   return {
@@ -350,8 +377,11 @@ export function counts(agents, opts = {}) {
     drawn: {
       atDesk: drawnAtDesk,
       finished,
-      waiting: forReview,
+      /** At the manager's desk: hands up AND finished turns (WP-78). */
+      waiting: drawnWaiting,
       benched: drawnBenched,
+      /** Everyone the lounge holds: benched, plus the ended it now rests. */
+      lounge: drawnBenched + drawnResting,
       wentHome,
     },
   };

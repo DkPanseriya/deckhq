@@ -116,6 +116,24 @@ function setDeskDesired(rec, placement, clip) {
     desired === 'type' ? IDLE_TYPE_MIN_S + rec.idleRng() * (IDLE_TYPE_MAX_S - IDLE_TYPE_MIN_S) : 0;
 }
 
+/**
+ * IS THE OCCUPANT OF THIS PLACE SITTING DOWN? (WP-78)
+ *
+ * A desk has a chair; so does a visitor chair at the manager's desk. A place in
+ * the office QUEUE does not - it is a mark on the carpet beside the desk - and
+ * a character drawn seated over bare carpet is a character sitting on the
+ * floor. Stated once because three places used to answer it, all with the same
+ * expression, which is the kind of agreement that lasts until it does not.
+ *
+ * @param {string} placement
+ * @param {import('./agents-core.js').PlacedSeat|null} [seat]
+ */
+export function seatedAt(placement, seat) {
+  if (placement === 'desk') return true;
+  if (placement !== 'office') return false;
+  return !(seat && /** @type {{standing?: boolean}} */ (seat).standing === true);
+}
+
 export function samePoint(a, b) {
   if (a === b) return true;
   if (!a || !b) return false;
@@ -285,7 +303,7 @@ export class AgentRuntime {
         rec.targetSeat = seat;
         rec.placement = placement;
         rec.path = [];
-        rec.seated = placement === 'desk' || placement === 'office';
+        rec.seated = seatedAt(placement, seat);
         rec.clip = initialClipFor(agent, placement);
         rec.clipStartedAt = Date.now();
         setDeskDesired(rec, placement, rec.clip);
@@ -303,7 +321,7 @@ export class AgentRuntime {
         rec.pendingClip = null;
         rec.targetSeat = seat;
         rec.roomId = destRoom ? destRoom.id : null;
-        rec.seated = placement === 'desk' || placement === 'office';
+        rec.seated = seatedAt(placement, seat);
         if (placementChanged) {
           rec.placement = placement;
           rec.clip = initialClipFor(agent, placement);
@@ -335,9 +353,13 @@ export class AgentRuntime {
         if (placement !== 'lounge') {
           rec.rotation = { activity: null, remaining: 0, pairedWith: null };
         }
-      } else if (rec.path.length === 0 && placement === 'desk') {
+      } else if (rec.path.length === 0 && (placement === 'desk' || placement === 'office')) {
         // Same desk, but the activity state may have changed reaction (e.g. a hand goes up)
         // without a seat/placement change — reflect it immediately, no walk required.
+        //
+        // WP-78 added `office` to it. A session can now go `needs_input` ->
+        // `for_review` without changing seat (the queue order did not move),
+        // and the hand has to come down when it does.
         //
         // WP-28 moved the comparison from `rec.clip` to `rec.deskDesired`.
         // `rec.clip` is what is ON SCREEN and the idle director may have put a
@@ -583,7 +605,7 @@ export function stepAgent(rt, dtSeconds, opts = {}) {
     // street — `AgentRuntime#step` turns them round and sends them back — so
     // their facing is left as the direction they were travelling in.
     if (rt.targetSeat && typeof rt.targetSeat.angle === 'number') rt.angle = rt.targetSeat.angle;
-    rt.seated = rt.placement === 'desk' || rt.placement === 'office';
+    rt.seated = seatedAt(rt.placement, rt.targetSeat);
     if (rt.pendingClip) {
       rt.clip = rt.pendingClip;
       rt.pendingClip = null;

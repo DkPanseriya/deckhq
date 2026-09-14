@@ -36,6 +36,7 @@
  *   overflow?: boolean,
  *   junior?: boolean,
  *   partnerOf?: string,
+ *   standing?: boolean,
  * })} PlacedSeat
  */
 

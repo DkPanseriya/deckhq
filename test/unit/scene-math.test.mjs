@@ -765,15 +765,15 @@ test("WP-60: the owner's office wall reads — no two waiting badges are drawn o
       assert.ok(!hit, `${a.id} and ${b.id} are drawn on top of each other`);
     }
   }
-  // THE RUN ALONG THE WALL IS THE ONE THAT COLLIDES. The agent at the desk and
-  // the one seat with air around it keep their own numbers; the packed run does
-  // not. That the split happens at all is the test — the exact membership is a
-  // fact about the reception's seat pitch, which is `plan-office.js`'s to
-  // change.
-  assert.ok(pills.length >= 1, 'the packed run along the wall must not be drawn as seven pills');
-
-  // AND NOBODY IS LOST. Every badge that was taken away is inside a pill, and
-  // the pills between them count exactly the ones that were.
+  // WHETHER ANYTHING COLLIDES AT ALL IS THE RECEPTION'S BUSINESS, NOT THIS
+  // TEST'S. WP-60 measured a packed run along the office wall and this file
+  // asserted that it aggregated; WP-78 rebuilt the waiting area as two or three
+  // chairs at the desk and a standing queue at `OFFICE_QUEUE_PITCH`, and at
+  // this population the numbers no longer overlap in the first place. The
+  // property WP-60 was protecting is the loop above — nothing is DRAWN on top
+  // of anything else — and the aggregation rule itself has five tests of its
+  // own further up this file. What is asserted here is that whichever way the
+  // geometry falls, the floor is still honest about the whole queue.
   const aggregated = pills.reduce((a, p) => a + p.count, 0);
   assert.equal(
     drawn.size + aggregated,
@@ -784,11 +784,14 @@ test("WP-60: the owner's office wall reads — no two waiting badges are drawn o
   // AND EACH PILL CARRIES THE LONGEST WAIT IT REPLACED — the number that makes
   // the debt visible, which is the whole reason a badge is drawn at all.
   const suppressed = items.filter((it) => !drawn.has(it.id));
-  assert.equal(
-    Math.max(...pills.map((p) => p.oldest)),
-    Math.max(...suppressed.map((it) => it.ms)),
-    'the pill is quieter than the badges it replaced, never less true',
-  );
+  assert.equal(pills.length > 0, suppressed.length > 0, 'a badge vanished with no pill for it');
+  if (pills.length > 0) {
+    assert.equal(
+      Math.max(...pills.map((p) => p.oldest)),
+      Math.max(...suppressed.map((it) => it.ms)),
+      'the pill is quieter than the badges it replaced, never less true',
+    );
+  }
 });
 
 // ------------------------------------------------ frozen pane + overflow scroll
@@ -1211,7 +1214,7 @@ test('every other room plate is still exactly two lines', () => {
   const lounge = plateLinesFor({ kind: 'lounge', id: '__lounge__', name: 'Lounge' }, snapshot, {
     goneHome: new Set(['x']),
   });
-  assert.deepEqual(lounge, ['Lounge', '3 benched · 1 went home']);
+  assert.deepEqual(lounge, ['Lounge', '3 resting · 1 went home']);
 
   const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
   assert.deepEqual(letGo, ['Archive', '1 fired']);
