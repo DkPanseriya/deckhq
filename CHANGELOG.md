@@ -670,6 +670,23 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   recorded in `docs/plan/08-PLAN-V2-100X.md` §9, the 3D decision in §13.21, and the owner's
   14 September direction in `docs/DEVIATIONS.md` §152.
 
+- **`docs/plan/10-INTERIOR-DESIGN.md` — the interior, audited element by element and then
+  redesigned.** A document and six mockups, not code: nothing under `src/`, `public/` or `test/`
+  was touched. The audit is measured rather than felt — the herringbone block is 4.67 U × 1.58 U,
+  about **twelve times the area of a real one**, at 1.27–1.43:1 internal contrast with a 1.6 px
+  near-black seam on every block; the brightest surfaces in any room are a whiteboard, a sofa and a
+  chair; a task rug runs up to 2.6× its own desk cluster; every project room in `three.png` draws
+  four identical plants; and the lounge is three fifths bare. One written promise fails
+  outright: `docs/03-VISUAL-SPEC.md` §10 says every state colour clears 3:1 against its floor, and
+  `needs_input` on the office parquet measures **1.70:1** — on the one floor a raised hand ever
+  stands on. The design answers it with a **figure halo**, one token (`#F6F2E9`) applied as a
+  ground pool on light themes and a 1.1 px rim on dark ones, whose worst case against any on-floor
+  state is 3.28:1. Eleven floor tokens per theme are given with exact hex, and all three were run
+  through `assertThemeContrast()` and `assertMaterialDiscipline()` unmodified before being written
+  down. Packages WP-85a/b/c are in `docs/plan/08-PLAN-V2-100X.md` §9, the five owner decisions in
+  §13.22, and the direction in `docs/DEVIATIONS.md` §158. The mockups in `docs/media/interior/` are
+  illustrations of the specification, not screenshots of shipped code.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights
