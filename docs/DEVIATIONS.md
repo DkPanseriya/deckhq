@@ -15761,3 +15761,198 @@ within 8 U — have been reasoned about and drawn, not measured over `floor-inte
 sixteen populations; that measurement is 85c's acceptance criterion and may move the constants. And
 the lounge's "bare-floor fraction ≤ 35%" is a target taken from the mockup rather than from a survey
 of what those sixteen populations actually produce.
+
+## 159. WP-67 — the brief is a file, the schemas are generated, and the login is still expired
+
+`docs/07-STUDIO-DESIGN.md` §2 (Grill), §3, §9 and §10's WP-67 row. WP-66 built the store, the three
+schemas, the consent and every endpoint that needed no spawn (§150); `POST /api/studio/plan`
+answered **501** and named this package. It now starts a real `claude` planner session in the
+project directory, through `adapter.openNewSession` — the same call `/api/new-project` makes — and
+the planner writes the three artefacts itself. DeckHQ writes none of them, then or ever.
+
+**§158 is not in this file.** A concurrent documentation package holds that number; this is 159
+because the numbers are handed out rather than found, and a gap is cheaper than a collision.
+
+### 159.1 What was measured, and what the machine refused to let us measure
+
+Acceptance criterion (1) is _"a real `claude` planner runs an interview end to end on the reference
+machine and the three files validate"_. **It has not been met, and the reason is the one §117 and
+§97.5 already record: the stored login on this machine is expired.** Verbatim, on 14 September
+2026, against Claude Code **2.1.260**:
+
+```
+{ "is_error": true, "num_turns": 1, "permission_denials": [],
+  "result": "Failed to authenticate: OAuth session expired and could not be refreshed" }
+```
+
+That was a real run, and everything up to the API call is therefore real. A throwaway `git init`
+repository in a temp directory, a daemon on a temp state file, `POST /api/studio/enable`, then
+`POST /api/studio/plan`, which:
+
+- wrote `<project>/.deckhq/studio/briefs/planner.md` — **8,548 bytes**, the only file this route
+  writes — and nothing else. Afterwards the directory held `README.md` (1,106 bytes, WP-66's) and
+  `briefs/`. No `blueprint.md`, no `roster.json`, no `board.json`: the planner never got to write
+  them, and DeckHQ has no code path that would have written them for it. The snapshot said
+  `present: false` for all three and `problems: []` — **absent is not a problem; it is a plan
+  nobody has written yet.**
+- built this argv, which the real `claude` then ran:
+
+```json
+["claude",
+ "--append-system-prompt-file",
+ "…\\orbital\\.deckhq\\studio\\briefs\\planner.md",
+ "Begin the Studio planning interview now. Ask your first question, and wait for my answer."]
+```
+
+- and — the part worth having — **the ordinary scan found the session and the daemon said so**:
+
+```
+[daemon] info studio planner for …\orbital is claude-code:d9010573-a929-4c40-8c04-243c259858ba
+```
+
+That id is the `session_id` the real `claude` minted for that run. Nothing in `src/studio/` was
+involved in finding it; the registry found it on its own poll and the route wrote down an id.
+**Acceptance criterion (4) — the planner appears on the floor as an ordinary session — is
+therefore met against a real binary**, even though the interview behind it never started. What is
+still owed is one `claude login` and one interview.
+
+The harness added `--print --output-format json` to that argv so a reply could be read without a
+terminal window on the owner's desktop; those two flags are the harness's, and the four above are
+the route's. No other project, session or directory of the owner's was touched: the state
+directory was a temp one, the project was a temp one, and both were removed.
+
+### 159.2 `--append-system-prompt-file` is real, and it is not in `--help`
+
+`claude --help` on 2.1.260 lists `--append-system-prompt <prompt>` and `--system-prompt <prompt>`.
+It does **not** list `--append-system-prompt-file` in its options block at all — the string appears
+only inside the prose of the `--bare` paragraph. So its existence was established rather than
+assumed, by handing it a path that does not exist:
+
+```
+$ claude --append-system-prompt-file /definitely/not/here.md --print hi
+Error: Append system prompt file not found: C:\...\definitely\not\here.md
+```
+
+A flag that is not parsed does not validate its argument. That is the whole evidence, and it is
+recorded here because an undocumented flag is a flag that can go away.
+
+**Why a file and not the text.** §4 settles it for Hire — _`instructions` is one argv element
+naming the brief file rather than carrying it, because a brief is long and a prompt is an
+argument_ — and the same reasoning is stronger for the planner, whose brief is eight kilobytes.
+Eight kilobytes on a Windows command line is a quarter of the 32,767-character ceiling before
+anything else is on it, and on the macOS path it would go through `shQuote` into a wrapper script.
+The fourth element is one fixed sentence with nothing of the user's in it. `src/core/terminals.mjs`
+rule 1 is unchanged and unbent: **argv arrays, never a shell string.**
+
+### 159.3 The schemas in the brief are generated from the schema module
+
+`src/studio/briefs/planner.md` ships in the package and is a **template with holes in it**. Every
+schema, every enumerated value, every ceiling and both document versions are filled in by
+`src/studio/brief.mjs` from `src/studio/schema.mjs`'s exported constants at the moment a planner is
+started.
+
+This is not tidiness. A hand-written copy of a schema inside a prompt goes stale the first time a
+validator gains a field; the planner is then told the old shape, writes a file this build refuses,
+and the refusal names a line the planner has no way to understand — which reads as the model being
+bad at JSON and is in fact us lying to it. `test/unit/studio-brief.test.mjs` closes it from both
+ends: it **parses the two JSON examples out of the rendered brief and runs them through
+`validateRoster` and `validateBoard`**, and it asserts the template itself carries no schema key,
+no ceiling and no JSON of its own.
+
+One value the design did not anticipate: **`projectKey`**. The brief has to tell the planner what
+it is, because nothing in the project carries it — WP-66's `enable` writes exactly one file and it
+is the README — so a brief that said "copy it from the file DeckHQ made" would be naming a file
+with no key in it, and sixteen invented hex characters would be refused by the validator with a
+message about the sixteen it invented.
+
+### 159.4 Nine places the code differs from the document, and why
+
+1. **409, not 403, for a `/plan` with no consent.** WP-66's write routes answer 403. This one
+   answers 409 with the enable hint, on the owner's instruction for this package. The two are now
+   inconsistent, and this note is the record of that: a later package should settle on one, and the
+   argument for 409 is that "this project has not enabled Studio" is a state conflict the caller
+   can fix, not a credential they lack.
+2. **The artefact watch is a re-read, not a watcher.** §10's WP-67 row asks for the three files to
+   be validated when they appear or change. `GET /api/studio` reads all three from disk on every
+   request, so the snapshot is never stale and there is no cache to invalidate — and, the half that
+   matters, **no watcher that could ever write a file back**. A watcher would have bought one thing
+   (a push instead of a poll) at the cost of a background process holding handles on the user's
+   repository. The page polls while a planner is starting and re-reads when its panel opens.
+3. **`problems` is a new field on the snapshot.** `{ file, path, line, error }`, one entry per
+   artefact that is present and does not validate. Absent is not a problem. It is computed from the
+   same three reads the rest of the snapshot already made, so it cannot disagree with them.
+4. **Claude Code only, and the refusal names the reason rather than the package.** A `runtime`
+   that is not `claude-code` is refused with _"the brief was written for Claude Code and has only
+   ever been run against it"_ — `docs/ADAPTERS.md` §6's honesty rule, applied to a prompt. §4's
+   _"a runtime with no `openNewSession` is refused at Hire, never silently skipped"_ is the same
+   rule one package later; Codex, Gemini CLI and OpenCode all have `openNewSession` and none of
+   them has ever been handed this brief.
+5. **`studio.planner[projectKey]` is one id, and the scan writes it.** The endpoint answers **202
+   with `agentId: null`** when it has just started one, because the session id is the runtime's to
+   mint and the scan's to find, and answering with one immediately would mean inventing it. The
+   route keeps a map of projects it is _expecting_ a session in, bounded at ten minutes — the same
+   number and the same reason as `PENDING_IDENTITY_TTL_MS` — and writes the id down when the
+   registry hands one over. That map holds directories, not sessions, so §9 invariant 4 is intact
+   and `test/unit/studio-invariant.test.mjs` still fails on anything under `src/studio/` that
+   reaches for the registry or the adapters.
+6. **`/plan` on a project that already has a live planner does not start a second one.** §5.3 calls
+   the endpoint "start or continue", and continuing is the panel's ordinary streaming send, so all
+   the endpoint has to do is hand back the id — which it reads out of the registry each time rather
+   than trusting its own note, so a planner the user closed reads as gone within one scan.
+7. **The planner's brief obeys §9 invariant 3 now, a package early.** §9 files that invariant under
+   WP-68, which is where role briefs are written. WP-67 writes a brief too, so it holds the rule:
+   an edited `briefs/planner.md` is never overwritten, the regeneration goes beside it as
+   `planner.next.md`, and **the user's file is what the session runs under**.
+8. **A test seam through `startDaemon`.** `opts.launchTerminal` stands in for
+   `src/core/terminals.mjs`'s `launchTerminal`, and `openNewSession` grew an optional `launch` to
+   receive it. Undefined in production, and overridable for the same reason `stateFile` is, with a
+   sharper edge than usual: a test that spawned the real thing would open a terminal window on the
+   developer's desktop and the suite could not close it. `adapter-open.mjs` also grew
+   `newSessionCommand()` — a pure function returning the argv — so the array can be asserted
+   element by element rather than reasoned about, which is `terminals.mjs`'s own rule 4.
+9. **`ctx.pendingIdentities` is shared rather than made twice.** `/api/new-project` queues a name
+   for the session it is about to start; `/plan` queues `Planner` the same way. Two queues over one
+   directory would both match the same session and one of them would lose, so `actions.mjs` puts
+   its own on `ctx` and the studio route uses that one.
+
+### 159.5 The panel block, and what it deliberately is not
+
+Three lines above the transcript — `blueprint.md valid`, `roster.json line 12 — …`,
+`board.json not written yet` — each with `[ open ]` into the editor through the existing allowlist
+(`POST /api/open-in-editor`, which takes a path relative to the project and never a command). A
+planner's output is files, not transcript, so this is the one thing the panel could not say any
+other way.
+
+It is **not** the board: `board.json`'s cards are WP-69's tab, and a column drawn here would be a
+second place a card lives. It is not drawn at all unless `GET /api/studio` says the project has
+granted consent, which is off by default everywhere — so on every floor in the product as it
+ships, this block is absent. `public/` changed and no golden moved, because the goldens photograph
+the floor and this is in the panel.
+
+The palette gets one row, `Studio: plan this project`, with **no accelerator**: the accelerators
+are for the two-keystroke everyday commands and starting a planner is not one. The row is present
+whether or not the project has enabled Studio, and a project that has not gets the daemon's own
+refusal with the command that grants consent — a row that appeared only when Studio was on would
+be a row almost nobody could find twice.
+
+`public/app.js` crossed WP-22's 900-line ceiling by fifty-four lines, so the palette's half moved
+to `public/app-studio.js`. It belongs apart anyway: the rest of `app.js` is the shell every floor
+has, and Studio is a mode that is off on every project until somebody turns it on.
+
+### 159.6 Unverified
+
+- **The interview itself.** No planner has answered a question, read back a summary, or written a
+  `blueprint.md`. What has been proved is that the brief renders, that its schemas are the ones
+  this build validates, that the argv is what reaches the binary, that the binary accepts the flag,
+  and that the session lands on the floor. Whether a model given this brief asks the five questions
+  in order and stops at three files is a hypothesis (`08` §1.1 rule 11) until somebody logs in.
+- **The fixture planner is not a model.** `test/fixtures/fake-planner.mjs` reads the brief for the
+  three paths and the project key and writes fixed text, on `fake-claude.mjs`'s pattern. It proves
+  the plumbing — argv, brief, files, validation, the `problems` list, the line number on a bad
+  roster — and proves nothing about prose.
+- **macOS and Linux.** `openNewSession` builds the same four-element argv everywhere, and the only
+  platform it has run on is Windows 11. The `shQuote` wrapper path a Mac would take is
+  `terminals.mjs`'s, unchanged by this package and still unrun on a real Mac (§9, §91).
+- **The panel block has been looked at in one theme at one window size.** Its rows wrap inside
+  their own line rather than pushing the panel sideways, but that has not been photographed, and a
+  validator message long enough to wrap several lines has not been seen on screen.

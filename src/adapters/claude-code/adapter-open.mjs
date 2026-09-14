@@ -141,6 +141,39 @@ export async function openInApp(sessionId, cwd, opts = {}) {
 }
 
 /**
+ * The argv a brand-new session is started with. Pure, so the exact array can
+ * be asserted element by element rather than reasoned about — WP-67's
+ * acceptance criterion (2), and the same discipline `terminals.mjs` rule 4
+ * holds for every launch form.
+ *
+ * Two optional parts, in this order:
+ *
+ *   `--append-system-prompt-file <path>`  WP-67. A brief is long and a prompt
+ *     is an argument (§4), so the brief travels as a FILE and only its path is
+ *     on the command line. The flag is not in `claude --help`'s option list on
+ *     this machine (2.1.260) — it appears only inside the `--bare` paragraph —
+ *     but it is accepted and it validates its argument: a missing file is
+ *     `Error: Append system prompt file not found: <path>`, which is how its
+ *     existence was established rather than assumed. `docs/DEVIATIONS.md` §159.
+ *   the first prompt, as ONE element.
+ *
+ * Nothing here is ever a shell string. A path and a prompt are user data, and
+ * `docs/DEVIATIONS.md` §28 is why that rule is absolute in this area.
+ *
+ * @param {{instructions?: string, systemPromptFile?: string}} [opts]
+ * @returns {string[]}
+ */
+export function newSessionCommand(opts = {}) {
+  /** @type {string[]} */
+  const argv = ['claude'];
+  const briefFile = String(opts.systemPromptFile || '').trim();
+  if (briefFile) argv.push('--append-system-prompt-file', briefFile);
+  const prompt = String(opts.instructions || '').trim();
+  if (prompt) argv.push(prompt);
+  return argv;
+}
+
+/**
  * Open a terminal running a BRAND NEW session in `cwd`.
  *
  * This is how a new room appears on the floor: point DeckHQ at a project
@@ -150,23 +183,25 @@ export async function openInApp(sessionId, cwd, opts = {}) {
  * directory, and the session is Claude Code's to own.
  *
  * Same discipline as `openInTerminal`: argv arrays only, never a shell string
- * with user data interpolated into it.
+ * with user data interpolated into it. The macOS wrapper script is the one
+ * place a value becomes part of a shell line, and `shQuote` there quotes it
+ * whole — the old macOS path dropped the prompt entirely rather than face
+ * that, which was a silent difference in behaviour between platforms.
  *
  * @param {string} cwd absolute path to an existing directory
- * @param {{instructions?: string, terminal?: string}} [opts] an optional first
- *   prompt, and the user's pinned emulator from settings
+ * @param {{instructions?: string, terminal?: string, systemPromptFile?: string,
+ *          launch?: (opts:any) => Promise<any>}} [opts] an optional first
+ *   prompt, the user's pinned emulator from settings, an optional brief file
+ *   (WP-67), and `launch` — a test seam in place of `launchTerminal`, for the
+ *   same reason `launchTerminal` has `spawn`, `detect` and `writeScript`: a
+ *   test must never open a real terminal window on somebody's desktop. The
+ *   daemon passes none of it in production.
  * @returns {Promise<void>}
  */
 export async function openNewSession(cwd, opts = {}) {
-  // An initial prompt is passed as one argv element. It is user text and must
-  // never reach a shell as part of a command string. The macOS wrapper script
-  // is the one place it becomes part of a shell line, and `shQuote` there
-  // quotes it whole — the old macOS path dropped the prompt entirely rather
-  // than face that, which was a silent difference in behaviour between
-  // platforms.
-  const prompt = String(opts.instructions || '').trim();
-  await launchTerminal({
-    command: prompt ? ['claude', prompt] : ['claude'],
+  const launch = opts.launch || launchTerminal;
+  await launch({
+    command: newSessionCommand(opts),
     cwd,
     prefix: 'new',
     pin: opts.terminal,

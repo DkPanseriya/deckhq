@@ -7,13 +7,29 @@
  *   POST /api/studio/roster              replace the roster the user edited
  *   POST /api/studio/card                create, edit or MOVE a card
  *   GET  /api/studio/tracking?project=   §7's numbers
- *   POST /api/studio/plan                501 — WP-67
+ *   POST /api/studio/plan                start or continue the planner — WP-67
  *   POST /api/studio/hire                501 — WP-68
  *   POST /api/studio/handover            501 — WP-70
  *
  * Loopback only, and a cross-site POST is refused before it reaches here, by
  * the guard in `src/daemon.mjs` that every other route stands behind. Nothing
- * in this file opens a socket, starts a process or reads a transcript.
+ * in this file opens a socket or reads a transcript.
+ *
+ * ## The one thing that starts a process, and what it starts (WP-67)
+ *
+ * `POST /api/studio/plan` calls `adapter.openNewSession(project, …)` — the
+ * same adapter method, with the same shape of options, that `/api/new-project`
+ * calls when the user points DeckHQ at a directory. That is the whole point:
+ * the planner is not a second kind of thing. It is a `claude` session in the
+ * project directory, found by the ordinary scan, sitting at an ordinary desk,
+ * answered from the ordinary panel over `SendHub` (§9 invariant 4). Continuing
+ * the interview is the composer, not an endpoint.
+ *
+ * **Studio writes none of the three artefacts.** The planner writes them, as
+ * files, with its own tools; this route reads them back through `StudioStore`
+ * and validates them. Nothing below has a code path that produces a
+ * `blueprint.md`, a `roster.json` or a `board.json`, and the only file this
+ * route ever writes is the planner's own brief.
  *
  * ## The one rule this route exists to hold
  *
@@ -46,6 +62,7 @@ import { projectKeyFor } from '../../core/ledger-record.mjs';
 import { StudioPathError } from '../../studio/paths.mjs';
 import { StudioStore } from '../../studio/store.mjs';
 import { COLUMNS, MAX_CARDS, validateBoard } from '../../studio/schema.mjs';
+import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
 import {
   describeDisable,
   describeEnable,
@@ -56,10 +73,61 @@ import {
 
 /** What a package that does not exist yet answers with, and why. */
 const NOT_YET = {
-  '/api/studio/plan': 'the planner session lands in WP-67; this build has the store and the board',
   '/api/studio/hire': 'worktrees, briefs and the spawn land in WP-68; nothing runs in this build',
   '/api/studio/handover': 'the handover watcher and the review gate land in WP-70',
 };
+
+/**
+ * The one runtime that has a planner brief — WP-67, and `docs/ADAPTERS.md` §6.
+ *
+ * The brief in `src/studio/briefs/planner.md` was written for Claude Code and
+ * has been run against it. Handing it to Codex, Gemini CLI or OpenCode would be
+ * claiming a thing nobody has measured, so those are refused **by name** with
+ * the reason, rather than attempted and half-working. WP-68 is where a second
+ * runtime is measured.
+ */
+const PLANNER_RUNTIME = 'claude-code';
+
+/**
+ * How long a started planner is waited for before the wait is given up.
+ *
+ * Ten minutes, which is `PENDING_IDENTITY_TTL_MS` and is the same number for
+ * the same reason: what is being waited for is a terminal window opening and a
+ * runtime writing its first transcript line, which is seconds. Restated rather
+ * than imported, because the two are allowed to diverge — one is about a name
+ * and one is about an id — and `test/integration/studio-plan.test.mjs` asserts
+ * this one on its own.
+ */
+export const PLANNER_WAIT_MS = 10 * 60 * 1000;
+
+/**
+ * The session a planner spawn turned into, or null.
+ *
+ * The newest session in the project's directory that this build has not
+ * already recorded as somebody's planner — `createPendingIdentities`' match
+ * rule, for its reason: the session that has just started is the newest one,
+ * and two projects must never claim one session. There is no private list
+ * here and no second scan; this reads the registry's own agents and picks one
+ * by its id (§9 invariant 4).
+ *
+ * @param {Array<{id?:string, cwd?:string, runtime?:string, lastActivityAt?:number}>} agents
+ * @param {string} root resolved project directory
+ * @param {Set<string>} taken agent ids already recorded as a planner
+ */
+export function plannerAmong(agents, root, taken) {
+  return (
+    (Array.isArray(agents) ? agents : [])
+      .filter(
+        (a) =>
+          a &&
+          typeof a.id === 'string' &&
+          !taken.has(a.id) &&
+          String(a.runtime || '') === PLANNER_RUNTIME &&
+          path.resolve(String(a.cwd || '')) === root,
+      )
+      .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0] || null
+  );
+}
 
 /**
  * The project directory a request names, resolved, or a reason it was refused.
@@ -106,7 +174,11 @@ export function nextCardId(board) {
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{store:any, log:any, dataDir?:string}} ctx
+ * @param {{store:any, log:any, dataDir?:string, registry?:any, adapters?:any,
+ *          pendingIdentities?:any, launchTerminal?:(opts:any) => Promise<any>}} ctx
+ *   WP-67 added the last four. `registry` is read for one thing and one thing
+ *   only — whether an agent id is still a session on the floor — and never
+ *   copied; `launchTerminal` is the test seam `src/daemon.mjs` documents.
  */
 export function register(router, ctx) {
   const dataDir = ctx.dataDir || DATA_DIR;
@@ -163,12 +235,21 @@ export function register(router, ctx) {
     if ('error' in project) return sendError(res, 400, project.error);
     const studio = new StudioStore(project.root, { log: ctx.log });
     const consent = consentFor(project.projectKey);
+    // WP-67. The planner, as an id and whether that id is still a session on
+    // the floor — read out of the registry here rather than remembered, so a
+    // planner the user closed reads as gone within one scan instead of being a
+    // link to nothing.
+    const planner = store.studioPlannerFor?.(project.projectKey) || null;
+    const plannerLive = planner
+      ? (ctx.registry?.agents || []).some((a) => a.id === planner.agentId)
+      : false;
     sendJson(res, 200, {
       project: project.root,
       projectKey: project.projectKey,
       dir: studio.dir,
       enabled: Boolean(consent),
       consent,
+      planner: planner ? { ...planner, live: plannerLive } : null,
       // What enabling would write, so the page can draw the consent screen
       // without a second request, and so the screen is the same list the CLI
       // prints.
@@ -441,7 +522,149 @@ export function register(router, ctx) {
   });
 
   // -------------------------------------------------------------------------
-  // The three that need a spawn, and say so
+  // POST /api/studio/plan — the planner session (WP-67, §2 Grill and §3)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Projects whose planner has been started and not yet seen by the scan.
+   * `projectKey → { root, startedAt }`, at most one per project, emptied the
+   * moment the scan hands one over or the wait runs out. Not a session list:
+   * there is no session in it, by construction — it holds the directory we are
+   * expecting one to appear in.
+   * @type {Map<string, {root:string, startedAt:number}>}
+   */
+  const awaiting = new Map();
+
+  /** Every agent id already spoken for, so two projects cannot claim one. */
+  const takenPlanners = () =>
+    new Set(Object.values(store.studioPlanner?.() || {}).map((p) => p.agentId));
+
+  ctx.registry?.on?.(() => {
+    if (awaiting.size === 0) return;
+    const agents = ctx.registry.agents || [];
+    const taken = takenPlanners();
+    for (const [projectKey, want] of [...awaiting]) {
+      // The wait is bounded by the same TTL a queued identity gets, and for
+      // the same reason: what it is waiting for is a terminal opening and a
+      // runtime writing its first transcript line. Longer than that is a
+      // session that never arrived, and remembering it for ever would make
+      // the next Plan press continue something that does not exist.
+      if (clockNow() - want.startedAt > PLANNER_WAIT_MS) {
+        awaiting.delete(projectKey);
+        continue;
+      }
+      const found = plannerAmong(agents, want.root, taken);
+      if (!found) continue;
+      awaiting.delete(projectKey);
+      taken.add(found.id);
+      store.recordStudioPlanner(projectKey, { agentId: found.id, startedAt: want.startedAt });
+      ctx.log.info(`studio planner for ${want.root} is ${found.id}`);
+    }
+  });
+
+  router.post('/api/studio/plan', async (req, res) => {
+    const found = await projectFromBody(req, res);
+    if (!found) return;
+    const { root, projectKey, body } = found;
+
+    // Consent first, and with the hint. Studio writing the planner's brief is
+    // a write inside `.deckhq/studio/`, and starting a session that has been
+    // told to write three files there is the larger half of the same thing.
+    const consent = consentFor(projectKey);
+    if (!consent) {
+      return sendError(
+        res,
+        409,
+        `Studio is not enabled for ${root}. POST /api/studio/enable with { confirm: true }, or ` +
+          `run \`deckhq studio enable "${root}" --yes\`, and you will be shown every path it ` +
+          'would write first. Consent is per project and is never inferred from another.',
+      );
+    }
+
+    const runtime = String(body.runtime || PLANNER_RUNTIME);
+    if (runtime !== PLANNER_RUNTIME) {
+      return sendError(
+        res,
+        400,
+        `Studio's planner brief was written for Claude Code and has only ever been run against ` +
+          `it, so "${runtime}" is refused rather than attempted. Handing it a brief nobody has ` +
+          'measured it against would be a claim this project does not make (docs/ADAPTERS.md §6).',
+      );
+    }
+    const adapter = ctx.adapters.getAdapter(runtime);
+    if (!adapter) return sendError(res, 404, `Unknown runtime "${runtime}"`);
+    if (typeof adapter.openNewSession !== 'function') {
+      return sendError(res, 400, `${adapter.label} cannot start a new session`);
+    }
+
+    // Continue, rather than start a second one. §5.3 calls this endpoint
+    // "start or continue the planner session", and continuing is the panel's
+    // ordinary streaming send — so all this has to do is hand back the id.
+    const known = store.studioPlannerFor?.(projectKey) || null;
+    if (known && (ctx.registry?.agents || []).some((a) => a.id === known.agentId)) {
+      return sendJson(res, 202, {
+        ok: true,
+        project: root,
+        projectKey,
+        started: false,
+        agentId: known.agentId,
+        startedAt: known.startedAt,
+        note: 'this project already has a planner on the floor; answer it in the panel',
+      });
+    }
+    if (known) store.forgetStudioPlanner?.(projectKey);
+
+    const studio = new StudioStore(root, { log: ctx.log });
+    /** @type {{file:string, written:boolean, beside:string|null}} */
+    let brief;
+    try {
+      brief = await ensurePlannerBrief(studio);
+    } catch (err) {
+      return refusePath(res, err, ctx);
+    }
+
+    const startedAt = clockNow();
+    try {
+      await adapter.openNewSession(root, {
+        // The brief is a FILE on the command line, never its own text (§4).
+        systemPromptFile: brief.file,
+        // One fixed sentence, with nothing of the user's in it.
+        instructions: PLANNER_KICKOFF,
+        terminal: store.settings.terminal,
+        launch: ctx.launchTerminal,
+      });
+    } catch (err) {
+      ctx.log.warn('studio plan failed', root, err?.message || err);
+      return sendError(res, 500, err?.message || String(err));
+    }
+
+    // The same two lines `/api/new-project` runs after a spawn: a name waiting
+    // for the session that is about to exist, and a scan sooner than the poll.
+    ctx.pendingIdentities?.queue(root, 'Planner', null);
+    awaiting.set(projectKey, { root, startedAt });
+    setTimeout(() => ctx.registry?.refresh?.().catch(() => {}), 2500);
+
+    // 202, and the id is honestly absent: the session id is the runtime's to
+    // mint and the scan's to find, and answering with one now would mean
+    // inventing it. The page watches `GET /api/studio` for `planner.agentId`.
+    return sendJson(res, 202, {
+      ok: true,
+      project: root,
+      projectKey,
+      started: true,
+      agentId: null,
+      startedAt,
+      brief: brief.file,
+      // §6.1: an edited brief is never overwritten; the regeneration is beside
+      // it, and the user's is what the session just started under.
+      briefWritten: brief.written,
+      briefBeside: brief.beside,
+      note: 'the planner appears on the floor within one scan; answer it in the panel',
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // The two that still need a package, and say so
   // -------------------------------------------------------------------------
 
   for (const [pathname, why] of Object.entries(NOT_YET)) {

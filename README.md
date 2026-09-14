@@ -494,8 +494,9 @@ that live in your own repository, and — eventually — one real coding session
 the same scan as everything else. It is **off everywhere** and does nothing until you enable it
 for a directory.
 
-**What exists today is the store and the consent, and nothing runs.** No planner, no worktree, no
-spawn, no board tab. Enabling a project creates a directory and a record; that is all it does.
+**What exists today is the store, the consent and the planner. What does not exist is Hire.** No
+worktree, no role session, no board tab. Enabling a project creates a directory and a record; that
+is all enabling does.
 
 ```bash
 deckhq studio enable  ./my-project          # print every path it would write, change nothing
@@ -513,6 +514,35 @@ gitignored, because a plan is something a team should be able to commit.
 alone**. A path that would resolve outside `.deckhq/studio/` — by `..`, by being absolute, or
 through a symlink — is refused with the offending path rather than quietly clamped back inside.
 Consent is per project and is never inferred from another.
+
+### Plan: the interview that writes the plan
+
+Once a project is enabled, `⌘K` → **`Studio: plan this project`** starts a planner. It is a real
+`claude` session in that directory, with an interview brief as its first prompt — so it walks onto
+the floor on the next scan, takes a desk, and you answer it in the ordinary panel composer. There
+is no separate Studio chat, because there is no separate anything.
+
+It asks you, in turn, for the goal, the non-goals, the constraints, the milestones with their
+acceptance criteria, and the roles you need. Then it writes three files and says `written`:
+
+| File           | What it is                                                                       |
+| -------------- | -------------------------------------------------------------------------------- |
+| `blueprint.md` | the goal, the non-goals, the constraints, and the milestones with their criteria |
+| `roster.json`  | the roles: purpose, prompt, tools, budget                                        |
+| `board.json`   | the cards, every one of them starting in `backlog`                               |
+
+**DeckHQ writes none of them.** The planner writes them, as ordinary files, with its own tools.
+DeckHQ reads them back and checks them, and one that does not check out is reported with its name,
+its line and the reason — and **left exactly as it was written**. The panel shows all three above
+the transcript, with a link into your editor for each.
+
+The brief itself lands at `.deckhq/studio/briefs/planner.md` and is yours too: edit it and DeckHQ
+will never overwrite it. A regeneration is written beside it as `planner.next.md`, and yours is
+what runs. **Claude Code only** for now — another runtime is refused by name rather than handed a
+brief nobody has run it against.
+
+Hiring a roster is the next package. Nothing in the roster runs until you press Hire, and there is
+no Hire yet.
 
 One rule is already fixed, and it is the same rule the queue runs on: **a card's column is yours.**
 No session ending, no test passing, no file appearing and no budget being spent moves a card. They

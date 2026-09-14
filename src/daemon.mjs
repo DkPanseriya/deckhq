@@ -216,7 +216,8 @@ function envHoldMs() {
  * @param {{ port?: number, adoptHooksPort?: boolean, stateFile?: string,
  *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
  *           notify?: boolean, daemonFile?: string, snapshotDir?: string,
- *           packsDir?: string, ratesFile?: string }} [opts]
+ *           packsDir?: string, ratesFile?: string,
+ *           launchTerminal?: (opts:any) => Promise<any> }} [opts]
  *   `daemonFile` overrides where the bound port is published; it defaults to
  *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
  *   caller named no state file.
@@ -355,6 +356,15 @@ export async function startDaemon(opts = {}) {
     // its writes in the developer's own `~/.deckhq/installed.json`, because
     // `deckhq shortcut --remove` reads that file and acts on what it says.
     dataDir: opts.stateFile ? path.dirname(opts.stateFile) : DATA_DIR,
+    // WP-67. A stand-in for `core/terminals.mjs`'s `launchTerminal`, passed
+    // through to `adapter.openNewSession` by `POST /api/studio/plan`.
+    // Undefined in production, and overridable for the same reason `stateFile`
+    // is, with a sharper edge: a test that spawned the real thing would open a
+    // terminal window on the developer's desktop, and the suite would not be
+    // able to close it. `test/integration/studio-plan.test.mjs` uses it to run
+    // `test/fixtures/fake-planner.mjs` in place of `claude`, which is how the
+    // argv this route builds is asserted element by element.
+    launchTerminal: opts.launchTerminal,
     port: null,
   };
   registerState(router, ctx);

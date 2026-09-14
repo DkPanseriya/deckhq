@@ -375,12 +375,53 @@ export class StudioStore {
    * Errors are carried rather than thrown: a board that does not parse must
    * not take the roster and the blueprint down with it, because the whole
    * point of naming the line is that the user can go and fix it.
+   *
+   * ## `problems`, and why the watch is a re-read (WP-67)
+   *
+   * Every one of the three reads above hits the disk, so this snapshot is
+   * always what is on disk **now**. That is the whole of Studio's artefact
+   * watch: there is no cache to go stale, and — this being the half that
+   * matters — no watcher that could ever write a file back. A planner's three
+   * files appear in the next `GET /api/studio` because they are read, not
+   * because anything was notified.
+   *
+   * `problems` is the same three answers turned into one list the page can
+   * draw without knowing the shape of each: `{ file, line, error }`, one entry
+   * per artefact that is present and does not validate. An artefact that is
+   * absent is not a problem — it is a plan nobody has written yet.
    */
   snapshot() {
     const board = this.readBoard();
     const roster = this.readRoster();
     const blueprint = this.readBlueprint();
+    /** @type {Array<{file:string, path:string, line:number|null, error:string}>} */
+    const problems = [];
+    if (blueprint.error) {
+      problems.push({
+        file: FILES.blueprint,
+        path: this.pathOf(FILES.blueprint),
+        line: blueprint.line ?? null,
+        error: blueprint.error,
+      });
+    }
+    if (roster.error) {
+      problems.push({
+        file: FILES.roster,
+        path: this.pathOf(FILES.roster),
+        line: roster.line ?? null,
+        error: roster.error,
+      });
+    }
+    if (board.error) {
+      problems.push({
+        file: FILES.board,
+        path: this.pathOf(FILES.board),
+        line: board.line ?? null,
+        error: board.error,
+      });
+    }
     return {
+      problems,
       root: this.root,
       dir: this.dir,
       projectKey: this.projectKey,

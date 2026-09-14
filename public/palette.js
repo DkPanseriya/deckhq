@@ -306,6 +306,23 @@ export function buildCommandEntries(ctx) {
       run: () => actions.installApp(),
     },
     {
+      // WP-67. Studio is opt-in per project and off by default everywhere, so
+      // this row is where "plan this project" is found rather than a control
+      // on a plate that would be dead on almost every floor. It acts on the
+      // selected session's project, and a project that has not enabled Studio
+      // is told so — by the daemon, in the daemon's own words — rather than
+      // having the row hidden, which is a row nobody can find twice.
+      //
+      // No accelerator: the everyday accelerators are for the everyday
+      // commands, and starting a planner is not one.
+      id: 'cmd:studio-plan',
+      group: 'command',
+      label: 'Studio: plan this project',
+      hint: 'start the planner interview — it writes a blueprint, a roster and a board',
+      keywords: ['studio', 'plan', 'planner', 'grill', 'blueprint', 'roster', 'board', 'idea'],
+      run: () => actions.studioPlan(),
+    },
+    {
       id: 'cmd:refresh',
       group: 'command',
       label: 'Refresh',

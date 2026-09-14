@@ -1464,6 +1464,78 @@ button {
 /* ====================================================== end WP-47 block */
 
 /* ======================================================================
+   WP-67 · THE THREE STUDIO ARTEFACTS (docs/07-STUDIO-DESIGN.md §2, §3)
+   A planner's output is FILES, not transcript, so three lines say whether
+   they are there and whether they validate. Deliberately quiet: mono, muted,
+   the size of the records line. A problem gets a rule on the left in the
+   accent, never accent-coloured small text — this stylesheet's standing
+   contract. Hidden on every project that has not enabled Studio, which is
+   all of them by default.
+   ====================================================================== */
+
+.studio-artefacts {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+}
+.studio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.3rem;
+}
+.studio-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.5;
+  padding-left: 0.4rem;
+  border-left: 2px solid transparent;
+}
+.studio-row--problem {
+  border-left-color: var(--accent);
+}
+.studio-file {
+  flex: 0 0 auto;
+  color: var(--ink-2);
+}
+.studio-state {
+  flex: 1 1 auto;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.studio-row--problem .studio-state {
+  color: var(--ink);
+}
+.studio-open {
+  appearance: none;
+  background: none;
+  border: 0;
+  flex: 0 0 auto;
+  padding: 0.1rem 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.studio-open:hover:not(:disabled) {
+  color: var(--ink-2);
+}
+.studio-open:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.studio-note {
+  margin-top: 0.4rem;
+}
+.studio-note.is-warn {
+  color: var(--ink);
+}
+/* ====================================================== end WP-67 block */
+
+/* ======================================================================
    WP-19 · THE PERMISSION CARD (docs/DEVIATIONS.md §86.5, §97)
    A question the runtime is holding a socket open for, so it sits at the top
    of the review body, above WHAT IT SAID. It is the one card on this screen

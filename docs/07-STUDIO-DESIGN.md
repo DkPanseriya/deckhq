@@ -2,11 +2,13 @@
 
 **WP-66 · WP-67 · WP-68 · WP-69 · WP-70 · WP-71**
 
-**Date:** 8 September 2026 · **Owner:** Architect · **Status:** design of record. **WP-66 is built**
-(`docs/DEVIATIONS.md` §150): the store, the three schemas, the consent and the endpoints that need
-no spawn. WP-67 to WP-71 are unbuilt, and every sentence below about what a runtime does under
-Studio remains a hypothesis until a machine measures it (`08` §1.1 rule 11). Where this document
-and the code disagree, §150.2 names the difference and its reason.
+**Date:** 8 September 2026 · **Owner:** Architect · **Status:** design of record. **WP-66 and WP-67
+are built** (`docs/DEVIATIONS.md` §150, §159): the store, the three schemas, the consent, the
+endpoints that need no spawn, and the planner session that writes the three artefacts. WP-68 to
+WP-71 are unbuilt, and every sentence below about what a runtime does under Studio remains a
+hypothesis until a machine measures it (`08` §1.1 rule 11) — including, still, what a planner
+actually writes, because the reference machine's login is expired and no interview has been run.
+Where this document and the code disagree, §150.2 and §159.4 name the difference and its reason.
 
 **Binding sources, in precedence order:** `docs/01-PRODUCT.md` §2 · `docs/plan/08-PLAN-V2-100X.md`
 §1.1 rules 1–11 · `docs/02-ARCHITECTURE.md` §2, §5, §9 · `docs/ADAPTERS.md` §6 ·
@@ -193,10 +195,10 @@ Loopback only; cross-site refused by the guard already in `src/daemon.mjs` (§28
 | `POST` | `/api/studio/handover` | `{ cardId, decision: 'accept'\|'bounce', note }` |
 | `GET` | `/api/studio/tracking?project=` | §7's numbers |
 
-**As built (WP-66).** Everything above that needs no spawn exists: `GET /api/studio`, `enable`,
-`disable`, `roster`, `card` and `tracking`. `plan`, `hire` and `handover` answer **501** with one
-line naming the package that adds them, so the surface is complete and honest rather than
-half-present. `tracking` answers `{ cards: [], note: "no data" }` and contains no digit at all
+**As built (WP-66, then WP-67).** Everything above that needs no spawn exists: `GET /api/studio`,
+`enable`, `disable`, `roster`, `card` and `tracking`. `plan` starts — or continues — a real planner
+session (WP-67, §159); `hire` and `handover` answer **501** with one line naming the package that
+adds them, so the surface is complete and honest rather than half-present. `tracking` answers `{ cards: [], note: "no data" }` and contains no digit at all
 until WP-71 has a ledger fold behind it.
 
 `POST /api/studio/card` takes `{ cwd, op, ... }` with `op` one of `create`, `edit` or `move`. A
@@ -274,10 +276,13 @@ use** for hired agents as for any session, and a role's `allowedTools` is a line
 rather than something DeckHQ enforces on the runtime — the card says which is which; **no
 telemetry**.
 
-New invariants, each with a named test. **1 and 4 have theirs** — WP-66 shipped
+New invariants, each with a named test. **1, 3 and 4 have theirs.** WP-66 shipped
 `test/unit/studio-invariant.test.mjs`, which reads the source rather than the behaviour, so it
-fails on a writer or a session list somebody adds tomorrow. 2 and 3 land with the packages that
-create the thing they are about (WP-67 and WP-68).
+fails on a writer or a session list somebody adds tomorrow, and covers 1 and 4. **3 landed in
+WP-67**, a package earlier than this section expected, because WP-67 writes a brief too — the
+planner's; `test/unit/studio-brief.test.mjs` edits one and asserts the regeneration goes beside it
+and the user's is what is returned. 2 lands with WP-68, which is the first package where a hired
+session can show activity at all.
 
 1. **A card's column is user-owned.** No observed event moves it. The single exception is §8's
    budget stop, asserted to reach `blocked` and no other column.
@@ -313,13 +318,37 @@ column writer (4). Also shipped: `deckhq studio enable|disable <dir> [--yes]`,
 no goldens. **Nothing runs.** Ten places where the code had to differ from this document are
 recorded in `docs/DEVIATIONS.md` §150.2 with their reasons.
 
-### WP-67 · Grill — the planner session and its artefacts · `AB` · M · P3 · after WP-66
+### WP-67 · Grill — the planner session and its artefacts · `AB` · M · P3 · after WP-66 · **DONE**
 
 The interview brief, the planner spawn, the streamed reply, the parse into three files.
 **Accepted when:** (1) a real `claude` planner runs an interview end to end on the reference
 machine and the three files validate; (2) its argv is asserted element by element with no shell
 anywhere; (3) malformed output is reported with the line it failed on and writes nothing; (4) the
 planner appears on the floor as an ordinary session.
+
+**Done, 14 September 2026 — three of the four met, and the fourth is owed.**
+`src/studio/briefs/planner.md` (the brief, shipped in the package), `src/studio/brief.mjs` (which
+fills its schemas from `schema.mjs` rather than from a hand copy), `POST /api/studio/plan`, the
+three artefacts in the panel above the transcript, and `⌘K`'s `Studio: plan this project`.
+
+(2) `test/integration/studio-plan.test.mjs` compares the launch's `command` to
+`['claude', '--append-system-prompt-file', <brief>, <one fixed sentence>]` element by element;
+`newSessionCommand()` in `src/adapters/claude-code/adapter-open.mjs` is the pure function it comes
+from. (3) A fixture planner writes a `roster.json` with a policy the schema does not know; the
+snapshot's new `problems` list names the file, the line and the reason, carries no roster, and the
+file on disk is untouched. (4) **Measured against a real binary**: a real `claude` started by this
+route was found by the ordinary scan and recorded by its id
+(`docs/DEVIATIONS.md` §159.1). (1) **Not met.** The stored login on the reference machine is
+expired — the same gap §117 and §97.5 record — so no interview has been run and no planner has
+written a `blueprint.md`. What has been run is everything up to the API call: the brief renders at
+8,548 bytes, the flag is accepted, the argv is what reaches the binary, and the session lands on
+the floor. One `claude login` closes it.
+
+Nine places the code differs from this document are in §159.4 with their reasons; the sharpest are
+that `/plan` answers **409** rather than WP-66's 403 without consent, and that the artefact "watch"
+is a re-read on every `GET /api/studio` rather than a watcher — there is no cache to go stale and,
+more to the point, no watcher that could ever write a file back. §9 invariant 3 (*brief files are
+the user's*) landed here rather than in WP-68, because this package writes a brief.
 
 ### WP-68 · Roster and Hire · `AB` · L · P3 · after WP-67
 

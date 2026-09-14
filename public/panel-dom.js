@@ -153,6 +153,25 @@ export function buildPanelDom() {
     permissionNote,
   );
 
+  // WP-67 · the three Studio artefacts, above WHAT IT SAID because a planner
+  // session's output is FILES and not transcript (`07-STUDIO-DESIGN.md` §2):
+  // "blueprint.md valid / roster.json line 12 — … / board.json not written
+  // yet", each with a link into the editor. Hidden — and on every session in
+  // the product it stays hidden — until `GET /api/studio` says this project
+  // has granted Studio consent, which is off by default everywhere.
+  const studioSection = document.createElement('section');
+  studioSection.className = 'review-section studio-artefacts';
+  studioSection.setAttribute('aria-label', 'Studio plan');
+  studioSection.hidden = true;
+  const studioHeading = document.createElement('h3');
+  studioHeading.className = 'review-heading';
+  studioHeading.textContent = 'Studio plan';
+  const studioList = document.createElement('div');
+  studioList.className = 'studio-list';
+  const studioNote = document.createElement('p');
+  studioNote.className = 'review-note studio-note';
+  studioSection.append(studioHeading, studioList, studioNote);
+
   const saidSection = document.createElement('section');
   saidSection.className = 'review-section';
   const saidHeading = document.createElement('h3');
@@ -222,7 +241,7 @@ export function buildPanelDom() {
   changedFoot.appendChild(expandAllBtn);
   changedSection.append(changedHeadRow, changedEl);
 
-  body.append(permissionSection, saidSection, threadDetails, changedSection);
+  body.append(permissionSection, studioSection, saidSection, threadDetails, changedSection);
 
   // Actions: three weighted buttons on 1/2/3, everything else behind ⋯ more.
   const actionsWrap = document.createElement('div');
@@ -290,6 +309,10 @@ export function buildPanelDom() {
     permissionInput,
     permissionActions,
     permissionNote,
+    studioSection,
+    studioHeading,
+    studioList,
+    studioNote,
     saidSection,
     saidHeading,
     saidEl,
