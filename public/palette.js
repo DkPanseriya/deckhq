@@ -219,6 +219,9 @@ export function buildCommandEntries(ctx) {
   const settings = snapshot?.settings || {};
   const soundOn = Boolean(settings.sound);
   const notifyOn = settings.notifications !== false;
+  // WP-83. `=== true`, not a truthiness test: a snapshot from a daemon that
+  // predates the setting must read as OFF, which is the shipped default.
+  const costOn = settings.showCost === true;
   const redacting = Boolean(ctx.redactSnapshots);
 
   return [
@@ -431,6 +434,17 @@ export function buildCommandEntries(ctx) {
       accel: 'u',
       keywords: ['audio', 'mute', 'chime', 'volume'],
       run: () => actions.setSound(!soundOn),
+    },
+    {
+      // WP-83. A STORED setting, unlike the row below it: whether a currency
+      // appears at all is a property of the machine, not of this tab. It ships
+      // off, and turning it on restores every cost surface unchanged.
+      id: 'cmd:show-cost',
+      group: 'command',
+      label: costOn ? 'Hide cost' : 'Show cost',
+      hint: costOn ? 'list-price estimates are showing' : 'token usage only; estimates are hidden',
+      keywords: ['money', 'price', 'dollars', 'usd', 'rate card', 'spend', 'billing', 'tokens'],
+      run: () => actions.setShowCost(!costOn),
     },
     {
       // A view toggle, not a stored setting. The old header wrote

@@ -858,7 +858,7 @@ export function buildPlan(projects, agents, opts = {}) {
 
 export { resolveAnchors, tableSizesFor } from './plan-anchors.js';
 export { shelfPack, squarify, tileRows } from './plan-packing.js';
-export { formatTokens, payrollLine } from './plan-rooms.js';
+export { formatTokens, payrollLine, tokenLine } from './plan-rooms.js';
 export {
   ASPECT_TOLERANCE,
   FLOOR_OPEN_MAX,

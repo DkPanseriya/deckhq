@@ -91,6 +91,49 @@ export function payrollLine(project) {
     : `${amount} to date · list price`;
 }
 
+/**
+ * The room plate's third line when cost is off, which is how it ships (WP-83).
+ *
+ * TOKENS, NOT MONEY, and the same three rules the payroll line keeps:
+ *
+ *   1. **Quiet.** Still the third line on a door plate, still context.
+ *   2. **Dated by its own words.** `today` when the ledger has the day's token
+ *      deltas for this room — `Ledger.todayTokens`, folded per project by
+ *      `todayTokensFor` in `src/core/state-machine-rules.mjs` — and `to date`
+ *      when it does not and this is the room's lifetime total falling back.
+ *      The plate never says "today" about a number that is not today's.
+ *   3. **It says nothing rather than something it cannot measure.** A room
+ *      with no token figure at all gets no line, exactly as an unpriceable
+ *      room got none before.
+ *
+ * **`with cache` is not decoration either.** The data line above this one is
+ * `project.tokens`, which is input plus output and nothing else; this line is
+ * that plus the cache traffic, which on a real room is an order of magnitude
+ * larger. Two token figures on one plate that count different things, with
+ * only one of them saying so, is a plate that looks wrong to anybody who adds
+ * them up — and the bigger of the two is the one that needed the qualifier.
+ *
+ * Short on purpose: WP-81 reworks the plate and will set the type; this is the
+ * data line it will be given. Kept in the same file as `payrollLine` because
+ * the two are alternatives for one slot and the choice between them is one
+ * setting read in one place (`plateLinesFor` in `scene-labels.js`).
+ *
+ * @param {{todayTokens?:number|null, todayTokensIsToday?:boolean, tokens?:number,
+ *          cacheTokens?:number}} project
+ * @returns {string}
+ */
+export function tokenLine(project) {
+  const today = project ? project.todayTokens : null;
+  if (today != null && Number.isFinite(Number(today)) && Number(today) > 0) {
+    return project.todayTokensIsToday
+      ? `today ${formatTokens(Number(today))} tok · with cache`
+      : `${formatTokens(Number(today))} tok to date · with cache`;
+  }
+  const lifetime = (Number(project?.tokens) || 0) + (Number(project?.cacheTokens) || 0);
+  if (lifetime <= 0) return '';
+  return `${formatTokens(lifetime)} tok to date · with cache`;
+}
+
 // ------------------------------------------------------------ a pinned room
 
 /**

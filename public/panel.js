@@ -96,7 +96,13 @@ import { createLivePart } from './panel-live.js';
 // Everything the panel used to define itself, re-exported from where it now
 // lives, so every existing import of this module resolves exactly as before.
 export { permissionKeyDecision } from './panel-rules.js';
-export { juniorMetaFor, costLineParts, boardCostParts } from './panel-format.js';
+export {
+  juniorMetaFor,
+  costLineParts,
+  boardCostParts,
+  costVisible,
+  usageLineParts,
+} from './panel-format.js';
 
 /**
  * @param {object} opts

@@ -19,6 +19,7 @@ import { createPanel } from './panel.js';
 import { createHooksUI } from './hooks-ui.js';
 import { createPalette } from './palette.js';
 import { createDeckUI } from './deck.js';
+import { loadUsage, setShowCost, usageNames } from './app-usage.js';
 import { wireSurfaceControls } from './surfaces.js';
 import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
@@ -456,11 +457,17 @@ setDeckUI(
     lastEl: el.stripLast,
     deckEl: el.deck,
     deckBodyEl: el.deckBody,
+    tabsEl: el.deckTabs,
     stageEl: el.stage,
     getQueue: () => getNeedsYouQueue(latestSnapshot),
     getSelectedId: () => selectedId,
     onSelect: (id, o) => selectAgent(id, o),
     announce,
+    // WP-83. The fetch lives in `app-usage.js`, not in deck.js, whose header
+    // promises nothing in it fetches at all. It is a read: `/api/stats`
+    // replays the ledger and touches no ack state.
+    loadUsage,
+    getUsageNames: usageNames,
   }),
 );
 
@@ -786,6 +793,8 @@ const paletteUI = createPalette({
         toast('Sound off, on this machine, until you turn it back on.');
       }
     },
+    // WP-83. Whether any currency figure appears at all, anywhere.
+    setShowCost: (next) => setShowCost(next, toast),
     snapshot: takeSnapshot,
     toggleRedaction,
     toggleLetGoVisible: () => {

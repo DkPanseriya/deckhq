@@ -186,6 +186,17 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // (`appearanceRng`), so installing a pack offers a set and choosing one
   // applies it; nothing happens because a file appeared in a directory.
   avatarSet: '',
+  // WP-83. WHETHER ANY CURRENCY FIGURE APPEARS ANYWHERE. Ships OFF.
+  //
+  // The owner, 14 September 2026: "mostly people will have subscriptions, so
+  // they have a different billing system... it should help them track their
+  // token usage". A list-price dollar figure is not a subscriber's bill and
+  // not their budget; it is a number that looks like both. So the floor, the
+  // deck, the panel, the room plate, the postcard, Wrapped and `deckhq stats`
+  // show token usage by default, and turning this on restores every cost
+  // surface exactly as it was — `08` §1.1 rule 7 is unchanged in both
+  // directions, and `src/core/rates.mjs` is untouched by this package.
+  showCost: false,
   onboarded: false,
 });
 
@@ -196,6 +207,7 @@ const BOOLEAN_SETTINGS = Object.freeze([
   'notifyForReview',
   'osNotify',
   'sound',
+  'showCost',
   'onboarded',
 ]);
 

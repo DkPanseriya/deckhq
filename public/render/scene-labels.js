@@ -14,7 +14,7 @@
  * (docs/03-VISUAL-SPEC.md §7).
  */
 
-import { formatTokens, payrollLine } from './plan.js';
+import { formatTokens, payrollLine, tokenLine } from './plan.js';
 import { PALETTE } from './palette.js';
 import { formatElapsed } from './rig.js';
 import { waitingSince } from '../floor-rule.js';
@@ -116,11 +116,18 @@ export function ellipsise(ctx, text, maxW) {
  * fallback for a room the snapshot has nothing to say about.
  *
  * **A project room has three lines** (WP-26, `docs/plan/08` §8.1): its name,
- * its session/token/needs-you line, and the payroll meter under them. The
- * third is `''` whenever nothing in that room has a rate — `payrollLine`
- * refuses to put `$0.00` on a wall when what it means is "no rate" — and
- * `_drawRoomPlate` simply draws nothing for an empty line, so a floor of
- * unpriced rooms looks exactly as it did before the meter existed.
+ * its session/token/needs-you line, and a meter under them. The third is `''`
+ * whenever there is nothing honest to put on it, and `_drawRoomPlate` simply
+ * draws nothing for an empty line, so a floor with no meter to show looks
+ * exactly as it did before the meter existed.
+ *
+ * **WHAT THAT THIRD LINE IS, IS A SETTING** (WP-83). It ships as this room's
+ * tokens — `tokenLine`, from the ledger's own day tally — because most users
+ * are on a subscription and a dollar figure at public list prices is neither
+ * their bill nor their budget. With `settings.showCost` on it is the payroll
+ * meter it has always been: `payrollLine`, which refuses to put `$0.00` on a
+ * wall when what it means is "no rate". The choice is made HERE, once, from
+ * the snapshot's own settings, so no other surface has to ask.
  *
  * A plain named export rather than only a method, for the reason the note at
  * the bottom of this file gives: `new Scene(...)` needs a canvas, so anything
@@ -158,7 +165,7 @@ export function plateLinesFor(room, snapshot, plan) {
     return [
       room.name,
       `${project.sessionCount} sessions${juniorPart} · ${formatTokens(project.tokens)} tok · ${project.needsYou} need you`,
-      payrollLine(project),
+      snap.settings?.showCost === true ? payrollLine(project) : tokenLine(project),
     ];
   }
   if (room.kind === 'office') {

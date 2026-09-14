@@ -2633,6 +2633,284 @@ button {
   color: var(--muted);
 }
 
+/* ============================================ WP-83 · the Usage tab
+
+   Two tabs over one surface. The queue is a list of debts; usage is a ledger
+   of spend. Everything below is inside the deck, which is already a
+   full-surface view with a way out of it (public/surfaces.js) — the tabs add a
+   second thing to look at, never a second thing to escape from.
+
+   No currency lives in this block, under any setting: the cost surfaces are
+   the ones that already existed, and this is what stands where they were. */
+
+.deck-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.deck-tab {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 0.75rem;
+  text-transform: uppercase;
+}
+.deck-tab:hover {
+  color: var(--ink-2);
+}
+/* The selected tab is carried by the rule AND by the ink AND by
+   `aria-selected`, never by colour alone. */
+.deck-tab.is-selected {
+  border-bottom-color: var(--focus);
+  color: var(--ink);
+}
+.deck-tab:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.usage {
+  padding: 1rem 1.25rem 2rem;
+}
+.usage-windows {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+.usage-window {
+  appearance: none;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.3rem 0.7rem;
+}
+.usage-window:hover {
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+.usage-window.is-selected {
+  background: var(--surface-3);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+.usage-window:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.usage-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  justify-content: space-between;
+  margin: 0 0 0.75rem;
+}
+.usage-total {
+  align-items: baseline;
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+}
+.usage-total-v {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 1.7rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.usage-total-k,
+.usage-trend {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* The split, as one bar. Proportion only — the numbers are in the legend
+   under it and in every table below, so a reader who cannot see the bar has
+   lost nothing. */
+.usage-bar {
+  border-radius: var(--radius-sm);
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.usage-seg {
+  display: block;
+  height: 100%;
+}
+.usage-seg[data-counter='input'] {
+  background: #4f7fb8;
+}
+.usage-seg[data-counter='cacheWrite'] {
+  background: #7a6cae;
+}
+.usage-seg[data-counter='cacheRead'] {
+  background: #3f7f74;
+}
+.usage-seg[data-counter='output'] {
+  background: #a8813f;
+}
+
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  list-style: none;
+  margin: 0.6rem 0 1.5rem;
+  padding: 0;
+}
+.usage-legend-item {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+}
+.usage-swatch {
+  border-radius: 2px;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
+}
+.usage-legend-item[data-counter='input'] .usage-swatch {
+  background: #4f7fb8;
+}
+.usage-legend-item[data-counter='cacheWrite'] .usage-swatch {
+  background: #7a6cae;
+}
+.usage-legend-item[data-counter='cacheRead'] .usage-swatch {
+  background: #3f7f74;
+}
+.usage-legend-item[data-counter='output'] .usage-swatch {
+  background: #a8813f;
+}
+.usage-legend-k {
+  color: var(--muted);
+}
+.usage-legend-v {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-section {
+  margin-bottom: 1.75rem;
+}
+/* Wide content scrolls inside its own box; the deck itself never scrolls
+   sideways. */
+.usage-scroll {
+  overflow-x: auto;
+}
+.usage-table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  min-width: 100%;
+}
+.usage-caption {
+  caption-side: top;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  padding-bottom: 0.4rem;
+  text-align: left;
+  text-transform: uppercase;
+}
+.usage-table th,
+.usage-table td {
+  border-bottom: 1px solid var(--line);
+  font-weight: 400;
+  height: 30px;
+  padding: 0 0.7rem;
+  text-align: left;
+  white-space: nowrap;
+}
+.usage-table thead th {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-2);
+  color: var(--muted);
+  padding: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.usage-table th.num,
+.usage-table td.num {
+  text-align: right;
+}
+.usage-sort {
+  appearance: none;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  padding: 0 0.7rem;
+  height: 30px;
+  text-transform: uppercase;
+  width: 100%;
+  text-align: inherit;
+}
+.usage-table th.num .usage-sort {
+  text-align: right;
+}
+.usage-sort:hover {
+  color: var(--ink);
+}
+.usage-sort:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+/* The sorted column, marked in the ink as well as in `aria-sort`. */
+.usage-table th[aria-sort] .usage-sort {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.usage-cell {
+  color: var(--ink-2);
+}
+.usage-cell.num {
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.usage-row:hover {
+  background: var(--surface);
+}
+.usage-empty,
+.usage-nodata {
+  color: var(--muted);
+  padding: 1rem 0;
+  text-align: center;
+}
+.usage-nodata {
+  padding: 3rem 1rem;
+}
+.usage-foot {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin: 0;
+  padding-top: 0.75rem;
+}
+
 /* ================================================== end WP-10 block */
 
 /* ------------------------------------------------------------ responsive */

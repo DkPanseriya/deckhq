@@ -152,9 +152,12 @@ export function formatRange(sinceMs, untilMs) {
  * anything, which is a sentence with a shape of blame in it.
  *
  * @param {any} body a `GET /api/wrapped` body
+ * @param {{showCost?:boolean}} [opts] WP-83. Whether the spend row is drawn at
+ *   all. Absent is OFF, which is the shipped default and the safe reading of a
+ *   snapshot that has not arrived.
  * @returns {{title:string, subtitle:string, rows:{label:string, value:string}[], footer:string}}
  */
-export function wrappedCopy(body) {
+export function wrappedCopy(body, opts = {}) {
   const w = body?.window || {};
   const prev = body?.previous || {};
   const kind = body?.kind === 'annual' ? 'annual' : 'week';
@@ -187,9 +190,12 @@ export function wrappedCopy(body) {
   // 2. Tokens.
   if (Number(w.tokens) > 0) rows.push({ label: 'Tokens', value: compactTokens(w.tokens) });
 
-  // 3. Spend. Rule 7: an estimate, never a bill, naming its dated table.
+  // 3. Spend. Rule 7: an estimate, never a bill, naming its dated table — and
+  // WP-83: only when `settings.showCost` is on, which it is not by default.
+  // The tokens row above it is the one that is always there, because tokens
+  // are what a subscriber actually spends.
   const spend = body?.spend || {};
-  if (typeof spend.estimate === 'number' && spend.estimate > 0) {
+  if (opts.showCost === true && typeof spend.estimate === 'number' && spend.estimate > 0) {
     const version = spend.rateCardVersion ? `, rate card ${spend.rateCardVersion}` : '';
     const short =
       spend.unrated > 0 ? ` · ${spend.unrated} room${spend.unrated === 1 ? '' : 's'} unpriced` : '';

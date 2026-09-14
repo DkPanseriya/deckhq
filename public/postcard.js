@@ -29,6 +29,7 @@
  * in `node --test`.
  */
 
+import { costVisible } from './panel-format.js';
 import { compactTokens, formatMoney, formatWait } from './snapshot.js';
 
 /** The weekday names the card opens with. No `Intl`: see `records.js`. */
@@ -243,14 +244,23 @@ export function postcardCopy(o) {
   const tokens = Number(w.tokens) || 0;
   const { spend, rated } = spendToday(snapshot);
   const version = snapshot.rateCardVersion || o.stats?.rateCardVersion || '';
-  if (rated > 0 && spend > 0) {
+  // WP-83. TOKENS BY DEFAULT, MONEY ONLY WHEN ASKED FOR. The card is the one
+  // surface people paste into a chat, which is exactly why a list-price figure
+  // has no business on it unless the reader turned it on: it is not their bill
+  // and it is not the bill of whoever they show it to either.
+  if (costVisible(snapshot) && rated > 0 && spend > 0) {
     // Standing rule 7: cost is an estimate, never a bill, and it names the
     // dated table it came from (`docs/DEVIATIONS.md` §111).
     lines.push(`≈ ${formatMoney(spend)} list price${version ? `, rate card ${version}` : ''}.`);
   } else if (tokens > 0) {
-    // No priced room: say what moved rather than putting a zero where money
-    // goes. Zero is a claim about the money (§111 decision 4).
-    lines.push(`${compactTokens(tokens)} tokens, no rate for them.`);
+    // What moved, rather than a zero where money goes. Zero is a claim about
+    // the money (§111 decision 4) — and with cost off there is no claim at all
+    // to make, so the sentence simply stops after the count.
+    lines.push(
+      costVisible(snapshot)
+        ? `${compactTokens(tokens)} tokens, no rate for them.`
+        : `${compactTokens(tokens)} tokens.`,
+    );
   }
 
   const wait = w.longestWait;

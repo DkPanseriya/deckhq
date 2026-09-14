@@ -137,6 +137,69 @@ export function boardCostParts(cost, version) {
   };
 }
 
+/**
+ * Is any currency figure allowed on screen at all? (WP-83.)
+ *
+ * ONE FUNCTION, ASKED EVERYWHERE. The panel's bottom line, the project board,
+ * the room plate, the postcard and Wrapped all gate on this and on nothing
+ * else, so "is cost showing" has exactly one answer on a floor rather than
+ * five that can drift — the defect `docs/DEVIATIONS.md` §16/§35/§38/§52/§55
+ * all share.
+ *
+ * ABSENT MEANS OFF. A snapshot from a daemon that predates this setting, a
+ * snapshot that has not arrived yet, a fixture that carries no settings at
+ * all — all of them are read as off, because the shipped default is off and a
+ * surface that guessed "on" would put a dollar figure in front of somebody who
+ * never asked for one.
+ *
+ * @param {any} snapshot
+ * @returns {boolean}
+ */
+export function costVisible(snapshot) {
+  return snapshot?.settings?.showCost === true;
+}
+
+/**
+ * The panel's usage line: the four counters as the RUNTIME split them, the
+ * total, and the model (WP-83).
+ *
+ * This is what stands where the cost line was. A counter the runtime did not
+ * report is `no data`, never `0` — Codex writes no cache-write figure, and a
+ * confident zero there would be a measurement nobody made. A session whose
+ * runtime reports no breakdown at all gets the two totals it has always had.
+ *
+ * Exported as parts, the way {@link costLineParts} is, so `test/unit` can read
+ * what the line says without standing up a DOM.
+ *
+ * @param {{tokens?:number, cacheTokens?:number, model?:string|null,
+ *          tokenBreakdown?:Record<string, number>}} agent
+ * @returns {string[]}
+ */
+export function usageLineParts(agent) {
+  const breakdown = agent && agent.tokenBreakdown;
+  const total = (Number(agent?.tokens) || 0) + (Number(agent?.cacheTokens) || 0);
+  /** @type {string[]} */
+  const parts = [`${formatNumber(total)} tok`];
+  if (breakdown && typeof breakdown === 'object') {
+    for (const [key, label] of [
+      ['input', 'in'],
+      ['cacheWrite', 'cache w'],
+      ['cacheRead', 'cache r'],
+      ['output', 'out'],
+    ]) {
+      const n = breakdown[key];
+      parts.push(typeof n === 'number' ? `${formatCompact(n)} ${label}` : `${label} no data`);
+    }
+  } else {
+    // No breakdown: say the two numbers that ARE measured rather than four
+    // that are not. `08` §1.1 rule 11 — a claim is a hypothesis until measured.
+    parts.push(`${formatCompact(agent?.cacheTokens)} cache`, 'split no data');
+  }
+  const model = shortModel(agent?.model);
+  if (model) parts.push(model);
+  return parts;
+}
+
 /** @param {number} ms */
 export function formatElapsed(ms) {
   const minutes = Math.floor(ms / 60000);

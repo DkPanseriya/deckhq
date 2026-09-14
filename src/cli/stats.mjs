@@ -30,7 +30,8 @@ import process from 'node:process';
 import { LEDGER_DIR } from '../core/paths.mjs';
 import { computeStats, projectKeyFor, readAll, records as teamRecords } from '../core/ledger.mjs';
 import { rateCardVersion } from '../core/rates.mjs';
-import { readCache } from './source.mjs';
+import { COUNTERS, NO_DATA, usageReport } from '../core/usage.mjs';
+import { readCache, readState } from './source.mjs';
 import { group, palette, useColor, waited } from './deck.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -42,6 +43,7 @@ const HELP = [
   '',
   '  --days N     the window, in days. Default 30. The records below it are',
   '               never windowed — "ever" means ever.',
+  '  --usage W    the token-usage window: today, 7d or 30d. Default 7d.',
   '  --json       the same numbers as JSON',
   '  --no-color   no ANSI (NO_COLOR is honoured too)',
   '  --help       this message',
@@ -161,11 +163,80 @@ export function renderRecords(rec, opts = {}) {
   return lines;
 }
 
+/** The heading each of the four counters gets in a report. */
+const COUNTER_LABELS = Object.freeze({
+  input: 'input',
+  cacheWrite: 'cache write',
+  cacheRead: 'cache read',
+  output: 'output',
+});
+
+/**
+ * WP-83's block: where the tokens went, split four ways.
+ *
+ * Every line is a fold of `tokens` records over the window and nothing else —
+ * no rate, no currency, no plan. A counter that no record in the window named
+ * prints `no data` rather than `0`, because `0` is a measurement and nobody
+ * made it (`src/core/usage.mjs` rule 2), and the trend prints `no data` unless
+ * both weeks were lived through.
+ *
+ * @param {ReturnType<typeof usageReport>} usage
+ * @param {{names?:Record<string,string>, color?:boolean}} [opts]
+ * @returns {string[]}
+ */
+export function renderUsage(usage, opts = {}) {
+  const c = palette(Boolean(opts.color));
+  const names = opts.names || {};
+  const label = (s) => c.dim(String(s).padEnd(26));
+  /** @type {string[]} */
+  const lines = ['', c.bold(`  tokens · ${usage.label || 'last 7 days'}`), ''];
+
+  if (usage.empty) {
+    lines.push(c.dim(`  ${NO_DATA} — no token record in this window`), '');
+    return lines;
+  }
+
+  const t = usage.totals;
+  lines.push(`  ${label('total')}${group(t.total).padStart(12)}`);
+  for (const counter of COUNTERS) {
+    const cell = t.absent.includes(counter) ? NO_DATA : group(t[counter]);
+    lines.push(`  ${label(COUNTER_LABELS[counter])}${cell.padStart(12)}`);
+  }
+
+  if (usage.byProject.length) {
+    lines.push('', c.dim('  where they went — by project'), '');
+    for (const row of usage.byProject.slice(0, 8)) {
+      const name = names[row.projectKey] || c.dim(row.projectKey.slice(0, 8));
+      lines.push(`  ${String(name).padEnd(26)}${group(row.total).padStart(12)}`);
+    }
+  }
+
+  if (usage.byModel.length) {
+    lines.push('', c.dim('  by model'), '');
+    for (const row of usage.byModel.slice(0, 8)) {
+      lines.push(`  ${String(row.model).padEnd(26)}${group(row.total).padStart(12)}`);
+    }
+  }
+
+  const pct = usage.trend.status === 'ok' ? usage.trend.changePct : null;
+  lines.push(
+    '',
+    c.dim(`  7 days vs the 7 before: ${pct == null ? NO_DATA : `${pct >= 0 ? '+' : ''}${pct}%`}`),
+    '',
+  );
+  return lines;
+}
+
 /**
  * The report, as text.
+ *
+ * WP-83: the rate-card line appears only when `showCost` is on. It ships off,
+ * so by default this command reports tokens and never a currency.
+ *
  * @param {ReturnType<typeof computeStats>} stats
  * @param {{names?:Record<string,string>, color?:boolean, dir?:string, rateCard?:string,
- *          records?:ReturnType<typeof teamRecords>}} [opts]
+ *          records?:ReturnType<typeof teamRecords>, showCost?:boolean,
+ *          usage?:ReturnType<typeof usageReport>}} [opts]
  */
 export function renderStats(stats, opts = {}) {
   const c = palette(Boolean(opts.color));
@@ -176,8 +247,11 @@ export function renderStats(stats, opts = {}) {
   // plate and in the settings sheet. Printed even for an empty ledger:
   // "which table is this build pricing with" is a question a user asks
   // before there are any numbers, and this is the command they ask it from.
+  const showCost = opts.showCost === true;
   const rateCard = opts.rateCard || rateCardVersion();
-  const rateCardLine = c.dim(`  rate card ${rateCard} — list-price estimate, not a bill`);
+  const rateCardLine = showCost
+    ? c.dim(`  rate card ${rateCard} — list-price estimate, not a bill`)
+    : null;
 
   if (stats.records === 0) {
     lines.push(
@@ -185,8 +259,7 @@ export function renderStats(stats, opts = {}) {
       '',
       c.dim('  it fills as the floor moves; there is nothing to measure yet'),
       '',
-      rateCardLine,
-      '',
+      ...(rateCardLine ? [rateCardLine, ''] : []),
     );
     return lines.join('\n');
   }
@@ -253,8 +326,11 @@ export function renderStats(stats, opts = {}) {
     }
   }
 
-  lines.push('');
-  lines.push(rateCardLine);
+  // WP-83. Where the tokens went, in place of where the money went.
+  if (opts.usage) lines.push(...renderUsage(opts.usage, { names, color: opts.color }));
+  else lines.push('');
+
+  if (rateCardLine) lines.push(rateCardLine);
   lines.push(c.dim(`  from ${opts.dir || LEDGER_DIR} — ${group(stats.records)} records`), '');
   return lines.join('\n');
 }
@@ -262,7 +338,8 @@ export function renderStats(stats, opts = {}) {
 /**
  * @param {string[]} [argv]
  * @param {{write?:(s:string)=>void, error?:(s:string)=>void, dir?:string,
- *          cacheDir?:string, now?:number, color?:boolean}} [deps]
+ *          cacheDir?:string, now?:number, color?:boolean, showCost?:boolean,
+ *          stateFile?:string}} [deps]
  * @returns {Promise<number>}
  */
 export async function runStats(argv = [], deps = {}) {
@@ -296,12 +373,33 @@ export async function runStats(argv = [], deps = {}) {
   const teamRec = teamRecords(records, { now });
   const names = projectNames(readCache(deps.cacheDir));
 
+  // WP-83. Whether this command prints a currency at all, read from the same
+  // `state.json` the floor reads so the terminal and the window agree. A
+  // state file that is missing or unreadable is a floor with the shipped
+  // default, which is off — `readState` never throws.
+  const showCost =
+    deps.showCost ??
+    (deps.stateFile ? readState(deps.stateFile) : readState()).settings.showCost === true;
   const rateCard = rateCardVersion();
+  const usage = usageReport(records, { now, window: option(argv, '--usage') || '7d' });
 
   if (argv.includes('--json')) {
     write(
       JSON.stringify(
-        { ...stats, records: teamRec, projects: names, dir, rateCardVersion: rateCard },
+        {
+          ...stats,
+          records: teamRec,
+          projects: names,
+          dir,
+          // WP-83. The same fold the deck's Usage tab and `GET /api/stats`
+          // read, from the same function, so the three cannot disagree.
+          usage,
+          showCost,
+          // The rate card's version travels whether or not it is being shown:
+          // `--json` is for a script, and a script asking which table this
+          // build would price with is asking about the build, not the setting.
+          rateCardVersion: rateCard,
+        },
         null,
         2,
       ) + '\n',
@@ -316,6 +414,8 @@ export async function runStats(argv = [], deps = {}) {
       dir,
       records: teamRec,
       rateCard,
+      showCost,
+      usage,
     }),
   );
   return 0;
