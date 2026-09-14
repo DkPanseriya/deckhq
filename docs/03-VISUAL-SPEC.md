@@ -414,11 +414,29 @@ All baked into the backdrop bitmap once per layout change.
 | Doors | Gap in the wall plus a quarter-circle swing arc. Architectural convention, and it reads instantly. |
 | Pools of light | A soft warm radial over the manager's desk, every working desk and every threshold — baked, static, and what turns §6.1's key light into a light rather than a shadow direction. |
 
-**Furniture inventory:** bench desks with centre divider, monitors with screen glow, keyboards,
-task chairs with backrest and arms, the user's desk, sofas with cushions, coffee table, round
-dining table, pool table with cues and balls, table-tennis table with net, board-game table,
-arcade cabinet, kitchen counter with hob and sink, coffee machine, fridge, rugs (rectangular and
-round, with a border inset), potted plants at three scales.
+**Furniture inventory:** bench desks with a lit edge and a darker light-away band, monitors with
+screen glow, keyboards, task chairs with backrest and arms, tub chairs, armchairs, bar stools, the
+user's desk with its monitor and in-tray, sofas with cushions, coffee table, round dining table,
+pool table with cues and balls, table-tennis table with net, board-game table, arcade cabinet,
+kitchen counter with hob and sink, coffee machine, fridge, whiteboard, shelf, pinboard, rugs
+(rectangular and round, with a border inset), potted plants at three scales.
+
+### 6.3 The furniture set, and how big each piece is
+
+**`docs/plan/10-INTERIOR-DESIGN.md` §3.4 is the table, and `public/render/plan-furniture.js` is that
+table in code.** Nothing here restates a size, because two statements of one dimension are two
+dimensions that may disagree (§16, §35, §38). What this section owns is the four rules a piece has
+to satisfy whatever its size, all of them measured by `test/unit/interior.test.mjs`:
+
+1. **A piece reads by SHAPE, not by brightness.** Nothing inside a room is brighter than that
+   theme's wall (WP-85a), so a whiteboard, a sofa and a tub chair are told apart by their outlines.
+2. **Every seat shows its back**, every table shows its edge — a `TABLE_EDGE_U` band of the darker
+   timber on the side the light travels toward, a capped sheen on the side it comes from.
+3. **No two seat kinds share a footprint.** Four kinds, four sizes: tub 2.4 U, task 2.0, stool 1.4,
+   armchair 3.0.
+4. **A rug defines a group and never covers a room.** A project room's task rug is its desk cluster
+   plus `RUG_CLUSTER_PAD`, capped at `RUG_MAX_OVER_CLUSTER`; floor beyond that gets a **break-out
+   corner** — a round rug, two tub chairs and a side table — or stays honestly bare.
 
 Every furniture item carries a soft contact shadow. Shadows are what make a flat render read as a
 photograph rather than a diagram.

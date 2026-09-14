@@ -209,7 +209,7 @@ test('WP-78: five waiting is three in chairs and two standing, in arrival order'
   // Asked of a reception wide enough for the third chair, so the split is a
   // fact about the rule rather than about whichever box the packer handed it.
   const { room: office } = buildOffice(5, { w: 30, h: 0 });
-  const chairs = office.props.filter((p) => p.kind === 'waiting_chair');
+  const chairs = office.props.filter((p) => p.kind === 'tub_chair');
   assert.equal(chairs.length, 3);
   const queue = office.zones.filter((z) => String(z.id).startsWith(OFFICE_QUEUE_ZONE));
   assert.equal(queue.length, 2, 'the two the chairs could not take are standing');
@@ -272,7 +272,7 @@ test('WP-78: the visitor chairs are two or three, scale with the room, and never
   // given, with every chair inside the room it is in.
   for (const w of [0, 22, 24, 26, 30, 40, 46]) {
     const { room: office } = buildOffice(6, w ? { w, h: 0 } : undefined);
-    const chairs = office.props.filter((p) => p.kind === 'waiting_chair');
+    const chairs = office.props.filter((p) => p.kind === 'tub_chair');
     assert.equal(chairs.length, visitorChairCount(office.w), `fit w=${w}`);
     for (const c of chairs) {
       assert.ok(c.x >= 0 && c.x + c.w <= office.w, `a chair is through a wall at w=${w}`);

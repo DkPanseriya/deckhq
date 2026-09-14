@@ -312,6 +312,16 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   // ---- desks, benches, tables (wood tones) ----
   deskTop: '#C8AC84',
   deskEdge: '#a8906f',
+  /**
+   * The lit edge of a table top (WP-85b, §3.4's *"every table shows its edge"*).
+   *
+   * It replaces the `rgba(255,255,255,0.85)` centre divider every desk used to
+   * carry, which was a near-white line — brighter than the wall on the default
+   * theme — drawn down the middle of the one piece of furniture the person at it
+   * is supposed to be the loud thing on. `sheenOver` holds the derived form
+   * under the wall on every theme; this is the shipped default it caps.
+   */
+  deskSheen: 'rgba(255,255,255,0.16)',
   tableWood: '#DCC9AE',
 
   // ---- task chairs, sofas ----

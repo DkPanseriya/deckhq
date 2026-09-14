@@ -385,6 +385,7 @@ export function interiorHighlights(d, floor) {
     'the wool rug': over(d.rugCream, d.rugBorder),
     'the task rug': over(d.rugSage, d.rugBorder),
     'a desk top': d.deskTop,
+    'a desk edge': over(d.deskTop, d.deskSheen),
     'a lit ground': pooled(floor.wood, lightInkFor(floor.ink)),
     'a lit screed': pooled(floor.screed, lightInkFor(floor.ink)),
   };
@@ -570,6 +571,10 @@ export function materialTokensFor(theme) {
     // ---- desks, benches, tables ----
     deskTop: desk,
     deskEdge: shade(desk, -0.16),
+    // §3.4: "every table shows its edge" — a darker band on the light-away
+    // side and a sheen on the lit one. Held under the wall like every other
+    // highlight, which the near-white divider it replaces was not.
+    deskSheen: sheenOver(desk, wall, lightInk ? 0.1 : 0.16),
     tableWood: wood,
 
     // ---- chairs and sofas ----

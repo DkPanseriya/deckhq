@@ -28,6 +28,22 @@ import {
   PLATE_BAND,
   clamp,
 } from './plan-units.js';
+import {
+  LOUNGE_ARCADE_H,
+  LOUNGE_ARCADE_W,
+  LOUNGE_COFFEE_H,
+  LOUNGE_COFFEE_W,
+  LOUNGE_DINING,
+  LOUNGE_FRIDGE_H,
+  LOUNGE_FRIDGE_W,
+  LOUNGE_POOL_H,
+  LOUNGE_POOL_W,
+  LOUNGE_STOOL_PITCH,
+  LOUNGE_TT_H,
+  LOUNGE_TT_W,
+  SEAT_ARMCHAIR,
+  SEAT_STOOL,
+} from './plan-furniture.js';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
@@ -105,7 +121,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       at(z, 'tv', 4.5, 0, 6, 0.6);
       at(z, 'sofa', 3.5, 7.6, 8, 2.4, -Math.PI / 2, 'lounge-sofa-main');
       at(z, 'sofa', 0.4, 3.2, 2.4, 5, 0, 'lounge-sofa-side');
-      at(z, 'coffee_table', 5.5, 4.2, 4.5, 2.2);
+      at(z, 'coffee_table', 4.6, 4.2, LOUNGE_COFFEE_W, LOUNGE_COFFEE_H);
       at(z, 'side_table', 12.4, 3.4, 1.8, 1.8);
       at(z, 'lamp', 12.6, 6, 1.6, 1.6);
       at(z, 'plant_large', 12.4, 8.4, 2.4, 2.4);
@@ -138,13 +154,20 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       zones.push(z);
       at(z, 'counter', 1, 0.4, 11, 2, 0, 'kitchen-counter');
       at(z, 'coffee_machine', 1.6, 2.7, 1.6, 1.2);
-      at(z, 'fridge', 10, 2.6, 2.2, 2.2);
+      at(z, 'fridge', 9.9, 2.5, LOUNGE_FRIDGE_W, LOUNGE_FRIDGE_H);
       // A fruit bowl and a mug on the counter: the small domestic cues that
       // make this read as a kitchen at a glance rather than as more office
       // furniture with a different outline.
       at(z, 'fruit_bowl', 5.2, 0.9, 1.6, 1.6);
       at(z, 'bar_counter', 1, 5, 11, 1.6, 0, 'bar-counter');
-      for (let i = 0; i < 4; i++) at(z, 'bar_stool', 2 + i * 2.8, 7, 1.6, 1.6);
+      // THREE STOOLS AT A 4 U PITCH (§3.4), where there were four at 2.8.
+      //
+      // There were four stools and three places to sit at them — `spots` below
+      // has always laid three — so the fourth was a seat nobody could ever be
+      // drawn in, at a pitch that put all four shoulder to shoulder. A stool is
+      // the smallest of §3.4's four seat kinds and the pitch is what says so.
+      for (let i = 0; i < 3; i++)
+        at(z, 'bar_stool', 1.9 + i * LOUNGE_STOOL_PITCH, 7, SEAT_STOOL, SEAT_STOOL);
       at(z, 'fruit_bowl', 8.4, 5.2, 1.4, 1.4);
       at(z, 'plant_large', 11.2, 6.4, 2.2, 2.2);
       spots.push({
@@ -159,7 +182,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
         spots.push({
           id: `lounge-bar-${i}`,
           kind: 'eat',
-          x: x + 2.8 + i * 2.8,
+          x: x + 1.9 + SEAT_STOOL / 2 + i * LOUNGE_STOOL_PITCH,
           y: y + 7.8,
           angle: -Math.PI / 2,
           capacity: 1,
@@ -168,7 +191,14 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     },
   });
 
-  // ---- a quiet corner, always present: books and a plant
+  // ---- a quiet corner, always present: books, two armchairs and a plant
+  //
+  // §3.4's quiet bay, at the furniture it names: *"two armchairs, side table,
+  // bookcase, one tall plant"*. It was a six-unit sofa and a side table beside
+  // it, which is the same silhouette as the two sofa runs one block over — and
+  // §1.6's finding was one silhouette repeated. The armchair is the largest of
+  // §3.4's four seat kinds at 3.0 U, so a quiet corner reads as a quiet corner
+  // from across the room rather than as a smaller living room.
   blocks.push({
     id: 'quiet',
     w: 9,
@@ -177,16 +207,27 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       const z = { id: 'quiet-zone', x, y, w: 9, h: 6 };
       zones.push(z);
       at(z, 'bookshelf', 0.5, 0.3, 8, 1.3);
-      at(z, 'sofa', 1, 3.4, 6, 2.2, Math.PI / 2);
-      at(z, 'side_table', 7.4, 3.6, 1.8, 1.8);
+      const chairY = 2.6;
+      at(z, 'armchair', 0.6, chairY, SEAT_ARMCHAIR, SEAT_ARMCHAIR, 0);
+      at(z, 'side_table', 3.9, chairY + 0.8, 1.4, 1.4);
+      at(z, 'armchair', 5.4, chairY, SEAT_ARMCHAIR, SEAT_ARMCHAIR, Math.PI);
       at(z, 'plant_large', 7.2, 0.4, 2.2, 2.2);
+      // One seat per chair, each facing the table between them.
       spots.push({
-        id: 'lounge-quiet',
+        id: 'lounge-quiet-a',
         kind: 'lounge_idle',
-        x: x + 4,
-        y: y + 4.5,
-        angle: -Math.PI / 2,
-        capacity: 2,
+        x: x + 0.6 + SEAT_ARMCHAIR / 2,
+        y: y + chairY + SEAT_ARMCHAIR / 2,
+        angle: 0,
+        capacity: 1,
+      });
+      spots.push({
+        id: 'lounge-quiet-b',
+        kind: 'lounge_idle',
+        x: x + 5.4 + SEAT_ARMCHAIR / 2,
+        y: y + chairY + SEAT_ARMCHAIR / 2,
+        angle: Math.PI,
+        capacity: 1,
       });
     },
   });
@@ -274,7 +315,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   };
 
   if (wants(4)) {
-    game('dining', 'dining_table', 7.2, 6.2, (z, t) => {
+    game('dining', 'dining_table', LOUNGE_DINING, LOUNGE_DINING, (z, t) => {
       /** @type {Array<['N'|'S'|'E'|'W', number]>} */
       const seats = [
         ['S', 0.28],
@@ -288,7 +329,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     });
   }
   if (wants(2)) {
-    game('pool', 'pool_table', 11.2, 7.2, (z, t) => {
+    game('pool', 'pool_table', LOUNGE_POOL_W, LOUNGE_POOL_H, (z, t) => {
       at(z, 'lamp', 0.4, z.h - 2, 1.4, 1.4);
       // Opposite sides, offset along the table rather than face to face —
       // how two people actually stand around a pool table.
@@ -309,7 +350,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     });
   }
   if (wants(2)) {
-    game('tt', 'table_tennis', 10.2, 6.2, (z, t) => {
+    game('tt', 'table_tennis', LOUNGE_TT_W, LOUNGE_TT_H, (z, t) => {
       // One at each end, across the net.
       spots.push({
         id: 'lounge-tt-a',
@@ -346,7 +387,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     });
   }
   if (wants(1)) {
-    game('arcade', 'arcade_cabinet', 4.2, 5.2, (z, t) => {
+    game('arcade', 'arcade_cabinet', LOUNGE_ARCADE_W, LOUNGE_ARCADE_H, (z, t) => {
       // In front of the cabinet, facing the screen.
       spots.push({ id: 'lounge-arcade', kind: 'arcade', capacity: 1, ...atTable(t, 'S', 0.5) });
     });

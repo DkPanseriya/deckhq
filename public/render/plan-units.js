@@ -436,29 +436,25 @@ export const CORNER_PLANT_INSET = 1.2;
 export const RUG_ROOM_INSET = 4;
 
 /**
- * How much bigger than its desk cluster a rug may grow (WP-55).
+ * How much bigger than its desk cluster a rug may be drawn (WP-55, remeasured
+ * by WP-85b).
  *
  * WP-50 let the rug grow to the room with no ceiling, on the grounds that a
  * small rug in a large cell reads as desks adrift. It does — but a rug that IS
  * the room reads as bare carpet, which is what the reference floor showed: an
- * 88 x 67 rug with one two-seat table on it. A rug defines a group; past this it
- * is floor covering, and the honest answer is to make the room smaller, which
- * is what the rest of this package does.
- */
-export const RUG_MAX_OVER_CLUSTER = 1.6;
-
-/**
- * The same ceiling for a room the SERVICE COLUMN made deep (WP-59c).
+ * 88 x 67 rug with one two-seat table on it. WP-55 capped it at 1.6 and WP-59c
+ * gave a column-stretched room's DEPTH a second, looser 2.6, and §1.4 of
+ * `docs/plan/10-INTERIOR-DESIGN.md` then measured what those two together
+ * actually drew: *"a pale mint slab ~20 U across holding one 6 U desk — the
+ * largest shape in the room, at 1.31:1 against the carpet under it"*.
  *
- * "Make the room smaller" is the honest answer to a room the plan CHOSE to
- * stretch, and it is not available for one the column stretched: the building
- * is as tall as its lounge, the room beside it is given that height, and the
- * choice is between a rug under the desks and bare carpet under them. So the
- * rug is allowed further down the depth axis only, and only there — the width
- * still stops at `RUG_MAX_OVER_CLUSTER`, because nothing ever made the room
- * wider than the plan chose.
+ * ONE NUMBER NOW, AND IT IS A CEILING RATHER THAN A TARGET. §3.4 sizes the rug
+ * at `cluster + RUG_CLUSTER_PAD` — half a unit of border round the group — and
+ * this is only what stops that half unit becoming a third of the cluster again
+ * on a very small one. The floor the rug no longer covers gets the break-out
+ * corner (`plan-furniture.js`), which is furniture, rather than more rug.
  */
-export const RUG_MAX_OVER_COLUMN = 2.6;
+export const RUG_MAX_OVER_CLUSTER = 1.35;
 
 /**
  * Clear floor a project room keeps between its desk cluster and its walls.
@@ -607,8 +603,18 @@ export const OFFICE_VISITOR_MAX = 3;
  *
  * So both pitches here clear the whole stack rather than the body, and the
  * queue runs along the well's LONGER axis so it spreads rather than stacks.
+ *
+ * WP-85b BROUGHT THE CHAIR PITCH IN FROM 6.4 TO 5.2 (§3.4). §1.7 measured what
+ * 6.4 drew: *"at `OFFICE_VISITOR_PITCH = 6.4 U` the three of them are 90 px
+ * apart, reading as three unrelated discs rather than a row"*. The label stack
+ * that bought the 6.4 is still four units tall, and the chairs still clear it —
+ * the pitch is stated on the chairs and `OFFICE_QUEUE_PITCH` on the queue, and
+ * only the queue ever stacks two names in one column. What the tighter pitch
+ * buys is a ROW: three chairs at 5.2 span 12.8 U, which reads as one piece of
+ * seating rather than as three, and fits two units of reception sooner
+ * (`OFFICE_VISITOR_THIRD`).
  */
-export const OFFICE_VISITOR_PITCH = 6.4;
+export const OFFICE_VISITOR_PITCH = 5.2;
 export const OFFICE_QUEUE_PITCH = 3.8;
 export const OFFICE_QUEUE_ROW = 6.4;
 
@@ -616,8 +622,13 @@ export const OFFICE_QUEUE_ROW = 6.4;
  * The reception interior from which the manager's desk earns a THIRD chair.
  * Below it, two — a room at `OFFICE_MIN_W` has no width to spare once the sofa
  * runs have taken theirs.
+ *
+ * It fell from 26 to 24 with the pitch (WP-85b): three chairs at 5.2 U span
+ * 12.8 U rather than 15.2, so the width that used to hold two now holds three
+ * with the same clear floor either side. The rule is unchanged and so is its
+ * shape — two or three, off the room's own interior and nothing else.
  */
-export const OFFICE_VISITOR_THIRD = 26;
+export const OFFICE_VISITOR_THIRD = 24;
 
 /**
  * How many chairs stand at the manager's desk in a reception this wide.

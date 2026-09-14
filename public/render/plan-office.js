@@ -36,6 +36,16 @@ import {
   clamp,
   visitorChairCount,
 } from './plan-units.js';
+import {
+  DESK_TRAY_H,
+  DESK_TRAY_W,
+  MONITOR_H,
+  MONITOR_W,
+  OFFICE_RUG_INSET,
+  OFFICE_RUG_LEAD,
+  SEAT_TUB,
+  WATER_COOLER,
+} from './plan-furniture.js';
 
 /** The prefix every standing queue place carries, as a zone id. */
 export const OFFICE_QUEUE_ZONE = 'office-queue-';
@@ -130,6 +140,33 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     y: deskY,
     anchor: { type: 'centered', of: 'office-desk' },
   });
+  // WHAT IS ON IT (§3.4: `user desk 8-14 x 3 with a monitor and a tray`).
+  //
+  // Every other desk in the building carries a monitor and this one carried
+  // nothing, which is what made the room's one piece of furniture read as a
+  // counter rather than as somebody's desk. Two objects at two sizes, on the
+  // desk's own zone so they travel with it at whatever width the room gives it.
+  const monitorDx = deskW * 0.3;
+  props.push({
+    kind: 'monitor',
+    w: MONITOR_W,
+    h: MONITOR_H,
+    angle: 0,
+    x: deskX + monitorDx,
+    y: deskY + 0.5,
+    anchor: { type: 'zone', of: 'office-desk', dx: monitorDx, dy: 0.5 },
+  });
+  const trayDx = deskW - DESK_TRAY_W - 0.7;
+  const trayDy = (3 - DESK_TRAY_H) / 2;
+  props.push({
+    kind: 'desk_tray',
+    w: DESK_TRAY_W,
+    h: DESK_TRAY_H,
+    angle: 0,
+    x: deskX + trayDx,
+    y: deskY + trayDy,
+    anchor: { type: 'zone', of: 'office-desk', dx: trayDx, dy: trayDy },
+  });
   // The manager sits BEHIND the desk, between it and the north wall, looking
   // down the room at whoever is in the guest chair.
   props.push({
@@ -172,23 +209,31 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // people who are waiting on HIM at his desk, so the chairs are two or three
   // - `visitorChairCount`, off the desk's own width, so a bigger room gets a
   // third rather than a wider gap - and the sofas seat nobody.
+  //
+  // WP-85b: THEY ARE TUB CHAIRS, AT 2.4 U AND A 5.2 U PITCH (§3.4). §1.7
+  // measured the old row — *"visitor chairs are 28 px and vanish under a 24 px
+  // character, and at 6.4 U the three of them are 90 px apart, reading as three
+  // unrelated discs rather than a row"* — and WP-79's figure is bigger again. A
+  // wider seat at a tighter pitch is one piece of seating rather than three, and
+  // the rug below runs up under it so the row stands IN the waiting area rather
+  // than in front of it.
   const deskCentre = { x: deskX + deskW / 2, y: deskY + 1.5 };
   const visitors = visitorChairCount(IN_W);
   const visitorY = deskY + 3 + 1.4;
   const visitorRun = (visitors - 1) * OFFICE_VISITOR_PITCH;
   for (let i = 0; i < visitors; i++) {
     const cx = deskX + deskW / 2 - visitorRun / 2 + i * OFFICE_VISITOR_PITCH;
-    const cy = visitorY + CHAIR / 2;
+    const cy = visitorY + SEAT_TUB / 2;
     const id = OFFICE_VISITOR_ZONE + i;
-    zones.push({ id, x: cx - CHAIR / 2, y: cy - CHAIR / 2, w: CHAIR, h: CHAIR });
+    zones.push({ id, x: cx - SEAT_TUB / 2, y: cy - SEAT_TUB / 2, w: SEAT_TUB, h: SEAT_TUB });
     props.push({
-      kind: 'waiting_chair',
+      kind: 'tub_chair',
       id,
-      w: CHAIR,
-      h: CHAIR,
+      w: SEAT_TUB,
+      h: SEAT_TUB,
       angle: angleTo({ x: cx, y: cy }, deskCentre),
-      x: cx - CHAIR / 2,
-      y: cy - CHAIR / 2,
+      x: cx - SEAT_TUB / 2,
+      y: cy - SEAT_TUB / 2,
       anchor: { type: 'centered', of: id },
     });
   }
@@ -200,7 +245,7 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // many the wall seating takes; whatever is left needs loose chairs, and the
   // room grows to hold those rather than laying them out past its own south
   // wall. Growing only ever increases the wall seating, so one pass converges.
-  const bandTop = visitorY + CHAIR + 2.4;
+  const bandTop = visitorY + SEAT_TUB + 2.4;
   const backW = Math.max(4, IN_W - (PAD + SOFA_D) * 2);
   // THE QUEUE, AND THE ROOM IT NEEDS.
   //
@@ -296,32 +341,57 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   const wellW = Math.max(4, IN_W - 2 * (PAD + SOFA_D));
   const wellH = Math.max(4, IN_H_FINAL - PAD - SOFA_D - wellY);
   zones.push({ id: 'office-well', x: wellX, y: wellY, w: wellW, h: wellH });
-  // A rug defines the seating group; it is not floor covering. Held to a
-  // sensible proportion so a wide reception gets a rug rather than a stripe,
-  // and inset enough that the boards read all the way round it.
-  // Wide enough to reach the seating it belongs to. Capping the rug's aspect
-  // at 2.4:1 left a shallow reception with a rug stranded nine units clear of
-  // the sofas on either side of it — the floating-prop defect, in the one room
-  // the user looks at first.
-  const rugH = Math.max(3, wellH - 2.4);
-  const rugW = Math.max(4, wellW - 2.4);
-  props.push({
+
+  // THE WAITING AREA, AND THE WOOL RUG THAT IS THE WHOLE OF IT (§3.4, §3.7).
+  //
+  // The rug used to sit inside the well — under the low table, clear of the
+  // chairs at the desk — which made the waiting area a thing in the middle of
+  // the floor and the chairs a row in front of a desk somewhere else. §3.7 asks
+  // for one place: *"the waiting room (rug, three tub chairs facing the desk
+  // across it, sofa runs on three walls, a low table with something on it)"*.
+  //
+  // So the rug is anchored to a zone that STARTS ABOVE THE CHAIRS and runs down
+  // to the back sofa, the chairs stand on it, and the queue forms down it. It is
+  // the waiting area less `OFFICE_RUG_INSET` a side, so the boards read all the
+  // way round it and every sofa run still touches the rug it encloses — §57's
+  // invariant, which `floor-integrity.test.mjs` asserts, and the reason §3.4's
+  // `≤12 deep` is not adopted (see `plan-furniture.js`).
+  const waitTop = visitorY - OFFICE_RUG_LEAD;
+  const waitH = Math.max(4, wellY + wellH - waitTop);
+  zones.push({ id: 'office-waiting', x: wellX, y: waitTop, w: wellW, h: waitH });
+  const rugW = Math.max(4, wellW - OFFICE_RUG_INSET * 2);
+  const rugH = Math.max(4, waitH - OFFICE_RUG_INSET);
+  const rugDx = (wellW - rugW) / 2;
+  // UNSHIFTED, so the rug is painted before everything that stands on it. The
+  // props array is the paint order, and a rug that now reaches up under the
+  // chairs would otherwise be drawn over them.
+  props.unshift({
     kind: 'rug',
+    // The slate wool, not the task sage (§3.1, owner decision 2).
+    tone: 'wool',
     w: rugW,
     h: rugH,
     angle: 0,
-    x: wellX + (wellW - rugW) / 2,
-    y: wellY + 1.2,
-    anchor: { type: 'centered', of: 'office-well' },
+    x: wellX + rugDx,
+    y: waitTop,
+    anchor: { type: 'zone', of: 'office-waiting', dx: rugDx, dy: 0 },
   });
+  // THE LOW TABLE GOES IN FRONT OF THE BACK SOFA, not in the middle of the room.
+  //
+  // §3.7: *"The middle stays clear, because the middle is where the queue
+  // forms."* Centred on the well — where it was — it stood exactly on the
+  // queue's second rank, and a coffee table is a thing you put in front of a
+  // sofa anyway. Attached to the run it belongs to, so it travels with it at
+  // whatever depth the room turns out to have.
+  const lowW = clamp(wellW * 0.4, 3, 7);
   props.push({
     kind: 'magazine_table',
-    w: clamp(wellW * 0.4, 3, 7),
+    w: lowW,
     h: 3,
     angle: 0,
-    x: wellX,
-    y: wellY,
-    anchor: { type: 'centered', of: 'office-well' },
+    x: wellX + (wellW - lowW) / 2,
+    y: IN_H_FINAL - PAD - SOFA_D - 3 - 1.2,
+    anchor: { type: 'attached', to: 'wait-sofa-s', edge: 'N', along: (backW - lowW) / 2, gap: 1.2 },
   });
   // The small pieces bracket the head of the seating band. Each is attached
   // to the sofa run it stands beside, so it travels with it.
@@ -346,8 +416,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   });
   props.push({
     kind: 'water_cooler',
-    w: 1.4,
-    h: 1.4,
+    w: WATER_COOLER,
+    h: WATER_COOLER,
     angle: 0,
     x: PAD + 0.7,
     y: bandTop - 4.4,
@@ -592,7 +662,7 @@ export function seatOffice(room, waitingCount) {
 
   const near = (p) => Math.hypot(p.x - deskCentre.x, p.y - deskCentre.y);
   const chairs = room.props
-    .filter((p) => p.kind === 'waiting_chair')
+    .filter((p) => p.kind === 'tub_chair')
     .map((p) => ({ x: p.x + p.w / 2, y: p.y + p.h / 2 }))
     .sort((a, b) => near(a) - near(b) || a.x - b.x || a.y - b.y);
   for (const c of chairs) place(c.x, c.y);

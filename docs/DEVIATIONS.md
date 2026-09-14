@@ -16542,3 +16542,176 @@ not move_ buys.
   fills 2.52 units above them where the old rig hung half its height either side of the centre, so
   the 44 px box now stands the figure on its bottom edge. It was checked against the numbers and in
   the standalone proof page, not in the running panel.
+
+
+## 163. WP-85b — the furniture set, and two things that were drawn square
+
+WP-85a made the floor quiet. This is the package that makes the things standing on it legible:
+`docs/plan/10-INTERIOR-DESIGN.md` §3.4's table of what each room is furnished with and how big every
+piece is, built as code, plus the two room compositions §3.7 asks for. It is the first interior
+package that moves the PLAN, so unlike 85a its golden diff is furniture and not paint.
+
+### 163.1 The table is a module, not a comment
+
+`public/render/plan-furniture.js` is §3.4 in code, and it is its own module because `plan-units.js`
+was already at WP-22's 900-line ceiling and because the two answer different questions: a dimension
+of the PLAN (how wide a corridor is, how tall the lounge may be padded) is read by the envelope
+search, and a piece of FURNITURE is read by one room builder and by nothing else.
+
+Everything below is a size in **plan units**, which is the rule WP-85a established for patterns and
+this extends to objects: a unit is about 0.30 m, so every number is a claim about a real piece of
+furniture rather than about a bitmap.
+
+### 163.2 Four seat kinds, four footprints, and why that is a silhouette rule
+
+§3.4: *"No two seat kinds in one room share a footprint: tub 2.4 U, task 2.0, stool 1.4, armchair
+3.0."* At the size a floor is actually drawn at nobody tells two seats apart by their upholstery —
+WP-85a took the brightness out of the furniture on purpose — so the only thing left is how much floor
+a seat takes and what outline it has. The four are now really four:
+
+- **The task chair** keeps its painter: a rounded square with an arm down each side.
+- **The tub chair** is new, 2.4 U and round, with one continuous wrap-around back. The reception's
+  visitor chair was a `waiting_chair` — a task chair wearing a second kind name, with a comment
+  saying so — at 2.0 U, which §1.7 measured as *"28 px, vanishing under a 24 px character"*. WP-79's
+  figure is bigger again. The kind is gone; `tub_chair` is what the reception and the break-out
+  corner both lay.
+- **The stool** is 1.4 U. The counter had **four** stools at a 2.8 U pitch and **three** places to
+  sit at them, so the fourth was a seat nobody could ever be drawn in. Three at a 4 U pitch.
+- **The armchair** is new, 3.0 U, and it is what §3.4's quiet bay is made of: *"two armchairs, side
+  table, bookcase, one tall plant"*. The quiet corner was a six-unit sofa with the same silhouette as
+  the two runs one block over, which is §1.6's finding — one silhouette repeated — inside one room.
+
+The tub chair is drawn **frame first and cushion inside it**, which is the one thing worth recording
+about its painter. The first version was the other way round — a pale disc with a thin darker arc —
+and on a washed carpet that made the chair the brightest object in its room while the person in it
+was not, which is §1.2's inversion re-introduced one prop at a time.
+
+### 163.3 The rug stopped being floor covering, and the floor it gave back became furniture
+
+`RUG_MAX_OVER_CLUSTER` was 1.6 and `RUG_MAX_OVER_COLUMN` 2.6, per axis, and every rule around them
+still asked the rug to take whatever floor was going. §1.4 measured the result: *"a pale mint slab
+~20 U across holding one 6 U desk — the largest shape in the room, at 1.31:1 against the carpet under
+it."*
+
+A task rug is its **desk cluster plus `RUG_CLUSTER_PAD` (1.0 U)**, capped at **1.35×** on both axes.
+Half a unit of border round the group, and the cap only bites on a cluster small enough that half a
+unit would be a third of it again. `RUG_MAX_OVER_COLUMN` is deleted.
+
+It is measured off the **`desk-group` zone** rather than off the internal `cluster` box, and that is
+deliberate: `desk-group` is what the plan publishes as "the desks and the chairs round them", it is
+what §5's acceptance is stated over, and `cluster` includes the plant standing at the first table's
+end. A ceiling measured against a different number from the one anybody checks is a ceiling that
+passes its own test and fails the document.
+
+**What the room does with the floor the rug no longer covers is the break-out corner** (§3.4, owner
+decision 4): a round rug 6.4 U across, two tub chairs facing each other and a 1.4 U table between
+them. Two conditions, and they measure different things — the **ratio** (clear floor over 2.2× the
+cluster's area) asks whether the room should have a second destination at all, and the **band**
+(`BREAKOUT_BAND`, 7.6 U clear on both axes) asks whether the one we draw will fit. A ratio on its own
+puts a six-unit rug in a five-unit gap; a band on its own furnishes a room that was never empty.
+`breakoutFits()` is the whole rule, stated once, so the plan, the test and the document cannot each
+have their own threshold.
+
+**A room with a break-out group puts its desks at the top.** This is the part that is a composition
+change rather than a size, and it is the reason the group exists at all. `plan.js`'s `place` centres
+a room's contents in whatever cell it was given, so a room half as deep again as its furniture needs
+gets its spare floor as **two** equal strips — one of them under the plate, neither big enough for
+anything. A room with a second destination gives the whole of that floor to the destination, which is
+the composition `crop-project-room@2x.png` draws. The lift is written as `desired - slack` and
+`place`'s own centring puts it back, so there is still exactly one frame and one place that centres.
+
+### 163.4 The reception is one place instead of two
+
+§3.7 asks for *"the waiting room (rug, three tub chairs facing the desk across it, sofa runs on three
+walls, a low table with something on it)"*. What was there was a row of chairs in front of a desk and,
+separately, a rug in the middle of the floor with a table on it.
+
+- The **wool rug is anchored to a zone that starts above the chairs** (`office-waiting`) and runs
+  down to the back sofa. The chairs stand on it and the queue forms down it. It is unshifted to the
+  head of the props array, because the array is the paint order and a rug that now reaches up under
+  the chairs would otherwise be drawn over them.
+- The **visitor pitch fell from 6.4 U to 5.2** (§3.4). §1.7: *"at 6.4 U the three of them are 90 px
+  apart, reading as three unrelated discs rather than a row."* Three at 5.2 span 12.8 U and read as
+  one piece of seating. `OFFICE_VISITOR_THIRD` came down from 26 to 24 with it — the same two-or-three
+  rule, reached two units of reception sooner, because the tighter pitch is what buys the third chair.
+  WP-78's arrival order is untouched: `seatOffice` still sorts the chairs by their distance from the
+  desk and still fills every one before anybody stands.
+- The **low table moved off the middle**. §3.7: *"The middle stays clear, because the middle is where
+  the queue forms."* Centred on the well it stood exactly on the queue's second rank. It is attached
+  to the back sofa run now, which is where a coffee table belongs anyway.
+- The **manager's desk carries a monitor and an in-tray** (§3.4). Every other desk in the building
+  had something on it; the one room the user reads first had a bare top, which reads as a counter.
+
+**§3.4's `≤12 deep` on the wool rug is NOT adopted**, and this is the one place the build departs
+from the design of record. `floor-integrity.test.mjs` holds every reception sofa within 2.5 U of the
+rug it encloses — §57's remedy for *"sofas hard against the walls and the rug they surround stranded
+in the middle of a much wider room"* — and a 12 U ceiling strands the back run by 3.4 U in a reception
+deep enough to want one. §1.4's "a rug defines a group, past that it is floor covering" is satisfied
+here by the **sofas bounding it**, which is not true of a project room's task rug and is exactly why
+the two rules differ.
+
+### 163.5 Two defects that fell out, and neither was reachable from any test
+
+**A desk carried a near-white line down the middle of it.** `fillRect(-w/2, -3, w, 6)` in
+`rgba(255,255,255,0.85)`, on every desk on the floor. Composited over the default theme's `deskTop`
+that is brighter than the default theme's own **wall**, which is the §1.2 rule WP-85a enforced
+everywhere it could reach — and it could not reach here, because `interiorHighlights` measures
+material TOKENS and this was a literal in a painter. It is §3.4's edge band now: `TABLE_EDGE_U`
+(0.15 U) of the darker timber on the side the light travels toward, and a new `deskSheen` on the side
+it comes from, capped under the wall by the same `sheenOver` every other highlight goes through.
+
+**Every rectangular prop in a ROW reception was drawn square.** `paintProp` clips to a prop's own
+axis-aligned box and then rotates by `prop.angle`. Every prop on this floor carries `angle` 0 except
+in the row reception, which `buildOfficeRow` builds by **reflecting the portrait room in the
+diagonal** and therefore hands every prop a quarter turn — so an 8.8 × 3 user desk, a 24.8 × 14 wool
+rug, a 3 × 6.4 low table and a 0.4 × 4.8 framed print were each drawn turned inside a clip cut to
+their unturned box, and what survived the clip was the square in the middle. `sofa` and `manager` had
+cancelled the turn by hand since WP-22 — *"a 32 x 2.6 back run rotated by its own facing renders as a
+2.6 x 32 band straight across the room"* — and nothing else had, because nothing else had ever been
+looked at on the one floor where `angle` is not zero.
+
+`unturn(ctx, prop)` in `backdrop-paint.js` is the shared cancel, and
+`test/unit/interior.test.mjs` reads the painters' own source for it, kind by kind, in the style of
+the `paintCarpet` check: the defect is a MISSING CALL and no measurement of an output colour will
+ever find one.
+
+**And the slate wool existed everywhere except on the floor.** WP-85a derived `rugCream` as the
+reception's slate (§3.1, owner decision 2), guarded it, and wrote it into the changelog — and both
+rug painters read one token each, with the rectangular one reading `rugSage`. So every rug in the
+building was the task sage. A rug's textile is a property of the PROP now (`tone: 'wool' | 'task'`),
+because a painter cannot ask which room it is in; it is the same seam `prop.tall` already uses.
+
+### 163.6 What moved, and what did not
+
+The plan hash in `interior.test.mjs` moved **once, deliberately**, from `708e9f8e` to `47f20830`.
+WP-85a's test was written to prove a paint package had not moved a wall; a furniture package moves
+walls by definition — a capped whiteboard, a rug at `cluster + 1.0`, a 2.4 U tub chair and a pool
+table at §3.4's 13.5 × 7 all change what a room bids for — so the constant was re-taken and the test
+kept its job.
+
+The **plate band is still furniture-free by construction** (§3.8, `03-VISUAL-SPEC.md` §7), and it is
+asserted now rather than assumed, because this package moves the desks upward in every room that gets
+a break-out group and that is the one change that could put a desk under a name.
+
+The **seat invariant is asserted for the first time**: a seat's `(x, y)` *is* the figure's ground
+contact (`rig-metrics.js`), so every desk seat is checked to lie inside a real chair's footprint and
+the contact ellipse is checked never to overlap a desk top. Desks are sized against a 34 px robot
+now; a chair pushed one notch closer to its table is a figure standing on the table, and nothing
+measured that before.
+
+### 163.7 Not done, and not claimed
+
+- **§5's "no room has a clear-floor patch larger than 10 U × 10 U" is not enforced.** It is a density
+  statement, it is measured over `floor-integrity.test.mjs`'s sixteen populations, and the levers for
+  it — planter runs, prop density, plant placement — are WP-85c's. What this package guarantees is
+  the break-out group and its threshold, both measured.
+- **The reception's bookcases are not laid.** §3.4 lists *"bookcase 1.2 × 8 on each long wall"*; that
+  is two more props in a room, which is the density question 85c owns.
+- **Plant count and placement are untouched**, as scoped: three corner `plant_large` plus one per
+  table in a project room, two in the reception. §3.6 caps a project room at two and no two adjacent
+  sharing a silhouette; that is 85c.
+- **The lounge bays are not built.** The pieces inside it are at §3.4's sizes and the quiet corner is
+  §3.4's quiet bay, but the four named bays with their own grounds and planter runs are 85c.
+- **Nothing was judged on a machine other than the goldens' 1600 × 1000.** The break-out threshold is
+  measured over eleven populations at two window shapes in the test suite, which is where it bites
+  both ways; the PICTURE was only looked at on the committed captures and on a 2× crop of two of them.
