@@ -1,19 +1,21 @@
 /**
  * Every dimension, colour and threshold the rig is drawn from, and the four
- * text helpers beside them (WP-22 follow-up).
+ * text helpers beside them (WP-22 follow-up; the character rework is WP-79).
  *
- * Split out of `rig.js` unchanged. Each proportion is expressed against
- * `BASE_U` — the px-per-unit these were tuned at — which is what lets the rig
- * scale cleanly across the whole zoom range without a sprite sheet. Skin,
- * hair and prop materials are constant across agents by design
- * (docs/03-VISUAL-SPEC.md §3): individuality is carried by the name label,
- * not by appearance.
+ * WP-79 replaced the doodle — a top-down ellipse with stroke limbs — with
+ * **B**, the 45° three-quarter robot from `docs/media/design/character`. The
+ * figure is BILLBOARDED: it never rotates with `bodyAngle`, and the contact
+ * ellipse under its feet is the only part of it that lies in the floor's own
+ * plane. Everything about it is authored in ONE local frame (origin at the
+ * ground contact, y UP, 1 local unit = `RIG_UNIT_U` plan units), which is what
+ * lets the whole figure be stated once and drawn at any zoom without a sprite
+ * sheet.
  *
- * `rig.js` re-exports every name, so `scene-draw.js`, `minifloor.js` and
- * three test files import exactly what they imported before.
+ * `rig.js` re-exports every name, so `scene-draw.js`, `minifloor.js` and the
+ * test files import exactly what they imported before.
  */
 
-import { PALETTE } from './palette.js';
+import { channelsOf, mixHex, PALETTE } from './palette.js';
 
 export const TAU = Math.PI * 2;
 export const BASE_U = 14; // reference px-per-unit these proportions were tuned at
@@ -23,6 +25,34 @@ export const BASE_U = 14; // reference px-per-unit these proportions were tuned 
 export const SKIN = '#E4B98E';
 export const HAIR = '#3C2A1C';
 export const OUTLINE = 'rgba(255,255,255,0.85)';
+
+// ---- B's own materials (WP-79) --------------------------------------------
+//
+// THE THREE LESSONS FROM THE DESIGN STUDY, restated where they are enforced
+// (`docs/media/design/character/README.md`):
+//
+//   1. **The state colour owns the whole body mass, head included.** The old
+//      rig spent the head and the hair on identity and left a coloured
+//      waistcoat, which at 22 px read as a grey blob with a stripe. Every
+//      shape B draws is a tint of `opts.color`, so a character is one coherent
+//      hue at a glance and the hue is the state.
+//   2. **The face is a bright pane with a dark mark.** A lit screen on a
+//      coloured head survives 24 px; a dark screen with a light mark does not
+//      (measured on all four candidates — the study's own finding).
+//   3. **Identity is two or three SMALL elements**, never the body: the
+//      antenna tip, the ear cups, the chest badge and its glyph, the boots.
+//      Any louder and B reads as a teddy bear.
+
+/** The line work on the figure: one warm near-black, never pure black. */
+export const RIG_INK = '#382F26';
+/** A lit visor. Bright pane, dark mark — lesson 2. */
+export const RIG_PANE = '#F7F1E1';
+/** A mark ON a dark pane (the over-head badge's glyph). */
+export const RIG_MARK = '#FFF6E6';
+/** A dead visor, and an unlit lamp: `ended` has no power. */
+export const RIG_PANE_DEAD = '#CFC9BD';
+/** The mark on a dead visor. */
+export const RIG_OFF = '#9A938A';
 export const SELECTION_RING_COLOR = 'rgba(74,68,56,0.55)';
 export const CLOUD_FILL = 'rgba(252, 250, 244, 0.95)';
 export const CLOUD_EDGE = 'rgba(90, 78, 62, 0.45)';
@@ -68,37 +98,76 @@ export const SHADOW_RX = 0.86,
   SHADOW_RY = 0.39,
   SHADOW_OX = 0,
   SHADOW_OY = 0;
-export const TORSO_RX = 0.82,
-  TORSO_RY = 0.61;
-export const HEAD_R = 0.5,
-  HEAD_OFFSET_Y = -0.95;
-export const SHOULDER_OFFSET_X = 0.5,
-  // Kept symmetric with HIP_OFFSET_Y below: shoulders sit as far forward of
-  // centre as the hips sit behind it. At the old -0.2, the `type` clip's
-  // reach (clips.js TYPE_ARM: shoulder=1.2, elbow=0.35) landed the typing
-  // hand only ~0.01 local units on the correct (forward, head-side) side of
-  // centre — effectively a coin flip once floating point is involved, and
-  // `type` drives `working`, the single commonest state on a real machine.
-  // -0.4 gives every reaching pose real margin on the correct side without
-  // moving the reach angles themselves (verified against all 16 clips in
-  // clips.js; see test/unit/rig-orientation.test.mjs).
-  SHOULDER_OFFSET_Y = -0.4;
-export const HIP_OFFSET_X = 0.32,
-  HIP_OFFSET_Y = 0.4;
-// Identity marks (CONTRACTS-WP15.md §2) and the manager's suit accents share
-// this local frame: COLLAR_OFFSET_Y sits between the shoulder line and the
-// head (the neckline); GLYPH_OFFSET is "the shoulder/back" the spec calls
-// for — slightly behind centre (local +y) and to one side.
-export const COLLAR_OFFSET_Y = -0.58;
-export const GLYPH_OFFSET_X = 0.4,
-  GLYPH_OFFSET_Y = 0.08;
-export const ARM_LEN1 = 0.55,
-  ARM_LEN2 = 0.5,
-  ARM_WIDTH = 0.22,
-  HAND_R = 0.16;
-export const LEG_LEN_STAND = 0.55,
-  LEG_LEN_SEATED = 0.28,
-  LEG_WIDTH = 0.24;
+// ---- B's local frame (WP-79) ----------------------------------------------
+//
+// The figure is authored once, in a frame whose origin is the ground contact,
+// whose y runs UP, and whose unit is the figure's own nominal height. Nothing
+// in that frame knows about px or about zoom; `rigFrame()` in `rig-pose.js`
+// is the single place a local point becomes a screen point.
+//
+// WHY THE FRAME UNIT IS TWO PLAN UNITS. The design's in-situ test
+// (`docs/media/design/character/in-situ.png`, a 1:1 crop of
+// `test/goldens/win32/empty.png`) puts the figure at **34 px** on that floor,
+// whose fit scale is ~16.5 px per plan unit — so one frame unit is ~2.06 plan
+// units, and 2 is the round number inside that. It is the whole size decision,
+// and it is the one the owner signed off in the sheet rather than a taste call
+// made here.
+
+/** B's local frame: 1 local unit = this many plan units. */
+export const RIG_UNIT_U = 2.0;
+
+/**
+ * The local y of the tallest thing B draws — the antenna finial on a standing
+ * figure — so `BODY_HEIGHT_U` below stays a real measurement of the figure
+ * rather than a number that used to be one.
+ */
+export const RIG_CROWN = 1.26;
+
+/**
+ * The scale at which B stops drawing its quiet half: the rim halo, the chest
+ * glyph and the far arm (the design README's own risk note — "the rim-halo
+ * pass doubles stroke work, so at 100 agents the halo, chest glyph and far
+ * limbs should drop below ~30 px"). Measured on the FIGURE's height in screen
+ * px, not on `u`, because that is what the note is about.
+ *
+ * The raised hand and the visor are drawn at every level and are never in this
+ * list: they are the two things the floor exists to say.
+ */
+export const RIG_DETAIL_MIN_PX = 30;
+
+/**
+ * Below this the state mark on the visor swaps to ONE bold form instead of its
+ * full drawing. A three-bar `working` glyph at 20 px of figure is three grey
+ * pixels; one bar is still a bar.
+ *
+ * The design README says 34, and this is 30 — the one number in this package
+ * that departs from the study, and it departs because the study's own in-situ
+ * test settles it. B is 33 px of frame at the fit scale that test was taken at,
+ * so a swap at 34 would mean the floor NEVER draws a full mark: every figure on
+ * every golden would carry the fallback, and the six marks the design drew
+ * would exist only on the sheet. 30 is where a three-bar mark actually stops
+ * resolving, measured at 2× on the regenerated goldens.
+ */
+export const RIG_MARK_MIN_PX = 30;
+
+/**
+ * HOW HIGH ABOVE THE FEET THE OVER-HEAD SLOT STARTS, in plan units (WP-79).
+ *
+ * The state icon, the tool bubble, the thought cloud and the waiting badge all
+ * hang off the ground contact rather than off the crown, because they are ONE
+ * slot and a slot that moved with each figure's own antenna would put two
+ * neighbours' icons at two heights. It was 1.05 U while a character's crown sat
+ * at 1.45 U — the icon deliberately overlapped the top of the head a little —
+ * and B's crown is at `BODY_HEIGHT_U` (2.52 U), so it moves by the same
+ * difference and keeps the same small overlap.
+ *
+ * `CHROME_BADGE_U` is the waiting badge, which sits ABOVE the icon: it has to
+ * clear `max(ICON_MIN_PX, u * 0.9)` of icon on top of the offset below, which
+ * at every scale the floor is drawn at is under 1.1 U.
+ */
+export const CHROME_TOP_U = 2.35;
+export const CHROME_BUBBLE_U = 3.05;
+export const CHROME_BADGE_U = 3.45;
 /**
  * The radius, in plan units, of the ring drawn around the selected character.
  *
@@ -113,17 +182,25 @@ export const SELECTION_RING_R = 1.35;
 export const RING_BASE_R = 1.15;
 
 /**
- * A standing character's height in plan units, crown to sole: the top of the
- * head (`HEAD_OFFSET_Y - HEAD_R`) down to the far end of a leg at rest, plus
- * the round cap on the leg stroke.
+ * A standing character's height in plan units, crown to sole.
  *
  * Exported because `05-GUI-UX-SPEC.md` §6.2's "a character body is never under
  * 16 px" is a claim about THIS number times the character scale, and a test
  * that checks it must measure what the rig actually draws rather than a second
  * estimate of it (docs/DEVIATIONS.md §16, §35, §38: two representations of the
  * same thing, allowed to disagree).
+ *
+ * WP-79 kept the number — `2.0 × 1.26` is 2.52, exactly what the old rig's
+ * crown-to-sole came to — and that is deliberate rather than lucky: it is
+ * derived from B's own frame, and B was sized to the design's in-situ test, but
+ * having it land on the old value means the floor's CAMERA does not move.
+ * `CHAR_MIN_PX_PER_UNIT`, `CHAR_MAX_PX_PER_UNIT`, the fit ceiling, the hit box
+ * and the halo pool's span are all quotients of this number, and every one of
+ * them is unchanged. What changed is what is drawn inside the height: the old
+ * rig spent a third of it on thin splayed limbs and read as 22 px of coloured
+ * mass; B fills it.
  */
-export const BODY_HEIGHT_U = HEAD_R - HEAD_OFFSET_Y + HIP_OFFSET_Y + LEG_LEN_STAND + LEG_WIDTH / 2;
+export const BODY_HEIGHT_U = RIG_UNIT_U * RIG_CROWN;
 
 /**
  * Per-element legibility floors, in screen pixels (05-GUI-UX-SPEC.md §6.2's
@@ -140,6 +217,46 @@ export const LEGIBILITY_MIN_PX = Object.freeze({ body: 16, label: 11, icon: 12, 
 export const LABEL_MIN_PX = LEGIBILITY_MIN_PX.label;
 export const ICON_MIN_PX = LEGIBILITY_MIN_PX.icon;
 export const BADGE_MIN_PX = LEGIBILITY_MIN_PX.badge;
+
+// ---- the state colour, fanned out (WP-79) ---------------------------------
+
+/**
+ * Toward white (`f > 0`) or toward black (`f < 0`), by `|f|`.
+ * @param {string} hex @param {number} f
+ */
+export function shade(hex, f) {
+  return mixHex(hex, f > 0 ? '#ffffff' : '#000000', Math.abs(f));
+}
+
+/** The same colour at `a` opacity, as an `rgba()` string. */
+export function fade(hex, a) {
+  const ch = channelsOf(hex) || [0, 0, 0];
+  return `rgba(${ch[0]},${ch[1]},${ch[2]},${a})`;
+}
+
+/**
+ * The five tints every part of B is painted in, all of them the state colour.
+ *
+ * This function IS lesson 1 (see the header): there is no second hue anywhere
+ * on the body, so a character is one mass of one colour at 24 px rather than a
+ * grey shape with a coloured panel. `col` is the caller's colour untouched and
+ * at full strength — `test/unit/identity-visuals.test.mjs` measures that the
+ * barrel is filled with exactly it, which is VISUAL-SPEC §5's whole contract.
+ *
+ * @param {string} color the resolved state colour
+ * @param {boolean} [dead] `ended`: the visor is off and the lamp is out
+ */
+export function rigTints(color, dead) {
+  return {
+    col: color,
+    shell: shade(color, 0.58), // mitts, dome highlight: light, still the state hue
+    lite: shade(color, 0.24), // the lit top planes that sell the 45° tilt
+    dark: shade(color, -0.2), // the chest plate
+    deep: shade(color, -0.34), // the base, the ear cups, the far arm
+    glass: shade(color, -0.6), // the mark on the lit visor
+    dead: !!dead,
+  };
+}
 
 /**
  * The largest a name label is ever set (WP-59).

@@ -454,12 +454,13 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
     'drawCharacter and drawManagerFigure must each lay a halo',
   );
   // Under the body, not over it: inside `drawCharacter` the halo call precedes
-  // the contact shadow, and the rim pass precedes the legs. Measured on the
-  // function's own text, because the import block at the top of the file names
-  // all three in a different order and would answer the question wrongly.
+  // the contact shadow, and the rim pass precedes the first part of the figure
+  // (WP-79: the base, where it used to be the legs). Measured on the function's
+  // own text, because the import block at the top of the file names all three
+  // in a different order and would answer the question wrongly.
   const fn = rig.slice(rig.indexOf('export function drawCharacter'));
   assert.ok(fn.indexOf('drawFigureHalo(') < fn.indexOf('drawContactShadow('));
-  assert.ok(fn.indexOf('drawFigureRim(') < fn.indexOf('drawLegs(ctx, pose, ox, by'));
+  assert.ok(fn.indexOf('drawFigureRim(') < fn.indexOf('drawRigBase(ctx)'));
   const body = fs.readFileSync(path.join(RENDER, 'rig-body.js'), 'utf8');
   assert.match(body, /if \(lod < 1\) return false;/);
 });

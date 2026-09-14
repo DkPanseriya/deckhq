@@ -347,8 +347,15 @@ test('drawMiniFrame paints the rooms, then one character per person', () => {
   assert.ok(Math.abs(ground[2] - composed.shot.w * composed.scale) < 1e-6);
   assert.ok(ground[2] < VIEW.width);
 
-  // The people cost something, and each one costs the same as the last: draw
-  // the identical composition with nobody in it, then with one, then with two.
+  // The people cost something, and each one costs about the same as the last:
+  // draw the identical composition with nobody in it, then with one, then with
+  // two.
+  //
+  // "About", since WP-79: identity carries SILHOUETTE now — a barrel width, a
+  // dome size and one of six crown accessories — so two robots in the same
+  // state are not the same number of paths. The property that matters is
+  // unchanged and is what is asserted below: the cost is per-person and
+  // bounded, rather than growing with the crowd.
   //
   // The two compared are the two in the SAME state. WP-78 put the raised hand
   // in this window as well, and a raised hand is not the same number of
@@ -372,7 +379,13 @@ test('drawMiniFrame paints the rooms, then one character per person', () => {
   const one = cost(alike.slice(0, 1));
   const both = cost(alike);
   assert.ok(one > none, 'a person left no mark on the canvas');
-  assert.equal(both - one, one - none, 'the two characters did not cost the same');
+  const first = one - none;
+  const second = both - one;
+  assert.ok(second > 0, 'the second person left no mark on the canvas');
+  assert.ok(
+    Math.abs(second - first) <= first * 0.15,
+    `the two characters cost ${first} and ${second} calls — more than 15% apart`,
+  );
   assert.ok(ctx.calls.length > both, 'the third person left no mark on the canvas');
 });
 

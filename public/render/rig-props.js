@@ -15,6 +15,8 @@ import {
   OUTLINE,
   PROP_COLORS,
   ICON_MIN_PX,
+  CHROME_TOP_U,
+  CHROME_BUBBLE_U,
   CLOUD_FILL,
   CLOUD_EDGE,
   DOT_COLOR,
@@ -189,7 +191,7 @@ export function drawCheckIcon(ctx, cx, topY, size, color) {
 /** High-contrast vector icons — no fonts, no emoji. Never under ICON_MIN_PX. */
 export function drawIcon(ctx, ox, oy, u, kind, color, ringPhase) {
   const size = Math.max(ICON_MIN_PX, u * 0.9);
-  const topY = oy - u * 1.05 - size;
+  const topY = oy - u * CHROME_TOP_U - size;
   if (kind === 'hand') {
     const pulse = Math.sin(ringPhase * TAU) * 0.5 + 0.5;
     drawHandIcon(ctx, ox, topY, size, color, pulse);
@@ -209,15 +211,15 @@ export function drawDots(ctx, ox, oy, u, opacity) {
   // having a visible thinking pose at all.
   const prevAlpha = ctx.globalAlpha;
   const cx = ox + u * 0.95;
-  const cy = oy - u * 1.5;
+  const cy = oy - u * CHROME_BUBBLE_U;
 
   // The trail, rising from beside the head toward the cloud.
   ctx.fillStyle = CLOUD_FILL;
   ctx.strokeStyle = CLOUD_EDGE;
   ctx.lineWidth = Math.max(0.6, u * 0.045);
   const trail = [
-    [ox + u * 0.5, oy - u * 0.55, u * 0.1],
-    [ox + u * 0.72, oy - u * 0.95, u * 0.14],
+    [ox + u * 0.5, oy - u * (CHROME_BUBBLE_U - 0.95), u * 0.1],
+    [ox + u * 0.72, oy - u * (CHROME_BUBBLE_U - 0.55), u * 0.14],
   ];
   for (const [tx, ty, tr] of trail) {
     ctx.globalAlpha = opacity * 0.85;

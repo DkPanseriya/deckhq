@@ -38,7 +38,7 @@ import { setLightShadow } from './render/backdrop.js';
 import { drawCharacter } from './render/rig.js';
 import { sampleClip } from './render/clips.js';
 import { lodForZoom } from './render/agents.js';
-import { characterScaleFor, colorForAgent, iconForAgent } from './render/scene.js';
+import { characterScaleFor, colorForAgent, iconForAgent, stateForAgent } from './render/scene.js';
 
 /**
  * The window `08` B3 specifies. Small enough to sit over a terminal without
@@ -146,6 +146,7 @@ function corridorBeside(plan, office) {
  *   shot:{x:number,y:number,w:number,h:number}, scale:number, charScale:number,
  *   lod:0|1, offsetX:number, offsetY:number,
  *   people:{id:string,x:number,y:number,sx:number,sy:number,angle:number,clip:string,
+ *     walking:boolean,state:string,
  *     t:number,color:string,icon:'hand'|'hourglass'|'check'|null,
  *     projectMk:number|undefined,avatar:string|undefined,identityId:string|undefined,
  *     selected:boolean,inOffice:boolean}[],
@@ -288,8 +289,13 @@ export function composeMiniFrame(frame, view) {
       // Same rule as `scene.js`: mid-walk beats whatever clip the record still
       // names, because `rec.clip` is the PREVIOUS clip until arrival.
       clip: (rec.path && rec.path.length > 0 ? 'walk' : rec.clip) || 'type',
+      walking: Boolean(rec.path && rec.path.length > 0),
       t: (now - (rec.clipStartedAt || 0)) / 1000,
       color: colorForAgent(agent),
+      // WP-79: the same question the floor asks, asked of the same function —
+      // the pose and the visor's mark come from the state, and a second copy
+      // of the rule here could disagree with the floor about a person.
+      state: stateForAgent(agent),
       icon: iconForAgent(agent),
       // Same identity channels as the main floor: the project's hair, accent
       // and glyph, and this session's own face (WP-20). Both are total
@@ -448,6 +454,9 @@ export function drawMiniFrame(ctx, composed, opts) {
       u: composed.charScale,
       lod: composed.lod,
       color: person.color,
+      state: person.state,
+      walking: person.walking,
+      seconds: person.t,
       icon: person.icon,
       // No name label and no waiting badge. There is no room for either at
       // this size, and the numeral beside the canvas already says how many

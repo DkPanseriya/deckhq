@@ -1,28 +1,50 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { drawCharacter } from '../../public/render/rig.js';
+import {
+  BODY_HEIGHT_U,
+  RIG_DETAIL_MIN_PX,
+  RIG_POSES,
+  RIG_STATES,
+  RIG_UNIT_U,
+  drawCharacter,
+  drawManagerFigure,
+  handTop,
+  idlePhase,
+  makePose,
+  rigDetail,
+  rigHeight,
+  rigPoseFor,
+  walkFrame,
+} from '../../public/render/rig.js';
+import { STATE_COLORS, identityFor, appearanceFor } from '../../public/render/palette.js';
 import { sampleClip, CLIPS } from '../../public/render/clips.js';
 
 /**
- * Proves the fix for "characters have hands on one side and head on other
- * side, looks like hands are on backside": rig.js used to rotate every body
- * part by raw `pose.bodyAngle`, which — given the rig's local frame faces
- * local -y, not local +x — put the head a quarter turn away from where
- * `bodyAngle` says the character actually faces. This file renders real
- * clips through the real `drawCharacter` with a fake canvas 2D context and
- * checks, purely from the recorded draw-call coordinates, that the head and
- * any actively-reaching hand land on the *facing* side of the body centre,
- * and legs/torso never do.
+ * WP-79's rig, measured from the draw calls it actually issues.
+ *
+ * This file used to prove the opposite property. The old rig ROTATED with
+ * `pose.bodyAngle`, its local frame faced local -y while `bodyAngle` measured
+ * from +x, and the quarter-turn correction between the two produced this
+ * renderer's worst bug: a head on one side and the hands on the other
+ * (docs/DEVIATIONS.md §26). B is BILLBOARDED — it never turns at all — so the
+ * correction is gone and with it the whole class of defect. What is measured
+ * here now is that it is really gone (the figure is byte-identical at every
+ * facing), plus the five properties the new figure has to hold:
+ *
+ *   1. every state gets a DIFFERENT pose;
+ *   2. the raised hand clears the body's top, at every level of detail;
+ *   3. the level-of-detail drop list is exactly the design README's;
+ *   4. reduced motion contributes exactly zero phase;
+ *   5. the same id draws byte-identically twice.
  *
  * `drawCharacter` computes screen coordinates by hand rather than issuing
- * `ctx.translate`/`ctx.rotate` per limb (see its performance-discipline doc
+ * `ctx.translate`/`ctx.rotate` per part (see its performance-discipline doc
  * comment in rig.js), so every point it hands to `ctx.arc`/`ctx.moveTo`/etc.
  * already IS the final screen coordinate under the identity transform. The
  * fake context below still tracks a real `save`/`restore`/`translate`/
  * `rotate`/`scale` matrix and applies it to every recorded point, so this
- * test keeps working unchanged if the implementation ever moves to
- * `ctx.translate`/`ctx.rotate` instead — it does not assume "no transform
- * calls happen".
+ * file keeps working unchanged if the implementation ever moves to
+ * `ctx.translate`/`ctx.rotate` instead.
  */
 
 // ---------------------------------------------------------- fake 2D context
@@ -50,16 +72,15 @@ function applyPoint(m, x, y) {
 
 /**
  * A minimal CanvasRenderingContext2D stand-in: no rendering, just an
- * `a..f` CTM (updated by `translate`/`rotate`/`scale`, pushed/popped by
- * `save`/`restore`) and a flat log of every point-bearing call, recorded in
- * *world* (post-transform) coordinates. Style-only properties/methods
- * (`fillStyle`, `lineWidth`, `fill`, `stroke`, `beginPath`, ...) are no-ops.
+ * `a..f` CTM and a flat log of every point-bearing call, recorded in *world*
+ * (post-transform) coordinates together with the fill/stroke style in force.
  * @returns {{calls: Array<object>, ctx: object}}
  */
 function makeFakeCtx() {
   const calls = [];
   let m = identity();
   const stack = [];
+  const style = () => ({ fill: ctx.fillStyle, stroke: ctx.strokeStyle, lw: ctx.lineWidth });
   const ctx = {
     save() {
       stack.push(m);
@@ -82,10 +103,20 @@ function makeFakeCtx() {
     createRadialGradient() {
       return { addColorStop() {} };
     },
-    beginPath() {},
+    beginPath() {
+      calls.push({ kind: 'beginPath' });
+    },
     closePath() {},
-    fill() {},
-    stroke() {},
+    fill() {
+      calls.push({ kind: 'fill', ...style() });
+    },
+    stroke() {
+      calls.push({ kind: 'stroke', ...style() });
+    },
+    fillRect(x, y, w, h) {
+      const p = applyPoint(m, x, y);
+      calls.push({ kind: 'fillRect', w, h, ...p, ...style() });
+    },
     strokeRect() {},
     moveTo(x, y) {
       calls.push({ kind: 'moveTo', ...applyPoint(m, x, y) });
@@ -97,16 +128,16 @@ function makeFakeCtx() {
       calls.push({ kind: 'quadraticCurveTo', ...applyPoint(m, x, y) });
     },
     arc(x, y, r) {
-      calls.push({ kind: 'arc', r, ...applyPoint(m, x, y) });
+      calls.push({ kind: 'arc', r, ...applyPoint(m, x, y), ...style() });
     },
     ellipse(x, y, rx, ry) {
-      calls.push({ kind: 'ellipse', rx, ry, ...applyPoint(m, x, y) });
+      calls.push({ kind: 'ellipse', rx, ry, ...applyPoint(m, x, y), ...style() });
     },
     fillText(text, x, y) {
-      calls.push({ kind: 'fillText', ...applyPoint(m, x, y) });
+      calls.push({ kind: 'fillText', text, ...applyPoint(m, x, y) });
     },
     strokeText(text, x, y) {
-      calls.push({ kind: 'strokeText', ...applyPoint(m, x, y) });
+      calls.push({ kind: 'strokeText', text, ...applyPoint(m, x, y) });
     },
     measureText(text) {
       return { width: String(text).length * 6 };
@@ -118,6 +149,7 @@ function makeFakeCtx() {
     'lineWidth',
     'lineCap',
     'lineJoin',
+    'miterLimit',
     'globalAlpha',
     'font',
     'textAlign',
@@ -133,195 +165,310 @@ function makeFakeCtx() {
 const U = 20; // px per plan unit — deliberately not BASE_U (14), to exercise scaling.
 const ORIGIN = { x: 231, y: 157 }; // arbitrary, non-zero, so a bug at (0,0) can't hide.
 
-// Radius bands (× u) that separate hands from heads among the recorded `arc`
-// calls, from rig.js's own constants: HAND_R = 0.16, HEAD_R = 0.5 (hair
-// re-draws the same head centre at 0.96 * HEAD_R). The floor ring (hand_raise
-// only) and the selection ring are far larger (RING_BASE_R = 1.15,
-// SELECTION_RING_R = 1.35) and fall outside both bands.
-const HAND_R_BAND = [0.05 * U, 0.3 * U];
-const HEAD_R_BAND = [0.3 * U, 0.75 * U];
+const BASE = {
+  x: ORIGIN.x,
+  y: ORIGIN.y,
+  u: U,
+  color: STATE_COLORS.working,
+  identity: identityFor(4),
+  appearance: appearanceFor('sess-fixture'),
+  reduced: true,
+};
 
-/**
- * Renders `pose` through the real `drawCharacter` and pulls out the drawn
- * centres of its body parts, classified by the normative draw order
- * (VISUAL-SPEC §3: contact shadow -> legs -> torso -> held prop (behind) ->
- * arms -> head -> hair -> ...) and by radius. Requires `pose.prop == null`
- * (true for all four poses this file tests) so no extra arcs/segments from a
- * held prop confuse the classification.
- */
-function renderAndMeasure(pose, lod = 1) {
-  assert.equal(pose.prop, null, 'test helper assumes no held prop');
+/** Every point-bearing call, as `[x, y]` pairs. */
+function points(calls) {
+  return calls.filter((c) => typeof c.x === 'number' && typeof c.y === 'number');
+}
+
+function render(opts, pose) {
   const { calls, ctx } = makeFakeCtx();
-  drawCharacter(ctx, pose, { x: ORIGIN.x, y: ORIGIN.y, u: U, lod, color: '#335544' });
-
-  const arcs = calls.filter((c) => c.kind === 'arc');
-  const handArcs = arcs.filter((c) => c.r >= HAND_R_BAND[0] && c.r <= HAND_R_BAND[1]);
-  const headArcs = arcs.filter((c) => c.r >= HEAD_R_BAND[0] && c.r <= HEAD_R_BAND[1]);
-  assert.equal(handArcs.length, 2, 'expected exactly 2 hand-scale arcs (right hand, left hand)');
-  assert.ok(headArcs.length >= 1, 'expected at least 1 head-scale arc');
-
-  // drawCharacter computes the right arm (side=1) before the left (side=-1)
-  // — see computeArmGeometry/drawArmStroke call order — so among the
-  // hand-scale arcs, index 0 is the right hand and index 1 is the left hand.
-  const rightHand = handArcs[0];
-  const leftHand = handArcs[1];
-  // drawHead precedes drawHair, and both draw the same centre; either works.
-  const head = headArcs[0];
-
-  const ellipses = calls.filter((c) => c.kind === 'ellipse');
-  // Contact shadow (ry = SHADOW_RY*u = 0.39u) vs torso (ry = TORSO_RY*u =
-  // 0.61u): torso has the larger ry, regardless of draw order.
-  const torso = ellipses.reduce((a, b) => (b.ry > a.ry ? b : a));
-
-  // Legs are the first two moveTo+lineTo segments (hip -> foot, per leg),
-  // drawn before arms and using no ctx.arc at all — see drawLegs. Requires
-  // lod >= 1 (checked below) and lod < 2's finger-tick moveTo/lineTo calls
-  // not yet having happened, which is true since finger ticks are drawn
-  // after arms/hands, well after these first 4 points.
-  assert.ok(lod >= 1, 'legs are only drawn at lod >= 1');
-  const points = calls.filter((c) => c.kind === 'moveTo' || c.kind === 'lineTo');
-  const legPoints = points.slice(0, 4);
-  assert.equal(legPoints.length, 4, 'expected 4 leg points (2 per leg)');
-
-  return { rightHand, leftHand, head, torso, legPoints };
+  drawCharacter(ctx, pose || makePose(), { lod: 2, ...opts });
+  return calls;
 }
 
-/** Dot product of (point - ORIGIN) with the unit facing vector for `bodyAngle`. */
-function forwardDot(point, bodyAngle) {
-  const fx = Math.cos(bodyAngle);
-  const fy = Math.sin(bodyAngle);
-  return (point.x - ORIGIN.x) * fx + (point.y - ORIGIN.y) * fy;
-}
-
-// `bob` (a small vertical "breathing" offset, up to 0.5 plan units in these
-// clips) shifts the torso/leg anchor slightly independent of facing, so
-// "behind or at the centre" is checked with a small tolerance rather than
-// an exact zero. It is an order of magnitude below the ~13px head offset or
-// the 5-13px leg offsets this file otherwise measures, so it cannot mask a
-// real forward/backward mistake.
-const AT_CENTRE_EPSILON = 1.5 * (U / 14);
-
-// docs/03-VISUAL-SPEC.md §3's convention, verbatim, matching plan.js's
-// `angleTo`: 0 faces +x (east), PI/2 faces +y (south).
-const FACINGS = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2];
-const REQUIRED_CLIPS = ['type', 'hand_raise', 'stand_wait', 'walk'];
-const T_FRACTIONS = [0, 0.25, 0.5, 0.75, 0.999];
-
-/** Every (clip, t, bodyAngle) combination this file must hold for. */
-function* cases() {
-  for (const clipName of REQUIRED_CLIPS) {
-    const duration = CLIPS[clipName].duration;
-    for (const frac of T_FRACTIONS) {
-      for (const bodyAngleAbs of FACINGS) {
-        // Mirrors scene.js `_drawCharacterAt`: sampleClip's bodyAngle is only
-        // a small relative sway (arcade's lean is the one exception); the
-        // scene adds the seat/path's absolute facing on top before drawing.
-        const pose = sampleClip(clipName, duration * frac, false);
-        pose.bodyAngle = bodyAngleAbs + pose.bodyAngle;
-        yield { clipName, frac, bodyAngleAbs, pose };
-      }
-    }
-  }
+/** The recorded calls as a comparable string — the "byte-identical" in the tests below. */
+function fingerprint(calls) {
+  return JSON.stringify(
+    calls.map((c) => [
+      c.kind,
+      c.x !== undefined ? Math.round(c.x * 1e6) / 1e6 : null,
+      c.y !== undefined ? Math.round(c.y * 1e6) / 1e6 : null,
+      c.r ?? c.rx ?? null,
+      c.fill ?? null,
+      c.stroke ?? null,
+    ]),
+  );
 }
 
 // ------------------------------------------------------------------ tests
 
-test('the facing convention itself matches plan.js: bodyAngle=0 is +x, bodyAngle=PI/2 is +y', () => {
-  // A minimal, direct pin of VISUAL-SPEC §3 / plan.js's angleTo, independent
-  // of any clip: a plain seated rest pose, facing due east, should draw its
-  // head displaced in +x only (not +y), and facing due south should draw it
-  // displaced in +y only (not x) — the exact quarter-turn this bug got wrong.
-  const restPoseEast = sampleClip('stand_wait', 0, false);
-  restPoseEast.bodyAngle = 0;
-  const east = renderAndMeasure(restPoseEast);
-  assert.ok(east.head.x - ORIGIN.x > 5, 'facing +x: head should be displaced toward +x');
-  assert.ok(
-    Math.abs(east.head.y - ORIGIN.y) < 1e-6,
-    'facing +x: head should have ~zero y displacement',
+test('BILLBOARD: the figure is byte-identical at every facing, and while walking', () => {
+  // The whole of docs/DEVIATIONS.md §26, inverted. There is no rotation left in
+  // the rig, so `bodyAngle` cannot displace anything — and this is the property
+  // that says so, rather than a comment claiming it.
+  const FACINGS = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2, 1.1, -2.7];
+  for (const clipName of ['type', 'hand_raise', 'stand_wait', 'walk']) {
+    const duration = CLIPS[clipName].duration;
+    for (const frac of [0, 0.25, 0.5, 0.75, 0.999]) {
+      let reference = null;
+      for (const angle of FACINGS) {
+        const pose = sampleClip(clipName, duration * frac, false);
+        pose.bodyAngle = angle + pose.bodyAngle;
+        const got = fingerprint(render(BASE, pose));
+        if (reference === null) reference = got;
+        else assert.equal(got, reference, `${clipName} @ ${frac} turned at bodyAngle=${angle}`);
+      }
+    }
+  }
+});
+
+test('the contact ellipse is the only thing in the floor plane, and it is under the feet', () => {
+  const calls = render(BASE);
+  const ellipses = calls.filter((c) => c.kind === 'ellipse');
+  assert.ok(ellipses.length > 0);
+  // The contact shadow is the widest ellipse and is centred exactly on the
+  // ground contact (WP-78: `SHADOW_OX`/`SHADOW_OY` are zero, and the feet point
+  // IS `(x, y)`).
+  const widest = ellipses.reduce((a, b) => (b.rx > a.rx ? b : a));
+  assert.equal(widest.x, ORIGIN.x);
+  assert.equal(widest.y, ORIGIN.y);
+  // And the BODY stands on the contact point rather than straddling it. The
+  // two ground marks — the shadow ellipse and the halo's pool — are the only
+  // things that reach below it, and neither is part of the figure, so the
+  // measurement is taken over the outlined parts (every one of which is built
+  // from `moveTo`/`lineTo`/`quadraticCurveTo`).
+  const outline = calls.filter(
+    (c) => c.kind === 'moveTo' || c.kind === 'lineTo' || c.kind === 'quadraticCurveTo',
   );
-
-  const restPoseSouth = sampleClip('stand_wait', 0, false);
-  restPoseSouth.bodyAngle = Math.PI / 2;
-  const south = renderAndMeasure(restPoseSouth);
-  assert.ok(south.head.y - ORIGIN.y > 5, 'facing +y: head should be displaced toward +y');
+  const bottom = Math.max(...outline.map((c) => c.y));
+  const h = rigHeight(U);
   assert.ok(
-    Math.abs(south.head.x - ORIGIN.x) < 1e-6,
-    'facing +y: head should have ~zero x displacement',
+    bottom <= ORIGIN.y + h * 0.02,
+    `the figure hangs ${(bottom - ORIGIN.y).toFixed(1)}px below its own feet`,
+  );
+  // It fills its stated height, rather than a third of it: the old rig's
+  // readable mass was 22 px where its box was 35 (the design study's own
+  // measurement), and B's whole point is that the box and the mass are the same
+  // shape.
+  const top = Math.min(...outline.map((c) => c.y));
+  assert.ok(
+    ORIGIN.y - top >= BODY_HEIGHT_U * U * 0.75,
+    `the figure fills only ${((ORIGIN.y - top) / (BODY_HEIGHT_U * U)).toFixed(2)} of its height`,
   );
 });
 
-test('the head is drawn forward of centre, on the facing side, for type/hand_raise/stand_wait/walk', () => {
-  let checked = 0;
-  for (const { clipName, frac, bodyAngleAbs, pose } of cases()) {
-    const { head } = renderAndMeasure(pose);
-    const dot = forwardDot(head, pose.bodyAngle);
-    assert.ok(
-      dot > 0,
-      `${clipName} @ frac=${frac}, bodyAngle=${bodyAngleAbs}: head dot=${dot} should be > 0`,
+test('POSES: every state is posed differently, and `walking` differs from all six', () => {
+  const vectors = new Map();
+  for (const state of [...RIG_STATES, 'walking']) {
+    const k = rigPoseFor(state);
+    vectors.set(
+      state,
+      JSON.stringify([k.lean, k.by, k.hy, k.hrot, k.aR, k.aL, k.sq, !!k.stand, !!k.recline]),
     );
-    checked++;
   }
-  assert.equal(checked, REQUIRED_CLIPS.length * T_FRACTIONS.length * FACINGS.length);
+  const seen = new Map();
+  for (const [state, v] of vectors) {
+    assert.ok(!seen.has(v), `${state} is posed identically to ${seen.get(v)}`);
+    seen.set(v, state);
+  }
+  assert.equal(vectors.size, 7);
+  // And an unknown state still draws, as a powered-down robot.
+  assert.equal(rigPoseFor('nonsense'), RIG_POSES.ended);
+  assert.equal(rigPoseFor('let_go'), RIG_POSES.ended);
 });
 
-test('a hand with hand:"key" (actively reaching, e.g. typing) is drawn on the same side as the head', () => {
-  let keyHandsChecked = 0;
-  for (const { clipName, frac, bodyAngleAbs, pose } of cases()) {
-    const { rightHand, leftHand } = renderAndMeasure(pose);
-    if (pose.armR.hand === 'key') {
-      const dot = forwardDot(rightHand, pose.bodyAngle);
-      assert.ok(
-        dot > 0,
-        `${clipName} @ frac=${frac}, bodyAngle=${bodyAngleAbs}: armR 'key' hand dot=${dot} should be > 0`,
-      );
-      keyHandsChecked++;
+test('POSES: the six states draw differently, not just skeleton-differently', () => {
+  const prints = new Map();
+  for (const state of RIG_STATES) {
+    const got = fingerprint(render({ ...BASE, color: STATE_COLORS[state], state }));
+    for (const [other, prev] of prints) {
+      assert.notEqual(got, prev, `${state} draws exactly like ${other}`);
     }
-    if (pose.armL.hand === 'key') {
-      const dot = forwardDot(leftHand, pose.bodyAngle);
-      assert.ok(
-        dot > 0,
-        `${clipName} @ frac=${frac}, bodyAngle=${bodyAngleAbs}: armL 'key' hand dot=${dot} should be > 0`,
-      );
-      keyHandsChecked++;
-    }
+    prints.set(state, got);
   }
-  // `type` is the only one of the 4 required clips that ever uses hand:'key'
-  // (see clips.js TYPE_CLIP) — assert the check was actually exercised, so
-  // this test cannot pass vacuously.
-  assert.ok(keyHandsChecked > 0, 'expected at least one hand:"key" pose to have been checked');
 });
 
-test('legs and torso stay behind or at the centre, never on the forward/head side', () => {
-  let checked = 0;
-  for (const { clipName, frac, bodyAngleAbs, pose } of cases()) {
-    const { torso, legPoints } = renderAndMeasure(pose);
-    const torsoDot = forwardDot(torso, pose.bodyAngle);
-    assert.ok(
-      torsoDot <= AT_CENTRE_EPSILON,
-      `${clipName} @ frac=${frac}, bodyAngle=${bodyAngleAbs}: torso dot=${torsoDot} should be <= ${AT_CENTRE_EPSILON}`,
+test('THE RAISED HAND clears the body top for needs_input, at every LOD and every scale', () => {
+  // The single most important thing this rig draws (VISUAL-SPEC §5). It is not
+  // enough that the pose puts it there: the hand must also survive the LOD
+  // drop list, which is why this renders rather than reading the skeleton.
+  const k = rigPoseFor('needs_input');
+  const domeTopLocal = k.hy + 0.26 * 1.14; // the largest dome, at its top
+  assert.ok(handTop(k) > domeTopLocal, 'the pose does not raise the hand past the dome');
+
+  for (const lod of [0, 1, 2]) {
+    for (const u of [8, 14, 20, 34]) {
+      const calls = render({
+        ...BASE,
+        u,
+        lod,
+        color: STATE_COLORS.needs_input,
+        state: 'needs_input',
+      });
+      const h = rigHeight(u);
+      // The mitt is the only circle drawn at the raised hand's height. Find
+      // every drawn point in the top fifth of the figure and check the hand is
+      // among them — i.e. that something IS drawn up there at every LOD.
+      const handY = ORIGIN.y - handTop(k) * h;
+      const near = points(calls).filter((c) => Math.abs(c.y - handY) < h * 0.06);
+      assert.ok(
+        near.length > 0,
+        `lod ${lod} @ u=${u}: nothing is drawn at the raised hand's height`,
+      );
+      // And it is genuinely above the dome, in screen space.
+      const domeY = ORIGIN.y - domeTopLocal * h;
+      assert.ok(handY < domeY, `lod ${lod} @ u=${u}: the hand is not above the dome`);
+    }
+  }
+});
+
+test('LOD: the drop list is exactly the design README’s — rim, chest glyph, far limbs', () => {
+  // "at 100 agents the halo, chest glyph and far limbs should drop below
+  // ~30 px" — docs/media/design/character/README.md, "Ranking and risks".
+  // Nothing else is in the list, and the visor and the raised hand are in no
+  // list at all.
+  for (const u of [40, 20, 12]) {
+    render({ ...BASE, u, lod: 2 });
+    const detail = rigDetail();
+    const expected = rigHeight(u) >= RIG_DETAIL_MIN_PX;
+    assert.equal(detail.rim, expected, `u=${u}: rim`);
+    assert.equal(detail.chestGlyph, expected, `u=${u}: chest glyph`);
+    assert.equal(detail.farArm, expected, `u=${u}: far arm`);
+  }
+  // L0 drops the same three whatever the scale, because L0 is the overview and
+  // the state colour plus the icon above the head are the whole message there.
+  render({ ...BASE, u: 40, lod: 0 });
+  const l0 = rigDetail();
+  assert.deepEqual([l0.rim, l0.chestGlyph, l0.farArm], [false, false, false]);
+
+  // The threshold is on the FIGURE's height, not on `u` — which is what the
+  // README's "~30 px" means. 30 px of figure is 15 px per plan unit.
+  assert.equal(RIG_UNIT_U * 15, RIG_DETAIL_MIN_PX);
+});
+
+test('LOD: the visor is drawn at every level of detail, and the figure never vanishes', () => {
+  for (const lod of [0, 1, 2]) {
+    for (const u of [8, 14, 20, 34]) {
+      const calls = render({ ...BASE, u, lod, color: STATE_COLORS.working, state: 'working' });
+      // The pane is the one fill in `RIG_PANE`. It is present at every level.
+      const pane = calls.filter((c) => c.kind === 'fill' && c.fill === '#F7F1E1');
+      assert.ok(pane.length > 0, `lod ${lod} @ u=${u}: no lit visor was drawn`);
+    }
+  }
+});
+
+test('MOTION: reduced motion contributes exactly zero phase, and freezes the figure', () => {
+  // Not "a small phase" and not "the first frame": zero, so every term derived
+  // from it drops out of the arithmetic (VISUAL-SPEC §10).
+  for (const seconds of [0, 0.37, 1.9, 12345.678, NaN, undefined]) {
+    assert.equal(idlePhase(seconds, true), 0, `reduced motion leaked a phase at t=${seconds}`);
+  }
+  // And without it, the phase really does move with the clock and stays in range.
+  const samples = [0, 0.4, 1.1, 2.6, 3.3].map((s) => idlePhase(s, false));
+  assert.ok(
+    new Set(samples).size === samples.length,
+    'the idle phase does not move with the clock',
+  );
+  for (const p of samples) assert.ok(p >= 0 && p < 1, `phase ${p} is out of range`);
+  // A negative clock (a fixture's epoch behind the injected now) wraps rather
+  // than going negative.
+  assert.ok(idlePhase(-1.2, false) >= 0);
+
+  // The whole figure is frozen: two different clocks draw the same picture.
+  const a = fingerprint(render({ ...BASE, reduced: true, seconds: 0 }));
+  const b = fingerprint(render({ ...BASE, reduced: true, seconds: 9999.5 }));
+  assert.equal(a, b, 'reduced motion still moved with the clock');
+});
+
+test('MOTION: the walk is two frames and no blend', () => {
+  const seen = new Set();
+  for (let i = 0; i <= 40; i++) seen.add(walkFrame(i / 40));
+  assert.deepEqual([...seen].sort(), [0, 1]);
+  // And it is total over anything a clip could hand it.
+  assert.equal(walkFrame(NaN), 0);
+  assert.equal(walkFrame(-0.3), 1);
+  assert.equal(walkFrame(7.25), 0);
+
+  // Two frames, two different pictures.
+  const one = fingerprint(
+    render({ ...BASE, walking: true, reduced: false, seconds: 0.1 }, makePose({ seated: false })),
+  );
+  const two = fingerprint(
+    render({ ...BASE, walking: true, reduced: false, seconds: 0.95 }, makePose({ seated: false })),
+  );
+  assert.notEqual(one, two, 'both walk frames draw the same picture');
+});
+
+test('DETERMINISM: the same session id draws byte-identically, twice and in any order', () => {
+  // docs/DEVIATIONS.md §105: a face is a pure function of the session id.
+  // Nothing is rolled, nothing is cached, nothing is persisted — so two renders
+  // of the same id, with other ids rendered in between, are the same bytes.
+  const ids = ['demo:actor-1', 'demo:actor-7', 'sess-zq04', 'sess-a7f2'];
+  const first = new Map();
+  for (const id of ids) {
+    first.set(
+      id,
+      fingerprint(render({ ...BASE, appearance: appearanceFor(id), identity: identityFor(3) })),
     );
-    for (const [i, p] of legPoints.entries()) {
-      const legDot = forwardDot(p, pose.bodyAngle);
-      assert.ok(
-        legDot <= AT_CENTRE_EPSILON,
-        `${clipName} @ frac=${frac}, bodyAngle=${bodyAngleAbs}: leg point ${i} dot=${legDot} should be <= ${AT_CENTRE_EPSILON}`,
-      );
-    }
-    checked++;
   }
-  assert.equal(checked, REQUIRED_CLIPS.length * T_FRACTIONS.length * FACINGS.length);
+  for (const id of [...ids].reverse()) {
+    const again = fingerprint(
+      render({ ...BASE, appearance: appearanceFor(id), identity: identityFor(3) }),
+    );
+    assert.equal(again, first.get(id), `${id} drew differently the second time`);
+  }
+  // And two different ids really do draw differently, so the check above is
+  // not passing on a rig that ignores its identity.
+  assert.notEqual(first.get(ids[0]), first.get(ids[1]));
 });
 
-test('LOD 0 (simple body) still imports and draws without throwing, for every facing', () => {
-  // Not geometrically checked (L0 has no separate head/arm offsets — see
-  // drawSimpleBody), but a real regression here (e.g. a crash from the
-  // facingRot change) would otherwise go unnoticed by the lod>=1 tests above.
-  for (const bodyAngleAbs of FACINGS) {
-    const pose = sampleClip('type', 0, false);
-    pose.bodyAngle = bodyAngleAbs;
-    const { ctx } = makeFakeCtx();
-    assert.doesNotThrow(() => {
-      drawCharacter(ctx, pose, { x: ORIGIN.x, y: ORIGIN.y, u: U, lod: 0, color: '#335544' });
-    });
+test('HALO: every character still lays one, and never at L0', () => {
+  // WP-85a §3.9, carried through WP-79 unchanged in intent: the state colour is
+  // read against a constant that travels with the figure, not against the floor.
+  for (const lod of [1, 2]) {
+    const calls = render({ ...BASE, lod });
+    const halo = calls.filter((c) => c.fill === '#F6F2E9' || c.stroke === '#F6F2E9');
+    assert.ok(halo.length > 0, `lod ${lod} drew no halo at all`);
+    // It is laid UNDER the body: the first halo mark precedes the first mark in
+    // the state colour.
+    const firstHalo = calls.findIndex((c) => c.fill === '#F6F2E9' || c.stroke === '#F6F2E9');
+    const firstBody = calls.findIndex((c) => c.fill === STATE_COLORS.working);
+    assert.ok(firstHalo >= 0 && firstBody > firstHalo, `lod ${lod} drew the halo over the body`);
+  }
+  const l0 = render({ ...BASE, lod: 0 });
+  assert.equal(
+    l0.filter((c) => c.fill === '#F6F2E9' || c.stroke === '#F6F2E9').length,
+    0,
+    'L0 drew a halo',
+  );
+});
+
+test('the manager is the same figure, drawn by the same functions, with no state on it', () => {
+  const { calls, ctx } = makeFakeCtx();
+  assert.doesNotThrow(() => drawManagerFigure(ctx, { x: 50, y: 60, u: 14, angle: 1.3 }));
+  assert.ok(calls.length > 0);
+  // Billboarded like every agent: the angle it is handed changes nothing.
+  const other = makeFakeCtx();
+  drawManagerFigure(other.ctx, { x: 50, y: 60, u: 14, angle: -2.2 });
+  assert.equal(fingerprint(other.calls), fingerprint(calls));
+  // No angle at all still draws.
+  const bare = makeFakeCtx();
+  assert.doesNotThrow(() => drawManagerFigure(bare.ctx, { x: 0, y: 0, u: 14 }));
+  // And no state colour anywhere on it.
+  for (const c of calls) {
+    for (const state of Object.values(STATE_COLORS)) {
+      assert.notEqual(c.fill, state, 'the manager wore a state colour');
+    }
+  }
+});
+
+test('the state is recovered from the colour when a caller does not pass one', () => {
+  // Every call site passes `state` now, and this is the guard for the ones that
+  // do not: `colorForAgent` only ever returns a STATE_COLORS entry, so the
+  // inverse is exact.
+  for (const state of RIG_STATES) {
+    const explicit = fingerprint(render({ ...BASE, color: STATE_COLORS[state], state }));
+    const implied = fingerprint(render({ ...BASE, color: STATE_COLORS[state] }));
+    assert.equal(implied, explicit, `${state} was not recovered from its colour`);
   }
 });
