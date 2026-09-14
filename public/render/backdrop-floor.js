@@ -16,16 +16,89 @@ import {
   ROOM_SLAB_EDGE_PX,
   ROOM_SLAB_SHADOW_BLUR_PX,
   ROOM_SLAB_SHADOW_DIST_PX,
+  U_DEFAULT,
   WALL_SHADOW_DIST_PX,
 } from './backdrop-paint.js';
 
+// ------------------------------------------------- how big the patterns are
+//
+// WP-85a. Every pattern on this floor is a size in PLAN UNITS rather than in
+// baked pixels, and that is the difference between a material and a texture: a
+// unit is about 0.30 m (`docs/plan/10-INTERIOR-DESIGN.md` heading), so a number
+// here is a claim about a real floor that anybody can check against a real
+// building. The bake happens to run at `U_DEFAULT`, and these were tuned there;
+// stating them in units means a bake at any other `u` lays the same floor
+// rather than the same bitmap.
+
+/**
+ * The herringbone lattice, in units (§3.2). Was 46 baked px — 3.29 U — which
+ * made a block 4.67 U × 1.58 U, or 1.40 m × 0.47 m. A real herringbone block is
+ * 0.30–0.60 m by 0.07–0.10 m: three times too long, five times too wide, twelve
+ * times the area, and a board measured 65 px in `three.png` against a 24 px
+ * character. At 1.71 U the block is 2.43 U × 0.82 U — 0.73 m × 0.25 m — which
+ * is a wide-format parquet rather than a decking plank.
+ */
+export const HERRINGBONE_CELL_U = 24 / U_DEFAULT;
+
+/** A block's length and width as fractions of the cell. 45°, which is what makes a warm room read warm. */
+export const HERRINGBONE_BLOCK_L = 1.42;
+export const HERRINGBONE_BLOCK_W = 0.48;
+
+/** The seam between two blocks, in units. Was 1.6 baked px at 0.55 alpha. */
+export const HERRINGBONE_SEAM_U = 0.8 / U_DEFAULT;
+
+/**
+ * The carpet weave's pitch, in units (§3.2). Two hairline passes at 3 baked px:
+ * far enough apart to read as a weave under a 2× crop, close enough to vanish
+ * into one tone at fit scale, which is what a floor is supposed to do.
+ */
+export const CARPET_WEAVE_PITCH_U = 3 / U_DEFAULT;
+
+/** The kitchen tile's grid, in units (§3.2): 22 baked px, down from 30. */
+export const TILE_CELL_U = 22 / U_DEFAULT;
+
+/**
+ * A threshold's pool of light, in units (§3.3). A doorway is how a plan says
+ * *you are entering something*, and a pool is the cheapest way to say it that
+ * costs no floor area and blocks no route.
+ */
+export const DOOR_POOL_R_U = 2.8;
+
+/**
+ * How far a desk's pool reaches past the desk itself, in units. The pool is a
+ * downlight over a workstation, so it has to take in the chair and the person
+ * as well as the worktop — a pool that stopped at the desk edge would read as a
+ * lighter desk rather than as a lit place.
+ */
+export const DESK_POOL_MARGIN_U = 2.2;
+
+/**
+ * Which props stand under a downlight (§3.2): the manager's desk, and every
+ * working desk. Not the lounge — its bays and their centrepieces are WP-85c,
+ * and a pool with nothing under it is a stain.
+ * @type {ReadonlyArray<string>}
+ */
+export const LIT_PROP_KINDS = Object.freeze(['user_desk', 'reception_desk', 'desk']);
+
 // ------------------------------------------------------------- materials
 
-/** 46 px herringbone lattice, four tone variations, 1.6 px seams. */
-export function paintHerringbone(ctx, x, y, w, h, rng) {
-  const CELL = 46;
-  const L = CELL * 1.42;
-  const W = CELL * 0.48;
+/**
+ * The boards: reception and lounge (§3.2).
+ *
+ * A 1.71 U herringbone in four tones a thirtieth apart, seamed at a fifth of an
+ * alpha. The four tones and the seam are the theme's (see `themes.js`); the
+ * geometry is here, and both halves were the loudest thing in the product
+ * before WP-85a.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {() => number} rng
+ * @param {number} [u] px per plan unit; the bake's own `u`.
+ */
+export function paintHerringbone(ctx, x, y, w, h, rng, u = U_DEFAULT) {
+  const CELL = HERRINGBONE_CELL_U * u;
+  const L = CELL * HERRINGBONE_BLOCK_L;
+  const W = CELL * HERRINGBONE_BLOCK_W;
   const tones = [
     PALETTE.woodHerringboneA,
     PALETTE.woodHerringboneB,
@@ -40,6 +113,7 @@ export function paintHerringbone(ctx, x, y, w, h, rng) {
 
   const cols = Math.ceil(w / CELL) + 3;
   const rows = Math.ceil(h / CELL) + 3;
+  ctx.lineWidth = HERRINGBONE_SEAM_U * u;
   for (let j = -2; j < rows; j++) {
     for (let i = -2; i < cols; i++) {
       const dir = (i + j) % 2 === 0 ? 1 : -1;
@@ -50,7 +124,6 @@ export function paintHerringbone(ctx, x, y, w, h, rng) {
       ctx.fillStyle = tones[toneIdx];
       ctx.fillRect(0, 0, L, W);
       ctx.strokeStyle = PALETTE.woodHerringboneSeam;
-      ctx.lineWidth = 1.6;
       ctx.strokeRect(0, 0, L, W);
       ctx.fillStyle = PALETTE.woodHerringboneSheen;
       ctx.fillRect(0, 0, L, W * 0.32);
@@ -61,39 +134,71 @@ export function paintHerringbone(ctx, x, y, w, h, rng) {
 }
 
 /**
- * Woven carpet, warm grey, fine two-tone noise.
+ * Woven carpet, warm grey — a WEAVE since WP-85a (§3.2).
  *
  * `tint` is the identity colour of the project whose room this is, or nothing
  * for the circulation that happens to be carpeted (WP-72). The carpet moves
  * `CARPET_IDENTITY_WASH` — six per cent — of the way toward it and no further:
  * the room agrees with the ring on the agent sitting in it, and the surface is
- * still a carpet. The NOISE is untouched, so the weave stays one material
+ * still a carpet. The WEAVE is untouched by the wash, so it stays one material
  * across the whole floor and only its ground shifts.
+ *
+ * IT USED TO SCATTER UP TO SIX THOUSAND SINGLE PIXELS — `rgba(255,255,255,0.55)`
+ * and `rgba(150,140,125,0.16)`, one device pixel each, placed at random inside
+ * the room. That reads as a dirty surface at 1× and as sensor noise at 2×, and
+ * it cost six thousand fills per room on every rebake. A weave is DIRECTIONAL
+ * and LOW-FREQUENCY and salt is neither, so this is two hairline passes at
+ * `CARPET_WEAVE_PITCH_U` — one horizontal, one vertical, the light one first —
+ * which is a textile at a 2× crop and one flat tone at fit scale.
+ *
+ * The `rng` argument is kept, unused, and that is deliberate rather than an
+ * oversight: a weave has nothing random in it, and removing the parameter would
+ * change every call site in a package whose golden diff is supposed to be paint
+ * only. `test/unit/interior.test.mjs` reads this function's source and fails if
+ * a 1 × 1 fill ever comes back.
  *
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {number} x @param {number} y @param {number} w @param {number} h
- * @param {() => number} rng
+ * @param {() => number} _rng kept for the call signature; a weave is not random
  * @param {string|null} [tint]
+ * @param {number} [u] px per plan unit; the bake's own `u`.
  */
-export function paintCarpet(ctx, x, y, w, h, rng, tint = null) {
+export function paintCarpet(ctx, x, y, w, h, _rng, tint = null, u = U_DEFAULT) {
+  const pitch = CARPET_WEAVE_PITCH_U * u;
   ctx.save();
   roundRect(ctx, x, y, w, h, 2);
   ctx.clip();
   ctx.fillStyle = washedCarpet(PALETTE.carpetBase, tint);
   ctx.fillRect(x, y, w, h);
-  const dots = Math.min(6000, Math.round(w * h * 0.6));
-  for (let i = 0; i < dots; i++) {
-    ctx.fillStyle = rng() > 0.5 ? PALETTE.carpetNoiseLight : PALETTE.carpetNoiseDark;
-    ctx.fillRect(x + rng() * w, y + rng() * h, 1, 1);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = PALETTE.carpetWeaveLight;
+  ctx.beginPath();
+  for (let gy = Math.ceil(y / pitch) * pitch; gy <= y + h; gy += pitch) {
+    ctx.moveTo(x, gy + 0.5);
+    ctx.lineTo(x + w, gy + 0.5);
   }
+  ctx.stroke();
+  ctx.strokeStyle = PALETTE.carpetWeaveDark;
+  ctx.beginPath();
+  for (let gx = Math.ceil(x / pitch) * pitch; gx <= x + w; gx += pitch) {
+    ctx.moveTo(gx + 0.5, y);
+    ctx.lineTo(gx + 0.5, y + h);
+  }
+  ctx.stroke();
   ctx.restore();
 }
 
-/** Square tile with grout lines. */
-export function paintTile(ctx, x, y, w, h) {
+/**
+ * Square tile with grout lines — the café bay only (§3.2).
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {number} [u] px per plan unit; the bake's own `u`.
+ */
+export function paintTile(ctx, x, y, w, h, u = U_DEFAULT) {
   // Grout is a hairline, not a rule. At full contrast on a 24px pitch the grid
   // outweighed everything standing on it and the room read as graph paper.
-  const CELL = 30;
+  const CELL = TILE_CELL_U * u;
   ctx.save();
   roundRect(ctx, x, y, w, h, 2);
   ctx.clip();
@@ -113,6 +218,42 @@ export function paintTile(ctx, x, y, w, h) {
     ctx.lineTo(gx + 0.5, y + h);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+/**
+ * A POOL OF LIGHT (WP-85a §3.2), and the one new device in this package.
+ *
+ * WP-72 gave the floor one key light and spent it entirely on shadow direction,
+ * which made it a rule about offsets rather than a light. This is the other
+ * half: a soft warm radial, baked with the backdrop, over the places a plan
+ * lights because that is where the work and the arriving happen — the manager's
+ * desk, every working desk, each corridor threshold.
+ *
+ * It is a `radial-gradient` fill and nothing else: no shadow, no stroke, no
+ * second pass. The centre stop is the theme's `lightPool` and the outer stop is
+ * the same colour at zero alpha (`fadedOut`) rather than a transparent black,
+ * because a gradient whose far stop is a different hue interpolates through that
+ * hue in premultiplied space and leaves a grey ring — which is the artefact
+ * `fadedOut` exists to prevent everywhere else on this floor.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} cx @param {number} cy centre, in baked pixels
+ * @param {number} r radius, in baked pixels
+ */
+export function paintLightPool(ctx, cx, cy, r) {
+  if (!(r > 0)) return;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  // Full at the centre, gone at the rim, and nothing in between: a straight
+  // ramp is what a soft light on a flat floor looks like from directly above,
+  // and any hold on the inner stops turns it into a disc with an edge.
+  g.addColorStop(0, PALETTE.lightPool);
+  g.addColorStop(1, fadedOut(PALETTE.lightPool));
+  ctx.save();
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
 }
 

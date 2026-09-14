@@ -6,8 +6,18 @@
  * waistband — in the order `drawCharacter` paints them.
  */
 
-import { PALETTE } from './palette.js';
 import {
+  FIGURE_HALO,
+  FIGURE_HALO_POOL_ALPHA,
+  FIGURE_HALO_POOL_SPAN,
+  FIGURE_HALO_RIM_PX,
+  channelsOf,
+  figureHaloMode,
+  PALETTE,
+} from './palette.js';
+import {
+  BASE_U,
+  BODY_HEIGHT_U,
   TAU,
   HAIR,
   TORSO_RX,
@@ -46,6 +56,104 @@ import {
   _lHy,
 } from './rig-pose.js';
 
+// ---------------------------------------------------------------- the halo
+//
+// WP-85a §3.9, and the whole of `03-VISUAL-SPEC.md` §10's rewritten promise.
+//
+// §10 used to say "all state colours meet 3:1 against their floor background",
+// which was never true on any theme: on the default parquet `needs_input`
+// measured 1.70:1, on night shift `for_review` 1.44:1. It could not be fixed by
+// moving the floor either — the state palette is mid-tone, so a floor clearing
+// 3:1 against all six would have to be near paper or near black. So the surface
+// a state colour is read against stopped being the floor, and became one
+// constant that travels with the figure: `FIGURE_HALO`, worst case 3.28:1.
+//
+// Two devices, because a light floor and a dark one need opposite things:
+//
+//   POOL (light floors). A soft radial under the feet. Its job is not contrast
+//     but UNIFORMITY — it flattens the parquet under a character so the
+//     silhouette sits on one tone rather than on four boards and a seam.
+//   RIM (dark floors). The silhouette drawn once in the halo colour, `rim`
+//     wider all round, with the real body painted straight over it: what
+//     survives is a thin bright edge. A pool on a dark floor is a hole in the
+//     room; a rim is what every top-down game that solved legibility does
+//     (§2, *Don't Starve* and *Hades*).
+//
+// Both are cheap by construction — the pool is one arc and the rim is five
+// fills of shapes the rig was already drawing — and both drop at L0, where the
+// state disc above the head is the signal anyway (§4).
+
+/**
+ * The ground pool, on a light floor. Drawn under the contact shadow, because
+ * the shadow is a thing ON the floor and the pool is the floor.
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} ox @param {number} oy the figure's ground contact
+ * @param {number} u px per plan unit
+ */
+export function drawHaloPool(ctx, ox, oy, u) {
+  const r = FIGURE_HALO_POOL_SPAN * BODY_HEIGHT_U * u;
+  if (!(r > 0)) return;
+  const ch = channelsOf(FIGURE_HALO) || [255, 255, 255];
+  const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
+  g.addColorStop(0, `rgba(${ch[0]},${ch[1]},${ch[2]},${FIGURE_HALO_POOL_ALPHA})`);
+  g.addColorStop(1, `rgba(${ch[0]},${ch[1]},${ch[2]},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(ox, oy, r, 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * How wide the rim is at this zoom, in px. Proportional to `u` so a character
+ * drawn twice as large gets twice the edge rather than a hairline that
+ * disappears, with a floor of 0.8 px so it never falls below a device pixel on
+ * a floor drawn small.
+ * @param {number} u
+ */
+export function haloRimWidth(u) {
+  return Math.max(0.8, (FIGURE_HALO_RIM_PX * u) / BASE_U);
+}
+
+/**
+ * The rim pass, on a dark floor: every part of the silhouette, in the halo
+ * colour, `rim` px proud. The real body is drawn immediately after and covers
+ * all but the edge.
+ *
+ * The arm geometry must already be computed for both sides — `drawCharacter`
+ * does that before calling this, which is the one ordering change WP-85a made
+ * to the rig.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {import('./clips.js').Pose} pose
+ * @param {number} ox @param {number} oy @param {number} cosA @param {number} sinA
+ * @param {number} facingRot @param {number} u @param {number} [build]
+ */
+export function drawFigureRim(ctx, pose, ox, oy, cosA, sinA, facingRot, u, build) {
+  const rim = haloRimWidth(u);
+  drawLegs(ctx, pose, ox, oy, cosA, sinA, u, FIGURE_HALO, rim);
+  drawArmStroke(ctx, 1, u, FIGURE_HALO, FIGURE_HALO, rim);
+  drawArmStroke(ctx, -1, u, FIGURE_HALO, FIGURE_HALO, rim);
+  drawTorso(ctx, ox, oy, facingRot, u, FIGURE_HALO, build, rim);
+  drawHead(ctx, ox, oy, cosA, sinA, u, FIGURE_HALO, rim);
+}
+
+/**
+ * The halo under one character, whichever device this floor calls for. Returns
+ * `true` when the RIM is the device, so the caller knows to lay the rim pass in
+ * between the geometry and the body.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} ox @param {number} oy @param {number} u
+ * @param {number} lod the halo is not drawn at L0 (§4)
+ * @returns {boolean} whether the rim pass is owed
+ */
+export function drawFigureHalo(ctx, ox, oy, u, lod) {
+  if (lod < 1) return false;
+  if (figureHaloMode() === 'rim') return true;
+  drawHaloPool(ctx, ox, oy, u);
+  return false;
+}
+
 // -------------------------------------------------------------- body parts
 
 export function drawContactShadow(ctx, ox, oy, u) {
@@ -73,10 +181,14 @@ export function drawSimpleBody(ctx, ox, oy, u, color, skin, build) {
   ctx.fill();
 }
 
-export function drawLegs(ctx, pose, ox, oy, cosA, sinA, u, color) {
+/**
+ * @param {number} [widen] WP-85a: extra half-width, in px, for the dark-theme
+ *   halo rim pass. Zero everywhere else, so the body itself is unchanged.
+ */
+export function drawLegs(ctx, pose, ox, oy, cosA, sinA, u, color, widen = 0) {
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
-  ctx.lineWidth = LEG_WIDTH * u;
+  ctx.lineWidth = LEG_WIDTH * u + 2 * widen;
   if (pose.seated) {
     for (const side of SIDES) {
       rotateLocal(HIP_OFFSET_X * side, HIP_OFFSET_Y, cosA, sinA);
@@ -117,19 +229,23 @@ export function drawLegs(ctx, pose, ox, oy, cosA, sinA, u, color) {
  *   colour — at full strength, so the one thing the torso has to say is said
  *   at exactly the contrast it was before.
  */
-export function drawTorso(ctx, ox, oy, facingRot, u, color, build) {
+export function drawTorso(ctx, ox, oy, facingRot, u, color, build, widen = 0) {
   const b = build || 1;
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.ellipse(ox, oy, TORSO_RX * u * b, TORSO_RY * u * b, facingRot, 0, TAU);
+  ctx.ellipse(ox, oy, TORSO_RX * u * b + widen, TORSO_RY * u * b + widen, facingRot, 0, TAU);
   ctx.fill();
+  // The halo rim pass wants the SHAPE and not the drawing: the torso's cool
+  // outline is what separates a body from the thing behind it, and stroking it
+  // one rim out would put a second, softer body around the first.
+  if (widen > 0) return;
   ctx.strokeStyle = PALETTE.inkCool;
   ctx.lineWidth = Math.max(0.6, u * 0.035);
   ctx.stroke();
 }
 
 /** @param {string} [skin] per-agent skin tone (WP-20); defaults to the constant. */
-export function drawArmStroke(ctx, side, u, color, skin) {
+export function drawArmStroke(ctx, side, u, color, skin, widen = 0) {
   const sx = side > 0 ? _rSx : _lSx,
     sy = side > 0 ? _rSy : _lSy;
   const ex = side > 0 ? _rEx : _lEx,
@@ -138,7 +254,7 @@ export function drawArmStroke(ctx, side, u, color, skin) {
     hy = side > 0 ? _rHy : _lHy;
   ctx.strokeStyle = color;
   ctx.lineCap = 'round';
-  ctx.lineWidth = ARM_WIDTH * u;
+  ctx.lineWidth = ARM_WIDTH * u + 2 * widen;
   ctx.beginPath();
   ctx.moveTo(sx, sy);
   ctx.lineTo(ex, ey);
@@ -149,7 +265,7 @@ export function drawArmStroke(ctx, side, u, color, skin) {
   ctx.stroke();
   ctx.fillStyle = skin || SKIN;
   ctx.beginPath();
-  ctx.arc(hx, hy, HAND_R * u, 0, TAU);
+  ctx.arc(hx, hy, HAND_R * u + widen, 0, TAU);
   ctx.fill();
 }
 
@@ -169,13 +285,13 @@ export function drawFingerTicks(ctx, side, u, fingerPhase) {
 }
 
 /** @param {string} [skin] per-agent skin tone (WP-20); defaults to the constant. */
-export function drawHead(ctx, ox, oy, cosA, sinA, u, skin) {
+export function drawHead(ctx, ox, oy, cosA, sinA, u, skin, widen = 0) {
   rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
   const hx = ox + _rx * u,
     hy = oy + _ry * u;
   ctx.fillStyle = skin || SKIN;
   ctx.beginPath();
-  ctx.arc(hx, hy, HEAD_R * u, 0, TAU);
+  ctx.arc(hx, hy, HEAD_R * u + widen, 0, TAU);
   ctx.fill();
 }
 
