@@ -414,6 +414,19 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   WP-71 are in `docs/plan/08-PLAN-V2-100X.md` §9 and the owner's decisions in §13.20.
   `docs/DEVIATIONS.md` §148.
 
+- **`docs/plan/09-3D-AND-FLOW.md` — what a 3D office would actually buy, and why the answer is the
+  floor we already have.** A document, not code. It takes apart the claim that a three.js scene
+  shows flow, hierarchy, control and progress, and finds that the projection carries almost none of
+  it: flow is arcs, hierarchy is a label and a seat, control is a list, progress is two rows of
+  text, and what the third dimension adds is mass, a horizon and an occlusion problem
+  `docs/03-VISUAL-SPEC.md` §1 exists to refuse. Three routes are costed — draw the edges in the 2D
+  canvas, an optional isometric projection with hoisted badges so a raised hand is provably never
+  covered, or a real 3D renderer vendored or shipped as a Supporter pack — and the recommendation
+  is the first, decisively: a GPU-dependent view cannot have goldens, and no renderer without
+  goldens becomes the default surface. Seven packages (WP-77 to WP-83) and a paused WP-73/WP-74 are
+  recorded in `docs/plan/08-PLAN-V2-100X.md` §9, the 3D decision in §13.21, and the owner's
+  14 September direction in `docs/DEVIATIONS.md` §152.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights

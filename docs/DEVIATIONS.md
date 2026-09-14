@@ -14408,3 +14408,76 @@ the package that adds them, and a test asserts the body is one line and one key.
 `/api/studio/tracking` answers `{ cards: [], note: 'no data' }`, and a test asserts **no digit
 appears anywhere in the response** — not even a zero, which is §7's refusal and the same one the
 rate card already makes for a model it cannot price.
+
+## 152. Direction — the floor was lit, and the owner looked past the light
+
+**§151 is not in this file.** It is being written by a package running beside this one and the
+number is reserved for it; this entry takes 152 so that two agents do not claim one heading. If
+§151 is still absent when both have merged, the gap is this sentence's fault and nothing is
+missing.
+
+No code changed. This is a direction entry: what the owner said on **14 September 2026**, what was
+decided because of it, and which planned work stops.
+
+### 152.1 What the owner said
+
+Two pieces of feedback on the same day, on the floor as WP-72 left it.
+
+**On 3D.** Verbatim in spirit: *"I do not see any 3D implementation like the other project. It is a
+lot of work, but it shows how everything flows, is controlled, managed workflow, hierarchy. Think
+and analyse in depth; if usable keep it for the future."* The other project is `agents-office`,
+whose scene is captured and mechanism-mapped in the visual takeover memo (PolyForm Noncommercial;
+ideas only, nothing copied).
+
+**On the floor as it stands.** The room plate's numbers are not the numbers that need action, and
+one of them — the payroll line — is a dollar figure at public list prices for a user on a
+subscription, which is not their bill and not their budget. The characters are too small to read
+and too easily mistaken for furniture; they want a rework, side or 45°, bigger, robot-like, and
+their size should be the user's choice rather than the layout's. A project the user cares about
+should be able to stay on the floor with no live session. The lounge takes a share of the stage its
+population does not earn. Waiting sessions stand about instead of sitting at the manager's desk.
+And the contact shadows under people and small props are offset along the key light as though a
+person were as tall as a building, which WP-72 introduced and which reads as things floating.
+
+### 152.2 What was decided
+
+**The 3D question is answered in `docs/plan/09-3D-AND-FLOW.md`, and the answer is no for the
+default surface.** The analysis takes the four things the owner credits to the reference scene and
+asks which of them the projection is carrying. Flow is dashed arcs and a hub, drawn in screen space.
+Hierarchy is a star on a pill and a seat at the head of a bench. Control is an HTML list with a
+`WAITING` tab. Progress is `DOING / NEXT / DONE` and a bar. All four work unchanged on a flat floor.
+What the third dimension contributes is mass, a horizon, and occlusion — and their own capture
+(`ao-04`) shows the cost: one label on top of another, one cut in half by a card, and every
+character facing away from the camera so a state has to be read from a pill rather than a person.
+
+DeckHQ's gap is real and it is not a camera gap. The hierarchy exists in the model already (user →
+project → session → subagent, with WP-41 seating juniors beside their parent); blocked-on exists
+(`needs_input`, `for_review`, and Studio's review gate and budget cap); the one real hand-off exists
+(the walk to `Your Office`). The floor draws none of the edges. Edges are a drawing job in the
+plane. The recommendation is route 1 — arcs from the injected clock, a hierarchy layer, blocked-on
+spurs, a chain tab in the deck, and Studio's board as the managed-workflow surface — with an
+isometric projection shelved behind a passing "a raised hand is never covered" test, and a
+GPU-dependent renderer that cannot have goldens refused on the default surface for ever. Whether it
+ever ships as a Supporter pack is the owner's, filed as `08-PLAN-V2-100X.md` §13.21.
+
+**Seven packages were opened** for the rest: WP-77 pinned rooms and a lounge sized by its
+population, WP-78 desk seating and honest shadows, WP-79 the character rework (design first, PNG
+candidates before any rig code), WP-80 the agent scale setting, WP-81 the room plate's content,
+WP-82 the product icon, WP-83 token usage with cost behind a setting that ships off.
+
+### 152.3 What stops
+
+**WP-73 (character life) and WP-74 (HUD polish) are paused, not cancelled**, and marked in
+`08-PLAN-V2-100X.md` §9 as superseded by WP-78/79 and WP-81. Both were written against the rig and
+the plate as they are. WP-79 changes what a character looks like and therefore what a desk prop has
+to sit beside, and WP-81 changes what a plate *says* before WP-74 makes it a card — building either
+now would mean building it twice. The parts of them that survive the rework are content for whoever
+picks them up: the identity-hashed desk clutter, the screen glow on `working` desks only, and the
+focus scrim. Nothing about them was wrong; they were simply next in a queue whose order changed.
+
+**One thing WP-72 shipped is being walked back on purpose.** §149 made every cast offset along one
+`LIGHT_DIR`, which is right for a wall, a building and a tall prop, and wrong for a person and a
+mug: a contact shadow is the place a thing touches the floor, and at a human's height the offset is
+smaller than a pixel. WP-78 restores the distinction rather than the flat-floor look — tall things
+keep the ray, short things sit on their own feet — and `test/unit/lighting.test.mjs`'s rule that
+`setLightShadow()` is the only writer of `shadowOffsetX`/`shadowOffsetY` is untouched.
