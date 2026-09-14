@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="DeckHQ">
+  <title>DeckHQ</title>
+  <!--
+    THE MARK. One file, one drawing, two grounds - WP-82.
+
+    Candidate 5 of five (docs/media/design/icon/, and its README for the 16 px
+    verdict on each): the agent, head and visor and antenna. Everything on this
+    floor is an agent; this is one, face on.
+
+    Six shapes, all of them axis-aligned rounded rectangles - the circle is a
+    rounded rectangle whose radius is half its side. No path data, no font, no
+    gradient, no filter, no external reference, no script. That is not
+    minimalism for its own sake: it is what lets scripts/brand/render-icons.mjs
+    rasterise this file itself, deterministically, with no image library and no
+    browser, so the PNGs and the .ico in the repository are provably this
+    drawing and not a photograph of it.
+
+    THE TWO GROUNDS. `svg.dark` / `svg.light` are the classes a renderer sets;
+    `prefers-color-scheme` is what an unclassed copy follows in a browser. The
+    dark ground is the one the raster set is built from - the mark's own README
+    calls it the stronger, and light-on-light leans on the rim.
+
+    Ink spans 44..468 across and 48..470 down: 83% and 82% of the box. That is
+    deliberately too much ink for a maskable icon's safe circle, which is why
+    public/manifest.webmanifest asks for `any` and not `any maskable`.
+  -->
+  <style>
+    svg{--plate:#14161B;--edge:#2A2E39;--form:#E9ECF2;--dim:#79808E;--deep:#14161B;--accent:#E4A44E}
+    @media (prefers-color-scheme:light){svg{--plate:#F4F2ED;--edge:#D8D3C8;--form:#1B1E25;--dim:#8C93A0;--deep:#F4F2ED;--accent:#B5731A}}
+    svg.dark{--plate:#14161B;--edge:#2A2E39;--form:#E9ECF2;--dim:#79808E;--deep:#14161B;--accent:#E4A44E}
+    svg.light{--plate:#F4F2ED;--edge:#D8D3C8;--form:#1B1E25;--dim:#8C93A0;--deep:#F4F2ED;--accent:#B5731A}
+  </style>
+
+  <!-- The plate, and the rim that is the only thing holding a light mark off a
+       light taskbar. -->
+  <rect width="512" height="512" rx="112" fill="var(--plate)"/>
+  <rect x="6" y="6" width="500" height="500" rx="106" fill="none" stroke="var(--edge)" stroke-width="12"/>
+
+  <!-- Antenna: stem, then the tip that carries the only colour in the mark.
+       Short, so the head can grow into the space the old stalk was wasting. -->
+  <rect x="236" y="106" width="40" height="76" rx="20" fill="var(--dim)"/>
+  <circle cx="256" cy="92" r="44" fill="var(--accent)"/>
+
+  <!-- Head. 424x300, and no ears: they were 1.1 px at 16 and were only ever
+       stealing the width the head needed. -->
+  <rect x="44" y="170" width="424" height="300" rx="104" fill="var(--form)"/>
+
+  <!-- Visor, high in the face so it reads as eyes and not as a mouth. -->
+  <rect x="104" y="232" width="304" height="118" rx="59" fill="var(--deep)"/>
+</svg>

@@ -16160,3 +16160,154 @@ from the boards it stands on.
 - **The mini-floor and the snapshot inherit the tokens and were not photographed.** Both read
   `PALETTE` for flat fills and the mini-floor calls `drawCharacter`, so both follow the new floor by
   construction; neither was looked at on screen.
+
+## 161. WP-82 — one drawing, eleven files, and a rasteriser instead of a screenshot
+
+The plan row: *"one SVG source lives in the repository and every PNG size and the `.ico` are
+generated from it … a test fails if a generated asset is older than its source."* The owner picked
+candidate **5, the agent** — head, visor, antenna — from the five in `docs/media/design/icon/`. Its
+README's verdict is the bar this entry is measured against: *"16 px: reads. The visor slot stays
+open on all four ground/variant combinations."*
+
+What DeckHQ had instead was **three unrelated marks**, none of which was a product mark:
+
+| Where | What was there | Drawn by |
+|---|---|---|
+| `public/icon-192.png`, `public/icon-512.png` — PWA, `.lnk`, app window | A floor plate with four desks, one crimson | `scripts/make-pwa-icons.mjs` |
+| `vscode/media/icon.png` — Marketplace, panel tab | The glyph `▣`, crimson on near-black | `scripts/vscode-icon.mjs` |
+| `site/favicon.svg`, and both `.brand-mark` rules | A crimson rounded square | by hand, twice |
+| The npm README | nothing at all | — |
+
+Two of those spent the accent on decoration, which `03-VISUAL-SPEC.md` §5 forbids inside the
+product; all three were a different drawing; and neither generator had a test, so either could have
+been stale for a year with nothing saying so. Both generators are deleted.
+
+### 161.1 The source, and what it is allowed to contain
+
+`public/brand/deckhq-mark.svg` is candidate 5, cleaned: `viewBox="0 0 512 512"`, six shapes, both
+grounds in the one file (`svg.dark` / `svg.light` for a renderer that sets the class,
+`prefers-color-scheme` for a copy that is only loaded). It sits under `public/` and not under
+`docs/` because `package.json`'s `files` list ships `public/` — the mark is part of the package, and
+the npm README's `<img>` resolves against it.
+
+`test/unit/brand-mark.test.mjs` refuses `<text>`, `<image>`, `<script>`, `<foreignObject>`,
+`xlink:href`, any `href`, `url(`, `@font-face`, `data:`, and any URL but the SVG namespace itself.
+That is not boilerplate hardening. Every one of them would make the drawing depend on something
+outside the file — a font that differs per machine, a paint server, a fetch — and the rasteriser
+below exists because the mark does not.
+
+### 161.2 Why the renderer is arithmetic and not a browser
+
+The obvious build step was the one this repository already owns: drive headless Chrome the way
+`scripts/capture-floor.mjs` and `scripts/goldens.mjs` do, and screenshot the SVG at each size.
+`scripts/brand/render-icons.mjs` does not do that, and the reason is in the goldens' own header —
+**they are per platform**, because a rasteriser is not a function. Two Chromes anti-alias a curve
+differently, so a committed icon would have been a photograph taken on one machine, and the test
+guarding it could only ever have been a pixel tolerance that skipped wherever Chrome was absent.
+
+An icon is not a running program. The mark is six axis-aligned rounded rectangles (the circle is one
+whose radius is half its side), and the exact coverage of a rounded rectangle is a closed form: the
+signed distance to it, evaluated at the pixel centre and clamped to a one-pixel ramp. `Math.sqrt` is
+IEEE-754 exact and everything else in the file is add and multiply, so the output is **byte for byte
+identical on every machine and every Node**. The test is therefore `assert.deepEqual` on the bytes;
+it runs everywhere and it never skips. It reads the colours out of the SVG's own `<style>` rather
+than restating them, and it throws on any element outside the subset rather than skipping it — a
+shape that silently did not draw is a mark that shipped wrong.
+
+It is about 120 lines of drawing code, and it replaced about 190 lines of two hand-written 4×4
+box-filter painters that drew something other than the mark. Its anti-aliasing is better at 16 px
+than theirs, which is where the whole question is decided.
+
+### 161.3 What is generated, and who reads it
+
+`node scripts/brand/render-icons.mjs` (`--check` to compare) writes ten files:
+
+| File | Sizes | Read by |
+|---|---|---|
+| `public/icon-{16,32,48,64,128,192,256,512}.png` | 8 | `manifest.webmanifest` (192, 512), `ICON_PNGS` for the `.lnk` ICO (512 + 192), the site header and hero (256), the ICO below |
+| `public/favicon.ico` | 16/32/48/64/128/256 in one file | the tab strip, the taskbar button, the `--app=` window frame |
+| `vscode/media/icon.png` | 128 | the Marketplace tile and the panel tab |
+
+`192` is not a rung anyone asks for by name; it is in the list because `manifest.webmanifest` and
+`src/core/launcher-apply.mjs` already named it, and because the `.lnk` ICO declares it **exactly**
+rather than through the format's "256 or larger" sentinel (`src/core/ico.mjs`). Dropping it would
+have rewritten the Windows shortcut path for no gain. `pngToIco` already took a list, so the
+favicon's six entries needed no change to the wrapper.
+
+The raster set is baked on the **dark** ground only, on the mark's own README — *"Dark variant is
+the stronger; light-on-light depends on its rim"* — and because a PNG cannot follow
+`prefers-color-scheme` at all: an icon carrying its own dark plate reads on a light taskbar and a
+dark one alike. The light variant is in the SVG and `--variant light` renders it; nothing ships it.
+
+### 161.4 The manifest stopped claiming to be maskable
+
+`purpose` was `"any maskable"` and is now `"any"`. The old mark sat inside the central 62% of its
+box, which is inside a maskable icon's safe circle. This one spans **83% × 82%** — which is what
+makes it read at 16 px — so a launcher applying a circular mask would crop the antenna off.
+`"any maskable"` was about to become a false claim; the test now asserts `any`.
+
+### 161.5 The header, and the one place the mark is neutral
+
+The floor's header carried a 10 px square with a 3 px ring. It now carries the mark **inline**, at
+18 px — inline rather than as an `<img>` for a specific reason: an SVG loaded through `<img>`
+resolves `prefers-color-scheme` against the **operating system**, and all three DeckHQ themes are
+dark. On a light desktop the header would have shown a bone-white plate in a near-black bar.
+
+Inline, every paint is a `--mark-*` variable and `public/style.css` maps five of them onto chrome
+tokens the current theme has already set, so the mark is themed by the same mechanism as everything
+else on that bar and needs no rule per theme. `--mark-deep` is `--mark-plate`, as in the source: the
+visor is the plate showing through the head, and any other value turns it into a mouth.
+
+**The sixth is the exception, and it is deliberate.** The mark's one saturated note is an amber
+antenna tip, and it keeps it in every raster, on the site and on the README. In the header it does
+not: a few pixels to its right is `needs-you-breakdown`, whose `needs_input` dot is amber `#b87333`
+and whose `stalled` dot is amber `#9a7b4f`. A third amber inside 200 px of the same bar is exactly
+the "cry wolf" failure §5 forbids for crimson, in another hue. So `--mark-accent` is `--ink-2` here
+and amber everywhere else — **one variable, not a second drawing** — and the test proves the two
+copies are the same geometry, shape for shape, painting the same variables in the same order.
+
+### 161.6 The site and the README
+
+`site/favicon.svg` is deleted. `site/build.mjs` copies `public/brand/deckhq-mark.svg` (the tab icon:
+a tab strip belongs to the reader's browser, so following *their* colour scheme there is right) and
+`public/icon-256.png` as `deckhq-mark.png` (the header and the hero, because the site is dark only
+and an `<img>` would have had the problem above). Neither is redrawn; both are copies of generated
+files, and `site.test.mjs` already asserts that every `<img>` a built page shows exists.
+
+The README's first line is now the mark beside the title. GitHub and npm both render it, and both
+grounds are in the file, so it follows the reader's GitHub theme.
+
+### 161.7 Goldens: 8 px, and nothing else
+
+The brand mark's layout box went from 10 px to 18 px, so every flex item to its right in the topbar
+moved **8 px right**. That is the entire change, and it is measurable rather than asserted: shifting
+the region `x 120..700, y 9..75` of the new `single.png` back by 8 px against the old one leaves
+**0 differing pixels** at a channel tolerance of 8, and every other offset from −2 to +14 leaves
+2,000–3,100. Unshifted, the nine goldens differ by 4,032–4,987 px of 1,600,000 (0.25–0.31%; `wide`
+is 4,053 of 2,073,600), and every differing pixel on all nine is inside `y 9..74` and `x 13..452`
+(`x 13..641` on `reference`, whose breakdown row is wider) — the topbar and nothing below it.
+
+All nine were regenerated once and `goldens:check` is green: 0 px over tolerance, 0 px moved at all.
+
+### 161.8 Unverified, and what is deliberately not here
+
+- **Nothing was looked at on a real taskbar, Start Menu, dock, Marketplace page or npm page.** The
+  ICO is asserted to parse and to carry six square PNG entries that point inside the file; that it
+  is the entry Explorer picks at each size is the format's contract, not a measurement here. The
+  16 px mark was read as the committed PNG, not as a live tab favicon.
+- **`docs/media/app-window.png` is stale** — a capture of the `deckhq app` window with the old
+  four-desk icon in its frame, and recapturing it needs a real window on a real desktop, which this
+  package did not have. **So are `hero.gif`, `floor.png`, `deck-view.png`, `panel-review-card.png`
+  and the two theme shots**: every one is a photograph of a floor whose header still shows the 10 px
+  square. They are correct pictures of an older build, each needs a recapture that is a visible
+  change of its own, and none was attempted.
+- **The light variant ships nowhere.** It was rendered once to check that it renders; its 16 px
+  legibility is the design README's claim, taken on trust.
+- **The plugin has no icon field to fill.** Neither `plugin/.claude-plugin/plugin.json` nor
+  `.claude-plugin/marketplace.json` carries an icon key, and nothing was invented for them.
+- **`src/core/launcher-apply.mjs`'s `ICON_PNGS` is untouched** — still 512 + 192, still two entries
+  in the `.lnk` ICO. Now that eight sizes exist it could carry six; that is a change to the Windows
+  shortcut path with its own test to rewrite, and it was out of scope here.
+- **The favicon `<link>` declares `sizes` and no `type`.** `image/x-icon` and
+  `image/vnd.microsoft.icon` are both in use and browsers ignore the attribute for an `.ico`; the
+  daemon serves it as `image/x-icon` (`src/http/server.mjs`).

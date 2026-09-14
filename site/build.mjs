@@ -155,13 +155,19 @@ function shell(page) {
     <meta name="description" content="${esc(page.description)}" />
     <meta name="color-scheme" content="dark" />
     <link rel="stylesheet" href="${esc(up)}style.css" />
-    <link rel="icon" href="${esc(up)}favicon.svg" type="image/svg+xml" />
+    <!-- WP-82 · the product mark. The favicon is the SVG, which carries both
+         grounds and follows the reader's own colour-scheme preference — a tab
+         strip belongs to the browser, not to this site. The header takes the
+         dark raster instead: this site is dark only, and an img element
+         resolves that media query against the OS rather than against the
+         page. -->
+    <link rel="icon" href="${esc(up)}deckhq-mark.svg" type="image/svg+xml" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-head">
       <a class="brand" href="${esc(up)}index.html">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <img class="brand-mark" src="${esc(up)}deckhq-mark.png" alt="" width="20" height="20" />
         <span class="brand-name">DeckHQ</span>
       </a>
       <nav class="site-nav" aria-label="Sections">
@@ -619,8 +625,15 @@ ${listing}
 
   // Static assets.
   fs.copyFileSync(path.join(here, 'style.css'), path.join(OUT, 'style.css'));
-  fs.copyFileSync(path.join(here, 'favicon.svg'), path.join(OUT, 'favicon.svg'));
-  written += 2;
+  // WP-82 · the mark, copied and never redrawn: the SVG is the source in the
+  // repository and the PNG is what scripts/brand/render-icons.mjs rendered from
+  // it. The site has no third copy of either.
+  fs.copyFileSync(
+    path.join(root, 'public', 'brand', 'deckhq-mark.svg'),
+    path.join(OUT, 'deckhq-mark.svg'),
+  );
+  fs.copyFileSync(path.join(root, 'public', 'icon-256.png'), path.join(OUT, 'deckhq-mark.png'));
+  written += 3;
   for (const name of media) {
     const from = path.join(root, 'docs', 'media', name);
     if (!fs.existsSync(from)) throw new Error(`docs/media/${name} is referenced but missing`);

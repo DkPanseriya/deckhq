@@ -451,6 +451,42 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   WP-60: the plate now says `N fired`, and `test/unit/fire-vocabulary.test.mjs` no longer excludes
   `public/render/`. `docs/DEVIATIONS.md` §143.2, §145.4.
 
+- **One product mark, everywhere, generated from one file — WP-82.** DeckHQ had three unrelated
+  icons and no product mark: a floor-plate-and-four-desks PNG for the PWA and the Desktop shortcut,
+  a `▣` glyph for the VS Code Marketplace, a crimson square for the site and the header, and nothing
+  at all on the npm page. Two of them spent the crimson accent on decoration, which
+  `docs/03-VISUAL-SPEC.md` §5 forbids inside the product, and neither generator had a test, so
+  either could have been stale for a year with nothing saying so.
+
+  The mark is now **the agent** — head, visor, antenna — the candidate the owner picked from the
+  five in `docs/media/design/icon/`. It lives once, as `public/brand/deckhq-mark.svg`: six
+  axis-aligned rounded rectangles, both grounds in the one file, no font, no gradient, no external
+  reference, nothing that can fetch. Every raster is rendered from it by
+  `node scripts/brand/render-icons.mjs` — eight PNGs (16, 32, 48, 64, 128, 192, 256, 512), a
+  six-entry `public/favicon.ico`, and the 128 px Marketplace tile — and every consumer reads one of
+  those: the browser tab, the `deckhq app` window, the Desktop and Start Menu shortcut (whose `.ico`
+  is wrapped from the same PNGs by `src/core/ico.mjs`), the floor's own header, the docs site's
+  favicon, header and hero, the VS Code extension, and the first line of the README.
+  `scripts/make-pwa-icons.mjs`, `scripts/vscode-icon.mjs` and `site/favicon.svg` are gone.
+
+  **The renderer is arithmetic, not a screenshot, and that is the point.** It would have been
+  easier to drive headless Chrome the way the goldens do — and the goldens are per platform for
+  exactly the reason that would have been wrong: two Chromes anti-alias a curve differently, so a
+  committed icon would have been a photograph taken on one machine. Rounded rectangles have a closed
+  form, so `render-icons.mjs` rasterises them itself from the signed distance at each pixel centre,
+  in about 120 lines with no dependency, and produces the same bytes on every machine and every
+  Node. `test/unit/brand-mark.test.mjs` therefore compares the committed bytes rather than
+  approximating them, runs everywhere instead of skipping where Chrome is absent, and the source and
+  its outputs cannot drift apart. `node scripts/brand/render-icons.mjs --check` says so in one line.
+
+  The floor's header mark is the same drawing inline at 18 px, themed through `--mark-*` variables
+  mapped onto the chrome tokens, with its one amber note neutralised there and nowhere else —
+  `needs_input` and `stalled` are both amber dots a few pixels to its right, and a third amber in
+  that bar is the "cry wolf" §5 forbids for crimson in another hue. The manifest also stopped
+  claiming `maskable`: this mark fills 83% of its box, which is past a maskable icon's safe circle.
+  Every golden was rebaked once; the only change on the floor is the topbar moving 8 px right.
+  `docs/DEVIATIONS.md` §161.
+
 ### Fixed
 
 - **Every full-surface view has a visible way back to the floor — WP-84.** The owner: _"Once the
@@ -738,6 +774,18 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   environment is re-read so one process can hold two instants, and a live `now` does not freeze
   the client while a pinned one does. `scripts/test.mjs` deletes `DECKHQ_NOW` from the canary
   environment, for the reason it already deletes `DECKHQ_HOSTNAME`.
+
+- **`test/unit/brand-mark.test.mjs` — twenty tests, and the one that stops the mark rotting.** The
+  mark is read by a browser tab, a taskbar, a `.lnk`, a Marketplace tile, two sites and the product's
+  own header, and every one of them reads a _different, generated_ file — exactly the shape of thing
+  that goes stale quietly. The suite asserts the SVG is well-formed and carries nothing that could
+  fetch, script or re-letter it; that both grounds declare the same variables and every shape's paint
+  resolves in both; that every consumer path exists and is not empty; that `public/favicon.ico`
+  parses, holds six square PNG entries and points inside itself; that the header's inline copy is the
+  source's geometry shape for shape and asks for no variable `style.css` does not set; and — the one
+  that matters — that **re-rendering the SVG right now reproduces every committed raster byte for
+  byte**. That last one is a byte comparison and not a tolerance, and it needs no browser, so it runs
+  on every machine rather than skipping where Chrome is absent.
 
 ### Packaging
 

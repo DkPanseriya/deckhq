@@ -12,7 +12,13 @@
     <!-- WP-16 · one line: an installed DeckHQ can badge the dock with the
          needs-you count while every window is closed. public/sw.js. -->
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icon-192.png" type="image/png" />
+    <!-- WP-82 · the mark. The ICO carries 16/32/48/64/128/256 and is what a
+         Windows tab strip, taskbar button and `--app=` window frame reach for;
+         the 192 PNG is the same drawing and is what everything else takes.
+         Both are rendered from public/brand/deckhq-mark.svg by
+         scripts/brand/render-icons.mjs — never hand-edited. -->
+    <link rel="icon" href="./favicon.ico" sizes="16x16 32x32 48x48 64x64 128x128 256x256" />
+    <link rel="icon" href="./icon-192.png" type="image/png" sizes="192x192" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -20,7 +26,35 @@
 
     <header class="topbar" id="topbar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
+        <!-- WP-82 · the mark, inline. It is inline and not an <img> because an
+             SVG loaded through <img> resolves `prefers-color-scheme` against
+             the OPERATING SYSTEM, and all three DeckHQ themes are dark: a mark
+             on a light desktop would have arrived with a bone-white plate in a
+             near-black header. Inline, every colour is a `--mark-*` variable
+             that public/style.css maps onto the chrome tokens the current theme
+             already set, so the mark is themed by the same mechanism as
+             everything else on this bar.
+
+             The geometry below is public/brand/deckhq-mark.svg's, shape for
+             shape, and test/unit/brand-mark.test.mjs fails if the two ever
+             differ. Do not edit one without the other; the SVG is the source. -->
+        <svg class="brand-mark" viewBox="0 0 512 512" aria-hidden="true" focusable="false">
+          <rect width="512" height="512" rx="112" fill="var(--mark-plate)" />
+          <rect
+            x="6"
+            y="6"
+            width="500"
+            height="500"
+            rx="106"
+            fill="none"
+            stroke="var(--mark-edge)"
+            stroke-width="12"
+          />
+          <rect x="236" y="106" width="40" height="76" rx="20" fill="var(--mark-dim)" />
+          <circle cx="256" cy="92" r="44" fill="var(--mark-accent)" />
+          <rect x="44" y="170" width="424" height="300" rx="104" fill="var(--mark-form)" />
+          <rect x="104" y="232" width="304" height="118" rx="59" fill="var(--mark-deep)" />
+        </svg>
         <span class="brand-name">DeckHQ</span>
       </div>
 

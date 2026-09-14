@@ -114,11 +114,23 @@ body {
   text-decoration: none;
 }
 
+/* WP-82 · the product mark, as the dark raster. The crimson square it replaces
+   was the accent spent on decoration, which docs/03-VISUAL-SPEC.md §5 forbids
+   inside the product and which had no more business here. */
 .brand-mark {
-  width: 0.8rem;
-  height: 0.8rem;
-  background: var(--accent);
-  border-radius: 2px;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+/* The hero's copy of the same file, large enough to be a portrait rather than
+   a favicon. */
+.hero-mark {
+  width: 72px;
+  height: 72px;
+  display: block;
+  margin: 0 0 1.1rem;
 }
 
 .site-nav {
