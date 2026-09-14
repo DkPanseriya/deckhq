@@ -1,4 +1,4 @@
-# DeckHQ
+# <img src="public/brand/deckhq-mark.svg" alt="" width="34" height="34" align="top" /> DeckHQ
 
 **Every AI coding session on your machine, on one office floor.** It sees the ones your terminal
 forgot, and it remembers what's waiting on you even after you've read it. Local, private, MIT.
@@ -868,6 +868,14 @@ The hero GIF above is generated, not drawn: `scripts/capture-hero.mjs` records t
 while one agent's turn ends through the real hook endpoint, and `scripts/gif-encoder.mjs` encodes
 the frames with no dependency, so it contains no real project names and can be regenerated after
 any change to the floor.
+
+So is the mark at the top of this file. It lives once, as
+[`public/brand/deckhq-mark.svg`](public/brand/deckhq-mark.svg) — six rounded rectangles, both
+grounds in one file, no font and no external reference — and every PNG, the `favicon.ico` and the
+VS Code tile are rendered from it by `node scripts/brand/render-icons.mjs`, which rasterises the
+shapes itself rather than driving a browser, so the bytes are the same on every machine.
+`--check` compares the committed files against a fresh render, and `test/unit/brand-mark.test.mjs`
+does the same on every run, so the source and its outputs cannot drift apart.
 
 Layout, contracts and the reasoning behind every decision are in [`docs/`](docs/README.md). Start
 with [`docs/01-PRODUCT.md`](docs/01-PRODUCT.md) for what this is and

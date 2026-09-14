@@ -82,7 +82,11 @@ test('the site builds every page it navigates to', () => {
     'log/index.html',
     'log/1.html',
     'style.css',
-    'favicon.svg',
+    // WP-82 · the mark, both the SVG the tab strip gets and the dark raster
+    // the pages show. `site/favicon.svg` — a crimson square that was nothing
+    // the product used — is gone.
+    'deckhq-mark.svg',
+    'deckhq-mark.png',
   ]) {
     assert.ok(fs.existsSync(path.join(out, rel)), `${rel} was not built`);
   }

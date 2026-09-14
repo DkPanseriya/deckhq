@@ -282,15 +282,35 @@ button {
   gap: 0.5rem;
   flex: 0 0 auto;
 }
+/* WP-82 · the product mark, inline in index.html and drawn from
+   public/brand/deckhq-mark.svg.
+
+   NEUTRAL, DELIBERATELY, AND THIS IS THE ONE PLACE IT IS. The shipped mark has
+   one saturated note — an amber antenna tip — and everywhere else (favicon,
+   taskbar, Marketplace tile, README, site) it keeps it. Here it does not.
+   Twelve pixels to the right of this mark sits `needs-you-breakdown`, whose
+   `needs_input` dot is amber #b87333 and whose `stalled` dot is amber #9a7b4f,
+   and a third amber in the same 200 px of header is the "cry wolf" failure
+   that docs/03-VISUAL-SPEC.md §5 forbids for crimson, in another hue. So
+   `--mark-accent` is ink here and amber in every raster; that is one variable,
+   not a second drawing.
+
+   The other five map onto the chrome tokens, so all three themes — all of them
+   dark — carry the mark without a rule of their own. `--mark-deep` is
+   `--mark-plate` on purpose: in the source the visor is the plate showing
+   through the head, and it has to stay that way or it reads as a mouth. */
 .brand-mark {
-  /* Neutral, deliberately: the accent is spent only on for_review and
-     primary actions (docs/03-VISUAL-SPEC.md §5). A red logo mark would
-     "cry wolf" beside a real for_review signal in the header. */
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  background: var(--ink-2);
-  box-shadow: 0 0 0 3px var(--surface-3);
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  display: block;
+
+  --mark-plate: var(--surface-2);
+  --mark-edge: var(--line);
+  --mark-form: var(--ink);
+  --mark-dim: var(--muted);
+  --mark-deep: var(--surface-2);
+  --mark-accent: var(--ink-2);
 }
 .brand-name {
   font-weight: 600;
