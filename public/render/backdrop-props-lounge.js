@@ -16,7 +16,7 @@
  */
 
 import { PALETTE } from './palette.js';
-import { roundRect } from './backdrop-paint.js';
+import { roundRect, unturn, SOFA_ARM_U, SOFA_BACK_U } from './backdrop-paint.js';
 import { LAMP_GLOW } from './backdrop-paint.js';
 
 /**
@@ -61,8 +61,12 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       });
       // Arms at each end and a back along one long side, so a sofa reads as a
       // sofa from directly above instead of as a white slab with lines on it.
-      const arm = Math.min(depth * 0.34, 7);
-      const back = Math.min(depth * 0.3, 6);
+      //
+      // §3.4 states both in PLAN UNITS — *"arms at 0.6 U"* — because 7 baked
+      // pixels is a different piece of furniture at every zoom the floor is
+      // drawn at, and a sofa whose arms vanish at fit scale is the slab again.
+      const arm = Math.min(depth * 0.34, SOFA_ARM_U * u);
+      const back = Math.min(depth * 0.3, SOFA_BACK_U * u);
       const backY = backAtStart ? -depth / 2 : depth / 2 - back;
       ctx.fillStyle = PALETTE.sofaFrame;
       roundRect(ctx, -len / 2, backY, len, back, 4);
@@ -92,7 +96,34 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       }
       break;
     }
+    case 'armchair': {
+      // THE QUIET CORNER'S ARMCHAIR (§3.4), 3.0 U — the largest of the four
+      // seat kinds and the one that has to read as a single seat rather than as
+      // a short sofa. So: a square frame with a high back on the far side and
+      // one cushion, where a sofa is a long frame with several.
+      //
+      // The wrapper has already turned the canvas by `angle`, and an armchair's
+      // footprint is square, so this is drawn in the FACING frame: +x is the way
+      // the occupant looks, the back is behind them at -x and the arms run along
+      // ±y. No rotation to cancel, unlike the sofa, whose rect is a long run and
+      // therefore cannot be turned.
+      const s = Math.min(w, h);
+      const back = Math.max(2, s * 0.26);
+      const arm = Math.max(1.5, s * 0.18);
+      local((k) => {
+        k.fillStyle = PALETTE.sofaFrame;
+        roundRect(k, -s / 2, -s / 2, s, s, 5);
+        k.fill();
+        k.strokeStyle = PALETTE.chairEdge;
+        k.stroke();
+      });
+      ctx.fillStyle = PALETTE.sofaCushion;
+      roundRect(ctx, -s / 2 + back, -s / 2 + arm, s - back - arm * 0.6, s - arm * 2, 4);
+      ctx.fill();
+      break;
+    }
     case 'coffee_table': {
+      unturn(ctx, prop);
       // Low table in front of a sofa group. Same wood tone and soft ring
       // highlight as the dining and board-game tables so the lounge reads as
       // one furniture set, but rectangular rather than round: a coffee table
@@ -166,6 +197,7 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'side_table': {
+      unturn(ctx, prop);
       // Small square table beside the sofa — same wood tokens as the desk
       // family, just square and low, with a soft corner sheen instead of
       // the desk's centre divider.
@@ -183,6 +215,7 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'magazine_table': {
+      unturn(ctx, prop);
       // Low rectangular coffee table with a couple of magazines fanned
       // across it — small flat rects at a slight angle read as "in use",
       // the same trick the whiteboard's marker dashes use.

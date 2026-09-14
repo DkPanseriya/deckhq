@@ -320,7 +320,7 @@ test('the waiting area fills its visitor chairs, then queues, and never a sofa',
   const modest = buildPlan([], waitingAgents(8));
   const office = modest.rooms.find((r) => r.kind === 'office');
   assert.equal(modest.officeSeats.length, 8);
-  const chairs = office.props.filter((p) => p.kind === 'waiting_chair');
+  const chairs = office.props.filter((p) => p.kind === 'tub_chair');
   assert.ok(
     chairs.length >= 2 && chairs.length <= 3,
     `two or three visitor chairs, got ${chairs.length}`,
@@ -345,13 +345,13 @@ test('the waiting area fills its visitor chairs, then queues, and never a sofa',
     const packed = buildPlan([], waitingAgents(waiting));
     const packedOffice = packed.rooms.find((r) => r.kind === 'office');
     assert.equal(packed.officeSeats.length, waiting, `${waiting} waiting need ${waiting} places`);
-    const n = packedOffice.props.filter((p) => p.kind === 'waiting_chair').length;
+    const n = packedOffice.props.filter((p) => p.kind === 'tub_chair').length;
     assert.ok(n >= 2 && n <= 3, `${waiting} waiting produced ${n} chairs`);
     assert.equal(
-      packedOffice.props.filter((p) => p.kind === 'waiting_chair').length,
+      packedOffice.props.filter((p) => p.kind === 'tub_chair').length,
       buildPlan([], waitingAgents(waiting))
         .rooms.find((r) => r.kind === 'office')
-        .props.filter((p) => p.kind === 'waiting_chair').length,
+        .props.filter((p) => p.kind === 'tub_chair').length,
       'the chair count moved between two builds of the same floor',
     );
   }
@@ -533,7 +533,7 @@ test('a seated waiting agent is on a chair, and a standing one is on no furnitur
     const plan = buildPlan([], waitingAgents(waiting));
     const office = plan.rooms.find((r) => r.kind === 'office');
     const sofas = office.props.filter((p) => p.kind === 'sofa');
-    const chairs = office.props.filter((p) => p.kind === 'waiting_chair');
+    const chairs = office.props.filter((p) => p.kind === 'tub_chair');
     assert.equal(plan.officeSeats.length, waiting);
 
     for (const seat of plan.officeSeats) {

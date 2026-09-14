@@ -47,11 +47,24 @@ import {
   LIGHT_POOL_COLOR,
   lightInkFor,
   materialTokensFor,
+  over,
   pooled,
   relativeLuminance,
   shade,
   THEMES,
 } from '../../public/render/themes.js';
+import {
+  BREAKOUT_BAND,
+  BREAKOUT_CLEAR_RATIO,
+  SEAT_FOOTPRINTS,
+  breakoutFits,
+} from '../../public/render/plan-furniture.js';
+import {
+  CHAIR_GAP,
+  CORNER_PLANT_INSET,
+  ROOM_PAD,
+  RUG_MAX_OVER_CLUSTER,
+} from '../../public/render/plan-units.js';
 import {
   CARPET_WEAVE_PITCH_U,
   DOOR_POOL_R_U,
@@ -61,7 +74,8 @@ import {
   HERRINGBONE_SEAM_U,
   TILE_CELL_U,
 } from '../../public/render/backdrop-floor.js';
-import { U_DEFAULT } from '../../public/render/backdrop-paint.js';
+import { SHADOW_RX, SHADOW_RY } from '../../public/render/rig-metrics.js';
+import { TABLE_EDGE_U, U_DEFAULT } from '../../public/render/backdrop-paint.js';
 import { BODY_HEIGHT_U } from '../../public/render/rig-metrics.js';
 import { buildPlan } from '../../public/render/plan.js';
 
@@ -468,17 +482,20 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
 // ------------------------------------------------------ the plan did not move
 
 /**
- * WP-85a's golden diff is PAINT ONLY (§5): it touches no plan geometry, so no
- * room rectangle on any golden may have moved. This is that claim, as a hash
- * over a ladder of populations rather than as a promise.
+ * THE ROOM RECTANGLES, AS ONE NUMBER.
  *
- * The constant below was taken with `public/render/plan*.js` byte-identical to
- * their state before this package — `git diff` over that directory is the
- * independent check on it — and it will keep being the right constant until
- * somebody deliberately changes the layout, at which point this fails and says
- * so rather than letting a paint package quietly move a wall.
+ * WP-85a's golden diff was PAINT ONLY (§5): it touched no plan geometry, so no
+ * room rectangle on any golden could have moved, and this hash over a ladder of
+ * populations was that claim rather than a promise.
+ *
+ * WP-85b IS A FURNITURE PACKAGE, and furniture sizes what a room bids for: a
+ * whiteboard capped at 8 U, a rug at `cluster + 1.0`, a tub chair at 2.4 and a
+ * lounge whose pool table grew to §3.4's 13.5 x 7 all move the envelope the
+ * search settles on. So the constant moved ONCE, deliberately, and the test
+ * kept its job — it is the thing that says a later package which claims to move
+ * paint has moved a wall.
  */
-const PLAN_HASH = '708e9f8e';
+const PLAN_HASH = '47f20830';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {
@@ -492,8 +509,13 @@ function hash32(s) {
 
 const PLAN_NOW = 1_800_000_000_000;
 
-/** @param {number[]} sizes @param {number} benched */
-function planFor(sizes, benched) {
+/**
+ * @param {number[]} sizes @param {number} benched
+ * @param {{w:number,h:number}} [stage] the window the floor is laid for — the
+ *   goldens' 1600 x 1000 by default, and a second shape wherever a property has
+ *   to hold on a room the packer sized differently.
+ */
+function planFor(sizes, benched, stage = { w: 1600, h: 1000 }) {
   const agents = [];
   const projects = sizes.map((n, i) => ({
     id: `p${i}`,
@@ -524,10 +546,10 @@ function planFor(sizes, benched) {
       lastActivityAt: PLAN_NOW - 60_000,
     });
   }
-  return buildPlan(projects, agents, { now: PLAN_NOW, stage: { w: 1600, h: 1000 } });
+  return buildPlan(projects, agents, { now: PLAN_NOW, stage });
 }
 
-test('WP-85a moves paint and nothing else: no room rectangle moved', () => {
+test('the room rectangles are the ones WP-85b left, over eighteen populations', () => {
   /** @type {string[]} */
   const lines = [];
   for (const sizes of [[1], [3], [2, 2], [3, 2, 2], [4, 3, 2, 1], [5, 4, 3, 2, 1]]) {
@@ -543,7 +565,8 @@ test('WP-85a moves paint and nothing else: no room rectangle moved', () => {
   assert.equal(
     got,
     PLAN_HASH,
-    'a room rectangle moved. WP-85a is a paint package — if this is deliberate, it is not WP-85a.',
+    'a room rectangle moved. If that is deliberate, say so in docs/DEVIATIONS.md and re-take ' +
+      'this constant; if it is not, a paint change has moved a wall.',
   );
   console.log(`\n    ${lines.length} room rectangles over 18 populations, hash ${got}`);
 });
@@ -621,5 +644,382 @@ test('the washed carpets a project room is really painted in are still readable 
         ).reduce((a, b) => Math.min(a, b)),
       )}:1`,
     ]),
+  );
+});
+
+// ------------------------------------------------- WP-85b: the furniture set
+
+/**
+ * A ladder of populations, and the rooms they produce.
+ *
+ * The same shape `planFor` above builds, asked of floors either side of the
+ * ones the goldens photograph. Stated once here because every acceptance in §5
+ * is a property over EVERY emitted plan, and a property measured on one floor
+ * is an anecdote.
+ */
+const GOLDEN_STAGE = { w: 1600, h: 1000 };
+/** A small window, where a room comes out too shallow for a second destination. */
+const SMALL_STAGE = { w: 800, h: 600 };
+
+const FURNITURE_POPULATIONS = /** @type {const} */ ([
+  [[1], 0, GOLDEN_STAGE],
+  [[3], 0, GOLDEN_STAGE],
+  [[3], 5, GOLDEN_STAGE],
+  [[2, 2], 0, GOLDEN_STAGE],
+  [[3, 2, 2], 5, GOLDEN_STAGE],
+  [[4, 3, 2, 1], 0, GOLDEN_STAGE],
+  [[5, 4, 3, 2, 1], 12, GOLDEN_STAGE],
+  [[15], 3, GOLDEN_STAGE],
+  [[2, 2], 0, SMALL_STAGE],
+  [[3, 2, 2], 5, SMALL_STAGE],
+  [[5, 4, 3, 2, 1], 12, SMALL_STAGE],
+]);
+
+/** Every live project room on every floor of the ladder. @returns {any[]} */
+function projectRoomLadder() {
+  /** @type {any[]} */
+  const out = [];
+  for (const [sizes, benched, stage] of FURNITURE_POPULATIONS) {
+    for (const room of planFor([...sizes], benched, stage).rooms) {
+      if (room.kind === 'project' && !room.pinned) out.push(room);
+    }
+  }
+  return out;
+}
+
+test('§3.4: the four seat kinds have four distinct footprints, in every emitted plan', () => {
+  // *"No two seat kinds in one room share a footprint"* — the silhouette rule
+  // stated as an arithmetic one, because at 34 px a reader tells two seats
+  // apart by how much floor they take and not by their upholstery. Measured on
+  // what the PLAN emits rather than on `plan-furniture.js`'s own constants: the
+  // reception's visitor chair was a task chair wearing a second name for four
+  // packages, and nothing could see it.
+  const declared = Object.values(SEAT_FOOTPRINTS);
+  assert.equal(new Set(declared).size, declared.length, 'two seat kinds share a footprint');
+  assert.deepEqual(
+    declared.slice().sort((a, b) => a - b),
+    [1.4, 2, 2.4, 3],
+    '§3.4 names these four footprints',
+  );
+
+  /** @type {Set<string>} */
+  const seen = new Set();
+  for (const [sizes, benched, stage] of FURNITURE_POPULATIONS) {
+    for (const room of planFor([...sizes], benched, stage).rooms) {
+      for (const prop of room.props || []) {
+        const want = SEAT_FOOTPRINTS[prop.kind];
+        if (want === undefined) continue;
+        assert.equal(
+          Math.max(prop.w, prop.h),
+          want,
+          `${room.kind}/${prop.kind} is ${Math.max(prop.w, prop.h)} U, not §3.4's ${want}`,
+        );
+        seen.add(prop.kind);
+      }
+    }
+  }
+  // And all four are actually drawn somewhere, or three of them are a table of
+  // numbers nothing reads.
+  for (const kind of Object.keys(SEAT_FOOTPRINTS)) {
+    assert.ok(seen.has(kind), `no floor in the ladder emits a ${kind}`);
+  }
+  report(
+    'the four seat kinds',
+    Object.entries(SEAT_FOOTPRINTS).map(([k, v]) => [k, `${v.toFixed(1)} U · ${v * U_DEFAULT} px`]),
+  );
+});
+
+test('§3.4: a task rug is never more than 1.35× its desk cluster, on either axis', () => {
+  // WP-85b's first acceptance. §1.4 measured what the old rule drew — *"a pale
+  // mint slab ~20 U across holding one 6 U desk, the largest shape in the
+  // room"* — and the remedy is a rug that is a SIZE rather than a fill.
+  let worst = 0;
+  let rooms = 0;
+  for (const room of projectRoomLadder()) {
+    const group = (room.zones || []).find((z) => z.id === 'desk-group');
+    const rug = (room.props || []).find((p) => p.kind === 'rug');
+    if (!group || !rug) continue;
+    rooms++;
+    for (const [axis, got, base] of /** @type {const} */ ([
+      ['width', rug.w, group.w],
+      ['depth', rug.h, group.h],
+    ])) {
+      const over2 = got / base;
+      worst = Math.max(worst, over2);
+      assert.ok(
+        over2 <= RUG_MAX_OVER_CLUSTER + 1e-9,
+        `${room.id}: the rug's ${axis} is ${over2.toFixed(2)}× its cluster, over ` +
+          `${RUG_MAX_OVER_CLUSTER}×`,
+      );
+    }
+  }
+  assert.ok(rooms >= 20, `expected a real ladder of rooms, measured ${rooms}`);
+  report('the task rug', [
+    ['rooms measured', String(rooms)],
+    ['worst over its cluster', `${worst.toFixed(3)}× (ceiling ${RUG_MAX_OVER_CLUSTER})`],
+  ]);
+});
+
+test('§3.4: the break-out corner appears exactly where the threshold says it does', () => {
+  // Owner decision 4 — *"a second small destination is furniture, so the room is
+  // still the size of what is in it"* — with the rule stated once, in
+  // `plan-furniture.js`, and asserted here in both directions: every room that
+  // has a group could hold one, and every room that could hold one has one.
+  let withGroup = 0;
+  let without = 0;
+  for (const room of projectRoomLadder()) {
+    const group = (room.zones || []).find((z) => z.id === 'desk-group');
+    const zone = (room.zones || []).find((z) => z.id === 'breakout');
+    const rug = (room.props || []).find((p) => p.kind === 'rug');
+    if (!group || !rug) continue;
+    const band0 = room.plateBand ?? 0;
+    const interiorH = room.h - band0;
+    const clusterArea = group.w * group.h;
+    const clearRatio = (room.w * interiorH - clusterArea) / clusterArea;
+    // The band the group would stand in: under the rug, clear of the planting in
+    // the two south corners. The same arithmetic `buildProjectRoom` does, read
+    // off the finished room rather than off the frame it was laid in.
+    const bandTop = group.y - room.y - band0 + group.h / 2 + rug.h / 2 + 1.2;
+    const band = interiorH - CORNER_PLANT_INSET - 0.4 - bandTop;
+    const fits = breakoutFits(room.w - ROOM_PAD * 2, band, clearRatio);
+    if (zone) {
+      withGroup++;
+      assert.ok(fits, `${room.id} has a break-out group in a ${band.toFixed(1)} U band`);
+      // And the whole group is inside the room and clear of the desks' own rug —
+      // a destination drawn through the desks is not a second destination.
+      const chairs = (room.props || []).filter((p) => p.kind === 'tub_chair');
+      assert.equal(chairs.length, 2, `${room.id}: a break-out corner is two tub chairs`);
+      for (const p of [zone, ...chairs]) {
+        assert.ok(
+          p.x >= room.x - 0.01 &&
+            p.x + p.w <= room.x + room.w + 0.01 &&
+            p.y + p.h <= room.y + room.h + 0.01,
+          `${room.id}: the break-out group is drawn through a wall`,
+        );
+        assert.ok(
+          p.y >= rug.y + rug.h - 0.01,
+          `${room.id}: the break-out group is drawn on the desks' rug`,
+        );
+      }
+    } else {
+      without++;
+      assert.equal(fits, false, `${room.id} could hold a break-out group and has none`);
+    }
+  }
+  assert.ok(withGroup > 0 && without > 0, 'the threshold has to bite both ways to mean anything');
+  report('the break-out corner', [
+    ['rooms with one', String(withGroup)],
+    ['rooms without', String(without)],
+    ['threshold', `${BREAKOUT_BAND.toFixed(1)} U clear, over ${BREAKOUT_CLEAR_RATIO}× the cluster`],
+  ]);
+});
+
+test('§3.4: a seated figure sits ON its chair and never through the desk', () => {
+  // THE ONE INVARIANT A FURNITURE PACKAGE CAN BREAK SILENTLY. §5 asks for desks
+  // sized to the robot, and a chair pushed one notch closer to its table is a
+  // figure standing on the table top. A seat's (x, y) IS the figure's ground
+  // contact (`rig-metrics.js`: *"a character's feet point IS (x, y)"*), so the
+  // two are checked against each other rather than one against a second
+  // estimate of the other.
+  let seats = 0;
+  for (const [sizes, benched, stage] of FURNITURE_POPULATIONS) {
+    const plan = planFor([...sizes], benched, stage);
+    for (const room of plan.rooms) {
+      if (room.kind !== 'project') continue;
+      const chairs = (room.props || []).filter((p) => p.kind === 'chair');
+      const desks = (room.props || []).filter((p) => p.kind === 'desk');
+      for (const seat of plan.seats.get(room.id) || []) {
+        seats++;
+        const chair = chairs.find(
+          (c) =>
+            seat.x >= c.x - 1e-6 &&
+            seat.x <= c.x + c.w + 1e-6 &&
+            seat.y >= c.y - 1e-6 &&
+            seat.y <= c.y + c.h + 1e-6,
+        );
+        assert.ok(
+          chair,
+          `${room.id}: a seat at (${seat.x.toFixed(2)}, ${seat.y.toFixed(2)}) has no chair under it`,
+        );
+        // The figure's own footprint: the contact ellipse `drawContactShadow`
+        // lays, centred on the feet point with no offset (`SHADOW_O*` are zero,
+        // and `lighting.test.mjs` measures that they are).
+        for (const desk of desks) {
+          const overlaps =
+            seat.x + SHADOW_RX > desk.x &&
+            seat.x - SHADOW_RX < desk.x + desk.w &&
+            seat.y + SHADOW_RY > desk.y &&
+            seat.y - SHADOW_RY < desk.y + desk.h;
+          assert.equal(
+            overlaps,
+            false,
+            `${room.id}: a figure at (${seat.x.toFixed(2)}, ${seat.y.toFixed(2)}) has its feet ` +
+              'on the desk top',
+          );
+        }
+      }
+    }
+  }
+  assert.ok(seats >= 30, `expected a real ladder of seats, measured ${seats}`);
+  report('the seated figure', [
+    ['seats measured', String(seats)],
+    ['task chair', `${SEAT_FOOTPRINTS.chair} U, at a ${CHAIR_GAP} U desk gap`],
+    ['contact ellipse', `${SHADOW_RX} × ${SHADOW_RY} U, centred on the feet`],
+  ]);
+});
+
+test('§7: no prop is drawn in the strip a room writes its plate in', () => {
+  // `03-VISUAL-SPEC.md` §7's *"a label never covers furniture"*, kept the way
+  // §3.8 asks for it — as a property of the PLAN rather than as a check in the
+  // label pass: *"the band is furniture-free by construction, which turns §7's
+  // 'never covers furniture' into a property rather than a check"*. Re-asserted
+  // here because WP-85b moves the desks UPWARD in every room that gets a
+  // break-out group, which is the one change that could put a desk under a name.
+  let checked = 0;
+  for (const [sizes, benched, stage] of FURNITURE_POPULATIONS) {
+    for (const room of planFor([...sizes], benched, stage).rooms) {
+      const band = room.plateBand ?? 0;
+      if (!band) continue;
+      for (const prop of room.props || []) {
+        checked++;
+        assert.ok(
+          prop.y >= room.y + band - 0.01,
+          `${room.id}/${prop.kind} is ${(room.y + band - prop.y).toFixed(2)} U into the plate band`,
+        );
+      }
+    }
+  }
+  assert.ok(checked > 100, `expected the whole ladder's furniture, saw ${checked}`);
+  report('the plate band', [['props checked', String(checked)]]);
+});
+
+test('§3.4: a desk no longer carries a near-white line down the middle of it', () => {
+  // A source-reading test, in the style of `paintCarpet`'s above, because the
+  // defect is a LITERAL and no measurement of the token table could find it:
+  // every desk on the floor carried `fillRect(-w/2, -3, w, 6)` in
+  // `rgba(255,255,255,0.85)`, which composites brighter than the default theme's
+  // own wall. That is §1.2's violation — on the one piece of furniture the
+  // person sitting at it is supposed to out-shine — and it survived WP-85a
+  // because `interiorHighlights` measures tokens and this was a literal.
+  const src = fs.readFileSync(path.join(RENDER, 'backdrop-props-desk.js'), 'utf8');
+  // Comments stripped first: this file's own prose quotes the literal it is
+  // asserting the absence of, which is a test that can only ever fail.
+  const desk = src
+    .slice(src.indexOf("case 'desk':"), src.indexOf("case 'desk_tray':"))
+    .replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(desk.length > 200, "the desk painter's case block was not found");
+  assert.ok(desk.includes('PALETTE.deskSheen'), 'the desk edge must use a capped sheen token');
+  assert.equal(
+    /rgba\(255,\s*255,\s*255,\s*0\.[5-9]/.test(desk),
+    false,
+    'a desk is painting a near-white fill again',
+  );
+  assert.ok(desk.includes('TABLE_EDGE_U'), "§3.4's edge band is a size in units, not in px");
+  assert.equal(TABLE_EDGE_U, 0.15, '§3.4 states the band');
+  // And the sheen that replaced it is under the wall on every theme by
+  // derivation rather than by choice.
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const theme of THEMES) {
+    const d = materialTokensFor(theme);
+    const lit = over(d.deskTop, d.deskSheen);
+    rows.push([
+      theme.name,
+      `${lit}  ${(relativeLuminance(lit) / relativeLuminance(theme.floor.wall)).toFixed(3)} × the wall`,
+    ]);
+    assert.ok(
+      relativeLuminance(lit) <= relativeLuminance(theme.floor.wall) + 1e-9,
+      `${theme.name}: a lit desk edge (${lit}) is brighter than the wall`,
+    );
+  }
+  report('a desk edge, lit', rows);
+});
+
+test('§3.4: a prop whose rect is its footprint is not turned by its facing', () => {
+  // THE DEFECT THAT ONLY EXISTS IN ONE ROOM, WHICH IS WHY IT SURVIVED SO LONG.
+  //
+  // `paintProp` clips to a prop's own axis-aligned box and then rotates by
+  // `prop.angle`. Every prop on this floor carries `angle` 0 except in the ROW
+  // reception, which `buildOfficeRow` builds by reflecting the portrait room in
+  // the diagonal and therefore hands every prop a quarter turn. On that floor an
+  // 8.8 × 3 user desk, a 24.8 × 14 wool rug, a 3 × 6.4 low table and a 0.4 × 4.8
+  // framed print were each drawn turned inside a clip cut to their unturned box,
+  // which renders every one of them as a square. `sofa` and `manager` had
+  // cancelled the turn by hand since WP-22; nothing else had.
+  //
+  // Source-reading, like `paintCarpet`'s above, because the defect is a MISSING
+  // CALL and no measurement of an output colour will ever find one.
+  const sources = {
+    'backdrop-props-desk.js': fs.readFileSync(path.join(RENDER, 'backdrop-props-desk.js'), 'utf8'),
+    'backdrop-props-lounge.js': fs.readFileSync(
+      path.join(RENDER, 'backdrop-props-lounge.js'),
+      'utf8',
+    ),
+  };
+  /** The kinds whose `w × h` says how they LIE rather than where they look. */
+  const FOOTPRINT_KINDS = /** @type {const} */ ([
+    ['backdrop-props-desk.js', 'desk'],
+    ['backdrop-props-desk.js', 'desk_tray'],
+    ['backdrop-props-desk.js', 'monitor'],
+    ['backdrop-props-desk.js', 'art'],
+    ['backdrop-props-desk.js', 'pinboard'],
+    ['backdrop-props-desk.js', 'rug'],
+    ['backdrop-props-lounge.js', 'coffee_table'],
+    ['backdrop-props-lounge.js', 'magazine_table'],
+    ['backdrop-props-lounge.js', 'side_table'],
+  ]);
+  for (const [file, kind] of FOOTPRINT_KINDS) {
+    const src = sources[file];
+    const at = src.indexOf(`case '${kind}':`);
+    assert.ok(at >= 0, `${file} has no painter for ${kind}`);
+    // A chain of labels shares one block (`case 'desk': case 'user_desk': {`),
+    // so the body starts at the brace and ends at the next label.
+    const open = src.indexOf('{', at);
+    const next = src.indexOf("\n    case '", open);
+    const block = src.slice(open, next < 0 ? src.length : next);
+    assert.ok(
+      /unturn\(ctx, prop\)/.test(block),
+      `${file}: ${kind}'s rect is its footprint and its painter does not call unturn()`,
+    );
+  }
+  // And the two that cancel it by hand still do, because both then re-derive
+  // which side the back is on from the angle they cancelled.
+  assert.match(sources['backdrop-props-lounge.js'], /ctx\.rotate\(-a\);/);
+  assert.match(sources['backdrop-props-desk.js'], /ctx\.rotate\(-\(prop\.angle \|\| 0\)\);/);
+  report(
+    'props whose rect is their footprint',
+    FOOTPRINT_KINDS.map(([file, kind]) => [kind, file]),
+  );
+});
+
+test('§3.1: the reception lies on wool and a project room on its own task textile', () => {
+  // Owner decision 2 — *"`rugWool` is the one textile on this floor with a hue of
+  // its own, a slate wool at `#B5B9B9`… adopt it"* — which WP-85a derived, WP-85a's
+  // guards measured and no floor ever drew: both rug painters read one token
+  // each, and the rectangular one read the SAGE. The tone is a property of the
+  // prop now, because a painter cannot ask which room it is in.
+  for (const [sizes, benched, stage] of FURNITURE_POPULATIONS) {
+    for (const room of planFor([...sizes], benched, stage).rooms) {
+      for (const prop of room.props || []) {
+        if (prop.kind !== 'rug' && prop.kind !== 'rug_round') continue;
+        if (room.kind === 'office') {
+          assert.equal(prop.tone, 'wool', 'the reception waits on wool');
+        } else if (room.kind === 'project' && prop.kind === 'rug_round') {
+          assert.equal(prop.tone, 'task', "a break-out rug lies on its room's own carpet");
+        }
+      }
+    }
+  }
+  // The two really are two materials, or the flag is bookkeeping.
+  for (const theme of THEMES) {
+    const d = materialTokensFor(theme);
+    assert.notEqual(d.rugCream, d.rugSage, `${theme.name}: the wool and the task rug are one tone`);
+  }
+  report(
+    'the two textiles',
+    THEMES.map((t) => {
+      const d = materialTokensFor(t);
+      return [t.name, `wool ${d.rugCream} · task ${d.rugSage}`];
+    }),
   );
 });

@@ -42,6 +42,52 @@ export const CONTACT_SHADOW_MAX_PX = 10;
  */
 export const PROP_BLEED = 0.6;
 
+/**
+ * THE EDGE BAND EVERY TABLE TOP SHOWS (WP-85b, `10-INTERIOR-DESIGN.md` §3.4).
+ *
+ * *"Every table shows its edge — a 0.15 U darker band on the light-away side, a
+ * sheen on the lit side."* A size in PLAN UNITS rather than in baked pixels, for
+ * the reason every other pattern size became one in WP-85a: a bake at any `u`
+ * must lay the same furniture, and a 2 px band is a different piece of furniture
+ * at a different zoom.
+ */
+export const TABLE_EDGE_U = 0.15;
+
+/**
+ * THE ARM AND THE BACK EVERY SEAT SHOWS (WP-85b, §3.4).
+ *
+ * *"Every seat shows its back — frame band far side, cushion near, arms at
+ * 0.6 U; a rectangle with seams is a radiator."* Both were baked pixels (7 and
+ * 6) and are units now, for `TABLE_EDGE_U`'s reason.
+ */
+export const SOFA_ARM_U = 0.6;
+export const SOFA_BACK_U = 0.5;
+
+/**
+ * UNDO THE WRAPPER'S FACING TURN, for a prop whose RECT IS ITS FOOTPRINT.
+ *
+ * `paintProp` clips to the prop's own axis-aligned box and then rotates by
+ * `prop.angle`, because a chair, a tub chair and a character all need to face
+ * somewhere. A desk, a rug, a monitor, a tray, a low table and a framed print do
+ * not: their `w × h` says how they LIE, the plan's bounds, anchors and tests all
+ * read that unrotated box, and turning the drawing inside a clip cut to the box
+ * renders an 8.8 × 3 desk as a 3 × 3 square.
+ *
+ * `sofa` and `manager` have cancelled it by hand since WP-22 — *"a 32 x 2.6 back
+ * run rotated by its own facing renders as a 2.6 x 32 band straight across the
+ * room"* — and everything else on the list got away with it because `angle` is
+ * zero everywhere except in the ROW reception, which `buildOfficeRow` builds by
+ * reflecting the portrait room in the diagonal and therefore hands every prop a
+ * quarter turn. On that floor the user's desk, the wool rug, the low table and
+ * the wall art were all being drawn square. `docs/DEVIATIONS.md` §163.
+ *
+ * @param {any} ctx @param {{angle?: number}} prop
+ */
+export function unturn(ctx, prop) {
+  const a = (prop && prop.angle) || 0;
+  if (a) ctx.rotate(-a);
+}
+
 // ---- how far each thing on the floor is lifted off it ---------------------
 //
 // Every one of these is a distance ALONG `LIGHT_DIR` in baked pixels, never a
@@ -115,6 +161,7 @@ export const PROP_HEIGHT = Object.freeze({
   // --- tall: furniture you would walk around, and it casts like it.
   arcade_cabinet: 'tall',
   art: 'tall',
+  armchair: 'tall',
   bar_counter: 'tall',
   board_game_table: 'tall',
   bookshelf: 'tall',
@@ -124,6 +171,7 @@ export const PROP_HEIGHT = Object.freeze({
   exit_sign: 'tall',
   foosball: 'tall',
   fridge: 'tall',
+  pinboard: 'tall',
   pool_table: 'tall',
   reception_desk: 'tall',
   screen: 'tall',
@@ -141,6 +189,7 @@ export const PROP_HEIGHT = Object.freeze({
   chair: 'short',
   coffee_machine: 'short',
   coffee_table: 'short',
+  desk_tray: 'short',
   fruit_bowl: 'short',
   lamp: 'short',
   magazine_table: 'short',
@@ -150,7 +199,7 @@ export const PROP_HEIGHT = Object.freeze({
   rug: 'short',
   rug_round: 'short',
   side_table: 'short',
-  waiting_chair: 'short',
+  tub_chair: 'short',
   // The manager is a character, not furniture: `drawManagerFigure` draws its
   // own contact shadow and `paintProp` skips the prop one. Named anyway, so
   // the guard below has an answer for every kind the plan emits.

@@ -79,6 +79,10 @@ export {};
  * @property {number} angle
  * @property {Anchor} anchor
  * @property {string} [id] required on anchor targets
+ * @property {'wool'|'task'} [tone] which textile a rug is (WP-85b). A painter
+ *   cannot ask what room it is in, and a project room's break-out rug and the
+ *   reception's wool are the same two KINDS in two different materials, so the
+ *   plan declares it — the seam `prop.tall` already uses for a prop's height.
  */
 
 /**

@@ -23,16 +23,13 @@ import {
   CHAIR_GAP,
   CORNER_PLANT_INSET,
   FIXTURE_TOP,
-  ROOM_WIDTH_STRETCH_MAX,
   MIN_PROJECT_ROOM_H,
   MIN_PROJECT_ROOM_W,
   PLANT_GAP,
   PLANT_SIZE,
   PLATE_BAND,
-  ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
   RUG_MAX_OVER_CLUSTER,
-  RUG_MAX_OVER_COLUMN,
   RUG_ROOM_INSET,
   SEAT_PITCH,
   TABLE_DEPTH,
@@ -41,6 +38,22 @@ import {
   angleTo,
   clamp,
 } from './plan-units.js';
+import {
+  BREAKOUT_RUG_D,
+  BREAKOUT_TABLE,
+  MONITOR_H,
+  MONITOR_W,
+  PINBOARD_GAP,
+  PINBOARD_H,
+  PINBOARD_W,
+  RUG_CLUSTER_PAD,
+  SEAT_TUB,
+  SHELF_MAX_H,
+  SHELF_W,
+  WHITEBOARD_MAX_H,
+  WHITEBOARD_W,
+  breakoutFits,
+} from './plan-furniture.js';
 
 /** @typedef {import('./plan-units.js').ProjectLike} ProjectLike */
 /** @typedef {import('./plan-units.js').Prop} Prop */
@@ -367,10 +380,21 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   // through its rug, its planting and the clearance around the desks instead —
   // there is one board and one shelf however large the room gets, which is what
   // keeps a big room reading as a room rather than as a wall of fixtures.
+  //
+  // WP-85b PUT A CEILING BACK ON BOTH OF THEM (§3.4: `whiteboard 2.4 × ≥5.2`,
+  // `shelf 1.2 × ≤7`). "Grow with the wall" without a ceiling is how a board
+  // became the longest silhouette in a room whose subject is the person at the
+  // desk, and §1.2 measured it as the brightest object in frame besides. A wall
+  // with more spare than the two fixtures want gets the PINBOARD under the
+  // shelf — a second, shorter silhouette — rather than a longer board.
   const wallRun = Math.max(0, (fit && fit.h > 0 ? fit.h : 0) - PLATE_BAND);
   const wallRoom = Math.max(0, wallRun - FIXTURE_TOP - CORNER_PLANT_INSET - 2.4);
-  const shelfH = clamp(wallRun * 0.22, 3.6, Math.max(3.6, wallRoom * 0.45));
-  const boardH = clamp(wallRun * 0.4, WHITEBOARD_H, Math.max(WHITEBOARD_H, wallRoom));
+  const shelfH = clamp(wallRun * 0.22, 3.6, Math.max(3.6, Math.min(SHELF_MAX_H, wallRoom * 0.45)));
+  const boardH = clamp(
+    wallRun * 0.28,
+    WHITEBOARD_H,
+    Math.max(WHITEBOARD_H, Math.min(WHITEBOARD_MAX_H, wallRoom)),
+  );
 
   let remaining = Math.max(1, deskCount);
   sizes.forEach((seatCount, i) => {
@@ -423,21 +447,21 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
         });
         props.push({
           kind: 'monitor',
-          w: 1.6,
-          h: 0.5,
+          w: MONITOR_W,
+          h: MONITOR_H,
           // The rect already says the screen is wide and shallow, sitting
           // across the table edge. Rotating it by the occupant's facing on
           // top of that stood it on end — the same mistake the reception
           // sofa made. `angle` is not how a prop LIES; its rect is.
           angle: 0,
-          x: cx - 0.8,
-          y: side.sign < 0 ? ty : ty + t.h - 0.5,
+          x: cx - MONITOR_W / 2,
+          y: side.sign < 0 ? ty : ty + t.h - MONITOR_H,
           anchor: {
             type: 'attached',
             to: tableId,
             edge: side.key,
-            along: (k + 0.5) * SEAT_PITCH - 0.8,
-            gap: -0.5,
+            along: (k + 0.5) * SEAT_PITCH - MONITOR_W / 2,
+            gap: -MONITOR_H,
           },
         });
         remaining--;
@@ -482,13 +506,14 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
     props.push({
       kind: 'shelf',
       id: 'shelf',
-      w: 1.2,
+      w: SHELF_W,
       h: shelfH,
       angle: 0,
       x: firstTable.x,
       y: firstTable.y,
       anchor: { type: 'wall', side: 'E', along: FIXTURE_TOP, inset: 0.3 },
     });
+    let eastRun = FIXTURE_TOP + shelfH + PINBOARD_GAP;
     if (project.hasDashboard) {
       props.push({
         kind: 'screen',
@@ -499,7 +524,27 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
         x: firstTable.x,
         y: firstTable.y,
         // Under the shelf, whatever the shelf turned out to be.
-        anchor: { type: 'wall', side: 'E', along: FIXTURE_TOP + shelfH + 0.8, inset: 0.3 },
+        anchor: { type: 'wall', side: 'E', along: eastRun, inset: 0.3 },
+      });
+      eastRun += 2.4 + PINBOARD_GAP;
+    }
+    // THE PINBOARD (§3.4), under whatever the east wall already carries.
+    //
+    // The fixtures on this wall are capped now, so a deep room has wall left
+    // over; §1.6's finding was that the floor answered spare wall and spare
+    // floor the same way — with another plant — and that six identical plants
+    // is wallpaper. A short, papered board is a silhouette the shelf above it
+    // cannot be mistaken for, which is what spare wall is actually for.
+    if (wallRoom >= eastRun + PINBOARD_H) {
+      props.push({
+        kind: 'pinboard',
+        id: 'pinboard',
+        w: PINBOARD_W,
+        h: PINBOARD_H,
+        angle: 0,
+        x: firstTable.x,
+        y: firstTable.y,
+        anchor: { type: 'wall', side: 'E', along: eastRun, inset: 0.3 },
       });
     }
     // The project's whiteboard, on the WEST wall facing the room. Every
@@ -510,7 +555,7 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
       id: 'whiteboard',
       // Deeper than a board is thick: the rect has to contain the face the
       // painter projects into the room (see backdrop.js's `whiteboard` case).
-      w: 2.4,
+      w: WHITEBOARD_W,
       h: boardH,
       angle: 0,
       x: firstTable.x,
@@ -553,6 +598,88 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   const naturalW = Math.max(interiorW, MIN_PROJECT_ROOM_W);
   const naturalH = Math.max(interiorH, MIN_PROJECT_ROOM_H) + PLATE_BAND;
 
+  const w = Math.max(naturalW, fit && fit.w > 0 ? fit.w : 0);
+  const h = Math.max(naturalH, fit && fit.h > 0 ? fit.h : 0);
+  const finalW = w;
+  const finalH = h - PLATE_BAND;
+
+  // WHAT `place` WILL ADD BACK.
+  //
+  // `plan.js`'s `place` centres a room's contents in whatever cell it was
+  // given, by `(room.h - natural.h) / 2`. Everything below that wants to be
+  // measured against the FINAL interior — the break-out group, which belongs at
+  // the bottom of the room and not at the bottom of the room's natural
+  // footprint — therefore writes `desired - slack` and lets that centring put
+  // it back. Two frames are allowed to disagree only where one of them is
+  // stated in terms of the other, and this is that statement.
+  const slackX = Math.max(0, w - naturalW) / 2;
+  const slackY = Math.max(0, h - naturalH) / 2;
+
+  // A rug under the desk cluster, sized to the GROUP and not to the room
+  // (WP-85b, §3.4: `task rug = cluster + 1.0, capped 1.35× per axis`).
+  //
+  // It used to take whatever floor the room had spare, per axis, up to 1.6x its
+  // cluster and 2.6x on a column-stretched depth. §1.4 measured the result and
+  // called it what it was: floor covering. A rug defines a group — half a unit
+  // of border round the desks — and the floor it no longer covers is answered
+  // by the break-out group below, which is furniture.
+  //
+  // MEASURED OFF `desk-group` rather than off `cluster`, because `desk-group`
+  // is the box the plan publishes as "the desks and the chairs round them" and
+  // is what the acceptance in §5 is stated over. `cluster` includes the plant
+  // standing at the first table's end, so a rug capped against it would be
+  // capped against a different number from the one anybody measures.
+  const group = zones.find((z) => z.id === 'desk-group');
+  if (group) {
+    /** @param {number} base @param {number} room */
+    const rugSide = (base, room) => {
+      const ceiling = base * RUG_MAX_OVER_CLUSTER;
+      const wanted = Math.min(base + RUG_CLUSTER_PAD, ceiling);
+      return clamp(Math.min(wanted, Math.max(base, room - RUG_ROOM_INSET * 2)), base, ceiling);
+    };
+    props.unshift({
+      kind: 'rug',
+      w: rugSide(group.w, finalW),
+      h: rugSide(group.h, finalH),
+      angle: 0,
+      x: 0,
+      y: 0,
+      anchor: { type: 'centered', of: 'desk-group' },
+    });
+  }
+
+  // THE BREAK-OUT CORNER (§3.4, owner decision 4).
+  //
+  // A room the packer made deeper than its desks need now keeps that floor as
+  // floor rather than painting it, so the question §3.5 asks is what the floor
+  // is FOR: *"a clear-floor patch larger than 10 U x 10 U gets a destination,
+  // not a bigger rug"*. The destination is a round rug, two tub chairs facing
+  // each other and a small table between them — a second place in the room,
+  // which is why a large room is still the size of what is in it.
+  //
+  // It is decided before the contents are translated, because deciding it is
+  // also deciding where the DESKS go: a group that needs the bottom of the room
+  // can only have it if the cluster sits at the top rather than in the middle.
+  // `breakoutFits` is the whole of the rule and lives with the sizes it is
+  // about (`plan-furniture.js`), so the plan, the test and the document cannot
+  // each have their own threshold.
+  const clusterArea = group ? group.w * group.h : 0;
+  const clearRatio = clusterArea > 0 ? (finalW * finalH - clusterArea) / clusterArea : 0;
+  // Where the cluster would stand with the room's spare depth given to the
+  // break-out rather than shared above and below it, and what is left under the
+  // rug once it does. `CORNER_PLANT_INSET` is the planting in the two south
+  // corners, which the group must not be drawn through.
+  const rugProp = props[0] && props[0].kind === 'rug' ? props[0] : null;
+  // The desk group's own top, measured from the cluster's — they differ by the
+  // plant at the first table's end, which is in the cluster and not in the
+  // group — so the band below is measured off what is actually drawn.
+  const groupOffset = group ? group.y - cluster.y : 0;
+  const breakTop =
+    group && rugProp ? ROOM_PAD + groupOffset + group.h / 2 + rugProp.h / 2 + 1.2 : 0;
+  const breakBottom = finalH - CORNER_PLANT_INSET - 0.4;
+  const breakout =
+    !!group && breakoutFits(finalW - ROOM_PAD * 2, breakBottom - breakTop, clearRatio);
+
   // Contents land inside the room's own frame, never at its very corner. THE
   // ONE FRAME RULE: a room's props, zones and seats are all expressed relative
   // to the room's top-left, so `resolveAnchors` — which measures wall and
@@ -565,63 +692,71 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   // `natural.h` carries the band. Adding it here as well is the two-frames
   // defect in miniature.
   const dx = -cluster.x + (naturalW - cluster.w) / 2;
-  const dy = -cluster.y + (naturalH - PLATE_BAND - cluster.h) / 2;
+  // A ROOM WITH A BREAK-OUT GROUP PUTS ITS DESKS AT THE TOP.
+  //
+  // The centred layout is right for a room the size of its furniture and wrong
+  // for one the packer made half as deep again: the spare floor arrives as two
+  // equal strips, one of which is under the plate. A room with a second
+  // destination in it gives the whole of that floor to the destination, which
+  // is the composition §3.7 draws and the one `crop-project-room@2x.png` shows.
+  const dy = -cluster.y + (breakout ? ROOM_PAD - slackY : (naturalH - PLATE_BAND - cluster.h) / 2);
   translateContents({ props, zones }, dx, dy);
   for (const s of seats) {
     s.x += dx;
     s.y += dy;
   }
 
-  const w = Math.max(naturalW, fit && fit.w > 0 ? fit.w : 0);
-  const h = Math.max(naturalH, fit && fit.h > 0 ? fit.h : 0);
-
-  // A rug under the desk cluster. A project room is given its cell by the
-  // treemap and can still be a little larger than its desks need — an interior
-  // with a group of desks adrift in the middle of it is unfinished, and a rug
-  // is what defines the group as a group. It grows with the room, stopping
-  // `RUG_ROOM_INSET` clear of the walls so the corner planting and the wall
-  // fixtures keep floor of their own, and it is never allowed to become the
-  // room: past `RUG_MAX_OVER_CLUSTER` the extra floor is honestly bare rather
-  // than painted as a rug that nothing stands on.
-  if (zones.length) {
-    const clusterW = cluster.w + 1.6;
-    const clusterH = cluster.h + 1.6;
-    // THE RUG SPREADS ON BOTH AXES (WP-60).
-    //
-    // WP-59c gave the DEPTH the looser ceiling, because the service column was
-    // the only thing that ever made a room bigger than the plan chose and it
-    // could only make it deeper. WP-60's cells are dealt by occupancy and fill
-    // their row, so a busy project is now routinely much WIDER than its desks
-    // asked for as well — and a rug that stops at 1.6x the cluster in a room
-    // laid at 2.5x is a mat in the middle of a floor, which is the composition
-    // §106 removed one axis over.
-    //
-    // Each axis is judged on its own: a room stretched only in width keeps the
-    // tight ceiling on its depth, and the reverse. `RUG_ROOM_INSET` still holds
-    // the rug clear of the walls so the corner planting and the wall fixtures
-    // keep floor of their own, and past the looser ceiling the extra floor is
-    // honestly bare rather than painted as a rug nothing stands on.
-    const wideStretched = w > naturalW * ROOM_WIDTH_STRETCH_MAX + 0.01;
-    const deepStretched = h > naturalH * ROOM_HEIGHT_STRETCH_MAX + 0.01;
-    const rugW = clamp(
-      w - RUG_ROOM_INSET * 2,
-      clusterW,
-      clusterW * (wideStretched ? RUG_MAX_OVER_COLUMN : RUG_MAX_OVER_CLUSTER),
-    );
-    const rugH = clamp(
-      h - PLATE_BAND - RUG_ROOM_INSET * 2,
-      clusterH,
-      clusterH * (deepStretched ? RUG_MAX_OVER_COLUMN : RUG_MAX_OVER_CLUSTER),
-    );
-    props.unshift({
-      kind: 'rug',
-      w: rugW,
-      h: rugH,
+  if (breakout && rugProp) {
+    const d = BREAKOUT_RUG_D;
+    const band = breakBottom - breakTop;
+    // Centred across the room and at the head of the band it was measured in,
+    // written against the final interior and lifted by the slack `place` will
+    // put back.
+    const zx = (finalW - d) / 2 - slackX;
+    const zy = breakTop + (band - d) / 2 - slackY;
+    const z = { id: 'breakout', x: zx, y: zy, w: d, h: d };
+    zones.push(z);
+    props.push({
+      kind: 'rug_round',
+      id: 'breakout-rug',
+      // This one lies on the room's own carpet, so it is the task textile
+      // rather than the lounge's wool.
+      tone: 'task',
+      w: d,
+      h: d,
       angle: 0,
-      x: 0,
-      y: 0,
-      anchor: { type: 'centered', of: 'desk-group' },
+      x: zx,
+      y: zy,
+      anchor: { type: 'zone', of: z.id, dx: 0, dy: 0 },
     });
+    // The table first, then the two chairs facing each other across it: a
+    // conversation, which is the one thing a project room does not otherwise
+    // have a place for.
+    const tOff = (d - BREAKOUT_TABLE) / 2;
+    props.push({
+      kind: 'side_table',
+      w: BREAKOUT_TABLE,
+      h: BREAKOUT_TABLE,
+      angle: 0,
+      x: zx + tOff,
+      y: zy + tOff,
+      anchor: { type: 'zone', of: z.id, dx: tOff, dy: tOff },
+    });
+    const seatOff = (d - SEAT_TUB) / 2;
+    for (const side of /** @type {const} */ ([-1, 1])) {
+      const cdx = side < 0 ? 0 : d - SEAT_TUB;
+      props.push({
+        kind: 'tub_chair',
+        w: SEAT_TUB,
+        h: SEAT_TUB,
+        // Facing each other across the table: 0 is +x, so the chair on the
+        // west side looks east and the one on the east side looks west.
+        angle: side < 0 ? 0 : Math.PI,
+        x: zx + cdx,
+        y: zy + seatOff,
+        anchor: { type: 'zone', of: z.id, dx: cdx, dy: seatOff },
+      });
+    }
   }
 
   // Planting in the corners the plate and the wall fixtures leave free. Never

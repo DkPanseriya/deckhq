@@ -218,6 +218,62 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
   an older build still loads and still totals — as a total with no breakdown, which is exactly what
   a runtime that reports only a total produces today. `docs/DEVIATIONS.md` §157.
 
+- **The furniture set, sized in units and told apart by shape — WP-85b.** WP-85a made the floor
+  quiet; this makes the things standing on it legible. Every piece is now a size in plan units that
+  `public/render/plan-furniture.js` states once — `docs/plan/10-INTERIOR-DESIGN.md` §3.4's table in
+  code — and every seat obeys the rule that makes a set a set: **no two seat kinds share a
+  footprint**. Four kinds, four sizes: **tub 2.4 U, task 2.0, stool 1.4, armchair 3.0**. At the size
+  a floor is actually drawn at nobody tells two seats apart by their upholstery, so they are told
+  apart by how much floor they take and by their outline — a task chair is a rounded square with two
+  arms, a tub chair a circle with one wrap-around back, an armchair a square frame with a high back
+  and one cushion.
+
+  - **The reception's visitor chairs are tub chairs at a 5.2 U pitch.** They were task chairs
+    wearing a second kind name — 2.0 U, _"28 px, vanishing under a 24 px character"_, and 90 px
+    apart, which read as three unrelated discs rather than as a row. They are 2.4 U at 5.2, which is
+    12.8 U for three and one piece of seating. The third chair now arrives at a 24 U reception
+    instead of a 26 U one, because the tighter pitch is what buys it.
+  - **The reception's slate wool rug runs up under the chairs.** It used to sit inside the well,
+    clear of the row at the desk, which made the waiting area a thing in the middle of the floor and
+    the chairs a row in front of a desk somewhere else. It is one place now: the rug starts above
+    the chairs, the chairs stand on it, the queue forms down it, and the low table moved off the
+    middle — where §3.7 says the queue forms, and where it was landing on the queue's second rank —
+    to where a coffee table belongs, in front of the back sofa run.
+  - **The manager's desk carries a monitor and an in-tray.** Every other desk in the building had
+    something on it; the one room the user reads first had a bare top, which reads as a counter.
+  - **A desk shows its edge instead of a white line down its middle.** Every desk carried a 6 px
+    `rgba(255,255,255,0.85)` divider — near-white, and brighter than the default theme's own wall,
+    on the one piece of furniture the person sitting at it is supposed to out-shine. It is a
+    0.15 U band of the darker timber on the side the light travels toward and a capped sheen on the
+    side it comes from, which is what says _table_ from above.
+  - **The whiteboard and the shelf stopped growing with the wall.** WP-59c let the board take 40% of
+    a wall so a deep room did not carry a postage stamp; at 40% of a deep wall it is the longest
+    silhouette in the room. Capped at **8 U** (the shelf at 7), and the wall left over gets a
+    **pinboard** — a short, papered board the eye cannot mistake for the shelf above it.
+  - **The lounge's quiet corner is two armchairs, a side table, a bookcase and a plant**, which is
+    what §3.4 asks a quiet bay to be; it was a six-unit sofa with the same silhouette as the two runs
+    one block over. The counter has **three stools at a 4 U pitch** where it had four at 2.8 — there
+    were always only three places to sit at them. The pool table, the table-tennis table, the arcade
+    cabinet, the fridge and the coffee table are all at §3.4's sizes.
+
+  `docs/DEVIATIONS.md` §163, `docs/03-VISUAL-SPEC.md` §6.3.
+
+- **A room with spare floor gets a second place to be — WP-85b.** Owner decision 4:
+  _"a second small destination is furniture, so the room is still the size of what is in it."_ Where
+  a project room's clear floor exceeds **2.2× its desk cluster's area** and the band under the desks
+  is at least **7.6 U** deep and wide, it lays a **break-out corner** — a round rug 6.4 U across,
+  two tub chairs facing each other and a 1.4 U table between them — and the desks move to the top of
+  the room so the whole of the spare floor goes to it rather than arriving as two equal strips, one
+  of them under the plate. Both conditions are checked because they measure different things: the
+  ratio asks whether the room should have a second destination, the band asks whether the one we
+  draw will fit. A room under either threshold gets nothing, which §3.5 allows and which is honest.
+
+  It is the other half of a rug that stopped being floor covering. A task rug was allowed to grow to
+  **1.6× its cluster, and 2.6× down a column-stretched depth** — §1.4 measured the result as _"a pale
+  mint slab ~20 U across holding one 6 U desk, the largest shape in the room"_. It is its cluster
+  plus **1.0 U** now, capped at **1.35×** on both axes, which is half a unit of border round the
+  desks and nothing else.
+
 ### Changed
 
 - **Everyone on the floor is a robot now — WP-79.** The owner picked **B**, the 45° three-quarter
@@ -729,6 +785,24 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   label-on-body overlaps** over three populations at two viewports with at least four labels in five
   still drawn.
 
+- **Six more in `test/unit/interior.test.mjs` for the furniture set — WP-85b.** Every acceptance in
+  §5's WP-85b list is a property over **every emitted plan**, so each is measured over a ladder of
+  eleven populations at two window shapes rather than on one floor: the **four seat footprints**, on
+  what the plan emits rather than on the constants file, with all four proved to be drawn somewhere;
+  the **task rug** against the `desk-group` box the plan publishes, worst case 1.145× of a 1.35
+  ceiling over 28 rooms; and the **break-out corner** in both directions — every room that has one
+  could hold one, every room that could hold one has one — which is why the small window is in the
+  ladder at all, since on the goldens' own stage the threshold never says no.
+
+  Two of them guard things a furniture package can break silently. **A seated figure sits on its
+  chair**: a seat's (x, y) _is_ the figure's ground contact (`rig-metrics.js`), so the seat is
+  checked to lie inside a real chair's footprint and the contact ellipse is checked never to overlap
+  a desk top, over 84 seats. And **no prop is drawn in the plate band**, which is §7's _"a label
+  never covers furniture"_ kept the way §3.8 asks for it — as a property of the plan rather than as a
+  check in the label pass — re-asserted because WP-85b moves the desks upward in every room that
+  gets a break-out group. A sixth reads the desk painter's own source for the near-white divider,
+  because that defect was a literal and no measurement of the token table could ever have found it.
+
 - **`test/unit/interior.test.mjs` — eighteen tests over WP-85a, and it prints its measurements.**
   Every ratio `docs/plan/10-INTERIOR-DESIGN.md` §3 quotes is re-derived here and written to the
   runner's output, so a change that moves a material shows you what it moved rather than only that
@@ -739,7 +813,9 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   is checked by **reading the renderer's own source** for a 1 × 1 fill, in `lighting.test.mjs`'s
   style, because no measurement of a function's output colours would ever find "it scatters six
   thousand single pixels". And a **plan hash** over 123 room rectangles across eighteen populations
-  proves WP-85a moved paint and nothing else.
+  proved WP-85a moved paint and nothing else; WP-85b is a furniture package, so it moved that
+  constant once, deliberately, and the test kept its job — it is the thing that says a later package
+  claiming to move paint has moved a wall.
 
 - **`test/integration/studio-plan.test.mjs` and `test/unit/studio-brief.test.mjs` — seventeen tests
   over WP-67.** The planner's argv is asserted **element by element** against an array written out

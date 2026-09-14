@@ -17,7 +17,7 @@
 
 import { PALETTE } from './palette.js';
 import { drawManagerFigure } from './rig.js';
-import { roundRect, drawContactShadow } from './backdrop-paint.js';
+import { roundRect, drawContactShadow, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
 
 /**
  * @param {any} ctx @param {any} prop @param {number} u
@@ -28,6 +28,8 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
   switch (prop.kind) {
     case 'desk':
     case 'user_desk': {
+      // Its rect is its footprint: see `unturn`.
+      unturn(ctx, prop);
       local((k) => {
         k.fillStyle = PALETTE.deskTop;
         roundRect(k, -w / 2, -h / 2, w, h, 3);
@@ -36,12 +38,106 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
         k.lineWidth = 1.2;
         k.stroke();
       });
-      // centre divider
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillRect(-w / 2, -3, w, 6);
+      // §3.4: EVERY TABLE SHOWS ITS EDGE — a 0.15 U band of the darker timber
+      // on the side the light travels toward, and a sheen on the side it comes
+      // from. `LIGHT_DIR` is (+1, +1)/√2 (palette-colors.js), so the band is
+      // south and east and the sheen north and west.
+      //
+      // It replaces a 6 px `rgba(255,255,255,0.85)` divider down the middle of
+      // every desk on the floor: near-white, brighter than the default theme's
+      // wall, and the thing the eye landed on instead of the person sitting at
+      // it. A desk that shows its edge is a desk you can see is a desk; a white
+      // line down the middle is a desk with a line down the middle.
+      const band = Math.max(1, TABLE_EDGE_U * u);
+      ctx.fillStyle = PALETTE.deskEdge;
+      ctx.fillRect(-w / 2, h / 2 - band, w, band);
+      ctx.fillRect(w / 2 - band, -h / 2, band, h - band);
+      ctx.fillStyle = PALETTE.deskSheen;
+      ctx.fillRect(-w / 2, -h / 2, w, Math.max(0.8, band * 0.7));
+      break;
+    }
+    case 'desk_tray': {
+      unturn(ctx, prop);
+      // The in-tray on the manager's desk (§3.4). Two stacked leaves of paper
+      // in a shallow wire frame: a small rectangle with a lighter rectangle
+      // just inside it, offset, so it reads as a thing ON the desk rather than
+      // as part of the desk's own top.
+      local((k) => {
+        k.fillStyle = PALETTE.furnitureMetal;
+        roundRect(k, -w / 2, -h / 2, w, h, 1.5);
+        k.fill();
+      });
+      const lip = Math.max(0.8, Math.min(w, h) * 0.14);
+      ctx.fillStyle = PALETTE.whiteboardSurface;
+      roundRect(ctx, -w / 2 + lip, -h / 2 + lip, w - lip * 2, h - lip * 2, 1);
+      ctx.fill();
+      ctx.fillStyle = PALETTE.chairFill;
+      roundRect(ctx, -w / 2 + lip * 2, -h / 2 + lip * 0.5, w - lip * 3.2, h - lip * 2.4, 1);
+      ctx.fill();
+      break;
+    }
+    case 'tub_chair': {
+      // THE RECEPTION'S TUB CHAIR (§3.4), 2.4 U across.
+      //
+      // It reads by SHAPE and not by tone, which is the whole of §3.4's
+      // silhouette rule: a task chair is a rounded square with two arms down
+      // its sides, and this is a circle with one continuous wrap-around back —
+      // the two cannot be confused at 34 px even though they are upholstered in
+      // the same cloth. The back is on the far side from `angle`, exactly as a
+      // sofa's is, so a row of three facing a desk shows three open seats.
+      ctx.rotate(Math.PI / 2);
+      const R = Math.min(w, h) / 2;
+      // THE TUB IS THE FRAME, and the cushion is the small bright part inside
+      // it. Drawn the other way round — a pale disc with a thin darker arc —
+      // the chair is the brightest object in its room and the person in it is
+      // not, which is §1.2's inversion re-introduced one prop at a time.
+      local((k) => {
+        k.fillStyle = PALETTE.sofaFrame;
+        k.beginPath();
+        k.arc(0, 0, R, 0, Math.PI * 2);
+        k.fill();
+      });
+      // The seat pan: forward of centre, so the wrap reads thicker behind the
+      // occupant than in front of them — a back, in a shape with no corners.
+      ctx.fillStyle = PALETTE.chairFill;
+      ctx.beginPath();
+      ctx.arc(0, R * 0.2, R * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'pinboard': {
+      unturn(ctx, prop);
+      // A cork board on the east wall, under the shelf (§3.4). Short and
+      // papered where the shelf above it is long and full of book tops: the
+      // second silhouette §1.6 said the wall did not have.
+      local((k) => {
+        k.fillStyle = PALETTE.deskEdge;
+        roundRect(k, -w / 2, -h / 2, w, h, 1);
+        k.fill();
+      });
+      const inset = Math.max(0.8, Math.min(w, h) * 0.1);
+      ctx.fillStyle = PALETTE.tableWood;
+      ctx.fillRect(-w / 2 + inset, -h / 2 + inset, w - inset * 2, h - inset * 2);
+      // Pinned paper: three small leaves at fixed offsets — no random source
+      // anywhere in this file, since the same plan must re-bake pixel-identical.
+      const notes = [
+        [-0.16, -0.28, 0.5, 0.2],
+        [0.14, -0.02, 0.44, 0.22],
+        [-0.1, 0.26, 0.52, 0.18],
+      ];
+      ctx.fillStyle = PALETTE.whiteboardSurface;
+      for (const [nx, ny, nw, nh] of notes) {
+        ctx.fillRect(
+          nx * w - (nw * w) / 2,
+          ny * h - (nh * h) / 2,
+          Math.max(1, nw * w),
+          Math.max(1, nh * h),
+        );
+      }
       break;
     }
     case 'monitor': {
+      unturn(ctx, prop);
       ctx.fillStyle = PALETTE.monitorBody;
       roundRect(ctx, -w / 2, -h / 2, w, h, 1.5);
       ctx.fill();
@@ -49,10 +145,14 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       ctx.fillRect(-w / 2 + 1, -h / 2 + 1, w - 2, Math.max(1, h - 2));
       break;
     }
-    // A waiting-area chair is drawn like any other task chair; it is a
-    // distinct kind only because it obeys a different placement rule (a
-    // 3.2 U row pitch facing the user's desk, not a 0.15 U desk gap).
-    case 'waiting_chair':
+    // THE TASK CHAIR, and it is now the only thing drawn this way.
+    //
+    // The reception's visitor chair used to share this painter — "a waiting
+    // chair is drawn like any other task chair; it is a distinct kind only
+    // because it obeys a different placement rule" — and §3.4 ended that: no
+    // two seat kinds in one room may share a footprint, and two seat kinds
+    // anywhere that share a silhouette are one seat kind with two names. The
+    // reception's is a `tub_chair` above, at 2.4 U and round.
     case 'chair': {
       // FACING. `prop.angle` is in the plan's convention — 0 is +x, east — and
       // the outer wrapper has already rotated by it. This sprite is drawn
@@ -174,6 +274,7 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'art': {
+      unturn(ctx, prop);
       // Framed wall art, seen edge-on from above: a thin rectangle against
       // a wall (as little as 4 x 0.4 U), so every stroke below has a
       // Math.max floor rather than a fraction of h that could round to
@@ -405,12 +506,20 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'rug': {
+      unturn(ctx, prop);
       // A rug sits ON the floor: it needs a contact shadow and a pile, or it
       // reads as a painted rectangle. At reception size (the office rug is the
       // largest single surface in the building) a flat fill dominated the room
       // more than the furniture on it did.
       drawContactShadow(ctx, -w / 2, -h / 2, w, h);
-      ctx.fillStyle = PALETTE.rugSage;
+      // THE WOOL AND THE TASK RUG ARE TWO TEXTILES (§3.1, owner decision 2), and
+      // the prop says which. The reception's is `rugCream` — a slate wool, *"the
+      // one textile on this floor with a hue of its own, and the thing that
+      // tells you the waiting area is not the corridor"* — and a project room's
+      // is `rugSage`, carried by that room's own carpet. Both were painted sage
+      // before, so WP-85a's slate existed in the derivation, in the guards and in
+      // the document, and on no floor.
+      ctx.fillStyle = prop.tone === 'wool' ? PALETTE.rugCream : PALETTE.rugSage;
       roundRect(ctx, -w / 2, -h / 2, w, h, 5);
       ctx.fill();
       // Pile direction: a soft cross-wise sheen, the way a woven rug catches
@@ -446,11 +555,16 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
     case 'rug_round': {
       // Same border-inset language as `rug`, circular — the round
       // companion VISUAL-SPEC §6 already lists ("rugs (rectangular and
-      // round, with a border inset)"). rugCream instead of rugSage so the
-      // two rug shapes are also tonally distinct where they appear near
-      // each other.
+      // round, with a border inset)").
+      //
+      // WHICH TEXTILE, AND WHY THE PROP SAYS SO. The lounge's round rug lies on
+      // BOARDS and is the wool; a project room's break-out rug lies on that
+      // room's own CARPET and is the task textile, because a slate disc on a
+      // washed carpet is the highest-contrast object in a room whose subject is
+      // the person at the desk. A painter cannot ask what room it is in, so the
+      // plan declares it — the same seam `prop.tall` uses (`backdrop-paint.js`).
       const r = Math.min(w, h) / 2;
-      ctx.fillStyle = PALETTE.rugCream;
+      ctx.fillStyle = prop.tone === 'task' ? PALETTE.rugSage : PALETTE.rugCream;
       ctx.beginPath();
       ctx.arc(0, 0, r, 0, Math.PI * 2);
       ctx.fill();
