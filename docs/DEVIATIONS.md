@@ -15488,3 +15488,100 @@ default theme; it is a flex row of three items with the title taking the slack, 
 should shorten the title rather than the controls, but that has not been photographed. And the
 pool's 183 additions were checked against a word list written for this package, not against a
 dictionary: a name that is also an uncommon English word would pass.
+
+## 158. Direction — the office was lit and furnished, and nobody had designed the interior
+
+**§157 is not in this file.** It is being written by a package running beside this one and the
+number is reserved for it; this entry takes 158 so that two agents do not claim one heading. If
+§157 is still absent when both have merged, the gap is this sentence's fault and nothing is missing.
+
+No code changed. Nothing under `src/`, `public/` or `test/` was touched, no test was run and no
+daemon was started. This is a direction entry plus a design document,
+`docs/plan/10-INTERIOR-DESIGN.md`, and six mockups in `docs/media/interior/` that are illustrations
+of that document rather than screenshots of anything shipped.
+
+### 158.1 What the owner said
+
+14 September 2026, verbatim in spirit: *"Launch an interior designer expert; analyse and evaluate
+our tool in terms of design — the floor, the carpet, the colours, the furniture, the layout, the
+sizing, the items, everything. Then improve thoroughly every aspect of the interior. Make the best
+interior design first; the UI engineer tweaks a bit on top, not an overhaul. Appearance and
+engagement build the positive experience."*
+
+### 158.2 What the audit found, in numbers
+
+The layout is done and it is good — WP-55 sizes a room by its contents, WP13 anchors every prop,
+WP-77 sizes the lounge by its population, WP-78 puts the right people in the right zone, WP-72 lit
+the building. What nobody had designed is the **interior** of what those rules produce. Five
+findings, all measured on the committed goldens and on the renderer's own modules.
+
+1. **The parquet is the loudest thing in the product and carries no information.**
+   `paintHerringbone` lays a 46 px lattice at `U_DEFAULT`, so a block is 4.67 U × 1.58 U —
+   1.40 m × 0.47 m, against a real herringbone block's 0.30–0.60 m by 0.07–0.10 m. Three times too
+   long, five times too wide, about **twelve times the area**. Its four tones are
+   `shade(wood, ±0.09)`, measuring 1.27:1 between B and C on the default theme, 1.43:1 on night
+   shift and 1.40:1 on blueprint, and every block carries a 1.6 px seam at `rgba(91,76,55,0.55)` —
+   seven per cent of a 22 px block in near-black. It is the first thing the eye lands on in
+   `three.png`.
+
+2. **A written promise is false, and no test could have caught it.** `03-VISUAL-SPEC.md` §10 says
+   *"All state colours meet 3:1 against their floor background."* `assertThemeContrast` measures
+   state colours against the **chrome** and never against the floor. Default theme on the office
+   parquet: `needs_input` **1.70:1**, `benched` 1.64, `stalled` 1.77, `working` 2.23, `ended` 2.41,
+   `for_review` 2.44. Night shift: `for_review` 1.44. A raised hand stands in the user's office and
+   the user's office is parquet, so the most important signal in the product is drawn at 1.70:1. It
+   cannot be fixed by moving the floor — `benched #7B8794` and `needs_input #B87333` both sit near
+   L\* 53, so a floor clearing 3:1 against all seven would have to be near paper or near black.
+
+3. **The value hierarchy is inverted.** The brightest surfaces on the floor are `wall #FCFBF8`,
+   `chairFill #FBFAF7` and the derived `whiteboardSurface`, at 2.14:1 against the office wood — the
+   highest local contrast inside any room, spent on a whiteboard, a sofa and a chair. Ranked by what
+   pulls the eye in `three.png`: the zigzag, the whiteboards, the sofa runs, the crimson badge, the
+   people.
+
+4. **Nothing inside a room was sized by what is in it, even though every room was.** A rug runs to
+   `RUG_MAX_OVER_COLUMN` = 2.6× its own cluster — about 20 U across one 6 U desk in `orbital-api`.
+   Every project room draws four identical two-lobe plants and the lounge six. The lounge itself is
+   roughly three fifths bare herringbone: §2.4 sized the lounge by its population and nothing sized
+   what is inside the lounge.
+
+5. **WP-72's light is the best thing on this floor and it is under-used.** One `LIGHT_DIR`, slab
+   rims and honest tall/short shadows, and not one pool of light anywhere — so the key light is a
+   shadow direction rather than a light.
+
+### 158.3 What was decided
+
+**The design is `docs/plan/10-INTERIOR-DESIGN.md`,** and its shape follows the one the renderer
+already has: a theme is **eleven floor tokens** and `materialTokensFor` fans them out, so the whole
+material system is stated as eleven hexes per theme plus a short list of derivation changes. All
+three themes were run through `assertThemeContrast()` and `assertMaterialDiscipline()`
+**unmodified** before being written down, and the measured values are in the document and on
+`board.png` rather than asserted in prose. Worst floor ink on any of the fourteen identity-washed
+carpets: 10.23 / 9.21 / 10.44. Closest material of any kind to the reserved crimson: 78.4, against a
+bar of 60.
+
+**The answer to finding 2 is a figure halo, not a floor.** One token, `#F6F2E9`, applied as a ground
+pool on light themes — where its job is uniformity, flattening the parquet under the feet — and as a
+1.1 px rim on dark ones, where its job is contrast. Measured against every on-floor state colour the
+rim's worst case is **3.28:1** (`benched`), on both dark themes, with one token. The recommendation
+is therefore to **amend the spec rather than keep an unmeetable sentence in it**, and to make the new
+rule a test. That is an owner decision (`08` §13.22c) because it edits a binding document.
+
+**Three packages, WP-85a/b/c**, in `08` §9. **85a lands before WP-79** and the other two after, and
+that ordering is the one real scheduling claim in this file: WP-79 asks the owner to judge candidate
+figures *against a floor*, and if the floor changes afterwards the judgement was made against a
+surface that no longer exists. 85a moves no plan geometry, so its golden diff is paint only; 85b and
+85c size furniture and clearance against a 34 px robot and therefore cannot go first.
+
+### 158.4 What this entry does not claim
+
+Nothing here has been run in the product. The mockups are **separate canvas-2D pages**, written for
+this package, that reproduce the `three` population's room rectangles by hand at the goldens' own
+1600 × 1000 stage; they share no code with `backdrop.js` and they are not evidence that the renderer
+can draw what they show. The eleven-token palettes were validated against the shipped guards, which
+is a real measurement, but no golden was regenerated and no pixel of the product changed. The
+density rules in §3.5 — one free-standing prop per 9 U² of clear floor, no two identical silhouettes
+within 8 U — have been reasoned about and drawn, not measured over `floor-integrity.test.mjs`'s
+sixteen populations; that measurement is 85c's acceptance criterion and may move the constants. And
+the lounge's "bare-floor fraction ≤ 35%" is a target taken from the mockup rather than from a survey
+of what those sixteen populations actually produce.
