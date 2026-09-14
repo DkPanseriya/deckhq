@@ -137,9 +137,10 @@
 
 - **Studio, off everywhere, and this is its foundation.** Studio is the opt-in "idea to office"
   mode: a plan, a roster and a six-column board that live in your own repository at
-  `<project>/.deckhq/studio/`. This release ships the store, the schemas, the consent and the
-  endpoints. **Nothing runs yet** — no planner session, no worktree, no spawn, and no tab. What
-  exists is the directory, its rules and the way to take it back out.
+  `<project>/.deckhq/studio/`. This release ships the store, the schemas, the consent, the
+  endpoints and the **planner** — the interview that writes the plan. What is not here yet is
+  **Hire**: no worktree, no role session, no board tab. Disabled is still the default everywhere,
+  and on a floor that has never enabled Studio nothing about it is visible at all.
 
 - **`deckhq studio enable <dir>` and `deckhq studio disable <dir>`.** The consent discipline is
   `deckhq shortcut`'s, unchanged: run either without `--yes` and it prints every path, what each
@@ -157,8 +158,8 @@
   `ackState` does: **no observed event may move it.** An edit that carries a column is refused
   rather than quietly ignored, and a static test fails the build if a second column writer ever
   appears. `/api/studio/tracking` answers `no data` and no number at all — not even a zero — until
-  there is a ledger fold behind it. `/plan`, `/hire` and `/handover` answer 501 with one line
-  naming the package that adds them.
+  there is a ledger fold behind it. `/hire` and `/handover` answer 501 with one line naming the
+  package that adds them.
 
 - **The three files are validated and refused whole, with the path and the line.** A `board.json`
   with a column this build cannot draw reports `cards[2].column (line 41)` rather than quietly
@@ -167,6 +168,32 @@
   later write replaces it. A path that resolves outside `.deckhq/studio/`, by `..`, by being
   absolute or through a symlink, is refused with the offending path rather than clamped back
   inside. `docs/DEVIATIONS.md` §150.
+
+- **The Studio planner: an interview that ends in three files — WP-67.** `⌘K` →
+  `Studio: plan this project` starts a real `claude` session in that project's directory and hands
+  it an interview brief. It asks you, in turn, for the goal, the non-goals, the constraints, the
+  milestones with their acceptance criteria and the roles you need — then writes `blueprint.md`,
+  `roster.json` and `board.json`, and says `written`. You answer it in the ordinary panel composer,
+  because **it is an ordinary session**: it walks onto the floor on the next scan, takes a desk,
+  wears a name, and DeckHQ keeps nothing about it but its id. There is no second data path and no
+  private session list, and a static test fails the build if one ever appears.
+
+  **DeckHQ writes none of the three files.** The planner writes them, with its own tools, as files
+  you own; DeckHQ reads them back and validates them, and a file that does not validate is reported
+  with its name, its line and the reason — `roster.json line 12 — "yolo" is not one of ask,
+allowlist, plan` — and **left exactly as it was written**. The panel shows all three above the
+  transcript with an `[ open ]` into your editor.
+
+  The brief is a file on the command line (`--append-system-prompt-file`), never text interpolated
+  into one, and the whole argv is an array that no shell ever sees. The schemas inside it are
+  **generated from the validator this build actually runs**, so a prompt and a schema cannot drift
+  apart. The brief lands at `.deckhq/studio/briefs/planner.md` and is yours: edit it and DeckHQ
+  will never overwrite it — a regeneration is written beside it as `planner.next.md`, and yours is
+  what runs. Claude Code only in this release; another runtime is refused by name, because this
+  brief has only ever been run against Claude Code.
+
+  `docs/DEVIATIONS.md` §159, which also records what is still owed: **no interview has been run end
+  to end**, because the login on the reference machine is expired.
 
 - **A `Usage` tab in the deck: where your tokens went — WP-83.** The owner: _"it should help them
   track their token usage: where are they going, how much, in which sessions, how much input,
@@ -534,6 +561,20 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/integration/studio-plan.test.mjs` and `test/unit/studio-brief.test.mjs` — seventeen tests
+  over WP-67.** The planner's argv is asserted **element by element** against an array written out
+  by hand, and nothing is matched with a regex over a command line, because a regex over a command
+  line is what you write when there is a command line to write it over. A fixture planner —
+  `test/fixtures/fake-planner.mjs`, on `fake-claude.mjs`'s pattern — reads the brief for its three
+  paths and its project key and writes the artefacts as a real child process, so the whole round
+  trip is exercised for real and only the model is missing; a second mode writes a roster with a
+  policy the schema does not know, and the test asserts the snapshot names the file, names the line
+  `permissionPolicy` is actually on, carries no roster, leaves the blueprint and the board alone,
+  and does not touch a byte of the file. The brief's own tests parse the two JSON examples out of
+  the rendered prompt and run them through `validateRoster` and `validateBoard`, so a prompt that
+  drifts from the validator fails here rather than in somebody's planner session. No test in either
+  file opens a terminal.
 
 - **`test/unit/usage.test.mjs` — thirteen tests over WP-83's arithmetic and its honesty.** The
   fixture is eight `tokens` lines written out in a comment, and every total, ranking and counter is
