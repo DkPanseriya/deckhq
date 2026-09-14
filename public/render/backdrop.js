@@ -47,11 +47,15 @@ import {
   paintCarpet,
   paintTile,
   paintCirculation,
+  paintLightPool,
   paintRoomAmbientOcclusion,
   paintRoomSlabEdge,
   castRoomShadow,
   paintWallSegment,
   paintDoorSwing,
+  DESK_POOL_MARGIN_U,
+  DOOR_POOL_R_U,
+  LIT_PROP_KINDS,
 } from './backdrop-floor.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
@@ -179,9 +183,9 @@ export function bakeBackdrop(plan, dpr = 1) {
       // (the spine, a cross corridor) is poured circulation; a lobby, which is
       // just the open floor beside a room, takes that room's own material so
       // the two read as one space.
-      if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng);
-      else if (room.floor === 'carpet') paintCarpet(ctx, rx, ry, rw, rh, rng);
-      else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh);
+      if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng, u);
+      else if (room.floor === 'carpet') paintCarpet(ctx, rx, ry, rw, rh, rng, null, u);
+      else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh, u);
       else paintCirculation(ctx, rx, ry, rw, rh);
       continue;
     }
@@ -193,14 +197,14 @@ export function bakeBackdrop(plan, dpr = 1) {
     // the same wash under the same room on every machine and every rebake,
     // and it is the same colour the agents in it are already wearing.
     const tint = room.kind === 'project' ? identityFor(room.projectMk).accent : null;
-    if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng);
-    else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh);
+    if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng, u);
+    else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh, u);
     else if (room.floor === 'circulation') paintCirculation(ctx, rx, ry, rw, rh);
-    else paintCarpet(ctx, rx, ry, rw, rh, rng, tint);
+    else paintCarpet(ctx, rx, ry, rw, rh, rng, tint, u);
 
     if (room.kitchenZone) {
       const kz = room.kitchenZone;
-      paintTile(ctx, kz.x * u, kz.y * u, kz.w * u, kz.h * u);
+      paintTile(ctx, kz.x * u, kz.y * u, kz.w * u, kz.h * u, u);
     }
 
     paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh);
@@ -226,6 +230,39 @@ export function bakeBackdrop(plan, dpr = 1) {
     const rh = room.h * u;
     castRoomShadow(ctx, rx, ry, rw, rh, wpx, hpx);
     paintRoomSlabEdge(ctx, rx, ry, rw, rh);
+  }
+
+  // POOLS OF LIGHT (WP-85a §3.2).
+  //
+  // After every floor material and after the slabs, because a pool lies ON the
+  // finished floor — under the wall it spills against, under the desk it lights
+  // and under the person at it. Before the walls for the same reason.
+  //
+  // This is what turns WP-72's key light into a light. There was no pool
+  // anywhere on this floor, so the light was a shadow direction and nothing
+  // else; §3.2 puts one over the manager's desk, over every working desk and on
+  // every threshold, which is where a real plan lights because that is where
+  // the work and the arriving happen. The lounge bays' centrepieces are on that
+  // list too and are not lit here: the bays are WP-85c and a pool with nothing
+  // under it is a stain.
+  //
+  // Baked, static, and free at L0 — `docs/plan/10-INTERIOR-DESIGN.md` §4:
+  // reduced motion costs nothing because nothing here moves.
+  for (const room of plan.rooms) {
+    for (const prop of room.props || []) {
+      if (!LIT_PROP_KINDS.includes(prop.kind)) continue;
+      const pw = prop.w * u;
+      const ph = prop.h * u;
+      paintLightPool(
+        ctx,
+        prop.x * u + pw / 2,
+        prop.y * u + ph / 2,
+        Math.hypot(pw, ph) / 2 + DESK_POOL_MARGIN_U * u,
+      );
+    }
+  }
+  for (const door of plan.doors || []) {
+    paintLightPool(ctx, door.x * u, door.y * u, DOOR_POOL_R_U * u);
   }
 
   // Walls, from the floor's own wall list. Two zones either side of a

@@ -46,6 +46,8 @@
 
 import {
   DEFAULT_PALETTE,
+  FIGURE_HALO,
+  ON_FLOOR_STATES,
   overridePalette,
   PROJECT_IDENTITIES,
   resetPalette,
@@ -194,6 +196,228 @@ export function contrastRatio(a, b) {
  */
 export const GROUND_KEYS = Object.freeze(['wood', 'carpet', 'screed', 'ground', 'tile']);
 
+// ------------------------------------------------- the interior's own numbers
+//
+// WP-85a. `docs/plan/10-INTERIOR-DESIGN.md` §3.2 is the source of every number
+// in this block, and each of them is quoted here rather than inlined into the
+// derivation so `test/unit/interior.test.mjs` can measure the SAME constant the
+// floor is painted from.
+
+/**
+ * How far a herringbone board's two extreme tones sit either side of the
+ * theme's own wood (§3.2). Was `±0.09`, which measured 1.27:1 between B and C
+ * on the default floor — the loudest local contrast in the product, spent on a
+ * zigzag that carries no information. `±0.03` puts the whole board family
+ * inside one value plateau: 1.08:1 default, 1.13:1 on both dark themes.
+ */
+export const BOARD_TONE_SPREAD = 0.03;
+
+/**
+ * The ceiling that spread is held to, measured over `materialTokensFor` rather
+ * than promised (§5, WP-85a's first acceptance criterion). A theme whose wood
+ * is so dark that `shade(±0.03)` opens further than this is refused at import.
+ */
+export const BOARD_MAX_INTERNAL_CONTRAST = 1.14;
+
+/**
+ * The seam between two boards, in alpha. Was 0.55 at 1.6 px — seven per cent of
+ * a 22 px block in near-black. §3.2: 0.20 at 0.8 px.
+ */
+export const BOARD_SEAM_ALPHA = 0.2;
+
+/**
+ * The pool of light (§3.2), the one new device in this package and what turns
+ * WP-72's key light into a light rather than a shadow direction: a soft radial
+ * in `#FFE9C4`, baked with the backdrop, over the manager's desk, every working
+ * desk and every corridor threshold.
+ *
+ * Warm, and the only warm light on a floor whose chrome is cold by rule
+ * (DEVIATIONS §69) — which is the point: the building is the lit thing in this
+ * window.
+ */
+export const LIGHT_POOL_COLOR = '#FFE9C4';
+export const LIGHT_POOL_ALPHA_LIGHT = 0.1;
+export const LIGHT_POOL_ALPHA_DARK = 0.055;
+
+/**
+ * The slate the reception's wool rug is turned toward (§3.1, owner decision 2).
+ *
+ * The rug still DERIVES from the carpet — that is the legibility rule the
+ * `rugCream` comment below states and `assertThemeContrast` measures — and this
+ * only gives it a hue of its own once it is already inside the carpet's band.
+ * It is the one textile on this floor that is not a shade of the floor, and at
+ * 191 from crimson on the default theme it is nowhere near the one colour that
+ * means "standing in your office".
+ */
+const WOOL_SLATE = '#8CA2B6';
+
+/**
+ * The composite of a ground under a light pool at the pool's BRIGHTEST point —
+ * the surface a room plate, a name or the in-room "+" is actually read on once
+ * §3.2's pools are baked in. `assertThemeContrast` holds the ink to 4.5:1
+ * against this as well as against the bare ground, because a pool that lifted a
+ * dark theme's floor into its own white line work would leave every label in
+ * the building unreadable with every shipped measurement green.
+ *
+ * @param {string} ground
+ * @param {boolean} lightInk
+ */
+export function pooled(ground, lightInk) {
+  return mix(ground, LIGHT_POOL_COLOR, lightInk ? LIGHT_POOL_ALPHA_DARK : LIGHT_POOL_ALPHA_LIGHT);
+}
+
+/**
+ * Which of the two devices a theme uses, everywhere the answer is needed: light
+ * line work means a dark floor. One expression, so the derivation, the halo and
+ * the guards cannot each decide for themselves what "a dark theme" is.
+ * @param {string} ink
+ */
+export function lightInkFor(ink) {
+  return relativeLuminance(ink) > 0.5;
+}
+
+/**
+ * THE WALL IS THE TOP OF A ROOM'S VALUE RANGE (WP-85a §1.2), BY CONSTRUCTION.
+ *
+ * The audit's third finding: the brightest surfaces in the product were a
+ * whiteboard, a sofa and a chair, at the highest local contrast inside any
+ * room — the contrast budget spent on furniture while the people it was for
+ * went fourth and fifth. §2 says a floor lives in a narrow luminance band and
+ * everything worth looking at lives outside it, and the wall is where that band
+ * stops.
+ *
+ * It is enforced HERE rather than checked afterwards, and the difference
+ * matters: eleven colours are chosen by a person and the rest are arithmetic, so
+ * a rule that only a test knew would be a rule every new theme broke once and
+ * somebody fixed by hand. A material that would climb past the wall is walked
+ * back down to it — which is what makes `assertThemeContrast`'s guard a
+ * tautology for any theme this derivation produced, and a real refusal for a
+ * ground a theme named itself.
+ *
+ * @param {string} colour the material as the derivation would like it
+ * @param {string} wall the theme's wall
+ * @returns {string} the same material, at or under the wall
+ */
+function underWall(colour, wall) {
+  const ceiling = relativeLuminance(wall);
+  if (relativeLuminance(colour) <= ceiling) return colour;
+  // Bisect on `shade` toward black. Twenty-four halvings put the answer inside
+  // a sixteen-millionth of the range, which is well under one channel count, so
+  // the result is the same on every machine and every run.
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (relativeLuminance(shade(colour, -mid)) > ceiling) lo = mid;
+    else hi = mid;
+  }
+  return shade(colour, -hi);
+}
+
+/**
+ * The same rule for a HIGHLIGHT: the strongest `wanted` alpha of white over
+ * `base` whose composite still fits under the wall. A sheen is a material's
+ * brightest pixel, not a decoration on top of it, so it is held to the same
+ * ceiling the material is — otherwise the gloss on a whiteboard would be
+ * exactly the bright hole §1.2 found, with the board itself measuring green.
+ *
+ * @param {string} base the material the highlight lies on
+ * @param {string} wall the theme's wall
+ * @param {number} wanted the alpha the finish would like
+ */
+function sheenOver(base, wall, wanted) {
+  const ceiling = relativeLuminance(wall);
+  /** @param {number} a */
+  const composite = (a) => mix(base, '#FFFFFF', a);
+  if (relativeLuminance(composite(wanted)) <= ceiling) return alpha('#FFFFFF', wanted);
+  let lo = 0;
+  let hi = wanted;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (relativeLuminance(composite(mid)) > ceiling) hi = mid;
+    else lo = mid;
+  }
+  // Rounded to three places so a token stays a short readable string; the
+  // rounding is downward, which cannot push the composite back over.
+  return alpha('#FFFFFF', Math.floor(lo * 1000) / 1000);
+}
+
+/**
+ * Composite an `rgba()` token over an opaque colour — what the eye actually
+ * gets where a sheen, a cushion highlight or a rug border lies on its own
+ * material. Returns `base` unchanged for anything that is not an `rgba()`.
+ * @param {string} base
+ * @param {string} layer
+ */
+export function over(base, layer) {
+  const m = /^rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)$/i.exec(
+    String(layer).trim(),
+  );
+  if (!m) return base;
+  const a = Math.min(1, Math.max(0, Number(m[4])));
+  const b = rgb(base);
+  return hex([0, 1, 2].map((i) => b[i] + (Number(m[i + 1]) - b[i]) * a));
+}
+
+/**
+ * Every surface inside a room at its BRIGHTEST — the flat material where it has
+ * no highlight, and the composite where it has one. This is the set WP-85a's
+ * "no non-wall pixel inside a room is brighter than that theme's wall" is
+ * measured over, stated once so `assertThemeContrast` and the test suite look
+ * at the same list.
+ *
+ * @param {Record<string,string>} d the derived material tokens
+ * @param {Record<string,string>} floor the theme's eleven
+ * @returns {Record<string,string>}
+ */
+export function interiorHighlights(d, floor) {
+  return {
+    'the board, lit': over(d.woodHerringboneC, d.woodHerringboneSheen),
+    'the carpet weave': over(d.carpetBase, d.carpetWeaveLight),
+    'the screed sheen': over(d.circulationBase, d.circulationSheen),
+    'the tile': d.tileBase,
+    'the counter': d.counterTop,
+    'the partition': d.partitionFill,
+    'the whiteboard face': over(d.whiteboardSurface, d.whiteboardSheen),
+    'a chair cushion': over(d.chairFill, d.chairCushion),
+    'a sofa cushion': d.sofaCushion,
+    'the fridge': d.fridgeFill,
+    'the wool rug': over(d.rugCream, d.rugBorder),
+    'the task rug': over(d.rugSage, d.rugBorder),
+    'a desk top': d.deskTop,
+    'a lit ground': pooled(floor.wood, lightInkFor(floor.ink)),
+    'a lit screed': pooled(floor.screed, lightInkFor(floor.ink)),
+  };
+}
+
+/**
+ * EVERY STATE COLOUR CLEARS 3:1 AGAINST THE FIGURE HALO (WP-85a §3.9).
+ *
+ * `03-VISUAL-SPEC.md` §10 used to promise this against the FLOOR, which was
+ * never true on any theme and cannot be: the state palette is mid-tone —
+ * `benched #7B8794` and `needs_input #B87333` both near L* 53 — so a floor
+ * clearing 3:1 against all of them would have to be near paper or near black.
+ * The answer belongs on the character, and it is one constant: every figure on
+ * this floor stands on (light themes) or inside (dark themes) `FIGURE_HALO`, so
+ * the surface a state colour is read against stopped being a variable.
+ *
+ * That is why this takes no theme. It is asserted at import anyway, because the
+ * halo and the seven state colours are both edited by hand and the promise is
+ * only worth making if something re-measures it.
+ */
+export function assertFigureHaloContrast() {
+  for (const state of ON_FLOOR_STATES) {
+    const ratio = contrastRatio(STATE_COLORS[state], FIGURE_HALO);
+    if (ratio + 1e-9 < 3) {
+      throw new Error(
+        `the figure halo (${FIGURE_HALO}) is ${ratio.toFixed(2)}:1 against ${state}, and needs ` +
+          '>= 3:1. Every character on this floor is read against the halo rather than against ' +
+          'the ground — docs/03-VISUAL-SPEC.md §10.',
+      );
+    }
+  }
+}
+
 /**
  * Fan a theme's eleven materials out into the material tokens `backdrop.js`
  * and `rig.js` actually read.
@@ -229,33 +453,67 @@ export function materialTokensFor(theme) {
   // halo behind a room plate has to go the OTHER way from the ink or the
   // letterforms vanish into it — which is exactly what a near-white halo
   // would have done to blueprint's white plate text.
-  const lightInk = relativeLuminance(ink) > 0.5;
+  const lightInk = lightInkFor(ink);
   const haloBase = lightInk ? shade(ground, -0.55) : '#FCFAF4';
+
+  // Everything a room is furnished in, held under the wall by `underWall`
+  // (WP-85a §1.2). Named up here rather than inline because the highlights
+  // below are composited ON these, and a sheen that was measured against the
+  // uncapped material would put back exactly the bright hole the cap removed.
+  const chairFill = underWall(seat, wall);
+  const sofaCushion = underWall(shade(seat, 0.02), wall);
+  const fridgeFill = underWall(shade(seat, 0.03), wall);
+  const whiteboardSurface = underWall(shade(seat, 0.08), wall);
+  const counterTop = underWall(mix(tile, desk, 0.22), wall);
+  const rugSage = underWall(mix(carpet, plant, 0.3), wall);
+  // The reception's WOOL. Slate since WP-85a (§3.1, owner decision 2) — the one
+  // textile on this floor with a hue of its own, and the thing that tells you
+  // the waiting area is not the corridor. It is still carried into place by the
+  // carpet, so it cannot leave the floor's luminance band and a name drawn on it
+  // is as readable as a name drawn on the floor; only its temperature is its own.
+  const rugCream = underWall(
+    mix(shade(carpet, lightInk ? 0 : -0.132), WOOL_SLATE, lightInk ? 0.15 : 0.33),
+    wall,
+  );
 
   return {
     // ---- herringbone: one plank colour, four tones, a seam and a sheen ----
+    // WP-85a §3.2. The spread is `BOARD_TONE_SPREAD` rather than the ±0.09 this
+    // shipped with, and the fourth tone is a third of that rather than a fifth
+    // of the way to the far end, so the four boards are one material seen under
+    // one light instead of four woods laid in a zigzag.
     woodHerringboneA: wood,
-    woodHerringboneB: shade(wood, -0.09),
-    woodHerringboneC: shade(wood, 0.09),
-    woodHerringboneD: shade(wood, -0.03),
-    woodHerringboneSeam: alpha(shade(wood, -0.55), 0.55),
-    woodHerringboneSheen: alpha(lightInk ? '#FFFFFF' : '#FFFFFF', lightInk ? 0.06 : 0.1),
+    woodHerringboneB: shade(wood, -BOARD_TONE_SPREAD),
+    woodHerringboneC: shade(wood, BOARD_TONE_SPREAD),
+    woodHerringboneD: shade(wood, -BOARD_TONE_SPREAD / 3),
+    woodHerringboneSeam: alpha(shade(wood, -0.55), BOARD_SEAM_ALPHA),
+    // A sheen is what says "finished timber"; at 0.10 it was also the widest
+    // value step on the board, which put the loudest edge inside the quietest
+    // surface. A third of it still reads as a finish at a 2x crop.
+    woodHerringboneSheen: sheenOver(shade(wood, BOARD_TONE_SPREAD), wall, lightInk ? 0.035 : 0.045),
 
     // ---- circulation ----
     circulationBase: screed,
     circulationSpeckle: alpha(shade(screed, -0.45), 0.13),
     circulationEdge: alpha(shade(screed, -0.45), 0.2),
-    circulationSheen: alpha('#FFFFFF', lightInk ? 0.12 : 0.28),
+    circulationSheen: sheenOver(screed, wall, lightInk ? 0.12 : 0.16),
 
     // ---- carpet ----
+    // WP-85a §3.2: a WEAVE, not salt. Two hairline passes rather than six
+    // thousand single pixels — directional, low-frequency, gone at fit scale
+    // and still a weave under a 2x crop. `paintCarpet` owns the pitch.
     carpetBase: carpet,
-    carpetNoiseLight: alpha('#FFFFFF', lightInk ? 0.18 : 0.55),
-    carpetNoiseDark: alpha(shade(carpet, -0.5), 0.16),
+    carpetWeaveLight: alpha('#FFFFFF', 0.03),
+    carpetWeaveDark: alpha(shade(carpet, -0.5), 0.09),
 
     // ---- kitchen tile ----
     tileBase: tile,
     tileGrout: alpha(shade(tile, -0.45), 0.16),
-    counterTop: shade(tile, 0.06),
+    // The counter is a worktop in a tiled bay, not a light source: the tile
+    // carried a fifth of the way toward the building's own timber. It was
+    // `shade(tile, +0.06)`, which made the brightest surface in the café the
+    // one horizontal plane nobody looks at.
+    counterTop,
 
     // ---- the ground, and the room nobody is in ----
     floorGround: ground,
@@ -289,16 +547,25 @@ export function materialTokensFor(theme) {
     // did exactly that in its first capture: pale mint rugs under white names.
     // Deriving from the carpet means anything readable on the floor is
     // readable on the rug, and `assertThemeContrast` measures that.
-    rugSage: mix(carpet, plant, 0.3),
-    rugCream: shade(carpet, lightInk ? 0.08 : 0.04),
-    rugBorder: alpha('#FFFFFF', lightInk ? 0.22 : 0.6),
+    //
+    // `rugSage` is the TASK rug in a project room and `rugCream` the reception
+    // and lounge WOOL; both are derived above, where the cap can reach them.
+    rugSage,
+    rugCream,
+    // One border token lies on both rugs, so it is sized against whichever of
+    // them has the least headroom left under the wall.
+    rugBorder: sheenOver(
+      relativeLuminance(rugSage) > relativeLuminance(rugCream) ? rugSage : rugCream,
+      wall,
+      lightInk ? 0.22 : 0.36,
+    ),
     rugEdge: alpha(shade(ground, -0.45), 0.28),
 
     // ---- plants ----
     plantLeafA: plant,
     plantLeafB: shade(plant, 0.14),
     plantLeafC: shade(plant, -0.14),
-    plantPot: shade(seat, -0.08),
+    plantPot: shade(seat, -0.1),
 
     // ---- desks, benches, tables ----
     deskTop: desk,
@@ -306,17 +573,20 @@ export function materialTokensFor(theme) {
     tableWood: wood,
 
     // ---- chairs and sofas ----
-    chairFill: seat,
+    chairFill,
     chairEdge: shade(seat, -0.12),
     chairBackrest: shade(seat, -0.07),
-    chairCushion: alpha('#FFFFFF', lightInk ? 0.14 : 0.42),
+    chairCushion: sheenOver(chairFill, wall, lightInk ? 0.14 : 0.24),
     sofaFill: shade(seat, -0.03),
-    sofaFrame: shade(seat, -0.08),
-    sofaCushion: shade(seat, 0.05),
+    // §3.4's silhouette rule, as far as a TOKEN can carry it: the frame band is
+    // a real step below the cushion it holds, so a sofa run reads as a piece of
+    // furniture with a back rather than as a row of near-white boxes.
+    sofaFrame: shade(seat, -0.24),
+    sofaCushion,
     sofaSeam: alpha(shade(seat, -0.5), 0.35),
-    fridgeFill: shade(seat, 0.03),
-    whiteboardSurface: shade(seat, 0.08),
-    whiteboardSheen: alpha('#FFFFFF', lightInk ? 0.18 : 0.5),
+    fridgeFill,
+    whiteboardSurface,
+    whiteboardSheen: sheenOver(whiteboardSurface, wall, lightInk ? 0.18 : 0.22),
 
     // ---- the line work ----
     inkWarm: ink,
@@ -328,6 +598,12 @@ export function materialTokensFor(theme) {
     plusRest: alpha(ink, 0.55),
     plusHover: ink,
     plusHoverHalo: alpha(ink, lightInk ? 0.16 : 0.1),
+
+    // ---- the pool of light (WP-85a §3.2) ----
+    // One token, two alphas: a dark theme's floor has much less headroom above
+    // it, so the same pool at the light theme's strength would wash a night
+    // corridor out to the colour of its own line work.
+    lightPool: alpha(LIGHT_POOL_COLOR, lightInk ? LIGHT_POOL_ALPHA_DARK : LIGHT_POOL_ALPHA_LIGHT),
   };
 }
 
@@ -339,24 +615,31 @@ export function materialTokensFor(theme) {
  * schema proves the schema can express what ships.
  *
  * These values are QUOTED from `palette.js` and `style.css`, and applying this
- * theme does not run the derivation above — see `applyTheme`. That is the one
- * special case in this file and it exists for a hard reason: the shipped
- * herringbone's four tones are hand-tuned and no single-colour derivation
- * reproduces them byte for byte, and the goldens for the default floor must
- * stay at 0 px.
+ * theme does not run the derivation above — see `applyTheme`, which restores
+ * the shipped materials rather than re-deriving them.
+ *
+ * WP-85a CLOSED THE GAP THAT USED TO SIT HERE. Until this package the default
+ * herringbone's four tones were hand-tuned and no single-colour derivation
+ * reproduced them, so "the default floor" and "the derivation" were two
+ * different statements of the same floor that were allowed to disagree. §3.1
+ * says three themes are one system, so they are: `DEFAULT_PALETTE` now holds
+ * exactly `materialTokensFor(THEMES[0])`, byte for byte, and the guard at the
+ * bottom of this file proves it for EVERY derived token rather than for the
+ * eleven anchors. The reset stays because it is faster and because it puts the
+ * props a theme does not touch back as well.
  */
 const DEFAULT_FLOOR = Object.freeze({
-  wood: '#CBA87A',
-  carpet: '#E4DFD3',
-  screed: '#CFC9BC',
-  ground: '#E3DED4',
-  tile: '#EDEAE4',
-  wall: '#FCFBF8',
-  partition: '#E7E2D6',
-  desk: '#D8BD97',
-  seat: '#FBFAF7',
-  plant: '#6F8F5E',
-  ink: '#33291E',
+  wood: '#DCC9AE',
+  carpet: '#E7E2D7',
+  screed: '#D2CDC1',
+  ground: '#DFDAD0',
+  tile: '#E3DFD6',
+  wall: '#F4F1EA',
+  partition: '#E0DACD',
+  desk: '#C8AC84',
+  seat: '#DCD5C6',
+  plant: '#6C8F63',
+  ink: '#32281D',
 });
 
 const DEFAULT_CHROME = Object.freeze({
@@ -392,18 +675,22 @@ export const THEMES = Object.freeze(
       version: THEME_VERSION,
       blurb: 'The same office after hours: cooler, dimmer, lights low.',
       floor: {
-        wood: '#4E5259',
-        carpet: '#3A3E46',
-        screed: '#33373E',
-        ground: '#2A2D34',
-        tile: '#41454D',
-        wall: '#565B63',
-        partition: '#454A52',
-        desk: '#5A5F67',
+        // WP-85a §3.1. The wood goes UNDER the carpet rather than over it: on a
+        // dark theme the boards are the thing a working desk's pool of light is
+        // read against, and a floor that started brighter than the room it runs
+        // into had the value hierarchy the same way round as the day theme's.
+        wood: '#40454D',
+        carpet: '#31353D',
+        screed: '#2A2E35',
+        ground: '#22262D',
+        tile: '#373C44',
+        wall: '#4E545D',
+        partition: '#3C414A',
+        desk: '#4A4F58',
         // Measured, not chosen: at `#666C75` this theme's own ink was 4.43:1
         // on a chair, and an agent's name is drawn where the agent sits.
         // `assertThemeContrast` refused it at import.
-        seat: '#5A606A',
+        seat: '#4F555F',
         plant: '#6E9E86',
         ink: '#E8EBF1',
       },
@@ -423,15 +710,15 @@ export const THEMES = Object.freeze(
       version: THEME_VERSION,
       blurb: 'The floor as a drawing: drafting-table blue, white line work.',
       floor: {
-        wood: '#23486E',
-        carpet: '#1F4266',
-        screed: '#1A3757',
-        ground: '#1B3A5C',
-        tile: '#26507A',
-        wall: '#2E5C8A',
-        partition: '#27507A',
-        desk: '#2A527D',
-        seat: '#356191',
+        wood: '#1C3D5F',
+        carpet: '#173553',
+        screed: '#132C47',
+        ground: '#112941',
+        tile: '#20466C',
+        wall: '#2C5885',
+        partition: '#1F4265',
+        desk: '#245079',
+        seat: '#2A5580',
         plant: '#7FB8A2',
         ink: '#F2F6FB',
       },
@@ -608,6 +895,19 @@ export function assertThemeContrast(theme) {
   // The line work, on every ground the floor draws it on.
   for (const key of GROUND_KEYS) {
     need(contrastRatio(floor.ink, floor[key]), 4.5, `floor ink on the ${key}`);
+    // AND ON THAT GROUND UNDER A POOL OF LIGHT, AT ITS BRIGHTEST POINT (WP-85a).
+    //
+    // §3.2's pools are baked into the backdrop over the manager's desk, every
+    // working desk and every corridor threshold — which is to say, over exactly
+    // the places a room plate and a name are drawn. A pool is a lightening, so
+    // on a dark theme it eats into the headroom the theme's white line work
+    // needs, and measuring the bare ground alone would measure the one part of
+    // the floor the label is NOT on.
+    need(
+      contrastRatio(floor.ink, pooled(floor[key], lightInkFor(floor.ink))),
+      4.5,
+      `floor ink on the ${key} under a pool of light`,
+    );
   }
   // AND ON THE CARPET A PROJECT ROOM IS ACTUALLY PAINTED IN (WP-72).
   //
@@ -639,6 +939,42 @@ export function assertThemeContrast(theme) {
   const derived = materialTokensFor({ floor });
   for (const key of ['rugSage', 'rugCream', 'deskTop', 'chairFill', 'sofaFill']) {
     need(contrastRatio(floor.ink, derived[key]), 4.5, `floor ink on the derived ${key}`);
+  }
+
+  // THE BOARD STAYS INSIDE ONE VALUE PLATEAU (WP-85a §3.2).
+  //
+  // A herringbone is the largest surface in this building and it carries no
+  // information; §2's first principle is that the ground is quiet so the
+  // objects can speak. The spread is a constant, so this is really a check on
+  // the THEME: a wood dark enough that `shade(±0.03)` opens further than the
+  // ceiling would put the loudest edge in the product back inside its quietest
+  // surface, and it is refused rather than shipped.
+  const boardSpread = contrastRatio(derived.woodHerringboneB, derived.woodHerringboneC);
+  if (boardSpread > BOARD_MAX_INTERNAL_CONTRAST + 1e-9) {
+    throw new Error(
+      `${where}: the herringbone's internal contrast is ${boardSpread.toFixed(2)}:1, over the ` +
+        `${BOARD_MAX_INTERNAL_CONTRAST}:1 ceiling. A floor lives in a narrow luminance band and ` +
+        'everything worth looking at lives outside it — docs/plan/10-INTERIOR-DESIGN.md §3.2.',
+    );
+  }
+
+  // NOTHING INSIDE A ROOM IS BRIGHTER THAN THE WALL AROUND IT (WP-85a §5).
+  //
+  // The audit's third finding, as a property rather than as a screenshot: the
+  // brightest surfaces in the product were a whiteboard, a sofa and a chair, at
+  // the highest local contrast inside any room. The wall is the lit edge of the
+  // building and the top of the interior's value range; a material that climbs
+  // past it has taken the eye off the people. Composites are measured too — a
+  // sheen is a material's brightest pixel, not a decoration on top of it.
+  const wallLuminance = relativeLuminance(floor.wall);
+  for (const [name, colour] of Object.entries(interiorHighlights(derived, floor))) {
+    if (relativeLuminance(colour) > wallLuminance + 1e-9) {
+      throw new Error(
+        `${where}: ${name} (${colour}) is brighter than the wall (${floor.wall}). The wall is the ` +
+          'top of a room’s value range and the people are the loud thing in it — ' +
+          'docs/plan/10-INTERIOR-DESIGN.md §1.2.',
+      );
+    }
   }
   // COLOUR DISCIPLINE. Crimson means "standing in your office" and a theme may
   // not spend it, in either table — not the literal, and not a near-miss.
@@ -777,27 +1113,27 @@ export function swatchesFor(theme) {
 // finding that out at start-up beats finding it out in a screenshot.
 for (const theme of THEMES) assertThemeContrast(theme);
 
-// And the default theme's materials really are the shipped ones: if somebody
-// edits `palette.js` without editing `DEFAULT_FLOOR`, the picker's "default"
-// swatch would lie about the floor it selects.
-for (const [key, token] of Object.entries({
-  wood: 'woodHerringboneA',
-  carpet: 'carpetBase',
-  screed: 'circulationBase',
-  ground: 'floorGround',
-  tile: 'tileBase',
-  wall: 'wallFill',
-  partition: 'partitionFill',
-  desk: 'deskTop',
-  seat: 'chairFill',
-  plant: 'plantLeafA',
-  ink: 'plateInk',
-})) {
+// And the halo, once, for the whole product.
+assertFigureHaloContrast();
+
+// THREE THEMES, ONE SYSTEM (WP-85a §3.10).
+//
+// The default theme is applied as a reset rather than through the derivation,
+// so "what ships" and "what the derivation says" are two statements of one
+// floor. Before this package they were allowed to disagree — the herringbone's
+// four tones were hand-tuned — and the eleven-anchor check below was the whole
+// of what held them together, which left every derived tone, seam, sheen, rug
+// and halo free to drift. Now EVERY derived token is compared, so the default
+// floor cannot stop being the default theme's own derivation, and a change to
+// the derivation that somebody forgets to carry into `palette.js` fails at
+// import rather than in a screenshot.
+for (const [token, derived] of Object.entries(materialTokensFor(THEMES[0]))) {
   const shipped = DEFAULT_PALETTE[token];
-  if (String(shipped).toLowerCase() !== String(DEFAULT_FLOOR[key]).toLowerCase()) {
+  if (String(shipped).toLowerCase() !== String(derived).toLowerCase()) {
     throw new Error(
-      `themes.js: DEFAULT_FLOOR.${key} (${DEFAULT_FLOOR[key]}) has drifted from ` +
-        `PALETTE.${token} (${shipped}). The default theme must describe the floor that ships.`,
+      `themes.js: PALETTE.${token} (${shipped}) is not what the default theme derives ` +
+        `(${derived}). The floor that ships and the default theme must be one floor — ` +
+        'docs/plan/10-INTERIOR-DESIGN.md §3.10.',
     );
   }
 }

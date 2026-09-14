@@ -48,6 +48,8 @@ function makeFakeCtx() {
     strokeRect: record('strokeRect'),
     setLineDash: record('setLineDash'),
     createLinearGradient: () => ({ addColorStop: () => {} }),
+    // WP-85a: the figure halo's ground pool is a radial.
+    createRadialGradient: () => ({ addColorStop: () => {} }),
     fillText: (text, x, y) => calls.push({ kind: 'fillText', text: String(text), x, y }),
     strokeText: (text, x, y) => calls.push({ kind: 'strokeText', text: String(text), x, y }),
     // A stable, monospace-ish metric: every assertion below is about the fit

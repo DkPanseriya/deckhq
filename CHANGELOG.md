@@ -220,6 +220,65 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
 
 ### Changed
 
+- **The interior: materials, palette, floors, walls, and the halo under people — WP-85a.** The
+  owner: _"analyse and evaluate our tool in terms of design — the floor, the carpet, the colours…
+  then improve thoroughly every aspect of the interior."_ The layout was already done; what nobody
+  had designed was the interior of what it produces. This is the first of three packages and it
+  moves **paint only** — no room rectangle on any golden changed, and a test proves it.
+  - **Eleven tokens per theme, and the default floor is no longer an exception to them.** A theme
+    has always been eleven materials fanned out by `materialTokensFor()`, but the shipped floor was
+    hand-tuned and allowed to disagree with its own derivation, which left every derived tone, seam,
+    sheen and rug free to drift. `DEFAULT_PALETTE` is now exactly `materialTokensFor(default)`, byte
+    for byte, and a guard at import compares **every** derived token rather than eleven anchors.
+    Three themes, one system — `docs/plan/10-INTERIOR-DESIGN.md` §3.10.
+  - **The parquet stopped being the loudest thing in the product.** It laid a 46 px lattice, so a
+    block was 4.67 U × 1.58 U — 1.40 m × 0.47 m, about **twelve times** the area of a real
+    herringbone block — in four tones **1.27:1** apart, each outlined with a 1.6 px seam at 0.55
+    alpha. It is now a **1.71 U** cell, a 0.73 m × 0.25 m block, four tones **1.08:1** apart
+    (1.13:1 on both dark themes) and a 0.8 px seam at 0.20. The wood went lighter and lost chroma,
+    which lifts every state standing on it: `needs_input` **1.70 → 2.35**, `working` 2.23 → 3.08,
+    `for_review` 2.44 → 3.37.
+  - **The carpet is a weave instead of salt.** `paintCarpet` scattered up to six thousand
+    single-pixel fills per room, which reads as a dirty surface at 1× and as sensor noise at 2×. Two
+    hairline passes at a 3 px pitch now — directional, low-frequency, one flat tone at fit scale and
+    still a textile under a 2× crop. WP-72's six-per-cent identity wash is untouched.
+  - **The value hierarchy is the right way up, by construction.** The brightest surfaces in the
+    product were a wall, a chair and a whiteboard — the highest local contrast inside any room,
+    spent on furniture while the people it exists for came fourth and fifth. The seat token left the
+    near-white band, the desk went darker than the floor it stands on, and **nothing inside a room
+    may be brighter than that theme's wall**: it is enforced where each material is derived, so a
+    theme cannot produce a floor that breaks it, and the sheens are held to the ceiling too because
+    a sheen is a material's brightest pixel.
+  - **Pools of light.** WP-72 gave this floor one key light and spent all of it on shadow direction.
+    A soft warm radial now lies over the manager's desk, over every working desk and on every
+    threshold — baked with the backdrop, static, and free under reduced motion. The ink is held to
+    4.5:1 against every ground **at a pool's brightest point** as well as against the bare floor.
+  - **Every pattern is a size in plan units**, not in baked pixels, so a bake at any `u` lays the
+    same floor rather than the same bitmap.
+  - **The reception rug is a slate wool.** The one textile on this floor with a hue of its own, and
+    what tells you the waiting area is not the corridor. Still derived from the carpet, so anything
+    readable on the floor is readable on the rug.
+
+  `docs/DEVIATIONS.md` §160, `docs/plan/10-INTERIOR-DESIGN.md` §3, `docs/03-VISUAL-SPEC.md` §6.0.
+
+- **`03-VISUAL-SPEC.md` §10's contrast promise is true now, because it changed — WP-85a.** §10 said
+  _"all state colours meet 3:1 against their floor background"_. It was never true on any theme and
+  it could not be made true: the state palette is mid-tone — `benched #7B8794` and
+  `needs_input #B87333` both near L\* 53 — so a floor clearing 3:1 against all six on-floor states
+  would have to be near paper or near black. On the default parquet `needs_input` measured
+  **1.70:1**; on night shift `for_review` measured **1.44:1**. Nothing caught it because
+  `assertThemeContrast` held state colours to the **chrome** and never to the floor.
+
+  The promise moved onto the character. **Every character now carries one halo, `#F6F2E9`** — a soft
+  ground **pool** under the feet on a light floor, whose job is uniformity rather than contrast (it
+  flattens the boards so the silhouette sits on one tone), and a thin **rim** on the silhouette on a
+  dark floor, where a pool would be a bright hole in the room. Worst case over all six on-floor
+  states, every shipped theme and every theme anybody will ever write: `benched` at **3.28:1**. It
+  is not themeable — like the seven state colours it is a separate export no floor key names, so no
+  theme document and no asset pack can reach it — and `assertFigureHaloContrast()` re-measures it at
+  import. The state colours on the bare floor are still measured, and recorded as **known and
+  accepted** failures rather than deleted quietly.
+
 - **Cost is off by default, and `Show cost` turns it back on — WP-83.** `08` §1.1 rule 7 has always
   said cost is an estimate and never a bill, and that has not changed. What has changed is that
   most people are on a subscription, where a figure at public list prices is neither their bill nor
@@ -561,6 +620,18 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/unit/interior.test.mjs` — eighteen tests over WP-85a, and it prints its measurements.**
+  Every ratio `docs/plan/10-INTERIOR-DESIGN.md` §3 quotes is re-derived here and written to the
+  runner's output, so a change that moves a material shows you what it moved rather than only that
+  it moved. It holds the eleven tokens per theme to the design document; the board to ≤ 1.14:1
+  internally with a block ≤ 2.6 U and a seam ≤ 0.9 px at ≤ 0.22 alpha; the ink to 4.5:1 on every
+  ground and on every ground under a pool of light; every interior surface and every sheen composite
+  to the wall above it; and every on-floor state colour to 3:1 against the figure halo. `paintCarpet`
+  is checked by **reading the renderer's own source** for a 1 × 1 fill, in `lighting.test.mjs`'s
+  style, because no measurement of a function's output colours would ever find "it scatters six
+  thousand single pixels". And a **plan hash** over 123 room rectangles across eighteen populations
+  proves WP-85a moved paint and nothing else.
 
 - **`test/integration/studio-plan.test.mjs` and `test/unit/studio-brief.test.mjs` — seventeen tests
   over WP-67.** The planner's argv is asserted **element by element** against an array written out

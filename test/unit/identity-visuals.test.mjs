@@ -68,6 +68,8 @@ function makeFakeCtx() {
     strokeText: noop,
     setLineDash: noop,
     createLinearGradient: () => ({ addColorStop: noop }),
+    // WP-85a: the figure halo's ground pool is a radial.
+    createRadialGradient: () => ({ addColorStop: noop }),
     measureText: (t) => ({ width: String(t).length * 6 }),
   };
   for (const prop of [
@@ -308,6 +310,7 @@ function makeRecordingCtx() {
     strokeText: () => {},
     setLineDash: () => {},
     createLinearGradient: () => ({ addColorStop: () => {} }),
+    createRadialGradient: () => ({ addColorStop: () => {} }),
     measureText: (t) => ({ width: String(t).length * 6 }),
   };
   ctx.fillStyle = null;
@@ -560,10 +563,17 @@ test('LEGIBILITY: no appearance mark is a filled shape over the torso — every 
     // A hat is big but sits on the head, a contact shadow is big but sits at
     // the feet, an aura is big but is drawn at 16% opacity behind everything —
     // all three are what this test must not confuse for a cover-up.
+    //
+    // AND IT HAS TO BE DRAWN AFTER (WP-85a). §3.9's figure halo is a wide fill
+    // centred on the body — a ground pool on a light floor, a rim on a dark one
+    // — and it is deliberately laid UNDER the whole rig, which is the opposite
+    // of covering the state up: it is what the state is read against. "Over the
+    // torso" is a statement about paint order, so it is measured as one.
+    const torsoAt = calls.indexOf(torso);
     const covering = calls.filter(
-      (c) =>
+      (c, i) =>
         c.op === 'fill' &&
-        c !== torso &&
+        i > torsoAt &&
         c.style !== colour &&
         c.alpha === 1 &&
         c.path.some((p) => (p.ry || p.r || 0) >= torsoRy * 0.8 && Math.hypot(p.x, p.y) < 0.3 * 20),

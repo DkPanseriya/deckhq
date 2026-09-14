@@ -296,12 +296,14 @@ All baked into the backdrop bitmap once per layout change.
 
 | Surface | Treatment |
 |---|---|
-| User's office, lounge | Herringbone wood. 46 px lattice cell, four tone variations, 1.6 px seams. |
-| Project rooms, circulation | Woven carpet, warm grey, fine two-tone noise. |
-| Kitchen area | Square tile with grout lines. |
-| Walls | 5 px thick, near-white fill, drop shadow onto the floor, and a gradient ambient-occlusion band where wall meets floor. |
+| User's office, lounge | Herringbone boards. 1.71 U lattice cell, four tones a thirtieth apart, 0.8 px seams at 0.20 alpha. |
+| Project rooms, circulation | Woven carpet, warm grey, two hairline weave passes at a 3 px pitch. Washed 6 % toward the project's identity (§5). |
+| Corridors and the spine | Poured screed, one long soft sheen, nothing else. |
+| Kitchen area | Square tile with hairline grout, 22 px grid. |
+| Walls | 5 px thick, drop shadow onto the floor, and a gradient ambient-occlusion band where wall meets floor. **Not near-white since WP-85a** — the wall is the top of a room's value range, not a light source. |
 | Partitions | 0.3 U thick, waist height, no shadow — visually subordinate to real walls. |
 | Doors | Gap in the wall plus a quarter-circle swing arc. Architectural convention, and it reads instantly. |
+| Pools of light | A soft warm radial over the manager's desk, every working desk and every threshold — baked, static, and what turns §6.1's key light into a light rather than a shadow direction. |
 
 **Furniture inventory:** bench desks with centre divider, monitors with screen glow, keyboards,
 task chairs with backrest and arms, the user's desk, sofas with cushions, coffee table, round
@@ -311,6 +313,27 @@ round, with a border inset), potted plants at three scales.
 
 Every furniture item carries a soft contact shadow. Shadows are what make a flat render read as a
 photograph rather than a diagram.
+
+### 6.0 The materials themselves
+
+**The eleven tokens, the derivation that fans them out, and the rules the interior is held to are
+`docs/plan/10-INTERIOR-DESIGN.md` §3.** That document is the design of record for what this floor is
+made of; this section is what the renderer does with it.
+
+Three things from it are load-bearing here and are measured by `test/unit/interior.test.mjs`:
+
+- **A theme is eleven colours.** `wood, carpet, screed, ground, tile, wall, partition, desk, seat,
+  plant, ink` — everything else on the floor is derived from those by `materialTokensFor()`, for the
+  shipped themes and a pack's alike. The default floor is that derivation too, byte for byte
+  (§3.10); it used to be a hand-tuned exception and is not one any more.
+- **The ground is quiet so the objects can speak.** A herringbone board's four tones sit inside one
+  value plateau — at most **1.14:1** between the extremes, asserted over the derivation — and
+  **nothing inside a room may be brighter than that theme's wall**. Both are enforced where the
+  material is derived rather than checked afterwards, so a theme cannot produce a floor that breaks
+  them.
+- **Every pattern is a size in plan units**, not in baked pixels. A unit is about 0.30 m, so the
+  1.71 U herringbone cell is a claim about a real floor: a 0.73 m × 0.25 m block, against the 1.40 m
+  × 0.47 m this shipped with before WP-85a.
 
 ### 6.1 Light
 
@@ -409,7 +432,27 @@ conversation, an animated L2 close-up of the agent, the action buttons, and a co
 
 ## 10. Accessibility and motion
 
-- All state colours meet 3:1 against their floor background; text meets 4.5:1.
+**Rewritten 14 September 2026 (WP-85a).** This section used to promise that *"all state colours meet
+3:1 against their floor background"*. It was not true on any theme and it could not be made true:
+the state palette is mid-tone — `benched #7B8794` and `needs_input #B87333` both sit near L\* 53 —
+so a floor clearing 3:1 against all six on-floor states would have to be near paper or near black.
+On the default parquet `needs_input` measured **1.70:1**; on night shift `for_review` measured
+**1.44:1**. Nothing measured it, because `assertThemeContrast` held state colours to the **chrome**
+and never to the floor. The promise has moved onto the character, where it can be kept.
+
+- **Every state colour meets 3:1 against the figure halo, and the halo always goes the opposite way
+  from the floor.** One constant, `#F6F2E9`, not themeable and unreachable from any theme document:
+  a soft ground **pool** under the feet on a light floor, whose job is uniformity — it flattens the
+  boards so the silhouette sits on one tone — and a thin **rim** on the silhouette on a dark floor,
+  where a pool would be a bright hole in the room. Which device applies is
+  `relativeLuminance(ink) > 0.5`. Measured worst case, every theme and every theme anybody will ever
+  write: `benched` at **3.28:1**. `assertFigureHaloContrast()` re-measures it at import and
+  `test/unit/interior.test.mjs` prints all six.
+- **Text meets 4.5:1 on every ground it lands on** — including the fourteen identity-washed carpets,
+  and including a ground at a pool of light's brightest point.
+- The state colours on the bare floor are measured too, and recorded as **known and accepted**
+  failures rather than deleted quietly: `test/unit/interior.test.mjs` prints all ninety pairs and
+  fails if a floor ever does clear the bar on its own, so the halo can be reconsidered on evidence.
 - State is never conveyed by colour alone — every state has an icon or a distinct pose.
 - `prefers-reduced-motion: reduce`: characters snap between positions, clips hold a
   representative static pose, the hand-raise pulse becomes a static ring, lounge rotation stops.

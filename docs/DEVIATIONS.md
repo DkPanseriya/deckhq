@@ -15956,3 +15956,207 @@ has, and Studio is a mode that is off on every project until somebody turns it o
 - **The panel block has been looked at in one theme at one window size.** Its rows wrap inside
   their own line rather than pushing the panel sideways, but that has not been photographed, and a
   validator message long enough to wrap several lines has not been seen on screen.
+
+## 160. WP-85a — the floor was the loudest thing in the room, and a written promise was false
+
+`docs/plan/10-INTERIOR-DESIGN.md` §3 is the design of record and §5's WP-85a row the acceptance
+list; §158 is the audit that opened it. This is the first of three packages and it moves **paint
+only** — eleven tokens per theme, the floors, the walls, pools of light, and one halo under every
+character. No plan module was touched, no furniture was added or moved, no rig shape changed. All
+nine goldens were rebaked once and `goldens:check` is green.
+
+### 160.1 Three themes, one system — and the default floor stopped being the exception
+
+`themes.js` already had the right shape: a theme is **eleven materials** and `materialTokensFor()`
+fans them out into the tokens the renderer paints from. What it also had was a documented escape
+hatch — *"the shipped herringbone's four tones are hand-tuned and no single-colour derivation
+reproduces them byte for byte"* — so the floor that ships and the derivation that describes it were
+two statements of one thing, held together by a guard that compared **eleven anchors** and let every
+derived tone, seam, sheen, rug and halo drift freely.
+
+`DEFAULT_PALETTE` is now exactly `materialTokensFor(THEMES[0])`, and the guard at the bottom of
+`themes.js` compares **every** derived token. The reset stays — it is faster, and it also restores
+the props a theme does not touch — but it can no longer restore a different floor from the one the
+default theme describes. §3.10's claim that a pack theme "gets this interior for free and cannot
+break it" is true because there is now only one derivation to get.
+
+The eleven, per theme, are §3.1's table verbatim, and `test/unit/interior.test.mjs` asserts them
+against a copy written out by hand rather than against the module that produces them.
+
+### 160.2 The parquet: twelve times too big, and outlined in near-black
+
+Measured, on the committed goldens:
+
+| | before | after |
+|---|---|---|
+| lattice cell | 46 px = **3.29 U** | 24 px = **1.71 U** |
+| block | 4.67 U × 1.58 U = 1.40 m × 0.47 m | 2.43 U × 0.82 U = **0.73 m × 0.25 m** |
+| tone spread | `shade(wood, ±0.09)` | `shade(wood, ±0.03)` |
+| internal contrast (B:C) | 1.27 / 1.43 / 1.40 | **1.08 / 1.13 / 1.13** |
+| seam | 1.6 px at 0.55 alpha | **0.8 px at 0.20** |
+| sheen | 0.10 / 0.06 alpha | 0.045 / 0.035 |
+
+A real herringbone block is 0.30–0.60 m by 0.07–0.10 m. The old one was three times too long, five
+times too wide and about twelve times the area, and in `three.png` a board measured 65 px against a
+24 px character — the first thing the eye landed on, carrying no information.
+
+The ceiling is enforced rather than promised: `assertThemeContrast` refuses a theme whose wood opens
+the spread past **1.14:1**, and the test prints the measured spread for all three. It also records
+the spread the floor shipped with, so nobody can widen it back without this saying what they did.
+
+### 160.3 The carpet was salt, not weave
+
+`paintCarpet` scattered `Math.min(6000, w * h * 0.6)` single-device-pixel `fillRect(x, y, 1, 1)`
+calls per room, alternating two colours off a seeded RNG. That is a dirty surface at 1× and sensor
+noise at 2×, and it is six thousand fills per room on every rebake. It is now two hairline passes at
+a **3 px pitch** — one horizontal in `rgba(255,255,255,0.03)`, one vertical in
+`shade(carpet, -0.5)` at 0.09 — which is directional, low-frequency, one flat tone at fit scale and
+still a textile under a 2× crop. WP-72's six-per-cent identity wash is untouched, so the fourteen
+washed grounds per theme are the same fourteen and `assertThemeContrast` still measures them
+(worst ink: 10.23 / 9.21 / 10.44).
+
+The guard on it is a **source-reading test**, in `lighting.test.mjs`'s style: the defect is "this
+function scatters six thousand single pixels", and no amount of measuring its output colours would
+ever have found that.
+
+`rng` is kept as a parameter and is unused. Removing it would have changed every call site in a
+package whose golden diff is supposed to be paint only, and a weave has nothing random in it.
+
+### 160.4 The value hierarchy, inverted and then enforced
+
+§1.2's finding: the brightest surfaces in the product were `wall #FCFBF8`, `chairFill #FBFAF7` and
+the derived `whiteboardSurface`, at 2.14:1 against the office wood — the highest local contrast
+inside any room, spent on a whiteboard, a sofa and a chair. Ranked by what pulled the eye in
+`three.png`: the zigzag, the whiteboards, the sofa runs, the crimson badge, the people. The
+product's promise was fourth and fifth.
+
+The seat left the near-white band (`#FBFAF7` → `#DCD5C6`), the desk went darker than the floor it
+stands on, the wall stopped being near-white — and then the rule was made **structural**:
+`underWall()` and `sheenOver()` walk a derived material (or a highlight's alpha) back down until it
+fits under the theme's wall, and `assertThemeContrast` re-measures fifteen interior surfaces and
+composites afterwards.
+
+Enforcing it in the derivation rather than checking it in a test is the decision worth recording.
+Eleven colours are chosen by a person and the rest is arithmetic; a rule only a test knew would be a
+rule every new theme broke once and somebody fixed by hand. The guard is now a tautology for any
+theme this derivation produced, and a real refusal for a **ground** a theme named itself — which is
+the half a person actually chooses.
+
+It also resolved a genuine conflict inside the design document. §3.1's derived table gives night
+shift a whiteboard face at `#5d636c` against a wall at `#4E545D` — brighter than the wall — while
+§5's acceptance criterion says no non-wall pixel inside a room may be. §5 won, because it is the
+acceptance criterion and because WP-85b's own list says the whiteboard face must be below the wall
+on every theme. Night shift's seat (`#4F555F`) is also one count over its wall (`#4E545D`), which is
+why the cap exists rather than a refusal: a seat that wanted to be brighter is parked exactly **on**
+the wall instead of failing the theme.
+
+### 160.5 Pools of light
+
+WP-72 gave this floor one key light and spent every bit of it on shadow direction, so the light was
+a rule about offsets rather than a light. §3.2's pools are the other half: a soft radial in
+`#FFE9C4` at 0.10 alpha (0.055 on dark themes, which have far less headroom above the floor before a
+pool becomes a hole), baked with the backdrop, over the manager's desk, over every working desk and
+on every threshold at r 2.8 U.
+
+The lounge bays' centrepieces are on §3.2's list and are **not** lit here: the bays are WP-85c and a
+pool with nothing under it is a stain.
+
+A pool lands over exactly the places a room plate and a name are drawn, so `assertThemeContrast` now
+holds the ink to 4.5:1 against every ground **under a pool at its brightest point** as well as
+against the bare ground. Worst case is night shift's wood at **6.99:1**.
+
+### 160.6 The halo, and §10's promise
+
+`03-VISUAL-SPEC.md` §10 said *"all state colours meet 3:1 against their floor background"*. It was
+false on every theme since the sentence was written, and nothing measured it: `assertThemeContrast`
+held the state colours to the **chrome** and never to the floor. On the default parquet
+`needs_input` was **1.70:1** — and a raised hand stands in the user's office, and the user's office
+is parquet, so the most important signal in the product was drawn at 1.70:1.
+
+It could not be fixed by moving the floor. `benched #7B8794` and `needs_input #B87333` both sit near
+L\* 53, so a floor clearing 3:1 against all six on-floor states would have to be near paper or near
+black. **53 of the 90 state-on-floor pairs are under 3:1 on the three shipped themes, and the test
+prints every one of them as known and accepted** — and fails if a floor ever does clear the bar
+alone, so the decision can be re-opened on evidence rather than on memory.
+
+So the surface a state colour is read against stopped being the floor. One constant, `FIGURE_HALO`
+`#F6F2E9`, travels with every figure:
+
+- **pool**, on a light floor — a radial at 0.34 alpha falling to zero at 0.58 × the body's height,
+  drawn under the contact shadow. Its job is **uniformity, not contrast**: it flattens the boards
+  under the feet so the silhouette sits on one tone rather than on four boards and a seam.
+- **rim**, on a dark floor — the silhouette drawn once in the halo colour, 1.1 px proud at `BASE_U`,
+  with the real body painted straight over it. What survives is a thin bright edge. A pool on a dark
+  floor is a hole in the room; a rim is what §2's top-down references do.
+
+Which device applies is `relativeLuminance(ink) > 0.5`, the switch the derivation already used.
+Measured against all six on-floor states: `for_review` 4.87, `ended` 4.81, `working` 4.44, `stalled`
+3.53, `needs_input` 3.39, **`benched` 3.28** — one number for every theme, including one nobody has
+written yet, because the halo is a separate export that no floor key names and therefore no theme
+document or asset pack can reach.
+
+`let_go` is deliberately not on that list. A let-go session has left: it is a row in the departures
+list and in the deck, never a body standing on a floor, so holding the halo to `#BDB7AA` (1.79:1)
+would be holding a character's outline to a colour no character wears. `ON_FLOOR_STATES` says so in
+one place.
+
+The one ordering change WP-85a made to the rig: `computeArmGeometry` moved ahead of the body in
+`drawCharacter`, because the rim pass needs both arms solved and has to be painted before the legs.
+It writes only module scratch numbers, so computing it early draws nothing early.
+
+### 160.7 What moved on the goldens
+
+All nine rebaked once; `goldens:check` green on the second run (the first was a CDP flake that
+skipped eight captures and proved nothing either way). Against the pre-WP-85a goldens, at the
+harness's own channel tolerance of 8:
+
+| golden | px moved | of |
+|---|---|---|
+| demo | 796,965 | 1,600,000 (49.8 %) |
+| demo@night-shift | 725,277 | 1,600,000 (45.3 %) |
+| demo@blueprint | 1,040,869 | 1,600,000 (65.1 %) |
+| empty | 959,169 | 1,600,000 (60.0 %) |
+| pinned | 971,296 | 1,600,000 (60.7 %) |
+| reference | 814,787 | 1,600,000 (50.9 %) |
+| single | 858,595 | 1,600,000 (53.7 %) |
+| three | 961,425 | 1,600,000 (60.1 %) |
+| wide | 1,298,751 | 2,073,600 (62.6 %) |
+
+Half to two thirds of every frame, which is what repainting every material on the floor looks like
+and is the reason this package had to be one commit rather than several. **No room rectangle moved**:
+`test/unit/interior.test.mjs` hashes 123 room rectangles over eighteen populations, and the constant
+it compares against was taken with `public/render/plan*.js` byte-identical to their pre-WP-85a state
+— `git diff` over that directory is the independent check on it.
+
+Looked at beside the mockups, on all nine: the floor is the quiet thing and the people are the loud
+thing, which is the whole point of the package. The 45° boards read as a warm room rather than as a
+zigzag; the project-room weave is one tone at fit scale; the crimson badges and the green figures
+are the first things the eye lands on; and on both dark themes the rim genuinely separates a body
+from the boards it stands on.
+
+### 160.8 Unverified, and what is deliberately not here
+
+- **The mockups are illustrations and this is not a pixel match to them.** They are standalone
+  canvas-2D pages, and they contain WP-85b and WP-85c furniture — a quieter reception, tub chairs at
+  a 5.2 U pitch, planter runs, lounge bays. None of that is in this package and the goldens
+  correctly still show the old furniture set on the new materials. The task rugs in particular are
+  still up to 2.6× their cluster and are now the most prominent shape in a project room; capping
+  them at 1.35× is WP-85b's first acceptance criterion.
+- **§3.1's derived table is matched where a derivation could reach it and not everywhere.**
+  `woodB`/`woodC`, `sofaFrame`, `sofaCushion`, `pot`, `counter` and `rugTask` come out byte-identical
+  on all three themes. `rugWool` lands within 3–6 counts on the dark themes (`#3f454f` against the
+  table's `#3c4551`, `#294562` against `#2a4560`) and exactly on the default; `board` is the §5
+  conflict above. The document says those values were measured on a standalone page, so a
+  derivation that reproduces them exactly was not available to be written.
+- **§3.3's threshold pieces are not here.** The screed threshold band and the reception doormat are
+  furniture on a plan, and a plan that gained a prop would have failed 160.7's hash. The corridor
+  light pool, which is paint, is.
+- **Nothing was looked at on a real Mac or Linux machine.** The goldens are `win32`'s; the `linux`
+  set is stale by the same amount and CI regenerates it.
+- **Only the three shipped themes were rendered.** The guards are written over `materialTokensFor`
+  so a pack theme is held to the same bars at registration, but no pack theme has been painted.
+- **Zoom was not swept.** Every pattern is now a size in units and the bake still runs at
+  `U_DEFAULT`, so the units-vs-pixels change is provably inert today and untested at any other `u`.
+- **The mini-floor and the snapshot inherit the tokens and were not photographed.** Both read
+  `PALETTE` for flat fills and the mini-floor calls `drawCharacter`, so both follow the new floor by
+  construction; neither was looked at on screen.

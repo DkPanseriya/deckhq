@@ -56,6 +56,8 @@ import {
 import { makePose, computeArmGeometry, roundRectFill } from './rig-pose.js';
 import {
   drawContactShadow,
+  drawFigureHalo,
+  drawFigureRim,
   drawSimpleBody,
   drawLegs,
   drawTorso,
@@ -318,12 +320,26 @@ export function drawCharacter(ctx, pose, opts) {
   // in, not a mark on the body (WP-20's legendary `glow`).
   if (trait === 'glow' && lod >= 1) drawGlow(ctx, ox, oy, u, appearance.traitColor);
 
+  // THE HALO, BEFORE THE SHADOW (WP-85a §3.9). On a light floor this is a
+  // ground pool, and the shadow belongs on top of it because the shadow is a
+  // thing ON the floor and the pool is the floor. On a dark floor it returns
+  // `true` instead and the rim is laid under the body below, where it can hug
+  // the silhouette rather than the ground.
+  const haloRim = drawFigureHalo(ctx, ox, oy, u, lod);
+
   drawContactShadow(ctx, ox, oy, u);
 
   if (lod === 0) {
     drawSimpleBody(ctx, ox, oy, u, color, skin, build);
   } else {
     const by = oy + pose.bob * (u / BASE_U);
+    // The arm solve moved AHEAD of the body (WP-85a): the rim pass needs both
+    // arms' geometry, and it has to be painted before the legs. It writes only
+    // the module's scratch numbers, so computing it early draws nothing early.
+    computeArmGeometry(ox, by, cosA, sinA, u, 1, pose.armR.shoulder, pose.armR.elbow);
+    computeArmGeometry(ox, by, cosA, sinA, u, -1, pose.armL.shoulder, pose.armL.elbow);
+    if (haloRim) drawFigureRim(ctx, pose, ox, by, cosA, sinA, facingRot, u, build);
+
     drawLegs(ctx, pose, ox, by, cosA, sinA, u, color);
     drawTorso(ctx, ox, by, facingRot, u, color, build);
     // The outfit accent goes on before the arms, so a sleeve crosses it.
@@ -342,9 +358,6 @@ export function drawCharacter(ctx, pose, opts) {
         appearance.traitColor,
       );
     }
-
-    computeArmGeometry(ox, by, cosA, sinA, u, 1, pose.armR.shoulder, pose.armR.elbow);
-    computeArmGeometry(ox, by, cosA, sinA, u, -1, pose.armL.shoulder, pose.armL.elbow);
 
     if (pose.prop === 'cue') drawCueBehind(ctx, u);
 
@@ -460,12 +473,21 @@ export function drawManagerFigure(ctx, opts) {
     armR: { shoulder: 0, elbow: 0, hand: 'rest' },
   });
 
+  // The manager is a character too, so it gets §3.9's halo like every other
+  // figure on this floor — a suit at `#2B2F3A` needs it on a dark theme at
+  // least as much as a state colour does. `lod` is 2: the manager is baked
+  // into the backdrop once per plan change and is always drawn in full.
+  const haloRim = drawFigureHalo(ctx, ox, oy, u, 2);
+
   drawContactShadow(ctx, ox, oy, u);
-  drawLegs(ctx, pose, ox, oy, cosA, sinA, u, MANAGER_SUIT);
-  drawTorso(ctx, ox, oy, facingRot, u, MANAGER_SUIT);
 
   computeArmGeometry(ox, oy, cosA, sinA, u, 1, pose.armR.shoulder, pose.armR.elbow);
   computeArmGeometry(ox, oy, cosA, sinA, u, -1, pose.armL.shoulder, pose.armL.elbow);
+  if (haloRim) drawFigureRim(ctx, pose, ox, oy, cosA, sinA, facingRot, u, 1);
+
+  drawLegs(ctx, pose, ox, oy, cosA, sinA, u, MANAGER_SUIT);
+  drawTorso(ctx, ox, oy, facingRot, u, MANAGER_SUIT);
+
   drawArmStroke(ctx, 1, u, MANAGER_SUIT);
   drawArmStroke(ctx, -1, u, MANAGER_SUIT);
 

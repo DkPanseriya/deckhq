@@ -93,6 +93,67 @@ export const STATE_COLORS = Object.freeze({
 export const RESERVED_CRIMSON = STATE_COLORS.for_review;
 
 /**
+ * THE STATES A FIGURE IS EVER DRAWN IN, ON THE FLOOR (WP-85a §3.9).
+ *
+ * Six of the seven. `let_go` is the one that is not on this list and that is a
+ * statement about the product rather than an omission: a let-go session has
+ * left — it is a row in the departures list and in the deck, never a body
+ * standing on a floor — so holding the figure halo to 3:1 against `#BDB7AA`
+ * would be holding a character's outline to a colour no character wears.
+ *
+ * The order is the one `03-VISUAL-SPEC.md` §5 lists them in, with `ended` last
+ * because it is the row §5 never had (see `STATE_COLORS.ended` above).
+ * @type {ReadonlyArray<string>}
+ */
+export const ON_FLOOR_STATES = Object.freeze([
+  'working',
+  'needs_input',
+  'stalled',
+  'for_review',
+  'benched',
+  'ended',
+]);
+
+/**
+ * THE HALO EVERY CHARACTER ON THIS FLOOR IS READ AGAINST (WP-85a §3.9).
+ *
+ * `03-VISUAL-SPEC.md` §10 promised that every state colour clears 3:1 against
+ * its floor background. It never did, on any theme, and it never could: the
+ * state palette is mid-tone — `benched #7B8794` and `needs_input #B87333` both
+ * sit near L* 53 — so a floor clearing 3:1 against all six would have to be
+ * near paper or near black, which is not a floor anybody would want to look at.
+ *
+ * So the surface a state colour is read against stopped being the floor. Every
+ * figure carries this one warm near-white with it: a ground POOL under the feet
+ * on a light theme, whose job is uniformity — flattening the parquet so the
+ * silhouette sits on one tone — and a thin RIM on the silhouette on a dark one,
+ * where a pool would be a bright hole in the room. Which device applies is
+ * `relativeLuminance(ink) > 0.5`, the switch the theme derivation already uses.
+ *
+ * IT IS NOT THEMEABLE, and that is the whole of the guarantee. Like the seven
+ * state colours it is a separate export that no floor key names, so no theme
+ * document and no asset pack can reach it; `assertFigureHaloContrast` measures
+ * it against all six on-floor states at import. Worst case, both dark themes
+ * and every theme anybody will ever write: `benched` at 3.28:1.
+ */
+export const FIGURE_HALO = '#F6F2E9';
+
+/**
+ * The pool's peak alpha at the centre of a figure, and the fraction of the
+ * body's height at which it reaches zero (§3.9). Stated here beside the colour
+ * because `rig-body.js` paints it and `test/unit/interior.test.mjs` measures it.
+ */
+export const FIGURE_HALO_POOL_ALPHA = 0.34;
+export const FIGURE_HALO_POOL_SPAN = 0.58;
+
+/**
+ * How far the dark-theme rim stands proud of the silhouette, in px at
+ * `BASE_U`. §3.9 says 1.1: enough to separate a body from a dark board at fit
+ * scale, too little to read as an outline around a sticker.
+ */
+export const FIGURE_HALO_RIM_PX = 1.1;
+
+/**
  * Material and furniture colour tokens for the baked backdrop. Every entry
  * name says what it paints, not just what colour it is, so backdrop.js reads
  * like a materials list rather than a swatch book.
@@ -112,12 +173,18 @@ export const RESERVED_CRIMSON = STATE_COLORS.for_review;
  */
 export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   // ---- herringbone wood floor (office + lounge), four tone variations ----
-  woodHerringboneA: '#CBA87A',
-  woodHerringboneB: '#BE9868',
-  woodHerringboneC: '#D6B98A',
-  woodHerringboneD: '#C4A074',
-  woodHerringboneSeam: 'rgba(105,76,44,0.55)',
-  woodHerringboneSheen: 'rgba(255,255,255,0.10)',
+  //
+  // WP-85a §3.2. The four tones sit `BOARD_TONE_SPREAD` apart rather than the
+  // ±0.09 this shipped with — 1.08:1 between the two extremes instead of
+  // 1.27:1 — and the seam is 0.20 alpha instead of 0.55. The parquet was the
+  // loudest thing in the product and it carries no information; §2's first
+  // principle is that the ground is quiet so the objects can speak.
+  woodHerringboneA: '#DCC9AE',
+  woodHerringboneB: '#d5c3a9',
+  woodHerringboneC: '#ddcbb0',
+  woodHerringboneD: '#dac7ac',
+  woodHerringboneSeam: 'rgba(99,90,78,0.2)',
+  woodHerringboneSheen: 'rgba(255,255,255,0.045)',
 
   /**
    * Circulation — the corridors between rooms. This MUST differ from every
@@ -126,20 +193,28 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    * field rather than as rooms off corridors; a partition line alone was not
    * enough to carry the distinction at fit zoom.
    */
-  circulationBase: '#CFC9BC',
-  circulationSpeckle: 'rgba(120,112,98,0.13)',
-  circulationEdge: 'rgba(120,112,98,0.20)',
+  circulationBase: '#D2CDC1',
+  circulationSpeckle: 'rgba(116,113,106,0.13)',
+  circulationEdge: 'rgba(116,113,106,0.2)',
   /** A single soft sheen along a run, so the surface reads as poured. */
-  circulationSheen: 'rgba(255,255,255,0.28)',
+  circulationSheen: 'rgba(255,255,255,0.16)',
 
-  // ---- woven carpet (project rooms), warm grey, two-tone noise ----
-  carpetBase: '#E4DFD3',
-  carpetNoiseLight: 'rgba(255,255,255,0.55)',
-  carpetNoiseDark: 'rgba(150,140,125,0.16)',
+  /**
+   * Woven carpet (project rooms), warm grey — a WEAVE since WP-85a (§3.2).
+   *
+   * These were `carpetNoise*`, and the name was honest: `paintCarpet` scattered
+   * up to six thousand single pixels of them, which reads as a dirty surface at
+   * 1x and as sensor noise at 2x. A weave is directional and low-frequency and
+   * salt is neither. Two hairline passes now, one horizontal and one vertical,
+   * at the pitch `paintCarpet` owns.
+   */
+  carpetBase: '#E7E2D7',
+  carpetWeaveLight: 'rgba(255,255,255,0.03)',
+  carpetWeaveDark: 'rgba(116,113,108,0.09)',
 
   // ---- kitchen tile + grout (inside the lounge) ----
-  tileBase: '#EDEAE4',
-  tileGrout: 'rgba(140,132,118,0.16)',
+  tileBase: '#E3DFD6',
+  tileGrout: 'rgba(125,123,118,0.16)',
 
   /**
    * The ground the whole building stands on, and the shadow it casts onto the
@@ -147,7 +222,7 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    * on one axis; this is what makes that slack read as the edge of the
    * building rather than as a hole in it.
    */
-  floorGround: '#E3DED4',
+  floorGround: '#DFDAD0',
   floorDropShadow: 'rgba(0, 0, 0, 0.55)',
   /**
    * The light the ground catches beside the building, and loses as it leaves
@@ -181,20 +256,36 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    * and the wall's own occlusion band meet at every corner, and two different
    * darks meeting there reads as a smudge rather than as a corner.
    */
-  slabEdge: 'rgba(70, 58, 42, 0.22)',
-  slabShadow: 'rgba(55, 45, 32, 0.30)',
+  slabEdge: 'rgba(61,60,59,0.22)',
+  slabShadow: 'rgba(63,62,58,0.3)',
 
   /** Wash over a project room nobody is working in. */
   roomDimmed: 'rgba(58, 48, 38, 0.10)',
 
+  /**
+   * A POOL OF LIGHT (WP-85a §3.2).
+   *
+   * WP-72 gave this floor one key light and the floor spent it entirely on
+   * shadow direction, which made it a rule about offsets rather than a light.
+   * This is the other half: a soft warm radial, baked with the backdrop, over
+   * the manager's desk, every working desk and every threshold — the places a
+   * plan lights because that is where the work and the arriving happen.
+   *
+   * Warm on a floor whose chrome is cold by rule (DEVIATIONS §69), and that is
+   * the point: the building is the lit thing in this window. The alpha is the
+   * light theme's; a dark theme gets a little over half of it, because a dark
+   * floor has far less headroom above it before a pool becomes a hole.
+   */
+  lightPool: 'rgba(255,233,196,0.1)',
+
   // ---- walls, partitions, doors ----
-  wallFill: '#FCFBF8', // near-white, 5px thick
-  wallEdge: '#CFC9BE',
-  wallShadow: 'rgba(60,50,38,0.13)',
-  wallAmbientOcclusion: 'rgba(70,58,42,0.16)', // gradient band, wall meets floor
-  partitionFill: '#E7E2D6', // waist-height, 0.3U thick, visually subordinate
-  partitionEdge: '#C9C2B2',
-  doorSwingArc: 'rgba(140,132,118,0.45)',
+  wallFill: '#F4F1EA', // near-white, 5px thick
+  wallEdge: '#d2cfc9',
+  wallShadow: 'rgba(73,72,70,0.13)',
+  wallAmbientOcclusion: 'rgba(61,60,59,0.16)', // gradient band, wall meets floor
+  partitionFill: '#E0DACD', // waist-height, 0.3U thick, visually subordinate
+  partitionEdge: '#c1bbb0',
+  doorSwingArc: 'rgba(50,40,29,0.45)',
 
   // ---- shadows ----
   shadowContact: 'rgba(55,45,32,0.26)', // soft contact shadow under furniture
@@ -202,47 +293,47 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   shadowDeep: 'rgba(55,45,32,0.30)', // desks, benches, heavier pieces
 
   // ---- rugs ----
-  rugSage: '#C8D3C5',
-  rugCream: '#E6E0D2',
-  rugBorder: 'rgba(255,255,255,0.6)',
+  rugSage: '#c2c9b4',
+  rugCream: '#b5b9b9',
+  rugBorder: 'rgba(255,255,255,0.36)',
   /** The rug's own outer edge, so it sits on the floor rather than in it. */
-  rugEdge: 'rgba(120,112,98,0.28)',
+  rugEdge: 'rgba(123,120,114,0.28)',
 
   // ---- plants, three scales share the same three leaf tones ----
-  plantLeafA: '#6F8F5E',
-  plantLeafB: '#87A874',
-  plantLeafC: '#587A49',
-  plantPot: '#D9D2C4',
+  plantLeafA: '#6C8F63',
+  plantLeafB: '#819f79',
+  plantLeafC: '#5d7b55',
+  plantPot: '#c6c0b2',
 
   // ---- monitors ----
   monitorBody: '#33333A',
   monitorScreenGlow: 'rgba(150,190,205,0.55)',
 
   // ---- desks, benches, tables (wood tones) ----
-  deskTop: '#D8BD97',
-  deskEdge: '#B29470',
-  tableWood: '#CBA87A',
+  deskTop: '#C8AC84',
+  deskEdge: '#a8906f',
+  tableWood: '#DCC9AE',
 
   // ---- task chairs, sofas ----
-  chairFill: '#FBFAF7',
-  chairEdge: '#D2CCC1',
-  chairBackrest: '#D6CDBD',
+  chairFill: '#DCD5C6',
+  chairEdge: '#c2bbae',
+  chairBackrest: '#cdc6b8',
   /** Upholstery highlight on the seat pan, so a chair reads as padded. */
-  chairCushion: 'rgba(255, 255, 255, 0.42)',
-  sofaFill: '#EFECE4',
+  chairCushion: 'rgba(255,255,255,0.24)',
+  sofaFill: '#d5cfc0',
   /** Frame, arms and back — a shade darker than the cushions they hold. */
-  sofaFrame: '#E4E0D6',
-  sofaCushion: '#F7F5EF',
-  sofaSeam: 'rgba(150,142,126,0.35)',
+  sofaFrame: '#a7a296',
+  sofaCushion: '#ddd6c7',
+  sofaSeam: 'rgba(110,107,99,0.35)',
 
   // ---- metal furniture tone: chair frames, table legs, cabinet trim ----
   furnitureMetal: '#8C8474',
 
   // ---- kitchen fittings ----
-  counterTop: '#F0EDE6',
+  counterTop: '#ddd4c4',
   hob: '#3B3B40',
   sink: '#D8D3C8',
-  fridgeFill: '#F2F0EA',
+  fridgeFill: '#ddd6c8',
 
   // ---- arcade cabinet, board games, small accents ----
   cabinetBody: '#5B5560',
@@ -271,9 +362,9 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   ttNet: '#E4E0D6',
 
   // ---- tinted near-black neutrals: text, strokes, ink ----
-  inkWarm: '#4A4438', // primary text / stroke, warm-tinted near-black
-  inkCool: '#3A3D40', // secondary stroke, cool-tinted near-black (metal edges)
-  inkSoft: '#8C8474', // muted labels, sub-lines on room plates
+  inkWarm: '#32281D', // primary text / stroke, warm-tinted near-black
+  inkCool: '#42392f', // secondary stroke, cool-tinted near-black (metal edges)
+  inkSoft: '#746d65', // muted labels, sub-lines on room plates
 
   // ---- room chrome: plain-text room plates, no card (CONTRACTS-WP15.md §3)
   // ----  Darker than inkWarm/inkSoft on purpose: with the backing card gone,
@@ -291,19 +382,19 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    */
   plateHalo: 'rgba(252,250,244,0.92)',
 
-  plateInk: '#33291E', // room name
-  plateInkSecondary: '#3E3222', // one data line, a shade softer, still >=4.5:1
+  plateInk: '#32281D', // room name
+  plateInkSecondary: '#4b4238', // one data line, a shade softer, still >=4.5:1
 
   // ---- the in-room "+" (CONTRACTS-WP15.md §5): a thin quiet vector cross,
   // never a button — no fill plate, no rounded rect, just a stroke that
   // brightens on hover so it stays discoverable.
-  plusRest: 'rgba(140,132,116,0.55)', // resting stroke — quiet, still visible
-  plusHover: '#33291E', // hover stroke — solid, same ink as the room plate
-  plusHoverHalo: 'rgba(51,41,30,0.10)', // faint halo, hover only — not chrome
+  plusRest: 'rgba(50,40,29,0.55)', // resting stroke — quiet, still visible
+  plusHover: '#32281D', // hover stroke — solid, same ink as the room plate
+  plusHoverHalo: 'rgba(50,40,29,0.1)', // faint halo, hover only — not chrome
 
   // ---- whiteboard (project rooms, CONTRACTS-WP15.md §4) ----
-  whiteboardSurface: '#F2F6F5', // glossy board face, cool off-white
-  whiteboardSheen: 'rgba(255,255,255,0.50)', // gloss gradient highlight
+  whiteboardSurface: '#dfd8cb', // glossy board face, cool off-white
+  whiteboardSheen: 'rgba(255,255,255,0.22)', // gloss gradient highlight
   whiteboardMarkerBlue: '#3E6E8E',
   whiteboardMarkerPlum: '#7A5C7E',
 
@@ -344,6 +435,43 @@ export const PALETTE = { ...BASE_PALETTE };
  * held away from.
  */
 export const CRIMSON_MIN_DISTANCE = 60;
+
+/**
+ * WCAG 2.x relative luminance, for the renderer.
+ *
+ * A third copy — `themes.js` has the product's own and the test suite has the
+ * independent check on it — and it is here rather than imported because
+ * `rig-body.js` must be able to ask "is this floor dark?" without pulling in the
+ * theme machinery that repaints it. Three lines of the same arithmetic against
+ * a module cycle is not a close call.
+ *
+ * @param {string} colour `#rrggbb`; anything else reads as black.
+ */
+export function relativeLuminanceOf(colour) {
+  const ch = channelsOf(colour);
+  if (!ch) return 0;
+  const lin = ch.map((n) => {
+    const c = n / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+
+/**
+ * Which halo device the floor is currently painted for (§3.9): a ground POOL on
+ * a light floor, a thin RIM on a dark one.
+ *
+ * Reads the LIVE palette rather than a theme name, so it is right the moment
+ * `overridePalette` returns and a caller never has to be told which theme it is
+ * drawing. `plateInk` is the switch because it is the floor's line work, which
+ * is the same test the theme derivation itself uses to decide which way every
+ * halo on this floor goes.
+ *
+ * @returns {'pool'|'rim'}
+ */
+export function figureHaloMode() {
+  return relativeLuminanceOf(PALETTE.plateInk) > 0.5 ? 'rim' : 'pool';
+}
 
 /** @param {string} hex @returns {[number,number,number]|null} */
 export function channelsOf(hex) {

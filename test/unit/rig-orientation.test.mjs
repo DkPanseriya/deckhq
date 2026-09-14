@@ -78,6 +78,10 @@ function makeFakeCtx() {
     scale(sx, sy) {
       m = compose(m, { a: sx, b: 0, c: 0, d: sy, e: 0, f: 0 });
     },
+    // WP-85a: the figure halo's ground pool is a radial gradient fill.
+    createRadialGradient() {
+      return { addColorStop() {} };
+    },
     beginPath() {},
     closePath() {},
     fill() {},
