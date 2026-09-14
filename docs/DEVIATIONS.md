@@ -15255,3 +15255,236 @@ is 256 KB of `file-history-snapshot` before its first message, which would repor
 its own agent. Neither occurs in the owner's data. Nothing here was run against Codex, Gemini CLI or
 OpenCode: none of their adapters reports `originUuid`, so for all three the behaviour is exactly what
 it was.
+
+## 156. WP-84 — a way back to the floor, and two small leftovers
+
+The owner, having opened the deck:
+
+> _"Once the user clicks the agents tab, or the list of all who are waiting, there is literally no
+> button to close that panel or go back to the floor view."_
+
+He is right, and it was true of more than the deck. Beside it, this package takes the two items
+§155 found in passing and deliberately left alone — the name pool, and an `if` that was always
+true — because both were listed with a file and a line in `docs/plan/BUG-DUPLICATE-AGENT.md` §4 and
+neither belonged in a bug about resume chains.
+
+### 156.1 There was no door
+
+`Tab` opens the deck and `Tab` closes it. That is the whole of what the product said, in a hint
+that appears only past six waiting items — _"7 waiting · press Tab for the deck"_ — and that says
+nothing about getting back. `Escape`, which closes the day's card, the whiteboard and the panel,
+did not close the deck at all: its case in `app-keys.js` ran `dismissCard()`, then the whiteboard,
+then `selectAgent(null)`, and the deck was not in the list. A user who reached the deck with a
+mouse had one way out and no way to see it.
+
+The project board was worse in one respect and better in another: it closes on `Escape` and on a
+click on the scrim, and it advertised neither. The settings sheet had a ✕ and nothing else.
+
+**The rule, written down in `docs/plan/05-GUI-UX-SPEC.md` §3.4.** A FULL-SURFACE VIEW is anything
+that replaces the floor inside the stage or covers the window with a scrim. Every one of them
+carries, at its top edge, in this order:
+
+1. **`← Back to floor`, top left.** It says where it goes, not only that it stops.
+2. **Its own title with the shortcut printed in it** — `The deck  [Esc]`.
+3. **`✕`, top right.**
+
+Both are real `<button>`s in the tab order, both resolve to the same close — two affordances for
+one exit, never two different exits — and `Escape` closes the view as well. `Tab` still toggles the
+deck.
+
+Three views have it: the deck (`#deck`), the project board (`#whiteboard-overlay`) and the settings
+sheet (`#settings-dialog`). There is no Studio tab in the client yet; when there is, it gets the
+same bar, and §156.3 is why it cannot quietly not.
+
+**The chrome is static markup in `index.html`, and the wiring is one function.**
+`public/surfaces.js` holds the list and `wireSurfaceControls(host, onClose)`, which finds
+`.surface-back` and `.surface-close` inside a host and binds both to the close the CALLER owns.
+Markup rather than a render, because the test's job is to fail when somebody adds a view and
+forgets its way out, and a control that exists only after a render is a control a static test has
+to guess at.
+
+Two small consequences, stated because they are the kind of thing that breaks quietly. The deck's
+host now holds a chrome bar and a `.surface-body`, and `paintDeck()` empties the BODY — emptying
+the host would delete the ✕ the user was reaching for. The same split happened to the whiteboard
+scrim, whose chrome is absolutely positioned across the top while the board stays centred in what
+is left (`display: contents` on the body, so the board is still the grid item `place-items`
+centres).
+
+**Escape goes after the panel, not before it.** With the deck open and a review card beside it, the
+first `Escape` has always shut the card. Moving the deck ahead of that would have changed a key the
+user already knows in order to fix a key they had never been told about. So the deck closes on the
+`Escape` that has nothing else left to do, and the two buttons close it at any time.
+
+### 156.2 Closing a view closes the view
+
+§143 is why that sentence needs a paragraph. A ✕ in this product once resolved to `window.close`
+and took the browser tab with it, because `close()` written in a module that declares no binding
+called `close` does not fail to resolve — it finds the global. Four new close controls is exactly
+the shape of that mistake repeated.
+
+`test/unit/panel-close.test.mjs` already held two gates: a static one over every `.js` under
+`public/`, and a dynamic one that drives every close path against a window whose `close`, `open`,
+`print`, `stop` and three history navigations are counters. The static half needed nothing — it
+reads every client module, so `surfaces.js` arrived already covered. The dynamic half gained a
+section: the deck is stood up for real through `createDeckUI()` and both of its controls are
+pressed (it must be open before and shut after), and the shared wiring is driven once per entry in
+`SURFACES`, so the loop grows with the product rather than with the file. All seven counters must
+still be zero.
+
+### 156.3 The list of views is not trusted
+
+A registry of views only helps while somebody remembers to add to it, and "remember to add to it"
+is what failed here in the first place. So `test/unit/surfaces.test.mjs` does not believe
+`SURFACES`:
+
+- It reads `public/style.css` and collects **every leaf rule that makes an element cover its
+  container** — `position: fixed|absolute` together with `inset: 0` — walking into `@media` bodies
+  rather than swallowing them whole.
+- It maps those class and id selectors onto the elements `index.html` actually has.
+- Each survivor must be an element carrying `data-surface`, or be listed in the test's `NOT_A_VIEW`
+  map **with a written reason**. There are five: the floor canvas (it is where "Back to floor"
+  goes), the empty state and the error banner (the floor saying something about itself rather than
+  something the user opened), and the coach layer and the night overlay (both `pointer-events:
+  none`).
+
+An unexplained entry in an allowlist is how a gate stops meaning anything, so the reason is
+required rather than conventional. Run against a deck with its `data-surface` removed, four of the
+file's eleven tests fail, this one included.
+
+Beside it: every `<dialog>` in the document must offer a visible way out — a ✕, an `aria-label`
+naming a close, or a printed `Esc`. That is how the command palette passes without being given a
+"Back to floor" it has no use for: it prints _"Esc to close"_ in its own footer, and it is a box
+you type into rather than a place you arrive at.
+
+**One scanning detail worth recording.** The first draft of that test found eight `<dialog>`
+elements in a document that has five. Three of them are the word `<dialog>` inside comments
+explaining which overlays are deliberately NOT dialogs. The scanner blanks comments to spaces
+before it reads — length-preserving, so every index still points into the real file — which is the
+same lesson §143's static gate learned about blanking comments and string literals, in a different
+file, thirteen packages later.
+
+### 156.4 Sixty names, ninety-two conversations
+
+`Greta 2` and `Sena 3` were never a bug. `Identity.givenName` walks the pool from a hash of the
+agent id and takes the first free name; only when EVERY name is taken does it fall back to
+`"<base> N"`. The pool held **60**. The owner's machine holds **92** conversations, and 38 of his
+103 agents wore a suffix. §155.2 said exactly this and refused to fix it there, because growing the
+pool touches the goldens that paint names.
+
+The pool now holds **243**: 183 added, at most six letters each, sayable, gender-mixed and drawn
+from about a dozen naming traditions, none of them also an ordinary English word and none of them
+one of the state words the interface speaks. The pool's own rule — no two names sharing their first
+three letters — is held for every one of the 183, against the old block as well as against each
+other; 22 candidates were dropped to keep it, `Mateo` beside `Matteo` and `Darja` beside `Darya`
+among them.
+
+**It grew by APPENDING, and that is a decision with two halves.**
+
+The obvious half: an identity is written the first time an agent is seen and never reassigned, so
+every name already handed out is a name somebody has learned, and the first 60 entries are frozen
+in place and in order. `test/unit/names-pool.test.mjs` writes them out longhand rather than reading
+them from the module, because a test that reads the thing it is checking checks nothing.
+
+The half that is easy to miss: **the start of the walk moved too, or rather it deliberately did
+not.** `givenName` took `nameHash(agentId) % SHORT_NAMES.length`. Quadrupling the array changes
+that modulus, which changes the starting point for every agent whose identity has not been written
+yet — a fresh install, and the goldens' demo fixture, which is rebuilt from nothing on every
+capture. So the start is now `nameHash(agentId) % ORIGINAL_POOL`, an exported 60, and the walk
+still runs the whole array. Everything the old pool could name, it names identically; the 183 new
+names are what the walk REACHES once the first block is spoken for, which is precisely the case
+this package exists for. Simulated over the demo fixtures before anything was changed: identical
+names at 1, 9, 12 and 20 agents, and 12 of 70 different at the reference population's size — which
+is the suffixes going away.
+
+**No golden moved.** `goldens:check` reports **0 px over tolerance and 0 px moved at all, on all
+nine captures**. The largest populated capture draws 27 agents and `reference` draws 16 of its 70
+sessions, so every name on every golden comes from the first block and is the name it was.
+
+### 156.5 The clause that was always true
+
+`src/http/routes/actions.mjs`, the pending-identity match, before:
+
+```js
+const match = registry.agents
+  .filter((a) => path.resolve(a.cwd || '') === p.cwd && !a.displayName)
+  .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0];
+```
+
+`registry.agents` is `_agents`, the merged scan. `displayName` — "the name the USER chose, or
+null" — is applied in `snapshot()`, not in the merge. So `!a.displayName` was `!undefined`: always
+true. The clause every reader took for _"only a session nobody has named"_ matched every session in
+the directory, and a name queued by the in-room `+` could land on one the user had typed. §155
+found it, proved it, and recorded it unfixed because answering it means deciding what the `+`
+button should do when its session never arrives.
+
+Both halves are answered here.
+
+- **The match reads `registry.snapshot().agents`**, which is where identity is applied. And when
+  `registry.agents` is empty the snapshot is the ACTOR floor (WP-13) — nobody real — so the queue
+  is left alone rather than matched against a fixture.
+- **A queued identity expires after ten minutes**, on the injected clock rather than `Date.now()`.
+  Ten, because what it is waiting for is a terminal opening and a runtime writing its first
+  transcript line, which is seconds; anything longer than a coffee is a session that never arrived.
+  When it expires the choice is dropped and the session that eventually appears keeps the name the
+  daemon gave it — which is a name, not a blank.
+
+**A deviation from `clock.mjs`'s own doctrine, stated.** That module's header says model time reads
+the override and elapsed-time machinery keeps `Date.now()`, and a TTL is elapsed-time machinery. It
+takes the injected clock anyway, for one reason: the old five-minute TTL could not be tested
+without sleeping for five minutes, and so it never was. The cost is that a daemon run with
+`DECKHQ_NOW` pinned never expires a queued identity — which happens only in a capture, where
+nothing is ever queued.
+
+The rule moved out of the route into `src/core/pending-identity.mjs`, pure apart from the clock it
+is handed, so these are decisions a unit test makes directly rather than through an HTTP route and
+a spawned terminal. It also picked up something the inline version got wrong by omission: two names
+queued for one directory can no longer both land on the same session. **What the `+` button does is
+otherwise unchanged** — same request, same spawn, same 2.5 s refresh.
+
+### Tests
+
+**2145 tests, 2144 passing and the one platform skip** (no POSIX uid on win32), up from 2116.
+Twenty nine are new:
+
+- **eleven** in `surfaces.test.mjs` — the registry against the document, then per view its markup,
+  its tab order, its printed shortcut and both controls actually closing it; `Escape` and `Tab` in
+  the keyboard map; the CSS-derived enumeration; and every dialog's visible way out;
+- **ten** in `pending-identity.test.mjs` — the match, THE BUG by name (a session the user has named
+  is never overwritten), a daemon-given name not counting as a user-chosen one, the expiry either
+  side of the boundary on a clock the test moves, two entries not colliding, writing to
+  `identityId` across a resume, and a static read of the route that fails if it goes back to
+  `registry.agents` or to `Date.now()`;
+- **seven** in `names-pool.test.mjs` — the frozen sixty longhand, the size floor, the shape of a
+  name, the prefix rule over everything added, the picker, an empty machine still drawing from the
+  original block, and ninety-two agents named without a single suffix;
+- **one** in `panel-close.test.mjs`, §156.2.
+
+One existing assertion was edited and none deleted. `state-visuals.test.mjs` matched the settings
+sheet's opening tag as one line and its ✕ as `aria-label="Close"`; `data-surface` put that tag onto
+several lines and the shortcut went into the label, so it finds the element by id now, expects the
+new name, and additionally requires the "Back to floor" beside it.
+
+### Verified in a browser
+
+The floor was run from this worktree (`scripts/demo-floor.mjs`, its own fixture, a free port) and
+driven: `Tab` into the deck shows the bar, the ✕ returns to the floor, `Tab` then `Escape` returns
+to the floor, and "Back to floor" returns to the floor; the project board opened from the palette
+shows the bar across the top of the scrim with the board centred under it, and "Back to floor"
+closes it; the settings sheet shows the bar in its head and the ✕ closes it. The tab survived all
+seven.
+
+**One thing that cost twenty minutes and is worth writing down.** The first attempt served an
+`index.html` with none of this in it. The preview server had been started from the main checkout
+rather than from this worktree, and a service worker was caching the old document on top of that. A
+UI change verified against the wrong tree is worse than a UI change not verified at all.
+
+### Unverified
+
+The three views are what the client has today. A Studio tab exists as a route
+(`src/http/routes/studio.mjs`, §150) and not as a surface, so nothing here has been applied to it;
+§156.3's gate is what will notice when it becomes one, provided it arrives as an element that
+covers its container. The bar has been looked at on one window size (1600 × 1000) and in the
+default theme; it is a flex row of three items with the title taking the slack, so a narrow window
+should shorten the title rather than the controls, but that has not been photographed. And the
+pool's 183 additions were checked against a word list written for this package, not against a
+dictionary: a name that is also an uncommon English word would pass.

@@ -187,15 +187,22 @@ registry.
 - `src/adapters/claude-code/stream.mjs` — one stream per agent id, opened from the panel.
 - `src/core/summary-cache.mjs` — keyed by file path + mtime + size, which is correct for a cache of
   file reads and is not a session list.
-- `src/http/routes/actions.mjs:421` — the pending-identity match filters on `!a.displayName` over
+- ~~`src/http/routes/actions.mjs:421` — the pending-identity match filters on `!a.displayName` over
   `registry.agents`, and `registry.agents` is `_agents`, which never carries `displayName`: identity
   is applied in `snapshot()`. The clause is therefore always true, so a name queued by "start a
   session here" attaches to the newest session in that cwd even if that session already has a name
-  the user chose. Real, small, and a different package's — fixing it means deciding what the `+`
-  button should do when its session never arrives, which is not this bug.
-- `public/names.js` holds 60 names against 92 conversations, so the suffix fallback in
-  `src/core/identity.mjs:157` is permanently engaged on this machine. Not a defect, but the pool
-  should grow; left for a package that can regenerate the goldens that paint names.
+  the user chose.~~ **FIXED by WP-84** (`docs/DEVIATIONS.md` §156). The match reads
+  `registry.snapshot().agents`, which is where identity is applied, and the question this entry
+  said had to be answered first — what the `+` button should do when its session never arrives —
+  is answered: the queued identity expires after **ten minutes** on the injected clock and is
+  dropped. The rule moved to `src/core/pending-identity.mjs`;
+  `test/unit/pending-identity.test.mjs` drives both halves, the always-true clause by name.
+- ~~`public/names.js` holds 60 names against 92 conversations, so the suffix fallback in
+  `src/core/identity.mjs:157` is permanently engaged on this machine.~~ **FIXED by WP-84**
+  (`docs/DEVIATIONS.md` §156). The pool holds **243** names. It grew by appending: the original
+  sixty are frozen in place and in order, and `givenName` still starts its walk inside that block,
+  so nothing already named is renamed and a floor rebuilt from nothing draws what it drew before —
+  the goldens that paint names moved **0 px on all nine**.
 
 ---
 

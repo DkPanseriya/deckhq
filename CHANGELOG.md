@@ -170,6 +170,19 @@
 
 ### Changed
 
+- **The name pool holds 243 names, up from 60 — WP-84.** `Greta 2` and `Sena 3` were not a bug:
+  every agent is handed a first name on sight, and when every name in the pool is spoken for the
+  rule falls back to `"<base> N"`. Sixty names against ninety-two conversations meant that fallback
+  had been permanently engaged — thirty-eight of the owner's hundred-odd agents wore a suffix. The
+  pool is now 243 short, sayable, internationally varied given names, and a machine has to get past
+  243 live conversations before it sees a number again.
+
+  **Nobody is renamed by it.** An identity is written the first time an agent is seen and never
+  reassigned, so every name already handed out stays where it is; and the sixty names the pool
+  shipped with are frozen in place, in order, with the walk that hands them out still starting
+  inside that block — so a floor rebuilt from nothing draws exactly the names it drew before. All
+  nine goldens moved **0 px**. `docs/DEVIATIONS.md` §156.
+
 - **The lounge is sized by who is in it — WP-77.** The owner: _"The lounge is very big, the whole
   bottom half."_ He was right, and the measurement is worse than the sentence: on the `three` floor
   at 1600 × 1000 the lounge came out **27.7 of 57.1 units — 49% of the building — with nobody in
@@ -314,6 +327,28 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Fixed
 
+- **Every full-surface view has a visible way back to the floor — WP-84.** The owner: _"Once the
+  user clicks the agents tab, or the list of all who are waiting, there is literally no button to
+  close that panel or go back to the floor view."_ He was right, and it was true of more than the
+  deck. **The deck, the project board and the settings sheet** each carry the same two controls
+  now: **✕ at the top right** and **← Back to floor at the top left**, both real buttons in the tab
+  order, with the shortcut printed in the view's own title (`Esc`) rather than left to be guessed
+  at. `Escape` closes each of them, `Tab` still toggles the deck, and closing a view closes the
+  VIEW — never the tab, never a navigation. §143's gate, which exists because a ✕ in this product
+  once resolved to `window.close` and took the browser tab with it, was extended to cover all four
+  new buttons. A new view that covers the floor and offers no way off it now fails
+  `test/unit/surfaces.test.mjs` before anybody opens a browser: the enumeration is derived from the
+  stylesheet, not from a list somebody has to remember to add to.
+  `docs/DEVIATIONS.md` §156, `docs/plan/05-GUI-UX-SPEC.md` §3.4.
+- **A name you queue with the `+` button can no longer overwrite a name you typed — WP-84.** "Start
+  a session here" asks for a short name before the session exists, and attaches it when the scan
+  finds one. The match was meant to skip any session you had already named; it read `displayName`
+  off the raw scan, which never carries it — identity is applied when the snapshot is built — so
+  the clause was always true and the queued name could land on a session wearing a name you chose.
+  It now reads the source that carries the field, and a queued name that waits more than **ten
+  minutes** for a session that never arrives is dropped rather than attaching to whatever turns up
+  later. What the `+` button does is otherwise unchanged.
+  `docs/DEVIATIONS.md` §156, `docs/plan/BUG-DUPLICATE-AGENT.md` §4.
 - **A conversation you resumed is one agent again, not two.** The owner saw the same chat —
   _"southeast asia trip planning"_ — standing at a desk as **Greta 2** and sitting in the lounge as
   **Sena 3**. They were two session ids for one conversation: Claude Code gives a resumed chat a
