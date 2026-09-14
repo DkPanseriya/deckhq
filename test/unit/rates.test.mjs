@@ -457,21 +457,36 @@ test('no client surface sums a cost estimate with "|| 0"', () => {
   }
 });
 
-test('deckhq stats prints the rate card version, empty ledger or not', () => {
-  assert.match(renderStats({ records: 0 }, { rateCard: '2026-09-04' }), /rate card 2026-09-04/);
-  const full = renderStats(
-    {
-      records: 4,
-      days: 30,
-      forReview: { medianMs: 1, p90Ms: 2, discharged: 1, open: 0 },
-      dischargesPerDayMean: 0.1,
-      sendsPerDay: {},
-      sendsPerDayMean: 0,
-      over24h: 0,
-      longestWaitEver: null,
-      tokensPerProjectPerDay: {},
-    },
-    { rateCard: '2026-09-04', dir: '/w/ledger' },
-  );
+/** The shape `renderStats` needs to print a full report. */
+function statsFixture() {
+  return {
+    records: 4,
+    days: 30,
+    forReview: { medianMs: 1, p90Ms: 2, discharged: 1, open: 0 },
+    dischargesPerDayMean: 0.1,
+    sendsPerDay: {},
+    sendsPerDayMean: 0,
+    over24h: 0,
+    longestWaitEver: null,
+    tokensPerProjectPerDay: {},
+  };
+}
+
+test('deckhq stats prints the rate card version with --show-cost, empty ledger or not', () => {
+  // WP-83: `showCost` ships off, so the rate-card line is opt-in here too.
+  const opts = { rateCard: '2026-09-04', showCost: true };
+  assert.match(renderStats({ records: 0 }, opts), /rate card 2026-09-04/);
+  const full = renderStats(statsFixture(), { ...opts, dir: '/w/ledger' });
   assert.match(full, /rate card 2026-09-04 — list-price estimate, not a bill/);
+});
+
+test('WP-83: deckhq stats prints no currency at all with cost off', () => {
+  // The shipped default, asserted as literal text: nothing that looks like
+  // money, and nothing that names a table only money comes off.
+  for (const stats of [{ records: 0 }, statsFixture()]) {
+    const out = renderStats(stats, { rateCard: '2026-09-04', dir: '/w/ledger' });
+    assert.doesNotMatch(out, /\$/);
+    assert.doesNotMatch(out, /rate card/);
+    assert.doesNotMatch(out, /list price/);
+  }
 });

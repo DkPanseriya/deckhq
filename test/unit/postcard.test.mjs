@@ -198,8 +198,14 @@ function statsFixture(now) {
   };
 }
 
+/**
+ * WP-83. The card's money line is behind `settings.showCost`, which ships OFF,
+ * so every test that asserts a currency has to say it turned it on — and the
+ * one below that asserts there is no currency by default does not.
+ */
 const FLOOR = {
   rateCardVersion: '2026-09-04',
+  settings: { showCost: true },
   projects: [
     { id: 'orb', name: 'orbital-api', todaySpend: 12.4, costRated: true },
     { id: 'chk', name: 'checkout-flow', todaySpend: 6, costRated: true },
@@ -252,6 +258,25 @@ test('a room with no rate produces tokens, never a zero where money goes', () =>
     'zero is a claim about the money we do not have',
   );
   assert.match(copy.text, /2\.4M tokens, no rate for them/);
+});
+
+test('WP-83: with cost off — which is how it ships — the card carries no currency', () => {
+  const now = at(22);
+  // The same floor, the same priced rooms, the setting simply absent. Absent
+  // reads as OFF, which is the shipped default and the safe reading of a
+  // snapshot from a daemon that predates the setting.
+  const copy = postcardCopy({
+    stats: statsFixture(now),
+    snapshot: { ...FLOOR, settings: {} },
+    now,
+  });
+  for (const line of copy.lines) {
+    assert.doesNotMatch(line, /\$/, `"${line}" put a currency on a card that should have none`);
+    assert.doesNotMatch(line, /list price/);
+    assert.doesNotMatch(line, /no rate/);
+  }
+  // And it still says what moved, which is the number that replaced the money.
+  assert.match(copy.text, /2\.4M tokens\./);
 });
 
 test('a quiet day says so rather than printing zeroes', () => {

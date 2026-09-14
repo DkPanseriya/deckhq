@@ -106,6 +106,26 @@ test('token split is correct: dedups usage repeated across split content-block l
   assert.equal(summary.tokens, 100 + 50 + 20 + 10 + 1000 + 500 + 30 + 15 + 200 + 100); // 2025
   assert.equal(summary.cacheTokens, 10 + 5 + 2 + 1 + 200 + 100 + 3 + 2 + 20 + 10); // 353
   assert.ok(summary.costEstimate > 0);
+
+  // WP-83. The same spend, split the way the transcript's own `usage` block
+  // split it. Claude Code is the one runtime here that names all four, so all
+  // four keys are present and the two totals above are exactly their sums —
+  // which is what makes the ledger's four-way record reconstructible.
+  assert.deepEqual(summary.tokenBreakdown, {
+    input: 100 + 20 + 1000 + 30 + 200, // 1350
+    output: 50 + 10 + 500 + 15 + 100, // 675
+    cacheRead: 10 + 2 + 200 + 3 + 20, // 235
+    cacheWrite: 5 + 1 + 100 + 2 + 10, // 118
+  });
+  assert.equal(
+    summary.tokenBreakdown.input + summary.tokenBreakdown.output,
+    summary.tokens,
+    'the breakdown and the total are the same measurement',
+  );
+  assert.equal(
+    summary.tokenBreakdown.cacheRead + summary.tokenBreakdown.cacheWrite,
+    summary.cacheTokens,
+  );
 });
 
 test('parseConversation excludes thinking/tool_use/tool_result blocks, sidechains, and harness wrapper text', async () => {
