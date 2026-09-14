@@ -19,7 +19,7 @@ import {
 } from './backdrop.js';
 import { badgeBox, drawBadge, drawCharacter, formatElapsed, labelBox } from './rig.js';
 import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
-import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceFor } from './palette.js';
+import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
 import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.js';
@@ -581,7 +581,7 @@ export class SceneDraw extends SceneHit {
     // minority of agents. A pure function of the session id, so it needs
     // nothing from the snapshot and nothing persisted, and like `identityFor`
     // it is total: an id that has not resolved yet still draws.
-    const appearance = appearanceFor(agent.id);
+    const appearance = appearanceOf(agent);
 
     drawCharacter(ctx, pose, {
       x: s.x,

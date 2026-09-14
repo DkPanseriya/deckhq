@@ -314,6 +314,22 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Fixed
 
+- **A conversation you resumed is one agent again, not two.** The owner saw the same chat —
+  _"southeast asia trip planning"_ — standing at a desk as **Greta 2** and sitting in the lounge as
+  **Sena 3**. They were two session ids for one conversation: Claude Code gives a resumed chat a
+  brand-new id and a brand-new transcript with the whole history replayed into it, and DeckHQ keyed
+  an agent by session id, so every `--resume` minted a second person with a second MK number and a
+  second first name. On his machine that was **101 transcripts for 92 conversations** — nine agents
+  that were somebody else drawn twice — and DeckHQ was making them itself, because "open in
+  terminal" and "send" both resume. Transcripts in the same project whose first message record has
+  the same id are now one agent: the live one, wearing the **earliest** session's name, number and
+  face, so the person you learned survives being picked back up. Nothing is reassigned and nothing
+  user-owned is written — a superseded session keeps whatever you last said about it, exactly as you
+  left it. `docs/DEVIATIONS.md` §155, `docs/plan/BUG-DUPLICATE-AGENT.md`.
+- **Archiving a resumed session's old transcript in the Claude Code app no longer fires an agent
+  that is still running.** The archive sync walked every file the scan found, including the ones
+  superseded by a resume, and `archived` drives `let_go`. It now walks the same list the floor does.
+  `docs/DEVIATIONS.md` §155.4.
 - **Waiting badges no longer pile up into an unreadable row.** On a packed reception wall the
   crimson time pills overlapped into a band of digits — `3d 2d 21h 2d 3h 2d 2h 1h 58m 1h 55m 20m`
   — every number true and not one of them readable. A badge is now drawn only where it does not

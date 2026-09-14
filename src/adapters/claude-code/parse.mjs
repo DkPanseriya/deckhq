@@ -559,6 +559,30 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
 
   const lastActivityAt = Number.isFinite(newestTs) ? newestTs : mtimeMs;
 
+  // THE ORIGIN RECORD (§155). The `uuid` of the first message record in this transcript, read
+  // from the head window this function is already given.
+  //
+  // What it is FOR: a resumed conversation is a new session id and a new file into which Claude
+  // Code replays every prior record, each keeping its own `uuid`. Nothing in the format names the
+  // predecessor — there is no `resumedFrom` field, and the `bridge-session` id differs between a
+  // session and its own resume — so the shared first record is the evidence, and `resume-chain.mjs`
+  // is where the inference is drawn and documented. A record uuid is random and per record, so two
+  // files can only share one by one having been copied from the other.
+  //
+  // Head window ONLY, deliberately: the first record of a large file is not in the tail, and a
+  // small file's tail window is its head anyway. `null` when the head window held no message
+  // record at all, which `resume-chain.mjs` reads as "its own conversation" rather than guessing.
+  // On this machine's 101 transcripts the origin record was never past line 16.
+  const originRec = findFirst(
+    [headText],
+    (r) =>
+      (r.type === 'user' || r.type === 'assistant') &&
+      typeof r.uuid === 'string' &&
+      r.uuid &&
+      primary(r),
+  );
+  const originUuid = originRec ? originRec.uuid : null;
+
   // WP-64. The MCP servers this session's own init event named, if it carried
   // one. The head is searched first because init is the first line of a
   // session; the tail is searched too, and wins, only because a `--continue`
@@ -586,6 +610,9 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
     lastRole,
     lastText: clampText(lastText),
     turnEnded: turnHasEnded(tailText, sidechain),
+    // §155. Null rather than absent, so a consumer never has to tell "this build does not report
+    // it" from "this transcript did not say".
+    originUuid,
     // WP-28. Two numbers about how this session works, never about the person
     // reading them. Both are approximations for the same reason the token
     // totals above are: the head and tail windows do not span a large file's

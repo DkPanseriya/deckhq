@@ -484,3 +484,77 @@ test('WP-64: the tail wins over the head, because a resumed session re-inits', (
   const summary = parseSummary(one, two, { id: 's', file: 'x', mtimeMs: 0 });
   assert.deepEqual(summary.mcpServers, [{ name: 'new', status: 'connected' }]);
 });
+
+// --------------------------------------------------------- §155: originUuid
+//
+// The evidence a resumed conversation leaves behind. Nothing in the format names a predecessor,
+// so `src/core/resume-chain.mjs` groups on this: the first message record of the transcript, which
+// a resume replays verbatim. What is read here decides whether two files are one person on the
+// floor, so the four ways of getting it wrong each get a test.
+
+test('§155: originUuid is the FIRST message record of the head window', () => {
+  const head = [
+    JSON.stringify({ type: 'custom-title', customTitle: 'Southeast Asia trip planning' }),
+    JSON.stringify({ type: 'file-history-snapshot', snapshot: {} }),
+    JSON.stringify({
+      type: 'user',
+      uuid: 'first-one',
+      isCompactSummary: true,
+      timestamp: '2026-08-29T05:10:45.063Z',
+      message: { content: 'hello' },
+    }),
+    JSON.stringify({
+      type: 'assistant',
+      uuid: 'second-one',
+      timestamp: '2026-08-29T05:10:50.000Z',
+      message: { content: [{ type: 'text', text: 'hi' }] },
+    }),
+  ].join('\n');
+  assert.equal(parseSummary(head, '', { id: 's', file: 'x', mtimeMs: 0 }).originUuid, 'first-one');
+});
+
+test('§155: a junior turn in a primary transcript is never the origin', () => {
+  // A sidechain record belongs to somebody else. Grouping on one would link two unrelated
+  // sessions the moment the same subagent transcript appeared in both of their heads.
+  const head = [
+    JSON.stringify({
+      type: 'user',
+      uuid: 'junior-turn',
+      isSidechain: true,
+      timestamp: '2026-08-29T05:10:40.000Z',
+      message: { content: 'junior' },
+    }),
+    JSON.stringify({
+      type: 'user',
+      uuid: 'the-real-one',
+      timestamp: '2026-08-29T05:10:45.063Z',
+      message: { content: 'hello' },
+    }),
+  ].join('\n');
+  const summary = parseSummary(head, '', { id: 's', file: 'x', mtimeMs: 0 });
+  assert.equal(summary.originUuid, 'the-real-one');
+});
+
+test('§155: the tail is never read for an origin — it is the head or nothing', () => {
+  // The first record of a large file is not in its tail, and a tail record would make two
+  // unrelated sessions look like one chain the moment they ended on the same replayed turn.
+  const tail = JSON.stringify({
+    type: 'user',
+    uuid: 'a-tail-record',
+    timestamp: '2026-08-29T05:10:45.063Z',
+    message: { content: 'hello' },
+  });
+  assert.equal(parseSummary('', tail, { id: 's', file: 'x', mtimeMs: 0 }).originUuid, null);
+});
+
+test('§155: a head window with no message record reports null rather than guessing', () => {
+  const head = JSON.stringify({ type: 'custom-title', customTitle: 'x' });
+  assert.equal(parseSummary(head, '', { id: 's', file: 'x', mtimeMs: 0 }).originUuid, null);
+});
+
+test('§155: the real fixture reports an origin', async () => {
+  const { head, tail } = await readFixture();
+  const summary = summarise(head, tail);
+  assert.equal(typeof summary.originUuid, 'string');
+  assert.ok(summary.originUuid.length > 0);
+});

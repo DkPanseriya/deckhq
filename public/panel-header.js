@@ -40,7 +40,7 @@ const FALLBACK_STATE_COLORS = {
  * Set once `render/palette.js` loads. It was declared as carrying only
  * `STATE_COLORS` while `rarityWordFor()` calls two more of its exports (WP-22).
  * @type {{STATE_COLORS?: Record<string,string>,
- *   appearanceFor?: (id: string) => {tier: string},
+ *   appearanceOf?: (agent: any) => {tier: string},
  *   rarityWord?: (tier: string) => string|null}|null}
  */
 let paletteModule = null;
@@ -59,9 +59,10 @@ function stateColor(state) {
  * @returns {string|null}
  */
 function rarityWordFor(agent) {
-  if (!agent || !paletteModule?.appearanceFor || !paletteModule?.rarityWord) return null;
+  if (!agent || !paletteModule?.appearanceOf || !paletteModule?.rarityWord) return null;
   try {
-    return paletteModule.rarityWord(paletteModule.appearanceFor(agent.id).tier);
+    // §155; see `public/render/palette.js`.
+    return paletteModule.rarityWord(paletteModule.appearanceOf(agent).tier);
   } catch (err) {
     console.debug('[deckhq] rarityWord failed', err);
     return null;
@@ -320,7 +321,7 @@ export function createHeaderPart(ctx) {
     // And the same face (WP-20): hair style, skin, outfit accent, glasses,
     // build and any rarity trait. The close-up is where a rare agent is
     // actually legible, so it must not be the one place that omits it.
-    const appearance = palette?.appearanceFor ? palette.appearanceFor(a.id) : undefined;
+    const appearance = palette?.appearanceOf ? palette.appearanceOf(a) : undefined;
 
     const draw = (elapsedSeconds) => {
       ctx.clearRect(0, 0, closeupCanvas.width, closeupCanvas.height);

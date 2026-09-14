@@ -15066,3 +15066,192 @@ scan, snapshot, floor — has been exercised through the `Registry` in a test an
 daemon in a capture, but not by a person clicking. And the open floor beside a single pinned room
 (§154.4) is the one part of this picture nobody has looked at on a floor with more than one pin at
 a stage other than 1600 x 1000.
+## 155. Bug — one conversation, four agents, four names, two zones
+
+**§154 is absent from this log.** A concurrent package holds it; this entry takes 155 so the two
+cannot collide, and the numbering therefore has a gap until that one lands — the same arrangement
+§153 made for §152.
+
+The owner, 14 September, one sentence:
+
+> _"I see 'southeast asia trip planning' agent named Greta 2 in the room, and for the same session an
+> agent named Sena 3 chilling in the lounge."_
+
+He read it as the name pool handing out two names for one agent. It was worse than that. The two
+bodies were two different session ids, and the registry believed in both of them.
+
+The full working is in `docs/plan/BUG-DUPLICATE-AGENT.md`, written before anything was changed.
+
+### 155.1 What was actually on his floor
+
+`GET /api/state` from the daemon that was already running on port 4317, and the transcripts under
+`~/.claude/projects/`, read and not written:
+
+| | one | the other |
+| --- | --- | --- |
+| `id` | `claude-code:5a03e0ea-…` | `claude-code:155a04b4-…` |
+| name | `Greta 2`, `MK2.10` | `Sena 3`, `MK2.11` |
+| title | Southeast Asia trip planning | Southeast Asia trip planning |
+| state | `stalled`, live | `ended`, not live |
+| zone | a desk (`AT_DESK_STATES`) | the lounge |
+
+Both `subagent: false`, both in `c-dk-projects-1-1percent-better`, both with a `sessionId` in every
+record equal to their own filename. Nothing was mis-keyed. They were two records because there are
+two files.
+
+**`5a03e0ea` is `155a04b4` resumed.** Message-record uuids are random and per record, so a shared one
+means the record was copied:
+
+| pair | shared message uuids |
+| --- | ---: |
+| `155a04b4` ∩ `5a03e0ea` | **1300** of `155a04b4`'s 1303 |
+| either ∩ an unrelated session in the same room | **0** |
+
+Both files' first message record is byte-identical — `uuid 3625bd2e-…`, an `isCompactSummary` user
+turn stamped `2026-08-29T05:10:45.063Z`. And the same room holds a second chain, four files deep,
+all sharing `1a0c9e2d-…`: `c8ead7c8` → `cacc0dd3` → `618d825b` → `c3a9e7ba`, wearing `Otto`, `Kobe`,
+`Petra` and `Tai`. One conversation, four people.
+
+Over the whole machine: **101 Claude Code transcripts, 92 conversations, 9 redundant agents** in six
+chains. Nine percent of his floor was the same conversation drawn more than once.
+
+**And DeckHQ manufactures them.** `adapter-open.mjs` spawns `claude --resume <id>` and
+`adapter-send.mjs` sends with `--resume`. Every "open in terminal" on a finished session mints a new
+session id, a new transcript, a new MK number and a new first name, and leaves the old body standing
+beside it. The defect grew every time the product was used exactly as designed.
+
+### 155.2 The " 2" and the " 3" were not the bug, and they were not wrong
+
+`Identity.givenName` walks `SHORT_NAMES` forward from a hash of the agent id and takes the first
+unused name. Only when EVERY name is taken does it fall back to `"<base> N"`. `public/names.js`
+holds **60** names; his registry held **108** agents and 110 spoken-for names. The pool has been
+exhausted for a long time, so every new agent gets a suffix, and `Greta` (MK3.27 in `career-ops`),
+`Sena` (MK3.11) and `Sena 2` (MK14.1) are all worn by somebody. `Greta 2` and `Sena 3` are correct
+output of a correct rule on an over-subscribed pool.
+
+They were a SYMPTOM: nine of those 110 names were spent on duplicate records. Collapsing the chains
+gives nine back and stops the leak. It does not end the shortage — 92 conversations against 60 names
+still suffixes — and growing the pool is left to a package that can regenerate the goldens that
+paint names. **Said here so nobody reads §155 as having fixed it.**
+
+### 155.3 The linkage, and what it is allowed to claim
+
+`docs/ADAPTERS.md`'s honesty rule, applied:
+
+- **Told.** Every record carries `sessionId`, `uuid`, `parentUuid` and `timestamp`. A resumed
+  transcript replays the prior conversation record for record, keeping each record's own `uuid` and
+  rewriting `sessionId`.
+- **Told, and it is not the link.** `bridge-session` records carry a `bridgeSessionId`. The two files
+  in the report carry different ones (`cse_011Fqj…` against `cse_01Ufun…`), so the desktop bridge's
+  own id says nothing about a resume.
+- **Not told.** There is no `resumedFrom`, no parent-session field, nothing naming the predecessor.
+  Every occurrence of an older session id inside a newer transcript is incidental — a scratchpad
+  path, a shell command, a file attachment.
+- **Inferred.** Two transcripts in the same project whose first message record has the same `uuid`
+  are the same conversation.
+
+That last line is the whole of the new behaviour and it is an inference, stated as one in
+`src/core/resume-chain.mjs`'s header, in `README.md` under Honest limits, and here.
+
+### 155.4 The fix
+
+`parse.mjs` reports `originUuid`: the `uuid` of the first non-sidechain message record, taken from
+the head window it already reads. Not the tail — the first record of a large file is not in its tail,
+and a tail record would link two unrelated sessions that happened to end on the same replayed turn.
+Not a sidechain record — that belongs to a junior, and grouping on one would join two sessions that
+merely spawned the same subagent. Null when the head window held no message record, which is read as
+"its own conversation" rather than as a guess. On this machine's 101 transcripts the origin record
+was never past line 16 of the file. `CACHE_SCHEMA_VERSION` goes to 3, because `parseSummary`'s output
+shape changed and that file's own rule says to bump rather than migrate.
+
+`src/core/resume-chain.mjs` is the rule, pure and taking summaries rather than a registry:
+
+- **Grouped by `(runtime, projectId, originUuid)`.** The project component is a refusal: the same
+  conversation resumed from a different working directory stays two agents, because deciding which
+  cwd it "really" belongs to would need evidence nobody has.
+- **The survivor is the member with the newest activity.** It is the file the runtime is writing to
+  and the one `--resume` will attach to. Acting on any other member would send a turn into a file
+  nothing reads.
+- **It wears the EARLIEST member's identity.** `Agent.identityId`, which is an agent's own id for
+  every agent that has never been resumed. The snapshot describes from it, the rename route writes to
+  it, and `palette.js`'s new `appearanceOf(agent)` draws the face from it — the name, the number and
+  the face move together or the person the user knows becomes a stranger halfway.
+- **Juniors are never grouped.** A subagent is numbered from its parent and lives for seconds.
+
+Applied in `_doRefresh`, before the seed, the archive sync and the merge, so all three agree about
+who exists. Two of those mattered on their own: `_syncArchived` was walking every summary, so
+archiving a superseded transcript in the Claude Code app moved `ackState` on a record that is no
+longer a session; and the liveness roster is filtered too, or a superseded id reported alive walks
+back on with no summary behind it.
+
+**Nothing in any of it writes a user-owned field.** A superseded session's ack record stays in the
+store exactly as the user left it — benched is still benched, `reviewSince` is still whatever he set
+— ready for the day that session is seen alone again. The survivor's own identity record also stays,
+never reassigned and never reused; it is simply not what the floor reads. `resume-chain.test.mjs`
+drives a benched original through a resume and deep-compares its ack record either side.
+
+### 155.5 The one consequence worth stating
+
+On a machine with chains that already existed, the survivor wears the identity of the chain's OLDEST
+TRANSCRIPT, which is not always the one DeckHQ happened to number first. The owner's four-deep chain
+survives as `c3a9e7ba` — which he knew as `Tai`, `MK2.2` — wearing `Otto`, `MK2.5`, because
+`c8ead7c8` is the original session and `Tai` was a resume of it that DeckHQ's first scan saw first.
+
+That is a one-time renumbering on a backfill, and it is the right rule going forward: for every chain
+formed from now on the oldest transcript IS the one numbered first, so the two orders agree and a
+resume keeps the name and the number the user learned. Choosing by MK order instead would have made
+the collapse depend on the identity table, which is a store read inside what is otherwise a pure
+reduction over a scan.
+
+### 155.6 What was ruled out, and how
+
+| candidate | verdict |
+| --- | --- |
+| a subagent registered as a peer | both records `subagent: false`, both top-level files, neither under a `subagents/` directory, and `listSessionFiles` is deliberately non-recursive |
+| the hook id and the transcript id differing | every record's `sessionId` equals its filename; all 108 registry agents resolve to a real transcript except two juniors and five Codex sessions, so no record was created by a hook alone |
+| placement reading one list for desks and another for the lounge | `placement()` is one function over one list and the only copy either side of the static-file boundary; the two bodies were two ids, not one id twice. Held by a test now anyway |
+| identity keyed on something unstable | `Identity` is keyed on `runtime:sessionId`, never a path. Two ids is WHY there were two names; it is not why there were two ids |
+
+The sweep for siblings found every session list in the tree deriving from `registry.snapshot().agents`
+or from a snapshot handed to it. What it did not fix is listed with file and line in
+`docs/plan/BUG-DUPLICATE-AGENT.md` §4, including the one real oddity found in passing:
+`actions.mjs`'s pending-identity match filters on `!a.displayName` against `registry.agents`, which
+never carries `displayName` — identity is applied in `snapshot()`, not in `_agents` — so that clause
+is always true.
+
+### Tests
+
+**2106 tests, 2105 passing and the one platform skip** (no POSIX uid on win32), up from 2079. Twenty
+seven are new: twenty two in `test/unit/resume-chain.test.mjs` — the key, the collapse, the four
+refusals, determinism under a tie, the three registry invariants (one agent per conversation, one
+placement zone each, no two names alike), the suffix rule, identity and pool cost across a resume,
+the `INVARIANT:` ack comparison, and the owner's own two chains by their real ids and origin uuids —
+and five in `claude-parse.test.mjs` for the four ways of reading the origin record wrong. No
+`INVARIANT:` test was touched and nothing was deleted. **No golden moved**: `appearanceOf` falls
+through to `agent.id` for every fixture, and `goldens:check` reports 0 px moved at all on all eight.
+
+### Verified on the machine it was reported from
+
+A registry built over the owner's real transcripts with `DECKHQ_STATE_DIR` pointed at a copy of
+`~/.deckhq`, read-only against `~/.claude`:
+
+| | before | after |
+| --- | ---: | ---: |
+| Claude Code agents | 103 | **94** |
+| chains collapsed | — | **6** |
+| sessions titled "Southeast Asia trip planning" | 6 | **2**, which are two genuinely different conversations that share a custom title |
+| duplicate names among drawn agents | — | **0** |
+| agents in more than one zone | — | **0** |
+| suffixed names | 38 of 103 | 38 of 94 — the pool is still short; §155.2 |
+
+`5a03e0ea` and `155a04b4` are now one agent, in one zone, under one name.
+
+### Unverified
+
+The linkage has been measured on one machine's 101 transcripts and on no other. Two shapes it has
+never seen: `claude --fork-session`, which deliberately branches one conversation into two the user
+may want separately and which this rule would collapse into one; and a transcript whose head window
+is 256 KB of `file-history-snapshot` before its first message, which would report no origin and stay
+its own agent. Neither occurs in the owner's data. Nothing here was run against Codex, Gemini CLI or
+OpenCode: none of their adapters reports `originUuid`, so for all three the behaviour is exactly what
+it was.

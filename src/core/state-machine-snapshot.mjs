@@ -105,7 +105,10 @@ export class RegistrySnapshot extends RegistryBase {
     const described = new Map();
     const agents = this._agents.map((a) => {
       if (!this.identity || a.subagent === true) return a;
-      const id = this.identity.describe(a.id, a.projectId);
+      // §155. `identityId`, not `id`. They are the same for every agent that has never been
+      // resumed; where they differ the agent is the live end of a resume chain and wears the
+      // chain's earliest identity, so the name the user learned survives the new session id.
+      const id = this.identity.describe(a.identityId || a.id, a.projectId);
       described.set(a.id, id);
       return { ...a, ...id };
     });

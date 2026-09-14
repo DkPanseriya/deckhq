@@ -119,6 +119,15 @@ export {
  * @property {number} [juniorCount]      how many juniors this session has on
  *                                      the floor right now. Zero on a junior
  *                                      and on every session that has none.
+ * @property {string} [identityId]       the agent id whose MK number and first
+ *                                      name this agent wears (§155). Its own,
+ *                                      except where it is the live end of a
+ *                                      resume chain: then it is the chain's
+ *                                      EARLIEST session, so the name the user
+ *                                      learned survives a `--resume`.
+ * @property {string[]} [supersedes]     the earlier session ids this agent
+ *                                      absorbed, oldest first (§155). Empty
+ *                                      for almost every agent.
  */
 
 /**
@@ -163,6 +172,13 @@ export {
  * @property {string|null} [subagentType]
  * @property {string|null} [subagentDescription]
  * @property {number|null} [spawnedAt]
+ * @property {string|null} [originUuid]        the id of this transcript's FIRST
+ *   message record, where the runtime's format has such a thing (§155). A
+ *   resumed conversation is a new session id and a new file with every prior
+ *   record replayed into it, so two transcripts sharing this are the same
+ *   conversation — the inference `src/core/resume-chain.mjs` draws, documents
+ *   and is the only reader of. Null when the adapter cannot report one; an
+ *   adapter that has no such field simply omits it and nothing collapses.
  */
 
 /**
