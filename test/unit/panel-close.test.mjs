@@ -357,6 +357,89 @@ test('WP-61: no close path in the panel reaches a window-closing API', async () 
   }
 });
 
+// ----------------------------------- 1b · every full-surface view's way back
+//
+// WP-84 gave the deck, the project board and the settings sheet a ✕ and a
+// "Back to floor" — four new close controls, in a product whose last ✕ closed
+// the browser tab. So they are driven here, against the same counters: the
+// deck for real, through `createDeckUI()`, and the shared wiring on its own
+// for the two a Node stub cannot stand up whole.
+
+test('WP-84: no way back out of a full-surface view reaches a window-closing API', async () => {
+  const stub = installStubWindow();
+  try {
+    const { createDeckUI } = await import('../../public/deck.js');
+    const { SURFACES, SURFACE_BACK_CLASS, SURFACE_CLOSE_CLASS, wireSurfaceControls } =
+      await import('../../public/surfaces.js');
+
+    /** The chrome as `index.html` ships it: back first, ✕ last. */
+    const chromeInto = (host) => {
+      const back = new StubNode('button');
+      back.className = SURFACE_BACK_CLASS;
+      const close = new StubNode('button');
+      close.className = SURFACE_CLOSE_CLASS;
+      host.append(back, close);
+      return { back, close };
+    };
+
+    // The deck, driven. Open it, press each control, and it must be shut —
+    // and the tab must still be there.
+    const deckEl = new StubNode('div');
+    deckEl.id = 'deck';
+    deckEl.hidden = true;
+    const deckBody = new StubNode('div');
+    const controls = chromeInto(deckEl);
+    deckEl.appendChild(deckBody);
+    const el = (tag) => new StubNode(tag);
+    const deck = createDeckUI({
+      stripEl: el('div'),
+      listEl: el('ul'),
+      moreEl: el('button'),
+      hintEl: el('p'),
+      lastEl: el('p'),
+      deckEl: /** @type {any} */ (deckEl),
+      deckBodyEl: /** @type {any} */ (deckBody),
+      stageEl: /** @type {any} */ (el('section')),
+      getQueue: () => [],
+      getSelectedId: () => null,
+      onSelect: () => {},
+    });
+    for (const button of [controls.close, controls.back]) {
+      deck.open();
+      assert.equal(deck.isOpen(), true, 'the deck should be open');
+      button.click();
+      assert.equal(deck.isOpen(), false, `.${button.className} did not close the deck`);
+      assert.equal(deckEl.hidden, true, `.${button.className} left the deck on screen`);
+    }
+    deck.destroy();
+
+    // The other two views own their own close (`hideWhiteboard`,
+    // `settingsUI.close`), so what is driven here is the shared wiring every
+    // one of them goes through — once per view, so the loop grows with
+    // SURFACES rather than with this file.
+    for (const surface of SURFACES) {
+      const host = new StubNode('div');
+      host.setAttribute('data-surface', surface.id);
+      const pair = chromeInto(host);
+      let closed = 0;
+      wireSurfaceControls(/** @type {any} */ (host), () => void closed++);
+      pair.back.click();
+      pair.close.click();
+      assert.equal(closed, 2, `the ${surface.id} view's controls did not both close it`);
+    }
+
+    const hit = TRAPPED.filter((k) => stub.reached[k] > 0);
+    assert.deepEqual(
+      hit,
+      [],
+      `a way back reached ${hit.map((h) => `window.${h}()`).join(', ')} — ` +
+        'see docs/DEVIATIONS.md §143 and §156',
+    );
+  } finally {
+    stub.undo();
+  }
+});
+
 // ------------------------------------------------- 2 · every client module
 
 /** Every `.js` under `public/`, recursively. */

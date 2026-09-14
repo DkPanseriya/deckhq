@@ -470,10 +470,17 @@ test('the palette and the settings sheet are keyboard and screen-reader shaped',
   assert.match(palette[0], /role="listbox"/);
   assert.match(palette[0], /<label class="sr-only" for="palette-input">/);
 
-  const sheet = /<dialog id="settings-dialog"[\s\S]*?<\/dialog>/.exec(html);
+  // WP-84 opened the sheet's start tag onto several lines when it added
+  // `data-surface`, so this finds the element by its id rather than by the
+  // exact shape of one line of markup.
+  const sheet = /<dialog\b[^>]*\bid="settings-dialog"[\s\S]*?<\/dialog>/.exec(html);
   assert.ok(sheet, 'the settings sheet shell is gone from index.html');
   assert.match(sheet[0], /aria-labelledby="settings-title"/);
-  assert.match(sheet[0], /id="settings-close"[^>]*aria-label="Close"/);
+  // The ✕ is still there and still named. WP-84 put the shortcut in the name
+  // — a way out nobody can see is not a way out — and added "Back to floor"
+  // beside it; `test/unit/surfaces.test.mjs` is what holds both in place.
+  assert.match(sheet[0], /id="settings-close"[\s\S]{0,80}aria-label="Close settings \(Esc\)"/);
+  assert.match(sheet[0], /class="surface-back"/);
 });
 
 test('no author rule can force a closed <dialog> on screen', () => {
