@@ -209,7 +209,12 @@ export async function openWrapped(kind, opts = {}) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     if (redactSnapshots) body.projects = redactProjectNames(body.projects);
-    showCard('wrapped', wrappedCopy(body), 'wrapped');
+    // WP-83. The spend row appears only when the user asked for a currency.
+    showCard(
+      'wrapped',
+      wrappedCopy(body, { showCost: latestSnapshot?.settings?.showCost === true }),
+      'wrapped',
+    );
     // The server's key wins: it is the one that computed the window.
     if (!opts.manual) await saveSetting({ wrappedShown: body.key || opts.key || '' });
   } catch (err) {

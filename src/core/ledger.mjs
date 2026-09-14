@@ -49,7 +49,18 @@
  * | `state` | `dim` (`activity`\|`ack`), `from`, `to` | an observed activity transition, or a change of ack state |
  * | `action` | `action` | one of the six `act()` actions the user took |
  * | `send` | `chars` | a turn was sent to a session from DeckHQ |
- * | `tokens` | `delta`, `tokens`, `cacheDelta`, `cacheTokens` | a scan saw this session's token total move |
+ * | `tokens` | `delta`, `tokens`, `cacheDelta`, `cacheTokens`, and at `v: 2` also `split`, `in`, `out`, `cacheRead`, `cacheWrite`, `model`, `tool` | a scan saw this session's token total move |
+ *
+ * ### Why the `tokens` record has a version and the others do not
+ *
+ * WP-83 needed the four counters kept apart, and a ninety-day ledger already
+ * existed. So `v: 2` ADDS fields and changes none: every v1 field means what
+ * it meant, `computeStats`, `windowDigest`, the replay and the room plate's
+ * day tally all still read it, and a line with no `v` is a v1 line — a total
+ * with no breakdown, which is the same thing this build writes for a runtime
+ * that reports no breakdown either (`split: false`). `parseRecords` was
+ * tolerant of unknown fields already, which is what made an additive change
+ * possible; see `src/core/usage.mjs` for how a reader tells the two apart.
  *
  * ### Why `first_seen` is per day, and why it carries `since`
  *

@@ -130,6 +130,8 @@ export const el = {
   // WP-84. The deck's chrome is static markup (public/surfaces.js says why),
   // so the host, the bar's body and the two controls are all named here.
   deckBody: document.getElementById('deck-body'),
+  // WP-83. The Queue/Usage tablist, static for the same reason the chrome is.
+  deckTabs: document.getElementById('deck-tabs'),
   stage: /** @type {HTMLElement} */ (document.querySelector('.stage')),
   canvas: /** @type {HTMLCanvasElement} */ (document.getElementById('floor-canvas')),
   tooltip: document.getElementById('tooltip'),

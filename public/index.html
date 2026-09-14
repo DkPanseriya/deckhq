@@ -205,6 +205,35 @@
               ✕
             </button>
           </div>
+          <!-- WP-83. Two tabs, one surface. The queue is a list of debts;
+               usage is a ledger of spend. They are the same act — sitting
+               down to look at what the floor has been doing rather than
+               watching it move — so they are the same view, and neither is a
+               dialog of its own with its own way out. -->
+          <div class="deck-tabs" id="deck-tabs" role="tablist" aria-label="Deck views">
+            <button
+              type="button"
+              class="deck-tab is-selected"
+              id="deck-tab-queue"
+              role="tab"
+              aria-selected="true"
+              aria-controls="deck-body"
+              data-tab="queue"
+            >
+              Queue
+            </button>
+            <button
+              type="button"
+              class="deck-tab"
+              id="deck-tab-usage"
+              role="tab"
+              aria-selected="false"
+              aria-controls="deck-body"
+              data-tab="usage"
+            >
+              Usage
+            </button>
+          </div>
           <div class="surface-body" id="deck-body"></div>
         </div>
 

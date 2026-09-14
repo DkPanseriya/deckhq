@@ -1152,9 +1152,57 @@ test('the character scale is a floor on the world scale, not a replacement for i
 // money, and the rule (`08` §1.1 rule 7) is that it is an estimate or it is
 // not shown at all.
 
-test('a project room plate carries the payroll line under its data line', () => {
+test('WP-83: the plate’s third line is this room’s tokens, and no currency', () => {
+  // The shipped default. `settings.showCost` is off, so the meter under the
+  // data line is the day's tokens — a sum of ledger records, which is a number
+  // a rate card cannot get wrong.
   const room = { kind: 'project', id: 'p0', name: 'deckhq' };
   const snapshot = {
+    projects: [
+      {
+        id: 'p0',
+        sessionCount: 3,
+        tokens: 2_200_000,
+        needsYou: 1,
+        todaySpend: 18.4,
+        todaySpendIsToday: true,
+        todayTokens: 412_000,
+        todayTokensIsToday: true,
+      },
+    ],
+  };
+  assert.deepEqual(plateLinesFor(room, snapshot), [
+    'deckhq',
+    '3 sessions · 2.2M tok · 1 need you',
+    'today 412k tok · with cache',
+  ]);
+  assert.doesNotMatch(plateLinesFor(room, snapshot).join(' '), /\$/);
+
+  // A figure that is not today's says so rather than being labelled "today" —
+  // the same rule the payroll line kept.
+  const stale = {
+    projects: [
+      {
+        id: 'p0',
+        sessionCount: 1,
+        tokens: 900,
+        needsYou: 0,
+        todayTokens: 900,
+        todayTokensIsToday: false,
+      },
+    ],
+  };
+  assert.equal(plateLinesFor(room, stale)[2], '900 tok to date · with cache');
+
+  // Nothing measured at all is no line, not a zero.
+  const silent = { projects: [{ id: 'p0', sessionCount: 1, tokens: 0, needsYou: 0 }] };
+  assert.equal(plateLinesFor(room, silent)[2], '');
+});
+
+test('a project room plate carries the payroll line under its data line, with cost on', () => {
+  const room = { kind: 'project', id: 'p0', name: 'deckhq' };
+  const snapshot = {
+    settings: { showCost: true },
     projects: [
       {
         id: 'p0',
@@ -1178,6 +1226,7 @@ test('a project nothing can price gets no payroll line, not $0.00', () => {
   // the rate card. Zero is a claim about the money and there is not one.
   const room = { kind: 'project', id: 'p0', name: 'deckhq' };
   const unrated = {
+    settings: { showCost: true },
     projects: [{ id: 'p0', sessionCount: 1, tokens: 900, needsYou: 0, todaySpend: null }],
   };
   const lines = plateLinesFor(room, unrated);
@@ -1185,6 +1234,7 @@ test('a project nothing can price gets no payroll line, not $0.00', () => {
   assert.doesNotMatch(lines.join(' '), /\$/);
   // A figure that is not today's says so rather than being labelled "today".
   const stale = {
+    settings: { showCost: true },
     projects: [
       {
         id: 'p0',

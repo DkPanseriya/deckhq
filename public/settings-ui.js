@@ -57,6 +57,9 @@ export const SETTINGS_KEYS = Object.freeze([
   'lightsOutHour',
   'theme',
   'avatarSet',
+  // WP-83. The Data section's switch, and the palette's `Show cost` / `Hide
+  // cost` beside it: whether any currency figure appears at all.
+  'showCost',
 ]);
 
 export const MIN_STALL_MIN = 2;
@@ -408,6 +411,19 @@ export function createSettingsUI(opts) {
       'State file',
       readOnlyValue(about.statePath || 'unknown'),
       'Your acknowledgements, names and preferences. Set DECKHQ_STATE_DIR to move it.',
+    );
+    // WP-83. The switch, above the table it governs. Off by default, because
+    // most people are on a subscription and a figure at public list prices is
+    // neither their bill nor their budget — what stands in its place is token
+    // usage, which a rate card cannot get wrong. Turning it on restores every
+    // cost surface exactly as it was.
+    row(
+      s,
+      'Show cost',
+      toggle('Show cost', current.showCost === true, (next) => save({ showCost: next })),
+      'Off by default. On, the floor, the panel, the room plates, the day’s card and Wrapped ' +
+        'each carry a list-price estimate again — an estimate for comparing projects, never a ' +
+        'bill. Off, they carry the tokens, which is what you actually spent.',
     );
     row(
       s,

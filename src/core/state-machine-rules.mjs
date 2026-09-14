@@ -116,6 +116,14 @@ export function freshObserved(runtime) {
     model: /** @type {string|null} */ (null),
     tokens: 0,
     cacheTokens: 0,
+    /**
+     * WP-83. The four counters as the runtime split them, or null when this
+     * runtime reports only a total. Null and not `{}`: an empty object would
+     * be a breakdown that happens to say nothing, and the ledger has to be
+     * able to tell "no split" from "a split that is all zeros".
+     * @type {import('./model.mjs').TokenBreakdown|null}
+     */
+    tokenBreakdown: /** @type {import('./model.mjs').TokenBreakdown|null} */ (null),
     // null, not 0: an unpriced session is one we have no rate for, and zero
     // would be a claim about the money (WP-26, `src/core/rates.mjs`).
     costEstimate: /** @type {number|null} */ (null),
@@ -183,6 +191,40 @@ export function todaySpendFor(project, todayTokens) {
     todaySpend: round(Math.min(lifetime, (moved / total) * lifetime)),
     todaySpendIsToday: true,
   };
+}
+
+/**
+ * What one project has spent in TOKENS today (WP-83).
+ *
+ * The sibling of {@link todaySpendFor}, and the simpler of the two: there is
+ * no rate card in it and therefore no estimate of an estimate. `todayTokens`
+ * is the day's `tokens` records folded per project by `Ledger._noteTokens` —
+ * how far this room's counters actually moved since local midnight — so this
+ * is a SUM of things that were written down, not a share of a lifetime total.
+ * That is the whole point of the package: a rate card can be wrong about a
+ * model and this number cannot be wrong about anything.
+ *
+ * It falls back the same way and says so the same way: a project with no
+ * `tokens` record today gets its lifetime total with `todayTokensIsToday:
+ * false`, so the plate says "to date" rather than claiming a day it does not
+ * have. Null only when there is nothing at all to report.
+ *
+ * @param {{cwd?:string, tokens?:number, cacheTokens?:number}} project
+ * @param {Record<string, {tokens?:number, cache?:number}>} todayTokens
+ * @returns {{todayTokens:number|null, todayTokensIsToday:boolean}}
+ */
+export function todayTokensFor(project, todayTokens) {
+  const lifetime = (Number(project?.tokens) || 0) + (Number(project?.cacheTokens) || 0);
+  const entry = (todayTokens || {})[projectKeyFor(project?.cwd || '')];
+  const moved = entry ? (Number(entry.tokens) || 0) + (Number(entry.cache) || 0) : 0;
+  if (moved > 0) {
+    // Clamped for the reason the spend is: a scan that read a longer
+    // transcript than the totals it is compared against would otherwise put a
+    // day's figure on the plate larger than the room has ever spent.
+    return { todayTokens: Math.min(lifetime || moved, moved), todayTokensIsToday: true };
+  }
+  if (lifetime <= 0) return { todayTokens: null, todayTokensIsToday: false };
+  return { todayTokens: lifetime, todayTokensIsToday: false };
 }
 
 /**

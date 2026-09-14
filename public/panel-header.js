@@ -16,10 +16,10 @@ import {
   who,
   juniorMetaFor,
   shortModel,
-  formatNumber,
-  formatCompact,
   formatElapsed,
   costLineParts,
+  costVisible,
+  usageLineParts,
 } from './panel-format.js';
 import { currentId, displayedAgent } from './panel-state.js';
 import { textNode, separator } from './panel-dom.js';
@@ -197,14 +197,21 @@ export function createHeaderPart(ctx) {
     changedHeading.textContent = `What changed in ${a.projectName || 'this project'}`;
     textarea.placeholder = `Reply to ${who(a)}…`;
 
-    // Costs are context, not the subject: one line, at the bottom, and the
-    // cost is a list-price estimate for comparing projects, NEVER a bill.
+    // WP-83. THE BOTTOM LINE IS TOKENS, AND MONEY ONLY WHEN ASKED FOR.
+    //
+    // What this session actually spent, split the way its own runtime split
+    // it: total, input, cache write, cache read, output, model. A counter the
+    // runtime never reported reads `no data` rather than `0`.
+    //
+    // With `settings.showCost` on — it ships off — the list-price estimate
+    // returns beside it, unchanged: still `list price`, still naming the dated
+    // table it came from, still `not a bill`. Rule 7 is untouched in both
+    // directions; what changed is only whether it is asked.
     costEl.textContent = '';
-    for (const [i, part] of [
-      `${formatNumber(a.tokens)} tok`,
-      `${formatCompact(a.cacheTokens)} cache`,
-      ...costLineParts(a, getSnapshot()?.rateCardVersion),
-    ].entries()) {
+    const snapshot = getSnapshot();
+    const line = usageLineParts(a);
+    if (costVisible(snapshot)) line.push(...costLineParts(a, snapshot?.rateCardVersion));
+    for (const [i, part] of line.entries()) {
       if (i) costEl.appendChild(separator());
       costEl.appendChild(textNode(part));
     }

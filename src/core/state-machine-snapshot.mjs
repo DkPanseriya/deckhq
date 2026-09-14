@@ -15,9 +15,10 @@
 
 import { counts, projects as projectsOf } from './model.mjs';
 import { fixedNow, now as clockNow } from './clock.mjs';
-import { projectKeyFor } from './ledger.mjs';
+import { LEDGER_TOKENS_VERSION, projectKeyFor } from './ledger.mjs';
 import { buildDemoSnapshot } from './demo-fixture.mjs';
 import { rateCardVersion } from './rates.mjs';
+import { COUNTER_FIELDS, breakdownDelta } from './usage.mjs';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -52,7 +53,7 @@ import { rateCardVersion } from './rates.mjs';
  */
 
 import { RegistryBase } from './state-machine-base.mjs';
-import { orderRooms, todaySpendFor } from './state-machine-rules.mjs';
+import { orderRooms, todaySpendFor, todayTokensFor } from './state-machine-rules.mjs';
 
 export class RegistrySnapshot extends RegistryBase {
   /** @returns {Agent[]} */
@@ -148,7 +149,13 @@ export class RegistrySnapshot extends RegistryBase {
       // floor and the idle list both ask the snapshot.
       const pinned = this.store.isProjectPinned?.(p.id) === true;
       const today = todaySpendFor(p, todayTokens);
-      const base = { ...p, hasDashboard, archived, pinned, ...today };
+      // WP-83. The same day tally, in tokens rather than in dollars — the room
+      // plate's third line when `settings.showCost` is off, which is how it
+      // ships. BOTH travel on every snapshot: which one is drawn is a setting,
+      // and a snapshot that carried only the one currently in favour would
+      // make flipping the setting a reload rather than a repaint.
+      const todayTok = todayTokensFor(p, todayTokens);
+      const base = { ...p, hasDashboard, archived, pinned, ...today, ...todayTok };
       if (!this.identity) return base;
       const projectMk = this.identity.projectMk(p.id);
       return { ...base, projectMk, mk: `MK${projectMk}` };
@@ -353,12 +360,47 @@ export class RegistrySnapshot extends RegistryBase {
         }
         const prevTokens = was ? was.tokens || 0 : 0;
         if ((a.tokens || 0) !== prevTokens) {
+          // WP-83 · THE RECORD GAINS A BREAKDOWN, AND KEEPS EVERY FIELD IT HAD.
+          //
+          // `delta`/`tokens`/`cacheDelta`/`cacheTokens` are untouched, because
+          // four things already read them — the room plate's day tally
+          // (`Ledger._noteTokens`), `computeStats`, `windowDigest` and the
+          // replay — and a schema change that made a ninety-day ledger
+          // unreadable would be a change that threw away the measurement it
+          // was made to improve. The new fields sit beside them, and a reader
+          // that has never heard of them is unaffected.
+          //
+          // `split` is the honesty flag: true means the four counters below
+          // are what the RUNTIME wrote down, false (or absent, which is every
+          // record this product has ever written until now) means this line
+          // carries a total and nothing else. Nothing is inferred in either
+          // direction — `breakdownDelta` returns null when the adapter gave no
+          // breakdown, and a counter the adapter did not name never appears.
+          const moved = breakdownDelta(a.tokenBreakdown, was ? was.tokenBreakdown : null);
           this._ledger('tokens', {
             ...base,
+            v: LEDGER_TOKENS_VERSION,
             delta: (a.tokens || 0) - prevTokens,
             tokens: a.tokens || 0,
             cacheDelta: (a.cacheTokens || 0) - (was ? was.cacheTokens || 0 : 0),
             cacheTokens: a.cacheTokens || 0,
+            split: Boolean(moved),
+            ...(moved
+              ? {
+                  [COUNTER_FIELDS.input]: moved.input,
+                  [COUNTER_FIELDS.output]: moved.output,
+                  [COUNTER_FIELDS.cacheRead]: moved.cacheRead,
+                  [COUNTER_FIELDS.cacheWrite]: moved.cacheWrite,
+                }
+              : {}),
+            // What spent it. The model is the adapter's own reading of the
+            // transcript; the tool is what this session was running when the
+            // scan saw the counters move, which is the strongest statement
+            // about "which tool the tokens went on" that a per-scan record can
+            // honestly make. Both are omitted when unknown, and every usage
+            // table reports how much of a window it could not attribute.
+            ...(a.model ? { model: a.model } : {}),
+            ...(a.currentTool && a.currentTool.name ? { tool: a.currentTool.name } : {}),
           });
         }
       }

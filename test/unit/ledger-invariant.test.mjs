@@ -28,7 +28,13 @@ import path from 'node:path';
 
 import { Registry } from '../../src/core/state-machine.mjs';
 import { agentId, needsYou } from '../../src/core/model.mjs';
-import { Ledger, dayKey, readDay, reconstructQueue } from '../../src/core/ledger.mjs';
+import {
+  LEDGER_TOKENS_VERSION,
+  Ledger,
+  dayKey,
+  readDay,
+  reconstructQueue,
+} from '../../src/core/ledger.mjs';
 
 // ---------------------------------------------------------------------------
 // Fakes, the same shape as state-machine.test.mjs's.
@@ -142,6 +148,10 @@ function summary(id, over = {}) {
     // Absent unless asked for: an adapter that cannot see an archive reports
     // undefined, which must never be read as "not archived".
     ...(over.archived === undefined ? {} : { archived: over.archived }),
+    // WP-83. Absent unless asked for, for the same reason: a runtime that
+    // reports only a total reports no breakdown, and an empty object would be
+    // a breakdown that happens to say nothing.
+    ...(over.tokenBreakdown === undefined ? {} : { tokenBreakdown: over.tokenBreakdown }),
   };
 }
 
@@ -344,6 +354,85 @@ test('the state machine writes one first_seen, the transitions, the actions, the
     for (const r of activity) assert.ok(r.from && r.to && r.from !== r.to);
     const ack = of('state').filter((r) => r.dim === 'ack');
     assert.ok(ack.some((r) => r.to === 'benched'));
+  } finally {
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// WP-83: the four counters, from what the runtime actually wrote
+// ---------------------------------------------------------------------------
+
+test('WP-83: a tokens record carries the four-way split and the model that spent it', async () => {
+  const dir = await tmpDir();
+  try {
+    const ledger = new Ledger(dir, { machineId: 'w83', flushIntervalMs: 0 });
+    await ledger.prime();
+    const store = fakeStore();
+    const adapter = makeAdapter();
+    const registry = new Registry({ store, adapters: [adapter], ledger });
+
+    // A runtime that splits its usage four ways (Claude Code), and one that
+    // names three and says nothing about cache writes (Codex).
+    adapter.setSummaries([
+      summary('a', {
+        tokens: 300,
+        tokenBreakdown: { input: 100, output: 200, cacheRead: 500, cacheWrite: 200 },
+      }),
+      summary('b', { tokens: 50, tokenBreakdown: { input: 30, output: 20, cacheRead: 10 } }),
+      // A runtime that reports only a total: no `tokenBreakdown` at all.
+      summary('c', { tokens: 77 }),
+    ]);
+    await registry.refresh();
+
+    // A second scan: the counters move, and the deltas are the MOVEMENT, not
+    // the running totals.
+    adapter.setSummaries([
+      summary('a', {
+        tokens: 360,
+        tokenBreakdown: { input: 140, output: 220, cacheRead: 560, cacheWrite: 200 },
+      }),
+      summary('b', { tokens: 50, tokenBreakdown: { input: 30, output: 20, cacheRead: 10 } }),
+      summary('c', { tokens: 77 }),
+    ]);
+    await registry.refresh();
+    await ledger.close();
+
+    const records = (await readDay(dir, dayKey(Date.now()))).filter((r) => r.kind === 'tokens');
+    const forSession = (s) => records.filter((r) => r.sessionId === agentId('claude-code', s));
+
+    // The four-way runtime, first sighting: the whole of each counter.
+    const a = forSession('a');
+    assert.equal(a.length, 2);
+    assert.equal(a[0].v, LEDGER_TOKENS_VERSION);
+    assert.equal(a[0].split, true);
+    assert.deepEqual([a[0].in, a[0].out, a[0].cacheRead, a[0].cacheWrite], [100, 200, 500, 200]);
+    // And the v1 fields are untouched, which is what keeps a 90-day ledger
+    // readable by everything that already reads them.
+    assert.equal(a[0].delta, 300);
+    assert.equal(a[0].tokens, 300);
+    // The second scan is the movement and nothing else.
+    assert.deepEqual([a[1].in, a[1].out, a[1].cacheRead, a[1].cacheWrite], [40, 20, 60, 0]);
+    assert.equal(a[1].delta, 60);
+    assert.equal(a[0].model, 'claude-opus-5');
+
+    // The three-way runtime: NO cacheWrite field at all, because it named
+    // none. "Not measured" must not arrive as a measured zero.
+    const b = forSession('b');
+    assert.equal(b.length, 1);
+    assert.equal(b[0].split, true);
+    assert.equal(Object.prototype.hasOwnProperty.call(b[0], 'cacheWrite'), false);
+    assert.deepEqual([b[0].in, b[0].out, b[0].cacheRead], [30, 20, 10]);
+
+    // A runtime that gave only a total: the record says so, and carries the
+    // total it did give.
+    const c = forSession('c');
+    assert.equal(c.length, 1);
+    assert.equal(c[0].split, false);
+    assert.equal(c[0].delta, 77);
+    for (const field of ['in', 'out', 'cacheRead', 'cacheWrite']) {
+      assert.equal(Object.prototype.hasOwnProperty.call(c[0], field), false);
+    }
   } finally {
     await fsp.rm(dir, { recursive: true, force: true });
   }

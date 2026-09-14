@@ -8,7 +8,7 @@
  * run. That rule is why these three live together.
  */
 
-import { boardCostParts } from './panel.js';
+import { boardCostParts, costVisible } from './panel.js';
 import { STATE_LABELS, el, formatNumber, latestSnapshot, toast } from './app-state.js';
 
 //
@@ -118,7 +118,12 @@ export function showWhiteboard(projectId) {
   // the same rule `projects()` keeps with `costRated`.
   const rated = onFloor.some((a) => a.costEstimate != null && Number.isFinite(a.costEstimate));
   const cost = rated ? onFloor.reduce((a, x) => a + (x.costEstimate ?? 0), 0) : null;
-  const money = boardCostParts(cost, latestSnapshot.rateCardVersion);
+  // WP-83. `null` when cost is off, which is how it ships: the tile, the total
+  // and the note below are skipped together, and nothing on this board is then
+  // a currency. One question, asked once — `costVisible()` in panel-format.js.
+  const money = costVisible(latestSnapshot)
+    ? boardCostParts(cost, latestSnapshot.rateCardVersion)
+    : null;
   const models = [...new Set(onFloor.map((a) => a.model).filter(Boolean))];
 
   const board = document.createElement('div');
@@ -161,7 +166,7 @@ export function showWhiteboard(projectId) {
   // the full figures.
   tile('Tokens', compactTokens(tokens));
   tile('Cache tokens', compactTokens(cache));
-  tile('Est. cost', money.tile);
+  if (money) tile('Est. cost', money.tile);
   board.appendChild(tiles);
 
   const heading = document.createElement('p');
@@ -195,7 +200,9 @@ export function showWhiteboard(projectId) {
   const totalLabel = document.createElement('span');
   totalLabel.textContent = 'Project total';
   const totalValue = document.createElement('span');
-  totalValue.textContent = `${formatNumber(tokens)} tok · ${money.total}`;
+  totalValue.textContent = money
+    ? `${formatNumber(tokens)} tok · ${money.total}`
+    : `${formatNumber(tokens)} tok`;
   total.append(totalLabel, totalValue);
   board.appendChild(total);
 
@@ -203,8 +210,9 @@ export function showWhiteboard(projectId) {
   hint.className = 'whiteboard-hint';
   // The board's figures are only checkable if the table they came from is
   // named on the board. `rateCardVersion` rides in on every snapshot for
-  // exactly this, so no surface has to fetch `/api/about` for a string.
-  hint.textContent = money.note;
+  // exactly this, so no surface has to fetch `/api/about` for a string. With
+  // cost off there is no table to name, and the line says how to leave.
+  hint.textContent = money ? money.note : 'Esc closes.';
   board.appendChild(hint);
 
   // WP-84 · the body, not the scrim. The scrim carries the surface chrome now

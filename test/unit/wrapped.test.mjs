@@ -234,7 +234,8 @@ function bodyFixture(overrides = {}) {
 
 test('every content §3.4 asks for is on the card, and each carries its window', () => {
   const body = bodyFixture();
-  const copy = wrappedCopy(body);
+  // WP-83: the Spend row is behind `settings.showCost`, which ships off.
+  const copy = wrappedCopy(body, { showCost: true });
   const labels = copy.rows.map((r) => r.label);
   assert.deepEqual(labels, [
     'Turns',
@@ -255,6 +256,20 @@ test('every content §3.4 asks for is on the card, and each carries its window',
   assert.match(text, /5 messages to one session in orbital-api/);
   assert.match(text, /10:00/);
   assert.match(text, /11 times/);
+});
+
+test('WP-83: with cost off — the shipped default — the card carries no currency', () => {
+  const copy = wrappedCopy(bodyFixture());
+  assert.equal(
+    copy.rows.some((r) => r.label === 'Spend'),
+    false,
+  );
+  for (const row of copy.rows) {
+    assert.doesNotMatch(row.value, /\$/, `"${row.label}" put a currency on a card with cost off`);
+    assert.doesNotMatch(row.value, /list price/);
+  }
+  // The tokens row is still there: it is what a subscriber actually spent.
+  assert.ok(copy.rows.some((r) => r.label === 'Tokens'));
 });
 
 test('the longest wait says whether it fell, against the window before', () => {

@@ -141,6 +141,12 @@ test('sessionFromSqlRow: the full shape, from the fixture', () => {
   assert.equal(a.inputTokens, 6100);
   assert.equal(a.outputTokens, 420);
   assert.equal(a.cacheTokens, 2048 + 512, 'cache read and write are one number on a summary');
+  // WP-83. And TWO on the breakdown: OpenCode is the only runtime besides
+  // Claude Code that records both halves, and seeing them apart is the whole
+  // point of the usage tables.
+  assert.equal(a.cacheReadTokens, 2048);
+  assert.equal(a.cacheWriteTokens, 512);
+  assert.equal(a.split, true);
   assert.equal(a.updatedAt, 1787648620000);
   assert.equal(a.archived, false);
 

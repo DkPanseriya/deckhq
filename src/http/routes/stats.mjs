@@ -10,6 +10,14 @@
  *   - tokens per project per day
  *   - the longest wait ever, and the day it started
  *
+ * WP-83 adds `usage`: the window's tokens split into input, cache write, cache
+ * read and output, with the rankings that answer "where did they go" — by
+ * session, by project, by model, by day and by tool — and the trend against
+ * the previous seven days. `?window=today|7d|30d` picks the window; it is
+ * day-aligned on the daemon's clock and separate from `?since=`. Every figure
+ * in it comes from a `tokens` record, and a counter no record named comes back
+ * in `absent` rather than as a zero (`src/core/usage.mjs`).
+ *
  * WP-46 adds `records`: the team's five records — longest wait ever, busiest
  * day, busiest week, the room that never slept, the fastest discharge day —
  * each with the day it was set and each carrying the first day the ledger
@@ -43,6 +51,7 @@ import {
   records as teamRecords,
   windowDigest,
 } from '../../core/ledger.mjs';
+import { WINDOWS, usageReport } from '../../core/usage.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -78,6 +87,17 @@ export function register(router, ctx) {
       const records = await readAll(ledger.dir);
       const stats = computeStats(records, { now, since });
 
+      // WP-83. The same fold the deck's Usage tab and `deckhq stats` read, so
+      // the three cannot disagree about what "last 7 days" means — the reason
+      // `computeStats` is shared between this route and the CLI. `?window=`
+      // is day-aligned on the daemon's clock and independent of `?since=`,
+      // which the postcard and the status line already use for other things.
+      const wanted = url.searchParams.get('window');
+      const usage = usageReport(records, {
+        now,
+        window: WINDOWS.includes(/** @type {any} */ (wanted)) ? wanted : '7d',
+      });
+
       /** @type {Record<string, string>} */
       const projects = {};
       for (const p of registry?.snapshot?.().projects || []) {
@@ -97,6 +117,10 @@ export function register(router, ctx) {
         // the body changed shape. `since`/`until` travel inside it so a card
         // can never label a number with a period it was not computed over.
         window: windowDigest(records, { since, until: now }),
+        // WP-83. Token usage, split four ways, ranked by where it went. It
+        // sits beside `window` rather than replacing it: the postcard reads
+        // that one and nothing about it moved.
+        usage,
         projects,
         // Say so rather than quietly reporting a short answer.
         incomplete: Boolean(ledger.writeError),

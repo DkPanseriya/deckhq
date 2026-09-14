@@ -244,7 +244,8 @@ export function modelName(model) {
  * @returns {{id:string, directory:string|null, title:string, parentId:string|null,
  *            model:string|null, createdAt:number, updatedAt:number,
  *            inputTokens:number, outputTokens:number, cacheTokens:number,
- *            archived:boolean}|null}
+ *            cacheReadTokens:number, cacheWriteTokens:number,
+ *            split:boolean, archived:boolean}|null}
  */
 export function sessionFromSqlRow(row) {
   if (!isPlainObject(row)) return null;
@@ -261,8 +262,14 @@ export function sessionFromSqlRow(row) {
     updatedAt: num(row.time_updated),
     inputTokens: num(row.tokens_input),
     outputTokens: num(row.tokens_output),
-    // Cache reads and writes are one number on a SessionSummary.
+    // Cache reads and writes are one number on a SessionSummary's
+    // `cacheTokens`, and two on its `tokenBreakdown` (WP-83): OpenCode is the
+    // only runtime besides Claude Code that records both halves, and the
+    // whole point of the usage tables is to be able to see them apart.
     cacheTokens: num(row.tokens_cache_read) + num(row.tokens_cache_write),
+    cacheReadTokens: num(row.tokens_cache_read),
+    cacheWriteTokens: num(row.tokens_cache_write),
+    split: true,
     // `time_archived` is OpenCode's own archive flag, and the desktop-archive
     // rule from docs/DEVIATIONS.md §46 applies: it is the runtime's answer,
     // read fresh on every scan and never cached.
@@ -297,6 +304,9 @@ export function sessionFromInfoJson(info) {
     inputTokens: num(tokens.input),
     outputTokens: num(tokens.output),
     cacheTokens: num(cache.read) + num(cache.write),
+    cacheReadTokens: num(cache.read),
+    cacheWriteTokens: num(cache.write),
+    split: true,
     archived: num(time.archived) > 0,
   };
 }
@@ -325,6 +335,13 @@ export function sessionFromListRow(row) {
     inputTokens: 0,
     outputTokens: 0,
     cacheTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+    // WP-83. THE ONE PATH IN THIS PRODUCT THAT REPORTS NO BREAKDOWN AT ALL.
+    // `opencode session list --format json` is the documented, stable
+    // fallback and it carries no usage of any kind, so the summary it becomes
+    // gets no `tokenBreakdown` and the ledger marks the record `split: false`.
+    split: false,
     archived: false,
   };
 }

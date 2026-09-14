@@ -44,6 +44,7 @@
 
 import { now as clockNow } from './clock.js';
 import { wireSurfaceControls } from './surfaces.js';
+import { COUNTERS, defaultSortFor, renderUsageView } from './usage.js';
 
 // ---------------------------------------------------------------- ordering
 
@@ -545,6 +546,14 @@ const CHIP_GAP = 8;
  * @param {() => string|null} opts.getSelectedId
  * @param {(id:string, o?:{openPanel?:boolean}) => void} opts.onSelect
  * @param {(text:string) => void} [opts.announce]
+ * @param {HTMLElement} [opts.tabsEl]  the `role="tablist"` above the body (WP-83)
+ * @param {(window:string) => Promise<any>} [opts.loadUsage]  fetches one
+ *   window's usage. INJECTED rather than done here, because nothing in this
+ *   module fetches — see the header — and because a test can then drive the
+ *   whole Usage tab from a fixture.
+ * @param {() => {projectNames:Record<string,string>, sessionNames:Record<string,string>}}
+ *   [opts.getUsageNames] the two lookups that turn a ledger hash into a name.
+ *   A key with nothing on the floor stays a hash, which is honest.
  */
 export function createDeckUI(opts) {
   const { stripEl, listEl, moreEl, hintEl, lastEl, deckEl, stageEl } = opts;
@@ -559,6 +568,19 @@ export function createDeckUI(opts) {
   let deckOpen = false;
   /** Where the keys act when the panel is shut and has no selection to lend. */
   let cursorId = null;
+
+  // WP-83's state, and all of it. Which tab is showing, which window the Usage
+  // tab is asking for, what the last fetch came back with, and how each of its
+  // five tables is sorted. Deliberately in memory rather than in `state.json`:
+  // "which column am I sorting the model table by" is a property of this
+  // reading, not of the machine — the same call `cmd:show-let-go` makes.
+  let tab = 'queue';
+  let usageWindow = '7d';
+  /** @type {any} */
+  let usageData = null;
+  let usageLoading = false;
+  /** @type {Record<string, {key:string, dir:'asc'|'desc'}>} */
+  const usageSorts = {};
 
   /** @param {string} id */
   function findInQueue(id) {
@@ -699,6 +721,107 @@ export function createDeckUI(opts) {
 
   // -------------------------------------------------------------- the deck
 
+  // ------------------------------------------------------ the Usage tab
+  //
+  // WP-83. Everything below is a read: it fetches through a function `app.js`
+  // handed in, paints a table, and touches no ack state and no setting. The
+  // module invariant at the top of this file is unchanged.
+
+  /** Paint whatever the last fetch came back with. */
+  function paintUsage() {
+    bodyEl.textContent = '';
+    if (usageLoading && !usageData) {
+      const loading = document.createElement('p');
+      loading.className = 'deck-empty';
+      loading.textContent = 'Reading the ledger…';
+      bodyEl.appendChild(loading);
+      return;
+    }
+    const names = opts.getUsageNames?.() || { projectNames: {}, sessionNames: {} };
+    const view = renderUsageView(
+      usageData,
+      {
+        window: usageWindow,
+        projectNames: names.projectNames,
+        sessionNames: names.sessionNames,
+        sorts: usageSorts,
+      },
+      document,
+    );
+    bodyEl.appendChild(view);
+
+    for (const button of bodyEl.querySelectorAll('.usage-window')) {
+      button.addEventListener('click', () => {
+        const next = button.getAttribute('data-window');
+        if (!next || next === usageWindow) return;
+        usageWindow = next;
+        usageData = null;
+        void loadUsage();
+      });
+    }
+    for (const section of bodyEl.querySelectorAll('.usage-section')) {
+      const id = section.getAttribute('data-section');
+      if (!id) continue;
+      for (const button of section.querySelectorAll('.usage-sort')) {
+        button.addEventListener('click', () => {
+          const key = button.getAttribute('data-column');
+          if (!key) return;
+          const was = usageSorts[id] || defaultSortFor(id);
+          // Clicking the column already sorted by reverses it; clicking a new
+          // one starts where a reader expects — biggest first for a number,
+          // A to Z for a name.
+          usageSorts[id] =
+            was.key === key
+              ? { key, dir: was.dir === 'desc' ? 'asc' : 'desc' }
+              : { key, dir: COUNTERS.includes(key) || key === 'total' ? 'desc' : 'asc' };
+          paintUsage();
+        });
+      }
+    }
+  }
+
+  async function loadUsage() {
+    if (!opts.loadUsage) {
+      usageData = null;
+      paintUsage();
+      return;
+    }
+    usageLoading = true;
+    paintUsage();
+    try {
+      usageData = await opts.loadUsage(usageWindow);
+    } catch {
+      // A ledger that cannot be read is a window with no records, which is
+      // exactly what the view already knows how to say. It is measurement,
+      // not state: nothing here is worth an error banner over the deck.
+      usageData = null;
+    } finally {
+      usageLoading = false;
+    }
+    if (deckOpen && tab === 'usage') paintUsage();
+  }
+
+  /** @param {'queue'|'usage'} next */
+  function setTab(next) {
+    if (tab === next) return;
+    tab = next;
+    if (opts.tabsEl) {
+      for (const button of opts.tabsEl.querySelectorAll('.deck-tab')) {
+        const on = button.getAttribute('data-tab') === tab;
+        button.classList.toggle('is-selected', on);
+        button.setAttribute('aria-selected', on ? 'true' : 'false');
+      }
+    }
+    if (tab === 'usage') {
+      if (usageData) paintUsage();
+      else void loadUsage();
+      announce?.('Usage. Where the tokens went.');
+    } else {
+      render();
+      announce?.('The queue.');
+    }
+  }
+
   /** @param {any[]} queue @param {number} now @param {string|null} selectedId */
   function paintDeck(queue, now, selectedId) {
     bodyEl.textContent = '';
@@ -743,6 +866,10 @@ export function createDeckUI(opts) {
       if (on) button.setAttribute('aria-current', 'true');
       else button.removeAttribute('aria-current');
     }
+    // WP-83. The Usage tab has no queue cursor and no rows to ring; a
+    // selection change while it is showing must not wipe the table under the
+    // reader's hand.
+    if (tab !== 'queue') return;
     const cursorRow = cursorFor(queue);
     for (const row of bodyEl.querySelectorAll('.deck-row')) {
       const on = row.getAttribute('data-id') === cursorRow;
@@ -773,7 +900,7 @@ export function createDeckUI(opts) {
     hintEl.hidden = !showHint;
     if (showHint) hintEl.textContent = `${queue.length} waiting · press Tab for the deck`;
 
-    if (deckOpen) paintDeck(queue, now, cursorFor(queue));
+    if (deckOpen && tab === 'queue') paintDeck(queue, now, cursorFor(queue));
   }
 
   // ------------------------------------------------------------- behaviour
@@ -811,7 +938,12 @@ export function createDeckUI(opts) {
     deckOpen = true;
     stageEl.classList.add('is-deck');
     deckEl.hidden = false;
-    render();
+    if (tab === 'usage') {
+      if (usageData) paintUsage();
+      else void loadUsage();
+    } else {
+      render();
+    }
     deckEl.focus();
     const n = getQueue().length;
     announce?.(
@@ -858,6 +990,17 @@ export function createDeckUI(opts) {
   // declares none resolves to `window.close` and takes the tab with it.
   wireSurfaceControls(deckEl, () => close());
 
+  // WP-83. The tabs are static markup (the reason `surfaces.js` gives for the
+  // chrome being static), so this is only their wiring.
+  if (opts.tabsEl) {
+    for (const button of opts.tabsEl.querySelectorAll('.deck-tab')) {
+      button.addEventListener('click', () => {
+        const next = button.getAttribute('data-tab');
+        if (next === 'queue' || next === 'usage') setTab(next);
+      });
+    }
+  }
+
   function destroy() {
     clearInterval(tickTimer);
     observer?.disconnect();
@@ -873,6 +1016,8 @@ export function createDeckUI(opts) {
     toggle,
     isOpen,
     cursor,
+    setTab,
+    activeTab: () => tab,
     destroy,
   };
 }
