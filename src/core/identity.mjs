@@ -28,7 +28,7 @@
  * that already asks that question). Guarded in identity.test.mjs.
  */
 
-import { SHORT_NAMES } from '../../public/names.js';
+import { ORIGINAL_POOL, SHORT_NAMES } from '../../public/names.js';
 
 /**
  * @typedef {object} IdentityRecord
@@ -160,7 +160,19 @@ export class Identity {
     if (typeof rec.given === 'string' && rec.given) return rec.given;
 
     const used = this._usedNames(agentId);
-    const start = nameHash(agentId) % SHORT_NAMES.length;
+    // WP-84. The start is taken modulo the pool's ORIGINAL block, not its
+    // whole length. `% SHORT_NAMES.length` would have moved every unnamed
+    // agent's starting point the moment the pool grew from 60 to 243 — a
+    // machine whose identities had not been written yet (a fresh install, and
+    // the goldens' demo fixture, which is rebuilt from nothing on every
+    // capture) would have drawn a different set of names for the same floor.
+    // Anchoring the start to the old block makes the growth purely additive:
+    // the walk below still runs the WHOLE array, so all 243 names are
+    // reachable — they are simply what it reaches once the first block is
+    // spoken for, which is the case (ninety-two conversations, sixty names)
+    // this package exists for. See `public/names.js`'s header.
+    const span = Math.min(ORIGINAL_POOL, SHORT_NAMES.length);
+    const start = nameHash(agentId) % span;
     let chosen = null;
     for (let i = 0; i < SHORT_NAMES.length && chosen === null; i++) {
       const candidate = SHORT_NAMES[(start + i) % SHORT_NAMES.length];
