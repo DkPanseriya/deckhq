@@ -35,13 +35,20 @@ import {
   ROOM_SLAB_EDGE_PX,
   ROOM_SLAB_SHADOW_BLUR_PX,
   ROOM_SLAB_SHADOW_DIST_PX,
+  PROP_HEIGHT,
   U_DEFAULT,
   WALL_SHADOW_DIST_PX,
   drawContactShadow,
+  isTallProp,
   setLightShadow,
   shadowOffsetFor,
   withShadow,
 } from '../../public/render/backdrop-paint.js';
+import { paintProp } from '../../public/render/backdrop.js';
+import { buildPlan } from '../../public/render/plan.js';
+import { SHADOW_OX, SHADOW_OY } from '../../public/render/rig-metrics.js';
+import { drawContactShadow as drawCharacterShadow } from '../../public/render/rig-body.js';
+import { CHAR_MAX_PX_PER_UNIT } from '../../public/render/scene-lod.js';
 import {
   castRoomShadow,
   paintCarpet,
@@ -249,9 +256,9 @@ test('WP-72: the floor keeps every vertical drop it already had', () => {
   }
 });
 
-test("WP-72: a prop's contact shadow sits down-right of the prop, never up-left", () => {
+test("WP-72: a TALL prop's contact shadow sits down-right of it, never up-left", () => {
   const ctx = makeRecorder();
-  drawContactShadow(ctx, 100, 200, 40, 20);
+  drawContactShadow(ctx, 100, 200, 40, 20, true);
   const blob = ctx.ops.find((o) => o.op === 'ellipse');
   assert.ok(blob, 'no contact shadow was drawn at all');
   // Bottom-centre of the footprint is (120, 220); the shadow is offset from it
@@ -260,6 +267,154 @@ test("WP-72: a prop's contact shadow sits down-right of the prop, never up-left"
   assert.ok(Math.abs(blob.x - (120 + off.x)) < 1e-9, `blob.x is ${blob.x}`);
   assert.ok(Math.abs(blob.y - (220 + off.y)) < 1e-9, `blob.y is ${blob.y}`);
   assert.ok(blob.x > 120 && blob.y > 220, 'the contact shadow is up-left of its prop');
+});
+
+// ------------------------------------------------- WP-78: honest shadows
+//
+// The owner, 14 September: "the oval shadows sometimes are offset and make no
+// sense." WP-72 gave everything on the floor the same 45-degree ray, which is
+// right for a thing with height and wrong for a thing lying on the floor. What
+// follows is that correction, stated as numbers.
+
+test("WP-78: a SHORT prop's contact shadow sits directly beneath it", () => {
+  const ctx = makeRecorder();
+  drawContactShadow(ctx, 100, 200, 40, 20, false);
+  const blob = ctx.ops.find((o) => o.op === 'ellipse');
+  assert.ok(blob, 'no contact shadow was drawn at all');
+  assert.equal(blob.x, 120, 'a mug does not throw its shadow to one side');
+  assert.equal(blob.y, 220, 'nor down the page');
+});
+
+test('WP-78: how tall a prop is, is DECLARED, and every prop the plan emits declares it', () => {
+  // The rule this exists to enforce: a size heuristic gets a rug — the biggest
+  // and flattest thing in a project room — exactly backwards, so height is a
+  // property rather than an inference. A new prop with no entry is a test
+  // failure, not a default.
+  for (const [kind, height] of Object.entries(PROP_HEIGHT)) {
+    assert.ok(height === 'tall' || height === 'short', `${kind} is "${height}"`);
+  }
+
+  // (a) every kind a real plan puts on a real floor.
+  const projects = [
+    { id: 'p0', name: 'p0', sessionCount: 9, tokens: 1 },
+    { id: 'p1', name: 'p1', sessionCount: 2, tokens: 1 },
+  ];
+  const agents = [];
+  for (let i = 0; i < 9; i++)
+    agents.push({ id: `a${i}`, projectId: 'p0', ackState: 'active', activityState: 'working' });
+  for (let i = 0; i < 2; i++)
+    agents.push({ id: `b${i}`, projectId: 'p1', ackState: 'active', activityState: 'working' });
+  for (let i = 0; i < 30; i++)
+    agents.push({
+      id: `c${i}`,
+      projectId: 'p0',
+      ackState: 'benched',
+      activityState: 'ended',
+      lastActivityAt: 1_800_000_000_000,
+    });
+  for (let i = 0; i < 6; i++)
+    agents.push({
+      id: `w${i}`,
+      projectId: 'p0',
+      ackState: 'active',
+      activityState: 'for_review',
+      reviewSince: 1_799_000_000_000 + i,
+    });
+  const plan = buildPlan(projects, agents, { targetAspect: 1.7, now: 1_800_000_000_000 });
+  /** @type {Set<string>} */
+  const emitted = new Set();
+  for (const room of plan.rooms) for (const prop of room.props || []) emitted.add(prop.kind);
+  assert.ok(emitted.size > 10, `only ${emitted.size} prop kinds on a fully furnished floor`);
+  for (const kind of [...emitted].sort()) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(PROP_HEIGHT, kind),
+      `the plan emits "${kind}" and PROP_HEIGHT does not say whether it is tall or short`,
+    );
+  }
+
+  // (b) and every kind the PAINTERS answer to, including the ones no current
+  // population happens to place. A prop that is drawn is a prop that casts.
+  const painted = new Set();
+  for (const file of [
+    'backdrop-props-desk.js',
+    'backdrop-props-lounge.js',
+    'backdrop-props-play.js',
+  ]) {
+    const src = fs.readFileSync(path.join(PUBLIC, 'render', file), 'utf8');
+    for (const m of src.matchAll(/case '([a-z_0-9]+)':/g)) painted.add(m[1]);
+  }
+  assert.ok(painted.size > 20, `only ${painted.size} painted kinds were found`);
+  for (const kind of [...painted].sort()) {
+    assert.ok(
+      Object.prototype.hasOwnProperty.call(PROP_HEIGHT, kind),
+      `a painter draws "${kind}" and PROP_HEIGHT does not say whether it is tall or short`,
+    );
+  }
+
+  // An unknown kind reads short rather than throwing or floating, and a prop
+  // may still override its own kind.
+  assert.equal(isTallProp({ kind: 'no_such_prop' }), false);
+  assert.equal(isTallProp({ kind: 'desk' }), true);
+  assert.equal(isTallProp({ kind: 'desk', tall: false }), false);
+  assert.equal(isTallProp({ kind: 'rug', tall: true }), true);
+});
+
+test('WP-78: a tall prop casts along the ray and a short one casts straight down', () => {
+  const box = (kind) => ({ kind, x: 4, y: 6, w: 3, h: 2, angle: 0 });
+  const castsOf = (kind) => {
+    const ctx = makeRecorder();
+    paintProp(ctx, box(kind), U_DEFAULT);
+    return ctx.ops.filter((o) => (o.op === 'fill' || o.op === 'fillRect') && o.shadowBlur > 0);
+  };
+
+  const tall = castsOf('user_desk');
+  assert.ok(tall.length > 0, 'a desk cast nothing at all');
+  for (const op of tall) {
+    assert.ok(op.shadowOffsetX > 0 && op.shadowOffsetY > 0, 'a desk stopped casting along the ray');
+  }
+
+  const short = castsOf('plant');
+  assert.ok(short.length > 0, 'a plant cast nothing at all');
+  for (const op of short) {
+    assert.equal(op.shadowOffsetX, 0, 'a potted plant slid its shadow sideways');
+    assert.equal(op.shadowOffsetY, 0, 'a potted plant dropped its shadow down the page');
+  }
+
+  // And the contact ellipse under each follows the same rule.
+  const ellipseOf = (kind) => {
+    const ctx = makeRecorder();
+    paintProp(ctx, box(kind), U_DEFAULT);
+    return ctx.ops.filter((o) => o.op === 'ellipse').at(-1);
+  };
+  const bottom = { x: (4 + 3 / 2) * U_DEFAULT, y: (6 + 2) * U_DEFAULT };
+  const flat = ellipseOf('rug');
+  assert.ok(Math.abs(flat.x - bottom.x) < 1e-9 && Math.abs(flat.y - bottom.y) < 1e-9);
+  const lifted = ellipseOf('user_desk');
+  assert.ok(lifted.x > bottom.x && lifted.y > bottom.y);
+});
+
+test("WP-78: a character's shadow is within 1 px of its feet, at every scale it is drawn", () => {
+  // The feet point IS `(x, y)`: `drawCharacter` is handed the seat or spot the
+  // person is standing on and draws the whole body about it, rotating the legs
+  // with the facing rather than hanging them down the page. So the ground
+  // contact is the origin, and the ellipse belongs on it.
+  //
+  // Measured at the LARGEST `u` the floor is ever drawn at, because the offsets
+  // are fractions of `u` and a fraction that reads as nothing at the fit scale
+  // is 15 px of daylight at the close one.
+  for (const u of [7.5, 14, CHAR_MAX_PX_PER_UNIT, 64]) {
+    const ctx = makeRecorder();
+    drawCharacterShadow(ctx, 120, 240, u);
+    const blob = ctx.ops.find((o) => o.op === 'ellipse');
+    assert.ok(blob, `no contact shadow was drawn at u=${u}`);
+    const off = Math.hypot(blob.x - 120, blob.y - 240);
+    assert.ok(off <= 1, `at u=${u} the shadow is ${off.toFixed(2)} px from the feet point`);
+  }
+  // Stated on the constants too, so the reason survives a refactor of the
+  // painter: the offset is zero because it is a decision, not because the
+  // painter happens not to add it.
+  assert.equal(SHADOW_OX, 0);
+  assert.equal(SHADOW_OY, 0);
 });
 
 test('WP-72: a real wall casts along the light; a waist-high partition still casts nothing', () => {

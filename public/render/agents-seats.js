@@ -13,7 +13,7 @@
  * `node --test` (docs/DEVIATIONS.md §122).
  */
 
-import { placement } from '../floor-rule.js';
+import { placement, waitingSince } from '../floor-rule.js';
 import {
   hashString,
   JUNIOR_BACK,
@@ -289,10 +289,14 @@ export function assignSeats(plan, agents) {
     assignHashed(list, seats, result);
   }
 
-  // Office waiting area is a literal queue: oldest reviewSince first, front seat first.
+  // The manager's desk is a literal queue: the longest wait takes the seat
+  // nearest him and the rest follow, into the chairs first and then along the
+  // standing queue beside the desk. WP-78 widened it from `for_review` to both
+  // waiting states, so the clock it reads is `waitingSince` rather than
+  // `reviewSince` — a raised hand has its own.
   officeAgents.sort((a, b) => {
-    const ra = a.reviewSince ?? Infinity;
-    const rb = b.reviewSince ?? Infinity;
+    const ra = waitingSince(a);
+    const rb = waitingSince(b);
     return ra - rb || String(a.id).localeCompare(String(b.id));
   });
   const officeSeats = plan.officeSeats || [];
@@ -314,6 +318,7 @@ export function assignSeats(plan, agents) {
       y: anchor.y - (1 + Math.floor(extra / 4)) * OVERFLOW_RING_R * 2,
       angle: anchor.angle,
       overflow: true,
+      standing: true,
     });
   });
 

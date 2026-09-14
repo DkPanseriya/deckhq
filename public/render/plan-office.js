@@ -18,24 +18,29 @@
 
 import {
   CHAIR,
-  OFFICE_CHAIR_PITCH,
-  OFFICE_CHAIR_ROW,
   OFFICE_GROWTH_H,
   OFFICE_GROWTH_W,
   OFFICE_MAX_H,
   OFFICE_MAX_W,
   OFFICE_MIN_H,
   OFFICE_MIN_W,
+  OFFICE_QUEUE_PITCH,
+  OFFICE_QUEUE_ROW,
   OFFICE_ROW_ASPECT_MAX,
   OFFICE_ROW_MAX_DEPTH,
-  OFFICE_SEAT_PITCH,
+  OFFICE_VISITOR_PITCH,
   PLATE_BAND,
   ROOM_ASPECT_MAX,
   SOFA_MIN_RUN,
-  SOFA_SEAT_BIAS,
   angleTo,
   clamp,
+  visitorChairCount,
 } from './plan-units.js';
+
+/** The prefix every standing queue place carries, as a zone id. */
+export const OFFICE_QUEUE_ZONE = 'office-queue-';
+/** The prefix every visitor chair carries, as a prop and a zone id. */
+export const OFFICE_VISITOR_ZONE = 'office-visitor-';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
@@ -72,9 +77,13 @@ import {
  *
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the interior this room has been given
- * @param {{maxW?:number}} [opts] `maxW` overrides `OFFICE_MAX_W` — the ONE
- *   thing `buildOfficeRow` changes about this room, because in a row that cap
- *   is read on the other axis and is the room's DEPTH (WP-59d).
+ * @param {{maxW?:number, landscape?:boolean}} [opts] `maxW` overrides
+ *   `OFFICE_MAX_W` — in a row that cap is read on the other axis and is the
+ *   room's DEPTH (WP-59d). `landscape` says this room is about to be reflected
+ *   in the diagonal by `buildOfficeRow`, which is the only thing the QUEUE
+ *   needs to know: a queue must spread along whichever axis ends up horizontal
+ *   on screen, because that is the axis a name label and a waiting badge have
+ *   room on (WP-78).
  */
 export function buildOffice(waitingCount, fit, opts = {}) {
   const maxW = Math.max(OFFICE_MIN_W, Number(opts.maxW) || OFFICE_MAX_W);
@@ -156,20 +165,33 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     anchor: { type: 'wall', side: 'E', along: deskY, inset: 0.15 },
   });
 
-  // --- the guest chair: one seat, facing the desk across it
-  const guestX = deskX + deskW / 2 - CHAIR / 2;
-  const guestY = deskY + 3 + 1.4;
-  zones.push({ id: 'office-guest', x: guestX, y: guestY, w: CHAIR, h: CHAIR });
-  props.push({
-    kind: 'waiting_chair',
-    id: 'guest-chair',
-    w: CHAIR,
-    h: CHAIR,
-    angle: -Math.PI / 2,
-    x: guestX,
-    y: guestY,
-    anchor: { type: 'centered', of: 'office-guest' },
-  });
+  // --- the visitor chairs: a ROW facing the desk across it (WP-78)
+  //
+  // There was one, and it belonged to "the agent that has waited longest";
+  // everybody else sat on the sofas round the walls. The owner wants the
+  // people who are waiting on HIM at his desk, so the chairs are two or three
+  // - `visitorChairCount`, off the desk's own width, so a bigger room gets a
+  // third rather than a wider gap - and the sofas seat nobody.
+  const deskCentre = { x: deskX + deskW / 2, y: deskY + 1.5 };
+  const visitors = visitorChairCount(IN_W);
+  const visitorY = deskY + 3 + 1.4;
+  const visitorRun = (visitors - 1) * OFFICE_VISITOR_PITCH;
+  for (let i = 0; i < visitors; i++) {
+    const cx = deskX + deskW / 2 - visitorRun / 2 + i * OFFICE_VISITOR_PITCH;
+    const cy = visitorY + CHAIR / 2;
+    const id = OFFICE_VISITOR_ZONE + i;
+    zones.push({ id, x: cx - CHAIR / 2, y: cy - CHAIR / 2, w: CHAIR, h: CHAIR });
+    props.push({
+      kind: 'waiting_chair',
+      id,
+      w: CHAIR,
+      h: CHAIR,
+      angle: angleTo({ x: cx, y: cy }, deskCentre),
+      x: cx - CHAIR / 2,
+      y: cy - CHAIR / 2,
+      anchor: { type: 'centered', of: id },
+    });
+  }
 
   // --- seating around the walls, sized to the room it is actually in
   //
@@ -178,26 +200,55 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // many the wall seating takes; whatever is left needs loose chairs, and the
   // room grows to hold those rather than laying them out past its own south
   // wall. Growing only ever increases the wall seating, so one pass converges.
-  const bandTop = guestY + CHAIR + 2.4;
+  const bandTop = visitorY + CHAIR + 2.4;
   const backW = Math.max(4, IN_W - (PAD + SOFA_D) * 2);
-  const chairCols = Math.max(1, Math.floor((IN_W - 2 * (PAD + SOFA_D) - 2) / OFFICE_CHAIR_PITCH));
-  const seatsFor = (height) => {
-    const run = Math.max(SOFA_MIN_RUN, height - bandTop - SOFA_D - PAD * 2);
-    return (
-      1 +
-      Math.max(2, Math.floor(run / OFFICE_SEAT_PITCH)) * 2 +
-      Math.max(2, Math.floor(backW / OFFICE_SEAT_PITCH))
-    );
+  // THE QUEUE, AND THE ROOM IT NEEDS.
+  //
+  // Everyone the chairs could not take stands inside the well the three sofa
+  // runs enclose, so a queue place can never land on a sofa whatever
+  // proportions the room turns out to have.
+  //
+  // IT RUNS ALONG THE WELL'S LONGER AXIS, and that is the whole of why this is
+  // not four lines. The packer may lay this room on its side (`buildOfficeRow`
+  // reflects it in the diagonal), so the axis that is "across the room" here is
+  // "down the room" on the next floor — and a queue laid across the SHORT axis
+  // of a row reception is six people stacked in the room's depth, each one's
+  // name drawn through the badge of the person behind them. That was measured
+  // on the `demo` floor before this rule existed.
+  const queued = Math.max(0, waitingCount - visitors);
+  const QUEUE_PAD = 1.6;
+  const wellWFor = () => Math.max(CHAIR, IN_W - 2 * (PAD + SOFA_D) - QUEUE_PAD * 2);
+  const wellHFor = (height) => Math.max(CHAIR, height - PAD - SOFA_D - bandTop - QUEUE_PAD * 2);
+  // `+ 1` because a lane count is places, not gaps: a run of exactly one pitch
+  // holds two people, at either end of it.
+  const lanesIn = (len) => Math.max(1, Math.floor(len / OFFICE_QUEUE_PITCH) + 1);
+  const layFor = (major, minor) => {
+    const lanes = lanesIn(major);
+    const files = Math.max(1, Math.ceil(queued / lanes));
+    return { lanes, files, fits: (files - 1) * OFFICE_QUEUE_ROW <= minor };
   };
-  const chairRowsFor = (height) =>
-    Math.ceil(Math.max(0, waitingCount - seatsFor(height)) / chairCols);
+  const wellW0 = wellWFor();
+  const wellH0 = wellHFor(IN_H);
+  // Along whichever axis will be HORIZONTAL on screen. A reception laid on its
+  // side is the same room reflected in the diagonal, so its local `y` is the
+  // screen's `x` — and a queue that ignores that stacks six people down the
+  // room's depth with each name drawn through the badge behind it.
+  let alongX = !opts.landscape;
+  let lay = alongX ? layFor(wellW0, wellH0) : layFor(wellH0, wellW0);
+  // Laid down the room and too wide for it: fall back to across the room, which
+  // is the arrangement the room can GROW to hold.
+  if (!alongX && !lay.fits) {
+    alongX = true;
+    lay = layFor(wellW0, wellH0);
+  }
   // The room is at least as tall as its own contents: the desk band, a sofa
   // run somebody can actually sit on, the back run and the wall pad. Clamping
   // the RUN instead (the old rule) let a short room overlap its own back sofa.
+  const queueDepth = queued > 0 ? (alongX ? (lay.files - 1) * OFFICE_QUEUE_ROW : 0) : 0;
   const IN_H_FINAL = Math.max(
     IN_H,
     bandTop + SOFA_MIN_RUN + SOFA_D + PAD * 2,
-    bandTop + chairRowsFor(IN_H) * OFFICE_CHAIR_ROW + 2.8 + SOFA_D + PAD * 2,
+    bandTop + QUEUE_PAD * 2 + CHAIR + queueDepth + SOFA_D + PAD * 2,
   );
   // The three runs form a continuous C: the side runs come down to meet the
   // back run, and the back run spans exactly between them. Leaving each run to
@@ -323,39 +374,28 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     anchor: { type: 'corner', corner: 'NE', inset: PAD + 0.6 },
   });
 
-  // --- how many people the room can seat, and the loose chairs for the rest
+  // --- the standing queue, beside the desk and inside the well
   //
-  // Only the COUNT is decided here. Where each agent actually sits is worked
-  // out later, in `seatOffice`, from the furniture's resolved positions.
-  const deskCentre = { x: deskX + deskW / 2, y: deskY + 1.5 };
-  const perSide = Math.max(2, Math.floor(sofaRunH / OFFICE_SEAT_PITCH));
-  const backCount = Math.max(2, Math.floor(backW / OFFICE_SEAT_PITCH));
-  const seatedCapacity = 1 + perSide * 2 + backCount;
-
-  // Overflow chairs, in rows across the well and facing the desk. They are
-  // laid out INSIDE the well, so a loose chair can never land on a sofa.
-  let overflow = Math.max(0, waitingCount - seatedCapacity);
-  const chairRows = Math.max(1, Math.ceil(overflow / chairCols));
-  const chairX0 = wellX + Math.max(1, (wellW - chairCols * OFFICE_CHAIR_PITCH) / 2) + 1.6;
-  const chairY0 = wellY + Math.max(1.4, (wellH - chairRows * OFFICE_CHAIR_ROW) / 2) + 1.4;
-  for (let r = 0; overflow > 0; r++) {
-    for (let c = 0; c < chairCols && overflow > 0; c++) {
-      const cx = chairX0 + c * OFFICE_CHAIR_PITCH;
-      const cy = chairY0 + r * OFFICE_CHAIR_ROW;
-      const id = `office-chair-${r}-${c}`;
-      zones.push({ id, x: cx - CHAIR / 2, y: cy - CHAIR / 2, w: CHAIR, h: CHAIR });
-      props.push({
-        kind: 'waiting_chair',
-        id,
-        w: CHAIR,
-        h: CHAIR,
-        angle: angleTo({ x: cx, y: cy }, deskCentre),
-        x: cx - CHAIR / 2,
-        y: cy - CHAIR / 2,
-        anchor: { type: 'centered', of: id },
-      });
-      overflow--;
-    }
+  // Zones and no props: a queue is people standing, and giving each of them a
+  // chair would say they had been seated. One lane fills before the next file
+  // starts, so the line forms in arrival order and only doubles back when the
+  // room runs out of wall — which is what a queue does.
+  const clampX = (v) => Math.min(Math.max(v, wellX + CHAIR / 2), wellX + wellW - CHAIR / 2);
+  const clampY = (v) => Math.min(Math.max(v, wellY + CHAIR / 2), wellY + wellH - CHAIR / 2);
+  for (let i = 0; i < queued; i++) {
+    const lane = i % lay.lanes;
+    const file = Math.floor(i / lay.lanes);
+    const along = lane * OFFICE_QUEUE_PITCH;
+    const back = file * OFFICE_QUEUE_ROW;
+    const qx = clampX(wellX + QUEUE_PAD + (alongX ? along : back));
+    const qy = clampY(wellY + QUEUE_PAD + (alongX ? back : along));
+    zones.push({
+      id: OFFICE_QUEUE_ZONE + i,
+      x: qx - CHAIR / 2,
+      y: qy - CHAIR / 2,
+      w: CHAIR,
+      h: CHAIR,
+    });
   }
 
   zones.push({ id: 'office-room', x: 0, y: 0, w: IN_W, h: IN_H_FINAL });
@@ -450,7 +490,7 @@ export function buildOfficeRow(waitingCount, fit) {
     w: depth,
     h: Math.max(rowW, OFFICE_MIN_H + want * (OFFICE_GROWTH_W + OFFICE_GROWTH_H)) + PLATE_BAND,
   };
-  const built = buildOffice(waitingCount, portrait, { maxW: depth });
+  const built = buildOffice(waitingCount, portrait, { maxW: depth, landscape: true });
   const room = built.room;
   const rename = (id) => (id == null ? id : (TRANSPOSED_ID.get(id) ?? id));
 
@@ -505,14 +545,23 @@ export function buildOfficeRow(waitingCount, fit) {
  * Seat the waiting agents on the reception furniture, after that furniture has
  * been placed for real.
  *
- * This runs late on purpose. The sofas are anchored to the room's walls, so
- * their final coordinates are not known until the room has been sized, tiled
- * and had its anchors resolved. An earlier version computed seats from the
- * pre-anchor layout, and agents appeared to sit on the floor beside the
- * furniture rather than on it — the two frames simply were not the same.
+ * This runs late on purpose. The chairs and the queue are anchored to the
+ * room's own frame, so their final coordinates are not known until the room has
+ * been sized, tiled and had its anchors resolved. An earlier version computed
+ * seats from the pre-anchor layout, and agents appeared to sit on the floor
+ * beside the furniture rather than on it - the two frames simply were not the
+ * same.
  *
- * Order matters: the guest chair at the desk is the front of the queue, then
- * the west run, the south run, the east run, and finally any loose chairs.
+ * THE ORDER IS THE QUEUE, AND THE QUEUE IS ARRIVAL ORDER (WP-78).
+ * `assignSeats` hands this array the waiting agents sorted oldest first, so
+ * seat 0 has to be the place nearest the manager. The chairs come first,
+ * sorted by their distance from the desk - which for a row centred on it puts
+ * the agent that has waited longest directly across from him and the rest to
+ * either side - and then the standing queue, in the order `buildOffice` laid
+ * it out.
+ *
+ * NOBODY IS SEATED ON A SOFA. The three runs are furniture now and nothing
+ * else; see `docs/DEVIATIONS.md` §153 for why they stayed in the room.
  *
  * @param {Room} room the office, with anchors already resolved
  * @param {number} waitingCount
@@ -530,52 +579,29 @@ export function seatOffice(room, waitingCount) {
     ? { x: desk.x + desk.w / 2, y: desk.y + desk.h / 2 }
     : { x: room.x + room.w / 2, y: room.y };
 
-  const place = (x, y) => {
+  /** @param {number} x @param {number} y @param {boolean} [standing] */
+  const place = (x, y, standing) => {
     if (seats.length >= waitingCount) return;
-    seats.push({ x, y, angle: angleTo({ x, y }, deskCentre) });
+    /** @type {Seat} */
+    const seat = { x, y, angle: angleTo({ x, y }, deskCentre) };
+    // A queue place has no chair under it, and a character drawn seated over
+    // bare carpet is a character sitting on the floor. `agents.js` reads this.
+    if (standing) seat.standing = true;
+    seats.push(seat);
   };
 
-  const guest = byId.get('guest-chair');
-  if (guest) place(guest.x + guest.w / 2, guest.y + guest.h / 2);
+  const near = (p) => Math.hypot(p.x - deskCentre.x, p.y - deskCentre.y);
+  const chairs = room.props
+    .filter((p) => p.kind === 'waiting_chair')
+    .map((p) => ({ x: p.x + p.w / 2, y: p.y + p.h / 2 }))
+    .sort((a, b) => near(a) - near(b) || a.x - b.x || a.y - b.y);
+  for (const c of chairs) place(c.x, c.y);
 
-  // Along each sofa run, spaced by seat pitch. A run's rectangle says which
-  // way it lies, exactly as it does for the painter.
-  //
-  // The ORDER is the queue: down the first side run, along the back, up the
-  // second. A row reception is the same three runs reflected in the diagonal
-  // (`buildOfficeRow`), so its back run is the east one and its sides are the
-  // north and south; the order is read off the room rather than assumed,
-  // because the ids moved with the walls they name.
-  const SEAT_ALONG = OFFICE_SEAT_PITCH;
-  const runs = room.landscape
-    ? ['wait-sofa-n', 'wait-sofa-e', 'wait-sofa-s']
-    : ['wait-sofa-w', 'wait-sofa-s', 'wait-sofa-e'];
-  for (const id of runs) {
-    const sofa = byId.get(id);
-    if (!sofa) continue;
-    const vertical = sofa.h > sofa.w;
-    const runLen = vertical ? sofa.h : sofa.w;
-    const n = Math.max(1, Math.floor(runLen / SEAT_ALONG));
-    // Sit on the SEAT, not on the back. The back occupies the far third of the
-    // sofa's depth from the direction it faces (`backdrop.js`'s sofa case), so
-    // the occupant is nudged that far toward the front of it.
-    const depth = vertical ? sofa.w : sofa.h;
-    const forward = depth * SOFA_SEAT_BIAS;
-    const bias = {
-      x: vertical ? Math.cos(sofa.angle || 0) * forward : 0,
-      y: vertical ? 0 : Math.sin(sofa.angle || 0) * forward,
-    };
-    for (let i = 0; i < n; i++) {
-      const along = ((i + 0.5) * runLen) / n;
-      if (vertical) place(sofa.x + sofa.w / 2 + bias.x, sofa.y + along);
-      else place(sofa.x + along, sofa.y + sofa.h / 2 + bias.y);
-    }
-  }
+  const index = (z) => Number(String(z.id).slice(OFFICE_QUEUE_ZONE.length));
+  const queue = (room.zones || [])
+    .filter((z) => typeof z.id === 'string' && z.id.startsWith(OFFICE_QUEUE_ZONE))
+    .sort((a, b) => index(a) - index(b));
+  for (const z of queue) place(z.x + z.w / 2, z.y + z.h / 2, true);
 
-  // Loose chairs last, in the order they were laid out.
-  for (const p of room.props) {
-    if (p.kind !== 'waiting_chair' || p.id === 'guest-chair') continue;
-    place(p.x + p.w / 2, p.y + p.h / 2);
-  }
   return seats;
 }

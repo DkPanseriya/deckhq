@@ -186,10 +186,12 @@ test('it draws the people in the office and the corridor, and nobody at a desk o
   const composed = composeMiniFrame(frame, VIEW);
   const ids = composed.people.map((p) => p.id).sort();
 
-  assert.deepEqual(ids, ['a-wait-0', 'a-wait-1']);
-  // The two who are waiting on you are exactly the two the office holds.
-  assert.deepEqual(composed.officeIds, ['a-wait-0', 'a-wait-1']);
-  for (const id of ['a-desk-0', 'a-desk-1', 'a-bench', 'a-hand']) {
+  // WP-78: a raised hand waits at the manager's desk too, so the window that
+  // exists to answer "is anything waiting on me" shows it. `a-hand` used to be
+  // excluded here because it was still sitting at its own desk.
+  assert.deepEqual(ids, ['a-hand', 'a-wait-0', 'a-wait-1']);
+  assert.deepEqual(composed.officeIds.slice().sort(), ['a-hand', 'a-wait-0', 'a-wait-1']);
+  for (const id of ['a-desk-0', 'a-desk-1', 'a-bench']) {
     assert.equal(
       ids.includes(id),
       false,
@@ -202,18 +204,21 @@ test('a record with no agent behind it is not drawn', () => {
   const frame = floor(POPULATION);
   frame.agentsById.delete('a-wait-0');
   const composed = composeMiniFrame(frame, VIEW);
-  assert.deepEqual(
-    composed.people.map((p) => p.id),
-    ['a-wait-1'],
-  );
+  assert.deepEqual(composed.people.map((p) => p.id).sort(), ['a-hand', 'a-wait-1']);
 });
 
 test('people are given the floor’s own state colour and state icon', () => {
   const composed = composeMiniFrame(floor(POPULATION), VIEW);
-  for (const person of composed.people) {
-    assert.equal(person.color, STATE_COLORS.for_review);
-    assert.equal(person.icon, 'check');
+  const byId = new Map(composed.people.map((p) => [p.id, p]));
+  // Two states share the office since WP-78 and they stay visibly different in
+  // the window: crimson and a check for a finished turn, amber and a raised
+  // hand for one that is blocked (`03-VISUAL-SPEC.md` §5).
+  for (const id of ['a-wait-0', 'a-wait-1']) {
+    assert.equal(byId.get(id).color, STATE_COLORS.for_review);
+    assert.equal(byId.get(id).icon, 'check');
   }
+  assert.equal(byId.get('a-hand').color, STATE_COLORS.needs_input);
+  assert.equal(byId.get('a-hand').icon, 'hand');
 });
 
 test('people come back in painter order, back of the room first', () => {
@@ -326,7 +331,7 @@ function stubCtx() {
 
 test('drawMiniFrame paints the rooms, then one character per person', () => {
   const composed = composeMiniFrame(floor(POPULATION), VIEW);
-  assert.equal(composed.people.length, 2);
+  assert.equal(composed.people.length, 3);
   const ctx = stubCtx();
   drawMiniFrame(ctx, composed, { width: VIEW.width, height: VIEW.height });
 
@@ -344,11 +349,18 @@ test('drawMiniFrame paints the rooms, then one character per person', () => {
 
   // The people cost something, and each one costs the same as the last: draw
   // the identical composition with nobody in it, then with one, then with two.
-  const cost = (n) => {
+  //
+  // The two compared are the two in the SAME state. WP-78 put the raised hand
+  // in this window as well, and a raised hand is not the same number of
+  // operations as a stood-up wait — it carries a pulsing floor ring — so
+  // including it would be measuring the clip rather than the per-person cost.
+  const alike = composed.people.filter((p) => p.id !== 'a-hand');
+  assert.equal(alike.length, 2);
+  const cost = (people) => {
     const c = stubCtx();
     drawMiniFrame(
       c,
-      { ...composed, people: composed.people.slice(0, n) },
+      { ...composed, people },
       {
         width: VIEW.width,
         height: VIEW.height,
@@ -356,12 +368,12 @@ test('drawMiniFrame paints the rooms, then one character per person', () => {
     );
     return c.calls.length;
   };
-  const none = cost(0);
-  const one = cost(1);
-  const both = cost(2);
+  const none = cost([]);
+  const one = cost(alike.slice(0, 1));
+  const both = cost(alike);
   assert.ok(one > none, 'a person left no mark on the canvas');
   assert.equal(both - one, one - none, 'the two characters did not cost the same');
-  assert.equal(both, ctx.calls.length);
+  assert.ok(ctx.calls.length > both, 'the third person left no mark on the canvas');
 });
 
 test('drawMiniFrame blits the main floor’s baked bitmap when there is one', () => {

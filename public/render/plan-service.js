@@ -466,8 +466,8 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     plateLines: [
       'Lounge',
       goneHomeCount > 0
-        ? `${benchedCount} benched · ${goneHomeCount} went home`
-        : `${benchedCount} benched`,
+        ? `${benchedCount} resting · ${goneHomeCount} went home`
+        : `${benchedCount} resting`,
     ],
     props,
     zones,

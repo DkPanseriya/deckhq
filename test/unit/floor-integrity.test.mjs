@@ -2051,8 +2051,12 @@ test('the header floor counts equal the plan’s drawn totals', () => {
     const c = counts(agents, { now: NOW, goneHomeDays: GONE_HOME_DAYS });
 
     const onFloor = (a) => !plan.hidden.has(a.id);
-    const desks = agents.filter((a) => derivePlacement(a) === 'desk');
+    const where = (zone) => agents.filter((a) => derivePlacement(a) === zone);
+    const desks = where('desk');
     const benchedAgents = agents.filter((a) => a.ackState === 'benched');
+    // WP-78: the lounge holds the ended as well as the benched, and the ones
+    // whose repo earned no room are drawn nowhere at all.
+    const resting = where('lounge').filter((a) => a.ackState === 'active');
 
     assert.equal(
       c.drawn.atDesk,
@@ -2061,10 +2065,15 @@ test('the header floor counts equal the plan’s drawn totals', () => {
     );
     assert.equal(
       c.drawn.finished,
-      desks.filter((a) => !onFloor(a)).length,
-      `"finished" must be the desk sessions the floor draws nowhere (${JSON.stringify(spec)})`,
+      [...desks, ...resting].filter((a) => !onFloor(a)).length,
+      `"finished" must be the sessions the floor draws nowhere (${JSON.stringify(spec)})`,
     );
     assert.equal(c.drawn.benched, benchedAgents.filter(onFloor).length);
+    assert.equal(
+      c.drawn.lounge,
+      [...benchedAgents, ...resting].filter(onFloor).length,
+      `the lounge draws the benched and the ended together (${JSON.stringify(spec)})`,
+    );
     assert.equal(c.drawn.wentHome, plan.goneHome.size);
     assert.equal(c.drawn.waiting, plan.officeSeats.length);
 
@@ -2072,14 +2081,17 @@ test('the header floor counts equal the plan’s drawn totals', () => {
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
     const expected =
       c.drawn.wentHome > 0
-        ? `${c.drawn.benched} benched · ${c.drawn.wentHome} went home`
-        : `${c.drawn.benched} benched`;
+        ? `${c.drawn.lounge} resting · ${c.drawn.wentHome} went home`
+        : `${c.drawn.lounge} resting`;
     assert.equal(lounge.plateLines[1], expected);
 
     // And nobody has been lost: every session is still counted somewhere.
-    assert.equal(c.drawn.atDesk + c.drawn.finished, c.atDesk);
     assert.equal(c.drawn.benched + c.drawn.wentHome, c.benched);
-    assert.equal(c.atDesk + c.forReview + c.benched + c.letGo, c.total);
+    assert.equal(
+      c.drawn.atDesk + c.drawn.waiting + c.drawn.lounge + c.drawn.finished + c.drawn.wentHome,
+      c.total - c.letGo,
+      `every session lands in exactly one bucket (${JSON.stringify(spec)})`,
+    );
   }
 });
 
@@ -2155,8 +2167,8 @@ test('the lounge is sized by who is drawn, and its plate carries the rest', () =
     loungeOf(mostAway).w * loungeOf(mostAway).h < loungeOf(all).w * loungeOf(all).h,
     'a lounge drawing 8 people must be smaller than one drawing 47',
   );
-  assert.deepEqual(loungeOf(mostAway).plateLines, ['Lounge', '8 benched · 39 went home']);
-  assert.deepEqual(loungeOf(all).plateLines, ['Lounge', '47 benched']);
+  assert.deepEqual(loungeOf(mostAway).plateLines, ['Lounge', '8 resting · 39 went home']);
+  assert.deepEqual(loungeOf(all).plateLines, ['Lounge', '47 resting']);
   // Every one of them is still reachable: the plan names them, which is what
   // the palette/keyboard command reads.
   assert.equal(mostAway.goneHome.size, 39);

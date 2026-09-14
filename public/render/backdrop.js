@@ -36,6 +36,7 @@ import {
   roundRect,
   withShadow,
   drawContactShadow,
+  isTallProp,
   makeCanvas,
   PROP_BLEED,
   PROP_SHADOW_DIST_PX,
@@ -66,8 +67,12 @@ export * from './backdrop-props-play.js';
  * Paint one furniture prop. All props share a soft contact shadow
  * (VISUAL-SPEC §6: "every furniture item carries a soft contact shadow").
  * Coordinates arrive pre-converted to px, already rotated by `angle`.
+ *
+ * Exported since WP-78 so `test/unit/lighting.test.mjs` can ask one prop what
+ * it casts. `bakeBackdrop` needs a real canvas and cannot run under
+ * `node --test`; this takes any 2D context, including a recorder.
  */
-function paintProp(ctx, prop, u) {
+export function paintProp(ctx, prop, u) {
   const w = prop.w * u;
   const h = prop.h * u;
   // A Prop is a top-left rect, exactly like Room and Zone — that is the one
@@ -103,8 +108,13 @@ function paintProp(ctx, prop, u) {
   // is how a thirty-two unit sofa run came out as a single cushion.
   ctx.rotate(prop.angle || 0);
 
+  // WP-78: how far the prop's own drop shadow travels is a question about its
+  // HEIGHT, and height is declared per kind in `PROP_HEIGHT` rather than
+  // guessed from `w * h`. A tall prop keeps WP-72's 3 px along the ray; a short
+  // one casts straight down onto the floor it is lying on, blur and no slide.
+  const tall = isTallProp(prop);
   const local = (fn) => {
-    withShadow(ctx, () => fn(ctx), { blur: 8, dist: PROP_SHADOW_DIST_PX });
+    withShadow(ctx, () => fn(ctx), { blur: 8, dist: tall ? PROP_SHADOW_DIST_PX : 0 });
     fn(ctx);
   };
 
@@ -129,7 +139,7 @@ function paintProp(ctx, prop, u) {
   // proportions), not to the padded anchor footprint — stacking this
   // bounding-box blob under it as well would just muddy the one that is
   // already correctly shaped and placed.
-  if (prop.kind !== 'manager') drawContactShadow(ctx, prop.x * u, prop.y * u, w, h);
+  if (prop.kind !== 'manager') drawContactShadow(ctx, prop.x * u, prop.y * u, w, h, tall);
 }
 
 // -------------------------------------------------------------------- bake

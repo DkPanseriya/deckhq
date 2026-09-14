@@ -87,7 +87,7 @@ import {
   WORKING_OPEN_MAX,
   clamp,
 } from './plan-units.js';
-import { isDeskAgent } from '../floor-rule.js';
+import { isActiveAgent } from '../floor-rule.js';
 
 // ------------------------------------------------------------------ the plan
 
@@ -123,9 +123,6 @@ export function buildPlan(projects, agents, opts = {}) {
   const list = Array.isArray(agents) ? agents : [];
   const pop = floorPopulation(list, { now: opts.now, goneHomeDays: opts.goneHomeDays });
   const waitingCount = pop.waiting;
-  // The lounge is sized by how many are DRAWN. Agents who went home are on the
-  // door plate and nowhere else.
-  const benchedCount = pop.benchedDrawn;
   const goneHomeCount = pop.goneHome.size;
 
   const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
@@ -169,9 +166,24 @@ export function buildPlan(projects, agents, opts = {}) {
   /** @type {Set<string>} */
   const hidden = new Set(pop.goneHome);
   for (const a of list) {
-    if (!a || !isDeskAgent(a)) continue;
+    if (!a || a.ackState !== 'active') continue;
+    // Working, hand up, gone quiet, waiting: the session is on the floor in
+    // its own right and its project has a room by definition.
+    if (isActiveAgent(a)) continue;
     if (!roomIds.has(String(a.projectId))) hidden.add(String(a.id));
   }
+
+  // THE LOUNGE HOLDS THE BENCHED **AND** THE ENDED (WP-78). `08` B6's rule is
+  // untouched — an `ended` session in a repo nobody is working in is still a
+  // line in the idle list and nothing on the floor, which is what `hidden`
+  // above just decided. What changed is where the ones whose repo IS live go:
+  // they used to sit at a desk in it, which made a project room a register of
+  // everything that had ever run there rather than of what is running now.
+  let restingCount = 0;
+  for (const [pid, n] of pop.resting) if (roomIds.has(pid)) restingCount += n;
+  // Sized by who is DRAWN. Agents who went home are on the door plate and
+  // nowhere else.
+  const benchedCount = pop.benchedDrawn + restingCount;
 
   // ---- pass 1: everything at its natural size, purely to bid for space.
   let office = buildOffice(waitingCount);
@@ -807,11 +819,14 @@ export {
   WORKING_OPEN_MAX,
 } from './plan-units.js';
 export {
+  AT_DESK_STATES,
   GONE_HOME_DAYS,
+  WAITING_STATES,
   floorPopulation,
   isActiveAgent,
   isDeskAgent,
   isGoneHome,
+  isWaitingAgent,
 } from '../floor-rule.js';
 
 /** @typedef {import('./plan-units.js').ActivityState} ActivityState */

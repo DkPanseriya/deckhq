@@ -168,14 +168,57 @@ at L0 by colour **and** icon — colour alone fails for colour-blind users.
 | State | Colour | Icon (above head) | Clip | Location |
 |---|---|---|---|---|
 | `working` | Green `#2E7D63` | none | `type`, with `drink` / `think` / `stretch` interleaved | Project desk |
-| `needs_input` | Amber `#B87333` | **Raised hand**, pulsing | `hand_raise` | Project desk |
+| `needs_input` | Amber `#B87333` | **Raised hand**, pulsing | `hand_raise` | User's office, at the manager's desk |
 | `stalled` | Muted amber `#9A7B4F` | Hourglass | `slump` | Project desk |
-| `for_review` | Crimson `#C0392B` | Checkmark in a circle | `stand_wait` | User's office waiting area |
-| `ended` | Warm dark grey `#6E6A63` | none | `slump` (seated, still) | Project desk |
+| `for_review` | Crimson `#C0392B` | Checkmark in a circle | `stand_wait` | User's office, at the manager's desk |
+| `ended` | Warm dark grey `#6E6A63` | none | `slump` (seated, still) | Lounge |
 | `benched` | Slate `#7B8794` | none | rotating lounge clips | Lounge |
 | `let_go` | Grey `#BDB7AA` | none | none | Off floor |
 
 Walking between locations always uses `walk`, in the colour of the destination state.
+
+### 5.1 The occupancy rule
+
+**Amended 14 September 2026 (WP-78).** The Location column above used to read *Project desk* for
+`needs_input`, `stalled` and `ended` alike. The owner: *"Only live working agents are on desks in
+the project rooms. Everyone else is in the lounge area, so I can clearly see which sessions are
+active at the moment."* A room where the session that finished three weeks ago sits in the same pose
+at the same kind of desk as the one that is typing cannot answer that, and on the reference machine
+it was 21 bodies over one working session.
+
+Three zones, one question each. This is the contract; `public/floor-rule.js` is the one
+implementation of it, on the side both the daemon and the browser can see.
+
+| Zone | The question it answers | States |
+|---|---|---|
+| **Project desk** | Is this session *working for me* right now? | `working`, `stalled` |
+| **The manager's desk** (user's office) | Is this session *waiting on me* right now? | `needs_input`, `for_review` |
+| **The lounge** | Everything else | `ended`, `benched` |
+
+Four rules qualify it, and each one is there because the obvious reading of the table is wrong
+without it:
+
+1. **`stalled` keeps its desk, and it is the one exception.** A stalled session is `working` that
+   has gone quiet past the stall window (`01-PRODUCT.md` §4.2): it is still live, and it may produce
+   its next line a second from now. Walking it to the lounge would make the floor move on a *timer*
+   rather than on an *event*, and it would have to walk back. It stays at its desk, slumped, with
+   its stall badge.
+2. **Selecting a session moves nobody.** Placement reads `ackState` and `activityState` and nothing
+   else. Being *waiting* is what walks an agent to the manager's desk; opening one in the panel
+   rings it on the floor (§8) and never moves it.
+3. **The waiting area is chairs first, then a queue.** A row of **two or three visitor chairs**
+   faces the manager's desk — three from a 26 U interior, two below it, and never a fourth — filled
+   in arrival order, oldest wait nearest. Everyone the chairs cannot take stands in a short queue
+   beside the desk, also in arrival order. **Nobody is seated on a sofa**, at any population: the
+   sofa runs are furniture that keeps the middle of the room clear, and the middle of the room is
+   where the queue is. The two waiting states stay visibly different once they are there — a raised
+   hand is still a raised hand, and a finished turn still stands and waits (§4.2 of
+   `01-PRODUCT.md`: *a raised hand at a desk means I am blocked; a person in your office means I
+   finished*; the first half of that sentence now means a raised hand **in your office**).
+4. **A repo with no live session still earns no room, and its finished sessions are still off the
+   floor** (WP-50). An `ended` session goes to the lounge only when its own project has a room. A
+   project room whose only live session is waiting in the office keeps its room and draws an empty
+   desk; that is the dynamic floor behaving as specified, not a defect.
 
 **Colour discipline:** crimson appears *only* for `for_review`. If the user sees red anywhere on
 the floor, something is standing in their office. Nothing decorative may use it.
@@ -216,10 +259,34 @@ What casts, from the smallest thing to the largest:
 
 | Thing | Shadow |
 |---|---|
-| **Furniture** | The two-pass drop shadow every prop already had (3 px along the ray), plus the contact ellipse where it meets the floor (2 px). |
+| **Furniture, tall** | The two-pass drop shadow every prop already had (3 px along the ray), plus the contact ellipse where it meets the floor (2 px). |
+| **Furniture, short** | Blur and **no offset at all**, plus a shallower contact ellipse directly beneath it. See §6.2. |
+| **A character** | One contact ellipse, centred **on the feet point** — which is the character's own `(x, y)`, since the rig draws the whole body about the spot the person is standing on. No offset. |
 | **Full-height walls** | 2 px, blurred 7. A **partition** is waist height and still casts nothing — it stays subordinate to a real wall (§6). |
 | **A room** | A room is a **slab**. A 6 px rim inside its two light-away sides (south and east), and one soft shadow — 5 px along the ray, blurred 10 — thrown outward onto the circulation between bands and across the partition it shares with the room beside it. Its own carpet is never darkened: a plate is read on it. The ambient-occlusion band where wall meets floor stays on the other two sides, so the four edges together read as a lit slab rather than as a room outlined in dark. |
 | **The building** | One soft shadow onto the studio ground, 8 px along the ray, blurred 26. The ground beside it is lifted by a gentle radial falloff that fades to the page's own ground at the furthest corner of the window, so the envelope reads as a slab lying on a surface rather than as a shape cut out of the background. |
+
+### 6.2 Tall and short
+
+**Added 14 September 2026 (WP-78).** One light is right for a thing with height and wrong for a
+thing lying on the floor. A mug, a chair and a potted plant do not throw a shadow down and to the
+right of themselves; they darken the floor they are touching. So **every prop declares its height**,
+and only a tall one casts along `LIGHT_DIR`.
+
+- **Tall** — desks, whiteboards, sofas, counters, cabinets, screens, game tables, the fridge: the
+  full §6.1 treatment, unchanged.
+- **Short** — chairs, plants, rugs, side and coffee tables, monitors, lamps, mugs and bowls: blur
+  with no offset, and a contact ellipse directly beneath at roughly half the depth. The ellipse is
+  painted over the bottom of the prop rather than under it, so a deep one on a rug reads as a
+  smudge below the furniture rather than as the line where it meets the floor.
+- **Walls are unchanged.** A full-height wall casts along the ray; a partition is waist height and
+  casts nothing (§6). So does the building onto its ground.
+
+**Height is a declared property of the prop kind, never inferred from its size.** `PROP_HEIGHT` in
+`public/render/backdrop-paint.js` is the list, a prop may override it with its own `tall` boolean,
+and a kind that appears in neither is a **test failure** rather than a default:
+`test/unit/lighting.test.mjs` reads every kind a real plan emits and every kind the painters answer
+to. A `w * h` heuristic would call a rug tall, which is exactly backwards.
 
 A project room's carpet also takes a **six per cent wash** toward that project's identity colour
 (§5's discipline is untouched: the wash is nowhere near crimson, and it is measured rather than
@@ -236,7 +303,10 @@ gradient. `docs/DEVIATIONS.md` §149.
 - **Room plates:** a small rounded white card at the room's top-left with the room name and one
   line of live data (`21 sessions · 2.2M tokens · 3 need you`). Never covers furniture.
 - **Waiting badge:** for `for_review` agents only, a crimson pill above the head with elapsed time
-  (`2d 4h`). This is the number that makes debt visible.
+  (`2d 4h`). This is the number that makes debt visible. Badges that would overlap are replaced by
+  one pill at the start of the run; the waiting area's own pitch is set so that a name label and a
+  badge clear their neighbours at the fit scale, on whichever axis the reception happens to be laid
+  (WP-78: the room may be transposed, §2's reception is the one room the packer turns).
 - **Name labels:** shown at L1 and above, below the character, truncated to 18 characters.
 - **Header:** needs-you total with a three-way breakdown, at-desk count, benched count, zoom
   control, hooks status, refresh.

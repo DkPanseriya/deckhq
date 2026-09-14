@@ -103,15 +103,27 @@ An agent leaves its project room in exactly two ways:
 | State | What it means | How it is entered | Where the agent is | What the user sees |
 |---|---|---|---|---|
 | `working` | Live and producing output | Session running, output within the stall window | At its project desk | Typing, occasional coffee, thinking poses |
-| `needs_input` | Live, blocked on a question or permission request | Hook fires `Notification` (permission or idle prompt) | **Stays at its desk** | **Raises a hand**, pulsing ring |
+| `needs_input` | Live, blocked on a question or permission request | Hook fires `Notification` (permission or idle prompt) | **Walks to the user's office** | **Raises a hand**, pulsing ring |
 | `stalled` | Live but silent longer than the stall window | No output for N minutes (default 10) | At its desk | Slumped pose, amber marker |
 | `for_review` | Finished a turn, awaiting the user | Hook fires `Stop`, or turn end detected | **Walks to the user's office** | Standing in the waiting area with a waiting-time badge |
 | `benched` | Reviewed, no work assigned, available | **User action only** | Lobby / break / kitchen | Pool, table tennis, board games, arcade, coffee, eating, talking |
 | `let_go` | Removed from the floor | **User action only** | Off floor | Hidden unless "Show let go" is on |
 
-**The two "needs you" signals are deliberately different.** A raised hand at a desk means *I am
-mid-task and blocked*. A person standing in your office means *I finished; review this*. Those
-require different responses from the user, so they must look different and be counted separately.
+> **Amendment, 14 September 2026 (WP-78) — where a waiting session waits, and where a finished one
+> rests.** `needs_input` used to stay at its desk and `ended` used to keep one. Both moved: every
+> session that needs the user waits at the manager's desk, and a session that has finished rests in
+> the lounge, so a project room answers *who is working right now* and nothing else. `stalled` is
+> the one exception and keeps its desk, because it is live work that has gone quiet and may resume.
+> The occupancy rule in full is `03-VISUAL-SPEC.md` §5.1; the reasoning and the measurements are
+> `docs/DEVIATIONS.md` §153. §4.1's "an agent leaves its project room in exactly two ways" gains a
+> third: it finishes a turn, the user benches it, **or it blocks on a question**. Nothing about §2
+> changes — every one of these is derived from observed state, and no code path here writes
+> `ack_state`.
+
+**The two "needs you" signals are deliberately different.** A raised hand means *I am mid-task and
+blocked*. A person standing in your office means *I finished; review this*. Those require different
+responses from the user, so they must look different and be counted separately — since WP-78 they
+wait in the same room, and the hand, the colour and the badge are what keep them apart.
 
 `working`, `needs_input`, `stalled` and `for_review` are **observed**. `benched` and `let_go` are
 **user-owned**. `for_review` is entered automatically but can only be *left* by a user action —

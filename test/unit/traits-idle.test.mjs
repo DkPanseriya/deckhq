@@ -230,15 +230,22 @@ test('any real state change cancels the variation immediately', () => {
 
   // A hand goes up on exactly that agent. `sync` is what the daemon's next
   // snapshot calls, and it must win.
+  //
+  // WP-78: a raised hand waits at the manager's desk rather than at its own, so
+  // the snapshot that raises it also rebuilds the plan — the office has one
+  // more person in it than it was laid out for. That is what the daemon does,
+  // and the rule under test is unchanged either way: the variation is
+  // DISCARDED, never queued behind the state's own clip.
   const raised = agents.map((a) =>
     a.id === varied.id ? { ...a, activityState: 'needs_input' } : a,
   );
-  runtime.sync(raised, plan, assignSeats(plan, raised));
+  const plan2 = buildPlan(PROJECTS, raised, { targetAspect: 2.06, now: NOW });
+  runtime.sync(raised, plan2, assignSeats(plan2, raised));
   assert.equal(runtime.get(varied.id).clip, 'hand_raise', 'a variation outlived a raised hand');
   assert.equal(runtime.get(varied.id).deskIdle.clip, null);
 
   // And it stays up: further frames must not put a variation back over it.
-  run(runtime, plan, 400);
+  run(runtime, plan2, 400);
   assert.equal(runtime.get(varied.id).clip, 'hand_raise', 'a raised hand was animated over');
 });
 

@@ -151,6 +151,55 @@
 
 ### Changed
 
+- **A project room holds the people working in it, and nobody else — WP-78.** The owner, on the
+  floor as it stood: _"Only live working agents are on desks in the project rooms. Everyone else is
+  in the lounge area, so I can clearly see which sessions are active at the moment."_ A room where
+  the session that finished three weeks ago sits in the same pose at the same kind of desk as the
+  one that is typing cannot answer that — on the reference machine it was 21 bodies at desks over
+  one working session. Three zones now, one question each:
+  - **A project desk** is for a session that is working for you right now: `working`, and
+    `stalled` as the one deliberate exception — a stalled session is live work that has gone quiet
+    past the stall window and may produce its next line a second from now, so it keeps its desk, its
+    slump and its stall badge rather than walking to the lounge and back on a timer.
+  - **The manager's desk** is for every session waiting on you: `needs_input` as well as
+    `for_review`. Both need you and nobody else, so both wait where you are, and they stay visibly
+    different once they are there — a raised hand is still a raised hand, a finished turn still
+    stands and waits with its crimson time badge.
+  - **The lounge** is everything else: benched, and finished. A repo nobody is working in still
+    earns no room and its finished sessions are still a line in the idle list and nothing on the
+    floor (WP-50 is untouched), so an `ended` session rests in the lounge only when its own repo is
+    live.
+
+  **Selecting a session moves nobody.** Placement reads the two states and nothing else; opening an
+  agent rings it on the floor and never walks it. The lounge's door plate reads `N resting` rather
+  than `N benched`, because most of the people in it now were never benched by anybody. The floating
+  mini-floor shows the raised hands as well as the finished turns, for free — it draws the office,
+  and that is where they are. `docs/03-VISUAL-SPEC.md` §5.1, `docs/DEVIATIONS.md` §153.
+
+- **The waiting area is chairs at the desk and a queue behind them, and the sofas seat nobody.**
+  There used to be one guest chair at the manager's desk for "the agent that has waited longest",
+  with everyone else on the sofas round the walls. There is now a row of **two or three visitor
+  chairs** facing the desk — three from a 26-unit interior, two below it, never a fourth, and the
+  same answer on every rebuild and every machine — filled oldest wait first, with the longest wait
+  directly across the desk from you. Everyone the chairs cannot take stands in a short queue beside
+  the desk, in arrival order. The queue reads both clocks, `reviewSince` for a finished turn and
+  `needsInputSince` for a raised hand, and a session whose runtime could not date its wait sorts to
+  the back rather than the front. The sofas stay as furniture — they are what keeps the middle of
+  the room clear — and no waiting agent is ever seated on one. `docs/DEVIATIONS.md` §153.3–4.
+
+- **Shadows tell you how tall a thing is.** WP-72 gave the floor one light and made every offset a
+  distance along it, which is right for a thing with height and wrong for a thing lying on the
+  floor: a mug, a chair and a potted plant do not throw a shadow down and to the right of
+  themselves. Every prop now declares `tall` or `short` — declared per kind in `PROP_HEIGHT`, never
+  inferred from its size, because a size heuristic calls a rug tall and a rug is the flattest thing
+  in the building. A tall prop casts exactly as it did; a short one casts straight down onto the
+  floor under it, with a shallower contact ellipse directly beneath. **A character's shadow is now
+  under its feet**: `SHADOW_OX`/`SHADOW_OY` were a sixth of a unit right and two thirds of a unit
+  down the page, which at the scales this floor is drawn at is 5–15 pixels of daylight between a
+  person and their own shadow. Walls are untouched — a full-height wall casts along the ray, a
+  waist-high partition still casts nothing. `docs/03-VISUAL-SPEC.md` §6.2, `docs/DEVIATIONS.md`
+  §153.5–6.
+
 - **The floor has one light, and every shadow on it agrees.** A key light in the upper left,
   stated once as `LIGHT_DIR` in `public/render/palette-colors.js` and read by everything that
   casts: a prop's drop shadow, its contact shadow, a wall, a room, and the building itself. Every
@@ -355,6 +404,20 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/unit/occupancy.test.mjs` — WP-78's rule, asked of the real plan.** Five cases over
+  `buildPlan`, `assignSeats` and `seatOffice` rather than over `placement()` alone, because the
+  failure worth guarding against is a rule that is true in the predicate and false on the floor: a
+  population of four working, two stalled, three waiting and five resting lands in three rooms with
+  nobody drawn twice; five waiting is three in chairs and two standing, in arrival order, with every
+  standing place behind every chair; the chair count is two or three and never moves; a stalled
+  session keeps its desk while an ended one does not; and an ended session in a repo nobody is
+  working in is still off the floor entirely. `lighting.test.mjs` gains four: a short prop's contact
+  shadow is directly beneath it, a tall one's is not, every prop kind a real plan emits **and** every
+  kind the three painters answer to is named `tall` or `short` in `PROP_HEIGHT` — a kind in neither
+  fails the build — and a character's shadow is within 1 px of its feet at four values of `u` up to 64. `paintProp` is exported so one prop can be asked what it casts; `bakeBackdrop` needs a real
+  canvas and cannot run under `node --test`. The suite is 2079 tests, 2078 passing and the one
+  platform skip that predates this package. Eight goldens regenerated.
 
 - **`test/unit/lighting.test.mjs` — the parts of a lighting pass that can be measured.** Eighteen
   cases: that `LIGHT_DIR` is a unit vector pointing down-right, that no shadow offsets up or left

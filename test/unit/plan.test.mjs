@@ -306,33 +306,48 @@ test('officeSeats count matches the waiting queue for every non-zero waiting cou
   }
 });
 
-test('the waiting area seats the wall sofas before it adds any loose chair', () => {
-  // One guest chair is always at the desk. Beyond that, people take the wall
-  // seating, and loose chairs only appear once the room is genuinely full.
+test('the waiting area fills its visitor chairs, then queues, and never a sofa', () => {
+  // WP-78. The chairs at the desk take the front of the queue; everybody the
+  // chairs cannot take STANDS, in the well the sofa runs enclose. The sofas
+  // seat nobody at any population.
   const modest = buildPlan([], waitingAgents(8));
   const office = modest.rooms.find((r) => r.kind === 'office');
   assert.equal(modest.officeSeats.length, 8);
+  const chairs = office.props.filter((p) => p.kind === 'waiting_chair');
+  assert.ok(
+    chairs.length >= 2 && chairs.length <= 3,
+    `two or three visitor chairs, got ${chairs.length}`,
+  );
   assert.equal(
-    office.props.filter((p) => p.kind === 'waiting_chair').length,
-    1,
-    'only the guest chair at the desk — the sofas take the rest',
+    modest.officeSeats.filter((s) => !s.standing).length,
+    chairs.length,
+    'every chair is taken before anybody stands',
+  );
+  assert.equal(
+    modest.officeSeats.slice(0, chairs.length).every((s) => !s.standing),
+    true,
+  );
+  assert.equal(
+    modest.officeSeats.slice(chairs.length).every((s) => s.standing === true),
+    true,
   );
 
-  // Past what the walls can seat, the middle of the room fills with chairs.
-  // The count that overflows depends on how big the reception is, and the
-  // reception is sized to its queue — so this walks up until it does, and
-  // checks that every one of them still gets a place.
-  let overflowed = false;
-  for (const waiting of [25, 40, 60, 90]) {
+  // The chair count is a function of the room's size and of nothing else, so
+  // it is the same answer on every rebuild of the same floor.
+  for (const waiting of [1, 25, 40, 60, 90]) {
     const packed = buildPlan([], waitingAgents(waiting));
     const packedOffice = packed.rooms.find((r) => r.kind === 'office');
     assert.equal(packed.officeSeats.length, waiting, `${waiting} waiting need ${waiting} places`);
-    if (packedOffice.props.filter((p) => p.kind === 'waiting_chair').length > 1) {
-      overflowed = true;
-      break;
-    }
+    const n = packedOffice.props.filter((p) => p.kind === 'waiting_chair').length;
+    assert.ok(n >= 2 && n <= 3, `${waiting} waiting produced ${n} chairs`);
+    assert.equal(
+      packedOffice.props.filter((p) => p.kind === 'waiting_chair').length,
+      buildPlan([], waitingAgents(waiting))
+        .rooms.find((r) => r.kind === 'office')
+        .props.filter((p) => p.kind === 'waiting_chair').length,
+      'the chair count moved between two builds of the same floor',
+    );
   }
-  assert.ok(overflowed, 'a room past its seating capacity must gain chairs');
 
   // An empty office is still a furnished reception, not a bare box.
   const empty = buildPlan([], []);
@@ -430,23 +445,26 @@ test('plan.seats is a Map keyed by projectId, one entry per project room', () =>
   }
 });
 
-test('only the agent being seen sits across from the manager', () => {
-  // A real office does not seat the whole queue facing the boss. There is one
-  // guest chair at the desk, it belongs to the front of the queue, and
-  // everybody else waits on the seating around the walls.
+test('the longest wait takes the chair nearest the manager', () => {
+  // WP-78 replaced "one guest chair for the agent being seen" with a row of
+  // two or three for the people who are waiting on him. What survives from the
+  // old rule is the ORDER: seat 0 is the closest place to the desk, and
+  // `assignSeats` hands this array over sorted oldest first.
   const plan = buildPlan([], waitingAgents(9));
   const office = plan.rooms.find((r) => r.kind === 'office');
   const desk = office.props.find((p) => p.kind === 'user_desk');
   const deskCentre = { x: desk.x + desk.w / 2, y: desk.y + desk.h / 2 };
   const dist = (s) => Math.hypot(s.x - deskCentre.x, s.y - deskCentre.y);
 
-  const near = plan.officeSeats.filter((s) => dist(s) < 8);
-  assert.equal(near.length, 1, 'exactly one seat may be at the desk');
-  assert.equal(
-    plan.officeSeats.indexOf(near[0]),
-    0,
-    'and it must be the front of the queue — the agent that has waited longest',
-  );
+  for (let i = 1; i < plan.officeSeats.length; i++) {
+    if (!plan.officeSeats[i].standing) {
+      assert.ok(
+        dist(plan.officeSeats[i]) >= dist(plan.officeSeats[0]) - 1e-9,
+        'a later chair is nearer the desk than the front of the queue',
+      );
+    }
+  }
+  assert.equal(plan.officeSeats[0].standing, undefined, 'the front of the queue is standing');
 });
 
 test('the waiting seating is against the walls, leaving the middle of the room clear', () => {
@@ -495,11 +513,15 @@ test('the lounge reads as a rest area at a glance, even when empty', () => {
   assert.ok(busy.props.length > empty.props.length, 'a busy lounge is more furnished');
 });
 
-test('every waiting agent is seated ON furniture, not on the floor beside it', () => {
-  // The sofas are anchored to the room's walls, so their real coordinates are
-  // only known after the room has been sized, tiled and resolved. Seats are
+test('a seated waiting agent is on a chair, and a standing one is on no furniture', () => {
+  // The chairs are anchored in the room's own frame, so their real coordinates
+  // are only known after the room has been sized, tiled and resolved. Seats are
   // therefore derived from the resolved furniture; deriving them from the
-  // pre-anchor layout put agents on the floor next to the sofas instead.
+  // pre-anchor layout put agents on the floor next to it instead.
+  //
+  // WP-78: and the sofas hold NOBODY, at any population. That is the owner's
+  // "nobody sits by default in front of the manager; everybody is waiting on
+  // the sofa" read the way he meant it — he wanted the opposite.
   for (const waiting of [1, 5, 14, 25]) {
     const plan = buildPlan([], waitingAgents(waiting));
     const office = plan.rooms.find((r) => r.kind === 'office');
@@ -515,12 +537,19 @@ test('every waiting agent is seated ON furniture, not on the floor beside it', (
           seat.y >= f.y - 0.6 &&
           seat.y <= f.y + f.h + 0.6,
       );
+      assert.equal(
+        onSofa,
+        false,
+        `waiting=${waiting}: somebody was put on a sofa at (${seat.x.toFixed(1)}, ${seat.y.toFixed(1)})`,
+      );
       const onChair = chairs.some(
         (c) => Math.hypot(seat.x - (c.x + c.w / 2), seat.y - (c.y + c.h / 2)) < 0.5,
       );
-      assert.ok(
-        onSofa || onChair,
-        `waiting=${waiting}: a seat at (${seat.x.toFixed(1)}, ${seat.y.toFixed(1)}) is on neither a sofa nor a chair`,
+      assert.equal(
+        onChair,
+        !seat.standing,
+        `waiting=${waiting}: a ${seat.standing ? 'standing' : 'seated'} agent at ` +
+          `(${seat.x.toFixed(1)}, ${seat.y.toFixed(1)}) is ${onChair ? 'on' : 'off'} a chair`,
       );
     }
   }
@@ -714,13 +743,15 @@ test('desks equal the agents at them, not the sessions on disk', () => {
   const plan = buildPlan([mkProject('p', 21, 1)], agents, {});
   assert.equal(plan.seats.get('p').length, 1, 'one agent at a desk is one desk');
 
-  // And an acknowledged session still sitting at its own desk counts too.
+  // WP-78: and a session that has ENDED no longer holds one. It rests in the
+  // lounge, so the room keeps its single desk however many have finished in it.
   const withEnded = [
     ...agents,
     { id: 'e', ackState: 'active', activityState: 'ended', projectId: 'p' },
   ];
   const plan2 = buildPlan([mkProject('p', 22, 2)], withEnded, {});
-  assert.equal(plan2.seats.get('p').length, 2);
+  assert.equal(plan2.seats.get('p').length, 1);
+  assert.equal(plan2.hidden.has('e'), false, 'its repo has a room, so it is drawn in the lounge');
 });
 
 test('the idle list carries every idle repo and never drops one', () => {

@@ -87,6 +87,94 @@ export const ENVELOPE_SHADOW_DIST_PX = 8 * Math.SQRT2;
 export const ENVELOPE_SHADOW_BLUR_PX = 26;
 
 /**
+ * HOW TALL EVERY PROP ON THIS FLOOR IS (WP-78).
+ *
+ * The owner, 14 September: _"The oval shadows sometimes are offset and make no
+ * sense."_ They were right, and it was not a bug in the offset: WP-72 gave
+ * everything on the floor the same 45-degree ray, which is correct for a thing
+ * with height and wrong for a thing without one. A mug, a chair and a potted
+ * plant are on the floor. An object lying on the floor does not throw a shadow
+ * down and to the right of itself; it darkens the floor it is touching. Putting
+ * a 2 px slide under a 2 U chair is what made the oval look detached from the
+ * thing it belonged to.
+ *
+ * So height is DECLARED, per kind, here. Not inferred from `w * h`: a rug is
+ * the biggest prop in a project room and the flattest thing in the building,
+ * and a size heuristic gets that exactly backwards. Two values and no third —
+ * `tall` casts along `LIGHT_DIR`, `short` casts straight down onto the floor
+ * under it — because a floor plan drawn from above cannot show a gradient of
+ * heights and should not pretend to.
+ *
+ * A kind with no entry here is a defect, not a default:
+ * `test/unit/lighting.test.mjs` reads every `kind` the plan can emit and every
+ * `case` the painters answer to, and fails on the first one this table does not
+ * name. `PROP_HEIGHT` is checked rather than guessed, so the next prop somebody
+ * adds has to say which it is.
+ */
+export const PROP_HEIGHT = Object.freeze({
+  // --- tall: furniture you would walk around, and it casts like it.
+  arcade_cabinet: 'tall',
+  art: 'tall',
+  bar_counter: 'tall',
+  board_game_table: 'tall',
+  bookshelf: 'tall',
+  counter: 'tall',
+  desk: 'tall',
+  dining_table: 'tall',
+  exit_sign: 'tall',
+  foosball: 'tall',
+  fridge: 'tall',
+  pool_table: 'tall',
+  reception_desk: 'tall',
+  screen: 'tall',
+  shelf: 'tall',
+  sofa: 'tall',
+  sofa_corner: 'tall',
+  table_tennis: 'tall',
+  tv: 'tall',
+  user_desk: 'tall',
+  water_cooler: 'tall',
+  whiteboard: 'tall',
+  // --- short: on the floor, or standing on something that already is.
+  bar_stool: 'short',
+  box: 'short',
+  chair: 'short',
+  coffee_machine: 'short',
+  coffee_table: 'short',
+  fruit_bowl: 'short',
+  lamp: 'short',
+  magazine_table: 'short',
+  monitor: 'short',
+  plant: 'short',
+  plant_large: 'short',
+  rug: 'short',
+  rug_round: 'short',
+  side_table: 'short',
+  waiting_chair: 'short',
+  // The manager is a character, not furniture: `drawManagerFigure` draws its
+  // own contact shadow and `paintProp` skips the prop one. Named anyway, so
+  // the guard below has an answer for every kind the plan emits.
+  manager: 'short',
+});
+
+/**
+ * Does this prop cast along the light, or straight down onto the floor?
+ *
+ * A prop may state its own `tall` — an explicit boolean on the object always
+ * wins, which is the seam a one-off piece of furniture needs — and otherwise
+ * the answer is its kind's entry in `PROP_HEIGHT`. An unknown kind reads short,
+ * because a thing nobody has measured is better drawn flat than drawn floating.
+ *
+ * @param {{kind?: string, tall?: boolean}} prop
+ * @returns {boolean}
+ */
+export function isTallProp(prop) {
+  if (!prop) return false;
+  if (prop.tall === true || prop.tall === false) return prop.tall;
+  return PROP_HEIGHT[prop.kind] === 'tall';
+}
+
+/**
  * Small deterministic PRNG (mulberry32) seeded from a string. Re-baking the
  * same plan must be pixel-identical, so no `Math.random()` is used anywhere
  * in this file.
@@ -191,11 +279,24 @@ export function withShadow(ctx, fn, opts = {}) {
 
 // ------------------------------------------------------------------ props
 
-export function drawContactShadow(ctx, x, y, w, h) {
+/**
+ * The dark line where a prop meets the floor.
+ *
+ * `tall` decides whether it is offset at all (WP-78). A tall prop's contact
+ * shadow travels the 2 px along `LIGHT_DIR` WP-72 gave it, because the thing
+ * above it really is lifted off the floor. A short one gets no offset: it sits
+ * directly beneath, which is the whole of the owner's complaint about ovals
+ * that "make no sense" beside the thing they belong to.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {boolean} [tall]
+ */
+export function drawContactShadow(ctx, x, y, w, h, tall = true) {
   // Placed by hand rather than blurred by the context, so it takes its
   // direction from `LIGHT_DIR` the same way every other shadow does (WP-72).
   // At 45° this is the (2, 2) the floor already shipped with, to the pixel.
-  const off = shadowOffsetFor(CONTACT_SHADOW_DIST_PX);
+  const off = tall ? shadowOffsetFor(CONTACT_SHADOW_DIST_PX) : { x: 0, y: 0 };
   ctx.save();
   ctx.fillStyle = PALETTE.shadowContact;
   ctx.beginPath();
@@ -207,7 +308,15 @@ export function drawContactShadow(ctx, x, y, w, h) {
     // depth is a property of how THICK the thing is, not of how big it is.
     // Unbounded, a room-sized rug (WP-50 gives one to a room much larger than
     // its desk cluster) cast a 380 px ellipse across half the room.
-    Math.min(CONTACT_SHADOW_MAX_PX, Math.max(h * 0.22, 3)),
+    //
+    // WP-78: and a SHORT thing is by definition not thick. This ellipse is
+    // painted over the bottom of the prop rather than under it, so on a rug or
+    // a coffee table the old depth read as a detached smudge below the
+    // furniture rather than as the line where it meets the floor — the second
+    // half of the owner's "the oval shadows make no sense".
+    tall
+      ? Math.min(CONTACT_SHADOW_MAX_PX, Math.max(h * 0.22, 3))
+      : Math.min(CONTACT_SHADOW_MAX_PX / 2, Math.max(h * 0.1, 2)),
     0,
     0,
     Math.PI * 2,

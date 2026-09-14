@@ -14610,3 +14610,241 @@ mug: a contact shadow is the place a thing touches the floor, and at a human's h
 smaller than a pixel. WP-78 restores the distinction rather than the flat-floor look — tall things
 keep the ray, short things sit on their own feet — and `test/unit/lighting.test.mjs`'s rule that
 `setLightShadow()` is the only writer of `shadowOffsetX`/`shadowOffsetY` is untouched.
+
+## 153. WP-78 — who sits where, and honest shadows
+
+The owner, 14 September, three sentences:
+
+> _"Only live working agents are on desks in the project rooms. Everyone else is in the lounge area,
+> so I can clearly see which sessions are active at the moment."_
+>
+> _"Nobody sits by default in front of the manager; everybody is waiting on the sofa. Only the agent
+> I open walks up to the manager desk."_
+>
+> _"The oval shadows sometimes are offset and make no sense."_
+
+The second one reads as a description and is a complaint: he was describing what the floor did, and
+what he wanted was the opposite of it.
+
+**§152 is absent from this log.** A concurrent documentation package holds it; this entry takes 153
+so the two cannot collide, and the numbering therefore has a gap until that one lands.
+
+### 153.1 A project room was a register, not a team room
+
+`placement()` had said the same thing since the first floor: _"A session that is not running still
+sits at its project desk. Only an explicit bench moves it to the lounge."_ That is `01-PRODUCT.md`
+§4.1 verbatim and it is a defensible rule — a session belongs to the repo it was started in, and a
+room is a team room.
+
+It is also why the room the product is about stopped answering the question the product is about. On
+the reference machine (`08` §0) a project room held 21 bodies at desks over one working session. The
+owner cannot read "who is working right now" off a room where the people who finished three weeks
+ago are sitting in exactly the same pose, at exactly the same kind of desk, as the one who is typing
+— and colour is not enough, because at the fit scale the floor is usually drawn at, a room of twenty
+grey people with one green one in it reads as a room of twenty people.
+
+So the rule is now three zones and one question each:
+
+| zone | the question | states |
+| ---- | ------------ | ------ |
+| project desk | is this session **working for me** right now? | `working`, `stalled` |
+| the manager's desk | is this session **waiting on me** right now? | `needs_input`, `for_review` |
+| the lounge | everything else | `ended`, `benched` |
+
+`AT_DESK_STATES` and `WAITING_STATES` in `public/floor-rule.js` are those two lists, and
+`placement()` is four lines over them. It is the one copy, either side of the static-file boundary,
+exactly as WP-22 left it.
+
+**`stalled` is the one exception, and it is deliberate rather than an oversight.** A stalled session
+is `working` that has gone quiet past the stall window (`01-PRODUCT.md` §4.2); it is still live, and
+it may produce its next line a second from now. Walking it to the lounge would make the floor
+flicker on a **timer** rather than on an **event** — the stall window is ten minutes by default and
+one line of output un-stalls it — and it would have to walk back. It keeps its desk, its slump and
+its stall badge. That sentence is now in `03-VISUAL-SPEC.md` §5.1 as well, because it is the only
+part of this rule somebody would otherwise read as a bug.
+
+**Selecting a session moves nobody.** The owner's "only the agent I open walks up to the manager
+desk" is the half of his sentence this package deliberately does not implement, and the reason is in
+the sentence before it: he wants _the waiting ones_ at his desk by default. `placement()` reads
+`ackState` and `activityState` and nothing else — there is no `selected` in it to read — and
+`model.test.mjs` asserts that an agent carrying every field a panel might set lands in the same
+place as one carrying none. Selection is a ring on the floor and a panel on the right
+(`03-VISUAL-SPEC.md` §8); being **waiting** is what walks somebody to the desk.
+
+### 153.2 What did NOT change, and why it matters more than what did
+
+**WP-50's rule is untouched.** A repo with no live session earns no room, and its finished sessions
+are a line in the idle list and nothing on the floor. Moving `ended` to the lounge without saying
+this would have put the reference machine's twenty forgotten sessions back on the picture — through
+a different door — which is the thing WP-50 exists to have removed. `buildPlan`'s hidden set now
+reads:
+
+```js
+if (isActiveAgent(a)) continue;                     // on the floor in its own right
+if (!roomIds.has(String(a.projectId))) hidden.add(String(a.id));
+```
+
+which is the same set it computed before, stated as what it always meant. So an `ended` session goes
+to the lounge **only if its own repo is live**. On `reference` that is one person; the other
+nineteen are still the header's `N finished` and the idle list's lines.
+
+**A project room with a live session and nobody in it stays.** `checkout-flow` on the `demo` floor
+has one session, it is `needs_input`, and it is standing in the office — so the room is drawn,
+furnished, with an empty desk and a plate that says `1 need you`. That is the existing dynamic-floor
+behaviour (`08` B6: an active agent earns a room) and it is left alone on purpose. Making the room
+collapse while its only agent is at the manager's desk would delete the room the user is about to
+send that agent back to, and re-create it a second later. WP-77's pinning is the package for that;
+nothing here anticipates it.
+
+**The invariant is untouched.** Every function this package added or changed is a display filter
+over observed fields. Nothing writes `ackState`, the `INVARIANT:` tests pass unchanged, and
+`for_review` is still a state only a user action can leave.
+
+### 153.3 The reception, rebuilt around the queue instead of around the walls
+
+`buildOffice` had one guest chair at the desk — "it belongs to the front of the queue, the agent
+that has waited longest" — and a C of sofas round the walls for everybody else. Every seat the room
+offered past the first was a sofa seat, and `seatOffice` filled them in that order.
+
+Now:
+
+- **A ROW of visitor chairs across the front of the desk**, facing it. `visitorChairCount(interiorW)`
+  is the whole rule: **three from a 26 U interior, two below it, never a fourth.** Two constants and
+  a comparison, so the plan, the tests and this document cannot each have their own answer, and the
+  same floor produces the same chairs on every rebuild and on every machine. It is the interior
+  width rather than the desk's because the desk is itself derived from the interior, and one
+  derivation is easier to keep honest than two. A fourth chair is a boardroom, and the room the user
+  reads first should not look like a meeting.
+- **A standing queue for the rest**, as zones and no props — a queue is people standing, and putting
+  a chair under each of them would say they had been seated. Laid inside the **well** the three sofa
+  runs enclose, so a queue place cannot land on a sofa whatever proportions the packer hands the
+  room.
+- **`seatOffice` orders by distance from the desk**: the chairs first, sorted by how near the desk
+  centre each one is, then the queue in the order it was laid out. `assignSeats` hands it the
+  waiting agents sorted **oldest first** — by `waitingSince`, which is new, because the queue now
+  holds two states and each reads its own clock (`reviewSince` for a finished turn,
+  `needsInputSince` for a raised hand). An agent whose timestamp the adapter could not supply sorts
+  to the **back**: an unknown wait is not evidence of a long one.
+
+**The sofas stay, and seat nobody.** That was a choice, and the alternative was to delete them. They
+stay because three things in that room are anchored to them — the side table, the lamp on it, the
+water cooler on the side table — and because the rug and the coffee table are centred on the well
+the three runs define; removing the runs is re-laying the whole reception, and
+`layout-anchors.test.mjs` holds nine relationships in it to 2 U. They also still do the job
+`buildOffice`'s first rule gives them: the seating is against the walls, which is what keeps the
+middle of the room clear for the queue that is now in it. A reception with no seating in it is not a
+reception. `plan.test.mjs` asserts that no office seat, at any population, is within 0.6 U of a sofa.
+
+### 153.4 The queue ran the wrong way, and the goldens said so
+
+Two defects, both found in a PNG and neither visible to the suite — `08` §1.1 rule 10, again.
+
+**The queue stacked down the room's depth.** The packer may lay the reception on its side
+(`buildOfficeRow` reflects the whole room in the diagonal, WP-59d), and on the `demo` floor it does.
+The first implementation laid the queue along the well's **longer axis**, which sounds right and is
+not: the `demo` reception's well is 12.8 × 9.5 in its own frame, so "longer" picked the axis that
+the reflection turns into the screen's **vertical**, and six people came out stacked down the room's
+depth with each name drawn through the badge of the person behind them.
+
+The axis that matters is the one that is **horizontal on screen**, because that is the axis a name
+label and a waiting badge have room on: a person in the waiting area is a body plus a pill above the
+head plus a truncated name below the feet, and that stack is about five units tall and one wide. So
+`buildOfficeRow` now tells `buildOffice` it is about to be transposed, and the queue lays along the
+axis that will end up across the screen either way.
+
+**And the pitch was a body's width, not a person's.** `OFFICE_SEAT_PITCH` is 2.6 — how close two
+bodies may be drawn on one sofa — and the first cut reused it. Measured against the label stack it
+is about half of what a waiting agent needs, so `OFFICE_VISITOR_PITCH` is **6.4** and
+`OFFICE_QUEUE_ROW` **6.4**, with `OFFICE_QUEUE_PITCH` **3.8** along the queue's own run where only
+the name has to clear. The numbers were settled by regenerating the goldens three times and reading
+the office at 2× — there is no formula here, and the honest statement is that they are measured on
+one 1600 × 1000 capture at the fit scale that population produces.
+
+### 153.5 Honest shadows: height is declared, not inferred
+
+WP-72 gave the floor one light and made every offset a distance along it (§149). That is right for a
+thing with height and wrong for a thing lying on the floor, and the owner was looking at the second
+case: a mug, a chair and a potted plant do not throw a shadow down and to the right of themselves.
+They darken the floor they are touching.
+
+**`PROP_HEIGHT` in `backdrop-paint.js` names every prop kind `tall` or `short`,** and
+`isTallProp(prop)` reads it. Two rules hold it in place:
+
+1. **It is declared, never inferred.** A `w * h` heuristic gets a rug — the biggest thing in a
+   project room and the flattest thing in the building — exactly backwards. A prop may also carry
+   its own `tall` boolean, which wins; the table is the answer for a kind.
+2. **A kind with no entry is a test failure, not a default.** `lighting.test.mjs` builds a fully
+   furnished plan, collects every `prop.kind` it emits, scans the three painter modules for every
+   `case '…'` they answer to, and fails on the first one the table does not name. `isTallProp`
+   itself answers `false` for an unknown kind, because a thing nobody has measured is better drawn
+   flat than drawn floating.
+
+What each gets:
+
+| | drop shadow | contact ellipse |
+| --- | ----------- | --------------- |
+| **tall** (desk, whiteboard, sofa, counter, pool table, fridge, screen, …) | `3√2` along `LIGHT_DIR`, unchanged | offset `2√2` along the ray, unchanged |
+| **short** (chair, plant, rug, side table, mug bowl, monitor, lamp, …) | blur only, **zero** offset | **directly beneath**, and half the depth |
+
+The halved depth is the second half of the complaint. The contact ellipse is painted **over** the
+bottom of the prop rather than under it, so on a rug or a coffee table `h * 0.22` read as a detached
+smudge below the furniture rather than as the line where it meets the floor. A short thing is by
+definition not thick.
+
+Walls are untouched: a full-height wall still casts along the ray and a partition is waist height
+and still casts nothing (`03-VISUAL-SPEC.md` §6). So is the building's own shadow onto the ground.
+
+### 153.6 A character's shadow was 15 px from its feet
+
+`SHADOW_OX` and `SHADOW_OY` were `0.12` and `0.62` — a sixth of a unit right and two thirds of a
+unit **down the page**, which is a drop from a light nobody had stated and the last one left after
+§149. At the fit scales this floor is drawn at that is between 5 and 15 screen pixels of daylight
+between a person and their own shadow, and on a seated agent it put the ellipse under the chair
+behind them.
+
+A character's feet point **is** `(x, y)`. `drawCharacter` is handed the seat or spot the person is
+standing on and draws the whole body about it, rotating the legs with the facing rather than hanging
+them down the page, so the ground contact is the origin. Both constants are now zero — kept as named
+constants rather than deleted, because "the offset is zero" is a decision, and `lighting.test.mjs`
+measures the drawn ellipse against the feet point at four values of `u` up to 64 rather than reading
+the constants alone.
+
+One test had to change to see it: `identity-visuals.test.mjs` found the torso as "the filled ellipse
+nearest the origin", which worked only while the shadow was the one that was offset. It reads the
+fill colour now — `shadowContact` is painted by the contact shadow and by nothing else on a
+character.
+
+### 153.7 What moved on the floor, and what the numbers say
+
+Eight goldens regenerated. On `reference` — the 70-session machine `08` §0 measured — the header now
+reads **1 at desk · 19 finished · 12 benched · 35 went home**, with two people at the manager's desk
+and thirteen in the lounge. Before this package the same floor drew those two in the office and
+everything else that was not benched at a desk.
+
+The lounge's door plate says **"N resting"** rather than "N benched", and the number is
+`counts.drawn.lounge` — the benched who are still inside the gone-home window, plus the ended whose
+repo is live. "Benched" would have been a lie on a plate counting people the user never benched.
+`counts.drawn` gains `lounge`; `drawn.waiting` is both waiting states rather than `for_review`
+alone; `drawn.finished` is still "the sessions the floor has nowhere to draw", which is now an
+`ended` session in a repo with no room rather than a desk in one.
+
+The mini-floor (`minifloor.js`) shows the raised hands as well as the finished turns, for free: it
+draws the office, and the office is where they are now. That is the window whose entire job is "is
+anything waiting on me", so it is a straight improvement rather than a side effect to be managed.
+
+**2079 tests, 2078 passing and the one platform skip that predates this package** (no POSIX uid on
+win32), up from 2069. Ten are new: five in `test/unit/occupancy.test.mjs` — the mixed population, the
+chair/queue split at five waiting, the chair-count rule, the stalled exception, and WP-50's rule
+surviving — and five in `lighting.test.mjs` for the short contact shadow, the `PROP_HEIGHT` guard,
+the tall/short cast, and the character's feet. `paintProp` is exported so one prop can be asked what
+it casts; `bakeBackdrop` needs a real canvas and cannot run under `node --test`.
+
+### 153.8 Unverified
+
+The pitches in §153.4 are measured on one machine, at one viewport, on the populations the goldens
+photograph. A floor with a reception the packer lays at proportions none of the eight fixtures
+produce could still crowd its labels; nothing in the suite can see that, and the honest statement is
+that it is checked by picture at the sizes we have pictures of. Nothing here was run on a real
+machine with real sessions — the floor is a pure function of the snapshot, so the goldens are the
+measurement, but the walk from a desk to the manager's office has been watched only under
+`prefers-reduced-motion`, where it is a teleport.

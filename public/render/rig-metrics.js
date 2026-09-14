@@ -48,10 +48,26 @@ export const MANAGER_TIE = PALETTE.managerTie;
 export const MANAGER_SCALE = 1.3; // "a bit bigger" than an agent (uniform scale over u)
 
 // body-part geometry, expressed as a fraction of `u` (tuned at BASE_U = 14)
+/**
+ * A CHARACTER'S SHADOW IS DIRECTLY UNDER ITS FEET (WP-78).
+ *
+ * `SHADOW_OX`/`SHADOW_OY` were 0.12 and 0.62 — a sixth of a unit right and
+ * two thirds of a unit down the page, which at the fit scales this floor is
+ * drawn at is between 5 and 15 screen pixels of daylight between a person and
+ * their own shadow. It was a drop from a light nobody had stated, and it was
+ * the owner's "the oval shadows sometimes are offset and make no sense".
+ *
+ * A character's feet point IS `(x, y)`: `drawCharacter` is handed the seat or
+ * spot the person is standing on and draws the whole body around it, rotating
+ * the legs with the facing rather than hanging them down the page. So the
+ * ground contact is the origin, and the ellipse is centred on it. Both are kept
+ * as named constants rather than deleted, because "the offset is zero" is a
+ * decision and `test/unit/lighting.test.mjs` measures it.
+ */
 export const SHADOW_RX = 0.86,
   SHADOW_RY = 0.39,
-  SHADOW_OX = 0.12,
-  SHADOW_OY = 0.62;
+  SHADOW_OX = 0,
+  SHADOW_OY = 0;
 export const TORSO_RX = 0.82,
   TORSO_RY = 0.61;
 export const HEAD_R = 0.5,

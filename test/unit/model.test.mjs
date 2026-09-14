@@ -50,12 +50,37 @@ test('placement: user-owned states outrank observed ones', () => {
   assert.equal(placement(agent({ ackState: 'active', activityState: 'for_review' })), 'office');
 });
 
-test('placement: a dead session still sits at its project desk', () => {
-  // docs/01-PRODUCT.md §4.1 — only an explicit bench moves it to the lounge.
-  assert.equal(placement(agent({ live: false, activityState: 'ended' })), 'desk');
-  assert.equal(placement(agent({ activityState: 'needs_input' })), 'desk');
-  assert.equal(placement(agent({ activityState: 'stalled' })), 'desk');
+test('placement: a desk is for live work, and everything else has its own zone', () => {
+  // WP-78, and the owner's sentence it comes from: "only live working agents
+  // are on desks in the project rooms. Everyone else is in the lounge area, so
+  // I can clearly see which sessions are active at the moment."
   assert.equal(placement(agent({ activityState: 'working' })), 'desk');
+  // The ONE exception, and it is deliberate: a stalled session is live work
+  // that has gone quiet, it keeps its desk and its badge, and it may resume.
+  assert.equal(placement(agent({ activityState: 'stalled' })), 'desk');
+  // Both waiting states wait where the user is.
+  assert.equal(placement(agent({ activityState: 'needs_input' })), 'office');
+  assert.equal(placement(agent({ activityState: 'for_review' })), 'office');
+  // And a session that has finished is resting, not working.
+  assert.equal(placement(agent({ live: false, activityState: 'ended' })), 'lounge');
+});
+
+test('placement is a pure function of the two states, so selecting moves nobody', () => {
+  // The owner asked for the waiting ones at his desk BY DEFAULT rather than
+  // for the one he happens to have open. There is nothing to read here that a
+  // selection could change: an agent with every extra field a panel might set
+  // lands in the same place as one with none.
+  for (const activityState of ['working', 'stalled', 'needs_input', 'for_review', 'ended']) {
+    const plain = agent({ activityState });
+    const opened = {
+      ...plain,
+      selected: true,
+      focused: true,
+      lastRole: 'assistant',
+      lastText: 'x',
+    };
+    assert.equal(placement(opened), placement(plain), activityState);
+  }
 });
 
 test('needsYou counts only active agents in the three attention states', () => {
@@ -87,20 +112,23 @@ test('counts gives the three-way header breakdown', () => {
   assert.equal(c.letGo, 1);
   assert.equal(c.working, 1);
   assert.equal(c.total, 7);
-  // needs_input, stalled and working all sit at a desk; for_review is in the office.
-  assert.equal(c.atDesk, 3);
+  // WP-78: stalled and working sit at a desk; needs_input and for_review are
+  // both at the manager's desk.
+  assert.equal(c.atDesk, 2);
+  assert.equal(c.drawn.waiting, 3);
 });
 
 test('counts.drawn describes the floor, and counts still describes the deck', () => {
-  // WP-55. `atDesk` is every session whose placement is a desk, which is what
-  // the deck and the CLI mean by it. `drawn.atDesk` is the ones the FLOOR puts
-  // at a desk — a project with nobody active in it has no room, so the finished
-  // sessions sitting in it are not drawn anywhere and are counted as
-  // `drawn.finished` instead. They are still in `total`, still in the panel,
-  // still in the deck.
+  // WP-55, amended by WP-78. `atDesk` is every session whose placement is a
+  // desk, which is what the deck and the CLI mean by it; `drawn.atDesk` is the
+  // ones the FLOOR puts at one. What WP-78 changed is who that is: a finished
+  // session is in the lounge now, not at a desk, so a live repo's ended
+  // sessions are `drawn.lounge` and a dead repo's — no room to draw them in —
+  // are still `drawn.finished`. They remain in `total`, in the panel, and in
+  // the deck either way.
   const list = [
-    // `busy` has somebody working, so it gets a room and its finished session
-    // is drawn at a desk in it.
+    // `busy` has somebody working, so it gets a room, and its finished session
+    // rests in the lounge rather than sitting at a desk in it.
     agent({ id: 'a', projectId: 'busy', activityState: 'working' }),
     agent({ id: 'b', projectId: 'busy', activityState: 'ended' }),
     // `quiet` has only finished sessions: a directory line, no room, nobody
@@ -112,11 +140,16 @@ test('counts.drawn describes the floor, and counts still describes the deck', ()
     agent({ id: 'e', projectId: 'queued', activityState: 'for_review' }),
   ];
   const c = counts(list, { now: 1_000_000_000_000, goneHomeDays: 7 });
-  assert.equal(c.atDesk, 4, 'the deck still counts every session at a desk');
-  assert.equal(c.drawn.atDesk, 2, 'the floor draws two of them at a desk');
-  assert.equal(c.drawn.finished, 2, 'and names the two it does not draw');
+  assert.equal(c.atDesk, 1, 'the deck counts the one session actually at a desk');
+  assert.equal(c.drawn.atDesk, 1, 'and the floor draws it');
+  assert.equal(c.drawn.finished, 2, 'the two in a repo with no room are named, not drawn');
+  assert.equal(c.drawn.lounge, 1, "the live repo's finished session rests in the lounge");
   assert.equal(c.drawn.waiting, 1);
-  assert.equal(c.drawn.atDesk + c.drawn.finished, c.atDesk, 'every desk session is accounted for');
+  assert.equal(
+    c.drawn.atDesk + c.drawn.finished + c.drawn.lounge + c.drawn.waiting,
+    list.length,
+    'every session is accounted for exactly once',
+  );
 });
 
 test('counts.drawn splits the benched by the gone-home window', () => {

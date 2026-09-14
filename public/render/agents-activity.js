@@ -105,6 +105,13 @@ export function clipForActivity(activityState) {
  */
 export function initialClipFor(agent, placement) {
   if (placement === 'desk') return clipForActivity(agent.activityState);
-  if (placement === 'office') return 'stand_wait';
+  // WP-78: a hand up is a hand up wherever the agent is waiting. `needs_input`
+  // waits at the manager's desk now rather than at its own, and losing the
+  // pulsing raised hand there would lose "the single most important animation
+  // in the product" (`03-VISUAL-SPEC.md` §4.1) for half the queue. A finished
+  // turn still stands and waits, so the two signals stay different.
+  if (placement === 'office') {
+    return agent.activityState === 'needs_input' ? 'hand_raise' : 'stand_wait';
+  }
   return null; // lounge: chosen once the agent arrives
 }

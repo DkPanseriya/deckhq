@@ -17,6 +17,7 @@
 import { formatTokens, payrollLine } from './plan.js';
 import { PALETTE } from './palette.js';
 import { formatElapsed } from './rig.js';
+import { waitingSince } from '../floor-rule.js';
 import { worldToScreen } from './agents.js';
 import { SceneCamera } from './scene-camera.js';
 import { now as clockNow } from '../clock.js';
@@ -152,19 +153,25 @@ export function plateLinesFor(room, snapshot, plan) {
   }
   if (room.kind === 'office') {
     const c = snap.counts || {};
-    const waiting = c.forReview || 0;
+    // WP-78: the office holds BOTH waiting states now, so the plate counts
+    // both. `drawn.waiting` is that number, computed once in `counts()`;
+    // `forReview` is what an older daemon's snapshot carries and all it can
+    // honestly claim.
+    const waiting = c.drawn && typeof c.drawn.waiting === 'number' ? c.drawn.waiting : c.forReview;
     // The longest wait is the number that makes debt visible. Individual
     // badges cannot fit across a packed waiting area at a tight fit scale,
     // so the plate carries the worst case; per-agent badges reappear once
     // the viewport is wide enough to fit them.
     let oldest = 0;
+    const now = clockNow();
     for (const a of snap.agents || []) {
-      if (a.ackState === 'active' && a.activityState === 'for_review' && a.reviewSince) {
-        oldest = Math.max(oldest, clockNow() - a.reviewSince);
-      }
+      if (a.ackState !== 'active') continue;
+      const since = waitingSince(a);
+      if (Number.isFinite(since)) oldest = Math.max(oldest, now - since);
     }
-    const suffix = waiting > 0 && oldest > 0 ? ` · oldest ${formatElapsed(oldest)}` : '';
-    return [room.name, `${waiting} waiting${suffix}`];
+    const n = waiting || 0;
+    const suffix = n > 0 && oldest > 0 ? ` · oldest ${formatElapsed(oldest)}` : '';
+    return [room.name, `${n} waiting${suffix}`];
   }
   if (room.kind === 'lounge') {
     const c = snap.counts || {};
@@ -175,10 +182,17 @@ export function plateLinesFor(room, snapshot, plan) {
     // what the header reports and what the panel lists — nothing about
     // their state changed, only whether they are drawn.
     const goneHome = plan && plan.goneHome ? plan.goneHome.size : 0;
-    const drawn = Math.max(0, (c.benched || 0) - goneHome);
+    // WP-78: the lounge rests the ENDED as well as the benched, so the number
+    // on the door is both. It stays honest about the split by saying "resting"
+    // rather than "benched" — benching is a user action and most of the people
+    // in here now did not have it done to them.
+    const drawn =
+      c.drawn && typeof c.drawn.lounge === 'number'
+        ? c.drawn.lounge
+        : Math.max(0, (c.benched || 0) - goneHome);
     return [
       room.name,
-      goneHome > 0 ? `${drawn} benched · ${goneHome} went home` : `${drawn} benched`,
+      goneHome > 0 ? `${drawn} resting · ${goneHome} went home` : `${drawn} resting`,
     ];
   }
   if (room.kind === 'let_go') {
