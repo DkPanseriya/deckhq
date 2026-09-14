@@ -7,12 +7,44 @@
 
   <h2>npx</h2>
   <p>The one to start with. It downloads the package, runs it, and leaves no binary behind.</p>
-  <p class="command">npx deckhq</p>
+  <p class="command">npx deckhq app</p>
   <p>
-    That starts the daemon on <code>127.0.0.1</code> and opens the floor in your browser.
-    <code>npx deckhq doctor</code> prints the environment report without starting anything, and
-    <code>npx deckhq --no-open</code> starts the daemon without a tab.
+    That starts the daemon on <code>127.0.0.1</code> and opens the floor in a window of its own
+    &#8212; Chrome or Edge in application mode, no tab strip, no address bar &#8212; and on its
+    first run it prints the paths a Desktop and Start Menu icon would take and asks, once, whether
+    to write them. Anything but <code>y</code> writes nothing and it never asks again.
+    <code>npx deckhq app --dry-run</code> prints what it would start and what it would open and does
+    neither. <code>npx deckhq doctor</code> prints the environment report without starting anything,
+    and <code>npx deckhq --no-open</code> starts the daemon without a tab.
   </p>
+
+  <h2>One line, including Node</h2>
+  <p>
+    If there is no Node on the machine at all, these two do the whole thing: check for Node 18 or
+    newer, <strong>offer</strong> to install it &#8212;
+    <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on
+    macOS, the distribution&#8217;s own command printed for you to run on Linux &#8212; then
+    <code>npm install -g deckhq@latest</code>, then the same icon question, then
+    <code>deckhq app</code>.
+  </p>
+  <p class="command">irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex</p>
+  <p class="command">curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh</p>
+  <div class="note">
+    <p>
+      <strong>Read a script before you pipe it into a shell</strong> &#8212; this one included. They
+      are two short files in the repository, served from this site byte for byte as they are there:
+      <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.ps1"
+        >install.ps1</a
+      >
+      and
+      <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.sh"
+        >install.sh</a
+      >. They ask before installing anything, they make no network call but <code>winget</code>,
+      <code>brew</code> and <code>npm</code>, they send nothing anywhere, and running either of them
+      twice does nothing the first run did not. Neither is part of the package: nothing DeckHQ runs
+      imports them, and they are not in the npm tarball.
+    </p>
+  </div>
 
   <h2>A global install</h2>
   <p>

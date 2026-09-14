@@ -431,3 +431,89 @@ test('planOpen falls back when the platform has no app-window form', () => {
   assert.equal(plan.mode, 'default');
   assert.equal(plan.command.command, 'xdg-open');
 });
+
+// ---------------------------------------------------------------------------
+// `--dry-run`, and the first-run pin offer — WP-75
+// ---------------------------------------------------------------------------
+
+test('--dry-run starts nothing, opens nothing, and says what it would do', async () => {
+  const io = capture();
+  const calls = [];
+  const code = await runApp(['--dry-run'], {
+    ...io,
+    platform: 'linux',
+    dataDir: '/state',
+    find: async () => null,
+    start: async () => assert.fail('--dry-run must not start a daemon'),
+    findBrowser: () => '/usr/bin/google-chrome',
+    offerPin: async () => assert.fail('--dry-run must not ask anything'),
+    spawnFn: recordingSpawn(calls),
+    node: '/usr/bin/node',
+    bin: '/pkg/bin/deckhq.mjs',
+  });
+  assert.equal(code, 0);
+  assert.equal(calls.length, 0, '--dry-run spawned something');
+  assert.match(io.stdout, /--dry-run: nothing below was started, opened or written\./);
+  assert.match(io.stdout, /\/usr\/bin\/node \/pkg\/bin\/deckhq\.mjs --no-open/);
+  assert.match(io.stdout, /an app window — \/usr\/bin\/google-chrome/);
+  assert.match(io.stdout, /--app=http:\/\/127\.0\.0\.1:4317\//);
+});
+
+test('--dry-run against a running daemon says it would be reused', async () => {
+  const io = capture();
+  const code = await runApp(['--dry-run', '--no-window'], {
+    ...io,
+    find: async () => ({ port: 4400, url: 'http://127.0.0.1:4400/' }),
+    start: async () => assert.fail('--dry-run must not start a daemon'),
+    findBrowser: () => null,
+  });
+  assert.equal(code, 0);
+  assert.match(io.stdout, /127\.0\.0\.1:4400\/ {2}\(already running/);
+  assert.match(io.stdout, /Window: {2}none — --no-window/);
+});
+
+test('the pin offer is made after the window, with the argv it was given', async () => {
+  const io = capture();
+  const seen = [];
+  const code = await runApp(['--pin'], {
+    ...io,
+    platform: 'linux',
+    find: async () => ({ port: 4317, url: URL_4317 }),
+    findBrowser: () => '/usr/bin/google-chrome',
+    spawnFn: recordingSpawn([]),
+    offerPin: async (argv) => {
+      // Whatever the window said is already on the screen: the offer is for a
+      // thing the user can see.
+      assert.match(io.stdout, /Opened as an app window/);
+      seen.push(argv);
+      return { asked: true };
+    },
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(seen[0], ['--pin']);
+});
+
+test('--no-window opens no window, so it makes no offer either', async () => {
+  const io = capture();
+  const code = await runApp(['--no-window'], {
+    ...io,
+    find: async () => ({ port: 4317, url: URL_4317 }),
+    offerPin: async () => assert.fail('there is no window to offer a shortcut to'),
+  });
+  assert.equal(code, 0);
+});
+
+test('an offer that throws never costs the window that is already open', async () => {
+  const io = capture();
+  const code = await runApp([], {
+    ...io,
+    platform: 'linux',
+    find: async () => ({ port: 4317, url: URL_4317 }),
+    findBrowser: () => '/usr/bin/google-chrome',
+    spawnFn: recordingSpawn([]),
+    offerPin: async () => {
+      throw new Error('the state directory is read-only');
+    },
+  });
+  assert.equal(code, 0);
+});

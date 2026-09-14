@@ -82,7 +82,9 @@ npm pack --dry-run
 ```
 
 Expect **198 files, 730.1 kB packed, 2.4 MB unpacked** for 1.3.0 (1.2.0 was 42 files and 225 kB;
-the growth is the split modules, the render parts and the two PWA icons). Read the list and
+the growth is the split modules, the render parts and the two PWA icons). On `main` after WP-66 and
+WP-75 it reads **225 files, 868.3 kB packed, 2.8 MB unpacked** — Studio, `src/cli/pin.mjs` and the
+longer README. Read the list and
 confirm `bin/`, `src/` (including `src/data/rates.json` and `src/core/publisher-key.mjs`),
 `public/` (including `deck.js`, `palette.js`, `settings-ui.js`, `minifloor.js`, `snapshot.js`,
 `sound.js`, `coach-marks.js`, `floor-rule.js`, all forty `render/*` parts,
@@ -97,6 +99,39 @@ none of the following are:
 
 If anything unwanted is there, fix the `files` field in `package.json` — never by adding a
 `.npmignore`, which silently overrides `files`.
+
+### 5a. The tarball runs — WP-75
+
+Reading the list is no longer the whole check. `test/integration/tarball.test.mjs` packs the
+package into a temp directory, extracts it, and runs **that** `bin/deckhq.mjs` with `--version` and
+`app --dry-run` in a home of its own. It is part of `npm test`, so step 3 already ran it; if it
+**skipped**, this machine had no `npm` or no `tar` and the check did not happen — run it explicitly
+and read the line:
+
+```sh
+npm test -- test/integration/tarball.test.mjs
+```
+
+A `src/` module that imports something outside `files` — `scripts/`, `docs/`, a fixture — passes
+every other test and throws `ERR_MODULE_NOT_FOUND` on the first stranger's machine. This is the
+test that catches it.
+
+### 5b. The one-line installers still resolve — WP-75
+
+The README and the home page both print two URLs, and a 404 there is the worst 404 this project
+can serve. After the Pages deploy for this release has finished:
+
+```sh
+curl -fsSI https://dkpanseriya.github.io/deckhq/install.ps1 | head -1
+curl -fsSI https://dkpanseriya.github.io/deckhq/install.sh  | head -1
+```
+
+Both `200`. They are copied into `site/dist` by `site/build.mjs`, so they ship with whatever the
+Pages workflow last deployed from `main` — which means **a release does not update them; a push to
+`main` does**. `test/unit/site.test.mjs` asserts the published bytes equal
+`scripts/install/install.*` byte for byte, and `test/unit/install-scripts.test.mjs` parses both with
+their own interpreters. Neither file is in the tarball, and a `files` entry that put `scripts/`
+there would fail that test.
 
 ## 6. Confirm the metadata the registry will show
 

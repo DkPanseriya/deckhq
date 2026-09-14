@@ -150,7 +150,8 @@ export async function buildPlan(surface, deps = {}) {
  * @param {{write?:(s:string)=>void, error?:(s:string)=>void, dataDir?:string,
  *          platform?:string, env?:Record<string,any>, binPath?:string,
  *          node?:string, probeFolders?:Function, applyFn?:typeof apply,
- *          removeFn?:typeof remove, exec?:Function, powershell?:string}} [deps]
+ *          removeFn?:typeof remove, exec?:Function, powershell?:string,
+ *          confirm?:(plan:import('../core/launcher.mjs').Plan) => Promise<boolean>|boolean}} [deps]
  * @returns {Promise<number>}
  */
 export async function runInstaller(surface, argv = [], deps = {}) {
@@ -240,7 +241,18 @@ export async function runInstaller(surface, argv = [], deps = {}) {
 
   write('\n' + describePlan(plan));
 
-  if (!yes) {
+  // `--yes` is one way to give consent. WP-75 adds the other, and it is the
+  // same consent rather than a weaker one: `deps.confirm` is only ever an
+  // interactive question asked **after** the path list above has been printed,
+  // so the user has seen every path before answering. Nothing else changes —
+  // the files are tagged, they are recorded, and `--remove --yes` takes them
+  // back out. Without `--yes` and without a confirm hook, nothing is written.
+  let consented = yes;
+  if (!consented && typeof deps.confirm === 'function') {
+    consented = Boolean(await deps.confirm(plan));
+  }
+
+  if (!consented) {
     write('  Nothing was changed. Run it again with --yes to write it.\n\n');
     return 0;
   }

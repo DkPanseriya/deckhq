@@ -238,6 +238,11 @@ const HELP = [
   '  --width <n>    the window, on its very first run. Default 1600',
   '  --height <n>   the same. Default 1000',
   '  --no-window    reuse or start the daemon and print the URL; open nothing',
+  '  --dry-run      print what this would start and what it would open, and do',
+  '                 neither. Starts nothing, opens nothing, writes nothing.',
+  '  --pin          ask whether to put DeckHQ on your Desktop and Start Menu,',
+  '                 even if that question has been answered before',
+  '  --no-pin       never ask',
   '  --help         this message',
   '',
   'Reuses a DeckHQ that is already running — the port you named, the one a',
@@ -249,6 +254,11 @@ const HELP = [
   'bar, its own taskbar button, and its own browser profile under',
   '~/.deckhq/app-profile so it keeps its size and never shares your tabs.',
   'A machine with neither falls back to your default browser and says so.',
+  '',
+  'The first time this opens a window on a machine with no DeckHQ shortcut on',
+  'it, it prints the paths `deckhq shortcut --install` would write and asks once',
+  'whether to write them. Anything but "y" writes nothing and it never asks',
+  'again. Off a terminal it asks nothing and prints the command instead.',
   '',
   'Makes no outbound network calls.',
   '',
@@ -275,7 +285,9 @@ function option(argv, name) {
  * @param {{write?:(s:string)=>void, error?:(s:string)=>void,
  *          find?:typeof findRunningDaemon, start?:typeof startDetachedDaemon,
  *          findBrowser?:() => string|null, spawnFn?:typeof spawn,
- *          dataDir?:string, platform?:NodeJS.Platform|string}} [deps]
+ *          dataDir?:string, platform?:NodeJS.Platform|string,
+ *          offerPin?:(argv:string[], deps:any) => Promise<any>, tty?:boolean,
+ *          node?:string, bin?:string}} [deps]
  * @returns {Promise<number>}
  */
 export async function runApp(argv = [], deps = {}) {
@@ -297,6 +309,14 @@ export async function runApp(argv = [], deps = {}) {
 
   const find = deps.find || findRunningDaemon;
   const start = deps.start || startDetachedDaemon;
+  const dryRun = argv.includes('--dry-run');
+
+  // `--dry-run` is what a stranger runs first, and what the tarball test runs
+  // on a machine with no browser and no intention of starting anything. It
+  // does the one thing that is free and reversible — ask loopback whether a
+  // DeckHQ is already there — and then says, in full, what the run without it
+  // would do. It spawns nothing, writes nothing and asks nothing.
+  if (dryRun) return await dryRunApp(argv, { ...deps, port, find, write, error });
 
   let daemon;
   try {
@@ -390,6 +410,84 @@ export async function runApp(argv = [], deps = {}) {
         '  of its own.\n\n',
     );
   }
+
+  // WP-75. After the window, never before it: the offer is for a thing the
+  // user can now see. It writes nothing without an answer, and it asks at most
+  // once per machine. Its failure is never this command's failure — the window
+  // is already open, and that was the job.
+  try {
+    const offer = deps.offerPin || (await import('./pin.mjs')).offerPin;
+    await offer(argv, { write, error, dataDir: deps.dataDir, tty: deps.tty });
+  } catch {
+    /* an offer that could not be made costs nothing */
+  }
+
+  return 0;
+}
+
+/**
+ * `--dry-run`: everything this command would do, and none of it.
+ *
+ * @param {string[]} argv
+ * @param {{write:(s:string)=>void, error:(s:string)=>void, port?:number|null,
+ *          find:typeof findRunningDaemon, findBrowser?:() => string|null,
+ *          dataDir?:string, platform?:NodeJS.Platform|string,
+ *          node?:string, bin?:string}} deps
+ * @returns {Promise<number>}
+ */
+async function dryRunApp(argv, deps) {
+  const { write } = deps;
+  const node = deps.node || process.execPath;
+  const bin = deps.bin || BIN;
+
+  let running = null;
+  try {
+    running = await deps.find({ port: deps.port ?? null });
+  } catch {
+    running = null;
+  }
+
+  const port = running?.port ?? (Number(deps.port) || DEFAULT_PORT);
+  const url = running?.url ?? `http://127.0.0.1:${port}/`;
+
+  write('\n  --dry-run: nothing below was started, opened or written.\n\n');
+  write(
+    running
+      ? `  Daemon:  ${url}  (already running — it would be reused)\n`
+      : `  Daemon:  none answered, so it would start one, detached:\n` +
+          `             ${node} ${bin} --no-open` +
+          (deps.port ? ` --port ${deps.port}` : '') +
+          '\n' +
+          `           then wait for ${url}api/state\n`,
+  );
+
+  let browser = null;
+  try {
+    browser = deps.findBrowser ? deps.findBrowser() : (await import('./chrome.mjs')).findChrome();
+  } catch {
+    browser = null;
+  }
+
+  if (argv.includes('--no-window')) {
+    write('  Window:  none — --no-window\n');
+  } else {
+    const plan = planOpen({
+      url,
+      platform: deps.platform,
+      dataDir: deps.dataDir,
+      browser,
+    });
+    write(
+      plan.mode === 'app'
+        ? `  Window:  an app window — ${plan.browser}\n`
+        : '  Window:  your default browser, as an ordinary tab — no Chrome, Edge or\n' +
+            '           Chromium was found\n',
+    );
+    if (plan.command) {
+      write(`             ${plan.command.command} ${plan.command.args.join(' ')}\n`);
+    }
+  }
+  write('\n');
   return 0;
 }
 

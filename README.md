@@ -4,8 +4,30 @@
 forgot, and it remembers what's waiting on you even after you've read it. Local, private, MIT.
 
 ```bash
-npx deckhq
+npx deckhq app
 ```
+
+One line. It starts the daemon, opens the floor in a window of its own, and — the first time only —
+prints the paths a Desktop and Start Menu icon would take and asks whether to write them. Say `y`
+once and there is no command after that, just the icon. Say anything else and nothing is written
+and you are never asked again.
+
+**No Node on the machine?** One line does that too. Each of these checks for Node 18 or newer,
+**offers** to install it (`winget` on Windows, `brew` on macOS, your distribution's own command
+printed on Linux — never without asking), installs DeckHQ, offers the icon, and opens the window:
+
+```powershell
+irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+```
+
+Read them before you run them — [`install.ps1`](scripts/install/install.ps1) and
+[`install.sh`](scripts/install/install.sh) are two short files in this repository, served from the
+docs site byte for byte as they are here. They are not part of the package: nothing DeckHQ runs
+imports them, and they are not in the npm tarball.
 
 ![An agent's turn ends: it leaves its project desk, walks the corridor into your office, and joins the queue of sessions waiting on you with a crimson waiting-time badge over its head](docs/media/hero.gif)
 
@@ -32,7 +54,11 @@ not the same as you having dealt with it.
 Real output from the development machine, 3 September 2026. Your numbers will differ, and that is
 the point: nobody knows this number about their own machine until they run the command.
 
-Node 18+. No build step, no runtime dependencies, no account, no network calls of any kind.
+**Node 18 or newer is the only requirement**, and the one line above installs it for you if it is
+not there. No build step, no runtime dependencies, no account, no network calls of any kind.
+
+The longer path, if you would rather do it a step at a time: `npm install -g deckhq`, then
+`deckhq app`, then `deckhq shortcut --install --yes` for the icon. Every one of those is below.
 
 ---
 
@@ -140,13 +166,21 @@ so there is nothing to hunt for in a menu.
 
 ## Run it like an app
 
-Three commands. The first is the one you want.
+Three commands, and on a new machine you type only the first — it offers the second itself.
 
 ```bash
 deckhq app                        # the floor in a window of its own
 deckhq shortcut --install --yes   # + a Desktop and Start Menu icon for it
 deckhq autostart --install --yes  # + the daemon, quietly, when you log in
 ```
+
+The first time `deckhq app` opens a window on a machine with no DeckHQ shortcut on it, it prints
+exactly the path list `deckhq shortcut --install` prints and asks one question — **"Put DeckHQ on
+your Desktop and Start Menu? [y/N]"**. `y` writes them, with that answer as the consent; anything
+else writes nothing and it never asks again. Off a terminal — a login script, a pipe, a CI job — it
+asks nothing at all and prints the command instead, because a prompt nobody can answer is a hung
+script. `deckhq app --pin` asks again whenever you want it; `--no-pin` never asks; and
+`deckhq app --dry-run` prints what it would start and what it would open and does neither.
 
 ![The DeckHQ floor in a Chrome application window on Windows 11: its own title bar reading "(7) DeckHQ" with the DeckHQ mark, no tab strip and no address bar, the queue strip along the top and the office below it](docs/media/app-window.png)
 

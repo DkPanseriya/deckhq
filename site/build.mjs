@@ -41,6 +41,13 @@ const PORT = Number(opt('--port', 4600));
 
 const REPO = 'https://github.com/DkPanseriya/deckhq';
 
+/**
+ * Where this site is served from, and therefore where the one-line installers
+ * below are. A GitHub project page, so the repository name is part of the
+ * path; there is no custom domain and this file must not invent one.
+ */
+const SITE_ORIGIN = 'https://dkpanseriya.github.io/deckhq';
+
 /* ------------------------------------------------------------------ pages */
 
 /**
@@ -92,6 +99,28 @@ const PAGES = [
 
 /** Images copied out of `docs/media/` into `dist/media/`. */
 const MEDIA = ['hero.gif', 'floor.png', 'panel-review-card.png', 'deck-view.png'];
+
+/**
+ * The one-line installers, copied to the root of the site — WP-75.
+ *
+ * They are served from here rather than from a raw GitHub URL because this is
+ * the only URL that is stable, is under this project's control, and already
+ * deploys: `.github/workflows/pages.yml` uploads `site/dist` whole on every
+ * push to `main`, so a file written here is at
+ * `https://dkpanseriya.github.io/deckhq/<name>` the moment the workflow is
+ * green. `raw.githubusercontent.com/.../v1.3.0/...` would pin a tag, which
+ * sounds better and is worse: the tag does not exist until the release is cut,
+ * so the line printed in the README and on the site would 404 between the
+ * merge and the tag, which is exactly when a stranger reads it.
+ *
+ * They are NOT in the npm tarball. `package.json`'s `files` does not carry
+ * `scripts/`, and that is the point: the product has no runtime dependency on
+ * either of them, and nothing in `src/` imports them.
+ */
+const INSTALLERS = [
+  { name: 'install.ps1', from: path.join('scripts', 'install', 'install.ps1') },
+  { name: 'install.sh', from: path.join('scripts', 'install', 'install.sh') },
+];
 
 /* ------------------------------------------------------------------ shell */
 
@@ -599,13 +628,24 @@ ${listing}
     written++;
   }
 
+  // The one-line installers, byte for byte as they are in the repository, so
+  // what a stranger pipes into their shell is a file that is reviewed, linted
+  // and in the history rather than one this script generated.
+  for (const installer of INSTALLERS) {
+    const from = path.join(root, installer.from);
+    if (!fs.existsSync(from)) throw new Error(`${installer.from} is missing`);
+    fs.copyFileSync(from, path.join(OUT, installer.name));
+    written++;
+  }
+
   // GitHub Pages runs Jekyll over an upload unless told not to, and Jekyll
   // drops files and directories beginning with an underscore.
   write('.nojekyll', '');
 
   process.stdout.write(
     `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
-      ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images)\n`,
+      ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images,` +
+      ` ${INSTALLERS.length} installers)\n`,
   );
 }
 
@@ -653,4 +693,4 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (SERVE) await serve();
 }
 
-export { markdown, inline, plain, splitEntries, safeUrl, build };
+export { markdown, inline, plain, splitEntries, safeUrl, build, INSTALLERS, SITE_ORIGIN };

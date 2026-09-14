@@ -205,18 +205,82 @@ export async function inspectShortcut(file, deps = {}) {
  */
 export function readRecord(dataDir = DATA_DIR) {
   const empty = { version: 1, entries: [] };
+  const parsed = readRecordDocument(dataDir);
+  if (!Array.isArray(parsed.entries)) return empty;
+  return {
+    version: Number(parsed.version) || 1,
+    entries: parsed.entries.filter(
+      (e) => e && typeof e.path === 'string' && typeof e.surface === 'string',
+    ),
+  };
+}
+
+/**
+ * The whole document as it is on disk, unfiltered — including keys this
+ * module does not own.
+ *
+ * WP-75 put one such key there: `app.pinOffered`, the answer to the first-run
+ * "put DeckHQ on your Desktop?" question. It belongs in this file rather than
+ * in `state.json` for the reason `docs/DEVIATIONS.md` §93 gives: `state.json`
+ * gets exactly one writer, and that writer is the daemon. This file is already
+ * the one the CLI writes about installation, which is exactly what a pin offer
+ * is about.
+ *
+ * @param {string} [dataDir]
+ * @returns {Record<string, any>}
+ */
+export function readRecordDocument(dataDir = DATA_DIR) {
   try {
     const parsed = JSON.parse(fs.readFileSync(path.join(dataDir, RECORD_NAME), 'utf8'));
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.entries)) return empty;
-    return {
-      version: Number(parsed.version) || 1,
-      entries: parsed.entries.filter(
-        (e) => e && typeof e.path === 'string' && typeof e.surface === 'string',
-      ),
-    };
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
   } catch {
-    return empty;
+    return {};
   }
+}
+
+/**
+ * Write the document, atomically, the way `writeRecord` does.
+ * @param {Record<string, any>} next
+ * @param {string} dataDir
+ */
+function writeRecordDocument(next, dataDir) {
+  const file = path.join(dataDir, RECORD_NAME);
+  fs.mkdirSync(dataDir, { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
+  fs.renameSync(tmp, file);
+  return next;
+}
+
+/**
+ * What `deckhq app` has already asked this machine, so it does not ask twice.
+ *
+ * @param {string} [dataDir]
+ * @returns {Record<string, any>}
+ */
+export function readAppFlags(dataDir = DATA_DIR) {
+  const app = readRecordDocument(dataDir).app;
+  return app && typeof app === 'object' && !Array.isArray(app) ? app : {};
+}
+
+/**
+ * Merge fields into `app`, leaving every entry and every other key alone.
+ *
+ * @param {Record<string, any>} patch
+ * @param {{dataDir?:string}} [opts]
+ */
+export function writeAppFlags(patch, opts = {}) {
+  const dataDir = opts.dataDir || DATA_DIR;
+  const doc = readRecordDocument(dataDir);
+  const next = {
+    version: Number(doc.version) || 1,
+    ...doc,
+    entries: Array.isArray(doc.entries) ? doc.entries : [],
+    app: { ...(readAppFlags(dataDir) || {}), ...patch },
+  };
+  writeRecordDocument(next, dataDir);
+  return next.app;
 }
 
 /**
@@ -246,13 +310,13 @@ export function writeRecord(surface, written, opts = {}) {
       ...(entry.digest ? { digest: entry.digest } : {}),
     });
   }
-  const next = { version: 1, entries: [...kept, ...added] };
-  const file = path.join(dataDir, RECORD_NAME);
-  fs.mkdirSync(dataDir, { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(next, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
-  return next;
+  // Keys this function does not own — WP-75's `app` — are carried through
+  // rather than dropped: installing a shortcut must not forget that the pin
+  // question has already been answered, and answering it must not forget the
+  // shortcut.
+  const { version: _v, entries: _e, ...rest } = readRecordDocument(dataDir);
+  const next = { version: 1, ...rest, entries: [...kept, ...added] };
+  return writeRecordDocument(next, dataDir);
 }
 
 /** Everything recorded for one surface. */
