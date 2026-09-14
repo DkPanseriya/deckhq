@@ -16311,3 +16311,234 @@ All nine were regenerated once and `goldens:check` is green: 0 px over tolerance
 - **The favicon `<link>` declares `sizes` and no `type`.** `image/x-icon` and
   `image/vnd.microsoft.icon` are both in use and browsers ignore the attribute for an `.ico`; the
   daemon serves it as `image/x-icon` (`src/http/server.mjs`).
+
+## 162. WP-79 — the doodle became a robot, and the floor stopped being furniture with people in it
+
+The owner judged four candidate figures on a real crop of his own floor and picked **B**, the 45°
+three-quarter robot (`docs/media/design/character/README.md`, `B.png`, `in-situ.png`). This entry is
+what changed to draw it, and the seven places the build departed from the sheet or from what the
+codebase already said.
+
+### 162.1 What was wrong with the old rig, in one number
+
+**22 px of readable mass inside a 48 px box.** The old figure was a top-down ellipse with stroke
+limbs: `BODY_HEIGHT_U` said 2.52 plan units crown to sole, which at the demo floor's fit scale is
+48 screen px, and of that a third was thin splayed arms and legs and another third was air. The
+torso plus the head — the only part with any colour area — measured about 22 px. The design study's
+own summary of the problem: _"the old rig spent head and hair on identity and left a coloured
+waistcoat, which at 22 px reads as a grey blob."_
+
+Everything else in this package follows from that sentence. The three lessons the study drew are
+enforced in code rather than stated in a comment:
+
+1. **The state colour owns the whole body mass, head included.** `rigTints()` fans `opts.color` out
+   into five tints and there is no second hue on the figure at all. `identity-visuals.test.mjs`
+   measures that the barrel — now found by AREA rather than by "the ellipse nearest the origin" — is
+   filled with exactly `opts.color` at alpha 1, for 400 appearances at every LOD.
+2. **The face is a bright pane with a dark mark.** Measured against the alternative on all four
+   candidates: a lit screen on a coloured head survives 24 px, a dark screen with a light mark does
+   not.
+3. **Identity is two or three small elements.** An antenna tip, a pair of ear cups, a chest badge, a
+   pair of boots. The study's own risk note for B: _"reads 'teddy' if the accents get any louder."_
+
+### 162.2 The figure never turns, and that deletes §26
+
+`Pose.bodyAngle` is still carried, still means what `03-VISUAL-SPEC.md` §3.4 says, and is still
+composed from the seat's facing, the path tangent and the clip's sway. The rig does not rotate the
+sprite by it. A three-quarter figure drawn on a plan has no facing to contradict: the sprite faces
+the reader, and the contact ellipse under its feet is the only element left in the floor's own plane.
+
+The old rig DID rotate, and the local frame it rotated faced local `-y` while `bodyAngle` measures
+from `+x`. The quarter-turn correction between the two is §26 — _"hands on one side, head on the
+other, arms coming out of the back"_ — and `test/unit/rig-orientation.test.mjs` existed to pin it.
+That file now measures the inverse property: the recorded draw calls are **byte-identical at every
+facing**, over four clips at five phases each and six angles. There is no correction left to get
+wrong, and the whole class of defect is gone rather than guarded.
+
+### 162.3 The size, and why the camera did not move
+
+The design's in-situ test is a 1:1 crop of `test/goldens/win32/empty.png` with the figure at **34 px**
+on a floor whose fit scale is ~16.5 px per plan unit. So one local unit is ~2.06 plan units, and
+**2.0** is the round number inside it: `RIG_UNIT_U = 2`. The crown of a standing figure is at local
+1.26, so `BODY_HEIGHT_U` comes out at **2.52** — exactly the old rig's number.
+
+That is deliberate rather than lucky, and it is the reason this package's golden diff is people and
+nothing else. `CHAR_MIN_PX_PER_UNIT`, `CHAR_MAX_PX_PER_UNIT`, the fit ceiling, `computeAnchor`'s hit
+box and the halo pool's span are all quotients of `BODY_HEIGHT_U`; had it moved, every capped floor
+would have been re-scaled and every room rectangle with it, and judging the figure would have meant
+judging it against a floor that had also changed. It did not move. **No room rectangle on any golden
+changed.**
+
+The figure is **taller at fit scale in the only sense that matters**: the box is the same and it is
+now full. 33 px of frame, 34–40 px of drawn crown-to-sole depending on the crown accessory, against
+22 px of readable mass before.
+
+### 162.4 Seven departures from the sheet, and one from the codebase
+
+1. **The raised hand moved out as well as up.** The study put the `needs_input` mitt at local
+   `[0.27, 0.97]` — hard against the dome's own edge and inside the ear cup's circle, which at 34 px
+   reads as a bump on the head rather than as a hand. It is at `[0.36, 1.03]`.
+2. **The near arm is drawn OVER the dome.** The sheet draws it before the head, which paints the
+   forearm over at exactly the pose where the arm matters. A raised hand must never be occluded,
+   including by the character raising it (`03-VISUAL-SPEC.md` §5). Every other pose puts the mitt
+   well below the dome, so nothing else moved.
+3. **The mark swaps to its bold form at 30 px, not 34.** The README says 34. B is 33 px of frame at
+   the fit scale the in-situ test was taken at, so a swap at 34 would mean the floor NEVER draws a
+   full mark: every figure on every golden would carry the fallback and the six marks the study drew
+   would exist only on the sheet. 30 is where a three-bar mark actually stops resolving, looked at on
+   the regenerated goldens at 2×.
+4. **`stalled` and `benched` dim their visors; `stalled`'s mark is an ellipsis, not an hourglass.**
+   The sheet has one light level and the hourglass twice — on the visor and on the over-head icon.
+   Three levels (lit / dimmed / off) is the smallest number that keeps _gone quiet_ and _finished_
+   apart, which is the distinction this floor exists to make, and the ellipsis is what a session that
+   stopped mid-sentence looks like. The hourglass stays where it was, above the head.
+5. **`benched`'s reach came in** from `[0.40, 0.40]` to `[0.34, 0.36]`: at the sheet's value the arm
+   reads as a detached noodle past the edge of the contact shadow.
+6. **The rim halo is unconditional and one width.** WP-85a §3.9 gives a ground pool on light floors
+   and a 1.1 px rim on dark ones. B's own design carries a light outline on every floor — it is what
+   separates a robot from a desk, a plant and its neighbour — so the rim now runs on both, at §3.9's
+   stated 1.1 px on both. A first pass doubled it on dark themes (the §3.9 contrast device) and the
+   night-shift capture came out as a floor of paper cut-outs; one figure should not be outlined twice
+   as heavily as another for a reason the reader cannot see. The pool is unchanged and still
+   light-floors-only.
+7. **A seventh pose.** The sheet is a still, so it has six. Walking is two frames and no blend: a
+   chunky robot's walk is a waddle, and a waddle is a step and its mirror.
+
+And the departure from the codebase: **`drawManagerFigure` ignores its `angle`**, like every other
+figure. It stays in the signature because `backdrop-props-desk.js` has a facing to hand over and a
+caller should not have to know that the rig stopped using it.
+
+### 162.5 The identity remap: nothing about the hash changed
+
+A face is a pure function of the session id (§105) and stays exactly that. The two hashes, the pools,
+the fixed draw order, the rarity split and the measured colour discipline are all untouched. What
+moved is where the draws land, because B has no hair, no waistband and no face to put glasses on:
+
+| draw | old slot | B's slot |
+|---|---|---|
+| project `accent` | collar dot | chest badge + collar ring |
+| project `glyph` | shoulder glyph | chest glyph |
+| project `hair` | hair colour | boots |
+| session `accent` | waistband | antenna tip + ear cups |
+| session `skin` | skin | mitts, and the dome's size |
+| session `hairStyle` (6) | hair silhouette | crown accessory (6) |
+| session `build` (3) | torso scale | barrel width (3) |
+| session `glasses` | lens rings | brow bar over the visor |
+| rarity trait | hat / scarf / jacket / hair / crown / glow | a cap, a collar band, a shoulder yoke, a rare antenna tip, a gold crown, an aura |
+
+`rigIdentity()` reads the INDEX out of each pool rather than drawing again, which is what keeps a
+session in the slot the same two hashes always gave it — and what lets a pack swap the accent table
+(WP-45) without re-rolling anybody.
+
+**"No two of twelve look alike" is measured, not claimed.** `identitySlots()` is the seven choices a
+viewer can actually see — project colour, glyph, session colour, mitt tone, barrel width, dome size,
+crown accessory — and `identityDistance()` is a plain Hamming distance over them, because these are
+categories and not a colour space: two robots differing in one accent and nothing else DO look alike
+at 34 px however far apart the two accents are in sRGB. The bar is **two of seven**, and the closest
+pair in the twelve-strong demo population clears it.
+
+### 162.6 The over-head slot, the labels, and the two collisions that were always there
+
+A taller figure pushes everything above the head up with it. `CHROME_TOP_U` went 1.05 → **2.35** (the
+state icon, the tool icon), `CHROME_BUBBLE_U` 1.5/1.75 → **3.05** (the thought cloud, the tool
+bubble) and `CHROME_BADGE_U` 2.35 → **3.45** (the waiting badge, which sits above the icon and has to
+clear it). All four are one constant each in `rig-metrics.js` rather than four literals in three
+files.
+
+That surfaced two collisions that had been geometry all along:
+
+- **A label on the body in front of it.** A label hangs below its own character's feet, and the
+  character one sofa row nearer the reader occupies exactly that strip of floor. True before; while a
+  figure was 22 px of mass inside a 48 px box, invisible.
+- **A label under the badge behind it.** With the badge reaching 4.5 U up and a label hanging 2.5 U
+  down, a 6 U queue pitch puts them through each other.
+
+Both are now **pinned obstacles in the label pass**, which already had the machinery: `pin: true`
+items are placed unconditionally and everything after has to clear them. The badge pass moved ahead
+of the label pass so its answer exists to be avoided — a waiting badge is the loudest thing this
+floor draws and it never moves, so everything else has to know where it landed.
+
+The label itself moved from **1.35 U** below the feet to **1.62**, to clear the halo's ground pool
+(`FIGURE_HALO_POOL_SPAN × BODY_HEIGHT_U` = 1.46 U). At 1.35 the name sat inside the bright disc
+rather than under it.
+
+**A label that cannot clear them is dropped**, which is the rule this pass already had: _a missing
+label beats an unreadable smear_. Measured over `scene-math.test.mjs`'s three populations at two
+viewports: **zero label-on-body overlaps**, and at least four labels in five still drawn. On the
+reference floor's reception queue one name goes; the panel, the tooltip and the queue strip all still
+carry it.
+
+### 162.7 The manager was headless, and why
+
+The user's own avatar is drawn into the baked backdrop as a prop, and `paintProp` clips every prop to
+its own footprint plus `PROP_BLEED` — _"a prop may not paint outside its own rect"_, which is a good
+rule about furniture and the wrong rule about a person. A character's footprint is where they stand
+and their body is almost entirely above it: 2.52 U of figure against a 2 U anchor rect. The first
+capture came back with a headless suit at the end of the desk, clipped 22 px above the prop's centre.
+
+The manager is now exempt from the clip. It is the same exemption it already had two lines further
+down, where `paintProp` skips the bounding-box contact shadow for `manager` because the rig draws a
+character-shaped one — and it is exempt for the same reason. The rule the clip exists to enforce is
+about floor coverage, and the manager covers exactly the floor its own contact ellipse covers.
+
+### 162.8 Performance, and what it cost
+
+The discipline `drawCharacter` has always had is unchanged and is now stated in three places rather
+than one: **no object or array allocated per call, no `ctx.save`/`ctx.rotate` per part, and no
+`Path2D`.** The figure's geometry is resolved once per character into module-scope scratch
+(`rigSetup`) and every path builder reads it from there; every coordinate handed to `ctx` is already
+the final screen coordinate, which is also what lets the point-recording fake contexts in the test
+suite measure anything at all.
+
+What did change: **a character no longer costs the same as its neighbour.** Identity carries
+silhouette now — a barrel width, a dome size and one of six crown accessories — so two robots in the
+same state are not the same number of paths. `minifloor.test.mjs` asserted exact equality and now
+asserts the property that actually matters, that the cost is per-person and bounded: the two
+characters it measures are within 15% of each other.
+
+### 162.9 Goldens
+
+All nine regenerated once, inspected at 1× and at 2× on the reception and a project room, fixed
+(§162.4 item 6, §162.7), regenerated once more, and `goldens:check` run: **0 px over tolerance, 0 px
+moved at all** — the reduced-motion and injected-clock discipline holds, so a capture is a capture.
+
+Against the previous set, at a channel tolerance of 8:
+
+| capture | px moved | of |
+|---|---|---|
+| `demo` | 44,493 | 2.78% |
+| `demo@blueprint` | 47,912 | 2.99% |
+| `demo@night-shift` | 47,829 | 2.99% |
+| `reference` | 33,692 | 2.11% |
+| `three` | 20,250 | 1.27% |
+| `empty` | 20,118 | 1.26% |
+| `wide` | 24,099 | 1.16% |
+| `pinned` | 16,951 | 1.06% |
+| `single` | 5,036 | 0.31% |
+
+Every one of those pixels is a person, a person's chrome or a person's shadow: the floor, the walls,
+the furniture, the plates and the rooms are byte-identical, which is what §162.3's _the camera did
+not move_ buys.
+
+### 162.10 Unverified, and what is deliberately not here
+
+- **The over-head state icons were not redrawn.** `drawHandIcon` and `drawHourglassIcon` are still
+  bare shapes in the state colour rather than the design README's _"badge on its own disc"_
+  (`drawCheckIcon` alone has the disc). They clear the 10 px floor and they are drawn last so nothing
+  can occlude them, which is what §5 and §1.1 require; making the set consistent is a package of its
+  own and would move every golden again.
+- **Name labels on the dark themes are still a smudge.** Dark ink with a light halo stroke on a dark
+  floor reads badly on `night-shift` and `blueprint`. It read badly before this package too — the
+  label's colours are `PALETTE.inkWarm` and a fixed near-white stroke, neither of which WP-79
+  touched — and fixing it is a theme question, not a rig one.
+- **Nothing was looked at on a real machine with a hundred agents.** The LOD drop list is measured as
+  a rule (`rigDetail()` against `RIG_DETAIL_MIN_PX`) and the thresholds come from the design README's
+  risk note; no frame budget was profiled, and the claim that dropping the rim, the chest glyph and
+  the far arm is the right three things to drop is the study's, taken on trust.
+- **`docs/media/design/character/lib.js` and `sheet.js` are untouched.** They are the exploration
+  that produced the decision, not a second implementation to keep in step; the port is deliberate and
+  the seven departures above are recorded so the two can be read against each other.
+- **The panel close-up was re-anchored by arithmetic, not by eye.** B is drawn from its feet and
+  fills 2.52 units above them where the old rig hung half its height either side of the centre, so
+  the 44 px box now stands the figure on its bottom edge. It was checked against the numbers and in
+  the standalone proof page, not in the running panel.

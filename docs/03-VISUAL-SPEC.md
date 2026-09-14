@@ -117,12 +117,85 @@ strung along the bottom of the building. 5.4 is measured — the worst two-row l
 
 ## 3. The character rig
 
-One rig, drawn procedurally in canvas 2D, driven by a pose object. No sprite sheets — the rig must
-scale cleanly across the whole zoom range.
+**Rewritten 14 September 2026 (WP-79).** One rig, drawn procedurally in canvas 2D, driven by a pose
+object. No sprite sheets — the rig must scale cleanly across the whole zoom range.
+
+The figure is **B**, the 45° three-quarter robot the owner picked from the four candidates in
+`docs/media/design/character` (`README.md`, `B.png`, `in-situ.png`): a chunky barrel, a dome head
+and a bright wrap visor. It replaces the top-down doodle this section used to describe — an ellipse
+with stroke limbs, whose readable coloured mass was 22 px inside a 48 px box.
+
+### 3.1 Billboarding, and what happened to `bodyAngle`
+
+**The figure never turns.** `Pose.bodyAngle` is still carried and still means what §3.4 says it
+means, and the seat, the path tangent and the clip's sway still compose into it — the rig simply
+does not rotate the sprite by it. A three-quarter figure drawn on a plan has no facing to
+contradict: the sprite always faces the reader, and the **contact ellipse under its feet is the only
+element in the floor's own plane.** That is the convention every top-down RPG uses, and it is what
+makes all six poses read from whichever direction the user is scanning.
+
+It also deletes a class of defect. The old rig rotated every part by `bodyAngle` through a
+quarter-turn correction, and getting the correction wrong put the head on one side and the hands on
+the other (`docs/DEVIATIONS.md` §26). There is no correction left to get wrong.
+
+### 3.2 Proportions
+
+Everything is authored in **one local frame**: origin at the ground contact, y up, one local unit =
+`RIG_UNIT_U` = **2 plan units**. That number is the whole size decision and it comes from the
+design's own in-situ test — a 1:1 crop of `test/goldens/win32/empty.png` with the figure at **34 px**
+on a floor whose fit scale is ~16.5 px per plan unit.
+
+| part | local |
+|---|---|
+| barrel | 0.47 / 0.54 / 0.60 wide (identity), 0.44 × `sq` tall |
+| dome | r 0.21 / 0.235 / 0.26 (identity), centred 0.60–0.86 by pose |
+| visor | 1.60 × 0.80 of the dome radius, a rounded slot across the face |
+| mitt | r 0.075 |
+| crown accessory | six forms, 0.94–1.62 dome radii above the dome's centre |
+| crown, standing | 1.26 — so `BODY_HEIGHT_U` is 2.52 plan units, unchanged |
+
+`BODY_HEIGHT_U` landing on the old rig's number is deliberate: the fit ceiling, the floor's
+px-per-unit band, the hit box and the halo pool's span are all quotients of it, and **the camera does
+not move.** What changed is what fills the height.
+
+### 3.3 State, and what carries it
+
+**The state colour owns the whole body mass, head included.** Every shape is a tint of the state
+colour (`rigTints`) — there is no second hue anywhere on the figure — so a character is one coherent
+colour at 24 px rather than a grey blob with a coloured panel. Identity may not touch it.
+
+**The visor is the state signal**, and it carries three things: the tint (a dark tint of the state
+colour for the mark), the light level, and the mark itself.
+
+| state | pose | visor | mark |
+|---|---|---|---|
+| `working` | at the desk, hands forward on the keys | lit | three lines of output |
+| `needs_input` | hand raised high and out, clear of the dome | lit | `!` |
+| `for_review` | standing, holding a page up | lit | a tick |
+| `stalled` | slumped forward, squashed | dimmed 50% | an ellipsis |
+| `ended` | slumped further, powered down | off | a dead bar |
+| `benched` | reclined, feet out | soft (25%) | a `z` |
+| walking | standing, two frames | lit | the state's own |
+
+A lit pane with a dark mark is the design study's largest single finding: it survives 24 px, and the
+inverse — a dark visor with a light mark — does not. **Three light levels rather than two**, because
+"gone quiet" and "finished" are the two states a monitoring floor must never confuse.
+
+Draw order per character: floor ring → selection ring → aura → figure halo → contact shadow → rim →
+base → far arm → barrel (top plane, collar ring, chest plate, chest glyph) → held prop (behind) →
+dome → visor → **near arm and mitt** → held page → crown accessory → rarity marker → prop (in front)
+→ state icon → badge → name label.
+
+The near arm goes over the dome, and that placement is load-bearing: at `needs_input` the mitt is
+level with the top of the dome and just outside its edge, so an arm drawn before the head has its
+forearm painted over by the head it is reaching past. **A raised hand must never be occluded**,
+including by the character raising it.
+
+### 3.4 The pose object
 
 ```ts
 interface Pose {
-  bodyAngle: number;        // radians, facing
+  bodyAngle: number;        // radians, facing — carried, never drawn (§3.1)
   lean: number;             // -1 back .. 1 forward
   headTurn: number;         // -1 .. 1
   armL: { shoulder: number; elbow: number; hand: 'rest'|'key'|'grip'|'open'|'raised' };
@@ -134,27 +207,63 @@ interface Pose {
 }
 ```
 
-Draw order per character: contact shadow → legs → torso → held prop (behind) → arms → head →
-hair → prop (in front) → state icon → badge.
+The clips are unchanged (§4) and still drive `bob`, `ring`, `prop` and the walk's `legPhase`. What
+the clips no longer drive is the limb geometry: a state picks one of seven skeletons rather than
+being solved from shoulder and elbow angles.
 
-Body colour is the **state colour**, at full strength, and the state icon owns the slot above the
-head. Those two carry the state and nothing else may take them.
+### 3.5 Identity slots
 
 **Appearance is a deterministic per-session identity, not a constant.** Superseded by WP-20 on
 3 September 2026 — this paragraph used to say that skin, hair and clothing detail were constant
 across agents and that individuality was carried by the name label alone. Hair style, skin tone,
-outfit accent, glasses and build are now a hash of the session id, so the same session looks like
-the same person on every machine, for ever, with nothing persisted and nothing to migrate. A small
-set of accessories sits on rarity tiers — measured over 10,000 ids at 73.6% common, 20.3% uncommon,
-5.3% rare, 0.9% legendary — an uncommon agent wearing a hat or a scarf, a rare one a jacket or a
-striking hair colour, a legendary one a crown or a soft aura.
+outfit accent, glasses and build are a hash of the session id, so the same session looks like the
+same person on every machine, for ever, with nothing persisted and nothing to migrate. A small set of
+accessories sits on rarity tiers — measured over 10,000 ids at 73.6% common, 20.3% uncommon, 5.3%
+rare, 0.9% legendary.
+
+WP-79 changed nothing about the hashes, the pools, the draw order or the rarity vocabulary. It
+changed where the draws LAND, because B has no hair, no waistband and no face to put glasses on:
+
+| draw | old slot | B's slot |
+|---|---|---|
+| project `accent` | collar dot | chest badge + collar ring |
+| project `glyph` | shoulder glyph | chest glyph |
+| project `hair` | hair colour | boots |
+| session `accent` | waistband | antenna tip + ear cups |
+| session `skin` | skin | mitts, and the dome's size |
+| session `hairStyle` (6) | hair silhouette | crown accessory (6) |
+| session `build` (3) | torso scale | barrel width (3) |
+| session `glasses` | lens rings | brow bar over the visor |
+| rarity trait | hat/scarf/jacket/hair/crown/glow | a cap, a collar band, a shoulder yoke, a rare antenna tip, a gold crown, an aura |
+
+Seven of those are the **identity slots** — project colour, glyph, session colour, mitt tone, barrel
+width, dome size, crown accessory — and "no two of twelve look alike" is held as a measured property
+over them: every pair in the demo population differs in at least two.
 
 The old sentence's reason survives as the constraint on the new rule: **state stays readable.**
-Identity may not touch the torso or the icon, and every appearance colour is at least 70 in sRGB
-from every state colour — computed at import time rather than eyeballed, so a new hair colour that
-reads as a state fails the build. Nothing here is earned, nothing decays, no count moves, and none
-of it is a score on the human (`docs/plan/08-PLAN-V2-100X.md` §1.1 rule 6). Full reasoning and the
-measurements: `docs/DEVIATIONS.md` §105.
+Identity may not touch the barrel's fill or the visor's tint, and every appearance colour is at least
+70 in sRGB from every state colour — computed at import time rather than eyeballed, so a new accent
+that reads as a state fails the build. Nothing here is earned, nothing decays, no count moves, and
+none of it is a score on the human (`docs/plan/08-PLAN-V2-100X.md` §1.1 rule 6). Full reasoning and
+the measurements: `docs/DEVIATIONS.md` §105 and §162.
+
+### 3.6 Level of detail
+
+Three things drop below **30 px of figure** — the design README's own risk note, since the rim pass
+doubles the stroke work and a floor can hold a hundred agents: the **rim halo**, the **chest glyph**
+and the **far arm**. L0 drops the same three at any scale. Below 30 px the visor's mark also swaps to
+one bold form instead of its full drawing.
+
+**The visor and the raised hand are in no drop list.** They are drawn at every level of detail and at
+every zoom, because they are the two things the floor exists to say.
+
+### 3.7 Motion
+
+Idle micro-motion is an **antenna bob** and a **visor blink**, both driven by one phase in `[0, 1)`
+computed from the injected clock (`public/clock.js`) and nothing else. Under
+`prefers-reduced-motion` the phase is exactly `0`, so every term derived from it drops out of the
+arithmetic and the figure is the static one the design sheets show (§10). Walking is **two frames**
+and no blend — a chunky robot's walk is a waddle, and a waddle is a step and its mirror.
 
 ## 4. Motion clips
 
@@ -397,7 +506,17 @@ gradient. `docs/DEVIATIONS.md` §149.
   one pill at the start of the run; the waiting area's own pitch is set so that a name label and a
   badge clear their neighbours at the fit scale, on whichever axis the reception happens to be laid
   (WP-78: the room may be transposed, §2's reception is the one room the packer turns).
-- **Name labels:** shown at L1 and above, below the character, truncated to 18 characters.
+- **Name labels:** shown at L1 and above, below the character, truncated to 18 characters. Since
+  WP-79 the label hangs **1.62 U** below the feet rather than 1.35, because it has to clear the halo's
+  ground pool (1.46 U) as well as the feet — at 1.35 the name sat inside the bright disc rather than
+  under it, which was invisible while a figure was 22 px of readable mass and obvious once B filled
+  its height.
+- **Labels yield to bodies and to badges (WP-79).** The per-frame collision pass takes the
+  characters' own boxes and the waiting badges as pinned obstacles before it places a single label,
+  so a name is never drawn across a face or under a crimson pill. A label that cannot clear them
+  after two nudges is dropped, which is the rule the pass already had: a missing label beats an
+  unreadable smear, and the panel and the queue strip still carry every name. Measured over three
+  populations: zero label-on-body overlaps, at least four labels in five still drawn.
 - **Header:** needs-you total with a three-way breakdown, at-desk count, benched count, zoom
   control, hooks status, refresh.
 

@@ -43,9 +43,28 @@ export function nowMs() {
  * @param {{ackState?:string, activityState?:string}} agent
  */
 export function colorForAgent(agent) {
-  if (agent.ackState === 'let_go') return STATE_COLORS.let_go;
-  if (agent.ackState === 'benched') return STATE_COLORS.benched;
-  return STATE_COLORS[agent.activityState] || STATE_COLORS.working;
+  return STATE_COLORS[stateForAgent(agent)] || STATE_COLORS.working;
+}
+
+/**
+ * Which of the six states a character is drawn IN (WP-79).
+ *
+ * The same question `colorForAgent` above has always answered, asked for the
+ * name rather than for the hex — because since WP-79 the state is not only a
+ * colour: it picks the POSE and the mark on the visor. Exactly one rule, in one
+ * place, so a robot's pose and its colour can never disagree about what it is
+ * doing, and so the mini-floor and the panel's close-up ask the same function
+ * the floor does.
+ * @param {{ackState?:string, activityState?:string}} agent
+ * @returns {string} a `STATE_COLORS` key
+ */
+export function stateForAgent(agent) {
+  if (!agent) return 'working';
+  if (agent.ackState === 'let_go') return 'let_go';
+  if (agent.ackState === 'benched') return 'benched';
+  return Object.prototype.hasOwnProperty.call(STATE_COLORS, agent.activityState)
+    ? agent.activityState
+    : 'working';
 }
 
 /**

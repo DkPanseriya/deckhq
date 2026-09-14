@@ -8,7 +8,15 @@
  * never treated as markup anywhere (`test/unit/thought-bubble.test.mjs`).
  */
 
-import { TAU, CLOUD_FILL, CLOUD_EDGE, DOT_COLOR, sansFont } from './rig-metrics.js';
+import {
+  TAU,
+  CHROME_TOP_U,
+  CHROME_BUBBLE_U,
+  CLOUD_FILL,
+  CLOUD_EDGE,
+  DOT_COLOR,
+  sansFont,
+} from './rig-metrics.js';
 import { roundRectFill, roundRectStroke } from './rig-pose.js';
 import { PALETTE } from './palette.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
@@ -119,9 +127,9 @@ export function toolBubbleBox(ctx, ox, oy, u, summary) {
   const text = fitOneLine(ctx, String(summary || '').trim(), maxTextW);
   const w = ctx.measureText(text).width + padX * 2;
   const h = fontPx * 1.25 + padY * 2;
-  // Sits clear of the head (its crown is about `oy - u * 1.45`), with the
-  // trail below filling the gap.
-  const y = oy - u * 1.75 - h;
+  // Sits clear of the crown (`BODY_HEIGHT_U` above the feet since WP-79), with
+  // the trail below filling the gap.
+  const y = oy - u * (CHROME_BUBBLE_U - 0.3) - h;
   return { text, x: ox - w / 2, y, w, h, fontPx };
 }
 
@@ -138,8 +146,8 @@ export function drawToolBubble(ctx, ox, oy, u, summary) {
 
   // Two trailing beats, rising from beside the head to the bubble.
   for (const [tx, ty, tr] of [
-    [ox + u * 0.42, oy - u * 1.12, u * 0.09],
-    [ox + u * 0.2, oy - u * 1.5, u * 0.13],
+    [ox + u * 0.42, oy - u * (CHROME_BUBBLE_U - 1.13), u * 0.09],
+    [ox + u * 0.2, oy - u * (CHROME_BUBBLE_U - 0.75), u * 0.13],
   ]) {
     ctx.beginPath();
     ctx.arc(tx, ty, tr, 0, TAU);
@@ -172,7 +180,7 @@ export function drawToolBubble(ctx, ox, oy, u, summary) {
  */
 export function drawToolIcon(ctx, ox, oy, u, kind) {
   const size = Math.max(10, u * 0.85);
-  const top = oy - u * 1.05 - size;
+  const top = oy - u * CHROME_TOP_U - size;
   const half = size / 2;
   const cx = ox;
   const cy = top + half;

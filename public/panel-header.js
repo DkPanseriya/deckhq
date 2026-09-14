@@ -319,9 +319,14 @@ export function createHeaderPart(ctx) {
             : null;
     // The canvas is drawn at 2× and shown at 44 px, so the figure stays crisp
     // on a high-density display; `u` scales with the canvas.
-    const u = closeupCanvas.width / 4;
+    // The canvas is drawn at 2× and shown at 44 px. WP-79: the figure stands
+    // on the bottom of the box rather than on its middle — B is drawn from its
+    // FEET and fills `BODY_HEIGHT_U` (2.52) units above them, where the old rig
+    // hung half its height either side of the centre. `u` is the height the
+    // box can give it, less a little air for the crown accessory.
+    const u = closeupCanvas.height / 2.9;
     const cx = closeupCanvas.width / 2;
-    const cy = closeupCanvas.height / 2;
+    const cy = closeupCanvas.height * 0.94;
     // The same hair, accent and glyph the floor draws (CONTRACTS-WP15.md §2),
     // so the close-up is recognisably the same person.
     const identity = palette?.identityFor ? palette.identityFor(a.projectMk, a.avatar) : undefined;
@@ -349,6 +354,12 @@ export function createHeaderPart(ctx) {
           u,
           lod: 2,
           color,
+          // WP-79: the same six states the floor poses from, so the close-up
+          // is the same robot in the same pose rather than a second reading
+          // of the same agent.
+          state: visualState(a),
+          walking: clipName === 'walk',
+          seconds: elapsedSeconds,
           label: null,
           icon,
           badge: null,

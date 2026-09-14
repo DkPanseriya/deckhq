@@ -13,7 +13,7 @@
 
 import { U } from './plan.js';
 import { worldToScreen, screenToWorld } from './agents.js';
-import { BODY_HEIGHT_U, SELECTION_RING_R } from './rig.js';
+import { characterBox } from './rig.js';
 import { SceneLabels } from './scene-labels.js';
 
 export const HIT_RADIUS_PX = 20;
@@ -80,9 +80,7 @@ export function computeAnchor(target, id, view) {
     // by a body's height, and out either side by the radius of the ring the
     // interface already draws to mean "this one".
     const feet = worldToScreen(rec, view.camera);
-    const w = 2 * SELECTION_RING_R * view.charScale;
-    const h = BODY_HEIGHT_U * view.charScale;
-    return { x: feet.x - w / 2, y: feet.y - h, w, h };
+    return characterBox(feet.x, feet.y, view.charScale);
   }
 
   return null;

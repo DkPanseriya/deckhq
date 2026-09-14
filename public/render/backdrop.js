@@ -97,14 +97,26 @@ export function paintProp(ctx, prop, u) {
   // that are deliberately bigger than their anchor footprint — a plant's
   // foliage over its pot, a lamp's pool of light — and for the soft edge of a
   // shadow; it is not enough to hide a misplaced piece of furniture.
-  ctx.beginPath();
-  ctx.rect(
-    -w / 2 - PROP_BLEED * u,
-    -h / 2 - PROP_BLEED * u,
-    w + 2 * PROP_BLEED * u,
-    h + 2 * PROP_BLEED * u,
-  );
-  ctx.clip();
+  //
+  // THE MANAGER IS THE ONE EXEMPTION, and it is the same exemption the contact
+  // shadow already makes below: it is a PERSON, not furniture. A person's
+  // footprint is where they stand, and their body is almost entirely above it —
+  // since WP-79 by `BODY_HEIGHT_U` (2.52 U) of billboarded robot, against a
+  // 2 U anchor rect. Clipping a character to the tile it stands on took the
+  // dome off the user's own avatar and left a headless suit at the end of the
+  // desk. The rule the clip exists to enforce — "furniture on the floor plan
+  // where the plan says there is none" — is a rule about floor coverage, and
+  // the manager covers exactly the floor its contact ellipse covers.
+  if (prop.kind !== 'manager') {
+    ctx.beginPath();
+    ctx.rect(
+      -w / 2 - PROP_BLEED * u,
+      -h / 2 - PROP_BLEED * u,
+      w + 2 * PROP_BLEED * u,
+      h + 2 * PROP_BLEED * u,
+    );
+    ctx.clip();
+  }
 
   // The clip is set in the prop's OWN, axis-aligned footprint — the rectangle
   // the plan reasons about — and only then is the prop's facing applied. Doing

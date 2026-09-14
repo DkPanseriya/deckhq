@@ -1,79 +1,90 @@
 /**
  * DeckHQ character rig — one procedural rig, canvas 2D, no sprite sheets.
  *
- * Scales cleanly across zoom 0.35-2.5 because every dimension derives from
- * `u` (px per plan unit at the current zoom). Body colour is the state
- * colour, passed in by the caller (scene.js resolves it from palette.js's
- * `STATE_COLORS`) — this module never needs the state name itself, only the
- * resolved colour, a badge string, and an icon name. Skin, hair and prop
- * materials are constant across agents by design (VISUAL-SPEC §3):
- * individuality is carried by the name label, not by appearance.
+ * WP-79 REPLACED THE FIGURE AND KEPT THE RIG. What is drawn is now **B**, the
+ * 45° three-quarter robot from `docs/media/design/character` — a chunky barrel,
+ * a dome head and a bright wrap visor, billboarded so it always faces the
+ * camera on a top-down floor. What did NOT change is everything around it: one
+ * `drawCharacter`, called by the floor, the mini-floor, the panel's close-up
+ * and the manager's own avatar; the same `Pose`; the same two identity hashes;
+ * the same chrome slot above the head; the same halo and the same contact
+ * ellipse at the feet.
+ *
+ * Three rules the figure is built on, from the design study's README:
+ *
+ *   1. **The state colour owns the whole body mass, head included.** Every
+ *      shape is a tint of `opts.color` (`rigTints`). The old rig spent the head
+ *      and the hair on identity and left a coloured waistcoat, which at 22 px
+ *      read as a grey blob with a stripe.
+ *   2. **The face is a bright pane with a dark mark.** A lit visor on a
+ *      coloured dome survives 24 px; the inverse does not.
+ *   3. **Identity is two or three small elements** — the antenna tip, the ear
+ *      cups, the chest badge, the boots — and never the body.
+ *
+ * Scales cleanly across the whole zoom range because every dimension derives
+ * from `u` (px per plan unit) through ONE number: `rigHeight(u)`, the figure's
+ * height in screen px. `rig-pose.js`'s frame turns a local point into a screen
+ * point, and nothing else in this rig knows about pixels at all.
  *
  * Performance (docs/02-ARCHITECTURE.md §8: 25 animated characters at 60 fps):
- * `drawCharacter` allocates no objects or arrays per call. Body-part
- * transforms are computed by hand (rotate a local point, then translate) into
- * flat module-scope scratch numbers rather than via `ctx.save/rotate/restore`
- * per limb — `drawCharacter` itself never calls `ctx.save`/`ctx.restore` at
- * all; the few stateful canvas properties it touches (`globalAlpha`) are
- * read and restored manually, which is cheaper than a full state push/pop.
+ * `drawCharacter` allocates no objects or arrays per call, issues no
+ * `ctx.save`/`ctx.rotate` per part, and uses no `Path2D`. The figure's geometry
+ * is resolved once per character into module-scope scratch (`rigSetup`) and
+ * every path builder reads it from there.
  *
  * ============================================================================
  * WP-22 follow-up · this file is the rig's assembly: the rings under a
- * character, the badge and label over it, and `drawCharacter` itself, which
- * paints every part in order. The parts are six modules:
+ * character, the badge and label over it, and `drawCharacter` itself. The
+ * parts are six modules:
  *
- *   rig-metrics.js  every dimension, colour and threshold, and the text
- *                   helpers
- *   rig-pose.js     the pose, the limb transforms, and the arm solve
- *   rig-body.js     shadow, legs, torso, arms, head, hair, waistband
- *   rig-traits.js   glasses, rarity, glow, glyph, identity marks, suit
+ *   rig-metrics.js  every dimension, colour and threshold, and the text helpers
+ *   rig-pose.js     the local frame, the six poses, the drawing primitives
+ *   rig-body.js     halo, shadow, base, arms, barrel, dome, visor, crown
+ *   rig-traits.js   the identity slots, the glyph, the rarity markers
  *   rig-props.js    the clips glue: mug, plate, cue, paddle, controller,
  *                   piece, and the three status icons
  *   rig-bubble.js   WP-52's tool bubble
  *
- * Not one function body changed and the dependency runs one way — metrics,
- * then pose, then the four drawing modules, then this one. Every name the
- * module exported is re-exported here, so `scene-draw.js`, `minifloor.js`,
- * `postcard.js` and four test files import what they always imported.
+ * Every name those modules export is re-exported here, so `scene-draw.js`,
+ * `minifloor.js` and the test files import what they always imported.
  * ============================================================================
  */
 
-import { PALETTE } from './palette.js';
+import { PALETTE, STATE_COLORS } from './palette.js';
 import {
   TAU,
   BASE_U,
+  BODY_HEIGHT_U,
   SELECTION_RING_COLOR,
   SELECTION_RING_R,
   RING_BASE_R,
   BADGE_MIN_PX,
+  CHROME_BADGE_U,
   MANAGER_SUIT,
   MANAGER_SCALE,
   labelFontSize,
   truncateLabel,
   monoFont,
   sansFont,
+  rigTints,
 } from './rig-metrics.js';
-import { makePose, computeArmGeometry, roundRectFill } from './rig-pose.js';
+import { idlePhase, rigFrame, rigHeight, rigPoseFor, roundRectFill } from './rig-pose.js';
 import {
   drawContactShadow,
   drawFigureHalo,
   drawFigureRim,
-  drawSimpleBody,
-  drawLegs,
-  drawTorso,
-  drawArmStroke,
-  drawFingerTicks,
-  drawHead,
-  drawHair,
-  drawWaistband,
+  drawRigBarrel,
+  drawRigBase,
+  drawRigCard,
+  drawRigCrown,
+  drawRigDome,
+  drawRigFarArm,
+  drawRigNearArm,
+  drawRigVisor,
+  haloRimWidth,
+  rigSetup,
 } from './rig-body.js';
-import {
-  drawGlasses,
-  drawRarityTrait,
-  drawGlow,
-  drawIdentityMarks,
-  drawSuitAccents,
-} from './rig-traits.js';
+import { drawGlow, managerIdentity, rigIdentity } from './rig-traits.js';
 import { drawCueBehind, drawPropFront, drawIcon, drawDots } from './rig-props.js';
 import { toolIconKind, drawToolBubble, drawToolIcon, toolBubbleText } from './rig-bubble.js';
 
@@ -116,6 +127,27 @@ export function drawSelectionRing(ctx, ox, oy, u) {
 }
 
 /**
+ * Which state a resolved state COLOUR came from.
+ *
+ * `drawCharacter` has always been handed the colour rather than the state, and
+ * B needs the state itself — it picks the pose and the mark on the visor. Every
+ * caller was updated to pass `opts.state`, and this is the fallback for the
+ * ones that were not: the colour is always exactly a `STATE_COLORS` entry
+ * (`scene-agent.js`'s `colorForAgent` returns nothing else), so the inverse is
+ * exact rather than a guess. A colour from outside the table — a theme's, a
+ * test's — lands on `working`, which draws.
+ * @param {string} color
+ * @returns {string}
+ */
+export function stateForColor(color) {
+  const want = String(color || '').toLowerCase();
+  for (const [state, value] of Object.entries(STATE_COLORS)) {
+    if (value.toLowerCase() === want) return state;
+  }
+  return 'working';
+}
+
+/**
  * The badge pill's box in screen space, without drawing anything.
  *
  * The same measure-then-paint split {@link labelBox} has, and split out for the
@@ -140,7 +172,7 @@ export function badgeBox(ctx, ox, oy, u, text) {
   // The pill grows with its text, so a floored font must not be drawn into an
   // unfloored box: at a tight fit scale the glyphs stood proud of the badge.
   const h = Math.max(u * 1.05, fontPx * 1.5);
-  return { fontPx, x: ox - w / 2, y: oy - u * 2.35 - h, w, h };
+  return { fontPx, x: ox - w / 2, y: oy - u * CHROME_BADGE_U - h, w, h };
 }
 
 export function drawBadge(ctx, ox, oy, u, text, color) {
@@ -158,6 +190,49 @@ export function drawBadge(ctx, ox, oy, u, text, color) {
   ctx.fillText(text, box.x + box.w / 2, box.y + box.h / 2 + box.h * 0.04);
   ctx.restore();
 }
+
+/**
+ * THE BOX ONE CHARACTER OCCUPIES, in screen px, given its ground contact.
+ *
+ * The figure runs UP from its feet by `BODY_HEIGHT_U`, and out either side by
+ * `SELECTION_RING_R` — the radius of the shape the interface already draws to
+ * mean *this one*, which is the product's own answer to "how wide is a person"
+ * and is sized to clear the widest pose the rig can reach.
+ *
+ * ONE definition, because three surfaces need it and three copies of it is the
+ * class of bug docs/DEVIATIONS.md §16, §35, §38, §52 and §55 all belong to:
+ * `scene-hit.js` turns a character into the rect a coach mark points at,
+ * `scene-draw.js` feeds it to the label-collision pass as an obstacle, and the
+ * tests measure against it.
+ *
+ * @param {number} ox @param {number} oy the ground contact, screen px
+ * @param {number} u px per plan unit at the CHARACTER scale
+ * @returns {{x:number, y:number, w:number, h:number}}
+ */
+export function characterBox(ox, oy, u) {
+  const w = 2 * SELECTION_RING_R * u;
+  const h = BODY_HEIGHT_U * u;
+  return { x: ox - w / 2, y: oy - h, w, h };
+}
+
+/**
+ * HOW FAR UNDER THE FEET A NAME LABEL SITS (WP-79 re-measured this).
+ *
+ * A label hangs below the ground contact, and the two things it must clear are
+ * the FEET — which are at the contact, not above it — and the figure's own
+ * halo, whose ground pool is a radial reaching `FIGURE_HALO_POOL_SPAN ×
+ * BODY_HEIGHT_U` (1.46 U) in every direction. The old 1.35 U put the label's
+ * top inside that pool, which was invisible while a figure was 22 px of mass
+ * and obvious once it filled its height: the name sat in the bright disc rather
+ * than under it.
+ *
+ * 1.62 U clears the pool's radius with a little air, and is still well inside
+ * `SELECTION_RING_R`'s idea of how much room a person occupies, so the
+ * collision pass at a shared desk is resolving the same crowding it always was
+ * — measured over the demo population in `test/unit/scene-math.test.mjs`:
+ * zero label-over-body overlaps, and the same number of nudges.
+ */
+export const LABEL_DROP_U = 1.62;
 
 /**
  * The label's bounding box in screen space, without drawing anything.
@@ -189,7 +264,7 @@ export function labelBox(ctx, ox, oy, u, rawLabel) {
   const padY = Math.max(1.5, u * 0.09);
   const w = textW + padX * 2;
   const h = fontPx * 1.18 + padY * 2;
-  const top = oy + u * 1.35;
+  const top = oy + u * LABEL_DROP_U;
   return { text, x: ox - w / 2, y: top - padY, w, h, top };
 }
 
@@ -231,70 +306,60 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
 // -------------------------------------------------------------- the rig API
 
 /**
- * FACING CONVENTION (VISUAL-SPEC §3's `Pose.bodyAngle`): 0 faces +x (east),
- * `Math.PI / 2` faces +y (south) — identical to `plan.js`'s `angleTo` (see
- * its doc comment there) and therefore to `Seat.angle`, which is where
- * `bodyAngle` ultimately comes from: `clips.js`'s `sampleClip` only ever
- * returns a small relative sway on top of it, and `scene.js` adds the
- * seat's absolute facing before calling `drawCharacter`.
+ * THE BILLBOARD CONVENTION (WP-79, replacing the old FACING CONVENTION).
  *
- * The body parts below are authored in a *local*, unrotated frame where
- * "forward" (the head — VISUAL-SPEC: "the head sits forward-of-centre") is
- * local -y and "lateral" (left/right, e.g. `SHOULDER_OFFSET_X`) is local x.
- * That local frame itself faces local -y, a quarter turn away from the +x
- * the convention above requires. Every routine that turns one of those
- * local points into a screen point must therefore rotate by
- * `bodyAngle + Math.PI / 2`, never by `bodyAngle` directly — that
- * quarter-turn correction is `facingRot` below, threaded through
- * `cosA`/`sinA` into `drawLegs` / `computeArmGeometry` / `drawHead` /
- * `drawHair`, and passed straight through to `drawTorso` / `drawHair`
- * wherever they need the facing angle itself rather than its sine/cosine.
+ * B does not turn. `pose.bodyAngle` is still carried, still means what
+ * VISUAL-SPEC §3 says it means (0 faces +x, `PI/2` faces +y — `plan.js`'s
+ * `angleTo`, and therefore `Seat.angle`), and is still what the seat, the path
+ * tangent and the clip's sway compose into. The rig simply does not rotate the
+ * FIGURE by it, because a three-quarter robot drawn on a plan has no facing to
+ * contradict: the sprite always faces the reader, and the contact ellipse under
+ * its feet is the only element in the floor's own plane. That is the top-down
+ * RPG convention, and it is what makes all six poses readable from whichever
+ * direction the user happens to be scanning.
  *
- * Get this wrong — e.g. rotate by raw `bodyAngle` — and the head (which has
- * no lateral offset) ends up displaced along what is actually the
- * character's *side* axis, while the arms (which do have a real lateral
- * spread) end up spread along what is actually the *forward/back* axis:
- * this was exactly the "hands on one side, head on the other, arms coming
- * out of the back" bug. See test/unit/rig-orientation.test.mjs.
+ * The old rig DID turn, and it produced this renderer's worst bug — a head on
+ * one side and the hands on the other (docs/DEVIATIONS.md §26), because the
+ * local frame faced local -y while `bodyAngle` measured from +x. There is no
+ * quarter-turn correction to get wrong any more, and no way to get it wrong.
+ * `test/unit/rig-orientation.test.mjs` now measures the opposite property: that
+ * the figure is IDENTICAL at every facing.
  */
 
 /**
  * Draws one character. `opts.u` is px-per-unit at the current zoom; every
  * dimension derives from it so the rig scales cleanly across 0.35-2.5.
  *
- * Draw order (VISUAL-SPEC §3, plus floor-level chrome and above-head chrome
- * that the §3 body-part order doesn't cover): floor ring -> selection ring ->
- * contact shadow -> legs -> torso -> held prop (behind) -> arms -> head ->
- * hair -> identity marks (collar accent + glyph, when `opts.identity` is set)
- * -> prop (in front) -> state icon (or the tool bubble, or thought/speech
- * dots) -> badge -> name label.
+ * Draw order: floor ring -> selection ring -> aura -> figure halo -> contact
+ * shadow -> rim -> base -> far arm -> barrel -> held prop (behind) -> near arm
+ * and mitt -> held page -> dome -> visor -> crown -> prop (in front) -> state
+ * icon (or the tool bubble, or thought/speech dots) -> badge -> name label.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {import('./clips.js').Pose} pose
- * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string,
+ * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string, state?:string,
  *   label?:string, labelOffsetY?:number, icon?:'hand'|'hourglass'|'check'|null,
- *   badge?:string|null, selected?:boolean, reduced?:boolean,
- *   tool?:{name:string, summary:string}|null,
+ *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
+ *   walking?:boolean, tool?:{name:string, summary:string}|null,
  *   identity?:{hair:string, accent:string, glyph:string}|null,
  *   appearance?:import('./palette.js').Appearance|null }} opts
+ *   `state` (WP-79): which of the six the figure is in. It picks the pose and
+ *   the mark on the visor. Optional: omitted, it is recovered exactly from
+ *   `color` (see `stateForColor`).
+ *   `seconds` (WP-79): elapsed seconds from the INJECTED clock, for the idle
+ *   micro-motion. Omitted, or under `reduced`, the figure is static.
  *   `tool` (WP-52): the agent's `currentTool` from the snapshot, or null. Drawn
  *   as a bubble with the summary at `lod >= 1`, as a tool-class icon at L0 and
  *   under reduced motion, and not at all when a state icon or a waiting badge
  *   already occupies the space above the head.
- *   `labelOffsetY`: vertical screen-px nudge applied to the label only
- *   (`scene.js`'s per-frame collision resolution, tech-lead review finding 1).
+ *   `labelOffsetY`: vertical screen-px nudge applied to the label only.
  *   `identity` (CONTRACTS-WP15.md §2): project appearance from
- *   `palette.js`'s `identityFor`. The torso stays `opts.color` — the state
- *   colour — regardless; identity rides on hair, a small clothing accent and
- *   a shoulder/back glyph only, and only at `lod >= 1` (L0's `drawSimpleBody`
- *   has no hair or accent layer to carry it).
- *   `appearance` (WP-20): who this particular session is, from `palette.js`'s
- *   `appearanceFor(sessionId)` — hair style, skin, an outfit accent, glasses,
- *   build, and a rarity trait on a minority of agents. Optional and additive:
- *   omit it and this function draws exactly what it drew before. Nothing here
- *   touches the torso fill, the state icon or the badge, so the two things the
- *   floor has to say — what state this session is in and whether it is waiting
- *   on you — read identically with or without it, at every LOD.
+ *   `palette.js`'s `identityFor` — the chest badge, its glyph, and the boots.
+ *   `appearance` (WP-20): who this particular session is, from
+ *   `palette.js`'s `appearanceOf(agent)` — the antenna tip, the ear cups, the
+ *   mitts, the barrel's width, the dome's size, the crown accessory, the brow
+ *   bar, and a rarity marker on a minority of agents. Neither channel touches
+ *   the barrel's fill or the visor's tint: the state owns both.
  */
 export function drawCharacter(ctx, pose, opts) {
   const ox = opts.x,
@@ -303,16 +368,20 @@ export function drawCharacter(ctx, pose, opts) {
     lod = opts.lod,
     color = opts.color;
   const reduced = !!opts.reduced;
-  const identity = opts.identity || null;
   const appearance = opts.appearance || null;
-  const skin = appearance ? appearance.skin : undefined;
-  const build = appearance ? appearance.build : 1;
   const trait = appearance ? appearance.trait : null;
-  // See the FACING CONVENTION comment above — rotating by pose.bodyAngle
-  // directly (instead of facingRot) is the bug this file used to have.
-  const facingRot = pose.bodyAngle + Math.PI / 2;
-  const cosA = Math.cos(facingRot);
-  const sinA = Math.sin(facingRot);
+  const state = opts.state || stateForColor(color);
+  // `walking` is the caller's, because the caller is the only one that knows:
+  // `scene-draw.js` plays `walk` whenever a record still has path left, which
+  // `rec.clip` does not say until the walk ends. The pose is the fallback for
+  // a caller that has nothing to add.
+  const walking = opts.walking === true || (pose.seated === false && pose.legPhase > 0);
+  const k = rigPoseFor(walking ? 'walking' : state);
+  const id = rigIdentity(opts.identity || null, appearance);
+  const dead = state === 'ended' || state === 'let_go';
+  const tints = rigTints(color, dead);
+  const h = rigHeight(u);
+  const phase = idlePhase(opts.seconds, reduced);
 
   if (pose.ring) drawFloorRing(ctx, ox, oy, u, pose.ringPhase, color, reduced);
   if (opts.selected) drawSelectionRing(ctx, ox, oy, u);
@@ -322,89 +391,53 @@ export function drawCharacter(ctx, pose, opts) {
 
   // THE HALO, BEFORE THE SHADOW (WP-85a §3.9). On a light floor this is a
   // ground pool, and the shadow belongs on top of it because the shadow is a
-  // thing ON the floor and the pool is the floor. On a dark floor it returns
-  // `true` instead and the rim is laid under the body below, where it can hug
-  // the silhouette rather than the ground.
-  const haloRim = drawFigureHalo(ctx, ox, oy, u, lod);
+  // thing ON the floor and the pool is the floor. On a dark floor there is no
+  // pool — a pool on a dark floor is a hole in the room — and the rim below is
+  // the whole device. The rim is laid at §3.9's stated 1.1 px on BOTH, because
+  // since WP-79 it is also B's own outline and one figure should not be
+  // outlined twice as heavily as another for a reason the reader cannot see.
+  drawFigureHalo(ctx, ox, oy, u, lod);
 
   drawContactShadow(ctx, ox, oy, u);
 
-  if (lod === 0) {
-    drawSimpleBody(ctx, ox, oy, u, color, skin, build);
-  } else {
-    const by = oy + pose.bob * (u / BASE_U);
-    // The arm solve moved AHEAD of the body (WP-85a): the rim pass needs both
-    // arms' geometry, and it has to be painted before the legs. It writes only
-    // the module's scratch numbers, so computing it early draws nothing early.
-    computeArmGeometry(ox, by, cosA, sinA, u, 1, pose.armR.shoulder, pose.armR.elbow);
-    computeArmGeometry(ox, by, cosA, sinA, u, -1, pose.armL.shoulder, pose.armL.elbow);
-    if (haloRim) drawFigureRim(ctx, pose, ox, by, cosA, sinA, facingRot, u, build);
+  // The body's own vertical breathing, from the clip. `bob` is stated in px at
+  // BASE_U, so it is scaled into this zoom exactly as it always was.
+  const by = oy + (reduced ? 0 : pose.bob * (u / BASE_U));
+  rigFrame(ox, by, h);
+  rigSetup(k, id, tints, h, phase, lod === 0);
 
-    drawLegs(ctx, pose, ox, by, cosA, sinA, u, color);
-    drawTorso(ctx, ox, by, facingRot, u, color, build);
-    // The outfit accent goes on before the arms, so a sleeve crosses it.
-    if (appearance) drawWaistband(ctx, ox, by, cosA, sinA, u, build, appearance.accent);
-    if (trait === 'jacket') {
-      drawRarityTrait(
-        ctx,
-        ox,
-        by,
-        cosA,
-        sinA,
-        u,
-        facingRot,
-        build,
-        'jacket',
-        appearance.traitColor,
-      );
-    }
+  drawFigureRim(ctx, haloRimWidth(u));
+  drawRigBase(ctx);
+  drawRigFarArm(ctx);
+  drawRigBarrel(ctx);
 
-    if (pose.prop === 'cue') drawCueBehind(ctx, u);
+  if (pose.prop === 'cue') drawCueBehind(ctx, u);
 
-    drawArmStroke(ctx, 1, u, color, skin);
-    drawArmStroke(ctx, -1, u, color, skin);
-    if (lod >= 2 && pose.armR.hand === 'key') drawFingerTicks(ctx, 1, u, pose.fingerPhase);
-    if (lod >= 2 && pose.armL.hand === 'key') drawFingerTicks(ctx, -1, u, pose.fingerPhase);
+  drawRigDome(ctx);
+  drawRigVisor(ctx, dead ? 'ended' : state);
+  // THE NEAR ARM GOES OVER THE DOME, AND THAT IS THE WHOLE REASON IT IS HERE.
+  // At `needs_input` the mitt is at local y 0.97, level with the top of the
+  // dome and just outside its edge, so an arm drawn before the head — which is
+  // where the study's own sheet draws it — has its forearm painted over by the
+  // head it is reaching past. A raised hand is the one thing on this floor that
+  // must never be occluded (VISUAL-SPEC §5), including by the character raising
+  // it. Every other pose puts the mitt well below the dome, so nothing else
+  // moves at all.
+  drawRigNearArm(ctx);
+  drawRigCard(ctx);
+  drawRigCrown(ctx);
 
-    drawHead(ctx, ox, by, cosA, sinA, u, skin);
-    // A rare hair colour is the one place the per-agent channel overrules the
-    // project channel (~2.5% of agents — see DEVIATIONS and palette.js).
-    const hairColor =
-      (appearance && appearance.hairColor) || (identity ? identity.hair : undefined);
-    drawHair(
-      ctx,
-      ox,
-      by,
-      cosA,
-      sinA,
-      u,
-      facingRot,
-      hairColor,
-      appearance ? appearance.hairStyle : undefined,
-    );
-    if (identity) drawIdentityMarks(ctx, ox, by, cosA, sinA, u, identity);
-    // A hat covers the hair, so it is drawn over it; the same is true of a
-    // scarf over the collar and a crown over the crown of the head.
-    if (trait === 'hat' || trait === 'scarf' || trait === 'crown') {
-      drawRarityTrait(ctx, ox, by, cosA, sinA, u, facingRot, build, trait, appearance.traitColor);
-    }
-    // Glasses last on the face, and L2 only — see `drawGlasses`. A hat sits
-    // back on the crown, so the brow it would cover is still there to wear
-    // them.
-    if (appearance && appearance.glasses && lod >= 2) {
-      drawGlasses(ctx, ox, by, cosA, sinA, u, facingRot);
-    }
-
-    if (pose.prop) drawPropFront(ctx, pose.prop, u);
-  }
+  if (pose.prop) drawPropFront(ctx, pose.prop, u);
 
   // Above-head chrome, in one place because it is one slot. Precedence:
   // the state icon, then the tool bubble (WP-52), then the abstract thought
   // cloud. The bubble YIELDS — a raised hand and a waiting badge are the
   // things the user has to act on, and "what it is doing" must never be
-  // drawn over, or beside, either of them. It also replaces the thought
-  // cloud rather than joining it: the cloud says "thinking", the bubble says
-  // what about, and two clouds over one head is noise.
+  // drawn over, or beside, either of them.
+  //
+  // Every one of these hangs off the FEET at a fixed offset (`CHROME_TOP_U`
+  // in `rig-metrics.js`), raised by WP-79 to clear a figure that now fills
+  // its whole 2.52 U rather than a third of it.
   const tool = opts.tool || null;
   const showTool = tool && !opts.icon && !opts.badge;
   if (opts.icon) {
@@ -432,66 +465,52 @@ export function drawCharacter(ctx, pose, opts) {
 /**
  * The user's own avatar, standing at the head of their desk — not an agent,
  * so it carries none of an agent's chrome: a fixed suit tone instead of a
- * state colour, no state icon, no waiting badge, no hand-raise ring, no MK
- * tag, no project identity. Reuses the exact same body primitives as
- * `drawCharacter`, in the same order — contact shadow -> legs -> torso ->
- * arms -> head -> hair -> suit accents — so it reads as unmistakably the
- * same species as every agent on the floor: just bigger, standing taller,
- * and in a suit.
+ * state colour, no visor mark of any state, no icon, no waiting badge, no
+ * hand-raise ring, no MK tag, no project identity. It is the same figure every
+ * agent is, drawn by the same functions in the same order, so it reads as
+ * unmistakably the same species: just bigger, standing taller, and in a suit.
  *
  * Called from `backdrop.js`'s `paintProp` (`case 'manager'`), which bakes the
  * whole floor once per plan change, never per frame — so unlike
- * `drawCharacter` this takes one fixed confident standing pose rather than a
- * Pose sampled from a clip: legs together, arms at rest, chest square to the
- * queue.
+ * `drawCharacter` this takes one fixed standing pose rather than a Pose sampled
+ * from a clip, and no idle phase at all.
  *
- * `backdrop.js` calls this from inside a translate-to-the-prop-centre
- * transform with the ambient `ctx.rotate` cancelled back out first, because
- * (like `drawCharacter`) this function bakes facing into the coordinates it
- * hands to `ctx` itself, exactly per the FACING CONVENTION above — it must
- * not also be called under an active rotation, or the figure would be turned
- * twice.
+ * `opts.angle` is accepted and ignored, exactly as `pose.bodyAngle` is: the
+ * figure is billboarded (see THE BILLBOARD CONVENTION above). It stays in the
+ * signature because `backdrop-props-desk.js` has a facing to hand over and a
+ * caller should not have to know that the rig has stopped using it.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {{ x:number, y:number, u:number, angle?:number }} opts
- *   `x,y`: the figure's centre, in the current (translate-only) transform.
- *   `u`: px-per-unit before the manager's own size bump (`MANAGER_SCALE`
- *   above — "a bit bigger" than an agent, per the work order).
- *   `angle`: facing, in `Pose.bodyAngle`'s convention (0 = +x/east).
  */
 export function drawManagerFigure(ctx, opts) {
   const ox = opts.x,
     oy = opts.y,
     u = opts.u * MANAGER_SCALE;
-  const bodyAngle = opts.angle || 0;
-  const facingRot = bodyAngle + Math.PI / 2;
-  const cosA = Math.cos(facingRot);
-  const sinA = Math.sin(facingRot);
-  const pose = makePose({
-    bodyAngle,
-    armL: { shoulder: 0, elbow: 0, hand: 'rest' },
-    armR: { shoulder: 0, elbow: 0, hand: 'rest' },
-  });
+  const h = rigHeight(u);
+  const k = rigPoseFor('for_review');
+  const id = managerIdentity();
+  const tints = rigTints(MANAGER_SUIT, false);
 
   // The manager is a character too, so it gets §3.9's halo like every other
   // figure on this floor — a suit at `#2B2F3A` needs it on a dark theme at
   // least as much as a state colour does. `lod` is 2: the manager is baked
   // into the backdrop once per plan change and is always drawn in full.
-  const haloRim = drawFigureHalo(ctx, ox, oy, u, 2);
+  drawFigureHalo(ctx, ox, oy, u, 2);
 
   drawContactShadow(ctx, ox, oy, u);
 
-  computeArmGeometry(ox, oy, cosA, sinA, u, 1, pose.armR.shoulder, pose.armR.elbow);
-  computeArmGeometry(ox, oy, cosA, sinA, u, -1, pose.armL.shoulder, pose.armL.elbow);
-  if (haloRim) drawFigureRim(ctx, pose, ox, oy, cosA, sinA, facingRot, u, 1);
+  rigFrame(ox, oy, h);
+  rigSetup(k, id, tints, h, 0, false);
 
-  drawLegs(ctx, pose, ox, oy, cosA, sinA, u, MANAGER_SUIT);
-  drawTorso(ctx, ox, oy, facingRot, u, MANAGER_SUIT);
-
-  drawArmStroke(ctx, 1, u, MANAGER_SUIT);
-  drawArmStroke(ctx, -1, u, MANAGER_SUIT);
-
-  drawHead(ctx, ox, oy, cosA, sinA, u);
-  drawHair(ctx, ox, oy, cosA, sinA, u, facingRot);
-  drawSuitAccents(ctx, ox, oy, cosA, sinA, u);
+  drawFigureRim(ctx, haloRimWidth(u));
+  drawRigBase(ctx);
+  drawRigFarArm(ctx);
+  drawRigBarrel(ctx);
+  drawRigDome(ctx);
+  // No state on this visor: the manager is the user, and the user has no
+  // activity state. A plain lit pane, and nothing written on it.
+  drawRigVisor(ctx, 'manager');
+  drawRigNearArm(ctx);
+  drawRigCrown(ctx);
 }

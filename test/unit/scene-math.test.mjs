@@ -32,13 +32,16 @@ import { resolveBadgeCollisions } from '../../public/render/scene-labels.js';
 import { buildPlan } from '../../public/render/plan.js';
 import {
   truncateLabel,
+  characterBox,
   labelBox,
   labelFontSize,
   badgeBox,
   BODY_HEIGHT_U,
+  LABEL_DROP_U,
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
 } from '../../public/render/rig.js';
+import { FIGURE_HALO_POOL_SPAN } from '../../public/render/palette.js';
 
 // ------------------------------------------------------- world <-> screen
 
@@ -888,10 +891,18 @@ test('a floor that fits leaves nothing to scroll', () => {
  * not from a second copy of its arithmetic — the whole class of bug §16, §35,
  * §38, §52 and §55 belong to is two representations allowed to disagree.
  */
-test('a character is never under 16 px of body, and its label never under 11 px', () => {
-  const NOW = 1_800_000_000_000;
-  const DAY = 24 * 60 * 60 * 1000;
-  const populations = {
+// Module scope since WP-79, because the label-clearance tests below hold the
+// same rule over the same three floors: one population, asked two questions.
+const POP_NOW = 1_800_000_000_000;
+const POP_DAY = 24 * 60 * 60 * 1000;
+/** A stub `ctx` with the two members `labelBox`/`badgeBox` actually read. */
+function measuringCtx() {
+  return { font: '', measureText: (text) => ({ width: String(text).length * 6 }) };
+}
+const populations = (() => {
+  const NOW = POP_NOW;
+  const DAY = POP_DAY;
+  return {
     // The reference machine's shape: one active repo, seventeen idle, and a
     // benched population mostly past the gone-home window.
     reference: () => {
@@ -965,7 +976,10 @@ test('a character is never under 16 px of body, and its label never under 11 px'
       return { projects, agents };
     },
   };
+})();
 
+test('a character is never under 16 px of body, and its label never under 11 px', () => {
+  const NOW = POP_NOW;
   // The goldens' stage, plus the narrowest and widest real windows.
   const VIEWPORTS = [
     [1600, 936],
@@ -991,6 +1005,105 @@ test('a character is never under 16 px of body, and its label never under 11 px'
       assert.ok(
         label >= LEGIBILITY_MIN_PX.label,
         `${name} at ${viewW}x${viewH}: a label is ${label.toFixed(1)} px`,
+      );
+    }
+  }
+});
+
+// ------------------------------------------- WP-79: labels under taller bodies
+
+test('WP-79: a name label clears the figure and its halo, at every scale the floor is drawn at', () => {
+  // A label hangs BELOW the ground contact, and the two things it has to clear
+  // are the figure's own feet — which are ON the contact — and the halo's
+  // ground pool, a radial reaching `FIGURE_HALO_POOL_SPAN × BODY_HEIGHT_U`
+  // (1.46 U) in every direction from it. The old 1.35 U put the label's top
+  // inside that pool, which was invisible while a figure was 22 px of readable
+  // mass and obvious once B filled its whole height.
+  const pool = FIGURE_HALO_POOL_SPAN * BODY_HEIGHT_U;
+  assert.ok(
+    LABEL_DROP_U > pool,
+    `the label starts ${LABEL_DROP_U} U down, inside a ${pool} U pool`,
+  );
+  const ctx = measuringCtx();
+  for (const u of [CHAR_MIN_PX_PER_UNIT, 10, 16.5, 28]) {
+    const box = labelBox(ctx, 100, 200, u, 'MK4.1');
+    // Below the feet, clear of the pool, and its own top edge (`y`, which is
+    // `top` less the padding) is what has to clear it rather than the baseline.
+    assert.ok(box.y > 200 + pool * u * 0.92, `at u=${u} the label sits in the halo pool`);
+    // And not so far down that it stops belonging to the person above it: a
+    // label further away than the figure is tall reads as a room label.
+    assert.ok(box.y < 200 + BODY_HEIGHT_U * u, `at u=${u} the label has floated off its character`);
+  }
+});
+
+test('WP-79: no name label lands on a body, over the demo population', () => {
+  const NOW = POP_NOW;
+  // The design README's own risk note: "characters are taller than 22 px, so
+  // name labels sit lower and collide sooner at shared desks — worth checking
+  // `scene-labels.js` before committing to a size." This is that check, run
+  // over the real seat geometry rather than over a sketch of it: build the
+  // plan, seat everybody in it, measure every label the floor would draw, run
+  // the frame's own collision pass, and then look for a resolved label box
+  // sitting on ANY character's body.
+  const ctx = measuringCtx();
+  for (const [name, build] of Object.entries(populations)) {
+    const { projects, agents } = build();
+    for (const [viewW, viewH] of [
+      [1600, 936],
+      [1280, 656],
+    ]) {
+      const plan = buildPlan(projects, agents, {
+        targetAspect: computeTargetAspect(viewW, viewH),
+        now: NOW,
+      });
+      const seats = assignSeats(plan, agents);
+      const fit = computeFitScale(plan.width, plan.height, viewW, viewH);
+      const u = characterScaleFor(fit);
+      const camera = { zoom: fit / 14, panX: 0, panY: 0, U: 14 };
+
+      /** Every seated character, in screen space, back to front. */
+      const people = agents
+        .map((a) => ({ id: a.id, seat: seats.get(a.id) }))
+        .filter((p) => p.seat)
+        .map((p) => ({ id: p.id, ...worldToScreen(p.seat, camera) }))
+        .sort((a, b) => a.y - b.y);
+      if (people.length === 0) continue;
+
+      // Exactly what `scene-draw.js` builds: every body first, pinned, then the
+      // labels. `characterBox` is the rig's own answer to "what does a person
+      // occupy", so this cannot disagree with the floor about it.
+      const bodies = people.map((p) => ({
+        id: `body:${p.id}`,
+        ...characterBox(p.x, p.y, u),
+        pin: true,
+      }));
+      const items = people.map((p) => {
+        const box = labelBox(ctx, p.x, p.y, u, 'MK4.1');
+        return { id: p.id, x: box.x, y: box.y, w: box.w, h: box.h };
+      });
+      const resolved = resolveLabelCollisions([...bodies, ...items]);
+      const hits = (a, b) =>
+        a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+      let overlaps = 0;
+      let drawn = 0;
+      for (const item of items) {
+        const placed = resolved.get(item.id);
+        if (!placed) continue; // dropped rather than drawn over a body
+        drawn++;
+        const rect = { x: item.x, y: item.y + placed.offsetY, w: item.w, h: item.h };
+        for (const body of bodies) if (hits(rect, body)) overlaps++;
+      }
+      assert.equal(
+        overlaps,
+        0,
+        `${name} at ${viewW}x${viewH}: ${overlaps} of ${items.length} labels land on a body`,
+      );
+      // And the pass has not answered "zero overlaps" by drawing nothing: the
+      // great majority of names still reach the floor.
+      assert.ok(
+        drawn >= Math.ceil(items.length * 0.8),
+        `${name} at ${viewW}x${viewH}: only ${drawn} of ${items.length} labels survived`,
       );
     }
   }

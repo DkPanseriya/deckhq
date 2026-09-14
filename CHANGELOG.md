@@ -220,6 +220,55 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
 
 ### Changed
 
+- **Everyone on the floor is a robot now — WP-79.** The owner picked **B**, the 45° three-quarter
+  robot, from the four candidates drawn for him in `docs/media/design/character` — a chunky barrel, a
+  dome head and a bright wrap visor — and the rig draws it. What was there before was an ellipse with
+  stroke limbs seen from directly above, whose readable coloured mass was **22 px inside a 48 px
+  box**: at the size a real floor is drawn at, a grey blob with a coloured waistcoat.
+
+  Three rules from the design study, and each is enforced where it is drawn rather than asserted in a
+  comment. **The state colour owns the whole body mass, head included** — every shape on the figure
+  is a tint of one colour, so a character is one coherent hue at a glance and the hue is what it is
+  doing. **The face is a bright pane with a dark mark** — a lit visor on a coloured dome survives
+  24 px and the inverse does not, measured on all four candidates. **Identity is two or three small
+  elements** — an antenna tip, a pair of ear cups, a chest badge, a pair of boots — and never the
+  body.
+
+  **It never turns.** The figure is billboarded: `bodyAngle` is still carried and still means what it
+  meant, and the seat, the path and the clip still compose into it, but the sprite always faces the
+  reader and the contact ellipse under its feet is the only thing left in the floor's plane. That is
+  the convention every top-down RPG uses, and it deletes the class of defect that produced this
+  renderer's worst bug — a head on one side and the hands on the other (`DEVIATIONS.md` §26). There
+  is no quarter-turn correction left to get wrong.
+
+  **Six states, six poses, three light levels in the visor.** Working at the desk with hands forward;
+  needs-input with the hand raised high and out, drawn over the dome so the figure cannot occlude its
+  own raised hand; for-review standing with a page held up; stalled slumped with the visor at half
+  light and an ellipsis on it; ended powered down with the visor off; benched reclined with the visor
+  soft. "Gone quiet" and "finished" are the two states a monitoring floor must never confuse, which
+  is why there are three light levels rather than two.
+
+  `docs/DEVIATIONS.md` §162, `docs/03-VISUAL-SPEC.md` §3.
+
+- **The same session still looks like the same person — WP-79.** Not one hash, pool, draw order or
+  rarity tier changed: a face is still a pure function of the session id (`DEVIATIONS.md` §105), and
+  the same id renders the same robot on every machine, for ever, with nothing persisted. What changed
+  is where the draws land, because a robot has no hair, no waistband and no face to put glasses on —
+  the project's colour became a chest badge and a collar ring, its glyph the mark on that badge, its
+  deep tone the boots; the session's accent became the antenna tip and the ear cups, its skin the
+  mitts, its hair style one of six crown accessories, its build the barrel's width, its glasses a
+  brow bar over the visor. An uncommon agent still wears a hat or a scarf, a rare one a jacket or a
+  striking tip colour, a legendary one a crown or an aura. **No two of twelve look alike**, and that
+  is measured over the demo population rather than claimed: every pair differs in at least two of the
+  seven slots.
+
+- **Name labels moved down, and they now yield to bodies and badges — WP-79.** A label hangs
+  **1.62 U** below the feet rather than 1.35, because it has to clear the halo's ground pool as well
+  as the feet — at 1.35 the name sat inside the bright disc rather than under it. And the per-frame
+  collision pass takes the characters' own boxes and the waiting badges as obstacles before it places
+  a single label, so a name is never drawn across a face or under a crimson pill. Both collisions
+  were always geometry; while a figure was 22 px of mass inside a 48 px box they were invisible.
+
 - **The interior: materials, palette, floors, walls, and the halo under people — WP-85a.** The
   owner: _"analyse and evaluate our tool in terms of design — the floor, the carpet, the colours…
   then improve thoroughly every aspect of the interior."_ The layout was already done; what nobody
@@ -489,6 +538,13 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Fixed
 
+- **The user's own avatar had its head clipped off — WP-79.** A prop may not paint outside its own
+  footprint, which is a good rule about furniture and a bad one about a person: a character's
+  footprint is where they stand and their body is almost entirely above it. The manager is drawn into
+  the baked backdrop as a prop, so a taller figure ran straight into that clip and what came out was
+  a headless suit at the end of the desk. The manager is now exempt from the footprint clip — the
+  same exemption it already had from the bounding-box contact shadow, and for the same reason.
+
 - **Every full-surface view has a visible way back to the floor — WP-84.** The owner: _"Once the
   user clicks the agents tab, or the list of all who are waiting, there is literally no button to
   close that panel or go back to the floor view."_ He was right, and it was true of more than the
@@ -656,6 +712,22 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/unit/rig-orientation.test.mjs` proves the opposite of what it used to — WP-79.** It was
+  written to pin the quarter-turn correction the old rig needed; B has no rotation at all, so the
+  same point-recording fake context now measures that **the figure is byte-identical at every
+  facing**, across four clips and five phases each. Beside it: every state draws a different picture;
+  the raised hand clears the dome at every LOD and every scale; the LOD drop list is exactly the
+  design README's three items and the visor is in none of them; reduced motion contributes exactly
+  zero phase and two clocks draw the same bytes; the walk is two frames and no blend; and the same
+  session id draws byte-identically twice with other ids rendered in between.
+
+- **Three new measurements where the rig meets the floor — WP-79.** `identity-visuals.test.mjs`
+  holds the closest pair in a twelve-strong crowd to two differing identity slots of seven, and holds
+  every slot to the no-state-colour discipline the pools are held to. `scene-math.test.mjs` holds the
+  name label clear of the halo pool at every scale the floor is drawn at, and holds **zero
+  label-on-body overlaps** over three populations at two viewports with at least four labels in five
+  still drawn.
 
 - **`test/unit/interior.test.mjs` — eighteen tests over WP-85a, and it prints its measurements.**
   Every ratio `docs/plan/10-INTERIOR-DESIGN.md` §3 quotes is re-derived here and written to the

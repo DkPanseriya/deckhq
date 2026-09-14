@@ -1,9 +1,26 @@
 /**
- * The body itself, part by part (WP-22 follow-up).
+ * B itself, part by part (WP-22 follow-up; rewritten for WP-79).
  *
- * Split out of `rig.js` unchanged: the contact shadow, the far-zoom
- * simplification, and then legs, torso, arms, fingers, head, hair and
- * waistband — in the order `drawCharacter` paints them.
+ * A 45° three-quarter robot: chunky barrel, dome head, wrap visor. The 45° read
+ * is the cheat every top-down RPG already uses — the floor stays near-plan and
+ * the actor is tilted toward the camera — and the top-plane ellipses on the
+ * barrel and the dome are what sell the tilt. The figure is BILLBOARDED: it
+ * never turns with `bodyAngle`, so all six poses read from whichever direction
+ * the user happens to be scanning the floor in, and the contact ellipse under
+ * the feet is the only element left in the floor's own plane.
+ *
+ * Paint order, back to front:
+ *
+ *   contact shadow → rim halo → base → far arm → barrel (top plane, collar
+ *   ring, chest plate, chest glyph) → near arm and mitt → held page → dome and
+ *   ear cups → visor and its state mark → brow bar → crown accessory → rarity
+ *   marker → legendary aura
+ *
+ * The RAISED HAND is drawn in the near-arm slot but reaches above the dome, and
+ * nothing after it is drawn over it. That is not an accident of ordering: a
+ * raised hand is the one thing on this floor the user must never fail to see
+ * (VISUAL-SPEC §5), and `test/unit/rig-orientation.test.mjs` measures that its
+ * bounding box clears the body's top at every level of detail.
  */
 
 import {
@@ -13,48 +30,51 @@ import {
   FIGURE_HALO_RIM_PX,
   channelsOf,
   figureHaloMode,
+  mixHex,
   PALETTE,
 } from './palette.js';
 import {
   BASE_U,
   BODY_HEIGHT_U,
-  TAU,
-  HAIR,
-  TORSO_RX,
-  HEAD_R,
-  HIP_OFFSET_X,
-  LEG_LEN_STAND,
+  RIG_DETAIL_MIN_PX,
+  RIG_INK,
+  RIG_MARK_MIN_PX,
+  RIG_OFF,
+  RIG_PANE,
+  RIG_PANE_DEAD,
   SHADOW_OX,
   SHADOW_OY,
   SHADOW_RX,
   SHADOW_RY,
-  TORSO_RY,
-  SKIN,
-  HEAD_OFFSET_Y,
-  LEG_WIDTH,
-  HIP_OFFSET_Y,
-  LEG_LEN_SEATED,
-  ARM_WIDTH,
-  HAND_R,
+  TAU,
+  fade,
 } from './rig-metrics.js';
 import {
-  SIDES,
-  _rx,
-  _ry,
-  rotateLocal,
-  _rSx,
-  _lSx,
-  _rSy,
-  _lSy,
-  _rEx,
-  _lEx,
-  _rEy,
-  _lEy,
+  MITT_R,
+  lCircle,
+  lEllipse,
+  lLimb,
+  lRoundRect,
+  ln,
+  lx,
+  ly,
+  rigArms,
+  rigLineWidth,
+  walkFrame,
   _rHx,
-  _lHx,
   _rHy,
+  _lHx,
   _lHy,
 } from './rig-pose.js';
+import {
+  DOME_R,
+  SHELL_W,
+  crownPath,
+  crownPathB,
+  crownTop,
+  drawChestGlyph,
+  drawRarityTrait,
+} from './rig-traits.js';
 
 // ---------------------------------------------------------------- the halo
 //
@@ -75,13 +95,16 @@ import {
 //     silhouette sits on one tone rather than on four boards and a seam.
 //   RIM (dark floors). The silhouette drawn once in the halo colour, `rim`
 //     wider all round, with the real body painted straight over it: what
-//     survives is a thin bright edge. A pool on a dark floor is a hole in the
-//     room; a rim is what every top-down game that solved legibility does
-//     (§2, *Don't Starve* and *Hades*).
+//     survives is a thin bright edge.
 //
-// Both are cheap by construction — the pool is one arc and the rim is five
-// fills of shapes the rig was already drawing — and both drop at L0, where the
-// state disc above the head is the signal anyway (§4).
+// WP-79 KEPT BOTH AND MADE THE RIM UNCONDITIONAL. B's own design carries a
+// light outline on every floor (`docs/media/design/character/B.png` — it is
+// what separates a robot from a desk, a plant and its neighbour), so the rim
+// pass now runs on light floors too, at the stated 1.1 px; on a dark floor it
+// runs at double that, which is the contrast device §3.9 measured. The pool is
+// unchanged and still light-floors-only. Both drop below
+// `RIG_DETAIL_MIN_PX` — the README's own risk note: at 100 agents the halo is
+// the first thing that should stop being drawn.
 
 /**
  * The ground pool, on a light floor. Drawn under the contact shadow, because
@@ -115,37 +138,14 @@ export function haloRimWidth(u) {
 }
 
 /**
- * The rim pass, on a dark floor: every part of the silhouette, in the halo
- * colour, `rim` px proud. The real body is drawn immediately after and covers
- * all but the edge.
- *
- * The arm geometry must already be computed for both sides — `drawCharacter`
- * does that before calling this, which is the one ordering change WP-85a made
- * to the rig.
- *
- * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
- * @param {import('./clips.js').Pose} pose
- * @param {number} ox @param {number} oy @param {number} cosA @param {number} sinA
- * @param {number} facingRot @param {number} u @param {number} [build]
- */
-export function drawFigureRim(ctx, pose, ox, oy, cosA, sinA, facingRot, u, build) {
-  const rim = haloRimWidth(u);
-  drawLegs(ctx, pose, ox, oy, cosA, sinA, u, FIGURE_HALO, rim);
-  drawArmStroke(ctx, 1, u, FIGURE_HALO, FIGURE_HALO, rim);
-  drawArmStroke(ctx, -1, u, FIGURE_HALO, FIGURE_HALO, rim);
-  drawTorso(ctx, ox, oy, facingRot, u, FIGURE_HALO, build, rim);
-  drawHead(ctx, ox, oy, cosA, sinA, u, FIGURE_HALO, rim);
-}
-
-/**
  * The halo under one character, whichever device this floor calls for. Returns
- * `true` when the RIM is the device, so the caller knows to lay the rim pass in
- * between the geometry and the body.
+ * `true` when the RIM should be laid at double width — a dark floor, where the
+ * rim is the contrast device rather than only the outline.
  *
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {number} ox @param {number} oy @param {number} u
  * @param {number} lod the halo is not drawn at L0 (§4)
- * @returns {boolean} whether the rim pass is owed
+ * @returns {boolean} whether this floor wants the wide rim
  */
 export function drawFigureHalo(ctx, ox, oy, u, lod) {
   if (lod < 1) return false;
@@ -154,8 +154,6 @@ export function drawFigureHalo(ctx, ox, oy, u, lod) {
   return false;
 }
 
-// -------------------------------------------------------------- body parts
-
 export function drawContactShadow(ctx, ox, oy, u) {
   ctx.fillStyle = PALETTE.shadowContact;
   ctx.beginPath();
@@ -163,248 +161,499 @@ export function drawContactShadow(ctx, ox, oy, u) {
   ctx.fill();
 }
 
+// ------------------------------------------------------- the figure's scratch
+//
+// Module scope, written once per character by `rigSetup`, so `drawRig` and
+// every path builder under it allocate nothing at all. Same discipline, and
+// same safety argument, as `rig-pose.js`'s frame: one character is drawn to
+// completion before the next one starts.
+
+let _k = null; // the pose skeleton
+let _id = null; // the resolved identity slots
+let _t = null; // the state colour, fanned out
+let _h = 1; // the figure's height in screen px
+let _lw = 1; // the ink weight in screen px
+let _bw = 0.54; // barrel width, local
+let _bh = 0.44; // barrel height, local
+let _bx = 0; // barrel centre x, local
+let _by = 0.43; // barrel centre y, local
+let _hx = 0; // dome centre x, local
+let _hy = 0.755; // dome centre y, local
+let _hr = 0.235; // dome radius, local
+let _detail = true; // draw the rim, the chest glyph and the far arm
+let _tiny = false; // the state mark swaps to one bold form
+let _droop = 0; // 0 upright, 1 fully drooped
+let _phase = 0; // idle micro-motion, 0 under reduced motion
+let _frame = 0; // which walk frame
+
 /**
- * L0: two shapes, and the state colour is one of them. `skin` and `build` are
- * the only parts of an agent's appearance that survive down here — a hat is
- * three pixels of noise at this scale, so nothing else is drawn (WP-20).
- * @param {string} [skin] @param {number} [build]
+ * Resolve one character's geometry into the scratch above.
+ * @param {any} k the pose skeleton (`rig-pose.js`'s `RIG_POSES`)
+ * @param {any} id the identity slots (`rig-traits.js`'s `rigIdentity`)
+ * @param {any} tints the state colour fanned out (`rig-metrics.js`'s `rigTints`)
+ * @param {number} h the figure's height, screen px
+ * @param {number} phase idle phase in [0,1), 0 under reduced motion
+ * @param {boolean} dim force the reduced drawing (L0)
  */
-export function drawSimpleBody(ctx, ox, oy, u, color, skin, build) {
-  const b = build || 1;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(ox, oy, TORSO_RX * u * b, TORSO_RY * u * b, 0, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = skin || SKIN;
-  ctx.beginPath();
-  ctx.arc(ox, oy + HEAD_OFFSET_Y * u, HEAD_R * u, 0, TAU);
-  ctx.fill();
+export function rigSetup(k, id, tints, h, phase, dim) {
+  _k = k;
+  _id = id;
+  _t = tints;
+  _h = h;
+  _lw = rigLineWidth(h);
+  _bw = SHELL_W[id.shell] || SHELL_W[0];
+  _bh = 0.44 * (k.sq || 1);
+  _bx = k.lean * 0.35;
+  _by = k.by + _bh / 2;
+  _hx = k.lean;
+  _hy = k.hy;
+  _hr = DOME_R[id.dome] || DOME_R[0];
+  _detail = !dim && h >= RIG_DETAIL_MIN_PX;
+  _tiny = h < RIG_MARK_MIN_PX;
+  _droop = tints.dead ? 1 : k.lean > 0.18 ? 0.7 : 0;
+  _phase = phase || 0;
+  _frame = k.walk ? walkFrame(phase * 2) : 0;
+  rigArms(k);
 }
 
 /**
- * @param {number} [widen] WP-85a: extra half-width, in px, for the dark-theme
- *   halo rim pass. Zero everywhere else, so the body itself is unchanged.
+ * What this figure is currently dropping, as plain booleans. Exported so the
+ * LOD test reads the rig's own answer rather than a second copy of the rule.
+ * @returns {{rim:boolean, chestGlyph:boolean, farArm:boolean, boldMark:boolean}}
  */
-export function drawLegs(ctx, pose, ox, oy, cosA, sinA, u, color, widen = 0) {
-  ctx.strokeStyle = color;
-  ctx.lineCap = 'round';
-  ctx.lineWidth = LEG_WIDTH * u + 2 * widen;
-  if (pose.seated) {
-    for (const side of SIDES) {
-      rotateLocal(HIP_OFFSET_X * side, HIP_OFFSET_Y, cosA, sinA);
-      const hx = ox + _rx * u,
-        hy = oy + _ry * u;
-      rotateLocal(HIP_OFFSET_X * side, HIP_OFFSET_Y + LEG_LEN_SEATED, cosA, sinA);
-      const fx = ox + _rx * u,
-        fy = oy + _ry * u;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(fx, fy);
-      ctx.stroke();
-    }
-  } else {
-    for (const side of SIDES) {
-      const phase = side > 0 ? pose.legPhase : (pose.legPhase + 0.5) % 1;
-      const swing = Math.sin(phase * TAU) * 0.28;
-      rotateLocal(HIP_OFFSET_X * side, HIP_OFFSET_Y, cosA, sinA);
-      const hx = ox + _rx * u,
-        hy = oy + _ry * u;
-      rotateLocal(HIP_OFFSET_X * side, HIP_OFFSET_Y + LEG_LEN_STAND + swing, cosA, sinA);
-      const fx = ox + _rx * u,
-        fy = oy + _ry * u;
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(fx, fy);
-      ctx.stroke();
-    }
+export function rigDetail() {
+  return { rim: _detail, chestGlyph: _detail, farArm: _detail, boldMark: _tiny };
+}
+
+// ------------------------------------------------------------ path builders
+
+function basePath(ctx, grow) {
+  const g = grow || 0;
+  const k = _k;
+  if (_id.shell === 2) {
+    // A tread skirt instead of feet: the third silhouette, and the one that
+    // reads at the smallest size because it is one mass.
+    lRoundRect(ctx, 0, k.by * 0.6, _bw * 0.9 + g, k.by * 1.35 + g, k.by * 0.5, 0);
+    return false;
   }
+  const lift = k.walk && _frame === 0 ? 0.03 : 0;
+  lRoundRect(
+    ctx,
+    -_bw * 0.22,
+    k.by * 0.55 + lift,
+    _bw * 0.34 + g,
+    k.by * 1.3 + g,
+    _bw * 0.14,
+    k.recline ? -0.55 : 0,
+  );
+  return true;
 }
 
-// `facingRot` (not raw `pose.bodyAngle` — see the FACING CONVENTION comment
-// above `drawCharacter`) so the ellipse's wide axis (TORSO_RX > TORSO_RY)
-// tilts to lie across the character's true lateral direction.
-/**
- * @param {number} [build] per-agent torso scale (WP-20, `AGENT_BUILDS`). It
- *   scales the ellipse and nothing else: the fill is still `color` — the state
- *   colour — at full strength, so the one thing the torso has to say is said
- *   at exactly the contrast it was before.
- */
-export function drawTorso(ctx, ox, oy, facingRot, u, color, build, widen = 0) {
-  const b = build || 1;
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(ox, oy, TORSO_RX * u * b + widen, TORSO_RY * u * b + widen, facingRot, 0, TAU);
-  ctx.fill();
-  // The halo rim pass wants the SHAPE and not the drawing: the torso's cool
-  // outline is what separates a body from the thing behind it, and stroking it
-  // one rim out would put a second, softer body around the first.
-  if (widen > 0) return;
-  ctx.strokeStyle = PALETTE.inkCool;
-  ctx.lineWidth = Math.max(0.6, u * 0.035);
-  ctx.stroke();
+function baseFootB(ctx, grow) {
+  const g = grow || 0;
+  const k = _k;
+  const lift = k.walk && _frame === 1 ? 0.03 : 0;
+  lRoundRect(
+    ctx,
+    _bw * 0.24,
+    k.by * 0.55 + (k.recline ? 0.03 : 0) + lift,
+    _bw * 0.34 + g,
+    k.by * 1.3 + g,
+    _bw * 0.14,
+    k.recline ? -0.65 : 0,
+  );
 }
 
-/** @param {string} [skin] per-agent skin tone (WP-20); defaults to the constant. */
-export function drawArmStroke(ctx, side, u, color, skin, widen = 0) {
-  const sx = side > 0 ? _rSx : _lSx,
-    sy = side > 0 ? _rSy : _lSy;
-  const ex = side > 0 ? _rEx : _lEx,
-    ey = side > 0 ? _rEy : _lEy;
-  const hx = side > 0 ? _rHx : _lHx,
-    hy = side > 0 ? _rHy : _lHy;
-  ctx.strokeStyle = color;
-  ctx.lineCap = 'round';
-  ctx.lineWidth = ARM_WIDTH * u + 2 * widen;
-  ctx.beginPath();
-  ctx.moveTo(sx, sy);
-  ctx.lineTo(ex, ey);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(ex, ey);
-  ctx.lineTo(hx, hy);
-  ctx.stroke();
-  ctx.fillStyle = skin || SKIN;
-  ctx.beginPath();
-  ctx.arc(hx, hy, HAND_R * u + widen, 0, TAU);
-  ctx.fill();
+function barrelPath(ctx, grow) {
+  const g = grow || 0;
+  lRoundRect(ctx, _bx, _by, _bw + g, _bh + g, _bw * 0.28, -_k.lean * 0.5);
 }
 
-export function drawFingerTicks(ctx, side, u, fingerPhase) {
-  const hx = side > 0 ? _rHx : _lHx,
-    hy = side > 0 ? _rHy : _lHy;
-  const s = 0.14 + 0.16 * fingerPhase;
-  ctx.strokeStyle = PALETTE.inkWarm;
-  ctx.lineWidth = Math.max(0.5, u * 0.045);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(hx - u * 0.08, hy);
-  ctx.lineTo(hx - u * 0.08, hy - u * s);
-  ctx.moveTo(hx + u * 0.08, hy);
-  ctx.lineTo(hx + u * 0.08, hy - u * s);
-  ctx.stroke();
+function domePath(ctx, grow) {
+  const g = grow || 0;
+  lEllipse(ctx, _hx, _hy, _hr * 1.06 + g, _hr * (_id.dome === 2 ? 1.14 : 0.98) + g, 0);
 }
 
-/** @param {string} [skin] per-agent skin tone (WP-20); defaults to the constant. */
-export function drawHead(ctx, ox, oy, cosA, sinA, u, skin, widen = 0) {
-  rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
-  const hx = ox + _rx * u,
-    hy = oy + _ry * u;
-  ctx.fillStyle = skin || SKIN;
-  ctx.beginPath();
-  ctx.arc(hx, hy, HEAD_R * u + widen, 0, TAU);
-  ctx.fill();
+function nearArmPath(ctx) {
+  lLimb(ctx, _bx + _bw * 0.4, _by + _bh * 0.2, _k.aR[0], _k.aR[1]);
 }
 
-// `facingRot` (not raw `pose.bodyAngle` — see the FACING CONVENTION comment
-// above `drawCharacter`), so `backAngle` below lands exactly opposite the
-// character's true facing direction (`facingRot + PI/2 === bodyAngle + PI`).
-/**
- * @param {string} [hairColor] project identity's hair colour
- *   (CONTRACTS-WP15.md §2); defaults to the constant `HAIR` when omitted, so
- *   every existing call site (and the manager — see `drawManagerFigure`,
- *   which always wants the default) is unaffected.
- * @param {string} [style] one of `palette.js`'s `AGENT_HAIR_STYLES` (WP-20).
- *   Every style is the same back-of-the-head cap plus at most one extra shape,
- *   because outline is the only thing that survives at 16 px — a fringe drawn
- *   in three pixels is noise, a bun that changes the head's silhouette is not.
- *   Omitted (or unrecognised) draws `crop`, exactly what this rig drew before.
- */
-export function drawHair(ctx, ox, oy, cosA, sinA, u, facingRot, hairColor, style) {
-  rotateLocal(0, HEAD_OFFSET_Y, cosA, sinA);
-  const hx = ox + _rx * u,
-    hy = oy + _ry * u;
-  const backAngle = facingRot + Math.PI / 2;
-  const r = HEAD_R * u;
-  // Unit vectors: `b` points out of the back of the head, `s` across it.
-  const bx = Math.cos(backAngle),
-    by = Math.sin(backAngle);
-  const sx = -by,
-    sy = bx;
-  ctx.fillStyle = hairColor || HAIR;
-
-  if (style === 'bun') {
-    // Drawn first so the cap overlaps it — a bun sits behind the head.
-    ctx.beginPath();
-    ctx.arc(hx + bx * r * 0.92, hy + by * r * 0.92, r * 0.42, 0, TAU);
-    ctx.fill();
-  } else if (style === 'long') {
-    // A fall of hair down the back, past the shoulder line.
-    ctx.beginPath();
-    ctx.moveTo(hx + sx * r * 0.9, hy + sy * r * 0.9);
-    ctx.lineTo(hx + sx * r * 0.72 + bx * r * 2.0, hy + sy * r * 0.72 + by * r * 2.0);
-    ctx.lineTo(hx - sx * r * 0.72 + bx * r * 2.0, hy - sy * r * 0.72 + by * r * 2.0);
-    ctx.lineTo(hx - sx * r * 0.9, hy - sy * r * 0.9);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // The cap itself. `short` sits tighter to the skull, everything else keeps
-  // the 0.96 the rig has always used.
-  const capR = style === 'short' ? r * 0.86 : r * 0.96;
-  ctx.beginPath();
-  ctx.arc(hx, hy, capR, backAngle - Math.PI / 2, backAngle + Math.PI / 2);
-  ctx.closePath();
-  ctx.fill();
-
-  if (style === 'bob') {
-    // Two blunt side tabs level with the jaw: the outline change that reads
-    // as a bob rather than as a crop.
-    for (const side of SIDES) {
-      ctx.beginPath();
-      ctx.ellipse(
-        hx + sx * side * r * 0.82 + bx * r * 0.18,
-        hy + sy * side * r * 0.82 + by * r * 0.18,
-        r * 0.3,
-        r * 0.52,
-        backAngle,
-        0,
-        TAU,
-      );
-      ctx.fill();
-    }
-  } else if (style === 'tuft') {
-    // A single spike off the crown, forward of the cap.
-    ctx.beginPath();
-    ctx.moveTo(hx - bx * r * 0.5 + sx * r * 0.34, hy - by * r * 0.5 + sy * r * 0.34);
-    ctx.lineTo(hx - bx * r * 1.3 + sx * r * 0.1, hy - by * r * 1.3 + sy * r * 0.1);
-    ctx.lineTo(hx - bx * r * 0.45 - sx * r * 0.2, hy - by * r * 0.45 - sy * r * 0.2);
-    ctx.closePath();
-    ctx.fill();
-  }
+function farArmPath(ctx) {
+  lLimb(ctx, _bx - _bw * 0.4, _by + _bh * 0.2, _k.aL[0], _k.aL[1]);
 }
 
-// ------------------------------------------------ per-agent appearance (WP-20)
+// ---------------------------------------------------------------- the rim
 
 /**
- * The outfit accent: the back hem of a shirt, a short band across the rear of
- * the torso.
+ * The rim pass: every mass of the silhouette, in the halo colour, `rim` px
+ * proud. The real body is drawn immediately after and covers all but the edge.
  *
- * Two decisions, both from looking at it at magnification. It is a STROKE on a
- * chord rather than a fill over the body, because the torso's colour is the
- * state and must keep its area and its contrast (VISUAL-SPEC §3/§5). And it is
- * SHORT and set well back — a first pass spanned nearly the full width at the
- * midline, and from directly above that reads as a stripe bisecting the body
- * rather than as a garment, which took the eye off the state colour it was
- * supposed to sit quietly inside. Half the width, further back, and it reads
- * as a hem.
- * @param {CanvasRenderingContext2D} ctx
- * @param {number} ox @param {number} oy @param {number} cosA @param {number} sinA
- * @param {number} u @param {number} build @param {string} accent
+ * `rigSetup` must already have run — `drawCharacter` does that before calling
+ * this, which is the one ordering rule the rig has.
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} rim the rim's width in screen px
  */
-export function drawWaistband(ctx, ox, oy, cosA, sinA, u, build, accent) {
-  const halfW = TORSO_RX * build * 0.46;
-  const y = TORSO_RY * build * 0.62;
-  rotateLocal(-halfW, y, cosA, sinA);
-  const ax = ox + _rx * u,
-    ay = oy + _ry * u;
-  rotateLocal(halfW, y, cosA, sinA);
-  const bx = ox + _rx * u,
-    by = oy + _ry * u;
-  ctx.strokeStyle = accent;
+export function drawFigureRim(ctx, rim) {
+  if (!_detail) return;
+  ctx.fillStyle = FIGURE_HALO;
+  ctx.strokeStyle = FIGURE_HALO;
+  ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(1, u * 0.1);
-  ctx.beginPath();
-  ctx.moveTo(ax, ay);
-  ctx.lineTo(bx, by);
+  ctx.lineWidth = rim * 2;
+  // A stroke of `2 * rim` centred on a filled path is that path grown by
+  // `rim` on every side — one call per mass rather than a second geometry.
+  const two = basePath(ctx, 0);
+  ctx.fill();
   ctx.stroke();
+  if (two) {
+    baseFootB(ctx, 0);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.lineWidth = ln(0.12) + rim * 2;
+  farArmPath(ctx);
+  ctx.stroke();
+  nearArmPath(ctx);
+  ctx.lineWidth = ln(0.13) + rim * 2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(_rHx, _rHy, ln(MITT_R) + rim, 0, TAU);
+  ctx.fill();
+  ctx.lineWidth = rim * 2;
+  barrelPath(ctx, 0);
+  ctx.fill();
+  ctx.stroke();
+  domePath(ctx, 0);
+  ctx.fill();
+  ctx.stroke();
+}
+
+// ------------------------------------------------------------- the body
+
+function paint(ctx, fill, ink) {
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (ink !== false) {
+    ctx.strokeStyle = RIG_INK;
+    ctx.lineWidth = _lw;
+    ctx.stroke();
+  }
+}
+
+/**
+ * The base: two stubby feet, or the tread skirt. The one part of the figure
+ * that touches the ground, and the one the walk cycle moves.
+ * @param {CanvasRenderingContext2D} ctx
+ */
+export function drawRigBase(ctx) {
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  const two = basePath(ctx, 0);
+  paint(ctx, _t.deep);
+  if (two) {
+    baseFootB(ctx, 0);
+    paint(ctx, _t.deep);
+  }
+  // The boots: the project's deep tone, a band across the front of each foot.
+  // One of the three "small elements" identity is allowed (design README).
+  if (_detail && two) {
+    ctx.fillStyle = _id.boot;
+    lRoundRect(ctx, -_bw * 0.22, _k.by * 0.22, _bw * 0.34, _k.by * 0.4, _bw * 0.08, 0);
+    ctx.fill();
+    lRoundRect(ctx, _bw * 0.24, _k.by * 0.22, _bw * 0.34, _k.by * 0.4, _bw * 0.08, 0);
+    ctx.fill();
+  }
+}
+
+/** The far arm: the first thing to go below `RIG_DETAIL_MIN_PX`. */
+export function drawRigFarArm(ctx) {
+  if (!_detail) return;
+  ctx.strokeStyle = _t.deep;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = ln(0.12);
+  farArmPath(ctx);
+  ctx.stroke();
+  ctx.fillStyle = _t.deep;
+  ctx.beginPath();
+  ctx.arc(_lHx, _lHy, ln(MITT_R * 0.86), 0, TAU);
+  ctx.fill();
+}
+
+/**
+ * The barrel: the state colour at full strength, over the whole body mass.
+ *
+ * This fill IS the legibility model. `test/unit/identity-visuals.test.mjs`
+ * measures that it is `opts.color` exactly, at alpha 1, for every appearance
+ * and at every LOD — if that ever stops being true the floor has stopped
+ * answering the only question it exists to answer (VISUAL-SPEC §3, §5).
+ * @param {CanvasRenderingContext2D} ctx
+ */
+export function drawRigBarrel(ctx) {
+  ctx.lineJoin = 'round';
+  barrelPath(ctx, 0);
+  paint(ctx, _t.col);
+
+  // The lit top plane, which is what says "tilted toward the camera" rather
+  // than "lying on the floor".
+  lEllipse(ctx, _bx + _k.lean * 0.12, _by + _bh * 0.38, _bw * 0.44, _bh * 0.15, 0);
+  ctx.fillStyle = _t.lite;
+  ctx.fill();
+
+  // The collar ring: the project's colour, small and at the top of the mass.
+  lEllipse(ctx, _bx + _k.lean * 0.18, _by + _bh * 0.44, _bw * 0.3, _bh * 0.1, 0);
+  ctx.fillStyle = _id.project;
+  ctx.fill();
+
+  // The chest plate, and the project glyph on it.
+  lRoundRect(ctx, _bx, _by - _bh * 0.1, _bw * 0.52, _bh * 0.42, _bw * 0.11, -_k.lean * 0.5);
+  ctx.fillStyle = _t.dark;
+  ctx.fill();
+  if (_detail) drawChestGlyph(ctx, _bx, _by - _bh * 0.1, _bw * 0.15, _id.glyph, _id.project);
+}
+
+/**
+ * The near arm and its mitt — and, for `needs_input`, the raised hand.
+ *
+ * Drawn AFTER the barrel and BEFORE the dome, and never gated on detail: at
+ * every level of detail and at every zoom this arm is drawn, because at
+ * `needs_input` it is the message.
+ * @param {CanvasRenderingContext2D} ctx
+ */
+export function drawRigNearArm(ctx) {
+  ctx.strokeStyle = _t.lite;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = ln(0.13);
+  nearArmPath(ctx);
+  ctx.stroke();
+  ctx.fillStyle = _id.mitt;
+  ctx.beginPath();
+  ctx.arc(_rHx, _rHy, ln(MITT_R), 0, TAU);
+  ctx.fill();
+  ctx.strokeStyle = RIG_INK;
+  ctx.lineWidth = _lw;
+  ctx.stroke();
+}
+
+/** The page a `for_review` robot is holding up. */
+export function drawRigCard(ctx) {
+  if (!_k.card) return;
+  lRoundRect(ctx, 0, _k.aR[1] + 0.02, 0.32, 0.2, 0.03, 0);
+  paint(ctx, '#FBF7EE');
+  if (!_detail) return;
+  ctx.strokeStyle = fade(RIG_INK, 0.5);
+  ctx.lineWidth = _lw;
+  ctx.beginPath();
+  ctx.moveTo(lx(-0.1), ly(_k.aR[1] + 0.06));
+  ctx.lineTo(lx(0.1), ly(_k.aR[1] + 0.06));
+  ctx.moveTo(lx(-0.1), ly(_k.aR[1] - 0.01));
+  ctx.lineTo(lx(0.06), ly(_k.aR[1] - 0.01));
+  ctx.stroke();
+}
+
+/** The dome and its ear cups. The dome is the state colour, like everything. */
+export function drawRigDome(ctx) {
+  // Ear cups first, so the dome overlaps them.
+  const ey = _hy - _hr * 0.14;
+  lCircle(ctx, _hx - _hr * 1.04, ey, _hr * 0.34);
+  paint(ctx, _t.deep);
+  lCircle(ctx, _hx + _hr * 1.04, ey, _hr * 0.34);
+  paint(ctx, _t.deep);
+  if (_detail) {
+    ctx.fillStyle = _id.accent;
+    lCircle(ctx, _hx - _hr * 1.04, ey, _hr * 0.15);
+    ctx.fill();
+    lCircle(ctx, _hx + _hr * 1.04, ey, _hr * 0.15);
+    ctx.fill();
+  }
+  domePath(ctx, 0);
+  paint(ctx, _t.col);
+  // The dome's own lit top plane.
+  lEllipse(ctx, _hx, _hy + _hr * 0.52, _hr * 0.62, _hr * 0.22, 0);
+  ctx.fillStyle = _t.lite;
+  ctx.fill();
+}
+
+/**
+ * THE VISOR: the state signal, and the most findable element on the floor.
+ *
+ * A bright pane with a dark mark, the state colour tinting both — the single
+ * biggest finding of the design study, measured against the alternative
+ * (a dark visor with a light mark), which did not survive 24 px. The pane is
+ * drawn at every level of detail, without exception; only the MARK simplifies,
+ * to one bold form below `RIG_MARK_MIN_PX`.
+ *
+ * `ended` is the one state with no light in it: the pane goes to
+ * `RIG_PANE_DEAD` and the mark to `RIG_OFF`, which is what a powered-down
+ * screen looks like and is why an ended session cannot be mistaken for a
+ * working one at any size.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} state
+ */
+export function drawRigVisor(ctx, state) {
+  const tilt = -_k.hrot * 0.5;
+  const vy = _hy - _hr * 0.14 - _k.hrot * 0.16;
+  // The blink: one frame in sixteen, the pane closes to a slot. Exactly zero
+  // frames under reduced motion, because `_phase` is exactly zero there.
+  const blink = _phase > 0.94 ? 0.24 : 1;
+  lRoundRect(ctx, _hx, vy, _hr * 1.6, _hr * 0.8 * blink, _hr * 0.32 * blink, tilt);
+  // HOW MUCH LIGHT IS IN THE VISOR IS PART OF THE STATE.
+  // `working`, `needs_input` and `for_review` are lit: something is happening,
+  // or something is waiting on you. `stalled` is dimmed — it has gone quiet but
+  // it is still live. `benched` is softer still, resting. `ended` has no power
+  // in it at all. Three levels rather than two, because "gone quiet" and
+  // "finished" are the two states a monitoring floor must never confuse.
+  ctx.fillStyle = _t.dead
+    ? RIG_PANE_DEAD
+    : state === 'stalled'
+      ? mixHex(RIG_PANE, RIG_PANE_DEAD, 0.5)
+      : state === 'benched'
+        ? mixHex(RIG_PANE, RIG_PANE_DEAD, 0.25)
+        : RIG_PANE;
+  ctx.fill();
+  ctx.strokeStyle = RIG_INK;
+  ctx.lineWidth = _lw * 0.9;
+  ctx.stroke();
+  if (blink < 1) return;
+  drawStateMark(ctx, state, _hx, vy, _hr * 0.34, _t.dead ? RIG_OFF : _t.glass, _tiny);
+  // The brow bar: the `glasses` slot, a raised ridge over the visor.
+  if (_id.brow && _detail) {
+    lRoundRect(ctx, _hx, vy + _hr * 0.52, _hr * 1.5, _hr * 0.16, _hr * 0.08, tilt);
+    ctx.fillStyle = _t.deep;
+    ctx.fill();
+  }
+}
+
+/**
+ * The crown accessory, then the rarity marker over it.
+ * @param {CanvasRenderingContext2D} ctx
+ */
+export function drawRigCrown(ctx) {
+  // The antenna bob: a slow rise and fall, and exactly zero under reduced
+  // motion because `_phase` is exactly zero there.
+  const bob = _phase === 0 ? 0 : Math.sin(_phase * TAU) * 0.012;
+  const hy = _hy + bob;
+  ctx.lineJoin = 'round';
+  crownPath(ctx, _id.crown, _hx, hy, _hr, _droop);
+  paint(ctx, _id.accent);
+  if (crownPathB(ctx, _id.crown, _hx, hy, _hr, _droop)) paint(ctx, _id.accent);
+  if (_id.trait && _id.trait !== 'glow') {
+    drawRarityTrait(ctx, _id.trait, _id.traitColor, _hx, hy, _hr, _bw, _by, RIG_INK);
+  }
+  if (_id.tier === 'legendary' && _detail) {
+    lEllipse(ctx, _hx, hy + _hr * 1.52, _hr * 1.25, _hr * 0.36, 0);
+    ctx.strokeStyle = fade(_id.traitColor, 0.65);
+    ctx.lineWidth = _lw * 2.2;
+    ctx.stroke();
+  }
+}
+
+/**
+ * The local y of the top of the DRAWN figure — crown accessory included, badge
+ * excluded. What the over-head chrome hangs off.
+ */
+export function rigTopY() {
+  return Math.max(
+    crownTop(_id.crown, _hy, _hr, _droop),
+    _hy + _hr * 1.14,
+    _k.aR[1] + MITT_R + 0.04,
+  );
+}
+
+/** The local y of the top of the raised hand. */
+export function rigHandTopY() {
+  return _k.aR[1] + MITT_R;
+}
+
+// ------------------------------------------------------------- the state mark
+
+/**
+ * The mark on the visor: six forms, one per state, each one a shape rather than
+ * a glyph from a font.
+ *
+ * `tiny` is the sub-`RIG_MARK_MIN_PX` fallback — ONE bold form instead of the
+ * full drawing. A three-bar `working` mark at 20 px of figure is three grey
+ * pixels; one bar is still a bar, and the state colour is still doing the work
+ * around it.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} state @param {number} cx @param {number} cy local
+ * @param {number} r the mark's half-size, local
+ * @param {string} color @param {boolean} tiny
+ */
+export function drawStateMark(ctx, state, cx, cy, r, color, tiny) {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(_lw * 1.5, ln(r) * 0.36);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  switch (state) {
+    case 'working':
+      // Three lines of output, or one bar when there is no room for three.
+      if (tiny) {
+        lRoundRect(ctx, cx, cy, r * 1.7, r * 0.44, r * 0.2, 0);
+        ctx.fill();
+      } else {
+        lRoundRect(ctx, cx - r * 0.4, cy - r * 0.5, r * 1.1, r * 0.32, r * 0.12, 0);
+        ctx.fill();
+        lRoundRect(ctx, cx, cy, r * 1.9, r * 0.32, r * 0.12, 0);
+        ctx.fill();
+        lRoundRect(ctx, cx - r * 0.55, cy + r * 0.5, r * 0.8, r * 0.32, r * 0.12, 0);
+        ctx.fill();
+      }
+      break;
+    case 'needs_input':
+      // An exclamation, because the visor is the one place the user's eye
+      // lands after the badge.
+      lRoundRect(ctx, cx, cy + r * 0.22, r * 0.52, r * 1.02, r * 0.2, 0);
+      ctx.fill();
+      lRoundRect(ctx, cx, cy - r * 0.66, r * 0.52, r * 0.42, r * 0.2, 0);
+      ctx.fill();
+      break;
+    case 'stalled':
+      // An ellipsis: the session said something and then stopped mid-sentence,
+      // which is what `stalled` IS (01-PRODUCT §4.2 — `working` past the stall
+      // window). The over-head icon carries the hourglass; the visor carries
+      // the silence. One dot when there is no room for three.
+      if (tiny) {
+        lCircle(ctx, cx, cy, r * 0.3);
+        ctx.fill();
+      } else {
+        for (const d of [-1, 0, 1]) {
+          lCircle(ctx, cx + d * r * 0.62, cy, r * 0.26);
+          ctx.fill();
+        }
+      }
+      break;
+    case 'for_review':
+      // A tick.
+      ctx.beginPath();
+      ctx.moveTo(lx(cx - r * 0.78), ly(cy + r * 0.06));
+      ctx.lineTo(lx(cx - r * 0.18), ly(cy - r * 0.58));
+      ctx.lineTo(lx(cx + r * 0.84), ly(cy + r * 0.72));
+      ctx.stroke();
+      break;
+    case 'ended':
+      // A dead bar. Nothing is running.
+      lRoundRect(ctx, cx, cy, r * 1.7, r * 0.36, r * 0.18, 0);
+      ctx.fill();
+      break;
+    case 'benched':
+      // A `z`, at rest.
+      if (tiny) {
+        lRoundRect(ctx, cx, cy, r * 1.5, r * 0.36, r * 0.18, 0);
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(lx(cx - r * 0.66), ly(cy + r * 0.62));
+        ctx.lineTo(lx(cx + r * 0.54), ly(cy + r * 0.62));
+        ctx.lineTo(lx(cx - r * 0.66), ly(cy - r * 0.58));
+        ctx.lineTo(lx(cx + r * 0.54), ly(cy - r * 0.58));
+        ctx.stroke();
+      }
+      break;
+    default:
+      // The manager, and anything that is not one of the six: a lit pane with
+      // nothing written on it. The user has no activity state.
+      break;
+  }
 }

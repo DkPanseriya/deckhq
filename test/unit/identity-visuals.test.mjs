@@ -32,7 +32,16 @@ import {
   appearanceFor,
   rarityWord,
 } from '../../public/render/palette.js';
-import { drawCharacter, drawManagerFigure, makePose } from '../../public/render/rig.js';
+import {
+  CHROME_TOP_U,
+  drawCharacter,
+  drawManagerFigure,
+  identityDistance,
+  identitySlots,
+  makePose,
+  rigIdentity,
+} from '../../public/render/rig.js';
+import { FIGURE_HALO } from '../../public/render/palette.js';
 import { sampleClip } from '../../public/render/clips.js';
 
 // ---------------------------------------------------------------- fake ctx
@@ -484,27 +493,47 @@ test('WP-20: skin tones are actually distinguishable from each other', () => {
 
 // ------------------------------------------------- STATE STAYS ON THE TORSO
 
+/** The bounding box of a recorded path, and its area. */
+function bboxOf(path) {
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const p of path) {
+    const rx = p.r || p.rx || (p.w ? p.w / 2 : 0);
+    const ry = p.r || p.ry || (p.h ? p.h / 2 : 0);
+    const cx = p.w ? p.x + p.w / 2 : p.x;
+    const cy = p.h ? p.y + p.h / 2 : p.y;
+    minX = Math.min(minX, cx - rx);
+    maxX = Math.max(maxX, cx + rx);
+    minY = Math.min(minY, cy - ry);
+    maxY = Math.max(maxY, cy + ry);
+  }
+  return { minX, minY, maxX, maxY, area: (maxX - minX) * (maxY - minY) };
+}
+
 /**
- * The torso: the filled ellipse whose centre is nearest the character's own
- * origin, once the contact shadow is out of the way.
+ * THE BARREL: the biggest filled shape on the figure, which since WP-79 is the
+ * whole body mass rather than a torso ellipse with limbs hung off it.
  *
- * It used to be told apart by its OFFSET — the shadow was the wider ellipse
- * drawn down and to the side. WP-78 put a character's shadow directly under
- * its feet, which is the same point the torso is drawn about, so the offset is
- * no longer a discriminator and the colour is: `shadowContact` is painted by
- * the contact shadow and by nothing else on a character.
+ * It used to be found as "the filled ellipse nearest the origin", because the
+ * old rig's torso was an ellipse. B's barrel is a rounded box built from
+ * `moveTo`/`lineTo`/`quadraticCurveTo`, so it is found by AREA instead: the
+ * dome, the chest plate, the base, the held page and the visor are all smaller,
+ * and the two things that are bigger — the contact shadow and the halo — are
+ * not fills of the body and are excluded by their own colours.
  */
-function torsoFill(calls, cx, cy) {
+function torsoFill(calls) {
   const fills = calls.filter(
     (c) =>
       c.op === 'fill' &&
-      c.path.length === 1 &&
-      c.path[0].shape === 'ellipse' &&
-      c.style !== PALETTE.shadowContact,
+      c.path.length >= 4 &&
+      c.style !== PALETTE.shadowContact &&
+      c.style !== FIGURE_HALO &&
+      typeof c.style === 'string',
   );
-  assert.ok(fills.length > 0, 'no filled ellipse was drawn at all');
-  const from = (c) => Math.hypot(c.path[0].x - cx, c.path[0].y - cy);
-  return fills.reduce((a, b) => (from(b) < from(a) ? b : a));
+  assert.ok(fills.length > 0, 'no filled body shape was drawn at all');
+  return fills.reduce((a, b) => (bboxOf(b.path).area > bboxOf(a.path).area ? b : a));
 }
 
 test('LEGIBILITY: the torso is filled with the state colour, at full strength, for every appearance', () => {
@@ -529,7 +558,7 @@ test('LEGIBILITY: the torso is filled with the state colour, at full strength, f
         label: 'Ada',
         icon: 'check',
       });
-      const torso = torsoFill(calls, 90, 70);
+      const torso = torsoFill(calls);
       assert.equal(
         torso.style,
         colour,
@@ -557,31 +586,42 @@ test('LEGIBILITY: no appearance mark is a filled shape over the torso — every 
       identity: identityFor(2),
       appearance,
     });
-    const torso = torsoFill(calls, 0, 0);
-    const torsoRy = torso.path[0].ry;
-    // Anything big AND sitting on the body centre would be covering the state.
-    // A hat is big but sits on the head, a contact shadow is big but sits at
-    // the feet, an aura is big but is drawn at 16% opacity behind everything —
-    // all three are what this test must not confuse for a cover-up.
+    const torso = torsoFill(calls);
+    const box = bboxOf(torso.path);
+    // Anything big AND sitting on the barrel would be covering the state. A
+    // crown accessory is big but sits above the dome, a contact shadow is big
+    // but sits at the feet, an aura is big but is drawn at 16% opacity behind
+    // everything — all three are what this test must not confuse for a
+    // cover-up.
     //
     // AND IT HAS TO BE DRAWN AFTER (WP-85a). §3.9's figure halo is a wide fill
     // centred on the body — a ground pool on a light floor, a rim on a dark one
     // — and it is deliberately laid UNDER the whole rig, which is the opposite
     // of covering the state up: it is what the state is read against. "Over the
     // torso" is a statement about paint order, so it is measured as one.
+    //
+    // The chest plate is the one thing allowed to sit ON the barrel, and it is
+    // a tint of the state colour itself (`rigTints().dark`) rather than any
+    // part of an identity — so it is excluded by AREA (under half the barrel),
+    // not by an exception.
     const torsoAt = calls.indexOf(torso);
-    const covering = calls.filter(
-      (c, i) =>
-        c.op === 'fill' &&
-        i > torsoAt &&
-        c.style !== colour &&
-        c.alpha === 1 &&
-        c.path.some((p) => (p.ry || p.r || 0) >= torsoRy * 0.8 && Math.hypot(p.x, p.y) < 0.3 * 20),
-    );
+    const covering = calls.filter((c, i) => {
+      if (c.op !== 'fill' || i <= torsoAt || c.alpha !== 1) return false;
+      if (c.style === colour) return false;
+      const b = bboxOf(c.path);
+      if (b.area < box.area * 0.5) return false;
+      // Centred on the barrel, rather than on the head or at the feet.
+      const cx = (b.minX + b.maxX) / 2;
+      const cy = (b.minY + b.maxY) / 2;
+      return (
+        Math.abs(cx - (box.minX + box.maxX) / 2) < 0.3 * 20 &&
+        Math.abs(cy - (box.minY + box.maxY) / 2) < 0.3 * 20
+      );
+    });
     assert.deepEqual(
       covering.map((c) => c.style),
       [],
-      `${id} (${appearance.tier}/${appearance.trait}) paints a torso-scale shape over the state colour`,
+      `${id} (${appearance.tier}/${appearance.trait}) paints a barrel-scale shape over the state colour`,
     );
   }
 });
@@ -609,12 +649,23 @@ test('LEGIBILITY: the chrome above the head is byte-identical with and without a
 
   for (const lod of [1, 2]) {
     const pose = sampleClip('hand_raise', 0.4, false);
-    const headTopY = opts.y - 0.95 * opts.u - 0.5 * opts.u;
+    // WHERE THE CHROME'S SLOT STARTS (WP-79). It is `CHROME_TOP_U` above the
+    // ground contact and it is the same height for every character on the
+    // floor, which is the point of it: two neighbours' icons must line up
+    // whatever is on their heads. A crown accessory can reach past it — a hat
+    // and a crown ARE above the head, and are the one thing allowed up there
+    // besides the chrome — so what is compared is the chrome itself: every
+    // piece of text, and every mark in the STATE colour above the line, which
+    // is the icon and the badge and nothing else (no identity colour may come
+    // within 70 of a state colour — asserted at the top of this file).
+    const line = opts.y - CHROME_TOP_U * opts.u;
     const above = (calls) =>
       calls.filter((c) =>
         c.op === 'fillText'
-          ? c.y <= headTopY
-          : (c.path || []).length > 0 && c.path.every((p) => p.y <= headTopY),
+          ? true
+          : (c.style === opts.color || c.style === '#FFFFFF') &&
+            (c.path || []).length > 0 &&
+            c.path.every((p) => p.y <= line),
       );
 
     const a = makeRecordingCtx();
@@ -694,4 +745,97 @@ test('drawManagerFigure does not throw, for every facing, and never receives sta
   // function should not depend on that).
   const ctx = makeFakeCtx();
   assert.doesNotThrow(() => drawManagerFigure(ctx, { x: 0, y: 0, u: 14 }));
+});
+
+// ------------------------------------------- WP-79: no two of twelve alike
+
+/**
+ * THE DEMO POPULATION, as a crowd of identities.
+ *
+ * `src/core/demo-fixture.mjs` builds a floor of `demo:actor-N` sessions for a
+ * machine with nothing running, and it is the one crowd this project ships and
+ * photographs. Twelve is the number the design study's own overview strip uses
+ * ("no two neighbours share a colour-and-icon pair" —
+ * `docs/media/design/character/B.png`), and it is the honest size to hold the
+ * rule at: a floor of four is easy and a floor of a hundred cannot be.
+ */
+function demoCrowd(n = 12) {
+  const out = [];
+  for (let i = 1; i <= n; i++) {
+    // The project channel cycles through the fourteen identities exactly as a
+    // real floor's MK numbers do; the session channel is the actor's own id.
+    out.push({
+      id: `demo:actor-${i}`,
+      slots: rigIdentity(identityFor(i), appearanceFor(`demo:actor-${i}`)),
+    });
+  }
+  return out;
+}
+
+/**
+ * How many of the seven identity slots two robots must differ in before they
+ * stop looking like the same robot at 34 px.
+ *
+ * TWO, not one. One slot is a single accent or a single glyph, and at the size
+ * this floor is drawn at that is a couple of pixels of difference on two
+ * otherwise identical shapes — which is exactly the complaint the design study
+ * levelled at candidate D ("the six variants are nearly indistinguishable").
+ * Two means every pair differs in at least one colour AND one mark, or in a
+ * silhouette dial, which is a difference you can see without comparing.
+ */
+const MIN_IDENTITY_DISTANCE = 2;
+
+test('WP-79: no two identities in a twelve-strong crowd look alike', () => {
+  const crowd = demoCrowd(12);
+  let worst = Infinity;
+  let worstPair = '';
+  for (let i = 0; i < crowd.length; i++) {
+    for (let j = i + 1; j < crowd.length; j++) {
+      const d = identityDistance(crowd[i].slots, crowd[j].slots);
+      if (d < worst) {
+        worst = d;
+        worstPair = `${crowd[i].id} / ${crowd[j].id}`;
+      }
+    }
+  }
+  assert.ok(
+    worst >= MIN_IDENTITY_DISTANCE,
+    `the closest pair in the demo crowd (${worstPair}) differs in only ${worst} of ` +
+      `${identitySlots(crowd[0].slots).length} identity slots`,
+  );
+});
+
+test('WP-79: the identity slots are the ones the rig actually draws, and they are stable', () => {
+  // Seven: four colours/marks and three silhouette dials. If a slot is added to
+  // the figure it belongs in this vector too, or the crowd test above stops
+  // measuring what a viewer can see.
+  const one = rigIdentity(identityFor(3), appearanceFor('demo:actor-3'));
+  assert.equal(identitySlots(one).length, 7);
+  // Pure, like everything else about a face (docs/DEVIATIONS.md §105).
+  const again = rigIdentity(identityFor(3), appearanceFor('demo:actor-3'));
+  assert.deepEqual(identitySlots(again), identitySlots(one));
+  assert.equal(identityDistance(one, again), 0);
+  // And total: a session with no project and no appearance still gets a robot.
+  const bare = rigIdentity(null, null);
+  assert.equal(identitySlots(bare).length, 7);
+  for (const slot of identitySlots(bare)) assert.notEqual(slot, undefined);
+});
+
+test('WP-79: the identity slots never carry a state colour', () => {
+  // The same discipline `palette-avatars.js` enforces on its pools, asserted
+  // where the pools are actually consumed: whatever B paints an accent, a
+  // badge, a boot or a mitt with, it is never something that could be read as
+  // a state (VISUAL-SPEC §5).
+  for (const { id, slots } of demoCrowd(40)) {
+    for (const colour of [slots.project, slots.accent, slots.mitt, slots.boot, slots.traitColor]) {
+      if (typeof colour !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(colour)) continue;
+      for (const [state, value] of Object.entries(STATE_COLORS)) {
+        assert.notEqual(
+          colour.toLowerCase(),
+          value.toLowerCase(),
+          `${id} wears STATE_COLORS.${state}`,
+        );
+      }
+    }
+  }
 });

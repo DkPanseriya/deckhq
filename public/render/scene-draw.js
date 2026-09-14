@@ -17,7 +17,14 @@ import {
   ENVELOPE_SHADOW_BLUR_PX,
   ENVELOPE_SHADOW_DIST_PX,
 } from './backdrop.js';
-import { badgeBox, drawBadge, drawCharacter, formatElapsed, labelBox } from './rig.js';
+import {
+  badgeBox,
+  characterBox,
+  drawBadge,
+  drawCharacter,
+  formatElapsed,
+  labelBox,
+} from './rig.js';
 import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
@@ -26,6 +33,7 @@ import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.j
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import {
   colorForAgent,
+  stateForAgent,
   agentLabelFor,
   iconForAgent,
   isNeedsYouAgent,
@@ -396,15 +404,74 @@ export class SceneDraw extends SceneHit {
     // needing a separate global ring pass.
     records.sort((a, b) => a.y - b.y);
 
+    // WAITING-BADGE COLLISION PASS (WP-60), the same shape as the label pass
+    // below and for the same reason: seven crimson pills along one office wall
+    // overlapped into a band of digits, and a pill can only stay out of its
+    // neighbour's way if something measured both before either was drawn.
+    //
+    // IT RUNS FIRST SINCE WP-79, and the order is the point: a waiting badge
+    // is the loudest thing this floor draws and it never moves, so everything
+    // else has to know where it landed. It used to run second because nothing
+    // else needed the answer.
+    //
+    // The gate is the one `_drawCharacterAt` uses, asked once here so the two
+    // cannot disagree about which badges exist this frame.
+    const charU = this._characterScale();
+    let badgePlan = null;
+    /** @type {{id:string,x:number,y:number,w:number,h:number}[]} */
+    const badgeBoxes = [];
+    if (lod >= 1 && this._scale() >= BADGE_MIN_PX_PER_UNIT) {
+      const items = [];
+      for (const rec of records) {
+        const agent = this._agentsById.get(rec.id);
+        const ms = agent ? waitingBadgeMs(agent) : null;
+        if (ms === null) continue;
+        const s = worldToScreen(rec, camera);
+        // A junior is drawn smaller, so its badge is a smaller box. Measured
+        // at the scale it will be drawn at, exactly as the label pass does.
+        const u = agent.subagent === true ? characterScaleFor(this._scale() * JUNIOR_SCALE) : charU;
+        const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
+        items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
+      }
+      badgePlan = resolveBadgeCollisions(items);
+      for (const it of items) {
+        if (badgePlan.drawn.has(it.id)) badgeBoxes.push({ ...it, id: `badge:${it.id}` });
+      }
+      for (const [i, pill] of badgePlan.pills.entries()) {
+        const probe = badgeBox(ctx, 0, 0, charU, `${pill.count} waiting · oldest 00h 00m`);
+        badgeBoxes.push({ id: `pill:${i}`, x: pill.x, y: pill.y, w: probe.w, h: probe.h });
+      }
+    }
+
     // Name-label collision pass (tech-lead review finding 1): measure every
     // label that will actually be drawn this frame, in the same order
     // characters paint in, and resolve overlaps before any of them are
     // drawn — a label can only be nudged away from one already placed if it
     // knows that one exists yet.
+    //
+    // AND THE BODIES AND THE BADGES ARE IN IT (WP-79). A label hangs below its
+    // own character's feet, and two things now reach into that strip of floor:
+    // the character standing in FRONT of it — one sofa row down, one desk
+    // nearer the reader — and the waiting badge of the character BEHIND it,
+    // which since WP-79 hangs `CHROME_BADGE_U` up rather than 2.35 because a
+    // taller figure pushed the whole over-head slot up with it. Both were
+    // always geometry; while a figure was 22 px of readable mass inside a 48 px
+    // box the first was invisible and the second did not reach. So both are
+    // added to the pass as PINNED obstacles: each claims its space and is never
+    // moved, and a label that cannot clear them is nudged down and then dropped
+    // — the rule this pass already had ("a missing label beats an unreadable
+    // smear"). Measured over the three populations in
+    // `test/unit/scene-math.test.mjs`: zero label-on-body overlaps, and at
+    // least four labels in five still drawn.
     let labelPlan = null;
-    const charU = this._characterScale();
     if (lod >= 1) {
       const items = [];
+      for (const rec of records) {
+        const s = worldToScreen(rec, camera);
+        const box = characterBox(s.x, s.y, charU);
+        items.push({ id: `body:${rec.id}`, ...box, pin: true });
+      }
+      for (const box of badgeBoxes) items.push({ ...box, pin: true });
       for (const rec of records) {
         const agent = this._agentsById.get(rec.id);
         const agentLabel = agent && agentLabelFor(agent);
@@ -424,30 +491,6 @@ export class SceneDraw extends SceneHit {
         });
       }
       labelPlan = resolveLabelCollisions(items);
-    }
-
-    // WAITING-BADGE COLLISION PASS (WP-60), the same shape as the label pass
-    // above and for the same reason: seven crimson pills along one office wall
-    // overlapped into a band of digits, and a pill can only stay out of its
-    // neighbour's way if something measured both before either was drawn.
-    //
-    // The gate is the one `_drawCharacterAt` uses, asked once here so the two
-    // cannot disagree about which badges exist this frame.
-    let badgePlan = null;
-    if (lod >= 1 && this._scale() >= BADGE_MIN_PX_PER_UNIT) {
-      const items = [];
-      for (const rec of records) {
-        const agent = this._agentsById.get(rec.id);
-        const ms = agent ? waitingBadgeMs(agent) : null;
-        if (ms === null) continue;
-        const s = worldToScreen(rec, camera);
-        // A junior is drawn smaller, so its badge is a smaller box. Measured
-        // at the scale it will be drawn at, exactly as the label pass does.
-        const u = agent.subagent === true ? characterScaleFor(this._scale() * JUNIOR_SCALE) : charU;
-        const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
-        items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
-      }
-      badgePlan = resolveBadgeCollisions(items);
     }
 
     for (const rec of records) {
@@ -532,7 +575,8 @@ export class SceneDraw extends SceneHit {
     // *previous* clip until arrival — see agents.js `stepAgent`). `t` is deliberately not
     // reset when this switches: `walk` loops, so `sampleClip` just wraps it, and a
     // continuously-increasing `t` is all a looping clip needs for smooth playback.
-    const clipName = rec.path.length > 0 ? 'walk' : rec.clip || 'type';
+    const walking = rec.path.length > 0;
+    const clipName = walking ? 'walk' : rec.clip || 'type';
     const t = (nowMs() - rec.clipStartedAt) / 1000;
     const pose = sampleClip(clipName, t, this._reduced);
     // `pose.bodyAngle` from a clip is a small relative sway (e.g. arcade's lean), not an
@@ -589,6 +633,15 @@ export class SceneDraw extends SceneHit {
       u,
       lod,
       color: colorForAgent(agent),
+      // WP-79: which of the six B is posed in, and whether it is mid-walk.
+      // Both are the scene's to say — `rec.clip` still names the PREVIOUS clip
+      // until a walk arrives, so the rig cannot work it out from the pose.
+      state: stateForAgent(agent),
+      walking,
+      // The idle micro-motion's clock, and the only one: `nowMs()` is the
+      // injected clock the whole scene runs on, so a golden is a golden and
+      // `prefers-reduced-motion` freezes the figure outright.
+      seconds: nowMs() / 1000,
       // `label`/`labelOffsetY` were resolved once for the whole frame above
       // (`_draw`'s collision pass) — drawCharacter still truncates to 18
       // chars and gates on lod >= 1 itself, this only decides *whether* and
