@@ -57,6 +57,7 @@
  *   panel-dom.js         every element the card is made of
  *   panel-header.js      the header, its live lines, and the close-up
  *   panel-permission.js  WP-19's card and its own funnel
+ *   panel-studio.js      WP-67's three Studio artefacts, when there are any
  *   panel-said.js        WHAT IT SAID and the thread under it
  *   panel-changes.js     WHAT CHANGED, the diffs, and the editor link
  *   panel-actions.js     the weighted buttons, ⋯ more, and 1/2/3
@@ -91,6 +92,7 @@ import { createResumePart, setResumeAppAvailable } from './panel-resume.js';
 import { createRecordsPart } from './panel-records.js';
 import { createTraitsPart } from './panel-traits.js';
 import { createComposerPart } from './panel-composer.js';
+import { createStudioPart } from './panel-studio.js';
 import { createLivePart } from './panel-live.js';
 
 // Everything the panel used to define itself, re-exported from where it now
@@ -155,6 +157,7 @@ export function createPanel(opts) {
     closeBtn,
     moreMenu,
     permissionSection,
+    studioSection,
     changedEl,
     changedTotals,
     textarea,
@@ -172,6 +175,7 @@ export function createPanel(opts) {
 
   const header = createHeaderPart({ ...dom, getSnapshot });
   const permission = createPermissionPart({ ...dom, toast, announce });
+  const studio = createStudioPart({ ...dom, toast });
   const said = createSaidPart({ ...dom, getSnapshot });
   const changes = createChangesPart({ ...dom, getSnapshot, toast });
   const actions = createActionsPart({
@@ -205,6 +209,7 @@ export function createPanel(opts) {
     stopCloseUp,
   } = header;
   const { pendingPermission, renderPermission, answerPermission } = permission;
+  const { loadStudio, refreshStudio } = studio;
   const { loadConversation } = said;
   const { loadChanges } = changes;
   const { performAction, pressNumberKey, agentFor, setMoreOpen } = actions;
@@ -313,6 +318,9 @@ export function createPanel(opts) {
     // connection. Passive: it reads a file and pushes a digest.
     watchLive(id);
     renderChrome();
+    // WP-67. Above the transcript, and absent on every project that has not
+    // enabled Studio — which is all of them by default.
+    loadStudio(agent);
     loadConversation(id);
     loadChanges(id, snapshot?.scannedAt ?? null);
     loadResumeTargets(id);
@@ -334,6 +342,7 @@ export function createPanel(opts) {
     setChangesScannedAt(undefined);
     expandedFiles.clear();
     setFileRows([]);
+    studioSection.hidden = true;
     stopCloseUp();
     // Close the tail watch with the card. The daemon stops watching the file
     // the moment this connection drops, so a closed panel costs nothing.
@@ -389,6 +398,9 @@ export function createPanel(opts) {
     refresh,
     performAction,
     pressNumberKey,
+    // WP-67. The Plan command re-reads the three files once the planner has
+    // had a chance to write them; a panel showing another session ignores it.
+    refreshStudio,
     getSelectedId,
     hasDraft,
     teamRecords,

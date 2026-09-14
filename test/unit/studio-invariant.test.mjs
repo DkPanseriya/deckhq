@@ -98,6 +98,12 @@ test('INVARIANT: the only writers of a card column are the card route and the bu
     // The normaliser. It COPIES a value `validateBoard` has already checked
     // against the six columns; it chooses nothing and cannot invent a column.
     'studio/schema.mjs': ['column: col'],
+    // WP-67. The `board.json` EXAMPLE embedded in the planner's brief — text
+    // in a prompt, not a board. Nothing reads it back; the value is
+    // `COLUMNS[0]`, which is `backlog`, which is where the brief tells the
+    // planner every card starts and where `op: 'create'` puts one anyway. A
+    // card reaches a real board through the route below and nowhere else.
+    'studio/brief.mjs': ['column: COLUMNS[0]'],
     // The budget stop (§8). Asserted below to reach `blocked` and nowhere else.
     'studio/budget.mjs': ['card.column = BLOCKED_COLUMN'],
     // The user's own press, and the only funnel in the HTTP layer.

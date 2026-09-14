@@ -39,8 +39,10 @@ const MAX_SEND_CHARS = 100_000;
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{registry:any, adapters:any, log:any, store:any, sends:any, identity:any}} ctx
+ * @param {{registry:any, adapters:any, log:any, store:any, sends:any, identity:any,
+ *          pendingIdentities?:any}} ctx
  *   `store`, `sends` and `identity` were read here and not declared (WP-22).
+ *   `pendingIdentities` is WRITTEN here, not read: see the note beside it.
  */
 export function register(router, ctx) {
   const { registry, store, log } = ctx;
@@ -443,6 +445,11 @@ export function register(router, ctx) {
    * WP-84 / §156.
    */
   const pendingIdentities = createPendingIdentities({ now: clockNow });
+  // WP-67. `POST /api/studio/plan` starts a session the same way this route
+  // does and wants the same thing to happen to its name, so it is handed THIS
+  // queue rather than making a second one: two queues over one directory would
+  // both match the same session and one of them would lose.
+  ctx.pendingIdentities = pendingIdentities;
 
   /** @param {string} cwd @param {any} name @param {any} avatar */
   function queuePendingIdentity(cwd, name, avatar) {

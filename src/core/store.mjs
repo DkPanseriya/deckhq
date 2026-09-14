@@ -560,6 +560,39 @@ function sanitizeStudioConsent(v) {
 }
 
 /**
+ * WP-67's per-project planner record: `studio.planner[projectKey] =
+ * { agentId, startedAt }`.
+ *
+ * **This is not a session list** (`docs/07-STUDIO-DESIGN.md` §9 invariant 4).
+ * It is one id per project, written once the ORDINARY scan has found the
+ * planner session, and it exists so that `POST /api/studio/plan` on a project
+ * that already has a planner CONTINUES it — the panel's normal streaming send
+ * — instead of starting a second one. Everything anyone knows about that
+ * session is read back out of the registry by its id, exactly as it is for any
+ * other session; nothing about it is cached here.
+ *
+ * A record whose agent id is not a session id shape, or whose key is not a
+ * project key, is dropped rather than carried, on `sanitizeStudioConsent`'s
+ * terms and for its reason.
+ *
+ * @param {unknown} v
+ * @returns {Record<string, {agentId:string, startedAt:number}>}
+ */
+function sanitizeStudioPlanner(v) {
+  if (!isPlainObject(v)) return {};
+  /** @type {Record<string, {agentId:string, startedAt:number}>} */
+  const out = {};
+  for (const [key, raw] of Object.entries(v)) {
+    if (!/^[0-9a-f]{16}$/.test(key) || !isPlainObject(raw)) continue;
+    const agentId = typeof (/** @type {any} */ (raw).agentId) === 'string' ? raw.agentId : '';
+    if (!agentId || agentId.length > 256) continue;
+    const startedAt = Number(/** @type {any} */ (raw).startedAt);
+    out[key] = { agentId, startedAt: Number.isFinite(startedAt) ? startedAt : 0 };
+  }
+  return out;
+}
+
+/**
  * A hand-edited or absent machine id reads back as absent, and the getter
  * mints a new one. WP-48: 32 hex characters of `randomBytes`, nothing derived
  * from the machine — not its name, not its MAC, not its user. A random id is
@@ -601,7 +634,9 @@ function defaultData() {
     // `<project>/.deckhq/studio/`, and when. Empty on every install: Studio is
     // opt-in per project and disabled is the default everywhere
     // (`docs/07-STUDIO-DESIGN.md` §1). See `sanitizeStudioConsent`.
-    studio: { consent: {} },
+    // WP-67 adds `planner`, which is empty for the same reason and stays
+    // empty until a planner session has been found by the ordinary scan.
+    studio: { consent: {}, planner: {} },
   };
 }
 
@@ -631,6 +666,7 @@ function normalize(parsed) {
   };
   const studio = {
     consent: sanitizeStudioConsent(isPlainObject(parsed.studio) ? parsed.studio.consent : {}),
+    planner: sanitizeStudioPlanner(isPlainObject(parsed.studio) ? parsed.studio.planner : {}),
   };
   return {
     version: 1,
@@ -988,8 +1024,71 @@ export class Store {
    */
   revokeStudioConsent(projectKey) {
     const key = String(projectKey || '');
-    if (!(key in this._data.studio.consent)) return false;
+    const hadPlanner = key in this._data.studio.planner;
+    // Studio being off for a project means Studio remembers nothing about it.
+    // The session itself is untouched — it is an ordinary session on the floor
+    // and stays exactly where it is (§8: DeckHQ does not kill what it did not
+    // start, and does not stop what it did).
+    if (hadPlanner) delete this._data.studio.planner[key];
+    if (!(key in this._data.studio.consent)) {
+      if (hadPlanner) this.save();
+      return false;
+    }
     delete this._data.studio.consent[key];
+    this.save();
+    return true;
+  }
+
+  /**
+   * Every project that has a planner recorded, as
+   * `projectKey → { agentId, startedAt }`. A copy, on `studioConsent`'s terms.
+   * @returns {Record<string, {agentId:string, startedAt:number}>}
+   */
+  studioPlanner() {
+    /** @type {Record<string, {agentId:string, startedAt:number}>} */
+    const out = {};
+    for (const [key, rec] of Object.entries(this._data.studio.planner)) out[key] = { ...rec };
+    return out;
+  }
+
+  /**
+   * The planner session recorded for one project, or null (WP-67). Null is the
+   * answer until a planner has been started AND found by the ordinary scan.
+   * @param {string} projectKey
+   * @returns {{agentId:string, startedAt:number}|null}
+   */
+  studioPlannerFor(projectKey) {
+    const rec = this._data.studio.planner[String(projectKey || '')];
+    return rec ? { ...rec } : null;
+  }
+
+  /**
+   * Write one down. Called from `POST /api/studio/plan` when the scan hands it
+   * a session in the project's directory, and from nowhere else: an id nobody
+   * observed would be exactly the guess §4 forbids.
+   * @param {string} projectKey
+   * @param {{agentId:string, startedAt:number}} record
+   */
+  recordStudioPlanner(projectKey, record) {
+    const key = String(projectKey || '');
+    if (!/^[0-9a-f]{16}$/.test(key)) return null;
+    const agentId = String(record?.agentId || '');
+    if (!agentId) return null;
+    const next = { agentId, startedAt: Number(record?.startedAt) || clockNow() };
+    this._data.studio.planner[key] = next;
+    this.save();
+    return { ...next };
+  }
+
+  /**
+   * Forget one. The session is left alone — this removes DeckHQ's note that it
+   * was the planner, which is all the note ever was.
+   * @param {string} projectKey
+   */
+  forgetStudioPlanner(projectKey) {
+    const key = String(projectKey || '');
+    if (!(key in this._data.studio.planner)) return false;
+    delete this._data.studio.planner[key];
     this.save();
     return true;
   }

@@ -371,11 +371,12 @@ test('tracking answers "no data" and invents no number', async () => {
   });
 });
 
-test('the three that need a spawn answer 501 and name the package that adds them', async () => {
+test('the two that still need a package answer 501 and name it', async () => {
+  // WP-67 took `/plan` off this list; it starts a real planner now, and
+  // `test/integration/studio-plan.test.mjs` is where it is tested.
   await withDaemon(async ({ d, a }) => {
     await post(d, '/enable', { cwd: a, confirm: true });
     for (const [pathname, wp] of [
-      ['/plan', /WP-67/],
       ['/hire', /WP-68/],
       ['/handover', /WP-70/],
     ]) {

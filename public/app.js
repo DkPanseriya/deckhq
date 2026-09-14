@@ -87,6 +87,7 @@ import {
   runProjectDashboard,
   showWhiteboard,
 } from './app-launchers.js';
+import { studioPlan } from './app-studio.js';
 import { adoptSnapshotClock, now as clockNow } from './clock.js';
 
 // -------------------------------------------------------------- app state
@@ -752,6 +753,7 @@ const paletteUI = createPalette({
     // the name of the thing they want on screen, and a command that could
     // close what it is named after would be a coin flip.
     idleProjects: () => idleProjects.open(),
+    studioPlan, // WP-67
     rename: openIdentityDialog,
     // The palette never calls /api/ack itself: it hands the action to the
     // panel's performAction(), the single funnel in the client. THE
