@@ -27,6 +27,19 @@ const siteDir = path.join(root, 'site');
 /** Hosts a reader may be sent to by a link they click. Nothing is fetched from them. */
 const LINKABLE = ['github.com', 'www.npmjs.com'];
 
+/**
+ * This site's own origin — WP-75.
+ *
+ * It appears in the sources because the one-line installers are printed on the
+ * page as text to copy: `curl -fsSL https://dkpanseriya.github.io/deckhq/
+ * install.sh | sh`. A URL a reader copies into their own shell is not a
+ * request this page makes, so it is allowed in the source scan and in nothing
+ * else: it is deliberately NOT in `LINKABLE`, so an `<a href>` to it would
+ * still fail the outbound-link test below, and the fetch test above refuses
+ * every absolute URL in a `src` or a `<link href>` whatever the host.
+ */
+const SELF = 'dkpanseriya.github.io';
+
 /** @param {string} dir @param {string[]} exts */
 function walk(dir, exts) {
   /** @type {string[]} */
@@ -73,6 +86,28 @@ test('the site builds every page it navigates to', () => {
   ]) {
     assert.ok(fs.existsSync(path.join(out, rel)), `${rel} was not built`);
   }
+});
+
+test('the one-line installers are published, byte for byte, at the URL the pages print', () => {
+  // WP-75. The install line on the home page is only true if the file is
+  // there, and it is only trustworthy if the bytes are the reviewed ones.
+  for (const [name, source] of [
+    ['install.ps1', path.join(root, 'scripts', 'install', 'install.ps1')],
+    ['install.sh', path.join(root, 'scripts', 'install', 'install.sh')],
+  ]) {
+    const built = path.join(out, name);
+    assert.ok(fs.existsSync(built), `${name} was not published`);
+    assert.deepEqual(
+      fs.readFileSync(built),
+      fs.readFileSync(source),
+      `${name} on the site is not the file in the repository`,
+    );
+  }
+
+  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  assert.match(home, /https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.ps1/);
+  assert.match(home, /https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.sh/);
+  assert.match(home, /npx deckhq app/);
 });
 
 test('every internal link resolves to a file that exists', () => {
@@ -138,6 +173,8 @@ test('SECURITY: the sources carry no third-party host either', () => {
       if (host === '127.0.0.1' || host === 'localhost') continue;
       // The one namespace URL the SVG needs; it is never fetched.
       if (host === 'www.w3.org') continue;
+      // This site itself, printed as a line to copy. See `SELF`.
+      if (host === SELF) continue;
       assert.ok(
         known.has(host),
         `${path.relative(root, file)} names ${host}, which is not one of ${[...known].join(', ')}`,

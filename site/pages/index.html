@@ -4,10 +4,27 @@
     It sees the ones your terminal forgot, and it remembers what&#8217;s waiting on you even after
     you&#8217;ve read it. Local, private, MIT.
   </p>
-  <p class="command">npx deckhq</p>
+  <p class="command">npx deckhq app</p>
   <p class="hero-meta">
-    Node 18 or newer. No build step, no runtime dependencies, no account, and no network calls of
-    any kind.
+    One line, if you already have <strong>Node 18 or newer</strong>. It opens the floor in a window
+    of its own and offers you a Desktop icon once. No build step, no runtime dependencies, no
+    account, and no network calls of any kind.
+  </p>
+
+  <p class="hero-meta">No Node? One line installs that too, and asks before it does:</p>
+  <p class="command">irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex</p>
+  <p class="hero-meta">Windows, PowerShell</p>
+  <p class="command">curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh</p>
+  <p class="hero-meta">
+    macOS and Linux. Each one checks for Node, offers to install it (<code>winget</code> /
+    <code>brew</code>, never without asking), runs <code>npm install -g deckhq@latest</code>, offers
+    the icon, and opens the window. Read them first if you like &#8212;
+    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.ps1"
+      >install.ps1</a
+    >,
+    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.sh"
+      >install.sh</a
+    >.
   </p>
 </section>
 
