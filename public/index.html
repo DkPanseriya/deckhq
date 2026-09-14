@@ -190,6 +190,9 @@
           aria-labelledby="idle-popover-title"
           hidden
         >
+          <!-- WP-77. "Nobody is working in these" is still true of every row:
+               a pinned repo has a room because the user asked for one, not
+               because anybody is in it. -->
           <p class="idle-popover-title" id="idle-popover-title">Nobody is working in these</p>
           <ul
             class="idle-list"
@@ -198,7 +201,9 @@
             tabindex="-1"
             aria-label="Idle projects"
           ></ul>
-          <p class="idle-popover-foot">Up and down to move · Enter to open · Esc to close</p>
+          <p class="idle-popover-foot">
+            Up and down to move · Enter to open · P to pin · Esc to close
+          </p>
         </div>
 
         <!-- The office-cleared line (WP-15, §9). One sentence, three seconds,

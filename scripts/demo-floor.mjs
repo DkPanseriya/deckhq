@@ -69,7 +69,8 @@ import {
   STATE_DIR,
   THEME,
 } from './demo-args.mjs';
-import { JUNIORS, SESSIONS, JUNIOR_PARENT } from './demo-populations.mjs';
+import { JUNIORS, PINNED_PROJECTS, SESSIONS, JUNIOR_PARENT } from './demo-populations.mjs';
+import { projectIdFromCwd } from '../src/core/model.mjs';
 import {
   fakeId,
   keepJuniorsWorking,
@@ -241,6 +242,15 @@ fs.writeFileSync(
         theme: themeByName(THEME).name,
       },
       ack,
+      // WP-77. The rooms the user pinned, keyed by the slug of their directory
+      // — which is why this is computed here rather than written down in
+      // `demo-populations.mjs`: the directory is inside the fixture and the
+      // fixture is rebuilt on every run. Empty for every population but
+      // `pinned`, so the other seven captures are of a floor with nothing
+      // pinned on it.
+      pins: Object.fromEntries(
+        PINNED_PROJECTS.map((name) => [projectIdFromCwd(path.join(root, name)), { at: NOW }]),
+      ),
     },
     null,
     2,

@@ -139,8 +139,13 @@ export class RegistrySnapshot extends RegistryBase {
       // `buildPlan`: the room pops back open on its own rather than hiding
       // somebody who is working.
       const archived = this.store.isProjectArchived(p.id);
+      // WP-77. A room the user pinned: it keeps a room on the floor with
+      // nothing running in it, at a third of a live room's footprint. Read
+      // here rather than derived anywhere else, exactly as `archived` is — the
+      // floor and the idle list both ask the snapshot.
+      const pinned = this.store.isProjectPinned?.(p.id) === true;
       const today = todaySpendFor(p, todayTokens);
-      const base = { ...p, hasDashboard, archived, ...today };
+      const base = { ...p, hasDashboard, archived, pinned, ...today };
       if (!this.identity) return base;
       const projectMk = this.identity.projectMk(p.id);
       return { ...base, projectMk, mk: `MK${projectMk}` };

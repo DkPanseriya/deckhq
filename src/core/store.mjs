@@ -469,6 +469,53 @@ function sanitizeRoomOrder(v) {
 const MAX_ROOM_ORDER = 512;
 
 /**
+ * WP-77's pinned project rooms, coerced into range.
+ *
+ * `pins[projectId] = { at }` — the instant the user asked for that repo to keep
+ * a room whether or not anything is running in it. The owner, 14 September:
+ * _"Pin any particular project room so it is always in a room, so the room does
+ * not collapse when agents are not running."_
+ *
+ * IT IS USER-OWNED STATE, and it takes `ackState`'s discipline (`08` §1.1 rule
+ * 1): nothing observed writes here. A session ending, a repo going quiet, a
+ * scan finding nothing — none of them may clear a pin, and
+ * `test/unit/pins.test.mjs` holds that as an `INVARIANT:` test. The only writer
+ * is `POST /api/pin`, which is a person clicking.
+ *
+ * Keyed by PROJECT ID rather than by the ledger's `projectKey`, for the reason
+ * `archivedProjects` and `layout.rooms` are: the id is what the floor, the
+ * palette and the popover all address a room by, and a second spelling of "this
+ * project" is a second thing that can disagree. It is `projectIdFromCwd`'s
+ * alphabet and nothing else — see `sanitizeRoomOrder`.
+ *
+ * `at` is kept rather than a bare `true` so a later package can order the pins
+ * by when they were made without asking the user to pin everything again.
+ *
+ * @param {unknown} v
+ * @returns {Record<string, {at:number}>}
+ */
+function sanitizePins(v) {
+  if (!isPlainObject(v)) return {};
+  /** @type {Record<string, {at:number}>} */
+  const out = {};
+  for (const [key, raw] of Object.entries(v)) {
+    if (!PROJECT_ID_RE.test(key)) continue;
+    const at = Number(isPlainObject(raw) ? /** @type {any} */ (raw).at : 0);
+    out[key] = { at: Number.isFinite(at) && at > 0 ? at : 0 };
+    if (Object.keys(out).length >= MAX_ROOM_ORDER) break;
+  }
+  return out;
+}
+
+/**
+ * A project id is a slug of a path — `projectIdFromCwd`'s alphabet, and nothing
+ * else. Restated here rather than imported for the reason `MAX_ROOM_ORDER` is:
+ * the store is the bottom of the dependency graph. `test/unit/layout-io.test.mjs`
+ * asserts the two agree.
+ */
+const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,127}$/;
+
+/**
  * WP-66's per-project Studio grants, coerced into range.
  *
  * `studio.consent[projectKey] = { grantedAt, root }`, exactly as
@@ -527,6 +574,11 @@ function defaultData() {
     // preference — it never affects what is captured or what any agent is
     // doing, and an id in here that no longer exists is harmless.
     archivedProjects: {},
+    // WP-77. Project ids the user has PINNED: they keep a room on the floor
+    // with nothing running in them, at a third of a live room's footprint.
+    // Empty on every install, and only a user action ever writes here — see
+    // `sanitizePins`.
+    pins: {},
     // WP-30. The order the floor deals rooms in, as project ids. Empty on
     // every install that has never imported a layout, and empty means "the
     // order the scan produced" — which is why an untouched floor is laid out
@@ -561,6 +613,7 @@ function normalize(parsed) {
   const archivedProjects = isPlainObject(parsed.archivedProjects)
     ? { ...parsed.archivedProjects }
     : {};
+  const pins = sanitizePins(parsed.pins);
   const layout = {
     rooms: sanitizeRoomOrder(isPlainObject(parsed.layout) ? parsed.layout.rooms : []),
   };
@@ -575,6 +628,7 @@ function normalize(parsed) {
     ack,
     identity,
     archivedProjects,
+    pins,
     layout,
     studio,
   };
@@ -797,6 +851,53 @@ export class Store {
   /** @returns {string[]} */
   archivedProjects() {
     return Object.keys(this._data.archivedProjects);
+  }
+
+  /**
+   * Is this project pinned — does it keep a room with nothing running in it
+   * (WP-77)?
+   * @param {string} projectId
+   */
+  isProjectPinned(projectId) {
+    return Object.prototype.hasOwnProperty.call(this._data.pins, String(projectId || ''));
+  }
+
+  /**
+   * Pin a project's room, or take the pin back.
+   *
+   * THE ONLY WRITER, and it is only ever reached from `POST /api/pin` — a
+   * person clicking. No scan, no hook and no ended session calls this: a pin is
+   * user-owned state on `ackState`'s terms (`08` §1.1 rule 1), and
+   * `test/unit/pins.test.mjs` holds that as an `INVARIANT:` test.
+   *
+   * Unpinning DELETES the key rather than storing `false`, for the reason
+   * `setProjectArchived` and `revokeStudioConsent` delete: a record of every
+   * project ever unpinned is a growing list nobody asked for.
+   *
+   * @param {string} projectId
+   * @param {boolean} pinned
+   * @returns {boolean} whether the project is pinned now
+   */
+  setProjectPinned(projectId, pinned) {
+    const id = String(projectId || '');
+    if (!PROJECT_ID_RE.test(id)) return false;
+    if (pinned) this._data.pins[id] = { at: clockNow() };
+    else delete this._data.pins[id];
+    this.save();
+    return this.isProjectPinned(id);
+  }
+
+  /**
+   * Every pinned project, as `projectId → { at }`. A copy, for the reason
+   * `studioConsent` returns one: a caller that could mutate the map in place
+   * would be a second writer.
+   * @returns {Record<string, {at:number}>}
+   */
+  pinnedProjects() {
+    /** @type {Record<string, {at:number}>} */
+    const out = {};
+    for (const [id, rec] of Object.entries(this._data.pins)) out[id] = { ...rec };
+    return out;
   }
 
   /**

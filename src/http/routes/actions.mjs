@@ -1,5 +1,6 @@
 /**
  * POST /api/ack             the six user-owned actions
+ * POST /api/pin             pin a project's room to the floor (WP-77)
  * GET  /api/conversation    read one session's real conversation
  * POST /api/send            run a turn in a session
  * POST /api/open            spawn a terminal attached to a session
@@ -137,6 +138,41 @@ export function register(router, ctx) {
 
     registry.setProjectArchived(id, archived);
     return sendJson(res, 200, { ok: true, id, archived });
+  });
+
+  /**
+   * Pin a project's room to the floor, or take the pin back (WP-77).
+   *
+   * The owner, 14 September: _"Pin any particular project room so it is always
+   * in a room, so the room does not collapse when agents are not running."_ A
+   * pinned repo keeps a room with nothing running in it — one desk, nobody at
+   * it, and a third of a live room's footprint — instead of becoming a line in
+   * the idle list.
+   *
+   * THE ONLY WRITER OF `pins`, and it is only ever a person clicking: the
+   * popover row's toggle, or the palette's `Pin` / `Unpin`. No observed event
+   * reaches it, which is `ackState`'s own discipline (`08` §1.1 rule 1) applied
+   * to the other piece of user-owned state in `state.json`.
+   */
+  router.post('/api/pin', async (req, res) => {
+    let body;
+    try {
+      body = await readJson(req);
+    } catch (err) {
+      return sendError(res, 400, err.message);
+    }
+    const id = String(body.id || '');
+    if (!id) return sendError(res, 400, 'id is required');
+    const pinned = body.pinned !== false;
+
+    // A pin on a repo this machine has never seen is a pin that could never be
+    // taken back from the interface, so it is refused here rather than written
+    // and forgotten — the same check `/api/project-archive` makes.
+    const known = (registry.snapshot().projects || []).some((p) => p.id === id);
+    if (!known) return sendError(res, 404, `no such project: ${id}`);
+
+    const now = registry.setProjectPinned(id, pinned);
+    return sendJson(res, 200, { ok: true, id, pinned: now });
   });
 
   router.get('/api/conversation', async (req, res, url) => {

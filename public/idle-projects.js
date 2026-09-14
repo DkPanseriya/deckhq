@@ -40,7 +40,7 @@
  * `docs/DEVIATIONS.md` §145.
  */
 
-import { idleProjectsOf } from './floor-rule.js';
+import { idleProjectsOf, pinnedProjectsOf } from './floor-rule.js';
 // The one definition of the elapsed vocabulary — `4m`, `2h 10m`, `2d 4h` — and
 // the one the canvas strip's third column was written in, so the popover reads
 // in the same units the floor does. This is a STATIC import from `./render/**`,
@@ -110,8 +110,13 @@ function lastSeen(project, now) {
  * @param {number} count
  * @returns {string}
  */
-export function idleChipLabel(count) {
+export function idleChipLabel(count, pinnedCount = 0) {
   const n = Math.max(0, Number(count) || 0);
+  const pinned = Math.max(0, Number(pinnedCount) || 0);
+  // WP-77. A floor whose every idle repo has been PINNED has nothing idle left
+  // to count, and the chip is still the only way back to the pin. So it says
+  // what it has: `2 pinned` rather than a `0 idle` that reads as "nothing here".
+  if (n === 0 && pinned > 0) return `${pinned} pinned`;
   return `${n} idle`;
 }
 
@@ -123,7 +128,7 @@ export function idleChipLabel(count) {
  * floor's `·`. It is deliberately identical to what the canvas drew, because
  * the list moved off the floor and the reading of a line did not.
  *
- * @param {{name?:string, id?:string, sessionCount?:number, lastActivityAt?:number}} project
+ * @param {{name?:string, id?:string, sessionCount?:number, lastActivityAt?:number, pinned?:boolean}} project
  * @param {number} now ms epoch
  * @returns {{name:string, stat:string}}
  */
@@ -141,7 +146,7 @@ export function idleRowText(project, now) {
  * carries a spelled-out label as well, the way `deck.js`'s `rowLabel` does for
  * a chip.
  *
- * @param {{name?:string, id?:string, sessionCount?:number, lastActivityAt?:number}} project
+ * @param {{name?:string, id?:string, sessionCount?:number, lastActivityAt?:number, pinned?:boolean}} project
  * @param {number} now ms epoch
  * @returns {string}
  */
@@ -149,7 +154,16 @@ export function idleRowLabel(project, now) {
   const sessions = Number(project?.sessionCount) || 0;
   const last = lastSeen(project, now);
   const count = `${sessions} session${sessions === 1 ? '' : 's'}`;
-  return `${nameOf(project)}, ${count}, ${last ? `last active ${last} ago` : 'no recorded activity'}`;
+  const when = last ? `last active ${last} ago` : 'no recorded activity';
+  // WP-77. A pinned repo is not idle in the sense the rest of this list is —
+  // it has a room on the floor — so the one word that says so comes first,
+  // where a reader hears it before the numbers.
+  return `${project?.pinned ? 'Pinned. ' : ''}${nameOf(project)}, ${count}, ${when}`;
+}
+
+/** What the row's pin toggle says, and what it will do. @param {boolean} pinned */
+export function pinButtonLabel(pinned) {
+  return pinned ? 'Unpin' : 'Pin';
 }
 
 /**
@@ -170,7 +184,7 @@ export function idleRowLabel(project, now) {
  *
  * @param {Document} doc
  * @param {HTMLElement} listEl the `role="listbox"`
- * @param {{id?:string, name?:string, sessionCount?:number, lastActivityAt?:number}[]} projects
+ * @param {{id?:string, name?:string, sessionCount?:number, lastActivityAt?:number, pinned?:boolean}[]} projects
  * @param {number} now ms epoch
  * @returns {HTMLElement[]} the row elements, in the order they were appended
  */
@@ -203,6 +217,27 @@ export function renderIdleList(doc, listEl, projects, now) {
     statEl.textContent = stat;
     row.appendChild(statEl);
 
+    // WP-77 · the pin, on the row it belongs to.
+    //
+    // LAST, and a real `<button>`. Last because the two things above it are
+    // what the row is FOR — which repo, and how long since anything happened —
+    // and the toggle is what you do about it. A button rather than a click
+    // handler on the row because a row already has a meaning (open this repo)
+    // and a second meaning on the same rectangle is a coin flip; `pin-toggle`
+    // is what `createIdlePopover` delegates on so a row click and a pin click
+    // can never be the same event.
+    //
+    // The option's own `aria-label` already says "Pinned" (see `idleRowLabel`),
+    // so this one names the ACTION rather than repeating the state.
+    const pinned = project?.pinned === true;
+    const pinEl = doc.createElement('button');
+    pinEl.className = `idle-row-pin${pinned ? ' is-pinned' : ''}`;
+    pinEl.setAttribute('type', 'button');
+    pinEl.setAttribute('aria-label', `${pinButtonLabel(pinned)} ${name}`);
+    pinEl.dataset.index = String(index);
+    pinEl.textContent = pinButtonLabel(pinned);
+    row.appendChild(pinEl);
+
     listEl.appendChild(row);
     return row;
   });
@@ -222,6 +257,9 @@ export function renderIdleList(doc, listEl, projects, now) {
  * @param {Document} [opts.doc]
  * @param {() => any} opts.getSnapshot     the app's current snapshot
  * @param {(projectId:string) => void} opts.onActivate  what a row click does
+ * @param {(projectId:string, pinned:boolean) => void} [opts.onPin] WP-77: what
+ *   the row's pin toggle does. It is handed the state the user ASKED for, not
+ *   the one the repo is in.
  * @param {() => boolean} [opts.isSuppressed] true while something else owns
  *   this corner of the stage — see `refresh`
  * @returns {{refresh:() => void, open:() => void, close:() => void,
@@ -231,6 +269,7 @@ export function createIdlePopover(opts) {
   const doc = opts.doc || document;
   const { chipEl, popoverEl, listEl, getSnapshot, onActivate } = opts;
   const isSuppressed = opts.isSuppressed || (() => false);
+  const onPin = opts.onPin || (() => {});
 
   /** @type {any[]} the records the rows were built from, same order */
   let projects = [];
@@ -240,10 +279,14 @@ export function createIdlePopover(opts) {
   let shown = false;
   /**
    * Opened on purpose — by click, or by `I` — rather than by the pointer
-   * resting on the chip. A pinned list ignores the leave timer: somebody who
+   * resting on the chip. A held-open list ignores the leave timer: somebody who
    * clicked to keep it open did not mean "until I move the mouse".
+   *
+   * It was called `pinned` until WP-77, which gave that word a meaning of its
+   * own in this file — a repo the user keeps a room for. Two meanings for one
+   * word in one module is a reading a maintainer gets wrong once.
    */
-  let pinned = false;
+  let held = false;
   /** @type {any} */
   let hoverTimer = null;
   /** @type {any} */
@@ -258,8 +301,16 @@ export function createIdlePopover(opts) {
    * @returns {boolean} whether the chip is on screen at all
    */
   function readProjects(now) {
-    projects = idleProjectsOf(getSnapshot(), { now });
-    chipEl.textContent = idleChipLabel(projects.length);
+    const snapshot = getSnapshot();
+    // PINNED FIRST (WP-77). They are the rows the user put there on purpose,
+    // and the only thing this list can still do for them is take the pin back;
+    // burying them under fourteen repos nobody is in would be hiding the one
+    // control that undoes the other. The chip counts the IDLE ones — that is
+    // what the word says — unless there are none, in which case it counts what
+    // it has (see `idleChipLabel`).
+    const idle = idleProjectsOf(snapshot, { now });
+    projects = [...pinnedProjectsOf(snapshot, { now }), ...idle];
+    chipEl.textContent = idleChipLabel(idle.length, projects.length - idle.length);
     // Two reasons to be gone. Nothing to list is the obvious one — a chip
     // reading "0 idle" is the clutter this feature exists to remove. The other
     // is the replay bar: `.replay` is bottom-centred at `min(38rem, 100% - 2rem)`
@@ -304,7 +355,7 @@ export function createIdlePopover(opts) {
     popoverEl.hidden = false;
     chipEl.setAttribute('aria-expanded', 'true');
     shown = true;
-    pinned = pin;
+    held = pin;
     doc.addEventListener('keydown', onKeydown, true);
     doc.addEventListener('pointerdown', onPointerDown, true);
     // Focus only when the person asked for the list. A hover that stole focus
@@ -316,7 +367,7 @@ export function createIdlePopover(opts) {
     cancelTimers();
     if (!shown) return;
     shown = false;
-    pinned = false;
+    held = false;
     popoverEl.hidden = true;
     chipEl.setAttribute('aria-expanded', 'false');
     doc.removeEventListener('keydown', onKeydown, true);
@@ -368,6 +419,14 @@ export function createIdlePopover(opts) {
       case 'Enter':
         activate(active);
         break;
+      // WP-77. The pin, from the keyboard. `05` §10: the floor is never the
+      // only way to reach anything, and neither is a mouse — a toggle that
+      // could only be clicked would be the one control in this list that a
+      // keyboard user has to leave the list to reach.
+      case 'p':
+      case 'P':
+        togglePin(active);
+        break;
       case 'Escape':
         close();
         break;
@@ -394,6 +453,32 @@ export function createIdlePopover(opts) {
     return node?.closest ? /** @type {HTMLElement|null} */ (node.closest('.idle-row')) : null;
   }
 
+  /** The pin toggle under a pointer event, or null (WP-77). @param {Event} e */
+  function pinAt(e) {
+    const node = /** @type {HTMLElement|null} */ (e.target);
+    return node?.closest ? /** @type {HTMLElement|null} */ (node.closest('.idle-row-pin')) : null;
+  }
+
+  /**
+   * Pin a repo's room to the floor, or take the pin back.
+   *
+   * THE LIST STAYS OPEN and is NOT repainted here. It is repainted by `refresh`
+   * when the daemon's next snapshot arrives — the pin is state the daemon owns,
+   * and a row that changed its own label before the write landed would be the
+   * interface telling the user something it does not yet know. It is one round
+   * trip over loopback.
+   * @param {number} index
+   */
+  function togglePin(index) {
+    const project = projects[index];
+    if (!project) return;
+    try {
+      onPin(String(project.id), project.pinned !== true);
+    } catch (err) {
+      console.error('[deckhq] pinning a project failed', err);
+    }
+  }
+
   chipEl.addEventListener('click', () => (shown ? close() : show(true)));
 
   chipEl.addEventListener('mouseenter', () => {
@@ -414,7 +499,7 @@ export function createIdlePopover(opts) {
   const scheduleLeave = () => {
     clearTimeout(hoverTimer);
     hoverTimer = null;
-    if (!shown || pinned) return;
+    if (!shown || held) return;
     clearTimeout(leaveTimer);
     leaveTimer = setTimeout(close, HOVER_CLOSE_MS);
   };
@@ -424,7 +509,18 @@ export function createIdlePopover(opts) {
 
   // Delegated, so a re-render on every new snapshot does not have to re-bind a
   // listener per row.
+  //
+  // THE PIN IS CHECKED FIRST, and it stops there (WP-77). A pin click is inside
+  // a row, so without this it would also open the repo and close the list —
+  // which is exactly the wrong answer: somebody pinning a repo is asking to see
+  // its room, and the list stays up so they can pin the next one.
   listEl.addEventListener('click', (e) => {
+    const pin = pinAt(e);
+    if (pin) {
+      e.stopPropagation();
+      togglePin(Number(pin.dataset.index));
+      return;
+    }
     const row = rowAt(e);
     if (row) activate(Number(row.dataset.index));
   });

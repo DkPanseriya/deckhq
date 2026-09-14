@@ -311,13 +311,25 @@ export function floorPopulation(agents, opts = {}) {
 /**
  * WHICH REPOS ARE ON THE FLOOR, AND WHICH ARE ONLY IN THE LIST (`08` B6).
  *
- *   an active agent      -> a room, with desks for the agents at them
- *   nobody, not archived -> one line in the idle list
- *   nobody, archived     -> off the floor and out of the list entirely
+ *   an active agent        -> a room, with desks for the agents at them
+ *   nobody, PINNED         -> a room, empty, a third the size (WP-77)
+ *   nobody, not archived   -> one line in the idle list
+ *   nobody, archived       -> off the floor and out of the list entirely
  *
  * An active agent always wins, which is what makes archiving safe: a project
  * the user archived comes back by itself the moment somebody starts working in
  * that repo, rather than hiding them.
+ *
+ * AND A PIN IS THE USER SAYING SO DIRECTLY (WP-77). The owner: _"Pin any
+ * particular project room so it is always in a room, so the room does not
+ * collapse when agents are not running."_ A pinned repo is a room rather than a
+ * line, which keeps WP-60's own property exactly as it was — **a repo with
+ * sessions is a room or a line, never both and never neither** — rather than
+ * inventing a third state that is half of each.
+ *
+ * ARCHIVING STILL WINS OVER PINNING, and deliberately: both are the user
+ * speaking, and "take this off my floor" is the more recent and the more
+ * specific of the two. The interface never offers both at once.
  *
  * ONE COPY, HERE, SINCE WP-60. It used to be three lines inside `buildPlan`,
  * which was right while the only thing that could ask was the strip the plan
@@ -329,12 +341,13 @@ export function floorPopulation(agents, opts = {}) {
  *
  * @param {{id?:string, projectId?:string, name?:string, projectName?:string,
  *   sessionCount?:number, activeCount?:number, archived?:boolean,
- *   lastActivityAt?:number}[]} projects
+ *   pinned?:boolean, lastActivityAt?:number}[]} projects
  * @param {ReturnType<typeof floorPopulation>} pop
- * @returns {{active: any[], idle: {id:string, name:string, sessionCount:number,
- *   lastActivityAt:number}[]}}
- *   `active` are the project records that earn a room, in the order given;
- *   `idle` are the list's own lines, already reduced to what a line says.
+ * @returns {{active: any[], pinned: any[], idle: {id:string, name:string,
+ *   sessionCount:number, lastActivityAt:number}[]}}
+ *   `active` are the project records that earn a full room, in the order given;
+ *   `pinned` are the ones that earn an empty one; `idle` are the list's own
+ *   lines, already reduced to what a line says.
  */
 export function splitProjectsByOccupancy(projects, pop) {
   const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
@@ -350,14 +363,22 @@ export function splitProjectsByOccupancy(projects, pop) {
   const visible = (Array.isArray(projects) ? projects : []).filter(
     (p) => (p.sessionCount ?? 0) > 0 && !(isIdle(p) && p.archived),
   );
+  const resting = visible.filter(isIdle);
   return {
     active: visible.filter((p) => !isIdle(p)),
-    idle: visible.filter(isIdle).map((p) => ({
-      id: idOf(p),
-      name: String(p.name ?? p.projectName ?? idOf(p)),
-      sessionCount: p.sessionCount ?? 0,
-      lastActivityAt: pop.lastActivity.get(idOf(p)) ?? Number(p.lastActivityAt) ?? 0,
-    })),
+    pinned: resting.filter((p) => p.pinned === true),
+    idle: resting.filter((p) => p.pinned !== true).map((p) => lineOf(p, pop)),
+  };
+}
+
+/** The shape one line of either list carries. @param {any} p @param {any} pop */
+function lineOf(p, pop) {
+  const id = String(p.id ?? p.projectId ?? 'unknown');
+  return {
+    id,
+    name: String(p.name ?? p.projectName ?? id),
+    sessionCount: p.sessionCount ?? 0,
+    lastActivityAt: pop.lastActivity.get(id) ?? Number(p.lastActivityAt) ?? 0,
   };
 }
 
@@ -367,6 +388,11 @@ export function splitProjectsByOccupancy(projects, pop) {
  * The convenience the DOM side actually wants: it holds a snapshot and nothing
  * else, and going through `floorPopulation` by hand at every call site is how
  * one of them ends up passing different options from the floor.
+ *
+ * PINNED REPOS ARE NOT IN IT (WP-77). They are rooms, and a repo that is a room
+ * and a line is the thing WP-60's property forbids; `pinnedProjectsOf` below is
+ * how the popover still offers the one action a pinned repo needs, which is
+ * taking the pin back.
  *
  * @param {{projects?:any[], agents?:FloorAgent[], settings?:{goneHomeDays?:number}}} snapshot
  * @param {{now?:number}} [opts]
@@ -378,4 +404,28 @@ export function idleProjectsOf(snapshot, opts = {}) {
     goneHomeDays: (snap.settings || {}).goneHomeDays,
   });
   return splitProjectsByOccupancy(snap.projects || [], pop).idle;
+}
+
+/**
+ * The repos that are on the floor because the user PINNED them (WP-77), in the
+ * same shape one idle line carries.
+ *
+ * It exists for one reason: the pin has to be reachable from the same place it
+ * was made. A pinned repo leaves the idle list the moment it is pinned — it is
+ * a room now — so without this the only way back would be the palette, and a
+ * toggle you can turn on in one place and off in another is two controls.
+ *
+ * @param {{projects?:any[], agents?:FloorAgent[], settings?:{goneHomeDays?:number}}} snapshot
+ * @param {{now?:number}} [opts]
+ */
+export function pinnedProjectsOf(snapshot, opts = {}) {
+  const snap = snapshot || {};
+  const pop = floorPopulation(snap.agents || [], {
+    now: opts.now,
+    goneHomeDays: (snap.settings || {}).goneHomeDays,
+  });
+  return splitProjectsByOccupancy(snap.projects || [], pop).pinned.map((p) => ({
+    ...lineOf(p, pop),
+    pinned: true,
+  }));
 }

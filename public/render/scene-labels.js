@@ -138,6 +138,16 @@ export function plateLinesFor(room, snapshot, plan) {
   if (room.kind === 'project') {
     const project = (snap.projects || []).find((p) => p.id === room.id);
     if (!project) return fallback();
+    // WP-77. A PINNED room says why it is there, and says it instead of the
+    // three numbers a live room carries. Nothing is running in it, so its
+    // tokens are history, its `need you` is zero by construction and its
+    // payroll meter would read the same figure for ever — three numbers that
+    // cannot change are three numbers nobody should keep reading. The word
+    // that CAN change is the one the plate is for.
+    if (room.pinned === true) {
+      const n = Number(project.sessionCount) || 0;
+      return [room.name, `${n} session${n === 1 ? '' : 's'} · pinned`, ''];
+    }
     // WP-41. Juniors are counted apart from the sessions, because they are a
     // different KIND of occupant: the user did not start them, cannot bench
     // them, and they will be gone before the next coffee. "3 sessions ·

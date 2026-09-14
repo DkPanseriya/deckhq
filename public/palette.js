@@ -595,6 +595,33 @@ function buildProjectEntries(ctx) {
         run: () => actions.newAgent(p.id),
       },
     );
+    // WP-77 · the pin, for EVERY project and not only the idle ones.
+    //
+    // That is the difference between it and archiving below, and it follows
+    // from what a pin is for: "so the room does not collapse when agents are
+    // not running" is a thing you decide about a repo you are working in NOW,
+    // about a moment that has not happened yet. Offering it only once the room
+    // had already collapsed would be offering it only after it was too late to
+    // be what the owner asked for.
+    out.push(
+      p.pinned
+        ? {
+            ...base,
+            id: `proj:unpin:${p.id}`,
+            label: `Unpin ${name}`,
+            hint: 'let this room collapse when nobody is in it',
+            keywords: ['unpin', 'release', 'room', 'collapse'],
+            run: () => actions.pinProject(p.id, false),
+          }
+        : {
+            ...base,
+            id: `proj:pin:${p.id}`,
+            label: `Pin ${name}`,
+            hint: 'keep a room for it when nobody is working in it',
+            keywords: ['pin', 'keep', 'room', 'stay'],
+            run: () => actions.pinProject(p.id, true),
+          },
+    );
     // Archiving is offered only for a room nobody is working in — the same
     // honesty rule the header chip follows: a repo with an active agent stays
     // on the floor regardless, so the control would be a lie.

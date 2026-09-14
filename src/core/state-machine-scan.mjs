@@ -194,6 +194,25 @@ export class RegistryScan extends RegistryCompute {
   }
 
   /**
+   * Pin a project's room to the floor, or take the pin back (WP-77).
+   *
+   * A view preference on the same terms as `setProjectArchived` above — it
+   * moves a room, it touches no session — with one difference that matters: it
+   * is USER-OWNED, so nothing on the scan path may undo it. There is no
+   * `_syncPins` beside `_syncArchived` and there is not going to be one; see
+   * `Store#setProjectPinned` and `test/unit/pins.test.mjs`.
+   * @param {string} projectId
+   * @param {boolean} pinned
+   */
+  setProjectPinned(projectId, pinned) {
+    const now = this.store.setProjectPinned(projectId, pinned);
+    this._changed = true;
+    this._rebuild();
+    this._emitIfChanged();
+    return now;
+  }
+
+  /**
    * The order the floor deals rooms in (WP-30). A view preference on exactly
    * the same terms as `setProjectArchived` above: it moves rooms, it touches
    * no session and it clears nothing.
