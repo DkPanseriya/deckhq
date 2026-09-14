@@ -27,13 +27,14 @@
  * No DOM access anywhere — this file must import cleanly under `node --test`.
  *
  * WHERE THINGS ARE (WP-22). This file was 3,255 lines and is now the assembly
- * step plus the population rule. Six siblings hold the rest, each one a pure
+ * step plus the population rule. Its siblings hold the rest, each one a pure
  * function of its arguments and none of them importing this file back:
  *
- *   plan-units.js    the shapes and every dimension
+ *   plan-shapes.js   what the shapes are — every typedef (WP-77)
+ *   plan-units.js    every dimension
  *   plan-packing.js  flow, shelf, squarify, tileRows — rectangles into a rect
  *   plan-anchors.js  resolveAnchors, translateContents, the table sizes
- *   plan-rooms.js    a project's room
+ *   plan-rooms.js    a project's room, and the pinned strip (WP-77)
  *   plan-office.js   the reception, upright and on its side (WP-59d)
  *   plan-service.js  the lounge
  *   plan-nav.js      walls, corridor centrelines, doors
@@ -47,8 +48,7 @@
  *                    lounge (WP-59d, and a third time)
  *
  * Who is on the floor at all is not here either, and never was two answers
- * again: `public/floor-rule.js` is the one copy, and `src/core/model.mjs`
- * imports the same file (WP-22).
+ * again: `public/floor-rule.js` is the one copy, imported by both sides (WP-22).
  *
  * Everything the old module exported is re-exported at the foot of this file,
  * so no import anywhere had to change.
@@ -58,7 +58,7 @@ import { floorPopulation, splitProjectsByOccupancy } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
-import { buildProjectRoom } from './plan-rooms.js';
+import { buildProjectRoom, layPinnedStrip } from './plan-rooms.js';
 import { createRowFloor } from './plan-rows.js';
 import { better, betterArrangement, score } from './plan-search.js';
 import { buildOffice, buildOfficeRow, seatOffice } from './plan-office.js';
@@ -80,12 +80,16 @@ import {
   OFFICE_MAX_W,
   OFFICE_MIN_W,
   OFFICE_SURPLUS_SHARE,
+  PINNED_AREA_SHARE,
   ROOM_ASPECT_MAX,
   ROWS_ASPECT_MIN,
   SERVICE_MAX_W,
   SERVICE_W_STEP,
   WORKING_OPEN_MAX,
   clamp,
+  loungeCeiling,
+  pinnedBandHeight,
+  pinnedPerRow,
 } from './plan-units.js';
 import { isActiveAgent } from '../floor-rule.js';
 
@@ -135,33 +139,35 @@ export function buildPlan(projects, agents, opts = {}) {
     );
 
   // WHICH REPOS ARE WORTH FLOOR SPACE — `splitProjectsByOccupancy`, and the
-  // rule itself is in `floor-rule.js` since WP-60 rather than here.
+  // rule itself is in `floor-rule.js` since WP-60 rather than here. It moved
+  // because a second caller appeared: the idle repos are a popover now, built
+  // from the snapshot, and a rule about who is on the floor with two
+  // implementations is a floor and a list that can disagree about the same repo.
   //
-  // It moved because a second caller appeared. The idle repos used to be a
-  // STRIP the plan drew, so the plan was the only thing that could ask; they
-  // are a popover now — HTML, off the canvas, built from the snapshot — and a
-  // rule about who is on the floor with two implementations is a floor and a
-  // list that can disagree about the same repo.
-  //
-  // Only the ACTIVE half is read here. A repo nobody is in earns no room, no
-  // strip and no bare carpet on the working side: it is a line in a list the
-  // user opens when they want it, which is the whole of WP-60.
-  const { active: activeProjects } = splitProjectsByOccupancy(projects, pop);
+  // A repo nobody is in earns no room, no strip and no bare carpet: it is a
+  // line in a list the user opens when they want it (WP-60) — UNLESS the user
+  // PINNED it, which is WP-77's middle case and the one thing on this floor
+  // that is not derived from what was observed. `pinned` comes off
+  // `state.json` through the snapshot and nothing here may write it.
+  const { active: activeProjects, pinned: pinnedProjects } = splitProjectsByOccupancy(
+    projects,
+    pop,
+  );
 
   // ---- who the floor draws nobody for.
   //
   // Two display filters, both of which leave `ackState` exactly as the user
   // set it: an agent who went home, and an agent sitting at a desk in a
-  // project that has no room. The idle list's line — name, sessions, last
-  // activity — is what stands for the second group, and the door plate for the
-  // first. `assignSeats` and `AgentRuntime#sync` read this set rather than
-  // re-deriving it, so there is one answer to "is this person on the floor"
-  // and not two that can disagree.
-  // Keyed on the projects that HAVE a room rather than on the idle ones. Those
-  // are not the same set: a project the user archived and then stopped working
-  // in is off the floor entirely, so it is in neither `activeProjects` nor
-  // `idleProjects`, and asking "is this agent's project idle?" answered no for
-  // it — leaving its sessions drawn in a room that does not exist.
+  // project that has no live room. The idle list's line stands for the second
+  // group and the door plate for the first. `assignSeats` and
+  // `AgentRuntime#sync` read this set rather than re-deriving it, so there is
+  // one answer to "is this person on the floor" and not two that disagree.
+  // Keyed on the projects that HAVE A LIVE ROOM rather than on the idle ones.
+  // Those are not the same set: a project the user archived and then stopped
+  // working in is off the floor entirely, so asking "is this agent's project
+  // idle?" answered no for it and left its sessions drawn in a room that does
+  // not exist. A PINNED room is not in it either (WP-77): pinning kept the
+  // room, not the people, and its room has no seat to draw anybody on.
   const roomIds = new Set(activeProjects.map(idOf));
   /** @type {Set<string>} */
   const hidden = new Set(pop.goneHome);
@@ -177,29 +183,26 @@ export function buildPlan(projects, agents, opts = {}) {
   // untouched — an `ended` session in a repo nobody is working in is still a
   // line in the idle list and nothing on the floor, which is what `hidden`
   // above just decided. What changed is where the ones whose repo IS live go:
-  // they used to sit at a desk in it, which made a project room a register of
+  // they used to sit at a desk in it, making a project room a register of
   // everything that had ever run there rather than of what is running now.
   let restingCount = 0;
   for (const [pid, n] of pop.resting) if (roomIds.has(pid)) restingCount += n;
-  // Sized by who is DRAWN. Agents who went home are on the door plate and
-  // nowhere else.
+  // Sized by who is DRAWN: agents who went home are on the door plate only.
   const benchedCount = pop.benchedDrawn + restingCount;
 
   // ---- pass 1: everything at its natural size, purely to bid for space.
   let office = buildOffice(waitingCount);
   let lounge = buildLounge(benchedCount, undefined, goneHomeCount);
-  // ARCHIVED SESSIONS ARE OFF THE FLOOR. They get no room, no street and no
-  // strip: an archived session is one the user has explicitly put away, and
-  // the floor is for the ones that are still in play. They are still counted
-  // in the header and still listed in the panel — they simply do not take
-  // screen space away from the rooms where work happens.
+  // ARCHIVED SESSIONS ARE OFF THE FLOOR. They get no room and no strip: an
+  // archived session is one the user has explicitly put away. They are still
+  // counted in the header and still listed in the panel — they simply do not
+  // take screen space away from the rooms where work happens.
   //
   // Bid at the shape a ROOM wants, not at a square. `flowBlocks` decides how a
   // project's tables are arranged, and asking it for a square cluster stands a
   // two-table project's benches one above the other — a room twice the depth of
   // its neighbours, which then has to be dealt a row of its own with a bay
-  // beside it (see `bandsOf`). One row of tables is what an office does, and it
-  // keeps every room in a band the same depth.
+  // beside it (see `bandsOf`). One row of tables keeps a band's rooms one depth.
   /** @type {{room: Room, seats: Seat[]}[]} */
   const projectRooms = activeProjects.map((p) => buildProjectRoom(p, desksIn(p), ROOM_ASPECT_MAX));
 
@@ -249,7 +252,15 @@ export function buildPlan(projects, agents, opts = {}) {
     // here rather than in `buildLounge` keeps it beside the width it is a
     // proportion OF, and makes the column self-limiting — a wider column is a
     // taller one, and a taller column stops being what a wide stage wants.
-    l.room.h = Math.max(l.room.h, colW / ROOM_ASPECT_MAX);
+    //
+    // AND NOT PAST WHAT ITS OCCUPANTS ARE WORTH (WP-77). The proportion knows
+    // nothing about who is in the room, so on a wide column it padded an empty
+    // lounge by six units for a ratio. `loungeCeiling` bounds the PADDING; the
+    // `max` keeps the contents whatever the ceiling says.
+    l.room.h = Math.max(
+      l.room.h,
+      Math.min(colW / ROOM_ASPECT_MAX, loungeCeiling(benchedCount, o.room.h)),
+    );
     got = { w: colW, office: o, lounge: l, h: o.room.h + l.room.h, pack };
     serviceCache.set(cacheKey, got);
     return got;
@@ -270,32 +281,42 @@ export function buildPlan(projects, agents, opts = {}) {
   // floor a project is worth. `desksIn` is agents AT DESKS RIGHT NOW (`08` B6),
   // which is what the room's furniture is built from and must stay that way —
   // a desk nobody is at is the oldest defect in this file. But on the owner's
-  // own machine every one of his active repos had exactly one agent at a desk
-  // and the rest finished or benched, so dealt by desks the row came out as
-  // four cells of one width — with `24 sessions` written on the plate of the
-  // first and `4 sessions` on the last. The number the eye correlates the
-  // room's size with is the one written on its door.
+  // own machine every active repo had exactly one agent at a desk and the rest
+  // finished or benched, so dealt by desks the row came out as four cells of
+  // one width — with `24 sessions` on the first plate and `4 sessions` on the
+  // last. The number the eye correlates a room's size with is on its door.
   //
   // So: the FURNITURE is desks and the FLOOR is sessions. A project with
-  // twenty-four sessions in it is a project twenty-four things have happened
-  // in this week, and it earns more room than one with a single session
-  // whether or not both happen to have one agent typing at this instant.
-  // `CELL_OCCUPANCY_RATIO_MAX` keeps the disparity inside three either way.
-  const workingFloor = createWorkingFloor(projectRooms, naturalOf, (i) =>
-    Math.max(1, activeProjects[i].sessionCount ?? desksIn(activeProjects[i])),
+  // twenty-four sessions in it is a project twenty-four things have happened in
+  // this week, and it earns more room than one with a single session whether or
+  // not both have an agent typing at this instant. `CELL_OCCUPANCY_RATIO_MAX`
+  // keeps the disparity inside three either way.
+  //
+  // AND THE PINNED STRIP IS RESERVED OUT OF IT (WP-77): `reserve` is the part
+  // of the working side's height that is not the rooms' to grow into. Zero
+  // wherever nothing is pinned, so such a floor is laid as WP-60 left it.
+  const reserve = (askedBandH, workingW) =>
+    pinnedBandHeight(pinnedProjects.length, workingW, askedBandH);
+  const workingFloor = createWorkingFloor(
+    projectRooms,
+    naturalOf,
+    (i) => Math.max(1, activeProjects[i].sessionCount ?? desksIn(activeProjects[i])),
+    reserve,
   );
   const { costWorkingFloor, fillOrder, invalidateBands, layColumn, workingShape } = workingFloor;
 
   // THE SECOND ARRANGEMENT (WP-59d): the office beside the rooms over the
-  // lounge beside the strip. Its own module for the same reason the working
-  // floor is one — every measurement in it reads `naturalOf`, which the fit
-  // loop changes underneath it — and handed the two service rooms as BUILDERS
-  // rather than as furniture, because a row's reception and a row's lounge are
-  // the same two rooms laid at other sizes.
+  // lounge. Its own module for the same reason the working floor is one —
+  // every measurement in it reads `naturalOf`, which the fit loop changes
+  // underneath it — and handed the two service rooms as BUILDERS rather than
+  // as furniture, because a row's reception and lounge are the same two rooms
+  // laid at other sizes.
   const rowFloor = createRowFloor({
     projectRooms,
     naturalOf,
     waiting: waitingCount,
+    benched: benchedCount,
+    reserve,
     floor: workingFloor,
     office: (w, depth) => buildOfficeRow(waitingCount, { w, h: depth }),
     lounge: (w, h, pack) => buildLounge(benchedCount, { w, h }, goneHomeCount, pack),
@@ -327,11 +348,15 @@ export function buildPlan(projects, agents, opts = {}) {
     const measured = measureService(sw, pack);
     const shape = workingShape(rowCount);
     const asked = projectRooms.length ? shape.h * bandDepth : 0;
-    const workingW = projectRooms.length ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
+    // A floor with nothing live in it but something PINNED still has a working
+    // side: the pinned strip stands on it (WP-77).
+    const workingW =
+      projectRooms.length || pinnedProjects.length ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
     // The height the working side has to fill is the COLUMN's, and the fill
-    // order above is what it may do about it (WP-59c).
-    const H = Math.max(measured.h, asked, MARGIN * 4);
-    const { bandH, forced } = fillOrder(rowCount, workingW, H, asked);
+    // order above is what it may do about it (WP-59c) — less the pinned strip.
+    const pinH = reserve(asked, workingW);
+    const H = Math.max(measured.h, asked + pinH, MARGIN * 4);
+    const { bandH, forced } = fillOrder(rowCount, workingW, Math.max(1, H - pinH), asked);
     const W = measured.w + CORRIDOR + workingW;
     // What of this envelope nobody stands on: the working side less its rooms.
     // The service column fills its own side exactly (see below) and the spine
@@ -350,6 +375,7 @@ export function buildPlan(projects, agents, opts = {}) {
       W,
       H,
       bandH,
+      pinH,
       // The depth this candidate ASKED its band to be laid at, before the fill
       // order grew it. `settle` needs the question and not only the answer:
       // handed `bandH` back it would compare the grown depth against itself,
@@ -420,8 +446,8 @@ export function buildPlan(projects, agents, opts = {}) {
   // THE LOUNGE IS PACKED TO FILL THE FLOOR BESIDE IT, AND FOR NOTHING ELSE
   // (WP-59c, step (c)). The ladder runs loosest first and stops the moment an
   // arrangement fills its working side, so a floor that was never short of
-  // height is laid exactly as it was before this package — and one that is
-  // short buys the height from the only place left that is not a room.
+  // height is laid loose — and one that is short buys the height from the only
+  // place left that is not a room.
   const search = () => {
     let best = null;
     for (const pack of LOUNGE_PACKS) {
@@ -458,9 +484,8 @@ export function buildPlan(projects, agents, opts = {}) {
   //
   // So: search, settle, and search again with what settling produced. The
   // second answer is stable because the rooms are — a room rebuilt into a cell
-  // of roughly the right shape stays roughly that shape — and the whole of it
-  // costs one more pass of arithmetic over a plan that is rebuilt when the
-  // FLOOR changes, not per frame.
+  // of roughly the right shape stays roughly that shape — and it costs one more
+  // pass of arithmetic over a plan rebuilt when the FLOOR changes, not per frame.
   invalidateBands();
   settle(search());
   invalidateBands();
@@ -542,9 +567,7 @@ export function buildPlan(projects, agents, opts = {}) {
   const loungeNaturalH = lounge.room.h;
   const columnSurplus = rows ? 0 : Math.max(0, H - (office.room.h + loungeNaturalH));
   // The reception takes a share of it, up to the point where it would stop
-  // being a room; the lounge takes the rest, because open floor reads as a
-  // lounge and reads as dead space anywhere else.
-  // The reception takes a floor of the column whatever the lounge needs. It is
+  // being a room, and a floor of the column whatever the lounge needs. It is
   // the room the product is about — the one that answers "is anything waiting
   // on me" — and on a machine where nearly every session is benched the lounge
   // would otherwise have four times its height simply by having more in it.
@@ -625,28 +648,54 @@ export function buildPlan(projects, agents, opts = {}) {
   // Two cases, one band. A floor with no rooms at all still needs its working
   // side to be something rather than a hole; and a floor whose service column
   // is taller than its one project room needs somewhere for the difference to
-  // go. Before WP-55 the rooms swallowed it and drew it as carpet.
-  //
-  // IN TWO ROWS IT IS UNDER ROW ONE'S ROOMS rather than at the bottom of the
-  // building (WP-59d). Row two has none of its own since WP-60: the strip that
-  // used to take the right of it is gone, so the lounge is the whole row.
+  // go. Before WP-55 the rooms swallowed it and drew it as carpet. IN TWO ROWS
+  // IT IS UNDER ROW ONE'S ROOMS rather than at the bottom of the building
+  // (WP-59d); row two has none of its own since WP-60.
   //
   // Open floor is NOT a route: there is nothing in it to walk to, and a
-  // full-height band beside the spine is a second parallel line the graph can
-  // never reach.
+  // full-height band beside the spine is a second parallel line the graph
+  // cannot reach.
   const open = (id, x, y, w, h) =>
     w > 1 && h > 0.01 ? [corridorRoom({ id, x, y, w, h, thoroughfare: false })] : [];
   const slackY = projectRooms.length ? bandH : 0;
-  const emptyBand = rows
-    ? open('__open-rooms__', workingX, slackY, workingWidth, fitted.h1 - slackY)
-    : open('__open__', workingX, slackY, workingWidth, Math.max(0, H - slackY));
+  const workingBottom = rows ? fitted.h1 : H;
+
+  // ---- THE PINNED STRIP, along the bottom of the working side (WP-77).
+  // `layPinnedStrip` is the rule; this is its rectangle. `pinH` is zero unless
+  // the strip was actually laid: a reservation nothing stood in is a hole, and
+  // every rectangle in `rooms` tiles the envelope exactly.
+  const wantPinH = Math.min(Math.max(0, fitted.pinH || 0), Math.max(0, workingBottom - slackY));
+  const live = projectRooms.map((pr) => pr.room.w * pr.room.h);
+  const strip =
+    wantPinH > 0.01
+      ? layPinnedStrip(
+          pinnedProjects,
+          { x: workingX, y: workingBottom - wantPinH, w: workingWidth, h: wantPinH },
+          pinnedPerRow(workingWidth),
+          live.length ? Math.min(...live) * PINNED_AREA_SHARE : Infinity,
+        )
+      : { rooms: [], gaps: [] };
+  const pinH = strip.rooms.length ? wantPinH : 0;
+  const pinnedGaps = strip.gaps.map((g, i) =>
+    corridorRoom({ ...g, id: `__pinned-${i}__`, thoroughfare: false }),
+  );
+
+  const emptyBand = open(
+    rows ? '__open-rooms__' : '__open__',
+    workingX,
+    slackY,
+    workingWidth,
+    Math.max(0, workingBottom - pinH - slackY),
+  );
 
   const rooms = [
     office.room,
     spine,
     ...crossCorridors,
     ...emptyBand,
+    ...pinnedGaps,
     ...projectRooms.map((pr) => pr.room),
+    ...strip.rooms,
     lounge.room,
   ];
 
@@ -689,6 +738,9 @@ export function buildPlan(projects, agents, opts = {}) {
     place(pr.room, pr.seats);
     seats.set(pr.room.id, pr.seats);
   }
+  // A pinned room is placed like any other and seats NOBODY: pinning kept the
+  // ROOM, not the people (WP-77, and WP-50 before it).
+  for (const room of strip.rooms) place(room, []);
   const walls = deriveWalls(rooms, W, H);
 
   // The walkable network. Agents are confined to it — see buildNavLines.
@@ -727,12 +779,14 @@ export function buildPlan(projects, agents, opts = {}) {
   // one would be a worse defect than the one this package fixes.
   //
   // IN TWO ROWS IT IS ROW ONE (WP-59d, narrowed by WP-60): the part of the
-  // building beside the reception that holds the rooms. Row two used to be in
-  // it as well, because the idle strip took the right of it and a strip is
-  // content; with the strip gone the lounge IS row two, and a lounge is a room
-  // that fills its own rectangle rather than a side to be filled.
+  // building beside the reception that holds the rooms. With the idle strip
+  // gone the lounge IS row two, and a lounge is a room that fills its own
+  // rectangle rather than a side to be filled.
   const workingArea = rows ? workingWidth * fitted.h1 : Math.max(0, workingWidth) * H;
-  const takenArea = projectRooms.reduce((a, pr) => a + pr.room.w * pr.room.h, 0);
+  // The pinned strip is CONTENT and not open floor: somebody asked for it.
+  const takenArea =
+    projectRooms.reduce((a, pr) => a + pr.room.w * pr.room.h, 0) +
+    strip.rooms.reduce((a, r) => a + r.w * r.h, 0);
   // THE BARE CARPET, REPORTED (WP-60).
   //
   // `ROOM_FILL_MAX` used to be a LIMIT: a band of rooms stopped short of its
@@ -765,9 +819,9 @@ export function buildPlan(projects, agents, opts = {}) {
     /** (b) — how tightly the lounge was packed; 1 is the room untouched. */
     loungePack: (rows ? rows.pack : chosen.measured.pack) ?? 1,
     /** (c) — the open plan left under the content, in units. */
-    openH: rows
-      ? Math.max(0, fitted.h1 - (projectRooms.length ? bandH : 0))
-      : Math.max(0, H - (projectRooms.length ? bandH : 0)),
+    openH: Math.max(0, workingBottom - pinH - slackY),
+    /** The depth the pinned strip took along the bottom of it (WP-77). */
+    pinnedH: pinH,
   };
 
   return {

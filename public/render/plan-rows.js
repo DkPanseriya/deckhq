@@ -57,6 +57,7 @@ import {
   ROOM_FILL_COLUMN_MAX,
   LOUNGE_ROW_ASPECT_MAX,
   LOUNGE_ROW_MIN_W,
+  loungeCeiling,
   MARGIN,
   MIN_PROJECT_ROOM_W,
   OFFICE_MAX_W,
@@ -82,10 +83,16 @@ import {
  *   the reception laid on its side, that wide and at least that deep
  * @param {(w:number, h:number, pack:number) => {room: Room, loungeSpots: any[]}} deps.lounge
  * @param {number} deps.waiting agents in the reception's queue
+ * @param {number} [deps.benched] people drawn in the lounge — what its height
+ *   ceiling is a function of (WP-77)
+ * @param {(askedBandH:number, workingW:number) => number} [deps.reserve] the
+ *   pinned strip's depth along the bottom of row one (WP-77)
  * @param {ReturnType<typeof import('./plan-envelope.js').createWorkingFloor>} deps.floor
  */
 export function createRowFloor(deps) {
   const { projectRooms, naturalOf, office, waiting, floor } = deps;
+  const benched = Math.max(0, Number(deps.benched) || 0);
+  const reserveOf = deps.reserve || (() => 0);
   const { bandDepthCeiling, bandsOf, costWorkingFloor, layWorkingFloor, workingShape } = floor;
 
   /**
@@ -127,9 +134,12 @@ export function createRowFloor(deps) {
    * @type {Map<string, {room:Room, loungeSpots:any[]}>}
    */
   const loungeCache = new Map();
-  const lounge = (w, h, pack) => {
+  const lounge = (w, h, pack, restH = 0) => {
     const grid = Math.floor(w / 2) * 2;
-    const key = h > 0 ? '' : `${grid}@${pack}`;
+    // `restH` joins the key because the ceiling below is a function of it, and
+    // a cached lounge measured against a shallower row one would be the wrong
+    // height for this candidate.
+    const key = h > 0 ? '' : `${grid}@${pack}@${Math.round(restH)}`;
     const hit = key ? loungeCache.get(key) : null;
     if (hit) return hit;
     const built = deps.lounge(key ? grid : w, h, pack);
@@ -138,9 +148,24 @@ export function createRowFloor(deps) {
     // `ROOM_FILL_MAX` of what is in it is the bare-carpet defect §106 removed,
     // and a wide row can ask for a great deal of padding: at 250 units the
     // proportion alone would make it 78 deep for nineteen units of furniture.
+    //
+    // AND NEVER PAST THE SHARE OF THE BUILDING ITS OCCUPANTS ARE WORTH (WP-77).
+    // The two bounds above are both stated against the ROW's width, which on a
+    // wide floor is an enormous licence: the `three` floor's lounge came out
+    // 27.7 of 57.1 units — half the building — with nobody in it, and the same
+    // 27.7 with fifteen. `loungeCeiling` is the third bound and the only one
+    // that knows who is in the room. It caps the PADDING and never the
+    // contents: `built.room.h` is what the furniture needs, and the `max` below
+    // is what keeps it.
+    //
+    // Three terms and two of them are HARD. The contents and the proportion are
+    // floors the room may not go under — furniture outside its room, and a
+    // lounge thinner than `LOUNGE_ROW_ASPECT_MAX` stops reading as a room at
+    // all — and the padding between them is what the ceiling bounds.
     built.room.h = Math.max(
       built.room.h,
-      Math.min(w / LOUNGE_ROW_ASPECT_MAX, built.room.natural.h * ROOM_FILL_MAX),
+      w / LOUNGE_ROW_ASPECT_MAX,
+      Math.min(built.room.natural.h * ROOM_FILL_MAX, loungeCeiling(benched, restH)),
     );
     if (key) loungeCache.set(key, built);
     return built;
@@ -198,7 +223,7 @@ export function createRowFloor(deps) {
     const asked = projectRooms.length ? shape.h * bandDepth : 0;
     const row = rowOne(askedW, roomsW, asked);
     if (!row) return null;
-    const back = rowTwo(row.W, pack);
+    const back = rowTwo(row.W, pack, row.h1 + CORRIDOR);
     const { W, h1, bandH, forced, ow } = row;
     const H = h1 + CORRIDOR + back.h2;
 
@@ -227,6 +252,7 @@ export function createRowFloor(deps) {
       asked,
       bandH,
       forced,
+      pinH: row.pinH,
       pack,
       rowCount: 1,
       askedW,
@@ -275,8 +301,13 @@ export function createRowFloor(deps) {
     // to widen a footnote. With the strip gone, so is the whole question.
     const w1 = Math.max(OFFICE_MIN_W, askedW) + roomsW;
     const owWanted = Math.max(w1, LOUNGE_ROW_MIN_W) - roomsW;
+    // WP-77. The pinned strip stands along the bottom of row one, under the
+    // rooms, so the row is as deep as the rooms AND the strip. It is depth the
+    // rooms give up — which is exactly what pinning asks for, and why it is a
+    // user action and never a derived one.
+    const pinH = reserveOf(asked, roomsW);
     let front = measureFront(owWanted, 0);
-    let h1 = Math.max(front.room.h, asked, MARGIN * 4);
+    let h1 = Math.max(front.room.h, asked + pinH, MARGIN * 4);
     // A row deeper than a reception can be is not a row this arrangement can
     // lay: the office would leave a strip of nothing under it, which is the
     // one thing the service side has never done. The column takes that floor.
@@ -299,9 +330,16 @@ export function createRowFloor(deps) {
     // these rooms past the depth it would have chosen", which the integrity
     // test reads — is exactly the comparison against it. A flag raised for
     // nothing is worse than no flag.
-    const bandH = projectRooms.length ? h1 : 0;
+    const bandH = projectRooms.length ? Math.max(0, h1 - pinH) : 0;
     const ceiling = projectRooms.length ? bandDepthCeiling(1, roomsW, ROOM_FILL_COLUMN_MAX) : 0;
-    return { ow, h1, W: ow + roomsW, bandH, forced: bandH > Math.max(asked, ceiling) + 1e-6 };
+    return {
+      ow,
+      h1,
+      W: ow + roomsW,
+      bandH,
+      pinH,
+      forced: bandH > Math.max(asked, ceiling) + 1e-6,
+    };
   };
 
   /**
@@ -321,8 +359,8 @@ export function createRowFloor(deps) {
    * Which is exactly what WP-60 wants of it: row two takes what its benched
    * population is worth, and row one's rooms get the rest of the building.
    */
-  const rowTwo = (W, pack) => {
-    const back = lounge(W, 0, pack);
+  const rowTwo = (W, pack, restH) => {
+    const back = lounge(W, 0, pack, restH);
     return { loungeW: W, h2: Math.max(back.room.h, MARGIN * 4) };
   };
 
@@ -370,7 +408,7 @@ export function createRowFloor(deps) {
       asked *= Math.min(worstH, 1.25);
     }
 
-    const back = rowTwo(row.W, chosen.pack);
+    const back = rowTwo(row.W, chosen.pack, row.h1 + CORRIDOR);
     return {
       W: row.W,
       H: row.h1 + CORRIDOR + back.h2,
@@ -378,6 +416,7 @@ export function createRowFloor(deps) {
       ow: row.ow,
       roomsW,
       bandH: row.bandH,
+      pinH: row.pinH,
       forced: row.forced,
       laid,
       ...back,
@@ -385,7 +424,7 @@ export function createRowFloor(deps) {
       // their contents in and a wall-anchored sofa cannot drift from the rug
       // it surrounds — the two-frames defect §57 removed.
       office: frontFor(row.ow, row.h1),
-      lounge: lounge(back.loungeW, back.h2, chosen.pack),
+      lounge: lounge(back.loungeW, back.h2, chosen.pack, row.h1 + CORRIDOR),
     };
   };
 

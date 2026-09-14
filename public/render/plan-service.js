@@ -19,6 +19,7 @@ import {
   LOUNGE_GAP,
   LOUNGE_MAX_GAMES,
   LOUNGE_PACKS,
+  LOUNGE_SOFA_GROUP_H,
   MARGIN,
   MINGLE_PITCH,
   MINGLE_PITCH_MIN,
@@ -90,12 +91,15 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   };
 
   // ---- the lounge proper: sofas facing a television, on a round rug
+  // The deepest block in the room, and therefore the one that decides how short
+  // an empty lounge can be — `LOUNGE_MIN_H` is arithmetic over it (WP-77), so
+  // the depth is named there rather than written twice.
   blocks.push({
     id: 'living',
     w: 15,
-    h: 11,
+    h: LOUNGE_SOFA_GROUP_H,
     place(x, y) {
-      const z = { id: 'living-zone', x, y, w: 15, h: 11 };
+      const z = { id: 'living-zone', x, y, w: 15, h: LOUNGE_SOFA_GROUP_H };
       zones.push(z);
       at(z, 'rug_round', 1.5, 1.5, 12, 8);
       at(z, 'tv', 4.5, 0, 6, 0.6);

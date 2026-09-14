@@ -1,224 +1,36 @@
 /**
- * The plan's vocabulary: what the shapes ARE, and how big things are.
+ * The plan's vocabulary: how big things are.
  *
  * Split out of `plan.js` by WP-22. Every other `plan-*.js` module imports from
  * here and none of them import each other's constants, so a dimension has one
- * definition and one place to change it. The typedefs live here for the same
- * reason: `plan.js` re-exports them, so `import('./plan.js').Room` — which
- * `agents.js`, `scene.js` and `backdrop.js` all write — still resolves.
+ * definition and one place to change it.
  *
- * Pure data and two arithmetic helpers. No DOM, no imports of its own.
- */
-
-/** @typedef {'working'|'needs_input'|'stalled'|'for_review'|'ended'} ActivityState */
-/** @typedef {'active'|'benched'|'let_go'} AckState */
-
-/**
- * @typedef {object} AgentLike
- * @property {string} [id]
- * @property {string} [projectId]
- * @property {AckState} [ackState]
- * @property {ActivityState} [activityState]
- * @property {number} [lastActivityAt] ms epoch; drives the gone-home filter
- */
-
-/**
- * @typedef {object} ProjectLike
- * @property {string} [id]
- * @property {string} [projectId]
- * @property {string} [name]
- * @property {string} [projectName]
- * @property {number} [sessionCount]
- * @property {number} [projectMk] the MK number this project's identity colour
- *   is derived from (CONTRACTS-WP15.md §1). Assigned once and persisted, which
- *   is what lets WP-72 tint the room's carpet with it.
- * @property {number} [tokens]
- * @property {number} [needsYou]
- * @property {boolean} [hasDashboard] the project has a runnable dashboard
- * @property {boolean} [archived] the user collapsed this project off the floor
- * @property {number} [lastActivityAt] ms epoch of the newest session in it
- * @property {number|null} [todaySpend] WP-26's payroll meter; see `payrollLine`
- * @property {boolean} [todaySpendIsToday] whether that figure is today's
- */
-
-/**
- * How a prop's position was derived. Every prop carries one.
- * @typedef {{type:'zone', of:string, dx:number, dy:number}
- *   | {type:'wall', side:'N'|'S'|'E'|'W', along:number, inset?:number}
- *   | {type:'corner', corner:'NE'|'NW'|'SE'|'SW', inset?:number}
- *   | {type:'attached', to:string, edge:'N'|'S'|'E'|'W', along:number, gap?:number}
- *   | {type:'centered', of:string}} Anchor
- */
-
-/**
- * A furniture instance the backdrop paints.
+ * THE SHAPES WENT TO `plan-shapes.js` (WP-77), which is the same remedy applied
+ * one level down: this file held "what the shapes ARE, and how big things are"
+ * and WP-77's constants took it past WP-22's own 900-line ceiling. Every
+ * typedef is re-declared below, so `import('./plan-units.js').Room` — which
+ * `plan.js` re-exports and a dozen modules write — resolves as it always did.
  *
- * `x, y` is the TOP-LEFT corner, in absolute units — the same convention as
- * `Room`, `Zone` and `Wall`, so every rectangle in the renderer means the same
- * thing. `backdrop.js` translates to the rect centre before drawing.
- *
- * @typedef {object} Prop
- * @property {string} kind
- * @property {number} x
- * @property {number} y
- * @property {number} w
- * @property {number} h
- * @property {number} angle
- * @property {Anchor} anchor
- * @property {string} [id] required on anchor targets
+ * Pure data and a handful of arithmetic helpers. No DOM, and one type-only
+ * import.
  */
 
-/**
- * A structural rectangle inside a room — a table's footprint, a sofa group, an
- * activity slice. Never painted; it exists so anchors have something real to
- * refer to.
- * @typedef {object} Zone
- * @property {string} id
- * @property {number} x
- * @property {number} y
- * @property {number} w
- * @property {number} h
- */
-
-/**
- * A wall segment on a zone boundary. Walls are properties of the FLOOR, not of
- * a room: two zones either side of a partition share one wall, which is what
- * makes the plan read as one building.
- * @typedef {object} Wall
- * @property {number} x1
- * @property {number} y1
- * @property {number} x2
- * @property {number} y2
- * @property {'exterior'|'solid'|'partition'} kind
- * @property {{at:number, width:number}} [door] gap along the segment
- */
-
-/**
- * @typedef {object} Room
- * @property {'office'|'project'|'lounge'|'corridor'} kind
- * @property {string} id
- * @property {string} name
- * @property {number} x
- * @property {number} y
- * @property {number} w
- * @property {number} h
- * @property {'full'|'partial'} walls
- * @property {[string, string]|[string, string, string]} plateLines
- *   Name, one data line, and — project rooms only, WP-26 — a quiet payroll
- *   line. The third is `''` when there is nothing honest to put there, and a
- *   renderer that only knows about two lines is correct to ignore it.
- * @property {Prop[]} props
- * @property {Zone[]} zones
- * @property {'wood'|'carpet'|'tile'|'circulation'} floor
- * @property {number} [projectMk] project rooms only: the MK number this
- *   project's identity colour is derived from, which is what tints its carpet
- *   (WP-72). Absent on every other kind of room, and `identityFor` is total,
- *   so a room whose MK has not resolved yet still paints.
- * @property {{x:number,y:number,w:number,h:number}} [kitchenZone]
- * @property {number} [plateBand] height reserved across the top of the room for
- *   its plate. `PLATE_BAND` on every room that carries one.
- * @property {{w:number, h:number}} [natural] what this room's own contents need,
- *   before the packer gives it a cell (WP-55, docs/DEVIATIONS.md §106).
- * @property {boolean} [landscape] the reception, laid on its side for a row
- *   (WP-59d): the waiting area runs along its width and the desk is at one
- *   end. `seatOffice` reads it to walk the runs in queue order.
- * @property {boolean} [thoroughfare] a corridor nobody routes down when false.
- * @property {{x:number,y:number}} [door] where an occupant leaves the room, set
- *   by `assignDoors` once the nav graph exists.
- * @property {{x:number,y:number}} [navEntry] the point on the corridor that door
- *   opens onto.
- * @property {string} [navLineId] which nav line `navEntry` sits on.
- */
-
-/**
- * @typedef {object} Seat
- * @property {number} x
- * @property {number} y
- * @property {number} angle radians; the occupant faces this direction
- * @property {boolean} [standing] WP-78: a place in the office queue, which has
- *   no chair under it. The rig draws its occupant on its feet.
- */
-
-/**
- * @typedef {object} LoungeSpot
- * @property {string} id
- * @property {'pool'|'table_tennis'|'board_game'|'arcade'|'coffee'|'eat'|'chat'|'lounge_idle'} kind
- * @property {number} x
- * @property {number} y
- * @property {number} angle
- * @property {number} capacity
- * @property {string} [partnerOf]
- */
-
-/**
- * One walkable corridor centreline.
- *
- * It used to be declared inside `buildNavLines`'s own doc comment, which is
- * why `agents.js` could reference `NavLine` in five annotations with nothing
- * defining it there (WP-22, `docs/DEVIATIONS.md` §122 defect 3). It is a shape,
- * so it lives with the other shapes.
- *
- * @typedef {object} NavLine
- * @property {string} id
- * @property {'h'|'v'} axis
- * @property {number} c    the constant coordinate: y for 'h', x for 'v'
- * @property {number} min  start along the varying axis
- * @property {number} max  end along the varying axis
- */
-
-/**
- * @typedef {object} Door
- * @property {number} x
- * @property {number} y
- * @property {number} angle
- * @property {number} width
- */
-
-/**
- * @typedef {object} Plan
- * @property {number} width
- * @property {number} height
- * @property {number} targetAspect
- * @property {Room[]} rooms tiling the envelope, sharing boundaries
- * @property {Wall[]} walls
- * @property {NavLine[]} nav corridor centrelines; the only walkable routes
- * @property {Map<string, Seat[]>} seats keyed by projectId
- * @property {Seat[]} officeSeats
- * @property {LoungeSpot[]} loungeSpots
- * @property {Seat[]} letGoSpots always empty: an archived session has no place
- *   on the floor at all. Kept so a renderer can ask without a guard.
- * @property {Door[]} doors
- * @property {Set<string>} hidden agent ids the plan draws nobody for
- * @property {Set<string>} goneHome the subset of `hidden` that went home
- * @property {WorkingSide} working what the working side did with the height
- *   the service column gave it (WP-59c)
- * @property {Arrangement} arrangement which shape the envelope search chose
- *   (WP-59d): `column` is the service column beside the working side, which
- *   every floor before this package was laid as; `two-rows` is the office
- *   beside the rooms over the lounge beside the strip.
- */
-
-/** @typedef {'column'|'two-rows'} Arrangement */
-
-/**
- * @typedef {object} WorkingSide
- * @property {number} x the working side's left edge, in units
- * @property {number} w its width
- * @property {number} open the fraction of it nobody stands on
- * @property {number} bareCarpet the worst room's bare fraction — floor inside
- *   a room its furniture does not occupy. REPORTED, never enforced (WP-60):
- *   `ROOM_FILL_MAX` used to stop a band short of its row rather than let this
- *   rise, which bought tidiness with a bay of open floor beside the rooms.
- * @property {boolean} roomsStretched (a) — the rooms were made deeper than the
- *   plan would have chosen, to meet the service column
- * @property {number} loungePack (b) — how tightly the lounge was packed; `1`
- *   is the room untouched
- * @property {number} openH (c) — the open plan left under the rooms, in units
- *
- * There used to be a `stripCols` between (a) and (b) — the columns the idle
- * strip had been laid in — because the strip standing its lines up was a step
- * of the fill order. WP-60 took the strip off the floor and the step with it.
- */
+/** @typedef {import('./plan-shapes.js').ActivityState} ActivityState */
+/** @typedef {import('./plan-shapes.js').AckState} AckState */
+/** @typedef {import('./plan-shapes.js').AgentLike} AgentLike */
+/** @typedef {import('./plan-shapes.js').ProjectLike} ProjectLike */
+/** @typedef {import('./plan-shapes.js').Anchor} Anchor */
+/** @typedef {import('./plan-shapes.js').Prop} Prop */
+/** @typedef {import('./plan-shapes.js').Zone} Zone */
+/** @typedef {import('./plan-shapes.js').Wall} Wall */
+/** @typedef {import('./plan-shapes.js').Room} Room */
+/** @typedef {import('./plan-shapes.js').Seat} Seat */
+/** @typedef {import('./plan-shapes.js').LoungeSpot} LoungeSpot */
+/** @typedef {import('./plan-shapes.js').NavLine} NavLine */
+/** @typedef {import('./plan-shapes.js').Door} Door */
+/** @typedef {import('./plan-shapes.js').Plan} Plan */
+/** @typedef {import('./plan-shapes.js').Arrangement} Arrangement */
+/** @typedef {import('./plan-shapes.js').WorkingSide} WorkingSide */
 
 /** Pixels per unit at scale 1. */
 export const U = 14;
@@ -484,18 +296,37 @@ export const OFFICE_ROW_MAX_DEPTH = 60;
 export const OFFICE_ROW_ASPECT_MAX = 3.2;
 
 /**
- * And the same bound on the lounge at the end of the other row (WP-59d).
+ * And the same bound on the lounge at the end of the other row (WP-59d,
+ * remeasured by WP-77).
  *
  * §139 gave the column lounge the reception's own rule — "a wider column is a
  * taller one, and the lever is self-limiting" — because a lounge shelf-packed
  * into a wide budget comes out as a gallery: eighty units of row two with a
  * television at one end and a pool table at the other is 4.2:1, which is a
- * corridor with sofas in it. The floor under its height is the same sentence
- * read on the row's axis, and it is self-limiting for the same reason: a wider
- * row is a taller building, and a taller building stops being the shape a wide
- * window wants.
+ * corridor with sofas in it.
+ *
+ * WP-77 RAISED IT TO 5.4, AND THE REASON IS WHAT THE BOUND WAS BUYING. It is a
+ * FLOOR ON THE LOUNGE'S DEPTH, not a cap on its width — the width is the
+ * building's, because row two is the whole of it — so at 3.2 it was padding an
+ * empty lounge from 19.4 units to 28 to keep a ratio. That padding is bare
+ * carpet INSIDE the lounge, which is the defect §106 removed one room over, and
+ * it was the eight units the owner was looking at when he said _"the lounge is
+ * very big, the whole bottom half"_.
+ *
+ * What row two actually is, once the lounge is the size of what is in it, is a
+ * PROMENADE: one block deep, with the sofa group, the kitchen counter, the
+ * quiet corner and a games table strung along the bottom of the building and
+ * the standing band running past them. That is a thing an office floor has. A
+ * gallery is what you get when the room is padded to a ratio it has nothing to
+ * put in.
+ *
+ * 5.4 is measured rather than chosen: the worst two-row lounge over
+ * `floor-integrity`'s sixteen populations at five aspects, with the occupancy
+ * ceiling in force, is 5.19:1. The bound is still enforced as a floor on the
+ * depth, so it is self-proving — `plan.test.mjs` §3.8 asserts the aspect and
+ * cannot fail while this is the number the depth is floored at.
  */
-export const LOUNGE_ROW_ASPECT_MAX = 3.2;
+export const LOUNGE_ROW_ASPECT_MAX = 5.4;
 
 /**
  * The narrowest the lounge may be laid in a row (WP-59d).
@@ -649,6 +480,76 @@ export const ROOM_PAD = 3.8;
 export const MIN_PROJECT_ROOM_W = 15;
 export const MIN_PROJECT_ROOM_H = 13;
 
+/**
+ * THE PINNED ROOM (WP-77) — the room a repo keeps with nobody in it.
+ *
+ * The owner: _"Pin any particular project room so it is always in a room, so
+ * the room does not collapse when agents are not running, maybe downsized
+ * according to live agents."_ The second half is the whole of the sizing rule:
+ * a room with nobody in it is not a room that earns a room's floor. It gets one
+ * desk, nobody at it, no juniors' seats, and **at most a third of a live room's
+ * footprint in the same plan**.
+ *
+ * A third is guaranteed rather than aimed at, and it takes both axes to do it:
+ *
+ *   - the DEPTH is `PINNED_DEPTH_SHARE` of the depth the band of live rooms
+ *     asked for, so a pinned room is always the shallower thing in the picture;
+ *   - and the WIDTH is then capped so the AREA lands under the third, measured
+ *     against the NARROWEST live room actually laid. Depth alone cannot do it:
+ *     a strip room as wide as the row would be a third of the depth and all of
+ *     the width, which is a corridor with a desk in it.
+ *
+ * `PINNED_MIN_H` is the floor under the depth share, and it is measured off
+ * what has to stand in the room: a desk is `TABLE_DEPTH` deep and wants clear
+ * floor on both sides of it, so five units of interior under the plate. Below
+ * that the room is a rug and a name, which is honest but is not what pinning
+ * was asked for. `PINNED_ROW_MIN_W` is how much width one pinned room is dealt
+ * before the strip wraps to a second row.
+ */
+export const PINNED_DEPTH_SHARE = 0.32;
+export const PINNED_MIN_H = 5 + PLATE_BAND;
+export const PINNED_MAX_H = 14;
+export const PINNED_ROW_MIN_W = 14;
+/** The most of a live room's footprint a pinned one may take. */
+export const PINNED_AREA_SHARE = 1 / 3;
+
+/**
+ * How deep one row of the pinned strip is laid, for a band of live rooms that
+ * asked to be `askedBandH` deep.
+ *
+ * Read off what the band ASKED for rather than off what it ended up with,
+ * because the strip's height has to be reserved before the fill order runs and
+ * the fill order only ever makes the band deeper. So this is an upper bound on
+ * `PINNED_DEPTH_SHARE` of the depth the rooms actually get, which is what makes
+ * the third a guarantee rather than an aim.
+ * @param {number} askedBandH
+ */
+export function pinnedRowDepth(askedBandH) {
+  const asked = Number(askedBandH) || 0;
+  if (asked <= 0) return PINNED_MIN_H;
+  return clamp(asked * PINNED_DEPTH_SHARE, PINNED_MIN_H, PINNED_MAX_H);
+}
+
+/** How many pinned rooms stand side by side in a working side this wide. */
+export function pinnedPerRow(workingW) {
+  return Math.max(1, Math.floor(Math.max(0, Number(workingW) || 0) / PINNED_ROW_MIN_W));
+}
+
+/**
+ * The height the pinned strip reserves at the bottom of the working side.
+ * Zero when nothing is pinned, which is every floor that has not been told
+ * otherwise.
+ * @param {number} count
+ * @param {number} workingW
+ * @param {number} askedBandH
+ */
+export function pinnedBandHeight(count, workingW, askedBandH) {
+  const n = Math.max(0, Number(count) || 0);
+  if (n === 0) return 0;
+  const rows = Math.ceil(n / pinnedPerRow(workingW));
+  return rows * pinnedRowDepth(askedBandH);
+}
+
 /** Shortest sofa run worth sitting on, in units. */
 export const SOFA_MIN_RUN = 5.2;
 
@@ -739,6 +640,99 @@ export function visitorChairCount(interiorW) {
  * where nothing is happening and gives the room up.
  */
 export const OFFICE_SURPLUS_SHARE = 0.55;
+
+/**
+ * THE SOFA GROUP, and the floor it puts under the lounge (WP-77).
+ *
+ * The living room — a television, a rug, two sofa runs, a coffee table and the
+ * lamp beside it — is the deepest block the lounge lays, so it is the block
+ * that decides how short an empty lounge can be. Stated here rather than inside
+ * `buildLounge` because `LOUNGE_MIN_H` is arithmetic over it and the two must
+ * not drift.
+ */
+export const LOUNGE_SOFA_GROUP_H = 11;
+
+/**
+ * THE SMALLEST THE LOUNGE MAY BE, whatever the ceiling below says (WP-77).
+ *
+ * One sofa group, the clear floor either side of it, and the plate across the
+ * top. An empty lounge is still a lounge — "a cleared queue is the reward and
+ * an empty grey box is not much of one" — and a room shorter than the furniture
+ * in it would draw the furniture outside itself, which is the one thing the
+ * plan may never do.
+ *
+ * It is a FLOOR and not a target: the lounge is as tall as its contents need,
+ * and this is only what stops the contents being argued below themselves.
+ */
+export const LOUNGE_MIN_H = LOUNGE_SOFA_GROUP_H + MARGIN * 2 + PLATE_BAND;
+
+/**
+ * HOW MUCH OF THE BUILDING'S HEIGHT THE LOUNGE MAY BE PADDED TO (WP-77).
+ *
+ * The owner, 14 September: _"The lounge is very big, the whole bottom half."_
+ * He was right, and the measurement is worse than the sentence: on the `three`
+ * floor at 1600 x 1000 the lounge came out **27.7 of 57.1 units — 49% of the
+ * building — with NOBODY IN IT**, and the identical 27.7 with fifteen people in
+ * it. Its height had nothing to do with its occupants. It was
+ * `LOUNGE_ROW_ASPECT_MAX` and `ROOM_FILL_MAX` between them: a room padded out
+ * to keep a proportion against a row that is a hundred units wide.
+ *
+ * So the proportion keeps a CEILING over it, and the ceiling is a function of
+ * who is in the room:
+ *
+ *   ≤ 5 people   25% of the building's height
+ *   each 5 more  five points more, to 50%
+ *
+ * A CEILING ON PADDING AND NEVER A CAP ON CONTENTS. The lounge is first the
+ * size of what it must hold — the clusters, the games and the standing band
+ * `buildLounge` lays for every benched agent — and this only ever removes the
+ * padding ON TOP of that. Where the two disagree the contents win, because a
+ * room smaller than its furniture is the defect and a room larger than its
+ * furniture is merely wasteful.
+ *
+ * The honest measurement, stated so nobody reads the number as a promise: at
+ * `LOUNGE_MIN_H` (19.4) on a 49 U building the lounge is 40% of the height, not
+ * 25%. The share bites on the PADDING, which on the owner's own floor was eight
+ * units of it, and the floor minimum is what is left. `docs/DEVIATIONS.md`
+ * §154.
+ */
+export const LOUNGE_SHARE_MIN = 0.25;
+export const LOUNGE_SHARE_MAX = 0.5;
+export const LOUNGE_SHARE_STEP = 0.05;
+/** People the smallest lounge holds before the ceiling takes its first step. */
+export const LOUNGE_QUIET_MAX = 5;
+/** And how many more arrivals buy the next step. */
+export const LOUNGE_SHARE_PER = 5;
+
+/**
+ * The share of the building's height the lounge may be padded to, for a lounge
+ * with `n` people drawn in it. A pure function of the count and nothing else —
+ * no clock, no stage, no randomness.
+ * @param {number} n
+ */
+export function loungeShareFor(n) {
+  const over = Math.max(0, (Number(n) || 0) - LOUNGE_QUIET_MAX);
+  const steps = Math.ceil(over / LOUNGE_SHARE_PER);
+  return clamp(LOUNGE_SHARE_MIN + steps * LOUNGE_SHARE_STEP, LOUNGE_SHARE_MIN, LOUNGE_SHARE_MAX);
+}
+
+/**
+ * The tallest the lounge may be padded to, given the rest of the building.
+ *
+ * `restH` is everything that is NOT the lounge — the reception's row and the
+ * corridor under it, or the reception above it in a column — so the share is
+ * solved rather than guessed: `h ≤ s(restH + h)` is `h ≤ s·restH / (1 - s)`.
+ * Stating it this way is what lets the ceiling be applied before the building's
+ * height is known, which is the only moment the lounge's own height is still
+ * being decided.
+ *
+ * @param {number} n people drawn in the lounge
+ * @param {number} restH the building without it, in units
+ */
+export function loungeCeiling(n, restH) {
+  const s = loungeShareFor(n);
+  return Math.max(LOUNGE_MIN_H, (s * Math.max(0, Number(restH) || 0)) / (1 - s));
+}
 
 /**
  * Gap between two furniture groups in the lounge, and the pitch of the

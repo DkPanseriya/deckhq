@@ -41,8 +41,17 @@ import {
  * @param {(i:number) => number} [occupancyOf] how many agents are at desks in
  *   room `i` — what its cell's WIDTH is shared out by since WP-60, and a
  *   different question from what its furniture happens to measure
+ * @param {(askedBandH:number, workingW:number) => number} [reserveOf] how much
+ *   of the working side's height is NOT the rooms' to take — the pinned strip
+ *   along the bottom of it (WP-77). Zero on every floor with nothing pinned,
+ *   which is every floor until somebody says otherwise.
  */
-export function createWorkingFloor(projectRooms, naturalOf, occupancyOf = () => 1) {
+export function createWorkingFloor(
+  projectRooms,
+  naturalOf,
+  occupancyOf = () => 1,
+  reserveOf = () => 0,
+) {
   /**
    * How much floor each project is worth, relative to the others.
    *
@@ -607,6 +616,12 @@ export function createWorkingFloor(projectRooms, naturalOf, occupancyOf = () => 
     let forced = chosen.forced;
     let bandH = chosen.bandH;
     let asked = chosen.asked ?? chosen.bandH;
+    // WP-77. The pinned strip's depth, taken off the top of what the rooms may
+    // grow into. Recomputed inside the loop because both of its inputs — the
+    // depth the band asked for, and the width the working side settled on —
+    // change under the fit loop, and a reservation priced against a floor that
+    // no longer exists is a strip drawn over a room.
+    let reserve = reserveOf(asked, workingW);
     for (let pass = 0; pass < 8; pass++) {
       // Rebuilding a room changes what its furniture needs, so the deal the
       // bands were cut from is stale the moment the previous pass touched one.
@@ -618,9 +633,13 @@ export function createWorkingFloor(projectRooms, naturalOf, occupancyOf = () => 
       // loop has since rebuilt them into their cells, so the rooms are a
       // different size and the answer has to be asked again. Asked through the
       // same function, so the two can be wrong together but never differently.
-      const order = fillOrder(chosen.rowCount, workingW, H, Math.min(asked, Math.max(1, H)));
+      reserve = reserveOf(asked, workingW);
+      // The rooms grow into the working side LESS the pinned strip. Everything
+      // below is unchanged: the strip is simply not theirs to fill.
+      const roomsH = Math.max(1, H - reserve);
+      const order = fillOrder(chosen.rowCount, workingW, roomsH, Math.min(asked, roomsH));
       forced = order.forced;
-      bandH = Math.min(order.bandH, Math.max(1, H));
+      bandH = Math.min(order.bandH, roomsH);
       laid = projectRooms.length
         ? layWorkingFloor({ x: workingX, y: 0, w: workingW, h: bandH }, chosen.rowCount)
         : { cells: [], corridors: [] };
@@ -650,9 +669,9 @@ export function createWorkingFloor(projectRooms, naturalOf, occupancyOf = () => 
       if (worstW <= 1.0005 && worstH <= 1.0005) break;
       workingW *= Math.min(worstW, 1.25);
       asked *= Math.min(worstH, 1.25);
-      H = Math.max(H, asked);
+      H = Math.max(H, asked + reserve);
     }
-    return { H, W, workingW, workingX, laid, bandH, forced };
+    return { H, W, workingW, workingX, laid, bandH, forced, pinH: reserve };
   };
 
   return {

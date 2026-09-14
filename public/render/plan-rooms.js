@@ -35,6 +35,7 @@ import {
   RUG_MAX_OVER_COLUMN,
   RUG_ROOM_INSET,
   SEAT_PITCH,
+  TABLE_DEPTH,
   TABLE_GAP,
   WHITEBOARD_H,
   angleTo,
@@ -88,6 +89,189 @@ export function payrollLine(project) {
   return project.todaySpendIsToday
     ? `today ${amount} · list price`
     : `${amount} to date · list price`;
+}
+
+// ------------------------------------------------------------ a pinned room
+
+/**
+ * THE ROOM A PINNED REPO KEEPS WITH NOBODY IN IT (WP-77).
+ *
+ * The owner, 14 September: _"Pin any particular project room so it is always in
+ * a room, so the room does not collapse when agents are not running, maybe
+ * downsized according to live agents."_
+ *
+ * So: a room, and a small one. One desk, **nobody at it** — no chair, no
+ * monitor, no junior's seat, because a chair with nobody on it is the oldest
+ * defect in this file and a desk nobody is at is the second oldest. What it
+ * carries instead is the three things that make a rectangle read as *that
+ * repo's room* rather than as a bay: its carpet washed toward its own identity
+ * colour (WP-72), a rug, and a plate with its name on it.
+ *
+ * IT IS BUILT AT THE CELL IT IS GIVEN and never at a natural size of its own.
+ * A pinned room is a placeholder: the cell it gets is decided by the third rule
+ * (`PINNED_AREA_SHARE` of the narrowest live room), so the furniture is
+ * designed into whatever came back rather than laid out and then centred — the
+ * two-frames defect §57 removed, which is easier to avoid than to fix. Where
+ * the cell is too small for a desk and the clearance round it, the room is a
+ * rug and a plate and says so honestly rather than drawing a desk through a
+ * wall.
+ *
+ * @param {ProjectLike} project
+ * @param {{w:number,h:number}} cell the rectangle this room has been given
+ * @returns {{ room: Room }}
+ */
+export function buildPinnedRoom(project, cell) {
+  const id = String(project.id ?? project.projectId ?? 'unknown');
+  const name = String(project.name ?? project.projectName ?? id);
+  const sessionCount = project.sessionCount ?? 0;
+
+  const w = Math.max(4, Number(cell?.w) || 0);
+  const h = Math.max(PLATE_BAND + 2, Number(cell?.h) || 0);
+  const interiorH = h - PLATE_BAND;
+
+  /** @type {Prop[]} */
+  const props = [];
+  /** @type {Zone[]} */
+  const zones = [];
+
+  // The room's own floor, as a zone, so the rug and the desk are centred on
+  // something real rather than on arithmetic that could drift from it.
+  const inset = Math.min(1.2, Math.min(w, interiorH) * 0.12);
+  zones.push({
+    id: `${id}-pinned-floor`,
+    x: inset,
+    y: inset,
+    w: Math.max(1, w - inset * 2),
+    h: Math.max(1, interiorH - inset * 2),
+  });
+  props.push({
+    kind: 'rug',
+    w: Math.max(1, w - inset * 2),
+    h: Math.max(1, interiorH - inset * 2),
+    angle: 0,
+    x: inset,
+    y: inset,
+    anchor: { type: 'centered', of: `${id}-pinned-floor` },
+  });
+
+  // One desk, centred, only where the room can hold it with clear floor round
+  // it. `TABLE_DEPTH` is what a desk IS; anything shallower is a desk drawn
+  // through the plate above it.
+  const deskW = clamp(w * 0.45, 3.2, 8);
+  if (interiorH >= TABLE_DEPTH + 1.6 && w >= deskW + 2) {
+    const deskId = `${id}-pinned-desk`;
+    zones.push({
+      id: deskId,
+      x: (w - deskW) / 2,
+      y: (interiorH - TABLE_DEPTH) / 2,
+      w: deskW,
+      h: TABLE_DEPTH,
+    });
+    props.push({
+      kind: 'desk',
+      id: `${deskId}-top`,
+      w: deskW,
+      h: TABLE_DEPTH,
+      angle: 0,
+      x: (w - deskW) / 2,
+      y: (interiorH - TABLE_DEPTH) / 2,
+      anchor: { type: 'centered', of: deskId },
+    });
+  }
+
+  /** @type {Room} */
+  const room = {
+    kind: 'project',
+    id,
+    name,
+    x: 0,
+    y: 0,
+    w,
+    h,
+    projectMk: project.projectMk,
+    plateBand: PLATE_BAND,
+    // Its natural size IS the cell: a pinned room never bids for floor. If it
+    // did, the envelope search would price an empty repo against a room with
+    // people in it, which is the whole thing WP-50 took off the floor.
+    natural: { w, h },
+    // The one flag the renderer and the tests read to tell this room from a
+    // live one. `kind` stays `project` on purpose: it is a project's room, it
+    // is painted by the same painter, and a new room kind would be three
+    // painters and a plate rule for a rectangle that differs only in what is
+    // in it.
+    pinned: true,
+    walls: 'partial',
+    floor: 'carpet',
+    plateLines: [
+      name,
+      // The badge. A word rather than a pill, because a plate is live text on
+      // the floor (CONTRACTS-WP15.md §3) and a second painted object over a
+      // room this small would be drawn through its own name.
+      `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
+      '',
+    ],
+    props,
+    zones,
+  };
+  return { room };
+}
+
+/**
+ * LAY THE PINNED STRIP along the bottom of the working side (WP-77).
+ *
+ * The rooms take the depth they need, the pinned rooms take the strip the fill
+ * order reserved for them, and open plan is what is left under both. That is
+ * WP-59c's order with one thing inserted before the open plan rather than a new
+ * order: a pinned room is CONTENT — a repo the user asked to keep — and content
+ * goes before the carpet nobody stands on.
+ *
+ * A THIRD OF THE NARROWEST LIVE ROOM, and the WIDTH is where that is settled.
+ * The strip's depth is already `PINNED_DEPTH_SHARE` of the band's (see
+ * `pinnedRowDepth`); this is what stops a shallow room that is as wide as the
+ * row from being half of a live one anyway. Against the NARROWEST rather than
+ * the largest, because that is the comparison a person actually makes: the
+ * pinned room has to read as the small one beside every room with somebody in
+ * it. Whatever a pinned room does not take of its share is open floor, never a
+ * wider pinned room.
+ *
+ * @param {ProjectLike[]} projects the pinned projects, in floor order
+ * @param {{x:number,y:number,w:number,h:number}} rect the strip
+ * @param {number} perRow how many stand side by side — `pinnedPerRow(rect.w)`
+ * @param {number} areaCap the most floor one pinned room may take, or
+ *   `Infinity` where there is no live room to be a third of
+ * @returns {{rooms: Room[], gaps: {x:number,y:number,w:number,h:number}[]}}
+ */
+export function layPinnedStrip(projects, rect, perRow, areaCap) {
+  /** @type {Room[]} */
+  const rooms = [];
+  /** @type {{x:number,y:number,w:number,h:number}[]} */
+  const gaps = [];
+  const list = Array.isArray(projects) ? projects : [];
+  if (!list.length || rect.h <= 0.01 || rect.w <= 1) return { rooms, gaps };
+
+  const stripRows = Math.ceil(list.length / Math.max(1, perRow));
+  const rowH = rect.h / stripRows;
+  // Shared by HOW MANY THERE ARE, not by how many would fit. `pinnedPerRow` is
+  // the wrap — when to start a second row — and reading it as the share left
+  // two thirds of the strip bare whenever one repo was pinned on a floor with
+  // room for three. Where the third rule still bites, what the rooms do not
+  // take is open floor: that is the price of a pinned room being a third of a
+  // live one, and it is a price paid in carpet rather than in a lie.
+  const cellW = Math.max(2, Math.min(rect.w / Math.min(perRow, list.length), areaCap / rowH));
+  for (let r = 0; r < stripRows; r++) {
+    const y = rect.y + r * rowH;
+    let x = rect.x;
+    for (const project of list.slice(r * perRow, (r + 1) * perRow)) {
+      const built = buildPinnedRoom(project, { w: cellW, h: rowH });
+      built.room.x = x;
+      built.room.y = y;
+      rooms.push(built.room);
+      x += cellW;
+    }
+    const restW = rect.x + rect.w - x;
+    if (restW > 0.005) gaps.push({ x, y, w: restW, h: rowH });
+  }
+  return { rooms, gaps };
 }
 
 // ------------------------------------------------------------ project zones
