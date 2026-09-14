@@ -2344,6 +2344,115 @@ button {
   pointer-events: none;
 }
 
+/* ======================================================================
+   WP-84 · THE WAY BACK — the chrome every full-surface view carries
+
+   docs/plan/05-GUI-UX-SPEC.md §3.4, docs/DEVIATIONS.md §156. A view that
+   replaces the floor or covers the window gets "Back to floor" at the top
+   left, its own title with the shortcut printed in it, and ✕ at the top
+   right. Three children, one row, the title taking the slack — so the two
+   controls sit in the corners a hand goes to whatever the view is.
+
+   Both controls are real buttons in the tab order, and `:focus-visible`'s
+   global ring is what marks them: nothing here suppresses an outline.
+   ====================================================================== */
+
+.surface-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+/* The deck scrolls. The bar must not scroll away from under the pointer that
+   is reaching for it, which is the whole complaint this package answers. */
+.deck > .surface-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* Over a scrim, the bar spans the window rather than the card, because the
+   scrim is what the click is escaping from. */
+.surface-chrome--over {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border-bottom-color: var(--line-2);
+}
+
+.surface-title {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+/* The shortcut is IN the title, not in a tooltip: a way out nobody can see is
+   not a way out. */
+.surface-title kbd {
+  margin-left: 0.45rem;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  line-height: 1;
+  vertical-align: 0.08em;
+}
+
+.surface-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.surface-back:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.surface-arrow {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.surface-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.surface-close:hover {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
 /* ------------------------------------------------------------- the deck */
 
 /* The deck replaces the floor inside the stage, so the panel beside it keeps
@@ -2750,9 +2859,18 @@ textarea.field-input {
   z-index: 60;
   display: grid;
   place-items: center;
-  padding: 2rem;
+  /* WP-84 · room at the top for the surface chrome, which is absolute so the
+     board itself stays centred in what is left. */
+  padding: 4.2rem 2rem 2rem;
   background: rgba(9, 10, 14, 0.62);
   backdrop-filter: blur(2px);
+}
+/* `display: contents` so the board is still the grid item `place-items`
+   centres — the wrapper exists only to be the thing `showWhiteboard()` empties
+   and refills, which it can no longer do to the scrim now that the chrome
+   lives there. */
+.whiteboard-scrim > .surface-body {
+  display: contents;
 }
 .whiteboard-board {
   position: relative;

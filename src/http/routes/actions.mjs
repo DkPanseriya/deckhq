@@ -17,6 +17,8 @@ import { discoverActions, openUrl, revealInFileManager, runAction } from '../../
 import { ACK_ACTIONS, splitAgentId } from '../../core/model.mjs';
 import { RESUME_TARGETS } from '../../core/store.mjs';
 import { SendHub } from '../../core/sends.mjs';
+import { createPendingIdentities } from '../../core/pending-identity.mjs';
+import { now as clockNow } from '../../core/clock.mjs';
 
 /**
  * `git init` in a directory. argv array, never a shell string — the path is
@@ -436,40 +438,33 @@ export function register(router, ctx) {
 
   /**
    * A name and avatar chosen before the session existed, waiting for the scan
-   * that discovers it. Applied to the newest session in that directory, then
-   * dropped — so a queued identity can never attach itself to the wrong
-   * session weeks later.
-   * @type {{cwd:string, name?:string, avatar?:string, at:number}[]}
+   * that discovers it. The rule is `src/core/pending-identity.mjs`; what is
+   * left here is the two lines that put something in and write the result out.
+   * WP-84 / §156.
    */
-  const pendingIdentities = [];
-  const PENDING_TTL_MS = 5 * 60 * 1000;
+  const pendingIdentities = createPendingIdentities({ now: clockNow });
 
+  /** @param {string} cwd @param {any} name @param {any} avatar */
   function queuePendingIdentity(cwd, name, avatar) {
-    if (!name && !avatar) return;
-    pendingIdentities.push({ cwd, name, avatar, at: Date.now() });
+    pendingIdentities.queue(cwd, name, avatar);
   }
 
   registry.on(() => {
-    if (pendingIdentities.length === 0 || !ctx.identity) return;
-    const now = Date.now();
-    for (let i = pendingIdentities.length - 1; i >= 0; i--) {
-      const p = pendingIdentities[i];
-      if (now - p.at > PENDING_TTL_MS) {
-        pendingIdentities.splice(i, 1);
-        continue;
-      }
-      const match = registry.agents
-        .filter((a) => path.resolve(a.cwd || '') === p.cwd && !a.displayName)
-        .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0];
-      if (!match) continue;
+    if (pendingIdentities.size === 0 || !ctx.identity) return;
+    // §156. `snapshot().agents`, not `registry.agents`: `displayName` — "the
+    // user chose this name" — is applied in `snapshot()` and is absent from
+    // the raw merge, so the match's "only a session nobody has named" clause
+    // was reading `!undefined` and was always true. And `_agents` empty means
+    // `snapshot()` is the actor floor (WP-13), which is nobody real, so the
+    // queue is left alone rather than matched against a fixture.
+    const agents = registry.agents.length ? registry.snapshot().agents : [];
+    const applied = pendingIdentities.settle(agents);
+    if (applied.length === 0) return;
+    for (const { agent, name, avatar } of applied) {
       // §155. Written where it is read; see the rename route above.
-      ctx.identity.setDisplay(match.identityId || match.id, {
-        name: p.name ?? null,
-        avatar: p.avatar ?? null,
-      });
-      store.save();
-      pendingIdentities.splice(i, 1);
+      ctx.identity.setDisplay(agent.identityId || agent.id, { name, avatar });
     }
+    store.save();
   });
 
   /**

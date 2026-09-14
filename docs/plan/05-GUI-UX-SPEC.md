@@ -177,6 +177,43 @@ Replaces the floor with a full-width table. The panel stays. `Tab` returns to th
   surface, and pretending otherwise is the theater failure mode. It still *opens* on the floor —
   the aha is spatial — but a one-line hint appears: *"7 waiting · press Tab for the deck"*.
 
+### 3.4 Every full-surface view carries a way back (WP-84)
+
+_(This section takes 3.4 rather than 3.3. Several modules cite a "§3.3" about the day's card, which
+is [`04-ENGAGEMENT-AND-GAMIFICATION.md`](04-ENGAGEMENT-AND-GAMIFICATION.md) §3.3; taking the free
+number here would have silently pointed those comments at this rule.)_
+
+A **full-surface view** is anything that replaces the floor inside the stage, or covers the window
+with a scrim: the deck, the project board, the settings sheet, and anything added after them.
+`Tab` and `Esc` are real exits and the deck's hint teaches one of them, but a shortcut is not a
+control. The report that produced this rule:
+
+> _"Once the user clicks the agents tab, or the list of all who are waiting, there is literally no
+> button to close that panel or go back to the floor view."_
+
+**Every full-surface view carries, at its top edge, in this order:**
+
+1. **`← Back to floor`, top left.** It says where it goes, not only that it stops. It is what
+   somebody reads when they are lost, which is the state this rule is about.
+2. **The view's own title, with its shortcut printed in it** — `The deck  [Esc]`. A way out nobody
+   can see is not a way out, so the shortcut is on the surface rather than in a tooltip.
+3. **`✕`, top right.** The corner a hand goes to whatever the view is.
+
+Both controls are real `<button>`s in the tab order, both do the same thing — two affordances for
+one exit, never two different exits — and `Escape` closes the view as well. `Tab` continues to
+toggle the deck.
+
+**Closing a view closes the view.** Not the tab, not the window, not a history entry. This is not a
+hypothetical: a ✕ in this product once resolved to `window.close` and took the browser tab with it
+(`docs/DEVIATIONS.md` §143), so every close control is held by a gate that drives it against a
+window whose closing globals are counters.
+
+The list of views is `public/surfaces.js`, and it is not trusted on its own:
+`test/unit/surfaces.test.mjs` derives the candidates from the stylesheet — every rule that makes an
+element cover its container — and fails on any of them that is neither a marked view nor carried in
+an allowlist with a written reason. A view added without a way off it fails before anybody opens a
+browser.
+
 ## 4. The panel: from viewer to review surface
 
 This is where the daily work happens and it is currently the weakest screen in the product.

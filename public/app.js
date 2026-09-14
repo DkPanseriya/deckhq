@@ -19,6 +19,7 @@ import { createPanel } from './panel.js';
 import { createHooksUI } from './hooks-ui.js';
 import { createPalette } from './palette.js';
 import { createDeckUI } from './deck.js';
+import { wireSurfaceControls } from './surfaces.js';
 import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
 import { createIdlePopover } from './idle-projects.js';
@@ -454,6 +455,7 @@ setDeckUI(
     hintEl: el.stripHint,
     lastEl: el.stripLast,
     deckEl: el.deck,
+    deckBodyEl: el.deckBody,
     stageEl: el.stage,
     getQueue: () => getNeedsYouQueue(latestSnapshot),
     getSelectedId: () => selectedId,
@@ -561,6 +563,11 @@ el.whiteboardOverlay.addEventListener('click', (e) => {
   if (e.target === el.whiteboardOverlay) hideWhiteboard();
 });
 
+// WP-84 · the board is a full-surface view, so it carries ✕ and "Back to
+// floor" like every other one, and both resolve to `hideWhiteboard` — an
+// imported binding this module owns, never a bare global (§143).
+wireSurfaceControls(el.whiteboardOverlay, () => hideWhiteboard());
+
 // WP-39 · the floating mini-floor — begin -----------------------------------
 //
 // A 320x200 Document Picture-in-Picture window holding your office, the
@@ -645,7 +652,10 @@ const settingsUI = createSettingsUI({
   },
 });
 
-el.settingsClose.addEventListener('click', () => el.settingsDialog.close());
+// WP-84 · the sheet's ✕ and its "Back to floor", wired through the one
+// function every full-surface view's controls go through. `settingsUI.close()`
+// is the sheet's own; nothing here is a bare global (§143).
+wireSurfaceControls(el.settingsDialog, () => settingsUI.close());
 
 // WP-45. Floor replay, and it is FREE — it reads the ledger the user already
 // owns, and a feature that reads your own records cannot be sold (see
