@@ -600,6 +600,17 @@ export function parseSummary(headText, tailText, { id, mtimeMs, sidechain = fals
     lastActivityAt,
     tokens: inputTokens + outputTokens,
     cacheTokens: cacheReadTokens + cacheWriteTokens,
+    // WP-83. The four counters kept apart, exactly as the transcript's `usage`
+    // block wrote them. Claude Code is the one runtime here that names all
+    // four, so all four keys are present; see `TokenBreakdown` in
+    // `src/core/model.mjs` for why a key that a runtime does not name is
+    // omitted rather than zeroed.
+    tokenBreakdown: {
+      input: inputTokens,
+      output: outputTokens,
+      cacheRead: cacheReadTokens,
+      cacheWrite: cacheWriteTokens,
+    },
     costEstimate: estimateCost({
       input: inputTokens,
       output: outputTokens,

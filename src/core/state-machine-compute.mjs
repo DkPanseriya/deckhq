@@ -48,6 +48,7 @@ import { splitAgentId, projectIdFromCwd, projectNameFromCwd, clampText } from '.
 
 import { RegistrySnapshot } from './state-machine-snapshot.mjs';
 import { freshObserved, toAgentId, endedOr, compareAgents } from './state-machine-rules.mjs';
+import { copyBreakdown } from './usage.mjs';
 import { now as clockNow } from './clock.mjs';
 
 export class RegistryCompute extends RegistrySnapshot {
@@ -176,6 +177,12 @@ export class RegistryCompute extends RegistrySnapshot {
         obs.model = summary.model ?? null;
         obs.tokens = summary.tokens || 0;
         obs.cacheTokens = summary.cacheTokens || 0;
+        // WP-83. Copied key by key, never referenced: the same rule `toolMix`
+        // below states, for the same reason — a summary can come from the
+        // cache, and handing the registry a live handle on a cached object is
+        // what `summary-cache.mjs` rule 3 exists to prevent. A key the runtime
+        // did not name stays absent here too.
+        obs.tokenBreakdown = copyBreakdown(summary.tokenBreakdown);
         obs.costEstimate = summary.costEstimate ?? null;
         obs.lastRole = summary.lastRole ?? null;
         obs.turnEnded = summary.turnEnded === true;
@@ -331,6 +338,10 @@ export class RegistryCompute extends RegistrySnapshot {
         lastActivityAt: obs.lastActivityAt,
         tokens: obs.tokens,
         cacheTokens: obs.cacheTokens,
+        // WP-83. Present only when the runtime reported one, so a consumer can
+        // tell "this runtime does not split its usage" from "this session has
+        // spent nothing".
+        ...(obs.tokenBreakdown ? { tokenBreakdown: { ...obs.tokenBreakdown } } : {}),
         costEstimate: obs.costEstimate,
         lastRole: obs.lastRole,
         lastText: obs.lastText,

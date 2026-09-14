@@ -264,6 +264,14 @@ async function buildSessionSummary(found, mtimeMs, projectPaths) {
     lastActivityAt,
     tokens: inputTokens + outputTokens,
     cacheTokens: cachedTokens,
+    // WP-83. Three keys: the Gemini CLI logs prompt, candidate and cached
+    // content tokens, and nothing about cache writes. `cacheWrite` is omitted
+    // rather than zeroed — see `TokenBreakdown` in `src/core/model.mjs`.
+    tokenBreakdown: {
+      input: inputTokens,
+      output: outputTokens,
+      cacheRead: cachedTokens,
+    },
     costEstimate: estimateCost({
       input: inputTokens,
       output: outputTokens,

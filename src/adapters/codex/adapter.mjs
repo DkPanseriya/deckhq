@@ -319,6 +319,21 @@ async function buildSessionSummary(filePath, mtimeMs) {
     lastActivityAt,
     tokens: inputTokens + outputTokens,
     cacheTokens: cachedInputTokens,
+    // WP-83. THREE keys, not four. A Codex rollout names its cached input and
+    // says nothing at all about cache writes, so `cacheWrite` is omitted —
+    // writing a zero there would turn "not measured" into "measured as none",
+    // and every usage table downstream would then print a confident 0 for a
+    // column no record ever carried. Absent entirely when the rollout had no
+    // usage event, which is the "only a total" case in `TokenBreakdown`.
+    ...(usage
+      ? {
+          tokenBreakdown: {
+            input: inputTokens,
+            output: outputTokens,
+            cacheRead: cachedInputTokens,
+          },
+        }
+      : {}),
     costEstimate: estimateCost({
       input: inputTokens,
       output: outputTokens,

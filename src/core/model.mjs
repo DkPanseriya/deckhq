@@ -67,6 +67,33 @@ export {
  */
 
 /**
+ * The four counters a turn is billed in, as the RUNTIME wrote them (WP-83).
+ *
+ * **A key is present only when the runtime named it.** That is the whole
+ * discipline of this type and the reason it is not four required numbers: a
+ * rollout that reports `cached_input_tokens` and nothing about cache writes is
+ * saying "I did not measure that", and writing `cacheWrite: 0` beside it would
+ * turn a silence into a claim. Every aggregate downstream reports a counter no
+ * record named as `no data` rather than as zero.
+ *
+ * Which runtime reports what, measured against the four adapters in this
+ * repository on 14 September 2026:
+ *
+ * | runtime | input | output | cacheRead | cacheWrite |
+ * |---|---|---|---|---|
+ * | `claude-code` | `input_tokens` | `output_tokens` | `cache_read_input_tokens` | `cache_creation_input_tokens` |
+ * | `codex` | `input_tokens` | `output_tokens` | `cached_input_tokens` | — |
+ * | `gemini-cli` | prompt tokens | candidate tokens | cached content tokens | — |
+ * | `opencode` | `tokens_input` | `tokens_output` | `tokens_cache_read` | `tokens_cache_write` |
+ *
+ * @typedef {object} TokenBreakdown
+ * @property {number} [input]
+ * @property {number} [output]
+ * @property {number} [cacheRead]
+ * @property {number} [cacheWrite]
+ */
+
+/**
  * @typedef {object} Agent
  * @property {string} id                 runtime session id, prefixed with the runtime
  * @property {RuntimeId} runtime
@@ -86,6 +113,9 @@ export {
  * @property {number} lastActivityAt
  * @property {number} tokens             input + output only
  * @property {number} cacheTokens        cache read + write
+ * @property {TokenBreakdown} [tokenBreakdown] WP-83. The same spend, split the
+ *                                      way the runtime itself split it. Absent
+ *                                      when the runtime reported only a total.
  * @property {number|null} costEstimate  list-price equivalent, or null when the
  *                                      rate card has no row for this model. NEVER a bill.
  * @property {'user'|'assistant'|null} lastRole
@@ -143,6 +173,9 @@ export {
  * @property {number} lastActivityAt
  * @property {number} tokens
  * @property {number} cacheTokens
+ * @property {TokenBreakdown} [tokenBreakdown] WP-83. Absent when this runtime
+ *   reports only a total; a KEY is absent when it reports only some of the
+ *   four. See {@link TokenBreakdown}.
  * @property {number|null} costEstimate  null when the model has no rate
  * @property {'user'|'assistant'|null} lastRole
  * @property {string} lastText

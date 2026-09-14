@@ -371,6 +371,19 @@ function toSummary(row, messages) {
     lastActivityAt: row.updatedAt || row.createdAt || Date.now(),
     tokens: row.inputTokens + row.outputTokens,
     cacheTokens: row.cacheTokens,
+    // WP-83. All four, because the `session` table has all four. The `list`
+    // fallback sets `split: false` and gets no breakdown at all: it reports no
+    // usage, and an object of zeros would claim it did.
+    ...(row.split
+      ? {
+          tokenBreakdown: {
+            input: row.inputTokens,
+            output: row.outputTokens,
+            cacheRead: row.cacheReadTokens,
+            cacheWrite: row.cacheWriteTokens,
+          },
+        }
+      : {}),
     costEstimate: estimateCost({
       input: row.inputTokens,
       output: row.outputTokens,

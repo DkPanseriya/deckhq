@@ -16,6 +16,19 @@ import { createHash } from 'node:crypto';
 /** Every `kind` this module writes. Anything else on a line is ignored. */
 export const LEDGER_KINDS = /** @type {const} */ (['session', 'state', 'action', 'send', 'tokens']);
 
+/**
+ * What version of the `tokens` record this build writes (WP-83).
+ *
+ * `1` is every `tokens` line this product wrote before WP-83: `delta`,
+ * `tokens`, `cacheDelta`, `cacheTokens`, and no version field at all. `2` adds
+ * the four-way split (`in`, `out`, `cacheRead`, `cacheWrite`), the `split`
+ * flag that says whether the runtime gave one, and the `model` and `tool` that
+ * spent it — and it changes NONE of the v1 fields, which is why a ninety-day
+ * ledger written by an older build still totals correctly. An absent `v` reads
+ * as 1; see `src/core/usage.mjs`.
+ */
+export const LEDGER_TOKENS_VERSION = 2;
+
 /** How often the buffer is written, at most. WP-17: "at most every 2 s". */
 export const FLUSH_INTERVAL_MS = 2000;
 
