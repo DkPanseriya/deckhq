@@ -48,7 +48,13 @@ import { projectKeyFor } from './ledger.mjs';
  */
 
 import { RegistryCompute } from './state-machine-compute.mjs';
-import { SCAN_MAX_AGE_DAYS, SCAN_LIMIT, TICK_INTERVAL_MS } from './state-machine-rules.mjs';
+import { collapseResumed } from './resume-chain.mjs';
+import {
+  SCAN_MAX_AGE_DAYS,
+  SCAN_LIMIT,
+  TICK_INTERVAL_MS,
+  toAgentId,
+} from './state-machine-rules.mjs';
 import { now as clockNow } from './clock.mjs';
 
 export class RegistryScan extends RegistryCompute {
@@ -164,17 +170,37 @@ export class RegistryScan extends RegistryCompute {
       }
     }
 
-    this._lastSummaries = summaries;
-    this._lastLive = live;
+    // §155. ONE CONVERSATION, ONE SESSION — applied here, before anything downstream sees the
+    // scan, so the seed, the archive sync and the merge all agree about who exists. A resumed
+    // conversation is a new session id and a new transcript file, and until this the registry
+    // made a second agent for it: a second MK number, a second first name, and a second body on
+    // the floor in a different zone. `resume-chain.mjs` holds the rule and the inference it rests
+    // on; nothing here writes.
+    const collapsed = collapseResumed(summaries);
+    this._lastSummaries = collapsed.summaries;
+    this._identityOf = collapsed.identityOf;
+    this._absorbed = collapsed.absorbed;
+    // A session that has been resumed is no longer a session, so its observation record is not
+    // the state of anything. Dropped rather than left to rot — `_observed` is the half no user
+    // owns, and the store's ack record for that id is deliberately untouched.
+    for (const id of collapsed.supersededBy.keys()) this._observed.delete(id);
+    // And the liveness roster too, or a superseded id reported alive would walk back on with no
+    // summary behind it — `_computeAgents` unions the two lists.
+    this._lastLive = collapsed.supersededBy.size
+      ? live.filter((l) => !collapsed.supersededBy.has(toAgentId(l.runtime, l.id)))
+      : live;
 
     try {
-      await seedIfNeeded(this.store, summaries, clockNow());
+      await seedIfNeeded(this.store, this._lastSummaries, clockNow());
     } catch (err) {
       this.log.error('seeding failed', err);
     }
 
     this._scannedAt = clockNow();
-    this._syncArchived(summaries);
+    // §155. The collapsed list, not the raw scan. A superseded transcript is not a session
+    // any more, and archiving it in the Claude Code app must not move `ackState` on a record
+    // nothing draws — `_syncArchived` is the one place in this file that writes.
+    this._syncArchived(this._lastSummaries);
     this._rebuild();
     await this._refreshDashboards();
     this._emitIfChanged();

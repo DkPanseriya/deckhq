@@ -553,6 +553,21 @@ undelivered install is visible instead of assumed to be fine.
 
 These are real, and listed here rather than discovered later.
 
+- **Which sessions are the same resumed conversation is inferred, not reported.** Claude Code gives
+  a resumed chat a new session id and a new transcript file, and nothing in that file names the one
+  it continues — there is no `resumedFrom` field, and the desktop bridge's own id differs between a
+  session and its own resume. So DeckHQ reads the first message record of each transcript and treats
+  two files in the same project that share one as the same conversation, which is sound because a
+  record id is random and per record: two files can only share one by one having been copied from
+  the other. Measured on 101 real transcripts, where it found 92 conversations. Two consequences it
+  is honest about: the same conversation resumed from a **different working directory** stays two
+  agents, because deciding which repo it really belongs to would need evidence nobody has; and a
+  deliberate **`--fork-session`** branch would be collapsed into one agent, which has never been
+  seen in real data and would be wrong if you use it. Codex, Gemini CLI and OpenCode report no such
+  id, so for those runtimes nothing is inferred and nothing is collapsed. `docs/DEVIATIONS.md` §155.
+- **Given names run out.** The pool is 60 first names and a busy machine has more sessions than
+  that, so past sixty you get `Wren 2`, `Wren 3`. The number is not a duplicate — no two agents ever
+  wear the same name — it is the pool being smaller than your history. `docs/DEVIATIONS.md` §155.2.
 - **Gemini CLI and OpenCode support is unverified.** Both adapters are implemented against each
   runtime's documented on-disk format or published CLI, and **neither has ever run against real
   data**, because neither runtime is installed on the development machine. Each reports itself

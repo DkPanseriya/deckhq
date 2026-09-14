@@ -351,6 +351,12 @@ export class RegistryCompute extends RegistrySnapshot {
         subagentDescription: junior && summary ? (summary.subagentDescription ?? null) : null,
         spawnedAt: junior && summary ? (summary.spawnedAt ?? null) : null,
         juniorCount: 0,
+        // §155. Its own id, except at the live end of a resume chain: there it wears the name and
+        // the MK number of the chain's earliest session, because that is the identity the user
+        // learned and a `--resume` must not take it away. Nothing is reassigned by this — the
+        // survivor's own identity record stays in the store, unread.
+        identityId: this._identityOf?.get(id) ?? id,
+        supersedes: this._absorbed?.get(id) ?? [],
       };
       agents.push(agent);
     }

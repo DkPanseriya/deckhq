@@ -340,7 +340,11 @@ export function register(router, ctx) {
       return sendError(res, 400, 'Give a name or an avatar to set');
     }
 
-    const rec = ctx.identity.setDisplay(id, patch);
+    // §155. The identity is written where it is READ. For every agent that has never been
+    // resumed those are the same id; for the live end of a resume chain the name lives on the
+    // chain's earliest session, and writing the rename anywhere else would be a rename the floor
+    // never shows.
+    const rec = ctx.identity.setDisplay(agent.identityId || id, patch);
     await store.save();
     registry.emitNow?.();
     return sendJson(res, 200, { ok: true, id, ...rec });
@@ -422,7 +426,11 @@ export function register(router, ctx) {
         .filter((a) => path.resolve(a.cwd || '') === p.cwd && !a.displayName)
         .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0];
       if (!match) continue;
-      ctx.identity.setDisplay(match.id, { name: p.name ?? null, avatar: p.avatar ?? null });
+      // §155. Written where it is read; see the rename route above.
+      ctx.identity.setDisplay(match.identityId || match.id, {
+        name: p.name ?? null,
+        avatar: p.avatar ?? null,
+      });
       store.save();
       pendingIdentities.splice(i, 1);
     }

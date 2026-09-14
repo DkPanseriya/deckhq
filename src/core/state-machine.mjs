@@ -181,6 +181,16 @@ export class Registry extends RegistryHooks {
     this._observed = new Map();
     /** @type {SessionSummary[]} */
     this._lastSummaries = [];
+    /**
+     * §155. What the last scan's resume collapse decided, by agent id: whose name each survivor
+     * wears, and what it absorbed. Empty on a machine where nobody has ever resumed anything,
+     * which is most of them. Derived per scan and never persisted — it is a reading of the
+     * transcripts on disk, not a fact about the user.
+     * @type {Map<string, string>}
+     */
+    this._identityOf = new Map();
+    /** @type {Map<string, string[]>} */
+    this._absorbed = new Map();
     /** @type {LiveSession[]} */
     this._lastLive = [];
     /** @type {Agent[]} */

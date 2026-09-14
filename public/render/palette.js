@@ -185,6 +185,27 @@ export function appearanceFor(sessionId) {
 }
 
 /**
+ * The face of one AGENT, rather than of one session id (§155).
+ *
+ * `appearanceFor` above is a pure function of the id it is given and stays exactly that. This is
+ * the one place that decides WHICH id an agent's face is drawn from, so every surface that draws a
+ * person — the floor, the panel, the mini-floor, the tooltip — asks the same question once instead
+ * of four times.
+ *
+ * It matters because a resumed conversation arrives under a new session id. The name and the MK
+ * number already follow the chain's earliest session (`Agent.identityId`), and a face that did not
+ * follow with them would mean the person the user knows as Tai turns into a stranger the moment
+ * the conversation is picked back up. `identityId` is its own id for every agent that has never
+ * been resumed, which is nearly all of them.
+ *
+ * @param {{id?: string, identityId?: string}} agent
+ * @returns {Appearance}
+ */
+export function appearanceOf(agent) {
+  return appearanceFor((agent && (agent.identityId || agent.id)) || '');
+}
+
+/**
  * The one quiet word the interface is allowed to say about rarity, or `null`
  * for a common agent (which is most of them, and which gets no word at all).
  *

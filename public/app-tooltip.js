@@ -39,9 +39,11 @@ export function placeNearCursor(node, maxW) {
  * @returns {string|null}
  */
 function rarityWordFor(agent) {
-  if (!agent || !palette?.appearanceFor || !palette?.rarityWord) return null;
+  if (!agent || !palette?.appearanceOf || !palette?.rarityWord) return null;
   try {
-    return palette.rarityWord(palette.appearanceFor(agent.id).tier);
+    // §155. `appearanceOf` rather than `appearanceFor(agent.id)`: a resumed session keeps the
+    // face of the conversation it continues, and one place decides which id that is.
+    return palette.rarityWord(palette.appearanceOf(agent).tier);
   } catch (err) {
     console.debug('[deckhq] rarityWord failed', err);
     return null;

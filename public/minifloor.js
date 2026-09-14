@@ -33,7 +33,7 @@
  */
 
 import { U } from './render/plan.js';
-import { PALETTE, identityFor, appearanceFor } from './render/palette.js';
+import { PALETTE, identityFor, appearanceOf } from './render/palette.js';
 import { setLightShadow } from './render/backdrop.js';
 import { drawCharacter } from './render/rig.js';
 import { sampleClip } from './render/clips.js';
@@ -147,7 +147,7 @@ function corridorBeside(plan, office) {
  *   lod:0|1, offsetX:number, offsetY:number,
  *   people:{id:string,x:number,y:number,sx:number,sy:number,angle:number,clip:string,
  *     t:number,color:string,icon:'hand'|'hourglass'|'check'|null,
- *     projectMk:number|undefined,avatar:string|undefined,
+ *     projectMk:number|undefined,avatar:string|undefined,identityId:string|undefined,
  *     selected:boolean,inOffice:boolean}[],
  *   officeIds:string[], numeral:number, handsUp:number}}
  */
@@ -297,6 +297,10 @@ export function composeMiniFrame(frame, view) {
       // fetched to draw a person here.
       projectMk: agent.projectMk,
       avatar: agent.avatar,
+      // §155. The id the face is drawn from, which is the agent's own except at the live end of
+      // a resume chain. Carried rather than re-derived, so the mini-floor cannot disagree with
+      // the floor about who somebody is.
+      identityId: agent.identityId,
       selected: rec.id === selectedId,
       inOffice,
     });
@@ -450,7 +454,7 @@ export function drawMiniFrame(ctx, composed, opts) {
       // are waiting — the body, its state colour and its icon are the whole
       // message. A name is one click away in the full floor.
       identity: identityFor(person.projectMk, person.avatar),
-      appearance: appearanceFor(person.id),
+      appearance: appearanceOf(person),
       selected: person.selected,
       reduced,
     });

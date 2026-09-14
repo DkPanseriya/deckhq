@@ -47,8 +47,12 @@ export class RegistryBase {
   _stoppedJuniors;
   /** @type {any} */ // the previous liveness roster
   _lastLive;
-  /** @type {any} */ // the previous scan
+  /** @type {any} */ // the previous scan, with resume chains already collapsed (§155)
   _lastSummaries;
+  /** @type {Map<string,string>} */ // survivor agent id -> the id whose name it wears (§155)
+  _identityOf;
+  /** @type {Map<string,string[]>} */ // survivor agent id -> the ids it absorbed, oldest first
+  _absorbed;
   /** @type {string|null} */ // the snapshot signature last emitted
   _lastKey;
   /** @type {number|null} */ // when the last scan finished
