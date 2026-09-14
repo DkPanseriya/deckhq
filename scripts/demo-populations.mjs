@@ -198,8 +198,33 @@ export const POPULATIONS = {
     ['data-pipeline', 'Backfill 2024 events', 'benched', 63, 1.4],
     ['infra-terraform', 'Move state to a remote backend', 'benched', 55, 0.6],
   ],
+  /**
+   * THE `three` FLOOR WITH ONE REPO PINNED (WP-77).
+   *
+   * The same nine sessions, so the two captures differ in exactly one thing:
+   * `data-pipeline` has nobody in it and the user has asked it to keep a room
+   * anyway. What the picture has to show is the strip along the bottom of the
+   * working side — one small room, one desk, nobody at it, a plate that says
+   * `pinned` — and the three live rooms still filling their row above it.
+   *
+   * Its own population rather than a pin on `three` because `three` is WP-59b's
+   * LAYOUT case and has to go on photographing a floor with nothing pinned on
+   * it: a golden that answers two questions answers neither when it moves.
+   */
+  pinned: () => POPULATIONS.three(),
   reference: referenceSessions,
 };
+
+/**
+ * The project folders the `pinned` population pins (WP-77), by name. The floor
+ * addresses a project by the SLUG of its directory, and the directory is inside
+ * the fixture, so the id cannot be written down here — `demo-floor.mjs` turns
+ * these into ids with `projectIdFromCwd` against the fixture root it just built.
+ *
+ * Empty for every other population, which is what keeps the other seven goldens
+ * a photograph of a floor with nothing pinned on it.
+ */
+export const PINNED_PROJECTS = POPULATION === 'pinned' ? ['data-pipeline'] : [];
 
 if (!POPULATIONS[POPULATION]) {
   process.stderr.write(

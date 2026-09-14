@@ -144,8 +144,12 @@ const RUN_BUDGET_MS = Number(opt('--budget', 360)) * 1000;
  * cannot be split evenly into, and it is the shape that showed the packer
  * dealing two-and-one and drawing the lone room beside two thirds of a bare
  * band.
+ *
+ * `pinned` is WP-77's, and it is `three` with one repo pinned: the same nine
+ * sessions, so the two captures differ in exactly one thing and the strip along
+ * the bottom of the working side is the whole of what moved.
  */
-const POPULATIONS = ['demo', 'empty', 'single', 'three', 'reference'];
+const POPULATIONS = ['demo', 'empty', 'single', 'three', 'pinned', 'reference'];
 
 /**
  * The captures this gate takes: the five default-theme populations, plus one

@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPlan, formatTokens, payrollLine, U } from '../../public/render/plan.js';
 import { idleProjectsOf } from '../../public/floor-rule.js';
-import { OFFICE_ROW_ASPECT_MAX } from '../../public/render/plan-units.js';
+import { LOUNGE_ROW_ASPECT_MAX, OFFICE_ROW_ASPECT_MAX } from '../../public/render/plan-units.js';
 
 const EPS = 1e-6;
 // docs/DEVIATIONS.md §12: 05-LAYOUT-REWORK.md §2.2's [1.60, 1.78] clamp and
@@ -265,8 +265,15 @@ test('§3.8 a 21-session project seats every session, and every room in its plan
     // lounge in arrangement B are the ends of two rows and are as wide as the
     // row makes them, with the waiting area along the width and the desk at
     // one end. `OFFICE_ROW_ASPECT_MAX` is where that stops reading as a room.
+    //
+    // THE LOUNGE HAS ITS OWN, AND IT IS LOOSER SINCE WP-77. Row two is the
+    // whole width of the building, so the bound there is a floor on the
+    // lounge's DEPTH rather than a cap on its width — at 3.2 it was padding an
+    // empty lounge by eight units of bare carpet to keep a ratio, which is what
+    // the owner was looking at when he called it "the whole bottom half". See
+    // `LOUNGE_ROW_ASPECT_MAX`.
     const inRow = plan.arrangement === 'two-rows' && (r.kind === 'office' || r.kind === 'lounge');
-    const max = inRow ? OFFICE_ROW_ASPECT_MAX : 1.8;
+    const max = inRow ? (r.kind === 'lounge' ? LOUNGE_ROW_ASPECT_MAX : OFFICE_ROW_ASPECT_MAX) : 1.8;
     const aspect = r.w / r.h;
     assert.ok(
       aspect >= 0.6 - EPS && aspect <= max + EPS,

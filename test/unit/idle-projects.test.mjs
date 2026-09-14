@@ -233,6 +233,6 @@ test('the idle rule is imported, not re-derived', () => {
   const src = fs.readFileSync(path.join(PUBLIC, 'idle-projects.js'), 'utf8');
   // `floor-rule.js` is the one copy of "which repos are idle" (`08` B6). A
   // second answer here is a floor and a list that can disagree about a repo.
-  assert.match(src, /import \{ idleProjectsOf \} from '\.\/floor-rule\.js'/);
+  assert.match(src, /import \{ idleProjectsOf, pinnedProjectsOf \} from '\.\/floor-rule\.js'/);
   assert.match(src, /import \{ formatElapsed \} from '\.\/render\/rig-metrics\.js'/);
 });
