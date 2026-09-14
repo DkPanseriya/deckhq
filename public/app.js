@@ -23,6 +23,7 @@ import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
 import { createIdlePopover } from './idle-projects.js';
 import { exportLayout, importLayout } from './app-layout.js';
+import { setProjectArchived, setProjectPinned } from './app-rooms.js';
 import { createClearedTracker } from './office-cleared.js';
 import {
   FALLBACK_STATE_COLORS,
@@ -503,20 +504,6 @@ async function refreshNow() {
   }
 }
 
-/** @param {string} projectId @param {boolean} archived */
-async function setProjectArchived(projectId, archived) {
-  try {
-    const res = await fetch('/api/project-archive', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: projectId, archived }),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  } catch (err) {
-    toast(`Could not change that room: ${err.message}`, { isError: true });
-  }
-}
-
 /**
  * Resume the selected session. The panel owns the footer links and the
  * preference they save; this is the palette's route to the same endpoint, for
@@ -702,6 +689,8 @@ const idleProjects = createIdlePopover({
   listEl: el.idleList,
   getSnapshot: () => latestSnapshot,
   onActivate: (projectId) => filterToProject(projectId),
+  // WP-77. The pin, on the row it was made from.
+  onPin: (projectId, pinned) => setProjectPinned(projectId, pinned),
   isSuppressed: () => replayUI.isOpen(),
 });
 // WP-60 · the idle projects — end --------------------------------------------
@@ -738,6 +727,7 @@ const paletteUI = createPalette({
     revealFolder: revealProjectFolder,
     runDashboard: runProjectDashboard,
     archiveProject: setProjectArchived,
+    pinProject: setProjectPinned, // WP-77
     newAgent: startNewAgent,
     newProject: openNewProject,
     floatOffice, // WP-39

@@ -3606,6 +3606,36 @@ textarea.field-input {
   font-size: 0.68rem;
 }
 
+/* WP-77 · the pin, on the row it belongs to.
+   Quiet until it matters: the same weight as the stat beside it while the repo
+   is merely idle, and carrying the accent once the room is on the floor. It is
+   the third thing in the row and it looks like it. */
+.idle-row-pin {
+  flex: 0 0 auto;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: var(--radius-sm);
+  padding: 0.02rem 0.34rem;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.idle-row:hover .idle-row-pin,
+.idle-row.is-active .idle-row-pin {
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+.idle-row-pin.is-pinned {
+  border-color: var(--line);
+  color: var(--ink);
+}
+.idle-row-pin:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
 /* docs/03-VISUAL-SPEC.md §10. The list is information; its four-pixel rise is
    decoration, and the person who asked for less motion still wants the names. */
 @media (prefers-reduced-motion: reduce) {
