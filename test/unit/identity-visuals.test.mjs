@@ -483,13 +483,21 @@ test('WP-20: skin tones are actually distinguishable from each other', () => {
 
 /**
  * The torso: the filled ellipse whose centre is nearest the character's own
- * origin. Nearest rather than largest, because the contact shadow is a WIDER
- * ellipse (SHADOW_RX 0.86 vs TORSO_RX 0.82) — it is just offset down and to
- * the side, which is exactly what distinguishes it.
+ * origin, once the contact shadow is out of the way.
+ *
+ * It used to be told apart by its OFFSET — the shadow was the wider ellipse
+ * drawn down and to the side. WP-78 put a character's shadow directly under
+ * its feet, which is the same point the torso is drawn about, so the offset is
+ * no longer a discriminator and the colour is: `shadowContact` is painted by
+ * the contact shadow and by nothing else on a character.
  */
 function torsoFill(calls, cx, cy) {
   const fills = calls.filter(
-    (c) => c.op === 'fill' && c.path.length === 1 && c.path[0].shape === 'ellipse',
+    (c) =>
+      c.op === 'fill' &&
+      c.path.length === 1 &&
+      c.path[0].shape === 'ellipse' &&
+      c.style !== PALETTE.shadowContact,
   );
   assert.ok(fills.length > 0, 'no filled ellipse was drawn at all');
   const from = (c) => Math.hypot(c.path[0].x - cx, c.path[0].y - cy);
