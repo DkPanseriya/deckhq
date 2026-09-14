@@ -14408,3 +14408,133 @@ the package that adds them, and a test asserts the body is one line and one key.
 `/api/studio/tracking` answers `{ cards: [], note: 'no data' }`, and a test asserts **no digit
 appears anywhere in the response** — not even a zero, which is §7's refusal and the same one the
 rate card already makes for a model it cannot price.
+
+## 151. WP-75 — install without friction, and the one question that replaces a command
+
+The owner, 14 September: _"from user perspective, if I want to share it with someone it is a lot of
+friction to have this many steps. Make it easy to install and use."_ The steps were four — install
+Node, install the package, `deckhq app`, `deckhq shortcut --install --yes` — and the last one is the
+one nobody discovers on their own. The target was **one thing to paste, then an icon**.
+
+25 tests were added: `test/unit/pin-offer.test.mjs` (10), `test/unit/install-scripts.test.mjs` (8),
+`test/integration/tarball.test.mjs` (1), five more in `test/unit/app-window.test.mjs`, and one in
+`test/unit/site.test.mjs`. The suite is 2069 tests, 2068 passing and the one platform skip that
+predates this package.
+
+### 151.1 The tarball is now run, not read
+
+`docs/plan/RELEASE-CHECKLIST.md` step 5 has always asked a human to read `npm pack --dry-run` and
+confirm the right files are in it. Every other test in this suite runs the source tree, where every
+file in the repository is present; what a stranger gets is `package.json`'s `files` list. A `src/`
+module that imports something outside it — a fixture, a script, a doc — passes the whole suite and
+throws `ERR_MODULE_NOT_FOUND` on the first machine that runs `npx deckhq`.
+
+`test/integration/tarball.test.mjs` packs, extracts and runs **that** bin with `--version` and
+`app --dry-run`, in a home of its own. Three things it measured on the way:
+
+1. **`npm` may not be spawned by name on Windows.** From Node 18.20 a `.cmd` needs `shell: true`,
+   and this test hands npm a directory path, which is precisely what must not go through `cmd.exe`
+   quoting (§98, from the other side). So it runs `npm-cli.js` with this Node: the `npm_execpath`
+   the suite was started with, or the copy beside the Node binary. A machine with neither skips and
+   says so.
+2. **`tar -xf C:\…` is a _hostname_ to GNU tar.** The `tar` on a Windows PATH is as likely to be Git
+   for Windows' GNU tar as the bsdtar in System32, and GNU tar read the extracted path as host `C`:
+   `tar: Cannot connect to C: resolve failed`. Fixed by handing it a bare filename and a `cwd`,
+   which neither implementation can mistake for a host.
+3. **The tarball was already complete.** Nothing was missing — `bin/`, `src/` including
+   `shortcut.ps1`, and both PNGs the icon is wrapped from are all in it. The test exists so that
+   stays true, not because it was not.
+
+`deckhq app --dry-run` was added for it, and is worth having anyway: it prints the daemon it would
+reuse or the exact argv it would spawn, and the browser command in full, and starts, opens and
+writes nothing. A test asserts the state directory is still empty afterwards.
+
+### 151.2 The pin offer, and why it is not a relaxed consent
+
+`deckhq app` on a machine with no shortcut recorded now prints the path list
+`deckhq shortcut --install` prints — the same function, unchanged — and asks one question: **"Put
+DeckHQ on your Desktop and Start Menu? [y/N]"**. Five rules hold it in place:
+
+1. **After the window, never before it.** The offer is for a shortcut to a thing the user can
+   already see. `--no-window` opens no window and therefore makes no offer.
+2. **`y` is exactly as strong as `--yes`, because it is the same answer to the same printed list.**
+   `runInstaller` gained one hook, `deps.confirm`, called only after `describePlan()` has been
+   written out; `deckhq app` passes the question through it rather than passing `--yes` behind the
+   user's back. There is one place in this package where a plan becomes files, and it is still
+   `apply()`.
+3. **Off a TTY there is no question**, one line naming the command instead. A prompt nobody can
+   answer hangs a login script — and `deckhq autostart` runs `deckhq app --no-window` at login.
+4. **An unanswered offer is not recorded as answered.** The no-TTY branch records nothing, so the
+   next interactive run still owes the question. Only a typed answer — either answer — writes
+   `app.pinOffered`.
+5. **Nothing is spawned to make an offer nobody is being asked.** Off a TTY the plan is not built,
+   which matters because building the Windows plan asks PowerShell where the real Desktop is
+   (§144.6).
+
+### 151.3 `app.pinOffered` is in `installed.json`, not `state.json`
+
+`state.json` gets exactly one writer and it is the daemon (§93): a CLI that wrote a flag into it
+would have the flag overwritten by the next debounced save, which is `deckhq layout import`'s reason
+and §150.8's. `installed.json` is already the file the CLI writes about installation, and a pin
+offer is about installation. `writeRecord()` now carries unknown top-level keys through instead of
+rebuilding `{ version, entries }`, so installing a shortcut cannot forget the answer and answering
+cannot forget the shortcut. A test asserts both directions.
+
+### 151.4 The installers are out-of-band, and that is what keeps rule 3 true
+
+`scripts/install/install.ps1` and `scripts/install/install.sh` check for Node, **offer** to install
+it, install the package, offer the icon, and open the window. They are not in the tarball —
+`package.json`'s `files` does not carry `scripts/` — and nothing in `src/` imports them, so the
+zero-runtime-dependency rule is untouched. A test asserts that `files` does not ship `scripts/`,
+which is the assertion that would notice somebody "fixing" it.
+
+Four things they are held to, by test:
+
+- **`install.ps1` is Windows PowerShell 5.1.** That is what a Windows machine has before anybody
+  installs anything. No `&&`, no `||`, no `??`, no `?.`, and no leading `param()` block — a script
+  arriving through `irm … | iex` is a _string_, and a param block is not allowed at the top of one.
+  The file is parsed by `[System.Management.Automation.Language.Parser]::ParseFile` and `install.sh`
+  by `bash -n`; a machine without either interpreter skips that test rather than passing quietly.
+- **`iex` must not close the user's terminal.** A top-level `exit` in an `iex`'d string exits the
+  _session_, so the script exits only when `$MyInvocation.MyCommand.Path` says it is running as a
+  file. And every native call goes through `Out-Host`: a PowerShell function returns everything it
+  wrote to the success stream, so `npm`'s own output would otherwise **be** the exit code.
+- **`curl … | sh` has the script on stdin**, so `read` would eat the script. Every question is asked
+  on `/dev/tty`, and a machine with no terminal is asked nothing and installs nothing but the
+  package it was run to install. The final `deckhq app --no-pin` is the same hazard from the other
+  end: the app's own question must not read the rest of the script.
+- **Node is never installed without a yes.** The package is what the user ran the script for; Node
+  is a second program on their machine, and the shortcut writes files in shared folders. Both are
+  behind the question. On Linux nothing is run at all — the distribution's command is printed and
+  the script stops, because a package manager asking for a password is not a conversation this
+  script may have on somebody's behalf.
+
+### 151.5 The URL is the Pages site, not a raw GitHub tag
+
+`site/build.mjs` copies both scripts into `site/dist`, and `.github/workflows/pages.yml` uploads
+that directory whole on every push to `main`, so they are at
+`https://dkpanseriya.github.io/deckhq/install.sh` the moment that workflow is green.
+`raw.githubusercontent.com/…/v1.3.0/…` sounds better and is worse: the tag does not exist until the
+release is cut, so the line printed in the README and on the home page would 404 between the merge
+and the tag — exactly when a stranger reads it. A test asserts the published bytes equal the
+repository's, so what is piped into a shell is a file that is reviewed, linted and in the history.
+
+`test/unit/site.test.mjs` guards the site against third-party hosts. `dkpanseriya.github.io` is now
+allowed in the _sources_ — it is a line printed for a reader to copy — and deliberately not in
+`LINKABLE`, so an `<a href>` to it would still fail, and the fetch test still refuses every absolute
+URL in a `src` or a `<link href>` whatever the host.
+
+### 151.6 What is not here
+
+No `public/` change and no goldens. Nothing written to `~/.claude` or `~/.codex`. No process
+killed — `--dry-run` starts none to kill, and the offer spawns nothing the shortcut installer did
+not already spawn. No standalone executable: `docs/plan/SEA-FEASIBILITY.md` reads Node's SEA feature
+against this package and recommends **not now** — it needs a bundler in front of a codebase that
+imports lazily on purpose (§92), an asset branch through `src/http/`, ~$300/yr of signing
+certificates and ~110 MB per platform per release, and WP-75 already gets a stranger to an icon.
+WP-76 is a planned row in `docs/plan/08-PLAN-V2-100X.md` §9 and nothing more.
+
+**Unverified:** neither installer has been executed end to end on a machine with no Node on it. Both
+are parsed by their own interpreters and read by tests; per `docs/plan/08-PLAN-V2-100X.md` §1.1 rule
+11 that makes them hypotheses until somebody runs one, and it is the same standing gap as the macOS
+bundle and the Linux desktop entry beside them.

@@ -8,6 +8,43 @@
 
 ### Added
 
+- **One line to install, one question to pin — WP-75.** Sharing DeckHQ used to be four steps:
+  install Node, install the package, `deckhq app`, `deckhq shortcut --install --yes`. It is now one
+  thing to paste and then an icon.
+  - **`npx deckhq app` is the first line of the README**, and a test proves it works cold:
+    `test/integration/tarball.test.mjs` runs `npm pack`, extracts the tarball into a temp directory
+    with a home of its own, and runs **that** `bin/deckhq.mjs` with `--version` and `app --dry-run`.
+    A `src/` module that imports something outside `package.json`'s `files` list passes every other
+    test in the suite and throws on the first stranger's machine; this is the test that catches it.
+  - **`deckhq app --dry-run`** prints what it would start and what it would open — the daemon it
+    would reuse or the exact argv it would spawn, and the browser command, in full — and starts,
+    opens and writes nothing.
+  - **The first window offers the icon, once.** On a machine with no DeckHQ shortcut recorded in
+    `~/.deckhq/installed.json`, `deckhq app` prints the same path list `deckhq shortcut --install`
+    prints and asks one question after the window is open: _Put DeckHQ on your Desktop and Start
+    Menu? [y/N]_. `y` writes them with that answer as the consent — it goes through the same
+    installer, the same tag and the same record, and `--remove --yes` still takes back only what
+    DeckHQ wrote. Anything else writes nothing and is never asked again (`app.pinOffered` in
+    `installed.json`, which is the CLI's file; `state.json` keeps its one writer). Off a TTY it asks
+    nothing and prints the command instead, because a prompt nobody can answer hangs a login script
+    — and an unanswered offer is not recorded as answered. `deckhq app --pin` asks again;
+    `--no-pin` never asks.
+  - **One-line installers**, `scripts/install/install.ps1` and `scripts/install/install.sh`, served
+    from the docs site at `https://dkpanseriya.github.io/deckhq/install.ps1` and `…/install.sh`.
+    Each checks for Node 18+, **offers** to install it — `winget install OpenJS.NodeJS.LTS`,
+    `brew install node`, or the distribution's own command printed for you to run — then
+    `npm install -g deckhq@latest`, then the icon question, then `deckhq app`. They ask before
+    installing anything, they reach no host but winget, brew and npm, they send nothing anywhere,
+    and running either twice does nothing the first run did not. Neither is part of the runtime:
+    they are not in the tarball and nothing in `src/` imports them, so the zero-dependency rule is
+    untouched. Both are parsed by their own interpreter in `test/unit/install-scripts.test.mjs`;
+    `install.ps1` is held to Windows PowerShell 5.1, which is what a Windows machine has before
+    anybody installs anything.
+  - **A standalone `deckhq.exe` was evaluated and declined** for now:
+    `docs/plan/SEA-FEASIBILITY.md`, WP-76.
+
+  `docs/DEVIATIONS.md` §151.
+
 - **`deckhq app` — the floor in a window of its own.** One command: it reuses the DeckHQ you
   already have running (the port you named, the one a running daemon published in
   `~/.deckhq/daemon.json`, the one your installed hooks post to, then 4317 upward) and starts one
