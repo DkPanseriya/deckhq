@@ -51,7 +51,8 @@ count changes — but it must never look like a uniform grid.
 |---|---|
 | **The user's office** | Always present, always the top-left corner. Enclosed by real walls with one door and a swing arc. Fixed 32 × 27 U. Contains the user's desk, a rug, a plant, and the waiting area. |
 | **Project room** | One per project that has at least one session. Size derived from team size (§2.2). Partial-height partitions on two sides, open on the others. Contains benches, chairs, a whiteboard, and a plant. |
-| **The lounge** | Always present. One large open room combining lounge, games and kitchen. Minimum 60 × 30 U, grows with benched population. |
+| **The lounge** | Always present. One large open room combining lounge, games and kitchen. Minimum 60 × 30 U, grows with benched population. **Its height is bounded by §2.4 since WP-77.** |
+| **A pinned room** | A repo nobody is in that the user pinned. One desk, nobody at it, at most a third of a live room — §5.2. |
 
 Rooms are packed left-to-right, top-to-bottom with a 3 U circulation gap. Because project rooms
 differ in size, the result is an irregular plan rather than a grid — this is intended.
@@ -77,6 +78,42 @@ overflow marker exists.
 - Seat centres are offset **1.6 U** from the bench edge — chair back nearly touching the desk.
 - Chairs face the bench.
 - Waiting-area chairs in the user's office: 3.2 U pitch, in rows of 7, facing the user's desk.
+
+### 2.4 The lounge is sized by who is in it (WP-77)
+
+**Added 14 September 2026.** The owner, looking at the floor after WP-72: *"The lounge is very big,
+the whole bottom half."* He was right, and the measurement is worse than the sentence. On the
+`three` floor at 1600 × 1000 the lounge came out **27.7 of 57.1 units — 49% of the building — with
+nobody in it**, and the identical 27.7 with fifteen people in it. Its height had nothing to do with
+its occupants: it was `LOUNGE_ROW_ASPECT_MAX` and `ROOM_FILL_MAX` between them, padding a room out
+to keep a proportion against a row a hundred units wide.
+
+Three terms, and the order is the rule:
+
+1. **The contents, always.** The lounge is first the size of what it must hold — the clusters, a
+   games table once there are more people than places, and one standing place for every benched or
+   ended agent it draws. This is a floor the other two may not argue below: furniture outside its
+   own room is the one thing the plan may never do.
+2. **A floor minimum, `LOUNGE_MIN_H`.** One sofa group, the clear floor either side of it and the
+   plate across the top. An empty lounge still exists and still reads as somewhere you would want
+   to go; a cleared queue is the reward and an empty grey box is not much of one.
+3. **And a ceiling on the PADDING above those** — `loungeShareFor(n)` of the building's height:
+   **25% while five or fewer people are in it**, five points more for every five beyond that, to a
+   maximum of half. A pure function of the count: no clock, no stage, no randomness.
+
+**Where the ceiling and the minimum disagree, the minimum wins, and this is stated because the
+number reads like a promise otherwise.** At `LOUNGE_MIN_H` (19.4 U) on a 48.8 U building the lounge
+is 40% of the height rather than 25%. The share bites on the **padding**, which on the owner's own
+floor was eight units of it; what is left is a room the size of its own furniture. The eight units
+go to the working band and to the live rooms beside it.
+
+`LOUNGE_ROW_ASPECT_MAX` rose from 3.2 to **5.4** for the same reason and in the same package. In a
+row the lounge's width is the building's, so that bound is a floor on its DEPTH rather than a cap on
+its width, and at 3.2 it was buying its proportion with bare carpet inside the room — §106's defect,
+one room over. What row two actually is, once the lounge is the size of what is in it, is a
+**promenade**: one block deep, with the sofa group, the counter, the quiet corner and a games table
+strung along the bottom of the building. 5.4 is measured — the worst two-row lounge over
+`floor-integrity.test.mjs`'s sixteen populations at five aspects is 5.19:1.
 
 ## 3. The character rig
 
@@ -219,6 +256,36 @@ without it:
    floor** (WP-50). An `ended` session goes to the lounge only when its own project has a room. A
    project room whose only live session is waiting in the office keeps its room and draws an empty
    desk; that is the dynamic floor behaving as specified, not a defect.
+
+### 5.2 The pinned room (WP-77)
+
+The owner, 14 September 2026: *"Pin any particular project room so it is always in a room, so the
+room does not collapse when agents are not running, maybe downsized according to live agents."*
+
+Rule 4 above is the default and is unchanged. A **pin** is the user overriding it for one repo, and
+it is the only thing on the floor that is neither observed nor derived: `pins[projectId]` in
+`state.json`, written by `POST /api/pin` and by nothing else. It takes `ackState`'s discipline in
+full (`08` §1.1 rule 1) — **no observed event may clear a pin.** A session ending, a process going,
+a repo falling past the gone-home window: none of them touches it, and `test/unit/pins.test.mjs`
+holds that as an `INVARIANT:` test.
+
+What a pinned repo gets:
+
+| | Rule |
+|---|---|
+| **Where** | A strip along the bottom of the working side, under the live rooms and above whatever open floor is left. Content goes before carpet. |
+| **How big** | At most **a third of the narrowest live room's footprint** on the same floor. The depth is `PINNED_DEPTH_SHARE` of the band the live rooms asked for, and the width is then capped so the area lands under the third — depth alone would give a strip as wide as the row. |
+| **What is in it** | One desk. **No chair, no monitor, nobody** — a pinned room seats nobody, because pinning keeps the room and not the people. Its sessions are still the idle list's business. |
+| **The plate** | `N sessions · pinned`. No token line and no payroll meter: nothing is running in it, so those numbers cannot change, and a plate is for what can. |
+| **When it fills** | The moment a session starts in that repo it is a live room again, at a live room's size. The pin is untouched by that and takes effect again when the room empties. |
+
+**A pinned repo is a room, and therefore not a line.** WP-60's property is unchanged — *a repo with
+sessions is a room or a line, never both and never neither* — so a pinned repo leaves the idle list.
+The list keeps its own section for them, marked and with the toggle on the row, because a control
+you can turn on in one place and off in another is two controls.
+
+**Archiving still wins over pinning.** Both are the user speaking, and *take this off my floor* is
+the more specific of the two. The interface never offers both at once.
 
 **Colour discipline:** crimson appears *only* for `for_review`. If the user sees red anywhere on
 the floor, something is standing in their office. Nothing decorative may use it.

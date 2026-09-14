@@ -8,6 +8,25 @@
 
 ### Added
 
+- **Pin a project's room to the floor — WP-77.** The owner: _"Pin any particular project room so it
+  is always in a room, so the room does not collapse when agents are not running, maybe downsized
+  according to live agents."_ A pinned repo keeps a room with nothing running in it: **one desk,
+  nobody at it, at most a third of the narrowest live room's footprint**, and a plate that says
+  `N sessions · pinned`. It fills out into a full room the moment a session starts there. Pin and
+  unpin from the idle popover — `P` on a row, or the toggle — or from `⌘K`'s `Pin` / `Unpin`, which
+  offers it for **every** project rather than only the idle ones: pinning is a thing you decide
+  about a repo you are working in now, about a moment that has not happened yet.
+
+  **The pin is user-owned state and nothing observed may clear it.** `pins[projectId]` in
+  `state.json`, written by `POST /api/pin` and by nothing else, on `ackState`'s own terms
+  (`08` §1.1 rule 1): a session ending, a process going, a repo falling past the gone-home window —
+  none of them touches it. `test/unit/pins.test.mjs` holds that as an `INVARIANT:` test that drives
+  a real registry through the whole life of a pinned repo. A pinned repo is a room and therefore not
+  a line, so WP-60's property is untouched; the popover keeps its own section for them, because the
+  pin has to be reachable from the place it was made.
+
+  `docs/DEVIATIONS.md` §154, `docs/03-VISUAL-SPEC.md` §5.2.
+
 - **One line to install, one question to pin — WP-75.** Sharing DeckHQ used to be four steps:
   install Node, install the package, `deckhq app`, `deckhq shortcut --install --yes`. It is now one
   thing to paste and then an icon.
@@ -150,6 +169,26 @@
   inside. `docs/DEVIATIONS.md` §150.
 
 ### Changed
+
+- **The lounge is sized by who is in it — WP-77.** The owner: _"The lounge is very big, the whole
+  bottom half."_ He was right, and the measurement is worse than the sentence: on the `three` floor
+  at 1600 × 1000 the lounge came out **27.7 of 57.1 units — 49% of the building — with nobody in
+  it**, and the identical 27.7 with fifteen people in it. Its height had nothing to do with its
+  occupants. Now it is the size of what it must hold, never smaller than one sofa group with its
+  margins and its plate, and **never padded past 25% of the building's height while five or fewer
+  people are in it** — five points more for every five beyond that, to half. The eight units of
+  padding that went are eight units the working band and the live rooms got back; on `three` the
+  rooms go from 385 to 450 drawn pixels while the lounge goes from 415 to 335. Where the ceiling and
+  the floor minimum disagree the minimum wins, and `docs/DEVIATIONS.md` §154 says what that costs:
+  at the minimum on a 48.8 U building the lounge is 40% of the height and not 25%.
+
+  A wide row's lounge may now be up to 5.4 times its own depth, from 3.2. In a row the lounge is the
+  building's full width, so that bound was a floor on its DEPTH and the only thing it could buy its
+  proportion with was bare carpet inside the room. `demo` changes arrangement because of it — a
+  shorter lounge is a shorter building, and a five-room row at 2.23:1 on a 1.6:1 window is refused
+  in favour of a column whose lounge is 21% of the floor's area rather than 40%.
+
+  `docs/03-VISUAL-SPEC.md` §2.4.
 
 - **A project room holds the people working in it, and nobody else — WP-78.** The owner, on the
   floor as it stood: _"Only live working agents are on desks in the project rooms. Everyone else is

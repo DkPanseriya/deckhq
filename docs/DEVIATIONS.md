@@ -14848,3 +14848,221 @@ that it is checked by picture at the sizes we have pictures of. Nothing here was
 machine with real sessions — the floor is a pure function of the snapshot, so the goldens are the
 measurement, but the walk from a desk to the manager's office has been watched only under
 `prefers-reduced-motion`, where it is a teleport.
+
+## 154. WP-77 — the room you can keep, and a lounge that stopped being half the building
+
+The owner, 14 September, two sentences:
+
+> _"Pin any particular project room so it is always in a room, so the room does not collapse when
+> agents are not running, maybe downsized according to live agents."_
+>
+> _"The lounge is very big, the whole bottom half."_
+
+They are the same package because they are the same quantity: what a floor does with the height it
+has. The second sentence is what the first one needs — a strip along the bottom of the working side
+has to come from somewhere, and the lounge was holding eight units of it for nothing.
+
+### 154.1 The lounge was 49% of the building with nobody in it
+
+The sentence is a complaint. The measurement is worse.
+
+| the `three` floor at 1600 x 1000 | lounge | building | share |
+| --- | --- | --- | --- |
+| **0 benched** | 27.7 U | 57.1 U | **49%** |
+| **5 benched** | 27.7 U | 57.1 U | **49%** |
+| **15 benched** | 27.7 U | 57.1 U | **49%** |
+
+Three identical floors. The lounge's height was not a function of its occupants at all; it was
+`LOUNGE_ROW_ASPECT_MAX` (3.2) and `ROOM_FILL_MAX` (1.43x) arguing about a proportion against a row
+a hundred units wide, and both of them won by about the same amount. Eight of those units were
+padding: floor inside the lounge that nothing stood on, which is §106's defect one room over, put
+there by the bound that exists to stop a room reading as a corridor.
+
+**The rule is now three terms and an order** (`03-VISUAL-SPEC.md` §2.4):
+
+1. the CONTENTS, always — a floor nothing may argue below, because furniture outside its own room
+   is the one thing the plan may never do;
+2. `LOUNGE_MIN_H`, one sofa group with its margins and its plate, so an empty lounge still reads as
+   somewhere you would want to go;
+3. and a CEILING ON THE PADDING above those: `loungeShareFor(n)` of the building's height — 25% at
+   five people or fewer, five points more per five arrivals, to half. A pure function of the count.
+
+`loungeCeiling(n, restH)` solves the share rather than guessing it — `h <= s(restH + h)` is
+`h <= s.restH / (1 - s)` — which is what lets the ceiling be applied before the building's height
+is known, at the one moment the lounge's own height is still being decided.
+
+**Where the ceiling and the minimum disagree the minimum wins, and saying so is the point.** The
+acceptance line for this package reads "≤ 25% of stage height at ≤ 5 benched with a floor minimum
+below that", and on a real floor the two are not both satisfiable: `LOUNGE_MIN_H` is 19.4 U and the
+building this population produces is 48.8, so the lounge is 40% of the height and not 25%. To reach
+25% the building would have to be 77.6 U tall, or the sofa group would have to be smaller than a
+sofa group. The share bites on the PADDING — which is exactly the eight units the owner was looking
+at — and the minimum is what is left. `test/unit/pins.test.mjs` asserts the rule as implemented,
+`max(LOUNGE_MIN_H, 0.25 x H)`, and this paragraph is why the test does not assert the headline.
+
+**`LOUNGE_ROW_ASPECT_MAX` went from 3.2 to 5.4**, and that is the one number in this package that
+is a change of mind rather than an addition. §139 gave the row lounge the reception's own rule
+because a lounge shelf-packed into a wide budget "comes out as a gallery". In a ROW the lounge's
+width is the building's — row two is the whole of it since WP-60 — so the bound is a floor on the
+lounge's DEPTH and never a cap on its width, and the only thing it can buy its proportion with is
+bare carpet inside the room. What row two actually is, once the lounge is the size of what is in
+it, is a PROMENADE: one block deep, with the sofa group, the counter, the quiet corner and a games
+table strung along the bottom of the building. 5.4 is measured rather than chosen — the worst
+two-row lounge over `floor-integrity`'s sixteen populations at five aspects, with the ceiling in
+force, is 5.19:1 — and because the bound is enforced as a floor on the depth it is self-proving:
+`plan.test.mjs` §3.8 asserts the aspect and cannot fail while this is the number the depth is
+floored at.
+
+### 154.2 What the floor did with the eight units
+
+| capture | before | after |
+| --- | --- | --- |
+| `three` | 92.3 x 57.1, lounge 27.7 (49% of H) | **78.3 x 48.8, lounge 19.4 (40%)** |
+| `wide` | two rows, lounge 27.7 | **two rows, lounge 19.4** |
+| `demo` | two rows, lounge 27.7 over five rooms in one band | **a column, lounge 29.0 of 55.1, five rooms in two bands** |
+
+**`demo` changed ARRANGEMENT, and that is the search doing its job rather than a regression.** A
+shorter lounge is a shorter building, and a five-room row is as wide as its rooms make it: at
+110 x 49 the two-row floor is 2.23:1 on a 1.6:1 window, which `betterArrangement`'s first rank
+refuses by a whole tolerance. The column it takes instead is 1.71:1 with the lounge at 21% of the
+building's AREA — against 40% in the two-row floor it replaced. The owner's sentence is answered
+harder by the fold than by the height.
+
+The rooms are the other half of it. On `three` the working band goes from 385 to 450 drawn pixels
+while the lounge goes from 415 to 335: the height the lounge gave back went to the rooms and to the
+reception beside them, which is what "the space it gives back goes to the working band" means when
+it is measured rather than asserted.
+
+### 154.3 The pin
+
+`pins[projectId] = { at }` in `state.json`, and it is the second piece of USER-OWNED state in that
+file. It takes `ackState`'s discipline in full (`08` §1.1 rule 1): the only writer is
+`POST /api/pin`, which is a person clicking, and **no observed event may clear it**. There is no
+`_syncPins` beside `_syncArchived` and there is not going to be one.
+`test/unit/pins.test.mjs` holds it as an `INVARIANT:` test that drives a real `Registry` over a
+real `Store` through the whole life of a pinned repo — the turn ends, the process goes, the session
+is benched, the transcript falls forty days past the gone-home window — and asserts the pin after
+each one.
+
+Keyed by PROJECT ID rather than by the ledger's `projectKey`, for the reason `archivedProjects` and
+`layout.rooms` are: the id is what the floor, the palette and the popover all address a room by, and
+a second spelling of "this project" is a second thing that can disagree. `sanitizePins` holds it to
+`projectIdFromCwd`'s alphabet, so a hand-edited `state.json` cannot put a path in a value the
+renderer reads.
+
+**A pinned repo is a ROOM, and therefore not a line.** WP-60's property is untouched — *a repo with
+sessions is a room or a line, never both and never neither* — which is why `idleProjectsOf` no
+longer returns them and `pinnedProjectsOf` is a second function rather than a flag on the first. The
+popover lists them in their own section at the top, because the pin has to be reachable from the
+place it was made: a toggle you turn on in one place and off in another is two controls.
+
+### 154.4 Sizing the room, and the two axes it took
+
+"Downsized according to live agents" is the acceptance criterion, and a third of a live room is a
+guarantee rather than an aim. It takes both axes to make it one:
+
+- the DEPTH is `PINNED_DEPTH_SHARE` (0.32) of the depth the band of live rooms ASKED for — read off
+  the request rather than the answer, because the strip has to be reserved before the fill order
+  runs and the fill order only ever makes the band deeper, so this is an upper bound on 0.32 of
+  what the rooms actually get;
+- and the WIDTH is then capped so the AREA lands under the third, measured against the NARROWEST
+  live room actually laid. Depth alone cannot do it: a strip room as wide as the row would be a
+  third of the depth and all of the width, which is a corridor with a desk in it. Against the
+  narrowest rather than the largest because that is the comparison a person makes — the pinned room
+  has to read as the small one beside every room with somebody in it.
+
+Measured over five shapes at four aspects, every pinned room comes out at **0.311–0.333** of the
+narrowest live room, and the strip tiles the envelope exactly.
+
+**The price is open floor, and it is paid in carpet rather than in a lie.** One pinned repo on a
+floor whose strip is fifty-five units wide gets a 13.6 U room and forty-one units of circulation
+beside it, because the area cap and the strip's width cannot both be satisfied by one small room.
+The alternative was a pinned room the size of a live one, which is the thing the owner asked
+against. The leftover is a `__pinned-N__` rectangle — open floor, not a route — and the plan's
+`working.open` counts it honestly.
+
+**What is in it:** one desk, a rug, a plate, and **nobody**. No chair, no monitor, no junior's seat:
+pinning kept the ROOM and not the people, so an `ended` session in a pinned repo is still the idle
+list's business and still in `plan.hidden`, exactly as WP-50 left it. A chair with nobody on it is
+the oldest defect in `plan-rooms.js` and this package was not going to add one back.
+
+**The plate says `N sessions · pinned`** and nothing else. `plateLinesFor` recomputes a project
+plate from the live snapshot rather than reading `room.plateLines`, so the badge had to be added
+there as well as in the builder — the first regeneration of the `pinned` golden showed the room with
+a full live plate on it, tokens, `need you`, payroll meter and all. Three numbers that cannot change
+are three numbers nobody should keep reading; the word that CAN change is the one the plate is for.
+
+### 154.5 The strip had to come out of the fill order, not out of the leftovers
+
+The obvious implementation is to put the pinned rooms in `__open__`, the open plan the working side
+already draws under its rooms. It is wrong on exactly the floors this feature is for: WP-60's rooms
+FILL their band, so on a healthy floor `__open__` is zero units tall and a pin would silently do
+nothing.
+
+So the strip is reserved BEFORE the rooms grow into the height, and `createWorkingFloor` takes a
+fourth argument to do it — `reserveOf(askedBandH, workingW)`, the part of the working side's height
+that is not the rooms' to fill. Both arrangements subtract it in one place each: `fillOrder` is
+asked about `H - reserve` in the column, and `rowOne` makes row one `asked + pinH` deep and hands
+the band `h1 - pinH`. It returns zero wherever nothing is pinned, so a floor nobody has pinned
+anything on is laid exactly as WP-60 left it — which the eight untouched goldens then proved at
+0 px.
+
+### 154.6 Two files went over the 900-line ceiling, and neither ceiling moved
+
+WP-22's own remedy is the split.
+
+- **`plan-units.js` -> `plan-shapes.js`.** The file's first sentence was already the seam: it held
+  "what the shapes ARE, and how big things are", which is two things. Every typedef moved; the
+  dimensions stayed where they were, one definition and one place to change them.
+  `plan-units.js` re-declares each typedef as `import('./plan-shapes.js').X`, so
+  `import('./plan-units.js').Room` and `import('./plan.js').Room` — which a dozen modules write —
+  resolve exactly as before and no import anywhere had to change.
+- **`app.js` -> `app-rooms.js`.** WP-60 answered the first breach by moving the layout file out;
+  this is the same move on the next pair with the least to do with anything else in the shell.
+  `setProjectPinned` and `setProjectArchived` are two halves of one question — should this repo have
+  a room on the floor? — asked from opposite ends, and both touch `fetch` and `toast` and nothing
+  else.
+
+`layPinnedStrip` went to `plan-rooms.js` for the same reason and by the same rule: it is the strip's
+own arithmetic, it is pure, and `plan.js` is the assembly step.
+
+### Tests
+
+**2089 passing, 1 platform skip**, up from 2079. Ten are new, all in `test/unit/pins.test.mjs`:
+the pin surviving a restart through a second `Store` over the same file; the sanitiser refusing a
+path, a capital and a non-record; the `INVARIANT:` scan above; the room-or-a-line split; the third
+rule over five shapes at four aspects; the pinned room's emptiness, its desk and its plate; the
+whole floor tiling at three live rooms, one pinned room and fifteen benched; the ceiling ladder as a
+pure function; the lounge at nought and at five on a 1600 x 1000 stage; and that the lounge still
+grows for sixty people.
+
+Two existing tests changed what they say rather than how hard they say it. `plan.test.mjs` §3.8
+reads `LOUNGE_ROW_ASPECT_MAX` for the lounge instead of the reception's bound, which is the constant
+this package moved. `idle-projects.test.mjs`'s import assertion names `pinnedProjectsOf` alongside
+`idleProjectsOf` — the rule is still imported and still not re-derived. No `INVARIANT:` test was
+relaxed and nothing was deleted.
+
+### Goldens
+
+**Nine now.** `pinned` is new and is `three` with one repo pinned — the same nine sessions, so the
+two captures differ in exactly one thing and the strip along the bottom is the whole of what moved.
+Its fixture is cheap because `demo-floor.mjs` writes `state.json` itself: `PINNED_PROJECTS` names
+the folder and the script turns it into an id with `projectIdFromCwd` against the fixture root it
+has just built, which is the only way to write it down at all — the id is a slug of a temporary
+directory.
+
+Eight regenerated, and `goldens:check` then reported **0 px over tolerance and 0 px moved at all**
+on all nine.
+
+### Unverified
+
+The 5.4 aspect bound is measured on synthetic populations and looked at on four captures. A floor
+whose lounge the packer lays at proportions none of the nine fixtures produce could still read as a
+corridor; nothing in the suite can see that, and the honest statement is that it is checked by
+picture at the sizes we have pictures of.
+
+Nothing here was run against a real machine with real sessions. The pin's round trip — click, POST,
+scan, snapshot, floor — has been exercised through the `Registry` in a test and through the demo
+daemon in a capture, but not by a person clicking. And the open floor beside a single pinned room
+(§154.4) is the one part of this picture nobody has looked at on a floor with more than one pin at
+a stage other than 1600 x 1000.

@@ -624,24 +624,31 @@ These are real, and listed here rather than discovered later.
 
 ## Keyboard
 
-| Key                 | Action                                                                  |
-| ------------------- | ----------------------------------------------------------------------- |
-| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings                         |
-| `Tab`               | The deck — every waiting session as a table, and back                   |
-| `J` / `K`           | Move through the needs-you queue, oldest first                          |
-| `Enter`             | Open the deck row under the cursor                                      |
-| `1` / `2` / `3`     | Reply, approve, bench — on the selected session                         |
-| `A`                 | Acknowledge the selected agent                                          |
-| `B`                 | Bench the selected agent                                                |
-| `P`                 | Float the office — a small always-on-top window over your terminal      |
-| `G`                 | Step through the agents who went home, newest activity first            |
-| `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk |
-| `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot    |
-| `Esc`               | Close the panel — or dismiss the day's card, if one is up               |
-| `+` / `-`           | Magnify, 1x to 2.5x                                                     |
-| `0`                 | Back to fit — which is also the minimum                                 |
-| `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                   |
-| Drag / scroll       | Pan, whenever the floor is bigger than the window                       |
+| Key                 | Action                                                                   |
+| ------------------- | ------------------------------------------------------------------------ |
+| `⌘K` / `Ctrl+K`     | Everything: agents, projects, actions, settings                          |
+| `Tab`               | The deck — every waiting session as a table, and back                    |
+| `J` / `K`           | Move through the needs-you queue, oldest first                           |
+| `Enter`             | Open the deck row under the cursor                                       |
+| `1` / `2` / `3`     | Reply, approve, bench — on the selected session                          |
+| `A`                 | Acknowledge the selected agent                                           |
+| `B`                 | Bench the selected agent                                                 |
+| `P`                 | Float the office — a small always-on-top window over your terminal       |
+| `G`                 | Step through the agents who went home, newest activity first             |
+| `I`                 | The repos nobody is working in — `P` on a row pins one a room of its own |
+| `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk  |
+| `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot     |
+| `Esc`               | Close the panel — or dismiss the day's card, if one is up                |
+| `+` / `-`           | Magnify, 1x to 2.5x                                                      |
+| `0`                 | Back to fit — which is also the minimum                                  |
+| `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                    |
+| Drag / scroll       | Pan, whenever the floor is bigger than the window                        |
+
+`I` opens the list of repos nobody is working in — a quiet chip in the corner of the floor, and the
+names behind it. **Pinning one keeps it a room** even with nothing running in it: a small room, one
+desk, nobody at it, and a plate that says `pinned`, which fills out into a full room the moment you
+start a session there. `P` on a row pins and unpins; so does `Pin` / `Unpin` in `⌘K`. The pin lives
+in `state.json` and nothing your agents do can clear it.
 
 With a permission card open in the panel — a session with its hand up, asking before it runs
 something — `A`, `D` and `S` belong to that card: allow, deny, and allow for the rest of the
