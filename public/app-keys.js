@@ -129,6 +129,17 @@ export function handleKeydown(e) {
         hideWhiteboard();
         break;
       }
+      // WP-84 · Escape is a way back to the floor from every full-surface
+      // view, the deck included. It goes AFTER the panel, not before it: with
+      // the deck open and a card beside it, the first Escape has always shut
+      // the card, and moving the deck ahead of that would change a key the
+      // user already knows in order to fix a key they did not. So the deck
+      // closes on the Escape that has nothing else left to do — and the ✕ and
+      // "Back to floor" in its own bar close it at any time (surfaces.js).
+      if (el.panelRoot.hidden && deckUI?.isOpen()) {
+        deckUI.close();
+        break;
+      }
       selectAgent(null);
       break;
     // One queue, walked the same way on all three levels (§3): the floor's

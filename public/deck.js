@@ -43,6 +43,7 @@
  */
 
 import { now as clockNow } from './clock.js';
+import { wireSurfaceControls } from './surfaces.js';
 
 // ---------------------------------------------------------------- ordering
 
@@ -535,6 +536,10 @@ const CHIP_GAP = 8;
  * @param {HTMLElement} opts.hintEl       "7 waiting · press Tab for the deck"
  * @param {HTMLElement} opts.lastEl       the hover line under the strip
  * @param {HTMLElement} opts.deckEl       the deck's host inside the stage
+ * @param {HTMLElement} [opts.deckBodyEl] where the table goes; the host's own
+ *   `.surface-body`. Separate from the host because the host also carries the
+ *   chrome — the ✕ and "Back to floor" — and a repaint must not wipe the one
+ *   control the user is reaching for (WP-84, `public/surfaces.js`).
  * @param {HTMLElement} opts.stageEl      the stage, so the floor can stand down
  * @param {() => any[]} opts.getQueue     the needs-you queue, already scoped
  * @param {() => string|null} opts.getSelectedId
@@ -544,6 +549,10 @@ const CHIP_GAP = 8;
 export function createDeckUI(opts) {
   const { stripEl, listEl, moreEl, hintEl, lastEl, deckEl, stageEl } = opts;
   const { getQueue, getSelectedId, onSelect, announce } = opts;
+  // The table's own container. Falls back to the host for an embedder that
+  // built a deck without the chrome — the deck still works, it simply has no
+  // buttons, which is the state WP-84 found the product in.
+  const bodyEl = opts.deckBodyEl || deckEl;
 
   /** @type {Map<string, HTMLElement>} id -> the live `<li>` for that chip */
   const chips = new Map();
@@ -692,20 +701,20 @@ export function createDeckUI(opts) {
 
   /** @param {any[]} queue @param {number} now @param {string|null} selectedId */
   function paintDeck(queue, now, selectedId) {
-    deckEl.textContent = '';
+    bodyEl.textContent = '';
     if (queue.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'deck-empty';
       empty.textContent = 'Nothing is waiting on you.';
-      deckEl.appendChild(empty);
+      bodyEl.appendChild(empty);
       return;
     }
     const scroller = document.createElement('div');
     scroller.className = 'deck-scroll';
     scroller.appendChild(renderDeckTable(queue, { now, selectedId }, document));
-    deckEl.appendChild(scroller);
+    bodyEl.appendChild(scroller);
 
-    for (const row of deckEl.querySelectorAll('.deck-row')) {
+    for (const row of bodyEl.querySelectorAll('.deck-row')) {
       const id = row.getAttribute('data-id');
       if (id) row.addEventListener('click', () => onSelect(id, { openPanel: true }));
     }
@@ -735,7 +744,7 @@ export function createDeckUI(opts) {
       else button.removeAttribute('aria-current');
     }
     const cursorRow = cursorFor(queue);
-    for (const row of deckEl.querySelectorAll('.deck-row')) {
+    for (const row of bodyEl.querySelectorAll('.deck-row')) {
       const on = row.getAttribute('data-id') === cursorRow;
       row.classList.toggle('is-selected', on);
       if (on) {
@@ -815,7 +824,9 @@ export function createDeckUI(opts) {
     deckOpen = false;
     stageEl.classList.remove('is-deck');
     deckEl.hidden = true;
-    deckEl.textContent = '';
+    // The body, not the host: the host carries the chrome, and emptying it
+    // would delete the ✕ that was just clicked (WP-84).
+    bodyEl.textContent = '';
     render();
     announce?.('The floor.');
   }
@@ -840,6 +851,12 @@ export function createDeckUI(opts) {
     typeof ResizeObserver === 'function' ? new ResizeObserver(() => fitStrip()) : null;
   observer?.observe(stripEl);
   moreEl.addEventListener('click', () => open());
+
+  // WP-84 · the way back. `close` is this closure's own function, named in the
+  // same scope as the call — which is the one thing §143 proves must be true
+  // of a ✕'s listener, because an unqualified `close()` in a module that
+  // declares none resolves to `window.close` and takes the tab with it.
+  wireSurfaceControls(deckEl, () => close());
 
   function destroy() {
     clearInterval(tickTimer);

@@ -115,14 +115,36 @@
         ></canvas>
 
         <div class="tooltip" id="tooltip" role="tooltip" hidden></div>
+        <!-- The project board covers the whole window, so it is a full-surface
+             view and carries the two controls every one of them carries
+             (WP-84, public/surfaces.js): ✕ top right, "Back to floor" top
+             left, the shortcut in the title. Escape closed it before this and
+             still does. -->
         <div
           class="whiteboard-scrim"
           id="whiteboard-overlay"
           role="dialog"
           aria-modal="true"
           aria-label="Project board"
+          data-surface="board"
           hidden
-        ></div>
+        >
+          <div class="surface-chrome surface-chrome--over">
+            <button type="button" class="surface-back" id="board-back">
+              <span class="surface-arrow" aria-hidden="true">←</span> Back to floor
+            </button>
+            <h2 class="surface-title" id="surface-title-board">Project board <kbd>Esc</kbd></h2>
+            <button
+              type="button"
+              class="surface-close"
+              id="board-close"
+              aria-label="Close the project board (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="surface-body" id="whiteboard-body"></div>
+        </div>
 
         <div class="floor-skeleton" id="floor-skeleton" aria-hidden="true">
           <div class="sk-block"></div>
@@ -162,8 +184,29 @@
           tabindex="-1"
           role="group"
           aria-label="The deck. Everything waiting on you, oldest first."
+          data-surface="deck"
           hidden
-        ></div>
+        >
+          <!-- WP-84. The deck replaces the floor, and until this bar there was
+               no way back to it but a key nobody had been told about. ✕ top
+               right, "Back to floor" top left, `Esc` in the title, `Tab` still
+               toggles. public/surfaces.js. -->
+          <div class="surface-chrome">
+            <button type="button" class="surface-back" id="deck-back">
+              <span class="surface-arrow" aria-hidden="true">←</span> Back to floor
+            </button>
+            <h2 class="surface-title" id="surface-title-deck">The deck <kbd>Esc</kbd></h2>
+            <button
+              type="button"
+              class="surface-close"
+              id="deck-close"
+              aria-label="Close the deck (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="surface-body" id="deck-body"></div>
+        </div>
 
         <!-- The idle projects (WP-60). This was a column of repo names drawn
              down the bottom-right of the canvas, permanently, every line of it
@@ -417,10 +460,25 @@
     <!-- The settings sheet (docs/plan/05-GUI-UX-SPEC.md §5.4). Opened from the
          palette; the hook consent screen is a section inside it rather than a
          dialog of its own. -->
-    <dialog id="settings-dialog" class="dialog dialog--wide" aria-labelledby="settings-title">
-      <div class="dialog-head">
-        <h2 id="settings-title">Settings</h2>
-        <button type="button" class="icon-btn" id="settings-close" aria-label="Close">✕</button>
+    <dialog
+      id="settings-dialog"
+      class="dialog dialog--wide"
+      aria-labelledby="settings-title"
+      data-surface="settings"
+    >
+      <div class="dialog-head surface-chrome">
+        <button type="button" class="surface-back" id="settings-back">
+          <span class="surface-arrow" aria-hidden="true">←</span> Back to floor
+        </button>
+        <h2 id="settings-title" class="surface-title">Settings <kbd>Esc</kbd></h2>
+        <button
+          type="button"
+          class="icon-btn surface-close"
+          id="settings-close"
+          aria-label="Close settings (Esc)"
+        >
+          ✕
+        </button>
       </div>
       <div class="dialog-body" id="settings-body"></div>
     </dialog>

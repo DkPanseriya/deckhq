@@ -207,8 +207,11 @@ export function showWhiteboard(projectId) {
   hint.textContent = money.note;
   board.appendChild(hint);
 
-  el.whiteboardOverlay.textContent = '';
-  el.whiteboardOverlay.appendChild(board);
+  // WP-84 · the body, not the scrim. The scrim carries the surface chrome now
+  // — ✕ and "Back to floor" — and emptying it would take those with it.
+  const host = el.whiteboardBody || el.whiteboardOverlay;
+  host.textContent = '';
+  host.appendChild(board);
   el.whiteboardOverlay.hidden = false;
 }
 

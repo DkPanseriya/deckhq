@@ -90,7 +90,6 @@ export const el = {
   paletteEmpty: document.getElementById('palette-empty'),
   settingsDialog: /** @type {HTMLDialogElement} */ (document.getElementById('settings-dialog')),
   settingsBody: document.getElementById('settings-body'),
-  settingsClose: document.getElementById('settings-close'),
   newProjectDialog: /** @type {HTMLDialogElement} */ (
     document.getElementById('new-project-dialog')
   ),
@@ -128,10 +127,14 @@ export const el = {
   stripHint: document.getElementById('strip-hint'),
   stripLast: document.getElementById('strip-last'),
   deck: document.getElementById('deck'),
+  // WP-84. The deck's chrome is static markup (public/surfaces.js says why),
+  // so the host, the bar's body and the two controls are all named here.
+  deckBody: document.getElementById('deck-body'),
   stage: /** @type {HTMLElement} */ (document.querySelector('.stage')),
   canvas: /** @type {HTMLCanvasElement} */ (document.getElementById('floor-canvas')),
   tooltip: document.getElementById('tooltip'),
   whiteboardOverlay: document.getElementById('whiteboard-overlay'),
+  whiteboardBody: document.getElementById('whiteboard-body'),
   floorSkeleton: document.getElementById('floor-skeleton'),
   emptyState: document.getElementById('empty-state'),
   demoNote: document.getElementById('demo-note'),
