@@ -168,7 +168,47 @@
   absolute or through a symlink, is refused with the offending path rather than clamped back
   inside. `docs/DEVIATIONS.md` §150.
 
+- **A `Usage` tab in the deck: where your tokens went — WP-83.** The owner: _"it should help them
+  track their token usage: where are they going, how much, in which sessions, how much input,
+  cached, output, so they can make smart decisions."_ `Tab` into the deck and there are two tabs
+  now — `Queue`, which is what was there, and `Usage`, which is a window picker (today / 7 days /
+  30 days), that window's total, the four-way split as a stacked bar, and **five real tables**: by
+  project, by session (name, project, model, the four counters, total), by model, by day, and by
+  tool. Every column sorts. `By day` arrives as a calendar rather than as a ranking, because it is
+  the one table whose row order means something on its own.
+
+  **Every figure comes from a ledger record, and a counter nobody measured says `no data`.** The
+  `tokens` record now carries the four counters separately — `v: 2`, with `split`, `in`, `out`,
+  `cacheRead`, `cacheWrite`, the model and the tool — taken from what the runtime itself wrote and
+  nothing inferred. Claude Code and OpenCode report all four; **Codex and the Gemini CLI report no
+  cache-write figure at all**, so their records carry no such field and every table prints
+  `no data` in that column rather than a confident `0`. The trend — this seven days against the
+  seven before — is a number only when both weeks hold records. `GET /api/stats?window=` and
+  `deckhq stats --usage` read the same fold, so the browser, the terminal and the daemon cannot
+  disagree about what "last 7 days" means.
+
+  The record is **additive**: every v1 field means what it meant, so a ninety-day ledger written by
+  an older build still loads and still totals — as a total with no breakdown, which is exactly what
+  a runtime that reports only a total produces today. `docs/DEVIATIONS.md` §157.
+
 ### Changed
+
+- **Cost is off by default, and `Show cost` turns it back on — WP-83.** `08` §1.1 rule 7 has always
+  said cost is an estimate and never a bill, and that has not changed. What has changed is that
+  most people are on a subscription, where a figure at public list prices is neither their bill nor
+  their budget — so `settings.showCost` ships **off**, and with it off there is **no currency
+  anywhere**: not on the floor, not in the deck, not in the panel, not on a room plate, not on the
+  day's card, not in Wrapped, not in `deckhq stats`. What stands in each of those places is the
+  tokens the figure was computed from. The panel's bottom line reads
+  `1,600,000 tok · 128k in · 80k cache w · 1.36M cache r · 32k out · opus-5`; a room plate's third
+  line reads `today 5.8M tok · with cache` where the payroll meter was.
+
+  **Turning it on restores every cost surface exactly as it was** — the same `≈ $2.62`, the same
+  `list price`, the same dated rate card, the same `not a bill`. Nothing was thrown away to hide
+  it: `src/core/rates.mjs` is untouched by this package, the estimate is still computed on every
+  scan and still travels on every snapshot, and the setting decides only whether a surface asks.
+  `Show cost` / `Hide cost` in `⌘K`, and a row in Settings → Data above the rate card it governs.
+  `docs/DEVIATIONS.md` §157.
 
 - **The name pool holds 243 names, up from 60 — WP-84.** `Greta 2` and `Sena 3` were not a bug:
   every agent is handed a first name on sight, and when every name in the pool is spoken for the
@@ -494,6 +534,19 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/unit/usage.test.mjs` — thirteen tests over WP-83's arithmetic and its honesty.** The
+  fixture is eight `tokens` lines written out in a comment, and every total, ranking and counter is
+  compared against a sum done by hand, so an aggregate that ever starts inferring fails here. Plus
+  a property check that each counter is the sum of the records that carried it and nothing else;
+  window edges a millisecond either side of local midnight on an injected clock; an empty window;
+  a window where nothing reported a cache write; the trend's requirement that both weeks were lived
+  through; a v1 ledger line parsed and totalled with no breakdown; the truncated-transcript clamp;
+  the five tables' structure and `aria-sort`; and a sweep asserting no rendered surface carries a
+  `$`, an `≈`, `list price`, `no rate` or `rate card` with cost off. A fourteenth, in
+  `ledger-invariant.test.mjs`, drives a real `Registry` over a real `Ledger` and reads the written
+  lines back — four counters for a four-way runtime, **no `cacheWrite` field at all** for a
+  three-way one, `split: false` for one that gave only a total.
 
 - **`test/unit/occupancy.test.mjs` — WP-78's rule, asked of the real plan.** Five cases over
   `buildPlan`, `assignSeats` and `seatOffice` rather than over `placement()` alone, because the

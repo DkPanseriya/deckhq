@@ -133,8 +133,9 @@ Then three actions, weighted rather than equal. `1 Reply` focuses the composer. 
 an affirmative — `"Yes, go ahead."` by default, configurable — and is the only filled button on
 the screen, because it is the commonest reply in this workflow and one keystroke is the largest
 saving in the day. `3` benches. Everything rarer — mark for review, fire, rename, new agent,
-recall, rehire — sits behind `⋯ more`. The cost estimate is one quiet line at the bottom, which is
-where an estimate belongs.
+recall, rehire — sits behind `⋯ more`. What this session spent is one quiet line at the bottom —
+the total and its split into input, cache write, cache read and output, plus the model — and the
+list-price estimate joins it only if you have turned **Show cost** on.
 
 When a session stops to ask before it runs something, you can answer the permission prompt from
 the panel: a card appears above **what it said** with the tool and its literal input, and
@@ -600,15 +601,27 @@ These are real, and listed here rather than discovered later.
   that emulator's documented interface and unit-tested down to the exact argument list — and
   none of them has been run on a real Mac or a real Linux desktop. Treat them as untested until
   this line says otherwise. The rest of the product is CI-tested on all three.
-- **Cost is an estimate, not a bill.** DeckHQ multiplies observed token counts by published list
-  prices so you can compare projects against each other. It has no idea what your plan actually
-  charges you, and every place a figure appears carries the dated table it came from — the review
-  card, the room plate and `deckhq stats` all say `rate card <date>`, and all of them say
-  `list price`. The table is `src/data/rates.json`, keyed by model id prefix; a
-  `~/.deckhq/rates.json` merges over it entry by entry and takes effect the moment you save the
-  file, with no restart. A model the table has no row for reads **no rate** rather than `$0.00`:
-  we would rather show you nothing than a number we made up. The Codex/OpenAI rows are flagged
-  `unverified` in the file, because we have not checked them against a published price list.
+- **You get tokens, not dollars — and the dollars are one setting away.** Most people run these
+  tools on a subscription, where a figure at public list prices is neither your bill nor your
+  budget. So DeckHQ shows you what you actually spent: **`Tab` → `Usage`** gives you a window
+  (today, 7 days, 30 days), the total, and the split into **input, cache write, cache read and
+  output**, with tables for where it went — by project, by session, by model, by day, and by tool —
+  plus this week against the week before. The panel carries the same four counters for one session;
+  a room plate carries the room's day. Every figure is a sum of records in your own local ledger,
+  and a counter your runtime never reported reads **`no data`** rather than a confident `0`: Claude
+  Code and OpenCode report all four, Codex and the Gemini CLI report no cache-write figure at all.
+
+  Turn on **Show cost** (`⌘K`, or Settings → Data) and the list-price estimate comes back
+  everywhere it used to be. It is an estimate and never a bill: DeckHQ multiplies observed tokens
+  by published list prices so you can compare projects against each other, it has no idea what your
+  plan charges you, and every figure carries the dated table it came from — `rate card <date>` and
+  `list price`, on the review card, the room plate and `deckhq stats` alike. The table is
+  `src/data/rates.json`, keyed by model id prefix; a `~/.deckhq/rates.json` merges over it entry by
+  entry and takes effect the moment you save the file, with no restart. A model the table has no
+  row for reads **no rate** rather than `$0.00`: we would rather show you nothing than a number we
+  made up. The Codex/OpenAI rows are flagged `unverified` in the file, because we have not checked
+  them against a published price list.
+
 - **Answering a permission prompt from the panel has been proven once, against one runtime.**
   Claude Code 2.1.260 on Windows, 4 September 2026: a real session raised two prompts, the panel's
   endpoint allowed one and denied the other, and the runtime did both and carried on. That is one

@@ -159,7 +159,7 @@ reward for having cleared your queue.
 | F6 | Open any session's real conversation in a side panel | You cannot triage what you cannot read. |
 | F7 | Reply to a session, or dispatch new work to a benched agent | Turns a dashboard into a work surface. |
 | F8 | Open a session in a real terminal | The escape hatch. Some work belongs in a terminal and the product must not pretend otherwise. |
-| F9 | Per-project and per-session token accounting | "Which project is eating my quota" is a real, unanswered question. |
+| F9 | Per-project and per-session token accounting | "Which project is eating my quota" is a real, unanswered question. **Tokens, not money** (WP-83): most users are on a subscription, so the split into input / cache write / cache read / output is what ships, and the list-price estimate is opt-in behind `settings.showCost`. Every figure comes from a ledger record and a counter no runtime reported reads `no data`. |
 | F10 | OS notification + tab badge when a session starts needing the user | The window will be buried behind terminals. Without this the product does not deliver its promise. |
 | F11 | Opt-in hook installation with a clear consent screen and clean removal | Exact, instant state, and the only way `stalled` and `needs_input` can be distinguished. |
 | F12 | Zoom control, and an animated close-up of the selected agent | Reconciles glanceability with watching the office live. |

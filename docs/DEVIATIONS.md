@@ -15488,3 +15488,180 @@ default theme; it is a flex row of three items with the title taking the slack, 
 should shorten the title rather than the controls, but that has not been photographed. And the
 pool's 183 additions were checked against a word list written for this package, not against a
 dictionary: a name that is also an uncommon English word would pass.
+
+## 157. WP-83 — tokens are what you spend; the money is behind a switch
+
+The owner, 14 September 2026:
+
+> _"Maybe we do not want today cost etc. because mostly people will have subscriptions, so they
+> have a different billing system. But it should help them track their token usage: where are they
+> going, how much, in which sessions, how much input, cached, output, so they can make smart
+> decisions."_
+
+`01-PRODUCT.md` and `08` §1.1 rule 7 have said since WP-07 that cost is an estimate and never a
+bill, and that is still true and unchanged. What WP-26 could not fix is that a dollar figure at
+public list prices is not a subscriber's bill and not their budget either — it is a number that
+looks like both. So `settings.showCost` ships **off**, every cost surface is behind it, and what
+stands in its place is the thing the user actually spends.
+
+### 157.1 The plan said the adapters already carried the breakdown. They did not.
+
+`08` §9's "Why WP-83 exists" paragraph reads: _"The adapters already carry the breakdown
+(`tokenBreakdown.cacheRead` / `cacheWrite` on all four), so this is a presentation package over
+data the ledger holds, not a capture change."_
+
+`grep -r tokenBreakdown` over the whole repository returned nothing. Rule 11 — a claim in anyone's
+documentation is a hypothesis until measured — and this is the cheapest possible instance of it.
+Every adapter computed the four counters while reading a transcript and then **threw two of them
+away**: `parse.mjs` summed `input + output` into `tokens` and `cacheRead + cacheWrite` into
+`cacheTokens`, and the `SessionSummary` type had nowhere else to put them. So this package is a
+capture change after all, in four files, and the presentation half was the easy half.
+
+What each runtime actually reports, measured against the four adapters in this tree:
+
+| runtime | input | output | cache read | cache write |
+|---|---|---|---|---|
+| `claude-code` | `input_tokens` | `output_tokens` | `cache_read_input_tokens` | `cache_creation_input_tokens` |
+| `codex` | `input_tokens` | `output_tokens` | `cached_input_tokens` | **never** |
+| `gemini-cli` | prompt | candidates | cached content | **never** |
+| `opencode` | `tokens_input` | `tokens_output` | `tokens_cache_read` | `tokens_cache_write` |
+
+Two of the four give a four-way split; two give three counters and say nothing at all about cache
+writes. One path gives no usage of any kind — `opencode session list --format json`, the
+documented CLI fallback — which is the "a runtime gives only a total" case the package specified,
+and the only one in the tree.
+
+**A key is present on `TokenBreakdown` only when the runtime named it.** That is the whole
+discipline of the type and the reason it is not four required numbers. Writing `cacheWrite: 0`
+beside Codex's three counters would turn a silence into a measurement, and every table downstream
+would then print a confident `0` for a column no record ever carried. It is `rates.mjs`'s `NO_RATE`
+rule — _a wrong number is worse than no number, because a wrong number is actionable_ — applied to
+tokens instead of to money.
+
+### 157.2 The ledger record is versioned and additive
+
+The `tokens` record gains `v: 2`, `split`, `in`, `out`, `cacheRead`, `cacheWrite`, `model` and
+`tool`, and **changes none of its v1 fields**. `delta`, `tokens`, `cacheDelta` and `cacheTokens`
+mean exactly what they meant, because four things already read them — `Ledger._noteTokens` (the
+room plate's day tally), `computeStats`, `windowDigest` and the floor replay — and a schema change
+that made a ninety-day ledger unreadable would have thrown away the measurement it was made to
+improve. `parseRecords` was already tolerant of unknown fields, which is what made an additive
+change possible at all.
+
+A line with no `v` is a v1 line: a total with no breakdown. That is _also_ what this build writes
+for a runtime that reports no breakdown (`split: false`), so backward compatibility and the
+only-a-total case are one code path rather than two, and one test covers both.
+
+`split: true` means the four counters below it are what the RUNTIME wrote down. Nothing is
+inferred in either direction: `breakdownDelta` returns null when the adapter gave no breakdown, a
+counter the adapter did not name never appears on the line, and a counter that went DOWN — a
+truncated or rotated transcript — is clamped at zero exactly as `_noteTokens` already clamped the
+totals.
+
+### 157.3 `no data` is a value, and it is computed rather than asserted
+
+`src/core/usage.mjs` is pure: records in, numbers out, no disk, no registry, and a clock it is
+handed. Every bucket it produces carries `absent` — the counters that **no contributing record
+named** — computed from what was SEEN rather than from what is missing, which is the only way a
+mixed window (some Claude Code, some Codex) can be honest about a column that is real for half of
+it. `test/unit/usage.test.mjs` aggregates an eight-record fixture and compares every total, every
+ranking and every counter against sums written out by hand in the comment above it.
+
+The trend is `no data` unless BOTH weeks hold records. A week measured against a week the machine
+was switched off for is "up 100%", which is true of the arithmetic and false of the work.
+
+`model` and `tool` are the other two places this rule bites. A record that named neither is filed
+under no key at all rather than under `unknown`, and the tab's last line says how much of the
+window each dimension could account for — `24,247,800 of 32,817,800 tokens name a model, 0 name a
+tool` on the demo floor — so a reader cannot add a column up and believe it covers everything.
+
+**`tool` is the weakest figure in the package and is labelled as such.** A `tokens` record is
+written when a scan sees a session's counters move, and what it can honestly say is which tool that
+session was running at that moment — not which tool the turn spent its tokens on. The table's
+caption is `By tool, where a record named one`, and on a ledger whose records predate hooks it is
+`no data` throughout, which is what the demo floor shows.
+
+### 157.4 What moved on each surface
+
+- **The deck has two tabs.** `Queue` and `Usage`, one surface, one way out — the deck is already a
+  full-surface view with §156's bar, and a second tab is a second thing to look at rather than a
+  second thing to escape from. The Usage tab is a window picker (today / 7 days / 30 days), the
+  window's total, the four-way split as a stacked bar with a labelled legend, and five real
+  `<table>`s — by project, by session, by model, by day, by tool — each sortable by any column,
+  each with a caption, a row header and `aria-sort` on the column it is ordered by.
+- **`By day` starts as a calendar, not a ranking.** It is the one table here whose row order
+  carries meaning of its own, and the first render sorted it by size like the rest until the demo
+  floor showed a week in the order 14th, 11th, 10th, 8th. `DEFAULT_SORTS` in `public/usage.js`.
+- **The panel's bottom line** is `1,600,000 tok · 128k in · 80k cache w · 1.36M cache r · 32k out ·
+  opus-5`, and with cost on the list-price estimate returns after it, byte for byte as it was.
+- **The room plate's third line** is `today 5.8M tok · with cache` where it was the payroll meter.
+  `with cache` is not decoration: the line above it is `580k tok`, which is input plus output, and
+  two token figures on one plate that count different things with only one of them saying so is a
+  plate that looks wrong to anybody who adds them up. WP-81 restyles the plate; this is the data it
+  will be given.
+- **The board, the day's card, Wrapped and `deckhq stats`** each drop their money line entirely
+  rather than printing a zero in its place.
+- **The header's numbers are untouched**, and so is `doctor --share`.
+
+### 157.5 Turning it on restores everything, because nothing was thrown away
+
+`src/core/rates.mjs` is not modified by this package. `estimateCost` is still called on every
+scan, `costEstimate` still travels on every agent, `todaySpend` still travels on every project
+beside the new `todayTokens`, and `rateCardVersion` still rides in on every snapshot. `showCost`
+decides only whether a surface ASKS. That is why flipping it is a repaint rather than a reload, and
+why the "restores every cost surface exactly as it is today" half of the acceptance line is a
+property of the design rather than a promise somebody has to keep.
+
+`costVisible(snapshot)` in `public/panel-format.js` is the one place the question is asked, and it
+reads an ABSENT setting as off — a snapshot from a daemon that predates the setting, or one that
+has not arrived yet, must not put a dollar figure in front of somebody who never asked for one.
+
+### Tests
+
+Thirteen new in `usage.test.mjs`: the hand-summed fixture; a property check that each counter is
+the sum of the records that carried it and nothing else; window edges a millisecond either side of
+local midnight on an injected clock; the empty window; the absent counter; the trend's two-week
+requirement; a v1 ledger line parsed and totalled; `copyBreakdown`/`breakdownDelta` including the
+truncated-transcript clamp; the five tables' structure and `aria-sort`; sorting's total order; the
+panel's three branches; and the no-currency sweep over the Usage tab, the panel line and the room
+plate. One new in `ledger-invariant.test.mjs` drives a real `Registry` over a real `Ledger` and
+reads the written lines back: four counters for a four-way runtime, no `cacheWrite` FIELD for a
+three-way one, and `split: false` for one that gave only a total.
+
+Six existing assertions were edited and none deleted. `postcard.test.mjs`, `wrapped.test.mjs` and
+`rates.test.mjs` now say `showCost: true` where they assert a currency, and each gained a sibling
+asserting there is none by default; `scene-math.test.mjs`'s plate test split into the token line
+and the payroll line; `claude-parse.test.mjs` and `opencode-parse.test.mjs` gained the breakdown
+beside the totals they already checked.
+
+2163 tests, 1 skipped; lint, format and typecheck clean. Nine goldens regenerated for the plate's
+third line and re-checked at 0 px.
+
+### Verified in a browser
+
+The demo floor was run from this worktree with `--ledger-fixture` on a free port, and §156's own
+warning applied again: the FIRST attempt served an `index.html` with no tabs in it, because the
+preview server resolves `.claude/launch.json`'s relative paths against the main checkout rather
+than against this worktree. Started by hand instead, the tab was driven: the Usage tab renders all
+five tables over 299 real ledger records; `no data` appears in the four counter columns of every
+day whose records the fixture wrote as v1, and throughout the tool table; clicking `Total` on
+`By day` ranks it and clicking again reverses it; the panel's line reads the four counters with no
+currency; `POST /api/settings {showCost:true}` and a reload brings back `≈ $2.62 · list price, rate
+card 2026-09-04 · not a bill` after them, and turns the plate's third line from `today 5.8M tok ·
+with cache` back into `today ≈ $9.50 · list price`.
+
+### Unverified
+
+**`tool` has never been seen with a value on a real floor.** The field is written from
+`agent.currentTool`, which is populated by `PreToolUse` hooks; the demo fixture's synthetic ledger
+carries none, so the by-tool table has only ever been photographed empty. Its rendering is covered
+by a unit fixture and its emptiness by the demo; the populated case is not.
+
+`todayTokensFor` clamps the day's movement to the room's lifetime total for the reason
+`todaySpendFor` does, and that clamp has not been observed firing — it needs a scan that read a
+longer transcript than the totals it is compared against.
+
+The Usage tab has been looked at on one window size (1600 × 1000) in the default theme. Its tables
+scroll inside their own boxes so a narrow window should not push the deck sideways, but that has
+not been photographed, and it is not in the goldens: the goldens photograph the floor, and the deck
+is not on it.
