@@ -58,19 +58,6 @@
       "note": "Your Office: four waiting on the sofas, one at the chair"
     },
     {
-      "name": "working-desk",
-      "kind": "still",
-      "population": "demo",
-      "crop": {
-        "x": 452,
-        "y": 262,
-        "w": 212,
-        "h": 166
-      },
-      "width": 424,
-      "note": "one desk, close: the agent, the screen, the state colour"
-    },
-    {
       "name": "lounge-bay",
       "kind": "still",
       "population": "demo",
@@ -221,6 +208,34 @@
       },
       "width": 800,
       "note": "an agent finishes, walks to Your Office and puts its hand up"
+    },
+    {
+      "name": "room-plate-night-shift",
+      "kind": "still",
+      "population": "demo",
+      "crop": {
+        "x": 400,
+        "y": 200,
+        "w": 240,
+        "h": 380
+      },
+      "width": 480,
+      "note": "the same room in night shift",
+      "theme": "night shift"
+    },
+    {
+      "name": "room-plate-blueprint",
+      "kind": "still",
+      "population": "demo",
+      "crop": {
+        "x": 400,
+        "y": 200,
+        "w": 240,
+        "h": 380
+      },
+      "width": 480,
+      "note": "the same room in blueprint",
+      "theme": "blueprint"
     }
   ]
 }

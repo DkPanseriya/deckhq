@@ -187,12 +187,6 @@ const IMAGES = [
   { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden', role: 'hero' },
   { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden', role: 'crop' },
   {
-    to: 'goldens/pinned.png',
-    from: 'test/goldens/win32/pinned.png',
-    class: 'golden',
-    role: 'crop',
-  },
-  {
     to: 'goldens/single.png',
     from: 'test/goldens/win32/single.png',
     class: 'golden',
@@ -244,12 +238,6 @@ const IMAGES = [
     role: 'crop',
   },
   {
-    to: 'site/working-desk.png',
-    from: 'docs/media/site/working-desk.png',
-    class: 'capture',
-    role: 'crop',
-  },
-  {
     to: 'site/lounge-bay.png',
     from: 'docs/media/site/lounge-bay.png',
     class: 'capture',
@@ -285,38 +273,27 @@ const IMAGES = [
     class: 'capture',
     role: 'crop',
   },
-
-  // Captures kept for the log entries that cite them. None is on a page since
-  // WP-94b: they are photographs of older builds.
-  { to: 'hero.gif', from: 'docs/media/hero.gif', class: 'capture', role: 'gif' },
-  { to: 'deck-view.png', from: 'docs/media/deck-view.png', class: 'capture', role: 'crop' },
   {
-    to: 'panel-review-card.png',
-    from: 'docs/media/panel-review-card.png',
+    to: 'site/room-plate-night-shift.png',
+    from: 'docs/media/site/room-plate-night-shift.png',
     class: 'capture',
     role: 'crop',
   },
   {
-    to: 'permission-card.png',
-    from: 'docs/media/permission-card.png',
-    class: 'capture',
-    role: 'crop',
-  },
-  { to: 'app-window.png', from: 'docs/media/app-window.png', class: 'capture', role: 'crop' },
-  {
-    to: 'office-cleared.png',
-    from: 'docs/media/office-cleared.png',
-    class: 'capture',
-    role: 'crop',
-  },
-  {
-    to: 'wrapped-weekly.png',
-    from: 'docs/media/wrapped-weekly.png',
+    to: 'site/room-plate-blueprint.png',
+    from: 'docs/media/site/room-plate-blueprint.png',
     class: 'capture',
     role: 'crop',
   },
 
-  // Illustrations. Every one of these is a drawing of a specification.
+  // The older captures — the app window, the cleared office, Wrapped, the deck,
+  // the panel — are off this list since WP-94b. They are photographs of builds
+  // before WP-79 and WP-87, they are still in `docs/media/` for the log entries
+  // that cite them, and a log entry's own picture registers itself below.
+
+  // Illustrations. Every one of these is a drawing of a specification, and it
+  // is on a page only because that specification is COMING: `docs/MEDIA.md` §2.
+  // Nothing here is a design option, a candidate or a before-and-after.
   {
     to: 'look/presets.png',
     from: 'docs/media/look/presets.png',
@@ -332,42 +309,6 @@ const IMAGES = [
   {
     to: 'look/agent-sizes.png',
     from: 'docs/media/look/agent-sizes.png',
-    class: 'illustration',
-    role: 'crop',
-  },
-  {
-    to: 'interior/board.png',
-    from: 'docs/media/interior/board.png',
-    class: 'illustration',
-    role: 'hero',
-  },
-  {
-    to: 'interior/mockup-default.png',
-    from: 'docs/media/interior/mockup-default.png',
-    class: 'illustration',
-    role: 'hero',
-  },
-  {
-    to: 'design/character-b.png',
-    from: 'docs/media/design/character/B.png',
-    class: 'illustration',
-    role: 'hero',
-  },
-  {
-    to: 'design/character-in-situ.png',
-    from: 'docs/media/design/character/in-situ.png',
-    class: 'illustration',
-    role: 'hero',
-  },
-  {
-    to: 'motion/life-sheet.png',
-    from: 'docs/media/motion/life-sheet.png',
-    class: 'illustration',
-    role: 'crop',
-  },
-  {
-    to: 'motion/lounge-activities.png',
-    from: 'docs/media/motion/lounge-activities.png',
     class: 'illustration',
     role: 'crop',
   },

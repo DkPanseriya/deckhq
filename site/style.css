@@ -856,6 +856,15 @@ figcaption {
   color: var(--ink-2);
 }
 
+/* WP-94b. What is designed and not built. It sits on the picture's own caption
+   rather than in a paragraph under it, because the reader who needs it most is
+   the one skimming the pictures and reading none of the words. */
+.tag--coming {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--ink);
+}
+
 /* ------------------------------------------------------------------ hero */
 
 .hero {
@@ -1476,10 +1485,10 @@ figcaption {
   color: var(--ink);
 }
 
-.step-state--planned {
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  color: var(--muted);
+.step-state--coming {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--ink-2);
 }
 
 /* ------------------------------------------------------------ the device */

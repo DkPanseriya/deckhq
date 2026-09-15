@@ -430,7 +430,11 @@ test('HONESTY: a mockup is never shown as a screenshot', async () => {
       }
     }
   }
-  assert.ok(shown >= 8, `expected the mockups to be published; found ${shown}`);
+  // Four, not the eight WP-94a had: since WP-94b a mockup is published only
+  // where it draws something that is COMING, and the design-journey sheets —
+  // the candidates, the material board, the interior before-and-after — are
+  // off the site entirely.
+  assert.ok(shown >= 4, `expected the mockups to be published; found ${shown}`);
 
   // And the gate refuses a page that forgets. Without this the test above
   // passes on a site that happens to be correct and a gate that does nothing.
