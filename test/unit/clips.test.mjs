@@ -9,7 +9,9 @@ import {
   makeActivityRotation,
 } from '../../public/render/clips.js';
 
-// docs/03-VISUAL-SPEC.md §4.1 + §4.2 — the 16-clip work list, verbatim durations.
+// docs/03-VISUAL-SPEC.md §4.1 + §4.2 — the 18-clip work list, verbatim
+// durations. Sixteen since the clips landed; `run` and `read` are WP-87's, and
+// their numbers are `docs/plan/12-MOTION-AND-CREW.md` §2's own.
 const EXPECTED = {
   type: { duration: 0.9, loop: true },
   think: { duration: 3.2, loop: true },
@@ -18,6 +20,7 @@ const EXPECTED = {
   hand_raise: { duration: 1.4, loop: true },
   slump: { duration: 4.0, loop: true },
   walk: { duration: 0.8, loop: true },
+  run: { duration: 0.52, loop: true },
   stand_wait: { duration: 4.0, loop: true },
   pool: { duration: 4.5, loop: true },
   table_tennis: { duration: 1.6, loop: true },
@@ -26,6 +29,7 @@ const EXPECTED = {
   coffee: { duration: 6.0, loop: false },
   eat: { duration: 3.4, loop: true },
   chat: { duration: 4.0, loop: true },
+  read: { duration: 20.0, loop: true },
   lounge_idle: { duration: 5.0, loop: true },
 };
 
@@ -59,9 +63,9 @@ function assertCompletePose(pose, label) {
   assert.equal(typeof pose.speechPhase, 'number', `${label}: speechPhase is a number`);
 }
 
-test('all 16 clips from VISUAL-SPEC §4 exist with the spec durations and loop flags', () => {
+test('all 18 clips from VISUAL-SPEC §4 exist with the spec durations and loop flags', () => {
   const names = Object.keys(EXPECTED);
-  assert.equal(names.length, 16);
+  assert.equal(names.length, 18);
   for (const name of names) {
     assert.ok(CLIPS[name], `CLIPS.${name} exists`);
     assert.equal(CLIPS[name].duration, EXPECTED[name].duration, `${name}.duration`);
@@ -71,10 +75,22 @@ test('all 16 clips from VISUAL-SPEC §4 exist with the spec durations and loop f
   assert.deepEqual(Object.keys(CLIPS).sort(), names.sort());
 });
 
-test('LOUNGE_CLIPS is exactly the eight §4.2 clips', () => {
+test('LOUNGE_CLIPS is exactly the nine §4.2 clips', () => {
   assert.deepEqual(
     [...LOUNGE_CLIPS].sort(),
-    ['pool', 'table_tennis', 'board_game', 'arcade', 'coffee', 'eat', 'chat', 'lounge_idle'].sort(),
+    [
+      'pool',
+      'table_tennis',
+      'board_game',
+      'arcade',
+      'coffee',
+      'eat',
+      'chat',
+      // WP-87: the quiet bay had no activity of its own, so anybody dealt to
+      // it sat doing nothing while the games bay played pool.
+      'read',
+      'lounge_idle',
+    ].sort(),
   );
 });
 

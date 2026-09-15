@@ -25,7 +25,7 @@ import {
   formatElapsed,
   labelBox,
 } from './rig.js';
-import { sampleClip, makeActivityRotation, makeIdleRotation } from './clips.js';
+import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { lodForZoom, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
@@ -37,9 +37,11 @@ import {
   agentLabelFor,
   iconForAgent,
   isNeedsYouAgent,
-  nowMs,
+  frameMs,
+  animMs,
 } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
+import { characterLife } from './life.js';
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
@@ -181,7 +183,7 @@ export class SceneDraw extends SceneHit {
     });
     this._backdrop = bakeBackdrop(this._plan, this._dpr);
     this._fadeFrom = previous;
-    this._fadeStartedAt = previous ? nowMs() : 0;
+    this._fadeStartedAt = previous ? frameMs() : 0;
     this._recomputeFitScale();
     // The pan referred to a floor that no longer exists, so it is discarded;
     // the magnification is the user's and is kept.
@@ -247,7 +249,7 @@ export class SceneDraw extends SceneHit {
   _startLoop() {
     if (this._running) return;
     this._running = true;
-    this._lastT = nowMs();
+    this._lastT = frameMs();
     this._raf = requestAnimationFrame(this._frame);
   }
 
@@ -270,6 +272,11 @@ export class SceneDraw extends SceneHit {
       this._runtime.step(dt, {
         reduced: this._reduced,
         plan: this._plan,
+        // WP-87. The runtime writes clip phases and rotation holds, and every
+        // one of them is now an instant on the INJECTED clock rather than
+        // `Date.now()` — see `animMs()`. `dt` stays the frame clock's, because
+        // an interval is a fact about this tab and nothing else.
+        now: animMs(),
         makeActivityRotation,
         makeIdleRotation,
       });
@@ -369,7 +376,7 @@ export class SceneDraw extends SceneHit {
       // is drawn OVER the new one and faded out. Recorded as a deviation.
       const fade = this._fadeFrom;
       if (fade) {
-        const t = (nowMs() - this._fadeStartedAt) / REPLAN_FADE_MS;
+        const t = (frameMs() - this._fadeStartedAt) / REPLAN_FADE_MS;
         if (t >= 1 || this._reduced) {
           this._fadeFrom = null;
         } else {
@@ -541,7 +548,10 @@ export class SceneDraw extends SceneHit {
 
   _drawCharacterAt(rec, camera, lod, labelPlan, badgePlan) {
     const ctx = this.ctx;
-    const agent = this._agentsById.get(rec.id);
+    // WP-87: a record whose id has LEFT the snapshot is kept for `despawn`'s
+    // 0.42 s so the figure can fold away, and for those few frames the only
+    // agent there is to draw is the one the record was last synced against.
+    const agent = this._agentsById.get(rec.id) || rec.agent;
     if (!agent) return;
     // People are drawn at their own scale (`_characterScale`), which is the
     // world scale except on a floor small enough that a body would drop below
@@ -571,13 +581,24 @@ export class SceneDraw extends SceneHit {
       // means: draw the character, not the label.
     }
     const s = worldToScreen(rec, camera);
-    // While mid-walk, sample `walk` regardless of `rec.clip` (which still names the
-    // *previous* clip until arrival — see agents.js `stepAgent`). `t` is deliberately not
-    // reset when this switches: `walk` loops, so `sampleClip` just wraps it, and a
-    // continuously-increasing `t` is all a looping clip needs for smooth playback.
+    // While mid-walk, sample `walk` — or `run`, on the one trip that runs
+    // (WP-87, `12-MOTION-AND-CREW.md` §2) — regardless of `rec.clip`, which
+    // still names the *previous* clip until arrival (see agents.js
+    // `stepAgent`). `t` is deliberately not reset when this switches: both
+    // loop, so `sampleClip` just wraps, and a continuously-increasing `t` is
+    // all a looping clip needs for smooth playback.
     const walking = rec.path.length > 0;
-    const clipName = walking ? 'walk' : rec.clip || 'type';
-    const t = (nowMs() - rec.clipStartedAt) / 1000;
+    const running = walking && rec.running === true;
+    const clipName = walking ? (running ? 'run' : 'walk') : rec.clip || 'type';
+    // WP-87. THE ANIMATION CLOCK, and it is an epoch instant now rather than
+    // `performance.now()` — see `animMs()`. `rec.clipStartedAt` is a real
+    // timestamp on the agent wherever the agent carries one, so two tabs draw
+    // the same frame and a reload does not restart a cycle. `?phase=` pins the
+    // phase of every clip without disabling motion, which is the seam the
+    // `demo@motion` golden is taken through.
+    const now = animMs();
+    const pinned = this._phase;
+    const t = pinned === null ? (now - rec.clipStartedAt) / 1000 : pinned * clipDuration(clipName);
     const pose = sampleClip(clipName, t, this._reduced);
     // `pose.bodyAngle` from a clip is a small relative sway (e.g. arcade's lean), not an
     // absolute facing — every clip except `arcade` leaves it at 0. The character's actual
@@ -638,10 +659,28 @@ export class SceneDraw extends SceneHit {
       // until a walk arrives, so the rig cannot work it out from the pose.
       state: stateForAgent(agent),
       walking,
-      // The idle micro-motion's clock, and the only one: `nowMs()` is the
-      // injected clock the whole scene runs on, so a golden is a golden and
-      // `prefers-reduced-motion` freezes the figure outright.
-      seconds: nowMs() / 1000,
+      // The idle micro-motion's clock, and the only one: `animMs()` IS the
+      // injected clock now — `public/clock.js`, pinned when the daemon's is —
+      // so a golden is a golden and `prefers-reduced-motion` freezes the figure
+      // outright (WP-87; the comment that used to sit here said this of
+      // `performance.now()`, which nothing could pin).
+      seconds: now / 1000,
+      phase: pinned,
+      // WP-87 · everything this figure is doing beyond its pose, computed from
+      // the snapshot and the clock in `life.js`. It is a shared scratch object:
+      // `drawCharacter` reads it synchronously and nothing holds on to it.
+      life: characterLife(agent, {
+        nowMs: now,
+        state: stateForAgent(agent),
+        lod,
+        reduced: this._reduced,
+        pinned,
+        flickerAt: rec.flickerAt ?? null,
+        spawnAt: rec.spawnAt ?? null,
+        leftAt: rec.leftAt ?? null,
+        walking,
+        running,
+      }),
       // `label`/`labelOffsetY` were resolved once for the whole frame above
       // (`_draw`'s collision pass) — drawCharacter still truncates to 18
       // chars and gates on lod >= 1 itself, this only decides *whether* and

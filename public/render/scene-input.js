@@ -26,6 +26,7 @@ import {
 import { bakeBackdrop } from './backdrop.js';
 import { assignSeats } from './agents.js';
 import { SceneDraw } from './scene-draw.js';
+import { animMs } from './scene-agent.js';
 
 /** Pointer travel past which a press counts as a pan rather than a click. */
 export const DRAG_SLOP_PX = 4;
@@ -278,6 +279,7 @@ export class SceneInput extends SceneDraw {
       agents,
       this._plan,
       assignSeats(this._plan, agents, { selectedId: this._selectedId }),
+      { now: animMs() },
     );
     if (!this._running) this._draw();
   }

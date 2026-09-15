@@ -38,6 +38,7 @@ import {
   BODY_HEIGHT_U,
   RIG_DETAIL_MIN_PX,
   RIG_INK,
+  RIG_MARK,
   RIG_MARK_MIN_PX,
   RIG_OFF,
   RIG_PANE,
@@ -185,6 +186,12 @@ let _tiny = false; // the state mark swaps to one bold form
 let _droop = 0; // 0 upright, 1 fully drooped
 let _phase = 0; // idle micro-motion, 0 under reduced motion
 let _frame = 0; // which walk frame
+// WP-87 · the two character-life terms the BODY carries. Everything else
+// `life.js` computes is drawn by `rig.js` over the top of the figure; these two
+// change the figure itself, so they live with the rest of its geometry.
+let _flicker = 0; // visor flash on a real tool call, 0..1
+let _power = 0; // power-down, 0 lit .. 1 dark
+let _card = 1; // how open the held page is, 0 edge-on .. 1 flat
 
 /**
  * Resolve one character's geometry into the scratch above.
@@ -194,8 +201,13 @@ let _frame = 0; // which walk frame
  * @param {number} h the figure's height, screen px
  * @param {number} phase idle phase in [0,1), 0 under reduced motion
  * @param {boolean} dim force the reduced drawing (L0)
+ * @param {import('./life.js').Life|null} [life] WP-87's character life. Omitted
+ *   — the manager's avatar, a caller that predates it — every term rests.
  */
-export function rigSetup(k, id, tints, h, phase, dim) {
+export function rigSetup(k, id, tints, h, phase, dim, life) {
+  _flicker = life ? life.flicker : 0;
+  _power = life ? life.power : 0;
+  _card = life ? life.card : 1;
   _k = k;
   _id = id;
   _t = tints;
@@ -210,7 +222,10 @@ export function rigSetup(k, id, tints, h, phase, dim) {
   _hr = DOME_R[id.dome] || DOME_R[0];
   _detail = !dim && h >= RIG_DETAIL_MIN_PX;
   _tiny = h < RIG_MARK_MIN_PX;
-  _droop = tints.dead ? 1 : k.lean > 0.18 ? 0.7 : 0;
+  // A dead figure's antenna is fully drooped — unless it is still going down,
+  // in which case the droop IS the power-down: the aerial falls over the same
+  // 1.6 s the pane fades over, which is the only part of the strip that moves.
+  _droop = tints.dead ? (_power > 0 ? _power : 1) : k.lean > 0.18 ? 0.7 : 0;
   _phase = phase || 0;
   _frame = k.walk ? walkFrame(phase * 2) : 0;
   rigArms(k);
@@ -437,9 +452,16 @@ export function drawRigNearArm(ctx) {
 /** The page a `for_review` robot is holding up. */
 export function drawRigCard(ctx) {
   if (!_k.card) return;
-  lRoundRect(ctx, 0, _k.aR[1] + 0.02, 0.32, 0.2, 0.03, 0);
+  // WP-87's PAGE FLIP (§2): the page narrows to its own edge and comes back,
+  // four frames over half a second, once every twelve. `_card` is 1 when it is
+  // held flat, which is both the reduced-motion form and every frame but the
+  // one in twenty-four this is turning in.
+  const open = Math.max(0.06, _card);
+  lRoundRect(ctx, 0, _k.aR[1] + 0.02, 0.32 * open, 0.2, 0.03, 0);
   paint(ctx, '#FBF7EE');
-  if (!_detail) return;
+  // Edge-on there is nothing written on it to draw, and the two rules would
+  // stand proud of a page a tenth of their length.
+  if (!_detail || open < 0.7) return;
   ctx.strokeStyle = fade(RIG_INK, 0.5);
   ctx.lineWidth = _lw;
   ctx.beginPath();
@@ -496,19 +518,35 @@ export function drawRigVisor(ctx, state) {
   // frames under reduced motion, because `_phase` is exactly zero there.
   const blink = _phase > 0.94 ? 0.24 : 1;
   lRoundRect(ctx, _hx, vy, _hr * 1.6, _hr * 0.8 * blink, _hr * 0.32 * blink, tilt);
+  // WP-87 · THE POWER-DOWN, and it is drawn ON THE VISOR because the visor is
+  // where this figure's power lives (§3.9, and `RIG_PANE_DEAD` above). Five
+  // frames over 1.6 s, keyed to the session's own end timestamp so it runs once
+  // and no re-render can run it again. Frame 5 IS the dead pane, which is what
+  // an ended session has always been drawn with — so an ended figure that has
+  // been ended for a while is pixel-for-pixel what it was before this package.
   // HOW MUCH LIGHT IS IN THE VISOR IS PART OF THE STATE.
   // `working`, `needs_input` and `for_review` are lit: something is happening,
   // or something is waiting on you. `stalled` is dimmed — it has gone quiet but
   // it is still live. `benched` is softer still, resting. `ended` has no power
   // in it at all. Three levels rather than two, because "gone quiet" and
   // "finished" are the two states a monitoring floor must never confuse.
-  ctx.fillStyle = _t.dead
+  let pane = _t.dead
     ? RIG_PANE_DEAD
     : state === 'stalled'
       ? mixHex(RIG_PANE, RIG_PANE_DEAD, 0.5)
       : state === 'benched'
         ? mixHex(RIG_PANE, RIG_PANE_DEAD, 0.25)
         : RIG_PANE;
+  // Mid power-down the pane is still on its way out; at `_power === 1` this is
+  // exactly `RIG_PANE_DEAD` and the expression above it.
+  if (_power > 0 && _power < 1) pane = mixHex(RIG_PANE, RIG_PANE_DEAD, _power);
+  // THE FLICKER (§2): a real tool call opening, three frames over 0.24 s. It
+  // brightens the pane rather than moving anything, because the visor is the
+  // most findable element on the floor and a flash there is legible at 16 px
+  // where a moved hand is not. It is capped at one per 0.5 s upstream, in
+  // `AgentRuntime#sync`, so a tool loop cannot strobe.
+  else if (_flicker > 0) pane = mixHex(pane, RIG_MARK, _flicker * 0.85);
+  ctx.fillStyle = pane;
   ctx.fill();
   ctx.strokeStyle = RIG_INK;
   ctx.lineWidth = _lw * 0.9;

@@ -59,6 +59,7 @@
  */
 import {
   WALK_SPEED,
+  RUN_SPEED,
   ROTATION_MIN_S,
   PAIRED_ACTIVITIES,
   EPS,
@@ -72,6 +73,21 @@ import {
 import { planWalk, doorFor } from './agents-nav.js';
 import { derivePlacement } from './agents-seats.js';
 import { pickNextActivity, pickNextActivityFromClips, initialClipFor } from './agents-activity.js';
+// WP-87. `./life.js` is the one new static import this file takes, and it does
+// not break the rule the header states above: `life.js` is pure, imports only
+// `./agents-core.js` (which imports nothing), and touches no canvas and no DOM,
+// so this module still loads on its own under `node --test`. The rules it
+// carries — which trip runs, which activity a bay deals, how long a hold is —
+// belong beside the animation table they are stated in rather than as a fourth
+// copy here.
+import {
+  ACTIVITY_BAY,
+  FLICKER_MIN_GAP_MS,
+  LIFE,
+  loungeActivityFor,
+  loungeHoldMs,
+  tripRuns,
+} from './life.js';
 
 export * from './agents-core.js';
 export * from './agents-nav.js';
@@ -140,6 +156,68 @@ export function samePoint(a, b) {
   return a.x === b.x && a.y === b.y;
 }
 
+/**
+ * WHAT THIS BENCHED AGENT DOES NEXT, as a pure function of (id, bay, cycle).
+ *
+ * §2: *"The activity is `BAY_ACTIVITIES[bay][hash(sessionId) % n]` and the hold
+ * is `hash(sessionId, cycleIndex)` mapped into 45–90 s — never `Math.random`,
+ * so two tabs on one floor show the same lounge."* Which bay is the same hash
+ * over the bays the plan actually laid, so a narrow lounge that gave up its
+ * games bay deals nobody a pool shot.
+ *
+ * @param {string} id the session id
+ * @param {string[]} bays the bay names this plan laid
+ * @param {number} cycle the rotation's cycle index
+ * @returns {{activity:string, duration:number, paired:boolean}}
+ */
+export function bayActivityChoice(id, bays, cycle) {
+  const bay = bays[hashString(`${id}:bay:${cycle}`) % bays.length];
+  const activity = loungeActivityFor(id, bay, cycle);
+  return {
+    activity,
+    duration: loungeHoldMs(id, cycle) / 1000,
+    paired: PAIRED_ACTIVITIES.has(activity),
+  };
+}
+
+/**
+ * WHEN THIS CLIP STARTED, AND IT IS THE AGENT'S OWN TIMESTAMP WHEREVER THERE
+ * IS ONE (WP-87, `docs/plan/12-MOTION-AND-CREW.md` §1.1).
+ *
+ * *"`clipStartedAt` becomes a phase offset derived from a real timestamp on the
+ * agent … rather than from when this tab noticed, so two tabs draw the same
+ * frame and a reload does not restart a cycle."* That is the whole of this
+ * function: a hand has been up since `needsInputSince`, a review has been
+ * waiting since `reviewSince`, and a session has been working since its last
+ * observed activity. Each is a fact the daemon reported, so two browsers
+ * looking at one floor agree about which frame of the wave they are on.
+ *
+ * The fallback is the caller's `now` — the injected clock — and it is used for
+ * exactly the things the model has no timestamp for: a walk (which started when
+ * THIS tab saw the seat change) and a lounge activity (which the rotation
+ * itself chose).
+ *
+ * @param {AgentLike & {needsInputSince?:number|null, reviewSince?:number|null,
+ *   lastActivityAt?:number, spawnedAt?:number|null}} agent
+ * @param {string} placement
+ * @param {number} now the injected clock
+ * @returns {number} ms epoch
+ */
+export function clipEpochFor(agent, placement, now) {
+  const ok = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  if (!agent) return now;
+  if (placement === 'desk' || placement === 'office') {
+    if (agent.activityState === 'needs_input') {
+      return ok(agent.needsInputSince) ?? ok(agent.lastActivityAt) ?? now;
+    }
+    if (agent.activityState === 'for_review') {
+      return ok(agent.reviewSince) ?? ok(agent.lastActivityAt) ?? now;
+    }
+    return ok(agent.lastActivityAt) ?? ok(agent.spawnedAt) ?? now;
+  }
+  return now;
+}
+
 // ------------------------------------------------------------- AgentRuntime
 
 /**
@@ -179,12 +257,34 @@ export class AgentRuntime {
         targetSeat: null,
         path: [],
         clip: null,
-        clipStartedAt: Date.now(),
+        // WP-87. An instant on the INJECTED clock, and wherever the agent
+        // carries a real timestamp for the state it is in, THAT timestamp —
+        // never "when this tab first noticed". It used to be `Date.now()`,
+        // subtracted from a `performance.now()`, which is an epoch instant
+        // taken away from a monotonic counter: about −1.7 billion seconds,
+        // survived only because a looping clip wraps and because every golden
+        // was the reduced-motion render. See `clipEpochFor` below.
+        clipStartedAt: 0,
         pendingClip: null,
         seated: false,
         seed,
         rng: mulberry32(seed),
         rotation: { activity: null, remaining: 0, pairedWith: null },
+        // WP-87 · the lounge rotation's cycle index. The activity and the hold
+        // are a hash of (id, bay, cycle), so this is what makes the next one
+        // different from this one without a random source anywhere near it.
+        rotationCycle: 0,
+        // WP-87 · the four instants the character-life director reads, all of
+        // them on the injected clock and all of them null until the event they
+        // name has actually been OBSERVED. `life.js` draws nothing from a null.
+        /** @type {number|null} */ toolSince: null,
+        /** @type {number|null} */ flickerAt: null,
+        /** @type {number|null} */ spawnAt: null,
+        /** @type {number|null} */ leftAt: null,
+        /** WP-87 · this trip is a run, not a walk. See `tripRuns`. */
+        running: false,
+        /** The agent this record was last synced against; see `sync`. */
+        /** @type {AgentLike|null} */ agent: null,
         // WP-28. The desk idle director's own state, and its own RNG stream.
         // Its own, deliberately: sharing `rng` would mean that adding a
         // variation at somebody's desk re-rolled every benched agent's lounge
@@ -249,8 +349,30 @@ export class AgentRuntime {
    * @param {AgentLike[]} agents
    * @param {Plan} plan
    * @param {Map<string, Seat|LoungeSpot>} seatMap
+   * @param {{now?:number}} [opts] WP-87. `now` is the INJECTED clock
+   *   (`public/clock.js` through `scene-agent.js`'s `animMs()`), and passing it
+   *   is what switches on the two one-shots at the ends of a session's life:
+   *   with a real instant a departing figure folds away over `despawn`'s 0.42 s
+   *   and a new one pops in over `spawn`'s 0.32 s; without one — a caller that
+   *   has no clock to give, which is every unit test that predates this — the
+   *   old behaviour holds exactly and a record that left the snapshot is gone
+   *   the same frame.
    */
-  sync(agents, plan, seatMap) {
+  sync(agents, plan, seatMap, opts = {}) {
+    const timed = typeof opts.now === 'number' && Number.isFinite(opts.now);
+    const now = timed ? /** @type {number} */ (opts.now) : 0;
+    // A FIRST SYNC IS NOT A HUNDRED ARRIVALS. §2's spawn is *"an id in this
+    // snapshot that was not in the LAST"*, and on the first snapshot there is
+    // no last — so the population a tab opens onto is simply present, and only
+    // what appears afterwards pops in.
+    //
+    // "Has held somebody", not "has been called": `Scene#setState` syncs TWICE
+    // on the first snapshot — once with the PREVIOUS agent list, to bridge the
+    // re-plan, and that list is empty on the first one. A flag set by the call
+    // rather than by the population therefore made the whole floor arrive, and
+    // the `demo@motion` capture photographed twenty-seven robots at a third of
+    // their size, mid pop-in. That capture is exactly what it is for.
+    const hadSnapshot = this._synced === true;
     const rooms = (plan && plan.rooms) || [];
     const doors = (plan && plan.doors) || [];
     // A new plan is a new floor: every wall, seat and corridor has moved, and
@@ -292,8 +414,32 @@ export class AgentRuntime {
       // stack every orphaned junior on one spot.
       if (agent.subagent === true && !seat) continue;
       seen.add(agent.id);
+      const existed = this._records.has(agent.id);
       const rec = this._ensure(agent.id);
       const destRoom = roomFor(placement, agent);
+      // The agent this record is standing in for, kept by reference so a figure
+      // that has LEFT the snapshot can still be drawn while it folds away —
+      // `scene-draw.js` looks here when the id is no longer in `_agentsById`.
+      rec.agent = agent;
+      // WP-87 · THE VISOR FLICKER'S ONE GATE, and it is the only place on the
+      // floor that can see one `currentTool.since` replace another. §2: the
+      // flash fires on a tool call the adapter genuinely observed opening, and
+      // is *"capped at one per 0.5 s, because a tool loop opening six calls in
+      // a second would otherwise strobe"*. A runtime that reports no tool
+      // events at all leaves `since` undefined and nothing ever fires.
+      const since = agent.currentTool && agent.currentTool.since;
+      if (typeof since === 'number' && Number.isFinite(since) && since !== rec.toolSince) {
+        rec.toolSince = since;
+        if (rec.flickerAt === null || since - rec.flickerAt >= FLICKER_MIN_GAP_MS) {
+          rec.flickerAt = since;
+        }
+      } else if (!agent.currentTool) {
+        rec.toolSince = null;
+      }
+      // An id that was not in the last snapshot pops in (§2's `spawn`).
+      if (!existed && hadSnapshot && timed) rec.spawnAt = now;
+      // …and one that came back before its fold-away finished is simply here.
+      rec.leftAt = null;
 
       if (!rec.initialised) {
         rec.x = seat ? seat.x : destRoom ? destRoom.x + destRoom.w / 2 : 0;
@@ -305,7 +451,7 @@ export class AgentRuntime {
         rec.path = [];
         rec.seated = seatedAt(placement, seat);
         rec.clip = initialClipFor(agent, placement);
-        rec.clipStartedAt = Date.now();
+        rec.clipStartedAt = clipEpochFor(agent, placement, now);
         setDeskDesired(rec, placement, rec.clip);
         rec.initialised = true;
         continue;
@@ -325,7 +471,7 @@ export class AgentRuntime {
         if (placementChanged) {
           rec.placement = placement;
           rec.clip = initialClipFor(agent, placement);
-          rec.clipStartedAt = Date.now();
+          rec.clipStartedAt = clipEpochFor(agent, placement, now);
           setDeskDesired(rec, placement, rec.clip);
           if (placement !== 'lounge')
             rec.rotation = { activity: null, remaining: 0, pairedWith: null };
@@ -338,6 +484,13 @@ export class AgentRuntime {
           const fromPoint = { x: rec.x, y: rec.y, room: fromRoom, door: doorFor(fromRoom, doors) };
           const toPoint = { x: seat.x, y: seat.y, room: destRoom, door: doorFor(destRoom, doors) };
           rec.path = planWalk(fromPoint, toPoint, rooms, plan);
+          // WP-87 · WALK, OR RUN. §2, and it is the one piece of motion on this
+          // floor that is a CLAIM rather than a state: the only trip that runs
+          // is an agent heading for Your Office because it needs input.
+          // `for_review` walks — it is waiting on you, but it is not blocked
+          // mid-turn — and nothing else on this floor ever runs at all, which
+          // is what keeps the claim readable across a room.
+          rec.running = tripRuns(placement, agent);
           rec.pendingClip = initialClipFor(agent, placement);
           setDeskDesired(rec, placement, rec.pendingClip);
           rec.roomId = destRoom.id;
@@ -373,17 +526,39 @@ export class AgentRuntime {
         const desired = initialClipFor(agent, placement);
         if (desired !== rec.deskDesired) {
           rec.clip = desired;
-          rec.clipStartedAt = Date.now();
+          rec.clipStartedAt = clipEpochFor(agent, placement, now);
           setDeskDesired(rec, placement, desired);
         } else if (!rec.deskIdle.clip && desired !== rec.clip) {
           rec.clip = desired;
-          rec.clipStartedAt = Date.now();
+          rec.clipStartedAt = clipEpochFor(agent, placement, now);
         }
       }
     }
 
+    // WHAT LEAVES, AND HOW LONG IT TAKES TO GO (WP-87 §2's `despawn`).
+    //
+    // A session that is no longer in the snapshot folds away over 0.42 s rather
+    // than vanishing between two frames, and its record is kept until it has.
+    // It is NOT what an ended session gets: `ended` stays on the floor (§5.1's
+    // occupancy rule) and powers down where it sits, because folding one away
+    // would say it had left the building.
+    //
+    // With no injected clock — a caller that gave none — there is no way to
+    // time a fold, so the record goes the same frame it always did.
+    // See `hadSnapshot` above: the floor has a previous population only once it
+    // has actually held one.
+    if (seen.size > 0) this._synced = true;
+
+    const gone = LIFE.despawn.period * 1000;
     for (const id of [...this._records.keys()]) {
-      if (!seen.has(id)) this._records.delete(id);
+      if (seen.has(id)) continue;
+      const rec = this._records.get(id);
+      if (!timed || !rec || !rec.initialised) {
+        this._records.delete(id);
+        continue;
+      }
+      if (rec.leftAt === null) rec.leftAt = now;
+      if (now - rec.leftAt >= gone) this._records.delete(id);
     }
   }
 
@@ -392,9 +567,11 @@ export class AgentRuntime {
    * simply not calling this while the tab is hidden is what pauses the whole
    * simulation, including activity rotation (VISUAL-SPEC §4.3, §10).
    * @param {number} dtSeconds
-   * @param {{reduced?: boolean, plan?: Plan,
+   * @param {{reduced?: boolean, plan?: Plan, now?: number,
    *   makeActivityRotation?: (rng: () => number) => {pick: (opts?: {partnerFree?: (activity:string)=>boolean}) => {activity:string, holdMs:number, degraded:boolean}},
    *   makeIdleRotation?: (rng: () => number, opts?: {tendency?: string|null}) => {pick: () => {clip:string, holdS:number}}}} [opts]
+   *   `now` (WP-87): the INJECTED clock, for every clip phase this pass writes.
+   *   `dt` stays the frame clock's, because an interval is a fact about the tab.
    *   `makeActivityRotation` was declared as a bare `Function`, which says
    *   nothing about what `pickNextActivityFromClips` then calls it with (WP-22).
    *   `makeActivityRotation`: the real factory from `./clips.js`, if the caller
@@ -403,6 +580,7 @@ export class AgentRuntime {
    */
   step(dtSeconds, opts = {}) {
     const plan = opts.plan;
+    const now = typeof opts.now === 'number' && Number.isFinite(opts.now) ? opts.now : 0;
     const loungeRoom = plan && plan.rooms ? plan.rooms.find((r) => r.kind === 'lounge') : null;
     const records = [...this._records.values()];
 
@@ -431,7 +609,7 @@ export class AgentRuntime {
         if (rec.deskIdle.remaining > 0) continue;
         const pick = opts.makeIdleRotation(rec.idleRng, { tendency: rec.tendency }).pick();
         rec.clip = pick.clip;
-        rec.clipStartedAt = Date.now();
+        rec.clipStartedAt = now;
         rec.deskIdle.clip = pick.clip === 'type' ? null : pick.clip;
         rec.deskIdle.remaining = pick.holdS;
       }
@@ -491,18 +669,41 @@ export class AgentRuntime {
     const performable = new Set();
     for (const sp of allSpots) performable.add(sp.kind);
 
+    // WP-87 · WHICH BAYS THIS LOUNGE ACTUALLY LAID. §3.7 gives up bays on a
+    // narrow floor — games first, then quiet — so the set is a fact about this
+    // plan rather than about the design, and it is read off the spots because
+    // a bay with no spot in it is a bay nobody can be in.
+    /** @type {string[]} */
+    const bays = [];
+    for (const sp of allSpots) {
+      const bay = sp.bay || ACTIVITY_BAY[sp.kind];
+      if (bay && !bays.includes(bay)) bays.push(bay);
+    }
+
     for (const rec of records) {
       if (rec.placement !== 'lounge' || rec.path.length !== 0) continue;
       rec.rotation.remaining -= dtSeconds;
       if (rec.rotation.activity && rec.rotation.remaining > 0) continue;
 
       let choice = null;
+      let cycle = rec.rotationCycle;
       // Try a few times for an activity that has both a free spot and, where
       // the clip needs one, a partner. The rotation is cosmetic, so a bounded
       // number of attempts is right — it must never spin.
+      //
+      // WP-87 REPLACED THE ROLL WITH A HASH (§1.1, §2). The activity is
+      // `BAY_ACTIVITIES[bay][hash(id, bay, cycle) % n]` and the hold is
+      // `hash(id, cycle)` mapped into 45–90 s, so two tabs on one floor show
+      // the same lounge, a reload does not re-deal it, and a golden can
+      // photograph it. A retry is the NEXT cycle index rather than another
+      // draw from a stream, which is what keeps the whole sequence a pure
+      // function of the session id. `makeActivityRotation` stays the fallback
+      // for a plan that has laid no bays at all.
       for (let attempt = 0; attempt < ACTIVITY_PICK_ATTEMPTS; attempt++) {
-        const pick =
-          typeof opts.makeActivityRotation === 'function'
+        cycle = rec.rotationCycle + attempt;
+        const pick = bays.length
+          ? bayActivityChoice(rec.id, bays, cycle)
+          : typeof opts.makeActivityRotation === 'function'
             ? pickNextActivityFromClips(rec, availability, opts.makeActivityRotation)
             : pickNextActivity(rec, availability);
         if (allSpots.length === 0) {
@@ -516,6 +717,7 @@ export class AgentRuntime {
         if (!choice) choice = pick;
       }
       if (!choice) continue;
+      rec.rotationCycle = cycle + 1;
 
       const spots = freeSpots(choice.activity, rec.targetSeat);
       if (spots.length === 0 && allSpots.length > 0) {
@@ -528,7 +730,11 @@ export class AgentRuntime {
       rec.rotation.remaining = choice.duration;
 
       if (spots.length && loungeRoom) {
-        const spot = spots[Math.floor(rec.rng() * spots.length) % spots.length];
+        // WP-87: which of the free places, from the same hash and the same
+        // cycle index rather than from the record's PRNG stream. A stream is
+        // deterministic but stateful, so an agent that re-rolled once because
+        // a table was busy shifted every choice it would ever make afterwards.
+        const spot = spots[hashString(`${rec.id}:spot:${cycle}`) % spots.length];
         const previous = rec.targetSeat;
         if (previous && previous.id) {
           const set = spotSlots.get(previous.id);
@@ -548,7 +754,7 @@ export class AgentRuntime {
       } else {
         // No plan/spots supplied (e.g. plan.js not built yet): rotate the clip in place.
         rec.clip = choice.activity;
-        rec.clipStartedAt = Date.now();
+        rec.clipStartedAt = now;
       }
     }
   }
@@ -556,15 +762,19 @@ export class AgentRuntime {
 
 /**
  * Advance one agent's walk, arrival, seating and destination clip by
- * `dtSeconds`. Pure with respect to everything except wall-clock time
- * (`Date.now()`, used for `clipStartedAt` so `clips.js`'s `sampleClip(name, t)`
- * can compute a phase) — movement itself is entirely `dtSeconds`-driven so it
- * is deterministic and testable without real waiting.
+ * `dtSeconds`.
+ *
+ * PURE SINCE WP-87. It used to read `Date.now()` on arrival, for the
+ * `clipStartedAt` that `clips.js`'s `sampleClip(name, t)` computes a phase
+ * from; that instant is the caller's now, from the injected clock, so nothing
+ * under any draw path reads the machine's own clock at all. Movement itself was
+ * always entirely `dtSeconds`-driven and is unchanged.
  *
  * @param {AgentRecord} rt
  * @param {number} dtSeconds
- * @param {{reduced?: boolean}} [opts]  `reduced`: snap straight to the final
- *   waypoint instead of interpolating (VISUAL-SPEC §10 — reduced motion).
+ * @param {{reduced?: boolean, now?: number}} [opts]  `reduced`: snap straight to
+ *   the final waypoint instead of interpolating (VISUAL-SPEC §10 — reduced
+ *   motion). `now`: the injected clock, for the arrival clip's phase.
  */
 export function stepAgent(rt, dtSeconds, opts = {}) {
   if (rt.path.length === 0) return;
@@ -575,7 +785,10 @@ export function stepAgent(rt, dtSeconds, opts = {}) {
     rt.y = last.y;
     rt.path = [];
   } else {
-    let remaining = Math.max(0, dtSeconds) * WALK_SPEED;
+    // WP-87 · `run` covers `RUN_SPEED / WALK_SPEED` more ground per second than
+    // `walk` does, which is §2's own 4.6 : 2.6. The absolute figures are this
+    // floor's rather than the document's — see `RUN_SPEED`.
+    let remaining = Math.max(0, dtSeconds) * (rt.running === true ? RUN_SPEED : WALK_SPEED);
     while (remaining > 0 && rt.path.length > 0) {
       const next = rt.path[0];
       const dx = next.x - rt.x;
@@ -606,10 +819,14 @@ export function stepAgent(rt, dtSeconds, opts = {}) {
     // their facing is left as the direction they were travelling in.
     if (rt.targetSeat && typeof rt.targetSeat.angle === 'number') rt.angle = rt.targetSeat.angle;
     rt.seated = seatedAt(rt.placement, rt.targetSeat);
+    // The trip is over, so the claim it carried is over too: nobody stands
+    // still and runs.
+    rt.running = false;
     if (rt.pendingClip) {
       rt.clip = rt.pendingClip;
       rt.pendingClip = null;
-      rt.clipStartedAt = Date.now();
+      rt.clipStartedAt =
+        typeof opts.now === 'number' && Number.isFinite(opts.now) ? opts.now : rt.clipStartedAt;
     }
   }
 }

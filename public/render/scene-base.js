@@ -73,6 +73,8 @@ export class SceneBase {
   _frameErrorLogged;
   /** @type {boolean} */ // prefers-reduced-motion, as last read
   _reduced;
+  /** @type {number|null} */ // WP-87's `?phase=`: every animation pinned, motion still on
+  _phase;
   /** @type {any} */ // the media query it is read from
   _reducedMotionQuery;
   /** @type {any} */ // the observer on the stage
