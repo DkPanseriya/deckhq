@@ -152,6 +152,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-160 | A documentation site | Docs / plugin / extension | done |
 | R-161 | Live where the user already lives | Docs / plugin / extension | done |
 | R-162 | A landing page that explains itself in seconds | Docs / plugin / extension | done |
+| R-163 | The site demonstrates features and configurability; the README stays scannable | Docs / plugin / extension | done |
 | R-170 | Tag, then never let a human be the release step | Releases | done |
 | R-171 | Commits are attributed to Darshak Panseriya | Releases | done |
 | R-172 | A product icon worth the product | Releases | done |
@@ -981,6 +982,26 @@ is this about"
 **Status:** done. **Implemented by:** WP-03 (`DEVIATIONS.md` §88 — the hero GIF, and the fact that
 the floor did not walk and there was no encoder to record it with); the README's floor image; the
 1.2.0 Release page carrying the floor, the review card and the GIF.
+
+**R-163 — The site demonstrates features and configurability; the README stays scannable**
+*Owner, 15 September 2026:* "I like all the UI and vision sheets you are generating. Keep them all
+aside; they could be great for the product webpage to demonstrate functions, features and
+configurability. Plan this actively, for the website and also update the GitHub README. Keep the
+README not bloated, easy to understand, scannable."
+*Taken to mean:* the design sheets already in `docs/media/` are marketing material for the site —
+**provided the site never passes one off as the product** — and the README is a front page rather
+than a manual.
+**Status:** done. **Implemented by:** WP-94a (`DEVIATIONS.md` §170). `docs/MEDIA.md` opens the three
+asset classes (`capture`, `golden`, `illustration`) and the rule that every published image carries
+its class in its caption; `site/build.mjs` fails the build when an illustration appears without the
+words *design illustration*, and `test/unit/site.test.mjs` asserts both the pages and the gate. Five
+pages added — Features, Look, Characters, Studio, Docs — with the `three` golden as the home hero.
+The README went from 911 lines to 211 against a 250-line budget enforced by
+`test/unit/readme.test.mjs`; everything cut is in `docs/GUIDE.md`, verbatim.
+**Notes.** The captures in `docs/media/` almost all predate WP-79, so the site prefers a golden
+wherever one exists and every stale capture says so in its caption. **WP-94b** retakes them after
+WP-89 lands, and replaces the golden hero with a live capture; until then this requirement is done
+and its pictures are dated.
 
 ### 2.16 Releases
 

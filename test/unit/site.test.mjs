@@ -74,6 +74,12 @@ after(() => {
 test('the site builds every page it navigates to', () => {
   for (const rel of [
     'index.html',
+    // WP-94a · the pages that show the product.
+    'features.html',
+    'look.html',
+    'characters.html',
+    'studio.html',
+    'docs.html',
     'model.html',
     'install.html',
     'hooks-and-privacy.html',
@@ -288,6 +294,137 @@ test('the build copies every image its pages reference', () => {
       assert.ok(fs.existsSync(target), `${path.relative(out, page)} shows a missing ${m[1]}`);
     }
   }
+});
+
+/* ------------------------------------------------------------------ WP-94a */
+
+test('every page carries exactly one h1', () => {
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const count = (html.match(/<h1[\s>]/g) ?? []).length;
+    assert.equal(count, 1, `${path.relative(out, page)} has ${count} h1 elements`);
+  }
+});
+
+test('every image carries alt text, and every photograph carries words', () => {
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    for (const m of html.matchAll(/<img\b[^>]*>/g)) {
+      const tag = m[0];
+      const alt = tag.match(/\salt="([^"]*)"/);
+      assert.ok(alt, `${path.relative(out, page)} has an image with no alt attribute: ${tag}`);
+      // `alt=""` is correct for the mark beside the wordmark — it is decoration
+      // beside text that already says DeckHQ — and wrong for anything under
+      // `media/`, which is the only thing on these pages carrying information a
+      // sighted reader gets and a screen reader would not.
+      const src = (tag.match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
+      if (/(^|\/)media\//.test(src)) {
+        assert.ok(
+          alt[1].trim().length > 20,
+          `${path.relative(out, page)} shows ${src} with no useful alt text`,
+        );
+      }
+    }
+  }
+});
+
+test('the only hosts anywhere on the site are GitHub, npm and this site', () => {
+  // A stricter restatement of the two SECURITY tests above, over every absolute
+  // URL in the written pages whatever attribute or text it sits in: the Pages
+  // origin (printed as a line to copy), and the two places a reader is sent.
+  //
+  // The engineering log is a record rather than copy, and it quotes hosts —
+  // `http://127x0x0x1`, the hostname §115's glob test pins — that are the
+  // subject of an entry rather than a link. Its links and its fetches are
+  // covered by the two SECURITY tests above, which do read it.
+  const allowed = new Set([...LINKABLE, SELF]);
+  for (const page of walk(out, ['.html'])) {
+    if (path.basename(path.dirname(page)) === 'log') continue;
+    const html = fs.readFileSync(page, 'utf8');
+    for (const m of html.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)) {
+      const host = m[1].toLowerCase();
+      if (host === '127.0.0.1' || host === 'localhost' || host === 'www.w3.org') continue;
+      assert.ok(allowed.has(host), `${path.relative(out, page)} names ${host}`);
+    }
+  }
+});
+
+test('HONESTY: a mockup is never shown as a screenshot', async () => {
+  // WP-94a, and `docs/ADAPTERS.md` §6 applied to pictures. Every image the site
+  // copies has a class in `docs/MEDIA.md`: a capture is DeckHQ photographed, a
+  // golden is a real render of a fixture, an illustration is a drawing of a
+  // specification that no build has produced. The last one has to say so.
+  const { imageClass, assertMediaIsLabelled, IMAGES, ILLUSTRATION_DIRS, ILLUSTRATION_LABEL } =
+    await import('../../site/build.mjs');
+
+  // Every illustration source really is under one of the mockup directories,
+  // and every image under one of them really is declared an illustration.
+  for (const image of IMAGES) {
+    const dir = image.from.startsWith('docs/media/') ? image.from.split('/')[2] : null;
+    const isMockupDir = dir !== null && ILLUSTRATION_DIRS.includes(dir);
+    assert.equal(
+      image.class === 'illustration',
+      isMockupDir,
+      `${image.from} is declared ${image.class}`,
+    );
+    assert.equal(imageClass(image.to), image.class, `${image.to} resolves to the wrong class`);
+  }
+
+  // Every illustration on a built page sits in a figure whose caption says so.
+  const illustrations = IMAGES.filter((i) => i.class === 'illustration').map((i) => i.to);
+  let shown = 0;
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    for (const figure of html.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
+      const caption = (figure[0].match(/<figcaption[\s>]([\s\S]*?)<\/figcaption>/) ?? ['', ''])[1];
+      for (const img of figure[0].matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
+        const rel = img[1].replace(/^(?:\.\.\/)*media\//, '');
+        if (!illustrations.includes(rel)) continue;
+        shown++;
+        assert.ok(
+          caption.toLowerCase().includes(ILLUSTRATION_LABEL),
+          `${path.relative(out, page)} shows the mockup ${rel} without "${ILLUSTRATION_LABEL}"`,
+        );
+      }
+    }
+  }
+  assert.ok(shown >= 8, `expected the mockups to be published; found ${shown}`);
+
+  // And the gate refuses a page that forgets. Without this the test above
+  // passes on a site that happens to be correct and a gate that does nothing.
+  const bad = `<figure><img src="media/${illustrations[0]}" alt="x" /><figcaption>The floor.</figcaption></figure>`;
+  assert.throws(() => assertMediaIsLabelled('bad.html', bad), /mockup/);
+  const loose = `<img src="media/${illustrations[0]}" alt="x" />`;
+  assert.throws(() => assertMediaIsLabelled('loose.html', loose), /outside a figure/);
+  const unknown = '<img src="media/not-in-the-registry.png" alt="x" />';
+  assert.throws(() => assertMediaIsLabelled('unknown.html', unknown), /not in the media registry/);
+
+  // A labelled one is fine.
+  const good = `<figure><img src="media/${illustrations[0]}" alt="x" /><figcaption>A drawing. <span class="tag tag--illustration">Design illustration</span></figcaption></figure>`;
+  assert.doesNotThrow(() => assertMediaIsLabelled('good.html', good));
+});
+
+test('no image the site serves is wider than the capture stage', async () => {
+  const { MAX_IMAGE_WIDTH } = await import('../../site/build.mjs');
+  const { decodePng } = await import('../../scripts/lib/png.mjs');
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  let checked = 0;
+  for (const image of walk(path.join(out, 'media'), ['.png'])) {
+    const bytes = fs.readFileSync(image);
+    if (!bytes.subarray(0, 8).equals(signature)) continue;
+    let width;
+    try {
+      width = decodePng(bytes).width;
+    } catch {
+      continue; // a shape this decoder does not read is copied whole on purpose
+    }
+    checked++;
+    assert.ok(
+      width <= MAX_IMAGE_WIDTH,
+      `media/${path.relative(path.join(out, 'media'), image)} is ${width} px wide`,
+    );
+  }
+  assert.ok(checked > 10, 'expected the site to carry images');
 });
 
 test('the deployment workflow builds the site it deploys', () => {

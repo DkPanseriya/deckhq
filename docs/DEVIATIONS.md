@@ -17362,3 +17362,156 @@ now ten times the size of that modulus.
   open: a name that is also an uncommon English word, or a slur in a language nobody here reads,
   would pass. `Paki` getting as far as the accepted list is the evidence that this is a real risk
   rather than a formality.
+
+## 170. WP-94a — the site shows the product, and a mockup says it is one
+
+The owner, 15 September 2026:
+
+> _"I like all the UI and vision sheets you are generating. Keep them all aside; they could be great
+> for the product webpage to demonstrate functions, features and configurability. Plan this actively,
+> for the website and also update the GitHub README. Keep the README not bloated, easy to understand,
+> scannable."_
+
+Two asks in one message, and the second is the harder of the two. Putting the sheets on the site is
+an afternoon. Putting them there **without turning the product into a thing it is not** is the whole
+package, because most of those sheets are drawings of packages nobody has built.
+
+**Numbered 170, and 169 was left free.** 168 was the last entry on `main` when this package opened,
+and 169 belongs to a package running beside it that was not present in this worktree. This is 170 on
+purpose.
+
+### 170.1 The thing the sheets are
+
+`docs/media/look/`, `docs/media/motion/`, `docs/media/interior/` and `docs/media/design/` hold
+nineteen images between them. **Six of them are drawings of work that does not exist**: the six
+interior presets, the graphics control centre and the agent-size sheet are WP-88a–c; the life sheet
+and the lounge activities are WP-87; the crew animation is WP-89. Every one of those packages is
+`planned` in `08` §9.
+
+A landing page full of them would be the best-looking page this project has ever had and would be a
+lie in exactly the way `ADAPTERS.md` §6 forbids: _a claim in anyone's documentation is a hypothesis
+until measured on a machine._ A drawing of a floor no build has produced is a claim, and a reader who
+installs DeckHQ after seeing the control centre and finds three themes has been mis-sold.
+
+So the first thing this package wrote was not a page. It was `docs/MEDIA.md`, and it says every image
+in this project is exactly one of three things:
+
+| Class | What it is |
+|---|---|
+| `capture` | DeckHQ, running, photographed |
+| `golden` | a real render of a fixture, taken by the visual-regression gate on the code on `main` |
+| `illustration` | a designer's mockup of a specification — **not shipped code** |
+
+Every image on the site and in the README carries its class in its caption, as a chip at the end of
+the `<figcaption>`. An illustration carries the words **design illustration** and a sentence saying
+which package it belongs to and whether that package has shipped.
+
+### 170.2 The label is a build failure, not a review finding
+
+A rule that lives in a document is a rule somebody forgets at 2 a.m. `site/build.mjs` now knows the
+class of every image it copies, and `assertMediaIsLabelled()` runs over each hand-written page
+**before it is written**:
+
+- an illustration inside a `<figure>` whose `<figcaption>` does not contain _design illustration_
+  throws, and the Pages workflow goes red;
+- an illustration **outside** a figure throws too, because it has nowhere to say what it is;
+- an image under `media/` that is not in the registry at all throws, so a page cannot show a picture
+  nobody has classified.
+
+The class is not taken on trust either. `imageClass()` derives it from the source directory —
+anything under `docs/media/{interior,look,motion,design}` is an illustration whatever the registry
+row claims — and `build()` refuses to start if a declared class and a derived class disagree. The
+registry is therefore readable as documentation and cannot drift from the rule that is enforced.
+
+`test/unit/site.test.mjs` asserts the same thing from the other side, over the emitted pages, and
+also asserts that the gate **throws on a page that forgets** — three negative cases, because a test
+that only checks a site which happens to be correct proves nothing about the gate.
+
+### 170.3 Five pages, and what each one is allowed to say
+
+| Page | Shows | Rule it keeps |
+|---|---|---|
+| Home | the `three` golden as the hero, three cards, the install block unchanged | the hero is a golden, so the first picture a stranger sees is one CI re-checks every run |
+| Features | nine sections, one image and three lines each | six captures, three goldens; every stale capture says in its caption that it predates the current figures |
+| Look | the three shipped themes as goldens, then the WP-88 sheets | the shipped half and the drawn half sit on one page, in that order, and the drawn half says **planned, not built** four times |
+| Characters | the golden, then the B sheet, the life sheet and the crew gif | the figure that ships is shown _before_ the sheets that proposed it and the sheets that will move it |
+| Studio | the eleven-step loop from `07-STUDIO-DESIGN.md` §2 as a table | every row carries `built` or `planned`; three rows are built |
+
+The hero was `docs/media/floor.png`, a capture from early September. It is now
+`test/goldens/win32/three.png`. That is the substantive change in this package's first page: the
+picture at the top of the product's own site is now the one thing in the repository that cannot
+silently go stale, because a golden that drifts by one pixel fails the gate.
+
+### 170.4 Twelve nav links, which is too many, and what was done instead
+
+Adding five pages took the navigation from seven links to twelve. Twelve at one weight is a list to
+read rather than a way around, so `PAGES` gained a `group` and the header renders two: the pages
+about the product, a rule, then the reference pages a size smaller. The rule is dropped below 46rem,
+where the bar wraps anyway. No page was removed and every page is still reachable from every page,
+which is the property that mattered.
+
+### 170.5 The README: 911 lines to 211
+
+The README was a manual. It carried the six-state table, every keyboard shortcut, every environment
+variable, the whole of `deckhq stats`, the whole of Studio, and eleven Honest limits several
+paragraphs long. All of it true, none of it scannable, and the bullet a stranger most needs — _it
+makes no network calls of any kind_ — was at line 573.
+
+It is now **211 lines** against a budget of 250, in the order the owner asked for: the mark and one
+line, a real render, install, what you see, what it never does, the runtime table, app mode, Studio,
+the docs, honest limits, support.
+
+**Nothing was deleted.** `docs/GUIDE.md` is the twenty-two sections that came out, in the README's
+own words, at the point they were cut — the extraction was scripted rather than retyped, so the
+wording cannot have drifted in the move. `test/unit/readme.test.mjs` holds both ends: the line
+budget, the fifteen headings that have to still be in the guide, and the link from the README to it.
+
+**The install commands are now one source.** `INSTALL_COMMANDS` in `site/build.mjs` is the array the
+README test checks the README against, so the three lines a stranger pastes cannot differ between the
+site and the front page without a test failing.
+
+**The honesty rule is pinned by a test.** `ADAPTERS.md` §6 point 3 says the unverified sentence lives
+in the README. Shortening the README is exactly the edit that would quietly drop it, so
+`readme.test.mjs` asserts three sentences verbatim, with the soft wrapping normalised out. Deleting
+them is still allowed — in the same commit as the run that earns it, which is what §6 point 4 asks
+for — and softening them is not.
+
+### 170.6 The image budget, and a resampler that had to be written
+
+The site now serves 25 images. Three of them were wider than the 1600 px capture stage — the
+application-window capture at 2910, the life sheet at 2010, the lounge activities at 2640 — and the
+column they are displayed in is 768 px.
+
+There is no image library to reach for and there will not be one. `scripts/lib/png.mjs` already
+decodes and encodes 8-bit non-interlaced PNGs with nothing but `node:zlib`, for the goldens diff, so
+the missing piece was a box filter, which is fourteen lines. `encodePng` writes one filter for every
+scanline and which one wins depends on the picture, so all five are tried and the smallest kept:
+**1858 KB → 771 KB, 826 KB → 774 KB, 591 KB → 355 KB**, and it costs 4 seconds of a 4.5-second build.
+
+Two decisions inside that:
+
+- **The threshold is the capture stage**, not a round number. A golden is 1600 px wide, so no golden
+  is ever resampled and a golden on the site is byte-identical to the golden in the tree. That is the
+  property the class exists for.
+- **The resampled file is written whether or not it is smaller.** The budget being kept is the width
+  a reader downloads, not the byte count. On these three it is smaller anyway; the rule is written
+  down so that the next wide image does not quietly stay wide.
+
+**The site is 13.4 MB of images across 214 files**, and that is not small. It is honest about why: 24
+of those images are the product, at the size the product was photographed, and the only alternative
+to shipping them is a site that shows less than the product does. `test/unit/site.test.mjs` asserts
+the width rule, so the number can only grow by images being added, never by one of them being wide.
+
+### 170.7 What this package did not do
+
+- **No screenshot was retaken.** Almost every capture in `docs/media/` predates WP-79, so the figures
+  in them are not the figures a reader will see. Retaking them needs WP-89 to land first — otherwise
+  they are retaken twice — so `MEDIA.md` §5 lists every one of them and `08` §9 opens **WP-94b** for
+  the job. In the meantime the site prefers a golden wherever one exists, and every stale capture
+  says in its own caption that it is from September 2026, before the figures took their current form.
+- **The eight before/after captures are marked never-recapture.** A before/after pair is a record of
+  a change; retaking one destroys the evidence it exists to carry.
+- **`docs/media/design/icon/sheet.png` and the three unused interior crops stay unpublished.** They
+  are in the register with their class and a reason, which is the point of a register.
+- **No page was removed and no page was merged.** The model, hooks, adapters and FAQ pages are
+  untouched; this package added to the site rather than rewriting it.
