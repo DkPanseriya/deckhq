@@ -1,0 +1,258 @@
+/**
+ * `src/cli/` has no import cycle, and the offers still say what they said —
+ * WP-92i, `docs/plan/13-ARCHITECTURE-AUDIT.md` A-07.
+ *
+ * `app.mjs → pin.mjs → shortcut.mjs → app.mjs`: three commands that each offer
+ * the next, and the third reaching back for `BIN`. Benign — every edge is read
+ * inside a function body, and an ES module cycle resolves as long as nothing in
+ * it reads an imported binding while the module is still evaluating — but
+ * nothing in the toolchain said it was there, and "benign" is a property
+ * somebody has to re-establish by reading every edge each time one is added.
+ * This says it instead.
+ *
+ * THE GRAPH IS BUILT THE WAY THE AUDIT BUILT ITS OWN. Comments are stripped
+ * first, so a JSDoc `import('./x.mjs')` in a type position is not counted as an
+ * edge — it is not one; it produces no code. What is counted is every static
+ * `import`, every `export … from` and every dynamic `import()` with a literal
+ * specifier, because all three are edges a reader has to follow and all three
+ * are edges the module graph really has.
+ *
+ * The second half of the file is the wording. WP-92i moved four strings and two
+ * functions out of `pin.mjs` into `offers.mjs`; the whole promise of the move is
+ * that a user sees exactly what they saw before, so every one of those strings
+ * is written out here in full. A change to any of them fails on the string
+ * rather than on a diff nobody reads.
+ */
+import '../helpers/isolate.mjs';
+
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'cli');
+
+/**
+ * Source with every comment removed, so what is left is what runs.
+ *
+ * A small state machine rather than a regular expression: a regular expression
+ * cannot tell `// a comment` from the `//` inside a string, and the whole point
+ * of stripping is to stop reading strings and comments as code.
+ *
+ * @param {string} src
+ * @returns {string}
+ */
+export function stripComments(src) {
+  let out = '';
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    const next = src[i + 1];
+    if (c === '/' && next === '/') {
+      while (i < src.length && src[i] !== '\n') i += 1;
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
+      i += 2;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      const quote = c;
+      out += c;
+      i += 1;
+      while (i < src.length) {
+        out += src[i];
+        if (src[i] === '\\') {
+          i += 2;
+          if (i <= src.length) out += src[i - 1];
+          continue;
+        }
+        if (src[i] === quote) {
+          i += 1;
+          break;
+        }
+        i += 1;
+      }
+      continue;
+    }
+    out += c;
+    i += 1;
+  }
+  return out;
+}
+
+/**
+ * Every relative specifier one module names, static and dynamic alike.
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function specifiersOf(src) {
+  const code = stripComments(src);
+  /** @type {string[]} */
+  const found = [];
+  const patterns = [
+    /\bfrom\s*['"]([^'"]+)['"]/g,
+    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+    /\bimport\s+['"]([^'"]+)['"]/g,
+    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(code)) !== null) found.push(m[1]);
+  }
+  return found;
+}
+
+/** The `src/cli/` graph: module basename -> the siblings it names. */
+async function cliGraph() {
+  const files = (await readdir(CLI)).filter((f) => f.endsWith('.mjs')).sort();
+  /** @type {Map<string, string[]>} */
+  const graph = new Map();
+  for (const file of files) {
+    const src = await readFile(path.join(CLI, file), 'utf8');
+    const siblings = specifiersOf(src)
+      .filter((s) => s.startsWith('./') && s.endsWith('.mjs'))
+      .map((s) => s.slice(2));
+    graph.set(file, [...new Set(siblings)]);
+  }
+  return graph;
+}
+
+/**
+ * The first cycle in a graph, as the path that closes it, or null.
+ * @param {Map<string, string[]>} graph
+ * @returns {string[]|null}
+ */
+export function findCycle(graph) {
+  /** @type {Set<string>} */
+  const done = new Set();
+  /** @type {string[]} */
+  const stack = [];
+
+  /** @param {string} node @returns {string[]|null} */
+  function walk(node) {
+    const at = stack.indexOf(node);
+    if (at !== -1) return [...stack.slice(at), node];
+    if (done.has(node)) return null;
+    stack.push(node);
+    for (const next of graph.get(node) || []) {
+      const cycle = walk(next);
+      if (cycle) return cycle;
+    }
+    stack.pop();
+    done.add(node);
+    return null;
+  }
+
+  for (const node of graph.keys()) {
+    const cycle = walk(node);
+    if (cycle) return cycle;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// The graph
+// ---------------------------------------------------------------------------
+
+test('src/cli/ has no import cycle', async () => {
+  const graph = await cliGraph();
+  assert.ok(
+    graph.size >= 15,
+    `the walk found only ${graph.size} modules — is it looking at src/cli?`,
+  );
+  const cycle = findCycle(graph);
+  assert.equal(cycle, null, cycle ? `src/cli/ has a cycle: ${cycle.join(' -> ')}` : 'unreachable');
+});
+
+test('the three offering commands form a chain, and nothing offers back', async () => {
+  const graph = await cliGraph();
+  // The direction of the story: `app` offers the pin, the pin delegates the
+  // writing to `shortcut`. Neither of the last two reaches back.
+  assert.ok(graph.get('app.mjs')?.includes('pin.mjs'), 'app must still make the offer');
+  assert.ok(graph.get('pin.mjs')?.includes('shortcut.mjs'), 'the pin must still delegate');
+  assert.equal(graph.get('shortcut.mjs')?.includes('app.mjs'), false);
+  assert.equal(graph.get('shortcut.mjs')?.includes('pin.mjs'), false);
+  assert.equal(graph.get('pin.mjs')?.includes('app.mjs'), false);
+  // And the module they share shares nothing of `src/cli/`'s, which is what
+  // makes it incapable of closing a cycle with any of them.
+  assert.deepEqual(graph.get('offers.mjs'), []);
+});
+
+test('the cycle detector finds a cycle when there is one', () => {
+  // The gate's own proof. Without this, "no cycle" and "no detector" look the
+  // same from the outside.
+  const none = new Map([
+    ['a.mjs', ['b.mjs']],
+    ['b.mjs', ['c.mjs']],
+    ['c.mjs', []],
+  ]);
+  assert.equal(findCycle(none), null);
+  const three = new Map([
+    ['a.mjs', ['b.mjs']],
+    ['b.mjs', ['c.mjs']],
+    ['c.mjs', ['a.mjs']],
+  ]);
+  assert.deepEqual(findCycle(three), ['a.mjs', 'b.mjs', 'c.mjs', 'a.mjs']);
+  const self = new Map([['a.mjs', ['a.mjs']]]);
+  assert.deepEqual(findCycle(self), ['a.mjs', 'a.mjs']);
+});
+
+test('a comment is not an edge, and a string is not a comment', () => {
+  // Why the stripper exists: the audit's own graph counted a JSDoc
+  // `import('./x.mjs')` as an edge until it stripped comments, and thirteen
+  // `plan*.js` modules looked like one cycle because of it.
+  assert.deepEqual(specifiersOf("/** @type {import('./app.mjs').X} */\nlet a;"), []);
+  assert.deepEqual(specifiersOf("// import { x } from './app.mjs';\nlet a;"), []);
+  assert.deepEqual(specifiersOf("import { x } from './app.mjs';"), ['./app.mjs']);
+  assert.deepEqual(specifiersOf("const { x } = await import('./pin.mjs');"), ['./pin.mjs']);
+  assert.deepEqual(specifiersOf("export { x } from './offers.mjs';"), ['./offers.mjs']);
+  assert.equal(stripComments("const s = 'a // b';").includes('// b'), true);
+});
+
+// ---------------------------------------------------------------------------
+// The wording. Every string WP-92i moved, in full.
+// ---------------------------------------------------------------------------
+
+test('every offer says exactly what it said before the move', async () => {
+  const offers = await import('../../src/cli/offers.mjs');
+
+  assert.equal(offers.PIN_QUESTION, 'Put DeckHQ on your Desktop and Start Menu? [y/N] ');
+  assert.equal(offers.PIN_FLAG, 'pinOffered');
+  assert.equal(
+    offers.PIN_HINT,
+    '  An icon for this: `deckhq shortcut --install --yes` — Desktop and Start Menu,\n' +
+      '  removable with `deckhq shortcut --remove --yes`.\n',
+  );
+  assert.equal(
+    offers.PIN_DECLINED,
+    '  This is not asked again. `deckhq shortcut --install` whenever you want it.\n\n',
+  );
+});
+
+test('what counts as a yes has not moved either', async () => {
+  const { isYes } = await import('../../src/cli/offers.mjs');
+  for (const yes of ['y', 'Y', 'yes', 'YES', ' yes ', 'Yes']) assert.equal(isYes(yes), true, yes);
+  for (const no of ['', ' ', 'n', 'no', 'yep', 'yes please', null, undefined, 0, 'ye'])
+    assert.equal(isYes(no), false, String(no));
+});
+
+test('the offer text lives in one module and no other', async () => {
+  // A second copy of the question is the state A-07 was about, one level down:
+  // three commands agreeing by having each written it out.
+  //
+  // Comments first, for the same reason the graph strips them: `pin.mjs`'s
+  // header quotes the question in prose, which is documentation of the offer
+  // rather than a second implementation of it.
+  const files = (await readdir(CLI)).filter((f) => f.endsWith('.mjs'));
+  /** @type {string[]} */
+  const carriers = [];
+  for (const file of files) {
+    const code = stripComments(await readFile(path.join(CLI, file), 'utf8'));
+    if (code.includes('Put DeckHQ on your Desktop and Start Menu?')) carriers.push(file);
+  }
+  assert.deepEqual(carriers, ['offers.mjs']);
+});

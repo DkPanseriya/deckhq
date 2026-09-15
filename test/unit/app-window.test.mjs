@@ -23,8 +23,12 @@ const {
   macAppBundle,
 } = await import('../../src/core/app-window.mjs');
 
-const { BIN, candidateAppPorts, findRunningDaemon, planOpen, runApp, startDetachedDaemon } =
+const { candidateAppPorts, findRunningDaemon, planOpen, runApp, startDetachedDaemon } =
   await import('../../src/cli/app.mjs');
+// WP-92i. `BIN` is the one thing `app`, `pin` and `shortcut` all need, and the
+// static edge that used to close the cycle between them; it lives in the module
+// all three share now. The two assertions below are unchanged.
+const { BIN } = await import('../../src/cli/offers.mjs');
 
 const URL_4317 = 'http://127.0.0.1:4317/';
 const PROFILE = '/state/app-profile';

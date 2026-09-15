@@ -135,7 +135,7 @@ test('the request is HELD: nothing at all is written back until somebody answers
 test('INVARIANT: holding, answering and expiring a request never touch ack state', async () => {
   const { router, calls, permissions } = setup({ holdMs: 20 });
   postHook(router, payload());
-  await postDecide(router, { id: 'toolu_1', decision: 'allow' });
+  await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'allow' });
   postHook(router, payload({ tool_use_id: 'toolu_2' }));
   await new Promise((r) => setTimeout(r, 60));
   permissions.shutdown();
@@ -174,7 +174,11 @@ test('a runtime with no permission parser is not answered by us', () => {
 test('Allow sends exactly {behavior:"allow"} on the held socket', async () => {
   const { router, calls } = setup();
   const held = postHook(router, payload());
-  const out = await postDecide(router, { id: 'toolu_1', decision: 'allow' });
+  const out = await postDecide(router, {
+    runtime: 'claude-code',
+    id: 'toolu_1',
+    decision: 'allow',
+  });
 
   assert.equal(out.status, 200);
   assert.deepEqual(answer(held), {
@@ -188,7 +192,7 @@ test('Allow sends exactly {behavior:"allow"} on the held socket', async () => {
 test('Deny sends behavior:"deny" with the message, and never interrupt', async () => {
   const { router } = setup();
   const held = postHook(router, payload());
-  await postDecide(router, { id: 'toolu_1', decision: 'deny' });
+  await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'deny' });
 
   assert.deepEqual(answer(held), {
     hookSpecificOutput: {
@@ -202,7 +206,7 @@ test('Deny sends behavior:"deny" with the message, and never interrupt', async (
 test('INVARIANT: Allow for this session sends destination:"session" and nothing else', async () => {
   const { router } = setup();
   const held = postHook(router, payload());
-  await postDecide(router, { id: 'toolu_1', decision: 'session' });
+  await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'session' });
 
   assert.deepEqual(answer(held), {
     hookSpecificOutput: {
@@ -226,7 +230,11 @@ test('INVARIANT: Allow for this session sends destination:"session" and nothing 
 test('with no rule to add, "for this session" is refused rather than invented', async () => {
   const { router } = setup();
   const held = postHook(router, payload({ permission_suggestions: [] }));
-  const out = await postDecide(router, { id: 'toolu_1', decision: 'session' });
+  const out = await postDecide(router, {
+    runtime: 'claude-code',
+    id: 'toolu_1',
+    decision: 'session',
+  });
   assert.equal(out.status, 400);
   assert.equal(held.headersSent, false, 'the socket must still be held');
 });
@@ -235,7 +243,7 @@ test('a tool that must be answered in the session cannot be answered from here',
   const { router } = setup();
   const held = postHook(router, payload({ tool_name: 'ExitPlanMode', tool_input: {} }));
   for (const decision of ['allow', 'deny']) {
-    const out = await postDecide(router, { id: 'toolu_1', decision });
+    const out = await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision });
     assert.equal(out.status, 409);
   }
   assert.equal(held.headersSent, false);
@@ -244,19 +252,59 @@ test('a tool that must be answered in the session cannot be answered from here',
 test('an unknown decision, a missing id and an unknown request are all refused', async () => {
   const { router } = setup();
   postHook(router, payload());
-  assert.equal((await postDecide(router, { id: 'toolu_1', decision: 'maybe' })).status, 400);
-  assert.equal((await postDecide(router, { decision: 'allow' })).status, 400);
-  assert.equal((await postDecide(router, { id: 'nope', decision: 'allow' })).status, 404);
+  assert.equal(
+    (await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'maybe' })).status,
+    400,
+  );
+  assert.equal(
+    (await postDecide(router, { runtime: 'claude-code', decision: 'allow' })).status,
+    400,
+  );
+  assert.equal(
+    (await postDecide(router, { runtime: 'claude-code', id: 'nope', decision: 'allow' })).status,
+    404,
+  );
   // The real one is still there, untouched.
-  assert.equal((await postDecide(router, { id: 'toolu_1', decision: 'allow' })).status, 200);
+  assert.equal(
+    (await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'allow' })).status,
+    200,
+  );
+});
+
+test('a decision that names no runtime is refused, and decides nothing', async () => {
+  // WP-92j, A-08. `String(body.runtime || 'claude-code')` stood here: an answer
+  // that named no runtime was written in Claude Code's decision shape whatever
+  // it was actually answering. The refusal names the field, and — the part
+  // that matters — the socket the runtime is blocked on is still open
+  // afterwards, so the terminal prompt is still the one that decides.
+  const { router } = setup();
+  const held = postHook(router, payload());
+
+  for (const over of [{}, { runtime: '' }, { runtime: '   ' }, { runtime: null }]) {
+    const out = await postDecide(router, { id: 'toolu_1', decision: 'allow', ...over });
+    assert.equal(out.status, 400, JSON.stringify(over));
+    assert.equal(out.body.field, 'runtime');
+    assert.match(out.body.error, /runtime/);
+    assert.equal(held.headersSent, false, 'a refused decision released the held socket');
+  }
+
+  // And with one named, the same request goes through.
+  const ok = await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'allow' });
+  assert.equal(ok.status, 200);
 });
 
 test('a request answered twice is a 404 the second time, not a second write', async () => {
   const { router } = setup();
   const held = postHook(router, payload());
-  assert.equal((await postDecide(router, { id: 'toolu_1', decision: 'allow' })).status, 200);
+  assert.equal(
+    (await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'allow' })).status,
+    200,
+  );
   const before = held.body;
-  assert.equal((await postDecide(router, { id: 'toolu_1', decision: 'deny' })).status, 404);
+  assert.equal(
+    (await postDecide(router, { runtime: 'claude-code', id: 'toolu_1', decision: 'deny' })).status,
+    404,
+  );
   assert.equal(held.body, before);
 });
 

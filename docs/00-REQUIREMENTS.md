@@ -1215,8 +1215,20 @@ instead of six times each, the settings route reading the terminal catalogue fro
 orphan `src/core/mcp-tool-name.mjs` deleted, and the empty-machine snapshot carrying exactly the keys
 a real one does — which also stopped the browser re-deriving the crew rule on every snapshot of every
 floor. Findings A-04, A-06, A-09, A-10 and A-11 are resolved with commits. All sixteen goldens 0 px
-after each, `/api/state` byte-identical on three fixtures, suite 2,450 → 2,456 by addition. WP-92h–o
-are planned.
+after each, `/api/state` byte-identical on three fixtures, suite 2,450 → 2,456 by addition. **WP-92h,
+WP-92i, WP-92j and WP-92k are done** (§182), and they are four different shapes rather than one:
+the registry stops building a snapshot when nobody is subscribed and asks "did anything move?" with
+a change key measured at 5.8× the `JSON.stringify` it replaces; the three CLI commands that offer
+each other share one `offers.mjs` instead of importing in a ring; four routes that used to answer a
+request naming no `runtime` as if it had said Claude Code return a 400 naming the field; and the
+seven client modules nothing had ever executed are imported under a DOM stub and parsed for three
+properties. Findings A-05, A-08 and A-13's first half are resolved with commits, and A-07's CLI
+third. All sixteen goldens 0 px after each, no PNG changed, `/api/state` byte-identical on the three
+fixtures, suite 2,456 → 2,486 by addition. **Two of the audit's own claims were false and are
+corrected in place**: A-05's "zero subscribers is the normal steady state" (two internal listeners
+subscribe for the life of the daemon) and A-08's "the audit found no caller that does not [send a
+runtime]" (three of four in `public/` did not, and landing the refusal alone would have been an
+outage). WP-92l–o are planned.
 **Notes.** The audit changed no code by design, and says so in its own header. Its refusals are
 recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
 site, the extension and the plugin were mapped but not audited in depth.

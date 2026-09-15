@@ -41,17 +41,11 @@ import process from 'node:process';
 
 import { DATA_DIR } from '../core/paths.mjs';
 import { readAppFlags, recordedPaths, writeAppFlags } from '../core/launcher-apply.mjs';
-
-/** The one question, asked once. */
-export const PIN_QUESTION = 'Put DeckHQ on your Desktop and Start Menu? [y/N] ';
-
-/** What the answer is recorded as, under `app` in `installed.json`. */
-export const PIN_FLAG = 'pinOffered';
-
-/** The line a non-interactive run gets instead of the question. */
-export const PIN_HINT =
-  '  An icon for this: `deckhq shortcut --install --yes` — Desktop and Start Menu,\n' +
-  '  removable with `deckhq shortcut --remove --yes`.\n';
+// WP-92i. The question, the flag, the two lines and the consent primitives all
+// live in `offers.mjs` now — the module `app`, `pin` and `shortcut` share, so
+// that none of the three has to import another to know what the offer says.
+// The wording is unchanged; `cli-graph.test.mjs` holds it there.
+import { PIN_DECLINED, PIN_FLAG, PIN_HINT, PIN_QUESTION, askLine, isYes } from './offers.mjs';
 
 /**
  * Should this run ask?
@@ -75,41 +69,6 @@ export function shouldOfferPin(opts = {}) {
   if (opts.installed) return false;
   if (opts.offered) return false;
   return true;
-}
-
-/**
- * The same question, read from a stream that may not be a TTY.
- *
- * `node:readline` rather than a raw `data` handler because a Windows console
- * delivers a line as `\r\n` and a POSIX one as `\n`, and because closing the
- * interface is what lets the process exit — this command is one step from
- * returning, and a half-open stdin would hold the loop open for ever.
- *
- * @param {string} question
- * @param {{input?:any, output?:any}} [deps]
- * @returns {Promise<string>}
- */
-export async function askLine(question, deps = {}) {
-  const input = deps.input || process.stdin;
-  const output = deps.output || process.stdout;
-  const { createInterface } = await import('node:readline');
-  const rl = createInterface({ input, output });
-  try {
-    return await new Promise((resolve) => rl.question(question, resolve));
-  } finally {
-    rl.close();
-  }
-}
-
-/**
- * `y` or `yes`, in any case, and nothing else. Everything else — an empty
- * line, `n`, a stray word, a closed stdin — is a no.
- *
- * @param {unknown} answer
- * @returns {boolean}
- */
-export function isYes(answer) {
-  return /^(y|yes)$/i.test(String(answer ?? '').trim());
 }
 
 /**
@@ -194,9 +153,7 @@ export async function offerPin(argv = [], deps = {}) {
     // user did not just agree to.
   }
 
-  if (!installed) {
-    write('  This is not asked again. `deckhq shortcut --install` whenever you want it.\n\n');
-  }
+  if (!installed) write(PIN_DECLINED);
 
   return { asked: true, answered: true, installed, hinted: false };
 }

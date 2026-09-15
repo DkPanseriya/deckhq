@@ -47,7 +47,9 @@ import {
   recordedPaths,
   remove,
 } from '../core/launcher-apply.mjs';
-import { BIN } from './app.mjs';
+// WP-92i. From `offers.mjs`, not from `app.mjs`: this import was the static
+// edge that closed the `app → pin → shortcut → app` cycle (A-07).
+import { BIN } from './offers.mjs';
 import fs from 'node:fs';
 
 const HELP = {

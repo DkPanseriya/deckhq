@@ -431,9 +431,29 @@ export class RegistrySnapshot extends RegistryBase {
     this._emitIfChanged();
   }
 
+  /**
+   * Tell everybody listening, if anything moved — WP-92h,
+   * `docs/plan/13-ARCHITECTURE-AUDIT.md` A-05.
+   *
+   * `_changed` is reset FIRST and unconditionally, before the subscriber
+   * count is consulted. That ordering is the whole correctness of the guard:
+   * `_changed` means "something has moved since the last time this was
+   * asked", not "something has moved since the last time somebody was told",
+   * and a subscriber that arrives later reads the CURRENT floor out of the
+   * next snapshot rather than a backlog of edges it was not there for. Leaving
+   * it true would instead emit on the next unrelated tick, which is a
+   * different behaviour and not the one twelve callers were written against.
+   *
+   * With nobody listening, the snapshot is not built. It is not a cheap
+   * object — `identity.describe` per agent, a second pass for the juniors,
+   * `orderRooms`, `projectsOf`, `counts` and `crewsFrom`, measured at 0.229 ms
+   * on the `demo` floor — and handing it to an empty set only to drop it is
+   * the one piece of work in the loop that is provably for nobody.
+   */
   _emitIfChanged() {
     if (!this._changed) return;
     this._changed = false;
+    if (this._subscribers.size === 0) return;
     const snap = this.snapshot();
     for (const fn of this._subscribers) {
       try {

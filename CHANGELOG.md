@@ -1170,6 +1170,20 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   `src/core/mcp-tool-name.mjs`, had no importer anywhere and is deleted — its own test was the only
   thing keeping it reachable. `docs/DEVIATIONS.md` §181.
 
+- **A request that does not say which runtime it is about is refused instead of guessed — WP-92j.**
+  Five route handlers read the runtime as "whatever the body said, or Claude Code" — so a request to
+  start a session, or to answer a permission prompt, was answered about a runtime the caller had
+  never named. Four of them now return `400` with `{ "error": …, "field": "runtime" }`, refusing
+  before anything is started: `POST /api/new-project`, `POST /api/agent`, `POST
+/api/permission/decide` and `GET /api/resume-targets`, which also accepts `?runtime=` now for a
+  caller asking about a runtime rather than about a session. A runtime that was named and simply is
+  not one is still a `404`. **The floor's own dialogs and panel always pass one now** — three of them
+  did not, which is the part of this the audit had missed — so nothing a user does changes; a
+  third-party caller relying on the old default gets one line saying which field to add.
+  `POST /api/permission` is unchanged: Claude Code posts to that URL itself and its payload names no
+  runtime, so the adapter that owns the URL is a documented choice there rather than a default.
+  `docs/DEVIATIONS.md` §182.
+
 ### Testing
 
 - **The golden harness can press a key, and `three@selected` is the first golden of a floor somebody
@@ -1388,6 +1402,36 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   `demoNote`, in the same order. The test it supersedes listed the keys by hand and so only ever
   checked the ones somebody had remembered to add — which is how two fields went missing for two
   packages. Proved failing against the tree one commit earlier, naming both of them.
+
+- **The daemon stops building a snapshot for nobody, and asks "did anything move?" 5.8× faster —
+  WP-92h.** Every scan, hook event and tick built the whole snapshot — a name and an avatar per
+  agent, the junior numbering, the room ordering, the counts and the crews — and handed it to
+  however many listeners there were, including none. It is not built when there is nobody to hand it
+  to. And the comparison that decides whether anything happened at all was `JSON.stringify()` over
+  every agent: measured on the 28-agent demo floor at 0.199 ms and 28,628 bytes per change, against
+  0.034 ms and 13,923 for the key that replaced it. The measurement is in the entry, because a
+  change key is only worth having if it is faster and only safe if it reads every field — so
+  `state-machine-key.test.mjs` walks a real agent, moves each field in turn and fails naming the one
+  the key does not read. Nothing observable changed: `/api/state` byte-identical on three fixtures,
+  every `INVARIANT:` test green, all sixteen goldens at 0 px. `docs/DEVIATIONS.md` §182.
+
+- **`src/cli/` is asserted to have no import cycle — WP-92i.** `app`, `pin` and `shortcut` each
+  imported the next, and the third reached back into the first for the path to `bin/deckhq.mjs`.
+  What all three share — that path, the pin offer's four lines and the two functions that ask for a
+  yes — is one module now, which imports none of them. Every word the CLI says is unchanged and
+  asserted in full. The new `cli-graph.test.mjs` builds the graph with comments stripped, so a JSDoc
+  type reference is not read as an edge, and proves its own detector on a graph that does have a
+  cycle. `docs/DEVIATIONS.md` §182.
+
+- **The seven client modules no test had ever touched now have gates and a smoke import — WP-92k.**
+  About 1,700 lines of the shell — the dialogs, the cards, the launchers, the Look section, the
+  snapshot button, the floor bootstrap and the Look pictures — were neither executed nor read by
+  anything in the suite, which is the region §143's tab-closing bug lived in. Each is imported once
+  under a DOM stub with the window-closing globals replaced by counters, and each is parsed for
+  three properties: §143's shape, every `fetch` a literal path on this daemon, and no `Date.now()`,
+  `Math.random()` or `performance.now()` where the client clock belongs. The gate is proved by
+  planting §143's line in a temp copy and watching it name the file and the line. No source file
+  changed. `docs/DEVIATIONS.md` §182.
 
 ### Packaging
 

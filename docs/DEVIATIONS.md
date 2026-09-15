@@ -19322,3 +19322,224 @@ The `empty` golden — which *is* the actor floor — is at 0 px, as are the oth
   through the adapter re-export; that is the one line that would let the re-export go, and it
   belongs to whoever takes it, not to this package.
 - **A-05, A-07, A-08, A-12, A-13 and A-14 are untouched.** They are WP-92h–o.
+
+## 182. WP-92h–k — the work done for nobody, the three commands that offered each other, the field that was answered while it was missing, and 1,700 lines nothing was looking at
+
+**Date:** 16 September 2026 · **Packages:** WP-92h, WP-92i, WP-92j, WP-92k · **From:**
+`docs/plan/13-ARCHITECTURE-AUDIT.md` findings A-05, A-07, A-08, A-13 · **Commits:** `8ea13eb`,
+`a55fcf5`, `f9a8295`, `8576ea8`
+
+§180's three moves were gates and §181's four were duplicates. These four are each a different
+shape: work the daemon did for nobody, a cycle between three commands, a field the daemon answered
+on behalf of a caller who had not filled it in, and a region of the client no test had ever
+executed. One of them — WP-92j — is user-visible, as a 400 where there used to be a silent guess,
+and it is the one the audit was **wrong** about, in a way that would have been an outage.
+
+All sixteen goldens are at 0 px after all four and no PNG changed. `/api/state` is byte-identical on
+`demo`, `three` and `crew`. The suite went 2,456 → 2,486, by addition only.
+
+### 182.1 A snapshot is not built for nobody, and the change key stops being a stringify (A-05)
+
+Two independent changes to the registry's per-change loop, under the audit's own instruction that
+this package must **measure before it optimises anything beyond the guard**.
+
+**The guard.** `_emitIfChanged()` called `this.snapshot()` and then handed the result to a possibly
+empty subscriber set. A snapshot is not cheap — `identity.describe` per agent, a second pass to
+number the juniors, `orderRooms`, `projectsOf`, `counts` and `crewsFrom` — and the daemon is built
+to outlive the tab, so building one for nobody is the one piece of work in the loop that is provably
+for no reader. It is guarded now, and `_changed` is still reset FIRST and unconditionally, before
+the subscriber count is consulted. That ordering is the whole correctness of it: `_changed` means
+"something has moved since this was last asked", not "since somebody was last told". Leaving it true
+would emit on the next unrelated tick, for an edge that had already been and gone, which is a
+different behaviour from the one twelve callers were written against.
+
+**The measurement.** On the real `demo` floor — 28 agents, the fixture the goldens photograph, clock
+pinned to `DECKHQ_NOW`, `process.hrtime.bigint()`, 4,000 iterations:
+
+| | ms/op | bytes | vs the stringify |
+|---|---:|---:|---:|
+| `JSON.stringify(agents)` (before) | 0.199 | 28,628 | — |
+| a change key built with `[].join()` | 0.142 | | 1.40× |
+| **a change key built by concatenation** | **0.034** | 13,923 | **5.83×** |
+| `snapshot()`, for scale | 0.229 | | |
+
+The array form is barely worth having and was **not** taken. String concatenation is, and is what
+landed: `changeKey()` in `state-machine-rules.mjs`, the pure end of the chain. It pays for values
+and no key names, and `null` and `undefined` concatenate to `'null'` and `'undefined'`, which is
+what keeps them distinct from an empty string without a marker of their own.
+
+**What it costs, and the gate that pays it.** `changeKey` names the fields; `JSON.stringify` did not
+have to, because it does not know what a field is. So a field added to `Agent` and forgotten there
+is a field whose change never reaches the browser — the floor would simply stop updating for it,
+with nothing failing. `test/unit/state-machine-key.test.mjs` is the answer: it walks the keys of a
+REAL agent, computed by a real `Registry` over the adapter contract rather than hand-written, moves
+each one in turn and asserts the key moved with it, naming the field when it did not. The four
+shapes a key-walk cannot reach — `tokenBreakdown` and `pendingPermission` are absent from a plain
+agent, `currentTool` is null, `supersedes` is empty — are listed with real values and asserted
+collision-free. `title` and `lastText` are length-prefixed, because the separator is a character a
+title is allowed to contain, and there is a test for exactly that pair of floors.
+
+**Proof.** `/api/state` byte-identical on `three` (14,989 bytes) and `crew` (10,500) to the byte;
+`demo` differs in exactly four numbers, all `lastGrowthAt` on the two juniors, which is a live mtime
+of a fixture file the demo keeps touching and which differs between **any** two runs of identical
+code — captured twice on the same commit, the same four moved again. Nothing else in 38,863 bytes
+differs. Every `INVARIANT:` test green. Two new tests in `state-machine.test.mjs`: a subscriber that
+arrives after four silent changes is handed the floor as it is now, deep-equal to `snapshot()` and
+not a replay; and a subscriber that arrives after a change it missed is handed nothing until
+something actually moves.
+
+**What the guard does not yet buy, and it is worth writing down.** A-05 says "the daemon is designed
+to outlive the tab, so zero subscribers is the normal steady state". In the daemon as wired today it
+is not: `src/core/notify-watch.mjs` and `src/http/routes/actions.mjs`'s pending-identity settler
+both subscribe at startup and never unsubscribe, so `_subscribers.size` is never zero while a daemon
+is running. The guard is therefore live for embedders, for the CLI's one-shot reads and for the test
+suite, and inert for the product until those two are moved off the snapshot channel — the settler
+ignores its argument entirely and calls `registry.snapshot()` itself, and the notifier needs only
+`id`, `activityState` and `live`, plus a label at the moment it actually fires. That is a package of
+its own and it is not this one. **The change key, which is 5.8× on every change, is not affected by
+any of it.**
+
+### 182.2 The CLI's three offers stop importing each other (A-07)
+
+`app.mjs → pin.mjs → shortcut.mjs → app.mjs`. Three commands that are one story — `deckhq app` opens
+the window and then offers a Desktop icon, the offer is `pin.mjs`, and the icon it writes is `deckhq
+shortcut --install` doing the writing with the answer as its consent — plus `shortcut.mjs` reaching
+back into `app.mjs` for `BIN`, the path all three point a launcher at.
+
+That last edge is the only **static** one of the three, and the one that closed the cycle.
+`src/cli/offers.mjs` holds what all three share and imports nothing from `src/cli/`, so it cannot be
+in a cycle with any of them: `BIN`, the pin offer's four strings — `PIN_QUESTION`, `PIN_FLAG`,
+`PIN_HINT` and `PIN_DECLINED`, which had been an inline literal — and the two consent primitives
+`askLine` and `isYes`, because `docs/02-ARCHITECTURE.md` §6's discipline rests on `isYes` being one
+function rather than three. `app → pin → shortcut` remains, and is a chain: a command may offer the
+next one, and nothing offers back.
+
+The other two cycles A-07 names are untouched. `settings-ui.js` ↔ `settings-ui-rates.js` is §131's
+documented shape-3 split; `deck.js` ↔ `usage.js` belongs to WP-92m, where that file is being split
+anyway.
+
+`test/unit/cli-graph.test.mjs` builds the graph the way the audit built its own — comments stripped
+first, so a JSDoc `import('./x.mjs')` in a type position is not counted as an edge, because it is
+not one — and asserts three things: `src/cli/` has no cycle at all, the three offering commands form
+a chain in that direction with nothing pointing back, and the detector finds a cycle in a three-node
+graph that has one. Without that third test, "no cycle" and "no detector" look the same from
+outside.
+
+The other half of the file is the wording, because the whole promise of the move is that a user sees
+exactly what they saw before: all four strings written out in full, `isYes` over eighteen answers,
+and the question asserted to exist in exactly one module under `src/cli/` — with comments stripped,
+since `pin.mjs`'s header quotes it in prose and that is documentation of the offer rather than a
+second implementation of it.
+
+**Proof that the gate fails:** with `import { START_TIMEOUT_MS } from './app.mjs'` put back into
+`shortcut.mjs`, both graph tests fail and the message reads `src/cli/ has a cycle: app.mjs ->
+pin.mjs -> shortcut.mjs -> app.mjs`. Reverted, green. No string, no branch and no call site moved.
+
+### 182.3 A route that needs a runtime asks for one (A-08)
+
+Five handlers read `String(body.runtime || 'claude-code')`. That reads as a default and is not one:
+it is the daemon deciding, silently, which of four runtimes a request was about, on the evidence of
+a field that was missing. Four of them refuse now, with one shape:
+
+```
+400  { "error": "A runtime is required. Name it as `runtime`: …", "field": "runtime" }
+```
+
+`src/http/routes/runtime-required.mjs` is the one copy of that refusal, so it cannot be half
+implemented at one of the four sites — `POST /api/new-project`, `POST /api/agent`, `POST
+/api/permission/decide`, and `GET /api/resume-targets`, which reads the runtime off `?id=` when
+there is one and now also accepts `?runtime=` for a caller asking about a runtime rather than about
+a session. The refusal happens before anything else is looked at, so a 400 about a runtime never
+depends on the directory existing, and nothing is started by a request that was refused. A runtime
+that *was* named and simply is not one is still a 404, not a 400.
+
+**The fifth is a choice and stays one.** `POST /api/permission` is not a route a client of ours
+calls: its URL is written into the user's own Claude Code settings by
+`src/adapters/claude-code/hooks-entries.mjs`, and Claude Code posts its own `PermissionRequest`
+payload to it — a shape we do not author, carrying no `runtime` field (§134 is the first real one
+this project ever received). The literal is `HOOK_URL_RUNTIME` now, with that paragraph beside it. A
+payload that does name a runtime is still believed. And a refusal is not available to that handler
+in any case: everything it cannot answer ends as `{}`, which is how the terminal prompt wins, so a
+400 there would read as a decision. `studio.mjs`'s `PLANNER_RUNTIME` already had its paragraph and
+is untouched.
+
+**THE AUDIT WAS WRONG ABOUT THE CLIENT.** A-08 says "the panel always sends one, and the audit found
+no caller that does not". Three of the four callers in `public/` did not: `app-dialogs.js` posts
+both `/api/new-project` and `/api/agent` with no runtime at all, and `panel-permission.js` answers a
+permission with `{ id, decision }`. Landing the refusal alone would have broken the new-project
+dialog, the new-agent dialog and every permission answer on every machine. All three send one now.
+The two dialogs name `NEW_SESSION_RUNTIME` — they have no runtime picker, so one of the four has to
+be chosen, and it is the same one the daemon was choosing for them; the choice has moved to the
+client that makes it, where a picker would go, and changing that line changes nothing else. The
+panel sends the runtime of the agent whose hand is up, read beside `p` rather than inside the
+`await`, because `displayedAgent` is a live binding and the panel can move to another agent while
+the request is in flight.
+
+`test/unit/runtime-required.test.mjs` is the gate, in two halves. The routes refuse, and refuse
+without starting anything — the fake adapter's `openNewSession` is never reached. And **every caller
+in `public/` names a runtime**, by grep, because a route that refuses what the product itself sends
+is not a hardening, and `app-dialogs.js` is one of the seven modules §182.4 is about, which until
+this package no test imported.
+
+One thing worth recording about the proof. `test/integration/permission.test.mjs` drives the real
+daemon over real HTTP, and its `decide()` did not name a runtime. Without that one-line change the
+suite does not fail, it **hangs**: a refused decision leaves the fake runtime waiting on a socket
+nobody will ever answer. That is exactly what a third-party caller would experience, and it is the
+clearest argument for the grep half of the gate.
+
+### 182.4 Static gates and a smoke import over the seven unguarded client modules (A-13)
+
+`app-dialogs.js`, `app-cards.js`, `app-launchers.js`, `app-look.js`, `app-snapshot.js`,
+`app-floor.js` and `look-ui-pictures.js` — about 1,700 lines of the shell that no test imported and
+no test read. §143's bug lived in exactly this region, and every gate was happy with it: `tsc`
+because `close(): void` is in `lib.dom.d.ts`, eslint because `close` is a browser global, the
+goldens because the floor is a canvas, the suite because nobody built the card and pressed the
+button. `test/unit/client-shell-gates.test.mjs` is A-13's first half. **No source file changed.**
+
+**They are imported**, which is more than A-13 asked for and turned out to be possible. The obstacle
+is `app-state.js`'s sixty `getElementById` calls at module scope and the eleven listeners
+`app-dialogs.js` registers on what they return: a stub answering `null` fails on the first
+`addEventListener`. A `getElementById` that mints a node per id and remembers it is the whole trick,
+and all seven then import cleanly. That is not a syntax check — every one of these modules does real
+work at module scope, and none of it had ever been executed anywhere but a browser. The seven
+window-closing globals are counters while they load, and all seven are zero afterwards.
+
+**They are parsed**, over comments and string literals blanked — `panel-close.test.mjs`'s device,
+for the reason its header gives — for three properties:
+
+1. **§143's shape.** No `window.close(`, no history navigation, and no bare
+   `close()`/`open()`/`print()`/`stop()` in a module that declares no binding of that name, which is
+   what §143 actually was.
+2. **Every `fetch` is a literal path on this daemon.** Eleven calls across the seven, every one
+   same-origin. P-05's no-egress promise is a property of the client as much as of the daemon, and
+   this was the half of it nothing checked.
+3. **No `Date.now()`, `Math.random()` or `performance.now()`.** These modules draw ages, dismiss a
+   card on a date and lay out a floor; the client clock is `public/clock.js`, which a pinned
+   snapshot moves (WP-63). `character-life.test.mjs` holds that rule over `public/render/` — WP-92c
+   made it a walk — and these seven were outside it.
+
+The seven are a **list rather than a walk**, deliberately: A-13 is a named debt with a second package
+behind it, and a walk would let the debt disappear the day a file is renamed. A rename fails the
+first test, on the missing file, and the right answer is to move the row rather than delete it.
+
+**Proof, and it is in the file rather than in this entry:** the last test plants §143's line verbatim
+into a temp copy and asserts the gate reports exactly one offence, naming the file and the line. It
+plants the other two rules the same way — a `fetch` to `https://example.com/telemetry`, a
+`Date.now()`, a `window.close()` and one honest `/api/stats` — and asserts three offences and that
+the same-origin path is not one of them. Nothing in the tree is broken to watch the gate work.
+
+### 182.5 What these four did not do
+
+- **One behaviour changed, and it is §182.3's 400.** Everything else is byte-identical output from
+  identical input: the guard hands nobody a snapshot nobody was going to read, the change key answers
+  the same question about the same agents, the CLI says every word it said, and WP-92k changed no
+  source file at all.
+- **No `INVARIANT:` test changed**, and no invariant was relaxed. The suite went 2,456 → 2,486 by
+  addition: nine for the change key and the late subscriber, seven for the CLI graph and its
+  wording, seven for the runtime refusal and its client gate, six for the client shell, and one line
+  in an integration test that now names a runtime because the panel does.
+- **Nothing was fixed in passing.** The two permanent internal subscribers §182.1 names are still
+  there; `deck.js` ↔ `usage.js` is still a cycle; the eight files on §180.2's exemption table are
+  still on it; `doctor-collect.mjs` still reaches the terminal catalogue through the adapter
+  re-export.
+- **A-12 and A-14 are untouched.** They are WP-92l–o.

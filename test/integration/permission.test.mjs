@@ -80,12 +80,18 @@ async function waitForHold(daemon, id, timeoutMs = 5000) {
   throw new Error(`no permission request was held within ${timeoutMs}ms (looking for ${id})`);
 }
 
-/** POST the panel's answer. */
-async function decide(daemon, id, decision) {
+/**
+ * POST the panel's answer.
+ *
+ * WP-92j. `runtime` is named, as the panel names it: the route refuses a
+ * decision that does not say which runtime it is answering, because the body a
+ * decision is written as is the runtime's own shape.
+ */
+async function decide(daemon, id, decision, runtime = 'claude-code') {
   const res = await fetch(`${daemon.url}api/permission/decide`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id, decision }),
+    body: JSON.stringify({ id, decision, runtime }),
   });
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }

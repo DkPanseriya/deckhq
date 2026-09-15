@@ -654,6 +654,67 @@ test('emits to subscribers only when the snapshot actually changed', async () =>
   assert.equal(calls, 1, 'unsubscribed listener must not be called');
 });
 
+test('a subscriber that arrives after several silent changes gets the floor as it is now', async () => {
+  // WP-92h, A-05. With nobody listening, `_emitIfChanged` no longer builds a
+  // snapshot — but it still clears `_changed`, so the changes that happened
+  // while the daemon had no tab open are not a backlog waiting to be replayed.
+  // They are simply the floor, and the first snapshot the late subscriber is
+  // handed has to BE the floor: every one of those changes in it, and the same
+  // object `snapshot()` would answer with right now.
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'user', tokens: 1 })],
+    live: [makeLive('a')],
+  });
+  const registry = new Registry({ store: fakeStore(), adapters: [adapter] });
+
+  // Four changes, with nobody subscribed. The agent arrives, then grows.
+  await registry.refresh();
+  for (const tokens of [2, 3, 4]) {
+    adapter.setSummaries([makeSummary('a', { lastRole: 'user', tokens })]);
+    await registry.refresh();
+  }
+  assert.equal(find(registry, 'a').tokens, 4, 'the silent changes must still have been computed');
+
+  /** @type {any[]} */
+  const seen = [];
+  registry.on((snapshot) => seen.push(snapshot));
+  assert.equal(seen.length, 0, 'subscribing is not itself an emit');
+
+  // One more change, and the late subscriber is told.
+  adapter.setSummaries([makeSummary('a', { lastRole: 'user', tokens: 5 })]);
+  await registry.refresh();
+
+  assert.equal(seen.length, 1, 'the next change after subscribing must emit exactly once');
+  // `now` is read per snapshot off the real clock, so the two readings are a
+  // millisecond apart and nothing else is. Everything the FLOOR is drawn from
+  // has to match.
+  const flatten = (s) => ({ ...s, now: 0 });
+  assert.deepEqual(
+    flatten(seen[0]),
+    flatten(registry.snapshot()),
+    'the snapshot handed to a late subscriber is the current floor, not a replay',
+  );
+  assert.equal(seen[0].agents[0].tokens, 5);
+});
+
+test('a change with nobody listening still resets `_changed`, so the next tick is silent', async () => {
+  // The other half of the guard: it must not leave `_changed` true. If it did,
+  // the first unrelated tick after a subscriber appeared would emit a snapshot
+  // for an edge that had already been and gone — twelve callers of
+  // `_emitIfChanged` were written against "emit only when something moved".
+  const adapter = makeAdapter('claude-code', {
+    summaries: [makeSummary('a', { lastRole: 'user' })],
+    live: [makeLive('a')],
+  });
+  const registry = new Registry({ store: fakeStore(), adapters: [adapter] });
+  await registry.refresh(); // the agent arrives, with nobody listening
+
+  let calls = 0;
+  registry.on(() => calls++);
+  await registry.refresh(); // identical data
+  assert.equal(calls, 0, 'a subscriber must not be handed a snapshot for a change it missed');
+});
+
 // ---------------------------------------------------------------------------
 // F. refresh() re-entrancy
 // ---------------------------------------------------------------------------

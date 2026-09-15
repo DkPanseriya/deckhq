@@ -295,6 +295,157 @@ export function orderRooms(projects, order) {
 }
 
 /**
+ * The separator between two fields of the change key. A unit separator, which
+ * is not a character any of the fields below legitimately contains.
+ */
+const K = '';
+
+/**
+ * One field of the change key, for a field that carries free text.
+ *
+ * LENGTH-PREFIXED, and that is the whole reason this is a function rather than
+ * a `+`. A title is whatever the user typed and `lastText` is whatever the
+ * model wrote; either could in principle contain the separator, and without a
+ * length in front of it `title='ab', lastText='c'` and `title='a',
+ * lastText='bc'` are the same string. With one they are not, at any
+ * position, because the reader would have to agree about the lengths too.
+ *
+ * A value that is not a string at all — an adapter double in a test, a field a
+ * future runtime leaves off — gets its own marker rather than the empty
+ * string, so "absent" and "empty" stay two different keys.
+ *
+ * @param {unknown} v
+ * @returns {string}
+ */
+function text(v) {
+  return typeof v === 'string' ? v.length + K + v : ' ';
+}
+
+/**
+ * Has the floor changed? — WP-92h, `docs/plan/13-ARCHITECTURE-AUDIT.md` A-05.
+ *
+ * `_rebuild()` compares each computed `Agent[]` against the last one to decide
+ * whether anybody needs to be told. It used to do that with
+ * `JSON.stringify(agents)`, which is correct and, measured on the `demo`
+ * floor's 28 agents, **0.199 ms per change against this function's 0.034 ms**
+ * — 5.8x, on a comparison the daemon makes on every scan, every hook event and
+ * every tick. The stringify pays for quoting, escaping, key names and a 28 KB
+ * result; this pays for 13 KB of values and no keys.
+ *
+ * IT MUST READ EVERY FIELD OF `Agent` THAT A SNAPSHOT CARRIES. A field left
+ * out of this list is a field whose change never reaches the browser — the
+ * floor simply stops updating for it, silently, which is the one failure
+ * cheapness could buy here. `state-machine-key.test.mjs` is the guard: it
+ * walks the keys of a real agent and asserts that moving any one of them moves
+ * this key, so a field added to `Agent` and forgotten here fails the suite
+ * rather than the product.
+ *
+ * Concatenation, not `[].join()`: the array form measured 0.142 ms, barely
+ * better than the stringify it replaces. `null` and `undefined` stringify to
+ * `'null'` and `'undefined'` under `+`, which is what keeps them distinct from
+ * the empty string without a marker of their own.
+ *
+ * @param {Agent[]} agents
+ * @returns {string}
+ */
+export function changeKey(agents) {
+  let key = String(agents.length);
+  for (const a of agents) {
+    const tool = a.currentTool;
+    const split = a.tokenBreakdown;
+    const pending = a.pendingPermission;
+    key +=
+      K +
+      a.id +
+      K +
+      a.runtime +
+      K +
+      text(a.title) +
+      K +
+      a.hasCustomTitle +
+      K +
+      a.projectId +
+      K +
+      text(a.projectName) +
+      K +
+      text(a.cwd) +
+      K +
+      a.gitBranch +
+      K +
+      a.model +
+      K +
+      a.live +
+      K +
+      a.activityState +
+      K +
+      a.ackState +
+      K +
+      a.reviewSince +
+      K +
+      a.needsInputSince +
+      K +
+      a.lastOutputAt +
+      K +
+      a.lastActivityAt +
+      K +
+      a.tokens +
+      K +
+      a.cacheTokens +
+      // WP-83. A breakdown names only the counters the runtime named, so the
+      // four are read one by one and an absent one keys as `undefined` —
+      // which is not what a zero keys as, and must not be.
+      K +
+      (split ? split.input : '') +
+      K +
+      (split ? split.cacheWrite : '') +
+      K +
+      (split ? split.cacheRead : '') +
+      K +
+      (split ? split.output : '') +
+      K +
+      a.costEstimate +
+      K +
+      a.lastRole +
+      K +
+      text(a.lastText) +
+      K +
+      (tool ? tool.name : '') +
+      K +
+      (tool ? text(tool.summary) : '') +
+      K +
+      (tool ? tool.since : '') +
+      // A permission prompt is open on at most one session at a time and on
+      // none of them nearly always, so the one nested shape in `Agent` is
+      // left to `JSON.stringify` rather than enumerated: its `suggestions`
+      // are the runtime's own rule objects, and this file is not the place
+      // that learns their shape.
+      K +
+      (pending ? JSON.stringify(pending) : '') +
+      K +
+      a.subagent +
+      K +
+      a.parentId +
+      K +
+      a.subagentType +
+      K +
+      a.subagentDescription +
+      K +
+      a.spawnedAt +
+      K +
+      a.workflowId +
+      K +
+      a.lastGrowthAt +
+      K +
+      a.juniorCount +
+      K +
+      a.identityId +
+      K +
+      (a.supersedes ? a.supersedes.length + K + a.supersedes.join(',') : '');
+  }
+  return key;
+}
+
+/**
  * Legality per docs/02-ARCHITECTURE.md §5.1. "Any active state" means
  * ackState === 'active' regardless of activityState.
  * @type {Record<string, (agent: Agent) => boolean>}

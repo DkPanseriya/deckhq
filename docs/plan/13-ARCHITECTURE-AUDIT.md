@@ -449,6 +449,20 @@ rather than a defect). **Must not change.** The fallback path must still work wi
 
 ### A-05 · The registry does two full passes over the model per change, one of them for nobody · **debt** · M
 
+> **RESOLVED** by WP-92h, commit `8ea13eb` (`docs/DEVIATIONS.md` §182.1). Both halves landed: the
+> guard, and — measured first, as this finding required — the change key, at **0.199 ms → 0.034 ms
+> per change on the `demo` floor, 5.8×**. The array-join form this finding implied was measured at
+> 1.40× and was not taken; string concatenation was. `state-machine-key.test.mjs` walks a real
+> agent and fails naming any `Agent` field the key does not read, which is the one way a named-field
+> key can be wrong.
+>
+> **One claim here is not true of the daemon as wired.** "Zero subscribers is the normal steady
+> state" is false while `notify-watch.mjs` and `actions.mjs`'s pending-identity settler both
+> subscribe at startup and never leave, so `_subscribers.size` is never zero in a running daemon.
+> The guard is live for embedders, the CLI's one-shot reads and the suite, and inert for the product
+> until those two move off the snapshot channel — the settler ignores its argument entirely, and the
+> notifier needs three fields plus a label only when it fires. That is a package of its own.
+
 **Evidence.** `state-machine-compute.mjs:116` — `const key = JSON.stringify(agents)` on every
 `_rebuild()`. `state-machine-snapshot.mjs:452` — `_emitIfChanged()` calls `this.snapshot()` before
 checking whether `_subscribers` is non-empty, and `snapshot()` runs `identity.describe` per agent,
@@ -484,6 +498,13 @@ projects; `npm test` unchanged; `git diff` touches no executable line.
 
 ### A-07 · Three import cycles · **debt** · S
 
+> **PARTLY RESOLVED** by WP-92i, commit `a55fcf5` (`docs/DEVIATIONS.md` §182.2). The CLI cycle is
+> closed: `src/cli/offers.mjs` holds what `app`, `pin` and `shortcut` share and imports none of
+> them. **`BIN` moved with the offer text** — this finding names only the offers, and `BIN` was the
+> one STATIC edge of the three, so lifting the text alone would have left the cycle exactly where it
+> was. `cli-graph.test.mjs` asserts the graph and proves its own detector. The `deck ↔ usage` pair
+> is WP-92m's; the settings pair stays, as this finding says.
+
 **Evidence.** §1.2. `src/cli/app.mjs ↔ pin.mjs ↔ shortcut.mjs`; `public/deck.js ↔ usage.js`;
 `public/settings-ui.js ↔ settings-ui-rates.js` (documented).
 **Move.** For the CLI, lift the three cross-offers into one `src/cli/offers.mjs` that all three
@@ -495,6 +516,20 @@ rather than importing the deck. Leave the settings pair; it is the documented sh
 **Must not change.** Every offer the CLI makes today, in the same words.
 
 ### A-08 · `'claude-code'` is the implicit default runtime in five route handlers · **risk** · M
+
+> **RESOLVED** by WP-92j, commit `f9a8295` (`docs/DEVIATIONS.md` §182.3). Four of the five refuse
+> with `400 { error, field: 'runtime' }` through one shared `runtime-required.mjs`;
+> `/api/resume-targets` also accepts `?runtime=`. The fifth, `POST /api/permission`, stays a choice
+> and is documented as one at its site: Claude Code posts its own payload to a URL the Claude Code
+> adapter wrote, that payload names no runtime, and a 400 from that handler would read as a
+> decision rather than as a refusal.
+>
+> **This finding's blast-radius claim was wrong.** "The panel always sends one, and the audit found
+> no caller that does not" — three of the four callers in `public/` did not: `app-dialogs.js` on
+> both `/api/new-project` and `/api/agent`, and `panel-permission.js` on every permission answer.
+> Landing the refusal alone would have broken two dialogs and every permission answer on every
+> machine. All three send one now, and `runtime-required.test.mjs` greps `public/` so the next
+> caller cannot be added without one.
 
 **Evidence.** `routes/permission.mjs:100,159`; `routes/actions.mjs:297,408,639`
 (`String(body.runtime || 'claude-code')`). `routes/studio.mjs:89` `PLANNER_RUNTIME = 'claude-code'`.
@@ -573,6 +608,17 @@ byte-identical on the `demo`, `three` and `crew` fixtures.
 **Must not change.** Anything. Not one bug fixed in passing, not one dead branch deleted.
 
 ### A-13 · Seven client modules are neither executed nor read by any test · **risk** · M
+
+> **FIRST HALF RESOLVED** by WP-92k, commit `8576ea8` (`docs/DEVIATIONS.md` §182.4).
+> `test/unit/client-shell-gates.test.mjs`, and it does more than this finding asked: all seven are
+> also **imported**, under a DOM stub whose `getElementById` mints a node per id — which is the one
+> thing that makes the shell loadable outside a browser, and which this finding assumed would need
+> the second package's builder refactor first. Three static rules, not one: §143's shape, every
+> `fetch` a literal same-origin path, and no `Date.now()`/`Math.random()`/`performance.now()`. The
+> gate is proved by planting §143's line into a temp copy. No source file changed.
+>
+> **The second half stands**: nothing here drives these modules, so what they DO under a browser is
+> still unmeasured. The seven are a list rather than a walk so that debt cannot go quiet.
 
 **Evidence.** §5. `app-dialogs.js`, `app-cards.js`, `app-launchers.js`, `app-look.js`,
 `app-snapshot.js`, `app-floor.js`, `look-ui-pictures.js` — about 1,700 lines. §143's tab-closing
