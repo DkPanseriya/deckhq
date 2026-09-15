@@ -44,6 +44,32 @@
   thirteen-byte header — and puts `width` and `height` on every `media/` image on all eleven pages
   and all 172 log entries. Nothing on a page moves while it loads, and the number cannot be typed
   wrong or forgotten on the next page somebody writes.
+- **The robots are alive — WP-87.** The owner: _"now that we have robot doodles, make also thinking
+  cloud, working etc animation. Also some other animations for playing games or drinking coffee in
+  the lounge. And running animation."_
+
+  **Twelve animations**, each with a trigger you can point at in the data: the typing cadence, a visor
+  flash on a real tool call, a **thought cloud that grows** while a turn is open and nothing is
+  running, the wave and its floor ring, a page flip while a review waits, two dots over a stall, a
+  **power-down** when a session ends, the lounge activities, walking, **running**, and a pop-in and
+  fold-away at the two ends of a session's life on the floor. Every one states its frame count, its
+  period, the zoom it stops being drawn at, and the single still frame it reduces to.
+
+  **The one trip that runs** is an agent going to Your Office because it needs input. `for_review`
+  walks — it is waiting on you, but it is not blocked mid-turn — and nothing else on this floor ever
+  runs, which is what keeps the claim readable across a room.
+
+  **The lounge is dealt by bay, and by hash.** A benched agent's activity is
+  `BAY_ACTIVITIES[bay][hash(id, bay, cycle)]` and its hold is the same hash mapped into 45–90 s, so
+  two tabs on one floor show the same lounge and a reload does not re-deal it. The quiet corner
+  finally has something to do in it: **`read`**, a held page and a turn every twenty seconds.
+  `03-VISUAL-SPEC.md` §4.4, `docs/DEVIATIONS.md` §172.
+
+- **`?phase=` — pin the animation, keep the motion — WP-87.** A phase in `[0, 1)` on the floor's own
+  URL holds every animation at one point of its own cycle while motion stays ON. This tab only, never
+  written back, and an out-of-range value does nothing — the same rules `?theme=` has. It exists so a
+  capture can photograph a moving floor reproducibly, and `test/goldens/<platform>/demo@motion.png`
+  is the first capture in this project's history with the floor moving in it.
 
 - **Six hundred first names, and a number is now unreachable — WP-86.** The owner: _"I don't like
   names like Livia 1, 2, 3. Make the list big enough so that we do not run out of names."_ The pool
@@ -362,6 +388,14 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
   desks and nothing else.
 
 ### Changed
+
+- **The quiet corner of the lounge is a place to read, and the games bay deals games — WP-87.** Lounge
+  places now carry the name of the bay they stand in, so an activity is dealt from where somebody is
+  actually sitting rather than from the whole clip list. The two armchairs beside the bookcase became
+  `read` places; before this they were sofa places by another name, and anybody dealt to the quiet
+  corner sat doing nothing while the games bay played pool. `chat` is dealt by no bay at all: two
+  agents facing each other need no furniture, so there is no place to deal, and dealing it anyway put
+  two people gesturing at each other across a pool table.
 
 - **The waiting sit on the sofas; the one you open comes to the desk — WP-93.** The owner, for the
   third time: _"They all should sit on the sofa. Only the agent I open walks up to the manager
@@ -732,6 +766,23 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   `docs/DEVIATIONS.md` §161.
 
 ### Fixed
+
+- **The floor's animation clock was never the injected one, and every golden was the still frame —
+  WP-87.** `scene-agent.js`'s `nowMs()` returned `performance.now()`, a tab-local counter no fixture
+  can pin, and handed it to the rig under a comment calling it the injected clock. It was also
+  subtracted from a `clipStartedAt` that came from `Date.now()`, so a clip's `t` was a monotonic
+  counter minus an epoch instant — **about −1.7 billion seconds**. A looping clip survived that by
+  wrapping, which is why nobody saw it; a one-shot clip held its first frame forever, which is why
+  `drink`, `stretch` and `coffee` never played to the end.
+
+  None of it ever failed a gate because `npm run goldens` emulates `prefers-reduced-motion`, which
+  forces the phase to exactly zero: **every committed capture in this project's history was the
+  reduced-motion render**, and no animation the product has ever had had appeared in one. There is
+  now one clock (`public/clock.js`, pinned by `DECKHQ_NOW` like every age on the screen), one phase,
+  and a clip's phase offset that comes from a real timestamp on the agent rather than from when this
+  tab happened to notice — so two tabs on one floor draw the same frame and a reload does not restart
+  a cycle. `performance.now()` survives in exactly one function, for frame pacing, and a test asserts
+  it. `docs/DEVIATIONS.md` §172.
 
 - **A re-plan left everybody standing in the building it replaced — WP-93.** Rebuilding the floor
   after a window resize gave every seat, wall and corridor new coordinates and never moved the people

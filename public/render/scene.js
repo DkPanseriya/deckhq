@@ -52,6 +52,8 @@ import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
 import { SceneInput } from './scene-input.js';
 import { planSignature } from './scene-draw.js';
+import { pickSessionPhase } from '../url-options.js';
+import { animMs } from './scene-agent.js';
 
 export * from './scene-base.js';
 export * from './scene-lod.js';
@@ -61,6 +63,7 @@ export * from './scene-hit.js';
 export * from './scene-draw.js';
 export * from './scene-input.js';
 export * from './scene-agent.js';
+export * from './life.js';
 
 export class Scene extends SceneInput {
   /**
@@ -135,6 +138,10 @@ export class Scene extends SceneInput {
     this._reducedMotionQuery =
       typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : null;
     this._reduced = this._reducedMotionQuery ? this._reducedMotionQuery.matches : false;
+    // WP-87. `?phase=0.25` pins every animation's phase WITHOUT turning motion
+    // off, which is how a golden photographs a moving floor. Read once, from
+    // this tab's own URL, never written back — `url-options.js`'s whole idiom.
+    this._phase = typeof location !== 'undefined' ? pickSessionPhase(location.search) : null;
 
     // A back-reference from the element to its scene. The floor is a single
     // canvas, so there is otherwise no way to reach the camera or the baked
@@ -184,13 +191,14 @@ export class Scene extends SceneInput {
           previousAgents,
           this._plan,
           assignSeats(this._plan, previousAgents, { selectedId: this._selectedId }),
+          { now: animMs() },
         );
       }
     }
 
     if (this._plan) {
       const seatMap = assignSeats(this._plan, agents, { selectedId: this._selectedId });
-      this._runtime.sync(agents, this._plan, seatMap);
+      this._runtime.sync(agents, this._plan, seatMap, { now: animMs() });
     }
 
     if (this.canvas.setAttribute) {
@@ -305,6 +313,7 @@ export class Scene extends SceneInput {
       agents,
       this._plan,
       assignSeats(this._plan, agents, { selectedId: this._selectedId }),
+      { now: animMs() },
     );
     // The loop is stopped while the tab is hidden, and a selection can still
     // arrive there (a notification, the palette). Draw so the ring and the walk
@@ -365,6 +374,7 @@ export class Scene extends SceneInput {
     this._runtime.step(dt, {
       reduced: this._reduced,
       plan: this._plan,
+      now: animMs(),
       makeActivityRotation,
       makeIdleRotation,
     });

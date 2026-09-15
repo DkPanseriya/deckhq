@@ -259,11 +259,38 @@ every zoom, because they are the two things the floor exists to say.
 
 ### 3.7 Motion
 
-Idle micro-motion is an **antenna bob** and a **visor blink**, both driven by one phase in `[0, 1)`
-computed from the injected clock (`public/clock.js`) and nothing else. Under
+**Rewritten 15 September 2026 (WP-87).** This section used to say that the idle phase came "from the
+injected clock (`public/clock.js`) and nothing else". It did not. `scene-agent.js`'s `nowMs()`
+returned `performance.now()` — a tab-local counter no fixture can pin — and passed it to
+`idlePhase()` under a comment calling it the injected clock; it was also subtracted from a
+`clipStartedAt` that came from `Date.now()`, so a clip's `t` was a monotonic counter minus an epoch
+instant, about −1.7 billion seconds. The goldens were stable for an unrelated reason:
+`scripts/goldens.mjs` emulates `prefers-reduced-motion`, which forces the phase to exactly `0`. **The
+whole committed set was the reduced-motion render**, which is why §162.9 could report *0 px moved at
+all*, and why no animation in this document had ever appeared in a golden.
+
+**There is now one clock and one phase, and they are the daemon's.**
+
+- **`animMs()` is every phase's clock** — `public/clock.js`, which is the daemon's pinned instant
+  when `DECKHQ_NOW` pins one and this machine's otherwise. Two tabs on one floor draw the same frame
+  and a reload does not restart a cycle.
+- **`frameMs()` is `performance.now()`, and it is frame pacing only** — the `dt` the runtime is
+  stepped by, and the re-plan cross-fade. An interval is a fact about this tab; a phase is not.
+- **A clip's phase offset is a real timestamp on the agent** wherever the model carries one:
+  `needsInputSince` for the wave, `reviewSince` for the review, `lastActivityAt` otherwise. Not when
+  this tab happened to notice.
+- **`?phase=0.25` pins every animation's phase WITHOUT disabling motion**, this tab only, never
+  written back (`public/url-options.js`'s idiom). It is the seam the `demo@motion` golden is taken
+  through: a photograph of a moving floor that is byte-identical across two runs.
+- **No `Math.random()` under any draw.** Every choice a figure makes — which lounge activity, which
+  place, how long it holds one — is a hash of the session id and a cycle index, the way identity has
+  been a pure function of the session id since WP-20.
+
+Idle micro-motion is an **antenna bob** and a **visor blink**, both from one phase in `[0, 1)`. Under
 `prefers-reduced-motion` the phase is exactly `0`, so every term derived from it drops out of the
 arithmetic and the figure is the static one the design sheets show (§10). Walking is **two frames**
-and no blend — a chunky robot's walk is a waddle, and a waddle is a step and its mirror.
+and no blend — a chunky robot's walk is a waddle, and a waddle is a step and its mirror. Running is
+**four frames** at 0.52 s, and §4.4 says which one trip ever uses it.
 
 ## 4. Motion clips
 
@@ -282,6 +309,7 @@ anywhere on the floor — a clip does not know which room it is in.
 | `hand_raise` | 1.4 s loop | Seated, right arm fully raised, slight wave. **Pulsing ring** on the floor beneath, in the needs-input colour. The single most important animation in the product. |
 | `slump` | 4.0 s loop | Seated, lean +0.35, head down, arms at rest. Used for `stalled`. Deliberately low-energy. |
 | `walk` | 0.8 s loop | Standing, leg cycle, arms counter-swing, body angle follows the path tangent. |
+| `run` | 0.52 s loop | **WP-87.** Standing, four frames, lean +0.28, arms swung high and tight, double bob. The one trip that uses it is §4.4's; nothing else on this floor ever runs. |
 | `stand_wait` | 4.0 s loop | Standing, weight shift every 2 s, occasional head turn. Used in the user's office. |
 
 ### 4.2 Lounge clips
@@ -296,15 +324,87 @@ These exist to make a cleared queue feel like a reward. They are not filler.
 | `arcade` | 2.2 s loop | Standing at the cabinet, both hands on controls, body leans with the action, screen flickers. |
 | `coffee` | 6.0 s once | Walks to the machine, presses, waits 1.5 s, takes mug, `prop = mug`. Then walks to a seat. |
 | `eat` | 3.4 s loop | Seated at the dining table, `prop = plate`, hand to mouth. |
-| `chat` | 4.0 s loop | **Paired.** Two agents facing, alternating gesture, speech dots above the speaker. |
+| `chat` | 4.0 s loop | **Paired.** Two agents facing, alternating gesture, speech dots above the speaker. Not dealt by a bay — see §4.3. |
+| `read` | 20.0 s loop | **WP-87.** In an armchair in the quiet bay, a held page and a **0.60 s page turn every 20 s**. The quiet corner was §3.7's one place with nothing to do in it. |
 | `lounge_idle` | 5.0 s loop | On a sofa, lean back, occasional head turn. |
 
 ### 4.3 Activity rotation
 
-A benched agent picks an activity, performs it for **45–90 s** (randomised), then walks to another.
-Paired activities wait for a partner; if none is free the agent takes a solo activity. This
-rotation is what makes the lounge feel alive rather than static. Rotation pauses entirely when the
-tab is hidden.
+A benched agent picks an activity, performs it for **45–90 s**, then walks to another. Paired
+activities wait for a partner; if none is free the agent takes a solo activity. This rotation is what
+makes the lounge feel alive rather than static. Rotation pauses entirely when the tab is hidden.
+
+**Which activity is a HASH, not a roll (WP-87), and it is dealt by BAY.** §3.7 lays the lounge as
+four bays and every lounge spot now carries the name of the one it stands in, so the rotation deals
+`BAY_ACTIVITIES[bay][hash(sessionId, bay, cycleIndex) % n]` and the hold is
+`hash(sessionId, cycleIndex)` mapped into 45–90 s:
+
+| bay | deals |
+|---|---|
+| sitting | `lounge_idle` |
+| café | `coffee`, `eat` |
+| quiet | `read` |
+| games | `pool`, `table_tennis`, `board_game`, `arcade` |
+
+Two tabs on one floor therefore show the same lounge, a reload does not re-deal it, and a golden can
+photograph it. A narrow lounge that gave up its games bay (§3.7's drop order) deals nobody a pool
+shot, because the bay is read off the spots the plan actually laid. `chat` is in no bay: two agents
+facing each other need no furniture, so there is no place to deal and dealing it anyway would put
+two people gesturing across a pool table.
+
+### 4.4 Character life (WP-87)
+
+What a figure does beyond holding its pose. `docs/plan/12-MOTION-AND-CREW.md` §2 is the design of
+record and `docs/media/motion/life-sheet.png` draws every strip; the table is `public/render/life.js`
+and `test/unit/character-life.test.mjs` asserts each row against it.
+
+| animation | trigger (what is OBSERVED) | frames · period | LOD | reduced |
+|---|---|---|---|---|
+| **working · type** | `activityState = working` | 4 · 0.90 s, loops | all | hands on the keys, no bob |
+| **visor flicker** | `currentTool.since` MOVES — a real tool call opening | 3 · 0.24 s, once, **capped at one per 0.5 s** | all | the lit visor, no flash |
+| **thinking · cloud** | turn open, `currentTool` null, > 2.0 s since the last event | 4 · sway 3.20 s; growth is not a loop | ≥ 1 | the cloud at its size, no sway |
+| **needs_input · wave** | `activityState = needs_input` | 4 · 1.40 s, loops, with the floor ring | all | hand up, ring at half phase |
+| **for_review · page flip** | idle only, while `for_review` holds | 4 · 0.50 s, once every 12 s | ≥ 1 | page held flat |
+| **stalled · slump + dots** | `activityState = stalled` | 3 · 4.00 s, loops | ≥ 1 | slumped, two dots, visor 50% |
+| **ended · power-down** | the session's own end timestamp | 5 · 1.60 s, **once, ever** | all | frame 5 immediately |
+| **benched · lounge** | `ackState = benched` | per activity, 45–90 s hold (§4.3) | ≥ 1 | one frame, same hash |
+| **walk** | any trip that is not the one below | 2 · 0.80 s | ≥ 1 | no trip animated |
+| **run** | destination is Your Office **and** state is `needs_input` | 4 · 0.52 s | ≥ 1 | no trip animated |
+| **spawn** | an id in this snapshot that was not in the last | 3 · 0.32 s, once | all | figure simply present |
+| **despawn** | an id that left the snapshot | 3 · 0.42 s, once | all | figure simply gone |
+
+**Honesty.** Nothing animates that is not backed by a real observed event or state. The typing
+cadence is a constant and **is not the token rate** — nothing reports keystrokes, and `tokens` is a
+running total sampled at the poll. The cloud does not mean *reasoning*: DeckHQ cannot see a thinking
+block, and what it can see is that a turn is open, no tool is running and nothing has been written
+for N seconds. It grows one lobe at 2 s, two at 6 s, three at 15 s, **and then stops** — a cloud that
+kept growing would be a claim about difficulty the data cannot support. The visor flicker fires only
+on a `currentTool.since` the adapter genuinely saw move, so a runtime that reports no tool events
+never flashes. `ended` **latches**, keyed to the session's own end timestamp rather than to a flag, so
+it cannot run twice across a reload or a second tab — and it is never the fold-away, because an ended
+session *stays on the floor* (§5.1) and folding it away would say it had left. There is no animation
+at all on `let_go`.
+
+**Running is a claim.** The one trip that runs is an agent going to Your Office because it needs
+input. `for_review` walks: it is waiting on you, but it is not blocked mid-turn. Nothing else on this
+floor ever runs, which is what keeps the claim readable across a room.
+
+**LOD.** §3.6's drop list stands unchanged; to it this adds: at **L0 the thought cloud, the page flip
+and the stall dots are dropped**, and below the tier only the visor and the raised hand animate. **The
+visor and the raised hand are in no drop list at any zoom.**
+
+**Motion never covers a raised hand or a label.** The cloud and the stall dots hang in the same
+above-head slot §7's chrome uses, and they are last in its precedence: a state icon wins, then the
+tool bubble, then these. So a `stalled` figure on the floor shows its hourglass rather than its two
+dots — the hourglass says the same thing louder — and the dots appear where the slot is free, which
+is a stalled session that has been benched. The pose, the visor's dimming and the slump are the
+stall signal either way.
+
+**Budget.** Per frame an agent costs its pose, its visor and at most one over-head element; no draw
+allocates per call — the character-life director fills one module-scope scratch object and hands the
+same one back. Asserted as draw-call counts over a hundred figures rather than as milliseconds,
+because a wall-clock assertion in a unit suite fails on a busy runner and says nothing about the
+commit.
 
 ## 5. State → visual mapping
 
@@ -654,6 +754,11 @@ and never to the floor. The promise has moved onto the character, where it can b
 - `prefers-reduced-motion: reduce`: characters snap between positions, clips hold a
   representative static pose, the hand-raise pulse becomes a static ring, lounge rotation stops.
   **The product must remain fully usable and fully legible in this mode.**
+- **The reduced form is INFORMATIVE, never absent (WP-87).** Every animation in §4.4 states its
+  reduced frame and every one of them is still a claim a reader can act on: the cloud at its current
+  size, the page held flat, two dots over a stall, a hand up. Nothing reduces to nothing. And nothing
+  in the reduced frame carries a phase term — `test/unit/character-life.test.mjs` renders the same
+  figure at two different clocks and asserts the two are byte-identical.
 - Full keyboard navigation of the queue and all actions (§8).
 - The canvas carries an `aria-label` summarising the floor, and an off-screen live region
   announces state changes for screen readers.

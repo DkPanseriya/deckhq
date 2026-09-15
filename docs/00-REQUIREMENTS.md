@@ -116,7 +116,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-057 | Agent size is the user's preference, not the layout's | Characters | planned |
 | R-058 | One conversation is one agent | Characters | done |
 | R-059 | Names never carry a numeric suffix | Characters | planned |
-| R-060 | Character animations: thinking, working, running, lounge activities | Characters | planned |
+| R-060 | Character animations: thinking, working, running, lounge activities | Characters | done |
 | R-061 | A crew animation for sub-agents and multi-agent workflows | Characters | planned |
 | R-070 | Design it like interior architecture, like a real office | Interior | done |
 | R-071 | A lounge you recognise in a second | Interior | done |
@@ -576,8 +576,17 @@ activities (games, coffee) that make a benched agent read as available capacity 
 stalled work.
 **Why.** `01-PRODUCT.md` §4.3: watching them enjoy themselves is a deliberate reward for having
 cleared your queue.
-**Status:** planned (**WP-87**). **Notes.** Every clip is bound by P-10 (one static frame under
-reduced motion, with a golden) and P-09 (phase from the injected clock, never `Date.now()`).
+**Status:** **done (WP-87**, `DEVIATIONS.md` §172). Twelve animations, each with a stated trigger,
+frame count, period, LOD band and reduced-motion frame (`03-VISUAL-SPEC.md` §4.4): the typing
+cadence, the visor flicker on a real tool call, the thought cloud, the wave, the page flip, the stall
+dots, the power-down, the lounge activities, walk, run, spawn and despawn.
+**Notes.** Every clip is bound by P-10 (one static frame under reduced motion, with a golden) and
+P-09 (phase from the injected clock, never `Date.now()`) — and **P-09 was being broken by the floor
+itself**. The animation clock was `performance.now()`, which no fixture can pin, so every committed
+golden was the reduced-motion render and no animation in the product had ever appeared in one. WP-87
+fixed that first: `animMs()` reads `public/clock.js`, `performance.now()` is frame pacing only, and
+`?phase=` pins a frame without disabling motion. The eleventh golden, `demo@motion`, is the first
+capture in this project's history with the floor moving in it.
 
 **R-061 — A crew animation for sub-agents and multi-agent workflows**
 *Owner, 15 September 2026:* "many times chat sessions do launch background task subagents, or multi

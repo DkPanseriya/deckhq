@@ -48,6 +48,16 @@
  * @property {'working'|'needs_input'|'stalled'|'for_review'|'ended'} activityState
  * @property {'active'|'benched'|'let_go'} ackState
  * @property {number|null} reviewSince
+ * @property {number|null} [needsInputSince] ms epoch the hand went up. WP-87
+ *   reads it as the wave's phase offset, so two tabs agree about which frame
+ *   of it they are on.
+ * @property {number} [lastActivityAt] ms epoch of the last observed event.
+ * @property {boolean} [turnEnded]  the turn is closed. WP-87's thought cloud
+ *   needs an OPEN one, and never infers the answer from anything else.
+ * @property {{name?:string, summary?:string, since?:number}|null} [currentTool]
+ *   WP-52's observed tool call. WP-87's visor flicker fires on `since` moving
+ *   and on nothing else; a runtime that reports no tool events never flashes.
+ * @property {number|null} [spawnedAt] ms epoch a junior's transcript opens.
  * @property {boolean} [subagent]   WP-41: this is a junior. Read by
  *   `derivePlacement`, and it was not declared here even though the whole
  *   junior seating pass turns on it.
@@ -99,6 +109,22 @@
  * @property {string|null} tendency     WP-28. Which idle clip this agent leans
  *   on, from `GET /api/traits`, or null. A weighting and nothing else.
  * @property {boolean} initialised
+ * @property {number} [rotationCycle] WP-87. Which turn of the lounge rotation
+ *   this is. The activity, the hold and the place are a hash of the session id
+ *   and THIS, so the whole sequence is a pure function of the id.
+ * @property {number|null} [toolSince] WP-87. The `currentTool.since` this
+ *   record has already seen, so a flicker fires on a CHANGE rather than on
+ *   every frame a tool happens to be open.
+ * @property {number|null} [flickerAt] WP-87. When the visor flash the 0.5 s cap
+ *   accepted began — the tool's own timestamp, so two tabs flash together.
+ * @property {number|null} [spawnAt] WP-87. When this id first appeared in a
+ *   snapshot that had a previous one. Null on the population a tab opens onto.
+ * @property {number|null} [leftAt] WP-87. When this id left the snapshot; the
+ *   record is kept for `despawn`'s 0.42 s so the figure can fold away.
+ * @property {boolean} [running] WP-87. This trip is a run — see `tripRuns`.
+ * @property {AgentLike|null} [agent] the agent this record was last synced
+ *   against, by reference, so a figure that has left the snapshot can still be
+ *   drawn while it folds away.
  * @property {string} [placement] what `derivePlacement()` said when this
  *   record was last synced. Written by `sync` and read by the rotation and
  *   the walk planner; it was never declared (WP-22).
@@ -115,6 +141,23 @@
  * enough to read as the agent being stuck rather than walking.
  */
 export const WALK_SPEED = 13;
+
+/**
+ * Plan units RUN per second, on the one trip that runs (WP-87).
+ *
+ * `docs/plan/12-MOTION-AND-CREW.md` §2 states the pair as 2.6 U/s walking and
+ * 4.6 U/s running. The absolute figures in that document were written against
+ * the study's own canvas, not against this floor: `WALK_SPEED` is 13 and the
+ * comment above says why — routes go door → corridor → door rather than cutting
+ * across, so at 4.5 U/s a trip from a project room to the lounge read as the
+ * agent being stuck rather than walking. Dropping to 2.6 would make that four
+ * times worse.
+ *
+ * So the RATIO is the document's and the scale is the floor's: 13 × 4.6 / 2.6 =
+ * 23. A run is 77% more ground per second than a walk, which is what makes it
+ * read as urgency from across a room. Recorded as a deviation.
+ */
+export const RUN_SPEED = Math.round((WALK_SPEED * 4.6) / 2.6);
 
 /** Activity rotation hold time, seconds (VISUAL-SPEC §4.3). */
 export const ROTATION_MIN_S = 45;
@@ -140,6 +183,7 @@ export const LOUNGE_CLIPS = [
   'coffee',
   'eat',
   'chat',
+  'read',
   'lounge_idle',
 ];
 

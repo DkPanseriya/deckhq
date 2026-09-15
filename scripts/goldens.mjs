@@ -152,6 +152,18 @@ const RUN_BUDGET_MS = Number(opt('--budget', 360)) * 1000;
 const POPULATIONS = ['demo', 'empty', 'single', 'three', 'pinned', 'reference'];
 
 /**
+ * THE PHASE `demo@motion` IS PINNED AT — `12-MOTION-AND-CREW.md` §5, verbatim:
+ * *"a golden fixture captures `demo@phase` at phase 0.25 — where the typing
+ * cadence is at its second stroke, the wave at its widest, the page edge-on and
+ * the power-down at frame 2"*.
+ *
+ * It is a quarter of the way through EVERY animation's own cycle, which is what
+ * makes one number enough for a strip of eleven of them with periods from
+ * 0.24 s to 20 s.
+ */
+export const MOTION_PHASE = 0.25;
+
+/**
  * The captures this gate takes: the five default-theme populations, plus one
  * `demo` floor per shipped theme (WP-30).
  *
@@ -184,13 +196,31 @@ const POPULATIONS = ['demo', 'empty', 'single', 'three', 'pinned', 'reference'];
  * the whole of that behaviour is outside the gate, because every other golden
  * photographs a floor nobody has touched.
  *
+ * A capture may also turn MOTION ON (WP-87). Every capture before this one was
+ * taken under emulated `prefers-reduced-motion: reduce`, which is why
+ * `docs/DEVIATIONS.md` §162.9 could report *0 px moved at all*: the committed
+ * set was — all of it — the reduced-motion render, and no animation the product
+ * has ever had appeared in any of it. `demo@motion` is the fix. It photographs
+ * the `demo` floor with motion ON and `?phase=` pinning every animation to the
+ * same point of its own cycle, so the capture is still byte-identical across
+ * two runs while the typing stroke, the wave, the page flip and the power-down
+ * are all visible in it. The phase is `MOTION_PHASE` below, and it is
+ * `12-MOTION-AND-CREW.md` §5's own.
+ *
  * @type {ReadonlyArray<{name:string, population:string, theme:string,
- *   stage?:{w:number, h:number}, press?:string}>}
+ *   stage?:{w:number, h:number}, press?:string, motion?:boolean, query?:string}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
   { name: 'wide', population: 'three', theme: 'default', stage: { w: 1920, h: 1080 } },
   { name: 'three@selected', population: 'three', theme: 'default', press: 'j' },
+  {
+    name: 'demo@motion',
+    population: 'demo',
+    theme: 'default',
+    motion: true,
+    query: `phase=${MOTION_PHASE}`,
+  },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
     population: 'demo',
@@ -570,7 +600,10 @@ async function captureStill(client) {
   // renderer, a blinking caret, a font still loading. A capture that could not
   // be held still is not a pixel verdict, so it must not read as one.
   throw Object.assign(
-    new Error('the floor kept changing between screenshots; is reduced motion being honoured?'),
+    new Error(
+      'the floor kept changing between screenshots; is reduced motion being honoured, ' +
+        'or (on a motion capture) is `?phase=` reaching the renderer?',
+    ),
     { environmental: true },
   );
 }
@@ -643,7 +676,7 @@ const started = Date.now();
 say(
   `goldens: ${CHECK ? 'checking' : 'regenerating'} ${captures.length} capture(s) on ` +
     `${process.platform}, ${OFF_STAGE ? `${WIDTH}x${HEIGHT} (every capture)` : `${DEFAULT_WIDTH}x${DEFAULT_HEIGHT} unless the capture says otherwise`}` +
-    `, reduced motion, settle ${SETTLE_MS} ms`,
+    `, reduced motion unless the capture says otherwise, settle ${SETTLE_MS} ms`,
 );
 
 /** Captures that disagreed with their golden. These fail the build. */
@@ -670,10 +703,22 @@ const run = withChrome(
     extraArgs: ['--force-color-profile=srgb', '--disable-lcd-text', '--font-render-hinting=none'],
   },
   async (client) => {
-    enter('emulating reduced motion');
-    await client.send('Emulation.setEmulatedMedia', {
-      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
-    });
+    /**
+     * Reduced motion is emulated PER CAPTURE since WP-87, because one capture
+     * now wants it off. It is still set before every single one rather than
+     * only when it changes: the emulation is the difference between a
+     * photograph of a state and a photograph of a moment, and a capture that
+     * inherited the previous one's setting would be a golden nobody could
+     * reproduce from the list alone.
+     * @param {boolean} reduce
+     */
+    const emulateMotion = async (reduce) => {
+      enter(reduce ? 'emulating reduced motion' : 'allowing motion');
+      await client.send('Emulation.setEmulatedMedia', {
+        features: [{ name: 'prefers-reduced-motion', value: reduce ? 'reduce' : 'no-preference' }],
+      });
+    };
+    await emulateMotion(true);
 
     for (const capture of captures) {
       const { name, population, theme } = capture;
@@ -721,8 +766,17 @@ const run = withChrome(
               mobile: false,
             });
 
-            enter(`navigating to ${demo.url}`);
-            await client.send('Page.navigate', { url: demo.url });
+            await emulateMotion(capture.motion !== true);
+
+            // WP-87: a capture may carry its own query string. `?phase=` pins
+            // every animation's phase without disabling motion — see
+            // `public/url-options.js` — which is the whole seam `demo@motion`
+            // is taken through.
+            const url = capture.query
+              ? `${demo.url}${demo.url.includes('?') ? '&' : '?'}${capture.query}`
+              : demo.url;
+            enter(`navigating to ${url}`);
+            await client.send('Page.navigate', { url });
 
             enter(`waiting for the floor to settle ("${name}")`);
             const state = await waitForFloor(client);

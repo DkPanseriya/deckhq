@@ -17873,3 +17873,148 @@ the hero is the only eager picture on the page.
 - **The claim count.** Studio still says three of eleven steps exist; Look still says WP-88 is
   planned four times; every stale capture still says it predates the current figures. This package
   moved type and colour, not what the site says it has.
+
+---
+
+## 172. WP-87 — the floor was never animated in a golden, and the clock was the reason
+
+**Numbered 172, and 171 was left free.** 170 was the last entry in this worktree when the package
+opened, and 171 belongs to a site package running beside it that is not present here. This is 172 on
+purpose.
+
+`docs/plan/12-MOTION-AND-CREW.md` is the design of record. Its §1.1 opens on a finding rather than on
+a feature, and that finding is the whole first half of this package.
+
+### 172.1 The finding: three clocks, none of them the injected one
+
+`rigPose.idlePhase(seconds, reduced)` is the one place time enters the figure, and `scene-draw.js`
+passed it `seconds: nowMs() / 1000` under a comment saying *"`nowMs()` is the injected clock the whole
+scene runs on"*.
+
+It was not. Three faults, all inside one expression:
+
+1. **`nowMs()` was `performance.now()`** — a monotonic, tab-local counter no fixture can pin.
+   `DECKHQ_NOW` (WP-63, §146) pins the daemon's clock and therefore every age on the screen; it could
+   not reach a single animation phase.
+2. **`clipStartedAt` was `Date.now()`** — an epoch instant. So `t = (nowMs() - rec.clipStartedAt) /
+   1000` was a counter in the tens of thousands minus an instant in the trillions: **about −1.7
+   billion seconds**. A looping clip survives that by wrapping, which is why nobody saw it; a
+   one-shot clip (`drink`, `stretch`, `coffee`) holds `frac = 0` forever, which is why they never
+   played to the end.
+3. **`clipStartedAt` was written when THIS TAB noticed**, not when the thing happened, so two
+   browsers on one floor were on different frames of the same wave and a reload restarted every
+   cycle.
+
+And the reason none of it had ever failed a gate: **`scripts/goldens.mjs` emulates
+`prefers-reduced-motion: reduce`**, which forces `idlePhase` to exactly `0` and `sampleClip` to a
+static pose. Every committed capture in this project's history was the reduced-motion render. That is
+why §162.9 could report *0 px moved at all* and mean it, and why **no animation this product has ever
+had has appeared in a golden**.
+
+### 172.2 One clock, one phase
+
+- **`animMs()`** (`public/render/scene-agent.js`) is every phase's clock and it is `public/clock.js` —
+  the daemon's pinned instant when the daemon says its clock is pinned, and this machine's otherwise.
+  The same `nowFixed` split `clock.js` already made for ages, applied to motion.
+- **`frameMs()`** is `performance.now()` and it is frame pacing only: the `dt` handed to
+  `AgentRuntime#step`, and the re-plan cross-fade. An interval is a fact about this tab; a phase is
+  not. `character-life.test.mjs` asserts `performance.now()` appears exactly once in the CODE of that
+  file, and that it is inside `frameMs`.
+- **`clipEpochFor(agent, placement, now)`** derives a clip's phase offset from a real timestamp on the
+  agent — `needsInputSince` for the wave, `reviewSince` for the review, `lastActivityAt` otherwise —
+  and falls back to the injected clock only for the two things the model has no timestamp for: a walk
+  and a lounge activity. Two tabs now draw the same frame, and a test builds two runtimes at two
+  different `now`s and asserts they agree.
+- **`?phase=0.25`** pins every animation's phase **without** disabling motion, in `url-options.js`'s
+  idiom: this tab only, never written back, and out of range means "use the clock". It is the seam the
+  new golden is taken through.
+- **No `Date.now()` and no `Math.random()` under any draw path.** `stepAgent` and `AgentRuntime#step`
+  took `Date.now()` in six places, and the lounge rotation ran off a seeded-but-STATEFUL PRNG stream.
+  Both are gone; a test strips comments from six renderer files and greps for either.
+
+### 172.3 The eleventh golden, and it is the first one that moves
+
+`demo@motion` is the `demo` floor with `prefers-reduced-motion` **off** and `?phase=0.25` on. The
+harness emulates reduced motion per capture rather than once for the run, and a capture may carry its
+own query string.
+
+It is byte-identical across two runs — `captureStill` still refuses to photograph anything that has
+not stopped — and it differs from `demo.png` by **4,903 px over tolerance, 6,544 px moved at all**.
+That is the typing stroke, the wave and its floor ring, the page flip, the thought clouds with their
+sway, and the antenna bob and visor blink, all at a quarter of their own cycle.
+
+**The other ten goldens moved too, and they were expected to.** 360–1,154 px each, and every one is
+the same thing: the **thinking cloud** now appears in the reduced-motion frame over a working agent
+whose turn is open and quiet, which is §2's stated reduced form (*"the cloud at its size, no sway"*).
+The `single` diff is one cloud over one robot and nothing else. `empty` is 0 px, as it must be. The
+lounge did not move at all, because the rotation does not run under reduced motion and never did.
+
+### 172.4 The twelve animations
+
+`03-VISUAL-SPEC.md` §4.4 carries the table; `public/render/life.js` is that table as data, and
+`test/unit/character-life.test.mjs` asserts every row's frame count and period against the document.
+Two are new clips — `run` (4 frames, 0.52 s) and `read` (a 0.6 s page turn every 20 s, for the quiet
+bay, which was §3.7's one place with nothing to do in it) — and the rest are terms the director
+computes and the rig draws.
+
+**What is deliberately NOT drawn, and why.**
+
+- **The typing cadence is not the token rate.** Nothing reports keystrokes, and `tokens` is a running
+  total sampled at the poll. Four strokes per 0.9 s is a constant.
+- **The cloud is not "thinking".** DeckHQ cannot see a reasoning block. What it can see is that a turn
+  is open, no tool is running, and nothing has been written for N seconds — and it stops growing at
+  three lobes, because a cloud that kept growing would be a claim about difficulty the data cannot
+  support.
+- **The visor flicker needs a `currentTool.since` that actually moved.** A runtime that reports no
+  tool events never flashes and is never simulated into flashing. The 0.5 s cap lives in
+  `AgentRuntime#sync`, the only place that can see one `since` replace another.
+- **`ended` latches.** The power-down is a subtraction from the session's own end timestamp, not a
+  trigger, so it cannot run twice across a reload or a second tab. It is not the fold-away: an ended
+  session stays on the floor (§5.1), and folding it away would say it had left.
+- **No animation at all on `let_go`.**
+
+### 172.5 Two departures from the design document
+
+1. **`RUN_SPEED` is 23 U/s, not §2's 4.6.** The document states the pair as 2.6 U/s walking and 4.6
+   running; those figures were written against the study's own canvas. This floor's `WALK_SPEED` is
+   **13**, raised from 4.5 when routes started going door → corridor → door rather than cutting
+   across, because at 4.5 a trip from a project room to the lounge read as the agent being stuck.
+   Dropping to 2.6 would be four times worse. So the **ratio** is the document's and the scale is the
+   floor's: `13 × 4.6 / 2.6 = 23`, and the test asserts the ratio rather than the number.
+2. **`03-VISUAL-SPEC.md` §9 is Notifications, so the motion rewrite landed in §3.7 and a new §4.4.**
+   The work order named "§9 motion"; §9 has carried the notification rules since the spec was
+   written, and §10 is accessibility-and-motion. §3.7 is where the phase rule lives and it was the
+   section carrying the false claim, so it is the one that was rewritten; §4.4 is new and carries
+   WP-87's own table beside §4.1–§4.3's clips.
+
+### 172.6 The bug the new golden caught on its first run
+
+`demo@motion`'s first capture came out with twenty-seven robots at **a third of their size**, mid
+pop-in. `Scene#setState` syncs the runtime TWICE on a snapshot that changes the plan signature: once
+with the PREVIOUS agent list, to bridge the re-plan, and on the first snapshot that list is empty. A
+"has this runtime synced before" flag set by the CALL rather than by the POPULATION therefore made
+the whole floor count as arriving. The flag is now set only by a sync that actually held somebody.
+
+Nothing but a capture with motion on could have found it, which is the argument for the capture.
+
+### 172.7 What this package did not do
+
+- **The visor flicker is not visible in `demo@motion`.** The demo fixture drives the floor through
+  real hook events and posts no `PreToolUse`, so no session in it has a `currentTool`. Adding one
+  would move the other ten goldens for a reason unrelated to this package. The flicker is asserted in
+  the unit suite and has not been looked at on a moving floor.
+- **Spawn and despawn are not visible in `demo@motion` either**, and that is correct: nothing is
+  arriving at or leaving a pinned demo floor. Both are asserted over a driven runtime instead.
+- **`chat` is now in no bay.** It is a real clip, and two agents facing each other need no furniture,
+  so `plan-service.js` lays no place for it and the rotation cannot deal it. Dealing it anyway would
+  put two people gesturing at each other across a pool table. It stays a clip the rotation can be
+  handed and is not one the bays offer.
+- **The stall dots yield to the hourglass.** §1.5: *motion never covers a raised hand or a label.*
+  The cloud and the dots hang in the same above-head slot the chrome uses and are last in its
+  precedence, so a `stalled` figure on the floor shows its state icon rather than its two dots and
+  the dots appear only where the slot is free — a stalled session that has been benched. The slump,
+  the dimmed visor and the state colour carry the stall either way. The §2 table's reduced frame is
+  honoured in the director; what reaches the canvas is the chrome rule that was already there.
+- **Nothing was profiled on a real machine with a hundred agents.** §162.10's admission stands. The
+  budget here is asserted as draw-call counts over a hundred figures, which is a shape check and not
+  a measurement.

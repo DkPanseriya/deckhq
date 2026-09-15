@@ -227,9 +227,13 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       at(z, 'side_table', 3.9, chairY + 0.8, 1.4, 1.4);
       at(z, 'armchair', 5.4, chairY, SEAT_ARMCHAIR, SEAT_ARMCHAIR, Math.PI);
       // One seat per chair, each facing the table between them.
+      // WP-87: an armchair beside a bookcase is a place to READ, and the quiet
+      // bay was the one §3.7 place with nothing to do in it — anybody dealt
+      // here sat still while the games bay played pool. `read` is the clip
+      // `lounge-activities.png` draws for this corner.
       spots.push({
         id: 'lounge-quiet-a',
-        kind: 'lounge_idle',
+        kind: 'read',
         x: x + 0.6 + SEAT_ARMCHAIR / 2,
         y: y + chairY + SEAT_ARMCHAIR / 2,
         angle: 0,
@@ -237,7 +241,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       });
       spots.push({
         id: 'lounge-quiet-b',
-        kind: 'lounge_idle',
+        kind: 'read',
         x: x + 5.4 + SEAT_ARMCHAIR / 2,
         y: y + chairY + SEAT_ARMCHAIR / 2,
         angle: Math.PI,
@@ -583,7 +587,15 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   for (const bay of bays) {
     bay.own.forEach((b, i) => {
       const at = bay.inner.out[i];
+      // WP-87: WHICH BAY A SPOT STANDS IN, recorded as the spot is created.
+      // A block's `place()` is the one moment both are in hand, and the bay is
+      // what the lounge rotation now deals from — `BAY_ACTIVITIES[bay]`, so a
+      // narrow lounge that gave up its games bay deals nobody a pool shot.
+      // Three lines rather than a second table keyed by spot id, which would
+      // be a copy of `BAY_OF` that could drift from it.
+      const before = spots.length;
       b.place(bay.x + BAY_PAD + at.x, bay.y + BAY_PAD + at.y);
+      for (let s = before; s < spots.length; s++) spots[s].bay = bay.name;
     });
   }
 

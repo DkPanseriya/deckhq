@@ -200,12 +200,24 @@ export function rigPoseFor(state) {
  * (VISUAL-SPEC §10, and the sheets' own note that they *are* the reduced-motion
  * render).
  *
+ * WP-87 added the third case. `pinned` — a number in `[0, 1)`, from `?phase=` —
+ * returns exactly that, WITHOUT the figure going still: the bob and the blink
+ * are held at one point of their cycle while everything else on the floor keeps
+ * animating, which is what lets a golden photograph a moving frame rather than
+ * the reduced-motion render. `reduced` still wins over it, because a reader who
+ * asked for no motion gets none however the URL is written.
+ *
  * @param {number} seconds elapsed seconds from the injected clock
  * @param {boolean} [reduced]
+ * @param {number|null} [pinned] WP-87's `?phase=`, or null for the clock
  * @returns {number} a phase in [0, 1), or 0 under reduced motion
  */
-export function idlePhase(seconds, reduced) {
+export function idlePhase(seconds, reduced, pinned) {
   if (reduced) return 0;
+  if (typeof pinned === 'number' && Number.isFinite(pinned)) {
+    const pin = pinned % 1;
+    return pin < 0 ? pin + 1 : pin;
+  }
   const s = Number(seconds);
   if (!Number.isFinite(s)) return 0;
   const period = 3.4; // one bob and one blink; deliberately not a round number

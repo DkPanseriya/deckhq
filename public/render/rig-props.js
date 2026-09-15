@@ -202,15 +202,75 @@ export function drawIcon(ctx, ox, oy, u, kind, color, ringPhase) {
   }
 }
 
-/** Thought (`think`) / speech (`chat`) dots: rise and fade above the head. */
-export function drawDots(ctx, ox, oy, u, opacity) {
+/**
+ * The cloud's four lobes, in GROWTH order: the base first, then the three §2
+ * grows onto it. Filled as one path, so the order changes no pixel of a
+ * complete cloud — it only decides which lobes a partial one has.
+ */
+const CLOUD_LOBES = Object.freeze([
+  Object.freeze([-0.1, -0.16, 0.38]),
+  Object.freeze([-0.42, 0.06, 0.3]),
+  Object.freeze([0.28, 0.0, 0.3]),
+  Object.freeze([0.02, 0.2, 0.28]),
+]);
+
+/**
+ * THE STALL DOTS (WP-87 §2): two beats over a slumped figure, at `opacity`.
+ *
+ * Two, not three: three in a row is the "loading" idiom and a stalled session
+ * is the opposite of loading. They sit in the chrome slot like everything else
+ * over a head, and they are the one over-head element that does NOT go under
+ * reduced motion — §2's reduced form for `stalled` is *"slumped, two dots,
+ * visor 50%"*, because a stall that looks like nothing is a stall the reader
+ * stops seeing.
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} ox @param {number} oy @param {number} u @param {number} opacity
+ */
+export function drawStallDots(ctx, ox, oy, u, opacity) {
+  if (!(opacity > 0.02)) return;
+  const prevAlpha = ctx.globalAlpha;
+  const cy = oy - u * CHROME_BUBBLE_U;
+  ctx.fillStyle = DOT_COLOR;
+  for (let i = 0; i < 2; i++) {
+    ctx.globalAlpha = opacity * (i === 0 ? 0.9 : 0.6);
+    ctx.beginPath();
+    ctx.arc(ox + (i === 0 ? -1 : 1) * u * 0.2, cy, u * 0.09, 0, TAU);
+    ctx.fill();
+  }
+  ctx.globalAlpha = prevAlpha;
+}
+
+/**
+ * THE THOUGHT CLOUD, AND HOW BIG IT IS (WP-87 §2).
+ *
+ * `lobes` is how many of the cloud's four lobes are drawn: §2's growth in three
+ * steps — one at 2 s of quiet, two at 6 s, three at 15 s — *"and then stops,
+ * because a cloud that kept growing would be a claim about difficulty the data
+ * cannot support."* The fourth lobe is the cloud's own base and is always
+ * there; `lobes` counts what grows onto it, so `lobes = 3` is exactly the
+ * four-lobed cloud this function drew before WP-87 and `think`'s own clip still
+ * asks for.
+ *
+ * `sway` is `[-1, 1]` and moves the whole cloud a fraction of a unit sideways
+ * over `think`'s 3.2 s. It is exactly 0 under reduced motion, which is §2's
+ * *"the cloud at its size, no sway"*.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {number} ox @param {number} oy @param {number} u
+ * @param {number} opacity
+ * @param {number} [lobes] 1..3, default 3 (the whole cloud)
+ * @param {number} [sway] -1..1, default 0
+ */
+export function drawDots(ctx, ox, oy, u, opacity, lobes, sway) {
   // A thought cloud beside the head, in the comic-strip idiom: two small
   // trailing bubbles leading up to a lobed cloud. Three dots in a row read as
   // "loading" rather than "thinking" — the cloud is what makes it legible as
   // a thought at a glance, which is the whole point of the `working` state
   // having a visible thinking pose at all.
   const prevAlpha = ctx.globalAlpha;
-  const cx = ox + u * 0.95;
+  const grown = Math.max(1, Math.min(3, Math.round(lobes ?? 3)));
+  const drift = Number.isFinite(sway) ? sway : 0;
+  const cx = ox + u * (0.95 + drift * 0.06);
   const cy = oy - u * CHROME_BUBBLE_U;
 
   // The trail, rising from beside the head toward the cloud.
@@ -232,14 +292,11 @@ export function drawDots(ctx, ox, oy, u, opacity) {
   // The cloud itself: overlapping lobes filled as one shape, so the seams
   // between them never show.
   ctx.globalAlpha = opacity;
-  const lobes = [
-    [-0.42, 0.06, 0.3],
-    [-0.1, -0.16, 0.38],
-    [0.28, 0.0, 0.3],
-    [0.02, 0.2, 0.28],
-  ];
+  // The base lobe first, then the three that GROW onto it in §2's order — so a
+  // one-lobe cloud is a small puff and a three-lobe one is the whole thing.
   ctx.beginPath();
-  for (const [lx, ly, lr] of lobes) {
+  for (let i = 0; i <= grown; i++) {
+    const [lx, ly, lr] = CLOUD_LOBES[i];
     ctx.moveTo(cx + lx * u + lr * u, cy + ly * u);
     ctx.arc(cx + lx * u, cy + ly * u, lr * u, 0, TAU);
   }

@@ -65,3 +65,32 @@ export function pickSessionTheme(search, settingTheme, known) {
   }
   return ok ? wanted : settingTheme;
 }
+
+/**
+ * `?phase=0.25` — PIN THE ANIMATION PHASE WITHOUT STOPPING THE ANIMATION
+ * (WP-87, `docs/plan/12-MOTION-AND-CREW.md` §1.1).
+ *
+ * The floor's goldens were stable for one reason and it was the wrong one:
+ * `scripts/goldens.mjs` emulates `prefers-reduced-motion: reduce`, so every
+ * committed capture is the reduced-motion render and no animation in the
+ * product has ever appeared in one. This is the seam that fixes it. A phase in
+ * `[0, 1)` pins every animation to that point of its own cycle — the typing
+ * stroke, the wave, the page flip, the power-down frame — while motion stays
+ * ON, so `demo@motion` is a photograph of a MOVING floor that is nonetheless
+ * byte-identical across two runs.
+ *
+ * Same rules as `?theme=`, and for the same reason: this tab only, never
+ * written back, and a value this code did not write may at worst do nothing.
+ * Out of range, not a number, and absent all return `null`, which means "use
+ * the clock".
+ *
+ * @param {string} search e.g. `location.search`
+ * @returns {number|null} a phase in [0, 1), or null for the ordinary clock
+ */
+export function pickSessionPhase(search) {
+  const raw = queryValue(search, 'phase');
+  if (raw === null) return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0 || value >= 1) return null;
+  return value;
+}

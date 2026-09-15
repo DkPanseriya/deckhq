@@ -315,6 +315,48 @@ const WALK_CLIP = {
   reducedPose: { legPhase: 0, armR: arm(WALK_OUT, 0.25, 'rest'), armL: arm(WALK_IN, 0.25, 'rest') },
 };
 
+/**
+ * THE ONE TRIP THAT RUNS (WP-87, `docs/plan/12-MOTION-AND-CREW.md` §2).
+ *
+ * Four frames at 0.52 s against `walk`'s two at 0.80 s, so the legs turn over
+ * two and a half times as fast; the lean goes forward, the arms swing higher
+ * and tighter, and the bob doubles. Running is a CLAIM rather than a state —
+ * this session is blocked mid-turn and is coming to find you — so it had to be
+ * unmistakably a different gait at a glance and not a faster waddle.
+ * @type {Clip}
+ */
+const RUN_CLIP = {
+  duration: 0.52,
+  loop: true,
+  seated: false,
+  prop: null,
+  keys: [
+    kf(0, {
+      lean: 0.28,
+      legPhase: 0,
+      bob: 0,
+      armR: arm(1.95, 0.7, 'rest'),
+      armL: arm(0.5, 0.7, 'rest'),
+    }),
+    kf(0.25, { legPhase: 0.25, bob: 1, armR: arm(1.2, 0.7, 'rest'), armL: arm(1.2, 0.7, 'rest') }),
+    kf(0.5, { legPhase: 0.5, bob: 0, armR: arm(0.5, 0.7, 'rest'), armL: arm(1.95, 0.7, 'rest') }),
+    kf(0.75, { legPhase: 0.75, bob: 1, armR: arm(1.2, 0.7, 'rest'), armL: arm(1.2, 0.7, 'rest') }),
+    kf(1, {
+      lean: 0.28,
+      legPhase: 1,
+      bob: 0,
+      armR: arm(1.95, 0.7, 'rest'),
+      armL: arm(0.5, 0.7, 'rest'),
+    }),
+  ],
+  reducedPose: {
+    lean: 0.28,
+    legPhase: 0,
+    armR: arm(1.95, 0.7, 'rest'),
+    armL: arm(0.5, 0.7, 'rest'),
+  },
+};
+
 /** @type {Clip} */
 const STAND_WAIT_CLIP = {
   duration: 4.0,
@@ -466,6 +508,46 @@ const CHAT_CLIP = {
   reducedPose: { armR: arm(1.0, 0.4, 'open'), speechPhase: 1 },
 };
 
+/**
+ * READING IN THE QUIET CORNER (WP-87 §2, `lounge-activities.png`).
+ *
+ * *"a 0.60 s page turn every 20 s"*, which is what the duration is: twenty
+ * seconds of an armchair and a held page, with the turn in the first three per
+ * cent of it. It is the quietest thing on the floor on purpose — the quiet bay
+ * is §3.7's one place with no game in it, and it had no activity of its own, so
+ * anybody dealt to it sat doing nothing at all.
+ * @type {Clip}
+ */
+const READ_CLIP = {
+  duration: 20,
+  loop: true,
+  seated: true,
+  prop: null,
+  keys: [
+    kf(0, {
+      lean: -0.12,
+      headTurn: -0.1,
+      armR: arm(1.35, 0.85, 'grip'),
+      armL: arm(-1.35, 0.85, 'grip'),
+    }),
+    // The turn: the right hand comes up and across, and goes back.
+    kf(0.015, { armR: arm(2.0, 0.55, 'grip') }),
+    kf(0.03, { armR: arm(1.35, 0.85, 'grip') }),
+    kf(1, {
+      lean: -0.12,
+      headTurn: -0.1,
+      armR: arm(1.35, 0.85, 'grip'),
+      armL: arm(-1.35, 0.85, 'grip'),
+    }),
+  ],
+  reducedPose: {
+    lean: -0.12,
+    headTurn: -0.1,
+    armR: arm(1.35, 0.85, 'grip'),
+    armL: arm(-1.35, 0.85, 'grip'),
+  },
+};
+
 /** @type {Clip} */
 const LOUNGE_IDLE_CLIP = {
   duration: 5.0,
@@ -484,7 +566,8 @@ const LOUNGE_IDLE_CLIP = {
 
 /**
  * Every motion clip in the product, keyed by name. VISUAL-SPEC §4.1 (work
- * clips) and §4.2 (lounge clips) — 16 clips total. Data, not code.
+ * clips) and §4.2 (lounge clips) — 18 clips since WP-87 added `run` and
+ * `read`. Data, not code.
  * @type {Record<string, Clip>}
  */
 export const CLIPS = {
@@ -495,6 +578,7 @@ export const CLIPS = {
   hand_raise: HAND_RAISE_CLIP,
   slump: SLUMP_CLIP,
   walk: WALK_CLIP,
+  run: RUN_CLIP,
   stand_wait: STAND_WAIT_CLIP,
   pool: POOL_CLIP,
   table_tennis: TABLE_TENNIS_CLIP,
@@ -503,10 +587,11 @@ export const CLIPS = {
   coffee: COFFEE_CLIP,
   eat: EAT_CLIP,
   chat: CHAT_CLIP,
+  read: READ_CLIP,
   lounge_idle: LOUNGE_IDLE_CLIP,
 };
 
-/** The eight §4.2 lounge clip names. */
+/** The nine §4.2 lounge clip names — eight, plus WP-87's `read`. */
 export const LOUNGE_CLIPS = [
   'pool',
   'table_tennis',
@@ -515,8 +600,24 @@ export const LOUNGE_CLIPS = [
   'coffee',
   'eat',
   'chat',
+  'read',
   'lounge_idle',
 ];
+
+/**
+ * How long one cycle of a clip is, in seconds.
+ *
+ * Exported for WP-87's `?phase=`: a pinned phase has to become a `t` for
+ * `sampleClip`, and the only honest conversion is through the clip's own
+ * duration. An unknown name is 1 s rather than a throw — the pin is a
+ * debugging and capture seam and must never be able to stop the floor drawing.
+ * @param {string} name
+ * @returns {number} seconds
+ */
+export function clipDuration(name) {
+  const clip = CLIPS[name];
+  return clip ? clip.duration : 1;
+}
 
 /** Idle variations interleaved into `working` (§4.1, §4.3). */
 export const IDLE_VARIATIONS = ['drink', 'think', 'stretch'];
@@ -746,6 +847,10 @@ const STATE_CLIP = {
   // state colour, not from the clip.
   ended: 'slump',
   moving: 'walk',
+  // WP-87. `moving` is a walk; `running` is the one trip that is not. The
+  // scene decides which a record is on (`tripRuns`), because only the scene
+  // knows where the trip is GOING.
+  running: 'run',
   let_go: null,
 };
 

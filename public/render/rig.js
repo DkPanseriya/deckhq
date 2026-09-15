@@ -85,7 +85,7 @@ import {
   rigSetup,
 } from './rig-body.js';
 import { drawGlow, managerIdentity, rigIdentity } from './rig-traits.js';
-import { drawCueBehind, drawPropFront, drawIcon, drawDots } from './rig-props.js';
+import { drawCueBehind, drawPropFront, drawIcon, drawDots, drawStallDots } from './rig-props.js';
 import { toolIconKind, drawToolBubble, drawToolIcon, toolBubbleText } from './rig-bubble.js';
 
 export * from './rig-metrics.js';
@@ -306,6 +306,29 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
 // -------------------------------------------------------------- the rig API
 
 /**
+ * THE STILL FRAME OF WP-87's CHARACTER LIFE, for every caller that has none.
+ *
+ * The mini-floor, the panel's close-up, `drawManagerFigure` and every test that
+ * calls `drawCharacter` directly all draw a figure with no director behind it.
+ * Rather than nine `life ? life.x : default` reads, there is one frozen object
+ * whose every term is the resting value — which is also the reduced-motion
+ * value, so a caller with no life and a caller under `prefers-reduced-motion`
+ * draw the same picture, as they must.
+ * @type {import('./life.js').Life}
+ */
+export const REST_LIFE = Object.freeze({
+  flicker: 0,
+  lobes: 0,
+  cloud: 0,
+  card: 1,
+  dots: 0,
+  power: 0,
+  scale: 1,
+  fade: 1,
+  running: false,
+});
+
+/**
  * THE BILLBOARD CONVENTION (WP-79, replacing the old FACING CONVENTION).
  *
  * B does not turn. `pose.bodyAngle` is still carried, still means what
@@ -341,8 +364,17 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
  *   label?:string, labelOffsetY?:number, icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
+ *   phase?:number|null, life?:import('./life.js').Life|null,
  *   identity?:{hair:string, accent:string, glyph:string}|null,
  *   appearance?:import('./palette.js').Appearance|null }} opts
+ *   `life` (WP-87): what this figure is doing beyond its pose — the visor
+ *   flash on a real tool call, the thought cloud's size and sway, the page
+ *   flip, the stall dots, the power-down, and the pop-in/fold-away at the two
+ *   ends of a session's life on the floor. Computed once per agent per frame by
+ *   `life.js` from the snapshot and the injected clock. Omitted, every term
+ *   rests at its reduced-motion value ({@link REST_LIFE}).
+ *   `phase` (WP-87): the `?phase=` pin, carried for callers that want to say
+ *   they are drawing a pinned frame; the rig itself reads only `life`.
  *   `state` (WP-79): which of the six the figure is in. It picks the pose and
  *   the mark on the visor. Optional: omitted, it is recovered exactly from
  *   `color` (see `stateForColor`).
@@ -362,9 +394,19 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
  *   the barrel's fill or the visor's tint: the state owns both.
  */
 export function drawCharacter(ctx, pose, opts) {
+  // WP-87 · what this figure is doing beyond its pose, from `life.js`. A caller
+  // with none — the mini-floor, the panel's close-up, a test — gets `REST`, and
+  // every term in it is the still, informative value, so nothing below is a
+  // code path that only the floor takes.
+  const life = opts.life || REST_LIFE;
   const ox = opts.x,
     oy = opts.y,
-    u = opts.u,
+    // THE SPAWN POP-IN AND THE DESPAWN FOLD-AWAY (§2) are the figure's own
+    // SIZE, which is `u`, so they are applied here and everything hanging off
+    // the body — arms, visor, crown, prop — scales with it for free. Both rest
+    // at 1, which is every frame of every figure that is neither arriving nor
+    // leaving.
+    u = opts.u * (life.scale === 1 ? 1 : Math.max(0.01, life.scale)),
     lod = opts.lod,
     color = opts.color;
   const reduced = !!opts.reduced;
@@ -381,7 +423,14 @@ export function drawCharacter(ctx, pose, opts) {
   const dead = state === 'ended' || state === 'let_go';
   const tints = rigTints(color, dead);
   const h = rigHeight(u);
-  const phase = idlePhase(opts.seconds, reduced);
+  const phase = idlePhase(opts.seconds, reduced, opts.phase ?? null);
+
+  // The fold-away and the pop-in fade as well as scale, because a figure that
+  // only shrank would read as walking away from the camera. `1` skips the
+  // assignment entirely, so nothing but an arrival or a departure ever touches
+  // the context's alpha.
+  const prevAlpha = life.fade === 1 ? null : ctx.globalAlpha;
+  if (prevAlpha !== null) ctx.globalAlpha = prevAlpha * Math.max(0, life.fade);
 
   if (pose.ring) drawFloorRing(ctx, ox, oy, u, pose.ringPhase, color, reduced);
   if (opts.selected) drawSelectionRing(ctx, ox, oy, u);
@@ -404,7 +453,7 @@ export function drawCharacter(ctx, pose, opts) {
   // BASE_U, so it is scaled into this zoom exactly as it always was.
   const by = oy + (reduced ? 0 : pose.bob * (u / BASE_U));
   rigFrame(ox, by, h);
-  rigSetup(k, id, tints, h, phase, lod === 0);
+  rigSetup(k, id, tints, h, phase, lod === 0, life);
 
   drawFigureRim(ctx, haloRimWidth(u));
   drawRigBase(ctx);
@@ -449,6 +498,16 @@ export function drawCharacter(ctx, pose, opts) {
   } else if (showTool) {
     // L0, or reduced motion at any LOD: the class, not the sentence.
     drawToolIcon(ctx, ox, oy, u, toolIconKind(tool.name));
+  } else if (life.dots > 0) {
+    // WP-87 · `stalled`'s two dots. They take the slot ahead of the clip's own
+    // thought/speech dots because a stalled session is not thinking: it has
+    // gone quiet, and that is the one thing the slot has to say about it.
+    drawStallDots(ctx, ox, oy, u, life.dots);
+  } else if (life.lobes > 0) {
+    // WP-87 · the thinking cloud: a turn open, no tool running, and nothing
+    // written for N seconds. Its SIZE is how long that has been true and its
+    // sway is the only part of it that moves.
+    drawDots(ctx, ox, oy, u, 1, life.lobes, life.cloud);
   } else {
     const thoughtOpacity = Math.sin(Math.min(1, Math.max(0, pose.thoughtPhase)) * Math.PI);
     if (thoughtOpacity > 0.02) drawDots(ctx, ox, oy, u, thoughtOpacity);
@@ -458,6 +517,8 @@ export function drawCharacter(ctx, pose, opts) {
 
   if (opts.badge) drawBadge(ctx, ox, oy, u, opts.badge, color);
   if (lod >= 1 && opts.label) drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY);
+
+  if (prevAlpha !== null) ctx.globalAlpha = prevAlpha;
 }
 
 // ------------------------------------------------------------- the manager

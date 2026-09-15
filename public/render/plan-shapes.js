@@ -171,12 +171,16 @@ export {};
 /**
  * @typedef {object} LoungeSpot
  * @property {string} id
- * @property {'pool'|'table_tennis'|'board_game'|'arcade'|'coffee'|'eat'|'chat'|'lounge_idle'} kind
+ * @property {'pool'|'table_tennis'|'board_game'|'arcade'|'coffee'|'eat'|'chat'|'read'|'lounge_idle'} kind
  * @property {number} x
  * @property {number} y
  * @property {number} angle
  * @property {number} capacity
  * @property {string} [partnerOf]
+ * @property {string} [bay] WP-87. Which of §3.7's four bays this place stands
+ *   in — `sitting`, `cafe`, `quiet` or `games`. Written as the spot is laid, so
+ *   the lounge rotation deals an activity from the bay somebody is actually
+ *   sitting in rather than from the whole clip list.
  */
 
 /**
