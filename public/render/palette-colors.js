@@ -15,7 +15,7 @@
  */
 
 /**
- * @typedef {'working'|'needs_input'|'stalled'|'for_review'|'benched'|'let_go'} ActivityLikeState
+ * @typedef {'working'|'needs_input'|'stalled'|'for_review'|'benched'|'let_go'|'ended'} ActivityLikeState
  */
 
 /**

@@ -43,6 +43,9 @@ import {
 } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
+import { CREW_SCALE } from './crew.js';
+import { drawCrews } from './crew-draw.js';
+import { BODY_HEIGHT_U, CHROME_BADGE_U } from './rig-metrics.js';
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
@@ -456,7 +459,10 @@ export class SceneDraw extends SceneHit {
         const s = worldToScreen(rec, camera);
         // A junior is drawn smaller, so its badge is a smaller box. Measured
         // at the scale it will be drawn at, exactly as the label pass does.
-        const u = agent.subagent === true ? characterScaleFor(this._scale() * JUNIOR_SCALE) : charU;
+        const u =
+          agent.subagent === true
+            ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
+            : charU;
         const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
         items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
       }
@@ -497,11 +503,29 @@ export class SceneDraw extends SceneHit {
         const s = worldToScreen(rec, camera);
         const box = characterBox(s.x, s.y, charU);
         items.push({ id: `body:${rec.id}`, ...box, pin: true });
+        // WP-89 · A CREW PARENT'S RAISED HAND IS A PINNED OBSTACLE TOO.
+        //
+        // §4: a junior's name is never drawn over it. The hand and the badge
+        // share the over-head slot, which reaches `CHROME_BADGE_U` above the
+        // contact — above `characterBox`, which stops at the crown — so a crew
+        // parent claims that strip whether or not it happens to be waiting. It
+        // is the same rule WP-79 gave bodies and badges, applied to the one
+        // thing this formation crowds.
+        if (this._crewCounts.has(rec.id)) {
+          items.push({
+            id: `hand:${rec.id}`,
+            x: box.x,
+            y: s.y - charU * CHROME_BADGE_U,
+            w: box.w,
+            h: charU * (CHROME_BADGE_U - BODY_HEIGHT_U),
+            pin: true,
+          });
+        }
       }
       for (const box of badgeBoxes) items.push({ ...box, pin: true });
       for (const rec of records) {
         const agent = this._agentsById.get(rec.id);
-        const agentLabel = agent && agentLabelFor(agent);
+        const agentLabel = agent && this._labelFor(agent, rec);
         if (!agentLabel) continue;
         const s = worldToScreen(rec, camera);
         // The CHARACTER scale, not the world scale — the label hangs off the
@@ -519,6 +543,27 @@ export class SceneDraw extends SceneHit {
       }
       labelPlan = resolveLabelCollisions(items);
     }
+
+    // WP-89 · THE CREWS, UNDER THE BODIES. §1.5: everything this design draws
+    // sits under the chrome band, and a cable that ran over a face would be the
+    // clearest possible way of breaking that. The routes were baked into the
+    // seats by `assignSeats` when the plan was built; this walks them.
+    drawCrews(ctx, {
+      records,
+      agentsById: this._agentsById,
+      camera,
+      scale: this._scale(),
+      charU,
+      lod,
+      reduced: this._reduced,
+      pinned: this._phase,
+      nowMs: animMs(),
+      crewCounts: this._crewCounts,
+      seatOf: (id) => {
+        const parent = this._runtime.get(id);
+        return parent ? parent.targetSeat : null;
+      },
+    });
 
     for (const rec of records) {
       this._drawCharacterAt(rec, camera, lod, labelPlan, badgePlan);
@@ -566,6 +611,43 @@ export class SceneDraw extends SceneHit {
     ctx.restore();
   }
 
+  /**
+   * HOW BIG THIS JUNIOR IS DRAWN, as a fraction of its parent (WP-89).
+   *
+   * A member of a FORMATION is `CREW_SCALE`; a junior standing beside its parent
+   * in WP-41's old way keeps `JUNIOR_SCALE`. Read off the SEAT rather than off
+   * the agent, because the seat is what `assignSeats` decided and a junior whose
+   * room could not hold an arc is drawn at the old size in the old rows.
+   *
+   * That split is also what keeps every committed golden at 0 px: the `demo`
+   * floor's senior has two juniors, which is not a crew.
+   * @param {any} rec
+   */
+  _juniorScaleOf(rec) {
+    const seat = rec && rec.targetSeat;
+    return seat && seat.crew === true ? CREW_SCALE : JUNIOR_SCALE;
+  }
+
+  /**
+   * THE NAME UNDER A FIGURE, and the one place a crew member's differs (WP-89).
+   *
+   * §3.2: *"Each junior carries its `agentType` as its label."* A crew of five
+   * `MK1.2j1 … MK1.2j5` says which parent they belong to — which the arc around
+   * that parent already says, loudly — and nothing about what any of them is
+   * doing; `Explore`, `general-purpose` is the one fact the sidecar reliably
+   * carries (§3.1: *"a junior reliably has a TYPE"*).
+   *
+   * Only a member of a FORMATION, and only where a type was actually observed: a
+   * junior beside its parent in the old way keeps its MK tag, and so does a crew
+   * member whose runtime reported no type. Nothing is invented.
+   * @param {any} agent @param {any} rec
+   */
+  _labelFor(agent, rec) {
+    const seat = rec && rec.targetSeat;
+    if (seat && seat.crew === true && agent.subagentType) return String(agent.subagentType);
+    return agentLabelFor(agent);
+  }
+
   _drawCharacterAt(rec, camera, lod, labelPlan, badgePlan) {
     const ctx = this.ctx;
     // WP-87: a record whose id has LEFT the snapshot is kept for `despawn`'s
@@ -580,7 +662,7 @@ export class SceneDraw extends SceneHit {
     // than its senior everywhere there is room for it to be (WP-41).
     const u =
       agent.subagent === true
-        ? characterScaleFor(this._scale() * JUNIOR_SCALE)
+        ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
         : this._characterScale();
     // Look up this frame's label-collision resolution (built once, before
     // any character is drawn — see `_draw`). `labelPlan` is null at lod 0,
@@ -588,7 +670,7 @@ export class SceneDraw extends SceneHit {
     // and above").
     let label = null;
     let labelOffsetY = 0;
-    const agentLabel = agentLabelFor(agent);
+    const agentLabel = this._labelFor(agent, rec);
     if (lod >= 1 && agentLabel) {
       const plan = labelPlan ? labelPlan.get(rec.id) : { offsetY: 0 };
       if (plan) {
