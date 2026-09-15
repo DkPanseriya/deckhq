@@ -207,8 +207,18 @@ export const MOTION_PHASE = 0.25;
  * are all visible in it. The phase is `MOTION_PHASE` below, and it is
  * `12-MOTION-AND-CREW.md` §5's own.
  *
+ * A capture may also open a SURFACE through the command palette and scroll to a
+ * section of it (WP-88b). `look` is the settings sheet standing on the Look
+ * section, with the six preset thumbnails painted, and it is the one golden this
+ * product has of a form rather than of a floor — because §4's whole claim is
+ * that a swatch is painted by the real floor painter, and the only thing that
+ * can check a painter is a picture. It is reached the way a person reaches it:
+ * the palette's own key, the command's accelerator, Enter. No test seam is added
+ * to the client for it, so what this photographs is the path a user has.
+ *
  * @type {ReadonlyArray<{name:string, population:string, theme:string,
- *   stage?:{w:number, h:number}, press?:string, motion?:boolean, query?:string}>}
+ *   stage?:{w:number, h:number}, press?:string, motion?:boolean, query?:string,
+ *   command?:string, scrollTo?:string}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
@@ -220,6 +230,16 @@ const CAPTURES = [
     theme: 'default',
     motion: true,
     query: `phase=${MOTION_PHASE}`,
+  },
+  // WP-88b. `,` is the Settings command's accelerator, so the palette's key,
+  // then one character, then Enter — the two-keystroke promise §5.3 is accepted
+  // against, used here as the way in.
+  {
+    name: 'look',
+    population: 'three',
+    theme: 'default',
+    command: ',',
+    scrollTo: 'settings-look',
   },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
@@ -507,6 +527,46 @@ async function pressKeys(client, keys) {
 }
 
 /**
+ * One key with modifiers held, and no `char` (WP-88b).
+ *
+ * `pressKeys` above sends `char` because it is typing; a chord is not typing,
+ * and a `char` event under Ctrl is what a browser would never send. `modifiers`
+ * is CDP's bitfield — 2 is Ctrl, which is the palette's key on the platform
+ * every golden is taken on.
+ *
+ * @param {ReturnType<typeof import('../src/cli/chrome.mjs').connect>} client
+ * @param {string} key
+ * @param {number} modifiers
+ */
+async function pressChord(client, key, modifiers) {
+  for (const type of ['rawKeyDown', 'keyUp']) {
+    await client.send('Input.dispatchKeyEvent', { type, key, modifiers, windowsVirtualKeyCode: 0 });
+  }
+  await sleep(200);
+}
+
+/**
+ * Enter, as the platform sends it: a key event with a carriage return as its
+ * text, which is what a `<dialog>`'s own handlers and the palette's row runner
+ * both listen for.
+ * @param {ReturnType<typeof import('../src/cli/chrome.mjs').connect>} client
+ */
+async function pressEnter(client) {
+  for (const type of ['rawKeyDown', 'char', 'keyUp']) {
+    await client.send('Input.dispatchKeyEvent', {
+      type,
+      key: 'Enter',
+      code: 'Enter',
+      text: '\r',
+      unmodifiedText: '\r',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    });
+  }
+  await sleep(200);
+}
+
+/**
  * What the page reports about its own readiness. `null` until the scene
  * exists and has a plan.
  * @param {ReturnType<typeof import('../src/cli/chrome.mjs').connect>} client
@@ -784,6 +844,32 @@ const run = withChrome(
             if (capture.press) {
               enter(`pressing "${capture.press}" ("${name}")`);
               await pressKeys(client, capture.press);
+              await sleep(SETTLE_MS);
+            }
+
+            // WP-88b. The palette, a command's accelerator, Enter — the way a
+            // person opens the surface this capture photographs.
+            if (capture.command) {
+              enter(`running "${capture.command}" from the palette ("${name}")`);
+              await pressChord(client, 'k', 2);
+              await pressKeys(client, capture.command);
+              await pressEnter(client);
+              await sleep(SETTLE_MS);
+            }
+            if (capture.scrollTo) {
+              enter(`scrolling to #${capture.scrollTo} ("${name}")`);
+              const { result } = await client.send('Runtime.evaluate', {
+                returnByValue: true,
+                expression: `(() => {
+                  const el = document.getElementById(${JSON.stringify(capture.scrollTo)});
+                  if (!el) return false;
+                  el.scrollIntoView({ block: 'start' });
+                  return true;
+                })()`,
+              });
+              // A capture that could not find the thing it is a photograph of
+              // must fail here rather than quietly become a golden of the floor.
+              if (!result.value) throw new Error(`#${capture.scrollTo} is not on the page`);
               await sleep(SETTLE_MS);
             }
 

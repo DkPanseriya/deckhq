@@ -182,11 +182,17 @@ function paintFragmentProp(ctx, spec, w, h, u) {
  */
 const FRAGMENT_PROPS = Object.freeze(
   [
-    { kind: 'rug', tone: 'wool', zone: 'office', wU: 7.2, hU: 5, fx: 0.5, fy: 0.24 },
-    { kind: 'rug', tone: 'task', zone: 'rooms', wU: 6.4, hU: 4, fx: 0.5, fy: 0.55 },
-    { kind: 'rug_round', tone: 'wool', zone: 'lounge', wU: 4.6, hU: 4.6, fx: 0.42, fy: 0.5 },
-    { kind: 'desk', zone: 'office', wU: 5.2, hU: 2.6, fx: 0.5, fy: 0.82 },
-    { kind: 'plant_broad', tone: 'broad', zone: 'lounge', wU: 2, hU: 2, fx: 0.94, fy: 0.08 },
+    // The sizes are a desk CLUSTER's, not a reception's: 5.2 x 3.4 is the mat
+    // under a bench desk rather than the room-sized rug a lobby gets, because
+    // the office zone of a 160 px fragment is ten plan units across and a
+    // reception rug laid in it covers the floor the card is about. Measured on
+    // the card itself — the first cut used the room-sized ones and every preset
+    // read as two pale slabs.
+    { kind: 'rug', tone: 'wool', zone: 'office', wU: 5.2, hU: 3.4, fx: 0.46, fy: 0.2 },
+    { kind: 'rug', tone: 'task', zone: 'rooms', wU: 5.2, hU: 3.2, fx: 0.5, fy: 0.62 },
+    { kind: 'rug_round', tone: 'wool', zone: 'lounge', wU: 3.8, hU: 3.8, fx: 0.34, fy: 0.55 },
+    { kind: 'desk', zone: 'office', wU: 4.4, hU: 2.2, fx: 0.46, fy: 0.84 },
+    { kind: 'plant_broad', tone: 'broad', zone: 'lounge', wU: 2, hU: 2, fx: 0.95, fy: 0.12 },
   ].map((p) => Object.freeze(p)),
 );
 
@@ -202,6 +208,14 @@ const FRAGMENT_PROPS = Object.freeze(
  */
 export function paintLookFragment(ctx, opts) {
   const { w, h, u } = opts;
+  // A GROUND UNDER THE FOUR, and it is not decoration. Every floor painter
+  // clips itself to a 2 px rounded rectangle — that is the bake's own device,
+  // where a room is a slab with soft corners — so four patches laid edge to edge
+  // leave a dark nick at each join, and on a 160 px card those nicks are the
+  // first thing the eye finds. The colour is the corridor's own field, which is
+  // to say the resolved look's, so nothing here invents one.
+  ctx.fillStyle = LOOK.zones.corridor.field;
+  ctx.fillRect(0, 0, w, h);
   for (const zone of THUMB_ZONES) paintZone(ctx, zone, w, h, u);
   if (opts.props === false) return;
   for (const spec of FRAGMENT_PROPS) paintFragmentProp(ctx, spec, w, h, u);

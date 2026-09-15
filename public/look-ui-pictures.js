@@ -35,9 +35,14 @@ import {
   withLook,
 } from './look-ui-thumbs.js';
 
-/** The live preview, in logical pixels. §4's *"~9 px/U"*. */
-export const PREVIEW_W = 480;
-export const PREVIEW_H = 120;
+/**
+ * The live preview, in logical pixels. §4's *"~9 px/U"*, which makes this a
+ * seventy-unit fragment: wide enough that a floor material lays several
+ * repeats of its own pattern rather than one, which is the difference between
+ * a preview and a colour chip.
+ */
+export const PREVIEW_W = 640;
+export const PREVIEW_H = 104;
 
 /**
  * How many painted canvases are kept. Six thumbnails, thirty-six swatches and a
@@ -83,8 +88,13 @@ export function createLookPictures(deps) {
       const canvas = doc.createElement('canvas');
       canvas.width = Math.ceil(w * scale);
       canvas.height = Math.ceil(h * scale);
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
+      // The CSS size is the STYLESHEET's, deliberately: an inline `style.width`
+      // outranks every rule in `style.css`, so setting one here would pin a
+      // preset card's picture at 160 px inside a card that is 210 px wide and
+      // leave a gap nobody could close from CSS. The backing store above is the
+      // only thing this file decides, and `height: auto` on a canvas follows its
+      // intrinsic ratio, so the aspect is carried by the numbers rather than by
+      // a second declaration that could disagree with them.
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
       ctx.scale(scale, scale);
