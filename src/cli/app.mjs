@@ -37,7 +37,6 @@
  */
 import { spawn } from 'node:child_process';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
 
 import { DATA_DIR } from '../core/paths.mjs';
 import { readDaemonFile } from '../core/daemon-file.mjs';
@@ -48,9 +47,10 @@ import {
   isLoopbackUrl,
 } from '../core/app-window.mjs';
 import { DEFAULT_PORT, PORT_SCAN_SPAN, askDaemon, probeLoopbackPort } from './source.mjs';
-
-/** `bin/deckhq.mjs`, resolved from this file rather than from the PATH. */
-export const BIN = fileURLToPath(new URL('../../bin/deckhq.mjs', import.meta.url));
+// WP-92i. `BIN` lived here and `shortcut.mjs` imported it, which was the one
+// static edge of the `app → pin → shortcut → app` cycle. It lives in the module
+// all three share now; see its header.
+import { BIN } from './offers.mjs';
 
 /** How long a spawned daemon has to answer `/api/state` before we give up. */
 export const START_TIMEOUT_MS = 10_000;

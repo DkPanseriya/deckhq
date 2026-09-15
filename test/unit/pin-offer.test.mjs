@@ -20,8 +20,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const { PIN_FLAG, PIN_HINT, PIN_QUESTION, isYes, offerPin, shouldOfferPin } =
-  await import('../../src/cli/pin.mjs');
+const { offerPin, shouldOfferPin } = await import('../../src/cli/pin.mjs');
+// WP-92i. The wording and the two consent primitives moved to the module the
+// three offering commands share; `pin.mjs` reads them from there too.
+const { PIN_FLAG, PIN_HINT, PIN_QUESTION, isYes } = await import('../../src/cli/offers.mjs');
 const { RECORD_NAME } = await import('../../src/core/launcher.mjs');
 const { readAppFlags, readRecord, writeAppFlags, writeRecord } =
   await import('../../src/core/launcher-apply.mjs');
