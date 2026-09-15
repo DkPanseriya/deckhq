@@ -263,13 +263,23 @@ export const PROP_ATTACH_MAX = 2.0;
  * the boards, which is the whole of why the lounge already carried a
  * `kitchenZone` and now carries a ground per bay.
  *
- * ORDER IS LOAD-BEARING TWICE. It is the order the bays are laid in, left to
- * right, and — reversed — it is the order they collapse in.
+ * ORDER IS LOAD-BEARING TWICE, and §3.7 states it once: *"a lounge below 60 U
+ * wide drops bays from the right — games first, then quiet"*. A drop order of
+ * games-then-quiet that is also *from the right* fixes the lay order exactly —
+ * **sitting, café, quiet, games** — and it is not the order §3.7's table prints
+ * them in, which is by minimum width. Taking the table's order instead would
+ * make "from the right" drop games and then café, which is the one bay the
+ * lounge cannot give up: the café is the room's only change of ground.
+ *
+ * So the lay order is the one sentence, and `LOUNGE_BAY_DROP_ORDER` below is
+ * DERIVED from it rather than written a second time — which is what makes
+ * "from the right" true by construction instead of by agreement between two
+ * lists somebody has to keep in step.
  */
 export const LOUNGE_BAYS = Object.freeze([
   Object.freeze({ name: 'sitting', minW: 26, ground: 'wood' }),
-  Object.freeze({ name: 'quiet', minW: 16, ground: 'wood' }),
   Object.freeze({ name: 'cafe', minW: 22, ground: 'tile' }),
+  Object.freeze({ name: 'quiet', minW: 16, ground: 'wood' }),
   Object.freeze({ name: 'games', minW: 20, ground: 'wood' }),
 ]);
 
@@ -286,11 +296,16 @@ export const LOUNGE_BAY_SPEC = Object.freeze(
  * then quiet. It never spreads three bays across sixty units."*
  */
 export const LOUNGE_BAY_ROW_MIN = 60;
-/** The order §3.7 drops them in, stated once. */
-export const LOUNGE_BAY_DROP_ORDER = Object.freeze(['games', 'quiet']);
-
+/** *"It never spreads THREE bays across sixty units"* — the three, named. */
+export const LOUNGE_BAY_ROW_MIN_COUNT = 3;
+/**
+ * *"From the right"* — the lay order, reversed. Derived rather than written,
+ * so the two can never disagree; §3.7's *"games first, then quiet"* is the
+ * first two entries of it, which is the check `interior.test.mjs` makes.
+ */
+export const LOUNGE_BAY_DROP_ORDER = Object.freeze([...LOUNGE_BAY_NAMES].reverse());
 /** The clear floor a planter run keeps either side of itself. */
-export const PLANTER_MARGIN = 0.5;
+export const PLANTER_MARGIN = 0.2;
 
 /**
  * WHICH BAYS THIS LOUNGE LAYS, and it is §3.7's rule with one reading made
@@ -312,6 +327,14 @@ export const PLANTER_MARGIN = 0.5;
  * dealt is an empty rectangle with a name, and §3.7's bays are places rather
  * than labels.
  *
+ * A DROP THAT BUYS NOTHING IS NOT MADE. §3.7 gives up a bay to get the rest of
+ * them into one row; on a lounge so narrow that even two bays will not fit in
+ * one row, giving up the third buys no row and costs a place, so the whole list
+ * survives and the bays wrap. Without that clause a 33 U column dropped its
+ * quiet bay and came out at exactly the same two rows and the same height it
+ * had with the bay in it — furniture removed for nothing, which is the shape of
+ * defect §1.7 was written about.
+ *
  * @param {number} widthU the lounge's interior width
  * @param {{oneRow?: boolean, has?: (name: string) => boolean}} [opts]
  * @returns {string[]} bay names, in lay order
@@ -319,19 +342,30 @@ export const PLANTER_MARGIN = 0.5;
 export function loungeBayNames(widthU, opts = {}) {
   const w = Number(widthU) || 0;
   const has = opts.has || (() => true);
-  let names = LOUNGE_BAY_NAMES.filter((n) => has(n));
+  const names = LOUNGE_BAY_NAMES.filter((n) => has(n));
   if (!opts.oneRow) return names;
-  // One row: drop from the right, in §3.7's order, until what is left fits.
   const runOf = (list) =>
     list.reduce(
-      (a, n) => a + (LOUNGE_BAYS.find((b) => b.name === n)?.minW ?? 0) + PLANTER_W + PLANTER_MARGIN * 2,
+      (a, n) =>
+        a + (LOUNGE_BAYS.find((b) => b.name === n)?.minW ?? 0) + PLANTER_W + PLANTER_MARGIN * 2,
       0,
     );
+  // Two clauses, and both are §3.7's own sentence: the run has to fit the width
+  // the room actually has, and *"it never spreads three bays across sixty
+  // units"* — so three or more of them need `LOUNGE_BAY_ROW_MIN` as well.
+  const fits = (list) =>
+    runOf(list) <= w && (list.length < LOUNGE_BAY_ROW_MIN_COUNT || w >= LOUNGE_BAY_ROW_MIN);
+  if (fits(names)) return names;
+  let cur = names;
   for (const drop of LOUNGE_BAY_DROP_ORDER) {
-    if (runOf(names) <= Math.max(w, LOUNGE_BAY_ROW_MIN) || names.length <= 1) break;
-    names = names.filter((n) => n !== drop);
+    const next = cur.filter((n) => n !== drop);
+    if (next.length === cur.length) continue;
+    // Never below two: a lounge with one named place is a field again.
+    if (next.length < 2) break;
+    cur = next;
+    if (fits(cur)) return cur;
   }
-  return names;
+  return fits(cur) ? cur : names;
 }
 
 /**

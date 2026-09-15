@@ -448,12 +448,22 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     arcade: 'games',
     board: 'games',
   });
-  /** Clear floor a bay's ground keeps round its own furniture. */
-  const BAY_PAD = 1;
-  // The gap between two bays has to hold the planter that divides them, which
-  // is why it is not simply `LOUNGE_GAP`: at the densest packing that gap is
-  // one unit, and a 0.9 U trough in it would touch the furniture either side.
-  const bayGap = Math.max(gap, PLANTER_W + PLANTER_MARGIN * 2);
+  // A BAY'S GROUND IS EXACTLY ITS FURNITURE, and the gap between two bays is
+  // the gap the lounge already used. Neither is a stylistic choice: grouping
+  // nine blocks into four places already costs area — a tall games table can no
+  // longer share a shelf with a tall sofa run — and every unit of padding on
+  // top of that is one the service column takes out of the working side. At one
+  // unit of bay padding the column went from 43 % of the building to 46 % and
+  // the working side opened an eleven per cent hole; at zero it is the floor
+  // WP-85b left, with places drawn on it. The clear floor each block needs is
+  // already inside the block (`GAME_INSET`, and the zones the others lay).
+  const BAY_PAD = 0;
+  const bayGap = Math.min(gap, PLANTER_W + PLANTER_MARGIN * 2);
+  // The trough is §3.4's 0.9 U, except where the packing has closed the gap
+  // below that — at `LOUNGE_PACKS`'s densest the gap is one unit — in which
+  // case it is as wide as the gap can hold and no wider. A divider that
+  // overhangs the furniture it divides is a divider drawn on the furniture.
+  const planterW = Math.min(PLANTER_W, Math.max(0.3, bayGap - PLANTER_MARGIN * 2));
 
   const budgetW = fit && fit.w > 0 ? fit.w - MARGIN * 2 : Infinity;
   // The lounge's blocks are all different sizes, so it shelf-packs rather than
@@ -468,18 +478,20 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   // At `LOUNGE_MIN_H` it is one sofa group deep by construction (WP-77), which
   // is the only shape where a bay has to be given up rather than wrapped. See
   // `loungeBayNames`.
-  const deepest = Math.max(...blocks.map((b) => b.h));
+  // The depth of two sofa groups is the measure, and it is WP-77's own: a
+  // lounge is one row when the room it has been given cannot hold a second
+  // shelf of furniture at all. Measured against `LOUNGE_SOFA_GROUP_H` rather
+  // than against the deepest block, because the deepest block is a games table
+  // on a floor that has one and the living room on a floor that does not, and a
+  // rule about the shape of the room may not change with the population in it.
   const depthBudget = fit && fit.h > 0 ? fit.h - PLATE_BAND - MARGIN * 2 : Infinity;
-  const oneRow = depthBudget < deepest * 2 + bayGap;
+  const oneRow = depthBudget < LOUNGE_SOFA_GROUP_H * 2 + bayGap;
   const present = new Set(blocks.map((b) => BAY_OF[b.id]));
   const bayNames = loungeBayNames(budget, { oneRow, has: (n) => present.has(n) });
   const kept = new Set(bayNames);
   const live = blocks.filter((b) => kept.has(BAY_OF[b.id]));
 
-  // Each bay packs its own blocks, then the bays pack into the room — IN THE
-  // ORDER §3.7 LISTS THEM rather than by height. `shelfPack` sorts tallest
-  // first, which is right for loose furniture and wrong for a row of places:
-  // the lounge reads left to right, sitting to games, on every floor.
+  // Each bay packs its own blocks, and then the bays pack into the room.
   const bays = bayNames.map((name) => {
     const own = live.filter((b) => BAY_OF[b.id] === name);
     const inner = shelfPack(own, gap, Math.max(budget - BAY_PAD * 2, ...own.map((b) => b.w)));
@@ -494,23 +506,79 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       h: inner.h + BAY_PAD * 2,
     };
   });
-  let bx = 0;
-  let by = 0;
-  let rowH = 0;
-  let row = 0;
-  for (const bay of bays) {
-    if (bx > 0 && bx + bay.w > budget + 1e-6) {
-      by += rowH + bayGap;
-      bx = 0;
-      rowH = 0;
-      row++;
+  // WHICH BAY GOES WHERE — the one search in this file, and it is exhaustive.
+  //
+  // §3.7 fixes which bays exist and the order they are GIVEN UP in. It says
+  // nothing about which one is on the left, and the difference is not cosmetic:
+  // at a 31 U service column, laying the quiet bay beside the sitting one costs
+  // two rows of eleven units, and laying it under the café costs three. That is
+  // two and a half units of building height, and the building's height is the
+  // service column's — WP-77 §154 is the whole of why this room is measured at
+  // all.
+  //
+  // So the bays are laid in the order that leaves the LEAST FLOOR: every
+  // permutation of at most four bays is twenty-four shelf-wraps, which is
+  // nothing, and the winner is decided by area, then by depth, then by §3.7's
+  // own order — three keys, all total, so the same lounge lays the same way on
+  // every machine and every bake. Ordering by the table instead would be a
+  // reading order nobody reads: a bay is found by its ground and its
+  // centrepiece, which is what §3.7 says a bay IS.
+  const lay = (order) => {
+    let bx = 0;
+    let by = 0;
+    let rowH = 0;
+    let row = 0;
+    let widest = 0;
+    /** @type {{x:number,y:number,row:number}[]} */
+    const out = [];
+    for (const bay of order) {
+      if (bx > 0 && bx + bay.w > budget + 1e-6) {
+        by += rowH + bayGap;
+        bx = 0;
+        rowH = 0;
+        row++;
+      }
+      out.push({ x: bx, y: by, row });
+      bx += bay.w + bayGap;
+      widest = Math.max(widest, bx - bayGap);
+      rowH = Math.max(rowH, bay.h);
     }
-    bay.x = bx;
-    bay.y = by;
-    bay.row = row;
-    bx += bay.w + bayGap;
-    rowH = Math.max(rowH, bay.h);
-  }
+    return { out, w: widest, h: by + rowH };
+  };
+  /** Every permutation of `list`, in a fixed order. @type {(l: any[]) => any[][]} */
+  const permutations = (list) =>
+    list.length <= 1
+      ? [list]
+      : list.flatMap((item, i) =>
+          permutations([...list.slice(0, i), ...list.slice(i + 1)]).map((rest) => [item, ...rest]),
+        );
+  /** Area, then depth, then §3.7's own order — the first key that differs. */
+  const better = (a, b) => {
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] < b[i] - 1e-9) return true;
+      if (a[i] > b[i] + 1e-9) return false;
+    }
+    return false;
+  };
+  /** @type {{order: typeof bays, got: ReturnType<typeof lay>, score: number[]} | null} */
+  let best = null;
+  permutations(bays).forEach((order, rank) => {
+    const got = lay(order);
+    const score = [got.w * got.h, got.h, rank];
+    if (!best || better(score, best.score)) best = { order, got, score };
+  });
+  const chosen = /** @type {{order: typeof bays, got: ReturnType<typeof lay>}} */ (
+    /** @type {unknown} */ (best)
+  );
+  chosen.order.forEach((bay, i) => {
+    const at = chosen.got.out[i];
+    bay.x = at.x;
+    bay.y = at.y;
+    bay.row = at.row;
+  });
+  // Lay order is the order they came out of the search; the array keeps §3.7's
+  // order for everything else that reads it.
+  bays.sort((a, b) => a.row - b.row || a.x - b.x);
   for (const bay of bays) {
     bay.own.forEach((b, i) => {
       const at = bay.inner.out[i];
@@ -568,15 +636,15 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     props.push({
       kind: 'planter',
       id: `lounge-planter-${left.name}-${right.name}`,
-      w: PLANTER_W,
+      w: planterW,
       h: run,
       angle: 0,
-      x: left.x + left.w + (bayGap - PLANTER_W) / 2,
+      x: left.x + left.w + (bayGap - planterW) / 2,
       y: Math.min(left.y, right.y),
       anchor: {
         type: 'zone',
         of: `lounge-bay-${left.name}`,
-        dx: left.w + (bayGap - PLANTER_W) / 2,
+        dx: left.w + (bayGap - planterW) / 2,
         dy: Math.min(left.y, right.y) - left.y,
       },
     });
