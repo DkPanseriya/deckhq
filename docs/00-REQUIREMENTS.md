@@ -127,7 +127,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-076 | Furniture that launches the project it belongs to | Interior | done |
 | R-077 | A graphics control centre with curated, mixable interior options | Interior | planned |
 | R-080 | A whiteboard per room with the project's numbers | Plates / numbers | done |
-| R-081 | The plate's numbers are the ones that need action | Plates / numbers | planned |
+| R-081 | The plate's numbers are the ones that need action | Plates / numbers | done |
 | R-082 | No white pop-up boxes; background only on hover | Plates / numbers | done |
 | R-090 | Per-project and per-session token accounting | Tokens / cost | done |
 | R-091 | Token usage, not money, because people are on subscriptions | Tokens / cost | done |
@@ -732,8 +732,19 @@ payroll line is off by default; every figure traces to a ledger record or a tran
 reads `no data` where one is absent.
 **Why.** A number on a plate that nobody acts on is decoration, and `01-PRODUCT.md` §4 says nothing
 on this floor is decorative-only.
-**Status:** planned (WP-81). **Notes.** WP-74 (HUD polish) was **superseded by WP-81**
-(`DEVIATIONS.md` §152): making the plate a card before deciding what is on it was the wrong order.
+**Status:** done. **Implemented by:** WP-81 (`DEVIATIONS.md` §173) — `platePlanFor` in
+`public/render/scene-labels.js` and the copy in `public/render/plan-plate.js`. Four ranked slots:
+`● 2 need you · oldest 1d 2h` (14 px, the largest thing on the plate), the room's name, `Elif · Bash
+npm test` from `agent.currentTool`, and `today 5.8M tok · with cache` from the ledger's day tally
+with the cost after it only under `settings.showCost`. The copy test in `scene-math.test.mjs` pairs
+every rendered fragment with the one field it came from; `no data` stands where a figure is absent.
+**Notes.** WP-74 (HUD polish) was **superseded by WP-81** (`DEVIATIONS.md` §152): making the plate a
+card before deciding what is on it was the wrong order — and once decided, the card was refused
+outright, because R-082 below is the owner's own words about this object. Two departures from the
+work order, both recorded in §173: the state colour is a **dot** beside the hero rather than the
+hero's own ink (the mid-tone state palette measures 3.27:1 as text on a plate, under the 4.5:1 this
+requirement is held to), and the session count moved to the plate's **hover** rather than being
+dropped.
 
 **R-082 — No white pop-up boxes; background only on hover**
 *Owner, 31 August 2026:* "do not make white background pop up box, maybe just minimal fonts without

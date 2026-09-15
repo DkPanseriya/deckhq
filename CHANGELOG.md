@@ -8,6 +8,26 @@
 
 ### Added
 
+- **A room plate ranks its lines, and the one you might act on is the biggest — WP-81.** The owner:
+  _"Make sure the calculations on the whiteboard of the project rooms are right and informative and
+  not just there for the sake of it. […] how to make it easy to read at a glance in a split second
+  so the user does not have to spend effort reading it."_ The plate said `orbital-api · 7 sessions ·
+580k tok · 2 need you` over `today 5.8M tok · with cache` — three numbers in one size, of which
+  exactly one is ever acted on. It now reads **`orbital-api`** over **`● 2 need you · oldest
+1d 2h`** over `Elif · Bash npm test` over `today 5.8M tok · with cache`, in four sizes and four
+  inks, largest first. When nothing needs you the big line says what the room IS doing — `3 working`,
+  or `quiet` — so it is never a zero you have to stop on. `docs/DEVIATIONS.md` §173.
+
+- **The plate says what each agent is doing right now — WP-81.** Up to two live `currentTool`
+  summaries, from the same field the side panel's `doing:` line and the floor's thought bubble read,
+  with the same MCP substitution (`mcp__gmail__send` reads `Gmail · send` on all three). An agent
+  with no tool open contributes no entry and none is invented for it.
+
+- **Your Office, the Lounge and a pinned room follow the same grammar — WP-81.** `2 waiting ·
+oldest 3h`, `5 resting`, `1 session · pinned`. The office says `nobody waiting` where it used to
+  say `0 waiting`. A pinned room keeps its session count because with nothing running it is the
+  only fact it has.
+
 - **The documentation site is a product page — WP-94c.** The owner: _"Make very fancy and attractive
   pages. Should look like a product by Apple, Uber, Netflix, Airbnb, Google level companies."_ Those
   five do not share a look; what they share is that every page is **one system applied**. So the
@@ -389,6 +409,25 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
 
 ### Changed
 
+- **The session count and the room's lifetime tokens moved to the plate's hover — WP-81.** They are
+  the size of a room rather than the state of it, and they were competing with the line that
+  matters. `orbital-api · 7 sessions · +2 juniors · 580k tok in and out` is one hover away, on the
+  canvas's own tooltip.
+
+- **Tokens and cost now stand together rather than replacing each other — WP-81.** WP-83 made them
+  alternatives for one slot because two token figures on one plate needed telling apart; there is
+  only one token figure on the plate now, so with `settings.showCost` on the estimate follows it —
+  `today 5.8M tok · with cache · ≈ $9.50 · list price`. Cost is still off by default and still
+  labelled list price, never a bill.
+
+- **A plate with nothing to report says `no data` — WP-81.** An empty line is a gap a reader fills
+  in from the room above; absence is a value (`docs/DEVIATIONS.md` §157.3).
+
+- **Nothing on a plate is brighter than the wall beside it — WP-81.** `plateHalo` was a hard-coded
+  near-white above every wall in the product, the one surface the interior's own "hold it under the
+  wall" rule never covered. It is the theme's own wall now, derived rather than typed, so a theme
+  that moves its wall moves its signage with it.
+
 - **The quiet corner of the lounge is a place to read, and the games bay deals games — WP-87.** Lounge
   places now carry the name of the bay they stand in, so an activity is dealt from where somebody is
   actually sitting rather than from the whole clip list. The two armchairs beside the bookcase became
@@ -766,6 +805,10 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   `docs/DEVIATIONS.md` §161.
 
 ### Fixed
+
+- **A room plate no longer draws through the in-room `+` — WP-81.** The affordance stands in the
+  same 3.4 U strip the plate is written in, at the other end of it, so a long line reached straight
+  across it. The plate reserves the corner now.
 
 - **The floor's animation clock was never the injected one, and every golden was the still frame —
   WP-87.** `scene-agent.js`'s `nowMs()` returned `performance.now()`, a tab-local counter no fixture

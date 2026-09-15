@@ -18018,3 +18018,171 @@ Nothing but a capture with motion on could have found it, which is the argument 
 - **Nothing was profiled on a real machine with a hundred agents.** §162.10's admission stands. The
   budget here is asserted as draw-call counts over a hundred figures, which is a shape check and not
   a measurement.
+
+## 173. WP-81 — the plate had three numbers of equal weight, and one of them mattered
+
+The owner, 14 September 2026:
+
+> _"Make sure the calculations on the whiteboard of the project rooms are right and informative and
+> not just there for the sake of it. Make better UI decisions: what users care about to see, how
+> they want to see it, how to make it easy to read at a glance in a split second so the user does
+> not have to spend effort reading it."_
+
+The plate read `orbital-api` over `7 sessions · 580k tok · 2 need you` over `today 5.8M tok · with
+cache`. Every figure on it was true. Three of them were set in one size, one colour and one face,
+and exactly one — `2 need you` — is a thing anybody ever does something about. Ranking them was
+left to the reader, which is the opposite of a glance: the eye has to parse all three before it can
+discard two. `01-PRODUCT.md` §4 says nothing on this floor is decorative-only, and a number nobody
+acts on, set as loudly as the number they do, is worse than decoration — it is camouflage.
+
+### 173.1 Four ranks, and the biggest one is not the room's name
+
+| rank | slot | example | where every character of it comes from |
+|---|---|---|---|
+| 1 | hero, 14 px mono 700, `plateInk` | `● 2 need you · oldest 1d 2h` | `project.needsYou` (`model.mjs`); the tail is `agent.reviewSince` / `.needsInputSince` through `floor-rule.js`'s `waitingSince` |
+| 2 | title, 12.5 px sans 700, `plateInkSecondary` | `orbital-api` | `project.name` |
+| 3 | doing, 11 px sans 600, `plateInkSecondary` | `Elif · Bash npm test` | `agent.label` + `agent.currentTool.summary`, through the same `humaniseToolSummary` the panel and the bubble use |
+| 4 | spend, 11 px mono 600, `plateInkTertiary` | `today 5.8M tok · with cache` | `project.todayTokens`, the ledger's own day tally (WP-83) |
+
+**The hero outranks the room's own name, and that is the package.** The name says *which room*; the
+hero says *whether to get up*. Naming a room louder than the reason to look at it is the inversion
+`10-INTERIOR-DESIGN.md` §1.2 found in the materials, one layer up.
+
+**The hero is never empty and never a zero.** `2 need you` when the room is holding somebody up,
+`3 working` when it is not and something is running, `quiet` when neither. A `0 need you` is a
+number the eye must stop on in order to discover that it means nothing. The office plate follows the
+same rule — `nobody waiting` where it used to say `0 waiting`.
+
+**`oldest 1d 2h` is a wait the plate can prove.** `waitingSince` is the one definition of waiting on
+this floor, and it has no timestamp for a `stalled` session. A stalled agent therefore colours the
+hero's dot and can never set its `oldest`: the plate says how long it can prove, not how long it
+suspects.
+
+### 173.2 What came off the plate, and where it went
+
+`7 sessions`, `+2 juniors` and `580k tok` are the SIZE of a room, not the state of it. Nobody has
+ever got up because a room held seven sessions. They are on the plate's hover now — the canvas's
+own `title` attribute, set from the hit rect the plate pass already built, so the hover and the
+plate cannot disagree about which facts went where — and nowhere on its face.
+
+One exception, and it is the interesting one: a **pinned** room keeps `3 sessions · pinned`. Nothing
+runs in it, so it has no `need you`, no `working` and no doing line; the session count is the only
+fact it has, and WP-81's rule is that the count moves off unless it is the only fact.
+
+### 173.3 The state colour is a dot, not the type — and the measurement is why
+
+The work order asked for `2 need you` **in the state colour**. It is not, and this is the one place
+this package departs from its brief.
+
+The state palette is mid-tone by design (`10-INTERIOR-DESIGN.md` §1.3: `benched #7B8794` and
+`needs_input #B87333` both near L\* 53). Measured against the surface a plate's letters are actually
+read on — `plateHalo` at 0.92 composited over the lit ground — `needs_input` is **3.27:1** on the
+default theme and `for_review` **3.33:1** on night shift. Both under the 4.5:1 this package is
+required to hold. A derivation that clears 4.5 on a light plate AND a dark one exists
+(`#995f2a`, `#cb5d51`) and is no longer the state colour: it is a different colour wearing the
+state's name, which is the thing `palette.js`'s crimson discipline exists to prevent.
+
+So the split `§1.3` had to make on the characters is made again here, and it is the house rule
+already written in `style.css` above the header's own breakdown — _"a dot, a tabular number and a
+neutral-ink word, every time"_. The **dot** is the state colour, held to 3:1 like every other
+non-text signal on this floor. The **words** are plate ink at 4.5:1 and say the same thing the
+colour does, so colour is never the only channel. Worst case over three themes and five grounds:
+text **5.69:1**, dot **3.27:1**.
+
+### 173.4 `plateHalo` is the wall now, and there is still no card
+
+`10-INTERIOR-DESIGN.md` §3.8 hands WP-81 a **card**: 5 px radius, 10 × 6 px padding, a short-prop
+shadow. **Refused**, and the reason is `00-REQUIREMENTS.md` **R-082**, which is the owner's own
+words about this exact object and is marked done: _"do not make white background pop up box, maybe
+just minimal fonts without background colour."_ §3.8 is a design file whose own header says no
+package in it is approved; R-082 is a requirement. The plate stays text with a halo.
+
+What §3.8 actually *needs* from a card is kept by another route. Its worry is §1.2's — that nothing
+in a room should out-shout the wall. `plateHalo` was a hard-coded `#FCFAF4`, **brighter than every
+wall in the product**, the one surface `underWall` never covered. It is the theme's own `wall` on a
+light theme now, and still the far side of the ground on a dark one, where the halo has to go the
+opposite way from light ink. Derived rather than typed, so a theme that moves its wall moves its
+signage with it.
+
+`plateInkTertiary` is new, at `shade(ink, ±0.24)`. `±0.30` clears the bare grounds and fails under a
+pool of light, which is why the fourth rank is 0.24 and not prettier.
+
+### 173.5 The plate stays in its band, and gives way in rank order
+
+`PLATE_BAND` is 3.4 U and `interior.test.mjs` already proves no prop is drawn in it, which is how
+§7's _"a label never covers furniture"_ became a property rather than a check. Four ranks do not
+always fit in it, so the band's height in pixels decides how many are drawn: **the spend line goes
+first, then the doing line**, and the title and the hero are never dropped. All four appear at
+**≥ 15.9 px per unit**; below that the plate is three lines, which is why `demo.png`'s busy rooms
+show name/hero/doing and its quiet ones show name/hero/spend.
+
+Sideways it gives way differently: a plate too narrow for its hero drops the `· oldest …` tail
+rather than ellipsising it, because a cut number is a wrong number, and a plate too narrow for two
+doing entries drops the second rather than truncating through it.
+
+**And it stops short of the `+`.** The first 3× crop of `orbital-api` showed `oldest 1d 2h` drawn
+straight through the in-room affordance. The `+` stands in the same 3.4 U strip at the other end of
+it, so the band being furniture-free was never enough — the collision was chrome against chrome, and
+no furniture rule could have caught it. `PLUS_CLEAR_U` (its inset plus its hover halo, 2.975 U) moved
+to `plan-units.js` beside `PLATE_BAND`, and the plate measures its width against it.
+
+### 173.6 No jitter, and the clock is injected
+
+Every figure is set in `FONT_MONO`, which is what tabular stability is on a canvas with no
+`font-variant-numeric` (§7). `scene-math.test.mjs` draws one plate twice against a recording 2D
+context at two clocks a minute apart and asserts the recorded `x`, `y`, face and text of every run
+are identical; three hours apart, the wait advances and the run it belongs to is still set at the
+same `x`. There is no `Date.now()` in the path: the plate reads `public/clock.js`, which the daemon
+pins under `DECKHQ_NOW`.
+
+### 173.7 The demo floor never ran a tool, so the second line was never photographed
+
+`currentTool` is written by a `PreToolUse` hook and by nothing else. `scripts/demo-floor.mjs` drove
+`SessionStart`, `Notification` and `UserPromptSubmit` and never a tool event, so the plate's doing
+line was **empty in every capture** — the copy unit-tested and the pixels not. That is the same gap
+§157's own "Unverified" note left open for the by-tool table.
+
+`DEMO_TOOLS` now drives two, through the real `/api/hook` endpoint, in the real Claude Code payload
+shape (`tool_name` / `tool_input`), summarised by the real adapter. Both on **working** sessions: a
+tool call cannot move a session's state — `state-machine-hooks.mjs` refuses to, on purpose — so a
+tool on a waiting session would print "editing tests" beside a raised hand, true of the process and
+a lie about the floor.
+
+### Tests
+
+Twelve new in `scene-math.test.mjs`: the four ranked lines over one fixture; the copy test, which
+pairs each rendered fragment with the one field it came from and asserts that changing that field
+moves that fragment; `no data`; the money after the tokens and only with `showCost`; the tooltip;
+the dot per state; the no-jitter pass; the rank of size and ink; the band collapse across four
+scales; the `+` clearance; the doing line's ordering, cut and MCP substitution; and the type scale.
+Three new in `interior.test.mjs`: plate text on its halo over every ground, the dot at 3:1, and the
+halo never above the wall. `assertThemeContrast` gained both, so a theme that fails is refused at
+load rather than reported.
+
+Eight existing assertions were edited and none deleted — `plan.test.mjs`, `subagents.test.mjs`,
+`usage.test.mjs` and `themes.test.mjs`, each for a string or a slot that moved.
+
+2336 tests, 1 skipped; lint, format and typecheck clean. Eleven goldens regenerated twice — once for
+the plate, once for the `+` clearance and the demo's tool events — and `goldens:check` matches all
+eleven at **0 px moved at all**.
+
+### Two modules were split, and one ceiling was the reason
+
+`plan-rooms.js` went to 930 lines when the plate copy grew from two lines to four, so the copy is
+`plan-plate.js` now: pure `project row -> string`, no geometry, read by both the live plate and the
+plan's own fallback `plateLines`. `plan.js` came back under 900 by re-exporting it with `export *`
+and by merging the two `floor-rule.js` imports it always had.
+
+### Unverified
+
+**The plate's hover has not been driven with a pointer.** `plateTooltipFor` is unit-covered and
+`app-floor.js` sets `canvas.title` from it, but a `title` attribute only appears after a real mouse
+rests on the plate for the platform's own delay, and that was not photographed.
+
+**`showCost: true` was not photographed either.** The composed line — `today 5.8M tok · with cache ·
+≈ $9.50 · list price` — is asserted as a string and is long enough that in a narrow room it will
+ellipsise; which rooms lose which half of it has been reasoned about and not seen.
+
+**The collapse threshold is a measurement of the renderer, not of a window.** 15.9 px per unit is
+computed from the type scale and the band; which window sizes land either side of it was observed on
+two of the eleven goldens (`demo` below, `pinned` and `wide` above) and not swept.
