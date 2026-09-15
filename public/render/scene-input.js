@@ -24,6 +24,7 @@ import {
   DEFAULT_VIEW_H,
 } from './scene-camera.js';
 import { bakeBackdrop } from './backdrop.js';
+import { assignSeats } from './agents.js';
 import { SceneDraw } from './scene-draw.js';
 
 /** Pointer travel past which a press counts as a pan rather than a click. */
@@ -261,6 +262,23 @@ export class SceneInput extends SceneDraw {
     const target = computeTargetAspect(this._viewW, this._viewH);
     if (!shouldRebuildAspect(target, this._plan.targetAspect)) return;
     this._rebuildPlan(target);
+    // AND PUT THE PEOPLE INTO THE NEW BUILDING (WP-93).
+    //
+    // A re-plan gives every seat, wall and corridor new coordinates, and this
+    // path — unlike `setState`, which syncs on the line after its own rebuild —
+    // never re-seated anybody. The records went on describing the old floor
+    // until the next snapshot happened to arrive. On a live floor that
+    // self-heals in a second and reads as a hiccup; with the panel open, which
+    // is a resize and therefore a re-plan, it was the whole population standing
+    // in the wrong room, and `three@selected` is the golden that finally
+    // photographed it. `sync` snaps rather than walks on a new plan object,
+    // which is right: nobody's own state changed, the building did.
+    const agents = (this._snapshot && this._snapshot.agents) || [];
+    this._runtime.sync(
+      agents,
+      this._plan,
+      assignSeats(this._plan, agents, { selectedId: this._selectedId }),
+    );
     if (!this._running) this._draw();
   }
 

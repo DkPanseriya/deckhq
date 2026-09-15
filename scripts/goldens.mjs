@@ -175,12 +175,22 @@ const POPULATIONS = ['demo', 'empty', 'single', 'three', 'pinned', 'reference'];
  * `three`, so the pair is also the clearest statement of what the arrangement
  * choice does — one floor, two windows, two buildings.
  *
+ * A capture may also name KEYS to press once the floor has settled (WP-93).
+ * `three@selected` is the `three` floor with `j` pressed: `j` walks the
+ * needs-you queue, so it selects the session that has waited longest and opens
+ * its panel — and since WP-93 that is the one thing on this floor a user can do
+ * that MOVES somebody. The waiting sit on the reception sofas; the one you open
+ * gets up and walks to the chair at the manager's desk. Without this capture
+ * the whole of that behaviour is outside the gate, because every other golden
+ * photographs a floor nobody has touched.
+ *
  * @type {ReadonlyArray<{name:string, population:string, theme:string,
- *   stage?:{w:number, h:number}}>}
+ *   stage?:{w:number, h:number}, press?:string}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
   { name: 'wide', population: 'three', theme: 'default', stage: { w: 1920, h: 1080 } },
+  { name: 'three@selected', population: 'three', theme: 'default', press: 'j' },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
     population: 'demo',
@@ -446,6 +456,27 @@ function startDemo(population, theme = 'default') {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Press one key on the settled floor, the way a person would (WP-93).
+ *
+ * `rawKeyDown` + `char` + `keyUp` rather than a synthetic DOM event: the app
+ * listens on the document for real `keydown`, and dispatching through the
+ * protocol is the only way to reach it that also proves the listener is wired.
+ * The floor is then given the settle window again — a selection re-seats the
+ * reception and somebody walks — and `captureStill` still refuses to photograph
+ * anything that has not stopped.
+ * @param {ReturnType<typeof import('../src/cli/chrome.mjs').connect>} client
+ * @param {string} keys one character each, in order
+ */
+async function pressKeys(client, keys) {
+  for (const key of String(keys)) {
+    for (const type of ['rawKeyDown', 'char', 'keyUp']) {
+      await client.send('Input.dispatchKeyEvent', { type, text: key, key, unmodifiedText: key });
+    }
+    await sleep(120);
+  }
+}
+
+/**
  * What the page reports about its own readiness. `null` until the scene
  * exists and has a plan.
  * @param {ReturnType<typeof import('../src/cli/chrome.mjs').connect>} client
@@ -695,6 +726,12 @@ const run = withChrome(
 
             enter(`waiting for the floor to settle ("${name}")`);
             const state = await waitForFloor(client);
+
+            if (capture.press) {
+              enter(`pressing "${capture.press}" ("${name}")`);
+              await pressKeys(client, capture.press);
+              await sleep(SETTLE_MS);
+            }
 
             enter(`screenshotting ("${name}")`);
             const png = await captureStill(client);

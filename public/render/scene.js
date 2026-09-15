@@ -180,12 +180,16 @@ export class Scene extends SceneInput {
       // apply the new snapshot, so the agents whose own state changed walk
       // from their old seat to their new one and nobody else moves.
       if (this._plan) {
-        this._runtime.sync(previousAgents, this._plan, assignSeats(this._plan, previousAgents));
+        this._runtime.sync(
+          previousAgents,
+          this._plan,
+          assignSeats(this._plan, previousAgents, { selectedId: this._selectedId }),
+        );
       }
     }
 
     if (this._plan) {
-      const seatMap = assignSeats(this._plan, agents);
+      const seatMap = assignSeats(this._plan, agents, { selectedId: this._selectedId });
       this._runtime.sync(agents, this._plan, seatMap);
     }
 
@@ -271,9 +275,41 @@ export class Scene extends SceneInput {
     } need you${breakdown}`;
   }
 
-  /** Programmatic selection (e.g. keyboard queue navigation in app.js). */
+  /**
+   * Programmatic selection (e.g. keyboard queue navigation in app.js).
+   *
+   * WP-93 · OPENING A WAITING SESSION WALKS IT TO THE MANAGER'S DESK. The
+   * owner: _"They all should sit on the sofa. Only the agent I open walks up to
+   * the manager desk."_ So this is no longer only a ring on the floor: the
+   * selection is the second input to `assignSeats`, and changing it re-seats
+   * the floor — which moves exactly one person, because the plan and everybody
+   * else's place in it are untouched by it.
+   *
+   * Nothing is written anywhere. The selection lives in this field and in
+   * `app-state.js`, it is never persisted, and no observed event can set it.
+   * A session that is not waiting does not move when it is opened: `assignSeats`
+   * only ever reaches for the chair inside the office queue.
+   *
+   * The early return matters. `app-state.js` calls this on every selection
+   * event, including the ones that re-select what is already selected (the
+   * panel reopening, the deck syncing), and re-seating on those would hand the
+   * runtime a fresh seat object for a seat nobody moved to.
+   */
   select(agentId) {
-    this._selectedId = agentId || null;
+    const next = agentId || null;
+    if (next === this._selectedId) return;
+    this._selectedId = next;
+    if (!this._plan) return;
+    const agents = (this._snapshot && this._snapshot.agents) || [];
+    this._runtime.sync(
+      agents,
+      this._plan,
+      assignSeats(this._plan, agents, { selectedId: this._selectedId }),
+    );
+    // The loop is stopped while the tab is hidden, and a selection can still
+    // arrive there (a notification, the palette). Draw so the ring and the walk
+    // are current whether or not anything is animating.
+    if (!this._running) this._draw();
   }
 
   // ------------------------------------------------- a second render target

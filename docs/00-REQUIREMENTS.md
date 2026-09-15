@@ -103,7 +103,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-040 | Agents walk on corridors and never leave the building | Occupancy | done |
 | R-041 | Walking is fast enough to watch | Occupancy | done |
 | R-042 | Nobody stands on the furniture they are using | Occupancy | done |
-| R-043 | Nobody sits across from the manager except the one being reviewed | Occupancy | done, with a departure |
+| R-043 | Nobody sits across from the manager except the one you open | Occupancy | done |
 | R-044 | Only live work is in a project room; everyone else is elsewhere | Occupancy | done |
 | R-045 | Benched agents rest in the lounge; archived agents are "fired" and reversible | Occupancy | done |
 | R-050 | The rig faces the way it is going | Characters | done |
@@ -413,25 +413,32 @@ unseated at every population.
 P-09 a rule.
 **Status:** done. **Implemented by:** `DEVIATIONS.md` §37, §43.
 
-**R-043 — Nobody sits across from the manager except the one being reviewed**
+**R-043 — Nobody sits across from the manager except the one you open**
 *Owner, 31 August 2026:* "nobody directly sits across the manager, only the one that is being
 called, reviewed will go to manager desk and sit there." Restated 14 September: "And nobody sits by
 default in front of manager, everybody is waiting on sofa. Only the agent opened, walks upto the
-manager desk."
-**Interpretation as built (WP-78).** Every session in a waiting state is **at the manager's desk** —
-two or three visitor chairs oldest-first, then a standing queue, and never a sofa — and selecting
-one moves nobody.
-**Why.** The reception had become a register of everything that had ever run (21 bodies over one
-working session on the reference machine), and the queue's order is the product's answer to "who has
-been waiting longest".
-**Status:** done, **with a departure**. **Implemented by:** WP-78 (`DEVIATIONS.md` §153); the
-`01-PRODUCT.md` §4.2 amendment of 14 September.
-**Notes and trade-off.** The owner's 14 September sentence asks for the opposite of what shipped:
-he asked for everybody on the sofa and only the opened agent at the desk. WP-78 put the waiting
-queue at the desk and kept the sofas for nobody. The reasoning is in §153 — oldest-first ordering is
-only legible as a queue — but **this row is the record that the owner's words and the built
-behaviour differ**, and it is the first thing to re-read if the reception is revisited. The 31
-August half ("selecting one moves nobody") is honoured exactly.
+manager desk." Said a third time, 15 September 2026, as an instruction rather than a description:
+"They all should sit on the sofa. Only the agent I open walks up to the manager desk."
+**Interpretation as built (WP-93).** Every waiting session sits **on the reception sofas**, in
+arrival order, oldest wait nearest the desk; whoever the runs cannot seat stands in a short queue
+beside them, never at the desk. The manager's desk carries **one** visitor chair, square across it,
+and it is **empty unless the user has a waiting session open** — that session walks to it, sits
+facing him, and walks back when the panel closes or another is opened. A selected session that is
+not waiting does not move.
+**Why.** It is what he asked for, three times. The reception's job is "who is waiting on me", and a
+room of people seated round its walls with one chair at the desk says that in a way a row of chairs
+filled by the clock does not: the chair then means *this is the one I am dealing with*, which is a
+fact only the user has.
+**Status:** done. **Implemented by:** WP-93 (`DEVIATIONS.md` §169); WP-78 (§153) for the desk and
+lounge halves and the `01-PRODUCT.md` §4.2 amendment of 14 September.
+**Notes.** WP-78 shipped the **opposite** of the 14 September sentence for a day: it read it as a
+description of the floor he was looking at, put the whole waiting queue in two or three chairs at
+the desk, and left the sofas seating nobody. This row carried that departure openly, and WP-93 took
+it back. What survived the correction is WP-78's own argument — oldest-first ordering is only
+legible as a queue — now read off the sofa runs instead of a row of chairs. The 31 August half is
+honoured exactly, and in both readings *selecting a session never changes which room it is in*:
+`placement()` has no `selected` to read, and the chair is a seat inside the office chosen by an
+explicit argument to `assignSeats`, which no observed event can set.
 
 **R-044 — Only live work is in a project room; everyone else is elsewhere**
 *Owner, 14 September 2026:* "Only live working agents are on desks in the project rooms. Everyone
@@ -612,8 +619,9 @@ section Sofa, on each wall, and then additional chairs, table, etc." and "THe ma
 room is very cramped. Sofa can be against walls, so sofa can be bigger and there feels free space."
 **Status:** done. **Implemented by:** `DEVIATIONS.md` §34, §35 (a sofa's rectangle is what says how
 it lies), §55.
-**Notes.** WP-78 (§153) later emptied the sofas of waiting sessions — see R-043's departure. The
-furniture stands; who sits on it changed.
+**Notes.** WP-78 (§153) briefly emptied the sofas of waiting sessions; WP-93 (§169) put them back on
+them and left one chair at the desk for the session the user opens. The furniture never moved — who
+sits on it did, twice.
 
 **R-073 — Light, depth and honest shadows**
 *Owner, 14 September 2026:* "the oval shadows sometimes are offset and does not make any sense."

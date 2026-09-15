@@ -725,7 +725,7 @@ export function buildPlan(projects, agents, opts = {}) {
 
   place(office.room, office.officeSeats);
   // Now that the reception's furniture has real coordinates, put people on it.
-  office.officeSeats = seatOffice(office.room, waitingCount);
+  const seating = seatOffice(office.room, waitingCount);
   place(lounge.room, lounge.loungeSpots);
   if (lounge.room.kitchenZone) {
     const kz = lounge.room.zones.find((z) => z.id === 'kitchen-zone');
@@ -834,7 +834,7 @@ export function buildPlan(projects, agents, opts = {}) {
     walls,
     nav: nav.lines,
     seats,
-    officeSeats: office.officeSeats,
+    ...seating,
     loungeSpots: lounge.loungeSpots,
     // Archived sessions have no place on the floor at all.
     letGoSpots: [],

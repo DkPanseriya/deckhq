@@ -17515,3 +17515,168 @@ the width rule, so the number can only grow by images being added, never by one 
   are in the register with their class and a reason, which is the point of a register.
 - **No page was removed and no page was merged.** The model, hooks, adapters and FAQ pages are
   untouched; this package added to the site rather than rewriting it.
+## 169. WP-93 — the waiting sit on the sofas; the one you open comes to the desk
+
+The owner, 15 September 2026, one sentence:
+
+> _"They all should sit on the sofa. Only the agent I open walks up to the manager desk."_
+
+He had said it before. On 31 August: _"nobody directly sits across the manager, only the one that is
+being called, reviewed will go to manager desk and sit there."_ On 14 September: _"And nobody sits by
+default in front of manager, everybody is waiting on sofa. Only the agent opened, walks upto the
+manager desk."_ WP-78 read the second of those as a **description** of the floor he was looking at
+rather than as the floor he wanted, and shipped its opposite: a row of two or three visitor chairs at
+the manager's desk, filled by the whole waiting queue oldest-first, and three sofa runs seating
+nobody. §153 argued for it, `00-REQUIREMENTS.md` R-043 recorded it as a departure, and the third
+sentence closed the question.
+
+**This is the first time a shipped package's departure from the owner's words has been taken back
+rather than defended**, and the reason is worth stating once: the argument WP-78 made was about
+LEGIBILITY — oldest-first is only readable as a queue — and it turns out to be an argument about
+ordering, not about furniture. The sofas can be filled oldest-nearest exactly as the chairs were. So
+nothing had to be given up.
+
+### 169.1 The rule, in four lines
+
+| | Where |
+| --- | --- |
+| **waiting** (`needs_input`, `for_review`) | a place on one of the reception's three sofa runs, **arrival order, oldest wait nearest the desk** |
+| **waiting, and the sofas are full** | standing, in a short queue inside the well the runs enclose — beside the seating, never at the desk, arrival order |
+| **waiting, and the user has its panel OPEN** | the one visitor chair, square across the manager's desk, facing him |
+| **anything else, opened or not** | exactly where its state puts it: working at its desk, resting in the lounge |
+
+The zone rule from §153 is untouched — `AT_DESK_STATES`, `WAITING_STATES` and `placement()` are the
+same four lines over the same two fields — and so is WP-50's. What changed is the seating **inside**
+the office.
+
+### 169.2 One chair, and why the other two are gone rather than turned round
+
+`visitorChairCount(interiorW)` gave two chairs or three off the room's own width. It is deleted, with
+`OFFICE_VISITOR_MIN`, `OFFICE_VISITOR_MAX`, `OFFICE_VISITOR_THIRD` and `OFFICE_VISITOR_PITCH`, and
+`OFFICE_VISITOR_CHAIRS = 1` is what is left.
+
+The alternative on the table was to keep all three and turn the spare two to face the sofa side, as
+loose seating. It was rejected: **a chair at the manager's desk is read as somewhere a session might
+be sitting**, whichever way it faces, and two empty ones beside the occupied one say the audience
+seats three. The whole of this chair is that it answers one question — _which session am I dealing
+with_ — and a question with one answer should not have three seats at it. The room loses nothing by
+it: the sofa runs are the seating now, which is the point of the package.
+
+The composition from WP-85b/85c survives unchanged, because the chair kept the geometry the row was
+built around. `visitorY` is where it always was, so `bandTop` is, so the three runs are; the wool rug
+is still anchored to `office-waiting`, which still starts `OFFICE_RUG_LEAD` above the chair and runs
+down to the back sofa; the side table, the lamp on it, the water cooler on the side table and the low
+table in front of the back run are all still attached to the runs they belong to.
+`layout-anchors.test.mjs`'s nine relationships did not move a unit.
+
+### 169.3 How many the sofas hold, and the one pass that settles it
+
+`OFFICE_SOFA_PITCH` is **5.2 U**, and it is not `OFFICE_SEAT_PITCH` (2.6) for the reason WP-78 gave
+about its own row and then did not apply to the furniture: 2.6 spaces BODIES, and a waiting session
+is a body plus a badge above the head plus a name below the feet. 5.2 is the number WP-85b measured
+for that stack, and a sofa run is the same problem on whichever axis the packer ends up laying it —
+the reception is the one room that may be reflected in the diagonal (`buildOfficeRow`, WP-59d), so a
+run that is horizontal on one floor is vertical on the next.
+
+A run of length `L` seats `floor(L / OFFICE_SOFA_PITCH)`, spread **evenly** along it rather than
+packed from one end, and forward of the centre line by `SOFA_SEAT_BIAS` of the run's depth, because
+the back cushion takes the far third and a body on the centre line is sitting on the back. At the
+reception's own natural size that is six places — one on each side run and four across the back — and
+it grows with the room, which grows with the queue.
+
+**There is a circularity, and it converges in one pass.** The standing queue's size is `waitingCount`
+less what the sofas seat; the room's final height is settled from the queue; and the runs' length is
+settled from the height. `buildOffice` therefore reads the capacity off the PRE-GROWTH height.
+Growing the room only ever lengthens a run, so that figure is a lower bound, the queue laid out from
+it is an upper bound on the queue actually needed, and `seatOffice` — which reads the resolved
+furniture — leaves the spare places empty. The failure that would matter is a shortfall, and it
+cannot happen in this direction. The comment saying exactly this has been in `buildOffice` since
+before WP-78; it was describing the loose chairs it then had, and it is true again.
+
+### 169.4 Selection is an argument, not a field
+
+`assignSeats(plan, agents)` became `assignSeats(plan, agents, { selectedId })`, and that is the whole
+of the mechanism.
+
+- **`plan.officeChair` is a coordinate whether or not anybody is in it.** It comes back from
+  `seatOffice` beside `plan.officeSeats` and is deliberately NOT index 0 of that array: at index 0 it
+  would be given to the longest wait by default, which is the thing this package removes.
+- **`officeSeats` is still one place per waiting session**, so every count that reads its length —
+  `counts.drawn.waiting`, the reception's own sizing, five tests — is unchanged.
+- **The selected session's own sofa place is left EMPTY while it is at the desk**, rather than closed
+  up behind it. Opening a panel must move ONE person; re-packing the queue would walk every session
+  that had been waiting longer than the one you opened, which is the floor shuffling on a click.
+- **`placement()` still has no selection in it.** The ZONE is the state's alone — `model.test.mjs`
+  asserts that an agent carrying every field a panel might set lands where one carrying none does —
+  and the chair is a seat WITHIN the office. It is stated as an explicit argument precisely so
+  nothing can mistake it for something observed.
+- **Nothing is persisted.** `selectedId` lives in `Scene._selectedId` and `app-state.js`, it is never
+  written to `state.json`, and no hook, scan or session end can set it.
+  `test/unit/occupancy.test.mjs` holds that as an `INVARIANT:` test that drives a real `Registry`
+  through a `Notification` hook, a `Stop` hook, a `SessionEnd` hook and two scans, planning and
+  seating after each with no selection at all, and asserts the chair is empty every time — plus a
+  final assertion that somebody really was waiting during the run, because a run where the office was
+  empty would prove nothing.
+
+`Scene.select()` is where it reaches the floor: it re-seats and syncs, so the one person walks. It
+returns early when the selection has not actually changed, because `app-state.js` calls it on every
+selection event including the ones that re-select what is already selected.
+
+### 169.5 A defect the new golden found: a re-plan left everybody in the old building
+
+`_rebuildPlan` builds a new plan, re-bakes the backdrop and recomputes the camera — and never put the
+people into it. `setState` syncs on the line after its own rebuild, so the path everybody had ever
+photographed was covered; the RESIZE path (`_checkAspectRebuild`) was not. Every record's `x`/`y`
+went on describing a building that no longer existed until the next snapshot happened to arrive.
+
+On a live floor that self-heals in a second and reads as a hiccup. **Opening the panel is a resize**,
+therefore a re-plan, and the first capture of `three@selected` showed what that actually looked like:
+the manager's chair empty, one waiting session standing behind the manager's desk and the other
+marooned in the middle of the rug. Neither is a WP-93 rule; both are two different floors drawn on
+top of each other. `_checkAspectRebuild` now syncs, and `sync` SNAPS rather than walks on a new plan
+object — which is right, because nobody's own state changed, the building did.
+
+This is `08` §1.1 rule 10 again, and the cleanest example of it in this log: no unit test could see
+it, because the coordinates were internally consistent with a plan that had been thrown away.
+
+### 169.6 The goldens, and the first one of a floor somebody has touched
+
+`scripts/goldens.mjs` gained a `press` field on a capture and dispatches the keys through
+`Input.dispatchKeyEvent` once the floor has settled, then settles again before shooting.
+**`three@selected`** is the `three` population with `j` pressed: `j` walks the needs-you queue, so it
+selects the session that has waited longest and opens its panel.
+
+It is the tenth golden and the first of a floor a user has done anything to. Every other capture
+photographs a floor nobody has touched, which is exactly why the re-plan defect above had survived —
+and why, without this one, the whole of WP-93's behaviour would have been outside the gate.
+
+Nine existing goldens moved, between **9,979 px** (`single`, 0.62%) and **28,645 px** (`demo`, 1.79%)
+of 1,600,000: two chairs gone from every reception, and everybody who was in them now sitting round
+the walls. `goldens:check` then reports all ten at **0 px**, `three@selected` included, so the
+keypress capture is as reproducible as the rest.
+
+What the reception reads as now, which is the acceptance: on `demo`, six waiting — two on the north
+run, two on the south, two on the east — and one empty chair at the manager's desk. On
+`three@selected`, Kobe (the longest wait, and the one opened) in the chair facing the manager with its
+panel open beside the floor, and Ravi still on the sofa.
+
+### 169.7 Tests
+
+**2277 tests, 2276 passing and the one platform skip that predates this package** (no POSIX uid on
+win32), up from 2272. `test/unit/occupancy.test.mjs` is rewritten around the new rule and carries
+five new tests: three waiting seated on the sofas in arrival order with the chair empty; the sofas
+filling before anybody stands, with the standing places inside the well and in queue order; opening a
+waiting session putting it in the chair and moving nobody else; closing the panel putting the floor
+back exactly; and opening a session that is not waiting moving nobody. The `INVARIANT:` test is
+§169.4's. `plan.test.mjs`'s three reception assertions are inverted — a seated waiting agent is on a
+SOFA now, and no waiting place is ever the visitor chair's point.
+
+### 169.8 Unverified
+
+The sofa pitch is inherited from WP-85b's measurement of the chair row and has not been re-measured
+against a run of six names on one axis; §153.8's statement stands unchanged, that these numbers are
+checked by picture at the sizes we have pictures of. The walk to the chair and back has been watched
+only under `prefers-reduced-motion`, where it is a teleport — the goldens are taken that way — so the
+route `planWalk` actually takes from a sofa to the desk, and whether it reads as somebody getting up
+and crossing the room, is unmeasured. And nothing here was run against a real machine with real
+sessions; the floor is a pure function of the snapshot, so the goldens are the measurement.

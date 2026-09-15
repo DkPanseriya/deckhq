@@ -250,9 +250,15 @@ Planters do the dividing between bays, which is what a planting budget is for.
 ### 3.7 Reception, lounge, corridors
 
 **The reception is a destination**: three zones down one room — the head (desk, manager, light pool,
-art), the waiting room (rug, three tub chairs facing the desk across it, sofa runs on three walls, a
-low table with something on it), and the threshold (doormat, screed band, swing arc). The middle
-stays clear, because the middle is where the queue forms (§5.1 rule 3).
+art, and **one** tub chair facing the desk across it), the waiting room (rug, sofa runs on three
+walls, a low table with something on it), and the threshold (doormat, screed band, swing arc). The
+middle stays clear, because the middle is where the standing queue forms.
+
+**Amended by WP-93** (`DEVIATIONS.md` §169), which is where the chair count moved: this line asked
+for three tub chairs and the waiting sat in them. The waiting sit on the **sofa runs** now, oldest
+wait nearest the desk, and the single chair belongs to whichever session the user has open — so the
+head of the room is the manager, his desk and the one person he is seeing, and the waiting room is
+the seating round the walls. `03-VISUAL-SPEC.md` §5.1 is the rule.
 
 **The lounge is four bays, not one field** — each with its own ground, centrepiece and light pool,
 divided by planter runs rather than walls.

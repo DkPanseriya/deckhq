@@ -65,11 +65,12 @@ test('placement: a desk is for live work, and everything else has its own zone',
   assert.equal(placement(agent({ live: false, activityState: 'ended' })), 'lounge');
 });
 
-test('placement is a pure function of the two states, so selecting moves nobody', () => {
-  // The owner asked for the waiting ones at his desk BY DEFAULT rather than
-  // for the one he happens to have open. There is nothing to read here that a
-  // selection could change: an agent with every extra field a panel might set
-  // lands in the same place as one with none.
+test('placement is a pure function of the two states, so selecting changes no zone', () => {
+  // WP-93 does let the session the user OPENS walk to the manager's desk — but
+  // that is a seat inside the office, decided by `assignSeats` from an explicit
+  // argument, and the zone is still the state's alone. There is nothing to read
+  // here that a selection could change: an agent with every extra field a panel
+  // might set lands in the same place as one with none.
   for (const activityState of ['working', 'stalled', 'needs_input', 'for_review', 'ended']) {
     const plain = agent({ activityState });
     const opened = {

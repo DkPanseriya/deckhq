@@ -230,11 +230,23 @@ export function juniorSpots(anchor, room, n) {
 /**
  * Assign every agent a seat/spot on the floor.
  * docs/03-VISUAL-SPEC.md §2, work order for `agents.js`.
+ *
+ * PURE, AND A FUNCTION OF TWO INPUTS (WP-93). The population, and the one
+ * session the user has open. Nothing else: no clock, no store, no observed
+ * event. `selectedId` is client state the user owns — it is never persisted,
+ * never written back, and cannot be set by a hook, a scan or a session ending
+ * — and all it does is move ONE waiting session from its sofa place to the
+ * visitor chair. Leave it out and the floor is exactly what the population
+ * alone says, which is what `buildPlan` already gives.
+ *
  * @param {Plan} plan
  * @param {AgentLike[]} agents
+ * @param {{selectedId?: string|null}} [opts] `selectedId`: the session whose
+ *   panel is open. A waiting one walks to the manager's desk; anybody else is
+ *   left exactly where their state puts them.
  * @returns {Map<string, PlacedSeat>}
  */
-export function assignSeats(plan, agents) {
+export function assignSeats(plan, agents, opts = {}) {
   /** @type {Map<string, PlacedSeat>} */
   const result = new Map();
   /** @type {Map<string, AgentLike[]>} */
@@ -289,9 +301,9 @@ export function assignSeats(plan, agents) {
     assignHashed(list, seats, result);
   }
 
-  // The manager's desk is a literal queue: the longest wait takes the seat
-  // nearest him and the rest follow, into the chairs first and then along the
-  // standing queue beside the desk. WP-78 widened it from `for_review` to both
+  // The reception is a literal queue: the longest wait takes the sofa place
+  // nearest the manager and the rest follow, along the runs and then into the
+  // standing line beside them. WP-78 widened it from `for_review` to both
   // waiting states, so the clock it reads is `waitingSince` rather than
   // `reviewSince` — a raised hand has its own.
   officeAgents.sort((a, b) => {
@@ -300,7 +312,17 @@ export function assignSeats(plan, agents) {
     return ra - rb || String(a.id).localeCompare(String(b.id));
   });
   const officeSeats = plan.officeSeats || [];
+  // THE ONE SESSION THAT LEAVES THE SOFA (WP-93). Its own sofa place is left
+  // EMPTY while it is at the desk rather than closed up behind it: opening a
+  // panel must move one person, and re-packing the queue would walk everybody
+  // who happened to be waiting longer than the one you opened.
+  const chair = plan.officeChair || null;
+  const selectedId = opts && opts.selectedId != null ? String(opts.selectedId) : null;
   officeAgents.forEach((agent, i) => {
+    if (chair && selectedId !== null && String(agent.id) === selectedId) {
+      result.set(agent.id, chair);
+      return;
+    }
     if (!officeSeats.length) return;
     if (i < officeSeats.length) {
       result.set(agent.id, officeSeats[i]);
