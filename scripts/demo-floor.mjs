@@ -69,7 +69,13 @@ import {
   STATE_DIR,
   THEME,
 } from './demo-args.mjs';
-import { JUNIORS, PINNED_PROJECTS, SESSIONS, JUNIOR_PARENT } from './demo-populations.mjs';
+import {
+  DEMO_TOOLS,
+  JUNIORS,
+  PINNED_PROJECTS,
+  SESSIONS,
+  JUNIOR_PARENT,
+} from './demo-populations.mjs';
 import { projectIdFromCwd } from '../src/core/model.mjs';
 import {
   fakeId,
@@ -335,6 +341,23 @@ for (const s of built) {
 for (const s of built) {
   if (s.state === 'needs_input') await hook(s, 'Notification');
   if (s.state === 'stalled') await hook(s, 'UserPromptSubmit'); // starts the stall clock
+}
+
+// WP-81. What the working sessions are RUNNING, so the room plate's second
+// line has something true on it in a photograph. A real `PreToolUse`, in the
+// real Claude Code payload shape, summarised by the real adapter — and last,
+// because `PostToolUse` and a turn boundary both clear `currentTool` and the
+// events above are turn boundaries.
+for (const s of built) {
+  const tool = DEMO_TOOLS[s.title];
+  if (!tool || s.state !== 'working') continue;
+  await postHook(port, {
+    session_id: s.id,
+    cwd: s.cwd,
+    hook_event_name: 'PreToolUse',
+    runtime: 'claude-code',
+    ...tool,
+  });
 }
 
 const stallSeconds = 2 * 60;

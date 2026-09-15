@@ -12,11 +12,14 @@
  * floor: a repo nobody is in is now a line in a popover the user opens, so it
  * costs no floor at all and this module builds one kind of thing.
  *
- * The two plate-line formatters live here because this is the only place that
- * writes a plate. `plan.js` re-exports both.
+ * WHAT A PLATE SAYS IS NOT HERE. It was, while it was two lines; WP-81 made it
+ * four and the copy moved to `plan-plate.js`, which is pure words over a
+ * project row and is read by the live plate (`scene-labels.js`) as well as by
+ * this file's fallback `plateLines`. `plan.js` re-exports it.
  */
 
 import { tableBlockSize, tableSize, tableSizesFor, translateContents } from './plan-anchors.js';
+import { plateHeroLine, plateTertiaryLine } from './plan-plate.js';
 import { boundsOf, flowBlocks } from './plan-packing.js';
 import {
   CHAIR,
@@ -65,91 +68,6 @@ import {
 /** @typedef {import('./plan-units.js').Wall} Wall */
 /** @typedef {import('./plan-units.js').Room} Room */
 /** @typedef {import('./plan-units.js').Seat} Seat */
-
-/**
- * Compact token formatting, e.g. `2200000 -> '2.2M'`.
- * @param {number} n
- */
-export function formatTokens(n) {
-  const v = Number(n) || 0;
-  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `${Math.round(v / 1000)}k`;
-  return `${Math.round(v)}`;
-}
-
-/**
- * The room plate's payroll line (WP-26), or `''` when there is nothing
- * honest to put on it.
- *
- * Three rules, and the third is the one that matters:
- *
- *   1. **Quiet.** It is the third line on a door plate, under the name and the
- *      session count. It is context for a room, not a headline.
- *   2. **Dated by its own words.** `today` when the ledger has the day's token
- *      deltas for this project; `to date` when it does not and the line is the
- *      session totals falling back (`todaySpendFor` in
- *      `src/core/state-machine.mjs`). The plate never says "today" about a
- *      number that is not today's.
- *   3. **It says what kind of number it is.** `list price` is not decoration:
- *      `08` §1.1 rule 7 is that cost is an estimate and never a bill, and a
- *      currency figure on a wall with no qualifier beside it reads as a bill.
- *      A project nothing in the rate card can price gets NO LINE at all rather
- *      than `$0.00` — see `src/core/rates.mjs`.
- *
- * @param {{todaySpend?:number|null, todaySpendIsToday?:boolean}} project
- * @returns {string}
- */
-export function payrollLine(project) {
-  const usd = project ? project.todaySpend : null;
-  if (usd == null || !Number.isFinite(Number(usd))) return '';
-  const amount = `≈ $${Number(usd).toFixed(2)}`;
-  return project.todaySpendIsToday
-    ? `today ${amount} · list price`
-    : `${amount} to date · list price`;
-}
-
-/**
- * The room plate's third line when cost is off, which is how it ships (WP-83).
- *
- * TOKENS, NOT MONEY, and the same three rules the payroll line keeps:
- *
- *   1. **Quiet.** Still the third line on a door plate, still context.
- *   2. **Dated by its own words.** `today` when the ledger has the day's token
- *      deltas for this room — `Ledger.todayTokens`, folded per project by
- *      `todayTokensFor` in `src/core/state-machine-rules.mjs` — and `to date`
- *      when it does not and this is the room's lifetime total falling back.
- *      The plate never says "today" about a number that is not today's.
- *   3. **It says nothing rather than something it cannot measure.** A room
- *      with no token figure at all gets no line, exactly as an unpriceable
- *      room got none before.
- *
- * **`with cache` is not decoration either.** The data line above this one is
- * `project.tokens`, which is input plus output and nothing else; this line is
- * that plus the cache traffic, which on a real room is an order of magnitude
- * larger. Two token figures on one plate that count different things, with
- * only one of them saying so, is a plate that looks wrong to anybody who adds
- * them up — and the bigger of the two is the one that needed the qualifier.
- *
- * Short on purpose: WP-81 reworks the plate and will set the type; this is the
- * data line it will be given. Kept in the same file as `payrollLine` because
- * the two are alternatives for one slot and the choice between them is one
- * setting read in one place (`plateLinesFor` in `scene-labels.js`).
- *
- * @param {{todayTokens?:number|null, todayTokensIsToday?:boolean, tokens?:number,
- *          cacheTokens?:number}} project
- * @returns {string}
- */
-export function tokenLine(project) {
-  const today = project ? project.todayTokens : null;
-  if (today != null && Number.isFinite(Number(today)) && Number(today) > 0) {
-    return project.todayTokensIsToday
-      ? `today ${formatTokens(Number(today))} tok · with cache`
-      : `${formatTokens(Number(today))} tok to date · with cache`;
-  }
-  const lifetime = (Number(project?.tokens) || 0) + (Number(project?.cacheTokens) || 0);
-  if (lifetime <= 0) return '';
-  return `${formatTokens(lifetime)} tok to date · with cache`;
-}
 
 // ------------------------------------------------------------ a pinned room
 
@@ -267,7 +185,14 @@ export function buildPinnedRoom(project, cell) {
       // The badge. A word rather than a pill, because a plate is live text on
       // the floor (CONTRACTS-WP15.md §3) and a second painted object over a
       // room this small would be drawn through its own name.
+      //
+      // WP-81 moved the session count off every OTHER project plate and on to
+      // the plate's tooltip, and left it here: on a pinned room it is the only
+      // fact there is. Nothing is running, so there is no "need you", no
+      // "working" and no doing line — the room's whole claim on the floor is
+      // that the user asked for it, and how big the repo it stands for is.
       `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
+      '',
       '',
     ],
     props,
@@ -348,7 +273,6 @@ export function layPinnedStrip(projects, rect, perRow, areaCap) {
 export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = undefined) {
   const id = String(project.id ?? project.projectId ?? 'unknown');
   const name = String(project.name ?? project.projectName ?? id);
-  const sessionCount = project.sessionCount ?? deskCount;
 
   /** @type {Prop[]} */
   const props = [];
@@ -834,13 +758,13 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
     natural: { w: naturalW, h: naturalH },
     walls: 'partial',
     floor: 'carpet',
-    plateLines: [
-      name,
-      `${sessionCount} session${sessionCount === 1 ? '' : 's'} · ${formatTokens(project.tokens || 0)} tok · ${project.needsYou || 0} need you`,
-      // WP-26's payroll meter. Third and quietest; `''` when the room has no
-      // priceable model, which is what keeps an invented `$0.00` off the wall.
-      payrollLine(project),
-    ],
+    // WP-81's four slots, and the plan's own copy of them. A live plate is
+    // recomputed from the snapshot every poll (`platePlanFor`); this is the
+    // fallback for a room the snapshot has nothing to say about, so it carries
+    // the two lines a project ROW alone can prove — the hero and the spend —
+    // and leaves the "doing" slot empty, because who is running what is a fact
+    // about AGENTS and the plan is not handed any.
+    plateLines: [name, plateHeroLine(project), '', plateTertiaryLine(project, false)],
     props,
     zones,
   };

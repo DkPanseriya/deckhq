@@ -677,8 +677,33 @@ gradient. `docs/DEVIATIONS.md` §149.
 
 ## 7. Labels and chrome
 
-- **Room plates:** a small rounded white card at the room's top-left with the room name and one
-  line of live data (`21 sessions · 2.2M tokens · 3 need you`). Never covers furniture.
+- **Room plates (WP-81):** live text at the room's top-left — **no card, no fill** (`00-REQUIREMENTS`
+  R-082), lifted off the floor's pattern by a `plateHalo` stroke that is the theme's own **wall**, so
+  nothing on a plate is brighter than the brightest surface a room is allowed. **Four ranks, largest
+  first, and the room's own name is the second of them:**
+
+  | rank | size / face | ink | says |
+  |---|---|---|---|
+  | hero | 14 px mono 700 | `plateInk` | `● 2 need you · oldest 1d 2h` — or `3 working`, or `quiet` |
+  | title | 12.5 px sans 700 | `plateInkSecondary` | the room's name |
+  | doing | 11 px sans 600 | `plateInkSecondary` | `Elif · Bash npm test`, at most two entries |
+  | spend | 11 px mono 600 | `plateInkTertiary` | `today 5.8M tok · with cache`, the cost after it only with `showCost` |
+
+  The **hero outranks the name** because the name says which room and the hero says whether to get
+  up. It is never a zero: a room holding nobody up says what it *is* doing instead. Its state colour
+  is a **dot** and never the type — the state palette is mid-tone and cannot clear 4.5:1 as text on
+  both a light and a dark plate — so the dot is held to 3:1, the words beside it carry the same fact
+  at 4.5:1, and colour is never the only channel (the header's own rule, `style.css`).
+
+  Nothing is estimated: every figure traces to a ledger record, a registry counter or a transcript
+  field, and a plate with no figure says `no data`. The session count and the room's lifetime tokens
+  are on the plate's **hover**, not its face — they are the size of a room, not the state of it.
+
+  **Never covers furniture, and never the `+`.** The plate lives inside `PLATE_BAND` (3.4 U), which
+  the plan keeps furniture-free by construction, and stops short of `PLUS_CLEAR_U` at the band's east
+  end where the in-room `+` stands. Where the band cannot hold four ranks it drops them from the
+  bottom — spend, then doing — and a plate too narrow for its hero drops the `· oldest …` tail rather
+  than cutting a number. All four appear at ≥ 15.9 px per unit.
 - **Waiting badge:** for `for_review` agents only, a crimson pill above the head with elapsed time
   (`2d 4h`). This is the number that makes debt visible. Badges that would overlap are replaced by
   one pill at the start of the run; the waiting area's own pitch is set so that a name label and a

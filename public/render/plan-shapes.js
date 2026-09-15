@@ -127,10 +127,13 @@ export {};
  * @property {number} w
  * @property {number} h
  * @property {'full'|'partial'} walls
- * @property {[string, string]|[string, string, string]} plateLines
- *   Name, one data line, and — project rooms only, WP-26 — a quiet payroll
- *   line. The third is `''` when there is nothing honest to put there, and a
- *   renderer that only knows about two lines is correct to ignore it.
+ * @property {[string, string]|[string, string, string]|[string, string, string, string]} plateLines
+ *   WP-81's four ranked slots: the room's name, the one line that might make
+ *   somebody move (`2 need you · oldest 1d 2h`), what the room is doing right
+ *   now, and what it has spent. Any slot after the first may be `''`, which
+ *   `_drawRoomPlate` draws nothing for and closes the gap under. A room that
+ *   owns fewer ranks — the office, the lounge, the archive — carries two, and
+ *   a renderer that only knows about two lines is correct to ignore the rest.
  * @property {Prop[]} props
  * @property {Zone[]} zones
  * @property {'wood'|'carpet'|'tile'|'circulation'} floor

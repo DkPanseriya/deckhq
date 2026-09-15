@@ -265,6 +265,25 @@ export class Scene extends SceneInput {
   }
 
   /**
+   * WP-81. What one room's plate no longer prints, for the hover.
+   *
+   * The session count, the juniors and the room's lifetime tokens: the size of
+   * a room rather than the state of it. `_plateRects` carries the string
+   * because it was built in the same pass that decided what the plate had room
+   * to say, so the hover and the plate can never disagree about which facts
+   * went where. `''` for a room with no plate drawn this frame, which is what
+   * `app-floor.js` reads as "take the title attribute off".
+   * @param {string} id a project room's id
+   * @returns {string}
+   */
+  plateTooltipFor(id) {
+    for (const plate of this._plateRects) {
+      if (plate.id === id && plate.kind === 'project') return plate.tooltip || '';
+    }
+    return '';
+  }
+
+  /**
    * Summarise the floor for the canvas `aria-label` / the off-screen live
    * region app.js owns. docs/03-VISUAL-SPEC.md §10.
    * @param {{projects?: any[], counts?: Record<string, number>}} snapshot

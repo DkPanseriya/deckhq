@@ -49,6 +49,7 @@ import { assignSeats, derivePlacement, JUNIOR_OFFSET } from '../../public/render
 import {
   characterScaleFor,
   plateLinesFor,
+  platePlanFor,
   CHAR_MIN_PX_PER_UNIT,
   JUNIOR_SCALE,
 } from '../../public/render/scene.js';
@@ -1053,6 +1054,11 @@ test('a junior whose parent is not on the floor is not drawn at all', () => {
 // ---------------------------------------------------------------------------
 
 test('the room plate counts the juniors, apart from the sessions', () => {
+  // WP-81 moved BOTH counts off the plate's face and on to its hover: they say
+  // how big a room is, and nobody has ever got up because a room held four
+  // sessions. What the plate itself says is whether anybody is waiting. The
+  // rule this test is really about is unchanged — a junior is never folded
+  // into `sessionCount`, because the user did not start it and cannot bench it.
   const room = {
     kind: 'project',
     id: 'p',
@@ -1067,15 +1073,23 @@ test('the room plate counts the juniors, apart from the sessions', () => {
     juniors: 2,
     costRated: false,
   };
-  const [, line] = plateLinesFor(room, { projects: [project] });
-  assert.match(line, /^4 sessions · \+2 juniors · /);
-  const [, one] = plateLinesFor(room, { projects: [{ ...project, juniors: 1 }] });
-  assert.match(one, /\+1 junior · /);
-  const [, none] = plateLinesFor(room, { projects: [{ ...project, juniors: 0 }] });
-  assert.equal(none.includes('junior'), false, 'a room with none says nothing about them');
+  const tipFor = (p) => platePlanFor(room, { projects: [p] }).tooltip;
+  assert.match(tipFor(project), /^design-system · 4 sessions · \+2 juniors · /);
+  assert.match(tipFor({ ...project, juniors: 1 }), /\+1 junior · /);
+  assert.equal(
+    tipFor({ ...project, juniors: 0 }).includes('junior'),
+    false,
+    'a room with none says nothing about them',
+  );
   // A snapshot from a daemon that predates this package has no `juniors` key.
-  const [, old] = plateLinesFor(room, { projects: [{ ...project, juniors: undefined }] });
-  assert.equal(old.includes('junior'), false);
+  assert.equal(tipFor({ ...project, juniors: undefined }).includes('junior'), false);
+  // And the plate's face carries neither count.
+  assert.equal(
+    plateLinesFor(room, { projects: [project] })
+      .join(' ')
+      .includes('session'),
+    false,
+  );
 });
 
 test('a junior is drawn smaller than its parent, but never below the legibility floor', () => {

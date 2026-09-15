@@ -267,6 +267,26 @@ export function pooled(ground, lightInk) {
 }
 
 /**
+ * The opaque colour a room plate's letters are actually read against (WP-81).
+ *
+ * Not the floor: `_drawRoomPlate` strokes `plateHalo` behind every glyph at
+ * 0.92 alpha, so the surface under the ink is the halo composited over the lit
+ * ground. Stated once, here, so the guard below and `interior.test.mjs` measure
+ * the same pixel the renderer paints.
+ *
+ * @param {Record<string,string>} floor a theme's eleven floor keys
+ * @param {string} ground the ground the room stands on
+ */
+export function plateGroundOver(floor, ground) {
+  const lightInk = lightInkFor(floor.ink);
+  const haloBase = lightInk ? shade(floor.ground, -0.55) : floor.wall;
+  return mix(pooled(ground, lightInk), haloBase, PLATE_HALO_ALPHA);
+}
+
+/** How opaque the halo behind a plate's letterforms is. */
+export const PLATE_HALO_ALPHA = 0.92;
+
+/**
  * Which of the two devices a theme uses, everywhere the answer is needed: light
  * line work means a dark floor. One expression, so the derivation, the halo and
  * the guards cannot each decide for themselves what "a dark theme" is.
@@ -454,8 +474,14 @@ export function materialTokensFor(theme) {
   // halo behind a room plate has to go the OTHER way from the ink or the
   // letterforms vanish into it — which is exactly what a near-white halo
   // would have done to blueprint's white plate text.
+  // WP-81: on a light theme the halo IS THE WALL, not a hard-coded `#FCFAF4`
+  // that was brighter than every wall in the product. §1.2 is that the wall is
+  // the top of a room's value range; a halo above it spent the floor's last
+  // contrast on signage, and it was the one surface `underWall` did not hold.
+  // A dark theme keeps the far side of the ground, because there the halo has
+  // to go DOWN from light ink and the wall is the wrong direction entirely.
   const lightInk = lightInkFor(ink);
-  const haloBase = lightInk ? shade(ground, -0.55) : '#FCFAF4';
+  const haloBase = lightInk ? shade(ground, -0.55) : wall;
 
   // Everything a room is furnished in, held under the wall by `underWall`
   // (WP-85a §1.2). Named up here rather than inline because the highlights
@@ -636,9 +662,14 @@ export function materialTokensFor(theme) {
     inkWarm: ink,
     inkCool: shade(ink, lightInk ? -0.08 : 0.08),
     inkSoft: lightInk ? shade(ink, -0.32) : shade(ink, 0.32),
-    plateHalo: alpha(haloBase, 0.92),
+    plateHalo: alpha(haloBase, PLATE_HALO_ALPHA),
     plateInk: ink,
     plateInkSecondary: lightInk ? shade(ink, -0.12) : shade(ink, 0.12),
+    // WP-81's fourth rank: the spend line, quieter again than the room's own
+    // name. `±0.24` is the last step that still clears 4.5:1 on every ground
+    // this floor draws a plate on, measured in `interior.test.mjs` rather than
+    // chosen — `±0.30` clears the bare grounds and fails under a pool of light.
+    plateInkTertiary: lightInk ? shade(ink, -0.24) : shade(ink, 0.24),
     plusRest: alpha(ink, 0.55),
     plusHover: ink,
     plusHoverHalo: alpha(ink, lightInk ? 0.16 : 0.1),
@@ -983,6 +1014,32 @@ export function assertThemeContrast(theme) {
   const derived = materialTokensFor({ floor });
   for (const key of ['rugSage', 'rugCream', 'deskTop', 'chairFill', 'sofaFill']) {
     need(contrastRatio(floor.ink, derived[key]), 4.5, `floor ink on the derived ${key}`);
+  }
+
+  // AND EVERY RANK OF PLATE TEXT, ON THE HALO IT IS ACTUALLY READ ON (WP-81).
+  //
+  // A plate is now four ranks — hero, name, doing, spend — each a step quieter
+  // than the last, and "quieter" is a contrast budget being spent. The backdrop
+  // is not the bare floor either: `plateHalo` is stroked behind the glyphs at
+  // 0.92, so what a reader sees a plate's letters against is the halo
+  // COMPOSITED over whichever ground the room stands on, under a pool of light.
+  // That composite is the only honest surface to measure, and the quietest ink
+  // on the darkest of them is the number that decides whether the fourth rank
+  // exists at all.
+  for (const key of GROUND_KEYS) {
+    const behind = plateGroundOver(floor, floor[key]);
+    for (const rank of ['plateInk', 'plateInkSecondary', 'plateInkTertiary']) {
+      need(contrastRatio(derived[rank], behind), 4.5, `${rank} on a plate over the ${key}`);
+    }
+    // The hero's state dot is a GRAPHIC, not text, and is held to 3:1 like
+    // every other non-text signal on this floor. It could not be held to 4.5
+    // and stay the state colour: the palette is mid-tone by design (§1.3), so
+    // an ink that cleared 4.5 on both a light and a dark plate would no longer
+    // be `for_review` crimson or `needs_input` amber. The words beside it carry
+    // the same fact at 4.5:1, which is why colour is never alone here.
+    for (const state of ['working', 'needs_input', 'stalled', 'for_review']) {
+      need(contrastRatio(STATE_COLORS[state], behind), 3, `the ${state} plate dot on the ${key}`);
+    }
   }
 
   // THE BOARD STAYS INSIDE ONE VALUE PLATEAU (WP-85a §3.2).
