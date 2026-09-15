@@ -18924,3 +18924,138 @@ largest formation and no more, which is the honest limit of pricing a shape with
 crossing; nobody has played it.
 
 **The Linux golden set does not have `crew` or `crew@reduced`**, and still owes §175.9's rebakes.
+
+## 179. WP-91 — the invariant is held in fifty-four tests, and two of the gates that hold it are looking at the wrong files
+
+**Date:** 16 September 2026 · **Package:** WP-91 · **Audit:**
+`docs/plan/13-ARCHITECTURE-AUDIT.md` · **Map:** `docs/plan/13-audit-map.json` · **Opens:** WP-92a–o
+
+The owner, 16 September: _"analyses, evaluates, scrutinises and optimises the architecture of the
+complete product, to make it clean, bug-free, extendable, modular… the product is finally working
+well, no major overhaul."_
+
+This package is the analysis and nothing else. **Not one line under `src/`, `public/`, `test/` or
+`scripts/` was changed.** The suite was run once — 2,437 tests, 2,436 passing, one platform skip,
+14.8 s — and the static analysis was written into a scratch directory rather than into the tree.
+
+### 179.1 What the graph says
+
+Every `import`, `export … from`, dynamic `import()` and `require()` under `src/`, `public/`, `bin/`,
+`scripts/`, `test/`, `site/`, `vscode/` and `plugin/`, extracted after stripping comments so a JSDoc
+`import('./x.js')` is not counted as an edge. **282 non-test modules, 143 test files, 731 value
+edges.**
+
+| |  |
+| --- | --- |
+| `public/` → `src/` imports | **0** |
+| `src/` → `public/` imports | **14**, every one licensed by §122 and documented in its own file header |
+| cycles | **3**, all inside one directory, none across a layer |
+| non-test files over the 900-line ceiling | **8** |
+| files the ceiling's own test checks | **129** of 282 |
+| Node-side lines reachable from a test | **100%** |
+
+The comment-stripping is load-bearing and is worth recording, because the first pass reported a
+thirteen-module cycle through `plan*.js` that does not exist: `plan-units.js` carries
+`import('./plan-units.js').Room` in a `@typedef`, and a scanner that reads comments calls that a
+self-edge. The three real cycles are `src/cli/{app,pin,shortcut}.mjs` — three commands that each
+offer the next — `public/deck.js` against `usage.js`, and `public/settings-ui.js` against
+`settings-ui-rates.js`, which is §131's shape-3 `wire()` and is documented. None can deadlock:
+nothing in any of them reads an imported binding at module-evaluation time. All three are
+readability debt.
+
+### 179.2 The two defects, and both of them are gates
+
+**The Linux goldens gate has been red for a reason that is not a pixel.** `test/goldens/linux/`
+holds six PNGs; `CAPTURES` defines sixteen. `scripts/goldens.mjs:733` decides that a missing golden
+is a SKIP when the platform has no set at all and a FAILURE when it has one — _"a hole in an
+existing set"_ — so the ten captures added since the first Linux set landed (`crew`,
+`crew@reduced`, `demo@motion`, `demo@small`, `look`, `pinned`, `three`, `three@large`,
+`three@selected`, `wide`) are ten failures and `process.exit(1)` on `ubuntu-latest`, on every push
+to `main` and every pull request.
+
+That rule was right when it was written: a hole in a _complete_ set means somebody added a capture
+and forgot to bake it. What it did not anticipate is a set that is complete on one platform and
+partway through being built on another, which is the state §87 and §114 left Linux in on purpose,
+and which §178's own last line says is still owed. The effect is the thing §87 argued hardest
+against, in its own words — _"a red build on a missing browser teaches people to ignore the gate"_ —
+reached by a different road.
+
+**The 900-line ceiling checks the files that have already been split, and nothing else.**
+`test/unit/model.test.mjs:300` walks eighteen prefix groups — `public/render/plan*`, `public/app*`,
+`src/core/state-machine*` and fifteen more — and checks 129 files. Every one passes, three of them
+at 898. The eight files that are over the ceiling are `render/themes.js` (1,430), `site/build.mjs`
+(1,324), `core/store.mjs` (1,230), `public/deck.js` (1,113), `scripts/goldens.mjs` (1,054),
+`claude-code/parse.mjs` (978), `codex/adapter.mjs` (939) and `render/clips.js` (903), and **not one
+of them is in a group.** There is no exemption table anywhere in the repository, so "`themes.js` is
+exempt at 1,429" was never a decision — it is a file that was never in a glob. §131 closed with a
+table of the ten files still over the ceiling and the discipline of naming them; that table was not
+carried into the test, and the gate now cannot see the largest non-test file in the tree.
+
+Neither defect is in the product. Both are in the machinery that is supposed to notice when the
+product breaks, which is why they lead the list.
+
+### 179.3 The invariant, measured rather than asserted
+
+`activityState` is observed and `ackState` is the user's, and the code holds it. **54 named
+`INVARIANT:` tests across 28 files**, and the structure behind them is what makes the claim
+checkable: `act()` is the only method that may move a user-owned field and it lives in
+`state-machine.mjs` beside the header that states the rule; `_markForReview` and `_markNeedsInput`
+are strictly set-only-if-unset; `_noteLedger` runs last, on plain values, inside a `try`, and
+`ledger-invariant.test.mjs` drives the same script through two registries and diffs both; and
+`placement()` has exactly one copy in the tree, on the side of the static-file boundary that both
+halves can reach.
+
+Eighteen invariants are registered in the audit's §2 with the test or gate that holds each. Two are
+held by a hand-maintained file list that has fallen behind the tree — the draw-path clock guard
+names six of 58 render modules, the ceiling names 129 of 282 — and **neither is breached today**:
+every `public/render/*.js` was scanned, and the only `Date.now()` or `performance.now()` anywhere in
+the renderer is `scene-agent.js:47`, which is `frameMs()`'s documented fallback. The counter-example
+worth copying is `agent-size.test.mjs`, which enumerates every number the seven dimension modules
+export and fails on one that is in neither the `body` nor the `building` list, so a package that
+adds a dimension cannot ship without deciding which side of the law it is on. §177.1 called that
+_"the only way a law like this survives its own author"_, and it is right.
+
+### 179.4 The extension points, and the one that is not one
+
+Adding a runtime touches **two files outside its own directory**, and that is measured rather than
+claimed: `opencode` appears outside `src/adapters/` in exactly two places, both of them in
+`model.mjs` — the `RuntimeId` union and one documentation table. `ADAPTERS.md` §8's checklist is
+honest. A Look option touches two files, because the option tables _are_ the allowlist and
+`LOOK_OPTION_COUNT` is computed from them. A dimension constant touches one, and is refused if it is
+undeclared.
+
+Adding an activity state touches **47 files**. There is no single enumeration of the six states with
+their colour, clip, icon, placement, label, sound and sort rank; there are seven parallel tables in
+seven modules, each correct and each independently editable. This is recorded as a fact about the
+architecture rather than as a finding, because the six-state model _is_ the product and is not going
+to grow a seventh — but a reader who assumed the states were as extensible as the runtimes would be
+wrong by a factor of twenty.
+
+### 179.5 The coverage hole, and where §143's bug lived
+
+Measured as transitive reachability from a test file's imports rather than as a count of test files:
+**every line of `src/` is reachable from a test** — core, adapters, cli, http, state-machine,
+studio, ledger, identity and the daemon all at 100% — and `public/render/` is at 99%, the one
+unreached module being `plan-shapes.js`, which is `export {}` and types only.
+
+The hole is the application shell. Eighteen `public/app*.js` and `look-ui*.js` modules, about 4,500
+lines, are imported by no test, because they touch `document` at module scope. Twelve are at least
+read as _text_ by a static gate; `app.js` by twelve different test files. **Seven are neither
+executed nor read by anything**: `app-dialogs.js`, `app-cards.js`, `app-launchers.js`,
+`app-look.js`, `app-snapshot.js`, `app-floor.js` and `look-ui-pictures.js`. §143's tab-closing
+`close()` lived in exactly this region, and that entry already says what it cost: _"Nothing in the
+toolchain could have caught it as written."_ It still could not.
+
+### 179.6 What the audit refused to do
+
+- **Nothing was profiled.** A-05 says the registry serialises the whole agent list to detect change
+  and then builds a snapshot for nobody; that is a claim about work done, not about milliseconds,
+  and WP-92h must measure before it optimises anything past the subscriber guard. §162.10's and
+  §178's admissions stand: nobody has run this on a machine with a hundred agents.
+- **No move was proposed that changes behaviour without an owner question behind it.** §13 item 26
+  carries six, each with a default, and the WP-92 sequence is buildable on the defaults alone.
+- **No rewrite.** `plan.js`, `scene.js`, `rig.js`, `backdrop.js` and `agents.js` keep their shapes
+  and their seams. The three splits in the sequence are §131's shape 1 — whole declarations move,
+  doc comments with them, and the only edit inside one is `export` on its first line — proved by
+  §131's own three checks and 0 px on sixteen goldens after every commit.
+- **The site, the VS Code extension and the plugin were mapped but not audited in depth.**
