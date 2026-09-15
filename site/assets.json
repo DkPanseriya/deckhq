@@ -150,10 +150,10 @@
       "fps": 25,
       "seconds": 4,
       "crop": {
-        "x": 0,
-        "y": 136,
-        "w": 1600,
-        "h": 700
+        "x": 4,
+        "y": 196,
+        "w": 1592,
+        "h": 750
       },
       "width": 1100,
       "note": "the whole floor with every animation running"
@@ -201,10 +201,10 @@
       "fps": 25,
       "seconds": 5,
       "crop": {
-        "x": 0,
-        "y": 136,
+        "x": 4,
+        "y": 196,
         "w": 800,
-        "h": 460
+        "h": 420
       },
       "width": 800,
       "note": "an agent finishes, walks to Your Office and puts its hand up"

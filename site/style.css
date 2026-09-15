@@ -1088,8 +1088,16 @@ figcaption {
   max-width: none;
 }
 
+/* WP-94b: never enlarged. The pictures are crops now, and they are not all the
+   same shape — a queue strip is 1100 x 49 and a room plate is 480 x 760. A
+   narrow one is drawn at the size it was taken and centred; only a picture
+   wider than the column is scaled, and only down. */
 .band-shot img {
-  width: 100%;
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
 }

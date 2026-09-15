@@ -609,6 +609,28 @@ test('WEIGHT: no page costs more than its budget, read to the bottom', async () 
   }
 });
 
+test('MOTION: every GIF the site serves actually moves', () => {
+  // A GIF with one frame is a PNG that costs more, and it is what a capture
+  // pipeline produces when the floor was not animating — which is the failure
+  // mode worth a gate, because it looks right in a screenshot. Counting frames
+  // means counting graphic control extensions: `21 F9 04`, the four-byte block
+  // that carries each frame's delay.
+  let checked = 0;
+  for (const file of walk(path.join(out, 'media'), ['.gif'])) {
+    const bytes = fs.readFileSync(file);
+    let frames = 0;
+    for (let i = 0; i + 3 < bytes.length; i++) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) frames++;
+    }
+    checked++;
+    assert.ok(
+      frames > 1,
+      `media/${path.relative(path.join(out, 'media'), file)} has ${frames} frame(s)`,
+    );
+  }
+  assert.ok(checked > 0, 'expected the site to carry an animation');
+});
+
 test('WEIGHT: every picture below the fold is lazy, on every page', () => {
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
