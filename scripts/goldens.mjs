@@ -11,9 +11,13 @@
  *   npm run goldens          # regenerate test/goldens/<platform>/*.png
  *   npm run goldens:check    # compare, write diffs to test/goldens/.out/, exit 1 on a mismatch
  *
- *   node scripts/goldens.mjs [--check] [--only NAME] [--theme NAME] [--settle MS]
- *                            [--stage WxH] [--keep] [--verbose]
+ *   node scripts/goldens.mjs [--check] [--strict] [--only NAME] [--theme NAME]
+ *                            [--settle MS] [--stage WxH] [--keep] [--verbose]
  *                            [--deadline S] [--budget S]
+ *
+ * `--strict` says this platform's set is meant to be COMPLETE, so a capture
+ * with no golden yet exits non-zero instead of being reported as not yet baked.
+ * See `scripts/lib/goldens-gate.mjs` for the three outcomes and DEVIATIONS §180.
  *
  * `--stage 1920x1080` photographs the floor on a window other than the one the
  * committed goldens were taken in (WP-59). The capture lands in
@@ -61,7 +65,10 @@
  *   serve both. `test/goldens/<process.platform>/` holds one set each; a
  *   platform without a set is reported and skipped, never failed, and its
  *   fresh captures are left in `test/goldens/.out/` so CI can hand them back as
- *   an artifact to be committed.
+ *   an artifact to be committed. A platform with a PARTIAL set is the same
+ *   thing per capture rather than per platform: the ones with a golden are
+ *   compared, the ones without are reported NOT YET BAKED, and only a real
+ *   disagreement is red (§180).
  *
  * TOLERANCE, AND THE NOISE IT WAS MEASURED AGAINST
  *   A pixel differs when any channel moves by more than CHANNEL_TOLERANCE;
@@ -102,6 +109,7 @@ import { fileURLToPath } from 'node:url';
 import { CHROME_UNAVAILABLE, findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
 import { THEME_NAMES } from '../src/core/themes.mjs';
 import { DEMO_EPOCH } from './demo-args.mjs';
+import { decide } from './lib/goldens-gate.mjs';
 import { decodePng, diffImages, encodePng } from './lib/png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -114,6 +122,13 @@ const opt = (name, fallback) => {
 };
 
 const CHECK = has('--check');
+/**
+ * This platform's set is meant to be complete: a capture with no golden yet
+ * exits non-zero instead of reading NOT YET BAKED. Off by default, because the
+ * linux set is 6 of 16 and a gate that is red for a non-pixel reason is a gate
+ * nobody reads (§180, audit A-01). The bake package turns it on.
+ */
+const STRICT = has('--strict');
 const ONLY = opt('--only', '');
 /** Capture only this theme's set. `--theme night-shift` or `--theme "night shift"`. */
 const THEME = opt('--theme', '');
@@ -720,11 +735,13 @@ async function captureStill(client) {
  * Compare one capture against its golden; write the actual and a diff image
  * to OUT_DIR when they disagree.
  *
- * `compared` is false when there was no golden to compare against, so the
- * summary can say SKIPPED instead of claiming everything matched.
+ * Three outcomes, and `scripts/lib/goldens-gate.mjs` holds what they mean:
+ * `match`, `missing` (no golden for this capture on this platform yet — NOT
+ * YET BAKED, never a failure, §180) and `fail` (a golden exists and the
+ * picture disagrees with it, which is the only red this gate has).
  * @param {string} name
  * @param {Buffer} actualPng
- * @returns {{ok:boolean, compared:boolean, detail:string}}
+ * @returns {{outcome:import('./lib/goldens-gate.mjs').Outcome, detail:string}}
  */
 function check(name, actualPng) {
   const goldenFile = path.join(GOLDENS_DIR, `${name}.png`);
@@ -732,15 +749,14 @@ function check(name, actualPng) {
   const actualFile = path.join(OUT_DIR, `${name}.actual.png`);
 
   if (!fs.existsSync(goldenFile)) {
+    // A hole in a partial set is the same thing as an empty set, one capture
+    // at a time: nothing has been proved about the floor, so nothing is red.
+    // The picture goes to OUT_DIR, which is the artifact CI uploads, which is
+    // how the golden gets baked and committed.
     fs.writeFileSync(actualFile, actualPng);
-    const platformHasSet = fs.existsSync(GOLDENS_DIR);
     return {
-      // No set at all for this platform is a skip; a hole in an existing set is a failure.
-      ok: !platformHasSet,
-      compared: false,
-      detail: platformHasSet
-        ? `no golden at ${rel(goldenFile)} — run \`npm run goldens\` and commit it`
-        : `no ${process.platform} goldens; capture left at ${rel(actualFile)}`,
+      outcome: 'missing',
+      detail: `not yet baked on ${process.platform} — run \`npm run goldens\` and commit ${rel(goldenFile)}; capture left at ${rel(actualFile)}`,
     };
   }
 
@@ -756,8 +772,7 @@ function check(name, actualPng) {
   if (result.sizeMismatch) {
     fs.writeFileSync(actualFile, actualPng);
     return {
-      ok: false,
-      compared: true,
+      outcome: 'fail',
       detail: `size ${actual.width}x${actual.height}, golden is ${expected.width}x${expected.height}`,
     };
   }
@@ -766,14 +781,12 @@ function check(name, actualPng) {
     fs.writeFileSync(actualFile, actualPng);
     fs.writeFileSync(diffFile, encodePng(result.diff));
     return {
-      ok: false,
-      compared: true,
+      outcome: 'fail',
       detail: `${result.differing.toLocaleString('en-US')} of ${result.total.toLocaleString('en-US')} px over tolerance (${pct}, budget ${(MAX_DIFF_FRACTION * 100).toFixed(2)}%), ${noise} — see ${rel(diffFile)}`,
     };
   }
   return {
-    ok: true,
-    compared: true,
+    outcome: 'match',
     detail: `${result.differing.toLocaleString('en-US')} px over tolerance (${pct} of budget ${(MAX_DIFF_FRACTION * 100).toFixed(2)}%), ${noise}`,
   };
 }
@@ -787,8 +800,13 @@ say(
     `, reduced motion unless the capture says otherwise, settle ${SETTLE_MS} ms`,
 );
 
-/** Captures that disagreed with their golden. These fail the build. */
-const failures = [];
+/**
+ * One entry per capture that produced a picture, for `decide()` at the end:
+ * `match`, `missing` or `fail`. Captures that could not be TAKEN are not in
+ * here — they are `unproven` below.
+ * @type {import('./lib/goldens-gate.mjs').CaptureVerdict[]}
+ */
+const verdicts = [];
 /**
  * Captures that could not be taken at all — a demo that would not boot, a
  * floor that would not settle, a browser that stopped answering, a deadline.
@@ -796,7 +814,6 @@ const failures = [];
  * they are reported and the run exits SKIPPED. §87, §114 and §126.3.
  */
 const unproven = [];
-let compared = 0;
 const run = withChrome(
   {
     chromePath,
@@ -927,10 +944,10 @@ const run = withChrome(
 
             if (CHECK) {
               const verdict = check(name, png);
-              if (!verdict.ok) failures.push(name);
-              if (verdict.compared) compared++;
+              verdicts.push({ name, outcome: verdict.outcome });
+              const tag = { match: 'ok  ', missing: 'MISS', fail: 'FAIL' }[verdict.outcome];
               say(
-                `  ${verdict.ok ? 'ok  ' : 'FAIL'} ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
+                `  ${tag} ${name.padEnd(18)} ${state.agents} agents  ${secs}s  ${verdict.detail}`,
               );
             } else {
               // A capture at a stage the goldens were not taken in never joins
@@ -1021,14 +1038,6 @@ try {
 }
 
 const total = ((Date.now() - started) / 1000).toFixed(1);
-if (failures.length) {
-  // A real disagreement with a committed golden. This, and only this, is red.
-  say(
-    `goldens: ${failures.length} of ${captures.length} failed (${failures.join(', ')}) in ${total}s`,
-  );
-  if (CHECK) say(`goldens: actual captures and diff images are in ${rel(OUT_DIR)}`);
-  process.exit(1);
-}
 if (!CHECK) {
   if (unproven.length) {
     say(`goldens: ${unproven.length} capture(s) could not be taken (${unproven.join(', ')})`);
@@ -1036,18 +1045,28 @@ if (!CHECK) {
     process.exit(1);
   }
   say(`goldens: regenerated in ${total}s`);
-} else if (unproven.length) {
-  say(
-    `goldens: SKIPPED in ${total}s — ${unproven.length} of ${captures.length} could not be captured (${unproven.join(', ')}).`,
-  );
-  say(`goldens: ${compared} compared and matching; the rest prove nothing about the floor.`);
-  if (fs.existsSync(OUT_DIR)) say(`goldens: what was captured is in ${rel(OUT_DIR)}`);
-} else if (compared === 0) {
-  // Nothing was compared, so nothing is proven — say so rather than printing a
-  // green line CI will read as protection it does not have.
-  say(`goldens: SKIPPED in ${total}s — no ${process.platform} goldens to compare against.`);
-  say(`goldens: the captures in ${rel(OUT_DIR)} are the set to commit.`);
 } else {
-  const skipped = captures.length - compared;
-  say(`goldens: all ${compared} match in ${total}s${skipped ? ` (${skipped} skipped)` : ''}`);
+  // THE VERDICT. `decide()` is the rule, and it is in its own module because it
+  // is the half of this gate a test can reach without a browser (§180).
+  const verdict = decide(verdicts, { strict: STRICT, platform: process.platform });
+
+  if (verdict.failed.length) {
+    // A real disagreement with a committed golden. This, and only this, is red.
+    say(`goldens: ${verdict.headline} in ${total}s`);
+    say(`goldens: actual captures and diff images are in ${rel(OUT_DIR)}`);
+  } else if (unproven.length) {
+    say(
+      `goldens: SKIPPED in ${total}s — ${unproven.length} of ${captures.length} could not be captured (${unproven.join(', ')}).`,
+    );
+    say(`goldens: ${verdict.headline}; the rest prove nothing about the floor.`);
+    if (fs.existsSync(OUT_DIR)) say(`goldens: what was captured is in ${rel(OUT_DIR)}`);
+  } else {
+    say(`goldens: ${verdict.headline} in ${total}s`);
+  }
+  if (verdict.missing.length && !verdict.failed.length) {
+    // Named, not hidden: this is the list the bake package downloads and
+    // commits, and the list `--strict` refuses once it is meant to be empty.
+    say(`goldens: the captures in ${rel(OUT_DIR)} are the set to commit.`);
+  }
+  if (verdict.exitCode) process.exit(verdict.exitCode);
 }

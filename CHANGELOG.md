@@ -1133,6 +1133,17 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   nothing running, or one small room — the floor stays the shape it honestly is and the rest is
   ground. `docs/DEVIATIONS.md` §139.
 
+- **The goldens job stopped being red for a reason that is not a pixel — WP-92a.** Linux has six of
+  the sixteen goldens committed, and the harness read a missing golden as a SKIP when a platform had
+  no set at all and as a **failure** when it had one — so the ten captures added since the first
+  Linux set landed were ten hard failures, and the `goldens` job on `ubuntu-latest` was red on every
+  push to `main` and every pull request over something no commit had broken. A capture with no golden
+  on this platform is now reported as **NOT YET BAKED**, named in the summary, and left in
+  `test/goldens/.out/` for the bake; a golden that exists and disagrees is still the only red the
+  gate has. `--strict` turns a missing golden into a named non-zero exit, and it is what the bake
+  package turns on once the Linux set is complete. Sixteen goldens on win32: **all 16 match, 0 px**.
+  `docs/DEVIATIONS.md` §180.
+
 ### Testing
 
 - **The golden harness can press a key, and `three@selected` is the first golden of a floor somebody
@@ -1318,6 +1329,24 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   that matters — that **re-rendering the SVG right now reproduces every committed raster byte for
   byte**. That last one is a byte comparison and not a tolerance, and it needs no browser, so it runs
   on every machine rather than skipping where Chrome is absent.
+
+- **The 900-line ceiling is checked over every file, not only the ones already split — WP-92b.** The
+  cap walked eighteen filename-prefix groups, which is 129 of the 282 non-test modules, and all eight
+  files actually over it were outside every group: `themes.js` was not exempt at 1,430 lines, it was
+  never in a glob. `test/unit/line-ceiling.test.mjs` now walks every non-test file under `src/`,
+  `public/`, `scripts/` and `site/`, with a **dated exemption table** naming each of the eight, why,
+  and the package that will bring it under — and an exemption whose file has since dropped under the
+  cap fails, so the table cannot rot into a place to hide. The ceiling is still 900.
+
+- **The draw-path clock guard walks `public/render/` instead of naming six files — WP-92c.** I-08
+  (no `Date.now()` or `Math.random()` where a frame is drawn) checked six of the fifty-eight render
+  modules; `rig.js` has been a re-export shell since the §131 split, so none of the four files its
+  bodies live in was among them, and neither were `crew.js`, `scene-draw.js` or the four
+  `backdrop-*`. Nothing was breached. It is now a walk of every module under `render/` — plus any
+  `life`/`scene`/`rig`/`crew` module that lands beside it — with one exception cut out by its own
+  shape: the body of `frameMs()`, which is frame pacing rather than a phase. Proved by planting
+  `Date.now()` in a temp copy, so the gate has been seen to fail without anything in the tree being
+  broken to see it. `docs/DEVIATIONS.md` §180.
 
 ### Packaging
 

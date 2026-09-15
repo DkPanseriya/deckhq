@@ -19059,3 +19059,117 @@ toolchain could have caught it as written."_ It still could not.
   doc comments with them, and the only edit inside one is `export` on its first line — proved by
   §131's own three checks and 0 px on sixteen goldens after every commit.
 - **The site, the VS Code extension and the plugin were mapped but not audited in depth.**
+
+## 180. WP-92a–c — three gates that were looking at the wrong files, and one that was red for a reason that is not a pixel
+
+**Date:** 16 September 2026 · **Packages:** WP-92a, WP-92b, WP-92c · **From:**
+`docs/plan/13-ARCHITECTURE-AUDIT.md` findings A-01, A-02, A-03 · **Commits:** `049f7b1`, `eabedb2`,
+`3e9e866`
+
+The first three moves of the WP-92 sequence, and between them they change **no product code at
+all**: one script, two tests and one new pure module. §179's central finding was that the two
+defects a well-tested codebase has are in its gates rather than in its product, and these are those
+gates. All sixteen goldens are at 0 px after each commit, `/api/state` is untouched because nothing
+that builds it was touched, and the suite went 2,437 → 2,450 by addition only.
+
+### 180.1 A golden that was never baked is not a golden that failed (A-01)
+
+`test/goldens/linux/` holds six of the sixteen captures. `check()` read a missing golden two ways:
+a SKIP when the platform had no set at all, a FAILURE when it had one — _"a hole in an existing
+set"_ — so every capture added after the first Linux set landed was a hard failure, and the
+`goldens` job on `ubuntu-latest` had been red on **every push to `main` and every pull request**
+for a reason that had nothing to do with a pixel. §87's own argument against failing on a missing
+browser — _a red build on a missing browser teaches people to ignore the gate_ — applies to a
+missing golden exactly, and §178's last line already knew the debt was there.
+
+There are three outcomes now, not two:
+
+| outcome | what it means | exit |
+| --- | --- | --- |
+| `match` | a golden exists and the capture agrees with it | 0 |
+| `missing` | no golden for this capture on this platform yet — **NOT YET BAKED**, named in the summary, the picture left in `test/goldens/.out/` for the bake | 0, or **2** under `--strict` |
+| `fail` | a golden exists and the capture disagrees with it, or is a different size | **1** |
+
+`--strict` is the other half of the fix. It says _this platform's set is meant to be complete_, so
+a missing golden becomes a named non-zero exit; it is off today because the Linux set is partial,
+and the bake package turns it on once all sixteen are committed. Without it the third outcome would
+be a hole anybody could hide in, which is the mistake this entry is about, one level up.
+
+**The rule moved out of the harness.** `scripts/goldens.mjs` needs Chrome and about seven seconds
+per capture, so its verdict was the one part of the gate no test could reach — and the verdict was
+the part that was wrong. `decide()` now lives in `scripts/lib/goldens-gate.mjs`, beside `png.mjs`,
+which is the same seam for the same reason; `test/unit/goldens-gate.test.mjs` is seven tests over
+it. The owner's answer to §8 question 1 was _honest first, bake later_, and this is the honest half.
+
+The CI job's invocation did not change, so `.github/workflows/ci.yml` did not either. What the job
+is now expected to print — six matching, ten named as not yet baked, green — is written down in
+`docs/plan/RELEASE-CHECKLIST.md` §4.1, with the instruction for baking the ten and turning
+`--strict` on.
+
+### 180.2 The ceiling over every file, and a table for the eight that are over it (A-02)
+
+`test/unit/model.test.mjs` enumerated eighteen prefix groups — `public/render/plan*`, `public/app*`,
+`src/core/state-machine*` — and checked 129 of the 282 non-test modules against 900 lines. Every one
+passed. **All eight files actually over the ceiling were outside every group**, so the gate only
+ever checked the files that had already been split. `public/render/themes.js` was not exempt at
+1,430 lines; it was never in a glob, and there was no exemption table in the repository to be
+exempt in.
+
+The gate is now `test/unit/line-ceiling.test.mjs`: a walk of every non-test `.js`/`.mjs`/`.cjs`
+file under `src/`, `public/`, `scripts/` and `site/`, plus a dated exemption table with one row per
+file, its reason, and the package that will bring it under.
+
+| file | lines | brought under by |
+| --- | ---: | --- |
+| `public/render/themes.js` | 1,430 | WP-92n — tables out, derivation stays |
+| `site/build.mjs` | 1,324 | permanent — one coherent thing, in no package |
+| `src/core/store.mjs` | 1,230 | WP-92l — persistence + settings schema |
+| `public/deck.js` | 1,113 | WP-92m — and it closes the `deck ↔ usage` cycle |
+| `scripts/goldens.mjs` | 1,073 | permanent — one coherent thing, in no package |
+| `src/adapters/claude-code/parse.mjs` | 978 | **permanent** — `02-ARCHITECTURE.md` §2.1 outranks the ceiling |
+| `src/adapters/codex/adapter.mjs` | 939 | permanent — one adapter's four methods and their degrade promise |
+| `public/render/clips.js` | 903 | permanent — a table, and a table split in two is two tables that can disagree |
+
+**An exemption goes stale loudly.** A file that has since dropped under the ceiling fails the gate
+until its row is deleted, which is what stops the table becoming a place to hide rather than a
+record of a decision. The per-group module counts stayed: the walk proves nothing is over the
+ceiling, and it cannot prove a split _happened_.
+
+Not walked: `test/` (a test file's length is its fixtures) and `bin/`, `plugin/`, `vscode/`, which
+are separate artifacts — the largest file across all three is 352 lines, so that is a scope
+decision rather than an exemption.
+
+The ceiling is 900 and it did not move. The owner's answer to §8 question 2 was _a table first, then
+split three_, and the three are on the table with their package numbers against them.
+
+### 180.3 The draw-path clock guard walks `render/` instead of naming six files (A-03)
+
+I-08 — _no `Date.now()` or `Math.random()` under a draw path_ — was six file names of the
+fifty-eight modules under `public/render/`. `rig.js` has been a re-export shell since §131, so the
+four files its bodies moved into were outside the guard; so were `crew.js`, `scene-draw.js`, the
+three `agents-*` and the four `backdrop-*`. Nothing was breached — §179 scanned all 58 and the only
+hit is `scene-agent.js`'s documented fallback — and nothing would have noticed if it had been.
+
+The list is now a walk of every module under `public/render/`, plus any `life`/`scene`/`rig`/`crew`
+module that lands _beside_ it in `public/` rather than inside it, with **one exception**: the body
+of `frameMs()` in `scene-agent.js`, which is frame pacing on this tab's own timeline and is the one
+place `performance.now()` and its `Date.now()` fallback belong. The exception is cut out by the
+shape of that function rather than by its file name, so a `scene-agent.js` that stopped declaring
+`frameMs()` would fail the gate rather than inherit its licence.
+
+**It is proved failing against a temp directory, not against the tree.** A `rig-pose.js` carrying
+`Date.now()` is written into a scratch `public/render/`, the gate names it, and a second file proves
+that `Date.now()` inside a comment is still history rather than code. A gate nobody has seen fail is
+a gate nobody knows the shape of — and `rig-pose.js` is exactly the file §131 moved out from under
+the old six-name list.
+
+### 180.4 What these three did not do
+
+- **No product code changed.** The diff over the three commits touches `scripts/goldens.mjs`, two
+  test files, one new test file, one new module under `scripts/lib/`, and two documents. Nothing
+  under `src/` or `public/`.
+- **No golden was baked or rebaked.** The Linux set still owes its ten; that is its own package, and
+  turning `--strict` on is part of it.
+- **None of the eight over-cap files was split.** They are on a table with dates and package
+  numbers, which is the owner's default and not a claim that the table is the end state.
+- **The ceiling did not move, the tolerance did not move, and no `INVARIANT:` test changed.**
