@@ -152,13 +152,21 @@ test('WP-61: no user-facing string in the client or the CLI still says "let go"'
   assert.deepEqual(offenders, [], 'these strings still say "let go" to a person');
 });
 
-test('WP-61: the README and the site say Fired, and the six-state table keeps the id', () => {
+test('WP-61: the docs and the site say Fired, and the six-state table keeps the id', () => {
+  // WP-94a moved the six-state table out of the README and into `docs/GUIDE.md`
+  // with the rest of the manual, in the README's own words. The rule is
+  // unchanged and so is the check: the row exists, it says Fired to a person,
+  // and it keeps `let_go` as the id — because the id is an address and renaming
+  // it would be a data change dressed as a copy change. Both files are read, so
+  // the vocabulary cannot come back through either one.
   const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
-  const row = readme.split('\n').find((l) => l.startsWith('| `let_go`'));
+  const guide = fs.readFileSync(path.join(ROOT, 'docs', 'GUIDE.md'), 'utf8');
+  const row = guide.split('\n').find((l) => l.startsWith('| `let_go`'));
   assert.ok(row, 'the six-state table still has a `let_go` row');
   assert.match(row, /\*\*Fired\*\*/, 'the row says Fired');
   assert.match(row, /Show fired/, 'and names the view toggle by its new label');
   assert.ok(!/let[ -]go/i.test(readme), 'no "let go" is left in the README');
+  assert.ok(!/let[ -]go/i.test(guide.replace(/`let_go`/g, '')), 'no "let go" is left in the guide');
   const site = fs.readFileSync(path.join(ROOT, 'site/pages/model.html'), 'utf8');
   assert.ok(site.includes('<code>let_go</code>'), 'the site still names the state id');
   assert.ok(!/let-go agents/i.test(site), 'and no longer says "let-go agents"');

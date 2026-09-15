@@ -1057,6 +1057,54 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Documentation
 
+- **Five new pages on the documentation site, and a rule that a mockup can never be shown as a
+  screenshot — WP-94a.** The owner, 15 September: _"I like all the UI and vision sheets you are
+  generating. Keep them all aside; they could be great for the product webpage to demonstrate
+  functions, features and configurability."_ Most of those sheets are drawings of packages nobody
+  has built, so the first thing this wrote was not a page.
+
+  **`docs/MEDIA.md`** classifies every image in the repository as a `capture` (DeckHQ photographed),
+  a `golden` (a real render of a fixture, re-checked pixel for pixel on every CI run) or an
+  `illustration` (a designer's mockup of a specification — not shipped code), lists which captures
+  are stale and why, and names WP-94b as the package that retakes them.
+
+  **The label is enforced by the build.** `site/build.mjs` knows the class of every image it copies;
+  an illustration on a page whose caption does not contain the words _design illustration_ throws,
+  and so does an illustration outside a figure, or an image nobody has classified. The class is
+  derived from the source directory rather than trusted, so a registry row with the wrong class
+  fails the build rather than mislabelling a page. `test/unit/site.test.mjs` asserts the same thing
+  over the emitted pages **and** that the gate throws on a page that forgets.
+
+  **The pages:** Features (nine sections, one image and three lines each), Look (the three shipped
+  themes as goldens, then the WP-88 interior presets, control centre and agent sizes as labelled
+  mockups), Characters (the figure that ships, then the sheets that proposed it and the WP-87 and
+  WP-89 motion), Studio (the eleven-step loop, every row marked built or planned), and Docs. The
+  home page's hero is now the `three` golden rather than a September capture, so the first picture a
+  stranger sees is the one thing in the repository that cannot silently go stale.
+
+  Images wider than the 1600 px capture stage are downscaled into the site by a box filter over
+  `scripts/lib/png.mjs` — still no dependency — which took the three of them from 1858 KB, 826 KB
+  and 591 KB to 771 KB, 774 KB and 355 KB. A golden is exactly 1600 px, so no golden is ever
+  resampled. `docs/DEVIATIONS.md` §170.
+
+- **The README is 211 lines, and nothing it dropped was lost — WP-94a.** The owner: _"Keep the
+  README not bloated, easy to understand, scannable."_ It was 911 lines and it was a manual: the
+  six-state table, every keyboard shortcut, every environment variable, the whole of Studio, and
+  eleven Honest limits several paragraphs long. The bullet a stranger most needs — _no network calls
+  of any kind_ — was at line 573.
+
+  It now runs: the mark and one line, a real render, install in three ways, **what you see** in six
+  bullets, **what it never does** in five, a runtime table with each adapter's verification status,
+  app mode, Studio in three lines, the docs, and Honest limits as bullets.
+  **[`docs/GUIDE.md`](docs/GUIDE.md)** is the twenty-two sections that came out, in the README's own
+  words — the extraction was scripted rather than retyped, so the wording could not drift in the
+  move.
+
+  `test/unit/readme.test.mjs` holds it there: a 250-line budget, the three install commands checked
+  against `site/build.mjs`'s own array so the site and the front page cannot disagree, the fifteen
+  headings that have to still be in the guide, and the three unverified-adapter sentences that
+  `docs/ADAPTERS.md` §6 requires the README to carry. `docs/DEVIATIONS.md` §170.
+
 - **`docs/00-REQUIREMENTS.md` — the requirements register and spec sheet — WP-90.** The owner,
   15 September: _"over the history of our chats, I have talked about many requirements and user
   stories or usecases. I want you to document them all, so we have a track of what has been

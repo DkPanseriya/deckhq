@@ -156,6 +156,26 @@ body {
   border-bottom-color: var(--accent);
 }
 
+/* WP-94a · the nav carries two groups on one bar: the pages about the product,
+   then the reference pages, quieter, after a rule. Twelve links at one weight
+   is a list to read rather than a way around. */
+.nav-rule {
+  width: 1px;
+  align-self: stretch;
+  background: var(--line);
+  margin: 0.1rem 0;
+}
+
+.site-nav .nav-rule ~ a {
+  font-size: 0.84rem;
+}
+
+@media (max-width: 46rem) {
+  .nav-rule {
+    display: none;
+  }
+}
+
 main {
   padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 3rem;
 }
@@ -407,6 +427,56 @@ figcaption {
   color: var(--muted);
   font-size: 0.86rem;
   line-height: 1.55;
+}
+
+/* WP-94a · what an image IS, in its own caption. `docs/MEDIA.md` is the
+   policy: a capture is DeckHQ photographed, a golden is a real render of a
+   fixture that CI re-checks every run, and a design illustration is a drawing
+   of a specification that no build has produced. The last one is the reason
+   this exists — a mockup shown as a screenshot is the picture equivalent of an
+   adapter claiming a verification it has not had. */
+.tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05em 0.5em;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  vertical-align: 0.08em;
+}
+
+.tag--golden {
+  border-color: rgba(46, 125, 99, 0.6);
+  color: var(--state-working);
+}
+
+.tag--illustration {
+  border-color: rgba(184, 115, 51, 0.6);
+  color: var(--state-needs_input);
+}
+
+/* A feature section: one picture, three lines, and nothing else competing. */
+.feature {
+  max-width: var(--wide);
+  margin-inline: auto;
+}
+
+.feature h2 {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.feature > p {
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.feature figure {
+  margin-top: 1.2rem;
 }
 
 /* ------------------------------------------------------------------ home */

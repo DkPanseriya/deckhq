@@ -26,6 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { decodePng, encodePng } from '../scripts/lib/png.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -58,26 +59,73 @@ const PAGES = [
   {
     slug: 'index',
     nav: 'Home',
+    group: 'main',
     title: 'DeckHQ',
     description:
       'Every AI coding session on your machine, on one office floor. It sees the ones your ' +
       'terminal forgot, and it remembers what is waiting on you even after you have read it.',
   },
   {
-    slug: 'model',
-    nav: 'The model',
-    title: 'The model in 60 seconds',
-    description: 'The six states, and the one rule that decides what you owe.',
+    slug: 'features',
+    nav: 'Features',
+    group: 'main',
+    title: 'Features',
+    description:
+      'The floor, the queue, the review card, permissions, token usage, pinning, app mode, ' +
+      'notifications and themes — one picture each.',
+  },
+  {
+    slug: 'look',
+    nav: 'Look',
+    group: 'main',
+    title: 'The look',
+    description:
+      'The three themes that ship today, and the interior presets, control centre and agent ' +
+      'sizes that WP-88 is designed to add.',
+  },
+  {
+    slug: 'characters',
+    nav: 'Characters',
+    group: 'main',
+    title: 'The characters',
+    description:
+      'The figure on the floor: what it is today, and the motion and crew sheets that WP-87 ' +
+      'and WP-89 are designed against.',
+  },
+  {
+    slug: 'studio',
+    nav: 'Studio',
+    group: 'main',
+    title: 'Studio',
+    description:
+      'The idea-to-office loop: what exists today — the store, the consent and the planner — ' +
+      'and the eight steps that do not.',
   },
   {
     slug: 'install',
     nav: 'Install',
+    group: 'main',
     title: 'Install',
     description: 'npx, a global install, the Claude Code plugin, the VS Code extension.',
   },
   {
+    slug: 'docs',
+    nav: 'Docs',
+    group: 'main',
+    title: 'Documentation',
+    description: 'Every document this project keeps, and what each one is for.',
+  },
+  {
+    slug: 'model',
+    nav: 'The model',
+    group: 'more',
+    title: 'The model in 60 seconds',
+    description: 'The six states, and the one rule that decides what you owe.',
+  },
+  {
     slug: 'hooks-and-privacy',
     nav: 'Hooks and privacy',
+    group: 'more',
     title: 'Hooks and privacy',
     description:
       'What DeckHQ reads, what it writes, what it asks you first, and where it sends it.',
@@ -85,20 +133,128 @@ const PAGES = [
   {
     slug: 'adapters',
     nav: 'Adapters',
+    group: 'more',
     title: 'Adapters',
     description: 'Which runtimes DeckHQ reads, how verified each one is, and how to add one.',
   },
   {
     slug: 'faq',
     nav: 'FAQ',
+    group: 'more',
     title: 'FAQ',
     description: 'The questions this project is asked most, answered with what has been measured.',
   },
-  { slug: 'log/index', nav: 'Engineering log', title: 'Engineering log', description: '' },
+  {
+    slug: 'log/index',
+    nav: 'Engineering log',
+    group: 'more',
+    title: 'Engineering log',
+    description: '',
+  },
 ];
 
-/** Images copied out of `docs/media/` into `dist/media/`. */
-const MEDIA = ['hero.gif', 'floor.png', 'panel-review-card.png', 'deck-view.png'];
+/**
+ * The one-line installers as the pages and the README print them — WP-75,
+ * WP-94a. One source, so the README test and the site test check the same
+ * three strings and a change to either has to change this array.
+ */
+const INSTALL_COMMANDS = [
+  'npx deckhq app',
+  'irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex',
+  'curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh',
+];
+
+/* ------------------------------------------------------------------ media */
+
+/**
+ * Every image the hand-written pages may show, and what class it is — WP-94a.
+ * The policy is `docs/MEDIA.md`:
+ *
+ *   `capture`       DeckHQ, running, photographed.
+ *   `golden`        a real render of a fixture, taken by the goldens gate.
+ *   `illustration`  a designer's mockup of a specification. NOT shipped code.
+ *
+ * `to` is the path under `dist/media/`; a page writes `media/<to>`. The class
+ * is not decoration: `assertIllustrationsAreLabelled()` below refuses to build
+ * a page that shows an illustration whose caption does not say so, because a
+ * mockup presented as a screenshot is the same defect as an adapter claiming a
+ * verification it has not had (`docs/ADAPTERS.md` §6).
+ *
+ * @type {ReadonlyArray<{to: string, from: string, class: 'capture'|'golden'|'illustration'}>}
+ */
+const IMAGES = [
+  // Goldens: the only class whose currency is proved on every CI run.
+  { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden' },
+  { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden' },
+  { to: 'goldens/pinned.png', from: 'test/goldens/win32/pinned.png', class: 'golden' },
+  { to: 'goldens/single.png', from: 'test/goldens/win32/single.png', class: 'golden' },
+  {
+    to: 'goldens/demo-night-shift.png',
+    from: 'test/goldens/win32/demo@night-shift.png',
+    class: 'golden',
+  },
+  {
+    to: 'goldens/demo-blueprint.png',
+    from: 'test/goldens/win32/demo@blueprint.png',
+    class: 'golden',
+  },
+
+  // Captures. Several are stale — taken before WP-79 gave the figure its
+  // current form — and `docs/MEDIA.md` §4.2 lists every one for WP-94b.
+  { to: 'hero.gif', from: 'docs/media/hero.gif', class: 'capture' },
+  { to: 'deck-view.png', from: 'docs/media/deck-view.png', class: 'capture' },
+  { to: 'panel-review-card.png', from: 'docs/media/panel-review-card.png', class: 'capture' },
+  { to: 'permission-card.png', from: 'docs/media/permission-card.png', class: 'capture' },
+  { to: 'app-window.png', from: 'docs/media/app-window.png', class: 'capture' },
+  { to: 'office-cleared.png', from: 'docs/media/office-cleared.png', class: 'capture' },
+  { to: 'wrapped-weekly.png', from: 'docs/media/wrapped-weekly.png', class: 'capture' },
+
+  // Illustrations. Every one of these is a drawing of a specification.
+  { to: 'look/presets.png', from: 'docs/media/look/presets.png', class: 'illustration' },
+  {
+    to: 'look/control-centre.png',
+    from: 'docs/media/look/control-centre.png',
+    class: 'illustration',
+  },
+  { to: 'look/agent-sizes.png', from: 'docs/media/look/agent-sizes.png', class: 'illustration' },
+  { to: 'interior/board.png', from: 'docs/media/interior/board.png', class: 'illustration' },
+  {
+    to: 'interior/mockup-default.png',
+    from: 'docs/media/interior/mockup-default.png',
+    class: 'illustration',
+  },
+  {
+    to: 'design/character-b.png',
+    from: 'docs/media/design/character/B.png',
+    class: 'illustration',
+  },
+  {
+    to: 'design/character-in-situ.png',
+    from: 'docs/media/design/character/in-situ.png',
+    class: 'illustration',
+  },
+  { to: 'motion/life-sheet.png', from: 'docs/media/motion/life-sheet.png', class: 'illustration' },
+  {
+    to: 'motion/lounge-activities.png',
+    from: 'docs/media/motion/lounge-activities.png',
+    class: 'illustration',
+  },
+  { to: 'motion/crew.gif', from: 'docs/media/motion/crew.gif', class: 'illustration' },
+];
+
+/**
+ * The four directories under `docs/media/` that hold mockups rather than
+ * photographs. Anything sourced from one of them is an illustration, whatever
+ * the table above says — asserted at build time, so adding a row with the
+ * wrong class fails rather than mislabelling a page.
+ */
+const ILLUSTRATION_DIRS = ['interior', 'look', 'motion', 'design'];
+
+/** The words an illustration's caption has to carry. */
+const ILLUSTRATION_LABEL = 'design illustration';
+
+/** A PNG wider than this is downscaled to it on the way into the site. */
+const MAX_IMAGE_WIDTH = 1600;
 
 /**
  * The one-line installers, copied to the root of the site — WP-75.
@@ -138,11 +294,23 @@ const esc = (s) =>
 function shell(page) {
   const up = '../'.repeat(page.depth ?? 0);
   const here_ = page.slug;
-  const nav = PAGES.map((p) => {
+  // Two groups on one bar — WP-94a. Twelve links in one flat row is a list to
+  // read rather than a way around, so the product pages lead and the reference
+  // pages follow them, quieter, after a rule.
+  const link = (p, indent) => {
     const href = p.slug === 'index' ? `${up}index.html` : `${up}${p.slug}.html`;
     const current = p.slug === here_ || (p.slug === 'log/index' && here_.startsWith('log/'));
-    return `        <a href="${esc(href)}"${current ? ' aria-current="page"' : ''}>${esc(p.nav)}</a>`;
-  }).join('\n');
+    return `${indent}<a href="${esc(href)}"${current ? ' aria-current="page"' : ''}>${esc(p.nav)}</a>`;
+  };
+  const group = (name) => PAGES.filter((p) => (p.group ?? 'main') === name);
+  const nav =
+    group('main')
+      .map((p) => link(p, '        '))
+      .join('\n') +
+    '\n        <span class="nav-rule" aria-hidden="true"></span>\n' +
+    group('more')
+      .map((p) => link(p, '        '))
+      .join('\n');
 
   const full = page.slug === 'index' ? 'DeckHQ' : `${page.title} — DeckHQ`;
 
@@ -510,6 +678,16 @@ function splitEntries(md) {
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
 function build() {
+  // The registry's declared class has to be the one the source directory
+  // implies, so the table above is readable on its own and cannot drift from
+  // the rule `imageClass()` actually applies.
+  for (const image of IMAGES) {
+    const actual = imageClass(image.to);
+    if (actual !== image.class) {
+      throw new Error(`${image.from} is declared ${image.class} and is ${actual}`);
+    }
+  }
+
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(path.join(OUT, 'log'), { recursive: true });
   fs.mkdirSync(path.join(OUT, 'media'), { recursive: true });
@@ -521,10 +699,13 @@ function build() {
     written++;
   };
 
-  // The hand-written pages.
+  // The hand-written pages. Each one is checked against the media policy
+  // before it is written: a page that shows a mockup without saying so is a
+  // build failure, not a review finding.
   for (const page of PAGES) {
     if (page.slug === 'log/index') continue;
     const body = read(path.join('site', 'pages', `${page.slug}.html`));
+    assertMediaIsLabelled(`${page.slug}.html`, body);
     write(`${page.slug}.html`, shell({ ...page, body, depth: 0 }));
   }
 
@@ -542,9 +723,14 @@ function build() {
     return `${REPO}/blob/main/docs/${clean}`;
   };
 
-  const media = new Set(MEDIA);
+  // The log's own images, on top of the registry above. A log entry's picture
+  // is a capture by construction: it is what the package it records was
+  // photographed doing, and it is kept at the path the markdown names.
+  /** @type {Map<string, {from: string, class: string}>} */
+  const media = new Map(IMAGES.map((image) => [image.to, image]));
   for (const m of deviations.matchAll(/!\[[^\]]*\]\((media\/[^)\s]+)\)/g)) {
-    media.add(path.basename(m[1]));
+    const rel = m[1].slice('media/'.length);
+    if (!media.has(rel)) media.set(rel, { to: rel, from: `docs/media/${rel}`, class: 'capture' });
   }
 
   const items = entries.map((entry, index) => ({
@@ -634,10 +820,16 @@ ${listing}
   );
   fs.copyFileSync(path.join(root, 'public', 'icon-256.png'), path.join(OUT, 'deckhq-mark.png'));
   written += 3;
-  for (const name of media) {
-    const from = path.join(root, 'docs', 'media', name);
-    if (!fs.existsSync(from)) throw new Error(`docs/media/${name} is referenced but missing`);
-    fs.copyFileSync(from, path.join(OUT, 'media', name));
+  let bytes = 0;
+  let downscaled = 0;
+  for (const [rel, image] of media) {
+    const from = path.join(root, image.from);
+    if (!fs.existsSync(from)) throw new Error(`${image.from} is referenced but missing`);
+    const to = path.join(OUT, 'media', rel);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    const result = copyImage(from, to);
+    bytes += result.bytes;
+    if (result.downscaled) downscaled++;
     written++;
   }
 
@@ -657,9 +849,161 @@ ${listing}
 
   process.stdout.write(
     `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
-      ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images,` +
+      ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images` +
+      ` at ${(bytes / 1024 / 1024).toFixed(1)} MB, ${downscaled} downscaled,` +
       ` ${INSTALLERS.length} installers)\n`,
   );
+}
+
+/* ------------------------------------------------------------------ media */
+
+/**
+ * One image into the site. A PNG wider than `MAX_IMAGE_WIDTH` is resampled to
+ * it; everything else is copied byte for byte, so a golden on the site is the
+ * golden in the tree and a GIF is never re-encoded.
+ *
+ * The resampler is a box filter over `scripts/lib/png.mjs`, which is the
+ * goldens harness's own decoder — enough PNG for 8-bit non-interlaced images
+ * and nothing else. An image it refuses (a palette PNG, 16-bit, interlaced) is
+ * copied whole rather than dropped: a picture at the wrong size is a budget
+ * problem, and a missing picture is a broken page.
+ *
+ * @param {string} from @param {string} to
+ * @returns {{bytes: number, downscaled: boolean}}
+ */
+function copyImage(from, to) {
+  const source = fs.readFileSync(from);
+  if (path.extname(from).toLowerCase() === '.png') {
+    try {
+      const img = decodePng(source);
+      if (img.width > MAX_IMAGE_WIDTH) {
+        const small = boxDownscale(img, MAX_IMAGE_WIDTH);
+        // `encodePng` writes one filter for every scanline, and which one wins
+        // depends entirely on the picture — a flat floor likes `Up`, a shaded
+        // sheet likes `Paeth`. There are three images in this repository wide
+        // enough to reach here, so trying all five and keeping the smallest
+        // costs a second and saves more than a guess would.
+        let out = null;
+        for (const filter of [0, 1, 2, 3, 4]) {
+          const candidate = encodePng(small, { filter });
+          if (!out || candidate.length < out.length) out = candidate;
+        }
+        // Written whether or not it is the smaller file. The budget being kept
+        // is the WIDTH a reader downloads for a column 768 px wide, not the
+        // byte count, and a picture at the right size is worth a few kilobytes
+        // if it ever costs them. On the three images in this repository wide
+        // enough to reach here it costs nothing: 1858 KB to 771 KB, 826 KB to
+        // 774 KB, 591 KB to 355 KB.
+        fs.writeFileSync(to, out);
+        return { bytes: out.length, downscaled: true };
+      }
+    } catch {
+      // Not a shape this decoder handles. Fall through to the plain copy.
+    }
+  }
+  fs.writeFileSync(to, source);
+  return { bytes: source.length, downscaled: false };
+}
+
+/**
+ * Resample an RGBA image down to `width`, averaging each destination pixel
+ * over the source box it covers. No sharpening and no gamma correction: these
+ * are flat-shaded screenshots of a vector floor, and the only thing being
+ * asked for is that a 2910 px capture stops being served at 2910 px to a
+ * column 768 px wide.
+ *
+ * @param {{width: number, height: number, data: Uint8Array}} img
+ * @param {number} width
+ */
+function boxDownscale(img, width) {
+  const height = Math.max(1, Math.round((img.height * width) / img.width));
+  const out = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const sy0 = Math.floor((y * img.height) / height);
+    const sy1 = Math.max(sy0 + 1, Math.floor(((y + 1) * img.height) / height));
+    for (let x = 0; x < width; x++) {
+      const sx0 = Math.floor((x * img.width) / width);
+      const sx1 = Math.max(sx0 + 1, Math.floor(((x + 1) * img.width) / width));
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+      let n = 0;
+      for (let sy = sy0; sy < sy1; sy++) {
+        for (let sx = sx0; sx < sx1; sx++) {
+          const i = (sy * img.width + sx) * 4;
+          r += img.data[i];
+          g += img.data[i + 1];
+          b += img.data[i + 2];
+          a += img.data[i + 3];
+          n++;
+        }
+      }
+      const o = (y * width + x) * 4;
+      out[o] = Math.round(r / n);
+      out[o + 1] = Math.round(g / n);
+      out[o + 2] = Math.round(b / n);
+      out[o + 3] = Math.round(a / n);
+    }
+  }
+  return { width, height, data: out };
+}
+
+/**
+ * The class of one image, by the path a page writes in its `src` — WP-94a.
+ * Anything sourced from one of `ILLUSTRATION_DIRS` is an illustration whatever
+ * the registry claims, so a row added with the wrong class fails the build
+ * rather than mislabelling a page.
+ *
+ * @param {string} src a `media/...` path as a page writes it
+ * @returns {'capture'|'golden'|'illustration'|null}
+ */
+function imageClass(src) {
+  const rel = src.replace(/^(?:\.\.\/)*media\//, '');
+  const image = IMAGES.find((i) => i.to === rel);
+  if (!image) return null;
+  const dir = image.from.startsWith('docs/media/') ? image.from.split('/')[2] : null;
+  if (dir && ILLUSTRATION_DIRS.includes(dir)) return 'illustration';
+  return image.class;
+}
+
+/**
+ * The honesty gate — WP-94a, and `docs/ADAPTERS.md` §6 applied to pictures.
+ *
+ * A mockup of a specification may be shown; it may not be shown as the
+ * product. So every `<figure>` on a hand-written page that carries an
+ * illustration must carry `design illustration` in its caption, and an
+ * illustration outside a figure has nowhere to say what it is and is refused
+ * outright.
+ *
+ * @param {string} name the page, for the message
+ * @param {string} body the hand-written HTML body
+ */
+function assertMediaIsLabelled(name, body) {
+  const seen = new Set();
+  for (const m of body.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
+    const figure = m[0];
+    const caption = (figure.match(/<figcaption[\s>]([\s\S]*?)<\/figcaption>/) ?? ['', ''])[1];
+    for (const img of figure.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
+      seen.add(img[1]);
+      if (imageClass(img[1]) !== 'illustration') continue;
+      if (!caption.toLowerCase().includes(ILLUSTRATION_LABEL)) {
+        throw new Error(
+          `${name} shows ${img[1]}, which is a mockup, without "${ILLUSTRATION_LABEL}" in its caption`,
+        );
+      }
+    }
+  }
+  for (const img of body.matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
+    const src = img[1];
+    if (seen.has(src) || !src.startsWith('media/')) continue;
+    if (imageClass(src) === 'illustration') {
+      throw new Error(`${name} shows ${src}, which is a mockup, outside a figure with a caption`);
+    }
+    if (imageClass(src) === null) {
+      throw new Error(`${name} shows ${src}, which is not in the media registry`);
+    }
+  }
 }
 
 /** @param {string} html @param {number} spaces */
@@ -706,4 +1050,21 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (SERVE) await serve();
 }
 
-export { markdown, inline, plain, splitEntries, safeUrl, build, INSTALLERS, SITE_ORIGIN };
+export {
+  markdown,
+  inline,
+  plain,
+  splitEntries,
+  safeUrl,
+  build,
+  imageClass,
+  assertMediaIsLabelled,
+  INSTALLERS,
+  INSTALL_COMMANDS,
+  IMAGES,
+  ILLUSTRATION_DIRS,
+  ILLUSTRATION_LABEL,
+  MAX_IMAGE_WIDTH,
+  PAGES,
+  SITE_ORIGIN,
+};
