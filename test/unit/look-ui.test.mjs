@@ -533,10 +533,10 @@ test('painting a swatch leaves the live look exactly as it found it', async () =
 });
 
 test('every option the section can offer is a swatch spec the painter understands', () => {
-  // The three groups with no picture — the furniture set and the two densities —
-  // are deliberate and say so; what this catches is a NEW picker silently
-  // joining them because nobody taught `swatchSpecFor` about it.
-  const without = new Set(['furniture', 'plants', 'props']);
+  // The four groups with no picture — the furniture set, the two densities and
+  // WP-88c's agent size — are deliberate and say so; what this catches is a NEW
+  // picker silently joining them because nobody taught `swatchSpecFor` about it.
+  const without = new Set(['furniture', 'plants', 'props', 'agentSize']);
   for (const picker of LOOK_PICKERS) {
     for (const option of picker.options) {
       const spec = swatchSpecFor(picker, option.id, DEFAULT_LOOK, catalogue);

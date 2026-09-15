@@ -215,6 +215,11 @@ export {};
  * @property {number} width
  * @property {number} height
  * @property {number} targetAspect
+ * @property {string} agentSize which of `small` | `medium` | `large` this floor
+ *   was laid at (WP-88c). `auto` never appears here: it is a SETTING, and this
+ *   is what it resolved to for this population.
+ * @property {number} agentScale the factor every body constant carries — §2's
+ *   `s`, one of 0.80 / 1.00 / 1.25.
  * @property {Room[]} rooms tiling the envelope, sharing boundaries
  * @property {Wall[]} walls
  * @property {NavLine[]} nav corridor centrelines; the only walkable routes

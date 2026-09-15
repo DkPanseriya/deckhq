@@ -12,6 +12,7 @@
  * and `scene-math.test.mjs` import exactly what they imported before.
  */
 
+import { registerBodyScale } from './plan-scale.js';
 import { BODY_HEIGHT_U, LEGIBILITY_MIN_PX } from './rig.js';
 import { SceneBase } from './scene-base.js';
 
@@ -53,7 +54,7 @@ export const MIN_SCALE = 7.5;
  * waiting badge — are `rig.js`'s, because §6.2 states them per element and the
  * rig is where each one is measured and drawn.
  */
-export const CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
+export let CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
 
 /**
  * THE FIT HAS A CEILING TOO (WP-55), AND IT WAS SET TOO LOW (WP-59).
@@ -77,7 +78,7 @@ export const CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
 export const BODY_MAX_PX = 72;
 
 /** The largest px-per-unit the floor is ever drawn at. See `BODY_MAX_PX`. */
-export const CHAR_MAX_PX_PER_UNIT = BODY_MAX_PX / BODY_HEIGHT_U;
+export let CHAR_MAX_PX_PER_UNIT = BODY_MAX_PX / BODY_HEIGHT_U;
 
 /**
  * The scale a person is drawn at, given the scale the FLOOR is drawn at.
@@ -124,3 +125,21 @@ export class SceneLod extends SceneBase {
     return characterScaleFor(this._scale());
   }
 }
+
+// ----------------------------------------------------- the scaling law (§2)
+//
+// **THE TWO LEVEL-OF-DETAIL THRESHOLDS ARE IN SCREEN PIXELS AND THEREFORE DO
+// NOT SCALE** — 16 px of body at the bottom, 72 px at the top. What they are
+// stated ON does: both are `px / BODY_HEIGHT_U`, and `BODY_HEIGHT_U` moves with
+// the agent size, so the floor at `small` is allowed to be drawn smaller before
+// people stop shrinking with it, and at `large` the fit stops growing sooner.
+// That is the right way round: a floor of a hundred small agents still puts
+// every body over the legibility floor, because the floor is on the BODY.
+//
+// Re-derived rather than scaled, for `plan-furniture.js`'s reason: a quotient
+// of a scaled number is already scaled, and multiplying it again would be a
+// second answer to the same question.
+registerBodyScale(() => {
+  CHAR_MIN_PX_PER_UNIT = LEGIBILITY_MIN_PX.body / BODY_HEIGHT_U;
+  CHAR_MAX_PX_PER_UNIT = BODY_MAX_PX / BODY_HEIGHT_U;
+});

@@ -103,11 +103,14 @@ function planHash(plan) {
 
 // ------------------------------------------------------- catalogue integrity
 
-test('§1: ten pickers, 52 options, and the arithmetic is the tables rather than a promise', () => {
-  assert.equal(LOOK_PICKERS.length, 10);
-  assert.equal(LOOK_OPTION_COUNT, 52);
+test('§1: eleven pickers, 56 options, and the arithmetic is the tables rather than a promise', () => {
+  // Ten and 52 through WP-88b; WP-88c's agent size is the eleventh, and its four
+  // settings take the count to 56. Both numbers are computed from the tables, so
+  // a package that adds an option has to come here and say so.
+  assert.equal(LOOK_PICKERS.length, 11);
+  assert.equal(LOOK_OPTION_COUNT, 56);
   report(
-    'the ten pickers',
+    'the eleven pickers',
     LOOK_PICKERS.map((p) => [p.id, `${p.options.length} options`]),
   );
 });

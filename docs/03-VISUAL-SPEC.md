@@ -794,3 +794,60 @@ and never to the floor. The promise has moved onto the character, where it can b
 - Full keyboard navigation of the queue and all actions (§8).
 - The canvas carries an `aria-label` summarising the floor, and an off-screen live region
   announces state changes for screen readers.
+
+## 11. Agent size, and the scaling law
+
+**WP-88c.** `docs/plan/11-LOOK-CONTROL-CENTRE.md` §2 is the design; this is the binding statement.
+The user chooses **small**, **medium**, **large** or **auto** in the Look section, and the floor is
+laid at a scale factor `s`:
+
+| setting | `s` | `RIG_UNIT_U` | `BODY_HEIGHT_U` |
+|---|---|---|---|
+| small | 0.80 | 1.6 | 2.016 U |
+| medium — *what ships* | 1.00 | 2.0 | 2.52 U |
+| large | 1.25 | 2.5 | 3.15 U |
+
+### 11.1 The law
+
+> **Everything a body sets scales by `s`. Everything the building sets does not.**
+
+A chair is sized by a person. A corridor is sized by a plan. So:
+
+- **scales** — every seat (task, tub, stool, armchair); every pitch between two people (seat, sofa,
+  queue, the lounge's standing band); desk and table depth, sofa depth and the shortest sofa run;
+  every rug pad and the break-out rug; the whiteboard, the shelf, the pinboard, the monitor, the
+  tray, the cooler and the whole lounge kit; the planting and the clearance a prop keeps from a
+  body; the desk light-pool margin; and the figure's own chrome bands, contact ellipse and selection
+  ring.
+- **does not scale** — room padding 3.80, the corridor 4.00, the stage margin 2.50, the door 3.50,
+  the plate band 3.40, the minimum project room 15 × 13; the parquet cell 1.71, the carpet weave
+  0.21, the tile cell 1.57 and the threshold pool 2.80; the band depths, the envelope search's
+  bounds, the wall thickness and the fit-scale clamp; **and every type size.** A large floor gets
+  larger people under the same labels, not larger labels.
+
+Each constant is classified as `body`, `building` or neither — a ratio, a count, a share, a duration
+or a screen-pixel threshold — in `public/render/plan-scale.js`, and
+`test/unit/agent-size.test.mjs` fails on a number the planners export that is in neither list.
+
+### 11.2 What follows from it, and what does not
+
+- **Rooms grow and shrink with their contents**, exactly as §2 of `05-LAYOUT-REWORK.md` already has
+  them: a cluster's area moves as `s²`, the minimums do not, and the envelope search re-runs. The
+  room *rectangles* are therefore **not** invariant across sizes, and must not be — a 3.15 U robot
+  at a 2.6 U desk sits through the desk.
+- **The same population puts the same people in the same rooms in the same order** at every size.
+  That is the invariant; who sits where is not a function of how big they are drawn. Which lounge
+  *activity* a resting session gets may differ, because the lounge's bays are sized by furniture.
+- **The level-of-detail floors are in screen pixels and hold at every size.** §1's 16 px body, 11 px
+  label, 12 px icon and 13 px badge are floors on the element, so `CHAR_MIN_PX_PER_UNIT` and
+  `CHAR_MAX_PX_PER_UNIT` are re-derived from `BODY_HEIGHT_U` rather than scaled.
+- **Medium is byte-identical to the floor that shipped before the setting existed.** `s = 1` is the
+  identity, and the committed goldens are the proof.
+
+### 11.3 `auto`
+
+Reads the **live count** — the people the plan is about to draw, at a desk, waiting, or standing in
+the lounge, and never the session list: **≤ 10 large, ≤ 40 medium, else small**, with **±2 of
+hysteresis** (up at 12 and 42, down at 8 and 38) so one session starting does not re-plan the
+building. It is a pure function of the count and the size the floor is already at — no clock, no
+randomness. The shipped default is **medium**; `auto` is one click away.

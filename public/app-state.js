@@ -1,5 +1,5 @@
 import { createSounds } from './sound.js';
-import { pickSessionLook, pickSessionTheme } from './url-options.js';
+import { pickSessionLook, pickSessionScale, pickSessionTheme } from './url-options.js';
 
 /**
  * The wiring every part of the client shares: the DOM it draws into, the
@@ -404,7 +404,11 @@ export function setLookSetting(value) {
 export function sessionLook() {
   if (!lookOptions?.presetById) return settingLook;
   const preset = pickSessionLook(location.search, null, lookOptions.presetById);
-  return preset ? /** @type {any} */ (preset).look : settingLook;
+  const base = preset ? /** @type {any} */ (preset).look : settingLook;
+  // And `?scale=` on top of it (WP-88c). One of four words, applied last, so
+  // `?look=night-lab&scale=small` is the night lab with a hundred sessions in
+  // it — which is exactly what the two size goldens photograph.
+  return pickSessionScale(location.search, base, lookOptions.AGENT_SIZES || []);
 }
 
 /**

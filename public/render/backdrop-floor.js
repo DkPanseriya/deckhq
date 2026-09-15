@@ -10,6 +10,7 @@
  */
 
 import { fadedOut, PALETTE, washedCarpet } from './palette.js';
+import { registerBodyScale } from './plan-scale.js';
 import {
   roundRect,
   setLightShadow,
@@ -86,7 +87,16 @@ export const THRESHOLD_DEPTH_U = 0.4;
  * as well as the worktop — a pool that stopped at the desk edge would read as a
  * lighter desk rather than as a lit place.
  */
-export const DESK_POOL_MARGIN_U = 2.2;
+export let DESK_POOL_MARGIN_U = 2.2;
+
+// WP-88c, §2: *"desk light-pool margin"* is one row of the scaling table, and
+// the reason is in the sentence above it — the pool takes in the chair and the
+// PERSON as well as the worktop, so a pool sized for a 2.52 U figure is a stain
+// round the feet of a 3.15 U one. The pattern cells at the top of this file are
+// the other side of the law and do not move: a floor is laid by the building.
+registerBodyScale((s) => {
+  DESK_POOL_MARGIN_U = 2.2 * s;
+});
 
 /**
  * Which props stand under a downlight (§3.2): the manager's desk, and every

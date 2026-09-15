@@ -22,6 +22,8 @@
  * problems list, one row per picker — which is the shape the Look section draws.
  */
 
+import { now as clockNow } from './clock.js';
+import { floorPopulation } from './floor-rule.js';
 import {
   applyLookSetting,
   latestSnapshot,
@@ -157,6 +159,7 @@ export function createLookPort() {
       lookGuards ? lookGuards.lookMetrics(next, theme) : [],
     theme: () => paintedTheme(),
     picture: (/** @type {any} */ spec) => lookPictures?.picture(spec) || null,
+    live: liveAgentCount, // WP-88c — the number beside `auto`
     apply: postLook,
     exportLook,
     importLook,
@@ -184,6 +187,33 @@ export const lookPaletteActions = Object.freeze({
   setLookPreset: (/** @type {string} */ id) => postLook(lookOptions?.lookForPreset(id)),
   resetLook: () =>
     postLook(lookOptions?.lookForPreset((latestSnapshot?.settings?.look || {}).preset)),
+  // WP-88c. One key of the stored look rather than a preset, and that is the
+  // difference between this and every row above it: a size is not a floor, so
+  // choosing one must leave the floor the user chose exactly as it is.
+  setAgentSize: (/** @type {string} */ id) =>
+    postLook({ ...(latestSnapshot?.settings?.look || {}), agentSize: id }),
   exportLook,
   importLook,
 });
+
+/**
+ * HOW MANY PEOPLE THE FLOOR IS DRAWING RIGHT NOW (WP-88c).
+ *
+ * The number beside `auto` in the Look section, and the only thing on that row
+ * that is not a word: *"auto · 27 live"* is what makes the setting legible,
+ * because `auto` on its own does not say what it decided.
+ *
+ * Counted with `floorPopulation` — the plan's own rule, from `floor-rule.js` —
+ * rather than by adding up the agent list here, so the sheet and the building
+ * behind it cannot disagree about who is on the floor.
+ */
+export function liveAgentCount() {
+  const snapshot = latestSnapshot;
+  if (!snapshot) return 0;
+  const pop = floorPopulation(snapshot.agents || [], {
+    now: clockNow(),
+    goneHomeDays: (snapshot.settings || {}).goneHomeDays,
+  });
+  const desks = [...pop.desks.values()].reduce((n, k) => n + k, 0);
+  return desks + pop.waiting + pop.benchedDrawn;
+}

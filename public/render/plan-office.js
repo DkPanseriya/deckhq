@@ -33,6 +33,7 @@ import {
   OFFICE_VISITOR_CHAIRS,
   PLATE_BAND,
   ROOM_ASPECT_MAX,
+  SOFA_DEPTH,
   SOFA_MIN_RUN,
   SOFA_SEAT_BIAS,
   angleTo,
@@ -204,7 +205,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // added a band on every pass and the reception grew a little taller each
   // time the plan was rebuilt.
   const IN_H = Math.max(wantH, IN_W / ROOM_ASPECT_MAX, fit ? fit.h - PLATE_BAND : 0);
-  const SOFA_D = 2.6;
+  // §2: a sofa is as deep as the person on it. `plan-scale.js` owns the number.
+  const SOFA_D = SOFA_DEPTH;
   const PAD = 0.4;
 
   // --- the desk, at the head of the room

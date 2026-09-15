@@ -18618,3 +18618,148 @@ real file input** — the route it posts to is covered by `look-io.test.mjs`, an
 the four lines between a `change` event and that POST. The **Linux** golden set has no `look.png`,
 and still owes §175.9's two rebakes; the Ubuntu leg will report all three missing or stale until
 somebody runs `npm run goldens` there.
+
+---
+
+## 177. WP-88c — the chair was sized by a person, and the corridor by a plan
+
+**Date:** 16 September 2026 · **Package:** WP-88c · **Design:**
+`docs/plan/11-LOOK-CONTROL-CENTRE.md` §2, §5 · **Requirement:** R-057, R-077 · **Mockup:**
+`docs/media/look/agent-sizes.png` · **Supersedes:** WP-80
+
+The owner, 15 September: *"the user can set the size of agents compared to screen; someone with 100
+agents wants them smaller, someone with 5–10 wants them bigger so they are not lost; accordingly the
+size of table, chair, sofa, everything adjusts automatically."*
+
+§175 carried `agentSize` in the document and said in writing that **nothing read it**; §176 refused
+to draw a picker for it on this sheet's founding rule — *a control ships only if moving it changes
+something today*. This is the package that gives it something to change.
+
+### 177.1 The law, and where it is enforced
+
+**Everything a body sets scales by `s`. Everything the building sets does not.** `s` is 0.80 / 1.00
+/ 1.25, which is `RIG_UNIT_U` 1.6 / 2.0 / 2.5 and `BODY_HEIGHT_U` 2.016 / 2.52 / 3.15. A chair is
+sized by a person; a corridor is sized by a plan.
+
+`public/render/plan-scale.js` owns it — the factor, the `auto` rule, the registry and **the
+classification table**, which is §2's two tables said where they are enforced. Every constant the
+seven dimension modules export is `body` (it scales), `building` (a length the plan sets, and it does
+not), or neither — a ratio, a count, a share, a duration, or a size in screen pixels. Type is always
+in the last group, and §2 says why in one line: *"a large floor gets larger people under the same
+labels, not larger labels."*
+
+`test/unit/agent-size.test.mjs` enumerates every number those modules export and **fails on one that
+is in neither list**, so a package that adds a dimension has to decide which side of the law it is on
+before it can ship. That is the only way a law like this survives its own author.
+
+### 177.2 Why the constants are `let` and not a function call
+
+The alternative was `bodyU(SEAT_PITCH)` at four hundred call sites: four hundred chances to forget
+one, and no way at all to tell that somebody had. An ES module's exported bindings are LIVE, so
+re-assigning `SEAT_PITCH` inside the module that declares it changes what every planner reads on its
+next call and **no call site had to know this file exists**. It is the device `PALETTE` and `LOOK`
+already are, pushed down one level to the numbers themselves.
+
+The cost is that the scale is process state, and it is paid the way the other two pay it: `buildPlan`
+sets it at the top of every plan, before any geometry, so the plan and the figures drawn on it can
+never be at two sizes. Each module registers its own rescale — `plan-scale.js` itself imports nothing,
+so there is no cycle — and `registerBodyScale` runs the callback immediately, which is what makes load
+order irrelevant.
+
+Every base is read once, at load, and every rescale is ONE multiplication from that base rather than
+a ratio applied to the current value. So a round trip is exact: `agent-size.test.mjs` builds a plan at
+medium, visits small and large, and asserts the medium plan comes back byte-identical.
+
+### 177.3 The body constants left `plan-units.js`, and that is WP-22 again
+
+That file stood at 899 lines against the 900-line ceiling with no room for a second declaration of
+anything, so the twenty-one body constants came OUT of it into `plan-scale.js` — the same remedy
+`plan-shapes.js` (WP-77) and `plan-furniture.js` (§163) are. It re-exports every name, so no import
+anywhere moved. `plan.js` was at the ceiling too, and four paragraphs of its own comment were
+tightened to pay for the five lines the setting cost.
+
+### 177.4 `auto`, and the hysteresis that is not a timer
+
+≤ 10 live large, ≤ 40 medium, else small, with **±2 of hysteresis: up at 12 and 42, down at 8 and
+38.** A machine sitting at ten live sessions starts one more and stops it again every few minutes,
+and without the band every one of those would re-plan the building and re-bake its backdrop — the
+rooms changing size under the user's hands twice a minute, for nothing.
+
+§2 also asks for *"at most one re-bake per 30 s"* and **that half is not implemented**: this floor may
+not read the clock, and a timer would be a second, weaker answer to the question the band already
+answers deterministically. `autoAgentSize(live, previous)` is a pure function of two arguments, so the
+sequence of sizes a sequence of counts produces is a thing a test enumerates rather than a thing a
+clock decides.
+
+The **live count** is the people the plan is about to draw — at a desk, waiting, or standing in the
+lounge — and not the session list. A machine with forty sessions that have gone home is not a busy
+floor, and shrinking it for them would be sizing an office by its filing cabinet.
+
+### 177.5 The default is `medium`, and §6's owner decision 3 says `auto`
+
+**The two owner decisions cannot both hold.** Decision 2: *"a default that changed the shipped floor
+would move every golden and decide for the majority who never open the section."* Decision 3: *"auto
+ships as the default."* `auto` on the `single` fixture is one live agent, which is `large`, which is a
+different floor — and `three`, `pinned` and `empty` are all under ten. Shipping `auto` would have
+moved nine of the twelve committed goldens on a package whose acceptance is that none of them move.
+
+So decision 2 wins, because it is also §5's acceptance and the goldens strategy (*"Studio oak at
+medium is today's floor"*), and `auto` ships as an option one click away in the Look section and one
+keystroke away in the palette. A user who never opens either sees the floor they had.
+
+### 177.6 What a picker looks like when it has no picture
+
+The agent size is the **eleventh** picker — 56 options now, counted from the tables as always — and
+it is the fourth with no swatch. A 46 × 28 chip cannot honestly show a floor of larger people, so it
+is four words, and the live preview above the pickers shows what they do. Its row carries the one
+number on that surface that is not a word: *"auto is 27 live right now"*, counted with
+`floorPopulation` so the sheet and the building behind it cannot disagree about who is on the floor.
+
+Four rows in the command palette — `Agents: small | medium | large | auto` — and not a cycle, for the
+reason the six presets are six rows: a cycle makes the user press a key until the floor looks right,
+and the thing they want is a name. `setAgentSize` writes ONE key of the stored look rather than a
+preset, because a size is not a floor and choosing one must leave the floor the user chose alone.
+
+`?scale=large` lays one tab at a size, on top of whatever look it is painting, and writes nothing
+back — WP-64's rules, and WP-80's own parameter arriving with the setting that gives it something to
+say. It takes a size directly where `?look=` takes only a preset name, and the difference is the
+blast radius: a look is fifteen options and a size is one of four words that changes no colour at
+all. `planSignature` reads the size off the RESOLVED look rather than off the snapshot, because a
+URL's size never reaches `settings.look`.
+
+### 177.7 Two goldens, and twelve that did not move
+
+`three@large` and `demo@small`, both through `?scale=`. §5's reasoning is `demo@motion`'s: *"the
+furniture grew with the figure" is exactly the class of bug (§26, §52, §55) that passes every unit
+test and is obvious in one screenshot.* Two, at opposite ends, because the ends fail differently —
+`large` is where furniture that did not follow the body shows, `small` is where legibility goes.
+
+**The other twelve report `0 px moved at all`**, `look.png` included. Read at 3×, the large floor puts
+a 3.15 U robot on a chair at a desk that grew with it, visor above the monitor and feet clear of the
+desk top; the small floor draws twenty-seven people over six rooms with every body over the 16 px
+legibility floor and no name on anybody's head.
+
+**One thing the large capture shows that no test asked for**: at `large` the project rooms lose their
+break-out corners. That is `breakoutFits` doing its job — a 25% larger desk cluster leaves a clear
+patch under the 7.6 U band a round rug and its margin need — and it is §3.5's own *"a break-out
+corner, a planter run, or nothing"* rather than a regression. It does mean a large room is plainer
+than a medium one, which is the honest trade and is not what the mockup shows.
+
+### 177.8 What is not verified
+
+**The new picker is not in a golden.** `look.png` photographs the Look section from its top and the
+eleventh row is below the fold at 1600 × 1000 — which is why the capture is still at 0 px, and is also
+why the control it now offers has never been photographed.
+
+**§2's 30-second re-bake limit is not implemented** (§177.4), so a population oscillating by four
+live agents around a threshold will still re-plan on each crossing; the band makes that need four
+arrivals rather than one.
+
+**The `medium` identity is asserted against this build, not against the last one.** `agent-size.test`
+proves that naming `medium` changes nothing and that a round trip is exact; what proves the floor is
+the one that shipped is the twelve goldens, and only on Windows — **the Linux set is still missing
+`look.png`, `three@large` and `demo@small`** and owes §175.9's two rebakes.
+
+**Nothing at `small` or `large` has been driven in a browser by a person.** Both new captures were
+read at 1× and 3× and nothing else; the settings sheet, the panel and the deck have only been seen at
+`medium`.

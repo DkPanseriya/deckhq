@@ -31,7 +31,8 @@
  * function of its arguments and none of them importing this file back:
  *
  *   plan-shapes.js   what the shapes are — every typedef (WP-77)
- *   plan-units.js    every dimension
+ *   plan-units.js    every dimension the BUILDING sets
+ *   plan-scale.js    every dimension a BODY sets, and how it scales (WP-88c)
  *   plan-packing.js  flow, shelf, squarify, tileRows — rectangles into a rect
  *   plan-anchors.js  resolveAnchors, translateContents, the table sizes
  *   plan-rooms.js    a project's room, and the pinned strip (WP-77)
@@ -62,6 +63,7 @@ import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-na
 import { buildProjectRoom, layPinnedStrip } from './plan-rooms.js';
 import { createRowFloor } from './plan-rows.js';
 import { better, betterArrangement, score } from './plan-search.js';
+import { DEFAULT_AGENT_SIZE, sizeForPopulation } from './plan-scale.js';
 import { buildOffice, buildOfficeRow, seatOffice } from './plan-office.js';
 import { buildLounge } from './plan-service.js';
 import {
@@ -107,12 +109,11 @@ import {
  * @param {ProjectLike[]} projects
  * @param {AgentLike[]} agents
  * @param {{ targetAspect?: number, stage?: {w:number, h:number},
- *   goneHomeDays?: number, now?: number }} [opts]
- *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test
- *   and a golden can both be a pure function of their fixture. `stage` is the
- *   canvas the floor will be drawn on, in pixels (WP-59); it is only ever read
- *   for its SHAPE, and `targetAspect` is the same number stated directly. Pass
- *   either.
+ *   goneHomeDays?: number, now?: number, agentSize?: string }} [opts]
+ *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test and
+ *   a golden are both pure functions of their fixture. `stage` is the canvas the
+ *   floor will be drawn on (WP-59), read only for its SHAPE, and `targetAspect`
+ *   is that number stated directly — pass either. `agentSize` is WP-88c's.
  * @returns {Plan}
  */
 export function buildPlan(projects, agents, opts = {}) {
@@ -128,6 +129,9 @@ export function buildPlan(projects, agents, opts = {}) {
   const pop = floorPopulation(list, { now: opts.now, goneHomeDays: opts.goneHomeDays });
   const waitingCount = pop.waiting;
   const goneHomeCount = pop.goneHome.size;
+  // How big the people are (WP-88c) — before any geometry, because every body
+  // length below is a live binding `plan-scale.js` §2 is what sets.
+  const sized = sizeForPopulation(opts.agentSize ?? DEFAULT_AGENT_SIZE, pop);
 
   const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
   const desksIn = (p) =>
@@ -156,17 +160,16 @@ export function buildPlan(projects, agents, opts = {}) {
 
   // ---- who the floor draws nobody for.
   //
-  // Two display filters, both of which leave `ackState` exactly as the user
-  // set it: an agent who went home, and an agent sitting at a desk in a
-  // project that has no live room. The idle list's line stands for the second
-  // group and the door plate for the first. `assignSeats` and
-  // `AgentRuntime#sync` read this set rather than re-deriving it, so there is
-  // one answer to "is this person on the floor" and not two that disagree.
-  // Keyed on the projects that HAVE A LIVE ROOM rather than on the idle ones.
-  // Those are not the same set: a project the user archived and then stopped
-  // working in is off the floor entirely, so asking "is this agent's project
-  // idle?" answered no for it and left its sessions drawn in a room that does
-  // not exist. A PINNED room is not in it either (WP-77): pinning kept the
+  // Two display filters, both of which leave `ackState` exactly as the user set
+  // it: an agent who went home, and an agent at a desk in a project with no live
+  // room. The door plate stands for the first and the idle list's line for the
+  // second; `assignSeats` and `AgentRuntime#sync` read this set rather than
+  // re-deriving it, so "is this person on the floor" has one answer and not two
+  // that disagree. Keyed on the projects that HAVE A LIVE ROOM rather than on
+  // the idle ones, which are not the same set: a repo the user archived and then
+  // stopped working in is off the floor entirely, so asking "is this agent's
+  // project idle?" answered no for it and left its sessions drawn in a room that
+  // does not exist. A PINNED room is not in it either (WP-77): pinning kept the
   // room, not the people, and its room has no seat to draw anybody on.
   const roomIds = new Set(activeProjects.map(idOf));
   /** @type {Set<string>} */
@@ -180,11 +183,10 @@ export function buildPlan(projects, agents, opts = {}) {
   }
 
   // THE LOUNGE HOLDS THE BENCHED **AND** THE ENDED (WP-78). `08` B6's rule is
-  // untouched — an `ended` session in a repo nobody is working in is still a
-  // line in the idle list and nothing on the floor, which is what `hidden`
-  // above just decided. What changed is where the ones whose repo IS live go:
-  // they used to sit at a desk in it, making a project room a register of
-  // everything that had ever run there rather than of what is running now.
+  // untouched — an `ended` session in a repo nobody is working in is still a line
+  // in the idle list and nothing on the floor, which is what `hidden` above just
+  // decided. What changed is where the ones whose repo IS live go: they used to
+  // sit at a desk in it, making a room a register of what had ever run there.
   let restingCount = 0;
   for (const [pid, n] of pop.resting) if (roomIds.has(pid)) restingCount += n;
   // Sized by who is DRAWN: agents who went home are on the door plate only.
@@ -828,6 +830,8 @@ export function buildPlan(projects, agents, opts = {}) {
     width: W,
     height: H,
     targetAspect,
+    agentSize: sized.size, // what `auto` resolved to here; §2's `s` beside it
+    agentScale: sized.s,
     arrangement: /** @type {'column'|'two-rows'} */ (rows ? 'two-rows' : 'column'),
     working,
     rooms,
@@ -836,11 +840,9 @@ export function buildPlan(projects, agents, opts = {}) {
     seats,
     ...seating,
     loungeSpots: lounge.loungeSpots,
-    // Archived sessions have no place on the floor at all.
-    letGoSpots: [],
+    letGoSpots: [], // an archived session has no place on the floor at all
     doors,
-    // Who the floor draws nobody for, decided once, here. `assignSeats` and
-    // `AgentRuntime#sync` read it rather than deciding again.
+    // Who the floor draws nobody for, decided once here rather than twice.
     hidden,
     goneHome: pop.goneHome,
   };
@@ -849,11 +851,9 @@ export function buildPlan(projects, agents, opts = {}) {
 // ---------------------------------------------------------------- re-exports
 
 /**
- * WP-22 split this file into `plan-units`, `plan-packing`, `plan-anchors`,
- * `plan-rooms`, `plan-service` and `plan-nav`. Everything the old module
- * exported is re-exported here, unchanged, so every existing import keeps
- * working and the goldens keep matching to the pixel. The typedefs are
- * re-exported too, so `import('./plan.js').Room` still resolves.
+ * WP-22 split this file into its `plan-*` siblings. Everything the old module
+ * exported is re-exported here, unchanged — typedefs included, so
+ * `import('./plan.js').Room` still resolves — and no import anywhere moved.
  */
 
 export { resolveAnchors, tableSizesFor } from './plan-anchors.js';

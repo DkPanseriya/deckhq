@@ -113,7 +113,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-054 | Per-project appearance so agents are recognisable without reading | Characters | done |
 | R-055 | Agents big enough to find without hunting | Characters | done |
 | R-056 | Character rework: 45°, robot, readable, never furniture | Characters | done |
-| R-057 | Agent size is the user's preference, not the layout's | Characters | planned |
+| R-057 | Agent size is the user's preference, not the layout's | Characters | done |
 | R-058 | One conversation is one agent | Characters | done |
 | R-059 | Names never carry a numeric suffix | Characters | planned |
 | R-060 | Character animations: thinking, working, running, lounge activities | Characters | done |
@@ -125,7 +125,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-074 | A full interior pass: materials, furniture, density | Interior | in progress |
 | R-075 | Text legible over the floor | Interior | done |
 | R-076 | Furniture that launches the project it belongs to | Interior | done |
-| R-077 | A graphics control centre with curated, mixable interior options | Interior | in progress |
+| R-077 | A graphics control centre with curated, mixable interior options | Interior | done |
 | R-080 | A whiteboard per room with the project's numbers | Plates / numbers | done |
 | R-081 | The plate's numbers are the ones that need action | Plates / numbers | done |
 | R-082 | No white pop-up boxes; background only on hover | Plates / numbers | done |
@@ -538,12 +538,20 @@ allow.
 of agents compared to screen. Someone working with 100 agents may want to see them smaller, someone
 with only 5-10 want to have sizes bigger, so they are not lost in the space."
 **Interpretation.** small / medium / large / auto, with auto derived from the live count (≤ 10
-large, ≤ 40 medium, else small). It changes rig and label scale and **no plan geometry** — the same
-population produces the same room rectangles at all four settings.
+large, ≤ 40 medium, else small). **Everything a body sets scales with it and everything the building
+sets does not** — seats, pitches, desk and sofa depth, the rugs, the planting and the figure's own
+chrome move; the corridors, the room padding, the plate band, the parquet and every type size do
+not. Rooms grow and shrink with their contents as WP-50 and WP-55 already have them.
 **Why.** The right character size is a function of how many there are, and only the user knows
 which regime they are in.
-**Status:** planned (WP-80). **Notes.** Folded into R-077's control centre by the owner's
-15 September message; WP-80 and WP-88 must not ship two settings for one thing.
+**Status:** done. **Implemented by:** WP-88c (`DEVIATIONS.md` §177); the law is
+`docs/03-VISUAL-SPEC.md` §11 and `public/render/plan-scale.js`.
+**Notes.** WP-80 is superseded and its interpretation with it. **This row contradicts what it used to
+say**: WP-80's criterion was *"no plan geometry — the same population produces the same room
+rectangles at all four settings"*, and that is the wrong invariant, because a 3.15 U robot at a 2.6 U
+desk sits through the desk. What holds instead is that the same population puts the same people in
+the same rooms in the same order at every size, while the rooms follow their contents.
+`?scale=` is WP-80's own parameter, kept. Medium is the floor that shipped, byte for byte.
 
 **R-058 — One conversation is one agent**
 *Owner, 14 September 2026:* "I see southeast asia trip planning agent named Greta 2 in the room, and
@@ -707,7 +715,7 @@ scheme, rugs, tables, chairs, sofas, plants — that combine without producing a
 agent-size control from R-057, with furniture scaling to the chosen agent size automatically.
 **Why.** Themes exist (WP-30, §125) and are a whole-floor diff; the owner is asking for per-element
 choice within a curated set, which is a different thing.
-**Status:** in progress (**WP-88a and 88b done**, 88c open). **Notes.** The options are the interior designer's, not a free
+**Status:** done (**WP-88a, 88b and 88c**). **Notes.** The options are the interior designer's, not a free
 palette: `10-INTERIOR-DESIGN.md`'s material system already derives every theme's tokens from one
 derivation, so a "set" is a token bundle rather than a colour picker. Every combination must still
 pass `assertThemeContrast`, `assertMaterialDiscipline` and the ≥ 3:1 figure-halo guard (P-03 and
@@ -738,10 +746,19 @@ which refuses whole, rather than to `/api/settings`, which would sanitise it. Ni
 input, and every control operable from the keyboard alone: one Tab stop per picker, arrows inside it.
 `look` is in `SETTINGS_KEYS`. One new golden, `look.png`; the eleven that existed are untouched.
 
-**What is still owed:** agent size and the scaling law (WP-88c). The Look section deliberately has
-**no agent-size picker** — `agentSize` is carried in the document and nothing reads it, and this
-sheet's founding rule is that a control ships only when moving it changes something (§58, §94). That
-is where R-057 is answered, and this row will say so when it is.
+**WP-88c shipped agent size and the scaling law (`DEVIATIONS.md` §177), which is where R-057 is
+answered.** `Agent size` is the eleventh picker — small, medium, large, auto, with the live count
+beside `auto` — and four rows in the palette, so the catalogue is now **56 options over eleven
+pickers**. The law is *everything a body sets scales by `s` (0.80 / 1.00 / 1.25) and everything the
+building sets does not*, stated in `docs/03-VISUAL-SPEC.md` §11 and enforced by a classification
+table in `public/render/plan-scale.js` that `test/unit/agent-size.test.mjs` proves is complete: a
+package that adds a dimension cannot ship without saying which side of the law it is on. `auto` reads
+how many people the floor actually draws, with ±2 of hysteresis around each threshold.
+**This row contradicts §4 of the design on one point.** Owner decision 3 asks for `auto` as the
+shipped default and decision 2 forbids a default that moves the shipped floor; `auto` on a quiet
+machine is `large`, so the two cannot both hold. **The default is `medium`** and `auto` is one click
+away. Two new goldens, `three@large` and `demo@small`; the twelve that existed report 0 px moved at
+all.
 
 ### 2.7 Plates and numbers
 

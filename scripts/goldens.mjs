@@ -241,6 +241,22 @@ const CAPTURES = [
     command: ',',
     scrollTo: 'settings-look',
   },
+  // WP-88c · THE TWO SIZES, through `?scale=` (`public/url-options.js`).
+  //
+  // §5's own reasoning, and it is `demo@motion`'s: *"the furniture grew with the
+  // figure" is exactly the class of bug (§26, §52, §55) that passes every unit
+  // test and is obvious in one screenshot.* A desk that did not grow with the
+  // robot at it is a robot sitting through a desk, and no assertion over an
+  // emitted plan can see that a picture looks wrong.
+  //
+  // TWO, and at opposite ends, because the two ends fail differently. `large` is
+  // where furniture that did not follow the body shows — a 3.15 U figure at a
+  // 2.6 U desk — and it is taken on `three`, a floor with room to be generous.
+  // `small` is where LEGIBILITY goes: twenty-seven people at 0.8, every body over
+  // the 16 px floor and every name still clear of a head, which is the `demo`
+  // floor's own question. The other twelve are `medium` and must not move at all.
+  { name: 'three@large', population: 'three', theme: 'default', query: 'scale=large' },
+  { name: 'demo@small', population: 'demo', theme: 'default', query: 'scale=small' },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
     population: 'demo',

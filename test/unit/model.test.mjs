@@ -308,7 +308,7 @@ test('WP-22: no split module is over 900 lines', async () => {
   // The WP-22 follow-up added the last groups; the ceiling itself, 900, has
   // not moved.
   const groups = [
-    [path.join(root, 'render'), 'plan', 7],
+    [path.join(root, 'render'), 'plan', 8],
     [root, 'app', 11],
     [root, 'panel', 14],
     [path.join(root, 'render'), 'scene', 9],

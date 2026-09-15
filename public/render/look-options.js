@@ -24,9 +24,10 @@
  *
  * ## The count, said out loud
  *
- * §1 promises *"52 options over ten pickers"*, and this is how the two numbers
- * are reached — stated here because the arithmetic is not obvious and a later
- * reader should not have to rediscover it:
+ * §1 promised *"52 options over ten pickers"*, and WP-88c's agent size is the
+ * eleventh — a picker now, because §2 landed and moving it changes the floor.
+ * This is how the two numbers are reached, stated here because the arithmetic is
+ * not obvious and a later reader should not have to rediscover it:
  *
  *   four floor pickers, one per zone          5 + 4 + 5 + 6 = 20
  *   the colour scheme                                          6
@@ -35,10 +36,11 @@
  *   the task rug        3 tones + 2 patterns                   5
  *   the planting        3 families + 3 densities               6
  *   the prop density                                           3
- *   ------------------------------------------------ ten pickers, 48 options
+ *   the agent size      small / medium / large / auto (§2)      4
+ *   --------------------------------------------- eleven pickers, 52 options
  *   the lounge kit      four checkboxes, not a picker (§1.g)    4
  *                                                             ---
- *                                                              52
+ *                                                              56
  *
  * `LOOK_OPTION_COUNT` is computed from the tables rather than written down, so
  * the two can never disagree and a package that adds an option has to say so.
@@ -48,6 +50,7 @@
  * validates an imported document lives.
  */
 
+import { DEFAULT_AGENT_SIZE } from './plan-scale.js';
 import { RUG_TONE_IDS } from './themes.js';
 import {
   FLOOR_MATERIALS,
@@ -427,18 +430,30 @@ export const LOUNGE_KIT_REQUIRED = 'sitting';
 // ------------------------------------------------------------- agent size
 
 /**
- * §2's four settings, carried by the model and NOT YET APPLIED — WP-88c is the
- * package that makes `RIG_UNIT_U` read this, and it supersedes WP-80.
+ * §2'S FOUR SETTINGS, AND SINCE WP-88c THEY ARE APPLIED.
  *
- * It is in the document now rather than later for one reason: a look that gained
- * a key in a second package would be a look file exported today that a build
- * tomorrow refuses, and `layout-io`'s whole-or-one-error discipline makes that a
- * refusal rather than a shrug. `auto` is the default (owner decision 3).
+ * `RIG_UNIT_U` is 1.6 / 2.0 / 2.5 by setting, every body constant on the floor
+ * carries the matching `s`, and `auto` reads the live count. `public/render/
+ * plan-scale.js` owns the law and the arithmetic; this is only the allowlist.
+ *
+ * **`medium` is the shipped default rather than `auto`**, which is a departure
+ * from §6's owner decision 3 and is forced by decision 2 — see
+ * `DEFAULT_AGENT_SIZE` in `plan-scale.js`, and `docs/DEVIATIONS.md` §177. The
+ * order below is the picker's: smallest first, and `auto` last because it is not
+ * a size but a rule for choosing one.
  * @type {ReadonlyArray<string>}
  */
-export const AGENT_SIZES = Object.freeze(['auto', 'small', 'medium', 'large']);
+export const AGENT_SIZES = Object.freeze(['small', 'medium', 'large', 'auto']);
 
-// ---------------------------------------------------------- the ten pickers
+/** What each setting is called in the picker. */
+export const AGENT_SIZE_LABELS = Object.freeze({
+  small: 'Small',
+  medium: 'Medium',
+  large: 'Large',
+  auto: 'Auto',
+});
+
+// ------------------------------------------------------- the eleven pickers
 
 /**
  * The catalogue, as the ten groups a settings section shows — WP-88b builds the
@@ -492,13 +507,24 @@ export const LOOK_PICKERS = Object.freeze(
       path: 'props.density',
       options: PROP_DENSITY_IDS.map((id) => ({ id, label: PROP_DENSITIES[id].label })),
     },
+    {
+      // WP-88c. The eleventh, and it arrives exactly when §4's founding rule
+      // lets it: *"a control ships only if moving it changes something today"*.
+      // It carries no swatch — a 46 x 28 chip cannot honestly show a floor of
+      // larger people — so it is four words, and the preview above shows what
+      // they do.
+      id: 'agentSize',
+      label: 'Agent size',
+      path: 'agentSize',
+      options: AGENT_SIZES.map((id) => ({ id, label: AGENT_SIZE_LABELS[id] })),
+    },
   ].map((p) => Object.freeze({ ...p, options: Object.freeze(p.options) })),
 );
 
 /**
- * §1's 52, counted from the tables rather than written down. The lounge kit's
- * four checkboxes are not a picker (§1.g) and are added here so the promise and
- * the arithmetic are the same number.
+ * §1's 52 plus §2's four, counted from the tables rather than written down. The
+ * lounge kit's four checkboxes are not a picker (§1.g) and are added here so the
+ * promise and the arithmetic are the same number.
  */
 export const LOOK_OPTION_COUNT =
   LOOK_PICKERS.reduce((n, p) => n + p.options.length, 0) + LOUNGE_KIT_BAYS.length;
@@ -528,7 +554,8 @@ export const LOOK_OPTION_COUNT =
  * the herringbone, the corridor is the poured screed, a project room is the wool
  * broadloom, the scheme is the identity transform, the set is what WP-85b drew,
  * the rugs are WP-85a's slate and sage, the densities are §3.5's and §3.6's, and
- * every bay is on.
+ * every bay is on, and the agent size is `medium` — §2's `s = 1`, which is what
+ * makes the twelve committed goldens a photograph of this look.
  * @type {Readonly<Look>}
  */
 export const DEFAULT_LOOK = Object.freeze({
@@ -548,7 +575,7 @@ export const DEFAULT_LOOK = Object.freeze({
   plants: Object.freeze({ family: 'leafy', density: 'normal' }),
   props: Object.freeze({ density: 'normal' }),
   lounge: Object.freeze({ sitting: true, quiet: true, cafe: true, games: true }),
-  agentSize: 'auto',
+  agentSize: DEFAULT_AGENT_SIZE,
 });
 
 /**
