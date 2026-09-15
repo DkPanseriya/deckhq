@@ -37,6 +37,7 @@ import {
   SceneLabels,
 } from '../../public/render/scene-labels.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
+import { PLUS_CLEAR_U } from '../../public/render/plan-units.js';
 import { buildPlan } from '../../public/render/plan.js';
 import {
   truncateLabel,
@@ -1672,6 +1673,33 @@ test('WP-81: a plate collapses from the bottom and never leaves its band', () =>
   );
   assert.equal(narrow.runs[1].text, '2 need you');
   assert.equal(narrow.runs[2].text.includes('Nadir'), false);
+});
+
+test('WP-81: a plate stops short of the in-room "+", which stands in the same band', () => {
+  // The defect the first 3x crop of `orbital-api` showed: `2 need you · oldest
+  // 1d 2h` drawn straight through the affordance in the room's north-east
+  // corner. The plate band is furniture-free by construction, so no furniture
+  // rule could have caught it — the "+" is chrome, like the plate.
+  const U = 28;
+  const { runs, rect } = withFixedNow(PLATE_NOW, () =>
+    drawPlate({ ...WIDE_ROOM, w: 14 }, plateFixture(), { U }),
+  );
+  const plusLeft = (14 - PLUS_CLEAR_U) * U;
+  assert.ok(runs.length >= 2);
+  assert.ok(
+    rect.x + rect.w <= plusLeft + 1e-6,
+    `the plate reaches ${(rect.x + rect.w).toFixed(1)} px, past the "+" at ${plusLeft.toFixed(1)}`,
+  );
+  // And the corner is only a PROJECT room's: the office, the lounge and the
+  // archive have no "+" in them, so nothing is reserved on their plates.
+  const office = withFixedNow(PLATE_NOW, () =>
+    drawPlate(
+      { kind: 'office', id: 'o', name: 'Your Office', x: 0, y: 0, w: 14, h: 10, plateBand: 3.4 },
+      { counts: { drawn: { waiting: 2 } }, agents: [] },
+      { U },
+    ),
+  );
+  assert.ok(office.rect.w > 0);
 });
 
 test('WP-81: the doing line is the adapter’s own tool summary, cut but never invented', () => {

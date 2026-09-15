@@ -24,8 +24,11 @@ export const HIT_RADIUS_PX = 20;
 // room plate — small targets that sit near furniture must win over the
 // character standing behind them, and a click on the "+" must never select
 // the agent behind it (see `_hitTest`).
-export const PLUS_SIZE_U = 1.5; // the "+" glyph's own half-length, plan units
-export const PLUS_MARGIN_U = 1.7; // inset from the room's north/east walls — "the room's top-right corner area is free"
+// The "+"'s own two dimensions live in `plan-units.js` since WP-81, beside the
+// `PLUS_CLEAR_U` the room plate measures itself against — the plate and the
+// affordance share one corner and must not each decide where it starts. They
+// are re-exported here because this is where every caller already asks.
+export { PLUS_SIZE_U, PLUS_MARGIN_U } from './plan-units.js';
 export const PLUS_HIT_RADIUS_PX = 15;
 export const FIXTURE_HIT_PAD_PX = 6; // generous click padding around shelf/screen/whiteboard rects
 

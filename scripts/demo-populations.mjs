@@ -254,6 +254,34 @@ export const SESSIONS = POPULATIONS[POPULATION]();
  * row moving in `DEMO_SESSIONS` should not silently reattach the juniors to
  * somebody else.
  */
+/**
+ * WHAT THE WORKING SESSIONS ARE RUNNING, FOR WP-81's SECOND PLATE LINE.
+ *
+ * The room plate's second line is `MK1.1 · Bash npm test` — `agent.currentTool`
+ * as the adapter summarised it, and nothing else. `currentTool` is written by a
+ * `PreToolUse` hook and by no other path, so a demo floor that never fired one
+ * photographed that line empty on every capture: the copy was unit-tested and
+ * the PIXELS were not, which is exactly the gap `DEVIATIONS.md` §157's own
+ * "Unverified" note left open for the by-tool table.
+ *
+ * So the demo drives a real `PreToolUse` through the real endpoint, in the real
+ * Claude Code payload shape, and the real adapter summarises it — the same
+ * discipline every other state on this floor is produced by. Keyed by title for
+ * the reason `JUNIORS` is: ids are derived from cast position.
+ *
+ * Only two rows, and both on WORKING sessions. A tool call cannot move a
+ * session's state (`state-machine-hooks.mjs` refuses to, on purpose), so
+ * putting one on a waiting session would say "editing tests" beside a raised
+ * hand — true of the process and a lie about the floor.
+ */
+export const DEMO_TOOLS = Object.freeze({
+  'Rate limiter for the public API': { tool_name: 'Bash', tool_input: { command: 'npm test' } },
+  'Dark mode audit across 40 components': {
+    tool_name: 'Edit',
+    tool_input: { file_path: 'src/tokens/dark.ts' },
+  },
+});
+
 export const JUNIOR_PARENT = 'Dark mode audit across 40 components';
 export const JUNIORS = [
   {

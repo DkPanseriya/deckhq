@@ -49,6 +49,27 @@ export const MARGIN = 2.5;
  */
 export const PLATE_BAND = 3.4;
 
+/**
+ * THE OTHER THING IN THE PLATE BAND, AND WHAT THE PLATE OWES IT (WP-81).
+ *
+ * `10-INTERIOR-DESIGN.md` §3.8: *"the in-room `+` is 2.4 U square in the
+ * north-east corner and is the only other chrome inside a room."* It stands in
+ * the SAME strip the plate is written in, at the other end of it, so the band
+ * being furniture-free is not enough on its own — a hero line long enough to
+ * reach the corner is drawn straight through the affordance, which is what
+ * WP-81's first capture showed at 3× on `orbital-api`.
+ *
+ * `PLUS_CLEAR_U` is how much of a room's width, measured in from its east
+ * wall, belongs to the "+" and not to the plate: its inset from the wall plus
+ * the radius of its hover halo, which is the widest it is ever drawn.
+ * `scene-hit.js` owns the two numbers under it and re-exports them from here,
+ * so the plate and the affordance cannot end up with two opinions about where
+ * the corner starts.
+ */
+export const PLUS_SIZE_U = 1.5; // the "+" glyph's own half-length, plan units
+export const PLUS_MARGIN_U = 1.7; // inset from the room's north/east walls
+export const PLUS_CLEAR_U = PLUS_MARGIN_U + PLUS_SIZE_U * 0.5 * 1.7;
+
 /** The building is the shape of the screen, within reason. */
 export const ASPECT_MIN = 1.2;
 export const ASPECT_MAX = 2.2;

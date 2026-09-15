@@ -14,7 +14,10 @@
  * (docs/03-VISUAL-SPEC.md §7).
  */
 
-import { formatTokens, PLATE_BAND, plateHeroLine, plateTertiaryLine } from './plan.js';
+import { formatTokens, plateHeroLine, plateTertiaryLine } from './plan.js';
+// Straight from the dimensions module rather than through `plan.js`: this is a
+// leaf of pure numbers, and `plan.js` is already at the 900-line ceiling.
+import { PLATE_BAND, PLUS_CLEAR_U } from './plan-units.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { formatElapsed } from './rig.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
@@ -592,7 +595,13 @@ export class SceneLabels extends SceneCamera {
     // Every measurement below is stated at `PLATE_BASE_SCALE` and multiplied
     // by this, so the plate keeps its proportion to the door it is on.
     const k = plateScaleFor(worldScale);
-    const maxW = Math.max(60 * k, roomW - 12 * k);
+    // The plate's own half of the band. The east end of it belongs to the
+    // in-room "+" (`PLUS_CLEAR_U`), which stands in this same strip and was
+    // being written straight through at 3x on `orbital-api` — a room's chrome
+    // colliding with a room's chrome, which no furniture rule could have
+    // caught because neither of them is furniture.
+    const plusClear = room.kind === 'project' ? PLUS_CLEAR_U * worldScale : 0;
+    const maxW = Math.max(60 * k, roomW - 6 * k - Math.max(6 * k, plusClear));
     const x = topLeft.x + 6 * k;
     const bandPx = (Number(room.plateBand) || PLATE_BAND) * worldScale;
 
