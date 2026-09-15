@@ -1144,6 +1144,32 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   package turns on once the Linux set is complete. Sixteen goldens on win32: **all 16 match, 0 px**.
   `docs/DEVIATIONS.md` §180.
 
+- **The floor stopped counting its crews twice — WP-92g.** The daemon has published one `crews` list
+  per snapshot since WP-89, built after the juniors are named so a member carries the name the floor
+  draws under it. The browser fell back to counting them again whenever the field was absent **or
+  empty** — and a floor with no sub-agents on it, which is most floors, publishes an empty list. So
+  the rule that was moved into the daemon precisely so it would have one home ran a second time in
+  the tab on every single snapshot, to arrive at the same empty answer. It now recomputes only when
+  the field is genuinely absent: an older daemon, or a replay. The empty-machine floor was the reason
+  the emptiness could not be trusted — it carried no `crews` at all, and no `rateCardVersion`, so its
+  cost lines read "rate card unknown" — and it now carries exactly the keys a real snapshot has, in
+  the same order, asserted against a real one rather than against a list somebody has to remember to
+  extend. All sixteen goldens 0 px, `empty` included. `docs/DEVIATIONS.md` §181.
+
+- **The review card's state colours come from the same place as the floor's — WP-92d.** The panel
+  carried its own private copy of the seven state colours, and it was six rows where every other copy
+  has seven: no `ended`. In the moment before the renderer finishes loading, an ended session's icon
+  in the panel was a neutral grey rather than the spec's. There is one literal in the client now and
+  every consumer imports it, held to `render/palette.js` key for key by a test. `docs/DEVIATIONS.md`
+  §181.
+
+- **The settings sheet stopped asking the Claude Code adapter which terminals exist — WP-92f.** The
+  emulator catalogue moved to `src/core/` when the Codex adapter became its second user; the settings
+  route was still importing it through the one-line re-export left behind, so a runtime-neutral list
+  looked like one runtime's property. The id list is unchanged, in order. A second re-export,
+  `src/core/mcp-tool-name.mjs`, had no importer anywhere and is deleted — its own test was the only
+  thing keeping it reachable. `docs/DEVIATIONS.md` §181.
+
 ### Testing
 
 - **The golden harness can press a key, and `three@selected` is the first golden of a floor somebody
@@ -1347,6 +1373,21 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   shape: the body of `frameMs()`, which is frame pacing rather than a phase. Proved by planting
   `Date.now()` in a temp copy, so the gate has been seen to fail without anything in the tree being
   broken to see it. `docs/DEVIATIONS.md` §180.
+
+- **The type checker checks one declaration of `HookEvent`, not six — WP-92e.** `RuntimeAdapter` and
+  `HookEvent` were copy-pasted verbatim into all six `state-machine-*.mjs` modules, twenty-seven
+  lines each time, so `tsc` compared every copy against itself and the one thing a shared type exists
+  to catch — two of them drifting — was the one thing nothing could see. Both are declared once in
+  `state-machine-rules.mjs`, the pure end of the chain, and referenced by `import()` from the other
+  five. **No executable line is in the diff**: every added and removed line is a comment or a blank,
+  checked by filter rather than by eye. 125 lines gone, 26 added, zero `@ts-ignore` still zero.
+
+- **A gate that compares two snapshot shapes instead of listing one — WP-92g.**
+  `test/unit/snapshot-shape.test.mjs` stands up a real `Registry` over a real `Store`, takes a real
+  snapshot, and asserts the empty-machine floor carries exactly those keys plus `demo` and
+  `demoNote`, in the same order. The test it supersedes listed the keys by hand and so only ever
+  checked the ones somebody had remembered to add — which is how two fields went missing for two
+  packages. Proved failing against the tree one commit earlier, naming both of them.
 
 ### Packaging
 

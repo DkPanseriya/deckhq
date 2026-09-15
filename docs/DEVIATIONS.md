@@ -19173,3 +19173,152 @@ the old six-name list.
 - **None of the eight over-cap files was split.** They are on a table with dates and package
   numbers, which is the owner's default and not a claim that the table is the end state.
 - **The ceiling did not move, the tolerance did not move, and no `INVARIANT:` test changed.**
+
+---
+
+## 181. WP-92d–g — four places where one idea had two definitions, and the cheapest of them was costing a derivation per frame
+
+**Date:** 16 September 2026 · **Packages:** WP-92d, WP-92e, WP-92f, WP-92g · **From:**
+`docs/plan/13-ARCHITECTURE-AUDIT.md` findings A-04, A-06, A-09, A-11, A-10 · **Commits:** `378e077`,
+`1f29b16`, `459b1b8`, `a0cc9f7`
+
+§180's three moves were gates. These four are the product, and they are all the same sentence: a
+value, a type, a catalogue or a shape that had been written down twice, where only one of the two
+copies was held by anything. None of them is an overhaul — the four diffs together are 355 lines
+added and 204 removed across twenty files, five of them tests and one a deletion — and each was
+proved before and after. All sixteen goldens are at 0 px after every commit, and `/api/state` is
+byte-identical on the `demo`, `three` and `crew` fixtures across all four.
+
+The thing worth taking out of this entry: **a duplicate is not expensive because it is duplicated,
+it is expensive because of what the second copy makes somebody else do.** Three of these four were
+tidy-ups. The fourth had the browser re-deriving the crew rule on every snapshot of every floor,
+for two years' worth of packages, because a field was missing from a fixture.
+
+### 181.1 One state palette literal in the client, not three (A-04)
+
+The seven state colours live in four places on purpose. `public/render/palette-colors.js` is
+canonical — `docs/03-VISUAL-SPEC.md` §5 transcribed — `public/style.css` restates them as
+`--state-*` because the chrome is CSS and the floor is canvas, and the shell carries a literal it
+can read because **every import from `render/**` is dynamic and defensive**: `app.js`'s header says
+a missing or broken renderer must cost the floor and the close-up and nothing else. Three of those
+four were held together by `state-visuals.test.mjs`.
+
+The fourth was `public/panel-header.js:30`, a private `FALLBACK_STATE_COLORS` that no test named and
+that had **six rows where the other three have seven** — no `ended`. So with `render/palette.js` not
+yet loaded, an ended agent's state icon in the panel fell through the `|| '#888888'` at the end of
+`stateColor()` instead of reading the spec's `#6E6A63`. That is the one observable difference these
+four packages make, and it is a convergence rather than a change: the fallback now agrees in all
+seven states with the palette it is a fallback for.
+
+The literal is `public/state-palette.js` now — no imports, no DOM, no side effects, so importing it
+can neither create a cycle nor move anything's evaluation order — and `app.js` and `panel-header.js`
+both read it. The audit proposed importing it from `app-state.js`, on the belief that
+`panel-header.js` already imported from there; it does not, and `app-state.js` is sixty
+`getElementById` calls and a `createSounds()` at module scope, so a panel part pulling the shell's
+DOM module into its graph would have been a bigger change than the one being made.
+
+Two assertions make it a fact instead of an intention: exactly one `FALLBACK_STATE_COLORS` literal
+exists under `public/`, and it equals `STATE_COLORS` key for key. Proved failing against a second
+literal planted under `public/`.
+
+### 181.2 Two `@typedef` blocks for the registry chain, not twelve (A-06)
+
+`RuntimeAdapter` and `HookEvent` were copy-pasted verbatim into all six `state-machine-*.mjs`
+modules, twenty-seven lines each time. `tsc` checked every copy against itself, so the one thing a
+shared type exists to catch — a drift between two of them — was the one thing nothing could see.
+
+Both live once in `state-machine-rules.mjs` now, the pure end of the chain that the other five
+already import from, and the five write `import('./state-machine-rules.mjs').HookEvent`: the device
+§131 used for `doctor-report.mjs` and §95 for `terminals-catalog.mjs`. The `Agent`,
+`ActivityState`, `SessionSummary`, `LiveSession` and `Store` aliases stayed exactly where they were
+— each already names one declaration in `model.mjs` or `store.mjs`, so none of them was ever a
+second definition of anything.
+
+**The diff contains no executable line**, and that is asserted rather than asserted-to:
+
+```
+git diff -U0 | grep -E '^[+-]' | grep -v '^[+-][+-][+-]' \
+  | grep -vE '^[+-]\s*(/\*|\*|\*/|//)' | grep -vE '^[+-]\s*$'
+```
+
+prints nothing over the commit. 125 lines removed, 26 added. A JSDoc `import()` in a type position
+is not a value edge — the audit's own graph is built after comments are stripped — so the module
+graph is unchanged and zero `@ts-ignore` stays zero.
+
+### 181.3 The settings sheet reads the catalogue from `core/`, and the orphan goes (A-09, A-11)
+
+Two findings with one shape: a module pointing at a re-export instead of at the thing it re-exports.
+
+`routes/settings.mjs` imported `terminalIds` from `src/adapters/claude-code/terminals.mjs`. §95 moved
+the emulator table to `src/core/terminals.mjs` when the Codex adapter became its second user and left
+that file as one line of `export *`, so the route looked like it needed the Claude Code adapter to
+answer a question no runtime owns: which ids `settings.terminal` may name, on every platform. It
+reads `core/` now. The re-export stays for its one remaining caller, `src/cli/doctor-collect.mjs`,
+and its header says so instead of naming two callers it no longer has.
+
+`src/core/mcp-tool-name.mjs` re-exported eight names from `public/mcp-tool-name.js` for a Node-side
+caller WP-64 intended and nobody wrote. Zero importers in `src/`, `public/` and `scripts/` — and its
+own test was the only thing keeping it reachable, which is exactly what made it invisible: a module
+with a green test looks alive. It is deleted and the test points at the original. **The parsing rule
+did not move**; it stays in `public/`, where the label is drawn, in the §122 direction.
+
+Proof: `settings-keys.test.mjs`, `terminals.test.mjs` — which asserts the re-export's surface, so it
+also proves the id list is unchanged in order — `mcp-tool-name.test.mjs` and `resume-target.test.mjs`
+green, 106 tests; a `grep` over ten directories leaving no importer behind; `/api/state` byte-identical
+on the three fixtures; `typecheck` green on both projects, the deleted module having left the Node
+project's reachable set.
+
+### 181.4 The demo snapshot is the real snapshot's shape, and crews are derived once (A-10)
+
+`src/core/demo-fixture.mjs` exists to be "a snapshot-shaped object", so that every surface
+downstream — floor, panel, deck, strip, `doctor`, status line — has one code path rather than two.
+`Registry.snapshot()` substitutes it at the one place a snapshot is produced, and nothing after that
+point is told which floor it is holding except by the `demo` flag.
+
+`_realSnapshot()` then grew `crews` (WP-89) and `rateCardVersion` (WP-26). The actor floor grew
+neither. **And the cost of the first one landed on every floor, not only the empty one.**
+`Scene.setState` fell back to counting the crews itself when the field was absent *or empty* —
+
+```js
+Array.isArray(this._snapshot.crews) && this._snapshot.crews.length ? … : crewsFrom(agents, …)
+```
+
+— and an ordinary floor, one with no juniors on it, publishes `crews: []`. So the rule WP-89 moved
+into the daemon precisely so it would have one home ran a second time in the browser on every
+snapshot, to arrive at `[]` again. The test is `Array.isArray` alone now: a published empty list is
+an answer, `undefined` is the absence of one, and only an absence — an older daemon, a replay — is
+worth recomputing.
+
+`rateCardVersion` is **passed into** `buildDemoSnapshot` rather than read there, like `settings`,
+`hooks`, `takenNames` and `writeError` beside it. `loadRateCard()` stats a file under the user's
+home, and this module's header promises a pure function of `now`; reading it inside the fixture made
+the test-isolation canary (§124) fire on the first run, which is the gate doing its job. The
+registry already computes the string once per snapshot and hands it over. `crews` is derived in the
+fixture by `crewsFrom` — the same function, over one more of the `src/` → `public/` edges §122
+allows and the audit §1.3 enumerates, so the actors' crews cannot be a second rule that disagrees.
+
+**The new gate holds no list.** `test/unit/snapshot-shape.test.mjs` stands up a real `Registry` over
+a real `Store` and a fake adapter, takes a real snapshot, and asserts the actor floor's keys are
+exactly those plus `demo` and `demoNote`, **in that order** — for `buildDemoSnapshot` directly and
+for the substitution an empty machine actually gets. The hand-written key list in
+`demo-fixture.test.mjs` is what missed this for two packages; it is updated and now says where the
+contract lives. Proved failing on all four of its tests against the tree one commit earlier, naming
+`crews` and `rateCardVersion` as the difference.
+
+The `empty` golden — which *is* the actor floor — is at 0 px, as are the other fifteen. `demo: true`,
+`demoNote` and the rule that an actor is not addressable are untouched: the ids are still not in
+`registry.agents`, so `/api/ack`, `/api/send` and `/api/resume` still 404 on them by construction.
+
+### 181.5 What these four did not do
+
+- **No behaviour changed except the one named in §181.1** — the panel's `ended` fallback colour
+  while the renderer is still loading — and that one makes two copies agree rather than making one
+  of them new.
+- **No `INVARIANT:` test changed**, and no invariant was relaxed. The suite went 2,450 → 2,456 by
+  addition only: two in `state-visuals.test.mjs` and four in the new `snapshot-shape.test.mjs`.
+- **No file was split and no module was moved** except the one small pure module §181.1 needed and
+  the one orphan §181.3 deleted. The eight files on §180.2's exemption table are still on it.
+- **Nothing was fixed in passing.** `doctor-collect.mjs` still imports the terminal catalogue
+  through the adapter re-export; that is the one line that would let the re-export go, and it
+  belongs to whoever takes it, not to this package.
+- **A-05, A-07, A-08, A-12, A-13 and A-14 are untouched.** They are WP-92h–o.

@@ -1208,8 +1208,15 @@ that stopped being the file list.
 done** (§180): the goldens gate reports a not-yet-baked golden instead of failing on it, the
 900-line ceiling is checked over every file under `src/`, `public/`, `scripts/` and `site/` against a
 dated exemption table, and the draw-path clock guard walks `public/render/` instead of naming six
-files. All three changed gates only — no product code, all sixteen goldens at 0 px. WP-92d–o are
-planned.
+files. All three changed gates only — no product code, all sixteen goldens at 0 px. **WP-92d, WP-92e,
+WP-92f and WP-92g are done** (§181), and these four are the product rather than the gates: one state
+palette literal in the client instead of three, `HookEvent` and `RuntimeAdapter` declared once
+instead of six times each, the settings route reading the terminal catalogue from `core/` with the
+orphan `src/core/mcp-tool-name.mjs` deleted, and the empty-machine snapshot carrying exactly the keys
+a real one does — which also stopped the browser re-deriving the crew rule on every snapshot of every
+floor. Findings A-04, A-06, A-09, A-10 and A-11 are resolved with commits. All sixteen goldens 0 px
+after each, `/api/state` byte-identical on three fixtures, suite 2,450 → 2,456 by addition. WP-92h–o
+are planned.
 **Notes.** The audit changed no code by design, and says so in its own header. Its refusals are
 recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
 site, the extension and the plugin were mapped but not audited in depth.

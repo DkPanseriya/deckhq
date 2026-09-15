@@ -428,6 +428,14 @@ injected clock; `?phase=` keeps working; `demo@motion` and `crew` stay 0 px.
 
 ### A-04 · A second, private, untested copy of the state palette · **risk** · S
 
+> **RESOLVED** by WP-92d, commit `378e077` (`docs/DEVIATIONS.md` §181.1). The literal lives once, in
+> a new pure `public/state-palette.js`, and `app.js` and `panel-header.js` both import it.
+> `state-visuals.test.mjs` asserts exactly one such literal exists under `public/` and that it equals
+> `STATE_COLORS` key for key. Not as written here: the panel does **not** import from `app-state.js`,
+> and `app-state.js` is DOM refs and a `createSounds()` at module scope, so the fallback went into a
+> module with no imports and no side effects instead. The private copy also had six rows, not seven
+> — no `ended` — so the fallback for that one state moved from `#888888` to the spec's `#6E6A63`.
+
 **Evidence.** `public/panel-header.js:30` declares `FALLBACK_STATE_COLORS` privately, duplicating
 `public/app-state.js:45`, which duplicates `public/render/palette-colors.js:74`, which
 `style.css:72` restates and `state-visuals.test.mjs` holds. Nothing names the panel's copy.
@@ -459,6 +467,11 @@ a subscriber added after a silent change still receives the next snapshot.
 **Must not change.** `_changed` semantics. `emitNow()`. The SSE first-push on connect.
 
 ### A-06 · `HookEvent` and `RuntimeAdapter` are defined six times each · **debt** · S
+
+> **RESOLVED** by WP-92e, commit `1f29b16` (`docs/DEVIATIONS.md` §181.2). Both are declared once in
+> `state-machine-rules.mjs`; the other five write `import('./state-machine-rules.mjs').HookEvent`.
+> 125 lines removed, 26 added, and the "no executable line" claim is asserted by a filter over
+> `git diff -U0` rather than by reading it. Zero `@ts-ignore` stays zero.
 
 **Evidence.** Identical `@typedef` blocks in all six `src/core/state-machine-*.mjs`. `tsc` checks
 each against itself, so drift is invisible.
@@ -497,6 +510,11 @@ sends one, and the audit found no caller that does not.
 
 ### A-09 · `src/http/routes/settings.mjs` reaches into the Claude Code adapter for a runtime-neutral list · **style** · S
 
+> **RESOLVED** by WP-92f, commit `459b1b8` (`docs/DEVIATIONS.md` §181.3). The route imports from
+> `src/core/terminals.mjs`. The adapter-side re-export was **not** deleted: `src/cli/doctor-collect.mjs`
+> still points at it, and repointing that too was outside this package's stated proof. Its header
+> now names the one caller it has left.
+
 **Evidence.** `settings.mjs:20` imports `terminalIds` from `../../adapters/claude-code/terminals.mjs`,
 which §95 left as a re-export of `src/core/terminals.mjs`. The terminal catalogue is not
 Claude-Code-specific.
@@ -505,6 +523,16 @@ nothing points at it. **Blast radius.** One line. **Proof.** `settings-keys.test
 `terminals.test.mjs` green. **Must not change.** The terminal id list, in order.
 
 ### A-10 · The demo snapshot is not the real snapshot's shape · **risk** · S
+
+> **RESOLVED** by WP-92g, commit `a0cc9f7` (`docs/DEVIATIONS.md` §181.4). `buildDemoSnapshot` carries
+> both fields, `crews` derived by the same `crewsFrom` the daemon uses, and `Scene.setState` falls
+> back on absence alone — so an ordinary floor, which publishes `crews: []`, no longer re-derives the
+> rule in the browser on every snapshot. One correction to the move as written:
+> `rateCardVersion` is **passed in** by the registry rather than read in the fixture, because
+> `loadRateCard()` stats a file under the user's home and the fixture promises a pure function of
+> `now` — reading it there tripped the §124 isolation canary on the first run.
+> `test/unit/snapshot-shape.test.mjs` compares the key sets against a **real** `Registry.snapshot()`
+> rather than a list. All sixteen goldens 0 px, `empty` included.
 
 **Evidence.** `demo-fixture.mjs`'s return carries no `crews` and no `rateCardVersion`;
 `_realSnapshot` carries both. `Scene.setState` recomputes crews when the field is absent *or empty*,
@@ -517,6 +545,10 @@ shapes have the same key set.
 **Must not change.** `demo: true`, `demoNote`, and the rule that an actor is not addressable.
 
 ### A-11 · `src/core/mcp-tool-name.mjs` has no consumer · **debt** · S
+
+> **RESOLVED** by WP-92f, commit `459b1b8` (`docs/DEVIATIONS.md` §181.3). Deleted; the test points at
+> `public/mcp-tool-name.js`. `typecheck` green on both projects, the module having left the Node
+> project's reachable set. The parsing rule did not move.
 
 **Evidence.** Zero importers in `src/`, `public/` or `scripts/`; only `test/unit/mcp-tool-name.test.mjs`.
 **Move.** Delete it and point the test at `public/mcp-tool-name.js`, or find the Node-side caller
