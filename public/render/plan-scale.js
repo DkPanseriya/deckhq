@@ -577,6 +577,7 @@ export const SCALE_CLASSES = Object.freeze({
     building: Object.freeze([]),
     pure: Object.freeze([
       'WALK_SPEED',
+      'RUN_SPEED',
       'ROTATION_MIN_S',
       'ROTATION_MAX_S',
       'IDLE_TYPE_MIN_S',
