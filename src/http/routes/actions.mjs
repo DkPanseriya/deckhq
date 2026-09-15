@@ -13,6 +13,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { mkdir, stat } from 'node:fs/promises';
 import { readJson, sendError, sendJson } from '../server.mjs';
+import { requireRuntime } from './runtime-required.mjs';
 import { discoverActions, openUrl, revealInFileManager, runAction } from '../../core/actions.mjs';
 import { ACK_ACTIONS, splitAgentId } from '../../core/model.mjs';
 import { RESUME_TARGETS } from '../../core/store.mjs';
@@ -294,7 +295,11 @@ export function register(router, ctx) {
       return sendError(res, 400, err.message);
     }
     const dir = String(body.cwd || body.path || '').trim();
-    const runtime = String(body.runtime || 'claude-code');
+    // WP-92j, A-08. A fallback to the Claude Code adapter used to stand here,
+    // which meant a request that named no runtime started a Claude Code
+    // session on the strength of a missing field.
+    const runtime = requireRuntime(res, body.runtime);
+    if (!runtime) return;
     const wantCreate = body.create === true;
     const wantGitInit = body.gitInit === true;
     const instructions = String(body.instructions || '').trim();
@@ -405,7 +410,10 @@ export function register(router, ctx) {
       return sendError(res, 400, err.message);
     }
     const cwd = String(body.cwd || '').trim();
-    const runtime = String(body.runtime || 'claude-code');
+    // WP-92j, A-08. See `POST /api/new-project` above: the runtime a session
+    // is started in is the caller's to name, and there is no default for it.
+    const runtime = requireRuntime(res, body.runtime);
+    if (!runtime) return;
     const instructions = String(body.instructions || '').trim();
     if (!cwd) return sendError(res, 400, 'cwd is required');
 
@@ -629,14 +637,23 @@ export function register(router, ctx) {
 
   /**
    * Which resume targets are actually usable right now, so the panel knows
-   * whether to offer "Resume in app" at all. `id` (optional) resolves the
-   * right runtime's adapter — a codex session, for instance, has no
-   * `openInApp` regardless of what is installed. Defaults to the
-   * `claude-code` adapter when no id is given.
+   * whether to offer "Resume in app" at all. `?id=` resolves the right
+   * runtime's adapter — a codex session, for instance, has no `openInApp`
+   * regardless of what is installed — and `?runtime=` names it directly, for a
+   * caller asking about a runtime rather than about a session.
+   *
+   * WP-92j, A-08. A request that gives neither used to be answered as Claude
+   * Code, which meant "can this be resumed in an app?" could be answered about
+   * the wrong runtime entirely. It is refused now; the panel has always passed
+   * an id.
    */
   router.get('/api/resume-targets', async (req, res, url) => {
     const id = url.searchParams.get('id') || '';
-    const runtime = id ? splitAgentId(id).runtime : 'claude-code';
+    const named = id ? splitAgentId(id).runtime : url.searchParams.get('runtime');
+    const runtime = requireRuntime(res, named, {
+      hint: 'Or pass `?id=<agent id>`, and it is read from that.',
+    });
+    if (!runtime) return;
     const adapter = ctx.adapters.getAdapter(runtime);
     let appAvailable = false;
     try {

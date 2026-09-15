@@ -156,6 +156,11 @@ export function createPermissionPart(ctx) {
    */
   async function answerPermission(decision) {
     const p = pendingPermission();
+    // WP-92j, A-08. Read here, beside `p`, and not inside the `await` below:
+    // `displayedAgent` is a live binding and the panel can move to another
+    // agent while this request is in flight. The runtime an answer is written
+    // in is the runtime of the agent whose hand was up when it was answered.
+    const runtime = displayedAgent?.runtime;
     if (!p || answering) return;
     if (p.requiresUserInteraction) return;
     if (decision === 'session' && !(Array.isArray(p.suggestions) && p.suggestions.length > 0)) {
@@ -167,7 +172,7 @@ export function createPermissionPart(ctx) {
       const res = await fetch('/api/permission/decide', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: p.id, decision }),
+        body: JSON.stringify({ id: p.id, decision, runtime }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);

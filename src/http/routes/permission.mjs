@@ -19,9 +19,29 @@
  * the reason a closed DeckHQ can never get in anybody's way.
  */
 import { readJson, sendError, sendJson } from '../server.mjs';
+import { requireRuntime } from './runtime-required.mjs';
 
 /** The most of a hook payload we will read before giving up on it. */
 const MAX_PAYLOAD = 512 * 1024;
+
+/**
+ * Whose payload `POST /api/permission` is, when the payload does not say.
+ *
+ * WP-92j, A-08. The other four sites the audit found were defaults and are
+ * refusals now. This one is a CHOICE, for a reason that is a property of the
+ * route rather than a preference: this URL is not one a client of ours calls.
+ * It is written into the user's own Claude Code settings by
+ * `src/adapters/claude-code/hooks-entries.mjs`, and Claude Code posts its own
+ * `PermissionRequest` payload to it — a shape we do not author and which
+ * carries no `runtime` field (`docs/DEVIATIONS.md` §134 is the first real one
+ * ever received). So the runtime here is the adapter that owns the URL.
+ *
+ * A payload that DOES name a runtime is still believed, which is what a second
+ * runtime adopting this route would need. And a refusal is not available to
+ * this handler in any case: everything it cannot answer ends as `{}`, so the
+ * terminal prompt wins — a 400 here would read as a decision.
+ */
+const HOOK_URL_RUNTIME = 'claude-code';
 
 /**
  * Serial number behind the fallback request key, and the reason it exists.
@@ -97,7 +117,7 @@ export function register(router, ctx) {
         return passOn();
       }
 
-      const runtime = String(payload.runtime || 'claude-code');
+      const runtime = String(payload.runtime || HOOK_URL_RUNTIME);
       const adapter = adapters.getAdapter(runtime);
       const parse = adapter && adapter.hooks && adapter.hooks.permissionRequest;
       if (typeof parse !== 'function') {
@@ -156,7 +176,13 @@ export function register(router, ctx) {
       return sendError(res, 400, `Unknown decision "${decision}"`);
     }
 
-    const runtime = String(body.runtime || 'claude-code');
+    // WP-92j, A-08. The panel holds the agent whose hand is up, and the agent
+    // carries its runtime; answering a prompt is per-runtime — the body a
+    // decision is written as is the runtime's own shape. A caller that names
+    // none used to have its answer written in Claude Code's shape whatever it
+    // was actually answering.
+    const runtime = requireRuntime(res, body.runtime);
+    if (!runtime) return;
     const adapter = adapters.getAdapter(runtime);
     const bodyFor = adapter && adapter.hooks && adapter.hooks.permissionDecisionBody;
     if (typeof bodyFor !== 'function') {

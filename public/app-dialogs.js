@@ -16,6 +16,17 @@
 import { availableNames } from './names.js';
 import { FALLBACK_AVATAR_GLYPHS, el, latestSnapshot, palette, toast } from './app-state.js';
 
+/**
+ * The runtime these two dialogs start a session in — WP-92j, A-08.
+ *
+ * Neither dialog has a runtime picker, so one of the four has to be named, and
+ * this is the one the daemon used to pick for us when the field was left off.
+ * The route refuses a request that names none now, so the choice is made here
+ * instead: in the client that made it, where it can be seen and where a picker
+ * would go. Changing this line changes nothing else.
+ */
+const NEW_SESSION_RUNTIME = 'claude-code';
+
 //
 // The three flows in CONTRACTS-WP15.md §6 / WP15 task C, all in the GUI, all
 // keyboard-usable. None of them ever touch /api/ack — creating or renaming
@@ -70,6 +81,7 @@ async function submitNewProject() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         path,
+        runtime: NEW_SESSION_RUNTIME,
         create: toggleIsOn(el.newProjectCreateToggle),
         gitInit: toggleIsOn(el.newProjectGitInitToggle),
         name: el.newProjectName.value.trim() || undefined,
@@ -268,6 +280,7 @@ async function submitNewAgent() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         cwd,
+        runtime: NEW_SESSION_RUNTIME,
         name: getNewAgentName() || undefined,
         avatar: getNewAgentAvatar() || undefined,
         instructions: el.newAgentInstructions.value.trim() || undefined,
