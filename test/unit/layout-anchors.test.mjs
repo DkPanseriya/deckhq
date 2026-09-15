@@ -152,6 +152,9 @@ test('§3.4 chair-to-desk gap is 0.15 U ± 0.05 for every chair, in every room',
 
 // --------------------------------------------------------- §3.9 uniform density
 
+/** §3.6's free-standing kinds. A planter is a partition, so it is not one. */
+const PLANT_KINDS = new Set(['plant_broad', 'plant_blade', 'plant_tree']);
+
 test('§3.9 chair and plant offsets are identical in the smallest and the largest zone', () => {
   const plan = bigFixturePlan();
   const projectRooms = plan.rooms.filter((r) => r.kind === 'project');
@@ -168,13 +171,21 @@ test('§3.9 chair and plant offsets are identical in the smallest and the larges
   // Density is fixed by the furniture, never rescaled per zone: a chair is
   // the same distance from its table and a plant the same distance from the
   // table it stands beside, in the smallest zone and the largest.
+  //
+  // THE PLANT IS MEASURED OFF ITS CORNER SINCE WP-85c. It used to stand at the
+  // end of the first bench desk, attached to it, and that plant is gone: §3.6
+  // allows a project room two, §3.5 answers spare floor with a destination
+  // rather than with more planting, and what is left is the two corners. A
+  // corner inset is the same statement in the same units — the room's own
+  // wall, not a proportion of it — which is what §3.9 is asking for.
   const measure = (room) => {
     const targets = byIdMap(room);
     const chair = room.props.find((p) => p.kind === 'chair');
-    const plant = room.props.find((p) => p.kind === 'plant');
+    const plant = room.props.find((p) => PLANT_KINDS.has(p.kind));
+    assert.ok(plant, `${room.id}: a project room with nothing planted in it`);
+    assert.equal(plant.anchor.type, 'corner', 'a project room plants its corners');
     const table = targets.get(chair.anchor.to);
-    const plantTarget = targets.get(plant.anchor.to);
-    return { chairGap: rectGap(chair, table), plantInset: rectGap(plant, plantTarget) };
+    return { chairGap: rectGap(chair, table), plantInset: plant.anchor.inset ?? 0 };
   };
 
   const small = measure(smallest);

@@ -9,6 +9,7 @@
  */
 
 import { CORRIDOR, clamp } from './plan-units.js';
+import { DOORMAT_H, DOORMAT_INSET, DOORMAT_W } from './plan-props.js';
 
 /** @typedef {import('./plan-units.js').Wall} Wall */
 /** @typedef {import('./plan-units.js').NavLine} NavLine */
@@ -228,5 +229,62 @@ export function assignDoors(rooms, lines) {
     room.door = door;
     room.navEntry = { x: e.x, y: e.y };
     room.navLineId = best.line.id;
+    if (room.kind === 'office') layDoormat(room);
   }
+}
+
+/**
+ * §3.3's DOORMAT, *"inside the reception door only"*.
+ *
+ * It is laid here rather than in `buildOffice` for one reason: the reception
+ * does not know where its own door is. A door is where the room meets the
+ * corridor, the corridors are a property of the whole floor, and both are
+ * decided long after every room has been furnished — so a mat placed at build
+ * time would be a mat at a door somebody guessed.
+ *
+ * WHERE IT LIES. Centred on the door, its long axis along the wall the door is
+ * in, and `DOORMAT_INSET` inside that wall — which is clear of the sofa run,
+ * because §3.4 stands those runs `PAD + SOFA_D` off three of the reception's
+ * walls and a mat flush to the wall is a mat under a sofa. It is anchored to
+ * the WELL, the floor those runs enclose, rather than to the wall: a wall
+ * anchor would put it 3.6 U from its own target and §3.3's *"nothing floats
+ * past 2.0 U"* would be measuring the wrong distance. The well is what it is
+ * actually lying on.
+ *
+ * `unshift` because the props array is the paint order and a mat is a floor
+ * covering: everything in this room is drawn on top of it.
+ *
+ * @param {Room} room the reception, with `room.door` already set
+ */
+function layDoormat(room) {
+  const door = room.door;
+  const well = (room.zones || []).find((z) => z.id === 'office-well');
+  if (!door || !well) return;
+  const vertical = Math.abs(door.x - room.x) < 0.01 || Math.abs(door.x - (room.x + room.w)) < 0.01;
+  const w = vertical ? DOORMAT_H : DOORMAT_W;
+  const h = vertical ? DOORMAT_W : DOORMAT_H;
+  // Inside the wall the door is in, then slid back into the well if the room
+  // is too shallow to hold it there — a mat outside the floor it lies on is
+  // worse than a mat a little nearer the middle of the room.
+  const x = vertical
+    ? door.x < room.x + room.w / 2
+      ? room.x + DOORMAT_INSET
+      : room.x + room.w - DOORMAT_INSET - w
+    : door.x - w / 2;
+  const y = vertical
+    ? door.y - h / 2
+    : door.y < room.y + room.h / 2
+      ? room.y + DOORMAT_INSET
+      : room.y + room.h - DOORMAT_INSET - h;
+  const fx = clamp(x, well.x, Math.max(well.x, well.x + well.w - w));
+  const fy = clamp(y, well.y, Math.max(well.y, well.y + well.h - h));
+  room.props.unshift({
+    kind: 'doormat',
+    w,
+    h,
+    angle: 0,
+    x: fx,
+    y: fy,
+    anchor: { type: 'zone', of: 'office-well', dx: fx - well.x, dy: fy - well.y },
+  });
 }

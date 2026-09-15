@@ -16715,3 +16715,181 @@ measured that before.
 - **Nothing was judged on a machine other than the goldens' 1600 × 1000.** The break-out threshold is
   measured over eleven populations at two window shapes in the test suite, which is where it bites
   both ways; the PICTURE was only looked at on the committed captures and on a 2× crop of two of them.
+
+---
+
+## 164. WP-85c — props, plants, density, and the lounge and reception as places
+
+WP-85b furnished the rooms. This is the package that decorates them, and the whole of it is
+`docs/plan/10-INTERIOR-DESIGN.md` §3.5, §3.6 and §3.7: four density rules, a planting budget of four
+silhouettes, four named lounge bays and a reception with three zones. §3.5 states its own acceptance
+in its first line — *"four rules, all checkable on an emitted plan"* — so the package ships with the
+suite that checks them, `test/unit/props.test.mjs`, over the seven shapes the goldens photograph.
+
+### 164.1 The catalogue is a module, and nothing in it is random
+
+`public/render/plan-props.js` is §3.5 and §3.6 in code, its own module for `plan-furniture.js`'s
+reason: `plan-units.js` is at WP-22's ceiling, and a catalogue is a vocabulary rather than a
+dimension of the plan — the room builders read it, the envelope search never does.
+
+**Nothing in it is random, and that is a correctness claim rather than a style one.** The backdrop is
+baked once per plan and the next bake must be pixel-identical, so every choice is a pure function of
+a string the plan already has: `appearanceHash`, the same hash WP-79 draws a robot from. There is no
+`Math.random()` and no `Date.now()` anywhere in this package.
+
+### 164.2 Four plants, and the two that are gone
+
+§3.6's table is four kinds at four footprints — `plant_broad` 2.0 U, `plant_blade` 2.4, `plant_tree`
+3.2, `planter` 0.9 × its run. **They differ in SILHOUETTE and not in scale**, because at the goldens'
+fit scale a 2.0 U bush is 28 px and a 2.4 U blade 34, and nobody reads that difference.
+
+`plant` and `plant_large` are **deleted**, painters and all. They were one five-blob rosette at two
+scales, which is §1.6's finding — *"forty prop kinds, one silhouette repeated"* — and a painter no
+plan can reach is a silhouette waiting to come back. `PLANT_SIZE` and `PLANT_GAP` went with them.
+
+A project room plants **two corners**, on its long diagonal, never the north-west one the name is
+written in. It used to plant three corners and the end of the first bench desk, all four the same
+rosette. What the floor it gave back gets is WP-85b's break-out corner, which is furniture.
+
+The reception keeps **the one tree on this floor**, at the head of the room where the manager's light
+pool already is, and its two corners draw from broad and blade only. That last clause is a defect the
+new suite found on its first run: the corner run could return a second canopy 7.4 U from the tree,
+which is §3.5's eight-unit rule broken inside one room.
+
+**`plantRun` cannot repeat a silhouette**, by construction rather than by rejection: each step
+advances through the cycle by 1 or 2, never by 0, so the function is total and cannot loop.
+
+### 164.3 What is on a desk
+
+Four objects at four sizes — a mug, a notebook, a sticky note, an in-tray — drawn from **twelve
+enumerated sets** against the desk's own id and its **ordinal in the room**. Both, for two different
+reasons: the hash is what makes two projects differ, and the ordinal is what GUARANTEES two desks in
+one room differ. Twelve sets and a room of at most twelve desks makes that arithmetic rather than a
+hope about a hash, which matters because two desks side by side is exactly where a repeat reads as a
+texture.
+
+**Everything stands inside the seat's own 2.6 U cell**, so nothing here enlarges the cluster the room
+is sized from and no desk ornament has an opinion about the size of the building.
+
+### 164.4 The lounge is four bays, and what the bays cost
+
+§3.7: *"The lounge is four bays, not one field."* It was a field — nine blocks shelf-packed by height
+into whatever rectangle the packer had left, so a pool table could land between the sofas and the
+fridge. A bay is three things: its own ground, its own centrepiece, and a planter run between it and
+the next one. The blocks did not change; what changed is that they pack **twice**, inside a bay and
+then as bays.
+
+**The lay order is `sitting, café, quiet, games`, and §3.7 fixes it in one sentence.** *"A lounge
+below 60 U wide drops bays from the right — games first, then quiet"*: a drop order of
+games-then-quiet that is also *from the right* admits exactly one lay order, and it is not the order
+§3.7's own table prints them in (which is by minimum width). `LOUNGE_BAY_DROP_ORDER` is **derived**
+from the lay order rather than written a second time, so "from the right" is true by construction.
+
+Two readings are made explicit, and both are recorded because they are judgement rather than text:
+
+- **A drop that buys no row is not made.** On a lounge too narrow for even two bays in a row, giving
+  up the third buys no row and costs a place. Without that clause a 33 U service column dropped its
+  quiet bay and came out at exactly the same two rows and the same height it had with the bay in it.
+- **The lay order within the room is SEARCHED, not declared.** Every permutation of at most four bays
+  is twenty-four shelf-wraps; the winner is decided by area, then depth, then §3.7's own order. Laid
+  by the table instead, a narrow column cost two and a half units of building height, and the
+  building's height is the service column's (WP-77 §154).
+
+**The bays cost the building something, and here is the number.** Grouping nine blocks into four
+places is a packing constraint — the tallest games table can no longer share a shelf with the tallest
+sofa run — and that costs a narrow lounge **2.2 U of depth**. On one of `floor-integrity.test.mjs`'s
+sixteen populations at 1920 × 1080 the envelope search answers a taller service column with a wider
+one: **46 % of the building where WP-59b measured 43**. That guard's slack moved from five points to
+seven, at the line where it is measured, with this paragraph named in the comment. Every other
+population in that list is where it was.
+
+Everything else about the cost was given back rather than paid: a bay's ground is exactly its
+furniture and the gap between bays is the gap the lounge already used, because the clear floor each
+block needs is already inside the block. At one unit of bay padding the column went to 46 % on a
+second population as well and a project room reported 69 % bare carpet.
+
+**The demo floor changed ARRANGEMENT, and that is the one visible thing this package did not intend.**
+It was already near the boundary the search picks on; with the lounge 1.5 U taller it now lays six
+rooms in one row with the lounge wall to wall underneath, where it used to lay two rows beside a
+service column. Both are arrangements the same search has always been able to choose, and the flip is
+the reason `demo.png` moved 85 % of its pixels while `three.png` moved 13 %. It was not tuned for.
+
+### 164.5 Thresholds, the doormat, and the two ends of one problem
+
+§3.3's three threshold pieces are finished, and they are split across two files for one reason: **a
+door is not known when a room is built.**
+
+- **The screed band** belongs to the FLOOR. A doorway is shared by the room and the corridor, and a
+  band that belonged to one of them would stop at the wall. It is painted over `plan.doors`, under
+  the pool of light that lands on it, beside WP-85a's `DOOR_POOL_R_U`.
+- **The doormat** is laid in `assignDoors`, which is the same fact in reverse: the reception does not
+  know where its own door is until the corridors do, so a mat placed at build time is a mat at a door
+  somebody guessed.
+
+The mat is anchored to the **well** rather than to the wall, and that is the honest anchor: §3.4
+stands the sofa runs 3 U off three of this room's walls, so a mat inside the door is 3.6 U from the
+wall — past §3.3's *"nothing floats past 2.0 U"* — and 0 U from the floor it is actually lying on.
+
+**The reception's bookcases** (§3.4's *"bookcase 1.2 × 8 on each long wall"*) stand in the **head
+band** beside the desk rather than behind the sofa runs, and the east one appears only when the art
+leaves the run for it. A wall that has spent its run on one fixture does not get a second drawn
+through it.
+
+### 164.6 Materials: three muted spines, a trough, a mat, and the games
+
+Every new material is derived and none is raw; `test/unit/props.test.mjs` reads
+`backdrop-props-plant.js` and fails on the first hex literal in it.
+
+- **`bookA/B/C`** are §3.5's *"desk timber mixed halfway to three muted neutrals"*, and the three
+  neutrals are three depths of the screed. The spines were the marker blue, the marker plum, the
+  cabinet body and the board-game felt: four of the most saturated tokens on the floor, tiled twenty
+  to a shelf, on the one piece of furniture meant to read as texture.
+- **`planterTrough`/`planterSoil`** come from the partition and the screed, because a planter is a
+  partition that happens to be planted.
+- **`thresholdBand`, `matFill`, `matPile`** come from the screed and the wool.
+- **Three clutter tokens**, held under the wall by the same `underWall` everything else is.
+
+**The lounge games are muted 24 % toward the carpet** (§3, owner decision 5: *"yes, muted 22–26 %"*).
+Applied to the **object** and not through the theme, because this product already holds that *a theme
+repaints no prop — monitors, the hob and the billiard cloth are objects*: billiard cloth is green in
+every building on earth. `GAME_HUES` is what they are muted from, kept as its own table because a
+material cannot be derived from itself.
+
+### 164.7 What the pictures found, that no test could
+
+Three fixes came out of 2× crops rather than out of an assertion, which is what looking is for.
+
+- **The planter was a bead curtain**: lobes 1.6 across-widths apart came out as a vertical string of
+  separate green discs. The pitch is under one radius now.
+- **The book spines went from shouting to silent**: the first derivation put all three within a few
+  counts of the carcass they stand in, and a shelf was a blank pale slab.
+- **The blade plant was a chipped saucer**: its tips were scaled by the radius a ROUND canopy gets,
+  so five blades reached a third of the way up a visible pot.
+
+### 164.8 Not done, and not claimed
+
+- **§3.5's clear-patch rule is enforced as §3.5 states it, which includes *"or nothing"*.** A project
+  room whose largest bare square exceeds 10 U × 10 U is required to carry a destination — a break-out
+  group or planting — rather than required to have no such square. The reception's middle and the
+  lounge's promenade are exempt in words: §3.7 says the middle is where the queue forms, and the
+  promenade is where the benched stand.
+- **§5's *"bare-floor fraction ≤ 35 %"* is measured over the lounge's FURNISHED INTERIOR**, the room
+  less `MARGIN` and the plate band, with the promenade counted as a place. Measured that way it is
+  **13.7–25.8 %** across the seven populations. Against the padded rectangle the packer hands the
+  room it is 39–55 %, and almost all of that is the room's own 2.5 U margin and the floor the
+  envelope search gave it — which is a measurement of the search, not of the lounge.
+- **§5's 1.2 U character clearance is scoped to the decoration.** A seat's own `(x, y)` IS the
+  figure's ground contact, somebody at the coffee machine stands 0.7 U from the counter they are
+  using, and a pool player stands `STAND_OFF` from the table. A rule that counted those would be a
+  rule against using the furniture. Closest decoration to anybody's feet: **1.40 U**.
+- **§3.5's eight-unit silhouette rule is scoped the same way.** A bench desk's four task chairs are
+  four identical silhouettes 2.6 U apart by construction, and that is what a bench desk is.
+- **A bay's ground is a zone, not a second material.** Only the café's differs from the boards, which
+  is what §3.7 asks for; the sitting and quiet bays are told apart by their rugs, rectangular and
+  round.
+- **The lounge's own row is still padded wall to wall by the packer**, and on the `demo` capture that
+  leaves a bare stretch of boards either side of the furniture. That is WP-60's row rule, exposed by
+  the arrangement flip above rather than introduced here, and it is not this package's to change.
+- **Nothing was judged on a machine other than the goldens' 1600 × 1000**, plus the committed `wide`
+  capture at 1920 × 1080. The 2× inspection was of the reception, a project room, a lounge bay and
+  one bookcase on the `demo` capture.

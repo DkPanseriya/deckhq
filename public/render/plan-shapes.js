@@ -95,6 +95,13 @@ export {};
  * @property {number} y
  * @property {number} w
  * @property {number} h
+ * @property {string} [bay] the lounge only (WP-85c): which of §3.7's four named
+ *   bays this rectangle is the ground of. A bay is a PLACE — its own ground, its
+ *   own centrepiece, a planter run between it and the next one — so the plan
+ *   names it rather than leaving the reader to infer a grouping from positions.
+ * @property {'wood'|'tile'} [ground] what that bay stands on. Only the café's
+ *   differs from the boards, which is why the lounge already carried a
+ *   `kitchenZone` before there were bays to have one.
  */
 
 /**

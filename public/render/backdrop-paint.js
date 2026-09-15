@@ -183,9 +183,30 @@ export const PROP_HEIGHT = Object.freeze({
   user_desk: 'tall',
   water_cooler: 'tall',
   whiteboard: 'tall',
+  // WP-85c's plants. A TREE IS TALL and the other three are not, which is the
+  // whole of why §3.6 gives them four silhouettes rather than one at four
+  // scales: a 3.2 U canopy at head height casts along the ray like the
+  // bookcase beside it, a 2.0 U bush on the floor casts straight down, and a
+  // planter is a trough somebody steps over.
+  plant_tree: 'tall',
   // --- short: on the floor, or standing on something that already is.
   bar_stool: 'short',
   box: 'short',
+  // WP-85c's desk clutter. Everything here stands ON a desk that has already
+  // cast its own shadow along the ray; a mug that cast a second one would be a
+  // mug floating three pixels above the table it is sitting on.
+  mug: 'short',
+  notebook: 'short',
+  sticky: 'short',
+  plant_blade: 'short',
+  plant_broad: 'short',
+  planter: 'short',
+  // WP-85c's doormat (§3.3), inside the reception door. Laid INTO the floor,
+  // like the screed band it lies behind — a mat that cast along the ray would
+  // be a mat somebody had left propped against the wall. The band itself is
+  // not here because it is not a prop: it belongs to the doorway, which is
+  // shared by the room and the corridor, so `backdrop-floor.js` paints it.
+  doormat: 'short',
   chair: 'short',
   coffee_machine: 'short',
   coffee_table: 'short',
@@ -194,8 +215,6 @@ export const PROP_HEIGHT = Object.freeze({
   lamp: 'short',
   magazine_table: 'short',
   monitor: 'short',
-  plant: 'short',
-  plant_large: 'short',
   rug: 'short',
   rug_round: 'short',
   side_table: 'short',

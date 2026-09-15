@@ -25,8 +25,6 @@ import {
   FIXTURE_TOP,
   MIN_PROJECT_ROOM_H,
   MIN_PROJECT_ROOM_W,
-  PLANT_GAP,
-  PLANT_SIZE,
   PLATE_BAND,
   ROOM_PAD,
   RUG_MAX_OVER_CLUSTER,
@@ -54,6 +52,12 @@ import {
   WHITEBOARD_W,
   breakoutFits,
 } from './plan-furniture.js';
+import {
+  PLANTS_PER_PROJECT_ROOM,
+  PLANT_FOOTPRINTS,
+  deskClutterFor,
+  plantRun,
+} from './plan-props.js';
 
 /** @typedef {import('./plan-units.js').ProjectLike} ProjectLike */
 /** @typedef {import('./plan-units.js').Prop} Prop */
@@ -397,6 +401,10 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   );
 
   let remaining = Math.max(1, deskCount);
+  // Which desk this is in the ROOM, across every table in it. `deskClutterFor`
+  // needs it: twelve clutter sets and an ordinal is what makes two desks in one
+  // room differ by arithmetic rather than by a hash's good luck.
+  let deskOrdinal = 0;
   sizes.forEach((seatCount, i) => {
     const at = flow.out[i];
     const t = tableSize(seatCount);
@@ -464,27 +472,37 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
             gap: -MONITOR_H,
           },
         });
+        // WHAT IS ON THIS DESK (§3.5, `plan-props.js`).
+        //
+        // A mug, a notebook, a sticky note, an in-tray: at most three of them,
+        // never the same three as the desk beside it, and every one a pure
+        // function of the desk's own id so the bake is identical next time.
+        //
+        // ON THE DESK, INSIDE THE SEAT'S OWN CELL. Each piece is placed in the
+        // 2.6 U of table this occupant has, outboard of their monitor or behind
+        // it, so nothing here enlarges `cluster` and nothing here is the reason
+        // a room is the size it is. A desk ornament that changed a room's
+        // footprint would be an ornament with an opinion about the building.
+        const deskKey = `${tableId}:${side.key}${k}`;
+        for (const item of deskClutterFor(deskKey, deskOrdinal)) {
+          // `along` and `depth` are in the seat's cell, measured from its left
+          // edge and from the edge the occupant sits at.
+          const ax = tx + k * SEAT_PITCH + item.along - item.w / 2;
+          const ay =
+            side.sign < 0 ? ty + item.depth - item.h / 2 : ty + t.h - item.depth - item.h / 2;
+          props.push({
+            kind: item.kind,
+            w: item.w,
+            h: item.h,
+            angle: 0,
+            x: ax,
+            y: ay,
+            anchor: { type: 'zone', of: tableId, dx: ax - tx, dy: ay - ty },
+          });
+        }
+        deskOrdinal++;
         remaining--;
       }
-    }
-
-    // One plant per table, standing at its end where it cannot be adrift.
-    if (i === 0) {
-      props.push({
-        kind: 'plant',
-        w: PLANT_SIZE,
-        h: PLANT_SIZE,
-        angle: 0,
-        x: tx + t.w + PLANT_GAP,
-        y: ty,
-        anchor: {
-          type: 'attached',
-          to: tableId,
-          edge: 'E',
-          along: (t.h - PLANT_SIZE) / 2,
-          gap: PLANT_GAP,
-        },
-      });
     }
   });
 
@@ -759,19 +777,38 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
     }
   }
 
-  // Planting in the corners the plate and the wall fixtures leave free. Never
-  // the north-west corner: that is where the room's name is written.
-  for (const corner of /** @type {const} */ (['SW', 'SE', 'NE'])) {
+  // TWO PLANTS, NOT FOUR (§3.6: *"at most two per project room"*).
+  //
+  // There were four — one at the first table's end and one in each of three
+  // corners — and all four were the same rosette at two scales. §1.6 measured
+  // exactly that: *"forty prop kinds, one silhouette repeated"*, and a room
+  // that answers spare floor, spare wall and a spare corner with the same
+  // object is a room decorated by area rather than by anchor (§3.5). What the
+  // spare floor gets instead is the break-out group above, which is furniture.
+  //
+  // SOUTH-WEST AND NORTH-EAST, so the two stand on the room's long diagonal
+  // and read as planting rather than as a pair. Never the north-west corner:
+  // that is where the room's name is written.
+  //
+  // The two kinds come from `plantRun`, which cannot return the same silhouette
+  // twice in a row — §3.6's *"never two of the same kind adjacent"* held by
+  // construction rather than by a check.
+  const cornerKinds = plantRun(id, PLANTS_PER_PROJECT_ROOM);
+  /** @type {readonly ('SW'|'NE')[]} */
+  const cornersUsed = ['SW', 'NE'];
+  cornersUsed.forEach((corner, n) => {
+    const kind = cornerKinds[n];
+    const size = PLANT_FOOTPRINTS[kind] || 2.4;
     props.push({
-      kind: 'plant_large',
-      w: 2.4,
-      h: 2.4,
+      kind,
+      w: size,
+      h: size,
       angle: 0,
       x: 0,
       y: 0,
       anchor: { type: 'corner', corner, inset: CORNER_PLANT_INSET },
     });
-  }
+  });
 
   /** @type {Room} */
   const room = {

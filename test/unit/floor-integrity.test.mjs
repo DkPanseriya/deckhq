@@ -1576,9 +1576,19 @@ test('the working side is the wider half once it holds three rooms', () => {
       // the search to hold it there, which is what `SERVICE_COLUMN_MAX` is.
       // Stated as a note on the number rather than as a second assertion: a
       // floor of one twenty-one desk project and three one-desk ones lands at
-      // 43%, because the alternative column is 8 units narrower and 14 taller.
+      // 46%, because the alternative column is 8 units narrower and 14 taller.
+      //
+      // SEVEN POINTS OF SLACK, AND WP-85c BOUGHT THE LAST TWO. §3.7 groups the
+      // lounge's nine furniture blocks into four named bays, and a group is a
+      // packing constraint: the tallest games table can no longer share a shelf
+      // with the tallest sofa run, which costs a narrow lounge 2.2 U of depth.
+      // On this one population at 1920 x 1080 the envelope search answers a
+      // taller service column with a wider one — 46% where WP-59b measured 43.
+      // `docs/DEVIATIONS.md` §164. It is the price of the bays and it is paid
+      // once, on the floor with a twenty-one desk room on it; every other
+      // population in this list is where it was.
       assert.ok(
-        office.w / plan.width <= SERVICE_COLUMN_MAX + 0.05,
+        office.w / plan.width <= SERVICE_COLUMN_MAX + 0.07,
         `${where}: the service column is ` +
           `${((office.w / plan.width) * 100).toFixed(0)}% of the building`,
       );

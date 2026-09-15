@@ -65,6 +65,22 @@ export const TILE_CELL_U = 22 / U_DEFAULT;
 export const DOOR_POOL_R_U = 2.8;
 
 /**
+ * THE SCREED THRESHOLD (§3.3), 4.4 U along the wall by 0.4 U across it.
+ *
+ * *"Three new threshold pieces, because they are how a plan says you are
+ * entering something."* This is the first of them and it belongs to the FLOOR
+ * rather than to a room: a doorway is shared by the room and the corridor
+ * outside it, and a band that belonged to one of them would stop at the wall.
+ * It is also the only one of the three that has to know where the door is, and
+ * the door is assigned after every room has been built (`assignDoors`).
+ *
+ * Laid INTO the screed, under the pool of light that lands on it, so a
+ * threshold reads as a change of surface rather than as a step.
+ */
+export const THRESHOLD_RUN_U = 4.4;
+export const THRESHOLD_DEPTH_U = 0.4;
+
+/**
  * How far a desk's pool reaches past the desk itself, in units. The pool is a
  * downlight over a workstation, so it has to take in the chair and the person
  * as well as the worktop — a pool that stopped at the desk edge would read as a
@@ -477,6 +493,29 @@ export function paintWallSegment(ctx, wall, u) {
     ctx.lineTo(x1 + half, y2);
   }
   ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * §3.3's screed band across one doorway.
+ *
+ * `door.angle` already says which way the wall runs — the swing opens into the
+ * room, so 0 and π are a door in a vertical wall and ±π/2 a door in a
+ * horizontal one — which is why this takes the door rather than the wall.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {{x:number, y:number, angle:number}} door
+ * @param {number} u
+ */
+export function paintThresholdBand(ctx, door, u) {
+  const vertical = Math.abs(Math.cos(door.angle)) > 0.5;
+  const run = THRESHOLD_RUN_U * u;
+  const depth = THRESHOLD_DEPTH_U * u;
+  const w = vertical ? depth : run;
+  const h = vertical ? run : depth;
+  ctx.save();
+  ctx.fillStyle = PALETTE.thresholdBand;
+  ctx.fillRect(door.x * u - w / 2, door.y * u - h / 2, w, h);
   ctx.restore();
 }
 

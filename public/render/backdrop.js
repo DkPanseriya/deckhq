@@ -53,18 +53,21 @@ import {
   castRoomShadow,
   paintWallSegment,
   paintDoorSwing,
+  paintThresholdBand,
   DESK_POOL_MARGIN_U,
   DOOR_POOL_R_U,
   LIT_PROP_KINDS,
 } from './backdrop-floor.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
+import { paintPlantProps } from './backdrop-props-plant.js';
 import { paintPlayProps } from './backdrop-props-play.js';
 
 export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
 export * from './backdrop-props-desk.js';
 export * from './backdrop-props-lounge.js';
+export * from './backdrop-props-plant.js';
 export * from './backdrop-props-play.js';
 
 /**
@@ -137,7 +140,8 @@ export function paintProp(ctx, prop, u) {
   if (
     !paintDeskProps(ctx, prop, u, w, h, local) &&
     !paintLoungeProps(ctx, prop, u, w, h, local) &&
-    !paintPlayProps(ctx, prop, u, w, h, local)
+    !paintPlayProps(ctx, prop, u, w, h, local) &&
+    !paintPlantProps(ctx, prop, u, w, h, local)
   ) {
     // Unknown prop kinds still get a neutral block rather than being
     // silently dropped — better a plain box than a missing desk.
@@ -273,7 +277,11 @@ export function bakeBackdrop(plan, dpr = 1) {
       );
     }
   }
+  // §3.3's threshold, then the pool that lands on it: the band is a change of
+  // SURFACE and the pool is light falling on that surface, so the pool goes
+  // over it and not the other way round.
   for (const door of plan.doors || []) {
+    paintThresholdBand(ctx, door, u);
     paintLightPool(ctx, door.x * u, door.y * u, DOOR_POOL_R_U * u);
   }
 
