@@ -567,6 +567,40 @@ export function materialTokensFor(theme) {
     plantLeafB: shade(plant, 0.14),
     plantLeafC: shade(plant, -0.14),
     plantPot: shade(seat, -0.1),
+    // A planter is a PARTITION that is planted (§3.6), so its trough is the
+    // partition's material and not the pot's, and the soil is the floor's own
+    // dark rather than a brown nothing else on this floor uses.
+    planterTrough: underWall(partition, wall),
+    planterSoil: shade(screed, -0.42),
+
+    // ---- book spines (§3.5) ----
+    //
+    // *"`bookA/B/C` derive from the desk timber mixed halfway to three muted
+    // neutrals"*, and the three neutrals are the three this floor already has:
+    // the desk's own edge, the screed it stands on and the wall behind it.
+    // HALFWAY is the number §3.5 states, so it is `0.5` in all three and the
+    // variation between spines is which neutral rather than how far.
+    bookA: underWall(mix(desk, shade(screed, -0.28), 0.5), wall),
+    bookB: underWall(mix(desk, screed, 0.5), wall),
+    bookC: underWall(mix(desk, wall, 0.5), wall),
+
+    // ---- thresholds (§3.3) ----
+    //
+    // A screed band across a doorway is SCREED, a shade off the circulation it
+    // crosses, because a threshold that is a different material is a step. The
+    // mat inside the reception door is the one place on this floor with a pile
+    // that is not a rug, so it is the wool mixed to the screed it lies on.
+    thresholdBand: shade(screed, -0.06),
+    matFill: underWall(mix(rugCream, screed, 0.4), wall),
+    matPile: alpha(shade(ground, -0.5), 0.22),
+
+    // ---- what is on a desk (§3.5) ----
+    clutterCeramic: underWall(shade(seat, 0.02), wall),
+    clutterPaper: underWall(mix(seat, wall, 0.5), wall),
+    // The one warm note on a desk, and it is the plant's complement rather than
+    // a yellow of its own: mixing the timber halfway to the wall and then a
+    // third of the way to the leaf keeps it inside the floor's own family.
+    clutterNote: underWall(mix(mix(desk, wall, 0.4), plant, 0.18), wall),
 
     // ---- desks, benches, tables ----
     deskTop: desk,

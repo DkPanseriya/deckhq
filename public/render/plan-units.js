@@ -389,8 +389,13 @@ export const CHAIR_GAP = 0.15;
 export const TABLE_GAP = 3.2;
 export const TABLE_SIZES = [8, 6, 4, 2];
 
-export const PLANT_SIZE = 2;
-export const PLANT_GAP = 0.4;
+/**
+ * A plant's footprint is `plan-props.js`'s now (WP-85c §3.6). `PLANT_SIZE` and
+ * `PLANT_GAP` were one size and one offset for the one silhouette this floor
+ * had; four kinds at four footprints cannot be a pair of numbers, and the room
+ * that used them — a plant at the end of the first bench desk — is the
+ * decoration-by-area §3.5 replaced with a break-out corner.
+ */
 
 /**
  * THE IDLE-PROJECTS STRIP USED TO BE HERE — where a project with nobody in it

@@ -373,7 +373,7 @@ test('WP-78: a tall prop casts along the ray and a short one casts straight down
     assert.ok(op.shadowOffsetX > 0 && op.shadowOffsetY > 0, 'a desk stopped casting along the ray');
   }
 
-  const short = castsOf('plant');
+  const short = castsOf('plant_broad');
   assert.ok(short.length > 0, 'a plant cast nothing at all');
   for (const op of short) {
     assert.equal(op.shadowOffsetX, 0, 'a potted plant slid its shadow sideways');

@@ -347,14 +347,15 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // without the strips turning to noise. Book count scales with width
       // so books stay roughly book-sized instead of stretching to fill a
       // wide case.
-      const tones = [
-        PALETTE.plantLeafA,
-        PALETTE.whiteboardMarkerBlue,
-        PALETTE.cabinetBody,
-        PALETTE.whiteboardMarkerPlum,
-        PALETTE.boardGameFelt,
-        PALETTE.plantLeafC,
-      ];
+      // §3.5: *"book spines lose their saturation — `bookA/B/C` derive from
+      // the desk timber mixed halfway to three muted neutrals, so a shelf
+      // never competes with an identity ring"*. These were the marker blue,
+      // the marker plum, the cabinet body and the board-game felt: four of the
+      // most saturated tokens on the floor, tiled twenty to a shelf, on the
+      // one piece of furniture that is meant to read as TEXTURE. Three tones
+      // now, a step of value apart, and the variation between spines is their
+      // height rather than their hue.
+      const tones = [PALETTE.bookA, PALETTE.bookB, PALETTE.bookC];
       const pad = Math.min(bw, bh) * 0.12;
       const rows = bh > 32 ? 2 : 1;
       const rowH = (bh - pad * 2) / rows;
@@ -444,65 +445,6 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // — otherwise the figure would be turned twice.
       ctx.rotate(-(prop.angle || 0));
       drawManagerFigure(ctx, { x: 0, y: 0, u, angle: prop.angle || 0 });
-      break;
-    }
-    case 'plant': {
-      const scale = Math.max(w, h) / 2;
-      local((k) => {
-        k.fillStyle = PALETTE.plantPot;
-        k.beginPath();
-        k.arc(0, scale * 0.3, scale * 0.7, 0, Math.PI * 2);
-        k.fill();
-      });
-      const blobs = [
-        [0, -0.4, 1],
-        [-0.65, -0.05, 0.78],
-        [0.65, -0.1, 0.78],
-        [-0.3, -0.85, 0.62],
-        [0.4, -0.8, 0.68],
-      ];
-      const tones = [PALETTE.plantLeafA, PALETTE.plantLeafB, PALETTE.plantLeafC];
-      blobs.forEach(([dx, dy, r], i) => {
-        ctx.fillStyle = tones[i % tones.length];
-        ctx.beginPath();
-        ctx.arc(dx * scale, dy * scale, r * scale, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      break;
-    }
-    case 'plant_large': {
-      // A bigger version of `plant`: more of a statement piece, so the
-      // canopy gets a fuller rosette of blobs rather than a linear
-      // scale-up of the same five, plus a visible pot rim so the base
-      // reads as a real container rather than a flat disc.
-      const scale = Math.max(w, h) / 2;
-      local((k) => {
-        k.fillStyle = PALETTE.plantPot;
-        k.beginPath();
-        k.arc(0, scale * 0.32, scale * 0.76, 0, Math.PI * 2);
-        k.fill();
-      });
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-      ctx.lineWidth = Math.max(1, scale * 0.06);
-      ctx.beginPath();
-      ctx.arc(0, scale * 0.32, scale * 0.6, 0, Math.PI * 2);
-      ctx.stroke();
-      const bigBlobs = [
-        [0, -0.45, 1.05],
-        [-0.68, -0.1, 0.82],
-        [0.68, -0.12, 0.82],
-        [-0.36, -0.88, 0.66],
-        [0.42, -0.84, 0.7],
-        [-0.1, -1.05, 0.5],
-        [0.15, -0.62, 0.6],
-      ];
-      const bigTones = [PALETTE.plantLeafA, PALETTE.plantLeafB, PALETTE.plantLeafC];
-      bigBlobs.forEach(([dx, dy, r], i) => {
-        ctx.fillStyle = bigTones[i % bigTones.length];
-        ctx.beginPath();
-        ctx.arc(dx * scale, dy * scale, r * scale, 0, Math.PI * 2);
-        ctx.fill();
-      });
       break;
     }
     case 'rug': {

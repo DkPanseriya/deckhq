@@ -59,12 +59,14 @@ import {
 } from './backdrop-floor.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
+import { paintPlantProps } from './backdrop-props-plant.js';
 import { paintPlayProps } from './backdrop-props-play.js';
 
 export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
 export * from './backdrop-props-desk.js';
 export * from './backdrop-props-lounge.js';
+export * from './backdrop-props-plant.js';
 export * from './backdrop-props-play.js';
 
 /**
@@ -137,7 +139,8 @@ export function paintProp(ctx, prop, u) {
   if (
     !paintDeskProps(ctx, prop, u, w, h, local) &&
     !paintLoungeProps(ctx, prop, u, w, h, local) &&
-    !paintPlayProps(ctx, prop, u, w, h, local)
+    !paintPlayProps(ctx, prop, u, w, h, local) &&
+    !paintPlantProps(ctx, prop, u, w, h, local)
   ) {
     // Unknown prop kinds still get a neutral block rather than being
     // silently dropped — better a plain box than a missing desk.

@@ -299,11 +299,40 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   /** The rug's own outer edge, so it sits on the floor rather than in it. */
   rugEdge: 'rgba(123,120,114,0.28)',
 
-  // ---- plants, three scales share the same three leaf tones ----
+  // ---- plants, four silhouettes share the same three leaf tones ----
   plantLeafA: '#6C8F63',
   plantLeafB: '#819f79',
   plantLeafC: '#5d7b55',
   plantPot: '#c6c0b2',
+  /**
+   * The trough a planter run is planted in, and the soil in it (WP-85c §3.6).
+   *
+   * A planter is a PARTITION that happens to be planted — it divides one lounge
+   * bay from the next — so it is the partition's own material rather than the
+   * pot's: a thing that reads as built into the floor, not as a row of pots
+   * somebody put in a line.
+   */
+  planterTrough: '#E0DACD',
+  planterSoil: '#7a7770',
+
+  /**
+   * BOOK SPINES, DESATURATED (WP-85c §3.5).
+   *
+   * *"Book spines lose their saturation: `bookA/B/C` derive from the desk
+   * timber mixed halfway to three muted neutrals, so a shelf never competes
+   * with an identity ring."* They were the marker blues, plums and felts — six
+   * of the most saturated tokens on the floor, tiled twenty to a shelf, on the
+   * one piece of furniture that is meant to read as texture.
+   */
+  bookA: '#b0a088',
+  bookB: '#cdbda3',
+  bookC: '#decfb7',
+
+  // ---- thresholds: the screed band across a doorway, and the mat inside the
+  // reception's (WP-85c §3.3) ----
+  thresholdBand: '#c5c1b5',
+  matFill: '#c1c1bc',
+  matPile: 'rgba(112,109,104,0.22)',
 
   // ---- monitors ----
   monitorBody: '#33333A',
@@ -323,6 +352,20 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    */
   deskSheen: 'rgba(255,255,255,0.16)',
   tableWood: '#DCC9AE',
+
+  /**
+   * WHAT IS ON A DESK (WP-85c §3.5): a mug, a notebook, a sticky note.
+   *
+   * Three tokens for four objects — the in-tray is the reception's `desk_tray`
+   * and keeps its own — and all three are held UNDER the wall by the same
+   * derivation everything else on this floor is. A sticky note is the one
+   * object here anybody would draw in a saturated yellow, and a saturated
+   * yellow 0.7 U across on every desk is forty small bright dots competing
+   * with the one ring that means something (§1.2).
+   */
+  clutterCeramic: '#ddd6c7',
+  clutterPaper: '#e8e3d8',
+  clutterNote: '#c6bea0',
 
   // ---- task chairs, sofas ----
   chairFill: '#DCD5C6',

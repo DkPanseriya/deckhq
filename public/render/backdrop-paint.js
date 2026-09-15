@@ -183,9 +183,29 @@ export const PROP_HEIGHT = Object.freeze({
   user_desk: 'tall',
   water_cooler: 'tall',
   whiteboard: 'tall',
+  // WP-85c's plants. A TREE IS TALL and the other three are not, which is the
+  // whole of why §3.6 gives them four silhouettes rather than one at four
+  // scales: a 3.2 U canopy at head height casts along the ray like the
+  // bookcase beside it, a 2.0 U bush on the floor casts straight down, and a
+  // planter is a trough somebody steps over.
+  plant_tree: 'tall',
   // --- short: on the floor, or standing on something that already is.
   bar_stool: 'short',
   box: 'short',
+  // WP-85c's desk clutter. Everything here stands ON a desk that has already
+  // cast its own shadow along the ray; a mug that cast a second one would be a
+  // mug floating three pixels above the table it is sitting on.
+  mug: 'short',
+  notebook: 'short',
+  sticky: 'short',
+  plant_blade: 'short',
+  plant_broad: 'short',
+  planter: 'short',
+  // WP-85c's thresholds (§3.3). Both are laid INTO the floor — a screed band
+  // across a doorway and a mat inside the reception door — so neither has a
+  // height to cast from at all.
+  doormat: 'short',
+  threshold: 'short',
   chair: 'short',
   coffee_machine: 'short',
   coffee_table: 'short',
@@ -194,8 +214,6 @@ export const PROP_HEIGHT = Object.freeze({
   lamp: 'short',
   magazine_table: 'short',
   monitor: 'short',
-  plant: 'short',
-  plant_large: 'short',
   rug: 'short',
   rug_round: 'short',
   side_table: 'short',
