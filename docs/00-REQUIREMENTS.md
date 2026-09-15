@@ -125,7 +125,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-074 | A full interior pass: materials, furniture, density | Interior | in progress |
 | R-075 | Text legible over the floor | Interior | done |
 | R-076 | Furniture that launches the project it belongs to | Interior | done |
-| R-077 | A graphics control centre with curated, mixable interior options | Interior | planned |
+| R-077 | A graphics control centre with curated, mixable interior options | Interior | in progress |
 | R-080 | A whiteboard per room with the project's numbers | Plates / numbers | done |
 | R-081 | The plate's numbers are the ones that need action | Plates / numbers | done |
 | R-082 | No white pop-up boxes; background only on hover | Plates / numbers | done |
@@ -707,11 +707,24 @@ scheme, rugs, tables, chairs, sofas, plants — that combine without producing a
 agent-size control from R-057, with furniture scaling to the chosen agent size automatically.
 **Why.** Themes exist (WP-30, §125) and are a whole-floor diff; the owner is asking for per-element
 choice within a curated set, which is a different thing.
-**Status:** planned (**WP-88**). **Notes.** The options are the interior designer's, not a free
+**Status:** in progress (**WP-88a done**, 88b and 88c open). **Notes.** The options are the interior designer's, not a free
 palette: `10-INTERIOR-DESIGN.md`'s material system already derives every theme's tokens from one
 derivation, so a "set" is a token bundle rather than a colour picker. Every combination must still
 pass `assertThemeContrast`, `assertMaterialDiscipline` and the ≥ 3:1 figure-halo guard (P-03 and
 WP-85a). WP-88 **subsumes WP-80**; one setting for agent size, not two.
+
+**WP-88a shipped the model, the derivation and the guards (`DEVIATIONS.md` §175).** The catalogue is
+`public/render/look-options.js` — ten pickers, 52 options, six presets — and `DEFAULT_LOOK` is
+"Studio oak", which is byte-identical to the floor that ships: it derives all 86 material tokens
+exactly and emits the same plan, so no golden moved. `resolveLook(look, theme)` is the derivation and
+`validateLook(look, theme)` the guards, returning `{ok, problems}` with one row per picker — a
+refused combination is refused with its measured reason and never clamped. All 162 material x scheme
+x theme combinations pass `assertThemeContrast` and `assertMaterialDiscipline` unmodified. It also
+fixed two real failures on the shipped floor that §1.d of `11-LOOK-CONTROL-CENTRE.md` measured: the
+wool rug at 1.00:1 on night shift and the task rug at 1.69:1 on blueprint, both from a constant mix
+weight, both now a bisection on the ratio. `settings.look`, `GET/POST /api/look`, `?look=<preset>`
+and `deckhq look export | import` carry it. **What is still owed:** the Look section itself and its
+previews (WP-88b), and agent size with the scaling law (WP-88c). There is no UI yet, by design.
 
 ### 2.7 Plates and numbers
 

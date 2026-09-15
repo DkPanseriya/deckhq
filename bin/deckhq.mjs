@@ -16,6 +16,7 @@
  *   npx deckhq stats      what the floor did, from the local event ledger
  *   npx deckhq ledger     list, export and verify days of that ledger
  *   npx deckhq layout     export or import the floor's arrangement
+ *   npx deckhq look       what the building is made of, as a file you own
  *   npx deckhq pack       signed asset packs: more themes and avatar sets
  *   npx deckhq app        the floor in a window of its own, daemon and all
  *   npx deckhq shortcut   a Desktop and Start Menu icon for that window
@@ -60,6 +61,7 @@ const SUBCOMMANDS = {
   stats: async (rest) => (await import('../src/cli/stats.mjs')).runStats(rest),
   ledger: async (rest) => (await import('../src/cli/ledger.mjs')).runLedger(rest),
   layout: async (rest) => (await import('../src/cli/layout.mjs')).runLayout(rest),
+  look: async (rest) => (await import('../src/cli/look.mjs')).runLook(rest),
   pack: async (rest) => (await import('../src/cli/pack.mjs')).runPack(rest),
   app: async (rest) => (await import('../src/cli/app.mjs')).runApp(rest),
   shortcut: async (rest) => (await import('../src/cli/shortcut.mjs')).runShortcut(rest),
@@ -105,6 +107,7 @@ async function main() {
         '       deckhq stats [--days N] [--json]',
         '       deckhq ledger days | export [--signed] | verify <file>',
         '       deckhq layout export | show | import <file>',
+        '       deckhq look export | show | import <file> | presets',
         '       deckhq pack build | verify | install | list | remove',
         '       deckhq app [--port N] [--dry-run] [--pin | --no-pin]',
         '       deckhq shortcut --install [--yes] | --remove [--yes]',
@@ -135,6 +138,10 @@ async function main() {
         '  layout        the floor as a file: theme, room order, folded rooms and',
         '                the two floor preferences. `export > my-floor.json`,',
         '                `import my-floor.json`. Free, and gates nothing.',
+        '  look          what the building is made of: the floor material in each',
+        '                zone, the colour scheme, the furniture set, the rugs, the',
+        '                planting, the props and the lounge kit. `presets` lists the',
+        '                six. Unlike a layout it names no project: it is anonymous.',
         '  pack          signed asset packs: more themes and avatar sets, and',
         '                nothing else. `verify`, `install`, `list`, `remove`.',
         '                No account, no licence check, no network. A pack is a file.',

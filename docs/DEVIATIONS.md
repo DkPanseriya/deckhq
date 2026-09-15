@@ -18309,3 +18309,179 @@ fills.
 **Not verified:** how any of this behaves on GitHub Pages over a real connection. The weight is
 measured on disk, the pages are measured in a headless Chrome on `127.0.0.1`, and the owner's
 report was about neither.
+
+## 175. WP-88a — the floor could not be configured, and two rugs had never been measured against the floor under them
+
+**Date:** 15 September 2026 · **Package:** WP-88a · **Design:** `docs/plan/11-LOOK-CONTROL-CENTRE.md`
+§1, §3, §4, §5 · **Requirement:** R-077 · §174 belongs to the concurrent site agent and was not in
+the log's tail when this was written; this entry takes 175 on that basis.
+
+The owner, 15 September: *"I still don't see any option to configure the overall GUI graphics: office
+floor carpet and colours, rugs, tables, chairs, sofa, plants, etc. We do not flood everything with
+too many options; the interior designer carefully crafts options that can be mixed and matched."*
+Themes existed (§125) and are a whole-floor diff; this is per-element choice inside a curated set.
+
+**No UI landed here, by design.** WP-88a is the model, the derivation and the guards; WP-88b is the
+section that shows them.
+
+### 175.1 The two rugs, which is the part that was a defect rather than a feature
+
+§1.d of the design measured the shipped floor and found two failures, both from one cause. Each rug
+derived through a **constant** — a mix weight toward the foliage for the task rug, a shade of the
+carpet for the wool — while the gap between the carpet and the floor the rug lies on is not constant
+across themes. Measured, rug against the floor under it:
+
+| | default | night shift | blueprint |
+|---|---|---|---|
+| wool rug on the office boards, before | 1.23 | **1.00** | 1.13 |
+| wool rug on the office boards, after | 1.23 | 1.16 | 1.16 |
+| task rug on the project-room carpet, before | 1.32 | **1.56** | **1.69** |
+| task rug on the project-room carpet, after | 1.32 | 1.42 | 1.42 |
+
+The wool rug was invisible on night shift and the task rug was the loudest local contrast in a
+project room on both dark themes, with every number in `assertThemeContrast` green — because nothing
+measured a rug against its own floor. `rugParameterFor` now solves for the ratio: a parameter whose
+rug already reads is returned **untouched**, which is what keeps the default floor byte-identical and
+every golden still; one whose rug does not is walked to the band's edge by bisection, the device
+`underWall` already uses. `assertThemeContrast` holds both rugs to `[1.06, 1.45]`, so a pack theme is
+now measured on the one surface a name is most often drawn on.
+
+**The band is two bands, and that is deliberate.** The refusal band is `[1.06, 1.45]`; the derivation
+aims at `[1.16, 1.43]`. A rug walked back to exactly 1.45 would be one channel count from a refusal,
+and a small change anywhere else would reopen the defect. §1.d's own landing points (1.16 and 1.43)
+are what the narrower band produces.
+
+**One departure from §1.d's table.** It moves blueprint's wool rug from 1.13 to 1.16. 1.13 is inside
+the refusal band, so a derivation aimed only at that band would have left it alone — the narrower
+reads band moves it anyway, and the measurement then agrees with the design's own number. Nothing
+else in §1.d's four landing points differs.
+
+### 175.2 The catalogue, and how 52 over ten is reached
+
+`public/render/look-options.js`. The arithmetic is not obvious and is stated in the file so nobody
+has to rediscover it: four floor pickers (5 + 4 + 5 + 6 = 20), the colour scheme (6), the furniture
+set (3), the wool rug (3 tones + 2 patterns = 5), the task rug (5), the planting (3 families + 3
+densities = 6), the prop density (3) — ten pickers, 48 options — plus the lounge kit's four
+checkboxes, which §1.g calls checkboxes rather than a picker. 52. `LOOK_OPTION_COUNT` is computed
+from the tables rather than written down.
+
+The option tables **are** the allowlist, the same construction `themes.js` uses: there is no key that
+names a state colour, the reserved crimson, a project identity, the figure halo, room geometry, who
+sits where, plate content, the camera or a type size, so a look document cannot carry one.
+
+### 175.3 The luminance lock, and why 162 is a proof rather than a search
+
+A scheme mixes each of the nine surface tokens toward an anchor hue held at that token's own
+lightness, scales its chroma, and puts the result back on its **original relative luminance** by
+bisection. A WCAG ratio depends on relative luminance and nothing else, so every measurement
+`assertThemeContrast` makes is unchanged by construction. Measured worst drift over all 18 scheme ×
+theme pairs: **0.00768**, against a 0.01 bar — the residue of a 24-step bisection and a hex rounding.
+
+`warm` returns the colour untouched rather than round-tripping it through HSL, and that is
+load-bearing: a round trip can move a channel by one count, and `warm` is the transform the goldens
+are shot in.
+
+Measured over all 162 material × scheme × theme combinations, enumerated by
+`test/unit/look-guards.test.mjs` rather than asserted in prose:
+
+| | measured | ceiling |
+|---|---|---|
+| worst field contrast | 1.134:1 (night shift / mono / herringbone oak) | 1.14 |
+| worst speck contrast | 1.909:1 (blueprint / clay / terrazzo) | 2.0 |
+| worst floor ink | 6.96:1 (night shift / mono / herringbone oak) | ≥ 4.5 |
+| brighter than its theme's wall | none | none |
+
+### 175.4 Two departures from §1's own rules, both measured
+
+**Rule 3's second clause applies only where the tone source is shared.** §1 rule 3 reads *"two
+adjacent zones may not use the same floor option — and if they share a tone source their edge must
+still reach 1.04:1"*. Applying the 1.04 floor to every adjacency refuses the **shipped floor**: its
+poured-screed corridor sits 1.02:1 from its oak office and has since the first capture. Two materials
+off different tokens are already two materials; two off one token separate by pattern alone, and
+pattern is the first thing the fit scale takes away. So `FLOOR_MATERIALS` carries a `source` and the
+clause reads it.
+
+**A material's tones and specks are held under the wall, not only its field.** §1.a does not say so;
+`underWall` is WP-85a's rule for furniture. Without it a terrazzo chip came out brighter than night
+shift's wall — the bright hole §1.2 found, with the field itself green.
+
+### 175.5 Two presets were moved
+
+`garden-floor` and `workshop` were drafted with a lounge floor that differed from the office's. The
+wool rug lies in **both** the reception and the lounge, so a look that gives those zones different
+floors is asking one textile to read on both, and both presets were refused on a dark theme. Every
+shipped preset now puts the same material in the office and the lounge. `night-lab`'s corridor moved
+from poured screed to ceramic tile for 175.4's reason: on night shift a 4 % shade of the screed is
+1.03:1, under the 1.04 floor.
+
+That pairing is also the refusal the guard test asserts, in §1.d's own words: *"sage on polished
+concrete is 1.01:1 — the rug would not read"*.
+
+### 175.6 What the painters now read
+
+`applyLook` writes one object — `LOOK`, the device `PALETTE` already is — and every painter reads it:
+the bake picks a material with `materialForRoom`, the rug painter lays §1.d's bands, the plant
+painter reads §1.e's family silhouette tables, `plantsPerProjectRoom`, `plantsPerLoungeBay` and
+`propClearU2` read the densities, the lounge kit filters §3.7's bays before the width rule runs, and
+the furniture set scales every furniture radius. `backdrop-floor-look.js` adds the five materials the
+floor did not have: wide ash boards, terrazzo, polished concrete, loop-pile tile and cork.
+
+**A lobby still takes the room's own material, and the café's tile is not a picker.** §1.a's zones
+are four uses; a kitchen bay inside the lounge is a fifth, and a kitchen has a floor the rest of a
+lounge does not.
+
+Every one of those resolves to exactly the constant it replaces on the default look. `DEFAULT_LOOK`
+derives all 86 shipped material tokens byte for byte and emits the same plan, asserted three ways in
+`test/unit/look.test.mjs` and once more by the goldens.
+
+### 175.7 What a look is, as a file
+
+`kind: "deckhq.look"`, version 1, `layout-io`'s whole-or-one-error discipline. **Unlike a layout it
+is anonymous** — no project, no path, no session, no name — so it is a file that can be posted. An
+unknown option is refused rather than dropped, because a file that silently became a different floor
+would look like it had been accepted. A document whose ids are all real is then measured against
+every shipped theme, so a look that passes import cannot become a refused floor when the user
+switches to night shift.
+
+`settings.look` holds it; `sanitizeLook` is the one place that drops rather than refuses, because a
+daemon that would not start over a typo in a floor material is worse than one that paints the default
+and says so through `lookWarning`. `GET/POST /api/look` is loopback and behind the daemon's own
+cross-site guard. `?look=<preset>` paints one tab and takes a preset **name** and never a look — a
+URL that could set any look is a link a stranger could send.
+
+`look` is exempt from `settings-keys.test.mjs`'s "every setting has a control" rule for exactly one
+package: WP-88b is the section that owns the row, and §4 of the design says `'look'` joins
+`SETTINGS_KEYS` there.
+
+### 175.8 What is not verified
+
+`agentSize` is carried in the document and defaults to `auto`, and **nothing reads it**: WP-88c is the
+package that makes `RIG_UNIT_U` scale with it. It is in the schema now because a look exported today
+that a later build refused would be worse than a key nothing uses.
+
+The furniture set's `arms`, `brace`, `uprights`, `seams` and `boardFelt` are declared and only
+`radius` and `frame` are painted. §1.c's rolled arms and cross-braces are a painter package, and no
+screenshot of the other two sets exists.
+
+### 175.9 Two goldens moved, and the design document says they may not
+
+§5 promised *"no golden is rebaked here"*. Two were, and the two are the same two the rug fix could
+not leave alone: `demo@night-shift` and `demo@blueprint`. **The nine default-theme captures are at 0
+px moved** — not under tolerance, moved at all — which is the claim the promise was really making,
+and the one `DEFAULT_LOOK` exists to keep. The design's own §1.d demanded the dark themes' rugs
+change; a floor where the rug is invisible is not a floor a capture should be protecting.
+
+The diff images were read before either was rebaked, and the moved pixels are **only the rugs**: on
+night shift the reception's wool rug and the lounge's round one; on blueprint every project room's
+task rug, its break-out round rug, the lounge's sitting rug and the reception rug's border. Nothing
+else on either floor moved by one pixel.
+
+**The Linux goldens for those two captures are still the old rugs, and cannot be rebaked from
+Windows** — goldens are per platform because text is rasterised by the operating system's fonts
+(`scripts/goldens.mjs`). `test/goldens/linux/demo@night-shift.png` and
+`test/goldens/linux/demo@blueprint.png` are owed a regeneration on Linux, and the Ubuntu leg of CI
+will fail on exactly those two until somebody runs `npm run goldens` there. The other four Linux
+captures are unaffected.
+
+Beyond that, no golden shows any of this: WP-88b takes the composite the design asks for. The one
+thing the goldens do prove here is the negative — that the default look moved nothing.

@@ -16,6 +16,7 @@
  */
 
 import { PALETTE } from './palette.js';
+import { setRadius } from './look-derive.js';
 import { roundRect, unturn, SOFA_ARM_U, SOFA_BACK_U } from './backdrop-paint.js';
 import { LAMP_GLOW } from './backdrop-paint.js';
 
@@ -69,11 +70,11 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       const back = Math.min(depth * 0.3, SOFA_BACK_U * u);
       const backY = backAtStart ? -depth / 2 : depth / 2 - back;
       ctx.fillStyle = PALETTE.sofaFrame;
-      roundRect(ctx, -len / 2, backY, len, back, 4);
+      roundRect(ctx, -len / 2, backY, len, back, setRadius(4));
       ctx.fill();
-      roundRect(ctx, -len / 2, -depth / 2, arm, depth, 4);
+      roundRect(ctx, -len / 2, -depth / 2, arm, depth, setRadius(4));
       ctx.fill();
-      roundRect(ctx, len / 2 - arm, -depth / 2, arm, depth, 4);
+      roundRect(ctx, len / 2 - arm, -depth / 2, arm, depth, setRadius(4));
       ctx.fill();
       // Seat cushions between the arms, each with its own soft seam.
       const seatX = -len / 2 + arm;
@@ -118,7 +119,7 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
         k.stroke();
       });
       ctx.fillStyle = PALETTE.sofaCushion;
-      roundRect(ctx, -s / 2 + back, -s / 2 + arm, s - back - arm * 0.6, s - arm * 2, 4);
+      roundRect(ctx, -s / 2 + back, -s / 2 + arm, s - back - arm * 0.6, s - arm * 2, setRadius(4));
       ctx.fill();
       break;
     }

@@ -43,10 +43,7 @@ import {
   seededRng,
 } from './backdrop-paint.js';
 import {
-  paintHerringbone,
-  paintCarpet,
   paintTile,
-  paintCirculation,
   paintLightPool,
   paintRoomAmbientOcclusion,
   paintRoomSlabEdge,
@@ -58,6 +55,8 @@ import {
   DOOR_POOL_R_U,
   LIT_PROP_KINDS,
 } from './backdrop-floor.js';
+import { paintFloorMaterial } from './backdrop-floor-look.js';
+import { LOOK, materialForRoom } from './look-derive.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
 import { paintPlantProps } from './backdrop-props-plant.js';
@@ -65,6 +64,7 @@ import { paintPlayProps } from './backdrop-props-play.js';
 
 export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
+export * from './backdrop-floor-look.js';
 export * from './backdrop-props-desk.js';
 export * from './backdrop-props-lounge.js';
 export * from './backdrop-props-plant.js';
@@ -199,10 +199,21 @@ export function bakeBackdrop(plan, dpr = 1) {
       // (the spine, a cross corridor) is poured circulation; a lobby, which is
       // just the open floor beside a room, takes that room's own material so
       // the two read as one space.
-      if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng, u);
-      else if (room.floor === 'carpet') paintCarpet(ctx, rx, ry, rw, rh, rng, null, u);
-      else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh, u);
-      else paintCirculation(ctx, rx, ry, rw, rh);
+      // WP-88a: WHICH material is the look's (`materialForRoom`), and it is the
+      // same dispatcher every other zone goes through. A lobby still takes the
+      // room's own material and the corridor still takes the corridor's, which
+      // is exactly the chain of `if`s this replaces.
+      paintFloorMaterial(
+        ctx,
+        materialForRoom(room, LOOK.look.floors),
+        rx,
+        ry,
+        rw,
+        rh,
+        rng,
+        null,
+        u,
+      );
       continue;
     }
 
@@ -213,12 +224,12 @@ export function bakeBackdrop(plan, dpr = 1) {
     // the same wash under the same room on every machine and every rebake,
     // and it is the same colour the agents in it are already wearing.
     const tint = room.kind === 'project' ? identityFor(room.projectMk).accent : null;
-    if (room.floor === 'wood') paintHerringbone(ctx, rx, ry, rw, rh, rng, u);
-    else if (room.floor === 'tile') paintTile(ctx, rx, ry, rw, rh, u);
-    else if (room.floor === 'circulation') paintCirculation(ctx, rx, ry, rw, rh);
-    else paintCarpet(ctx, rx, ry, rw, rh, rng, tint, u);
+    paintFloorMaterial(ctx, materialForRoom(room, LOOK.look.floors), rx, ry, rw, rh, rng, tint, u);
 
     if (room.kitchenZone) {
+      // The cafe's own floor, and NOT a picker: §1.a's zones are four uses and a
+      // kitchen bay inside the lounge is a fifth. A kitchen has a floor the rest
+      // of a lounge does not, on every floor anybody has ever stood on.
       const kz = room.kitchenZone;
       paintTile(ctx, kz.x * u, kz.y * u, kz.w * u, kz.h * u, u);
     }

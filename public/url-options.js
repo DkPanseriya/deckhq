@@ -94,3 +94,38 @@ export function pickSessionPhase(search) {
   if (!Number.isFinite(value) || value < 0 || value >= 1) return null;
   return value;
 }
+
+/**
+ * `?look=night-lab` — PAINT ONE TAB IN A PRESET (WP-88a, §4).
+ *
+ * Same rules as `?theme=`, and one more that is the whole of why this parameter
+ * takes a preset NAME rather than a look: **a URL that could set any look is a
+ * link a stranger could send.** A look is fifteen option ids, and a query string
+ * that carried all fifteen would be a way to hand somebody a floor they did not
+ * choose — so what crosses this boundary is one id out of six, every one of them
+ * measured on all three themes before this build shipped.
+ *
+ * `known` is injected rather than imported so this stays pure and so the caller
+ * decides what "known" means — in the app it is `presetById`, which is case- and
+ * separator-insensitive, so `?look=Night_Lab` finds `night-lab`.
+ *
+ * For this tab, and for nothing else: never written back through `/api/look`,
+ * never the look the picker shows, and closing the tab is the whole of undoing
+ * it. An unknown value is IGNORED rather than refused or substituted.
+ *
+ * @param {string} search        the query string
+ * @param {unknown} settingLook  what `settings.look` says
+ * @param {(name:string) => unknown} known a preset lookup; falsy for an unknown id
+ * @returns {unknown} the look to paint
+ */
+export function pickSessionLook(search, settingLook, known) {
+  const wanted = queryValue(search, 'look');
+  if (!wanted) return settingLook;
+  let preset = null;
+  try {
+    preset = known(wanted) || null;
+  } catch {
+    preset = null;
+  }
+  return preset || settingLook;
+}

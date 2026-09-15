@@ -13,6 +13,7 @@ import { createLog } from './log.mjs';
 import { EDITOR_NAMES } from './editor.mjs';
 import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 import { DEFAULT_THEME_NAME, sanitizeThemeName } from './themes.mjs';
+import { DEFAULT_LOOK, sanitizeLook } from './look.mjs';
 import { sanitizeAvatarSetName } from './avatars.mjs';
 import { now as clockNow } from './clock.mjs';
 import { migrateState, STATE_VERSION } from './state-migrations.mjs';
@@ -99,6 +100,8 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       `YYYY-MM-DD`, or empty (WP-18)
  * @property {string} wrappedShown       which Wrapped has been shown — `2026-W36`
  *                                       or `2026-annual`, or empty (WP-27)
+ * @property {import('../../public/render/look-options.js').Look} look
+ *                                       what the building is made of (WP-88a).
  * @property {string} theme              which floor theme is painted (WP-30). A
  *                                       name from `core/themes.mjs`, never a
  *                                       path and never a colour: the document
@@ -177,6 +180,22 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // failure, and every theme this build offers has been measured
   // (`test/unit/state-visuals.test.mjs`).
   theme: DEFAULT_THEME_NAME,
+  // WP-88a. WHAT THE BUILDING IS MADE OF: nine floor materials over four zones,
+  // a colour scheme, a furniture set, two rugs, the planting, the prop density
+  // and the lounge kit (`docs/plan/11-LOOK-CONTROL-CENTRE.md` §1).
+  //
+  // A DOCUMENT and not a name, which is the opposite of `theme` above, and the
+  // difference is what the two can carry. A theme is colours, so a theme in
+  // `state.json` would be an unmeasured contrast failure in `state.json`; a look
+  // is option IDS from a table this build ships, so the worst a hand-edited one
+  // can name is an option that does not exist — and `sanitizeLook` drops that,
+  // measures what is left, and falls back to Studio oak if the combination is
+  // one the guards refuse. `deckhq doctor` says so out loud (`lookWarning`).
+  //
+  // Studio oak is byte-identical to the floor that ships (§3, owner decision 2),
+  // so an install that never opens the Look section is an install this key
+  // changed nothing about.
+  look: DEFAULT_LOOK,
   // WP-45. Which avatar set the agents are dressed from, or `''` — the tables
   // `public/render/palette.js` ships. A name and not a document, for the same
   // reason `theme` is: a set that arrived through `state.json` would be a set
@@ -437,6 +456,7 @@ function sanitizeSettings(raw) {
   s.ledgerRetentionDays = clampRetentionDays(s.ledgerRetentionDays);
   s.lightsOutHour = clampLightsOutHour(s.lightsOutHour);
   s.theme = sanitizeThemeName(s.theme);
+  s.look = sanitizeLook(s.look);
   s.avatarSet = sanitizeAvatarSetName(s.avatarSet);
   s.postcardDay = sanitizeShownKey(s.postcardDay);
   s.wrappedShown = sanitizeShownKey(s.wrappedShown);

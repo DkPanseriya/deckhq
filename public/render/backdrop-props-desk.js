@@ -16,8 +16,62 @@
  */
 
 import { PALETTE } from './palette.js';
+import { shade } from './themes.js';
 import { drawManagerFigure } from './rig.js';
 import { roundRect, drawContactShadow, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
+import { LOOK, setFrame, setRadius } from './look-derive.js';
+
+/**
+ * A RUG'S BANDS (WP-88a, §1.d).
+ *
+ * Three bands across the SHORT axis, because a band along the long one reads as
+ * a runner and a rug is not a runner. `plain` has none, which is the rug this
+ * floor has always laid — so this function returns before it draws anything on
+ * the default look, and the goldens cannot see it.
+ *
+ * @param {any} ctx @param {number} w @param {number} h @param {number} u
+ * @param {'wool'|'task'} role
+ */
+function paintRugBands(ctx, w, h, u, role) {
+  const pattern = LOOK.rugs[role]?.pattern;
+  if (!pattern?.bands?.length) return;
+  const across = h <= w;
+  const span = across ? h : w;
+  const band = Math.max(1, pattern.bandU * u);
+  ctx.save();
+  roundRect(ctx, -w / 2, -h / 2, w, h, 5);
+  ctx.clip();
+  ctx.fillStyle = shade(LOOK.rugs[role].colour, -pattern.bandShade);
+  for (const at of pattern.bands) {
+    const c = -span / 2 + span * at;
+    if (across) ctx.fillRect(-w / 2, c - band / 2, w, band);
+    else ctx.fillRect(c - band / 2, -h / 2, band, h);
+  }
+  ctx.restore();
+}
+
+/**
+ * The same pattern on a round rug: three concentric rings at the same fractions
+ * of the radius. A round rug has no short axis, and a stripe across a disc is a
+ * chord rather than a band.
+ *
+ * @param {any} ctx @param {number} r @param {number} u @param {'wool'|'task'} role
+ */
+function paintRugRings(ctx, r, u, role) {
+  const pattern = LOOK.rugs[role]?.pattern;
+  if (!pattern?.bands?.length) return;
+  ctx.save();
+  ctx.strokeStyle = shade(LOOK.rugs[role].colour, -pattern.bandShade);
+  ctx.lineWidth = Math.max(1, pattern.bandU * u);
+  for (const at of pattern.bands) {
+    const rr = r * at;
+    if (rr <= 0) continue;
+    ctx.beginPath();
+    ctx.arc(0, 0, rr, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
 /**
  * @param {any} ctx @param {any} prop @param {number} u
@@ -30,12 +84,17 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
     case 'user_desk': {
       // Its rect is its footprint: see `unturn`.
       unturn(ctx, prop);
+      // WP-88a, §1.c: the SET decides the corner and whether there is a frame
+      // line on it. Scandi is what ships, `setRadius` hands back the 3 px this
+      // desk has always had, and `setFrame` is null — so the default look paints
+      // exactly the desk the goldens hold.
       local((k) => {
+        const frame = setFrame(u);
         k.fillStyle = PALETTE.deskTop;
-        roundRect(k, -w / 2, -h / 2, w, h, 3);
+        roundRect(k, -w / 2, -h / 2, w, h, setRadius(3));
         k.fill();
-        k.strokeStyle = PALETTE.deskEdge;
-        k.lineWidth = 1.2;
+        k.strokeStyle = frame ? frame.colour : PALETTE.deskEdge;
+        k.lineWidth = frame ? frame.width : 1.2;
         k.stroke();
       });
       // §3.4: EVERY TABLE SHOWS ITS EDGE — a 0.15 U band of the darker timber
@@ -182,7 +241,7 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // A soft cushion highlight, so the seat reads as upholstered rather than
       // as a flat tile at L1.
       ctx.fillStyle = PALETTE.chairCushion;
-      roundRect(ctx, -seat + 2.5, -seat + 5.5, seat * 2 - 5, seat * 1.5 - 5, 3);
+      roundRect(ctx, -seat + 2.5, -seat + 5.5, seat * 2 - 5, seat * 1.5 - 5, setRadius(3));
       ctx.fill();
       // The back, across the top: the side the occupant leans against.
       ctx.fillStyle = PALETTE.chairBackrest;
@@ -464,6 +523,12 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       ctx.fillStyle = prop.tone === 'wool' ? PALETTE.rugCream : PALETTE.rugSage;
       roundRect(ctx, -w / 2, -h / 2, w, h, 5);
       ctx.fill();
+      // WP-88a, §1.d: the PATTERN. `plain` is the field and its border, which is
+      // the rug this floor has always laid; `banded` adds three 0.5 U bands at a
+      // sixth, a half and five sixths of the short axis, each 0.02 off the field
+      // — a step small enough to stay inside the rug's own value plateau, which
+      // is what a name drawn on it is measured against.
+      paintRugBands(ctx, w, h, u, prop.tone === 'wool' ? 'wool' : 'task');
       // Pile direction: a soft cross-wise sheen, the way a woven rug catches
       // light along the weave.
       const pile = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
@@ -495,6 +560,9 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'rug_round': {
+      // The round rug takes the same tone and the same pattern as its
+      // rectangular companion in the same role; its bands are rings.
+
       // Same border-inset language as `rug`, circular — the round
       // companion VISUAL-SPEC §6 already lists ("rugs (rectangular and
       // round, with a border inset)").
@@ -515,6 +583,7 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       ctx.beginPath();
       ctx.arc(0, 0, Math.max(0, r - 5), 0, Math.PI * 2);
       ctx.stroke();
+      paintRugRings(ctx, r, u, prop.tone === 'task' ? 'task' : 'wool');
       break;
     }
     default:

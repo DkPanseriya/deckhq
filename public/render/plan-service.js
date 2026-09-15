@@ -49,11 +49,12 @@ import {
   LOUNGE_BAY_SPEC,
   PLANTER_MARGIN,
   PLANTER_W,
-  PLANTS_PER_LOUNGE_BAY,
+  plantsPerLoungeBay,
   PLANT_FOOTPRINTS,
   loungeBayNames,
   plantRun,
 } from './plan-props.js';
+import { LOOK } from './look-derive.js';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
@@ -492,7 +493,15 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   const depthBudget = fit && fit.h > 0 ? fit.h - PLATE_BAND - MARGIN * 2 : Infinity;
   const oneRow = depthBudget < LOUNGE_SOFA_GROUP_H * 2 + bayGap;
   const present = new Set(blocks.map((b) => BAY_OF[b.id]));
-  const bayNames = loungeBayNames(budget, { oneRow, has: (n) => present.has(n) });
+  // WP-88a, §1.g: THE KIT IS A CEILING TOO. Four checkboxes over these bays, and
+  // `sitting` may not be turned off — a lounge with no place to sit is a field
+  // again. §3.7's width rule is unchanged and still runs after this, so a narrow
+  // lounge drops bays from the right whatever the kit says.
+  const kit = LOOK.lounge?.on || {};
+  const bayNames = loungeBayNames(budget, {
+    oneRow,
+    has: (n) => present.has(n) && kit[n] !== false,
+  });
   const kept = new Set(bayNames);
   const live = blocks.filter((b) => kept.has(BAY_OF[b.id]));
 
@@ -634,7 +643,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   // put a bush exactly where somebody is drawn. Four corners in a fixed order,
   // and a bay with no free corner gets no plant: §3.6's numbers are a ceiling,
   // not a quota, and a room that plants a quota is decorated by area (§3.5).
-  const bayKinds = plantRun('__lounge__', Math.min(bays.length, PLANTS_PER_LOUNGE_BAY));
+  const bayKinds = plantRun('__lounge__', Math.min(bays.length, plantsPerLoungeBay()));
   bays.forEach((bay, i) => {
     const kind = bayKinds[i % bayKinds.length];
     const size = PLANT_FOOTPRINTS[kind] || 2.4;

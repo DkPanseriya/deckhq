@@ -55,12 +55,7 @@ import {
   WHITEBOARD_W,
   breakoutFits,
 } from './plan-furniture.js';
-import {
-  PLANTS_PER_PROJECT_ROOM,
-  PLANT_FOOTPRINTS,
-  deskClutterFor,
-  plantRun,
-} from './plan-props.js';
+import { plantsPerProjectRoom, PLANT_FOOTPRINTS, deskClutterFor, plantRun } from './plan-props.js';
 
 /** @typedef {import('./plan-units.js').ProjectLike} ProjectLike */
 /** @typedef {import('./plan-units.js').Prop} Prop */
@@ -717,7 +712,7 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   // The two kinds come from `plantRun`, which cannot return the same silhouette
   // twice in a row — §3.6's *"never two of the same kind adjacent"* held by
   // construction rather than by a check.
-  const cornerKinds = plantRun(id, PLANTS_PER_PROJECT_ROOM);
+  const cornerKinds = plantRun(id, plantsPerProjectRoom());
   /** @type {readonly ('SW'|'NE')[]} */
   const cornersUsed = ['SW', 'NE'];
   cornersUsed.forEach((corner, n) => {
