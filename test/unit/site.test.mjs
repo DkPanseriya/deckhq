@@ -430,7 +430,11 @@ test('HONESTY: a mockup is never shown as a screenshot', async () => {
       }
     }
   }
-  assert.ok(shown >= 8, `expected the mockups to be published; found ${shown}`);
+  // Four, not the eight WP-94a had: since WP-94b a mockup is published only
+  // where it draws something that is COMING, and the design-journey sheets —
+  // the candidates, the material board, the interior before-and-after — are
+  // off the site entirely.
+  assert.ok(shown >= 4, `expected the mockups to be published; found ${shown}`);
 
   // And the gate refuses a page that forgets. Without this the test above
   // passes on a site that happens to be correct and a gate that does nothing.
@@ -447,7 +451,8 @@ test('HONESTY: a mockup is never shown as a screenshot', async () => {
 });
 
 test('no image the site serves is wider than the capture stage', async () => {
-  const { MAX_IMAGE_WIDTH } = await import('../../site/build.mjs');
+  const { ROLES } = await import('../../site/build.mjs');
+  const MAX_IMAGE_WIDTH = Math.max(...Object.values(ROLES).map((r) => r.width));
   const { decodePng } = await import('../../scripts/lib/png.mjs');
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   let checked = 0;
@@ -467,6 +472,178 @@ test('no image the site serves is wider than the capture stage', async () => {
     );
   }
   assert.ok(checked > 10, 'expected the site to carry images');
+});
+
+/* ------------------------------------------------------------------ WP-94b */
+
+/**
+ * The visible words of one page: markup gone, and code gone with it.
+ *
+ * `<code>` and `<pre>` are stripped before the scan because they are not
+ * prose — a TypeScript interface on the Adapters page contains the word
+ * "option", and a shell line contains almost anything. The rules below are
+ * about what the site SAYS.
+ *
+ * @param {string} html a hand-written page body
+ */
+function prose(html) {
+  return html
+    .replace(/<pre[\s\S]*?<\/pre>/g, ' ')
+    .replace(/<code[\s\S]*?<\/code>/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&#8212;/g, '—')
+    .replace(/&#8217;/g, '’')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * COPY: the phrases this site does not use — WP-94b.
+ *
+ * The owner's review of 26 September asked for the defensive writing and the
+ * AI slop to go. Both are recognisable, so they are a list rather than a
+ * judgement: the negation-then-assertion move, the puffery vocabulary, the
+ * reflexive hedge, and the words that describe how something was designed
+ * rather than what it does.
+ */
+const FORBIDDEN = [
+  [/not (just|only|merely|simply|solely) [^.;]{2,80}(but|it’s)/i, 'the "not X but Y" move'],
+  [/isn’?t (just|only|merely|simply|about)/i, 'the "not X but Y" move'],
+  [/not only [^.;]{2,80}but/i, 'the "not X but Y" move'],
+  [/less about [^.;]{2,60}(than|and more about)/i, 'the "not X but Y" move'],
+  [/more than (just|a mere|simply)/i, 'the "not X but Y" move'],
+  [/\bdesigned to\b/i, 'puffery: say what it does'],
+  [/\bseamless(ly)?\b|\brobust\b|\bpowerful\b|\bholistic\b|\bsynergy\b/i, 'puffery'],
+  [/\bleverage(s|d)?\b|\bmeticulous|\bintricate\b|\bboasts\b|\bempower/i, 'puffery'],
+  [/game.?chang|cutting.?edge|\bdelve|\btapestry\b|\btestament\b/i, 'puffery'],
+  [/\bshowcas(e|es|ing)\b|\bunlock(s|ing)? (the|your)\b|\bharness(es|ing)? the\b/i, 'puffery'],
+  [/ever.?(evolving|changing)|fast.?paced|in today’?s\b|when it comes to/i, 'puffery'],
+  [/it’?s (worth|important) (to note|noting|to remember)/i, 'a hedge: say it'],
+  [/(that|it) (being )?said,|while (it’?s|this is) (true|important)/i, 'a hedge'],
+  [/\barguably\b|in many ways|to some (extent|degree)|on the other hand/i, 'a hedge'],
+  [/at its core|in essence|essentially,|ultimately,|in conclusion|in summary/i, 'a hedge'],
+  [/\boverall,|in the end,|needless to say|as (we|you) (can see|know)/i, 'a hedge'],
+  [/let’?s (dive|unpack|explore|take a (look|closer look))/i, 'a hedge'],
+  [/\bcandidates?\b|\bchosen\b|\branking\b|\branked\b/i, 'the design journey'],
+  [/before.and.after|before\/after|direction [ABCD]\b|material board/i, 'the design journey'],
+  [/\boptions?\b(?! for)/i, 'the design journey: show what there is'],
+];
+
+test('COPY: the site says nothing in the shape of AI slop', () => {
+  for (const name of fs.readdirSync(path.join(siteDir, 'pages'))) {
+    const text = prose(fs.readFileSync(path.join(siteDir, 'pages', name), 'utf8'));
+    for (const [pattern, why] of FORBIDDEN) {
+      const hit = pattern.exec(text);
+      assert.equal(
+        hit,
+        null,
+        `${name} uses ${why}: "${hit && text.slice(Math.max(0, hit.index - 30), hit.index + hit[0].length + 30).trim()}"`,
+      );
+    }
+  }
+});
+
+test('COPY: an em dash is a punctuation mark, not a rhythm', () => {
+  // One per 150 words. The site is allowed the mark — the log entries it
+  // renders are full of them — and is not allowed to reach for it as a
+  // cadence. Over the budget, a page is being written rather than said.
+  for (const name of fs.readdirSync(path.join(siteDir, 'pages'))) {
+    const text = prose(fs.readFileSync(path.join(siteDir, 'pages', name), 'utf8'));
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const dashes = (text.match(/—/g) ?? []).length;
+    const budget = Math.max(1, Math.round(words / 150));
+    assert.ok(
+      dashes <= budget,
+      `${name} has ${dashes} em dashes in ${words} words; the budget is ${budget}`,
+    );
+  }
+});
+
+test('COPY: a picture that is not built says so where it is shown', () => {
+  // WP-94b. An illustration is published only for something that is coming,
+  // and the reader who skims the pictures and reads none of the words has to
+  // be able to tell. So the "Coming" tag sits in the caption, beside the
+  // "Design illustration" label, on every one of them.
+  for (const name of fs.readdirSync(path.join(siteDir, 'pages'))) {
+    const html = fs.readFileSync(path.join(siteDir, 'pages', name), 'utf8');
+    for (const figure of html.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
+      const caption = (figure[0].match(/<figcaption[\s>]([\s\S]*?)<\/figcaption>/) ?? ['', ''])[1];
+      if (!caption.includes('tag--illustration')) continue;
+      assert.match(
+        caption,
+        /tag--coming/,
+        `${name} shows a mockup without saying it is coming: ${caption.trim().slice(0, 60)}`,
+      );
+    }
+  }
+});
+
+test('WEIGHT: every picture is inside the budget for what it is', async () => {
+  const { IMAGES, ROLES } = await import('../../site/build.mjs');
+  let checked = 0;
+  for (const image of IMAGES) {
+    const file = path.join(out, 'media', image.to);
+    if (!fs.existsSync(file)) continue;
+    const role = ROLES[image.role ?? (image.to.endsWith('.gif') ? 'gif' : 'crop')];
+    const size = fs.statSync(file).size;
+    checked++;
+    assert.ok(
+      size <= role.budget,
+      `media/${image.to} is ${Math.round(size / 1024)} KB, over the ` +
+        `${Math.round(role.budget / 1024)} KB budget for a ${image.role}`,
+    );
+  }
+  assert.ok(checked > 10, 'expected the site to carry images');
+});
+
+test('WEIGHT: no page costs more than its budget, read to the bottom', async () => {
+  const { PAGES, PAGE_BUDGET, pageWeight } = await import('../../site/build.mjs');
+  for (const page of PAGES) {
+    if (page.slug === 'log/index') continue;
+    const rel = `${page.slug}.html`;
+    const bytes = pageWeight(out, rel);
+    const budget = PAGE_BUDGET[rel] ?? PAGE_BUDGET.default;
+    assert.ok(
+      bytes <= budget,
+      `${rel} weighs ${Math.round(bytes / 1024)} KB, over its ${Math.round(budget / 1024)} KB budget`,
+    );
+  }
+});
+
+test('MOTION: every GIF the site serves actually moves', () => {
+  // A GIF with one frame is a PNG that costs more, and it is what a capture
+  // pipeline produces when the floor was not animating — which is the failure
+  // mode worth a gate, because it looks right in a screenshot. Counting frames
+  // means counting graphic control extensions: `21 F9 04`, the four-byte block
+  // that carries each frame's delay.
+  let checked = 0;
+  for (const file of walk(path.join(out, 'media'), ['.gif'])) {
+    const bytes = fs.readFileSync(file);
+    let frames = 0;
+    for (let i = 0; i + 3 < bytes.length; i++) {
+      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) frames++;
+    }
+    checked++;
+    assert.ok(
+      frames > 1,
+      `media/${path.relative(path.join(out, 'media'), file)} has ${frames} frame(s)`,
+    );
+  }
+  assert.ok(checked > 0, 'expected the site to carry an animation');
+});
+
+test('WEIGHT: every picture below the fold is lazy, on every page', () => {
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page);
+    const tags = [...html.matchAll(/<img\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => /\ssrc="(\.\.\/)*media\//.test(tag));
+    // The first picture on a page is what the reader came for and is fetched
+    // at once; everything under it waits until they scroll to it.
+    for (const tag of tags.slice(1)) {
+      assert.match(tag, /loading="lazy"/, `${where}: a picture below the fold is not lazy: ${tag}`);
+    }
+  }
 });
 
 /* ------------------------------------------------------------------ WP-94c */

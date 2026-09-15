@@ -2,37 +2,22 @@
   <div class="section-head">
     <h1>The look.</h1>
     <p class="lede">
-      Two halves, and the difference between them is the point of this page. The first half is what
-      the renderer draws today, photographed by the visual-regression gate. The second half is a
-      designer&#8217;s drawings of a package that has <strong>not been built</strong>. Every image
-      in it says so in its own caption.
+      Three finishes ship today, all free and none of them gated. Each one repaints materials and
+      neutrals; the six state colours never move, so a raised hand is the same amber in all three.
     </p>
-    <div class="note">
-      <p>
-        <strong>A mockup is never a screenshot here.</strong> An image labelled
-        <em>design illustration</em> was drawn against a specification; no build has produced it and
-        nothing you install will look exactly like it. The rule is
-        <a href="https://github.com/DkPanseriya/deckhq/blob/main/docs/MEDIA.md">docs/MEDIA.md</a>,
-        and the site build fails rather than publish one of them unlabelled.
-      </p>
-    </div>
   </div>
 
-  <h2>Six looks. Three of them you can select today.</h2>
   <ul class="gallery" data-reveal>
     <li>
       <figure class="tile">
         <img
           src="media/goldens/demo.png"
           alt="The demo floor in the default theme: warm office neutrals, wood and fabric, agents at desks in project rooms"
-          loading="lazy"
-          width="1600"
-          height="1000"
         />
         <figcaption>
           <b>Default &#8212; the warm office</b>
           <span class="tag tag--golden">Golden render</span>
-          <span class="tile-more">Ships today. Herringbone wood, woven carpet, one key light.</span>
+          <span class="tile-more">Herringbone wood, woven carpet, one key light.</span>
         </figcaption>
       </figure>
     </li>
@@ -42,15 +27,12 @@
           src="media/goldens/demo-night-shift.png"
           alt="The same demo floor in the night shift theme: cooler and dimmer, with the state colours unchanged"
           loading="lazy"
-          width="1600"
-          height="1000"
         />
         <figcaption>
           <b>Night shift</b>
           <span class="tag tag--golden">Golden render</span>
           <span class="tile-more"
-            >Ships today. The same office after hours &#8212; cooler, dimmer, same six state
-            colours.</span
+            >The same office after hours. Cooler, dimmer, same six states.</span
           >
         </figcaption>
       </figure>
@@ -61,32 +43,94 @@
           src="media/goldens/demo-blueprint.png"
           alt="The same demo floor in the blueprint theme: white line work on drafting-table blue, with the state colours unchanged"
           loading="lazy"
-          width="1600"
-          height="1000"
         />
         <figcaption>
           <b>Blueprint</b>
           <span class="tag tag--golden">Golden render</span>
-          <span class="tile-more">Ships today. The floor as a drawing on a drafting table.</span>
+          <span class="tile-more">The floor as a drawing on a drafting table.</span>
+        </figcaption>
+      </figure>
+    </li>
+  </ul>
+  <p class="shot-note">
+    One populated floor per theme is a committed golden. A theme that quietly failed to reach the
+    bake would fail CI on the next run.
+  </p>
+</section>
+
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>The same room, three times.</h2>
+    <p>
+      Ground, wood, fabric and light change. The plate stays legible, every ink keeps its contrast
+      floor, and the working green on the agents is the same green in all three.
+    </p>
+  </div>
+  <ul class="gallery">
+    <li>
+      <figure class="tile">
+        <img
+          src="media/site/room-plate.png"
+          alt="The design-system room in the default theme: warm wood floor, pale desks, four agents in working green"
+          loading="lazy"
+        />
+        <figcaption>
+          <b>Default</b> <span class="tag">Capture</span>
+          <span class="tile-more">Warm neutrals, herringbone ground.</span>
         </figcaption>
       </figure>
     </li>
     <li>
       <figure class="tile">
         <img
+          src="media/site/room-plate-night-shift.png"
+          alt="The same design-system room in night shift: the ground and furniture cooler and darker, the agents still in working green"
+          loading="lazy"
+        />
+        <figcaption>
+          <b>Night shift</b> <span class="tag">Capture</span>
+          <span class="tile-more">Same room, after hours.</span>
+        </figcaption>
+      </figure>
+    </li>
+    <li>
+      <figure class="tile">
+        <img
+          src="media/site/room-plate-blueprint.png"
+          alt="The same design-system room in blueprint: drafting-table blue with white line work, the agents still in working green"
+          loading="lazy"
+        />
+        <figcaption>
+          <b>Blueprint</b> <span class="tag">Capture</span>
+          <span class="tile-more">Line work on drafting blue.</span>
+        </figcaption>
+      </figure>
+    </li>
+  </ul>
+</section>
+
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>Coming: Look.</h2>
+    <p>
+      Interior presets, a picker for ground, carpet, wood, fabric and plants, and an agent size that
+      the furniture scales with. <strong>None of it is built.</strong> The three pictures below are
+      the drawings it is designed against, and they are labelled as drawings.
+    </p>
+  </div>
+  <ul class="gallery">
+    <li>
+      <figure class="tile">
+        <img
           src="media/look/presets.png"
           alt="Six curated interior presets shown as small floors side by side, each with a different ground, carpet, furniture set and colour scheme"
           loading="lazy"
-          width="1600"
-          height="1000"
         />
         <figcaption>
           <b>Six curated presets</b>
+          <span class="tag tag--coming">Coming</span>
           <span class="tag tag--illustration">Design illustration</span>
-          <span class="tile-more"
-            >WP-88a. Planned, not built &#8212; a design illustration of what those presets are
-            drawn against.</span
-          >
+          <span class="tile-more">Today there are three themes.</span>
         </figcaption>
       </figure>
     </li>
@@ -96,16 +140,12 @@
           src="media/look/control-centre.png"
           alt="A mockup of the graphics control centre: rows of swatches for ground, carpet, wood, fabric and plants, with a live preview of the floor beside them"
           loading="lazy"
-          width="1600"
-          height="1000"
         />
         <figcaption>
           <b>The graphics control centre</b>
+          <span class="tag tag--coming">Coming</span>
           <span class="tag tag--illustration">Design illustration</span>
-          <span class="tile-more"
-            >WP-88b. Planned, not built. Today there are three themes and no picker beyond
-            them.</span
-          >
+          <span class="tile-more">Today there is no picker beyond the three themes.</span>
         </figcaption>
       </figure>
     </li>
@@ -118,111 +158,20 @@
         />
         <figcaption>
           <b>Agent size, small to large</b>
+          <span class="tag tag--coming">Coming</span>
           <span class="tag tag--illustration">Design illustration</span>
-          <span class="tile-more">WP-88c. Planned, not built. Today there is one agent size.</span>
+          <span class="tile-more">Today there is one agent size.</span>
         </figcaption>
       </figure>
     </li>
   </ul>
+  <p class="shot-note">
+    Whatever ships has to pass what a theme passes today: <code>assertThemeContrast</code>,
+    <code>assertMaterialDiscipline</code> and the figure-halo guard, on every combination. Agent
+    size changes no geometry &#8212; the same population draws the same room rectangles at every
+    setting.
+  </p>
 </section>
-
-<section class="section" data-reveal>
-  <div class="bands">
-    <div class="band-row">
-      <div class="band-copy">
-        <h2>What a theme is allowed to move.</h2>
-        <p>
-          All three are free and none of them is gated. A theme repaints materials and neutrals; the
-          six state colours never move, so a raised hand is the same amber in all three and every
-          theme is measured against the same contrast floors before it can be selected.
-        </p>
-        <p>
-          One populated floor per theme is a committed golden, which is what proves a theme reaches
-          the bake rather than quietly not applying. The three above are those goldens.
-        </p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/interior/board.png"
-          alt="The interior material board: rows of ground, wood, fabric and metal swatches with their names and contrast values"
-          loading="lazy"
-        />
-        <figcaption>
-          The material board WP-85 was designed against.
-          <span class="tag tag--illustration">Design illustration</span> &#8212; a drawing of the
-          specification, not a screenshot of the product.
-        </figcaption>
-      </figure>
-    </div>
-
-    <div class="band-row">
-      <div class="band-copy">
-        <h2>The interior, as it was drawn.</h2>
-        <p>
-          The floor was lit and furnished before anybody had designed the interior. WP-85 fixed
-          that: one key light, a furniture set drawn rather than blocked out, four planting kinds
-          told apart by shape, a reception with a threshold, and something on every desk.
-        </p>
-        <p>
-          What shipped is the three goldens above. Compare them against the drawing beside this:
-          that comparison is the honest version of a before-and-after, and it is why both are on
-          this page.
-        </p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/interior/mockup-default.png"
-          alt="A designer&#8217;s mockup of the DeckHQ interior in the default theme: project rooms, a lounge in four bays, a reception with a doormat, plants and desk props"
-          loading="lazy"
-          width="1600"
-          height="1000"
-        />
-        <figcaption>
-          The interior as drawn for WP-85.
-          <span class="tag tag--illustration">Design illustration</span> &#8212; the shipped version
-          is the goldens above, and it is not identical to this.
-        </figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<div class="bleed never" data-reveal>
-  <div class="never-inner">
-    <h2>Coming in WP-88, and not here yet</h2>
-    <p class="lede">
-      The owner, 15 September 2026, asked for designer-curated interior options that mix and match
-      &#8212; floor, carpet, colours, rugs, tables, chairs, sofa, plants &#8212; plus agent size,
-      with the furniture scaling automatically.
-      <strong>None of this is built.</strong>
-    </p>
-    <ul class="never-list">
-      <li>
-        <h3>Every combination passes the same gates</h3>
-        <p>
-          <code>assertThemeContrast</code>, <code>assertMaterialDiscipline</code> and the
-          figure-halo guard, exactly as a shipped theme does.
-        </p>
-      </li>
-      <li>
-        <h3>Agent size changes no geometry</h3>
-        <p>
-          The same population has to produce the same room rectangles at every setting, small to
-          large.
-        </p>
-      </li>
-      <li>
-        <h3>It is three work packages</h3>
-        <p>
-          WP-88a, b and c in
-          <a href="https://github.com/DkPanseriya/deckhq/blob/main/docs/plan/08-PLAN-V2-100X.md"
-            >the plan</a
-          >. Today: three themes, one agent size.
-        </p>
-      </li>
-    </ul>
-  </div>
-</div>
 
 <article class="prose">
   <h2>Packs</h2>

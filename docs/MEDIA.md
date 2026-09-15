@@ -46,14 +46,27 @@ found by somebody looking at it.
 
 ## 3. Size
 
-Images are copied into the site at build time. A PNG wider than **1600 px** is downscaled to
-1600 px on the way, by `site/build.mjs` using `scripts/lib/png.mjs` — the same dependency-free
-decoder the goldens harness uses. Nothing else is touched: a GIF is copied byte for byte, and a
-PNG at or under 1600 px is copied byte for byte, so what the site serves for those is the file that
-is in the repository.
+Every image on the site declares the **role** it plays, and the role fixes both the width it is
+served at and the weight it may reach — WP-94b, `ROLES` in `site/build.mjs`:
 
-1600 px is the capture stage (`scripts/goldens.mjs` `DEFAULT_WIDTH`), so a golden is never
-resampled and a golden on the site is the golden in the tree.
+| Role | Served at | May weigh | What it is |
+|---|---|---|---|
+| `hero` | 1100 px | 600 KB | a full-column picture |
+| `crop` | 680 px | 250 KB | a detail of one feature |
+| `gif` | 1100 px | 2.5 MB | motion |
+
+A whole page is capped too: **2 MB** on Home, **3 MB** everywhere else, counting the document, the
+stylesheet, the two scripts, the mark and every picture on the page including the lazy ones. Both
+caps are enforced in `site/build.mjs`, which refuses to publish an image or a page over budget, and
+again in `test/unit/site.test.mjs`, which names the file and the overage.
+
+The resampling is `boxDownscale()` in `scripts/lib/png.mjs` — the same dependency-free decoder the
+goldens harness uses, and the same one the capture pipeline downscales through. A GIF is copied
+byte for byte and is never re-encoded. A PNG already inside its role's width is copied byte for
+byte, so what the site serves for those is the file that is in the repository.
+
+The reason the numbers are this low is the owner's report of 26 September: the pictures load
+slowly and Look's do not arrive at all. Nothing 404s; Features weighed 6.3 MB and Look 4.0 MB.
 
 **Every published image also carries its own pixel size in the markup** — WP-94c. A picture without
 `width` and `height` is a picture the browser reserves no room for, so the words under it move when
@@ -174,11 +187,42 @@ toggle that stayed hidden, or a picture that did not load.
 
 `site-index.png` in §4.2 is the older, unpublished picture of the site and is superseded by these.
 
+### 4.5 The product, cropped — `docs/media/site/`, class `capture`, all current
+
+The pictures the site actually shows, declared in `site/assets.json` and taken by
+`node scripts/site-assets.mjs` — WP-94b. Each one names a fixture population, a viewport, the keys
+or clicks that reach the state, and a crop rectangle in CSS pixels of the 1600 × 1000 stage. The
+daemon runs with `DECKHQ_NOW` pinned to `DEMO_EPOCH`, so every age in them is a property of the
+fixture rather than of the day somebody ran the script. Rerun the whole set with one command; the
+command is in `docs/plan/RELEASE-CHECKLIST.md`.
+
+| File | What it shows |
+|---|---|
+| `site/queue-strip.png` | The waiting strip: who is waiting, for how long, in what |
+| `site/room-plate.png` | One project room — its plate, its desks, its juniors |
+| `site/reception.png` | Your Office: four waiting on the sofas, two at the chairs |
+| `site/working-desk.png` | One desk, close: the agent, the screen, the thought bubble |
+| `site/lounge-bay.png` | A lounge bay: benched agents, off the clock |
+| `site/idle-popover.png` | The idle chip, opened: the repos nobody is working in |
+| `site/deck-usage.png` | The deck's Usage tab: tokens for seven days, by project |
+| `site/review-card.png` | The panel on a session that is for review |
+| `site/permission-card.png` | A real `PermissionRequest`, raised through `/api/hook` and held open by its caller |
+| `site/floor-crowded.gif` | The whole floor, every animation running. 100 frames, 25 fps |
+| `site/typing.gif` | Typing and thinking at two desks. 100 frames, 25 fps |
+| `site/lounge.gif` | The lounge: what a benched agent does with its time. 100 frames, 25 fps |
+| `site/hand-up.gif` | An agent finishes, walks to Your Office and puts its hand up. 120 frames, 25 fps |
+
+The first three GIFs step WP-87's pinned phase (`?phase=`) through exactly one cycle, so they are
+deterministic and they loop. `hand-up.gif` records a real walk on the wall clock, because standing
+up and crossing the floor is not a clip phase and cannot be pinned.
+
 ## 5. WP-94b — the recapture list
 
-After **WP-89** lands, every file marked **stale** in §4.2 that is still published is retaken on
-the current build, and the hero GIF is re-recorded. Until then the site prefers a golden wherever
-one exists, which is why the Home hero is `three.png` rather than `floor.png`.
+Done. Every picture the site shows of the product is now taken by `scripts/site-assets.mjs` from
+the current build, and §4.5 is the register of them. The stale captures in §4.2 are no longer
+published: `app-window.png`, `office-cleared.png`, `wrapped-weekly.png`, `panel-review-card.png`,
+`permission-card.png` and `deck-view.png` stay in the repository for the log entries that cite
+them and are off the pages.
 
 Not recaptured, ever: the eight before/after files in §4.2, and `site-index.png`, which is a
 picture of the site this package rewrote and is replaced rather than retaken.

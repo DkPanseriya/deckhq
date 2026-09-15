@@ -19,16 +19,16 @@
       setting to turn off, because there is nothing to turn off.
     </li>
     <li>
-      <strong>No fonts or scripts from a CDN</strong> &#8212; in the product, and on this site. The
-      only sockets are the loopback listener and the runtime processes DeckHQ starts on your behalf.
+      <strong>No fonts or scripts from a CDN</strong>, in the product, and on this site. The only
+      sockets are the loopback listener and the runtime processes DeckHQ starts on your behalf.
     </li>
     <li>
       Your conversation content never leaves the machine, and is rendered as text, never as HTML.
       There is no <code>innerHTML</code> in the client at all.
     </li>
     <li>
-      No accounts, no billing, no licence checks. MIT, zero runtime dependencies &#8212; you can
-      read the whole thing in an afternoon, and there is nothing underneath it to read.
+      No accounts, no billing, no licence checks. MIT, zero runtime dependencies. You can read the
+      whole thing in an afternoon, and there is nothing underneath it to read.
     </li>
   </ul>
 
@@ -96,7 +96,7 @@
           <td><code>~/.deckhq/ledger/</code></td>
           <td>
             One JSON object per line, per day, behind <code>deckhq stats</code>. It holds no paths
-            and no project names &#8212; a project is a hash &#8212; and it is pruned at
+            and no project names (a project is a hash), and it is pruned at
             <code>ledgerRetentionDays</code>, 90 by default.
           </td>
         </tr>
@@ -127,9 +127,9 @@
   <p>
     Without hooks, DeckHQ infers state from transcripts. It can tell you a session is alive and
     whether the last word was yours or the agent&#8217;s. It <strong>cannot</strong> tell
-    <code>needs_input</code> from <code>stalled</code> &#8212; a transcript alone does not
-    distinguish those two states, and the header says so plainly rather than showing you a
-    confidently wrong picture.
+    <code>needs_input</code> from <code>stalled</code>: a transcript alone does not distinguish
+    those two states, and the header says so plainly rather than showing you a confidently wrong
+    picture.
   </p>
   <p>
     With hooks installed, state is exact and instant: a permission prompt raises a hand within
@@ -162,7 +162,7 @@
   <h2>What a hook event may touch</h2>
   <p>
     A tool event moves a thought bubble and nothing else. Nothing about it touches
-    <code>ackState</code>, the needs-you count, or the stall clock &#8212; there is a named
+    <code>ackState</code>, the needs-you count, or the stall clock, and there is a named
     <code>INVARIANT:</code> test for exactly that. A path outside the session&#8217;s own working
     directory is reduced to its file name, so a screenshot of your floor cannot carry someone
     else&#8217;s directory tree, and every payload string is flattened to one line of printable text
@@ -174,9 +174,9 @@
     <code>deckhq doctor --share</code> prints the report as a fenced block with everything that
     belongs to you taken out: no paths, no project names, no machine name, no hook port, no
     free-text error message, and a date to the day rather than the hour. Project names cannot leak
-    by construction &#8212; the report counts distinct working directories and never keeps the
-    strings &#8212; and a redaction pass runs over the assembled block anyway, because a
-    runtime&#8217;s version string is text this project did not write.
+    by construction, because the report counts distinct working directories and never keeps the
+    strings. A redaction pass runs over the assembled block anyway, because a runtime&#8217;s
+    version string is text this project did not write.
   </p>
   <p>
     <code>deckhq ledger export --signed</code> writes one day out with an Ed25519 signature so

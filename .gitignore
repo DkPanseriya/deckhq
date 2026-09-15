@@ -21,5 +21,9 @@ stage/
 # (test/goldens/<platform>/*.png) are committed.
 test/goldens/.out/
 
+# Whole uncropped frames from `node scripts/site-assets.mjs --survey`, which is
+# how a crop rectangle gets chosen. Generated, never committed.
+site/.survey/
+
 # Agent worktrees, created by the orchestrator. Never committed.
 .claude/worktrees/

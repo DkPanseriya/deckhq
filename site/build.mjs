@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { decodePng, encodePng } from '../scripts/lib/png.mjs';
+import { boxDownscale, decodePng, encodePng } from '../scripts/lib/png.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -184,62 +184,135 @@ const INSTALL_COMMANDS = [
  */
 const IMAGES = [
   // Goldens: the only class whose currency is proved on every CI run.
-  { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden' },
-  { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden' },
-  { to: 'goldens/pinned.png', from: 'test/goldens/win32/pinned.png', class: 'golden' },
-  { to: 'goldens/single.png', from: 'test/goldens/win32/single.png', class: 'golden' },
+  { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden', role: 'hero' },
+  { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden', role: 'crop' },
+  {
+    to: 'goldens/single.png',
+    from: 'test/goldens/win32/single.png',
+    class: 'golden',
+    role: 'hero',
+  },
   {
     to: 'goldens/demo-night-shift.png',
     from: 'test/goldens/win32/demo@night-shift.png',
     class: 'golden',
+    role: 'crop',
   },
   {
     to: 'goldens/demo-blueprint.png',
     from: 'test/goldens/win32/demo@blueprint.png',
     class: 'golden',
+    role: 'crop',
   },
 
-  // Captures. Several are stale — taken before WP-79 gave the figure its
-  // current form — and `docs/MEDIA.md` §4.2 lists every one for WP-94b.
-  { to: 'hero.gif', from: 'docs/media/hero.gif', class: 'capture' },
-  { to: 'deck-view.png', from: 'docs/media/deck-view.png', class: 'capture' },
-  { to: 'panel-review-card.png', from: 'docs/media/panel-review-card.png', class: 'capture' },
-  { to: 'permission-card.png', from: 'docs/media/permission-card.png', class: 'capture' },
-  { to: 'app-window.png', from: 'docs/media/app-window.png', class: 'capture' },
-  { to: 'office-cleared.png', from: 'docs/media/office-cleared.png', class: 'capture' },
-  { to: 'wrapped-weekly.png', from: 'docs/media/wrapped-weekly.png', class: 'capture' },
+  // WP-94b · the pictures the pages actually show. Declared in
+  // `site/assets.json`, taken from the running product by
+  // `scripts/site-assets.mjs`, and registered in `docs/MEDIA.md` §4.5. Each
+  // one is a crop of the thing its words are about rather than a photograph
+  // of the whole window with the thing somewhere in it.
+  {
+    to: 'site/floor-crowded.gif',
+    from: 'docs/media/site/floor-crowded.gif',
+    class: 'capture',
+    role: 'gif',
+  },
+  { to: 'site/typing.gif', from: 'docs/media/site/typing.gif', class: 'capture', role: 'gif' },
+  { to: 'site/lounge.gif', from: 'docs/media/site/lounge.gif', class: 'capture', role: 'gif' },
+  { to: 'site/hand-up.gif', from: 'docs/media/site/hand-up.gif', class: 'capture', role: 'gif' },
+  {
+    to: 'site/queue-strip.png',
+    from: 'docs/media/site/queue-strip.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/room-plate.png',
+    from: 'docs/media/site/room-plate.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/reception.png',
+    from: 'docs/media/site/reception.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/lounge-bay.png',
+    from: 'docs/media/site/lounge-bay.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/idle-popover.png',
+    from: 'docs/media/site/idle-popover.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/deck-usage.png',
+    from: 'docs/media/site/deck-usage.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/review-card.png',
+    from: 'docs/media/site/review-card.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/permission-card.png',
+    from: 'docs/media/site/permission-card.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/deck-queue.png',
+    from: 'docs/media/site/deck-queue.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/room-plate-night-shift.png',
+    from: 'docs/media/site/room-plate-night-shift.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/room-plate-blueprint.png',
+    from: 'docs/media/site/room-plate-blueprint.png',
+    class: 'capture',
+    role: 'crop',
+  },
 
-  // Illustrations. Every one of these is a drawing of a specification.
-  { to: 'look/presets.png', from: 'docs/media/look/presets.png', class: 'illustration' },
+  // The older captures — the app window, the cleared office, Wrapped, the deck,
+  // the panel — are off this list since WP-94b. They are photographs of builds
+  // before WP-79 and WP-87, they are still in `docs/media/` for the log entries
+  // that cite them, and a log entry's own picture registers itself below.
+
+  // Illustrations. Every one of these is a drawing of a specification, and it
+  // is on a page only because that specification is COMING: `docs/MEDIA.md` §2.
+  // Nothing here is a design option, a candidate or a before-and-after.
+  {
+    to: 'look/presets.png',
+    from: 'docs/media/look/presets.png',
+    class: 'illustration',
+    role: 'crop',
+  },
   {
     to: 'look/control-centre.png',
     from: 'docs/media/look/control-centre.png',
     class: 'illustration',
-  },
-  { to: 'look/agent-sizes.png', from: 'docs/media/look/agent-sizes.png', class: 'illustration' },
-  { to: 'interior/board.png', from: 'docs/media/interior/board.png', class: 'illustration' },
-  {
-    to: 'interior/mockup-default.png',
-    from: 'docs/media/interior/mockup-default.png',
-    class: 'illustration',
+    role: 'crop',
   },
   {
-    to: 'design/character-b.png',
-    from: 'docs/media/design/character/B.png',
+    to: 'look/agent-sizes.png',
+    from: 'docs/media/look/agent-sizes.png',
     class: 'illustration',
+    role: 'crop',
   },
-  {
-    to: 'design/character-in-situ.png',
-    from: 'docs/media/design/character/in-situ.png',
-    class: 'illustration',
-  },
-  { to: 'motion/life-sheet.png', from: 'docs/media/motion/life-sheet.png', class: 'illustration' },
-  {
-    to: 'motion/lounge-activities.png',
-    from: 'docs/media/motion/lounge-activities.png',
-    class: 'illustration',
-  },
-  { to: 'motion/crew.gif', from: 'docs/media/motion/crew.gif', class: 'illustration' },
+  { to: 'motion/crew.gif', from: 'docs/media/motion/crew.gif', class: 'illustration', role: 'gif' },
 ];
 
 /**
@@ -253,8 +326,32 @@ const ILLUSTRATION_DIRS = ['interior', 'look', 'motion', 'design'];
 /** The words an illustration's caption has to carry. */
 const ILLUSTRATION_LABEL = 'design illustration';
 
-/** A PNG wider than this is downscaled to it on the way into the site. */
-const MAX_IMAGE_WIDTH = 1600;
+/**
+ * What a picture is for, how wide it is served, and what it may weigh — WP-94b.
+ *
+ * The owner's report was that the pictures load slowly and that the ones on
+ * Look do not arrive at all. Locally every one of them resolves, so the defect
+ * is not a path: it is 6.3 MB of Features and 4.0 MB of Look going down a
+ * connection that is not this machine's disk. So every image now declares the
+ * role it plays, the role fixes the width it is served at — the widest the
+ * layout ever shows it, doubled, and no more — and the weight it may reach.
+ *
+ * `hero`  a full-column picture; the page shows it at up to 600 CSS px.
+ * `crop`  a detail of one feature, shown in a card or beside text.
+ * `gif`   motion. Width is the pipeline's to set; the ceiling is the budget.
+ *
+ * The numbers are enforced twice: here, so a build cannot publish an image
+ * over its budget, and in `test/unit/site.test.mjs`, so the gate says which
+ * picture and by how much without anyone running the site.
+ */
+const ROLES = {
+  hero: { width: 1100, budget: 600 * 1024 },
+  crop: { width: 680, budget: 250 * 1024 },
+  gif: { width: 1200, budget: 2.5 * 1024 * 1024 },
+};
+
+/** What a whole page may weigh: its document, its assets, and every picture on it. */
+const PAGE_BUDGET = { 'index.html': 2 * 1024 * 1024, default: 3 * 1024 * 1024 };
 
 /**
  * The one-line installers, copied to the root of the site — WP-75.
@@ -795,7 +892,17 @@ function build() {
     if (!fs.existsSync(from)) throw new Error(`${image.from} is referenced but missing`);
     const to = path.join(OUT, 'media', rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    const result = copyImage(from, to);
+    // A picture the log carries declares no role — it is registered by the
+    // markdown that shows it — and the log shows its images full width, so it
+    // is held to the hero's width and the hero's budget.
+    const role = ROLES[image.role ?? (rel.endsWith('.gif') ? 'gif' : 'hero')];
+    const result = copyImage(from, to, role.width);
+    if (result.bytes > role.budget) {
+      throw new Error(
+        `media/${rel} is ${Math.round(result.bytes / 1024)} KB, over the ` +
+          `${Math.round(role.budget / 1024)} KB budget for a ${image.role ?? 'crop'}`,
+      );
+    }
     bytes += result.bytes;
     if (result.downscaled) downscaled++;
     written++;
@@ -921,8 +1028,29 @@ ${listing}
   // drops files and directories beginning with an underscore.
   write('.nojekyll', '');
 
+  // WP-94b · what a page costs, page by page. The per-image budget above stops
+  // one heavy picture; this stops twelve light ones. It runs last because a
+  // page's weight includes the stylesheet and the scripts, which are copied
+  // above, and it prints the number for every page so a build says where the
+  // weight went rather than only that it was too much.
+  const weights = PAGES.filter((p) => p.slug !== 'log/index').map((page) => ({
+    page: `${page.slug}.html`,
+    bytes: pageWeight(OUT, `${page.slug}.html`),
+  }));
+  for (const { page, bytes: weight } of weights) {
+    const budget = PAGE_BUDGET[page] ?? PAGE_BUDGET.default;
+    if (weight > budget) {
+      throw new Error(
+        `${page} weighs ${Math.round(weight / 1024)} KB, over its ` +
+          `${Math.round(budget / 1024)} KB budget`,
+      );
+    }
+  }
+  const heaviest = weights.reduce((a, b) => (b.bytes > a.bytes ? b : a));
+
   process.stdout.write(
-    `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
+    `site: heaviest page ${heaviest.page} at ${(heaviest.bytes / 1024).toFixed(0)} KB\n` +
+      `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
       ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images` +
       ` at ${(bytes / 1024 / 1024).toFixed(1)} MB, ${downscaled} downscaled,` +
       ` ${INSTALLERS.length} installers)\n`,
@@ -945,13 +1073,13 @@ ${listing}
  * @param {string} from @param {string} to
  * @returns {{bytes: number, downscaled: boolean}}
  */
-function copyImage(from, to) {
+function copyImage(from, to, maxWidth = ROLES.hero.width) {
   const source = fs.readFileSync(from);
   if (path.extname(from).toLowerCase() === '.png') {
     try {
       const img = decodePng(source);
-      if (img.width > MAX_IMAGE_WIDTH) {
-        const small = boxDownscale(img, MAX_IMAGE_WIDTH);
+      if (img.width > maxWidth) {
+        const small = boxDownscale(img, maxWidth);
         // `encodePng` writes one filter for every scanline, and which one wins
         // depends entirely on the picture — a flat floor likes `Up`, a shaded
         // sheet likes `Paeth`. There are three images in this repository wide
@@ -977,50 +1105,6 @@ function copyImage(from, to) {
   }
   fs.writeFileSync(to, source);
   return { bytes: source.length, downscaled: false };
-}
-
-/**
- * Resample an RGBA image down to `width`, averaging each destination pixel
- * over the source box it covers. No sharpening and no gamma correction: these
- * are flat-shaded screenshots of a vector floor, and the only thing being
- * asked for is that a 2910 px capture stops being served at 2910 px to a
- * column 768 px wide.
- *
- * @param {{width: number, height: number, data: Uint8Array}} img
- * @param {number} width
- */
-function boxDownscale(img, width) {
-  const height = Math.max(1, Math.round((img.height * width) / img.width));
-  const out = new Uint8Array(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    const sy0 = Math.floor((y * img.height) / height);
-    const sy1 = Math.max(sy0 + 1, Math.floor(((y + 1) * img.height) / height));
-    for (let x = 0; x < width; x++) {
-      const sx0 = Math.floor((x * img.width) / width);
-      const sx1 = Math.max(sx0 + 1, Math.floor(((x + 1) * img.width) / width));
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      let n = 0;
-      for (let sy = sy0; sy < sy1; sy++) {
-        for (let sx = sx0; sx < sx1; sx++) {
-          const i = (sy * img.width + sx) * 4;
-          r += img.data[i];
-          g += img.data[i + 1];
-          b += img.data[i + 2];
-          a += img.data[i + 3];
-          n++;
-        }
-      }
-      const o = (y * width + x) * 4;
-      out[o] = Math.round(r / n);
-      out[o + 1] = Math.round(g / n);
-      out[o + 2] = Math.round(b / n);
-      out[o + 3] = Math.round(a / n);
-    }
-  }
-  return { width, height, data: out };
 }
 
 /**
@@ -1078,6 +1162,38 @@ function assertMediaIsLabelled(name, body) {
       throw new Error(`${name} shows ${src}, which is not in the media registry`);
     }
   }
+}
+
+/**
+ * What one page costs a reader who loads it whole — WP-94b.
+ *
+ * The document, the stylesheet, the two scripts, the mark, and every picture
+ * the page shows, lazy ones included: a reader who scrolls to the bottom pays
+ * for all of them, and the owner's report was about exactly that scroll.
+ * Exported so the gate in `test/unit/site.test.mjs` measures the same bytes
+ * this build refuses to publish.
+ *
+ * @param {string} outDir the built site
+ * @param {string} rel a page, e.g. `features.html`
+ * @returns {number} bytes
+ */
+function pageWeight(outDir, rel) {
+  const file = path.join(outDir, rel);
+  const html = fs.readFileSync(file, 'utf8');
+  let bytes = Buffer.byteLength(html);
+  for (const name of ['style.css', 'theme.js', 'site.js', 'deckhq-mark.png']) {
+    const asset = path.join(outDir, name);
+    if (fs.existsSync(asset)) bytes += fs.statSync(asset).size;
+  }
+  const seen = new Set();
+  for (const tag of html.matchAll(/<img\b[^>]*>/g)) {
+    const src = (tag[0].match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    const image = path.resolve(path.dirname(file), src);
+    if (fs.existsSync(image)) bytes += fs.statSync(image).size;
+  }
+  return bytes;
 }
 
 /**
@@ -1199,7 +1315,9 @@ export {
   IMAGES,
   ILLUSTRATION_DIRS,
   ILLUSTRATION_LABEL,
-  MAX_IMAGE_WIDTH,
+  ROLES,
+  PAGE_BUDGET,
+  pageWeight,
   PAGES,
   SITE_ORIGIN,
 };

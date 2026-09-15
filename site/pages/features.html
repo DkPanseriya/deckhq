@@ -1,26 +1,23 @@
 <section class="section">
   <div class="section-head">
-    <h1>Nine things the floor does.</h1>
+    <h1>Ten things the floor does.</h1>
     <p class="lede">
-      One picture each, and every picture says what it is. A
-      <strong>golden render</strong> is the renderer&#8217;s own output, re-checked pixel for pixel
-      on every CI run; a <strong>capture</strong> is DeckHQ photographed on a real machine. Several
-      of the captures here are from September 2026 and show the figures as they were before WP-79
-      redrew them &#8212;
-      <a href="https://github.com/DkPanseriya/deckhq/blob/main/docs/MEDIA.md">docs/MEDIA.md</a>
-      lists every one for recapture.
+      Every picture below is a crop of DeckHQ running, taken from the demo fixture on a pinned clock
+      by
+      <a href="https://github.com/DkPanseriya/deckhq/blob/main/site/assets.json">one manifest</a>
+      and one script. Each one shows the part the words are about, at the size it is drawn.
     </p>
   </div>
 
   <div class="bands">
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>The floor, and who sits where.</h2>
+        <h2>Your projects, as an office.</h2>
         <p>
           Every project on disk with a live or recent session is a room, and the people in it are
-          that project&#8217;s sessions. The floor is generated from the population, not from a
-          saved layout: the same nine sessions produce the same building every time, and a room is
-          never drawn for a repository nobody is working in.
+          that project&#8217;s sessions. The building is generated from the population: the same
+          nine sessions produce the same floor every time, and no room is drawn for a repository
+          nobody is working in.
         </p>
         <p>
           Typing means working. A raised hand means blocked on a question. Slumped means silent
@@ -31,246 +28,232 @@
       </div>
       <figure class="band-shot">
         <img
-          src="media/goldens/demo.png"
-          alt="A populated DeckHQ floor: several project rooms with agents at desks, a four-bay lounge along one side, and the reception at the head of the service column"
-          loading="lazy"
-          width="1600"
-          height="1000"
+          src="media/site/floor-crowded.gif"
+          alt="The DeckHQ floor animating: agents typing at desks across five project rooms, thought bubbles rising, and benched agents moving in the lounge below"
         />
         <figcaption>
-          The <code>demo</code> fixture, rendered by the code on <code>main</code>.
-          <span class="tag tag--golden">Golden render</span>
+          Nine sessions, six rooms, four seconds. <span class="tag">Capture</span>
         </figcaption>
       </figure>
     </div>
 
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>The queue, and the deck.</h2>
+        <h2>A room is a repository.</h2>
         <p>
-          A strip of chips under the header carries the queue&#8217;s shape without leaving the
-          floor: oldest on the left, and it stays there. <code>Tab</code> swaps the floor for the
-          deck &#8212; the same queue, the same order, the same actions, as a table.
+          The plate carries the project name, how many sessions are in it, how many tokens they have
+          spent today, and whether the cache is working. Sub-agents sit beside their parent as
+          juniors, named after it.
         </p>
         <p>
-          The deck is a real semantic table, so a screen reader reaches everything the floor shows
-          and the floor is never the only way to get to anything. The same queue is in your terminal
-          as <code>deckhq waiting</code>.
+          Room size follows session count, so a repository with four people in it is visibly the
+          busy one. The packer lays the rooms out fresh on every resize.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/deck-view.png"
-          alt="The deck: the needs-you queue as a dense table of waiting time, agent, project and last word, with the review card open beside it"
+          src="media/site/room-plate.png"
+          alt="One project room: the plate reading design-system, four sessions, plus two juniors, 540k tokens, agents at two desks and two juniors below them"
           loading="lazy"
         />
         <figcaption>
-          The deck, with a review card open beside it. <span class="tag">Capture</span>
-          &#8212; September 2026, before the figures took their current form.
+          The <code>design-system</code> room, with its two juniors.
+          <span class="tag">Capture</span>
         </figcaption>
       </figure>
     </div>
 
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>The panel, and the review card.</h2>
+        <h2>They wait in your office.</h2>
         <p>
-          Click anyone and the panel opens beside the floor with the review material already in
-          front of you: how long they have been waiting, what they said rendered as the markdown
-          they actually wrote, and what changed in that project&#8217;s working tree, read straight
-          from git.
+          A session that finishes its turn walks out of its room and into yours. It sits on a sofa
+          with a badge over its head saying how long it has been there, and the oldest one is the
+          one you owe.
+        </p>
+        <p>
+          The header counts them. Clearing the office is the whole loop: reply, approve or bench,
+          and the room fills up again.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/site/reception.png"
+          alt="Your Office: four agents waiting on sofas with wait badges reading 4h, 7m, 1d 2h and 40m, two more standing in the queue at the side, and the header reading six waiting, oldest 1d 2h"
+          loading="lazy"
+        />
+        <figcaption>
+          Six waiting, the oldest for a day and two hours. <span class="tag">Capture</span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row" data-reveal>
+      <div class="band-copy">
+        <h2>A desk says what a session is doing.</h2>
+        <p>
+          Working is typing at the screen. Thinking is a cloud over the head. Both run off one
+          injected clock, so every animation on the floor agrees about what time it is and a
+          screenshot of a moving floor can be taken twice and come out the same.
+        </p>
+        <p>
+          Under <code>prefers-reduced-motion</code> each clip holds one representative pose, and a
+          golden proves the floor still reads.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/site/typing.gif"
+          alt="Two agents at a desk in a project room, one typing at a screen and one with a thought bubble over its head, both animating"
+          loading="lazy"
+        />
+        <figcaption>Typing and thinking, at one desk. <span class="tag">Capture</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row" data-reveal>
+      <div class="band-copy">
+        <h2>The strip says who is waiting.</h2>
+        <p>
+          A row of chips under the header carries the queue without leaving the floor: oldest on the
+          left, and it stays there. Each chip is the wait, the name and the project.
+        </p>
+        <p>
+          <code>Tab</code> swaps the floor for the deck &#8212; the same queue as a semantic table,
+          with the same actions, so a screen reader reaches everything the floor shows. The same
+          queue is in your terminal as <code>deckhq waiting</code>.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/site/queue-strip.png"
+          alt="The queue strip: six chips reading 1d 2h Emeka orbital-api, 4h 00m Vera checkout-flow, 40m Isla checkout-flow, 7m Oskar data-pipeline, just now Kobe orbital-api and just now Zola mobile-app"
+          loading="lazy"
+        />
+        <figcaption>Oldest on the left. <span class="tag">Capture</span></figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row" data-reveal>
+      <div class="band-copy">
+        <h2>The panel opens on the review.</h2>
+        <p>
+          Click anyone and the review material is already in front of you: how long they have
+          waited, what they said rendered as the markdown they wrote, and what changed in that
+          project&#8217;s working tree, read from git.
         </p>
         <p>
           <strong>Approve is a send, never an acknowledgement.</strong> It posts the reply exactly
           as typing it would, and the review is discharged when the runtime records your turn. The
-          heading over the diff names the project, never the agent, because several agents can share
-          one repository.
+          heading over the diff names the project, because several agents can share one repository.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/panel-review-card.png"
-          alt="The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project&#8217;s working tree at plus 142 minus 18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line"
+          src="media/site/review-card.png"
+          alt="The panel on Emeka: the title Backfill the events table, a waiting time of 1d 2h, what the agent said as markdown with a passing test run, and the diff summary plus 142 minus 18 across three files"
           loading="lazy"
         />
         <figcaption>
-          The review card, with the diff and the cost line. <span class="tag">Capture</span>
-          &#8212; September 2026, before the figures took their current form.
+          One session, its words and its diff. <span class="tag">Capture</span>
         </figcaption>
       </figure>
     </div>
 
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>The permission card.</h2>
+        <h2>Answer a permission from the panel.</h2>
         <p>
-          When a session stops to ask before it runs something, you can answer from the panel: a
-          card appears above what it said with the tool and its literal input, and
-          <strong>Allow</strong> / <strong>Deny</strong> on <code>A</code> / <code>D</code>. The
-          terminal prompt stays live the whole time, so a closed DeckHQ can never block anybody.
+          When a session stops to ask before it runs something, a card appears above what it said
+          with the tool and its literal input. <strong>Allow</strong> and <strong>Deny</strong> are
+          on <code>A</code> and <code>D</code>. The terminal prompt stays live the whole time, so a
+          closed DeckHQ can never block anybody.
         </p>
         <p>
           <strong>This has been proven once</strong> &#8212; Claude Code 2.1.260 on Windows, 4
           September 2026, one real session, two real prompts. Codex, Gemini CLI and OpenCode cannot
-          be answered from the panel at all. <a href="adapters.html">Adapters</a> has the rest.
+          be answered from the panel. <a href="adapters.html">Adapters</a> has the rest.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/permission-card.png"
-          alt="The permission card in the panel: the tool name, its literal input, and Allow, Deny and Allow-for-this-session buttons above what the agent said"
+          src="media/site/permission-card.png"
+          alt="The permission card in the panel: the heading Asking permission, the tool Bash, its literal input rm -rf build, and Allow, Deny and Allow for session buttons"
           loading="lazy"
         />
         <figcaption>
-          A permission prompt, answered from the panel. <span class="tag">Capture</span>
-          &#8212; September 2026, before the figures took their current form.
+          A real request, raised through the hook endpoint and held open by its caller.
+          <span class="tag">Capture</span>
         </figcaption>
       </figure>
     </div>
 
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>Token usage.</h2>
+        <h2>Tokens, by project and by session.</h2>
         <p>
           <code>Tab</code> &#8594; <strong>Usage</strong> gives you a window &#8212; today, 7 days,
           30 days &#8212; the total, and the split into input, cache write, cache read and output,
           with tables for where it went: by project, by session, by model, by day and by tool.
         </p>
         <p>
-          Dollars are one setting away and off by default. Turn on <strong>Show cost</strong>
-          and the list-price estimate appears everywhere, always carrying the dated rate card it
-          came from. It is an estimate and never a bill.
+          Dollars are one setting away and off by default. Turn on <strong>Show cost</strong> and
+          the list-price estimate appears everywhere, carrying the dated rate card it came from. It
+          is an estimate and never a bill.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/wrapped-weekly.png"
-          alt="Wrapped for the week, over the dimmed floor: turns per room, tokens, spend with its rate card, the longest wait, the room that never slept, the busiest hour, and the count of one phrase"
+          src="media/site/deck-usage.png"
+          alt="The deck's Usage tab: 24,247,800 tokens over the last seven days, a stacked bar split into input, cache write, cache read and output, and a table of where the tokens went by project"
           loading="lazy"
         />
-        <figcaption>
-          Wrapped: the same ledger, replayed for a week. <span class="tag">Capture</span>
-          &#8212; September 2026, before the figures took their current form.
-        </figcaption>
+        <figcaption>Seven days, split four ways. <span class="tag">Capture</span></figcaption>
       </figure>
     </div>
 
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>Pinning, and the popover.</h2>
+        <h2>Repositories nobody is working in.</h2>
         <p>
-          A room is drawn for a project somebody is working in. The repositories nobody is working
-          in are a quiet chip in the corner of the floor, and <code>I</code> opens the list behind
-          it.
+          A room is drawn for a project somebody is working in. The rest are one quiet chip in the
+          corner, and <code>I</code> opens the list behind it.
         </p>
         <p>
-          <strong>Pinning one keeps it a room</strong> even with nothing running in it: a small
-          room, one desk, nobody at it, and a plate that says <code>pinned</code>. The pin lives in
+          <strong>Pinning one keeps it a room</strong> with nothing running in it: a small room, one
+          desk, nobody at it, and a plate reading <code>pinned</code>. The pin lives in
           <code>state.json</code> and nothing your agents do can clear it.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/goldens/pinned.png"
-          alt="The same three-project floor with one repository pinned: a small room with a single empty desk and a plate reading pinned, in the strip along the bottom of the working side"
+          src="media/site/idle-popover.png"
+          alt="The idle popover open over the corner of the floor: the heading Nobody is working in these, one row reading infra-terraform with its age and a Pin button, and the keys to move, open, pin and close"
           loading="lazy"
-          width="1600"
-          height="1000"
         />
-        <figcaption>
-          The <code>pinned</code> fixture &#8212; the <code>three</code> floor with one repository
-          pinned, so the strip along the bottom is the whole of what moved.
-          <span class="tag tag--golden">Golden render</span>
-        </figcaption>
+        <figcaption>The idle chip, opened. <span class="tag">Capture</span></figcaption>
       </figure>
     </div>
 
     <div class="band-row" data-reveal>
       <div class="band-copy">
-        <h2>App mode.</h2>
+        <h2>Benched sessions go to the lounge.</h2>
         <p>
-          <code>deckhq app</code> opens the floor in Chrome or Edge in application mode: no tab
-          strip, no address bar, its own taskbar button, and its own browser profile under
-          <code>~/.deckhq/app-profile</code>, so the window keeps its size and position and never
-          shares your tabs or your extensions.
+          Bench a session and it leaves your office for the lounge, out of the queue and off the
+          count. It is still on disk and still resumable; it is no longer something you owe.
         </p>
         <p>
-          The title carries the needs-you count, so the taskbar is a live badge for the queue.
-          Windows is the platform this was run on; the macOS and Linux files are written from
-          Apple&#8217;s and freedesktop.org&#8217;s documentation and have never been executed.
+          The lounge has four bays and the benched fill them. Twelve animations ship, so the room
+          you are not being asked for anything by still moves.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/app-window.png"
-          alt="The DeckHQ floor in a Chrome application window on Windows 11: its own title bar reading (7) DeckHQ with the DeckHQ mark, no tab strip and no address bar, the queue strip along the top and the office below it"
+          src="media/site/lounge.gif"
+          alt="The lounge animating: benched agents around a table and at a counter, moving between activities"
           loading="lazy"
         />
-        <figcaption>
-          Its own window, its own taskbar button, the count in the title.
-          <span class="tag">Capture</span> &#8212; September 2026, before the figures took their
-          current form.
-        </figcaption>
-      </figure>
-    </div>
-
-    <div class="band-row" data-reveal>
-      <div class="band-copy">
-        <h2>Notifications, and sound.</h2>
-        <p>
-          Two events are worth an interruption and no more: an agent raising its hand, and a working
-          session whose process goes away without its runtime saying goodbye. Finished-and-waiting
-          and stalled are a count you consult when you choose to, never a toast.
-        </p>
-        <p>
-          Sound ships <strong>off</strong>. Three cues exist &#8212; a hand going up, a turn
-          finishing, and the office being cleared &#8212; and none of them plays until you ask for
-          it in Settings. Verified on Windows; the macOS and Linux commands are asserted in the test
-          suite and have not been run on those platforms.
-        </p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/office-cleared.png"
-          alt="The DeckHQ floor with an empty waiting area: nobody in reception, the lounge full, and the header reading clear"
-          loading="lazy"
-        />
-        <figcaption>
-          The office cleared: nobody waiting, everybody benched. The reward state, and the one the
-          third sound marks. <span class="tag">Capture</span> &#8212; September 2026, before the
-          figures took their current form.
-        </figcaption>
-      </figure>
-    </div>
-
-    <div class="band-row" data-reveal>
-      <div class="band-copy">
-        <h2>Themes.</h2>
-        <p>
-          Three finishes, all free and none of them gated: the default warm office,
-          <strong>night shift</strong> &#8212; the same office after hours, cooler and dimmer
-          &#8212; and <strong>blueprint</strong>, the floor as a drawing on a drafting table.
-        </p>
-        <p>
-          A theme repaints materials and neutrals and nothing else.
-          <strong>The six state colours never move</strong>, so a raised hand is the same amber in
-          every theme, and every theme is measured against the same contrast floors before it can be
-          selected. The <a href="look.html">Look</a> page has all three side by side.
-        </p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/goldens/demo-night-shift.png"
-          alt="The demo floor in the night shift theme: the same building, cooler and dimmer, with the state colours unchanged"
-          loading="lazy"
-          width="1600"
-          height="1000"
-        />
-        <figcaption>
-          The <code>demo</code> fixture in night shift &#8212; one of the three themed captures the
-          goldens gate takes on every run.
-          <span class="tag tag--golden">Golden render</span>
-        </figcaption>
+        <figcaption>The lounge, four seconds. <span class="tag">Capture</span></figcaption>
       </figure>
     </div>
   </div>
@@ -306,6 +289,47 @@
     </ul>
   </div>
 </div>
+
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>And around the floor</h2>
+  </div>
+  <ul class="ways">
+    <li>
+      <h3>App mode</h3>
+      <p>
+        <code>deckhq app</code> opens the floor in Chrome or Edge as an application: no tab strip,
+        no address bar, its own taskbar button, and its own profile under
+        <code>~/.deckhq/app-profile</code>, so the window keeps its size and never shares your tabs.
+        The title carries the needs-you count. Run on Windows; the macOS and Linux files are written
+        from the platform documentation and have not been executed.
+      </p>
+    </li>
+    <li>
+      <h3>Notifications</h3>
+      <p>
+        Two events are worth an interruption: a hand going up, and a working session whose process
+        goes away without its runtime saying goodbye. Finished-and-waiting is a count you consult,
+        never a toast.
+      </p>
+    </li>
+    <li>
+      <h3>Sound</h3>
+      <p>
+        Three cues exist &#8212; a hand up, a turn finishing, the office cleared &#8212; and sound
+        ships off. None of them plays until you turn it on in Settings.
+      </p>
+    </li>
+    <li>
+      <h3>Themes</h3>
+      <p>
+        Three finishes, all free: the warm office, night shift and blueprint. A theme repaints
+        materials and neutrals; the six state colours never move.
+        <a href="look.html">The look</a> has all three side by side.
+      </p>
+    </li>
+  </ul>
+</section>
 
 <article class="prose">
   <h2>Where next</h2>

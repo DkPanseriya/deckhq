@@ -144,6 +144,13 @@ const PROBE = `(() => {
     scheme: getComputedStyle(document.body).backgroundColor,
     toggleShown: !document.querySelector('.theme-toggle')?.hidden,
     imagesOk: [...document.images].every((i) => i.complete && i.naturalWidth > 0),
+    // WP-94b: which ones, not just whether. A broken picture on a page the
+    // author cannot reproduce locally is a filename, and the filename is the
+    // whole of the fix.
+    imagesBroken: [...document.images]
+      .filter((i) => !(i.complete && i.naturalWidth > 0))
+      .map((i) => i.getAttribute('src'))
+      .slice(0, 6),
   });
 })()`;
 
@@ -232,6 +239,42 @@ async function main() {
         }
       }
 
+      // WP-94b · Features and Characters, at the widest, in both schemes. The
+      // home page was the only page photographed until now, and the two pages
+      // whose pictures this package replaced are the two worth having a record
+      // of. The shot is the first screen: what a reader sees before scrolling.
+      for (const page of ['features', 'characters']) {
+        for (const scheme of SCHEMES) {
+          await client.send('Emulation.setDeviceMetricsOverride', {
+            width: 1440,
+            height: 900,
+            deviceScaleFactor: 1,
+            mobile: false,
+          });
+          await client.send('Emulation.setEmulatedMedia', {
+            features: [{ name: 'prefers-color-scheme', value: scheme }],
+          });
+          await client.send('Page.navigate', {
+            url: `http://127.0.0.1:${server.port}/${page}.html`,
+          });
+          await new Promise((r) => setTimeout(r, 1800));
+          const label = `${page}-1440-${scheme}`;
+          if (!CHECK_ONLY) {
+            const { data } = await client.send('Page.captureScreenshot', {
+              format: 'png',
+              captureBeyondViewport: false,
+            });
+            fs.mkdirSync(OUT_DIR, { recursive: true });
+            fs.writeFileSync(path.join(OUT_DIR, `${label}.png`), Buffer.from(data, 'base64'));
+            process.stdout.write(
+              `${label.padEnd(20)} 1440x900 ` +
+                `${Math.round(fs.statSync(path.join(OUT_DIR, `${label}.png`)).size / 1024)} KB\n`,
+            );
+          }
+        }
+      }
+      await client.send('Emulation.setEmulatedMedia', { features: [] });
+
       // Reduced motion, at the widest. The reveal has to be off — not faster,
       // off — and every section has to be at full opacity from the first
       // frame, without anything having scrolled.
@@ -284,16 +327,23 @@ async function main() {
             url: `http://127.0.0.1:${server.port}/${slug}`,
           });
           await new Promise((r) => setTimeout(r, 900));
+          // WP-94b: walk the page before the probe. Every picture below the
+          // fold is `loading="lazy"`, so a page that is never scrolled reports
+          // that its images loaded because it never asked for them — which is
+          // exactly the defect the owner reported on Look.
+          await client.send('Runtime.evaluate', { expression: WALK, awaitPromise: true });
+          await new Promise((r) => setTimeout(r, 600));
           const { result } = await client.send('Runtime.evaluate', {
             expression: PROBE,
             returnByValue: true,
           });
           const probe = JSON.parse(result.value);
-          if (probe.scrollWidth > probe.clientWidth || probe.h1 !== 1) {
+          if (probe.scrollWidth > probe.clientWidth || probe.h1 !== 1 || !probe.imagesOk) {
             failures++;
             process.stdout.write(
               `  ! ${slug} at ${size.width}: ${probe.scrollWidth}/${probe.clientWidth} wide,` +
                 ` ${probe.h1} h1` +
+                (probe.imagesOk ? '' : `, ${probe.imagesBroken.join(', ')} did not load`) +
                 (probe.overflowing.length ? ` (${probe.overflowing.join(', ')})` : '') +
                 '\n',
             );

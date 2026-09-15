@@ -38,6 +38,25 @@ verified has been moved out of it.
 The `1.3.0` section is closed: `## Unreleased` was renamed to `## 1.3.0 — 2026-09-04` and a fresh
 empty `## Unreleased` opened above it, so the next package has a heading to append to.
 
+### 1.1 Retake the site's pictures if the interface moved
+
+Every picture the site shows of the product is declared in `site/assets.json` and taken from the
+running product. If anything visible changed since the last release — the figure, the rooms, the
+panel, the deck, a theme — retake the whole set before the tag, so the site ships a photograph of
+what is being published rather than of the release before it:
+
+```sh
+node scripts/site-assets.mjs --list     # what the manifest declares
+node scripts/site-assets.mjs            # take all of it -> docs/media/site/
+node scripts/site-assets.mjs --only queue   # or just the ones whose name matches
+```
+
+It needs Chrome or Edge and about three minutes. It boots one demo daemon per picture on a port
+the OS chooses, with the clock pinned, and takes it down again; nothing real is photographed and
+nothing is left running. A picture the fixture cannot reach is **reported and skipped** — read the
+tail of the run, and never stage a missing one by hand. Then `node site/build.mjs`, which refuses
+to publish anything over its weight budget, and commit what changed under `docs/media/site/`.
+
 ## 2. Get to a clean `main`
 
 ```sh

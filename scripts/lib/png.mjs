@@ -336,3 +336,74 @@ export function diffImages(expected, actual, opts = {}) {
     diff: { width, height, data: diff },
   };
 }
+
+// ---------------------------------------------------------------- resample
+
+/**
+ * Resample an RGBA image down to `width`, averaging each destination pixel
+ * over the source box it covers — WP-94c, moved here from `site/build.mjs`
+ * for WP-94b so the site build and the capture pipeline use one filter.
+ *
+ * No sharpening and no gamma correction: these are flat-shaded screenshots of
+ * a vector floor, and the only thing being asked for is that a 2910 px capture
+ * stops being served at 2910 px to a column 680 px wide.
+ *
+ * @param {Image} img
+ * @param {number} width
+ * @returns {Image}
+ */
+export function boxDownscale(img, width) {
+  const height = Math.max(1, Math.round((img.height * width) / img.width));
+  const out = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const sy0 = Math.floor((y * img.height) / height);
+    const sy1 = Math.max(sy0 + 1, Math.floor(((y + 1) * img.height) / height));
+    for (let x = 0; x < width; x++) {
+      const sx0 = Math.floor((x * img.width) / width);
+      const sx1 = Math.max(sx0 + 1, Math.floor(((x + 1) * img.width) / width));
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+      let n = 0;
+      for (let sy = sy0; sy < sy1; sy++) {
+        for (let sx = sx0; sx < sx1; sx++) {
+          const i = (sy * img.width + sx) * 4;
+          r += img.data[i];
+          g += img.data[i + 1];
+          b += img.data[i + 2];
+          a += img.data[i + 3];
+          n++;
+        }
+      }
+      const o = (y * width + x) * 4;
+      out[o] = Math.round(r / n);
+      out[o + 1] = Math.round(g / n);
+      out[o + 2] = Math.round(b / n);
+      out[o + 3] = Math.round(a / n);
+    }
+  }
+  return { width, height, data: out };
+}
+
+/**
+ * Cut a rectangle out of an RGBA image. The rectangle is clamped to the
+ * picture, so a crop that runs off the edge returns what there was rather
+ * than throwing or reading past the buffer.
+ *
+ * @param {Image} img
+ * @param {{x:number, y:number, w:number, h:number}} r
+ * @returns {Image}
+ */
+export function cropImage(img, r) {
+  const x0 = Math.max(0, Math.min(img.width, Math.round(r.x)));
+  const y0 = Math.max(0, Math.min(img.height, Math.round(r.y)));
+  const w = Math.max(1, Math.min(img.width - x0, Math.round(r.w)));
+  const h = Math.max(1, Math.min(img.height - y0, Math.round(r.h)));
+  const out = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const from = ((y0 + y) * img.width + x0) * 4;
+    out.set(img.data.subarray(from, from + w * 4), y * w * 4);
+  }
+  return { width: w, height: h, data: out };
+}

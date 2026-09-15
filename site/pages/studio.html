@@ -3,15 +3,14 @@
     <h1>Come with an idea, leave with an office.</h1>
     <p class="lede">
       Studio is an opt-in mode, per project: a plan, a roster and a six-column board that live in
-      <em>your</em> repository, and &#8212; eventually &#8212; one real coding session per role,
-      found by the same scan as everything else.
+      <em>your</em> repository, and, eventually, one real coding session per role, found by the same
+      scan as everything else.
     </p>
     <div class="note">
       <p>
-        <strong>Three of the eleven steps exist.</strong> The store, the consent and the planner are
-        built. Hire is not: no worktree, no role session, no board tab. Enabling a project creates a
-        directory and a record, and that is all enabling does. Everything below marked
-        <em>planned</em> is design, not product.
+        <strong>Four of the eleven steps exist</strong>, and the tag on each step below says which.
+        Enabling a project writes one file and records the grant. Hire writes no worktree, starts no
+        role session and adds no board tab.
       </p>
     </div>
   </div>
@@ -39,8 +38,8 @@
       <span class="step-n">03</span>
       <b>Blueprint</b>
       <p>
-        <code>blueprint.md</code> &#8212; goal, non-goals, constraints, milestones with their
-        acceptance criteria &#8212; written by the planner with its own tools.
+        <code>blueprint.md</code>: goal, non-goals, constraints, and milestones with their
+        acceptance criteria, written by the planner with its own tools.
       </p>
       <span class="step-state step-state--built">built</span>
     </li>
@@ -54,28 +53,28 @@
       <span class="step-n">05</span>
       <b>Hire</b>
       <p>One session per role, in its own git worktree, with its own brief file.</p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
     <li>
       <span class="step-n">06</span>
       <b>Board</b>
       <p>Six columns as a tab beside the floor, on the deck&#8217;s semantic-table rule.</p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
     <li>
       <span class="step-n">07</span>
       <b>Work</b>
       <p>
-        Reuses everything &#8212; the six states, the permission card, the review card, the queue
-        strip, the ledger &#8212; and adds nothing, which is the point.
+        Reuses the six states, the permission card, the review card, the queue strip and the ledger,
+        and adds nothing, which is the point.
       </p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
     <li>
       <span class="step-n">08</span>
       <b>Handover</b>
       <p>A session writes a handover file; the transcript watcher picks it up.</p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
     <li>
       <span class="step-n">09</span>
@@ -84,13 +83,13 @@
         The handover raises the ordinary review card, with its diff, plus
         <strong>Accept</strong> and <strong>Bounce</strong>.
       </p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
     <li>
       <span class="step-n">10</span>
       <b>Track</b>
       <p>Cost and time from the same ledger <code>deckhq stats</code> reads.</p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
     <li>
       <span class="step-n">11</span>
@@ -99,7 +98,7 @@
         A periodic planner pass over blueprint, board and handovers, raising flags as review cards,
         with a budget stop.
       </p>
-      <span class="step-state step-state--planned">planned</span>
+      <span class="step-state step-state--coming">coming</span>
     </li>
   </ol>
   <p class="shot-note">
@@ -123,11 +122,11 @@
     <li>
       <h3>The store, and the consent</h3>
       <p>
-        <code>enable --yes</code> writes exactly one file &#8212;
-        <code>&lt;project&gt;/.deckhq/studio/README.md</code>, carrying a marker on its first line
-        &#8212; and records the path and the grant. Everything else in that directory, when it
-        arrives, is <strong>yours</strong>. It is not gitignored, because a plan is something a team
-        should be able to commit.
+        <code>enable --yes</code> writes exactly one file,
+        <code>&lt;project&gt;/.deckhq/studio/README.md</code>, carrying a marker on its first line,
+        and records the path and the grant. Everything else in that directory, when it arrives, is
+        <strong>yours</strong>. It is not gitignored, because a plan is something a team should be
+        able to commit.
       </p>
       <p class="command" data-command="deckhq studio enable ./my-project">
         deckhq studio enable ./my-project
@@ -139,8 +138,8 @@
       <p>
         <code>disable --yes</code> deletes only files that still carry the marker and
         <strong>names everything it left alone</strong>. A path that would resolve outside
-        <code>.deckhq/studio/</code> &#8212; by <code>..</code>, by being absolute, or through a
-        symlink &#8212; is refused with the offending path rather than quietly clamped back inside.
+        <code>.deckhq/studio/</code> by <code>..</code>, by being absolute, or through a symlink is
+        refused with the offending path rather than quietly clamped back inside.
       </p>
       <p class="command" data-command="deckhq studio disable ./my-project --yes">
         deckhq studio disable ./my-project --yes
@@ -171,28 +170,27 @@
         <p>
           <strong>DeckHQ writes none of them.</strong> The planner writes them, as ordinary files,
           with its own tools. DeckHQ reads them back and checks them, and one that does not check
-          out is reported with its name, its line and the reason &#8212; and left exactly as it was
+          out is reported with its name, its line and the reason, and left exactly as it was
           written.
         </p>
       </div>
       <figure class="band-shot">
         <img
-          src="media/panel-review-card.png"
+          src="media/site/review-card.png"
           alt="The panel beside the floor with a session&#8217;s message rendered as markdown, the working-tree diff under it, and a composer to answer in — the same panel a Studio planner is answered in"
           loading="lazy"
         />
         <figcaption>
           The ordinary panel. A planner is answered in exactly this, because there is no separate
-          Studio anything. <span class="tag">Capture</span> &#8212; September 2026, before the
-          figures took their current form.
+          Studio anything. <span class="tag">Capture</span>
         </figcaption>
       </figure>
     </div>
   </div>
   <p class="muted">
     The brief itself is yours too: edit it and DeckHQ will never overwrite it; a regeneration is
-    written beside it and yours is what runs. <strong>Claude Code only</strong> for now &#8212;
-    another runtime is refused by name rather than handed a brief nobody has run it against.
+    written beside it and yours is what runs. <strong>Claude Code only</strong> for now: another
+    runtime is refused by name rather than handed a brief nobody has run it against.
   </p>
 </section>
 
