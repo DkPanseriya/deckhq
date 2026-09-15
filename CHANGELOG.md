@@ -1071,6 +1071,28 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   §13.22, and the direction in `docs/DEVIATIONS.md` §158. The mockups in `docs/media/interior/` are
   illustrations of the specification, not screenshots of shipped code.
 
+- **`docs/plan/11-LOOK-CONTROL-CENTRE.md` — the interior, made configurable without being flooded
+  with options.** A document and three mockups, not code: nothing under `src/`, `public/` or `test/`
+  was touched. **52 named options across ten pickers** — 20 floor materials over four zones, 6 colour
+  schemes, 3 furniture sets, 6 rug settings per rug role, 9 planting settings, 3 prop densities, 8
+  lounge kits and 4 agent sizes — with all three themes still applying on top, and nothing free-form:
+  no colour picker, no image upload, no per-prop placement. A **colour scheme is a transform over a
+  theme's own eleven tokens**, not a fourth theme: hue and chroma move, and the result is pushed back
+  to the token's original relative luminance by bisection, so every WCAG measurement
+  `assertThemeContrast` makes is unchanged by construction (measured max ΔL over all 18 scheme ×
+  theme pairs: **0.00534**). All **162** material × scheme × theme combinations were run through the
+  shipped `materialTokensFor`, `assertThemeContrast` and `assertMaterialDiscipline` unmodified before
+  anything was written down: worst floor ink **6.99:1**, max field contrast **1.134:1**, closest
+  material to the reserved crimson **95.5** against a bar of 60. Measuring it found **two failures on
+  the shipped floor**: the reception's wool rug is **1.00:1** on the office boards under night shift,
+  and the project-room task rug is **1.69:1** on blueprint — both because two rug derivations use a
+  constant mix weight while the gap between `plant` and `carpet` is not constant across themes.
+  Agent size is small / medium / large / auto, and the scaling law is one line — everything a human
+  body sets scales with the character, everything the building sets does not — which is why WP-80 is
+  superseded by WP-88c. Packages WP-88a/b/c are in `docs/plan/08-PLAN-V2-100X.md` §9, the four owner
+  decisions in §13.24, and the direction in `docs/DEVIATIONS.md` §166. The mockups in
+  `docs/media/look/` are illustrations of the specification, not screenshots of shipped code.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights

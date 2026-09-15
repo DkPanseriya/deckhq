@@ -16983,3 +16983,86 @@ cites a numbered entry in this log or a §9 row already marked done, and anythin
 supported that way is `in progress` or `planned` instead. The register is a reading of the
 transcripts and the documents; it is not a test run, and nothing in it was measured on a machine by
 this package.
+## 166. Direction — the interior was designed, and nobody could change any of it
+
+**§164 and §165 are not in this file.** They are being written by packages running beside this one
+and the numbers are reserved for them; this entry takes 166 so that three agents do not claim one
+heading. If either is still absent when all three have merged, the gap is this sentence's fault and
+nothing is missing.
+
+No code changed. Nothing under `src/`, `public/` or `test/` was touched, no test was run and no
+daemon was started. This is a direction entry plus a design document,
+`docs/plan/11-LOOK-CONTROL-CENTRE.md`, and three mockups in `docs/media/look/` that are illustrations
+of that document rather than screenshots of anything shipped.
+
+### 166.1 What the owner said
+
+15 September 2026: *"I still don't see any option to configure the overall GUI graphics: office floor
+carpet and colours, rugs, tables, chairs, sofa, plants, etc. We do not flood everything with too many
+options; the interior designer carefully crafts options that can be mixed and matched or customised,
+so we give users some personalisation. The same graphics control centre also configures agent size,
+and the size of table, chair, sofa, everything adjusts automatically."*
+
+It is a fair reading of the floor after WP-85a and WP-85b. Eleven tokens per theme, a furniture set,
+four seat kinds, a rug derivation, pools of light and a break-out corner all landed — and every one
+of them is a constant in a module. The only thing a user may change about the building is which of
+three themes it is painted in.
+
+### 166.2 What was decided
+
+**The design is `docs/plan/11-LOOK-CONTROL-CENTRE.md`, and its shape is the one the renderer already
+has.** WP-85a made a theme eleven tokens fanned out by `materialTokensFor`; this adds a second layer
+over the same eleven — a floor material per zone, a colour scheme, a furniture set, rug tone and
+pattern per rug role, planting, prop density and the lounge kit — derived through the same derivation
+and guarded by the same guards. 52 named options across ten pickers, and nothing free-form: no colour
+picker, no image upload, no per-prop placement. The state colours, the crimson, the fourteen
+identities, the figure halo, the character, room geometry and plate content stay unreachable, by the
+allowlist discipline `themes.js` already uses.
+
+**A colour scheme is a transform, not a fourth theme.** Each of the nine surface tokens is mixed
+toward an anchor hue held at its own lightness, its chroma is scaled, and the result is pushed back to
+the token's original relative luminance by bisection — the device `underWall` already uses. Since a
+WCAG ratio depends only on relative luminance, every measurement `assertThemeContrast` makes is
+unchanged by construction, and the option space does not have to be enumerated to be safe. Measured
+max ΔL over all 18 scheme × theme pairs: **0.00534**, the residue of a 24-step bisection.
+
+**Everything in the document was measured before it was written.** All **162** material × scheme ×
+theme combinations were run through the shipped `materialTokensFor`, `assertThemeContrast` and
+`assertMaterialDiscipline` unmodified: worst floor ink **6.99:1** (night shift, the boards under a
+pool of light) against the 4.5 bar; max field contrast **1.134:1** against WP-85a's 1.14 ceiling; max
+speck contrast **1.93:1**; closest material of any kind to the reserved crimson **95.5** against a bar
+of 60, so no chroma walk-back was needed on any scheme. Zone edges over the six presets × three
+themes: **1.02 to 1.50**, under a 1.60 ceiling.
+
+**Two failures on the shipped floor fell out of the measurement.** The reception's wool rug measures
+**1.00:1** against the office boards on night shift — it is invisible — and 1.13:1 on blueprint; the
+project-room task rug measures **1.56:1** on night shift and **1.69:1** on blueprint, the loudest
+local contrast inside a room whose whole design is about being quiet. Both are `rugCream` and
+`rugSage` deriving through a **constant** mix weight while the gap between `plant` and `carpet` is not
+constant across themes. The rug-on-floor band the Look centre needs — [1.06, 1.45], because an agent's
+name is drawn wherever the agent stands and that is very often a rug — therefore refuses the shipped
+default on two themes, and WP-88a's first job is a change to the existing floor rather than to a new
+option. The measured landing points are in §1.d of the design.
+
+**Agent size is WP-88c and it supersedes WP-80.** WP-80's acceptance criterion was that the same
+population produces *the same room rectangles* at all four settings. That is the wrong invariant: a
+3.15 U robot at a 2.6 U desk sits through the desk. The law instead is one line — everything a human
+body sets scales with the character, everything the building sets does not — so seats, pitches, desk
+depth, rug pads and planting move by `s = 0.80 / 1.00 / 1.25` while room padding, the corridor, the
+parquet's own cell, the plate band and every type size stay exactly where they are.
+
+### 166.3 What this entry does not claim
+
+The three mockups are **separate canvas-2D pages** written for this package. They reproduce the
+`three` population's rooms by hand, share no code with `backdrop.js`, and are not evidence that the
+renderer can draw what they show. Their COLOURS are real — every token in them came from the shipped
+`materialTokensFor` through the scheme transform — and that is the only part of them that was
+measured rather than drawn.
+
+Nothing here has been run in the product. The nine floor painters exist as pattern rules and as mockup
+code, not as `backdrop-floor.js` functions. The density numbers for the three plant families and the
+three prop densities have been reasoned about, not measured over `floor-integrity.test.mjs`'s sixteen
+populations. The claim that `small` keeps every body above the 16 px legibility floor on the largest
+population is WP-88c's acceptance criterion, not a measurement taken here. And the 1.60 zone-edge
+ceiling is a bar chosen to sit above the shipped floor's own worst edge (1.41:1, night shift), not a
+threshold anybody has tested a refusal against.
