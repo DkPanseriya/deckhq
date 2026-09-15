@@ -8,19 +8,19 @@
   </div>
   <ul class="ways">
     <li>
-      <h3>npx &#8212; the one to start with</h3>
+      <h3>npx, the one to start with</h3>
       <p>Downloads the package, runs it, and leaves no binary behind.</p>
       <p class="command" data-command="npx deckhq app">npx deckhq app</p>
     </li>
     <li>
-      <h3>One line, including Node &#8212; Windows</h3>
+      <h3>One line, including Node: Windows</h3>
       <p>Checks for Node, offers to install it with <code>winget</code>, then DeckHQ.</p>
       <p class="command" data-command="irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex">
         irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
       </p>
     </li>
     <li>
-      <h3>One line, including Node &#8212; macOS and Linux</h3>
+      <h3>One line, including Node: macOS and Linux</h3>
       <p>
         <code>brew install node</code> on macOS; on Linux the distribution&#8217;s own command is
         printed for you to run.
@@ -38,10 +38,10 @@
 <article class="prose">
   <h2>What <code>npx deckhq app</code> does</h2>
   <p>
-    That starts the daemon on <code>127.0.0.1</code> and opens the floor in a window of its own
-    &#8212; Chrome or Edge in application mode, no tab strip, no address bar &#8212; and on its
-    first run it prints the paths a Desktop and Start Menu icon would take and asks, once, whether
-    to write them. Anything but <code>y</code> writes nothing and it never asks again.
+    That starts the daemon on <code>127.0.0.1</code> and opens the floor in a window of its own:
+    Chrome or Edge in application mode, with no tab strip and no address bar. On its first run it
+    prints the paths a Desktop and Start Menu icon would take and asks, once, whether to write them.
+    Anything but <code>y</code> writes nothing and it never asks again.
     <code>npx deckhq app --dry-run</code> prints what it would start and what it would open and does
     neither. <code>npx deckhq doctor</code> prints the environment report without starting anything,
     and <code>npx deckhq --no-open</code> starts the daemon without a tab.
@@ -50,15 +50,15 @@
   <h2>What the two one-liners do</h2>
   <p>
     If there is no Node on the machine at all, they do the whole thing: check for Node 18 or newer,
-    <strong>offer</strong> to install it &#8212; <code>winget install OpenJS.NodeJS.LTS</code> on
-    Windows, <code>brew install node</code> on macOS, the distribution&#8217;s own command printed
-    for you to run on Linux &#8212; then <code>npm install -g deckhq@latest</code>, then the same
-    icon question, then <code>deckhq app</code>.
+    <strong>offer</strong> to install it (<code>winget install OpenJS.NodeJS.LTS</code> on Windows,
+    <code>brew install node</code> on macOS, the distribution&#8217;s own command printed for you to
+    run on Linux), then <code>npm install -g deckhq@latest</code>, then the same icon question, then
+    <code>deckhq app</code>.
   </p>
   <div class="note">
     <p>
-      <strong>Read a script before you pipe it into a shell</strong> &#8212; this one included. They
-      are two short files in the repository, served from this site byte for byte as they are there:
+      <strong>Read a script before you pipe it into a shell</strong>, this one included. They are
+      two short files in the repository, served from this site byte for byte as they are there:
       <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.ps1"
         >install.ps1</a
       >
@@ -109,8 +109,7 @@ claude plugin marketplace add ./deckhq</code></pre>
   <ul>
     <li>
       <strong>The hooks</strong>, all of them, without touching your <code>settings.json</code> at
-      all &#8212; installing the plugin <em>is</em> the consent, and uninstalling takes them with
-      it.
+      all: installing the plugin <em>is</em> the consent, and uninstalling takes them with it.
     </li>
     <li>
       <strong>The daemon, started on your first session.</strong> An <code>async</code>
@@ -118,10 +117,9 @@ claude plugin marketplace add ./deckhq</code></pre>
       detached and without opening a browser. Ten terminals opened at once start exactly one daemon
       between them.
     </li>
-    <li><code>/deckhq:deck</code> &#8212; opens the floor, starting DeckHQ first if it has to.</li>
+    <li><code>/deckhq:deck</code> opens the floor, starting DeckHQ first if it has to.</li>
     <li>
-      <code>/deckhq:waiting</code> &#8212; prints the queue: who is waiting, on what project, for
-      how long.
+      <code>/deckhq:waiting</code> prints the queue: who is waiting, on what project, for how long.
     </li>
     <li>
       <code>deckhq_waiting</code>, an MCP tool, so you can ask Claude itself what is waiting on you
@@ -144,8 +142,8 @@ claude plugin marketplace add ./deckhq</code></pre>
     The extension is the thin part: it finds the daemon on
     <code>127.0.0.1:4317</code>&#8211;<code>4326</code>, starts one if there is none, opens the
     floor in a panel beside your code, and puts <code>&#9635; 3 waiting &#183; 1 hand up</code> in
-    the status bar. It reads and posts nothing &#8212; a status bar cannot discharge a debt by
-    displaying it.
+    the status bar. It reads and posts nothing: a status bar cannot discharge a debt by displaying
+    it.
   </p>
   <div class="note">
     <p>
@@ -173,7 +171,7 @@ deckhq statusline --remove --yes   # takes it out again</code></pre>
 
   <h2>Uninstalling</h2>
   <ul>
-    <li><code>npx</code>: nothing to undo &#8212; it left nothing behind.</li>
+    <li><code>npx</code>: nothing to undo, since it left nothing behind.</li>
     <li><code>npm uninstall -g deckhq</code> for a global install.</li>
     <li>
       Hooks and the status line have their own removal, which deletes only the tagged entries DeckHQ

@@ -476,6 +476,107 @@ test('no image the site serves is wider than the capture stage', async () => {
 
 /* ------------------------------------------------------------------ WP-94b */
 
+/**
+ * The visible words of one page: markup gone, and code gone with it.
+ *
+ * `<code>` and `<pre>` are stripped before the scan because they are not
+ * prose — a TypeScript interface on the Adapters page contains the word
+ * "option", and a shell line contains almost anything. The rules below are
+ * about what the site SAYS.
+ *
+ * @param {string} html a hand-written page body
+ */
+function prose(html) {
+  return html
+    .replace(/<pre[\s\S]*?<\/pre>/g, ' ')
+    .replace(/<code[\s\S]*?<\/code>/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&#8212;/g, '—')
+    .replace(/&#8217;/g, '’')
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * COPY: the phrases this site does not use — WP-94b.
+ *
+ * The owner's review of 26 September asked for the defensive writing and the
+ * AI slop to go. Both are recognisable, so they are a list rather than a
+ * judgement: the negation-then-assertion move, the puffery vocabulary, the
+ * reflexive hedge, and the words that describe how something was designed
+ * rather than what it does.
+ */
+const FORBIDDEN = [
+  [/not (just|only|merely|simply|solely) [^.;]{2,80}(but|it’s)/i, 'the "not X but Y" move'],
+  [/isn’?t (just|only|merely|simply|about)/i, 'the "not X but Y" move'],
+  [/not only [^.;]{2,80}but/i, 'the "not X but Y" move'],
+  [/less about [^.;]{2,60}(than|and more about)/i, 'the "not X but Y" move'],
+  [/more than (just|a mere|simply)/i, 'the "not X but Y" move'],
+  [/\bdesigned to\b/i, 'puffery: say what it does'],
+  [/\bseamless(ly)?\b|\brobust\b|\bpowerful\b|\bholistic\b|\bsynergy\b/i, 'puffery'],
+  [/\bleverage(s|d)?\b|\bmeticulous|\bintricate\b|\bboasts\b|\bempower/i, 'puffery'],
+  [/game.?chang|cutting.?edge|\bdelve|\btapestry\b|\btestament\b/i, 'puffery'],
+  [/\bshowcas(e|es|ing)\b|\bunlock(s|ing)? (the|your)\b|\bharness(es|ing)? the\b/i, 'puffery'],
+  [/ever.?(evolving|changing)|fast.?paced|in today’?s\b|when it comes to/i, 'puffery'],
+  [/it’?s (worth|important) (to note|noting|to remember)/i, 'a hedge: say it'],
+  [/(that|it) (being )?said,|while (it’?s|this is) (true|important)/i, 'a hedge'],
+  [/\barguably\b|in many ways|to some (extent|degree)|on the other hand/i, 'a hedge'],
+  [/at its core|in essence|essentially,|ultimately,|in conclusion|in summary/i, 'a hedge'],
+  [/\boverall,|in the end,|needless to say|as (we|you) (can see|know)/i, 'a hedge'],
+  [/let’?s (dive|unpack|explore|take a (look|closer look))/i, 'a hedge'],
+  [/\bcandidates?\b|\bchosen\b|\branking\b|\branked\b/i, 'the design journey'],
+  [/before.and.after|before\/after|direction [ABCD]\b|material board/i, 'the design journey'],
+  [/\boptions?\b(?! for)/i, 'the design journey: show what there is'],
+];
+
+test('COPY: the site says nothing in the shape of AI slop', () => {
+  for (const name of fs.readdirSync(path.join(siteDir, 'pages'))) {
+    const text = prose(fs.readFileSync(path.join(siteDir, 'pages', name), 'utf8'));
+    for (const [pattern, why] of FORBIDDEN) {
+      const hit = pattern.exec(text);
+      assert.equal(
+        hit,
+        null,
+        `${name} uses ${why}: "${hit && text.slice(Math.max(0, hit.index - 30), hit.index + hit[0].length + 30).trim()}"`,
+      );
+    }
+  }
+});
+
+test('COPY: an em dash is a punctuation mark, not a rhythm', () => {
+  // One per 150 words. The site is allowed the mark — the log entries it
+  // renders are full of them — and is not allowed to reach for it as a
+  // cadence. Over the budget, a page is being written rather than said.
+  for (const name of fs.readdirSync(path.join(siteDir, 'pages'))) {
+    const text = prose(fs.readFileSync(path.join(siteDir, 'pages', name), 'utf8'));
+    const words = text.split(/\s+/).filter(Boolean).length;
+    const dashes = (text.match(/—/g) ?? []).length;
+    const budget = Math.max(1, Math.round(words / 150));
+    assert.ok(
+      dashes <= budget,
+      `${name} has ${dashes} em dashes in ${words} words; the budget is ${budget}`,
+    );
+  }
+});
+
+test('COPY: a picture that is not built says so where it is shown', () => {
+  // WP-94b. An illustration is published only for something that is coming,
+  // and the reader who skims the pictures and reads none of the words has to
+  // be able to tell. So the "Coming" tag sits in the caption, beside the
+  // "Design illustration" label, on every one of them.
+  for (const name of fs.readdirSync(path.join(siteDir, 'pages'))) {
+    const html = fs.readFileSync(path.join(siteDir, 'pages', name), 'utf8');
+    for (const figure of html.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
+      const caption = (figure[0].match(/<figcaption[\s>]([\s\S]*?)<\/figcaption>/) ?? ['', ''])[1];
+      if (!caption.includes('tag--illustration')) continue;
+      assert.match(
+        caption,
+        /tag--coming/,
+        `${name} shows a mockup without saying it is coming: ${caption.trim().slice(0, 60)}`,
+      );
+    }
+  }
+});
+
 test('WEIGHT: every picture is inside the budget for what it is', async () => {
   const { IMAGES, ROLES } = await import('../../site/build.mjs');
   let checked = 0;

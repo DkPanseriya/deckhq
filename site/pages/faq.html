@@ -11,7 +11,7 @@
       <strong><code>claude agents</code> lists what is running. DeckHQ keeps what is owed.</strong>
     </p>
     <p>
-      When a session finishes its turn and its process exits, it leaves that list &#8212; correctly,
+      When a session finishes its turn and its process exits, it leaves that list, correctly,
       because it is no longer running. What nothing then records is that it asked you a question
       twenty minutes ago and is still waiting for the answer. That record is the entire product:
       DeckHQ reads every transcript on disk, so a finished session is still on the floor with what
@@ -25,16 +25,16 @@
   waiting on you  0   (3 waiting, all still running)</code></pre>
     <p>
       Note what the last row is doing. Three sessions want something, and DeckHQ counts none of them
-      as work anything has forgotten &#8212; because all three are still running, so the
-      runtime&#8217;s own view lists them too. It reports the number it can substantiate, which is
-      the only kind worth reporting. Run <code>npx deckhq doctor</code> and you get your own; it is
-      usually surprising, because nobody counts finished sessions.
+      as work anything has forgotten, because all three are still running, so the runtime&#8217;s
+      own view lists them too. It reports the number it can substantiate, which is the only kind
+      worth reporting. Run <code>npx deckhq doctor</code> and you get your own; it is usually
+      surprising, because nobody counts finished sessions.
     </p>
     <p>
       The agent view is also moving: recent builds group sessions as Pinned, Ready for review, Needs
       input, Working and Completed. That grouping covers background sessions and sessions with pull
-      requests rather than transcripts on disk, which is why the numbers above still differ &#8212;
-      and the day they stop differing, this answer gets rewritten rather than repeated.
+      requests rather than transcripts on disk, which is why the numbers above still differ. The day
+      they stop differing, this answer gets rewritten rather than repeated.
     </p>
   </section>
 
@@ -67,18 +67,18 @@
     <h2>Does DeckHQ run my agents?</h2>
     <p>
       No. It is the layer above whatever you already use. You start your sessions wherever you
-      normally start them &#8212; a terminal, an editor, a script &#8212; and they turn up on the
-      floor because their transcripts are on the disk. There is no manager agent, nothing is spawned
-      to make it work, and nothing on the floor costs a token to be there.
+      normally start them (a terminal, an editor, a script), and they turn up on the floor because
+      their transcripts are on the disk. There is no manager agent, nothing is spawned to make it
+      work, and nothing on the floor costs a token to be there.
     </p>
   </section>
 
   <section class="qa">
     <h2>Which runtimes does it read?</h2>
     <p>
-      Claude Code, verified. Codex, implemented and <strong>unverified</strong> &#8212; it has never
-      run against real Codex data. <a href="adapters.html">Adapters</a> has the detail and the
-      interface for adding one.
+      Claude Code, verified. Codex, implemented and <strong>unverified</strong>: it has never run
+      against real Codex data. <a href="adapters.html">Adapters</a> has the detail and the interface
+      for adding one.
     </p>
   </section>
 
@@ -87,9 +87,9 @@
     <p>
       The product is tested in CI on Windows, macOS and Linux against Node 18, 20 and 22. Two
       features are honest exceptions: &#8220;open in terminal&#8221; has been run for real on
-      Windows only &#8212; the macOS and Linux emulators are implemented against each one&#8217;s
-      documented interface and unit-tested down to the exact argument list, and executed nowhere
-      &#8212; and OS notifications are in the same position.
+      Windows only. The macOS and Linux emulators are implemented against each one&#8217;s
+      documented interface and unit-tested down to the exact argument list, and executed nowhere. OS
+      notifications are in the same position.
     </p>
   </section>
 
@@ -119,20 +119,20 @@
   <section class="qa">
     <h2>Is it free? Will it stay free?</h2>
     <p>
-      MIT, and the local product stays that way. There are paid services planned above it &#8212;
-      the kind that need a server, like one floor across several machines &#8212; and the rule
-      binding them is that they are things you opt into, never gates on the local interface.
-      Capture, the queue and every action stay in the free core, and the free product keeps making
-      no outbound connections at all.
+      MIT, and the local product stays that way. There are paid services planned above it, the kind
+      that need a server, like one floor across several machines. The rule binding them is that they
+      are things you opt into, never gates on the local interface. Capture, the queue and every
+      action stay in the free core, and the free product keeps making no outbound connections at
+      all.
     </p>
   </section>
 
   <section class="qa">
     <h2>Where is my data, and how do I get rid of it?</h2>
     <p>
-      In <code>~/.deckhq/</code>, on your own disk &#8212; the queue, bench states, names, settings,
-      the cache and the ledger. Delete the directory and there is nothing left of DeckHQ on the
-      machine. <code>DECKHQ_STATE_DIR</code> moves it somewhere else.
+      In <code>~/.deckhq/</code>, on your own disk: the queue, bench states, names, settings, the
+      cache and the ledger. Delete the directory and there is nothing left of DeckHQ on the machine.
+      <code>DECKHQ_STATE_DIR</code> moves it somewhere else.
     </p>
   </section>
 
@@ -141,8 +141,8 @@
     <p>
       Because a manager walking onto a floor gets, for free, what a list of session ids never gives
       you: who is busy, who is stuck, who is waiting to talk to you, and who is free. The metaphor
-      has exactly one job &#8212; make agent state legible at a glance &#8212; and every element on
-      the floor maps to a real state. Nothing on it is decorative only.
+      has exactly one job, making agent state legible at a glance, and every element on the floor
+      maps to a real state. Nothing on it is decorative only.
     </p>
     <p>
       The floor also has a failure mode this project takes seriously: something beautiful is
@@ -156,10 +156,9 @@
     <h2>Something is wrong. Where do I say so?</h2>
     <p>
       <a href="https://github.com/DkPanseriya/deckhq/issues">Issues</a>, with the output of
-      <code>deckhq doctor --share</code> if it is about your machine &#8212; that block has your
-      paths, project names and machine name taken out of it already. Security reports have their own
-      route in
-      <a href="https://github.com/DkPanseriya/deckhq/blob/main/SECURITY.md">SECURITY.md</a>. What
+      <code>deckhq doctor --share</code> if it is about your machine. That block has your paths,
+      project names and machine name taken out of it already. Security reports have their own route
+      in <a href="https://github.com/DkPanseriya/deckhq/blob/main/SECURITY.md">SECURITY.md</a>. What
       shipped and when is in the
       <a href="https://github.com/DkPanseriya/deckhq/blob/main/CHANGELOG.md">changelog</a>; why it
       shipped that way is in the <a href="log/index.html">engineering log</a>.
