@@ -18,6 +18,7 @@
 
 import {
   CHAIR,
+  FIXTURE_TOP,
   OFFICE_GROWTH_H,
   OFFICE_GROWTH_W,
   OFFICE_MAX_H,
@@ -46,6 +47,14 @@ import {
   SEAT_TUB,
   WATER_COOLER,
 } from './plan-furniture.js';
+import {
+  BOOKCASE_MAX_H,
+  BOOKCASE_MIN_RUN,
+  BOOKCASE_W,
+  PLANT_FOOTPRINTS,
+  PLANT_TREE,
+  plantRun,
+} from './plan-props.js';
 
 /** The prefix every standing queue place carries, as a zone id. */
 export const OFFICE_QUEUE_ZONE = 'office-queue-';
@@ -179,10 +188,15 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     y: deskY - 0.3 - 2.6,
     anchor: { type: 'attached', to: 'office-desk', edge: 'N', along: deskW / 2 - 1.3, gap: 0.3 },
   });
+  // The one TREE on this floor (§3.6), at the head of the room where the
+  // manager's light pool already is. `plant_tree` is a single canopy rather
+  // than the five-blob rosette every plant used to be: the reception is the
+  // room the user looks at first and the head of it is where a statement piece
+  // belongs, so the kind that is a statement stands there and nowhere else.
   props.push({
-    kind: 'plant_large',
-    w: 2.6,
-    h: 2.6,
+    kind: 'plant_tree',
+    w: PLANT_TREE,
+    h: PLANT_TREE,
     angle: 0,
     x: deskX + deskW + 1.2,
     y: deskY + 0.2,
@@ -405,14 +419,18 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     y: bandTop - 2.2,
     anchor: { type: 'attached', to: 'wait-sofa-w', edge: 'N', along: 0.4, gap: 0.4 },
   });
+  // INBOARD OF THE EAST RUN, not on the wall above it. The lamp used to stand
+  // at the head of that sofa against the east wall, which is the run the
+  // bookcase below now takes — and a standard lamp belongs at the end of a sofa
+  // rather than in front of a bookcase anyway.
   props.push({
     kind: 'lamp',
     w: 1.6,
     h: 1.6,
     angle: 0,
-    x: IN_W - PAD - 2,
+    x: IN_W - PAD - SOFA_D - 2.0,
     y: bandTop - 2.2,
-    anchor: { type: 'attached', to: 'wait-sofa-e', edge: 'N', along: 0.5, gap: 0.4 },
+    anchor: { type: 'attached', to: 'wait-sofa-e', edge: 'W', along: -2.2, gap: 0.4 },
   });
   props.push({
     kind: 'water_cooler',
@@ -423,25 +441,67 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     y: bandTop - 4.4,
     anchor: { type: 'attached', to: 'office-side-table', edge: 'N', along: 0.2, gap: 0.4 },
   });
+  // THE BOOKCASES (§3.4: *"bookcase 1.2 × 8 on each long wall"*).
+  //
+  // A reception's long walls are the two the seating runs down, and from
+  // `bandTop` to the floor they are sofa. What is left is the HEAD BAND — the
+  // wall beside the desk — and that is where a bookcase in a reception actually
+  // stands: behind the person waiting to be called, not behind the sofa they
+  // are sitting on.
+  //
+  // THE EAST ONE IS CONDITIONAL, and the condition is the art. §3.4 gives that
+  // wall a picture up to 6 U long and this band is under thirteen; a wall that
+  // has spent its run on one fixture does not get a second drawn through it.
+  // So the west wall always carries a case, the east wall carries one when the
+  // art leaves the run for it, and neither is ever stretched to fill a wall —
+  // §3.4 caps the case at 8 U for the reason it caps the whiteboard.
+  const westRun = clamp(bandTop - FIXTURE_TOP - 5.0, 0, BOOKCASE_MAX_H);
+  if (westRun >= BOOKCASE_MIN_RUN) {
+    props.push({
+      kind: 'bookshelf',
+      id: 'office-bookcase-w',
+      w: BOOKCASE_W,
+      h: westRun,
+      angle: 0,
+      x: PAD,
+      y: FIXTURE_TOP,
+      anchor: { type: 'wall', side: 'W', along: FIXTURE_TOP, inset: 0.3 },
+    });
+  }
+  const eastTop = deskY + artH + 1.0;
+  const eastRun = clamp(bandTop - eastTop, 0, BOOKCASE_MAX_H);
+  if (eastRun >= BOOKCASE_MIN_RUN) {
+    props.push({
+      kind: 'bookshelf',
+      id: 'office-bookcase-e',
+      w: BOOKCASE_W,
+      h: eastRun,
+      angle: 0,
+      x: IN_W - PAD - BOOKCASE_W,
+      y: eastTop,
+      anchor: { type: 'wall', side: 'E', along: eastTop, inset: 0.3 },
+    });
+  }
+
   // Planting in the two corners the seating leaves open, so the head of the
-  // room is furnished rather than bare either side of the desk.
-  props.push({
-    kind: 'plant',
-    w: 2,
-    h: 2,
-    angle: 0,
-    x: PAD + 0.6,
-    y: PAD + 0.6,
-    anchor: { type: 'corner', corner: 'NW', inset: PAD + 0.6 },
-  });
-  props.push({
-    kind: 'plant',
-    w: 2,
-    h: 2,
-    angle: 0,
-    x: IN_W - PAD - 2.6,
-    y: PAD + 0.6,
-    anchor: { type: 'corner', corner: 'NE', inset: PAD + 0.6 },
+  // room is furnished rather than bare either side of the desk. TWO KINDS, and
+  // never the same one twice: `plantRun` cannot repeat a silhouette (§3.6), so
+  // the pair reads as planting rather than as a symmetry.
+  const officeKinds = plantRun('__office__', 2);
+  /** @type {readonly ('NW'|'NE')[]} */
+  const officeCorners = ['NW', 'NE'];
+  officeCorners.forEach((corner, n) => {
+    const kind = officeKinds[n];
+    const size = PLANT_FOOTPRINTS[kind] || 2;
+    props.push({
+      kind,
+      w: size,
+      h: size,
+      angle: 0,
+      x: corner === 'NW' ? PAD + 0.6 : IN_W - PAD - 0.6 - size,
+      y: PAD + 0.6,
+      anchor: { type: 'corner', corner, inset: PAD + 0.6 },
+    });
   });
 
   // --- the standing queue, beside the desk and inside the well

@@ -44,6 +44,15 @@ import {
   SEAT_ARMCHAIR,
   SEAT_STOOL,
 } from './plan-furniture.js';
+import {
+  LOUNGE_BAY_SPEC,
+  PLANTER_MARGIN,
+  PLANTER_W,
+  PLANTS_PER_LOUNGE_BAY,
+  PLANT_FOOTPRINTS,
+  loungeBayNames,
+  plantRun,
+} from './plan-props.js';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
@@ -117,14 +126,17 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     place(x, y) {
       const z = { id: 'living-zone', x, y, w: 15, h: LOUNGE_SOFA_GROUP_H };
       zones.push(z);
-      at(z, 'rug_round', 1.5, 1.5, 12, 8);
+      // §3.7's sitting bay lies on *"boards + wool rug"*: the one rectangular
+      // textile in this room, and the quiet bay one block over takes the round
+      // one. Two grounds, two shapes — which is the difference §3.7 is asking
+      // for when it calls each bay a place.
+      at(z, 'rug', 1.5, 1.5, 12, 8, 0, 'lounge-sitting-rug');
       at(z, 'tv', 4.5, 0, 6, 0.6);
       at(z, 'sofa', 3.5, 7.6, 8, 2.4, -Math.PI / 2, 'lounge-sofa-main');
       at(z, 'sofa', 0.4, 3.2, 2.4, 5, 0, 'lounge-sofa-side');
       at(z, 'coffee_table', 4.6, 4.2, LOUNGE_COFFEE_W, LOUNGE_COFFEE_H);
       at(z, 'side_table', 12.4, 3.4, 1.8, 1.8);
       at(z, 'lamp', 12.6, 6, 1.6, 1.6);
-      at(z, 'plant_large', 12.4, 8.4, 2.4, 2.4);
       spots.push({
         id: 'lounge-sofa-a',
         kind: 'lounge_idle',
@@ -169,7 +181,6 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       for (let i = 0; i < 3; i++)
         at(z, 'bar_stool', 1.9 + i * LOUNGE_STOOL_PITCH, 7, SEAT_STOOL, SEAT_STOOL);
       at(z, 'fruit_bowl', 8.4, 5.2, 1.4, 1.4);
-      at(z, 'plant_large', 11.2, 6.4, 2.2, 2.2);
       spots.push({
         id: 'lounge-coffee',
         kind: 'coffee',
@@ -206,12 +217,14 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     place(x, y) {
       const z = { id: 'quiet-zone', x, y, w: 9, h: 6 };
       zones.push(z);
+      // §3.7's quiet bay: *"boards + round rug"*, and the rug goes down first
+      // so the armchairs stand on it rather than beside it.
+      at(z, 'rug_round', 1.2, 1.4, 6.6, 4.4, 0, 'lounge-quiet-rug');
       at(z, 'bookshelf', 0.5, 0.3, 8, 1.3);
       const chairY = 2.6;
       at(z, 'armchair', 0.6, chairY, SEAT_ARMCHAIR, SEAT_ARMCHAIR, 0);
       at(z, 'side_table', 3.9, chairY + 0.8, 1.4, 1.4);
       at(z, 'armchair', 5.4, chairY, SEAT_ARMCHAIR, SEAT_ARMCHAIR, Math.PI);
-      at(z, 'plant_large', 7.2, 0.4, 2.2, 2.2);
       // One seat per chair, each facing the table between them.
       spots.push({
         id: 'lounge-quiet-a',
@@ -412,16 +425,162 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     });
   }
 
-  // Flow the blocks to the shape of the room this lounge has been given, so
-  // it fills its column rather than leaving a band of bare floor beside it.
+  // ---- THE FOUR BAYS (§3.7), and which block belongs to which.
+  //
+  // *"The lounge is four bays, not one field."* It was a field: nine blocks of
+  // furniture shelf-packed by height into whatever rectangle the packer had
+  // left, so a pool table could land between the sofas and the fridge and the
+  // room had no places in it at all — one continuous floor with objects on it.
+  //
+  // A bay is three things and nothing else: its own ground, its own centrepiece
+  // and a planter run between it and the next one. The blocks did not have to
+  // change to get that; what had to change is that they pack TWICE — inside a
+  // bay first, then as bays — so a bay comes out as one rectangle the eye can
+  // find rather than as a scatter its neighbours are interleaved with.
+  const BAY_OF = /** @type {Record<string, string>} */ ({
+    living: 'sitting',
+    quiet: 'quiet',
+    coffee: 'cafe',
+    dining: 'cafe',
+    pool: 'games',
+    tt: 'games',
+    foos: 'games',
+    arcade: 'games',
+    board: 'games',
+  });
+  /** Clear floor a bay's ground keeps round its own furniture. */
+  const BAY_PAD = 1;
+  // The gap between two bays has to hold the planter that divides them, which
+  // is why it is not simply `LOUNGE_GAP`: at the densest packing that gap is
+  // one unit, and a 0.9 U trough in it would touch the furniture either side.
+  const bayGap = Math.max(gap, PLANTER_W + PLANTER_MARGIN * 2);
+
   const budgetW = fit && fit.w > 0 ? fit.w - MARGIN * 2 : Infinity;
   // The lounge's blocks are all different sizes, so it shelf-packs rather than
   // flowing into a fixed column count (see `shelfPack`).
   const budget = Number.isFinite(budgetW)
     ? budgetW
     : Math.max(...blocks.map((b) => b.w)) * Math.max(1, Math.round(Math.sqrt(blocks.length)));
-  const flow = shelfPack(blocks, gap, budget);
-  blocks.forEach((b, i) => b.place(flow.out[i].x, flow.out[i].y));
+
+  // IS THIS LOUNGE ONE ROW? §3.7's collapse rule is about a lounge laid in a
+  // single row of bays — *"it never spreads three bays across sixty units"* —
+  // and a lounge with the depth for a second shelf does not have that problem.
+  // At `LOUNGE_MIN_H` it is one sofa group deep by construction (WP-77), which
+  // is the only shape where a bay has to be given up rather than wrapped. See
+  // `loungeBayNames`.
+  const deepest = Math.max(...blocks.map((b) => b.h));
+  const depthBudget = fit && fit.h > 0 ? fit.h - PLATE_BAND - MARGIN * 2 : Infinity;
+  const oneRow = depthBudget < deepest * 2 + bayGap;
+  const present = new Set(blocks.map((b) => BAY_OF[b.id]));
+  const bayNames = loungeBayNames(budget, { oneRow, has: (n) => present.has(n) });
+  const kept = new Set(bayNames);
+  const live = blocks.filter((b) => kept.has(BAY_OF[b.id]));
+
+  // Each bay packs its own blocks, then the bays pack into the room — IN THE
+  // ORDER §3.7 LISTS THEM rather than by height. `shelfPack` sorts tallest
+  // first, which is right for loose furniture and wrong for a row of places:
+  // the lounge reads left to right, sitting to games, on every floor.
+  const bays = bayNames.map((name) => {
+    const own = live.filter((b) => BAY_OF[b.id] === name);
+    const inner = shelfPack(own, gap, Math.max(budget - BAY_PAD * 2, ...own.map((b) => b.w)));
+    return {
+      name,
+      own,
+      inner,
+      x: 0,
+      y: 0,
+      row: 0,
+      w: inner.w + BAY_PAD * 2,
+      h: inner.h + BAY_PAD * 2,
+    };
+  });
+  let bx = 0;
+  let by = 0;
+  let rowH = 0;
+  let row = 0;
+  for (const bay of bays) {
+    if (bx > 0 && bx + bay.w > budget + 1e-6) {
+      by += rowH + bayGap;
+      bx = 0;
+      rowH = 0;
+      row++;
+    }
+    bay.x = bx;
+    bay.y = by;
+    bay.row = row;
+    bx += bay.w + bayGap;
+    rowH = Math.max(rowH, bay.h);
+  }
+  for (const bay of bays) {
+    bay.own.forEach((b, i) => {
+      const at = bay.inner.out[i];
+      b.place(bay.x + BAY_PAD + at.x, bay.y + BAY_PAD + at.y);
+    });
+  }
+
+  // ---- each bay's own GROUND, and the planter run that divides it from the
+  // next one (§3.6: *"planters do the dividing between bays, which is what a
+  // planting budget is for"*).
+  //
+  // The ground is a zone rather than a rug: a rug is a thing lying on a floor
+  // and a bay's ground IS the floor — the café's is tile, which is the one
+  // material change inside this room and the reason it was already carrying a
+  // `kitchenZone` before there were bays to have one.
+  for (const bay of bays) {
+    const spec = LOUNGE_BAY_SPEC[bay.name];
+    zones.push({
+      id: `lounge-bay-${bay.name}`,
+      x: bay.x,
+      y: bay.y,
+      w: bay.w,
+      h: bay.h,
+      bay: bay.name,
+      ground: spec ? spec.ground : 'wood',
+    });
+  }
+  // ONE PLANT PER BAY, in the bay's own south-west corner (§3.6 allows six and
+  // this room wants the budget spent on the planters instead: *"planters do the
+  // dividing between bays, which is what a planting budget is for"*). The kinds
+  // come from `plantRun`, so the four bays never show the same silhouette twice
+  // running and a reader can tell one bay's corner from the next one's.
+  const bayKinds = plantRun('__lounge__', Math.min(bays.length, PLANTS_PER_LOUNGE_BAY));
+  bays.forEach((bay, i) => {
+    const kind = bayKinds[i % bayKinds.length];
+    const size = PLANT_FOOTPRINTS[kind] || 2.4;
+    const dx = Math.max(0, bay.w - size - 0.2);
+    const dy = Math.max(0, bay.h - size - 0.2);
+    props.push({
+      kind,
+      w: size,
+      h: size,
+      angle: 0,
+      x: bay.x + dx,
+      y: bay.y + dy,
+      anchor: { type: 'zone', of: `lounge-bay-${bay.name}`, dx, dy },
+    });
+  });
+
+  for (let i = 1; i < bays.length; i++) {
+    const left = bays[i - 1];
+    const right = bays[i];
+    if (left.row !== right.row) continue;
+    const run = Math.max(left.h, right.h);
+    props.push({
+      kind: 'planter',
+      id: `lounge-planter-${left.name}-${right.name}`,
+      w: PLANTER_W,
+      h: run,
+      angle: 0,
+      x: left.x + left.w + (bayGap - PLANTER_W) / 2,
+      y: Math.min(left.y, right.y),
+      anchor: {
+        type: 'zone',
+        of: `lounge-bay-${left.name}`,
+        dx: left.w + (bayGap - PLANTER_W) / 2,
+        dy: Math.min(left.y, right.y) - left.y,
+      },
+    });
+  }
 
   // Standing conversations need no furniture, so they take the promenade
   // along the bottom of the lounge once every seat is spoken for.
@@ -487,7 +646,12 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     sp.x += dx;
     sp.y += dy;
   }
-  const kitchen = zones.find((z) => z.id === 'kitchen-zone');
+  // THE CAFÉ BAY'S GROUND IS THE TILE (§3.7). It used to be the kitchen block's
+  // own 13 x 8 zone, which tiled the counter and left the dining table standing
+  // on boards two units away — half a floor, which is worse than either. The
+  // bay is the room's one material change and it is the whole bay.
+  const cafeBay = zones.find((z) => z.id === 'lounge-bay-cafe');
+  const kitchen = cafeBay || zones.find((z) => z.id === 'kitchen-zone');
 
   /** @type {Room} */
   const room = {
