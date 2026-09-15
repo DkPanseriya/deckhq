@@ -26,10 +26,25 @@
  *
  * Everything is a pure function of the `now` passed in, so two calls a second
  * apart produce the same floor and `test/goldens/` can photograph it.
+ *
+ * THE SHAPE IS THE POINT (WP-92g, audit finding A-10). The promise above —
+ * "a snapshot-shaped object" — is what lets every surface downstream have one
+ * code path instead of two, and it had quietly stopped being true: the actor
+ * floor carried no `crews` and no `rateCardVersion` while `_realSnapshot()`
+ * carried both. `test/unit/snapshot-shape.test.mjs` now compares the two key
+ * sets against a real `Registry.snapshot()` rather than against a list
+ * somebody has to remember to extend.
  */
 
 import { counts as countsOf, projects as projectsOf } from './model.mjs';
 import { fixedNow, now as clockNow } from './clock.mjs';
+// One of the `src/` -> `public/` edges `docs/DEVIATIONS.md` §122 allows and
+// `13-ARCHITECTURE-AUDIT.md` §1.3 enumerates: the crew rule is drawn in the
+// browser, so the one copy lives where both halves can reach it. Same import,
+// for the same field, as `state-machine-snapshot.mjs` — which is the whole
+// point: the actors' crews are derived by the same function as everybody
+// else's, not by a second rule that could disagree.
+import { crewsFrom } from '../../public/floor-rule.js';
 
 const MINUTE = 60_000;
 
@@ -100,7 +115,8 @@ function demoCwd(project) {
  * Build the actor floor.
  *
  * @param {{now?: number, settings?: any, hooks?: any, degraded?: any,
- *          writeError?: any, takenNames?: string[], scannedAt?: number|null}} [opts]
+ *          writeError?: any, takenNames?: string[], scannedAt?: number|null,
+ *          rateCardVersion?: string|null}} [opts]
  * @returns {any} a snapshot in the shape of `Registry.snapshot()`, plus `demo`
  *   and `demoNote`
  */
@@ -178,6 +194,12 @@ export function buildDemoSnapshot(opts = {}) {
   return {
     agents,
     projects,
+    // WP-92g. Derived by the same function the daemon uses, and published for
+    // the same reason: a floor that omits the field makes the client count the
+    // crews itself, which is a second derivation of a rule that has one home.
+    // The cast has no juniors, so this is `[]` — and `[]` published is not the
+    // same thing as the field being absent.
+    crews: crewsFrom(agents, { now }),
     counts: countsOf(agents),
     settings: opts.settings ?? {},
     takenNames: opts.takenNames ?? [],
@@ -187,6 +209,16 @@ export function buildDemoSnapshot(opts = {}) {
     // there is nothing on this machine for hooks to be exact about yet.
     degraded: {},
     writeError: opts.writeError ?? null,
+    // WP-92g. The actors carry `costEstimate`s, so the surfaces that draw one
+    // need the dated table it came from — standing rule 7 says a figure is an
+    // estimate and names its source everywhere it appears. Without this the
+    // panel's cost line on the actor floor read "rate card unknown".
+    //
+    // Passed in rather than read here, like `settings`, `hooks`, `takenNames`
+    // and `writeError` above it: `loadRateCard()` stats a file under the user's
+    // home, and this module's header promises a pure function of `now`. The
+    // registry already computes it once per snapshot and hands it over.
+    rateCardVersion: opts.rateCardVersion ?? null,
     scannedAt: opts.scannedAt ?? null,
     /**
      * The clock the actors' ages were computed against, so the browser reads

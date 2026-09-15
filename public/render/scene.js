@@ -171,10 +171,17 @@ export class Scene extends SceneInput {
     // WP-89. HOW MANY JUNIORS EACH PARENT HAS, whether or not they are all
     // drawn, so the `+N` chip can say what it is standing for and the label pass
     // knows whose raised hand to protect. Off the snapshot's own `crews` where
-    // the daemon published one, and counted here otherwise — an older daemon, a
-    // replay, or the actor floor.
+    // the daemon published one, and counted here otherwise — an older daemon or
+    // a replay.
+    //
+    // WP-92g. ABSENCE, NOT EMPTINESS. The test used to be `Array.isArray &&
+    // .length`, so every ordinary floor — one with no juniors on it, which is
+    // most of them — published `crews: []`, failed the length half, and had the
+    // whole rule run a second time here to arrive at `[]` again. A published
+    // empty list is an answer; `undefined` is the absence of one, and only the
+    // absence is worth recomputing.
     this._crewCounts = new Map(
-      Array.isArray(this._snapshot.crews) && this._snapshot.crews.length
+      Array.isArray(this._snapshot.crews)
         ? this._snapshot.crews.map((c) => [c.parentId, c.count])
         : crewsFrom(agents, { now: this._snapshot.now }).map((c) => [c.parentId, c.count]),
     );

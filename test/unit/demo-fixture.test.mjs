@@ -16,16 +16,23 @@ import { counts as countsOf } from '../../src/core/model.mjs';
 const NOW = 1_756_900_000_000;
 
 test('the fixture is shaped exactly like a real snapshot', () => {
+  // This list is a floor, not the contract. It only ever checked the fields
+  // somebody remembered to add to it, which is how `crews` and
+  // `rateCardVersion` went missing for two packages (WP-92g, audit A-10). The
+  // contract — every key a real `Registry.snapshot()` produces, and no other —
+  // is asserted against a real registry in `test/unit/snapshot-shape.test.mjs`.
   const snap = buildDemoSnapshot({ now: NOW });
   for (const key of [
     'agents',
     'projects',
+    'crews',
     'counts',
     'settings',
     'takenNames',
     'hooks',
     'degraded',
     'writeError',
+    'rateCardVersion',
     'scannedAt',
   ]) {
     assert.ok(key in snap, `the demo snapshot is missing ${key}`);

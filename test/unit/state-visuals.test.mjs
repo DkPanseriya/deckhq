@@ -767,3 +767,54 @@ test('the chrome ground is cold, and colder than every state colour', () => {
     );
   }
 });
+
+// ------------------------------------------------- one palette, four places
+// WP-92d (audit finding A-04). The seven values live in four files by design:
+// `render/palette-colors.js` is canonical, `style.css` restates them as
+// `--state-*` for the chrome, and the shell carries one literal it can read
+// while `render/palette.js` is still a dynamic, defensive import. There used
+// to be a second shell literal — a private, six-key copy in `panel-header.js`
+// that no test named, so it was the one of the four that could drift alone.
+// These two tests are what make "one literal in the shell" a fact rather than
+// an intention.
+
+const REPO = path.join(HERE, '..', '..');
+
+/** Every `.js` file under `public/`, recursively, in a stable order. */
+function clientFiles(dir = path.join(REPO, 'public'), out = []) {
+  for (const name of fs.readdirSync(dir).sort()) {
+    const full = path.join(dir, name);
+    if (fs.statSync(full).isDirectory()) clientFiles(full, out);
+    else if (name.endsWith('.js')) out.push(full);
+  }
+  return out;
+}
+
+test('SINGLE SOURCE: exactly one FALLBACK_STATE_COLORS literal exists under public/', () => {
+  const declaring = clientFiles().filter((file) =>
+    /(?:^|\s)(?:export\s+)?(?:const|let|var)\s+FALLBACK_STATE_COLORS\s*=\s*\{/m.test(
+      fs.readFileSync(file, 'utf8'),
+    ),
+  );
+  assert.deepEqual(
+    declaring.map((f) => path.relative(REPO, f).replace(/\\/g, '/')),
+    ['public/state-palette.js'],
+    'a second copy of the state palette can drift alone; import state-palette.js instead',
+  );
+});
+
+test('SINGLE SOURCE: the shell fallback is STATE_COLORS, key for key', async () => {
+  const { FALLBACK_STATE_COLORS } = await import('../../public/state-palette.js');
+  assert.deepEqual(
+    Object.keys(FALLBACK_STATE_COLORS).sort(),
+    Object.keys(STATE_COLORS).sort(),
+    'the shell fallback and the canonical palette name different states',
+  );
+  for (const [state, colour] of Object.entries(STATE_COLORS)) {
+    assert.equal(
+      FALLBACK_STATE_COLORS[state],
+      colour,
+      `the shell fallback for ${state} has drifted from palette-colors.js`,
+    );
+  }
+});

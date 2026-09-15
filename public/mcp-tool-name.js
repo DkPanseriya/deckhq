@@ -14,10 +14,12 @@
  *
  * `public/` may never import from `src/`, because `public/` is served as
  * static files and `src/` is not (`docs/DEVIATIONS.md` §122). The floor is
- * where this label is drawn, so the implementation is here and
- * `src/core/mcp-tool-name.mjs` re-exports it — the same direction
- * `src/core/themes.mjs` imports `public/render/themes.js` and
- * `src/core/identity.mjs` imports `public/names.js`.
+ * where this label is drawn, so the implementation is here. WP-64 also added
+ * `src/core/mcp-tool-name.mjs` as a re-export for a Node-side caller — the
+ * same direction `src/core/themes.mjs` imports `public/render/themes.js` and
+ * `src/core/identity.mjs` imports `public/names.js`. That caller never landed
+ * and the re-export had no importer, so WP-92f deleted it (A-11). Every
+ * consumer today is in `public/`, and the rule itself has not moved.
  *
  * ## What it will NOT do
  *

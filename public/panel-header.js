@@ -25,16 +25,7 @@ import { currentId, displayedAgent } from './panel-state.js';
 import { textNode, separator } from './panel-dom.js';
 import { now as clockNow } from './clock.js';
 import { humaniseToolSummary } from './mcp-tool-name.js';
-
-/** Fallback copy of docs/03-VISUAL-SPEC.md §5; see app.js for the same note. */
-const FALLBACK_STATE_COLORS = {
-  working: '#2E7D63',
-  needs_input: '#B87333',
-  stalled: '#9A7B4F',
-  for_review: '#C0392B',
-  benched: '#7B8794',
-  let_go: '#BDB7AA',
-};
+import { FALLBACK_STATE_COLORS } from './state-palette.js';
 
 /**
  * Set once `render/palette.js` loads. It was declared as carrying only

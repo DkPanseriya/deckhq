@@ -29,31 +29,8 @@ import { crewsFrom } from '../../public/floor-rule.js';
 /** @typedef {import('./model.mjs').LiveSession} LiveSession */
 /** @typedef {import('./store.mjs').Store} Store */
 
-/**
- * @typedef {object} RuntimeAdapter
- * @property {import('./model.mjs').RuntimeId} id  the same value that prefixes
- *   every `Agent.runtime` this adapter produces. It was declared as a bare
- *   `string`, so the two could not be compared (WP-22).
- * @property {string} [label]
- * @property {() => Promise<boolean>} available
- * @property {() => Promise<LiveSession[]>} liveSessions
- * @property {(opts: {maxAgeDays:number, limit:number}) => Promise<SessionSummary[]>} scanSessions
- */
-
-/**
- * @typedef {object} HookEvent
- * @property {string} runtime
- * @property {string} sessionId
- * @property {string} hookEvent
- * @property {string} [cwd]
- * @property {any} [payload]
- * @property {{name:string, summary:string}|null} [tool] parsed by the runtime's
- *   own adapter from a `PreToolUse` payload (WP-52); absent for every other event
- * @property {{agentId:string, parentSessionId:string|null}|null} [subagent]
- *   parsed by the runtime's own adapter from a `SubagentStop` payload (WP-41);
- *   null when the payload names no junior, and absent for every other event
- * @property {number} [at] ms epoch; defaults to Date.now() — override in tests
- */
+/** @typedef {import('./state-machine-rules.mjs').RuntimeAdapter} RuntimeAdapter */
+/** @typedef {import('./state-machine-rules.mjs').HookEvent} HookEvent */
 
 import { RegistryBase } from './state-machine-base.mjs';
 import { orderRooms, todaySpendFor, todayTokensFor } from './state-machine-rules.mjs';
@@ -88,6 +65,11 @@ export class RegistrySnapshot extends RegistryBase {
         takenNames: this.identity ? this.identity.takenNames() : [],
         hooks: { ...this._hookStatus },
         writeError: this.store.writeError || null,
+        // WP-92g. The dated table the actors' cost estimates are quoted
+        // against. Read here rather than in the fixture so `buildDemoSnapshot`
+        // stays the pure function of `now` its header promises — the rate card
+        // stats a file under the user's home.
+        rateCardVersion: rateCardVersion(),
         scannedAt: this._scannedAt,
       });
     }
