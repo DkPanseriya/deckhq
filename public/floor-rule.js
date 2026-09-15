@@ -632,3 +632,31 @@ export function crewsFrom(agents, opts = {}) {
 export function isCrewFormation(count) {
   return Number(count) >= CREW_THRESHOLD;
 }
+
+/**
+ * WHICH PARENTS JUST CROSSED INTO A CREW — §4, and the whole of the sound.
+ *
+ * *"The crew adds ONE cue — `door`, once, when a crew crosses from two juniors
+ * to three. Not per junior, not per spawn, and NEVER for a pulse."* So it is a
+ * TRANSITION over the threshold rather than a state: a parent that had four
+ * juniors last snapshot and has five now is silent, and so is one that had three
+ * and still has three. Five juniors appearing inside one poll is one crossing.
+ *
+ * Here rather than in `app-notify.js` for the reason `placement` is here: it is
+ * a rule over observed fields, and a rule the test suite can only reach through
+ * a module that touches `document` is a rule nothing checks.
+ *
+ * @param {Map<string, number>} previous parent id -> junior count, last snapshot
+ * @param {{parentId?:string, count?:number}[]} crews this snapshot's `crews`
+ * @returns {string[]} the parents that crossed, in the order given
+ */
+export function crewCrossings(previous, crews) {
+  /** @type {string[]} */
+  const out = [];
+  for (const crew of crews || []) {
+    if (!crew || !crew.parentId) continue;
+    const before = previous.get(crew.parentId) ?? 0;
+    if (before < CREW_THRESHOLD && Number(crew.count) >= CREW_THRESHOLD) out.push(crew.parentId);
+  }
+  return out;
+}

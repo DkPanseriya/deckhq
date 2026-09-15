@@ -9,7 +9,7 @@
 
 import { applyMotionPreference } from './settings-ui.js';
 import { latestSnapshot, selectAgent, sounds, toast } from './app-state.js';
-import { CREW_THRESHOLD, crewsFrom } from './floor-rule.js';
+import { crewCrossings, crewsFrom } from './floor-rule.js';
 
 /**
  * States that fire a notification on *entry*, and the setting that governs
@@ -38,32 +38,6 @@ export function setPrevActivityStates(v) {
   // reason: a tab that opens onto a floor with a crew already on it must not
   // hear the crew form.
   prevCrewCounts = new Map();
-}
-
-/**
- * WHICH PARENTS JUST CROSSED INTO A CREW — §4, and the whole of the sound.
- *
- * *"The crew adds ONE cue — `door`, once, when a crew crosses from two juniors
- * to three. Not per junior, not per spawn, and NEVER for a pulse."* So it is a
- * transition over the threshold and not a state: a parent that already had four
- * juniors last snapshot and has five now is silent, and so is one that had three
- * and still has three.
- *
- * Pure, so `test/unit/crew.test.mjs` can drive a sequence of snapshots through
- * it without a browser or an AudioContext.
- * @param {Map<string, number>} previous
- * @param {{parentId:string, count:number}[]} crews
- * @returns {string[]} the parents that crossed, in the order given
- */
-export function crewCrossings(previous, crews) {
-  /** @type {string[]} */
-  const out = [];
-  for (const crew of crews || []) {
-    if (!crew || !crew.parentId) continue;
-    const before = previous.get(crew.parentId) ?? 0;
-    if (before < CREW_THRESHOLD && crew.count >= CREW_THRESHOLD) out.push(crew.parentId);
-  }
-  return out;
 }
 
 /** @type {{id:string,label:string,projectName:string}[]} agents pending in a coalesced notification */
