@@ -55,7 +55,7 @@
  * so no import anywhere had to change.
  */
 
-import { floorPopulation, splitProjectsByOccupancy } from '../floor-rule.js';
+import { floorPopulation, isActiveAgent, splitProjectsByOccupancy } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
@@ -92,7 +92,6 @@ import {
   pinnedBandHeight,
   pinnedPerRow,
 } from './plan-units.js';
-import { isActiveAgent } from '../floor-rule.js';
 
 // ------------------------------------------------------------------ the plan
 
@@ -859,13 +858,7 @@ export function buildPlan(projects, agents, opts = {}) {
 
 export { resolveAnchors, tableSizesFor } from './plan-anchors.js';
 export { shelfPack, squarify, tileRows } from './plan-packing.js';
-export {
-  formatTokens,
-  payrollLine,
-  plateHeroLine,
-  plateTertiaryLine,
-  tokenLine,
-} from './plan-plate.js';
+export * from './plan-plate.js';
 export {
   ASPECT_TOLERANCE,
   FLOOR_OPEN_MAX,
