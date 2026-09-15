@@ -13,13 +13,21 @@
     "Nothing here is a mockup. An asset a fixture cannot reach is reported by the",
     "run and left out of the site; it is never staged by hand."
   ],
-  "viewport": { "width": 1600, "height": 1000 },
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
   "assets": [
     {
       "name": "queue-strip",
       "kind": "still",
       "population": "demo",
-      "crop": { "x": 4, "y": 82, "w": 1220, "h": 54 },
+      "crop": {
+        "x": 4,
+        "y": 82,
+        "w": 1220,
+        "h": 54
+      },
       "width": 1100,
       "note": "the waiting strip: who is waiting, for how long, in what"
     },
@@ -27,7 +35,12 @@
       "name": "room-plate",
       "kind": "still",
       "population": "demo",
-      "crop": { "x": 400, "y": 200, "w": 240, "h": 380 },
+      "crop": {
+        "x": 400,
+        "y": 200,
+        "w": 240,
+        "h": 380
+      },
       "width": 480,
       "note": "one project room: its plate, its desks, its sessions"
     },
@@ -35,23 +48,38 @@
       "name": "reception",
       "kind": "still",
       "population": "demo",
-      "crop": { "x": 0, "y": 198, "w": 400, "h": 382 },
-      "width": 680,
+      "crop": {
+        "x": 0,
+        "y": 198,
+        "w": 400,
+        "h": 382
+      },
+      "width": 640,
       "note": "Your Office: four waiting on the sofas, one at the chair"
     },
     {
       "name": "working-desk",
       "kind": "still",
       "population": "demo",
-      "crop": { "x": 460, "y": 250, "w": 260, "h": 200 },
-      "width": 520,
+      "crop": {
+        "x": 452,
+        "y": 262,
+        "w": 212,
+        "h": 166
+      },
+      "width": 424,
       "note": "one desk, close: the agent, the screen, the state colour"
     },
     {
       "name": "lounge-bay",
       "kind": "still",
       "population": "demo",
-      "crop": { "x": 820, "y": 700, "w": 230, "h": 180 },
+      "crop": {
+        "x": 820,
+        "y": 700,
+        "w": 230,
+        "h": 180
+      },
       "width": 460,
       "note": "a lounge bay: benched agents, off the clock"
     },
@@ -60,7 +88,12 @@
       "kind": "still",
       "population": "demo",
       "press": "i",
-      "crop": { "x": 1250, "y": 850, "w": 348, "h": 150 },
+      "crop": {
+        "x": 1250,
+        "y": 850,
+        "w": 348,
+        "h": 150
+      },
       "width": 680,
       "note": "the idle chip, opened: repos nobody is working in"
     },
@@ -70,7 +103,12 @@
       "population": "demo",
       "press": ">",
       "click": "#deck-tab-usage",
-      "crop": { "x": 8, "y": 170, "w": 1584, "h": 350 },
+      "crop": {
+        "x": 8,
+        "y": 170,
+        "w": 1584,
+        "h": 350
+      },
       "width": 1100,
       "note": "the deck's Usage tab: tokens, by project"
     },
@@ -79,7 +117,12 @@
       "kind": "still",
       "population": "demo",
       "press": "j",
-      "crop": { "x": 1160, "y": 136, "w": 440, "h": 620 },
+      "crop": {
+        "x": 1160,
+        "y": 136,
+        "w": 440,
+        "h": 620
+      },
       "width": 880,
       "note": "the panel on a session that is for review"
     },
@@ -89,7 +132,12 @@
       "population": "demo",
       "permission": true,
       "press": "j",
-      "crop": { "x": 1160, "y": 140, "w": 440, "h": 370 },
+      "crop": {
+        "x": 1160,
+        "y": 140,
+        "w": 440,
+        "h": 370
+      },
       "width": 880,
       "note": "a real PermissionRequest, held open by its caller"
     },
@@ -100,7 +148,12 @@
       "mode": "phase",
       "fps": 25,
       "seconds": 4,
-      "crop": { "x": 0, "y": 136, "w": 1600, "h": 700 },
+      "crop": {
+        "x": 0,
+        "y": 136,
+        "w": 1600,
+        "h": 700
+      },
       "width": 1100,
       "note": "the whole floor with every animation running"
     },
@@ -112,7 +165,12 @@
       "scale": 2,
       "fps": 25,
       "seconds": 4,
-      "crop": { "x": 460, "y": 250, "w": 260, "h": 200 },
+      "crop": {
+        "x": 460,
+        "y": 250,
+        "w": 260,
+        "h": 200
+      },
       "width": 520,
       "note": "typing and thinking, at two desks"
     },
@@ -124,7 +182,12 @@
       "scale": 2,
       "fps": 25,
       "seconds": 4,
-      "crop": { "x": 400, "y": 690, "w": 400, "h": 260 },
+      "crop": {
+        "x": 400,
+        "y": 690,
+        "w": 400,
+        "h": 260
+      },
       "width": 800,
       "note": "the lounge: what a benched agent does with its time"
     },
@@ -136,7 +199,12 @@
       "endTurn": "orbital-api",
       "fps": 25,
       "seconds": 5,
-      "crop": { "x": 0, "y": 136, "w": 800, "h": 460 },
+      "crop": {
+        "x": 0,
+        "y": 136,
+        "w": 800,
+        "h": 460
+      },
       "width": 800,
       "note": "an agent finishes, walks to Your Office and puts its hand up"
     }
