@@ -596,9 +596,15 @@ These are real, and listed here rather than discovered later.
   deliberate **`--fork-session`** branch would be collapsed into one agent, which has never been
   seen in real data and would be wrong if you use it. Codex, Gemini CLI and OpenCode report no such
   id, so for those runtimes nothing is inferred and nothing is collapsed. `docs/DEVIATIONS.md` §155.
-- **Given names run out.** The pool is 60 first names and a busy machine has more sessions than
-  that, so past sixty you get `Wren 2`, `Wren 3`. The number is not a duplicate — no two agents ever
-  wear the same name — it is the pool being smaller than your history. `docs/DEVIATIONS.md` §155.2.
+- **Given names do not run out below 600 sessions.** The pool is 600 first names, and an agent is
+  handed one the first time it is seen and keeps it for good. Past 600 live identities on one
+  machine you would get `Wren 2`, `Wren 3` — not a duplicate, since no two agents ever wear the same
+  name, but the pool being smaller than your history. The pool held 60 until September 2026, so a
+  machine that was running DeckHQ then may have numbered names already; the first start after
+  upgrading takes each of them away once, keeps the MK number and the face exactly as they were, and
+  the panel says _"was Livia 2"_ for a week so the change is not silent. That one-time rename is the
+  only thing in DeckHQ that ever changes a name it gave. `deckhq doctor` prints the pool size and
+  how many names still carry a number; it should say 0. `docs/DEVIATIONS.md` §168.
 - **Gemini CLI and OpenCode support is unverified.** Both adapters are implemented against each
   runtime's documented on-disk format or published CLI, and **neither has ever run against real
   data**, because neither runtime is installed on the development machine. Each reports itself

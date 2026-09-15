@@ -21,6 +21,18 @@
  * waiting since yesterday"* is not. The given name is persisted beside the MK
  * numbers, under its own key, and — like the numbers — is never reassigned.
  *
+ * THE ONE EXCEPTION, AND IT IS NOT ONE (WP-86, docs/DEVIATIONS.md §168). A
+ * given name is never reassigned. A `"<base> N"` suffix was never a name: it is
+ * the marker this file writes when the pool is exhausted at the moment of
+ * assignment, and for months it was engaged permanently because the pool held
+ * sixty names and the owner's machine held ninety-two conversations. The pool
+ * holds 600 now, and the markers that were already persisted are taken away
+ * ONCE, by a versioned store migration that hands each of them the name the
+ * same walk would have given it (`core/state-migrations.mjs`). The MK number
+ * and the face are untouched, and the old marker is kept as `formerName` so the
+ * panel can say "was Livia 2" for a week. Nothing else in this product ever
+ * changes a name the daemon gave.
+ *
  * THE INVARIANT: assignment never writes a user-owned field. `name` and
  * `avatar` belong to the user and are written by `setDisplay` and by nothing
  * else, ever. `given` is the daemon's, and a user rename simply outranks it
@@ -29,6 +41,7 @@
  */
 
 import { ORIGINAL_POOL, SHORT_NAMES } from '../../public/names.js';
+import { now as clockNow } from './clock.mjs';
 
 /**
  * @typedef {object} IdentityRecord
@@ -37,9 +50,63 @@ import { ORIGINAL_POOL, SHORT_NAMES } from '../../public/names.js';
  * @property {string} mk            e.g. 'MK3.2'
  * @property {string|null} displayName  the USER's chosen name, or null
  * @property {string|null} givenName    the auto-assigned first name
+ * @property {string|null} formerName   the suffixed name WP-86's migration took
+ *                                      away, for the week after it did (§168)
  * @property {string|null} avatar
  * @property {string} label         displayName ?? givenName ?? mk
  */
+
+/**
+ * What a name looks like when the pool ran out: `Livia 2`, `Greta 3`.
+ *
+ * WP-86 writes down what this always was. `"<base> N"` is not a name; it is a
+ * MARKER saying there was no name left at the moment of assignment, and the
+ * owner's floor was covered in them because the pool held sixty and his machine
+ * held ninety-two conversations (§155.2, §156.4). The pool holds 600 now, which
+ * is more than the fallback can be reached below, and the markers that were
+ * already persisted are taken away once by a store migration — see
+ * `renameSuffixedNames` in `state-migrations.mjs`.
+ */
+export const SUFFIXED_NAME_RE = /^(.+) (\d+)$/;
+
+/**
+ * How long the panel may say "was Livia 2" after the migration renamed
+ * somebody. A week on the injected clock (`core/clock.mjs`), which is long
+ * enough that anybody who opens DeckHQ in a normal week sees the sentence once
+ * and short enough that it does not become part of the agent's identity. After
+ * it, the old name is simply gone from every surface.
+ */
+export const FORMER_NAME_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Is this the pool's "we ran out" marker rather than a name?
+ * @param {unknown} name
+ * @returns {boolean}
+ */
+export function isSuffixedName(name) {
+  return typeof name === 'string' && SUFFIXED_NAME_RE.test(name);
+}
+
+/**
+ * The name WP-86's migration took away, while it is still worth saying.
+ *
+ * Null on every record that was never renamed — which is every record on a
+ * machine that never ran out of names, and every record on a fresh install —
+ * and null again once `FORMER_NAME_MS` has passed. The stored fields are left
+ * alone rather than pruned: expiring a sentence is a read-side decision, and
+ * `describe()` is a read (the WP-20 invariant: describing an agent writes no
+ * field the user owns, and this writes no field at all).
+ *
+ * @param {{formerName?: string|null, renamedAt?: number|null}} rec
+ * @param {number} at model time, from the injected clock
+ * @returns {string|null}
+ */
+export function formerNameOf(rec, at) {
+  if (!rec || typeof rec.formerName !== 'string' || !rec.formerName) return null;
+  const since = Number(rec.renamedAt);
+  if (!Number.isFinite(since) || since <= 0) return null;
+  return at - since < FORMER_NAME_MS ? rec.formerName : null;
+}
 
 /**
  * FNV-1a over the agent id, 32-bit: where in `SHORT_NAMES` this agent starts
@@ -49,13 +116,58 @@ import { ORIGINAL_POOL, SHORT_NAMES } from '../../public/names.js';
  * @param {string} str
  * @returns {number} unsigned 32-bit
  */
-function nameHash(str) {
+export function nameHash(str) {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
     h = Math.imul(h, 16777619) >>> 0;
   }
   return h >>> 0;
+}
+
+/**
+ * THE WALK. The one place a first name is chosen, so that the daemon assigning
+ * one on first sight and WP-86's migration taking a suffix away cannot drift
+ * apart: both start at `nameHash(agentId) % ORIGINAL_POOL` and take the first
+ * name in the array that nobody is wearing.
+ *
+ * A NUMERIC SUFFIX IS THE LAST RESORT AND NOTHING ELSE. It is reached only when
+ * every one of the 600 names is spoken for at the moment of assignment — 600
+ * live identities on one machine — and it is a marker rather than a name; see
+ * `SUFFIXED_NAME_RE`. `suffixed` is returned rather than inferred so a caller
+ * can refuse it: the migration hands back a record untouched rather than
+ * swapping one marker for another.
+ *
+ * @param {string} agentId
+ * @param {Set<string>} used every name spoken for, lower-cased
+ * @returns {{name: string, suffixed: boolean}}
+ */
+export function pickGivenName(agentId, used) {
+  // WP-84. The start is taken modulo the pool's ORIGINAL block, not its whole
+  // length. `% SHORT_NAMES.length` would have moved every unnamed agent's
+  // starting point the moment the pool grew — a machine whose identities had
+  // not been written yet (a fresh install, and the goldens' demo fixture, which
+  // is rebuilt from nothing on every capture) would have drawn a different set
+  // of names for the same floor. Anchoring the start to the old block makes
+  // every growth purely additive: the walk below still runs the WHOLE array, so
+  // all 600 names are reachable — they are simply what it reaches once the
+  // first block is spoken for. See `public/names.js`'s header.
+  const span = Math.min(ORIGINAL_POOL, SHORT_NAMES.length);
+  const start = nameHash(agentId) % span;
+  for (let i = 0; i < SHORT_NAMES.length; i++) {
+    const candidate = SHORT_NAMES[(start + i) % SHORT_NAMES.length];
+    if (!used.has(candidate.toLowerCase())) return { name: candidate, suffixed: false };
+  }
+  // More agents than names. A repeated name would be worse than a marked one:
+  // two agents both called Wren is exactly the confusion the MK tag was
+  // invented to end. `used.size + 2` is a bound that cannot fail — there are at
+  // most `used.size` names in the way.
+  const base = SHORT_NAMES[start];
+  for (let n = 2; n < used.size + 3; n++) {
+    const candidate = `${base} ${n}`;
+    if (!used.has(candidate.toLowerCase())) return { name: candidate, suffixed: true };
+  }
+  return { name: base, suffixed: true };
 }
 
 /**
@@ -74,7 +186,7 @@ export class Identity {
    * `given` is the one this class assigns and never reassigns. The record type
    * used to name only the first two while `givenName()`, `_usedNames()` and
    * `takenNames()` all read and wrote the third (WP-22).
-   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null}>, nextProject: number}}
+   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null, formerName?: string|null, renamedAt?: number|null}>, nextProject: number}}
    */
   _state() {
     const s = this.store.identity;
@@ -160,35 +272,7 @@ export class Identity {
     if (typeof rec.given === 'string' && rec.given) return rec.given;
 
     const used = this._usedNames(agentId);
-    // WP-84. The start is taken modulo the pool's ORIGINAL block, not its
-    // whole length. `% SHORT_NAMES.length` would have moved every unnamed
-    // agent's starting point the moment the pool grew from 60 to 243 — a
-    // machine whose identities had not been written yet (a fresh install, and
-    // the goldens' demo fixture, which is rebuilt from nothing on every
-    // capture) would have drawn a different set of names for the same floor.
-    // Anchoring the start to the old block makes the growth purely additive:
-    // the walk below still runs the WHOLE array, so all 243 names are
-    // reachable — they are simply what it reaches once the first block is
-    // spoken for, which is the case (ninety-two conversations, sixty names)
-    // this package exists for. See `public/names.js`'s header.
-    const span = Math.min(ORIGINAL_POOL, SHORT_NAMES.length);
-    const start = nameHash(agentId) % span;
-    let chosen = null;
-    for (let i = 0; i < SHORT_NAMES.length && chosen === null; i++) {
-      const candidate = SHORT_NAMES[(start + i) % SHORT_NAMES.length];
-      if (!used.has(candidate.toLowerCase())) chosen = candidate;
-    }
-    if (chosen === null) {
-      // More agents than names. A repeated name would be worse than a plain
-      // one: two agents both called Wren is exactly the confusion the MK tag
-      // was invented to end. `used.size + 2` is a bound that cannot fail —
-      // there are at most `used.size` names in the way.
-      const base = SHORT_NAMES[start];
-      for (let n = 2; n < used.size + 3 && chosen === null; n++) {
-        const candidate = `${base} ${n}`;
-        if (!used.has(candidate.toLowerCase())) chosen = candidate;
-      }
-    }
+    const chosen = pickGivenName(agentId, used).name;
 
     rec.given = chosen;
     s.names[agentId] = rec;
@@ -242,6 +326,7 @@ export class Identity {
       mk,
       displayName,
       givenName,
+      formerName: formerNameOf(rec, clockNow()),
       avatar: rec.avatar ?? null,
       label: displayName || givenName || mk,
     };
@@ -283,6 +368,9 @@ export class Identity {
       // user's or the daemon's word for a session, and a junior is neither.
       displayName: null,
       givenName: null,
+      // A junior's identity is never persisted, so there is nothing WP-86's
+      // migration could ever have renamed.
+      formerName: null,
       avatar: null,
       label: mk,
     };

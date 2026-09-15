@@ -1027,6 +1027,20 @@ button {
   text-overflow: ellipsis;
 }
 
+/* WP-86 · "was Livia 2" — one line under the identity chip, for the week after
+   the store migration took a numeric suffix away from a given name
+   (docs/DEVIATIONS.md §168). As quiet as the trait line and for the same
+   reason: it is an account of a change, not information the review needs, and
+   it disappears on its own. */
+.panel-former {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin-top: 0.2rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* WP-46 · the team's record line, when one of the records has this session or
    its room as its subject. Quieter than the tool line above it — it is a
    grace note, not information the review needs — and it wraps rather than

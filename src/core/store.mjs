@@ -15,6 +15,7 @@ import { clampRetentionDays, DEFAULT_RETENTION_DAYS } from './ledger.mjs';
 import { DEFAULT_THEME_NAME, sanitizeThemeName } from './themes.mjs';
 import { sanitizeAvatarSetName } from './avatars.mjs';
 import { now as clockNow } from './clock.mjs';
+import { migrateState, STATE_VERSION } from './state-migrations.mjs';
 
 /** @typedef {import('./model.mjs').AckState} AckState */
 
@@ -606,7 +607,13 @@ function sanitizeMachineId(v) {
 
 function defaultData() {
   return {
-    version: 1,
+    // WP-86. A file this build writes is already current, so a machine that has
+    // never run DeckHQ migrates nothing — see `core/state-migrations.mjs`
+    // rule 4, and the goldens' fixture, which is rebuilt from nothing.
+    version: STATE_VERSION,
+    // What each versioned pass did, and when: `id → {at, version, ...}`. Empty
+    // on a fresh install and on any machine no pass has had anything to do on.
+    migrations: {},
     seededAt: null,
     // WP-48. Minted on first use, never sent anywhere. See `get machineId`.
     machineId: null,
@@ -669,7 +676,11 @@ function normalize(parsed) {
     planner: sanitizeStudioPlanner(isPlainObject(parsed.studio) ? parsed.studio.planner : {}),
   };
   return {
-    version: 1,
+    // The version the FILE carries, not this build's: `migrateState` needs to
+    // know how old what it just read is, and a normalize that stamped the
+    // current version on everything would have made every file look current.
+    version: Number.isInteger(parsed.version) && parsed.version > 0 ? parsed.version : 1,
+    migrations: isPlainObject(parsed.migrations) ? { ...parsed.migrations } : {},
     seededAt: typeof parsed.seededAt === 'number' ? parsed.seededAt : null,
     machineId: sanitizeMachineId(parsed.machineId),
     settings,
@@ -775,7 +786,35 @@ export class Store {
     }
 
     this._data = normalize(parsed);
+    this._migrate();
     restore();
+  }
+
+  /**
+   * Carry a file an older build wrote up to `STATE_VERSION` (WP-86).
+   *
+   * Runs on every `load()` that read an actual file, and on no fresh one: a
+   * default state object is already current, so the loop inside `migrateState`
+   * has nothing to do. A pass that changed something schedules the ordinary
+   * debounced write — the migration is not worth a synchronous one, because
+   * every pass is idempotent and the next start would simply run it again.
+   *
+   * What ran is logged at `info`, once, with what it did. A name changing
+   * underneath somebody is exactly the kind of thing a log has to be able to
+   * account for afterwards.
+   */
+  _migrate() {
+    const result = migrateState(this._data, { now: clockNow() });
+    if (!result.ran.length) return;
+    for (const pass of result.ran) {
+      const detail = Object.entries(pass.detail)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(' ');
+      this._log.info(
+        `state migration ${pass.id} (v${pass.version})${detail ? ` — ${detail}` : ''}`,
+      );
+    }
+    this.save();
   }
 
   /** @param {string} raw */

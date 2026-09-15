@@ -75,6 +75,17 @@ export function buildPanelDom() {
   // header above says it does.
   identityRow.append(closeupWrap, mkChip, draftChip, identitySpacer, renameBtn, closeBtn);
 
+  // WP-86 · "was Livia 2". One line under the identity chip, and only for the
+  // week after the store migration took a numeric suffix away from this
+  // agent's given name (docs/DEVIATIONS.md §168). A suffix was never a name —
+  // it was the marker the pool wrote when it ran out — but it was on screen
+  // for months, so the one thing the product owes the reader is an account of
+  // why the name they learned is not the name they see. After seven days it is
+  // gone, because by then it is no longer news.
+  const formerEl = document.createElement('div');
+  formerEl.className = 'panel-former';
+  formerEl.hidden = true;
+
   const titleEl = document.createElement('h2');
   titleEl.className = 'panel-title';
 
@@ -114,7 +125,7 @@ export function buildPanelDom() {
   recordEl.className = 'panel-record';
   recordEl.hidden = true;
 
-  top.append(identityRow, titleEl, metaEl, traitEl, waitingEl, doingEl, recordEl);
+  top.append(identityRow, formerEl, titleEl, metaEl, traitEl, waitingEl, doingEl, recordEl);
 
   // The scrolling body: WHAT IT SAID, the rest of the thread folded beneath
   // it, then WHAT CHANGED.
@@ -296,6 +307,7 @@ export function buildPanelDom() {
     identitySpacer,
     renameBtn,
     closeBtn,
+    formerEl,
     titleEl,
     metaEl,
     traitEl,

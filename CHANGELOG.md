@@ -8,6 +8,24 @@
 
 ### Added
 
+- **Six hundred first names, and a number is now unreachable — WP-86.** The owner: _"I don't like
+  names like Livia 1, 2, 3. Make the list big enough so that we do not run out of names."_ The pool
+  held 243. It holds **600**: at most seven letters each, sayable, gender-mixed, from about twenty
+  naming traditions, no two sharing their first three letters, no two within a single edit of each
+  other, and none of them a word the interface speaks or the name of a US state.
+
+  `Livia 2` was never a name. It is the marker `Identity.givenName` writes when the pool is exhausted
+  at the moment of assignment — and with 600 names it cannot be reached below **600 live identities
+  on one machine**, which is what `test/unit/names-pool.test.mjs` now assigns and counts. The first
+  243 entries are frozen in place and order, so no name already handed out moves, and the walk still
+  starts inside the original sixty, so an unnamed machine draws exactly what it always drew.
+  `docs/DEVIATIONS.md` §168.
+
+- **`deckhq doctor` prints the name pool and how many names carry a number — WP-86.** One row:
+  `names   600 in the pool, 94 handed out, 0 numbered`. The last figure is the one that matters and
+  it should read 0 from the first start after upgrading; it is printed whether or not it is zero,
+  because a row that only appears when something is wrong is a row nobody can check.
+
 - **Props, plants, and the lounge as four places — WP-85c.** The floor had forty prop kinds and one
   silhouette repeated: every spare corner in the building was answered with the same five-blob
   rosette at one of two scales, four of them to a project room, and a bench desk carried a monitor
@@ -655,6 +673,18 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Fixed
 
+- **The numbered names already on your floor are taken away, once — WP-86.** Growing the pool fixes
+  the future and nothing else: an identity is written the first time an agent is seen and never
+  reassigned, so a `Livia 2` assigned back when the pool held sixty names would have stayed for as
+  long as that session existed. The first start after upgrading runs a **versioned store migration**
+  that hands every numbered identity the name the ordinary walk would have given it — same
+  hash-seeded walk, first free name — and leaves the **MK number, the face, and any name or avatar
+  you chose yourself exactly as they were**. The panel says _"was Livia 2"_ under the identity chip
+  for seven days and then stops. It is recorded in `state.json`, it is idempotent, and it never runs
+  on a state file this build created. This one-time rename is the only thing in DeckHQ that ever
+  changes a name it gave, and `docs/DEVIATIONS.md` §168 is why it does not break the rule it looks
+  like it breaks: a suffix was a marker, not a name.
+
 - **The user's own avatar had its head clipped off — WP-79.** A prop may not paint outside its own
   footprint, which is a good rule about furniture and a bad one about a person: a character's
   footprint is where they stand and their body is almost entirely above it. The manager is drawn into
@@ -829,6 +859,17 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **`test/unit/identity-migration.test.mjs` is new, and holds the one rename this product allows —
+  WP-86.** Thirteen tests over a fixture state file with twelve numbered identities and thirty clean
+  ones: twelve renamed and thirty untouched byte for byte, no collision with any name including the
+  ones the user typed, the old name kept and then expiring either side of the seven-day boundary on a
+  clock the test moves, idempotence on a second pass, determinism against the state file's key order
+  (`load()` runs twice on a normal start), an exhausted pool keeping its marker rather than getting a
+  second one, the pass through a real `Store` and again on restart, a fresh file migrating nothing at
+  all, and a four-deep resume chain renamed **once**, because a chain has one identity.
+  `names-pool.test.mjs` gained the 243 frozen names longhand and the edit-distance rule; the suffix
+  test now assigns six hundred agents instead of ninety-two.
 
 - **`test/unit/rig-orientation.test.mjs` proves the opposite of what it used to — WP-79.** It was
   written to pin the quarter-turn correction the old rig needed; B has no rotation at all, so the

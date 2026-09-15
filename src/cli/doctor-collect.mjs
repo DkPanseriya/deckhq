@@ -19,6 +19,8 @@ import * as defaultAdapters from '../adapters/index.mjs';
 import { DATA_DIR, STATE_FILE } from '../core/paths.mjs';
 import { readDaemonFile } from '../core/daemon-file.mjs';
 import { TERMINAL_AUTO } from '../core/store.mjs';
+import { isSuffixedName } from '../core/identity.mjs';
+import { SHORT_NAMES } from '../../public/names.js';
 import { describeTerminal } from '../adapters/claude-code/terminals.mjs';
 
 /**
@@ -418,6 +420,43 @@ export async function readSettings(stateFile) {
 }
 
 /**
+ * The name pool, and how many persisted identities are still wearing the
+ * pool's "we ran out" marker instead of a name (WP-86, §168).
+ *
+ * The number that matters is `suffixed`, and after the store migration has run
+ * once it is **0** on every machine with fewer live identities than the pool
+ * has names. A non-zero here is either a machine with 600 identities or a
+ * migration that did not run, and both are worth being able to see from outside
+ * the daemon.
+ *
+ * Read straight off the file, on `readSettings`'s terms and for its reason:
+ * `doctor` must not construct a `Store`, because a read-only command must not
+ * be able to create — or migrate — the state it is reporting on.
+ *
+ * @param {string} stateFile
+ * @returns {Promise<{poolSize:number, assigned:number, suffixed:number}>}
+ */
+export async function readNames(stateFile) {
+  const out = { poolSize: SHORT_NAMES.length, assigned: 0, suffixed: 0 };
+  /** @type {any} */
+  let parsed;
+  try {
+    parsed = JSON.parse(await fsp.readFile(stateFile, 'utf8'));
+  } catch {
+    return out;
+  }
+  const names = parsed?.identity?.names;
+  if (!names || typeof names !== 'object') return out;
+  for (const rec of Object.values(names)) {
+    const given = rec && typeof (/** @type {any} */ (rec).given) === 'string' ? rec.given : '';
+    if (!given) continue;
+    out.assigned += 1;
+    if (isSuffixedName(given)) out.suffixed += 1;
+  }
+  return out;
+}
+
+/**
  * Which runtime each binary-pinning setting belongs to (WP-23a).
  *
  * One entry, and it is named here rather than guessed from the key so that
@@ -534,6 +573,7 @@ export function candidatePorts(hookPorts, explicit, published = null) {
  *   terminal?: (opts:any) => Promise<any>,
  *   terminalPin?: string,
  *   settings?: Record<string, any>,
+ *   names?: {poolSize:number, assigned:number, suffixed:number},
  * }} [opts]
  */
 export async function collectReport(opts = {}) {
@@ -603,6 +643,7 @@ export async function collectReport(opts = {}) {
 
   const deck = daemon ? { ...daemon.deck, port: daemon.port } : { ...NO_DECK, port: null };
   const state = checkState({ stateFile, dataDir });
+  const names = opts.names || (await readNames(stateFile));
 
   // Which terminal "open in terminal" would actually use, and how it was
   // chosen. WP-04. Never fails the report: an emulator probe that throws
@@ -723,6 +764,7 @@ export async function collectReport(opts = {}) {
     deck,
     state,
     terminal,
+    names,
     // Static and deliberate. The core opens no outbound socket at all
     // (docs/02-ARCHITECTURE.md §9), including from this command: the only
     // connections it makes are to 127.0.0.1.

@@ -17179,3 +17179,186 @@ a pixel.
 - **The `SubagentStop` payload is still unverified**, as it has been since WP-41. The crew's spawn
   and fold-away are driven by ids entering and leaving the snapshot, which needs no hook — the hook
   only makes the departure prompt rather than five minutes late.
+
+## 168. WP-86 — a suffix was never a name, and the pool is 600
+
+The owner, 15 September 2026:
+
+> _"I don't like names like Livia 1, 2, 3. Make the list big enough so that we do not run out of
+> names."_
+
+He was looking at his own floor, and his own floor was right to look like that. §155.2 found the
+cause, §156.4 fixed half of it, and this package finishes it.
+
+**Numbered so, and three numbers were skipped.** 164 was the last entry on `main` when this package
+opened; 165, 166 and 167 belong to packages running beside it and were not present in this worktree.
+This is **168** on purpose, leaving them theirs.
+
+### 168.1 The thing that was never a name
+
+`Identity.givenName` walks the pool from a hash of the agent id and takes the first free name. Only
+when EVERY name is taken does it fall through to `"<base> N"`. That fallback is not a naming scheme —
+it is a MARKER meaning _there was nothing left at the moment of assignment_, and the reason it was on
+the owner's floor at all is that the pool held sixty names and his machine held ninety-two
+conversations (§155.2: 38 of 103 agents wore one).
+
+Writing that sentence down is most of this package. Once a suffix is a marker rather than a name, two
+things follow that were not available before:
+
+1. **It can be made unreachable** rather than merely rare. `SUFFIXED_NAME_RE` and the "600
+   identities, zero suffixes" test in `names-pool.test.mjs` are the statement and its proof.
+2. **It can be taken away** without breaking "a given name is never reassigned". A name somebody
+   learned is not being changed; a marker is being replaced by the name it was standing in for.
+
+### 168.2 The pool holds 600, and the frozen head holds 243
+
+183 names were added in §156.4 and 357 are added here, so the pool is **600**: the number the owner's
+sentence asks for, and more live identities than any machine this product has been run on has had.
+
+It grew by APPENDING again, on §156.4's terms exactly. `ORIGINAL_POOL` is still 60 and still anchors
+the start of the walk — `nameHash(id) % ORIGINAL_POOL` — so an unnamed machine draws the same names
+it always drew and the goldens' fixture, rebuilt from nothing on every capture, is untouched. A
+second constant, `FROZEN_POOL = 243`, names the head that may not move: the 60 that shipped plus
+§156.4's 183, every one of which has been handed out and persisted somewhere by now.
+`names-pool.test.mjs` writes all 243 out longhand rather than reading them from the module.
+
+**Two rules were added to the three the pool already had.** The old three — at most six letters (now
+seven), no two sharing their first three letters, nothing that is a word the interface speaks — are
+unchanged and still checked over the whole array. The new two are checked over everything added from
+`FROZEN_POOL` on:
+
+- **No two names within a single edit of each other.** `Mira` beside `Mila`, `Iver` beside `Iker`:
+  one substitution apart is a floor you have to read twice, and the whole value of a name here is
+  being readable without reading.
+- **No name that is also a US state.** A floor plan is already a place; `Nevada` at a desk on it is a
+  second one.
+
+**The edit-distance rule starts at 243, and that is a fact rather than a softened rule.** Twenty-seven
+pairs inside the first 243 are one edit apart — `Bruna`/`Runa`, `Kian`/`Kiran`/`Cian`/`Lian`,
+`Iona`/`Fiona`, `Mira`/`Eira` — because the rule did not exist when they were added. They cannot be
+fixed: each of them is a persisted identity somewhere. The test says so in its own comment rather
+than quietly checking less than it claims.
+
+The 357 are at most seven letters, sayable, gender-mixed, drawn from about twenty naming traditions
+in balanced proportion, and were filtered against all five rules by a script rather than by eye; 71
+candidates were dropped to keep them, and a further batch was dropped by hand for being an English
+word (`Nacho`, `Ties`), unpronounceable outside their own orthography (`Tadhg`, `Llyr`), a surname
+rather than a given name (`Mbeki`), a fictional animal (`Simba`), or — the one that matters — a slur
+in British English (`Paki`), which a rule-based filter would never have caught and which is why a
+human read all 357 back afterwards.
+
+### 168.3 The migration, and why it is a store concern
+
+A pool that is big enough fixes the future. The suffixes already in `~/.deckhq/state.json` are the
+past, and an identity is written once and never reassigned, so they would have outlived the shortage
+that produced them for as long as those sessions existed.
+
+`src/core/state-migrations.mjs` is new and is the first thing in this product to rewrite something a
+previous build wrote. `state.json` has carried `version: 1` since the beginning; nothing read it and
+nothing ever changed it, because every change until now was additive and `normalize()` could fill a
+missing key in. It is read now.
+
+The pass, `renameSuffixedNames`:
+
+- takes every persisted identity whose `given` matches the marker shape and hands it the name **the
+  same walk** would have given it — `pickGivenName`, extracted out of `givenName` so that the daemon
+  naming an agent on first sight and this pass cannot drift apart;
+- touches the MK number, the face, `name` and `avatar` **not at all**. The face was never at risk —
+  `appearanceFor()` is a pure function of the session id (§105) — and the two user-owned fields are
+  the WP-20 invariant, held here by a test that diffs all thirty untouched records whole;
+- keeps the marker as `formerName` with `renamedAt`, so the panel can say **"was Livia 2"**;
+- leaves a record alone rather than giving it a second marker when 600 identities really have
+  exhausted the pool.
+
+**It is sorted by agent id, and that is the idempotency.** `load()` runs twice on a normal start —
+`startDaemon()` calls it and `Registry.start()` calls it again — and the 250 ms debounced write may
+not have landed in between, so the second pass genuinely does see the unmigrated file again. Sorting
+makes the result a function of the file's CONTENT rather than of its key order, so the second pass
+picks the same names; and once the write lands, `version: 2` means it does not run at all. Both
+halves are tested, along with a third: the pass over already-migrated data finds nothing to do.
+
+`migrateState` records what ran under `migrations` in `state.json` — `{at, version, renamed,
+leftAlone}` — and the store logs one line. A name changing underneath somebody is exactly the kind of
+thing a log has to be able to account for afterwards.
+
+**A fresh state file never migrates.** `defaultData()` starts at `STATE_VERSION`, so a machine that
+has never run DeckHQ has nothing to carry forward — which is also what keeps the goldens' demo
+fixture, built from nothing on every capture, exactly what it was.
+
+### 168.4 "was Livia 2", for a week
+
+The migration changes a name the user may have learned. The one thing the product owes them is an
+account of why, and the one thing it must not do is make the old name part of the new identity.
+
+So `describe()` returns `formerName` for seven days on the **injected** clock and null after, and the
+panel prints one quiet line under the identity chip. The expiry is a read-side decision — the stored
+fields are left alone rather than pruned, because `describe()` is a read and the WP-20 invariant says
+a read writes nothing. The browser has no second clock in this: `formerName` simply stops arriving on
+the snapshot. And a user-chosen name outranks the line entirely; if you named the agent yourself, the
+daemon's old marker is not what you are looking at.
+
+### 168.5 Resume chains need nothing, and that is the finding
+
+§155 says a chain wears its EARLIEST member's identity. The obvious worry — that a four-deep chain
+would be renamed four times — turns out to be the wrong shape of question. Each member has its own
+persisted identity record and the floor reads exactly one of them, so renaming records one at a time
+renames each identity once, and the chain's visible name changes once. The test builds a four-deep
+chain, runs `collapseResumed`, and asserts the survivor's identity is the anchor's, renamed, stable
+across a second `describe()`, and wearing a name none of its siblings took.
+
+### 168.6 `deckhq doctor`
+
+One new row:
+
+```
+  names           600 in the pool, 94 handed out, 0 numbered
+```
+
+`suffixed` is the number that matters and it should be **0** on every machine from the first start
+after the migration. It is printed when it is zero, because a row that only appeared when something
+was wrong is a row nobody can check. Read straight off the file rather than through a `Store`, on
+`readSettings`'s terms and for its reason: a read-only command must not be able to create — or
+migrate — the state it is reporting on.
+
+### Tests
+
+**2272 tests, 2271 passing and the one platform skip** (no POSIX uid on win32), up from 2253.
+Nineteen are new:
+
+- **thirteen** in the new `identity-migration.test.mjs` — twelve renamed and thirty untouched on a
+  fixture state, no collision including with the user's own names, the marker kept as `formerName`,
+  idempotence, determinism against key order, the exhausted-pool case keeping its marker,
+  `migrateState`'s versioning and recording, a file with no version at all, the migration through a
+  real `Store` and again on restart, a fresh file migrating nothing, the seven-day expiry either side
+  of the boundary on a clock the test moves, and the resume chain;
+- **three** in `names-pool.test.mjs` — the 243 frozen longhand, the edit-distance rule, and six
+  hundred identities with zero suffixes — with the size floor and the shape rule rewritten to 600,
+  seven letters and the state-name check;
+- **three** in `doctor.test.mjs` — the row, the row at zero, and `readNames` over every way a state
+  file can be unusable.
+
+One existing assertion was edited and none deleted: `doctor.test.mjs`'s JSON-shape test now expects
+`names` among the report's keys.
+
+### Goldens
+
+`goldens:check` reports **0 px over tolerance and 0 px moved at all, on all nine captures**. That is
+the anchored walk doing its job: the fixture is built from nothing, so it has no persisted identity to
+migrate and no suffix to take away, and `nameHash(id) % ORIGINAL_POOL` is unchanged by a pool that is
+now ten times the size of that modulus.
+
+### Unverified
+
+- **The panel's "was Livia 2" line has not been photographed.** It is one `div` with the trait line's
+  own type, set with `textContent`, hidden unless the daemon sends `formerName` — and `formerName`
+  cannot appear on a fixture floor, because the fixture has no persisted identities to migrate.
+  Seeing it in a browser needs a hand-built state file and a daemon pointed at it, which this package
+  did not do.
+- **No real `~/.deckhq/state.json` was migrated.** Every test runs against a temp state directory and
+  a fixture shaped like the owner's; the owner's own file has not been read or touched by this
+  package.
+- **The 357 new names were checked against a word list written for this package and by one reading,
+  not against a dictionary or a slur list.** §156.4 flagged the same gap for its 183 and it is still
+  open: a name that is also an uncommon English word, or a slur in a language nobody here reads,
+  would pass. `Paki` getting as far as the accepted list is the evidence that this is a real risk
+  rather than a formality.
