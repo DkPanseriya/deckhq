@@ -17066,3 +17066,116 @@ populations. The claim that `small` keeps every body above the 16 px legibility 
 population is WP-88c's acceptance criterion, not a measurement taken here. And the 1.60 zone-edge
 ceiling is a bar chosen to sit above the shipped floor's own worst edge (1.41:1, night shift), not a
 threshold anybody has tested a refusal against.
+
+## 167. Direction — the figure could stand six ways and move none, and five juniors read as a queue
+
+**Numbering note.** §164, §165 and §166 were expected to be taken by packages running concurrently
+with this one. Neither they nor §11 in `docs/plan/` existed in this worktree at the time of writing,
+so the gap is deliberate and this entry is **167** regardless of what lands in between.
+
+The owner, 15 September 2026, in two sentences:
+
+> Now that we have robot doodles, make also thinking cloud, working etc. animation. Also some other
+> animations for playing games or drinking coffee in the lounge. And running animation.
+
+> Many times chat sessions launch background sub-agents or multi-agent workflows. We need something
+> very attractive, dopamine-inducing, like a magic show. If a chat session fires 3+ agents or a
+> multi-agent workflow (if that is trackable), the GUI launches all those sub-agents (smaller in
+> size), connected by cables to the main chat session agent, surrounding it, sat on the floor with
+> their own laptops, feeding data by cables to the main agent.
+
+The answer is `docs/plan/12-MOTION-AND-CREW.md` and four illustrations in `docs/media/motion/`
+(`life-sheet.png`, `lounge-activities.png`, `crew.png`, `crew.gif`), drawn by standalone canvas
+pages beside them over WP-79's own exploration library. **Design only. Nothing under `src/`,
+`public/` or `test/` was touched, no golden was regenerated, and nothing in the document has been
+run.** Packages WP-87 and WP-89 are in `docs/plan/08-PLAN-V2-100X.md` §9, the four owner decisions
+in §13.24.
+
+### 167.1 The animation clock is not the injected clock, and every golden is the reduced-motion render
+
+WP-63 pinned the daemon's clock so a capture is a photograph of a state (§146), and WP-79 routed the
+figure's idle motion through one phase function with a comment in `scene-draw.js` saying *"`nowMs()`
+is the injected clock the whole scene runs on"*.
+
+It is not. `public/render/scene-agent.js`'s `nowMs()` returns `performance.now()`, and
+`clipStartedAt` in `agents.js` is `Date.now()`. The goldens are byte-stable for an entirely
+different reason: `scripts/goldens.mjs` emulates `prefers-reduced-motion: reduce`, which forces
+`idlePhase` to exactly `0` and `sampleClip` to a static pose. **Every committed capture is the
+reduced-motion render** — which is why §162.9 could report *0 px moved at all*, and why no animation
+this design adds could ever be seen in a golden as things stand.
+
+That makes WP-87's first task a clock rather than an animation: `nowMs()` on `clock.js`'s own
+`nowFixed` split, `clipStartedAt` derived from a real timestamp on the agent rather than from when a
+tab noticed, and a `?phase=` URL option in the `url-options.js` idiom that pins the phase **without**
+disabling motion — the seam a fixture uses to capture a moving frame. Nothing in §2 of the design is
+testable before that exists.
+
+### 167.2 A multi-agent workflow is trackable, and the floor throws the evidence away
+
+The owner's *"if that is trackable"* has a better answer than expected. WP-41 already handles two
+transcript shapes on disk (§120): `subagents/agent-<id>.jsonl` for a `Task` subagent, and
+`subagents/workflows/wf_<id>/agent-<id>.jsonl` for a workflow one, with the workflow's own
+`journal.jsonl` beside it. `listSubagentFiles` walks that second path and returns `{file,
+subagentId, parentSessionId}` — **the `wf_<id>` segment is right there and is discarded.**
+
+Keeping it is one field and no new I/O, and it is the difference between drawing *four juniors* and
+drawing *one workflow of four*. The journal stays unread: it is the workflow's log, not a session,
+and `subagentIdFromFile` already returns null for it.
+
+### 167.3 What is observable about a junior, stated once
+
+So that no package promises more than the data carries:
+
+| | Claude Code | Gemini CLI | OpenCode | Codex |
+|---|---|---|---|---|
+| a junior exists | transcript under `subagents/` | `kind: 'subagent'` or a parent-named dir | `row.parentId` | — |
+| its parent | the directory above `subagents/` | the path | `parentId` | — |
+| its type | `agentType`, in every measured sidecar shape | — | — | — |
+| its description | `description`, in **50** of 987 | — | — | — |
+| its model | `model`, in **38** of 987 | — | — | — |
+| a second tier | `parentAgentId`, in **4** of 987 | — | — | — |
+| when it started | oldest timestamp in the head window | — | — | — |
+| when it ended | **nothing** — inferred from 5 min of a still file | — | — | — |
+| its workflow | `wf_<id>` in the path (discarded today) | — | — | — |
+| progress, success, failure | **nothing** | — | — | — |
+
+Two things in that table decide the design. There is **no spawn record and no stop record**: the
+last line of a finished subagent transcript is an ordinary turn, so `SUBAGENT_IDLE_MS` (five
+minutes, measured over 28,813 consecutive-record gaps, p99.9 253 s) is the only honest end signal,
+and `SubagentStop` fires on the PARENT's session id with its junior-naming payload still unverified
+on a machine. And **every other runtime carries a parent link and nothing else**, both of them
+unverified against real data (§123). So the crew is a Claude Code formation, and everywhere else the
+floor keeps WP-41's seat-beside-parent — the honesty rule applied to a whole feature rather than to
+a pixel.
+
+### 167.4 Four departures from the brief, and why
+
+1. **A junior draws at 0.66 of its parent, not at today's 0.80.** The brief asks for 0.6–0.7 and the
+   arc needs the floor. It still goes through `characterScaleFor`, so §96's 16 px legibility floor
+   binds and a crew at a tight fit stops shrinking rather than becoming texture.
+2. **Pulses run junior → parent only.** The brief says *"feeding data by cables to the main agent"*
+   and that is also the only direction the data goes: the parent's prompt is one event at spawn, and
+   drawing it as returning traffic would be a lie told sixty times a second.
+3. **The pulse rate is quantised to 1 / 2 / 4 per loop and capped.** The daemon polls, so the finest
+   honest statement about a junior is *this file moved between two polls*. A continuous rate would
+   claim a resolution nothing has.
+4. **A junior that has stopped writing keeps a grey cable and no pulses**, rather than losing its
+   cable. Losing it would say it had left; it has five minutes before it does.
+
+### 167.5 Not done, and not claimed
+
+- **Nothing was profiled.** The 192-pulse worst case (four crews of twelve) is arithmetic, not a
+  measurement, and §162.10's admission stands: nothing has been looked at on a real machine with a
+  hundred agents.
+- **The mockups are illustrations.** They are drawn by `docs/media/motion/*.html` over
+  `docs/media/design/character/lib.js` — the WP-79 exploration library, not `public/render/rig*.js`
+  — so a pose on a sheet is a sketch of the pose the rig should take and not a render of it. The
+  walk and run strips overlay a leading boot the real rig does not have yet, which is exactly the
+  `stride` term §2 asks WP-87 to add.
+- **No golden was taken at a pinned phase**, because the seam to pin one does not exist yet. The
+  phases §5's acceptance criteria name (0.25 for the life sheet, 0.16 for the crew) are chosen from
+  the mockups, and whether they are the most legible frames is a judgement to re-take against a real
+  capture once `?phase=` lands.
+- **The `SubagentStop` payload is still unverified**, as it has been since WP-41. The crew's spawn
+  and fold-away are driven by ids entering and leaving the snapshot, which needs no hook — the hook
+  only makes the departure prompt rather than five minutes late.

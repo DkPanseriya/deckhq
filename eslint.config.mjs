@@ -9,6 +9,12 @@ export default [
       'coverage/**',
       '.claude/**',
       '**/docs/media/design/**',
+      // The motion mockups' browser-side pages, for the same reason as
+      // `design/` above: they are classic scripts loaded over `file://` (no
+      // modules, because file:// blocks module CORS), so `var` and globals are
+      // the language they are written in rather than a lapse. `render.mjs`
+      // beside them is an ordinary module and stays linted.
+      '**/docs/media/motion/*.js',
       '**/*.vsix',
     ],
   },

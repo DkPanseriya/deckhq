@@ -2,16 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "deckhq-running",
+      "url": "http://127.0.0.1:4317"
+    },
+    {
       "name": "deckhq",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["bin/deckhq.mjs", "--no-open", "--port", "4317"],
-      "port": 4317
+      "runtimeArgs": ["bin/deckhq.mjs", "--no-open", "--port", "4318"],
+      "port": 4318,
+      "autoPort": false
     },
     {
       "name": "deckhq-demo",
       "runtimeExecutable": "node",
       "runtimeArgs": ["scripts/demo-floor.mjs", "--port", "4499"],
-      "port": 4499
+      "port": 4499,
+      "autoPort": false
     }
   ]
 }

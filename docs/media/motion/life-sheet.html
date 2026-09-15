@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>life-sheet</title>
+<style>html,body{margin:0;padding:0;background:#EFEAE0;overflow:hidden}canvas{display:block}</style>
+<canvas id="cv" width="1340" height="1910"></canvas>
+<script src="../design/character/lib.js"></script>
+<script src="motion.js"></script>
+<script src="life-sheet.js"></script>
+<script>
+var ctx = document.getElementById('cv').getContext('2d');
+try { renderLifeSheet(ctx); }
+catch (e) { document.title = 'ERR: ' + e.message; console.error(e); ctx.fillStyle = '#C0392B'; ctx.font = '14px monospace'; ctx.fillText('ERR ' + e.message, 20, 20); }
+document.body.setAttribute('data-done', '1');
+</script>
