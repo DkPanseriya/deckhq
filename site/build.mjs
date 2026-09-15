@@ -211,8 +211,83 @@ const IMAGES = [
     role: 'crop',
   },
 
-  // Captures. Several are stale — taken before WP-79 gave the figure its
-  // current form — and `docs/MEDIA.md` §4.2 lists every one for WP-94b.
+  // WP-94b · the pictures the pages actually show. Declared in
+  // `site/assets.json`, taken from the running product by
+  // `scripts/site-assets.mjs`, and registered in `docs/MEDIA.md` §4.5. Each
+  // one is a crop of the thing its words are about rather than a photograph
+  // of the whole window with the thing somewhere in it.
+  {
+    to: 'site/floor-crowded.gif',
+    from: 'docs/media/site/floor-crowded.gif',
+    class: 'capture',
+    role: 'gif',
+  },
+  { to: 'site/typing.gif', from: 'docs/media/site/typing.gif', class: 'capture', role: 'gif' },
+  { to: 'site/lounge.gif', from: 'docs/media/site/lounge.gif', class: 'capture', role: 'gif' },
+  { to: 'site/hand-up.gif', from: 'docs/media/site/hand-up.gif', class: 'capture', role: 'gif' },
+  {
+    to: 'site/queue-strip.png',
+    from: 'docs/media/site/queue-strip.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/room-plate.png',
+    from: 'docs/media/site/room-plate.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/reception.png',
+    from: 'docs/media/site/reception.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/working-desk.png',
+    from: 'docs/media/site/working-desk.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/lounge-bay.png',
+    from: 'docs/media/site/lounge-bay.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/idle-popover.png',
+    from: 'docs/media/site/idle-popover.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/deck-usage.png',
+    from: 'docs/media/site/deck-usage.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/review-card.png',
+    from: 'docs/media/site/review-card.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/permission-card.png',
+    from: 'docs/media/site/permission-card.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'site/deck-queue.png',
+    from: 'docs/media/site/deck-queue.png',
+    class: 'capture',
+    role: 'crop',
+  },
+
+  // Captures kept for the log entries that cite them. None is on a page since
+  // WP-94b: they are photographs of older builds.
   { to: 'hero.gif', from: 'docs/media/hero.gif', class: 'capture', role: 'gif' },
   { to: 'deck-view.png', from: 'docs/media/deck-view.png', class: 'capture', role: 'crop' },
   {

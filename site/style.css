@@ -1130,10 +1130,11 @@ figcaption {
   border-radius: var(--radius-lg);
 }
 
-/* A 2.5x detail of the SAME golden the hero shows whole, so three crops cost
-   nothing beyond the file already on the page. The margins put a chosen point
-   in the middle of the box: at 250 %, `left = 50 - 250·fx` and
-   `top = 28.125 - 156.25·fy`, both as percentages of the card's width. */
+/* WP-94b: the crop is the FILE now, not a margin trick over a whole floor.
+   `site/assets.json` declares the rectangle and the capture pipeline cuts it,
+   so the reader downloads a detail rather than a 1600 px floor to see one
+   corner of. The box keeps a fixed aspect so three cards line up whatever
+   shape the three pictures are. */
 .feel-crop {
   display: block;
   overflow: hidden;
@@ -1143,27 +1144,14 @@ figcaption {
 }
 
 .feel-crop img {
-  width: 250%;
-  max-width: none;
-  height: auto;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 42%;
   border: 0;
   border-radius: 0;
   background: none;
-}
-
-/* Your office, at (0.222, 0.355) of the floor. */
-.feel-crop--office img {
-  margin: -27.4% 0 0 -5.5%;
-}
-
-/* The three project rooms, at (0.719, 0.355). */
-.feel-crop--rooms img {
-  margin: -27.4% 0 0 -129.7%;
-}
-
-/* The lounge, at (0.5, 0.81). */
-.feel-crop--lounge img {
-  margin: -98.4% 0 0 -75%;
 }
 
 .feel-body {

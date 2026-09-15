@@ -98,6 +98,20 @@
       "note": "the idle chip, opened: repos nobody is working in"
     },
     {
+      "name": "deck-queue",
+      "kind": "still",
+      "population": "demo",
+      "press": ">",
+      "crop": {
+        "x": 8,
+        "y": 170,
+        "w": 1584,
+        "h": 296
+      },
+      "width": 1100,
+      "note": "the deck's Queue tab: the same queue as a table"
+    },
+    {
       "name": "deck-usage",
       "kind": "still",
       "population": "demo",
