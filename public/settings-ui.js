@@ -36,6 +36,7 @@
 import { current, about, setCurrent, setAbout } from './settings-ui-state.js';
 import { createSettingsWidgets } from './settings-ui-widgets.js';
 import { createRatesSection } from './settings-ui-rates.js';
+import { NO_LOOK, createLookSection } from './look-ui.js';
 
 export { current, about } from './settings-ui-state.js';
 
@@ -43,6 +44,13 @@ export { current, about } from './settings-ui-state.js';
  * Exactly the settings keys this sheet and the palette write. Asserted
  * against `DEFAULT_SETTINGS` by test/unit/settings-keys.test.mjs, which is
  * how a key the client writes but the store does not persist gets caught.
+ *
+ * `look` is the one of them this sheet does NOT write through
+ * `/api/settings` — the Look section posts it to `/api/look`, which measures
+ * the whole combination against every shipped theme and refuses it whole
+ * rather than sanitising it into something else (WP-88a, §175.7). It is in
+ * this list because this list's real question is *"which settings does the
+ * sheet own a control for"*, and since WP-88b the answer includes this one.
  */
 export const SETTINGS_KEYS = Object.freeze([
   'stallWindowMs',
@@ -60,6 +68,9 @@ export const SETTINGS_KEYS = Object.freeze([
   // WP-83. The Data section's switch, and the palette's `Show cost` / `Hide
   // cost` beside it: whether any currency figure appears at all.
   'showCost',
+  // WP-88b. The Look section: floors, scheme, furniture set, rugs, planting,
+  // props and the lounge kit, as one document.
+  'look',
 ]);
 
 export const MIN_STALL_MIN = 2;
@@ -151,11 +162,17 @@ export function applyMotionPreference(mode) {
  *   honest answer when the renderer did not load: there is nothing to pick between.
  * @param {Avatars} [opts.avatars] WP-45. Absent, or empty, means no Avatars row —
  *   which is every install that has not got a pack offering a set.
+ * @param {any} [opts.look] WP-88b. The look port — the catalogue, the guard, the
+ *   painter and the write. Absent means no Look section, which is the honest
+ *   answer on a build whose renderer did not load: there is nothing to paint a
+ *   swatch with and no guard to refuse with. Same shape and the same reason as
+ *   `Theming` above, and see `public/look-ui.js`.
  */
 export function createSettingsUI(opts) {
   const { dialogEl, bodyEl, getSnapshot, toast, hooks } = opts;
   const theming = opts.theming || NO_THEMING;
   const avatars = opts.avatars || NO_AVATARS;
+  const lookPort = opts.look || NO_LOOK;
   /** @returns {Array<{name:string, blurb?:string}>} */
   const shippedThemes = () => {
     const list = theming.list();
@@ -222,8 +239,20 @@ export function createSettingsUI(opts) {
     widgets;
   const rates = createRatesSection({ toast });
   const { renderRateEditor, loadRates } = rates;
+  // WP-88b. The Look section, between Floor and Data (§4). It owns its own
+  // pending change and its own refusals, so it is built once and re-rendered
+  // with the sheet rather than rebuilt: a rebuild would drop the refusal the
+  // user is reading the moment anything else on this sheet saved.
+  const lookSection = createLookSection({
+    doc: document,
+    widgets,
+    look: lookPort,
+    getLook: () => current.look,
+    toast,
+  });
   widgets.wire({ render });
   rates.wire({ render });
+  lookSection.wire({ render });
 
   // --------------------------------------------------------------- sections
 
@@ -466,32 +495,40 @@ export function createSettingsUI(opts) {
     renderNotifications(bodyEl);
     renderResume(bodyEl);
     renderFloor(bodyEl);
+    // WP-88b, §4: *"a Look section inside the existing settings sheet, between
+    // Floor and Data"*. Floor is the theme and the motion — the whole window;
+    // Look is what the building is made of, which is one step in.
+    lookSection.renderInto(bodyEl);
     renderData(bodyEl);
     renderHooks(bodyEl);
   }
 
   /**
-   * @param {'hooks'|null} [focusSection] jump straight to one section, which
-   *   is how the palette's "Install hooks" and the degraded banner arrive.
+   * @param {'hooks'|'look'|null} [focusSection] jump straight to one section,
+   *   which is how the palette's "Install hooks", the degraded banner and
+   *   WP-88b's `Look: …` rows arrive.
    */
   async function open(focusSection = null) {
     setCurrent({ ...(getSnapshot()?.settings || {}) });
+    // A change nobody posted does not survive the sheet being closed and
+    // reopened: what is on screen at the top of `open` is what the daemon has.
+    lookSection.reset();
     render();
     // Hook status is a live fact — installed, wrong port, events arriving —
     // so it is re-read every time the sheet opens, not once per page load.
     hooks.refresh?.();
     if (typeof dialogEl.showModal === 'function') dialogEl.showModal();
     else dialogEl.setAttribute('open', '');
-    if (focusSection === 'hooks') {
-      const target = document.getElementById('settings-hooks');
-      target?.scrollIntoView({ block: 'start' });
-    }
+    // `settings-look` is WP-88b's; `settings-hooks` is the consent screen's.
+    // One line for both, because "jump to a section" is one behaviour.
+    const anchor = focusSection ? `settings-${focusSection}` : '';
+    if (anchor) document.getElementById(anchor)?.scrollIntoView({ block: 'start' });
     // Both are facts about disk, both are wanted by the same section, and
     // neither is worth a second round trip's latency in series.
     await Promise.all([loadAbout(), loadRates()]);
     if (dialogEl.open) {
       render();
-      if (focusSection === 'hooks') document.getElementById('settings-hooks')?.scrollIntoView();
+      if (anchor) document.getElementById(anchor)?.scrollIntoView({ block: 'start' });
     }
   }
 

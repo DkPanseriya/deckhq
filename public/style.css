@@ -3768,6 +3768,207 @@ textarea.field-input {
   color: var(--ink);
 }
 
+/* ======================================================================
+   WP-88b · THE LOOK SECTION (docs/plan/11-LOOK-CONTROL-CENTRE.md §4)
+
+   Six preset cards, a live preview, one row per picker in the catalogue.
+   Every picture on this surface is a <canvas> painted by the real floor
+   painter (public/look-ui-thumbs.js), which is the same discipline WP-30's
+   theme swatch follows and for the same reason: a colour on this sheet is
+   DATA, so it is set where the data is, never in this file.
+
+   Colour, therefore, is the ink and ground sets and nothing else —
+   test/unit/state-visuals.test.mjs holds every `.settings*` rule to them.
+   The one non-neutral in here is the refusal's accent, and it is carried on
+   a BORDER rather than on text or a ground, which is exactly how the waiting
+   clock carries crimson (§2.4): the words themselves stay in --ink.
+   ====================================================================== */
+.settings-look-presets {
+  display: grid;
+  /* Three across, two down — the arrangement `11 §5` names for the golden,
+     and the widest a 160 px floor reads at inside a 46rem sheet. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.2rem 0 0.9rem;
+}
+.settings-look-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  text-align: left;
+  background: none;
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+.settings-look-preset:hover {
+  border-color: var(--line-2);
+}
+.settings-look-preset[aria-checked='true'] {
+  color: var(--ink);
+  border-color: var(--ink-2);
+  background: var(--surface-2);
+}
+.settings-look-preset canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+.settings-look-preset-name {
+  font-size: 0.78rem;
+  color: inherit;
+}
+.settings-look-preset-blurb {
+  font-size: 0.66rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.settings-look-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.7rem;
+}
+.settings-look-state-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--ink-2);
+}
+.settings-look-state .btn[disabled] {
+  color: var(--muted);
+  cursor: default;
+}
+
+.settings-look-preview canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  /* The one piece of motion in this section, and it conveys exactly one
+     thing: this picture is new. Reduced motion is honoured by the global
+     rule near the top of this file and, so it cannot be lost in a refactor,
+     by the explicit block below. */
+  animation: look-preview-in var(--t-med);
+}
+@keyframes look-preview-in {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .settings-look-preview canvas {
+    animation: none;
+  }
+}
+[data-motion='reduce'] .settings-look-preview canvas {
+  animation: none;
+}
+.settings-look-metrics {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.6rem;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.settings-look-group {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.settings-look-chips {
+  max-height: none;
+  overflow: visible;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+.settings-look-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.3rem;
+}
+.settings-look-chip canvas {
+  display: block;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+.settings-look-chip-label {
+  font-size: 0.62rem;
+}
+.settings-look-chip[aria-checked='true'],
+.settings-look-chip[aria-checked='true']:hover {
+  color: var(--ink);
+  border-color: var(--ink-2);
+  background: var(--surface-2);
+}
+.settings-look-bay {
+  padding: 0.32rem 0.6rem;
+}
+/* The locked bay (`sitting`) is aria-disabled rather than disabled, so it is
+   still focusable and still able to explain itself when it is pressed. It
+   reads as fixed rather than as broken: checked, and quieter. */
+.settings-look-bay[aria-disabled='true'] {
+  color: var(--muted);
+}
+
+.settings-look-refusal {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.1rem 0 0.5rem;
+  padding: 0.45rem 0.6rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 0.74rem;
+  line-height: 1.55;
+}
+.settings-look-refusal-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+}
+
+.settings-look-io {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.4rem;
+}
+.settings-look-foot {
+  margin-top: 0.7rem;
+}
+
+@media (max-width: 620px) {
+  .settings-look-presets {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .settings-look-group {
+    align-items: stretch;
+  }
+  .settings-look-chips {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 620px) {
   .settings-rate-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

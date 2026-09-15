@@ -25,6 +25,7 @@ import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
 import { createIdlePopover } from './idle-projects.js';
 import { exportLayout, importLayout } from './app-layout.js';
+import { createLookPort, lookPaletteActions, lookPresets } from './app-look.js';
 import { setProjectArchived, setProjectPinned } from './app-rooms.js';
 import { createClearedTracker } from './office-cleared.js';
 import {
@@ -660,6 +661,7 @@ const settingsUI = createSettingsUI({
     list: () => (palette?.avatarSets ? palette.avatarSets() : []),
     apply: (name) => applyAvatarSetting(name),
   },
+  look: createLookPort(), // WP-88b — the catalogue, the guard, the painter, the write
 });
 
 // WP-84 · the sheet's ✕ and its "Back to floor", wired through the one
@@ -739,6 +741,7 @@ const paletteUI = createPalette({
   getSelectedId: () => selectedId,
   getLetGoVisible: () => letGoVisible,
   getRedactSnapshots: () => redactSnapshots,
+  getLookPresets: lookPresets, // WP-88b — empty until the catalogue has loaded
   actions: {
     selectAgent,
     filterToProject,
@@ -766,6 +769,7 @@ const paletteUI = createPalette({
     refresh: refreshNow,
     exportLayout,
     importLayout,
+    ...lookPaletteActions, // WP-88b · a preset name, a reset, and the two files
     openSettings: () => settingsUI.open(),
     openHooks: () => settingsUI.open('hooks'),
     installApp, // WP-62 — Chrome's own offer, or the one command that always works

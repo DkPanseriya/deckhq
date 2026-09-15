@@ -278,6 +278,16 @@ export function setPacks(v) {
 /** The theme currently painted, so a repeat application costs one comparison. */
 let appliedTheme = 'default';
 
+/**
+ * Which theme the floor is actually wearing (WP-88b).
+ *
+ * A function rather than a live binding because the settings sheet's Look port
+ * reads it on every swatch: a chip is painted in the look it stands for ON THE
+ * THEME THE USER IS LOOKING AT, and a snapshot of the name taken when the port
+ * was built would be the theme they had at page load.
+ */
+export const paintedTheme = () => appliedTheme;
+
 /** The avatar set currently applied. `''` is the tables the product ships. */
 let appliedAvatarSet = '';
 
@@ -354,15 +364,28 @@ export function sessionTheme(settingTheme) {
  * @type {any}
  */
 export let look = null;
+/**
+ * The catalogue, the guards and the picture factory, beside the derivation.
+ *
+ * WP-88b needs all four — the settings sheet's Look port is built out of them —
+ * and they arrive the same way `look` does, from `loadRenderModules`, so a build
+ * whose renderer did not load simply has no Look section.
+ * @type {any}
+ */
+export let lookOptions = null;
 /** @type {any} */
-let lookOptions = null;
+export let lookGuards = null;
+/** @type {any} */
+export let lookPictures = null;
 /** @type {unknown} */
 let settingLook = null;
 
-/** @param {any} derive @param {any} options */
-export function setLook(derive, options) {
+/** @param {any} derive @param {any} options @param {any} [guards] @param {any} [pictures] */
+export function setLook(derive, options, guards = null, pictures = null) {
   look = derive;
   lookOptions = options;
+  lookGuards = guards;
+  lookPictures = pictures;
 }
 
 /** What `settings.look` says, remembered so a theme change repaints the same floor. */
@@ -431,6 +454,41 @@ export function applyThemeSetting(name) {
     scene?.repaint?.();
   }
   return next;
+}
+
+/**
+ * THE FLOOR, REPAINTED FOR A LOOK THE USER JUST CHOSE (WP-88b).
+ *
+ * `applyThemeSetting` above repaints when the THEME's name changes, and a look
+ * change does not change it — so without this, choosing a floor material would
+ * repaint the swatch in the sheet and leave the building behind it on the old
+ * paint until the next session started or ended. Measured on the demo floor, and
+ * exactly the defect §125 fixed for themes.
+ *
+ * `setState` rather than `repaint`, and that is the one difference from the
+ * theme path: a theme changes no geometry, and a look does. The planting
+ * densities, the prop density and the lounge kit are read while the plan is
+ * being BUILT (§175.6), so a look that turned the games bay off has to re-plan
+ * and not only re-bake. `planSignature` counts the look, so this costs one
+ * comparison on every snapshot and a rebuild only when the look actually moved.
+ *
+ * @param {unknown} value the look `settings.look` now holds
+ */
+export function applyLookSetting(value) {
+  setLookSetting(value);
+  // The snapshot is what `setState` reads the look out of, and the next one is
+  // seconds away; stamping it here is what makes the re-plan below see the look
+  // that was just chosen rather than the one it replaced.
+  if (latestSnapshot && latestSnapshot.settings) latestSnapshot.settings.look = value;
+  if (!look?.applyLook) return;
+  try {
+    look.applyLook(sessionLook(), appliedTheme, document.documentElement);
+  } catch (err) {
+    console.error('[deckhq] that look was refused by the renderer; staying put', err);
+    return;
+  }
+  if (latestSnapshot) scene?.setState?.(latestSnapshot);
+  else scene?.repaint?.();
 }
 
 /**

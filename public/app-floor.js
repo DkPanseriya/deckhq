@@ -22,6 +22,7 @@ import {
   setLookSetting,
   el,
   latestSnapshot,
+  paintedTheme,
   palette,
   scene,
   sceneModule,
@@ -137,7 +138,25 @@ export async function loadRenderModules({
     // WP-88a, and BEFORE the theme is applied for the same reason the packs are:
     // the first bake has to happen in the look the user chose, or a reload shows
     // the default floor for one frame.
-    setLook(await import('./render/look-derive.js'), await import('./render/look-options.js'));
+    //
+    // WP-88b adds the other two the settings sheet's Look port is built out of:
+    // the guards, because a picker measures a change before it applies it, and
+    // the picture factory, because every swatch and every preset thumbnail in
+    // that section is painted by the real floor painter. Both are dynamic and
+    // defensive like everything else from `render/**` — a build without them has
+    // no Look section rather than no settings sheet.
+    //
+    // `look-ui-pictures.js` is imported dynamically too, and not because it
+    // lives in `render/`: it PULLS IN `render/backdrop.js`, so a static import
+    // of it here would put the whole floor painter on the shell's critical path
+    // and undo the rule in one line.
+    const pictures = await import('./look-ui-pictures.js');
+    setLook(
+      await import('./render/look-derive.js'),
+      await import('./render/look-options.js'),
+      await import('./render/look-guards.js'),
+      pictures.createLookPictures({ doc: document, theme: paintedTheme }),
+    );
     setLookSetting((latestSnapshot?.settings || {}).look);
     applyThemeSetting(sessionTheme((latestSnapshot?.settings || {}).theme));
     applyAvatarSetting((latestSnapshot?.settings || {}).avatarSet);
