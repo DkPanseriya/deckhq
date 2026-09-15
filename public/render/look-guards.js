@@ -331,6 +331,54 @@ export function validateLook(look, theme) {
 }
 
 /**
+ * THE FIVE NUMBERS UNDER THE LIVE PREVIEW (§4), and they are the numbers the
+ * guards above refuse on rather than a second measurement of the same floor.
+ *
+ * Added by WP-88b, which needed them, and put HERE rather than in the section
+ * for the reason every other number in this file is here: a measurement the
+ * interface computes for itself is a measurement that can disagree with the
+ * guard that refused it, and then the user is told a ratio that is not the one
+ * the refusal was about.
+ *
+ * @param {unknown} look
+ * @param {unknown} [theme] a theme name or document
+ * @returns {Array<{id:string, label:string, ratio:number}>}
+ */
+export function lookMetrics(look, theme) {
+  const { resolved } = validateLook(look, theme);
+  const lightInk = lightInkFor(resolved.floor.ink);
+  /** @type {Array<{id:string, label:string, ratio:number}>} */
+  const out = [];
+  for (const [a, b] of ZONE_ADJACENCY) {
+    out.push({
+      id: `edge.${a}.${b}`,
+      label: `${a} | ${b}`,
+      ratio: contrastRatio(resolved.zones[a].field, resolved.zones[b].field),
+    });
+  }
+  for (const [role, zones] of Object.entries(RUG_ZONES)) {
+    const material = resolved.zones[zones[0]];
+    out.push({
+      id: `rug.${role}`,
+      label: `${role} rug on the ${material.label.toLowerCase()}`,
+      ratio: contrastRatio(resolved.rugs[role].colour, material.field),
+    });
+  }
+  // The WORST of them, because a preview that reported the best one would be
+  // saying nothing: rule 6 is a floor, and a floor is only as good as its
+  // weakest ground.
+  let worstInk = Infinity;
+  for (const zone of LOOK_ZONES) {
+    const field = resolved.zones[zone].field;
+    for (const ground of [field, pooled(field, lightInk)]) {
+      worstInk = Math.min(worstInk, contrastRatio(resolved.floor.ink, ground));
+    }
+  }
+  out.push({ id: 'ink', label: 'worst floor ink', ratio: worstInk });
+  return out.map((m) => ({ ...m, ratio: Number(m.ratio.toFixed(2)) }));
+}
+
+/**
  * Every material × scheme × theme combination §1's measurement covers: nine
  * materials, six schemes, three themes.
  *

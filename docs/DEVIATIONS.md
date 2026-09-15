@@ -18485,3 +18485,136 @@ captures are unaffected.
 
 Beyond that, no golden shows any of this: WP-88b takes the composite the design asks for. The one
 thing the goldens do prove here is the negative — that the default look moved nothing.
+
+---
+
+## 176. WP-88b — the fifty-two options had nowhere to be chosen, and a refusal had nobody to tell
+
+**Date:** 16 September 2026 · **Package:** WP-88b · **Design:** `docs/plan/11-LOOK-CONTROL-CENTRE.md`
+§4, §5 · **Requirement:** R-077 · **Mockup:** `docs/media/look/control-centre.png`
+
+WP-88a shipped the catalogue, the derivation and the guards and **no UI, by design** (§175). Every
+one of the fifty-two options was reachable only by POSTing to `/api/look` or by `deckhq look import`,
+and `validateLook`'s carefully worded refusals — *"sage on polished concrete is 1.01:1 — the rug
+would not read"* — were sentences nobody could see. This is the section §4 asks for.
+
+### 176.1 The catalogue IS the section
+
+`public/look-ui.js` reads `LOOK_PICKERS` and draws a row per picker, a chip per option and a
+checkbox per lounge bay. **There is no list of options in it.** A package that adds a floor material
+gets a chip for it without this file being edited, and `test/unit/look-ui.test.mjs` asserts that from
+the tables rather than from a copy of them: every picker's label reaches a row, every option's label
+reaches a chip, and every picker's dimensions partition its own options exactly.
+
+Two of the ten pickers carry two dimensions in one `options` array — a rug is a tone AND a pattern,
+the planting a family AND a density (§1.d, §1.e) — because a picker is a ROW rather than a variable.
+The split is by membership in the catalogue's own id tables, so a third dimension would fail the
+partition test rather than silently lose its chips.
+
+### 176.2 Every picture is the floor painter, and that is what bounds the cost
+
+§4: *"a floor thumbnail painted by the real backdrop painter"*, and *"a swatch cannot drift from the
+floor it stands for"*. `public/look-ui-thumbs.js` calls `paintFloorMaterial` and `paintProp` and
+holds no colour of its own — asserted by reading the source, because the way that promise breaks is
+somebody writing a second, simpler herringbone to save an import and then fixing only one of the two.
+
+**A thumbnail is a four-zone fragment, not the `three` floor, and that is a departure from what the
+package was asked for.** The obvious thumbnail is `bakeBackdrop(plan)` scaled down, and it is the
+wrong one twice: a bake lays its pattern in PLAN UNITS, so shrinking the picture does not shrink the
+work — the herringbone still lays one block per 1.71 U over the whole envelope whatever size the
+thumbnail is — and a full bake is 4800 × 2880 physical pixels before it is scaled, six times over,
+inside a settings sheet. So the fragment is office | corridor | project room | lounge, laid out in
+plan units, with the two rugs, a desk and a plant on it: all four of §1.a's zones, all three of
+`ZONE_ADJACENCY`'s edges, and the five pickers a floor material cannot show by itself. **Measured:
+6,076 context operations for all six at 160 × 100 against a budget of 13,000**
+(`test/unit/look-ui.test.mjs`), and 24 ms for the six.
+
+Thumbnails are cached per (preset, theme) as §4 asks; a swatch's key also names the scheme, because
+`oak` under `clay` and `oak` under `mono` are two pictures. The cache is bounded at 240 canvases,
+oldest evicted first. **The preview is never cached** — it is the answer to *"what did that change
+do"*, and a cache hit on it would be the section showing the floor the user has just left.
+
+`withLook` is how a chip for an option nobody has chosen gets painted at all: the live `LOOK` and
+`PALETTE` are the device WP-88a chose, so a swatch BECOMES that floor for the length of one
+synchronous paint and then stops being it. A test asserts the live look is byte-identical afterwards.
+
+### 176.3 A refusal is drawn where the hand is, not where the guard says
+
+The guard names the row a problem BELONGS to: put terrazzo in the office and the problem is
+`floor.corridor`'s, because the corridor is the zone that lost its edge. **The section draws it under
+the office**, because the office is the control that just refused to move, and a sentence two rows
+away from the chip somebody clicked reads as an unrelated complaint. The reason names both zones and
+both materials, so nothing is lost by moving it. A refusal with no hand behind it — an imported
+document, or the daemon refusing on a theme this tab is not painted in — goes to the row the guard
+named, and one naming a row this section does not draw is still read out rather than dropped.
+
+The order is the whole of §1's rule: `validateLook` runs BEFORE anything is shown or posted, so a
+refused combination changes the control, the floor and the daemon by nothing at all.
+
+### 176.4 Where the write goes, and why it is not `/api/settings`
+
+`look` joins `SETTINGS_KEYS` and leaves `settings-keys.test.mjs`'s exempt list, which is what §175.7
+said WP-88b owed it. It is also the one key this sheet does **not** write through `/api/settings`:
+`sanitizeLook` DROPS what it does not recognise, which is right for a hand-edited `state.json` and
+wrong for a person moving a picker — a sanitised look leaves them with a floor that matches neither
+what they chose nor what they had. The section posts to `/api/look`, which refuses whole and returns
+the problems list.
+
+`planSignature` now counts the look. A theme repaints materials; a look repaints materials **and
+moves geometry** — the planting and prop densities and the lounge kit are read while the plan is
+being built (§175.6) — so turning the games bay off has to re-plan and not only re-bake.
+
+### 176.5 Two things the section does not have
+
+**No agent-size picker.** §4's mockup shows one and this does not, on the settings sheet's own
+founding rule: *a control ships only if moving it changes something today* (§58, §94). `agentSize` is
+in the document and **nothing reads it** until WP-88c. A picker that repainted nobody would be the
+header toggle this sheet exists to have deleted. The section carries one line saying the setting
+arrives with its own package and is not a control yet.
+
+**The locked lounge bay is `aria-disabled`, not `disabled`, and clicking it does nothing.**
+`disabled` would take it out of the tab order, so a keyboard user would meet a kit of four with
+three controls in it and no account of the fourth. Clicking it cannot honestly do anything either:
+`normalizeLook` puts the sitting bay back on whatever a document says, so `validateLook`'s own §1.g
+refusal is unreachable from a picker. The row's note carries §1.g's reason instead, beside the
+control rather than after it has been pressed.
+
+### 176.6 Two files were split, and one of them is not this package's
+
+`public/palette.js` stood at **899 lines against WP-22's 900-line ceiling** with nine rows still to
+place, so `buildCommandEntries` came out whole into `public/palette-commands.js` — row for row,
+comment for comment — and is re-exported, so nobody's import moved. `public/app.js` was at 893 and is
+at 897: the port, the presets and the palette actions live in `public/app-look.js` beside the two
+`/api/look` calls. The new UI is three files — `look-ui.js` (the section), `look-ui-thumbs.js` (the
+painting, with no DOM in it so `node --test` can count what it draws) and `look-ui-pictures.js` (the
+canvases and the cache).
+
+### 176.7 One golden, and what two crops of it changed
+
+`test/goldens/<platform>/look.png` — the sheet standing on the Look section, six thumbnails painted,
+at the fixed clock and the default theme. **The eleven that existed are untouched**, which is what
+`DEFAULT_LOOK` is for. It is the first golden this product has of a form rather than of a floor, and
+it is taken the way a person gets there — the palette's key, the Settings accelerator, Enter — so no
+test seam was added to the client for it.
+
+Read at 2× against the mockup, three things read wrong and were fixed rather than argued:
+
+1. **The fragment was laid with a reception's rugs.** At ~7 px/U an office zone is ten plan units
+   across, and a room-sized rug in it left two pale slabs with no floor to look at. They are a desk
+   cluster's rugs now.
+2. **Four floor patches laid edge to edge left a dark nick at each join**, because every floor
+   painter clips itself to the bake's own 2 px rounded rectangle. A ground in the corridor's own
+   field goes under them.
+3. **The picker rows stack.** In the sheet's usual label-left/control-right row, five chips wrapped
+   four-and-one with the orphan against the right margin. The label keeps the top of the row and the
+   gallery gets the full width under it, as a grid where every chip is one column wide — so a picker
+   of five and a picker of six read as the same kind of thing.
+
+### 176.8 What is not verified
+
+The section has never been driven on a **narrow** window: the 620 px media query drops the preset
+strip to two columns and is reasoned rather than photographed. **Import has never been driven from a
+real file input** — the route it posts to is covered by `look-io.test.mjs`, and what is untested is
+the four lines between a `change` event and that POST. The **Linux** golden set has no `look.png`,
+and still owes §175.9's two rebakes; the Ubuntu leg will report all three missing or stale until
+somebody runs `npm run goldens` there.

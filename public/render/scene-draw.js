@@ -136,6 +136,14 @@ export function planSignature(snapshot) {
     // signature's job is "does the baked bitmap still describe this
     // snapshot", and after a theme change it does not.
     `t${(snapshot && snapshot.settings && snapshot.settings.theme) || 'default'}`,
+    // WP-88b, and the theme's reason with one clause more. A look repaints
+    // materials the way a theme does — so the baked bitmap stops describing the
+    // snapshot the moment it changes — but a look ALSO moves geometry: the
+    // planting and prop densities and the lounge kit are read while the plan is
+    // being built (docs/DEVIATIONS.md §175.6), so turning the games bay off
+    // changes the building and not only its paint. The whole document, because
+    // every key in it is one of those two things.
+    `l${JSON.stringify((snapshot && snapshot.settings && snapshot.settings.look) || '')}`,
   ].join('~');
 }
 

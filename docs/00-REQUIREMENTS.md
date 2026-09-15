@@ -707,7 +707,7 @@ scheme, rugs, tables, chairs, sofas, plants — that combine without producing a
 agent-size control from R-057, with furniture scaling to the chosen agent size automatically.
 **Why.** Themes exist (WP-30, §125) and are a whole-floor diff; the owner is asking for per-element
 choice within a curated set, which is a different thing.
-**Status:** in progress (**WP-88a done**, 88b and 88c open). **Notes.** The options are the interior designer's, not a free
+**Status:** in progress (**WP-88a and 88b done**, 88c open). **Notes.** The options are the interior designer's, not a free
 palette: `10-INTERIOR-DESIGN.md`'s material system already derives every theme's tokens from one
 derivation, so a "set" is a token bundle rather than a colour picker. Every combination must still
 pass `assertThemeContrast`, `assertMaterialDiscipline` and the ≥ 3:1 figure-halo guard (P-03 and
@@ -723,8 +723,25 @@ x theme combinations pass `assertThemeContrast` and `assertMaterialDiscipline` u
 fixed two real failures on the shipped floor that §1.d of `11-LOOK-CONTROL-CENTRE.md` measured: the
 wool rug at 1.00:1 on night shift and the task rug at 1.69:1 on blueprint, both from a constant mix
 weight, both now a bisection on the ratio. `settings.look`, `GET/POST /api/look`, `?look=<preset>`
-and `deckhq look export | import` carry it. **What is still owed:** the Look section itself and its
-previews (WP-88b), and agent size with the scaling law (WP-88c). There is no UI yet, by design.
+and `deckhq look export | import` carry it.
+
+**WP-88b shipped the section the owner asked for (`DEVIATIONS.md` §176).** `⌘K` → Settings → **Look**,
+between Floor and Data: six preset cards, each a real floor thumbnail painted by the floor painter
+itself; a live preview that repaints on every change with the zone edges, both rug ratios and the
+worst floor ink measured beneath it; and one row per picker in the catalogue, every chip a swatch of
+the material it stands for. The section is built from `LOOK_PICKERS` rather than from a list of its
+own, so an option the catalogue grows reaches a chip without the surface being edited. A combination
+the guards refuse **shows the guard's own sentence beside the control that caused it and changes
+nothing** — not the floor, not the control, and nothing is posted; the write goes to `/api/look`,
+which refuses whole, rather than to `/api/settings`, which would sanitise it. Nine palette rows
+(`Look: <preset>` × 6, reset, export, import), Export and Import through the browser's own file
+input, and every control operable from the keyboard alone: one Tab stop per picker, arrows inside it.
+`look` is in `SETTINGS_KEYS`. One new golden, `look.png`; the eleven that existed are untouched.
+
+**What is still owed:** agent size and the scaling law (WP-88c). The Look section deliberately has
+**no agent-size picker** — `agentSize` is carried in the document and nothing reads it, and this
+sheet's founding rule is that a control ships only when moving it changes something (§58, §94). That
+is where R-057 is answered, and this row will say so when it is.
 
 ### 2.7 Plates and numbers
 

@@ -63,6 +63,14 @@ import {
 // reads it.
 export { FLOOR_MATERIALS, FLOOR_MATERIAL_IDS, FLOOR_OPTIONS, LOOK_ZONES, ZONE_ADJACENCY };
 
+// The rug TONES live in `themes.js`, because a tone is a colour derivation and
+// the derivation is where the bisection that makes it read against its floor
+// lives (§1.d). Re-exported here for the same reason the materials are: WP-88b's
+// section reads the catalogue through ONE import, and a picker that had to know
+// which module each of its own option lists came from would be a picker that
+// could disagree with the guards about what the options are.
+export { RUG_TONE_IDS };
+
 // --------------------------------------------------------- colour schemes
 
 /**

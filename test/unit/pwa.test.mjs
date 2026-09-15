@@ -161,7 +161,9 @@ test('WP-62: the install prompt is deferred, offered once, and never a dead end'
   // The palette row exists whatever the browser does, and says the one command
   // that works everywhere when there is no offer to take.
   assert.match(header, /deckhq shortcut --install/);
-  assert.match(read('public', 'palette.js'), /id: 'cmd:install-app'/);
+  // The command table moved to `palette-commands.js` with WP-88b's split; the
+  // row itself is unchanged.
+  assert.match(read('public', 'palette-commands.js'), /id: 'cmd:install-app'/);
 });
 
 test('WP-62: the manifest is a standalone app with a 512 icon', () => {

@@ -20,6 +20,17 @@
   for byte. **No UI yet** — this package is the model, the derivation and the guards; the Look
   section is WP-88b. `docs/DEVIATIONS.md` §175.
 
+- **The Look section, where those 52 options are actually chosen — WP-88b.** `⌘K` → Settings →
+  **Look**: six preset cards, each a real floor thumbnail painted by the floor painter itself; a
+  live preview that repaints as you change anything, with the zone edges, both rug ratios and the
+  worst floor ink measured underneath it; and a row per picker, every chip a swatch of the material
+  it stands for rather than a colour square. A combination the guards refuse **shows the reason in
+  its own row beside the control that caused it and changes nothing at all** — not the floor, not
+  the control, and nothing is posted. Nine more palette rows (`Look: Night lab`, `Look: reset`,
+  `Look: export`, `Look: import`), Export and Import buttons on the section, and every control
+  operable from the keyboard alone: one Tab stop per picker, arrows inside it.
+  `docs/DEVIATIONS.md` §176.
+
 - **A look is a file you own, and unlike a layout it is anonymous — WP-88a.** `deckhq look export >
 my-floor.json`, `deckhq look import my-floor.json`, `deckhq look presets`, plus `GET/POST
 /api/look` and `?look=night-lab` to paint one tab. A look names no project, no path and no
