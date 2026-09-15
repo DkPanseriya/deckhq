@@ -586,7 +586,11 @@ test('the palette command and the P key are the only two ways in', () => {
   const app =
     fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8') +
     fs.readFileSync(path.join(PUBLIC, 'app-keys.js'), 'utf8');
-  const palette = fs.readFileSync(path.join(PUBLIC, 'palette.js'), 'utf8');
+  // The command table is `palette-commands.js` since WP-88b's split; both are
+  // read, so this still asks the same question of the same rows.
+  const palette =
+    fs.readFileSync(path.join(PUBLIC, 'palette.js'), 'utf8') +
+    fs.readFileSync(path.join(PUBLIC, 'palette-commands.js'), 'utf8');
   assert.match(palette, /id: 'cmd:float-office'/);
   assert.match(palette, /label: 'Float the office'/);
   assert.match(palette, /run: \(\) => actions\.floatOffice\(\)/);

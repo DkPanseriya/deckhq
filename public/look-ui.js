@@ -223,8 +223,24 @@ export function createLookSection(opts) {
    * @type {any}
    */
   let pending = null;
-  /** The problems the last refused change produced, by picker. @type {any[]} */
-  let refusals = [];
+  /**
+   * The last refusal: the guard's problems, and which control the person was
+   * holding when it happened.
+   *
+   * `from` is what decides WHERE the reason is drawn, and it is not
+   * `problem.picker`. A guard names the row a problem BELONGS to — put terrazzo
+   * in the office and the problem is the corridor's, because the corridor is the
+   * zone that lost its edge — but the control that just refused to move is the
+   * office's, and a sentence that appears two rows away from the chip somebody
+   * clicked reads as an unrelated complaint. The reason names both zones and
+   * both materials, so nothing is lost by putting it where the hand is.
+   *
+   * `from` is `null` for a refusal nobody's hand caused — an import, or the
+   * daemon refusing on a theme this tab is not painted in — and then each
+   * problem goes to the row the guard named.
+   * @type {{from:string|null, problems:any[]}}
+   */
+  let refusals = { from: null, problems: [] };
   /** @type {any} */
   let timer = null;
   /** Late-bound: the sheet's re-render. @type {() => void} */
@@ -245,18 +261,19 @@ export function createLookSection(opts) {
    * The order is the whole of rule 2: the guard runs first, on the theme the
    * floor is actually painted in, and only a look that passes is ever shown.
    * @param {any} next
+   * @param {string|null} [from] the picker the person was holding, if any
    */
-  function choose(next) {
+  function choose(next, from = null) {
     const c = cat();
     if (!c) return;
     const verdict = port.validate(next, port.theme());
     if (!verdict.ok) {
-      refusals = verdict.problems;
+      refusals = { from, problems: verdict.problems };
       pending = null;
       render();
       return;
     }
-    refusals = [];
+    refusals = { from: null, problems: [] };
     pending = next;
     render();
     if (timer) clearTimeout(timer);
@@ -271,10 +288,14 @@ export function createLookSection(opts) {
         return;
       }
       // Refused by the daemon — which measures against EVERY shipped theme, so
-      // this is the look that is fine here and unreadable on night shift.
-      refusals = result.problems?.length
-        ? result.problems
-        : [{ picker: '', option: '', reason: result.error || 'that look was refused' }];
+      // this is the look that reads here and would not on night shift. No
+      // `from`: the hand that caused it moved some time ago.
+      refusals = {
+        from: null,
+        problems: result.problems?.length
+          ? result.problems
+          : [{ picker: '', option: '', reason: result.error || 'that look was refused' }],
+      };
       pending = null;
       render();
     };
@@ -364,6 +385,19 @@ export function createLookSection(opts) {
       group.appendChild(btn);
     });
     return group;
+  }
+
+  /**
+   * The problems that belong under one row, and the ids they were claimed by.
+   *
+   * With a `from`, EVERY problem goes under the control the hand was on, so a
+   * refusal is one row and it is the one the person is looking at. Without one,
+   * each problem goes to the row the guard named.
+   * @param {string} rowId
+   */
+  function refusalsFor(rowId) {
+    if (refusals.from) return refusals.from === rowId ? refusals.problems : [];
+    return refusals.problems.filter((p) => p.picker === rowId);
   }
 
   /**
@@ -473,7 +507,7 @@ export function createLookSection(opts) {
           label: dimensions.length > 1 ? `${picker.label} — ${dimension.label}` : picker.label,
           options,
           value: String(at(current, dimension.path)),
-          onChange: (next) => choose(withPath(current, dimension.path, next)),
+          onChange: (next) => choose(withPath(current, dimension.path, next), picker.id),
         }),
       );
     }
@@ -484,9 +518,7 @@ export function createLookSection(opts) {
       group,
       `${picker.options.length} options${note ? ` · ${note}` : ''}`,
     );
-    for (const problem of refusals.filter((p) => p.picker === picker.id)) {
-      host.appendChild(refusalRow(problem));
-    }
+    for (const problem of refusalsFor(picker.id)) host.appendChild(refusalRow(problem));
   }
 
   /** @param {HTMLElement} host @param {any} c @param {any} current */
@@ -501,15 +533,23 @@ export function createLookSection(opts) {
       btn.setAttribute('role', 'checkbox');
       btn.setAttribute('aria-checked', String(Boolean(current.lounge[bay])));
       btn.setAttribute('tabindex', '0');
+      // THE LOCKED BAY IS `aria-disabled`, NOT `disabled`, and the difference is
+      // the one thing this row has to get right. A `disabled` button is out of
+      // the tab order, so a keyboard user meets a kit of four with three
+      // controls in it and no account of the fourth; this one is reachable,
+      // announced as checked and unavailable, and the row's own note beside it
+      // carries §1.g's reason — *"a lounge with no place to sit is a field
+      // again"*. Clicking it does nothing, because there is nothing it could
+      // honestly do: `normalizeLook` puts the sitting bay back on whatever a
+      // document says, so a post would be a round trip that returned the look
+      // it was given and called it a change.
       if (locked) btn.setAttribute('aria-disabled', 'true');
       const text = el('span', 'settings-look-chip-label');
       text.textContent = bay === 'cafe' ? 'café' : bay;
       btn.appendChild(text);
       btn.addEventListener('click', () => {
-        // The locked bay is not `disabled`: a control nobody can focus cannot
-        // explain itself, and "why can I not turn this off" is exactly the
-        // question §1.g answers. Pressing it runs the guard, which says so.
-        choose(withPath(current, `lounge.${bay}`, !current.lounge[bay]));
+        if (locked) return;
+        choose(withPath(current, `lounge.${bay}`, !current.lounge[bay]), 'lounge');
       });
       group.appendChild(btn);
     }
@@ -519,9 +559,7 @@ export function createLookSection(opts) {
       group,
       `${c.LOUNGE_KIT_BAYS.length} bays · sitting is always on — a lounge with nowhere to sit is a field again`,
     );
-    for (const problem of refusals.filter((p) => p.picker === 'lounge')) {
-      host.appendChild(refusalRow(problem));
-    }
+    for (const problem of refusalsFor('lounge')) host.appendChild(refusalRow(problem));
   }
 
   /** @param {HTMLElement} host */
@@ -567,8 +605,19 @@ export function createLookSection(opts) {
     renderPresets(s, c, current);
     renderState(s, c, current);
     renderPreview(s, current);
+    const rows = new Set([...c.LOOK_PICKERS.map((/** @type {any} */ p) => p.id), 'lounge']);
     for (const picker of c.LOOK_PICKERS) renderPicker(s, c, current, picker);
     renderLoungeKit(s, c, current);
+    // A refusal nobody's hand caused, naming a row this section does not draw —
+    // an imported document, or the daemon refusing on a theme this tab is not
+    // painted in. It still has to be READ somewhere, so it is read here rather
+    // than dropped: a refusal that changed nothing and said nothing would be
+    // indistinguishable from a control that silently did not work.
+    if (!refusals.from) {
+      for (const problem of refusals.problems.filter((p) => !rows.has(p.picker))) {
+        s.appendChild(refusalRow(problem));
+      }
+    }
     renderIo(s);
     // WP-88c owns the agent size. It is in the document (`agentSize`, defaulting
     // to `auto`) and NOTHING READS IT yet — so there is no row for it, on this
@@ -594,7 +643,7 @@ export function createLookSection(opts) {
       if (timer) clearTimeout(timer);
       timer = null;
       pending = null;
-      refusals = [];
+      refusals = { from: null, problems: [] };
     },
     toast,
   };

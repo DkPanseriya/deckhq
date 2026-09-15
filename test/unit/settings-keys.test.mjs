@@ -130,15 +130,16 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // preference beside them — `lightsOutHour`, WHEN the card arrives — does
   // have a row, in the Floor section.
   //
-  // `look` (WP-88a, docs/DEVIATIONS.md §175) is the tenth, and it is exempt for
-  // exactly one package: WP-88a is the options model, the derivation and the
-  // guards, with NO UI by design, and WP-88b is the Look section that owns the
-  // row — §4 of `docs/plan/11-LOOK-CONTROL-CENTRE.md` says `'look'` joins
-  // `SETTINGS_KEYS` there. Until it does it is `?look=`, `/api/look` and
-  // `deckhq look import`, all three of which validate before they write.
+  // `look` was the tenth, for exactly one package, and it is not any more:
+  // WP-88a was the options model, the derivation and the guards with NO UI by
+  // design (docs/DEVIATIONS.md §175), and WP-88b built the Look section §4 of
+  // `docs/plan/11-LOOK-CONTROL-CENTRE.md` said would own the row. It is in
+  // `SETTINGS_KEYS` now. It is also the one key the sheet does not write
+  // through `/api/settings`: the section posts it to `/api/look`, which
+  // measures the whole combination against every shipped theme and refuses it
+  // WHOLE rather than sanitising it into a floor nobody chose.
   const sheetOwned = new Set(SETTINGS_KEYS);
   const exempt = new Set([
-    'look',
     'approveText',
     'onboarded',
     'editor',
