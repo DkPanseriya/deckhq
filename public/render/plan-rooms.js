@@ -56,6 +56,7 @@ import {
   breakoutFits,
 } from './plan-furniture.js';
 import { plantsPerProjectRoom, PLANT_FOOTPRINTS, deskClutterFor, plantRun } from './plan-props.js';
+import { crewFootprint } from './crew.js';
 
 /** @typedef {import('./plan-units.js').ProjectLike} ProjectLike */
 /** @typedef {import('./plan-units.js').Prop} Prop */
@@ -254,6 +255,25 @@ export function layPinnedStrip(projects, rect, perRow, areaCap) {
   return { rooms, gaps };
 }
 
+/**
+ * THE FLOOR ONE PROJECT'S CREWS ASK FOR (WP-89), or nothing.
+ *
+ * `pop.crews` holds only the FORMATIONS — three juniors or more, `floor-rule.js`
+ * decides — so a room whose senior is running one or two asks for exactly what
+ * it always did, which is what keeps every committed golden at 0 px. The largest
+ * one in the room sets the term; `buildProjectRoom` says what it does with it.
+ *
+ * @param {{crews?: Map<string, number[]>}} pop a `floorPopulation` result
+ * @param {string} projectId
+ * @returns {{w:number,h:number}|undefined}
+ */
+export function crewFloorFor(pop, projectId) {
+  const sizes = pop && pop.crews ? pop.crews.get(projectId) : null;
+  if (!sizes || !sizes.length) return undefined;
+  const { w, h } = crewFootprint(sizes[0]);
+  return { w, h };
+}
+
 // ------------------------------------------------------------ project zones
 
 /**
@@ -263,9 +283,20 @@ export function layPinnedStrip(projects, rect, perRow, areaCap) {
  * @param {number} deskCount agents at desks in this project, minimum one table
  * @param {number} [targetAspect] shape the tables should aim to fill
  * @param {{w:number,h:number}} [fit] the cell the tiler has given this room
+ * @param {{w:number,h:number}} [crew] WP-89. The floor this room's largest crew
+ *   formation needs — `crewFootprint(n)`, the arc's bounding box plus one body's
+ *   clearance — or nothing. A crew is CONTENTS, so it is priced into the bid the
+ *   way WP-55 prices everything else and the packer does the rest. `{0,0}` for a
+ *   room with no formation in it, which is every room in every committed golden.
  * @returns {{ room: Room, seats: Seat[], size: {w:number,h:number} }}
  */
-export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = undefined) {
+export function buildProjectRoom(
+  project,
+  deskCount,
+  targetAspect = 1,
+  fit = undefined,
+  crew = undefined,
+) {
   const id = String(project.id ?? project.projectId ?? 'unknown');
   const name = String(project.name ?? project.projectName ?? id);
 
@@ -530,8 +561,17 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
   // corner planting and the wall fixtures to stand in, and the plate band
   // across the top. This is what the packer bids with and what the building's
   // own extent is summed from.
-  const interiorW = cluster.w + ROOM_PAD * 2;
-  const interiorH = cluster.h + ROOM_PAD * 2;
+  // WP-89. A CREW IS CONTENTS. The arc sits behind the chair it belongs to, so
+  // it asks for DEPTH; its width is a floor under the room's rather than an
+  // addition to it, because the desks it stands behind are already that wide.
+  //
+  // The largest formation in the room sets both. Two crews in one room therefore
+  // share the floor the wider of them asked for — stated rather than hidden, and
+  // the honest limit of pricing a shape by one number.
+  const crewW = crew && crew.w > 0 ? crew.w : 0;
+  const crewH = crew && crew.h > 0 ? crew.h : 0;
+  const interiorW = Math.max(cluster.w, crewW) + ROOM_PAD * 2;
+  const interiorH = cluster.h + crewH + ROOM_PAD * 2;
   const naturalW = Math.max(interiorW, MIN_PROJECT_ROOM_W);
   const naturalH = Math.max(interiorH, MIN_PROJECT_ROOM_H) + PLATE_BAND;
 

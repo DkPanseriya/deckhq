@@ -60,7 +60,7 @@ import { floorPopulation, isActiveAgent, splitProjectsByOccupancy } from '../flo
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
-import { buildProjectRoom, layPinnedStrip } from './plan-rooms.js';
+import { buildProjectRoom, crewFloorFor, layPinnedStrip } from './plan-rooms.js';
 import { createRowFloor } from './plan-rows.js';
 import { better, betterArrangement, score } from './plan-search.js';
 import { DEFAULT_AGENT_SIZE, sizeForPopulation } from './plan-scale.js';
@@ -203,10 +203,14 @@ export function buildPlan(projects, agents, opts = {}) {
   // Bid at the shape a ROOM wants, not at a square. `flowBlocks` decides how a
   // project's tables are arranged, and asking it for a square cluster stands a
   // two-table project's benches one above the other — a room twice the depth of
-  // its neighbours, which then has to be dealt a row of its own with a bay
-  // beside it (see `bandsOf`). One row of tables keeps a band's rooms one depth.
+  // its neighbours, dealt a row of its own with a bay beside it (`bandsOf`). One
+  // row of tables keeps a band's rooms one depth. WP-89's last argument is the
+  // floor this room's largest crew formation asks for, or nothing.
+  const crewIn = (p) => crewFloorFor(pop, idOf(p));
   /** @type {{room: Room, seats: Seat[]}[]} */
-  const projectRooms = activeProjects.map((p) => buildProjectRoom(p, desksIn(p), ROOM_ASPECT_MAX));
+  const projectRooms = activeProjects.map((p) =>
+    buildProjectRoom(p, desksIn(p), ROOM_ASPECT_MAX, undefined, crewIn(p)),
+  );
 
   // ---- THE SERVICE COLUMN, and the share of the floor it takes.
   //
@@ -463,13 +467,10 @@ export function buildPlan(projects, agents, opts = {}) {
   // Both fit loops live with the arrangement they lay — `layColumn` in
   // `plan-envelope.js`, `layRows` in `plan-rows.js` — and both need the one
   // step this file owns: rebuilding a project's room into a cell.
-  const rebuildInto = (i, cell, aspect) =>
-    (projectRooms[i] = buildProjectRoom(
-      activeProjects[i],
-      desksIn(activeProjects[i]),
-      aspect,
-      cell,
-    ));
+  const rebuildInto = (i, cell, aspect) => {
+    const p = activeProjects[i];
+    return (projectRooms[i] = buildProjectRoom(p, desksIn(p), aspect, cell, crewIn(p)));
+  };
   const settle = (chosen) => layColumn(chosen, rebuildInto);
 
   // ---- THE SEARCH IS RUN TWICE, AND THE SECOND ONE IS THE ANSWER (WP-59b).
@@ -477,17 +478,14 @@ export function buildPlan(projects, agents, opts = {}) {
   // Every candidate above is priced from `naturalOf(i)` — what a room's
   // furniture needs — and on the first pass those are the sizes `buildProjectRoom`
   // came up with before anything had been laid anywhere: a bid at the shape a
-  // room WANTS, which for a fifteen-desk project is 32 x 28 U. The fit loop
-  // then rebuilds it into the cell it was given and the same project comes out
-  // 32 x 18. The search was therefore answering a question about a different
-  // floor from the one that gets drawn, and on a twelve-room machine it showed:
-  // the deep first bid put the big project in a band of its own, and the search
-  // took a single row of twelve rooms 226 U wide with 58% of it open floor.
+  // room WANTS, which for a fifteen-desk project is 32 x 28 U. The fit loop then
+  // rebuilds it into its cell and the same project comes out 32 x 18, so the
+  // search was answering a question about a different floor from the one drawn.
+  // On a twelve-room machine that took a single row 226 U wide, 58% open floor.
   //
-  // So: search, settle, and search again with what settling produced. The
-  // second answer is stable because the rooms are — a room rebuilt into a cell
-  // of roughly the right shape stays roughly that shape — and it costs one more
-  // pass of arithmetic over a plan rebuilt when the FLOOR changes, not per frame.
+  // So: search, settle, and search again with what settling produced. The second
+  // answer is stable because the rooms are, and it costs one more pass of
+  // arithmetic over a plan rebuilt when the FLOOR changes, not per frame.
   invalidateBands();
   settle(search());
   invalidateBands();

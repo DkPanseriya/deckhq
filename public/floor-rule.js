@@ -94,7 +94,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * @property {string} [ackState]
  * @property {string} [activityState]
  * @property {boolean} [subagent]
+ * @property {string|null} [parentId] WP-89; the senior a junior belongs to
  * @property {number} [lastActivityAt] ms epoch; drives the gone-home filter
+ * @property {number|null} [lastGrowthAt] WP-89; ms epoch this junior's
+ *   transcript last moved, as the scan observed it
  */
 
 /**
@@ -278,12 +281,21 @@ export function floorPopulation(agents, opts = {}) {
   const goneHome = new Set();
   /** Newest activity per project — the idle list's third column. */
   const lastActivity = new Map();
+  /**
+   * WP-89. How many juniors each parent has, keyed `<projectId> <parentId>`,
+   * so `crews` below can say how much extra FLOOR each room's formations need.
+   * @type {Map<string, number>}
+   */
+  const juniorsPerParent = new Map();
 
   const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
 
   for (const a of list) {
     if (!a || a.ackState === 'let_go') continue;
     const pid = a.projectId == null ? '' : String(a.projectId);
+    if (isSubagent(a) && a.parentId != null && pid) {
+      bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
+    }
     if (pid) {
       known.add(pid);
       const at = Number(a.lastActivityAt) || 0;
@@ -305,6 +317,21 @@ export function floorPopulation(agents, opts = {}) {
     if (placement(a) === 'lounge') bump(resting, pid);
   }
 
+  // WP-89. The FORMATIONS, per project: the sizes of every crew big enough to
+  // become an arc, largest first. A parent with one or two juniors is not in
+  // here at all — its juniors take a seat pitch beside it and the desks the room
+  // was already sized for are the whole of the floor they need.
+  /** @type {Map<string, number[]>} */
+  const crews = new Map();
+  for (const [key, n] of juniorsPerParent) {
+    if (n < CREW_THRESHOLD) continue;
+    const pid = key.slice(0, key.indexOf(' '));
+    const list_ = crews.get(pid) || [];
+    list_.push(n);
+    crews.set(pid, list_);
+  }
+  for (const sizes of crews.values()) sizes.sort((a, b) => b - a);
+
   return {
     now,
     goneHomeDays,
@@ -314,6 +341,7 @@ export function floorPopulation(agents, opts = {}) {
     active,
     desks,
     resting,
+    crews,
     known,
     lastActivity,
   };
