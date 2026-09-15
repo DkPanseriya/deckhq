@@ -8,6 +8,38 @@
 
 ### Added
 
+- **Props, plants, and the lounge as four places — WP-85c.** The floor had forty prop kinds and one
+  silhouette repeated: every spare corner in the building was answered with the same five-blob
+  rosette at one of two scales, four of them to a project room, and a bench desk carried a monitor
+  and nothing else whoever was sitting at it.
+
+  **Four planting kinds now, told apart by SHAPE rather than by size** — a low broad bush, an upright
+  blade, one tree with a single canopy, and a **planter**: a trough of low planting that divides one
+  lounge bay from the next. A project room plants **two** corners on its long diagonal and never the
+  one its name is written in; the two never share a silhouette, by construction rather than by a
+  check. The floor the other two gave back is WP-85b's break-out corner, which is furniture.
+  `plant` and `plant_large` are gone, painters and all.
+
+  **The lounge is four bays, not one field** — sitting, café, quiet, games — each with its own
+  ground, its own centrepiece and a planter run between it and the next. Only the café stands on
+  tile. A lounge laid in one row too narrow to hold them gives them up **from the right, games first
+  and then quiet**, never below two, and never when giving one up buys no row. Which bay goes where
+  is searched rather than declared: every permutation of at most four bays is twenty-four
+  shelf-wraps, decided by area and then by depth, because the building's height is the service
+  column's.
+
+  **The reception has a threshold.** A screed band across every doorway, a doormat inside the
+  reception's own — laid where the door actually is, which is not known until the corridors are —
+  and bookcases in the head band beside the desk rather than behind the sofa runs. The middle of the
+  room stays clear, because the middle is where the queue forms.
+
+  **And there is something on every desk.** A mug, a notebook, a sticky note, an in-tray: at most
+  three of them, drawn from twelve enumerated sets against the desk's own id and its position in the
+  room, so two desks side by side can never match and the same floor bakes identically every time.
+  Nothing on a desk changes the size of the room it is in.
+
+  `docs/DEVIATIONS.md` §164, `docs/03-VISUAL-SPEC.md` §6.4.
+
 - **Pin a project's room to the floor — WP-77.** The owner: _"Pin any particular project room so it
   is always in a room, so the room does not collapse when agents are not running, maybe downsized
   according to live agents."_ A pinned repo keeps a room with nothing running in it: **one desk,
@@ -275,6 +307,35 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
   desks and nothing else.
 
 ### Changed
+
+- **A shelf stopped competing with the people in the room — WP-85c.** Book spines were the marker
+  blue, the marker plum, the cabinet body and the board-game felt: four of the most saturated tokens
+  on the floor, tiled twenty to a shelf, on the one piece of furniture that is meant to read as
+  texture. They derive from the desk timber mixed halfway to three depths of the screed now — three
+  real steps of value, no hue — so a bookcase reads as books and an identity ring is the loudest
+  thing in the room again. `docs/DEVIATIONS.md` §164.6.
+
+- **The lounge games are muted 24 % toward the carpet — WP-85c.** Owner decision 5: they stay,
+  because they are the one thing that makes a cleared queue look like a reward, and they are damped
+  rather than drained. Applied to the OBJECT and not through the theme, because a theme repaints no
+  prop on this floor: billiard cloth is green in every building on earth.
+
+- **`test/unit/props.test.mjs` — fourteen tests over WP-85c, and it prints its measurements.** §3.5
+  promises in its first line that its rules are _"all checkable on an emitted plan"_, so each one is
+  measured over the seven shapes the goldens photograph: prop density per 9 U² of clear floor,
+  identical silhouettes 8 U apart, the largest bare square in every project room, the desk clutter's
+  determinism and its pairwise distinctness, the plant counts, the bays and their collapse order, the
+  doormat and the queue, the new prop heights, and a source scan that fails on the first raw colour
+  in the new painter. It found one defect on its first run — a second canopy 7.4 U from the
+  reception's tree — and a second on its next: every lounge bay planting the corner somebody is
+  standing in. Its own suite rather than more of `interior.test.mjs`, which guards WP-85a: a suite
+  that guards two packages tells you which one broke only by accident.
+
+- **The demo floor lays six rooms in one row now, with the lounge wall to wall underneath — WP-85c.**
+  Grouping the lounge's nine furniture blocks into four named places is a packing constraint, and it
+  costs a narrow lounge 2.2 U of depth. The demo floor was already near the boundary the envelope
+  search picks its arrangement on, so it picked the other one. Both are arrangements that search has
+  always been able to choose; nothing was tuned to move it either way. `docs/DEVIATIONS.md` §164.4.
 
 - **Everyone on the floor is a robot now — WP-79.** The owner picked **B**, the 45° three-quarter
   robot, from the four candidates drawn for him in `docs/media/design/character` — a chunky barrel, a
