@@ -33,7 +33,10 @@ my-floor.json`, `deckhq look import my-floor.json`, `deckhq look presets`, plus 
   is not constant across themes, so nothing measured them: the wool rug came out at **1.00:1** on
   night shift and the task rug at **1.69:1** on blueprint with every contrast test green. Both are
   now a bisection on the ratio, held to `[1.06, 1.45]` — measured after: 1.23 / 1.16 / 1.16 and
-  1.32 / 1.42 / 1.42. The default floor is unchanged to the channel.
+  1.32 / 1.42 / 1.42. The default floor is unchanged to the channel: all nine default-theme goldens
+  are at **0 px moved**. The two themed captures were rebaked, and the moved pixels in both are only
+  the rugs. `test/goldens/linux/demo@night-shift.png` and `demo@blueprint.png` are owed the same
+  rebake on Linux.
 
 - **A room plate ranks its lines, and the one you might act on is the biggest — WP-81.** The owner:
   _"Make sure the calculations on the whiteboard of the project rooms are right and informative and

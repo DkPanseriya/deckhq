@@ -18340,5 +18340,25 @@ The furniture set's `arms`, `brace`, `uprights`, `seams` and `boardFelt` are dec
 `radius` and `frame` are painted. §1.c's rolled arms and cross-braces are a painter package, and no
 screenshot of the other two sets exists.
 
-No golden shows any of this: WP-88b takes the composite the design asks for. The one thing the
-goldens do prove here is the negative — that the default look moved nothing.
+### 175.9 Two goldens moved, and the design document says they may not
+
+§5 promised *"no golden is rebaked here"*. Two were, and the two are the same two the rug fix could
+not leave alone: `demo@night-shift` and `demo@blueprint`. **The nine default-theme captures are at 0
+px moved** — not under tolerance, moved at all — which is the claim the promise was really making,
+and the one `DEFAULT_LOOK` exists to keep. The design's own §1.d demanded the dark themes' rugs
+change; a floor where the rug is invisible is not a floor a capture should be protecting.
+
+The diff images were read before either was rebaked, and the moved pixels are **only the rugs**: on
+night shift the reception's wool rug and the lounge's round one; on blueprint every project room's
+task rug, its break-out round rug, the lounge's sitting rug and the reception rug's border. Nothing
+else on either floor moved by one pixel.
+
+**The Linux goldens for those two captures are still the old rugs, and cannot be rebaked from
+Windows** — goldens are per platform because text is rasterised by the operating system's fonts
+(`scripts/goldens.mjs`). `test/goldens/linux/demo@night-shift.png` and
+`test/goldens/linux/demo@blueprint.png` are owed a regeneration on Linux, and the Ubuntu leg of CI
+will fail on exactly those two until somebody runs `npm run goldens` there. The other four Linux
+captures are unaffected.
+
+Beyond that, no golden shows any of this: WP-88b takes the composite the design asks for. The one
+thing the goldens do prove here is the negative — that the default look moved nothing.
