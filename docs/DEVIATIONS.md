@@ -18763,3 +18763,164 @@ the one that shipped is the twelve goldens, and only on Windows — **the Linux 
 **Nothing at `small` or `large` has been driven in a browser by a person.** Both new captures were
 read at 1× and 3× and nothing else; the settings sheet, the panel and the deck have only been seen at
 `medium`.
+
+---
+
+## 178. WP-89 — the workflow id was in the path and the floor threw it away
+
+**Date:** 16 September 2026 · **Package:** WP-89 · **Design:**
+`docs/plan/12-MOTION-AND-CREW.md` §3, §5 · **Requirement:** R-061 · **Mockup:**
+`docs/media/motion/crew.png`, `crew.gif` · **After:** WP-41 (§120), WP-87 (§172), WP-88c (§177)
+
+The owner, 15 September: *"Many times chat sessions launch background sub-agents or multi-agent
+workflows. We need something very attractive, dopamine-inducing, like a magic show. If a chat session
+fires 3+ agents … the GUI launches all those sub-agents (smaller in size), connected by cables to the
+main chat session agent, surrounding it, sat on the floor with their own laptops, feeding data by
+cables."*
+
+WP-41 had already put juniors on the floor. What it had not done was say anything about them beyond
+*there are four of them*, and §3.1's audit of what a junior can honestly be observed to be doing is
+the whole reason this package is shaped the way it is.
+
+### 178.1 What is observed, and what is refused
+
+**Observed.** A transcript exists at a known path (so the junior exists). The directory above
+`subagents/` names its parent. `agentType` is in the sidecar — 987 of 987 on the reference machine
+carry one, and it is the only field that is nearly always there. `spawnedAt` is the oldest timestamp
+in the head window. **The file's mtime** — new here as `lastGrowthAt` — is when the transcript last
+grew. And **`wf_<id>`**, which was in the path all along.
+
+**Refused, and refused as the SHAPE of the record rather than as a comment beside it.** A crew member
+carries seven fields and there is nowhere on it to put progress, a percentage, a success, a failure,
+a return value or a reason, because none of those is reported by anything. §3.1's list, enforced by
+the test that enumerates the member's own keys.
+
+### 178.2 The `wf_<id>` segment, kept
+
+`listSubagentFiles` walked `subagents/workflows/wf_<id>/` to find the transcript and dropped the
+middle segment on the way. Keeping it is `workflowIdFromDir` and one field: no second read, no second
+stat, no journal parsed. It buys the distinction *these four juniors are one workflow* against *these
+four are four independent `Task` calls*, which is the difference between a crew and a coincidence.
+`null` means "not in a workflow" and never "we did not look".
+
+### 178.3 `active` is a minute, and neither window in the tree would do
+
+A cable pulses while its junior's file grew inside **60 s**. Two windows already existed and both are
+wrong for this:
+
+- **`SUBAGENT_IDLE_MS` is five minutes** and is when a junior LEAVES the floor. Using it would make
+  `active` true for every junior that is drawn at all, by construction, and the grey cable §3.2 asks
+  for would never once appear.
+- **`settings.stallWindowMs` is ten minutes by default** and is a *senior's* window: how long silence
+  must last before a human should look. A junior writes every 1.7 s at the median.
+
+So 60 s, from the same measurement `SUBAGENT_IDLE_MS` came from — 28,813 consecutive-record gaps over
+300 real subagent transcripts, **p99 63.5 s** — rounded down to a minute. 99% of the gaps inside a
+working junior's life are shorter than it, so a junior that is still writing effectively never
+flickers to grey, and one that has stopped goes grey within a minute rather than within five.
+
+### 178.4 THE PULSE RATE IS A RECENCY BAND, AND §3.2 ASKED FOR A RATE
+
+§3.2: *"at the junior's own observed events per minute over a trailing window, quantised to 1, 2 or 4
+per loop and capped at 4."* **What ships is 4 / 2 / 1 by how recently the file moved** — inside an
+eighth of the window, inside half, or the rest of it.
+
+The reason is §3.1's own sentence: *the daemon polls, so the finest honest statement is that this file
+moved between two polls*. A rate needs a history of polls; that history would have to live in the
+browser; and a golden would then be a function of how many polls happened to land while the capture
+settled, which is precisely the non-determinism §1.1 exists to remove. The band is a pure function of
+the snapshot and the injected clock, it carries the same information at poll resolution, and it
+quantises to the same three values. Recorded rather than hidden, because §3.2's owner decision 3 said
+a decorative cable would be forbidden outright by §1.4 — and a recency band is not decoration.
+
+### 178.5 0.65, and only in a formation
+
+§3.2 chose 0.66 from the brief's 0.60–0.70 band; this ships **0.65**, the middle of it, and the
+difference is under a pixel at every scale this floor draws at.
+
+The larger decision is that it applies **only to a member of a formation**. §6's owner decision 2
+made every junior 0.66 and accepted *"a lone junior beside a parent shrinks too"* as the cost. That
+cost is nine goldens: the `demo` floor's senior has two juniors, which is not a crew, and moving them
+would have moved every capture that contains them on a package whose acceptance is that none of them
+move. So a junior standing beside its parent in WP-41's way keeps `JUNIOR_SCALE` 0.80 and its MK tag,
+and a crew member draws at 0.65 and wears its `agentType`. **The fourteen existing goldens report
+0 px moved at all.**
+
+### 178.6 The arc, and why the cables cannot cross
+
+The arc opens **112°** about the direction away from the desk, at a radius that grows until
+neighbours are one junior-body apart: **4.2 U** for three through five, **10.3 U** for twelve. Its
+footprint — 8.8 × 6.0 U at five, 18.8 × 12.1 U at twelve — is what the room bids for.
+
+Each cable is three axis-aligned runs: out of the laptop toward the desk, across at its own **lane**,
+then into a port on the desk's front edge. Two cables cross only if a run of one meets a run of the
+other, and the lane assignment makes that impossible rather than checking for it afterwards: lanes
+are distinct, **the member furthest from the centre gets the lane nearest the desk**, and the ports
+are dealt in the same left-to-right order as the arc and packed tighter than it is wide. A lane may be
+nudged half a step to miss a plant, which preserves the ordering and therefore the property.
+
+A cable that has nowhere clear to go is **still drawn**. A junior with no visible link to the person
+who spawned it is worse than a cable that clips a pot.
+
+### 178.7 A crew is contents, and it stopped being desks
+
+A junior has counted as a desk since WP-41, and that was right while a junior *stood at* its parent's
+desk. A crew member sits on the floor with a laptop, so counting one furnished a room with five chairs
+nobody ever sits in and then sized the room around them. Formation members now come off `pop.desks`
+and the room bids for `crewFootprint(n)` instead — and a room with a crew in it **puts its desks at
+the bottom and grows no break-out corner**, because the spare floor is spoken for and §3.5 allows one
+destination, not two. That is WP-85b's *"a room with a break-out group puts its desks at the top"*
+read the other way up.
+
+Two juniors are unchanged in every respect: three desks, a four-seat table, a seat each beside the
+parent. `subagents.test.mjs`'s WP-41 case now asserts both halves.
+
+### 178.8 A formation happens at a desk
+
+A benched senior in the lounge with sixteen juniors keeps WP-59d's wrapping rows, whatever the count.
+It has no desk to put an arc in front of and no floor to spare beside the sofas, and the lounge case
+§122 was written for — sixteen bodies, all drawn, all inside the lounge — is unchanged. A pinned room
+draws no crew for a simpler reason: it has no seats at all, so the parent never gets one and the
+juniors were already skipped.
+
+### 178.9 Two goldens, and what was seen in them
+
+`crew` is the formation with motion ON and `?phase=` pinned at **0.16** — a sixth of the pulse loop,
+where a pulse has left its laptop and is plainly on the cable. It is not `demo@motion`'s 0.25, because
+0.25 with four pulses puts one of them exactly on the port, and a pulse standing on the desk is the
+one frame that does not read as travel. `crew@reduced` is the same floor under emulated
+`prefers-reduced-motion`: cables, no pulses, and the count badge instead.
+
+The fixture is **one session**, which is `single`'s shape and chosen for `single`'s reason — the crew
+is the whole subject and the smaller the building the more pixels its one room gets. Its five juniors
+differ in one thing only: how long ago each file moved (0 s, 20 s, 60.15 s, 150 s, 240 s), which deals
+two pulsing cables, one caught mid-fold, and two grey.
+
+**Read at 2×** on a live floor: the arc sits clear of the plate band with the parent at its desk
+below; five cables run down past the parent and terminate on the desk's near edge; the two live ones
+are green with pulses mid-run and the two finished ones are the `ended` grey with their laptops shut;
+one lid is half open. Three of six labels survive the collision pass, which is the pass doing its job.
+
+### 178.10 What is not built and not verified
+
+**The juniors are not drawn SEATED.** §3.2 says *"sat on the floor"*; the WP-79 rig has no sitting
+pose and every figure on this floor stands, including the ones at desks. Inventing one for the crew
+alone would have been a second body vocabulary. What carries the reading instead is the 0.65 scale,
+the position on open floor rather than at a chair, and the laptop. Adding a seated clip is WP-87's
+table to extend.
+
+**The retract is not in a golden.** A cable retracts over 0.30 s when its junior leaves the snapshot,
+which a static fixture cannot produce; it is asserted in `crew.test.mjs` and has not been watched.
+The **fold** — the laptop shutting and the cable greying when a file goes quiet — is in the golden.
+
+**The cost has not been profiled.** §3.2's own note stands: four crews of twelve is 192 pulse draws
+per frame and nobody has measured that against `02-ARCHITECTURE.md` §8 on a machine with a hundred
+agents. The gate that exists is a scale gate — no cables under 10 px per unit, no pulses under 14.
+
+**Two crews in one room share the floor the wider of them asked for.** `crewFloorFor` prices the
+largest formation and no more, which is the honest limit of pricing a shape with one number.
+
+**The `door` cue has not been heard.** It goes through the existing `decide()` and is unit-tested as a
+crossing; nobody has played it.
+
+**The Linux golden set does not have `crew` or `crew@reduced`**, and still owes §175.9's rebakes.

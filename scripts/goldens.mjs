@@ -152,6 +152,17 @@ const RUN_BUDGET_MS = Number(opt('--budget', 360)) * 1000;
 const POPULATIONS = ['demo', 'empty', 'single', 'three', 'pinned', 'reference'];
 
 /**
+ * THE PHASE `crew` IS PINNED AT — WP-89, `12-MOTION-AND-CREW.md` §5's own 0.16.
+ *
+ * A sixth of the way through the pulse loop, which is where a pulse has left its
+ * laptop and is plainly on the cable rather than sitting on either end of it. It
+ * is a different number from `MOTION_PHASE` deliberately: 0.25 with four pulses
+ * on a cable puts one of them exactly at the port, and a pulse standing on the
+ * desk is the one frame that does not read as travel.
+ */
+export const CREW_PHASE = 0.16;
+
+/**
  * THE PHASE `demo@motion` IS PINNED AT — `12-MOTION-AND-CREW.md` §5, verbatim:
  * *"a golden fixture captures `demo@phase` at phase 0.25 — where the typing
  * cadence is at its second stroke, the wave at its widest, the page edge-on and
@@ -257,6 +268,27 @@ const CAPTURES = [
   // floor's own question. The other twelve are `medium` and must not move at all.
   { name: 'three@large', population: 'three', theme: 'default', query: 'scale=large' },
   { name: 'demo@small', population: 'demo', theme: 'default', query: 'scale=small' },
+  // WP-89 · THE CREW, TWICE, AND THE PAIR IS THE POINT.
+  //
+  // `crew` is the formation with motion ON and `?phase=` pinned at `CREW_PHASE`:
+  // five juniors seated in an arc, five cables, pulses mid-run on the two whose
+  // transcripts are still moving, one laptop caught half folded, and two grey
+  // cables on the pair that have finished. Everything in §3.2 that is a picture
+  // rather than a sentence is in this one frame.
+  //
+  // `crew@reduced` is the same floor under emulated `prefers-reduced-motion`,
+  // and it is a SEPARATE capture rather than a variant because §1.2's claim is
+  // that the reduced form still informs: no pulses, the count badge on the desk,
+  // and the green/grey difference kept. Two pictures are the only way to check
+  // that the second one is still worth looking at.
+  {
+    name: 'crew',
+    population: 'crew',
+    theme: 'default',
+    motion: true,
+    query: `phase=${CREW_PHASE}`,
+  },
+  { name: 'crew@reduced', population: 'crew', theme: 'default' },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
     population: 'demo',

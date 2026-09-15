@@ -796,6 +796,33 @@ const SUBAGENT_FILE_RE = /^agent-([A-Za-z0-9_-]+)\.jsonl$/;
 /** How deep below `subagents/` a transcript may be. `workflows/wf_x/a.jsonl` is 2. */
 export const SUBAGENT_MAX_DEPTH = 2;
 
+/** The folder under `subagents/` that holds one multi-agent workflow per child. */
+export const SUBAGENT_WORKFLOW_DIR = 'workflows';
+
+/** A workflow folder's name: `wf_` and the workflow's own id. */
+const WORKFLOW_DIR_RE = /^wf_([A-Za-z0-9_-]+)$/;
+
+/**
+ * THE WORKFLOW ID THE PATH ALREADY CARRIES (WP-89).
+ *
+ * `subagents/workflows/wf_<id>/agent-<id>.jsonl` is the second transcript shape
+ * on disk (§120), and until this package the `wf_<id>` segment was walked past
+ * and dropped: the floor could see four juniors and could not see that they were
+ * ONE workflow rather than four independent `Task` calls. Recovering it is this
+ * regex and no new I/O — the directory has already been read to find the file.
+ *
+ * Null for a plain `Task` subagent, which has no workflow and must not be given
+ * a synthetic one: an absent workflow id is "this junior is not in a workflow",
+ * never "we did not look".
+ *
+ * @param {string} dirname one path segment
+ * @returns {string|null} the `wf_<id>` folder name, verbatim, or null
+ */
+export function workflowIdFromDir(dirname) {
+  const m = WORKFLOW_DIR_RE.exec(String(dirname || ''));
+  return m ? `wf_${m[1]}` : null;
+}
+
 /**
  * The subagent id a transcript filename names, or null when the file is not a
  * subagent transcript at all (`journal.jsonl` is the case that matters).

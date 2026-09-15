@@ -9,6 +9,7 @@
 
 import { applyMotionPreference } from './settings-ui.js';
 import { latestSnapshot, selectAgent, sounds, toast } from './app-state.js';
+import { crewCrossings, crewsFrom } from './floor-rule.js';
 
 /**
  * States that fire a notification on *entry*, and the setting that governs
@@ -23,6 +24,8 @@ const NOTIFY_COALESCE_MS = 10_000;
 
 /** @type {Map<string, string>} agentId -> activityState, from the previous snapshot */
 let prevActivityStates = new Map();
+/** @type {Map<string, number>} WP-89: agentId -> junior count, from the previous snapshot */
+let prevCrewCounts = new Map();
 /**
  * Prime the diff without notifying — what `handleSnapshot` does for the very
  * first snapshot and for the actor floor, so neither can fire for a state
@@ -31,6 +34,10 @@ let prevActivityStates = new Map();
  */
 export function setPrevActivityStates(v) {
   prevActivityStates = v;
+  // WP-89. The crew counts are primed alongside the states and for the same
+  // reason: a tab that opens onto a floor with a crew already on it must not
+  // hear the crew form.
+  prevCrewCounts = new Map();
 }
 
 /** @type {{id:string,label:string,projectName:string}[]} agents pending in a coalesced notification */
@@ -91,6 +98,18 @@ export function diffAndNotify(snapshot) {
   // this decides which one it drops.
   if (enteredNeedsInput) sounds.play('knock', { notified: lastNotifyShown });
   else if (enteredForReview) sounds.play('door', { notified: lastNotifyShown });
+
+  // WP-89 §4. One `door` when a crew forms, through the same `decide()` — so the
+  // existing mute, the zero-volume refusal, the OS-notified refusal and the 10 s
+  // coalescing window all hold with no new setting. Five juniors appearing
+  // inside one poll is one crossing and therefore one cue, which is the point.
+  const crews =
+    Array.isArray(snapshot.crews) && snapshot.crews.length
+      ? snapshot.crews
+      : crewsFrom(snapshot.agents || [], { now: snapshot.now });
+  const crossed = crewCrossings(prevCrewCounts, crews);
+  prevCrewCounts = new Map(crews.map((c) => [c.parentId, c.count]));
+  if (crossed.length) sounds.play('door', { notified: lastNotifyShown });
 }
 
 /** @param {{id:string,label:string,projectName:string}[]} enteredAgents */

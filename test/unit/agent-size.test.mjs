@@ -36,6 +36,7 @@ import * as PROPS from '../../public/render/plan-props.js';
 import * as RIG from '../../public/render/rig-metrics.js';
 import * as CORE from '../../public/render/agents-core.js';
 import * as FLOORPAINT from '../../public/render/backdrop-floor.js';
+import * as CREW from '../../public/render/crew.js';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import {
@@ -62,6 +63,7 @@ const MODULES = {
   'rig-metrics.js': RIG,
   'agents-core.js': CORE,
   'backdrop-floor.js': FLOORPAINT,
+  'crew.js': CREW,
 };
 
 /** One table, printed. @param {string} title @param {Array<[string, string]>} rows */

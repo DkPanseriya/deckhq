@@ -146,6 +146,19 @@ export {
  * @property {string|null} [subagentDescription] the Task call's own short
  *                                      description of the work.
  * @property {number|null} [spawnedAt]   ms epoch the junior's transcript opens.
+ * @property {string|null} [workflowId]  WP-89. The `wf_<id>` folder this
+ *                                      junior's transcript sits in, so a crew
+ *                                      that is ONE multi-agent workflow can be
+ *                                      told from four independent `Task` calls.
+ *                                      Null for a plain Task subagent and for
+ *                                      every runtime that has no such folder;
+ *                                      null is "not in a workflow", never "not
+ *                                      looked at".
+ * @property {number|null} [lastGrowthAt] WP-89. ms epoch the junior's transcript
+ *                                      file last moved, as the scan observed it.
+ *                                      The only event a junior has — there is no
+ *                                      progress and no stop record — and what
+ *                                      `crew`'s `active` is measured against.
  * @property {number} [juniorCount]      how many juniors this session has on
  *                                      the floor right now. Zero on a junior
  *                                      and on every session that has none.
@@ -205,6 +218,8 @@ export {
  * @property {string|null} [subagentType]
  * @property {string|null} [subagentDescription]
  * @property {number|null} [spawnedAt]
+ * @property {string|null} [workflowId]        WP-89; see `Agent`
+ * @property {number|null} [lastGrowthAt]      WP-89; see `Agent`
  * @property {string|null} [originUuid]        the id of this transcript's FIRST
  *   message record, where the runtime's format has such a thing (§155). A
  *   resumed conversation is a new session id and a new file with every prior

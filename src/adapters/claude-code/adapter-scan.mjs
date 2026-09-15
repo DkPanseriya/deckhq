@@ -27,6 +27,7 @@ import {
   subagentMetaFile,
   parseSubagentMeta,
   parseSubagentTimes,
+  workflowIdFromDir,
 } from './parse.mjs';
 import { readDesktopSessions } from './desktop.mjs';
 import { RUNTIME_ID, mapWithConcurrency, noteScanEvidence } from './adapter-live.mjs';
@@ -150,17 +151,22 @@ export function _resetSubagentIndex() {
  * Never throws — a session with no `subagents/` directory (the overwhelming
  * majority) resolves to [].
  *
+ * WP-89 KEEPS THE `wf_<id>` SEGMENT. It was in the path and was walked past, so
+ * the floor could see four juniors and not that they were one workflow. It is
+ * carried down the walk as `workflowId` and is null for a plain `Task` subagent
+ * — an absent id means "not in a workflow", never "we did not look".
+ *
  * @param {string} sessionDir `<projectDir>/<parentSessionId>`
  * @param {string} parentSessionId
  * @returns {Promise<{file:string, subagentId:string, parentSessionId:string,
- *   mtimeMs:number, size:number}[]>}
+ *   workflowId:string|null, mtimeMs:number, size:number}[]>}
  */
 export async function listSubagentFiles(sessionDir, parentSessionId) {
-  /** @type {{file:string, subagentId:string, parentSessionId:string, mtimeMs:number, size:number}[]} */
+  /** @type {{file:string, subagentId:string, parentSessionId:string, workflowId:string|null, mtimeMs:number, size:number}[]} */
   const out = [];
 
-  /** @param {string} dir @param {number} depth */
-  async function walk(dir, depth) {
+  /** @param {string} dir @param {number} depth @param {string|null} workflowId */
+  async function walk(dir, depth, workflowId) {
     let entries;
     try {
       entries = await fsp.readdir(dir, { withFileTypes: true });
@@ -170,7 +176,10 @@ export async function listSubagentFiles(sessionDir, parentSessionId) {
     for (const e of entries) {
       const full = path.join(dir, e.name);
       if (e.isDirectory()) {
-        if (depth < SUBAGENT_MAX_DEPTH) await walk(full, depth + 1);
+        // `subagents/workflows/` itself carries no id; `wf_<id>` under it does.
+        // Anything else nested keeps whatever id it inherited, which is null.
+        if (depth < SUBAGENT_MAX_DEPTH)
+          await walk(full, depth + 1, workflowIdFromDir(e.name) ?? workflowId);
         continue;
       }
       if (!e.isFile()) continue;
@@ -186,13 +195,14 @@ export async function listSubagentFiles(sessionDir, parentSessionId) {
         file: full,
         subagentId,
         parentSessionId,
+        workflowId,
         mtimeMs: stat.mtimeMs,
         size: stat.size,
       });
     }
   }
 
-  await walk(path.join(sessionDir, SUBAGENT_DIR), 0);
+  await walk(path.join(sessionDir, SUBAGENT_DIR), 0, null);
   return out;
 }
 
@@ -264,6 +274,17 @@ export async function scanSubagents(parents, now) {
         subagentType: meta.agentType,
         subagentDescription: meta.description,
         spawnedAt: times.spawnedAt,
+        // WP-89. The `wf_<id>` folder this transcript sits in, or null.
+        workflowId: entry.workflowId ?? null,
+        // WP-89. WHEN THIS FILE LAST MOVED, and it is the file's own mtime
+        // rather than a timestamp read out of a record. There is no progress
+        // signal and no stop record (§120), so "the transcript grew" is the
+        // only event a junior has; the mtime is the one observation of it the
+        // scan already makes — `SUBAGENT_IDLE_MS` is measured against this same
+        // number. A junior whose file has not grown recently is drawn with a
+        // grey cable and no pulses, which is the whole of the honest
+        // difference between working and finished.
+        lastGrowthAt: entry.mtimeMs,
       };
     } catch (err) {
       // Same rule as a session: one unreadable junior never fails a scan.

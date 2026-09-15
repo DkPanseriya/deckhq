@@ -47,6 +47,8 @@ export class SceneBase {
   _runtime;
   /** @type {any} */ // the snapshot rows, by id
   _agentsById;
+  /** @type {Map<string, number>} */ // WP-89: how many juniors each parent has
+  _crewCounts = new Map();
   /** @type {string|null} */ // what the panel is open on
   _selectedId;
   /** @type {any} */ // what the pointer is over, for the hover card

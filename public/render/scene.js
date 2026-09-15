@@ -53,6 +53,7 @@ import { makeActivityRotation, makeIdleRotation } from './clips.js';
 import { SceneInput } from './scene-input.js';
 import { planSignature } from './scene-draw.js';
 import { pickSessionPhase } from '../url-options.js';
+import { crewsFrom } from '../floor-rule.js';
 import { animMs } from './scene-agent.js';
 
 export * from './scene-base.js';
@@ -167,6 +168,16 @@ export class Scene extends SceneInput {
     this._snapshot = snapshot || { agents: [], projects: [], counts: {} };
     const agents = this._snapshot.agents || [];
     this._agentsById = new Map(agents.map((a) => [a.id, a]));
+    // WP-89. HOW MANY JUNIORS EACH PARENT HAS, whether or not they are all
+    // drawn, so the `+N` chip can say what it is standing for and the label pass
+    // knows whose raised hand to protect. Off the snapshot's own `crews` where
+    // the daemon published one, and counted here otherwise — an older daemon, a
+    // replay, or the actor floor.
+    this._crewCounts = new Map(
+      Array.isArray(this._snapshot.crews) && this._snapshot.crews.length
+        ? this._snapshot.crews.map((c) => [c.parentId, c.count])
+        : crewsFrom(agents, { now: this._snapshot.now }).map((c) => [c.parentId, c.count]),
+    );
 
     // Content-driven rebuild: the project/session-count signature changed
     // (room sizes and furniture counts are derived from it, per

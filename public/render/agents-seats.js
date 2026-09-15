@@ -13,7 +13,8 @@
  * `node --test` (docs/DEVIATIONS.md §122).
  */
 
-import { placement, waitingSince } from '../floor-rule.js';
+import { isCrewFormation, placement, waitingSince } from '../floor-rule.js';
+import { crewArc, crewSplit } from './crew.js';
 import {
   hashString,
   JUNIOR_BACK,
@@ -228,6 +229,30 @@ export function juniorSpots(anchor, room, n) {
 }
 
 /**
+ * The furniture a crew's cables may not be routed through, in world coordinates
+ * (WP-89).
+ *
+ * A room's TABLE zones. Zones rather than props because a zone is exactly *"a
+ * structural rectangle inside a room — a table's footprint"* (`plan-shapes.js`),
+ * expressed from the room's own top-left, and because the wall and corner props
+ * carry placeholder positions until `resolveAnchors` has run. A cable through a
+ * desk is the one thing §3.2 names.
+ *
+ * `desk-group` is left out on purpose: it is the box around the tables AND the
+ * chairs and the clearance between them, it contains the parent's own seat by
+ * construction, and treating it as solid would mean no cable could reach a port
+ * at all.
+ * @param {{x:number,y:number,zones?:{id?:string,x:number,y:number,w:number,h:number}[]}|null} room
+ * @returns {{x:number,y:number,w:number,h:number}[]}
+ */
+export function deskFootprints(room) {
+  if (!room || !Array.isArray(room.zones)) return [];
+  return room.zones
+    .filter((z) => String(z.id ?? '') !== 'desk-group')
+    .map((z) => ({ x: room.x + z.x, y: room.y + z.y, w: z.w, h: z.h }));
+}
+
+/**
  * Assign every agent a seat/spot on the floor.
  * docs/03-VISUAL-SPEC.md §2, work order for `agents.js`.
  *
@@ -272,6 +297,15 @@ export function assignSeats(plan, agents, opts = {}) {
    * @type {Map<string, AgentLike[]>}
    */
   const juniorsByParent = new Map();
+  /**
+   * WP-89. Where each senior ended up, so the crew pass can ask. A formation is
+   * a thing that happens AT A DESK — §3.2 is about *"the parent's desk"* — and a
+   * benched senior in the lounge or one waiting on a reception sofa has no desk
+   * to put an arc in front of and no floor to spare beside the sofas. Those keep
+   * WP-59d's wrapping rows, whatever the count.
+   * @type {Map<string, string>}
+   */
+  const placementById = new Map();
 
   for (const agent of agents) {
     if (hidden && hidden.has(agent.id)) continue;
@@ -283,6 +317,7 @@ export function assignSeats(plan, agents, opts = {}) {
       continue;
     }
     const p = derivePlacement(agent);
+    placementById.set(String(agent.id), p);
     if (p === 'let_go') {
       letGoAgents.push(agent);
     } else if (p === 'desk') {
@@ -372,8 +407,40 @@ export function assignSeats(plan, agents, opts = {}) {
     // the floor's origin.
     if (!anchor) continue;
     const ordered = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const spots = juniorSpots(anchor, roomAt(anchor), ordered.length);
+    const room = roomAt(anchor);
     const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
+
+    // WP-89 · THREE OR MORE AND THE DESK BECOMES A CREW.
+    //
+    // §3.2's threshold, and the rest of this block is the fallback ladder it
+    // asks for: the arc if the room has floor for it, WP-59d's wrapping rows if
+    // it has not, and — for a pinned room, which has no seats at all — nothing,
+    // because the parent never got a seat and the loop above already skipped it.
+    // At or below two the seats are exactly what they were, which is what keeps
+    // every committed golden at 0 px: the `demo` floor's senior has two.
+    //
+    // Only the first `CREW_DRAW_CAP` members are seated. A member with no seat
+    // gets no record and nothing drawn (`AgentRuntime#sync`), which is what the
+    // `+N` chip stands for — the rest are in the panel and in the deck.
+    const { drawn } = crewSplit(ordered.length);
+    if (isCrewFormation(ordered.length) && placementById.get(parentId) === 'desk') {
+      const arc = crewArc(anchor, room, drawn, deskFootprints(room));
+      if (arc.fits) {
+        for (let i = 0; i < drawn; i++) {
+          result.set(ordered[i].id, {
+            ...arc.seats[i],
+            kind: anchor.kind,
+            junior: true,
+            crew: true,
+            crewIndex: i,
+            crewOf: parentId,
+          });
+        }
+        continue;
+      }
+    }
+
+    const spots = juniorSpots(anchor, room, ordered.length);
     ordered.forEach((junior, i) => {
       result.set(junior.id, { ...spots[i], angle, kind: anchor.kind, junior: true });
     });

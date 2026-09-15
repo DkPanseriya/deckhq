@@ -586,6 +586,34 @@ export const SCALE_CLASSES = Object.freeze({
       'ACTIVITY_PICK_ATTEMPTS',
     ]),
   }),
+  // WP-89. Seven lengths, all of them set by a person: the chord between two
+  // seated juniors is a junior's own width, the smallest radius is a body's
+  // clearance from a chair, and the three cable spacings are the gaps between
+  // the people the cables run between. The scale and the arc's span are ratios.
+  'crew.js': Object.freeze({
+    body: Object.freeze([
+      'CREW_PITCH',
+      'CREW_R_MIN',
+      'CREW_LAPTOP_GAP',
+      'CREW_PORT_PITCH',
+      'CREW_PORT_OFFSET',
+      'CREW_LANE_0',
+      'CREW_LANE_STEP',
+      'CREW_CHIP_OUT',
+    ]),
+    building: Object.freeze([]),
+    pure: Object.freeze([
+      'CREW_SCALE',
+      'CREW_ARC_SPAN',
+      'CREW_THRESHOLD',
+      'CREW_DRAW_CAP',
+      'CREW_ACTIVE_MS',
+      'CREW_CABLE_MS',
+      'CREW_FOLD_MS',
+      'CREW_PULSE_MS',
+      'CREW_PULSE_MAX',
+    ]),
+  }),
   'backdrop-floor.js': Object.freeze({
     body: Object.freeze(['DESK_POOL_MARGIN_U']),
     // §2's own list: *"herringbone cell · carpet weave pitch · tile cell ·
