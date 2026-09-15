@@ -995,6 +995,27 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   §13.22, and the direction in `docs/DEVIATIONS.md` §158. The mockups in `docs/media/interior/` are
   illustrations of the specification, not screenshots of shipped code.
 
+- **`docs/plan/12-MOTION-AND-CREW.md` — how the robot moves, and what a crew of sub-agents is
+  allowed to claim.** A document and four illustrations, not code: nothing under `src/`, `public/`
+  or `test/` was touched. Twelve animations are specified with their trigger, frame count, period,
+  LOD tier and reduced-motion pose — typing, a visor flicker on a real tool call, a thought cloud
+  that grows in three steps and then stops, the raised hand's wave, a page flip, the stall dots, a
+  power-down that runs once and never again, five lounge activities chosen by a hash of the session
+  id, a walk, a run reserved for `needs_input` trips to Your Office, and a spawn burst and a
+  fold-away. Two findings came out of writing it. **The animation clock is not the injected clock**:
+  `scene-agent.js`'s `nowMs()` is `performance.now()` and `clipStartedAt` is `Date.now()`, and the
+  goldens are byte-stable only because the capture emulates `prefers-reduced-motion` — so every
+  committed capture is the reduced-motion render, and no animation could ever appear in one.
+  **And a multi-agent workflow is already observable while the floor discards the evidence**: a
+  workflow subagent writes to `subagents/workflows/wf_<id>/agent-<id>.jsonl`, `listSubagentFiles`
+  walks that path, and the `wf_<id>` segment is thrown away. The crew itself — 3+ concurrent juniors
+  seated in an arc with laptops, routed cables to the parent's desk, and pulses that run
+  junior→parent only while that junior's transcript is moving — is stated against what each runtime
+  actually exposes, and is a Claude Code formation because no other runtime carries a junior's type,
+  spawn time or end. Packages WP-87 and WP-89 are in `docs/plan/08-PLAN-V2-100X.md` §9, the four
+  owner decisions in §13.24, and the direction in `docs/DEVIATIONS.md` §167. The pictures in
+  `docs/media/motion/` are illustrations of the specification, not screenshots of shipped code.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights
