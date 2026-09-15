@@ -36,22 +36,6 @@ export const FALLBACK_AVATAR_GLYPHS = [
   'ring',
 ];
 
-/**
- * Fallback copy of docs/03-VISUAL-SPEC.md §5, used only until
- * ./render/palette.js is available. Keep in exact sync with style.css's
- * --state-* custom properties and with render/palette.js's STATE_COLORS.
- * @type {Record<string, string>}
- */
-export const FALLBACK_STATE_COLORS = {
-  working: '#2E7D63',
-  needs_input: '#B87333',
-  stalled: '#9A7B4F',
-  for_review: '#C0392B',
-  benched: '#7B8794',
-  let_go: '#BDB7AA',
-  ended: '#6E6A63',
-};
-
 export const STATE_LABELS = {
   working: 'Working',
   needs_input: 'Hands up',

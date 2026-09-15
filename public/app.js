@@ -28,8 +28,8 @@ import { exportLayout, importLayout } from './app-layout.js';
 import { createLookPort, lookPaletteActions, lookPresets } from './app-look.js';
 import { setProjectArchived, setProjectPinned } from './app-rooms.js';
 import { createClearedTracker } from './office-cleared.js';
+import { FALLBACK_STATE_COLORS } from './state-palette.js';
 import {
-  FALLBACK_STATE_COLORS,
   announce,
   applyAvatarSetting,
   applyThemeSetting,
