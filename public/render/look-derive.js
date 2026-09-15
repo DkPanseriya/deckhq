@@ -442,5 +442,37 @@ export function liveMaterial(id) {
   return LOOK.materials[id] || materialColours(id, LOOK.floor);
 }
 
+/**
+ * ONE FURNITURE RADIUS, AT THE SET THE LOOK IS IN (§1.c).
+ *
+ * A set swaps SILHOUETTES ONLY — *"footprints, anchors and tokens do not
+ * move"* — so what a painter gets is its own shipped radius SCALED by the set,
+ * not a radius of the set's own. Scandi is what ships and its factor is the one
+ * every hard-coded radius on this floor was drawn at, so it returns the number
+ * it was handed and the goldens cannot see this function at all.
+ *
+ * @param {number} shipped the radius the painter has always used, in px
+ */
+export function setRadius(shipped) {
+  const set = LOOK.furniture;
+  const base = FURNITURE_SETS.scandi.radius;
+  if (!set || set.radius === base) return shipped;
+  return shipped * (set.radius / base);
+}
+
+/**
+ * The dark frame line an industrial piece carries on every edge (§1.c), or
+ * `null` for a set that has none — which is two of the three, and is why this
+ * returns a value a caller can skip on rather than a no-op stroke.
+ *
+ * @param {number} u px per plan unit
+ * @returns {{colour:string, width:number}|null}
+ */
+export function setFrame(u) {
+  const set = LOOK.furniture;
+  if (!set || !set.frame) return null;
+  return { colour: PALETTE.inkCool, width: Math.max(0.8, set.frame * u) };
+}
+
 /** The live palette, for a painter that wants a token rather than a material. */
 export { PALETTE };

@@ -19,7 +19,9 @@
  */
 
 import { PALETTE } from './palette.js';
+import { shade } from './themes.js';
 import { roundRect, unturn } from './backdrop-paint.js';
+import { LOOK } from './look-derive.js';
 
 /**
  * How much of a plant's own footprint the pot takes, and how far the foliage
@@ -72,7 +74,13 @@ function pot(k, s) {
  * @returns {boolean} whether this group recognised the kind
  */
 export function paintPlantProps(ctx, prop, u, w, h, local) {
-  const tones = [PALETTE.plantLeafA, PALETTE.plantLeafB, PALETTE.plantLeafC];
+  // WP-88a, §1.e: the FAMILY is the silhouette and a +/-0.06 shade of `plant`,
+  // and nothing else. `leafy` is the shipped planting and its shade is zero, so
+  // the default look paints the lobes this file has always painted.
+  const family = LOOK.plants.family;
+  const tones = [PALETTE.plantLeafA, PALETTE.plantLeafB, PALETTE.plantLeafC].map((c) =>
+    family.shade ? shade(c, family.shade) : c,
+  );
   switch (prop.kind) {
     case 'plant_broad': {
       // §3.6: *"three overlapping lobes, low"*. WIDE AND SHORT, and the three
@@ -80,12 +88,7 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
       // above is a low mound with a horizon, not a flower.
       const s = Math.max(w, h) / 2;
       local((k) => pot(k, s));
-      const lobes = /** @type {const} */ ([
-        [-0.42, -0.06, 0.6],
-        [0.44, -0.1, 0.58],
-        [0.02, -0.34, 0.66],
-      ]);
-      lobes.forEach(([dx, dy, r], i) =>
+      family.broad.forEach(([dx, dy, r], i) =>
         lobe(ctx, dx * s, dy * s, r * s * CANOPY_R * 2, tones[i % tones.length]),
       );
       break;
@@ -96,21 +99,14 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
       // it cannot be mistaken for the bush beside it at any scale.
       const s = Math.max(w, h) / 2;
       local((k) => pot(k, s));
-      const blades = /** @type {const} */ ([
-        [-0.5, -0.86],
-        [-0.22, -1.02],
-        [0.04, -1.08],
-        [0.3, -0.98],
-        [0.54, -0.8],
-      ]);
       // THE BLADES REACH THE EDGE OF THE FOOTPRINT. The first cut scaled the
       // tips by `CANOPY_R`, which is the radius a round canopy gets — and a
       // blade is not round: it came out as a green wedge a third of the way up
       // a visible pot, which at fit scale reads as a chipped saucer. A blade
       // plant's whole silhouette is its reach.
       const foot = s * 0.26;
-      const reach = s * 0.92;
-      blades.forEach(([tipX, tipY], i) => {
+      const reach = s * family.bladeReach;
+      family.blade.forEach(([tipX, tipY], i) => {
         ctx.fillStyle = tones[i % tones.length];
         ctx.beginPath();
         ctx.moveTo(-foot * 0.5, s * 0.34);
@@ -128,9 +124,14 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
       // one direction on this floor (`LIGHT_DIR`).
       const s = Math.max(w, h) / 2;
       local((k) => pot(k, s));
-      lobe(ctx, 0, -s * 0.06, s * CANOPY_R * 1.72, PALETTE.plantLeafC);
-      lobe(ctx, -s * 0.28, -s * 0.34, s * CANOPY_R * 0.82, PALETTE.plantLeafA);
-      lobe(ctx, s * 0.12, -s * 0.42, s * CANOPY_R * 0.52, PALETTE.plantLeafB);
+      // The crown, its two highlight masses and their order are the family's
+      // (§1.e): one mass for a tree, a narrow head and a second beside it for a
+      // dracaena, a stubby column for a cactus. The tones are the shipped
+      // C / A / B, which is what keeps `leafy` byte-identical.
+      const crownTones = [tones[2], tones[0], tones[1]];
+      family.tree.forEach(([dx, dy, r], i) =>
+        lobe(ctx, dx * s, dy * s, s * CANOPY_R * r, crownTones[i % crownTones.length]),
+      );
       break;
     }
     case 'planter': {

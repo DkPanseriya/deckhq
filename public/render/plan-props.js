@@ -27,6 +27,7 @@
  */
 
 import { appearanceHash } from './palette.js';
+import { LOOK } from './look-derive.js';
 
 // ------------------------------------------------------------- the plants
 
@@ -65,9 +66,34 @@ export const PLANT_FOOTPRINTS = Object.freeze({
  */
 export const PLANT_RUN_KINDS = Object.freeze(['plant_broad', 'plant_blade', 'plant_tree']);
 
-/** §3.6's two ceilings, stated where the test and the plan both read them. */
+/**
+ * §3.6's two ceilings, stated where the test and the plan both read them.
+ *
+ * SINCE WP-88a THEY ARE THE `normal` ROW of §1.e's density table rather than the
+ * only row, and the plan reads the FUNCTIONS below instead of these constants.
+ * They stay exported because they are what `normal` means, and because a test
+ * that asserted against the live look would be a test that agreed with whatever
+ * the look happened to be.
+ */
 export const PLANTS_PER_PROJECT_ROOM = 2;
 export const PLANTS_PER_LOUNGE_BAY = 6;
+
+/**
+ * The same two ceilings, at the density the look is set to (§1.e).
+ *
+ * A CEILING AND NOT A QUOTA, which is the whole of why `lush` is safe: WP-85c's
+ * rules bind first — one free-standing prop per `propClearU2()` of clear floor,
+ * no two identical silhouettes within 8 U, nothing within 1.2 U of a character —
+ * so a small room never reaches it.
+ */
+export function plantsPerProjectRoom() {
+  return LOOK.plants?.density?.room ?? PLANTS_PER_PROJECT_ROOM;
+}
+
+/** @see plantsPerProjectRoom */
+export function plantsPerLoungeBay() {
+  return LOOK.plants?.density?.bay ?? PLANTS_PER_LOUNGE_BAY;
+}
 
 /**
  * A run of plant kinds, NO TWO ADJACENT THE SAME (§3.6).
@@ -245,6 +271,18 @@ export const BOOKCASE_MIN_RUN = 3.2;
  * plans in `interior.test.mjs` rather than trusted here.
  */
 export const PROP_CLEAR_U2 = 9;
+
+/**
+ * The same rule at the density the look is set to (§1.f): quiet 1 per 14 U²,
+ * normal 1 per 9 U² — what ships — busy 1 per 6 U².
+ *
+ * **Anchored props are unaffected.** A monitor, a tray, a pinboard, a whiteboard
+ * and a shelf are FURNITURE, not decoration, and a density picker that thinned
+ * the monitors would be a picker that emptied desks.
+ */
+export function propClearU2() {
+  return LOOK.props?.clearU2 ?? PROP_CLEAR_U2;
+}
 export const SILHOUETTE_SPACING = 8;
 export const CLEAR_PATCH_MAX = 10;
 

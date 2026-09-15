@@ -428,24 +428,113 @@ export const RUG_ROLES = Object.freeze(['wool', 'task']);
  * `plant`. A family may not change a footprint: the footprints are what
  * `interior.test.mjs` measures the density rules over.
  *
+ * `broad`, `blade` and `tree` are the silhouettes themselves, as the tables the
+ * painter reads: `[dx, dy, r]` for a leaf mass and `[tipX, tipY]` for a blade,
+ * both in fractions of the plant's own half-size. They are HERE rather than in
+ * the painter because §1.e's promise is that a family changes the silhouette and
+ * nothing else — and a table a test can read is the only way to hold a painter
+ * to that.
+ *
  * @type {Readonly<Record<string, {id:string, label:string, shade:number,
- *   broad:string, blade:string, tree:string}>>}
+ *   broad:ReadonlyArray<ReadonlyArray<number>>,
+ *   blade:ReadonlyArray<ReadonlyArray<number>>, bladeReach:number,
+ *   tree:ReadonlyArray<ReadonlyArray<number>>}>>}
  */
 export const PLANT_FAMILIES = Object.freeze(
   /** @type {any} */ (
     Object.fromEntries(
       [
-        { id: 'leafy', label: 'Leafy', shade: 0, broad: 'lobes', blade: 'fronds', tree: 'canopy' },
+        {
+          id: 'leafy',
+          label: 'Leafy',
+          shade: 0,
+          // THE SHIPPED LOBES, VERBATIM (WP-85c §3.6). Every number below was a
+          // literal inside `backdrop-props-plant.js` before this package; moving
+          // it here changed no pixel, and `shade: 0` is what keeps it that way.
+          broad: [
+            [-0.42, -0.06, 0.6],
+            [0.44, -0.1, 0.58],
+            [0.02, -0.34, 0.66],
+          ],
+          blade: [
+            [-0.5, -0.86],
+            [-0.22, -1.02],
+            [0.04, -1.08],
+            [0.3, -0.98],
+            [0.54, -0.8],
+          ],
+          bladeReach: 0.92,
+          tree: [
+            [0, -0.06, 1.72],
+            [-0.28, -0.34, 0.82],
+            [0.12, -0.42, 0.52],
+          ],
+        },
         {
           id: 'architectural',
           label: 'Architectural',
           shade: -0.06,
-          broad: 'discs',
-          blade: 'blades',
-          tree: 'dracaena',
+          // Leaf DISCS rather than a mound, upright blades that reach further,
+          // and a dracaena: one narrow crown with a second head beside it.
+          broad: [
+            [-0.5, 0.08, 0.5],
+            [0.5, 0.04, 0.5],
+            [-0.16, -0.4, 0.46],
+            [0.28, -0.44, 0.44],
+          ],
+          blade: [
+            [-0.34, -1.02],
+            [-0.08, -1.12],
+            [0.2, -1.08],
+            [0.46, -0.92],
+          ],
+          bladeReach: 1,
+          tree: [
+            [0.02, -0.18, 1.28],
+            [-0.3, -0.5, 0.62],
+            [0.3, 0.16, 0.5],
+          ],
         },
-        { id: 'dry', label: 'Dry', shade: 0.06, broad: 'fine', blade: 'tuft', tree: 'column' },
-      ].map((p) => [p.id, Object.freeze(p)]),
+        {
+          id: 'dry',
+          label: 'Dry',
+          shade: 0.06,
+          // A fine canopy, a grass tuft and a cactus column: three silhouettes
+          // that are all smaller than their own footprint, which is what a dry
+          // planting looks like from directly above.
+          broad: [
+            [-0.46, 0.04, 0.38],
+            [0.1, 0.12, 0.34],
+            [0.48, -0.04, 0.36],
+            [-0.24, -0.36, 0.34],
+            [0.26, -0.4, 0.32],
+            [0.0, -0.58, 0.3],
+          ],
+          blade: [
+            [-0.62, -0.7],
+            [-0.38, -0.92],
+            [-0.12, -1.0],
+            [0.14, -0.98],
+            [0.4, -0.88],
+            [0.62, -0.66],
+            [0.02, -0.6],
+          ],
+          bladeReach: 0.8,
+          tree: [
+            [0, -0.1, 0.94],
+            [-0.34, -0.06, 0.44],
+            [0.34, -0.22, 0.4],
+          ],
+        },
+      ].map((p) => [
+        p.id,
+        Object.freeze({
+          ...p,
+          broad: Object.freeze(p.broad.map((l) => Object.freeze(l))),
+          blade: Object.freeze(p.blade.map((l) => Object.freeze(l))),
+          tree: Object.freeze(p.tree.map((l) => Object.freeze(l))),
+        }),
+      ]),
     )
   ),
 );
