@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { decodePng, encodePng } from '../scripts/lib/png.mjs';
+import { boxDownscale, decodePng, encodePng } from '../scripts/lib/png.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
@@ -1089,50 +1089,6 @@ function copyImage(from, to, maxWidth = ROLES.hero.width) {
   }
   fs.writeFileSync(to, source);
   return { bytes: source.length, downscaled: false };
-}
-
-/**
- * Resample an RGBA image down to `width`, averaging each destination pixel
- * over the source box it covers. No sharpening and no gamma correction: these
- * are flat-shaded screenshots of a vector floor, and the only thing being
- * asked for is that a 2910 px capture stops being served at 2910 px to a
- * column 768 px wide.
- *
- * @param {{width: number, height: number, data: Uint8Array}} img
- * @param {number} width
- */
-function boxDownscale(img, width) {
-  const height = Math.max(1, Math.round((img.height * width) / img.width));
-  const out = new Uint8Array(width * height * 4);
-  for (let y = 0; y < height; y++) {
-    const sy0 = Math.floor((y * img.height) / height);
-    const sy1 = Math.max(sy0 + 1, Math.floor(((y + 1) * img.height) / height));
-    for (let x = 0; x < width; x++) {
-      const sx0 = Math.floor((x * img.width) / width);
-      const sx1 = Math.max(sx0 + 1, Math.floor(((x + 1) * img.width) / width));
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      let a = 0;
-      let n = 0;
-      for (let sy = sy0; sy < sy1; sy++) {
-        for (let sx = sx0; sx < sx1; sx++) {
-          const i = (sy * img.width + sx) * 4;
-          r += img.data[i];
-          g += img.data[i + 1];
-          b += img.data[i + 2];
-          a += img.data[i + 3];
-          n++;
-        }
-      }
-      const o = (y * width + x) * 4;
-      out[o] = Math.round(r / n);
-      out[o + 1] = Math.round(g / n);
-      out[o + 2] = Math.round(b / n);
-      out[o + 3] = Math.round(a / n);
-    }
-  }
-  return { width, height, data: out };
 }
 
 /**

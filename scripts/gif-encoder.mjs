@@ -142,7 +142,7 @@ export function crop(img, r) {
 // -------------------------------------------------------------- palette
 
 /** 6 bits per channel: the histogram key space is 262,144 buckets. */
-const Q = 6;
+export const Q = 6;
 const QSHIFT = 8 - Q;
 const key6 = (r, g, b) => ((r >> QSHIFT) << (2 * Q)) | ((g >> QSHIFT) << Q) | (b >> QSHIFT);
 
