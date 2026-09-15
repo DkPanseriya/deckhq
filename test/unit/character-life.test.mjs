@@ -25,6 +25,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -59,6 +60,86 @@ import { pickSessionPhase } from '../../public/url-options.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
+
+// ------------------------------------------- I-08, as a walk rather than a list
+//
+// The guard below used to name SIX files of the fifty-eight under
+// `public/render/`. `rig.js` has been a re-export shell since §131 — the bodies
+// are in `rig-pose.js`, `rig-metrics.js`, `rig-bubble.js` and `rig-traits.js`,
+// and none of those was checked; neither were `crew.js`, `scene-draw.js`,
+// `agents-*.js` or the four `backdrop-*` modules. Nothing was breached, and
+// nothing would have noticed if it had been. WP-92c, audit finding A-03,
+// `docs/DEVIATIONS.md` §180.
+//
+// So the list is gone and the rule is a walk with ONE named exception.
+
+/** The clock and random sources a draw path may not read. */
+const FORBIDDEN = /\b(Date\.now|Math\.random|performance\.now)\(\)/g;
+
+/**
+ * THE ONE EXCEPTION, and it is a named function rather than a named file:
+ * `frameMs()` in `scene-agent.js` is FRAME PACING — an interval on this tab's
+ * own timeline — so it is allowed `performance.now()` and the `Date.now()`
+ * fallback under it. Everything else in that same file, and every other file
+ * under `public/render/`, is a phase, and a phase comes from `animMs()`.
+ */
+const FRAME_CLOCK = {
+  file: 'scene-agent.js',
+  span: /export function frameMs\(\)\s*\{[\s\S]*?\n\}/,
+};
+
+/**
+ * Source with its comments removed — the history is explained at length in
+ * them, and the CODE must not repeat it.
+ * @param {string} text
+ */
+function codeOnly(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/**
+ * Every draw-path module: everything under `public/render/`, plus any
+ * `life`/`scene`/`rig`/`crew` module that ever lands beside it in `public/`
+ * rather than inside it.
+ * @param {string} publicDir
+ * @returns {string[]} absolute paths
+ */
+function drawPathFiles(publicDir) {
+  const renderDir = path.join(publicDir, 'render');
+  const inRender = fs.existsSync(renderDir)
+    ? fs
+        .readdirSync(renderDir)
+        .filter((f) => f.endsWith('.js'))
+        .map((f) => path.join(renderDir, f))
+    : [];
+  const beside = fs
+    .readdirSync(publicDir)
+    .filter((f) => /^(life|scene|rig|crew)([-.]|$)/.test(f) && f.endsWith('.js'))
+    .map((f) => path.join(publicDir, f));
+  return [...inRender, ...beside].sort();
+}
+
+/**
+ * The gate itself, over a `public/` directory — the real one, or a temp copy
+ * with something planted in it, which is how this is proved to fail.
+ * @param {string} publicDir
+ * @returns {string[]} one line per violation, empty when the rule holds
+ */
+function drawPathViolations(publicDir) {
+  /** @type {string[]} */ const found = [];
+  for (const file of drawPathFiles(publicDir)) {
+    let code = codeOnly(fs.readFileSync(file, 'utf8'));
+    if (path.basename(file) === FRAME_CLOCK.file) {
+      // Cut the exception out by its own shape. A `scene-agent.js` that stopped
+      // declaring `frameMs()` would fail here rather than inherit its licence.
+      code = code.replace(FRAME_CLOCK.span, '/* the frame clock */');
+    }
+    for (const hit of code.match(FORBIDDEN) ?? []) {
+      found.push(`${path.relative(ROOT, file).split(path.sep).join('/')} calls ${hit}`);
+    }
+  }
+  return found;
+}
 
 /** A pinned instant, the way `DECKHQ_NOW` pins one. */
 const NOW = 1_800_000_000_000;
@@ -184,26 +265,51 @@ test('WP-87 · the animation clock is the injected one, and `performance.now()` 
   );
   assert.match(bare, /export function frameMs\(\)[\s\S]*?performance\.now\(\)/);
   assert.match(bare, /export function animMs\(\)[\s\S]*?return clockNow\(\);/);
+});
 
-  // And no draw path may read the machine's own clock or a random source.
-  for (const file of [
-    'public/render/life.js',
-    'public/render/agents.js',
-    'public/render/rig.js',
-    'public/render/rig-body.js',
-    'public/render/rig-props.js',
-    'public/render/clips.js',
-  ]) {
-    const text = fs.readFileSync(path.join(ROOT, file), 'utf8');
-    // Comments explain the history; code must not repeat it. Strip block and
-    // line comments before looking.
-    const code = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    assert.equal(/\bDate\.now\(\)/.test(code), false, `${file} calls Date.now() under a draw path`);
-    assert.equal(
-      /\bMath\.random\(\)/.test(code),
-      false,
-      `${file} calls Math.random() under a draw path`,
+test('I-08 · no draw-path module reads the machine clock or a random source', () => {
+  // Every module under `public/render/`, not six of them. The only hit this is
+  // allowed to forgive is `frameMs()`'s own body, and it is cut out by shape.
+  const publicDir = path.join(ROOT, 'public');
+  const files = drawPathFiles(publicDir);
+  assert.ok(files.length >= 55, `expected the whole render tree, walked ${files.length} files`);
+  for (const name of ['rig-pose.js', 'crew.js', 'scene-draw.js', 'backdrop-paint.js']) {
+    assert.ok(
+      files.some((f) => path.basename(f) === name),
+      `${name} is not in the walk — the list is back`,
     );
+  }
+  assert.deepEqual(drawPathViolations(publicDir), []);
+});
+
+test('I-08 · the guard is a walk, so a planted clock anywhere under render/ fails it', () => {
+  // Proved against a temp copy rather than the tree: a gate nobody has seen
+  // fail is a gate nobody knows the shape of, and this is the exact shape §131
+  // moved out from under the old six-file list.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deckhq-drawpath-'));
+  try {
+    const renderDir = path.join(dir, 'render');
+    fs.mkdirSync(renderDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(renderDir, 'rig-pose.js'),
+      'export function poseFor(a) {\n  return a.t - Date.now();\n}\n',
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(renderDir, 'clean.js'),
+      '// Date.now() in a comment is history, not code.\nexport const K = 1;\n',
+      'utf8',
+    );
+    const found = drawPathViolations(dir);
+    assert.deepEqual(found.length, 1, `expected one violation, got ${JSON.stringify(found)}`);
+    assert.match(found[0], /rig-pose\.js calls Date\.now\(\)/);
+
+    // And a module named for the draw path that lands BESIDE render/ rather
+    // than inside it is walked too.
+    fs.writeFileSync(path.join(dir, 'scene-extra.js'), 'export const r = Math.random();\n', 'utf8');
+    assert.equal(drawPathViolations(dir).length, 2);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
