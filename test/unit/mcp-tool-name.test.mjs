@@ -11,11 +11,14 @@ import {
   isMcpToolName,
   mcpToolLabel,
   parseMcpToolName,
-} from '../../src/core/mcp-tool-name.mjs';
+} from '../../public/mcp-tool-name.js';
 
-// WP-64. The module under test lives in `public/` and is re-exported from
-// `src/core/` (the §122 direction: `public/` may never import from `src/`).
-// The import above is the re-export on purpose, so the test covers both.
+// WP-64 wrote the rule in `public/` — the label is drawn on the floor, and
+// `public/` may never import from `src/` (§122) — and added
+// `src/core/mcp-tool-name.mjs` as a re-export for a Node-side caller. The
+// caller never landed: the audit (A-11) found zero importers in `src/`,
+// `public/` and `scripts/`, and this test was the only thing keeping the shim
+// reachable. WP-92f deleted it and pointed the test at the original.
 
 test('mcp__<server>__<tool> splits into its two halves', () => {
   assert.deepEqual(parseMcpToolName('mcp__gmail__send'), { server: 'gmail', tool: 'send' });

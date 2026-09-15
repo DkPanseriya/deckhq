@@ -17,7 +17,10 @@ import { rateCardVersion } from '../../core/rates.mjs';
 import { EDITOR_NAMES } from '../../core/editor.mjs';
 import { isKnownTheme, themeNames } from '../../core/themes.mjs';
 import { avatarSetByName, avatarSets } from '../../core/avatars.mjs';
-import { terminalIds } from '../../adapters/claude-code/terminals.mjs';
+// §95 moved the emulator table to `core/`; the adapter-side re-export it left
+// behind made this route look like it needed the Claude Code adapter to answer
+// a question no runtime owns. The catalogue is runtime-neutral (WP-92f, A-09).
+import { terminalIds } from '../../core/terminals.mjs';
 
 /**
  * Exactly the persisted settings, derived rather than restated. The two lists

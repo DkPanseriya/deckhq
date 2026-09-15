@@ -10,11 +10,15 @@
  * builtins, so it does not invert `02-ARCHITECTURE.md` §2's layering the way
  * `core/` reaching into `adapters/` would.
  *
- * This file stays as a re-export so the two callers outside `src/adapters/`
- * — `src/cli/doctor.mjs` and `src/http/routes/settings.mjs` — keep working
- * untouched. Both were already importing across the adapter boundary, which
- * is the thing the move fixes; repointing them at `src/core/terminals.mjs`
- * and deleting this file is a one-line change for their owner.
+ * This file stayed as a re-export so the two callers outside `src/adapters/`
+ * — `src/cli/doctor-collect.mjs` and `src/http/routes/settings.mjs` — kept
+ * working untouched. Both were already importing across the adapter boundary,
+ * which is the thing the move fixes.
+ *
+ * WP-92f (audit finding A-09) repointed the route: a settings sheet listing
+ * every terminal id on every platform is asking a question no runtime owns, so
+ * it now reads `src/core/terminals.mjs` directly. `doctor-collect.mjs` is the
+ * one caller left, and this file lives exactly as long as it does.
  */
 
 export * from '../../core/terminals.mjs';
