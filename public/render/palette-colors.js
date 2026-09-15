@@ -367,9 +367,9 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    * of the most saturated tokens on the floor, tiled twenty to a shelf, on the
    * one piece of furniture that is meant to read as texture.
    */
-  bookA: '#b0a088',
-  bookB: '#cdbda3',
-  bookC: '#decfb7',
+  bookA: '#998a73',
+  bookB: '#b2a28a',
+  bookC: '#cdbda3',
 
   // ---- thresholds: the screed band across a doorway, and the mat inside the
   // reception's (WP-85c §3.3) ----
@@ -407,7 +407,7 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    * with the one ring that means something (§1.2).
    */
   clutterCeramic: '#ddd6c7',
-  clutterPaper: '#e8e3d8',
+  clutterPaper: '#d9d2c4',
   clutterNote: '#c6bea0',
 
   // ---- task chairs, sofas ----

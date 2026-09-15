@@ -576,13 +576,18 @@ export function materialTokensFor(theme) {
     // ---- book spines (§3.5) ----
     //
     // *"`bookA/B/C` derive from the desk timber mixed halfway to three muted
-    // neutrals"*, and the three neutrals are the three this floor already has:
-    // the desk's own edge, the screed it stands on and the wall behind it.
-    // HALFWAY is the number §3.5 states, so it is `0.5` in all three and the
-    // variation between spines is which neutral rather than how far.
-    bookA: underWall(mix(desk, shade(screed, -0.28), 0.5), wall),
-    bookB: underWall(mix(desk, screed, 0.5), wall),
-    bookC: underWall(mix(desk, wall, 0.5), wall),
+    // neutrals"*, and the three neutrals are three depths of the screed this
+    // floor is already poured in. HALFWAY is the number §3.5 states, so it is
+    // `0.5` in all three and the variation between spines is WHICH neutral.
+    //
+    // THE SPREAD IS THE POINT. The first cut mixed toward the screed, the wall
+    // and a shade of the desk, which put all three within a few counts of the
+    // carcass they stand in — a shelf at fit scale came out as a blank pale
+    // slab, which is the opposite failure from the marker blues it replaced but
+    // just as unreadable. Three real steps of value, still nowhere near a hue.
+    bookA: underWall(mix(desk, shade(screed, -0.5), 0.5), wall),
+    bookB: underWall(mix(desk, shade(screed, -0.26), 0.5), wall),
+    bookC: underWall(mix(desk, screed, 0.5), wall),
 
     // ---- thresholds (§3.3) ----
     //
@@ -596,7 +601,7 @@ export function materialTokensFor(theme) {
 
     // ---- what is on a desk (§3.5) ----
     clutterCeramic: underWall(shade(seat, 0.02), wall),
-    clutterPaper: underWall(mix(seat, wall, 0.5), wall),
+    clutterPaper: underWall(mix(seat, screed, 0.35), wall),
     // The one warm note on a desk, and it is the plant's complement rather than
     // a yellow of its own: mixing the timber halfway to the wall and then a
     // third of the way to the leaf keeps it inside the floor's own family.

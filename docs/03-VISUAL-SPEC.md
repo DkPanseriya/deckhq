@@ -419,7 +419,8 @@ screen glow, keyboards, task chairs with backrest and arms, tub chairs, armchair
 user's desk with its monitor and in-tray, sofas with cushions, coffee table, round dining table,
 pool table with cues and balls, table-tennis table with net, board-game table, arcade cabinet,
 kitchen counter with hob and sink, coffee machine, fridge, whiteboard, shelf, pinboard, rugs
-(rectangular and round, with a border inset), potted plants at three scales.
+(rectangular and round, with a border inset), four planting kinds (§6.4), a screed threshold and a
+doormat, and what is on a desk: a mug, a notebook, a sticky note and an in-tray.
 
 ### 6.3 The furniture set, and how big each piece is
 
@@ -440,6 +441,40 @@ to satisfy whatever its size, all of them measured by `test/unit/interior.test.m
 
 Every furniture item carries a soft contact shadow. Shadows are what make a flat render read as a
 photograph rather than a diagram.
+
+### 6.4 Props, plants and density (WP-85c)
+
+**`docs/plan/10-INTERIOR-DESIGN.md` §3.5 and §3.6 are the catalogue, and `public/render/plan-props.js`
+is that catalogue in code.** As with §6.3, nothing here restates a size. What this section owns is
+what a room may be decorated WITH and how much of it, and every rule below is measured over emitted
+plans by `test/unit/props.test.mjs`.
+
+1. **Decoration is a function of available anchors, not of area** (WP13 §2.3). A room answers a
+   corner, a wall and a desk; it does not answer square footage.
+2. **At most one free-standing prop per 9 U² of clear floor**, and **no two identical silhouettes
+   within 8 U**. The second rule is about decoration, not furniture: a bench desk's four task chairs
+   are four identical silhouettes 2.6 U apart and that is what a bench desk is.
+3. **A clear-floor patch larger than 10 U × 10 U gets a destination, not a bigger rug** — a break-out
+   corner (§6.3), a planter run, or nothing. The reception's middle and the lounge's promenade are
+   clear on purpose: that is where the queue forms and where the benched stand.
+4. **Nothing stands within 1.2 U of a character's footprint.** At 34 px a prop any nearer is drawn
+   through the figure rather than beside it.
+5. **Four planting kinds, told apart by silhouette and not by scale**: a low broad bush, an upright
+   blade, one tree with a single canopy, and a planter — a trough that divides one lounge bay from
+   the next. **At most two per project room and six per lounge bay, and never two of the same kind
+   adjacent.** The tree is the only plant that is TALL (§6.2).
+6. **What is on a desk is a pure function of the desk.** At most one object in each of the three
+   free places on an occupied seat's own cell, drawn from twelve enumerated sets against the desk's
+   id and its ordinal in the room, so two desks side by side can never match. Nothing on a desk
+   enlarges the cluster the room is sized from.
+7. **Book spines are muted** — derived from the desk timber mixed halfway to three neutrals — so a
+   shelf reads as texture and never competes with an identity ring.
+8. **The lounge is four bays, not one field**: sitting, café, quiet, games, each with its own ground
+   (only the café's is tile), its own centrepiece and a planter run between it and the next. A lounge
+   laid in one row too narrow to hold them gives them up **from the right — games first, then
+   quiet** — and never below two, and never when giving one up buys no row.
+9. **The reception is three zones down one room**: the head, the waiting room, and the threshold —
+   a doormat inside its own door, a screed band across the doorway, and the swing arc.
 
 ### 6.0 The materials themselves
 
@@ -490,9 +525,11 @@ thing lying on the floor. A mug, a chair and a potted plant do not throw a shado
 right of themselves; they darken the floor they are touching. So **every prop declares its height**,
 and only a tall one casts along `LIGHT_DIR`.
 
-- **Tall** — desks, whiteboards, sofas, counters, cabinets, screens, game tables, the fridge: the
-  full §6.1 treatment, unchanged.
-- **Short** — chairs, plants, rugs, side and coffee tables, monitors, lamps, mugs and bowls: blur
+- **Tall** — desks, whiteboards, sofas, counters, cabinets, screens, game tables, the fridge, and
+  **the one tree** (§6.4): the full §6.1 treatment, unchanged. A 3.2 U canopy at head height casts
+  like the bookcase beside it.
+- **Short** — chairs, the other three planting kinds, rugs and the doormat, side and coffee tables,
+  monitors, lamps, mugs, notebooks, sticky notes and bowls: blur
   with no offset, and a contact ellipse directly beneath at roughly half the depth. The ellipse is
   painted over the bottom of the prop rather than under it, so a deep one on a rug reads as a
   smudge below the furniture rather than as the line where it meets the floor.

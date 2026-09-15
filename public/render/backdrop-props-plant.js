@@ -103,18 +103,19 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
         [0.3, -0.98],
         [0.54, -0.8],
       ]);
-      const foot = s * 0.2;
+      // THE BLADES REACH THE EDGE OF THE FOOTPRINT. The first cut scaled the
+      // tips by `CANOPY_R`, which is the radius a round canopy gets — and a
+      // blade is not round: it came out as a green wedge a third of the way up
+      // a visible pot, which at fit scale reads as a chipped saucer. A blade
+      // plant's whole silhouette is its reach.
+      const foot = s * 0.26;
+      const reach = s * 0.92;
       blades.forEach(([tipX, tipY], i) => {
         ctx.fillStyle = tones[i % tones.length];
         ctx.beginPath();
-        ctx.moveTo(-foot * 0.5, s * 0.3);
-        ctx.quadraticCurveTo(
-          tipX * s * 0.4,
-          tipY * s * 0.4,
-          tipX * s * CANOPY_R,
-          tipY * s * CANOPY_R,
-        );
-        ctx.quadraticCurveTo(tipX * s * 0.45, tipY * s * 0.3, foot * 0.5, s * 0.3);
+        ctx.moveTo(-foot * 0.5, s * 0.34);
+        ctx.quadraticCurveTo(tipX * s * 0.36, tipY * s * 0.5, tipX * reach, tipY * reach);
+        ctx.quadraticCurveTo(tipX * s * 0.5, tipY * s * 0.4, foot * 0.5, s * 0.34);
         ctx.closePath();
         ctx.fill();
       });
@@ -146,27 +147,37 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
         roundRect(k, -w / 2, -h / 2, w, h, Math.min(3, across / 2));
         k.fill();
       });
+      // The trough's own rim, so the run reads as a built thing with a lip on
+      // it rather than as a painted stripe.
+      ctx.strokeStyle = PALETTE.planterSoil;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.45;
+      roundRect(ctx, -w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1, Math.min(3, across / 2));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
       ctx.fillStyle = PALETTE.planterSoil;
-      const inset = Math.max(1, across * 0.22);
+      const inset = Math.max(0.8, across * 0.18);
       roundRect(
         ctx,
-        -w / 2 + (vertical ? inset : inset),
+        -w / 2 + inset,
         -h / 2 + inset,
         Math.max(1, w - inset * 2),
         Math.max(1, h - inset * 2),
         1,
       );
       ctx.fill();
-      // Planting along the run: one lobe every 1.6 across-widths, so a long
-      // trough and a short one carry the same density rather than the same
-      // count. `PLANTER_MARGIN` is the clear floor either side; nothing here
-      // may cross it, which is why the radius is measured off `across`.
-      const r = across * 0.42;
-      const pitch = Math.max(across * 1.6, 4);
-      const n = Math.max(1, Math.floor((run - across) / pitch));
-      for (let i = 0; i < n; i++) {
-        const t = n === 1 ? 0.5 : i / (n - 1);
-        const along = (t - 0.5) * (run - across);
+      // PLANTING THAT OVERLAPS ITSELF. The first cut spaced the lobes 1.6
+      // across-widths apart, and at the goldens' scale a 0.9 U trough came out
+      // as a vertical string of separate green beads — a bead curtain laid on
+      // the floor, which is neither a partition nor a plant. The pitch is
+      // under one radius now, so the masses merge into one low run and the
+      // three tones read as depth in it.
+      const r = across * 0.52;
+      const pitch = Math.max(across * 0.62, 3);
+      const span = Math.max(0, run - across * 0.9);
+      const n = Math.max(1, Math.round(span / pitch));
+      for (let i = 0; i <= n; i++) {
+        const along = (i / n - 0.5) * span;
         lobe(ctx, vertical ? 0 : along, vertical ? along : 0, r, tones[(i * 2 + 1) % tones.length]);
       }
       break;
