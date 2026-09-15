@@ -162,6 +162,16 @@ export async function loadRenderModules({
           // (see onSelect) and stays until it is dismissed. Opening it on hover
           // meant a modal appearing under the cursor as it crossed the floor.
           showTooltip(sel && sel.kind === 'agent' ? sel.id : null);
+          // WP-81. The plate stopped printing the room's SIZE — its session
+          // count, its juniors and its lifetime tokens — because none of those
+          // is ever acted on and all three were competing with the one line
+          // that is. They are one hover away instead, on the platform's own
+          // tooltip rather than a second floating card: a title attribute
+          // costs no paint, no layout and no keyboard trap, and it is read
+          // aloud by a screen reader that the canvas cannot otherwise reach.
+          const plate = sel && sel.kind === 'project' ? scene.plateTooltipFor(sel.id) : '';
+          if (plate) el.canvas.title = plate;
+          else el.canvas.removeAttribute('title');
         },
       }),
     );

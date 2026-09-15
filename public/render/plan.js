@@ -35,6 +35,7 @@
  *   plan-packing.js  flow, shelf, squarify, tileRows — rectangles into a rect
  *   plan-anchors.js  resolveAnchors, translateContents, the table sizes
  *   plan-rooms.js    a project's room, and the pinned strip (WP-77)
+ *   plan-plate.js    what a room plate SAYS, in words (WP-81)
  *   plan-office.js   the reception, upright and on its side (WP-59d)
  *   plan-service.js  the lounge
  *   plan-nav.js      walls, corridor centrelines, doors
@@ -858,7 +859,13 @@ export function buildPlan(projects, agents, opts = {}) {
 
 export { resolveAnchors, tableSizesFor } from './plan-anchors.js';
 export { shelfPack, squarify, tileRows } from './plan-packing.js';
-export { formatTokens, payrollLine, tokenLine } from './plan-rooms.js';
+export {
+  formatTokens,
+  payrollLine,
+  plateHeroLine,
+  plateTertiaryLine,
+  tokenLine,
+} from './plan-plate.js';
 export {
   ASPECT_TOLERANCE,
   FLOOR_OPEN_MAX,

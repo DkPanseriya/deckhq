@@ -255,7 +255,14 @@ test('light line work gets a dark halo, and dark line work a light one', () => {
   // measures text against.
   const dark = materialTokensFor(/** @type {any} */ (themeByName('default')));
   const light = materialTokensFor(/** @type {any} */ (themeByName('blueprint')));
-  assert.match(dark.plateHalo, /^rgba\(252,250,244/);
+  // WP-81: a light theme's halo is now the theme's own WALL rather than a
+  // hard-coded near-white brighter than any wall in the product. Asserted as
+  // the wall itself, so a theme that moves its wall moves its halo with it.
+  const wallOf = themeByName('default')
+    .floor.wall.match(/\w\w/g)
+    .map((h) => parseInt(h, 16));
+  assert.equal(dark.plateHalo, `rgba(${wallOf.join(',')},0.92)`);
+  assert.match(light.plateHalo, /^rgba\(\d+,\d+,\d+,0\.92\)$/);
   assert.match(light.plateHalo, /^rgba\(\d+,\d+,\d+,0\.92\)$/);
   const channels = light.plateHalo.match(/\d+/g).slice(0, 3).map(Number);
   assert.ok(

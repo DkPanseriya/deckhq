@@ -28,7 +28,15 @@ import {
   plateLinesFor,
   CHAR_MIN_PX_PER_UNIT,
 } from '../../public/render/scene.js';
-import { resolveBadgeCollisions } from '../../public/render/scene-labels.js';
+import {
+  doingEntriesFor,
+  PLATE_DOING_CHARS,
+  PLATE_ROWS,
+  platePlanFor,
+  resolveBadgeCollisions,
+  SceneLabels,
+} from '../../public/render/scene-labels.js';
+import { adoptSnapshotClock } from '../../public/clock.js';
 import { buildPlan } from '../../public/render/plan.js';
 import {
   truncateLabel,
@@ -41,7 +49,7 @@ import {
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
 } from '../../public/render/rig.js';
-import { FIGURE_HALO_POOL_SPAN } from '../../public/render/palette.js';
+import { FIGURE_HALO_POOL_SPAN, PALETTE, STATE_COLORS } from '../../public/render/palette.js';
 
 // ------------------------------------------------------- world <-> screen
 
@@ -1265,122 +1273,246 @@ test('the character scale is a floor on the world scale, not a replacement for i
 // money, and the rule (`08` §1.1 rule 7) is that it is an estimate or it is
 // not shown at all.
 
-test('WP-83: the plate’s third line is this room’s tokens, and no currency', () => {
-  // The shipped default. `settings.showCost` is off, so the meter under the
-  // data line is the day's tokens — a sum of ledger records, which is a number
-  // a rate card cannot get wrong.
-  const room = { kind: 'project', id: 'p0', name: 'deckhq' };
-  const snapshot = {
+/**
+ * Run `fn` with the client clock pinned, exactly as a snapshot from a daemon
+ * under `DECKHQ_NOW` pins it. Every age on a plate is read through
+ * `public/clock.js`, so this is the only way an elapsed figure gets into these
+ * assertions — there is no `Date.now()` in the path under test.
+ * @template T @param {number} at @param {() => T} fn @returns {T}
+ */
+function withFixedNow(at, fn) {
+  adoptSnapshotClock({ now: at, nowFixed: true });
+  try {
+    return fn();
+  } finally {
+    adoptSnapshotClock(null);
+  }
+}
+
+/** The demo clock every plate test below is read against. */
+const PLATE_NOW = Date.UTC(2026, 8, 14, 12, 0, 0);
+const PLATE_HOUR = 3_600_000;
+
+/** A room and a snapshot holding one project, two waiters and two workers. */
+function plateFixture(extra = {}, settings = {}) {
+  return {
+    settings,
     projects: [
       {
         id: 'p0',
-        sessionCount: 3,
-        tokens: 2_200_000,
-        needsYou: 1,
-        todaySpend: 18.4,
-        todaySpendIsToday: true,
-        todayTokens: 412_000,
+        sessionCount: 7,
+        tokens: 580_000,
+        needsYou: 2,
+        working: 3,
+        todayTokens: 5_800_000,
         todayTokensIsToday: true,
-      },
-    ],
-  };
-  assert.deepEqual(plateLinesFor(room, snapshot), [
-    'deckhq',
-    '3 sessions · 2.2M tok · 1 need you',
-    'today 412k tok · with cache',
-  ]);
-  assert.doesNotMatch(plateLinesFor(room, snapshot).join(' '), /\$/);
-
-  // A figure that is not today's says so rather than being labelled "today" —
-  // the same rule the payroll line kept.
-  const stale = {
-    projects: [
-      {
-        id: 'p0',
-        sessionCount: 1,
-        tokens: 900,
-        needsYou: 0,
-        todayTokens: 900,
-        todayTokensIsToday: false,
-      },
-    ],
-  };
-  assert.equal(plateLinesFor(room, stale)[2], '900 tok to date · with cache');
-
-  // Nothing measured at all is no line, not a zero.
-  const silent = { projects: [{ id: 'p0', sessionCount: 1, tokens: 0, needsYou: 0 }] };
-  assert.equal(plateLinesFor(room, silent)[2], '');
-});
-
-test('a project room plate carries the payroll line under its data line, with cost on', () => {
-  const room = { kind: 'project', id: 'p0', name: 'deckhq' };
-  const snapshot = {
-    settings: { showCost: true },
-    projects: [
-      {
-        id: 'p0',
-        sessionCount: 3,
-        tokens: 2_200_000,
-        needsYou: 1,
-        todaySpend: 18.4,
+        todaySpend: 9.5,
         todaySpendIsToday: true,
+        ...extra,
       },
     ],
-  };
-  assert.deepEqual(plateLinesFor(room, snapshot), [
-    'deckhq',
-    '3 sessions · 2.2M tok · 1 need you',
-    'today ≈ $18.40 · list price',
-  ]);
-});
-
-test('a project nothing can price gets no payroll line, not $0.00', () => {
-  // `todaySpendFor` reports null for a room whose every model is missing from
-  // the rate card. Zero is a claim about the money and there is not one.
-  const room = { kind: 'project', id: 'p0', name: 'deckhq' };
-  const unrated = {
-    settings: { showCost: true },
-    projects: [{ id: 'p0', sessionCount: 1, tokens: 900, needsYou: 0, todaySpend: null }],
-  };
-  const lines = plateLinesFor(room, unrated);
-  assert.equal(lines[2], '');
-  assert.doesNotMatch(lines.join(' '), /\$/);
-  // A figure that is not today's says so rather than being labelled "today".
-  const stale = {
-    settings: { showCost: true },
-    projects: [
+    agents: [
       {
-        id: 'p0',
-        sessionCount: 1,
-        tokens: 900,
-        needsYou: 0,
-        todaySpend: 7.86,
-        todaySpendIsToday: false,
+        id: 'a1',
+        projectId: 'p0',
+        label: 'Elif',
+        ackState: 'active',
+        activityState: 'for_review',
+        reviewSince: PLATE_NOW - 26 * PLATE_HOUR,
       },
+      {
+        id: 'a2',
+        projectId: 'p0',
+        label: 'Nadir',
+        ackState: 'active',
+        activityState: 'needs_input',
+        needsInputSince: PLATE_NOW - 2 * PLATE_HOUR,
+      },
+      {
+        id: 'a3',
+        projectId: 'p0',
+        label: 'Elif',
+        ackState: 'active',
+        activityState: 'working',
+        currentTool: { name: 'Edit', summary: 'editing tests' },
+      },
+      {
+        id: 'a4',
+        projectId: 'p0',
+        label: 'Nadir',
+        ackState: 'active',
+        activityState: 'working',
+        currentTool: { name: 'Bash', summary: 'running build' },
+      },
+      // Somebody else's room, and somebody in this one with no tool open.
+      {
+        id: 'b1',
+        projectId: 'other',
+        ackState: 'active',
+        activityState: 'for_review',
+        reviewSince: PLATE_NOW - 400 * PLATE_HOUR,
+      },
+      { id: 'a5', projectId: 'p0', ackState: 'active', activityState: 'working' },
     ],
   };
-  assert.equal(plateLinesFor(room, stale)[2], '≈ $7.86 to date · list price');
+}
+
+const PLATE_ROOM = { kind: 'project', id: 'p0', name: 'orbital-api' };
+
+test('WP-81: the plate leads with the one line that might make somebody move', () => {
+  withFixedNow(PLATE_NOW, () => {
+    // The whole package in one assertion. What this replaced was `orbital-api ·
+    // 7 sessions · 580k tok · 2 need you` over `today 5.8M tok · with cache`:
+    // three numbers in one size, of which one is ever acted on.
+    assert.deepEqual(platePlanFor(PLATE_ROOM, plateFixture()).lines, [
+      'orbital-api',
+      '2 need you · oldest 1d 2h',
+      'Elif · editing tests, Nadir · running build',
+      'today 5.8M tok · with cache',
+    ]);
+  });
 });
 
-test('every other room plate is still exactly two lines', () => {
+test('WP-81: every figure on the plate traces to a named field, and none is estimated', () => {
+  withFixedNow(PLATE_NOW, () => {
+    // The copy test the work order asks for. Each rendered fragment is paired
+    // with the ONE field it came from, and the assertion is that changing that
+    // field — and only that field — moves that fragment.
+    const sources = [
+      ['2 need you', 'projects[].needsYou', { needsYou: 4 }, '4 need you'],
+      ['3 working', 'projects[].working', { needsYou: 0, working: 5 }, '5 working'],
+      [
+        'today 5.8M tok',
+        'projects[].todayTokens (Ledger.todayTokens)',
+        { todayTokens: 1_200_000 },
+        'today 1.2M tok · with cache',
+      ],
+    ];
+    for (const [fragment, field, patch, moved] of sources) {
+      const before = platePlanFor(PLATE_ROOM, plateFixture()).lines.join(' | ');
+      const after = platePlanFor(PLATE_ROOM, plateFixture(patch)).lines.join(' | ');
+      assert.notEqual(before, after, `${fragment} does not move when ${field} does`);
+      assert.match(after, new RegExp(moved.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), field);
+    }
+    // `oldest 1d 2h` is `agent.reviewSince` through `waitingSince`, and the
+    // clock is injected: there is no `Date.now()` anywhere in this path.
+    const later = withFixedNow(
+      PLATE_NOW + 24 * PLATE_HOUR,
+      () => platePlanFor(PLATE_ROOM, plateFixture()).lines[1],
+    );
+    assert.equal(later, '2 need you · oldest 2d 2h');
+    // The doing line is `agent.currentTool.summary` as the adapter wrote it.
+    // An agent with no tool open contributes nothing, and nothing is invented
+    // for it — `a5` above is working with no tool and is not on the line.
+    const lines = platePlanFor(PLATE_ROOM, plateFixture()).lines;
+    assert.equal(lines[2].includes('undefined'), false);
+    assert.equal(lines[2].split(', ').length, 2, 'at most two entries share the line');
+  });
+});
+
+test('WP-81: absence is a value — the spend line says `no data` rather than a zero', () => {
+  withFixedNow(PLATE_NOW, () => {
+    const silent = {
+      projects: [{ id: 'p0', sessionCount: 1, tokens: 0, cacheTokens: 0, needsYou: 0 }],
+    };
+    assert.deepEqual(platePlanFor(PLATE_ROOM, silent).lines, [
+      'orbital-api',
+      'quiet',
+      '',
+      'no data',
+    ]);
+    // A figure that is not today's says so rather than being labelled "today".
+    const stale = {
+      projects: [
+        { id: 'p0', sessionCount: 1, needsYou: 0, todayTokens: 900, todayTokensIsToday: false },
+      ],
+    };
+    assert.equal(platePlanFor(PLATE_ROOM, stale).lines[3], '900 tok to date · with cache');
+  });
+});
+
+test('WP-81: the money stands after the tokens, and only when it was asked for', () => {
+  withFixedNow(PLATE_NOW, () => {
+    assert.doesNotMatch(platePlanFor(PLATE_ROOM, plateFixture()).lines.join(' '), /\$/);
+    // With `showCost` on the cost follows the tokens rather than replacing
+    // them (WP-83 made them alternatives; there is only one token figure on
+    // this plate now, so they can stand together). `list price` stays glued to
+    // the figure and the plate never says "today" twice.
+    const on = platePlanFor(PLATE_ROOM, plateFixture({}, { showCost: true }));
+    assert.equal(on.lines[3], 'today 5.8M tok · with cache · ≈ $9.50 · list price');
+    // `todaySpendFor` reports null for a room whose every model is missing
+    // from the rate card. Zero is a claim about the money and there is not one.
+    const unrated = platePlanFor(
+      PLATE_ROOM,
+      plateFixture({ todaySpend: null }, { showCost: true }),
+    );
+    assert.equal(unrated.lines[3], 'today 5.8M tok · with cache');
+    assert.doesNotMatch(unrated.lines.join(' '), /\$/);
+  });
+});
+
+test('WP-81: the room’s SIZE moved to the plate’s hover, and a pinned room keeps it', () => {
+  withFixedNow(PLATE_NOW, () => {
+    const plate = platePlanFor(PLATE_ROOM, plateFixture({ juniors: 2 }));
+    assert.equal(plate.tooltip, 'orbital-api · 7 sessions · +2 juniors · 580k tok in and out');
+    for (const fact of ['7 sessions', '580k tok']) {
+      assert.equal(plate.lines.join(' ').includes(fact), false, `${fact} is still on the plate`);
+    }
+    // Except on a pinned room, where it is the only fact there is: nothing
+    // runs, so there is no "need you", no "working" and no doing line.
+    const pinned = platePlanFor(
+      { ...PLATE_ROOM, pinned: true },
+      { projects: [{ id: 'p0', sessionCount: 3 }] },
+    );
+    assert.deepEqual(pinned.lines, ['orbital-api', '3 sessions · pinned']);
+  });
+});
+
+test('WP-81: the hero carries a state dot, and colour is never the only channel', () => {
+  withFixedNow(PLATE_NOW, () => {
+    // The oldest waiter here is `for_review`, so the dot is the reserved
+    // crimson — the same colour the badge above that agent's head is drawn in.
+    assert.equal(platePlanFor(PLATE_ROOM, plateFixture()).dot, STATE_COLORS.for_review);
+    // With only `needs_input` waiting it is amber instead.
+    const amber = plateFixture();
+    amber.agents = amber.agents.filter((a) => a.activityState !== 'for_review');
+    assert.equal(platePlanFor(PLATE_ROOM, amber).dot, STATE_COLORS.needs_input);
+    // A room that is merely busy is green, and a still one has no dot at all.
+    const busy = platePlanFor(PLATE_ROOM, plateFixture({ needsYou: 0 }));
+    assert.equal(busy.dot, STATE_COLORS.working);
+    assert.equal(platePlanFor(PLATE_ROOM, plateFixture({ needsYou: 0, working: 0 })).dot, null);
+    // And the words say the same thing the colour does, every time.
+    assert.match(platePlanFor(PLATE_ROOM, plateFixture()).lines[1], /need you/);
+    assert.match(busy.lines[1], /working/);
+  });
+});
+
+test('every other room plate follows the same grammar in two lines', () => {
   // The payroll meter is a property of a project room. Adding a third line to
   // the office or the lounge would put a number on a door that owns none.
-  const now = Date.now();
   const snapshot = {
     counts: { forReview: 2, benched: 4, letGo: 1 },
-    agents: [{ ackState: 'active', activityState: 'for_review', reviewSince: now - 3 * 3_600_000 }],
+    agents: [
+      { ackState: 'active', activityState: 'for_review', reviewSince: PLATE_NOW - 3 * PLATE_HOUR },
+    ],
   };
-  const office = plateLinesFor({ kind: 'office', id: '__office__', name: 'Your Office' }, snapshot);
-  assert.equal(office.length, 2);
-  assert.match(office[1], /^2 waiting · oldest 3h$/);
+  withFixedNow(PLATE_NOW, () => {
+    const office = platePlanFor(
+      { kind: 'office', id: '__office__', name: 'Your Office' },
+      snapshot,
+    );
+    assert.equal(office.lines.length, 2);
+    assert.match(office.lines[1], /^2 waiting · oldest 3h$/);
+    assert.equal(office.dot, STATE_COLORS.for_review);
 
-  const lounge = plateLinesFor({ kind: 'lounge', id: '__lounge__', name: 'Lounge' }, snapshot, {
-    goneHome: new Set(['x']),
+    const lounge = plateLinesFor({ kind: 'lounge', id: '__lounge__', name: 'Lounge' }, snapshot, {
+      goneHome: new Set(['x']),
+    });
+    assert.deepEqual(lounge, ['Lounge', '3 resting · 1 went home']);
+
+    const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
+    assert.deepEqual(letGo, ['Archive', '1 fired']);
   });
-  assert.deepEqual(lounge, ['Lounge', '3 resting · 1 went home']);
-
-  const letGo = plateLinesFor({ kind: 'let_go', id: '__let_go__', name: 'Archive' }, snapshot);
-  assert.deepEqual(letGo, ['Archive', '1 fired']);
 });
 
 test('a room the snapshot has nothing to say about falls back to its own plate', () => {
@@ -1388,8 +1520,205 @@ test('a room the snapshot has nothing to say about falls back to its own plate',
   assert.deepEqual(plateLinesFor(room, { projects: [] }), ['ghost', 'gone']);
   assert.deepEqual(plateLinesFor({ kind: 'corridor', id: 's', name: '' }, {}), ['', '']);
   // No snapshot at all is not a crash: the floor draws before the first poll.
+  // WP-81: `nobody waiting` rather than `0 waiting`, for the reason a project
+  // room says `quiet` — a zero is a number the eye has to stop on to find out
+  // it means nothing.
   assert.deepEqual(plateLinesFor({ kind: 'office', id: 'o', name: 'Your Office' }, null), [
     'Your Office',
-    '0 waiting',
+    'nobody waiting',
   ]);
+});
+
+// ------------------------------------------------ how a plate is actually set
+//
+// `_drawRoomPlate` is a method on `SceneLabels`, and `new Scene(...)` wants a
+// canvas — so these drive the prototype directly against a recording 2D
+// context, which is all the method touches. The measurer is a true monospace
+// (every glyph `0.6em`), so a recorded x is a glyph POSITION rather than a
+// font-engine artefact.
+
+/** A 2D context that records every glyph run instead of painting one. */
+function recordingCtx() {
+  return {
+    font: '',
+    textAlign: '',
+    textBaseline: '',
+    lineJoin: '',
+    miterLimit: 0,
+    strokeStyle: '',
+    fillStyle: '',
+    lineWidth: 0,
+    /** @type {{text:string,x:number,y:number,font:string,fill:string}[]} */
+    runs: [],
+    /** @type {{x:number,y:number,r:number,fill:string}[]} */
+    dots: [],
+    /** @type {{x:number,y:number,r:number}|null} */
+    _arc: null,
+    save() {},
+    restore() {},
+    beginPath() {
+      this._arc = null;
+    },
+    arc(x, y, r) {
+      this._arc = { x, y, r };
+    },
+    fill() {
+      if (this._arc) this.dots.push({ ...this._arc, fill: String(this.fillStyle) });
+    },
+    measureText(text) {
+      return { width: String(text).length * parseFloat(/(\d[\d.]*)px/.exec(this.font)[1]) * 0.6 };
+    },
+    strokeText() {},
+    fillText(text, x, y) {
+      this.runs.push({ text, x, y, font: this.font, fill: String(this.fillStyle) });
+    },
+  };
+}
+
+/** Draw one room's plate at `U` px per unit and return what was set. */
+function drawPlate(room, snapshot, { zoom = 1, U = 17.5 } = {}) {
+  const ctx = recordingCtx();
+  // The prototype without its constructor: `new Scene(...)` wants a canvas and
+  // a document, and the plate pass touches neither.
+  const scene = Object.assign(Object.create(SceneLabels.prototype), {
+    ctx,
+    _plateRects: [],
+    _snapshot: snapshot,
+    _plan: null,
+  });
+  scene._drawRoomPlate(room, { zoom, panX: 0, panY: 0, U });
+  return { runs: ctx.runs, dots: ctx.dots, rect: scene._plateRects[0] };
+}
+
+const WIDE_ROOM = { ...PLATE_ROOM, x: 0, y: 0, w: 30, h: 20, plateBand: 3.4 };
+
+test('WP-81: two frames a minute apart set every plate glyph in the same place', () => {
+  // The no-jitter contract. Every number on a plate is set in the mono face,
+  // so an elapsed figure ticking from `1d 2h` to `1d 3h` moves no glyph that
+  // precedes it — and nothing before the tail may move at all. Measured as the
+  // recorded x of every run, at two clocks.
+  const a = withFixedNow(PLATE_NOW, () => drawPlate(WIDE_ROOM, plateFixture()));
+  const b = withFixedNow(PLATE_NOW + 61_000, () => drawPlate(WIDE_ROOM, plateFixture()));
+  assert.equal(a.runs.length, b.runs.length, 'a minute changed how many lines were drawn');
+  for (let i = 0; i < a.runs.length; i++) {
+    assert.equal(a.runs[i].x, b.runs[i].x, `line ${i} moved sideways between frames`);
+    assert.equal(a.runs[i].y, b.runs[i].y, `line ${i} moved vertically between frames`);
+    assert.equal(a.runs[i].font, b.runs[i].font, `line ${i} changed face between frames`);
+    assert.equal(a.runs[i].text, b.runs[i].text, `line ${i} changed text within one minute`);
+  }
+  // An hour later the tail DOES move, and only the tail: the run it belongs to
+  // is still set at the same x, in the same face.
+  const later = withFixedNow(PLATE_NOW + 3 * PLATE_HOUR, () =>
+    drawPlate(WIDE_ROOM, plateFixture()),
+  );
+  assert.notEqual(later.runs[1].text, a.runs[1].text, 'the wait never advanced');
+  assert.equal(later.runs[1].x, a.runs[1].x);
+  // Every figure is in the mono face, which is what tabular stability is on a
+  // canvas with no `font-variant-numeric` (VISUAL-SPEC §7).
+  for (const run of a.runs) {
+    if (/\d/.test(run.text)) assert.match(run.font, /JetBrains Mono/, run.text);
+  }
+});
+
+test('WP-81: the plate is ranked by size and by ink, hero first', () => {
+  const { runs, dots } = withFixedNow(PLATE_NOW, () => drawPlate(WIDE_ROOM, plateFixture()));
+  const px = (run) => parseFloat(/(\d[\d.]*)px/.exec(run.font)[1]);
+  assert.equal(runs.length, 4);
+  // The hero is the largest thing on the plate — larger than the room's own
+  // name, which is the whole point: the name says which room, the hero says
+  // whether to get up.
+  assert.ok(px(runs[1]) > px(runs[0]), 'the hero is not the biggest line');
+  assert.ok(px(runs[0]) > px(runs[2]), 'the name is not above the doing line');
+  assert.ok(px(runs[2]) >= 11 && px(runs[3]) >= 11, 'a plate line fell under 11 px');
+  // Four ranks of ink, and the quietest is the spend line.
+  assert.equal(runs[1].fill, PALETTE.plateInk);
+  assert.equal(runs[0].fill, PALETTE.plateInkSecondary);
+  assert.equal(runs[3].fill, PALETTE.plateInkTertiary);
+  // One state dot, beside the hero, in the reserved crimson.
+  assert.equal(dots.length, 2, 'the dot is a halo disc under an ink disc');
+  assert.equal(dots[1].fill, STATE_COLORS.for_review);
+  assert.ok(dots[1].x < runs[1].x, 'the dot is not to the left of the hero');
+});
+
+test('WP-81: a plate collapses from the bottom and never leaves its band', () => {
+  // §7: a label never covers furniture, kept as a property of the band rather
+  // than as a check — `PLATE_BAND` is furniture-free by construction, so the
+  // rule is simply that the plate stays inside it. The order it gives way in
+  // is the order the lines are worth losing: spend, then doing, then the
+  // hero's `· oldest …` tail.
+  const band = 3.4;
+  const seen = [];
+  for (const U of [28, 17.5, 14, 11]) {
+    const { runs, rect } = withFixedNow(PLATE_NOW, () =>
+      drawPlate({ ...WIDE_ROOM, plateBand: band }, plateFixture(), { U }),
+    );
+    seen.push(runs.length);
+    assert.ok(
+      rect.y + rect.h <= band * U + 1e-6,
+      `at ${U} px/unit the plate is ${(rect.y + rect.h - band * U).toFixed(1)} px past its band`,
+    );
+    assert.ok(runs.length >= 2, 'the name and the hero are never dropped');
+  }
+  assert.deepEqual(
+    [...seen].sort((a, b) => b - a),
+    seen,
+    'a tighter floor showed MORE plate lines, not fewer',
+  );
+  // And sideways: a narrow room drops the hero's tail rather than cutting a
+  // number in half, and drops the second "doing" entry rather than ellipsising
+  // through it.
+  const narrow = withFixedNow(PLATE_NOW, () =>
+    drawPlate({ ...WIDE_ROOM, w: 9 }, plateFixture(), { U: 28 }),
+  );
+  assert.equal(narrow.runs[1].text, '2 need you');
+  assert.equal(narrow.runs[2].text.includes('Nadir'), false);
+});
+
+test('WP-81: the doing line is the adapter’s own tool summary, cut but never invented', () => {
+  const agents = [
+    {
+      id: 'z',
+      projectId: 'p0',
+      label: 'Zoe',
+      ackState: 'active',
+      activityState: 'working',
+      currentTool: { name: 'mcp__gmail__send', summary: 'mcp__gmail__send' },
+    },
+    {
+      id: 'a',
+      projectId: 'p0',
+      label: 'Ada',
+      ackState: 'active',
+      activityState: 'working',
+      currentTool: { name: 'Edit', summary: 'x'.repeat(80) },
+    },
+    // Not working, so not on the line however busy its tool looks.
+    {
+      id: 'b',
+      projectId: 'p0',
+      label: 'Bo',
+      ackState: 'active',
+      activityState: 'for_review',
+      currentTool: { name: 'Bash', summary: 'npm test' },
+    },
+  ];
+  const entries = doingEntriesFor(agents);
+  // Ordered by id, not by `currentTool.since`: an id never moves, so two
+  // agents cannot swap places on a wall between two frames.
+  assert.equal(entries.length, 2);
+  assert.match(entries[0], /^Ada · /);
+  assert.ok(entries[0].endsWith('…'), 'a long summary is cut');
+  assert.ok(entries[0].length <= 'Ada · '.length + PLATE_DOING_CHARS);
+  // The same MCP substitution the panel and the thought bubble make.
+  assert.equal(entries[1], 'Zoe · Gmail · send');
+  assert.equal(doingEntriesFor([]).length, 0);
+  assert.equal(doingEntriesFor(null).length, 0);
+});
+
+test('WP-81: the plate’s type scale is stated once, and nothing is set under 11 px', () => {
+  assert.equal(PLATE_ROWS.length, 4);
+  assert.ok(PLATE_ROWS.every((r) => r.px >= 11));
+  assert.ok(PLATE_ROWS[1].px > PLATE_ROWS[0].px, 'the hero must outrank the name');
+  // Every row's leading is positive, so the rows can only ever run downward.
+  assert.ok(PLATE_ROWS.every((r) => r.lead > 0));
 });

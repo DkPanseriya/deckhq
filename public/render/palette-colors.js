@@ -478,15 +478,23 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   // the natural home for a runtime check, but this was hand-verified via the
   // same WCAG relative-luminance formula against every floor token above).
   /**
-   * The halo drawn behind plate text and agent labels. Deliberately a warm
-   * near-white rather than pure white: it has to lift letterforms off the
-   * herringbone's plank seams without reading as a card, which is the thing
-   * the floor is supposed to be free of.
+   * The halo drawn behind plate text and agent labels. It has to lift
+   * letterforms off the herringbone's plank seams without reading as a card,
+   * which is the thing the floor is supposed to be free of.
+   *
+   * WP-81 MADE IT THE WALL. It was a hard-coded warm near-white, `#FCFAF4`,
+   * which is BRIGHTER than the wall — and §1.2 of
+   * `docs/plan/10-INTERIOR-DESIGN.md` is that the wall is the top of a room's
+   * value range and the contrast budget above it belongs to people, not to
+   * signage. It is now the theme's own `wall` on a light theme, so the halo is
+   * at the ceiling rather than through it, and still the opposite way from the
+   * ink on a dark one. See `materialTokensFor` in `themes.js`.
    */
-  plateHalo: 'rgba(252,250,244,0.92)',
+  plateHalo: 'rgba(244,241,234,0.92)',
 
-  plateInk: '#32281D', // room name
-  plateInkSecondary: '#4b4238', // one data line, a shade softer, still >=4.5:1
+  plateInk: '#32281D', // the hero: the one line that might make somebody move
+  plateInkSecondary: '#4b4238', // the room's name and its doing line
+  plateInkTertiary: '#635c53', // WP-81's spend line, quietest, still >=4.5:1
 
   // ---- the in-room "+" (CONTRACTS-WP15.md §5): a thin quiet vector cross,
   // never a button — no fill plate, no rounded rect, just a stroke that

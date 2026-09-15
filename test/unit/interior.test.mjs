@@ -48,6 +48,7 @@ import {
   lightInkFor,
   materialTokensFor,
   over,
+  plateGroundOver,
   pooled,
   relativeLuminance,
   shade,
@@ -1030,4 +1031,96 @@ test('§3.1: the reception lies on wool and a project room on its own task texti
       return [t.name, `wool ${d.rugCream} · task ${d.rugSage}`];
     }),
   );
+});
+
+test('§3.8/WP-81: every rank of plate text clears 4.5:1 on the halo it is read on', () => {
+  // WP-81 gave the plate four ranks — hero, name, doing, spend — and each step
+  // quieter is a contrast budget being spent. The surface measured is the one
+  // the renderer actually paints: `plateHalo` at 0.92 composited over the lit
+  // ground, not the bare floor, because `_drawRoomPlate` strokes the halo
+  // behind every glyph before it fills one.
+  const RANKS = ['plateInk', 'plateInkSecondary', 'plateInkTertiary'];
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const theme of THEMES) {
+    const tokens = materialTokensFor(/** @type {any} */ (theme));
+    let worst = Infinity;
+    for (const key of GROUND_KEYS) {
+      const behind = plateGroundOver(theme.floor, theme.floor[key]);
+      for (const rank of RANKS) {
+        const ratio = contrastRatio(tokens[rank], behind);
+        worst = Math.min(worst, ratio);
+        assert.ok(
+          ratio >= 4.5,
+          `${theme.name}: ${rank} on a plate over the ${key} is ${r2(ratio)}:1, under 4.5:1`,
+        );
+      }
+    }
+    rows.push([
+      `${theme.name} · worst of ${RANKS.length} ranks × ${GROUND_KEYS.length} grounds`,
+      `${r2(worst)}:1`,
+    ]);
+  }
+  report('plate text on its halo', rows);
+});
+
+test('§3.8/WP-81: the plate’s state dot clears 3:1, and it is never the only channel', () => {
+  // The dot is a GRAPHIC and is held to 3:1 like every other non-text signal
+  // on this floor. It could not be held to 4.5 and stay the state colour: the
+  // palette is mid-tone by design (§1.3), so an ink clearing 4.5 on a light
+  // plate AND a dark one would no longer be `for_review` crimson. The words
+  // beside it carry the same fact at 4.5:1, which is why this is allowed.
+  const DOTS = ['working', 'needs_input', 'stalled', 'for_review'];
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const theme of THEMES) {
+    for (const state of DOTS) {
+      let worst = Infinity;
+      for (const key of GROUND_KEYS) {
+        const behind = plateGroundOver(theme.floor, theme.floor[key]);
+        worst = Math.min(worst, contrastRatio(STATE_COLORS[state], behind));
+      }
+      assert.ok(worst >= 3, `${theme.name}: the ${state} plate dot is ${r2(worst)}:1, under 3:1`);
+      rows.push([`${theme.name} · ${state}`, `${r2(worst)}:1`]);
+    }
+  }
+  report('the plate dot on its halo', rows);
+  // And the copy carries the state in words wherever the dot carries it in
+  // colour, which is the rule `style.css` states for the header's breakdown:
+  // "a dot, a tabular number and a neutral-ink word, every time".
+  const src = fs.readFileSync(
+    path.join(HERE, '..', '..', 'public', 'render', 'scene-labels.js'),
+    'utf8',
+  );
+  assert.match(src, /need you/);
+  assert.match(src, /working/);
+});
+
+test('§1.2/WP-81: nothing on a plate is brighter than the wall it hangs beside', () => {
+  // The audit's second finding, applied to the one surface `underWall` never
+  // covered. A light theme's plate halo used to be a hard-coded `#FCFAF4`,
+  // above every wall in the product — the contrast budget above the wall spent
+  // on signage rather than on people. It is the theme's own wall now.
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const theme of THEMES) {
+    const tokens = materialTokensFor(/** @type {any} */ (theme));
+    const halo = tokens.plateHalo.match(/\d+/g).slice(0, 3).map(Number);
+    const haloHex = `#${halo.map((n) => n.toString(16).padStart(2, '0')).join('')}`;
+    const lightInk = lightInkFor(theme.floor.ink);
+    const wallL = relativeLuminanceOf(theme.floor.wall);
+    const haloL = relativeLuminanceOf(haloHex);
+    if (lightInk) {
+      // A dark theme's halo goes the other way from its ink, so it is under
+      // the wall by a mile rather than at it.
+      assert.ok(haloL < wallL, `${theme.name}: a dark theme's halo is above its wall`);
+    } else {
+      assert.equal(haloHex.toLowerCase(), theme.floor.wall.toLowerCase());
+    }
+    rows.push([
+      `${theme.name} · halo ${haloHex} vs wall ${theme.floor.wall}`,
+      r2(haloL / (wallL || 1e-9)),
+    ]);
+  }
+  report('the plate halo against the wall', rows);
 });

@@ -12,7 +12,13 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlan, formatTokens, payrollLine, U } from '../../public/render/plan.js';
+import {
+  buildPlan,
+  formatTokens,
+  payrollLine,
+  plateTertiaryLine,
+  U,
+} from '../../public/render/plan.js';
 import { idleProjectsOf } from '../../public/floor-rule.js';
 import { LOUNGE_ROW_ASPECT_MAX, OFFICE_ROW_ASPECT_MAX } from '../../public/render/plan-units.js';
 
@@ -409,36 +415,48 @@ test('every waiting agent faces the desk, and the queue runs front-to-back', () 
 
 // ------------------------------------------------------- survivors: project
 
-test('plate lines report session count, compact tokens, and needs-you count', () => {
+// WP-81 RANKED THESE FOUR SLOTS AND THE PLAN'S FALLBACK CARRIES TWO OF THEM.
+// A live plate is recomputed from the snapshot every poll; `room.plateLines`
+// is what a room the snapshot cannot speak for falls back to, so it holds the
+// hero and the spend — the two a project ROW alone can prove — and leaves the
+// "doing" slot empty, because that one is a fact about agents.
+test('the plate leads with the line somebody might act on', () => {
   const plan = buildPlan([makeProject('career-ops', 21, { tokens: 2_200_000, needsYou: 3 })], []);
   const room = plan.rooms.find((r) => r.id === 'career-ops');
-  assert.deepEqual(room.plateLines, ['career-ops', '21 sessions · 2.2M tok · 3 need you', '']);
+  assert.deepEqual(room.plateLines, [
+    'career-ops',
+    '3 need you',
+    '',
+    '2.2M tok to date · with cache',
+  ]);
 });
 
-test('plate lines use the singular "session" for a one-session project', () => {
-  const plan = buildPlan([makeProject('solo', 1, { tokens: 500, needsYou: 0 })], []);
-  const room = plan.rooms.find((r) => r.id === 'solo');
-  assert.deepEqual(room.plateLines, ['solo', '1 session · 500 tok · 0 need you', '']);
+test('a room with nobody waiting says what it IS doing, and a still room says quiet', () => {
+  const busy = buildPlan([makeProject('solo', 1, { tokens: 500, needsYou: 0, working: 2 })], []);
+  assert.equal(busy.rooms.find((r) => r.id === 'solo').plateLines[1], '2 working');
+  // Not `0 need you`: a zero is a number the eye has to stop on to discover it
+  // means nothing, and the session count it used to sit beside is a fact about
+  // the room's SIZE — that moved to the plate's hover (WP-81).
+  const still = buildPlan([makeProject('solo', 1, { tokens: 500, needsYou: 0 })], []);
+  assert.deepEqual(still.rooms.find((r) => r.id === 'solo').plateLines, [
+    'solo',
+    'quiet',
+    '',
+    '500 tok to date · with cache',
+  ]);
 });
 
-// WP-26. The third line is the payroll meter, and it is empty above because a
-// project with no `todaySpend` has nothing honest to put on it.
+// WP-26's payroll meter is behind `showCost`, which is off in the plan's own
+// fallback (WP-83); the composed line is asserted in `scene-math.test.mjs`,
+// where the setting can be turned on.
 test('the payroll line names the day when the ledger has the day', () => {
-  const plan = buildPlan(
-    [makeProject('career-ops', 3, { todaySpend: 18.4, todaySpendIsToday: true })],
-    [],
-  );
-  const room = plan.rooms.find((r) => r.id === 'career-ops');
-  assert.equal(room.plateLines[2], 'today ≈ $18.40 · list price');
+  const room = { todaySpend: 18.4, todaySpendIsToday: true };
+  assert.equal(plateTertiaryLine(room, true), 'today ≈ $18.40 · list price');
 });
 
 test('the payroll line says "to date" when it is falling back to session totals', () => {
-  const plan = buildPlan(
-    [makeProject('career-ops', 3, { todaySpend: 7.855, todaySpendIsToday: false })],
-    [],
-  );
-  const room = plan.rooms.find((r) => r.id === 'career-ops');
-  assert.equal(room.plateLines[2], '≈ $7.86 to date · list price');
+  const room = { todaySpend: 7.855, todaySpendIsToday: false };
+  assert.equal(plateTertiaryLine(room, true), '≈ $7.86 to date · list price');
 });
 
 test('a room the rate card cannot price gets no payroll line at all', () => {

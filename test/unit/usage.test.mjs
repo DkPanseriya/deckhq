@@ -597,5 +597,8 @@ test('WP-83: no rendered surface carries a currency with showCost off', () => {
     },
   );
   assert.doesNotMatch(plate.join(' · '), money);
-  assert.equal(plate[2], 'today 412k tok · with cache');
+  // WP-81 ranked the plate's lines: the tokens are its fourth and quietest,
+  // under the room's name, the line that needs action and the line that says
+  // what is being done. The figure and its qualifier are unchanged.
+  assert.equal(plate[3], 'today 412k tok · with cache');
 });
