@@ -53,6 +53,7 @@ import {
   castRoomShadow,
   paintWallSegment,
   paintDoorSwing,
+  paintThresholdBand,
   DESK_POOL_MARGIN_U,
   DOOR_POOL_R_U,
   LIT_PROP_KINDS,
@@ -276,7 +277,11 @@ export function bakeBackdrop(plan, dpr = 1) {
       );
     }
   }
+  // §3.3's threshold, then the pool that lands on it: the band is a change of
+  // SURFACE and the pool is light falling on that surface, so the pool goes
+  // over it and not the other way round.
   for (const door of plan.doors || []) {
+    paintThresholdBand(ctx, door, u);
     paintLightPool(ctx, door.x * u, door.y * u, DOOR_POOL_R_U * u);
   }
 

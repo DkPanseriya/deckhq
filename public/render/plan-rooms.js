@@ -489,9 +489,7 @@ export function buildProjectRoom(project, deskCount, targetAspect = 1, fit = und
           // edge and from the edge the occupant sits at.
           const ax = tx + k * SEAT_PITCH + item.along - item.w / 2;
           const ay =
-            side.sign < 0
-              ? ty + item.depth - item.h / 2
-              : ty + t.h - item.depth - item.h / 2;
+            side.sign < 0 ? ty + item.depth - item.h / 2 : ty + t.h - item.depth - item.h / 2;
           props.push({
             kind: item.kind,
             w: item.w,

@@ -201,11 +201,12 @@ export const PROP_HEIGHT = Object.freeze({
   plant_blade: 'short',
   plant_broad: 'short',
   planter: 'short',
-  // WP-85c's thresholds (§3.3). Both are laid INTO the floor — a screed band
-  // across a doorway and a mat inside the reception door — so neither has a
-  // height to cast from at all.
+  // WP-85c's doormat (§3.3), inside the reception door. Laid INTO the floor,
+  // like the screed band it lies behind — a mat that cast along the ray would
+  // be a mat somebody had left propped against the wall. The band itself is
+  // not here because it is not a prop: it belongs to the doorway, which is
+  // shared by the room and the corridor, so `backdrop-floor.js` paints it.
   doormat: 'short',
-  threshold: 'short',
   chair: 'short',
   coffee_machine: 'short',
   coffee_table: 'short',

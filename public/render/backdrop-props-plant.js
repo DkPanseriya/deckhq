@@ -246,16 +246,6 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
       ctx.globalAlpha = 1;
       break;
     }
-    case 'threshold': {
-      // §3.3's screed band across a doorway, 4.4 × 0.4 U. It is laid INTO the
-      // floor — no shadow, no rim — because a threshold that stands proud of
-      // the screed is a step, and a plan that draws a step where there is none
-      // is a plan telling the reader to look down.
-      unturn(ctx, prop);
-      ctx.fillStyle = PALETTE.thresholdBand;
-      ctx.fillRect(-w / 2, -h / 2, w, h);
-      break;
-    }
     case 'doormat': {
       // §3.3's mat, inside the reception door only. Pile rather than pattern:
       // two hairline runs across the short axis, at the weave pitch the carpet

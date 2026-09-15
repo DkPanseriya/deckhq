@@ -202,12 +202,13 @@ export function deskClutterFor(key, ordinal = 0) {
  * entering something"*.
  *
  * The screed band goes across every doorway and the doormat inside the
- * reception's only. The third piece — the corridor light pool at r 2.8 U — was
- * already laid by WP-85a (`DOOR_POOL_R_U` in `backdrop-floor.js`), which is why
- * there is no constant for it here.
+ * reception's only. Two of the three are not here, and for one reason: they
+ * belong to the DOORWAY rather than to a room. The band is
+ * `THRESHOLD_RUN_U`/`THRESHOLD_DEPTH_U` and the pool `DOOR_POOL_R_U`, both in
+ * `backdrop-floor.js`, both painted over `plan.doors` — which is a list that
+ * does not exist until every room has been placed and `assignDoors` has run.
+ * What is left here is the mat, which is a thing lying in one room.
  */
-export const THRESHOLD_RUN = 4.4;
-export const THRESHOLD_DEPTH = 0.4;
 export const DOORMAT_W = 4.6;
 export const DOORMAT_H = 1.8;
 
@@ -367,26 +368,3 @@ export function loungeBayNames(widthU, opts = {}) {
   }
   return fits(cur) ? cur : names;
 }
-
-/**
- * HOW FAR THE GAMES ARE MUTED (§3, owner decision 5).
- *
- * *"Yes, the games stay — muted 22–26% toward the room's own carpet."* They are
- * the one saturated accent left on this floor and the one thing that makes a
- * cleared queue look like a reward, so they are damped rather than drained:
- * 24% is the middle of the band the owner set, and `interior.test.mjs` asserts
- * the shipped value is inside it rather than trusting this comment.
- */
-export const GAME_MUTE = 0.24;
-export const GAME_MUTE_MIN = 0.22;
-export const GAME_MUTE_MAX = 0.26;
-
-/** The tokens the mute applies to: the games, and nothing else on the floor. */
-export const MUTED_GAME_TOKENS = Object.freeze([
-  'poolFelt',
-  'poolRail',
-  'poolRailTop',
-  'ttBed',
-  'cabinetBody',
-  'boardGameFelt',
-]);

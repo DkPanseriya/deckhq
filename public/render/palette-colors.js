@@ -171,6 +171,49 @@ export const FIGURE_HALO_RIM_PX = 1.1;
  *
  * @type {Record<string, string>}
  */
+/**
+ * THE CARPET, named once (§3.1). The woven ground of a project room, and the
+ * colour the lounge games are muted toward — two uses that must not drift.
+ */
+const CARPET_BASE = '#E7E2D7';
+
+/**
+ * HOW FAR THE LOUNGE GAMES ARE MUTED (WP-85c, §3 owner decision 5).
+ *
+ * *"Do the lounge games stay? They are the one saturated accent left and the
+ * one thing that makes a cleared queue look like a reward. Default: yes, muted
+ * 22–26 % toward the room's own carpet."*
+ *
+ * Damped rather than drained: 24 % is the middle of the band the owner set, and
+ * `interior.test.mjs` asserts the shipped value is inside it rather than
+ * trusting this comment.
+ *
+ * HERE AND NOT IN `themes.js`, and that is a rule this product already had: *a
+ * theme repaints no prop — monitors, the hob and the billiard cloth are
+ * objects*. Billiard cloth is green in every building on earth and a floor
+ * theme has no business saying otherwise, so the mute is applied ONCE, to the
+ * object, against the carpet the default floor has. `GAME_HUES` is what it is
+ * muted from, kept as its own table because a material cannot be derived from
+ * itself.
+ */
+export const GAME_MUTE = 0.24;
+export const GAME_MUTE_MIN = 0.22;
+export const GAME_MUTE_MAX = 0.26;
+export const GAME_HUES = Object.freeze({
+  poolFelt: '#2F6B4F',
+  poolRail: '#6B4A2E',
+  poolRailTop: '#8A6238',
+  ttBed: '#2E5F80',
+  cabinetBody: '#5B5560',
+  boardGameFelt: '#7E9481',
+});
+/** The tokens the mute applies to: the games, and nothing else on the floor. */
+export const MUTED_GAME_TOKENS = Object.freeze(Object.keys(GAME_HUES));
+/** @param {keyof typeof GAME_HUES} k */
+function mutedGame(k) {
+  return mixHex(GAME_HUES[k], CARPET_BASE, GAME_MUTE);
+}
+
 export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   // ---- herringbone wood floor (office + lounge), four tone variations ----
   //
@@ -208,7 +251,7 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    * salt is neither. Two hairline passes now, one horizontal and one vertical,
    * at the pitch `paintCarpet` owns.
    */
-  carpetBase: '#E7E2D7',
+  carpetBase: CARPET_BASE,
   carpetWeaveLight: 'rgba(255,255,255,0.03)',
   carpetWeaveDark: 'rgba(116,113,108,0.09)',
 
@@ -389,9 +432,16 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   fridgeFill: '#ddd6c8',
 
   // ---- arcade cabinet, board games, small accents ----
-  cabinetBody: '#5B5560',
+  //
+  // MUTED SINCE WP-85c (§3, owner decision 5): *"the lounge games stay, muted
+  // 22–26 % toward the room's own carpet"*. `GAME_HUES` above is what
+  // they are muted FROM, and every value below is that table run through the
+  // default theme's own derivation — which is also the first derivation these
+  // six tokens have ever had. They were the one corner of this floor that read
+  // the same at noon and on a night shift.
+  cabinetBody: mutedGame('cabinetBody'),
   cabinetScreenGlow: 'rgba(150,190,205,0.55)',
-  boardGameFelt: '#7E9481',
+  boardGameFelt: mutedGame('boardGameFelt'),
 
   // ---- the departures room ----
   boxFill: '#C8A574',
@@ -404,13 +454,13 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   // wood at play scale on a wood floor, which is how a pool table ended up
   // looking like an oval side table. Billiard cloth is its own colour and
   // needs to stay unmistakable next to the tan floor.
-  poolFelt: '#2F6B4F',
+  poolFelt: mutedGame('poolFelt'),
   poolFeltLine: 'rgba(255,255,255,0.16)',
-  poolRail: '#6B4A2E',
-  poolRailTop: '#8A6238',
+  poolRail: mutedGame('poolRail'),
+  poolRailTop: mutedGame('poolRailTop'),
   poolPocket: '#241C15',
   poolCue: '#E8D9B8',
-  ttBed: '#2E5F80',
+  ttBed: mutedGame('ttBed'),
   ttLine: 'rgba(255,255,255,0.85)',
   ttNet: '#E4E0D6',
 
