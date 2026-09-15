@@ -24,7 +24,13 @@ import { splitAgentId, projectIdFromCwd, projectNameFromCwd, clampText } from '.
 /** @typedef {import('./state-machine-rules.mjs').HookEvent} HookEvent */
 
 import { RegistrySnapshot } from './state-machine-snapshot.mjs';
-import { freshObserved, toAgentId, endedOr, compareAgents } from './state-machine-rules.mjs';
+import {
+  freshObserved,
+  toAgentId,
+  endedOr,
+  compareAgents,
+  changeKey,
+} from './state-machine-rules.mjs';
 import { copyBreakdown } from './usage.mjs';
 import { now as clockNow } from './clock.mjs';
 
@@ -90,7 +96,10 @@ export class RegistryCompute extends RegistrySnapshot {
   _rebuild() {
     const previous = this._agents;
     const agents = this._computeAgents();
-    const key = JSON.stringify(agents);
+    // WP-92h. `changeKey`, not `JSON.stringify`: the same question, 5.8x
+    // cheaper on the `demo` floor, asked on every scan and every hook event.
+    // See its header for what it costs to add a field to `Agent` and not to it.
+    const key = changeKey(agents);
     if (key !== this._lastKey) {
       this._lastKey = key;
       this._changed = true;
