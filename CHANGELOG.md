@@ -8,6 +8,33 @@
 
 ### Added
 
+- **The floor is configurable, and two rugs that had never been measured are fixed — WP-88a.** The
+  owner: _"I still don't see any option to configure the overall GUI graphics: office floor carpet
+  and colours, rugs, tables, chairs, sofa, plants, etc. We do not flood everything with too many
+  options; the interior designer carefully crafts options that can be mixed and matched."_ There are
+  now nine floor materials over four zones — herringbone oak, wide ash boards, terrazzo, polished
+  concrete, wool broadloom, loop-pile tile, ceramic tile, poured screed and cork — six colour
+  schemes, three furniture sets, two rugs in three tones and two patterns, three plant families,
+  three planting and three prop densities, and a four-bay lounge kit: **52 options over ten
+  pickers**, with six presets. The default, _Studio oak_, is the floor exactly as it shipped, byte
+  for byte. **No UI yet** — this package is the model, the derivation and the guards; the Look
+  section is WP-88b. `docs/DEVIATIONS.md` §175.
+
+- **A look is a file you own, and unlike a layout it is anonymous — WP-88a.** `deckhq look export >
+my-floor.json`, `deckhq look import my-floor.json`, `deckhq look presets`, plus `GET/POST
+/api/look` and `?look=night-lab` to paint one tab. A look names no project, no path and no
+  session, so it is a file you can post. A malformed one is refused whole with its reason, and so is
+  a legal one whose combination the contrast guards will not paint.
+
+### Fixed — floor
+
+- **The wool rug was invisible on night shift and the task rug shouted on blueprint — WP-88a.** Both
+  derived through a constant mix weight while the gap between the carpet and the floor under the rug
+  is not constant across themes, so nothing measured them: the wool rug came out at **1.00:1** on
+  night shift and the task rug at **1.69:1** on blueprint with every contrast test green. Both are
+  now a bisection on the ratio, held to `[1.06, 1.45]` — measured after: 1.23 / 1.16 / 1.16 and
+  1.32 / 1.42 / 1.42. The default floor is unchanged to the channel.
+
 - **A room plate ranks its lines, and the one you might act on is the biggest — WP-81.** The owner:
   _"Make sure the calculations on the whiteboard of the project rooms are right and informative and
   not just there for the sake of it. […] how to make it easy to read at a glance in a split second

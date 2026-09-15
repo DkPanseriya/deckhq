@@ -619,6 +619,13 @@ Three things from it are load-bearing here and are measured by `test/unit/interi
 - **Every pattern is a size in plan units**, not in baked pixels. A unit is about 0.30 m, so the
   1.71 U herringbone cell is a claim about a real floor: a 0.73 m × 0.25 m block, against the 1.40 m
   × 0.47 m this shipped with before WP-85a.
+- **And the user may choose which of those materials each zone is made of (WP-88a).** Nine floor
+  materials over four zones, six colour schemes, three furniture sets, two rugs, three plant
+  families, three densities and four lounge bays — `docs/plan/11-LOOK-CONTROL-CENTRE.md` §1 is the
+  catalogue and `DEVIATIONS.md` §175 what shipped. **It changes nothing above.** A material derives
+  from the eleven tokens and nothing else, a scheme is a transform that locks each token's relative
+  luminance, and every combination is measured before it is offered: a refused one is refused with
+  the ratio, never clamped. The default — *Studio oak* — is this floor byte for byte.
 
 ### 6.1 Light
 
