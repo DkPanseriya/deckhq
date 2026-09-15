@@ -212,6 +212,20 @@ export const POPULATIONS = {
    * it: a golden that answers two questions answers neither when it moves.
    */
   pinned: () => POPULATIONS.three(),
+  /**
+   * WP-89's FLOOR: one senior with a crew of five around it.
+   *
+   * ONE SESSION, which is `single`'s shape and chosen for `single`'s reason: the
+   * crew is the whole subject of the picture, and the smaller the building the
+   * more pixels the one room in it gets. A `demo` floor with a crew on it would
+   * photograph twenty-seven people and five cables at sixteen pixels a unit, and
+   * the cables are what this capture is for. Two populated floors are compared
+   * side by side in the `demo` set already; this one answers one question.
+   *
+   * The five juniors themselves are `CREW_JUNIORS` below, and their ages are the
+   * whole of the point: two still writing, two gone quiet, one caught mid-fold.
+   */
+  crew: () => [['orbital-api', 'Audit every call site of the token bucket', 'working', 0.05, 2.4]],
   reference: referenceSessions,
 };
 
@@ -281,6 +295,86 @@ export const DEMO_TOOLS = Object.freeze({
     tool_input: { file_path: 'src/tokens/dark.ts' },
   },
 });
+
+/**
+ * WP-89's CREW, and the five of them are five different states on purpose.
+ *
+ * `quietSeconds` is how long ago each transcript last moved, measured back from
+ * the pinned clock, and it is the ONLY thing that differs between them — because
+ * it is the only thing the floor can observe about a junior (§3.1). Against
+ * `CREW_ACTIVE_MS` (60 s) and `CREW_FOLD_MS` (0.30 s) it deals:
+ *
+ *   0 s, 20 s   two ACTIVE — a live cable each, four pulses and two
+ *   60.15 s     one caught mid-FOLD — half a lid, a cable half way to grey
+ *   150 s, 240 s two finished — grey cable, folded laptop, no pulses
+ *
+ * All five are inside `SUBAGENT_IDLE_MS`, so all five are on the floor: a junior
+ * that has stopped does not vanish, it goes grey. The first four `wf_` juniors
+ * share one workflow id and the fifth is a bare `Task` call, which is the
+ * distinction WP-89 recovered from the path.
+ *
+ * `ageMinutes` tracks `quietSeconds` deliberately. They are two different
+ * observations — the newest record IN the transcript, and when the FILE last
+ * moved — and on a real junior they move together within a poll. A fixture that
+ * let them disagree would draw a five-minute thought cloud over a junior whose
+ * cable is pulsing, which is a picture no real machine can produce.
+ */
+export const CREW_PARENT = 'Audit every call site of the token bucket';
+export const CREW_WORKFLOW = 'wf_01k9crewdemo0001';
+export const CREW_JUNIORS = [
+  {
+    agentId: 'ad3m0000000000101',
+    agentType: 'Explore',
+    description: 'Map the rate-limit call sites',
+    text: 'Walking every import of the bucket module.',
+    tool: { name: 'Grep', input: { pattern: 'tokenBucket' } },
+    ageMinutes: 0,
+    quietSeconds: 0,
+    workflow: CREW_WORKFLOW,
+  },
+  {
+    agentId: 'ad3m0000000000102',
+    agentType: 'general-purpose',
+    description: 'Check the burst maths',
+    text: 'Re-deriving the refill rate against the published limits.',
+    tool: { name: 'Read', input: { file_path: 'src/limits/bucket.ts' } },
+    ageMinutes: 0.33,
+    quietSeconds: 20,
+    workflow: CREW_WORKFLOW,
+  },
+  {
+    agentId: 'ad3m0000000000103',
+    agentType: 'test-engineer',
+    description: 'Cover the 429 path',
+    text: 'Writing the case where the bucket empties mid-request.',
+    tool: { name: 'Edit', input: { file_path: 'test/limits.test.ts' } },
+    ageMinutes: 1,
+    // Just past the stall window, and by a fraction of the fold: this is the
+    // junior the capture exists to show finishing.
+    quietSeconds: 60.15,
+    workflow: CREW_WORKFLOW,
+  },
+  {
+    agentId: 'ad3m0000000000104',
+    agentType: 'Explore',
+    description: 'Find the old middleware',
+    text: 'Located two copies of the retry wrapper.',
+    tool: { name: 'Glob', input: { pattern: 'src/**/retry*.ts' } },
+    ageMinutes: 2.5,
+    quietSeconds: 150,
+    workflow: CREW_WORKFLOW,
+  },
+  {
+    agentId: 'ad3m0000000000105',
+    agentType: 'code-reviewer',
+    description: 'Read the diff so far',
+    text: 'Nothing in the diff changes the public shape.',
+    tool: { name: 'Read', input: { file_path: 'src/limits/index.ts' } },
+    ageMinutes: 4,
+    quietSeconds: 240,
+    workflow: null,
+  },
+];
 
 export const JUNIOR_PARENT = 'Dark mode audit across 40 components';
 export const JUNIORS = [

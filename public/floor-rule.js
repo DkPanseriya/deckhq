@@ -287,14 +287,18 @@ export function floorPopulation(agents, opts = {}) {
    * @type {Map<string, number>}
    */
   const juniorsPerParent = new Map();
+  /** WP-89. Where each SENIOR stands, so a crew can ask. @type {Map<string, string>} */
+  const seniorPlacement = new Map();
 
   const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
 
   for (const a of list) {
     if (!a || a.ackState === 'let_go') continue;
     const pid = a.projectId == null ? '' : String(a.projectId);
-    if (isSubagent(a) && a.parentId != null && pid) {
-      bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
+    if (isSubagent(a)) {
+      if (a.parentId != null && pid) bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
+    } else if (a.id != null) {
+      seniorPlacement.set(String(a.id), placement(a));
     }
     if (pid) {
       known.add(pid);
@@ -321,14 +325,27 @@ export function floorPopulation(agents, opts = {}) {
   // become an arc, largest first. A parent with one or two juniors is not in
   // here at all — its juniors take a seat pitch beside it and the desks the room
   // was already sized for are the whole of the floor they need.
+  //
+  // AND A FORMATION'S MEMBERS COME OFF THE DESK COUNT. A junior has counted as a
+  // desk since WP-41, and that was right while a junior STOOD at its parent's
+  // desk: *"a senior with two juniors already has two extra seats' worth of
+  // table"*. A crew member does not stand at a desk — it sits on the floor with
+  // a laptop — so counting one would furnish a room with five chairs nobody ever
+  // sits in and then size the room around them. The arc's own footprint is what
+  // it asks for instead, and that is `crewFloorFor`.
   /** @type {Map<string, number[]>} */
   const crews = new Map();
   for (const [key, n] of juniorsPerParent) {
     if (n < CREW_THRESHOLD) continue;
-    const pid = key.slice(0, key.indexOf(' '));
-    const list_ = crews.get(pid) || [];
-    list_.push(n);
-    crews.set(pid, list_);
+    const cut = key.indexOf(' ');
+    const pid = key.slice(0, cut);
+    // A formation only happens at a desk (`assignSeats`); a benched senior with
+    // sixteen juniors in the lounge keeps WP-59d's rows and keeps its desks.
+    if (seniorPlacement.get(key.slice(cut + 1)) !== 'desk') continue;
+    const sizes = crews.get(pid) || [];
+    sizes.push(n);
+    crews.set(pid, sizes);
+    desks.set(pid, Math.max(0, (desks.get(pid) || 0) - n));
   }
   for (const sizes of crews.values()) sizes.sort((a, b) => b - a);
 

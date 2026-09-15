@@ -70,6 +70,8 @@ import {
   THEME,
 } from './demo-args.mjs';
 import {
+  CREW_JUNIORS,
+  CREW_PARENT,
   DEMO_TOOLS,
   JUNIORS,
   PINNED_PROJECTS,
@@ -200,6 +202,18 @@ if (POPULATION === 'demo') {
       writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
     }
     keepJuniorsWorking();
+  }
+}
+
+// WP-89. The crew floor: five juniors on one senior, four of them one workflow,
+// each with its own distance behind the pinned clock. Nothing is kept alive
+// here — `quietSeconds` is the fixture, and a beat would erase it.
+if (POPULATION === 'crew') {
+  const parent = built.find((s) => s.title === CREW_PARENT);
+  if (parent) {
+    for (const junior of CREW_JUNIORS) {
+      writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
+    }
   }
 }
 

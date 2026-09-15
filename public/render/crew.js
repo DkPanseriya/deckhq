@@ -83,6 +83,17 @@ export let CREW_LAPTOP_GAP = 0.9;
 /** Pitch between two ports along the desk's front edge, in seat order. */
 export let CREW_PORT_PITCH = 0.55;
 
+/**
+ * How far IN FRONT of the parent's chair the port line runs — the desk's own
+ * front edge, which is what §3.2 puts the ports on.
+ *
+ * Not zero, and the difference is the whole picture: at zero the cables would
+ * end under the parent's feet, which says the data goes to the person. It goes
+ * to the desk. A chair is 2 U deep and sits 0.15 U off the table, so 1.2 U from
+ * the chair's centre is the near edge of the desk top.
+ */
+export let CREW_PORT_OFFSET = 1.2;
+
 /** The first cable lane, measured back from the port line. */
 export let CREW_LANE_0 = 0.3;
 
@@ -235,7 +246,7 @@ export function crewArc(anchor, room, n, obstacles) {
     const lap = world(lapR * Math.sin(theta), lapR * Math.cos(theta));
     // A member faces its parent, and its laptop faces the same way it does.
     const toParent = Math.atan2(anchor.y - at.y, anchor.x - at.x);
-    const port = world((i - (count - 1) / 2) * CREW_PORT_PITCH, 0);
+    const port = world((i - (count - 1) / 2) * CREW_PORT_PITCH, -CREW_PORT_OFFSET);
     seats.push({
       ...at,
       angle: toParent,
@@ -255,12 +266,25 @@ export function crewArc(anchor, room, n, obstacles) {
   return { fits, radius, seats };
 }
 
-/** @param {{x:number,y:number}} p @param {{x:number,y:number,w:number,h:number}} room */
+/**
+ * Is this seat inside the room's walls, with a half-body of clearance and clear
+ * of the plate band?
+ *
+ * The plate band is the strip across the top of a room that carries its name and
+ * its lines, and §1.5 is explicit that nothing in this design may be drawn over
+ * a label. A seated junior is drawn UP from its position by its own body height,
+ * so clearing the band means clearing it by a body rather than by a point —
+ * which is why the top inset is the band plus `CREW_PITCH`, the one body-width
+ * this file already measures everything else in.
+ * @param {{x:number,y:number}} p
+ * @param {{x:number,y:number,w:number,h:number,plateBand?:number}} room
+ */
 function insideRoom(p, room) {
+  const top = room.y + (room.plateBand || 0) + CREW_PITCH;
   return (
     p.x >= room.x + JUNIOR_PAD - 1e-9 &&
     p.x <= room.x + room.w - JUNIOR_PAD + 1e-9 &&
-    p.y >= room.y + JUNIOR_PAD - 1e-9 &&
+    p.y >= top - 1e-9 &&
     p.y <= room.y + room.h - JUNIOR_PAD + 1e-9
   );
 }
@@ -320,7 +344,7 @@ function routeFor(seat, world) {
   push(lu, lv);
   push(lu, lane);
   push(pu, lane);
-  push(pu, 0);
+  push(pu, -CREW_PORT_OFFSET);
   return pts;
 }
 
@@ -548,6 +572,7 @@ const BASE = {
   CREW_R_MIN,
   CREW_LAPTOP_GAP,
   CREW_PORT_PITCH,
+  CREW_PORT_OFFSET,
   CREW_LANE_0,
   CREW_LANE_STEP,
   CREW_CHIP_OUT,
@@ -559,6 +584,7 @@ registerBodyScale((s) => {
     CREW_R_MIN,
     CREW_LAPTOP_GAP,
     CREW_PORT_PITCH,
+    CREW_PORT_OFFSET,
     CREW_LANE_0,
     CREW_LANE_STEP,
     CREW_CHIP_OUT,

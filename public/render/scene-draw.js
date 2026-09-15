@@ -43,7 +43,7 @@ import {
 } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
-import { CREW_SCALE } from './crew.js';
+import { CREW_SCALE, crewChipAt } from './crew.js';
 import { drawCrews } from './crew-draw.js';
 import { BODY_HEIGHT_U, CHROME_BADGE_U } from './rig-metrics.js';
 
@@ -520,6 +520,23 @@ export class SceneDraw extends SceneHit {
             h: charU * (CHROME_BADGE_U - BODY_HEIGHT_U),
             pin: true,
           });
+          // And the crew's own chip, which is drawn under the bodies and would
+          // otherwise have a junior's name painted straight over it. Measured
+          // generously rather than exactly — an obstacle may claim more than it
+          // uses, and `drawChip` has the real text.
+          if (rec.targetSeat) {
+            const chip = worldToScreen(crewChipAt(rec.targetSeat), camera);
+            const cw = charU * 3.4;
+            const ch = charU * 0.8;
+            items.push({
+              id: `chip:${rec.id}`,
+              x: chip.x - cw / 2,
+              y: chip.y - ch / 2,
+              w: cw,
+              h: ch,
+              pin: true,
+            });
+          }
         }
       }
       for (const box of badgeBoxes) items.push({ ...box, pin: true });

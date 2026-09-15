@@ -596,6 +596,7 @@ export const SCALE_CLASSES = Object.freeze({
       'CREW_R_MIN',
       'CREW_LAPTOP_GAP',
       'CREW_PORT_PITCH',
+      'CREW_PORT_OFFSET',
       'CREW_LANE_0',
       'CREW_LANE_STEP',
       'CREW_CHIP_OUT',

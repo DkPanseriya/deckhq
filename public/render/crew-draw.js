@@ -36,12 +36,12 @@ import { worldToScreen } from './agents.js';
 import { sansFont } from './rig-metrics.js';
 
 /** Cable width in plan units, at a junior's own scale. */
-const CABLE_W_U = 0.16;
+const CABLE_W_U = 0.2;
 /** Pulse radius in plan units. */
-const PULSE_R_U = 0.26;
-/** The laptop, in plan units: base, and lid at full open. */
-const LAPTOP_W_U = 1.0;
-const LAPTOP_D_U = 0.62;
+const PULSE_R_U = 0.28;
+/** The laptop, in plan units: the base it stands on, and the lid at full open. */
+const LAPTOP_W_U = 0.9;
+const LAPTOP_D_U = 0.5;
 /** Below this many px per unit a cable is a smudge and a pulse is a flicker. */
 export const CREW_MIN_PX_PER_UNIT = 10;
 /** The same gate the waiting badge uses (§1.3): under it, pulses stop. */
@@ -200,13 +200,18 @@ function drawLaptop(ctx, view, seat, live, px) {
   const s = worldToScreen(seat.laptop, view.camera);
   const w = LAPTOP_W_U * px;
   const d = LAPTOP_D_U * px;
+  // The lid, BEHIND the base so the base reads as the near edge: full height
+  // open, nothing at all folded flat. Drawn first for the same reason a monitor
+  // is drawn before the desk it stands on.
+  const lid = d * 1.15 * live;
+  if (lid > 0.5) {
+    ctx.fillStyle = PALETTE.monitorBody;
+    ctx.fillRect(s.x - w / 2, s.y - d / 2 - lid, w, lid);
+    ctx.fillStyle = PALETTE.monitorScreenGlow;
+    ctx.fillRect(s.x - w / 2 + 1, s.y - d / 2 - lid + 1, Math.max(1, w - 2), Math.max(1, lid - 2));
+  }
   ctx.fillStyle = PALETTE.monitorBody;
   ctx.fillRect(s.x - w / 2, s.y - d / 2, w, d);
-  // The lid: full height open, nothing at all folded flat.
-  const lid = d * 0.9 * live;
-  if (lid <= 0.5) return;
-  ctx.fillStyle = PALETTE.monitorScreenGlow;
-  ctx.fillRect(s.x - w / 2, s.y - d / 2 - lid, w, lid);
 }
 
 /**

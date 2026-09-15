@@ -105,9 +105,17 @@ function needsYou(agent) {
  */
 export function queueGroups(agents, opts = {}) {
   const filter = opts.projectFilter ?? null;
-  const list = (Array.isArray(agents) ? agents : []).filter(
+  const all = (Array.isArray(agents) ? agents : []).filter(
     (a) => needsYou(a) && (filter === null || a.projectId === filter),
   );
+  // WP-89 §3.2: *"the deck shows a crew as ONE expandable group under its parent
+  // rather than N sibling rows, so a crew of twelve does not push the floor off
+  // the table."* A junior whose parent is in this same queue is therefore not a
+  // row of its own — it is a line under the parent's, built by `renderDeckTable`
+  // from `crewGroups` below. A junior whose parent is NOT in the queue keeps its
+  // own row: folding it under a row that does not exist would hide it.
+  const folded = crewGroups(all);
+  const list = all.filter((a) => !(a.subagent === true && folded.has(String(a.parentId ?? ''))));
   const by = (a, b) => waitStart(a) - waitStart(b) || String(a.id).localeCompare(String(b.id));
   const waiting = list.filter((a) => a.activityState !== 'stalled').sort(by);
   const stalled = list.filter((a) => a.activityState === 'stalled').sort(by);
@@ -115,6 +123,36 @@ export function queueGroups(agents, opts = {}) {
     { key: /** @type {const} */ ('waiting'), rows: waiting },
     { key: /** @type {const} */ ('stalled'), rows: stalled },
   ].filter((g) => g.rows.length > 0);
+}
+
+/**
+ * THE JUNIORS THAT FOLD UNDER A PARENT ALREADY IN THIS LIST (WP-89).
+ *
+ * Keyed by parent id, ordered by junior id — the order the arc seats them in and
+ * the order `describeJunior` numbers them in, so the floor, the deck and the
+ * panel all agree about which junior is the first one.
+ *
+ * Only over the rows it is handed: a junior is folded because its PARENT IS
+ * VISIBLE, never because it has one. That is what stops a junior disappearing
+ * out of a filtered deck whose parent the filter removed.
+ *
+ * @param {any[]} rows the queue rows, already filtered
+ * @returns {Map<string, any[]>}
+ */
+export function crewGroups(rows) {
+  const present = new Set((rows || []).map((a) => String(a.id)));
+  /** @type {Map<string, any[]>} */
+  const out = new Map();
+  for (const a of rows || []) {
+    if (!a || a.subagent !== true) continue;
+    const parentId = String(a.parentId ?? '');
+    if (!parentId || !present.has(parentId)) continue;
+    const list = out.get(parentId) || [];
+    list.push(a);
+    out.set(parentId, list);
+  }
+  for (const list of out.values()) list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  return out;
 }
 
 /**
@@ -491,15 +529,66 @@ export function renderDeckTable(agents, opts, doc) {
   thead.appendChild(headRow);
   table.appendChild(thead);
 
+  // WP-89. The crews, computed once over the same rows `queueGroups` filtered,
+  // so the two cannot disagree about which juniors were folded away.
+  const filter = opts.projectFilter ?? null;
+  const crews = crewGroups(
+    (Array.isArray(agents) ? agents : []).filter(
+      (a) => needsYou(a) && (filter === null || a.projectId === filter),
+    ),
+  );
+
   for (const group of queueGroups(agents, opts)) {
     const tbody = doc.createElement('tbody');
     tbody.className = 'deck-group';
     tbody.setAttribute('data-group', group.key);
-    for (const agent of group.rows) tbody.appendChild(buildRow(agent, opts, doc));
+    for (const agent of group.rows) {
+      tbody.appendChild(buildRow(agent, opts, doc));
+      const crew = crews.get(String(agent.id));
+      if (crew && crew.length) tbody.appendChild(buildCrewRow(agent, crew, doc));
+    }
     table.appendChild(tbody);
   }
 
   return table;
+}
+
+/**
+ * ONE CREW, AS ONE ROW UNDER ITS PARENT (WP-89 §3.2).
+ *
+ * A `<details>` whose summary is the count and whose body is one line per
+ * junior: its type where the runtime reported one — the one fact a sidecar
+ * reliably carries — and its name. Expandable rather than always open, because
+ * a crew of twelve under every waiting parent is the table the fold exists to
+ * prevent; present rather than hidden, because a junior nobody can see is a
+ * session somebody has to go looking for.
+ *
+ * @param {any} parent @param {any[]} crew
+ * @param {{createElement:(tag:string)=>any}} doc
+ */
+function buildCrewRow(parent, crew, doc) {
+  const tr = doc.createElement('tr');
+  tr.className = 'deck-crew';
+  tr.setAttribute('data-crew-of', String(parent.id));
+  const td = doc.createElement('td');
+  td.setAttribute('colspan', String(COLUMNS.length));
+  const details = doc.createElement('details');
+  const summary = doc.createElement('summary');
+  summary.textContent = crew.length === 1 ? '1 junior' : `${crew.length} juniors`;
+  details.appendChild(summary);
+  const list = doc.createElement('ul');
+  list.className = 'deck-crew-list';
+  for (const junior of crew) {
+    const li = doc.createElement('li');
+    li.setAttribute('data-id', String(junior.id));
+    const type = junior.subagentType ? `${junior.subagentType} · ` : '';
+    li.textContent = `${type}${cut(who(junior), 28)}`;
+    list.appendChild(li);
+  }
+  details.appendChild(list);
+  td.appendChild(details);
+  tr.appendChild(td);
+  return tr;
 }
 
 // ------------------------------------------------------------- controller

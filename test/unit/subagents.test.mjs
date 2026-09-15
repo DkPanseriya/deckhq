@@ -974,15 +974,25 @@ test("juniors are occupants: the table grows to seat the parent's whole huddle",
   const juniors = [1, 2, 3].map((n) =>
     agent({ id: `claude-code:j${n}`, projectId: 'p', subagent: true, parentId: 'claude-code:s' }),
   );
-  const withThree = floorPopulation([senior, ...juniors]);
-  assert.equal(withThree.desks.get('p'), 4, 'desks = agents at desks, juniors included');
+  const withTwo = floorPopulation([senior, juniors[0], juniors[1]]);
+  assert.equal(withTwo.desks.get('p'), 3, 'desks = agents at desks, juniors included');
   assert.deepEqual(
-    tableSizesFor(withThree.desks.get('p')),
+    tableSizesFor(withTwo.desks.get('p')),
     [4],
-    'a parent with three juniors gets a four-seat table',
+    'a parent with two juniors gets a four-seat table',
   );
-  assert.equal(withThree.active.get('p'), 4);
+  assert.equal(withTwo.active.get('p'), 3);
   for (const j of juniors) assert.equal(isDeskAgent(j), true);
+
+  // WP-89 SUPERSEDES THIS AT THREE. A crew member does not stand at its parent's
+  // desk — it sits on the floor with a laptop — so it stops counting as one, and
+  // the room asks for the arc's footprint instead (`crewFloorFor`). Furnishing a
+  // room with five chairs nobody ever sits in and then sizing the room around
+  // them is what this change is against.
+  const withThree = floorPopulation([senior, ...juniors]);
+  assert.equal(withThree.desks.get('p'), 1, 'a crew sits on the floor, not at the table');
+  assert.deepEqual(withThree.crews.get('p'), [3], 'and the room is told the formation is there');
+  assert.equal(withThree.active.get('p'), 4, 'they are still on the floor and still counted');
 });
 
 test('a junior takes no chair: it stands one seat pitch beside its parent, and behind it', () => {

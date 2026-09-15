@@ -150,10 +150,19 @@ export function writeTranscript({ id, cwd, title, ageHours, tokensM, finished })
  * correct behaviour and a poor screenshot.
  */
 export function writeSubagent({ parentId, cwd, junior }) {
-  const dir = path.join(PROJECTS_DIR, slugForCwd(cwd), parentId, 'subagents');
+  // WP-89. A junior with a `workflow` is written where a real multi-agent
+  // workflow's juniors live — `subagents/workflows/wf_<id>/` — so the fixture
+  // exercises the path segment the adapter now keeps rather than a shape only
+  // the unit tests have ever seen.
+  const subagents = path.join(PROJECTS_DIR, slugForCwd(cwd), parentId, 'subagents');
+  const dir = junior.workflow ? path.join(subagents, 'workflows', junior.workflow) : subagents;
   fs.mkdirSync(dir, { recursive: true });
   const transcript = path.join(dir, `agent-${junior.agentId}.jsonl`);
-  JUNIOR_FILES.push(transcript);
+  // WP-89. A junior with a `quietSeconds` says how long ago its file last moved,
+  // which is the one thing the crew reads: it is stamped below and deliberately
+  // left OUT of `JUNIOR_FILES`, so the keep-alive beat cannot drag a junior that
+  // is meant to be finishing back to life mid-capture.
+  if (junior.quietSeconds === undefined) JUNIOR_FILES.push(transcript);
 
   const end = NOW - junior.ageMinutes * MINUTE;
   const at = (offsetMs) => new Date(end + offsetMs).toISOString();
@@ -221,6 +230,15 @@ export function writeSubagent({ parentId, cwd, junior }) {
   // Deliberately NOT backdated, where `writeTranscript` backdates every
   // session: a junior is drawn only while its transcript is still moving, and
   // the in-file timestamps say how long it has been going.
+  //
+  // WP-89's crew is the exception, and it is the whole of what that capture
+  // shows: `quietSeconds` stamps the mtime a fixed distance behind the pinned
+  // clock, so `lastGrowthAt` — and therefore the cable's colour, its pulses and
+  // its fold — is the same number on every run.
+  if (junior.quietSeconds !== undefined) {
+    const at = new Date(NOW - junior.quietSeconds * 1000);
+    fs.utimesSync(transcript, at, at);
+  }
 }
 
 /** Every junior transcript in this fixture, for `keepJuniorsWorking`. */

@@ -654,8 +654,14 @@ export function buildProjectRoom(
   const breakTop =
     group && rugProp ? ROOM_PAD + groupOffset + group.h / 2 + rugProp.h / 2 + 1.2 : 0;
   const breakBottom = finalH - CORNER_PLANT_INSET - 0.4;
+  // WP-89. A ROOM WITH A CREW IN IT HAS NO BREAK-OUT CORNER. The spare floor is
+  // spoken for: the arc is the second destination in this room, and §3.5's own
+  // rule is *"a break-out corner, a planter run, or nothing"* — one of them, not
+  // both. Drawing both would put two tub chairs inside a crew.
   const breakout =
-    !!group && breakoutFits(finalW - ROOM_PAD * 2, breakBottom - breakTop, clearRatio);
+    crewH <= 0 &&
+    !!group &&
+    breakoutFits(finalW - ROOM_PAD * 2, breakBottom - breakTop, clearRatio);
 
   // Contents land inside the room's own frame, never at its very corner. THE
   // ONE FRAME RULE: a room's props, zones and seats are all expressed relative
@@ -676,7 +682,20 @@ export function buildProjectRoom(
   // equal strips, one of which is under the plate. A room with a second
   // destination in it gives the whole of that floor to the destination, which
   // is the composition §3.7 draws and the one `crop-project-room@2x.png` shows.
-  const dy = -cluster.y + (breakout ? ROOM_PAD - slackY : (naturalH - PLATE_BAND - cluster.h) / 2);
+  //
+  // AND A ROOM WITH A CREW PUTS THEM AT THE BOTTOM (WP-89), which is the same
+  // sentence read the other way up. An arc opens BEHIND the parent's chair —
+  // away from the desk, into the room — and a centred cluster leaves that strip
+  // half under the plate band, where a seated junior's head lands on the room's
+  // own name. The crew's depth is what this room bid for (`crewFloorFor`), so
+  // the whole of the spare goes to the side the arc opens into.
+  const dy =
+    -cluster.y +
+    (breakout
+      ? ROOM_PAD - slackY
+      : crewH > 0
+        ? finalH - cluster.h - ROOM_PAD - slackY
+        : (naturalH - PLATE_BAND - cluster.h) / 2);
   translateContents({ props, zones }, dx, dy);
   for (const s of seats) {
     s.x += dx;

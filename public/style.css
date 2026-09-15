@@ -2718,6 +2718,24 @@ button {
 .deck-project {
   color: var(--ink-2);
 }
+/* WP-89. A crew, folded under the parent it belongs to: quieter than a row,
+   and one line per junior once it is opened. */
+.deck-crew > td {
+  padding: 0 0 0.35rem 1.6rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.deck-crew summary {
+  cursor: pointer;
+}
+.deck-crew-list {
+  margin: 0.25rem 0 0;
+  padding-left: 1rem;
+  list-style: none;
+}
+.deck-crew-list li {
+  padding: 0.1rem 0;
+}
 .deck-last {
   color: var(--muted);
   max-width: 46rem;
