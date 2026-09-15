@@ -1,5 +1,5 @@
 import { createSounds } from './sound.js';
-import { pickSessionTheme } from './url-options.js';
+import { pickSessionLook, pickSessionTheme } from './url-options.js';
 
 /**
  * The wiring every part of the client shares: the DOM it draws into, the
@@ -346,6 +346,45 @@ export function sessionTheme(settingTheme) {
 }
 
 /**
+ * The whole `./render/look-derive.js` module namespace, if loaded (WP-88a), and
+ * the look this tab is painting.
+ *
+ * Held here for `themes`'s reason exactly: the modules that need it are loaded
+ * dynamically and this is the one place that knows whether they arrived.
+ * @type {any}
+ */
+export let look = null;
+/** @type {any} */
+let lookOptions = null;
+/** @type {unknown} */
+let settingLook = null;
+
+/** @param {any} derive @param {any} options */
+export function setLook(derive, options) {
+  look = derive;
+  lookOptions = options;
+}
+
+/** What `settings.look` says, remembered so a theme change repaints the same floor. */
+export function setLookSetting(value) {
+  settingLook = value;
+}
+
+/**
+ * WHICH LOOK THIS TAB PAINTS: `?look=<preset>` when it names one this build has,
+ * and the setting otherwise (§4).
+ *
+ * A preset NAME and never a look, because a URL that could set any look is a
+ * link a stranger could send. It is never written back, and an unknown value is
+ * ignored — the worst a stranger's URL can do to this floor is nothing.
+ */
+export function sessionLook() {
+  if (!lookOptions?.presetById) return settingLook;
+  const preset = pickSessionLook(location.search, null, lookOptions.presetById);
+  return preset ? /** @type {any} */ (preset).look : settingLook;
+}
+
+/**
  * Paint a theme, floor and chrome together, and say which one landed.
  *
  * Safe before (or without) `render/themes.js`: with no module there is nothing
@@ -370,6 +409,12 @@ export function applyThemeSetting(name) {
   /** @returns {string} */
   const paint = () => {
     try {
+      // WP-88a: the LOOK and the theme are painted together, because they are
+      // one floor — a scheme is a transform over the theme's own tokens, and
+      // applying either on its own would paint half of it. `applyLook` with the
+      // default look and the default theme is `applyTheme`'s own reset, so an
+      // install that never opens the Look section is unchanged.
+      if (look?.applyLook) return look.applyLook(sessionLook(), name, document.documentElement);
       return themes.applyTheme(name, document.documentElement);
     } catch (err) {
       console.error('[deckhq] that theme was refused; staying on the default', err);

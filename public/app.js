@@ -32,6 +32,7 @@ import {
   announce,
   applyAvatarSetting,
   applyThemeSetting,
+  setLookSetting,
   deckUI,
   el,
   findAgent,
@@ -214,6 +215,7 @@ function handleSnapshot(snapshot) {
   // part of the same update rather than a frame later.
   // WP-64: `?theme=<id>` overrides the setting for this tab only, and an id
   // this build does not have is ignored. Nothing is written back.
+  setLookSetting((snapshot.settings || {}).look);
   applyThemeSetting(sessionTheme((snapshot.settings || {}).theme));
   // WP-45. Same reasoning one channel out: the avatar set is a setting, so it
   // arrives with the snapshot, and applying it here means a set chosen in

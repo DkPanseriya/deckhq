@@ -129,8 +129,16 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // already been shown, so the card cannot be earned twice by two tabs. The
   // preference beside them — `lightsOutHour`, WHEN the card arrives — does
   // have a row, in the Floor section.
+  //
+  // `look` (WP-88a, docs/DEVIATIONS.md §175) is the tenth, and it is exempt for
+  // exactly one package: WP-88a is the options model, the derivation and the
+  // guards, with NO UI by design, and WP-88b is the Look section that owns the
+  // row — §4 of `docs/plan/11-LOOK-CONTROL-CENTRE.md` says `'look'` joins
+  // `SETTINGS_KEYS` there. Until it does it is `?look=`, `/api/look` and
+  // `deckhq look import`, all three of which validate before they write.
   const sheetOwned = new Set(SETTINGS_KEYS);
   const exempt = new Set([
+    'look',
     'approveText',
     'onboarded',
     'editor',

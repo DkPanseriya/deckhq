@@ -18,6 +18,8 @@
 import {
   applyAvatarSetting,
   applyThemeSetting,
+  setLook,
+  setLookSetting,
   el,
   latestSnapshot,
   palette,
@@ -132,6 +134,11 @@ export async function loadRenderModules({
     // exactly as the daemon registered it in Node — same function, same
     // contrast gate, same refusals.
     setPacks(await registerPacks(await packsRequest));
+    // WP-88a, and BEFORE the theme is applied for the same reason the packs are:
+    // the first bake has to happen in the look the user chose, or a reload shows
+    // the default floor for one frame.
+    setLook(await import('./render/look-derive.js'), await import('./render/look-options.js'));
+    setLookSetting((latestSnapshot?.settings || {}).look);
     applyThemeSetting(sessionTheme((latestSnapshot?.settings || {}).theme));
     applyAvatarSetting((latestSnapshot?.settings || {}).avatarSet);
   } catch (err) {
