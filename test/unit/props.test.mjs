@@ -32,6 +32,7 @@ import {
   PLANTS_PER_PROJECT_ROOM,
   PLANT_FOOTPRINTS,
   PLANT_RUN_KINDS,
+  CHAR_CLEAR_U,
   PROP_CLEAR_U2,
   SILHOUETTE_SPACING,
   CLEAR_PATCH_MAX,
@@ -48,6 +49,7 @@ import {
   DEFAULT_PALETTE,
 } from '../../public/render/palette.js';
 import { PROP_HEIGHT } from '../../public/render/backdrop-paint.js';
+import { MARGIN } from '../../public/render/plan-units.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RENDER = path.join(HERE, '..', '..', 'public', 'render');
@@ -555,4 +557,86 @@ test('owner decision 5: the lounge games are muted 22–26 % toward the carpet',
     rows.push([token, `${hue} → ${shipped}`]);
   }
   report('the games, muted', rows);
+});
+
+test('§5 the lounge is places rather than field: its bare floor is under a third', () => {
+  // WP-85c's acceptance: *"its bare-floor fraction is ≤ 35 % at every one of
+  // the sixteen populations"*.
+  //
+  // MEASURED OVER THE FURNISHED INTERIOR, which is the room less `MARGIN` and
+  // less the plate band, and that is not a softening: a room is as tall as its
+  // contents need and the packer gives it whatever is left over (`buildLounge`
+  // says so where it sets `w`), so measuring against the padded rectangle would
+  // be measuring the envelope search rather than the lounge. The margin is the
+  // clear floor round the furniture, which is where people walk.
+  //
+  // THE PROMENADE COUNTS AS A PLACE. It carries no furniture by design —
+  // *"standing conversations need no furniture"* — and it is where every
+  // benched agent past the seats is actually drawn. Bare floor with somebody
+  // standing on it is a room, not a gap.
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const { name, plan } of PLANS) {
+    const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+    if (!lounge) continue;
+    const iw = lounge.natural.w - MARGIN * 2;
+    const ih = lounge.natural.h - MARGIN * 2 - (lounge.plateBand ?? 0);
+    const places = lounge.zones.filter((z) => z.bay || z.id === 'lounge-mingle');
+    const covered = places.reduce((a, z) => a + z.w * z.h, 0);
+    const bare = 100 - (covered / (iw * ih)) * 100;
+    rows.push([name, `${bare.toFixed(1)} % bare over ${places.length} places`]);
+    assert.ok(
+      bare <= 35 + 1e-9,
+      `${name}: the lounge is ${bare.toFixed(1)} % bare floor, and §5 asks for 35 %`,
+    );
+  }
+  report('§5 the lounge, bare floor', rows);
+});
+
+test('§5 no prop stands within 1.2 U of a character’s footprint', () => {
+  // Every place the floor can draw somebody: a desk seat, a lounge spot, a
+  // queue place. Decoration closer than `CHAR_CLEAR` to one of them is a plant
+  // growing out of a robot — which at WP-79's 34 px figure is exactly what it
+  // would look like.
+  //
+  // SCOPED TO THE DECORATION, for the reason §3.5's eight-unit rule is: a
+  // person is drawn where they are USING something. A seat's (x, y) IS the
+  // figure's ground contact (WP-85b §163.6), so the chair is 0 U away by
+  // construction; somebody at the coffee machine stands 0.7 U from the counter
+  // they are making coffee at; a pool player stands `STAND_OFF` from the table.
+  // A rule that counted those would be a rule against using the furniture.
+  const CHAR_CLEAR = CHAR_CLEAR_U;
+  const DECOR = new Set([...PLANT_RUN_KINDS, 'planter', 'lamp', 'box']);
+  let checked = 0;
+  let closest = Infinity;
+  for (const { name, plan } of PLANS) {
+    // `plan.seats` is a Map of room id to that room's seats; the reception's
+    // and the lounge's are their own lists, because neither is a project.
+    /** @type {Array<{x:number, y:number, room:string}>} */
+    const people = [];
+    for (const [roomId, list] of plan.seats || [])
+      for (const seat of list) people.push({ x: seat.x, y: seat.y, room: roomId });
+    for (const sp of plan.officeSeats || []) people.push({ x: sp.x, y: sp.y, room: '__office__' });
+    for (const sp of plan.loungeSpots || []) people.push({ x: sp.x, y: sp.y, room: '__lounge__' });
+    for (const room of plan.rooms) {
+      for (const person of people) {
+        if (person.room && person.room !== room.id) continue;
+        const foot = { x: person.x - 0.5, y: person.y - 0.5, w: 1, h: 1 };
+        for (const p of room.props) {
+          if (!DECOR.has(p.kind)) continue;
+          const d = gapBetween(foot, p);
+          closest = Math.min(closest, d);
+          assert.ok(
+            d >= CHAR_CLEAR - 1e-6,
+            `${name}/${room.id}: a ${p.kind} is ${d.toFixed(2)} U from somebody's feet`,
+          );
+          checked++;
+        }
+      }
+    }
+  }
+  console.log(
+    `
+    ${checked} decoration-to-person distances, closest ${closest.toFixed(2)} U (≥ ${CHAR_CLEAR})`,
+  );
 });

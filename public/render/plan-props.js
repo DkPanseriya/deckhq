@@ -254,6 +254,21 @@ export const CLEAR_PATCH_MAX = 10;
  */
 export const PROP_ATTACH_MAX = 2.0;
 
+/**
+ * THE CLEAR FLOOR ROUND A PERSON (WP-85c's acceptance).
+ *
+ * *"No prop stands within 1.2 U of a character's footprint."* At WP-79's 34 px
+ * figure a prop any nearer is drawn through the robot rather than beside it —
+ * and a plan that puts a bush where somebody is standing has decorated a place
+ * rather than a room. It is what a bay's corner is searched against.
+ *
+ * FURNITURE IS NOT IN IT, and cannot be: a seat's own `(x, y)` IS the figure's
+ * ground contact (WP-85b), somebody making coffee stands at the counter, and a
+ * pool player stands `STAND_OFF` from the table. The rule is about the things
+ * that decorate the floor round a person, not about the thing they are using.
+ */
+export const CHAR_CLEAR_U = 1.2;
+
 // ------------------------------------------------------------- the lounge
 
 /**

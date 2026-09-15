@@ -45,6 +45,7 @@ import {
   SEAT_STOOL,
 } from './plan-furniture.js';
 import {
+  CHAR_CLEAR_U,
   LOUNGE_BAY_SPEC,
   PLANTER_MARGIN,
   PLANTER_W,
@@ -606,17 +607,43 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
       ground: spec ? spec.ground : 'wood',
     });
   }
-  // ONE PLANT PER BAY, in the bay's own south-west corner (§3.6 allows six and
-  // this room wants the budget spent on the planters instead: *"planters do the
-  // dividing between bays, which is what a planting budget is for"*). The kinds
-  // come from `plantRun`, so the four bays never show the same silhouette twice
-  // running and a reader can tell one bay's corner from the next one's.
+  // ONE PLANT PER BAY, IN A CORNER NOBODY IS STANDING IN.
+  //
+  // §3.6 allows six per bay and this room wants the budget spent on the
+  // planters instead: *"planters do the dividing between bays, which is what a
+  // planting budget is for"*. The kinds come from `plantRun`, so no two bays
+  // running show the same silhouette and a reader can tell one bay's corner
+  // from the next one's.
+  //
+  // THE CORNER IS SEARCHED, not chosen. A bay's corners are where its blocks
+  // did not reach, and a block's spots reach past its furniture by design — a
+  // pool player stands `STAND_OFF` clear of the table, the benched stand in the
+  // promenade. The first version planted the south-east corner of every bay and
+  // put a bush exactly where somebody is drawn. Four corners in a fixed order,
+  // and a bay with no free corner gets no plant: §3.6's numbers are a ceiling,
+  // not a quota, and a room that plants a quota is decorated by area (§3.5).
   const bayKinds = plantRun('__lounge__', Math.min(bays.length, PLANTS_PER_LOUNGE_BAY));
   bays.forEach((bay, i) => {
     const kind = bayKinds[i % bayKinds.length];
     const size = PLANT_FOOTPRINTS[kind] || 2.4;
-    const dx = Math.max(0, bay.w - size - 0.2);
-    const dy = Math.max(0, bay.h - size - 0.2);
+    const far = 0.2;
+    /** @type {Array<[number, number]>} */
+    const corners = [
+      [Math.max(0, bay.w - size - far), Math.max(0, bay.h - size - far)],
+      [far, Math.max(0, bay.h - size - far)],
+      [Math.max(0, bay.w - size - far), far],
+      [far, far],
+    ];
+    const free = corners.find(([dx, dy]) => {
+      const r = { x: bay.x + dx, y: bay.y + dy, w: size, h: size };
+      return !spots.some((sp) => {
+        const gapX = Math.max(0, Math.max(r.x - (sp.x + 0.5), sp.x - 0.5 - (r.x + r.w)));
+        const gapY = Math.max(0, Math.max(r.y - (sp.y + 0.5), sp.y - 0.5 - (r.y + r.h)));
+        return Math.hypot(gapX, gapY) < CHAR_CLEAR_U;
+      });
+    });
+    if (!free) return;
+    const [dx, dy] = free;
     props.push({
       kind,
       w: size,
