@@ -79,6 +79,7 @@ export function createHeaderPart(ctx) {
     getSnapshot,
     mkChip,
     draftChip,
+    formerEl,
     titleEl,
     metaEl,
     waitingEl,
@@ -148,6 +149,16 @@ export function createHeaderPart(ctx) {
       // and "MK2.2rare" is one word to it.
       mkChip.append(' ', rarityEl);
     }
+    // WP-86 · "was Livia 2", for the week after the store migration took a
+    // numeric suffix away (docs/DEVIATIONS.md §168). The daemon decides when
+    // the week is up — `formerName` simply stops arriving on the snapshot —
+    // so there is no second clock in the browser to disagree with it. A
+    // user-chosen name outranks all of this: if the user named this agent
+    // themselves, the daemon's old marker is not what they are looking at.
+    const former = !a.displayName && typeof a.formerName === 'string' ? a.formerName.trim() : '';
+    formerEl.textContent = former ? `was ${former}` : '';
+    formerEl.hidden = !former;
+
     renderDraftChip();
     renderRecordLine();
     // WP-28. One quiet line about the AGENT, under the identity area and above

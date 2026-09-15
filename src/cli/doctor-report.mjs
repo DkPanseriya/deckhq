@@ -117,6 +117,8 @@ export function renderReport(report, opts = {}) {
 
   lines.push(row('terminal', describeTerminalRow(report.terminal)));
 
+  if (report.names) lines.push(row('names', describeNames(report.names)));
+
   lines.push(
     row(
       'state',
@@ -254,6 +256,26 @@ export function describeTerminalRow(t) {
     fallback: 'always present',
   }[t.reason];
   return how ? `${t.label}   (${how})` : String(t.label);
+}
+
+/**
+ * The name row — WP-86, §168.
+ *
+ * How many names the pool holds, how many identities have been handed one, and
+ * how many of those are still wearing the pool's "we ran out" marker — `Livia
+ * 2`, `Greta 3` — instead of a name. **The last number should be 0**, on every
+ * machine, from the first start after the store migration ran. It is printed
+ * whether or not it is zero, because a row that only appeared when something
+ * was wrong would be a row nobody could check.
+ * @param {{poolSize:number, assigned:number, suffixed:number}} n
+ */
+export function describeNames(n) {
+  const head = `${group(n.poolSize)} in the pool, ${group(n.assigned)} handed out`;
+  if (n.suffixed === 0) return `${head}, 0 numbered`;
+  return (
+    `${head}, ${group(n.suffixed)} still numbered ` +
+    `(${plural(n.suffixed, 'name')} like "Livia 2", from before the pool was big enough)`
+  );
 }
 
 /**

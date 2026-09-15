@@ -39,8 +39,10 @@ import {
   checkState,
   collectReport,
   deckFrom,
+  describeNames,
   group,
   PITCH,
+  readNames,
   readTerminalPin,
   redact,
   renderReport,
@@ -49,6 +51,7 @@ import {
   tildify,
 } from '../../src/cli/doctor.mjs';
 import { getAdapters } from '../../src/adapters/index.mjs';
+import { SHORT_NAMES } from '../../public/names.js';
 
 // ---------------------------------------------------------------------------
 // Fakes
@@ -711,6 +714,61 @@ test('readTerminalPin answers "auto" for every way a state file can be unusable'
   assert.equal(await readTerminalPin(dataDir), 'auto'); // a directory, not a file
 });
 
+// ---------------------------------------------------------------------------
+// WP-86 · the name row
+// ---------------------------------------------------------------------------
+
+test('WP-86: the report says how big the pool is and how many names carry a number', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  await fsp.writeFile(
+    stateFile,
+    JSON.stringify({
+      version: 1,
+      identity: {
+        names: {
+          'claude-code:a': { given: 'Marco' },
+          'claude-code:b': { given: 'Livia 2' },
+          'claude-code:c': { given: 'Greta 3' },
+          'claude-code:d': { given: null, name: 'Ada' },
+        },
+      },
+    }),
+    'utf8',
+  );
+  const found = await readNames(stateFile);
+  assert.equal(found.poolSize, SHORT_NAMES.length);
+  assert.equal(found.assigned, 3, 'a record with no daemon-given name has not been handed one');
+  assert.equal(found.suffixed, 2);
+
+  const report = await collect(registry(fakeAdapter()), { state: { dataDir, stateFile } });
+  const text = renderReport(report);
+  assert.match(text, new RegExp(`names\\s+${group(SHORT_NAMES.length)} in the pool`));
+  assert.match(text, /2 still numbered/);
+  assert.match(text, /Livia 2/, 'the row shows the shape of the thing it is counting');
+});
+
+test('WP-86: the name row is printed when the count is zero, which is when it matters', () => {
+  // A row that only appeared when something was wrong is a row nobody can
+  // check. This is the number the migration is supposed to drive to zero, so
+  // the zero has to be visible.
+  const line = describeNames({ poolSize: 600, assigned: 94, suffixed: 0 });
+  assert.match(line, /600 in the pool/);
+  assert.match(line, /94 handed out/);
+  assert.match(line, /0 numbered/);
+  assert.doesNotMatch(line, /Livia/, 'nothing to explain when there is nothing left to explain');
+});
+
+test('WP-86: readNames answers with the pool size for every way a state file can be unusable', async () => {
+  const { dataDir, stateFile } = await tmpStateDir();
+  const empty = { poolSize: SHORT_NAMES.length, assigned: 0, suffixed: 0 };
+  assert.deepEqual(await readNames(stateFile), empty); // absent
+  for (const body of ['', 'not json', 'null', '[]', '{"identity":{}}', '{"identity":42}']) {
+    await fsp.writeFile(stateFile, body, 'utf8');
+    assert.deepEqual(await readNames(stateFile), empty, body);
+  }
+  assert.deepEqual(await readNames(dataDir), empty); // a directory, not a file
+});
+
 test('the share block does not carry which terminal this person uses', async () => {
   // The block is a launch asset that gets pasted in public. Which emulator
   // someone runs is a fact about them and adds nothing to the numbers, so it
@@ -1118,6 +1176,8 @@ test('--json emits one JSON document with a stable shape', async () => {
     'egress',
     'generatedAt',
     'hooks',
+    // WP-86: the pool's size, and how many identities still wear a suffix.
+    'names',
     'notes',
     'ok',
     'problems',
