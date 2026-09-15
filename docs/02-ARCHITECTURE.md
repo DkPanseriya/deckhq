@@ -343,3 +343,43 @@ deckhq/
 
 Existing prototype code in `public/app.js`, `public/studio.js`, `lib/sessions.mjs` and
 `server.mjs` is **reference, not foundation**. See `04-BUILD-PLAN.md` WP0.
+
+---
+
+## 11. The code as of 16 September 2026
+
+**This document is still normative. It is not still complete.** Everything above is the contract
+every module is written against, and none of it has been withdrawn — but ninety work packages have
+landed since it was approved, and §10's repository layout in particular is a sketch of a tree that
+now holds 282 non-test modules. Rather than rewrite a normative document from a snapshot of the
+code, WP-91 measured the code and wrote the measurement down beside it.
+
+**Read [`plan/13-ARCHITECTURE-AUDIT.md`](plan/13-ARCHITECTURE-AUDIT.md)** for the layers as they
+actually are, the dependency graph with every cycle and boundary crossing named, every product
+invariant with the test or gate that holds it, a trace of one hook event and one transcript growth
+from disk to pixel, the error-handling and test architecture, the extension points with the number
+of files each costs today, and fourteen ranked findings. Its machine-readable companion,
+[`plan/13-audit-map.json`](plan/13-audit-map.json), carries every module's size, imports, importers,
+layer, invariants enforced and covering tests, and is regenerated rather than edited.
+
+Four things in that audit correct a reader's expectation of the sections above, and are named here
+so nobody has to find them:
+
+1. **§2's adapter list is four runtimes, not two.** `claude-code`, `codex`, `gemini-cli` and
+   `opencode`, of which the last two are declared unverified (`ADAPTERS.md` §6). `RuntimeId` in
+   `src/core/model.mjs` is the union of record.
+2. **`placement()` lives in `public/floor-rule.js`, not in `src/core/model.mjs`.** §3.1's rule is
+   unchanged; the one copy of it moved to the side of the static-file boundary both halves can
+   reach, and `model.mjs` re-exports it. `public/` still may never import from `src/`, and does not:
+   the audit measured zero such edges. The fourteen edges in the other direction are listed in the
+   audit's §1.3.
+3. **§4.1's table has grown two rows and one amendment**, all of them recorded in place above:
+   `PreToolUse`/`PostToolUse` (WP-52, §89) and the `SubagentStop` payload (WP-41, §120), plus the
+   30 August amendment subordinating the whole table to §2's invariant.
+4. **§7's `state.json` carries a `STATE_VERSION`, now 2**, with versioned, idempotent, recorded
+   migrations in `src/core/state-migrations.mjs` (WP-86, §168). The `version: 1` this section
+   describes is what a file written before that carries, and is migrated once.
+
+§8's performance budget has never been measured on a machine with a hundred agents. That is stated
+in `DEVIATIONS.md` §162.10 and §178 and is repeated here because §8 reads as a set of measurements
+and is a set of targets.

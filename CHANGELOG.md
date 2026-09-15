@@ -1484,6 +1484,24 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   owner decisions in §13.24, and the direction in `docs/DEVIATIONS.md` §167. The pictures in
   `docs/media/motion/` are illustrations of the specification, not screenshots of shipped code.
 
+- **The architecture, audited against itself — WP-91.** The owner, 16 September: _"analyses,
+  evaluates, scrutinises and optimises the architecture of the complete product… the product is
+  finally working well, no major overhaul."_ `docs/plan/13-ARCHITECTURE-AUDIT.md` maps the layers as
+  they actually are, with a generated companion, `13-audit-map.json`, carrying every module's size,
+  imports, importers, layer, invariants and tests. **Nothing under `src/`, `public/`, `test/` or
+  `scripts/` was changed**; the suite was run once (2,437 tests, 2,436 passing, one platform skip)
+  and the analysis was written outside the tree. 282 non-test modules, 731 value edges, **no
+  `public/` → `src/` import at all**, three cycles all inside one directory, and every line of the
+  Node side reachable from a test. Eighteen product invariants are registered with the test or gate
+  that holds each; the one the product is built on is held by **54 named `INVARIANT:` tests across
+  28 files**. The two findings that are defects are both in gates rather than in the product: the
+  Linux golden set holds six of sixteen captures and a hole in an existing set exits 1, so CI's
+  `goldens` job has been red for a reason that is not a pixel; and the 900-line ceiling walks
+  eighteen prefix groups — 129 files of 282 — so the eight files that are over it have never been
+  looked at. Fourteen findings are ranked with `file:line` evidence, blast radius, proof method and
+  what each must not change, and the fifteen-package sequence they open is `08` §9's WP-92a–o, with
+  six owner questions as §13 item 26. `docs/DEVIATIONS.md` §179, requirement R-182.
+
 ## 1.3.0 — 2026-09-04
 
 ### Highlights
