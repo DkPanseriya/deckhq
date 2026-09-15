@@ -17515,3 +17515,194 @@ the width rule, so the number can only grow by images being added, never by one 
   are in the register with their class and a reason, which is the point of a register.
 - **No page was removed and no page was merged.** The model, hooks, adapters and FAQ pages are
   untouched; this package added to the site rather than rewriting it.
+
+## 171. WP-94c — a product page, and the one measurement that decides a colour
+
+The owner, 15 September 2026:
+
+> _"Make very fancy and attractive pages. Should look like a product by Apple, Uber, Netflix, Airbnb,
+> Google level companies."_
+
+**Numbered 171.** 170 was the last entry on `main` when this package opened, and 169 belongs to a
+package running beside it that was not present in this worktree.
+
+The five companies in that sentence do not share a look. What they share is that every page any of
+them ships is **one system applied**: one type scale, one spacing grid, one accent, one grammar for
+a section — and nothing on the page that is not in the system. WP-94a's site was honest, complete
+and had none of that. It was a reading measure of 36rem, headings at 1.3rem, twelve nav links and
+one picture per section, on a dark ground because the product is dark. It read as documentation,
+which is what it was.
+
+### 171.1 The scene, before the palette
+
+The product's own stylesheet opens with a sentence that decided this package: _"the whole window is
+an architect's drawing on a lit table in a dark studio."_ That is the scene, and the site is the
+other half of it. **Dark is the studio at night. Light is the table under daylight.** The two are
+not a preference switch bolted onto a dark page; they are the same room from two sides, which is
+why the light half is not invented here at all.
+
+It was already in the repository. `public/brand/deckhq-mark.svg` has carried **both grounds in one
+file** since WP-82 — `#14161B` plate and `#E9ECF2` form for dark, `#F4F2ED` plate and `#1B1E25` form
+for light — because a favicon follows the reader's own preference and a tab strip belongs to the
+browser. So the site's light scheme is the mark's light plate, its rim is the mark's rim, and its
+ink is the mark's form. Nothing was picked for taste that a committed file already answered.
+
+### 171.2 The accent was in the drawing, and crimson was not available
+
+The mark has exactly one colour in it: the amber on the antenna tip. That is the accent — rules, the
+current page, the focus ring, the one filled button.
+
+Crimson is the other question, and `docs/03-VISUAL-SPEC.md` §5 had already answered it: crimson is
+`for_review` and _"if red appears anywhere decorative, that is a bug."_ On this site it appears on
+exactly one band, the one about what is waiting on you, as a 2 px rule above each card. Nowhere
+else.
+
+**Then it was measured, which changed one of the two.** The stylesheet's contrast ratios are not
+opinions in a comment; `test/unit/site.test.mjs` parses the three token blocks out of `style.css`,
+recomputes WCAG relative luminance from the literals, and asserts every ink against every ground in
+both schemes — **eighty-one pairs**. Two things fell out of that:
+
+- **The mark's own light accent, `#B5731A`, could not set text.** It measures **3.46** on the light
+  plate, well under the 4.5 floor. The site's light accent is `#8A5510`, one step down the same ramp, at
+  **5.54**. This is the only place the site departs from the mark, and it departs because a number
+  said so.
+- **Crimson sets no text at all in the dark scheme.** It measures 3.38 on `--bg`, 3.13 on
+  `--surface`, 2.78 on `--surface-2`. So it is a fill, a dot and a rule, with neutral ink on top —
+  the same discipline `public/style.css` applies inside the product, written into the site's test as
+  a grep for `color: var(--crimson)` that must find nothing.
+
+The measured floors, worst case in either scheme: `--ink` 13.02, `--ink-2` 7.73, `--muted` **4.55**,
+`--accent` **4.88** (which is also the focus ring's floor), ink on accent 5.94, ink on crimson
+4.68.
+
+### 171.3 One system, and what it is
+
+| | |
+|---|---|
+| Type | a perfect fourth (1.333), fluid with `clamp()` from a 360 px phone to a 1440 px desktop. Display **42 → 80 px**, title 34 → 56, head 26 → 36, sub 20 → 24, lede 19 → 22, **body 17 → 18**, small 15, micro 13. Tabular numerals on the whole document |
+| Space | eight pixels. `--s-1` … `--s-8` are 8, 16, 24, 32, 48, 64, 96, 128, and every margin and pad on the site is one of them |
+| Width | content **1200 px**, prose a 38rem reading measure inside it, image bands the whole window |
+| Colour | the product's neutrals and the mark's two plates; one accent, the mark's amber; crimson on one band |
+| Motion | reveal on scroll — opacity and 10 px over 340 ms, once — and nothing else |
+
+The display step tops out at **80 px** rather than the 96 the brief allowed. 88 was tried first and
+wrapped the home headline onto three lines at 1440, which pushed the floor off the first screen;
+80 puts it on two and leaves ~280 px of the building above the fold. The test asserts the ceiling is
+between 64 and 96 so the reason survives the next person who likes a bigger number.
+
+**The band grammar.** One picture, one headline, two lines of copy. Odd bands put the picture right,
+even bands left, and under 60rem every band is one column. Features, Look, Characters and Studio use
+the same grammar, so five pages are one page's worth of rules.
+
+### 171.4 The full-bleed band, without the `100vw` bug
+
+An image band is the width of the window. The usual way to do that from inside a padded container is
+`width: 100vw; margin-left: 50%; transform: translateX(-50%)`, and it is wrong: `100vw` includes the
+scrollbar, so every such band overflows by 15 px and the whole page scrolls sideways.
+
+So `main` owns no padding at all. Every direct child supplies its own gutter, and a band supplies
+none. There is no `100vw` anywhere in the stylesheet, and `site/capture.mjs` measures
+`scrollWidth === clientWidth` on **thirteen pages at 375 and 1440** rather than trusting that.
+
+### 171.5 Three crops of one file, and a 2.6× hero on a phone
+
+The home page shows the `three` golden four times and downloads it once. The hero is the whole
+building at 16:7; the three "how it feels" cards are the office, the project rooms and the lounge,
+each a 2.5× detail of the same file, cropped by its box rather than by a second copy on disk. The
+margins are arithmetic rather than eyeballing — at 250 %, `left = 50 − 250·fx` and
+`top = 28.125 − 156.25·fy`, both as percentages of the card's width, which is what a percentage
+margin resolves against in **both** axes.
+
+A 1600 px floor letterboxed into a 375 px phone is a smudge. On a phone the hero box changes to 4:3
+and draws the picture at **2.6×** inside it, so what a phone gets is your office with the two
+sessions standing in it and the crimson `1d 2h` badge over the older one — legible, and the point of
+the product.
+
+### 171.6 The site has JavaScript now, and the test that let it
+
+WP-94a's test asserted `!/<script/i.test(html)` on every page. That is not the promise; the promise
+is that **nothing on a page is fetched from anywhere but this origin**. So the rule was tightened
+rather than dropped: a `<script>` is allowed, it must carry a `src`, and it must be **empty** — an
+inline script is refused, because an inline script is the one that never has to be reviewed as a
+file. The two files are asserted byte-for-byte identical to the ones in the repository, scanned for
+the five names that make a browser go and get something — the same five the page test has always
+looked for — and for any absolute URL, and checked to store exactly one `localStorage` key.
+
+(The five are not written out here on purpose: this log is rendered into the site, and a page that
+spells them is a page the site's own security test reports. That test reads every emitted page,
+including this one, which is the correct behaviour and worth a sentence of awkwardness.)
+
+**7.3 KB of it, and the page is whole without any of it.** `theme.js` is 0.8 KB, runs before the
+first paint, and reads one key. `site.js` is 6.5 KB and does four things, each an enhancement of
+something that already works:
+
+- the scheme follows `prefers-color-scheme` until the toggle is pressed — and the toggle ships
+  `hidden`, so a reader with scripting off gets no dead control on the bar;
+- both menus are `<details>` elements, so the site navigates with scripting off; the script only
+  closes them on a click past or an Escape;
+- a command line is selectable text with or without its **Copy** button, and the button is
+  `navigator.clipboard` with an `execCommand` fallback — both local, neither a request;
+- the reveal.
+
+### 171.7 The reveal, and the failsafe that was wrong the first time
+
+The rule is that content is **visible by default**. `site.js` adds `js-reveal` to the root and only
+then does the zero-opacity rule apply, so scripting off, a headless render and a print all show
+every word. The test enforces it from the CSS side: every rule that sets `opacity: 0` on a
+`[data-reveal]` must have `:root.js-reveal` in its selector.
+
+The first failsafe was **wrong, and the browser caught it**. It abandoned the reveal if nothing had
+been revealed within two seconds — and on the home page nothing *is* revealed within two seconds,
+because the first section is below the fold. A reader who landed and did not immediately scroll lost
+every reveal on the page. The fix is that a working `IntersectionObserver` calls its callback once
+per element the moment it is observed, on screen or not: **that callback**, not a reveal, is the
+signal the mechanism is alive. The flag is set before the loop, not inside it.
+
+### 171.8 Width and height on every picture, from the picture
+
+A picture without `width` and `height` is a picture the browser reserves no room for, so the words
+under it move when it arrives. Typing them by hand is a number that can be wrong and a step that can
+be forgotten, so `addImageDimensions()` in `site/build.mjs` puts them there from the file itself —
+PNG through `scripts/lib/png.mjs`, the goldens harness's own decoder, and GIF out of its thirteen-byte
+header, which carries the logical screen size in two little-endian shorts and needs no decoder at
+all. A tag that already declares a size is left alone: a hand-written pair is a deliberate one.
+
+That required the build to copy the images **before** it writes the pages, which it now does. It
+covers the 172 rendered log entries as well as the eleven hand-written pages, and the test checks
+every declared pair against the file on disk rather than merely checking one is present.
+
+### 171.9 Measured, not asserted
+
+`site/capture.mjs` builds the site into a temp directory, serves it from a socket the OS chooses
+(`listen(0)`), drives one Chrome over the DevTools Protocol, and takes the whole lot down again.
+Nothing is left running and the only origin in play is `127.0.0.1` on a port that existed for a few
+seconds. At each size it walks the page the way a reader does, so the reveal actually fires and
+every lazy image is asked for, and then reads out what a screenshot cannot show.
+
+The six shots are `docs/media/site/home-{375,768,1440}-{light,dark}.png`, class `capture`,
+`docs/MEDIA.md` §4.4. What the same run measured:
+
+| | |
+|---|---|
+| horizontal overflow | none, on thirteen pages at 375 and 1440 |
+| the reveal | 7 of 7 sections resolved after a walk, at every size, in both schemes |
+| reduced motion | every section at opacity 1, and the reveal never armed |
+| one `<h1>` | on all thirteen |
+| the sticky bar | `position: sticky` at every size; the toggle un-hidden |
+
+And the budgets, all under: **`style.css` 37.5 KB** of 40, **the scripts 7.3 KB** of 10, and the home
+page's first screen — the document, the stylesheet, both scripts, the mark and the one picture that
+is not lazy — **821 KB** of 1.5 MB. Everything below the fold is `loading="lazy"`; the test asserts
+the hero is the only eager picture on the page.
+
+### 171.10 What did not change
+
+- **Every page.** All eleven, plus the 172 log entries. Nothing was merged and nothing was dropped.
+- **The honesty gate.** `assertMediaIsLabelled()` is untouched, and the six mockups still carry
+  **design illustration** in their captions. The Look page's gallery was the one place this could
+  have gone wrong — a caption that appears on hover is a caption a touch screen and a screen reader
+  never get — so the tiles' captions are always in the document and hover only lifts the tile.
+- **The three install commands**, verbatim, from `INSTALL_COMMANDS` as WP-94a left it.
+- **The claim count.** Studio still says three of eleven steps exist; Look still says WP-88 is
+  planned four times; every stale capture still says it predates the current figures. This package
+  moved type and colour, not what the site says it has.

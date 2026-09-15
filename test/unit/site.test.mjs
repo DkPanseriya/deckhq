@@ -88,6 +88,10 @@ test('the site builds every page it navigates to', () => {
     'log/index.html',
     'log/1.html',
     'style.css',
+    // WP-94c · the two scripts. Everything they do, the page does without
+    // them; `site/site.js`'s header says which four things they are.
+    'theme.js',
+    'site.js',
     // WP-82 · the mark, both the SVG the tab strip gets and the dark raster
     // the pages show. `site/favicon.svg` — a crimson square that was nothing
     // the product used — is gone.
@@ -150,11 +154,49 @@ test('SECURITY: no page fetches anything from a third-party host', () => {
         `${path.relative(out, page)} fetches ${url} from another origin`,
       );
     }
-    assert.ok(!/<script/i.test(html), `${path.relative(out, page)} carries a script`);
+    // WP-94c · a page may carry a script, and only of one shape: a `src` to a
+    // file on this origin. An INLINE script is still refused, because an
+    // inline script is the one that never has to be reviewed as a file, and
+    // the `src` case is already covered by the loop above, which refuses every
+    // absolute URL whatever the host.
+    for (const tag of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+      assert.match(
+        tag[1],
+        /\ssrc="[^"]+"/,
+        `${path.relative(out, page)} carries a script with no src`,
+      );
+      assert.equal(tag[2].trim(), '', `${path.relative(out, page)} carries an inline script`);
+    }
     assert.ok(!/<iframe/i.test(html), `${path.relative(out, page)} carries a frame`);
     assert.ok(
       !/\b(fetch\(|XMLHttpRequest|navigator\.sendBeacon|new\s+WebSocket|EventSource)\b/.test(html),
       `${path.relative(out, page)} makes a request of its own`,
+    );
+  }
+});
+
+test('SECURITY: the scripts fetch nothing, store nothing but the scheme', () => {
+  // The same promise, applied to the two files WP-94c added. They are the only
+  // JavaScript on this site; if either one ever reached the network, the
+  // sentence in every page footer would be false.
+  for (const name of ['theme.js', 'site.js']) {
+    for (const file of [path.join(siteDir, name), path.join(out, name)]) {
+      const text = fs.readFileSync(file, 'utf8');
+      assert.ok(
+        !/\b(fetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|importScripts)\b/.test(
+          text,
+        ),
+        `${name} makes a request`,
+      );
+      assert.ok(!/https?:\/\//.test(text), `${name} names an absolute URL`);
+      for (const m of text.matchAll(/localStorage\.\w+\(\s*'([^']+)'/g)) {
+        assert.equal(m[1], 'deckhq-theme', `${name} stores ${m[1]}`);
+      }
+    }
+    assert.deepEqual(
+      fs.readFileSync(path.join(siteDir, name)),
+      fs.readFileSync(path.join(out, name)),
+      `${name} on the site is not the file in the repository`,
     );
   }
 });
@@ -425,6 +467,322 @@ test('no image the site serves is wider than the capture stage', async () => {
     );
   }
   assert.ok(checked > 10, 'expected the site to carry images');
+});
+
+/* ------------------------------------------------------------------ WP-94c */
+
+/**
+ * One declaration block's custom properties, by the selector that opens it.
+ * The three token blocks in `site/style.css` contain no nested braces, so the
+ * first `}` after the selector is the end of the block.
+ *
+ * @param {string} css @param {string} selector
+ * @returns {Record<string, string>}
+ */
+function tokensOf(source, selector) {
+  // Comments first: `site/style.css` writes the measured ratio beside most of
+  // these values, and a `#hex` inside a comment is not a declaration.
+  const css = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  const at = css.indexOf(selector);
+  assert.notEqual(at, -1, `${selector} is not in the stylesheet`);
+  const open = css.indexOf('{', at);
+  const close = css.indexOf('}', open);
+  /** @type {Record<string, string>} */
+  const out_ = {};
+  for (const m of css.slice(open, close).matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/gi)) {
+    out_[m[1]] = m[2].trim();
+  }
+  return out_;
+}
+
+/** WCAG 2.x relative luminance of a `#rrggbb`. @param {string} hex */
+function luminance(hex) {
+  const channels = [1, 3, 5].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+/** @param {string} a @param {string} b */
+function contrast(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** The blocks that carry a complete palette, and what each one is. */
+const SCHEME_BLOCKS = [
+  { name: 'dark (the default, and the OS preference)', selector: '\n:root {' },
+  { name: 'light (the OS preference)', selector: ":root:not([data-theme='dark']) {" },
+  { name: 'light (the toggle)', selector: ":root[data-theme='light'] {" },
+];
+
+/** Every token a scheme has to define, or it is not a complete scheme. */
+const REQUIRED_TOKENS = [
+  '--bg',
+  '--bg-2',
+  '--surface',
+  '--surface-2',
+  '--line',
+  '--line-2',
+  '--ink',
+  '--ink-2',
+  '--muted',
+  '--accent',
+  '--on-accent',
+  '--crimson',
+  '--on-crimson',
+  '--head-solid',
+];
+
+/**
+ * The grounds this site sets text on, and the inks it sets on them.
+ * `--head-solid` is in here because the sticky bar is a ground for the nav
+ * links whenever `backdrop-filter` is not available.
+ */
+const GROUNDS = ['--bg', '--bg-2', '--surface', '--surface-2', '--head-solid'];
+const INKS = ['--ink', '--ink-2', '--muted', '--accent'];
+
+test('the token set is one set, and every scheme defines all of it', () => {
+  const css = fs.readFileSync(path.join(siteDir, 'style.css'), 'utf8');
+  for (const block of SCHEME_BLOCKS) {
+    const t = tokensOf(css, block.selector);
+    for (const name of REQUIRED_TOKENS) {
+      assert.ok(t[name], `${block.name} does not define ${name}`);
+      assert.match(t[name], /^#[0-9a-f]{6}$/i, `${block.name}'s ${name} is ${t[name]}`);
+    }
+  }
+
+  // The two light blocks are the same palette written twice — once for the OS
+  // preference, once for the toggle. If they ever drift, one of them is a
+  // scheme nobody designed.
+  const byOs = tokensOf(css, SCHEME_BLOCKS[1].selector);
+  const byToggle = tokensOf(css, SCHEME_BLOCKS[2].selector);
+  for (const name of REQUIRED_TOKENS) {
+    assert.equal(byToggle[name], byOs[name], `${name} differs between the two light blocks`);
+  }
+
+  // And the whole scale and grid are on one root, so a page cannot invent a
+  // seventh type step or a spacing value off the eight-pixel grid.
+  const root = tokensOf(css, SCHEME_BLOCKS[0].selector);
+  for (const step of ['--t-display', '--t-title', '--t-head', '--t-sub', '--t-lede', '--t-body']) {
+    assert.ok(root[step], `the scale has no ${step}`);
+  }
+  for (const [i, space] of ['--s-1', '--s-2', '--s-3', '--s-4', '--s-5'].entries()) {
+    assert.ok(root[space], `the grid has no ${space}`);
+    // 8, 16, 24, 32, 48 — every one a multiple of half a rem, which is 8 px.
+    const rem = Number(root[space].replace('rem', ''));
+    assert.equal(rem * 16, [8, 16, 24, 32, 48][i], `${space} is ${root[space]}`);
+  }
+
+  // The display step never shouts. `clamp(min, fluid, max)`; the max is what a
+  // 1440 px window gets.
+  const max = root['--t-display'].match(/,\s*([\d.]+)rem\s*\)/);
+  assert.ok(max, `--t-display is not a clamp with a rem maximum: ${root['--t-display']}`);
+  assert.ok(Number(max[1]) * 16 <= 96, `the display step tops out at ${Number(max[1]) * 16} px`);
+  assert.ok(Number(max[1]) * 16 >= 64, `the display step tops out at ${Number(max[1]) * 16} px`);
+});
+
+test('ACCESSIBILITY: every ink clears 4.5:1 on every ground, in both schemes', () => {
+  const css = fs.readFileSync(path.join(siteDir, 'style.css'), 'utf8');
+  let checked = 0;
+  for (const block of SCHEME_BLOCKS) {
+    const t = tokensOf(css, block.selector);
+    for (const ground of GROUNDS) {
+      for (const ink of INKS) {
+        const ratio = contrast(t[ink], t[ground]);
+        checked++;
+        assert.ok(
+          ratio >= 4.5,
+          `${block.name}: ${ink} ${t[ink]} on ${ground} ${t[ground]} is ${ratio.toFixed(2)}:1`,
+        );
+      }
+    }
+
+    // What sits ON the two filled colours, rather than beside them.
+    for (const [on, fill] of [
+      ['--on-accent', '--accent'],
+      ['--on-crimson', '--crimson'],
+    ]) {
+      const ratio = contrast(t[on], t[fill]);
+      checked++;
+      assert.ok(
+        ratio >= 4.5,
+        `${block.name}: ${on} ${t[on]} on ${fill} ${t[fill]} is ${ratio.toFixed(2)}:1`,
+      );
+    }
+
+    // The focus ring is `--accent`, and `outline-offset` puts it on the ground
+    // AROUND the element rather than on the element, so the grounds above are
+    // the ones it has to hold. 3:1 is the floor for a non-text indicator.
+    // Crimson is deliberately not in this list: nothing focusable on this site
+    // sits on it, because crimson is a 2 px dash and a dot and never a
+    // control.
+    for (const ground of GROUNDS) {
+      const ratio = contrast(t['--accent'], t[ground]);
+      checked++;
+      assert.ok(ratio >= 3, `${block.name}: the focus ring on ${ground} is ${ratio.toFixed(2)}:1`);
+    }
+  }
+  assert.ok(checked >= 60, `expected every pair to be measured; measured ${checked}`);
+
+  // `public/style.css`'s rule, applied here: crimson is `for_review`, it clears
+  // 4.5:1 on nothing in the dark scheme, and it therefore sets no words. It is
+  // a fill, a dot and a rule, with neutral ink on top.
+  assert.ok(!/\bcolor:\s*var\(--crimson\)/.test(css), 'the stylesheet sets text in the crimson');
+});
+
+test('the stylesheet and the scripts stay inside their budgets', () => {
+  const css = fs.statSync(path.join(siteDir, 'style.css')).size;
+  const js =
+    fs.statSync(path.join(siteDir, 'theme.js')).size +
+    fs.statSync(path.join(siteDir, 'site.js')).size;
+  assert.ok(css <= 40 * 1024, `style.css is ${(css / 1024).toFixed(1)} KB, over 40 KB`);
+  assert.ok(js <= 10 * 1024, `the scripts are ${(js / 1024).toFixed(1)} KB, over 10 KB`);
+});
+
+test('every page carries the skip link, the nav and both menus', () => {
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page);
+    assert.match(html, /<a class="skip-link" href="#main">/, `${where} has no skip link`);
+    assert.match(html, /<main id="main">/, `${where} has nothing for the skip link to reach`);
+    assert.match(html, /<nav class="site-nav" aria-label="Sections">/, `${where} has no nav`);
+    // The wide bar's "More" group and the narrow bar's whole menu. Both are
+    // `<details>`, which is the reason the site navigates with scripting off.
+    assert.match(html, /<details class="nav-more">/, `${where} has no More group`);
+    assert.match(html, /<details class="nav-toggle">/, `${where} has no narrow-screen menu`);
+    assert.match(html, /<footer class="site-foot">/, `${where} has no footer`);
+  }
+});
+
+test('the page works with its scripts removed', () => {
+  // The JavaScript-off reading of every page: strip the script elements, and
+  // what is left has to be the whole page. Two things could break that — an
+  // element hidden in the markup and un-hidden by a script, and a reveal whose
+  // hidden state is in the stylesheet rather than behind the root class the
+  // script sets — so both are asserted rather than assumed.
+  const css = fs.readFileSync(path.join(siteDir, 'style.css'), 'utf8');
+
+  // The reveal's zero-opacity rule exists ONLY under `:root.js-reveal`.
+  for (const m of css.matchAll(/([^{}]*\[data-reveal\][^{}]*)\{([^}]*)\}/g)) {
+    const [, selector, body] = m;
+    if (!/opacity\s*:\s*0\b/.test(body)) continue;
+    assert.match(
+      selector,
+      /:root\.js-reveal/,
+      `a reveal is hidden by "${selector.trim()}", which does not wait for the script`,
+    );
+  }
+  assert.match(css, /:root\.js-reveal \[data-reveal\]/, 'the reveal is not gated on the script');
+
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page);
+    const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
+
+    // Every word of the body survives the removal: nothing on these pages is
+    // written by a script.
+    const body = withoutScripts.slice(
+      withoutScripts.indexOf('<main id="main">'),
+      withoutScripts.indexOf('</main>'),
+    );
+    assert.ok(body.length > 200, `${where} has almost nothing between its main tags`);
+
+    // The only `hidden` attribute on the site is the scheme toggle, which is a
+    // control that does nothing without a script and is therefore absent
+    // without one. Anything else hidden in the markup would be content a
+    // reader with scripting off never sees.
+    for (const tag of withoutScripts.matchAll(/<(\w+)[^>]*\shidden(?:[=\s>])[^>]*>/g)) {
+      assert.match(
+        tag[0],
+        /class="theme-toggle"/,
+        `${where} hides ${tag[1]} in the markup: ${tag[0]}`,
+      );
+    }
+    assert.match(
+      html,
+      /<button class="theme-toggle" type="button" hidden/,
+      `${where} ships a scheme toggle that does nothing without a script`,
+    );
+
+    // And nothing on a page depends on an inline style to be visible.
+    assert.ok(
+      !/style="[^"]*(display\s*:\s*none|opacity\s*:\s*0|visibility\s*:\s*hidden)/i.test(html),
+      `${where} hides something with an inline style`,
+    );
+  }
+});
+
+test('the home page leads with the golden, and every band picture is lazy', async () => {
+  const { imageSize } = await import('../../site/build.mjs');
+  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+
+  // The first picture a stranger sees is the one CI re-checks every run —
+  // WP-94a's rule, kept.
+  const first = home.match(/<img[^>]*\ssrc="(media\/[^"]+)"/);
+  assert.ok(first, 'the home page shows no picture from the media directory');
+  assert.equal(first[1], 'media/goldens/three.png', `the hero is ${first[1]}`);
+
+  // The hero is eager and everything under it is lazy, so what a reader pays
+  // for above the fold is one picture.
+  const images = [...home.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+  const fromMedia = images.filter((tag) => /\ssrc="media\//.test(tag));
+  assert.ok(
+    fromMedia.length >= 6,
+    `expected the home page to carry pictures; found ${fromMedia.length}`,
+  );
+  assert.ok(!/loading="lazy"/.test(fromMedia[0]), 'the hero picture is lazy');
+  for (const tag of fromMedia.slice(1)) {
+    assert.match(
+      tag,
+      /loading="lazy"/,
+      `a picture below the fold is not lazy: ${tag.slice(0, 80)}`,
+    );
+  }
+
+  // Every picture carries its own dimensions, so nothing on the page moves
+  // while it loads. WP-94c's `addImageDimensions()` puts them there from the
+  // file itself, which is why this holds on every page and not only this one.
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    for (const tag of html.matchAll(/<img\b[^>]*>/g)) {
+      const src = (tag[0].match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
+      if (!/(^|\/)media\//.test(src)) continue;
+      const where = path.relative(out, page);
+      assert.match(tag[0], /\swidth="\d+"/, `${where} shows ${src} with no width`);
+      assert.match(tag[0], /\sheight="\d+"/, `${where} shows ${src} with no height`);
+      // And the number is the file's own, not a guess.
+      const size = imageSize(path.resolve(path.dirname(page), src));
+      if (!size) continue;
+      assert.equal(
+        `${(tag[0].match(/\swidth="(\d+)"/) ?? [])[1]}x${(tag[0].match(/\sheight="(\d+)"/) ?? [])[1]}`,
+        `${size.width}x${size.height}`,
+        `${where} declares the wrong size for ${src}`,
+      );
+    }
+  }
+});
+
+test('what a reader downloads above the fold on the home page', () => {
+  // The budget is 1.5 MB: the document, the stylesheet, the two scripts, the
+  // mark, and the one picture that is not lazy. Everything else on the page is
+  // below the fold and is fetched only if the reader goes there.
+  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  let bytes = Buffer.byteLength(home);
+  for (const name of ['style.css', 'theme.js', 'site.js', 'deckhq-mark.png']) {
+    bytes += fs.statSync(path.join(out, name)).size;
+  }
+  for (const tag of home.matchAll(/<img\b[^>]*>/g)) {
+    if (/loading="lazy"/.test(tag[0])) continue;
+    const src = (tag[0].match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
+    if (!src.startsWith('media/')) continue;
+    bytes += fs.statSync(path.join(out, src)).size;
+  }
+  assert.ok(
+    bytes <= 1.5 * 1024 * 1024,
+    `the home page's first screen is ${(bytes / 1024).toFixed(0)} KB, over 1.5 MB`,
+  );
 });
 
 test('the deployment workflow builds the site it deploys', () => {

@@ -55,6 +55,15 @@ is in the repository.
 1600 px is the capture stage (`scripts/goldens.mjs` `DEFAULT_WIDTH`), so a golden is never
 resampled and a golden on the site is the golden in the tree.
 
+**Every published image also carries its own pixel size in the markup** — WP-94c. A picture without
+`width` and `height` is a picture the browser reserves no room for, so the words under it move when
+it arrives. `addImageDimensions()` in `site/build.mjs` reads the size out of the copy the site
+serves — a PNG through `scripts/lib/png.mjs`, a GIF out of its thirteen-byte header — and writes the
+pair onto every `media/` image on every hand-written page and every rendered log entry. A tag that
+already declares a size is left alone, because a hand-written pair is a deliberate one, and
+`test/unit/site.test.mjs` checks every declared pair against the file on disk rather than merely
+checking one is present.
+
 ## 4. The register
 
 Current = a fair picture of what `main` renders today. Stale = still a real photograph, of an older
@@ -139,6 +148,31 @@ The sheets under `design/` and `motion/` are rendered by scripts committed besid
 (`sheet.js`, `life-sheet.js`, `lounge.js`, `crew.js`, `render.mjs`), from the same `Path2D` drawing
 code the floor uses. That is what makes them faithful mockups rather than guesses — and it is not
 what makes them screenshots, because nothing in the product calls them.
+
+### 4.4 The site itself — `docs/media/site/`, class `capture`, all current
+
+Photographs of the documentation site, taken by `node site/capture.mjs` — WP-94c. It builds the
+site into a temp directory, serves it from a socket the OS chooses, drives one Chrome over the
+DevTools Protocol and takes the whole lot down again; the only origin in play is `127.0.0.1` on a
+port that existed for a few seconds. They are **captures**, not illustrations: every pixel is the
+real build rendered by a real browser.
+
+They are a record of how the site looked when WP-94c landed and are **not published on the site**
+— a picture of a page, on that page, is a loop nobody needs. Retake them with the same command
+whenever the site's design changes.
+
+| File | What it shows |
+|---|---|
+| `site/home-375-light.png`, `site/home-375-dark.png` | The home page on a 375 × 812 phone, both schemes. The hero is the `three` golden at 2.6×, cropped to your office |
+| `site/home-768-light.png`, `site/home-768-dark.png` | The home page on a 768 × 1024 tablet, both schemes |
+| `site/home-1440-light.png`, `site/home-1440-dark.png` | The home page on a 1440 × 900 desktop, both schemes |
+
+The same run measures what a screenshot cannot show and fails on any of it: horizontal overflow on
+thirteen pages at 375 and 1440, a reveal that did not resolve, a section still hidden under
+`prefers-reduced-motion`, a page with other than one `<h1>`, a bar that is not sticky, a scheme
+toggle that stayed hidden, or a picture that did not load.
+
+`site-index.png` in §4.2 is the older, unpublished picture of the site and is superseded by these.
 
 ## 5. WP-94b — the recapture list
 

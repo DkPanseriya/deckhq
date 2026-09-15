@@ -1,94 +1,233 @@
 <section class="hero">
-  <img class="hero-mark" src="deckhq-mark.png" alt="" width="72" height="72" />
-  <h1>Every AI coding session on your machine, on one office floor.</h1>
-  <p class="hero-sub">
-    It sees the ones your terminal forgot, and it remembers what&#8217;s waiting on you even after
-    you&#8217;ve read it. Local, private, MIT.
-  </p>
-  <p class="command">npx deckhq app</p>
-  <p class="hero-meta">
-    One line, if you already have <strong>Node 18 or newer</strong>. It opens the floor in a window
-    of its own and offers you a Desktop icon once. No build step, no runtime dependencies, no
-    account, and no network calls of any kind.
-  </p>
-
-  <p class="hero-meta">No Node? One line installs that too, and asks before it does:</p>
-  <p class="command">irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex</p>
-  <p class="hero-meta">Windows, PowerShell</p>
-  <p class="command">curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh</p>
-  <p class="hero-meta">
-    macOS and Linux. Each one checks for Node, offers to install it (<code>winget</code> /
-    <code>brew</code>, never without asking), runs <code>npm install -g deckhq@latest</code>, offers
-    the icon, and opens the window. Read them first if you like &#8212;
-    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.ps1"
-      >install.ps1</a
-    >,
-    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.sh"
-      >install.sh</a
-    >.
-  </p>
+  <div class="hero-inner">
+    <img class="hero-mark" src="deckhq-mark.png" alt="" width="48" height="48" />
+    <h1>Every AI coding session on your machine, on one floor.</h1>
+    <p class="hero-sub">
+      Your terminal forgets the ones that finished. This does not, and it remembers what is waiting
+      on you even after you have read it.
+    </p>
+    <div class="actions">
+      <a class="btn btn--primary" href="install.html">Install DeckHQ</a>
+      <a class="btn btn--ghost" href="#floor">See the floor</a>
+    </div>
+    <p class="hero-meta">Local · private · MIT · no network calls of any kind</p>
+  </div>
 </section>
 
-<figure>
-  <img
-    src="media/goldens/three.png"
-    alt="The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn stand waiting for a reply"
-    width="1600"
-    height="1000"
-  />
-  <figcaption>
-    The floor. Reception holds the sessions waiting on your reply, oldest first. Each project is a
-    room with its own session count and token spend on the plate, and the lounge holds the agents
-    you have reviewed and benched.
-    <span class="tag tag--golden">Golden render</span>
-  </figcaption>
-</figure>
-
-<ul class="cards">
-  <li>
-    <h3>Every session, not only the live ones</h3>
-    <p>
-      DeckHQ reads every transcript on disk, so a session that finished an hour ago is still on the
-      floor with what it last said.
-    </p>
-  </li>
-  <li>
-    <h3>A queue only you can clear</h3>
-    <p>
-      What you owe is decided by you, never by the runtime. Reading an item does not discharge it;
-      an explicit action does.
-    </p>
-  </li>
-  <li>
-    <h3>Nothing leaves the machine</h3>
-    <p>
-      No analytics, no update check, no CDN, no account. The only sockets are loopback and the
-      runtimes you start yourself.
-    </p>
-  </li>
-</ul>
-
-<figure>
-  <img
-    src="media/hero.gif"
-    alt="An agent&#8217;s turn ends: it leaves its project desk, walks the corridor into your office, and joins the queue of sessions waiting on you with a crimson waiting-time badge over its head"
-    loading="lazy"
-  />
-  <figcaption>
-    A turn ends. The agent stands up, walks to your office, and waits there with how long it has
-    been waiting over its head. It is still there tomorrow if you do not deal with it.
-    <span class="tag">Capture</span> &#8212; the demo floor, September 2026, before the figures took
-    their current form.
-  </figcaption>
-</figure>
-
-<section class="band">
-  <h2>Start with the number</h2>
-  <p>
-    Before you install anything, run the report. It takes about ten seconds, downloads a few hundred
-    kilobytes, sends nothing, and writes nothing.
+<div class="bleed" id="floor">
+  <div class="hero-shot">
+    <img
+      src="media/goldens/three.png"
+      alt="The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn stand waiting for a reply"
+      width="1600"
+      height="1000"
+    />
+  </div>
+  <p class="shot-note">
+    Three repositories, nine sessions, two of them waiting on you.
+    <span class="tag tag--golden">Golden render</span> &#8212; a real render of the
+    <code>three</code> fixture, re-checked pixel for pixel on every CI run.
   </p>
-  <p class="command">npx deckhq doctor</p>
+</div>
+
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>Three places, and you always know which one you are in.</h2>
+    <p>
+      The building is generated from the sessions on disk, not from a saved layout. The same
+      population draws the same floor every time.
+    </p>
+  </div>
+  <ul class="feel">
+    <li>
+      <span class="feel-crop feel-crop--office">
+        <img
+          src="media/goldens/three.png"
+          alt="A detail of the floor: your own office, with two sessions standing in it and a crimson badge reading one day two hours over the oldest"
+          loading="lazy"
+          width="1600"
+          height="1000"
+        />
+      </span>
+      <div class="feel-body">
+        <h3>Your office</h3>
+        <p>
+          Sessions that finished their turn stand here, oldest first, with how long they have been
+          waiting over their heads.
+        </p>
+      </div>
+    </li>
+    <li>
+      <span class="feel-crop feel-crop--rooms">
+        <img
+          src="media/goldens/three.png"
+          alt="A detail of the floor: three project rooms side by side, each with its own name plate, session count and token spend, and agents at desks inside"
+          loading="lazy"
+          width="1600"
+          height="1000"
+        />
+      </span>
+      <div class="feel-body">
+        <h3>A room per project</h3>
+        <p>
+          Every repository somebody is working in is a room, with its session count and its token
+          spend on the plate.
+        </p>
+      </div>
+    </li>
+    <li>
+      <span class="feel-crop feel-crop--lounge">
+        <img
+          src="media/goldens/three.png"
+          alt="A detail of the floor: the lounge along the bottom of the building, with benched agents sitting on sofas, standing at a table and talking in pairs"
+          loading="lazy"
+          width="1600"
+          height="1000"
+        />
+      </span>
+      <div class="feel-body">
+        <h3>The lounge</h3>
+        <p>
+          Everyone you have reviewed and benched waits here instead, out of the queue and still on
+          the floor.
+        </p>
+      </div>
+    </li>
+  </ul>
+</section>
+
+<div class="bleed" data-reveal>
+  <section class="section">
+    <figure class="device">
+      <div class="device-frame">
+        <div class="device-bar"><i></i><i></i><i></i><span>(2) DeckHQ</span></div>
+        <img
+          src="media/hero.gif"
+          alt="An agent&#8217;s turn ends: it leaves its project desk, walks the corridor into your office, and joins the queue of sessions waiting on you with a crimson waiting-time badge over its head"
+          loading="lazy"
+        />
+      </div>
+      <figcaption>
+        A turn ends. The agent stands up, walks to your office, and waits there with how long it has
+        been waiting over its head. It is still there tomorrow if you do not deal with it.
+        <span class="tag">Capture</span> &#8212; the demo floor, September 2026, before the figures
+        took their current form.
+      </figcaption>
+    </figure>
+  </section>
+</div>
+
+<section class="section" data-reveal>
+  <div class="bands">
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>The same queue, as a table.</h2>
+        <p>
+          <code>Tab</code> swaps the floor for the deck: waiting time, who, the project, the last
+          word, the tokens.
+        </p>
+        <p>It is a real semantic table, so the floor is never the only way to reach anything.</p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/deck-view.png"
+          alt="The deck: the needs-you queue as a dense table of waiting time, agent, project and last word, with the review card open beside it"
+          loading="lazy"
+        />
+        <figcaption>
+          The deck, with a review card open beside it. <span class="tag">Capture</span>
+          &#8212; September 2026, before the figures took their current form.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>Everything you need to answer, already open.</h2>
+        <p>
+          What it said as the markdown it wrote, and what changed in that project&#8217;s working
+          tree, read straight from git.
+        </p>
+        <p>
+          Then three weighted actions. <strong>Approve is a send</strong>, never an acknowledgement.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/panel-review-card.png"
+          alt="The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project&#8217;s working tree at plus 142 minus 18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line"
+          loading="lazy"
+        />
+        <figcaption>
+          The review card, with the diff and the cost line. <span class="tag">Capture</span>
+          &#8212; September 2026, before the figures took their current form.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>Every token, counted on your own machine.</h2>
+        <p>
+          Today, seven days, thirty days &#8212; by project, by session, by model, by day and by
+          tool.
+        </p>
+        <p>
+          A counter your runtime never reported reads <code>no data</code> rather than a confident
+          zero.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/wrapped-weekly.png"
+          alt="Wrapped for the week, over the dimmed floor: turns per room, tokens, spend with its rate card, the longest wait, the room that never slept, the busiest hour, and the count of one phrase"
+          loading="lazy"
+        />
+        <figcaption>
+          Wrapped: the same ledger, replayed for a week. <span class="tag">Capture</span>
+          &#8212; September 2026, before the figures took their current form.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>Three finishes, and none of them gated.</h2>
+        <p>
+          The warm office, night shift, and blueprint &#8212; the floor as a drawing on a drafting
+          table.
+        </p>
+        <p>
+          A theme repaints materials and neutrals.
+          <strong>The six state colours never move.</strong>
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/goldens/demo-blueprint.png"
+          alt="The demo floor in the blueprint theme: white line work on drafting-table blue, with the six state colours unchanged"
+          loading="lazy"
+          width="1600"
+          height="1000"
+        />
+        <figcaption>
+          Blueprint, on the <code>demo</code> fixture.
+          <span class="tag tag--golden">Golden render</span>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>Start with the number.</h2>
+    <p>
+      Before you install anything, run the report. Ten seconds, a few hundred kilobytes, and it
+      sends nothing and writes nothing.
+    </p>
+    <p class="command" data-command="npx deckhq doctor">npx deckhq doctor</p>
+  </div>
   <pre class="report"><code>  claude code     available
   transcripts     77 sessions across 20 projects
   running now     6   (claude code's own agent view reports 6)
@@ -98,18 +237,20 @@
   hooks           installed, port 4400, 285 events, last 1m ago
   state           ~/.deckhq/state.json, writable
   egress          none. no outbound sockets.</code></pre>
-  <p>
-    The fourth line is the number nobody else counts: sessions that finished their turn, left the
-    agent view when their process exited, and are still on the floor &#8212; because a session
-    finishing is not the same as you having dealt with it.
-  </p>
-  <p class="hero-meta">
-    A real run on the development machine, 3 September 2026. Your numbers will differ, and that is
-    the point: nobody knows this number about their own machine until they run the command.
-  </p>
+  <div class="section-foot">
+    <p>
+      The fourth line is the number nobody else counts: sessions that finished their turn, left the
+      agent view when their process exited, and are still on the floor &#8212; because a session
+      finishing is not the same as you having dealt with it.
+    </p>
+    <p class="muted">
+      A real run on the development machine, 3 September 2026. Your numbers will differ, and that is
+      the point: nobody knows this number about their own machine until they run the command.
+    </p>
+  </div>
 </section>
 
-<section class="band">
+<section class="band" data-reveal>
   <h2>The one rule</h2>
   <blockquote>
     <p><strong>What you owe is decided by you, never by the runtime.</strong></p>
@@ -117,37 +258,100 @@
   <p>
     <code>activityState</code> is observed &#8212; it changes on its own as a session starts,
     produces output, blocks, goes quiet, exits. <code>ackState</code> is yours, and it changes only
-    when you press a button. The waiting area renders your acknowledgement.
-    <a href="model.html">The model in 60 seconds</a> is the whole of it.
+    when you press a button. <a href="model.html">The model in 60 seconds</a> is the whole of it.
   </p>
 </section>
 
-<section class="band">
-  <h2>Where to go next</h2>
-  <ul>
+<div class="bleed never" data-reveal>
+  <div class="never-inner">
+    <h2>What it never does</h2>
+    <ul class="never-list never-list--owed">
+      <li>
+        <h3>Call anything</h3>
+        <p>
+          No analytics, no update check, no CDN. The only sockets are loopback and the runtimes you
+          start yourself.
+        </p>
+      </li>
+      <li>
+        <h3>Ask who you are</h3>
+        <p>
+          There is no account, no sign-in and no licence key. Every theme and every feature is there
+          on the first run.
+        </p>
+      </li>
+      <li>
+        <h3>Decide what you owe</h3>
+        <p>
+          Reading an item does not discharge it. No session ending and no test passing clears your
+          queue; an action of yours does.
+        </p>
+      </li>
+      <li>
+        <h3>Block your terminal</h3>
+        <p>
+          The prompt in your shell stays live the whole time. A closed DeckHQ can never stop anybody
+          from working.
+        </p>
+      </li>
+      <li>
+        <h3>Write without asking</h3>
+        <p>
+          Hooks, the status line, the Desktop icon: each prints the literal file and the exact path
+          first, and removes only what it wrote.
+        </p>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>Three ways in.</h2>
+    <p>Node 18 or newer, and nothing else. No build step, no runtime dependency, no account.</p>
+  </div>
+  <ul class="ways">
     <li>
-      <a href="features.html">Features</a> &#8212; the floor, the queue, the review card,
-      permissions, usage, pinning, app mode, notifications and themes, one picture each.
+      <h3>You already have Node</h3>
+      <p>
+        Downloads the package, runs it, leaves no binary behind. It opens the floor in a window of
+        its own.
+      </p>
+      <p class="command" data-command="npx deckhq app">npx deckhq app</p>
     </li>
     <li>
-      <a href="look.html">Look</a> &#8212; the three themes that ship today, and the interior
-      control centre that is designed and not yet built.
+      <h3>Windows, no Node</h3>
+      <p>
+        Checks for Node, offers to install it with <code>winget</code> &#8212; never without asking
+        &#8212; then installs DeckHQ and opens it.
+      </p>
+      <p class="command" data-command="irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex">
+        irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
+      </p>
     </li>
     <li>
-      <a href="characters.html">Characters</a> &#8212; the figure on the floor, and what it is
-      designed to do next.
-    </li>
-    <li>
-      <a href="studio.html">Studio</a> &#8212; idea to office, and the eight steps of that loop that
-      do not exist yet.
-    </li>
-    <li>
-      <a href="install.html">Install</a> &#8212; <code>npx</code>, a global install, the Claude Code
-      plugin, the VS Code extension.
-    </li>
-    <li>
-      <a href="docs.html">Docs</a>, the <a href="faq.html">FAQ</a>, and the
-      <a href="log/index.html">engineering log</a>.
+      <h3>macOS and Linux, no Node</h3>
+      <p>
+        The same script for a POSIX shell: <code>brew</code> on macOS, your distribution&#8217;s own
+        command printed for you on Linux.
+      </p>
+      <p
+        class="command"
+        data-command="curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh"
+      >
+        curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+      </p>
     </li>
   </ul>
+  <p class="muted">
+    Read a script before you pipe it into a shell &#8212; these two included. They are served from
+    this site byte for byte as they are in the repository:
+    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.ps1"
+      >install.ps1</a
+    >,
+    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.sh"
+      >install.sh</a
+    >. There is also a global install, a Claude Code plugin and a VS Code extension &#8212;
+    <a href="install.html">all four routes are here</a>.
+  </p>
 </section>
