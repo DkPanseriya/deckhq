@@ -117,6 +117,23 @@ freedesktop.org's documentation and have never been executed on a machine.
 
 Details, and the `?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](docs/GUIDE.md).
 
+## Change the look
+
+`⌘K` → **Settings** opens a **Look** section: six presets — Studio oak, Night lab, Paper office,
+Terrazzo hall, Garden floor, Workshop — then a floor material per zone, a colour scheme, a
+furniture set, two rugs, the planting, the prop density and the lounge kit. **52 options over ten
+pickers**, every chip a real swatch painted by the floor painter itself, and a live preview with
+the contrast it measured underneath. `⌘K` → `Look: Night lab` puts a whole preset on in two
+keystrokes. Nothing you can choose produces an illegible floor: a combination that would leave a
+rug unreadable on the floor under it is **refused with the reason and changes nothing**, and all
+three themes still apply on top. A look is a file you own, and unlike a layout it names no project,
+no path and no session — so it is one you can post:
+
+```bash
+deckhq look export > my-floor.json   # or the section's Export button
+deckhq look import my-floor.json     # refused whole if it is not paintable
+```
+
 ## Studio
 
 **In progress.** Studio is the opt-in "idea to office" mode, per project: a plan, a roster and a
