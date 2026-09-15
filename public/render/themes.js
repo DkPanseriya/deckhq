@@ -252,6 +252,153 @@ export const LIGHT_POOL_ALPHA_DARK = 0.055;
 const WOOL_SLATE = '#8CA2B6';
 
 /**
+ * THE RUG BAND (WP-88a, `docs/plan/11-LOOK-CONTROL-CENTRE.md` §1.d).
+ *
+ * A rug must read against the floor under it and stay inside that floor's value
+ * plateau, because an agent's name is drawn wherever the agent stands and that
+ * is very often a rug. Outside `[RUG_BAND_MIN, RUG_BAND_MAX]` a rug is either
+ * invisible or the loudest local contrast in the room, and both are failures a
+ * contrast test that only looks at ink would never see.
+ *
+ * `validateLook` REFUSES outside the band. The derivation below aims at the
+ * narrower `[RUG_READS_MIN, RUG_READS_MAX]`, so a rug this file walks back
+ * lands with margin rather than on the edge of a refusal.
+ */
+export const RUG_BAND_MIN = 1.06;
+export const RUG_BAND_MAX = 1.45;
+export const RUG_READS_MIN = 1.16;
+export const RUG_READS_MAX = 1.43;
+
+/**
+ * THE TWO RUGS ARE A BISECTION ON THE RATIO, NOT A CONSTANT (WP-88a).
+ *
+ * §1.d measured the shipped floor and found two real failures, both from the
+ * same cause: each rug derived through a CONSTANT — a mix weight toward the
+ * foliage for the task rug, a shade of the carpet for the wool — while the gap
+ * between the carpet and the floor the rug lies on is not constant across
+ * themes. The wool rug came out at 1.00:1 on night shift (a rug you cannot see)
+ * and the task rug at 1.69:1 on blueprint (the loudest thing in a project room).
+ *
+ * So the constant becomes a STARTING POINT and the ratio becomes the thing that
+ * is solved for. A parameter whose rug already reads is returned untouched —
+ * which is what keeps the default floor byte-identical and every golden still —
+ * and one whose rug does not is walked to the nearest parameter that lands on
+ * the reads band's edge, by bisection, the device `underWall` already uses.
+ *
+ * The ratio is V-shaped in the parameter (it has a minimum where the rug and the
+ * floor share a luminance), so the crossing is found by a coarse scan outward
+ * from `wanted` in both directions, nearest crossing wins, and the bisection
+ * then runs inside that one monotone segment. Twenty-four halvings put the
+ * answer well inside one channel count, so every machine gets the same rug.
+ *
+ * @param {(p:number) => string} make the rug, at a parameter
+ * @param {number} wanted the shipped constant
+ * @param {number} lo @param {number} hi the parameter's range
+ * @param {string} ground the floor this rug lies on
+ * @returns {number} the parameter to derive the rug at
+ */
+export function rugParameterFor(make, wanted, lo, hi, ground) {
+  /** @param {number} p */
+  const at = (p) => contrastRatio(make(p), ground);
+  const now = at(wanted);
+  if (now >= RUG_READS_MIN - 1e-9 && now <= RUG_READS_MAX + 1e-9) return wanted;
+  const target = now < RUG_READS_MIN ? RUG_READS_MIN : RUG_READS_MAX;
+  /** @param {number} r */
+  const reached = (r) => (now < RUG_READS_MIN ? r >= target - 1e-9 : r <= target + 1e-9);
+  /** @type {number|null} */
+  let best = null;
+  for (const end of [hi, lo]) {
+    // A fixed 0.002 scan: fine enough that no crossing between a rug that reads
+    // and one that does not is stepped over, coarse enough to cost nothing.
+    const steps = Math.max(1, Math.ceil(Math.abs(end - wanted) / 0.002));
+    /** @type {number|null} */
+    let cross = null;
+    for (let i = 1; i <= steps; i++) {
+      const p = wanted + ((end - wanted) * i) / steps;
+      if (reached(at(p))) {
+        cross = p;
+        break;
+      }
+    }
+    if (cross === null) continue;
+    let a = wanted;
+    let b = cross;
+    for (let i = 0; i < 24; i++) {
+      const mid = (a + b) / 2;
+      if (reached(at(mid))) b = mid;
+      else a = mid;
+    }
+    if (best === null || Math.abs(b - wanted) < Math.abs(best - wanted)) best = b;
+  }
+  // No parameter in range brings this rug into the band. The derivation does
+  // not clamp and does not throw: it returns what was asked for, and
+  // `validateLook` refuses the combination with the measured ratio in its own
+  // row — a refusal says why, a clamp says nothing.
+  return best === null ? wanted : best;
+}
+
+/**
+ * The three rug tones §1.d offers, as derivations rather than as colours.
+ *
+ * `wool` is WP-85a's slate, `sage` the task rug carried by the room's own
+ * carpet, and `sand` the carpet walked toward the building's timber. Each takes
+ * ONE parameter — the thing the bisection above solves for — so a tone is a
+ * family with a dial rather than a swatch.
+ *
+ * @type {Readonly<Record<string, {wanted:(lightInk:boolean)=>number, lo:number, hi:number,
+ *   make:(p:number, c:{carpet:string, wood:string, plant:string, lightInk:boolean})=>string}>>}
+ */
+export const RUG_TONES = Object.freeze({
+  wool: Object.freeze({
+    wanted: (lightInk) => (lightInk ? 0 : -0.132),
+    lo: -0.6,
+    hi: 0.6,
+    make: (p, c) => mix(shade(c.carpet, p), WOOL_SLATE, c.lightInk ? 0.15 : 0.33),
+  }),
+  sage: Object.freeze({
+    wanted: () => 0.3,
+    lo: 0,
+    hi: 0.6,
+    make: (p, c) => mix(c.carpet, c.plant, p),
+  }),
+  sand: Object.freeze({
+    wanted: () => 0.45,
+    lo: 0,
+    hi: 0.8,
+    make: (p, c) => mix(c.carpet, c.wood, p),
+  }),
+});
+
+/** Every rug tone's id, in picker order. @type {ReadonlyArray<string>} */
+export const RUG_TONE_IDS = Object.freeze(Object.keys(RUG_TONES));
+
+/**
+ * The two rug ROLES, and the floor key each lies on. `validateLook` measures
+ * the same pair the derivation solves for, so a rug the guard passes is the rug
+ * the bake puts down.
+ */
+export const RUG_GROUNDS = Object.freeze({ wool: 'wood', task: 'carpet' });
+
+/** The pair this floor has always shipped: the slate wool and the sage task rug. */
+export const DEFAULT_RUG_TONES = Object.freeze({ wool: 'wool', task: 'sage' });
+
+/**
+ * One rug, derived: the tone's own family, at the parameter that makes it read
+ * against the floor it lies on, held under the wall like every other material.
+ *
+ * @param {string} tone a key of `RUG_TONES`
+ * @param {string} ground the floor this rug lies on
+ * @param {{carpet:string, wood:string, plant:string, wall:string, lightInk:boolean}} c
+ * @returns {string}
+ */
+export function rugToneFor(tone, ground, c) {
+  const spec = RUG_TONES[tone] || RUG_TONES.wool;
+  /** @param {number} p */
+  const make = (p) => underWall(spec.make(p, c), c.wall);
+  return make(rugParameterFor(make, spec.wanted(c.lightInk), spec.lo, spec.hi, ground));
+}
+
+/**
  * The composite of a ground under a light pool at the pool's BRIGHTEST point —
  * the surface a room plate, a name or the in-room "+" is actually read on once
  * §3.2's pools are baked in. `assertThemeContrast` holds the ink to 4.5:1
@@ -450,10 +597,17 @@ export function assertFigureHaloContrast() {
  * and repainting the props with it would make every theme a different
  * product rather than the same office at a different hour.
  *
+ * WP-88a added the second parameter, and it is the seam the Look centre paints
+ * through: `rugs` names which of `RUG_TONES` each of the two rug ROLES is cut
+ * from. It defaults to the pair this floor has always shipped — the reception's
+ * slate wool and the project room's sage task rug — so every caller that does
+ * not know the Look centre exists gets exactly the floor it got before.
+ *
  * @param {{floor: Record<string, string>}} theme
+ * @param {{rugs?: {wool?: string, task?: string}}} [look]
  * @returns {Record<string, string>} material tokens, ready for `overridePalette`
  */
-export function materialTokensFor(theme) {
+export function materialTokensFor(theme, look = {}) {
   const f = theme.floor || {};
   /** @param {string} key */
   const at = (key) => f[key] || /** @type {any} */ (DEFAULT_FLOOR)[key];
@@ -492,16 +646,20 @@ export function materialTokensFor(theme) {
   const fridgeFill = underWall(shade(seat, 0.03), wall);
   const whiteboardSurface = underWall(shade(seat, 0.08), wall);
   const counterTop = underWall(mix(tile, desk, 0.22), wall);
-  const rugSage = underWall(mix(carpet, plant, 0.3), wall);
-  // The reception's WOOL. Slate since WP-85a (§3.1, owner decision 2) — the one
-  // textile on this floor with a hue of its own, and the thing that tells you
-  // the waiting area is not the corridor. It is still carried into place by the
-  // carpet, so it cannot leave the floor's luminance band and a name drawn on it
-  // is as readable as a name drawn on the floor; only its temperature is its own.
-  const rugCream = underWall(
-    mix(shade(carpet, lightInk ? 0 : -0.132), WOOL_SLATE, lightInk ? 0.15 : 0.33),
-    wall,
-  );
+  // THE TWO RUGS (§1.d). Each is a TONE cut against the floor it actually lies
+  // on: the task rug on a project room's carpet, the reception and lounge wool
+  // on the boards. Both were constants until WP-88a and both were measured
+  // outside the band on a dark theme; `rugToneFor` solves for the ratio instead.
+  //
+  // The reception's WOOL is slate since WP-85a (§3.1, owner decision 2) — the
+  // one textile on this floor with a hue of its own, and the thing that tells
+  // you the waiting area is not the corridor. It is still carried into place by
+  // the carpet, so it cannot leave the floor's luminance band and a name drawn
+  // on it is as readable as a name drawn on the floor; only its temperature is
+  // its own.
+  const rugContext = { carpet, wood, plant, wall, lightInk };
+  const rugSage = rugToneFor(look.rugs?.task || DEFAULT_RUG_TONES.task, carpet, rugContext);
+  const rugCream = rugToneFor(look.rugs?.wool || DEFAULT_RUG_TONES.wool, wood, rugContext);
 
   return {
     // ---- herringbone: one plank colour, four tones, a seam and a sheen ----
@@ -1014,6 +1172,25 @@ export function assertThemeContrast(theme) {
   const derived = materialTokensFor({ floor });
   for (const key of ['rugSage', 'rugCream', 'deskTop', 'chairFill', 'sofaFill']) {
     need(contrastRatio(floor.ink, derived[key]), 4.5, `floor ink on the derived ${key}`);
+  }
+
+  // AND EACH RUG READS AGAINST THE FLOOR IT LIES ON, WITHOUT SHOUTING (WP-88a,
+  // §1.d). Two failures on the shipped floor were found by measuring exactly
+  // this and by nothing else: a wool rug at 1.00:1 on night shift and a task rug
+  // at 1.69:1 on blueprint, with every other number in this function green. Both
+  // rugs are now solved for rather than derived through a constant, so this is a
+  // check on the solver for any theme the derivation produced — and a real
+  // refusal for one whose carpet and boards leave no parameter that reads.
+  for (const [role, groundKey] of Object.entries(RUG_GROUNDS)) {
+    const rug = role === 'wool' ? derived.rugCream : derived.rugSage;
+    const ratio = contrastRatio(rug, floor[groundKey]);
+    if (ratio + 1e-9 < RUG_BAND_MIN || ratio - 1e-9 > RUG_BAND_MAX) {
+      throw new Error(
+        `${where}: the ${role} rug (${rug}) is ${ratio.toFixed(2)}:1 against the ${groundKey} ` +
+          `it lies on, outside [${RUG_BAND_MIN}, ${RUG_BAND_MAX}]. A name is drawn wherever an ` +
+          'agent stands and that is very often a rug — docs/plan/11-LOOK-CONTROL-CENTRE.md §1.d.',
+      );
+    }
   }
 
   // AND EVERY RANK OF PLATE TEXT, ON THE HALO IT IS ACTUALLY READ ON (WP-81).
