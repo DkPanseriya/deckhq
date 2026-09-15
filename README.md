@@ -214,6 +214,11 @@ Real, and listed here rather than discovered later. Each one links to where it i
 - **Given names do not run out below 600 sessions.** Past 600 live identities on one machine you
   would get `Wren 2` — not a duplicate, but the pool being smaller than your history. §168.
 - **Local only.** One machine, one human. No remote sessions, no team presence, no cloud sync.
+- **Four HTTP routes name a runtime or are refused.** `/api/new-project`, `/api/agent`,
+  `/api/permission/decide` and `/api/resume-targets` used to answer a request with no `runtime` as
+  if it had said Claude Code; they return `400 { error, field: "runtime" }` instead. The floor
+  passes one on every call, so nothing you do changes — a script of yours that relied on the old
+  default needs the field, and the refusal says which. §182.
 
 Section numbers are entries in [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md), which is also
 [the engineering log](https://dkpanseriya.github.io/deckhq/log/index.html) on the site.
