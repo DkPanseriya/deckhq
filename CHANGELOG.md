@@ -8,6 +8,26 @@
 
 ### Added
 
+- **The crew — WP-89.** The owner: _"If a chat session fires 3+ agents … the GUI launches all those
+  sub-agents (smaller in size), connected by cables to the main chat session agent, surrounding it,
+  sat on the floor with their own laptops, feeding data by cables."_ Three or more live sub-agents on
+  a session at a desk now turn its desk into a **formation**: the juniors at 0.65 of the parent,
+  seated in an arc of radius 4.2 U in front of it (a crew of twelve opens to 10.3 U), a laptop each,
+  and one axis-aligned cable per junior running with two bends — round the furniture, never through
+  it — to a port on the desk's front edge. A cable **pulses** junior→parent, at 1, 2 or 4 pulses a
+  loop, **only while that junior's transcript was observed to grow inside the last minute**; a junior
+  whose file has stopped keeps its cable and it goes grey, and its laptop folds. Twelve are drawn and
+  the rest are a `+N` chip, with every one of them still in the panel and in the deck, where a crew is
+  one expandable row under its parent rather than N sibling rows. The room grows for it: a crew is
+  contents, so it bids for the arc's floor instead of for chairs nobody sits in. One soft `door` cue
+  when a crew forms — never per junior and never per pulse. Two new goldens, `crew` and
+  `crew@reduced`; the other fourteen are unchanged to the pixel. `docs/DEVIATIONS.md` §178.
+
+- **The `wf_<id>` a workflow's transcripts have always carried — WP-89.** A multi-agent workflow's
+  juniors live one level deeper, under `subagents/workflows/`, and the floor walked past that segment
+  and threw it away. It is kept now, as one field and no extra I/O, so four juniors of one workflow
+  can be told from four independent `Task` calls.
+
 - **The floor is configurable, and two rugs that had never been measured are fixed — WP-88a.** The
   owner: _"I still don't see any option to configure the overall GUI graphics: office floor carpet
   and colours, rugs, tables, chairs, sofa, plants, etc. We do not flood everything with too many

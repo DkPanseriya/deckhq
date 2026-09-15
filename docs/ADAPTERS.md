@@ -115,6 +115,33 @@ no argument is legal and the type gate enforces the `= {}` default.
   changelog as a known gap. `costEstimate` comes from `estimateCost()`, which returns `null` — not
   `$0.00` — when the rate card has no row for the model.
 
+#### Sub-agents, and the two fields the crew reads (WP-89)
+
+A junior is an ordinary `SessionSummary` with `subagent: true`, `parentSessionId`, `subagentType`
+and `spawnedAt`. Two more fields decide whether it is drawn as part of a **crew** — the formation
+`docs/plan/12-MOTION-AND-CREW.md` §3 describes — and both are optional:
+
+| field | what it is | absent means |
+|---|---|---|
+| `workflowId` | the runtime's own id for the multi-agent workflow this junior belongs to | this junior is not in a workflow — **never** "we did not look" |
+| `lastGrowthAt` | ms epoch this junior's transcript file was last observed to have grown | nothing is known about whether it is still writing, so it never pulses |
+
+**Claude Code's two transcript shapes** are the model for both:
+
+```
+~/.claude/projects/<slug>/<parentSessionId>/subagents/agent-<id>.jsonl               # a Task subagent
+~/.claude/projects/<slug>/<parentSessionId>/subagents/workflows/wf_<id>/agent-<id>.jsonl  # a workflow one
+```
+
+`workflowIdFromDir` recovers `wf_<id>` from the folder name — it is in the path already, so keeping
+it costs one field and no extra I/O — and `journal.jsonl` beside it is the workflow's own log and
+not a subagent. `lastGrowthAt` is the transcript's own mtime, which the scan already stats.
+
+**A runtime that reports neither still works.** Its juniors keep WP-41's seat beside their parent,
+they are counted, they are clickable and they are in the deck; they simply never form an arc with
+cables, because nothing observed would drive one. That refusal is the honesty rule (§6) applied to a
+whole feature rather than to a field.
+
 ### `conversation()`
 
 Text only, most recent last. **No tool calls, no reasoning, no UI notices.** The panel is a review

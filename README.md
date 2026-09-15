@@ -59,6 +59,11 @@ when their process exited, and are still waiting on you.
 - **A review card, not a notification.** Click anyone and the panel has how long they have been
   waiting, what they said as the markdown they actually wrote, and what changed in that project's
   working tree — then `1` reply, `2` approve, `3` bench.
+- **The crew, when a session fires three or more sub-agents.** The desk becomes a formation: the
+  juniors on the floor in an arc around it, a laptop each, and a cable from each laptop to the desk
+  with a pulse running up it while that junior's transcript is still being written. A junior that
+  has stopped keeps its cable and it goes grey. Twelve are drawn; beyond that a `+N` chip, with the
+  rest in the panel and in the deck.
 - **Tokens, by project, session, model, day and tool**, from your own local ledger. Dollars are one
   setting away and off by default, because most people run these tools on a subscription.
 - **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` discharges one,
@@ -182,6 +187,14 @@ Real, and listed here rather than discovered later. Each one links to where it i
 - **Answering a permission prompt from the panel has been proven once**, against one runtime, one
   machine, one day — Claude Code 2.1.260 on Windows, 4 September 2026. A streamed reply has been
   watched once, the same day. §97.
+- **A crew's pulses say a file is moving, not how fast or how far.** A sub-agent transcript carries
+  no progress, no percentage, no success or failure and no stop record, so the only thing DeckHQ can
+  see about a junior is that its file grew between two polls. A cable pulses while that happened
+  inside the last minute and goes grey when it has not; the rate is banded from how recently, not
+  measured as events per second. Nothing on a junior says whether it worked. §178.
+- **The crew is a Claude Code formation.** Gemini CLI and OpenCode report a parent link and no type,
+  no spawn time and no growth, and Codex reports no sub-agents at all — so on those runtimes a
+  junior keeps its seat beside its parent and never gets a cable. §178.
 - **Without hooks, `needs_input` and `stalled` are not distinguishable.** A transcript alone does
   not separate them, and the header says so rather than showing a confidently wrong picture.
 - **Which sessions are the same resumed conversation is inferred, not reported.** Claude Code gives

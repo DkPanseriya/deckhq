@@ -117,7 +117,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-058 | One conversation is one agent | Characters | done |
 | R-059 | Names never carry a numeric suffix | Characters | planned |
 | R-060 | Character animations: thinking, working, running, lounge activities | Characters | done |
-| R-061 | A crew animation for sub-agents and multi-agent workflows | Characters | planned |
+| R-061 | A crew animation for sub-agents and multi-agent workflows | Characters | done |
 | R-070 | Design it like interior architecture, like a real office | Interior | done |
 | R-071 | A lounge you recognise in a second | Interior | done |
 | R-072 | A reception with sofas against the walls and room to breathe | Interior | done |
@@ -607,12 +607,21 @@ floor around the parent with laptops, joined to it by cables, with data pulses a
 toward the parent.
 **Why.** A fan-out is the most impressive thing these runtimes do and the floor currently shows it
 as a number.
-**Status:** planned (**WP-89**). **Implemented by:** the detection half exists — WP-41 (`DEVIATIONS.md`
-§120) attaches subagent transcripts to their parent and draws juniors beside it, and §120 names what
-is measured and what is inferred. WP-89 is the composition, the cables and the pulses.
-**Notes.** The owner's "if that is trackable" is honoured by P-03: where the parent link is inferred
-rather than observed, the floor must not draw a cable that claims otherwise. Juniors are never in
-the needs-you count unless they raise a hand themselves.
+**Status:** done (**WP-89**, `DEVIATIONS.md` §178). **Implemented by:** WP-41 (§120) attaches
+subagent transcripts to their parent and draws juniors beside it; WP-89 adds the formation. Three or
+more juniors on a session AT A DESK turn it into a crew: the members at 0.65 of the parent, seated in
+an arc of radius 4.2 U (twelve open to 10.3 U), a laptop each, and one axis-aligned two-bend cable
+per junior to a port on the desk's front edge. Twelve are drawn and the rest are a `+N` chip. The
+`wf_<id>` segment `listSubagentFiles` used to discard is kept, so a crew that is one multi-agent
+workflow is known to be one. Goldens `crew` (motion on, phase 0.16) and `crew@reduced`.
+**Notes.** The owner's "if that is trackable" is honoured by P-03 and is the shape of the whole
+feature: a pulse runs only while a junior's transcript was observed to grow inside the minute, a
+junior whose file has stopped keeps a grey cable, and a runtime that reports no growth at all —
+Gemini CLI, OpenCode, Codex — draws no cable and keeps WP-41's seats. The rate is **banded from
+recency rather than measured as events per second**, because a poll cannot see more than *this file
+moved*; §178 records that deviation. There is no progress, no success and no failure on a junior,
+because nothing reports one. Juniors are never in the needs-you count unless they raise a hand
+themselves.
 
 ### 2.6 Interior
 
