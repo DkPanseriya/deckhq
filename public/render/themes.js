@@ -465,7 +465,7 @@ export function lightInkFor(ink) {
  * @param {string} wall the theme's wall
  * @returns {string} the same material, at or under the wall
  */
-function underWall(colour, wall) {
+export function underWall(colour, wall) {
   const ceiling = relativeLuminance(wall);
   if (relativeLuminance(colour) <= ceiling) return colour;
   // Bisect on `shade` toward black. Twenty-four halvings put the answer inside
@@ -599,12 +599,16 @@ export function assertFigureHaloContrast() {
  *
  * WP-88a added the second parameter, and it is the seam the Look centre paints
  * through: `rugs` names which of `RUG_TONES` each of the two rug ROLES is cut
- * from. It defaults to the pair this floor has always shipped — the reception's
- * slate wool and the project room's sage task rug — so every caller that does
- * not know the Look centre exists gets exactly the floor it got before.
+ * from, and `rugGrounds` names the floor each one is cut AGAINST. Both default
+ * to what this floor has always had — the reception's slate wool on the boards,
+ * the project room's sage task rug on the carpet — so every caller that does not
+ * know the Look centre exists gets exactly the floor it got before. A look that
+ * put polished concrete in the project rooms passes the concrete's own field
+ * here, because the rug has to read against the floor it is actually on.
  *
  * @param {{floor: Record<string, string>}} theme
- * @param {{rugs?: {wool?: string, task?: string}}} [look]
+ * @param {{rugs?: {wool?: string, task?: string},
+ *          rugGrounds?: {wool?: string, task?: string}}} [look]
  * @returns {Record<string, string>} material tokens, ready for `overridePalette`
  */
 export function materialTokensFor(theme, look = {}) {
@@ -658,8 +662,16 @@ export function materialTokensFor(theme, look = {}) {
   // on it is as readable as a name drawn on the floor; only its temperature is
   // its own.
   const rugContext = { carpet, wood, plant, wall, lightInk };
-  const rugSage = rugToneFor(look.rugs?.task || DEFAULT_RUG_TONES.task, carpet, rugContext);
-  const rugCream = rugToneFor(look.rugs?.wool || DEFAULT_RUG_TONES.wool, wood, rugContext);
+  const rugSage = rugToneFor(
+    look.rugs?.task || DEFAULT_RUG_TONES.task,
+    look.rugGrounds?.task || carpet,
+    rugContext,
+  );
+  const rugCream = rugToneFor(
+    look.rugs?.wool || DEFAULT_RUG_TONES.wool,
+    look.rugGrounds?.wool || wood,
+    rugContext,
+  );
 
   return {
     // ---- herringbone: one plank colour, four tones, a seam and a sheen ----

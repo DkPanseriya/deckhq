@@ -41,7 +41,9 @@ test('the two failures §1.d measured are fixed, and by the bisection rather tha
   // The numbers this replaces, so the test says what it is for: the wool rug was
   // 1.00:1 on night shift (invisible) and the task rug 1.69:1 on blueprint (the
   // loudest local contrast in a project room). Both came through a constant.
-  const night = materialTokensFor(/** @type {any} */ (THEMES.find((t) => t.name === 'night shift')));
+  const night = materialTokensFor(
+    /** @type {any} */ (THEMES.find((t) => t.name === 'night shift')),
+  );
   const blueprint = materialTokensFor(
     /** @type {any} */ (THEMES.find((t) => t.name === 'blueprint')),
   );
