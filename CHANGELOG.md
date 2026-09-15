@@ -8,6 +8,43 @@
 
 ### Added
 
+- **The documentation site is a product page — WP-94c.** The owner: _"Make very fancy and attractive
+  pages. Should look like a product by Apple, Uber, Netflix, Airbnb, Google level companies."_ Those
+  five do not share a look; what they share is that every page is **one system applied**. So the
+  site has one now, and it is written down: a 1.333 type scale fluid from a 360 px phone to a
+  1440 px desktop (display **42 → 80 px**, body **17 → 18**, tabular numerals throughout), an
+  **eight-pixel** spacing grid every margin on the site is drawn from, 1200 px of content with
+  full-bleed image bands, and one band grammar — a picture, a headline, two lines — that Home,
+  Features, Look, Characters and Studio all use.
+
+  **Both schemes, from one token set.** The site follows `prefers-color-scheme` and a toggle on the
+  bar overrides it in either direction. Neither half was invented: the dark neutrals are
+  `public/style.css`'s, and the light ones are the other half of the mark, which has carried both
+  grounds in one file since WP-82. The accent is the amber on the mark's antenna tip; crimson stays
+  what `docs/03-VISUAL-SPEC.md` §5 says it is and appears on exactly one band, the one about what is
+  waiting on you. `docs/DEVIATIONS.md` §171.
+
+- **Every colour on the site is measured, not asserted — WP-94c.** `test/unit/site.test.mjs` parses
+  the token blocks out of `site/style.css`, recomputes WCAG relative luminance from the literals and
+  checks **eighty-one pairs**: every ink on every ground in both schemes, what sits on each filled
+  colour, and the focus ring. The worst is 4.55:1. It is the reason the site's light accent is
+  `#8A5510` and not the mark's own `#B5731A`, which measures 3.46 on the light plate and therefore
+  cannot set words.
+
+- **`site/capture.mjs` — six screenshots and five measurements, from a browser.** It builds the site
+  into a temp directory, serves it on a socket the OS chooses, drives one Chrome over the DevTools
+  Protocol and takes the whole lot down again; nothing is left running and nothing is fetched from
+  off the machine. It writes `docs/media/site/home-{375,768,1440}-{light,dark}.png` and checks, at
+  each size, that no page is wider than its own window (thirteen pages at 375 and 1440), that every
+  reveal resolves, that under `prefers-reduced-motion` nothing starts hidden, that each page has one
+  `<h1>`, and that the bar is sticky.
+
+- **Pictures carry their own dimensions now — WP-94c.** `addImageDimensions()` in `site/build.mjs`
+  reads the size out of the file — PNG through the goldens harness's own decoder, GIF out of its
+  thirteen-byte header — and puts `width` and `height` on every `media/` image on all eleven pages
+  and all 172 log entries. Nothing on a page moves while it loads, and the number cannot be typed
+  wrong or forgotten on the next page somebody writes.
+
 - **Six hundred first names, and a number is now unreachable — WP-86.** The owner: _"I don't like
   names like Livia 1, 2, 3. Make the list big enough so that we do not run out of names."_ The pool
   held 243. It holds **600**: at most seven letters each, sayable, gender-mixed, from about twenty

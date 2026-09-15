@@ -289,28 +289,46 @@ const esc = (s) =>
     .replace(/'/g, '&#39;');
 
 /**
+ * The two glyphs on the scheme toggle, drawn here rather than fetched. One is
+ * shown at a time and which one says what pressing the button would do.
+ */
+const SUN = `<svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2" /><path d="M12 2.4v2.4M12 19.2v2.4M2.4 12h2.4M19.2 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7" /></svg>`;
+const MOON = `<svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.3A8.6 8.6 0 0 1 9.7 3.5a8.6 8.6 0 1 0 10.8 10.8Z" /></svg>`;
+
+/**
  * @param {{ title: string, description: string, body: string, slug: string, depth?: number }} page
  */
 function shell(page) {
   const up = '../'.repeat(page.depth ?? 0);
   const here_ = page.slug;
-  // Two groups on one bar — WP-94a. Twelve links in one flat row is a list to
-  // read rather than a way around, so the product pages lead and the reference
-  // pages follow them, quieter, after a rule.
+  // Two groups on one bar — WP-94a, kept by WP-94c. Twelve links in one flat
+  // row is a list to read rather than a way around, so the product pages lead
+  // and the reference pages sit behind one disclosure after them. Under 45rem
+  // the whole thing collapses into a second disclosure, and both are
+  // `<details>` elements, so the menu opens with scripting switched off.
   const link = (p, indent) => {
     const href = p.slug === 'index' ? `${up}index.html` : `${up}${p.slug}.html`;
     const current = p.slug === here_ || (p.slug === 'log/index' && here_.startsWith('log/'));
     return `${indent}<a href="${esc(href)}"${current ? ' aria-current="page"' : ''}>${esc(p.nav)}</a>`;
   };
   const group = (name) => PAGES.filter((p) => (p.group ?? 'main') === name);
+  const main = group('main');
+  const more = group('more');
+
   const nav =
-    group('main')
-      .map((p) => link(p, '        '))
-      .join('\n') +
-    '\n        <span class="nav-rule" aria-hidden="true"></span>\n' +
-    group('more')
-      .map((p) => link(p, '        '))
-      .join('\n');
+    main.map((p) => link(p, '          ')).join('\n') +
+    `
+          <details class="nav-more">
+            <summary>More</summary>
+            <div class="nav-more-list">
+${more.map((p) => link(p, '              ')).join('\n')}
+            </div>
+          </details>`;
+
+  const drawer =
+    main.map((p) => link(p, '            ')).join('\n') +
+    '\n            <hr />\n' +
+    more.map((p) => link(p, '            ')).join('\n');
 
   const full = page.slug === 'index' ? 'DeckHQ' : `${page.title} — DeckHQ`;
 
@@ -321,26 +339,40 @@ function shell(page) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(full)}</title>
     <meta name="description" content="${esc(page.description)}" />
-    <meta name="color-scheme" content="dark" />
+    <!-- WP-94c · both schemes, from one token set. The page follows the
+         reader's own preference, and the toggle on the bar overrides it in
+         either direction. -->
+    <meta name="color-scheme" content="dark light" />
     <link rel="stylesheet" href="${esc(up)}style.css" />
     <!-- WP-82 · the product mark. The favicon is the SVG, which carries both
          grounds and follows the reader's own colour-scheme preference — a tab
-         strip belongs to the browser, not to this site. The header takes the
-         dark raster instead: this site is dark only, and an img element
-         resolves that media query against the OS rather than against the
-         page. -->
+         strip belongs to the browser, not to this site. -->
     <link rel="icon" href="${esc(up)}deckhq-mark.svg" type="image/svg+xml" />
+    <!-- The stored scheme, before the first paint. Two dozen lines, no
+         network call, and the only script on this site that is not deferred.
+         Everything the pages do without it is in site/site.js's header. -->
+    <script src="${esc(up)}theme.js"></script>
+    <script src="${esc(up)}site.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header class="site-head">
       <a class="brand" href="${esc(up)}index.html">
-        <img class="brand-mark" src="${esc(up)}deckhq-mark.png" alt="" width="20" height="20" />
+        <img class="brand-mark" src="${esc(up)}deckhq-mark.png" alt="" width="22" height="22" />
         <span class="brand-name">DeckHQ</span>
       </a>
       <nav class="site-nav" aria-label="Sections">
 ${nav}
       </nav>
+      <details class="nav-toggle">
+        <summary aria-label="Sections">Menu</summary>
+        <nav class="nav-drawer" aria-label="Sections">
+${drawer}
+        </nav>
+      </details>
+      <button class="theme-toggle" type="button" hidden aria-label="Switch colour scheme">
+        ${SUN}${MOON}
+      </button>
     </header>
 
     <main id="main">
@@ -348,19 +380,51 @@ ${page.body.replace(/\n$/, '')}
     </main>
 
     <footer class="site-foot">
-      <p class="foot-pitch">
-        <code>npx deckhq</code> · local · MIT · no telemetry, no network calls of any kind
-      </p>
-      <nav class="foot-links" aria-label="Elsewhere">
-        <a href="${REPO}">Source</a>
-        <a href="https://www.npmjs.com/package/deckhq">npm</a>
-        <a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a>
-        <a href="${REPO}/blob/main/SECURITY.md">Security</a>
-        <a href="${REPO}/blob/main/CHANGELOG.md">Changelog</a>
-        <a href="${REPO}/blob/main/LICENSE">Licence</a>
-      </nav>
+      <div class="foot-inner">
+        <div>
+          <p class="foot-pitch"><strong>DeckHQ</strong></p>
+          <p>
+            Every AI coding session on your machine, on one office floor. Local, private, MIT.
+          </p>
+          <p><code>npx deckhq app</code></p>
+        </div>
+        <div class="foot-col">
+          <h2>Product</h2>
+          <ul>
+            <li><a href="${esc(up)}features.html">Features</a></li>
+            <li><a href="${esc(up)}look.html">The look</a></li>
+            <li><a href="${esc(up)}characters.html">Characters</a></li>
+            <li><a href="${esc(up)}studio.html">Studio</a></li>
+            <li><a href="${esc(up)}install.html">Install</a></li>
+          </ul>
+        </div>
+        <div class="foot-col">
+          <h2>Documentation</h2>
+          <ul>
+            <li><a href="${esc(up)}docs.html">All documents</a></li>
+            <li><a href="${esc(up)}model.html">The model in 60 seconds</a></li>
+            <li><a href="${esc(up)}hooks-and-privacy.html">Hooks and privacy</a></li>
+            <li><a href="${esc(up)}adapters.html">Adapters</a></li>
+            <li><a href="${esc(up)}faq.html">FAQ</a></li>
+            <li><a href="${esc(up)}log/index.html">Engineering log</a></li>
+          </ul>
+        </div>
+        <div class="foot-col">
+          <h2>Project</h2>
+          <ul>
+            <li><a href="${REPO}">Source</a></li>
+            <li><a href="https://www.npmjs.com/package/deckhq">npm</a></li>
+            <li><a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a></li>
+            <li><a href="${REPO}/blob/main/SECURITY.md">Security</a></li>
+            <li><a href="${REPO}/blob/main/CHANGELOG.md">Changelog</a></li>
+            <li><a href="${REPO}/blob/main/LICENSE">Licence</a></li>
+          </ul>
+        </div>
+      </div>
       <p class="foot-note">
-        This site loads nothing from anywhere else. No fonts, no scripts, no analytics.
+        This site loads nothing from anywhere else. No web font, no CDN, no analytics, no
+        third-party frame — and the product it documents makes no outbound network call of any
+        kind.
       </p>
     </footer>
   </body>
@@ -699,17 +763,6 @@ function build() {
     written++;
   };
 
-  // The hand-written pages. Each one is checked against the media policy
-  // before it is written: a page that shows a mockup without saying so is a
-  // build failure, not a review finding.
-  for (const page of PAGES) {
-    if (page.slug === 'log/index') continue;
-    const body = read(path.join('site', 'pages', `${page.slug}.html`));
-    assertMediaIsLabelled(`${page.slug}.html`, body);
-    write(`${page.slug}.html`, shell({ ...page, body, depth: 0 }));
-  }
-
-  // The engineering log.
   const deviations = read('docs/DEVIATIONS.md');
   const { preamble, entries } = splitEntries(deviations);
   // `docs/DEVIATIONS.md` links to its neighbours the way a file on disk does.
@@ -733,6 +786,32 @@ function build() {
     if (!media.has(rel)) media.set(rel, { to: rel, from: `docs/media/${rel}`, class: 'capture' });
   }
 
+  // The images go first, because the pages are measured against them: WP-94c's
+  // `addImageDimensions()` reads the size out of the copy the site serves.
+  let bytes = 0;
+  let downscaled = 0;
+  for (const [rel, image] of media) {
+    const from = path.join(root, image.from);
+    if (!fs.existsSync(from)) throw new Error(`${image.from} is referenced but missing`);
+    const to = path.join(OUT, 'media', rel);
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    const result = copyImage(from, to);
+    bytes += result.bytes;
+    if (result.downscaled) downscaled++;
+    written++;
+  }
+
+  // The hand-written pages. Each one is checked against the media policy
+  // before it is written: a page that shows a mockup without saying so is a
+  // build failure, not a review finding.
+  for (const page of PAGES) {
+    if (page.slug === 'log/index') continue;
+    const source = read(path.join('site', 'pages', `${page.slug}.html`));
+    assertMediaIsLabelled(`${page.slug}.html`, source);
+    const body = addImageDimensions(source, OUT);
+    write(`${page.slug}.html`, shell({ ...page, body, depth: 0 }));
+  }
+
   const items = entries.map((entry, index) => ({
     ...entry,
     file: `${index + 1}.html`,
@@ -747,7 +826,8 @@ function build() {
       next ? `<a class="pager-next" href="${next.file}">${esc(next.label)} →</a>` : '<span></span>',
     ].join('\n        ');
 
-    const body = `      <article class="prose log-entry">
+    const body = addImageDimensions(
+      `      <article class="prose log-entry">
         <p class="log-back"><a href="index.html">Engineering log</a></p>
         <p class="log-number">${esc(entry.label)}</p>
         <h1>${inline(entry.heading, rewriteSrc, rewriteHref)}</h1>
@@ -755,7 +835,9 @@ ${indentBlock(markdown(entry.body.join('\n'), { headingOffset: -1, rewriteSrc, r
       </article>
       <nav class="pager" aria-label="Log entries">
         ${nav}
-      </nav>`;
+      </nav>`,
+      OUT,
+    );
 
     const words = plain(entry.heading);
     write(
@@ -809,8 +891,12 @@ ${listing}
     }),
   );
 
-  // Static assets.
-  fs.copyFileSync(path.join(here, 'style.css'), path.join(OUT, 'style.css'));
+  // Static assets. The two scripts are WP-94c and are listed here rather than
+  // globbed, so a file dropped into `site/` is not published by accident.
+  for (const asset of ['style.css', 'theme.js', 'site.js']) {
+    fs.copyFileSync(path.join(here, asset), path.join(OUT, asset));
+  }
+  written += 2; // style.css is counted again below, with the two marks
   // WP-82 · the mark, copied and never redrawn: the SVG is the source in the
   // repository and the PNG is what scripts/brand/render-icons.mjs rendered from
   // it. The site has no third copy of either.
@@ -820,18 +906,6 @@ ${listing}
   );
   fs.copyFileSync(path.join(root, 'public', 'icon-256.png'), path.join(OUT, 'deckhq-mark.png'));
   written += 3;
-  let bytes = 0;
-  let downscaled = 0;
-  for (const [rel, image] of media) {
-    const from = path.join(root, image.from);
-    if (!fs.existsSync(from)) throw new Error(`${image.from} is referenced but missing`);
-    const to = path.join(OUT, 'media', rel);
-    fs.mkdirSync(path.dirname(to), { recursive: true });
-    const result = copyImage(from, to);
-    bytes += result.bytes;
-    if (result.downscaled) downscaled++;
-    written++;
-  }
 
   // The one-line installers, byte for byte as they are in the repository, so
   // what a stranger pipes into their shell is a file that is reviewed, linted
@@ -1006,6 +1080,65 @@ function assertMediaIsLabelled(name, body) {
   }
 }
 
+/**
+ * The pixel size of an image on disk — WP-94c.
+ *
+ * PNG through the goldens harness's own decoder; GIF out of its thirteen-byte
+ * header, which carries the logical screen size in two little-endian shorts and
+ * needs no decoder at all. Anything else, or anything malformed, is `null`.
+ *
+ * @param {string} file
+ * @returns {{width: number, height: number} | null}
+ */
+function imageSize(file) {
+  let bytes;
+  try {
+    bytes = fs.readFileSync(file);
+  } catch {
+    return null;
+  }
+  const ext = path.extname(file).toLowerCase();
+  if (ext === '.png') {
+    try {
+      const { width, height } = decodePng(bytes);
+      return { width, height };
+    } catch {
+      return null;
+    }
+  }
+  if (ext === '.gif' && bytes.length > 10 && bytes.subarray(0, 3).toString('latin1') === 'GIF') {
+    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+  }
+  return null;
+}
+
+/**
+ * Put the real `width` and `height` on every `media/` image that does not
+ * already carry them — WP-94c.
+ *
+ * A picture without them is a picture the browser reserves no room for, so the
+ * words under it move when it arrives. Doing it here rather than by hand means
+ * the number is the file's own, cannot be typed wrong, and cannot be forgotten
+ * on the next page somebody writes. A tag that already declares a size is left
+ * exactly as it is: a hand-written pair is a deliberate one.
+ *
+ * @param {string} body the hand-written HTML body
+ * @param {string} outDir where the images were copied to
+ */
+function addImageDimensions(body, outDir) {
+  return body.replace(/<img\b[^>]*>/g, (tag) => {
+    if (/\swidth="/.test(tag) || /\sheight="/.test(tag)) return tag;
+    const src = (tag.match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
+    // `media/...` on a hand-written page, `../media/...` in a rendered log
+    // entry, which lives one directory down.
+    const rel = src.replace(/^(?:\.\.\/)+/, '');
+    if (!rel.startsWith('media/')) return tag;
+    const size = imageSize(path.join(outDir, rel));
+    if (!size) return tag;
+    return tag.replace(/\s*\/?>$/, ` width="${size.width}" height="${size.height}" />`);
+  });
+}
+
 /** @param {string} html @param {number} spaces */
 function indentBlock(html, spaces) {
   const pad = ' '.repeat(spaces);
@@ -1058,6 +1191,8 @@ export {
   safeUrl,
   build,
   imageClass,
+  imageSize,
+  addImageDimensions,
   assertMediaIsLabelled,
   INSTALLERS,
   INSTALL_COMMANDS,

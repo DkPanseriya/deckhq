@@ -1,153 +1,220 @@
-<article class="prose">
-  <h1>The characters</h1>
-  <p class="lede">
-    A session on the floor is a person at a desk. Its colour is its state, its face is its identity,
-    and both have to read at 22 pixels from across the room. This page has what ships today, and
-    then the sheets two unbuilt packages are designed against &#8212; every one of those labelled as
-    the drawing it is.
-  </p>
-</article>
+<section class="section">
+  <div class="section-head">
+    <h1>The characters.</h1>
+    <p class="lede">
+      A session on the floor is a person at a desk. Its colour is its state, its face is its
+      identity, and both have to read at 22 pixels from across the room. This page has what ships
+      today, and then the sheets two unbuilt packages are designed against &#8212; every one of
+      those labelled as the drawing it is.
+    </p>
+  </div>
 
-<section class="feature">
-  <h2>What ships today</h2>
-  <p>
-    <strong>The state colour owns the whole body.</strong> Head included. An agent can never wear a
-    state colour as identity, and identity can never borrow one: every avatar colour is held a fixed
-    distance from all six state colours, checked rather than eyeballed.
+  <h2>The state owns the whole body.</h2>
+  <p class="muted">
+    Six states, and they are the only thing on the floor colour is spent on. An agent can never wear
+    a state colour as identity, and identity can never borrow one: every avatar colour is held a
+    fixed distance from all six, checked rather than eyeballed.
   </p>
-  <p>
-    <strong>Identity is a face, a name and sometimes a hat</strong>, derived from the session id, so
-    the same session is the same person on every restart. The name comes from a pool of 600 and is
-    kept for good; a number after a name is unreachable below 600 live identities on one machine.
+  <ul class="states" data-reveal>
+    <li>
+      <b><span class="state-dot dot--working"></span>Working</b>
+      <span>Typing. Producing output right now.</span>
+    </li>
+    <li>
+      <b><span class="state-dot dot--needs_input"></span>Needs input</b>
+      <span>A raised hand. Blocked on a question only you can answer.</span>
+    </li>
+    <li>
+      <b><span class="state-dot dot--stalled"></span>Stalled</b>
+      <span>Slumped. Silent longer than the stall window.</span>
+    </li>
+    <li>
+      <b><span class="state-dot dot--for_review"></span>For review</b>
+      <span>Finished its turn and standing in your office, waiting on a reply.</span>
+    </li>
+    <li>
+      <b><span class="state-dot dot--benched"></span>Benched</b>
+      <span>You have dealt with it. In the lounge, out of the queue.</span>
+    </li>
+    <li>
+      <b><span class="state-dot dot--let_go"></span>Let go</b>
+      <span>Gone from disk. On its way off the floor.</span>
+    </li>
+  </ul>
+  <p class="muted">
+    The names are the model, not the colour: a state is carried by a pose and a label as well as by
+    a hue, so the floor is legible to a reader who sees neither.
+    <a href="model.html">The model in 60 seconds</a> is the whole of it.
   </p>
-  <p>
-    <strong>Reduced motion is a first-class render, not a degradation.</strong> Under
-    <code>prefers-reduced-motion</code> characters snap instead of walking, each clip holds one
-    representative pose, and the floor stays fully legible &#8212; with a golden proving it.
-  </p>
-  <figure>
-    <img
-      src="media/goldens/single.png"
-      alt="A DeckHQ floor with one project room: agents at their desks with state-coloured bodies, bright visor faces, and name labels under them"
-      loading="lazy"
-      width="1600"
-      height="1000"
-    />
-    <figcaption>
-      The <code>single</code> fixture, rendered by the code on <code>main</code>: the figure as it
-      is drawn today. <span class="tag tag--golden">Golden render</span>
-    </figcaption>
-  </figure>
 </section>
 
-<section class="feature">
-  <h2>How that figure was chosen</h2>
-  <p>
-    Four candidates were drawn as full sheets &#8212; sizes, states, identity, in situ &#8212; and
-    put on the same lounge crop at 1:1, 34 pixels tall, because the argument is only settled at the
-    size the floor actually draws.
-  </p>
-  <p>
-    <strong>B won:</strong> a 45&#176; three-quarter robot, symmetric and front-facing, so all six
-    poses read from any scan direction, and the bright visor is the most findable element on the
-    floor. It maps cleanly onto the skeleton the rig already had.
-  </p>
-  <p>
-    The sheets below are the proposal, not the product. The figure that shipped is in the golden
-    above; every golden in the repository changed when it landed.
-  </p>
-  <figure>
-    <img
-      src="media/design/character-b.png"
-      alt="Character sheet B: a three-quarter view robot drawn at several sizes, in six states, with six identity variants and a strip of it in situ on a floor"
-      loading="lazy"
-    />
-    <figcaption>
-      Candidate B, the sheet the owner picked.
-      <span class="tag tag--illustration">Design illustration</span> &#8212; a proposal drawn for
-      WP-79; what shipped is the golden above.
-    </figcaption>
-  </figure>
-  <figure>
-    <img
-      src="media/design/character-in-situ.png"
-      alt="Four character candidates, A to D, each placed on the same lounge crop of a real floor at actual size, 34 pixels tall"
-      loading="lazy"
-    />
-    <figcaption>
-      All four candidates on one lounge crop, at the size the floor draws them.
-      <span class="tag tag--illustration">Design illustration</span> &#8212; the comparison that
-      settled it.
-    </figcaption>
-  </figure>
+<section class="section" data-reveal>
+  <div class="bands">
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>What ships today.</h2>
+        <p>
+          <strong>Identity is a face, a name and sometimes a hat</strong>, derived from the session
+          id, so the same session is the same person on every restart. The name comes from a pool of
+          600 and is kept for good.
+        </p>
+        <p>
+          <strong>Reduced motion is a first-class render, not a degradation.</strong> Under
+          <code>prefers-reduced-motion</code> characters snap instead of walking, each clip holds
+          one representative pose, and the floor stays fully legible &#8212; with a golden proving
+          it.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/goldens/single.png"
+          alt="A DeckHQ floor with one project room: agents at their desks with state-coloured bodies, bright visor faces, and name labels under them"
+          loading="lazy"
+          width="1600"
+          height="1000"
+        />
+        <figcaption>
+          The <code>single</code> fixture, rendered by the code on <code>main</code>: the figure as
+          it is drawn today.
+          <span class="tag tag--golden">Golden render</span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>How that figure was chosen.</h2>
+        <p>
+          Four candidates were drawn as full sheets &#8212; sizes, states, identity, in situ &#8212;
+          and put on the same lounge crop at 1:1, 34 pixels tall, because the argument is only
+          settled at the size the floor actually draws.
+        </p>
+        <p>
+          <strong>B won:</strong> a 45&#176; three-quarter robot, symmetric and front-facing, so all
+          six poses read from any scan direction, and the bright visor is the most findable element
+          on the floor.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/design/character-b.png"
+          alt="Character sheet B: a three-quarter view robot drawn at several sizes, in six states, with six identity variants and a strip of it in situ on a floor"
+          loading="lazy"
+        />
+        <figcaption>
+          Candidate B, the sheet the owner picked.
+          <span class="tag tag--illustration">Design illustration</span> &#8212; a proposal drawn
+          for WP-79; what shipped is the golden above.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="band-row">
+      <div class="band-copy">
+        <h2>Four candidates, at actual size.</h2>
+        <p>
+          All four on one lounge crop of a real floor, 34 pixels tall. This comparison is what
+          settled it, and it is the only fair way to settle it.
+        </p>
+        <p>
+          The sheets on this page are the proposal, not the product. Every golden in the repository
+          changed when the winner landed.
+        </p>
+      </div>
+      <figure class="band-shot">
+        <img
+          src="media/design/character-in-situ.png"
+          alt="Four character candidates, A to D, each placed on the same lounge crop of a real floor at actual size, 34 pixels tall"
+          loading="lazy"
+        />
+        <figcaption>
+          All four candidates on one lounge crop, at the size the floor draws them.
+          <span class="tag tag--illustration">Design illustration</span> &#8212; the comparison that
+          settled it.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
 </section>
 
-<section class="feature">
-  <h2>Coming in WP-87: the ways it moves</h2>
-  <p>
-    The figure can stand six ways and move none. WP-87 gives it a thinking cloud, a working clip, a
-    run cycle, and the lounge activities a benched agent has nothing to do without &#8212; games,
-    coffee, a conversation.
-  </p>
-  <p>
-    <strong>None of it is built.</strong> The two sheets below are what it is designed against, and
-    they are rendered by scripts in this repository from the same drawing code the floor uses, which
-    makes them faithful and does not make them screenshots.
-  </p>
-  <p>
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>Coming in WP-87: the ways it moves.</h2>
+    <p>
+      The figure can stand six ways and move none. WP-87 gives it a thinking cloud, a working clip,
+      a run cycle, and the lounge activities a benched agent has nothing to do without.
+      <strong>None of it is built.</strong> The two sheets below are what it is designed against;
+      they are rendered by scripts in this repository from the same drawing code the floor uses,
+      which makes them faithful and does not make them screenshots.
+    </p>
+  </div>
+  <ul class="gallery">
+    <li>
+      <figure class="tile">
+        <img
+          src="media/motion/life-sheet.png"
+          alt="A sheet of twelve motion studies of the DeckHQ figure: thinking, typing, walking, running, standing, waiting, sitting, drinking, and four more, each drawn as a row of key poses"
+          loading="lazy"
+        />
+        <figcaption>
+          <b>The life sheet</b>
+          <span class="tag tag--illustration">Design illustration</span>
+          <span class="tile-more"
+            >Twelve ways the figure moves, as proposed for WP-87. Planned, not built.</span
+          >
+        </figcaption>
+      </figure>
+    </li>
+    <li>
+      <figure class="tile">
+        <img
+          src="media/motion/lounge-activities.png"
+          alt="A sheet of lounge activities: figures playing pool and table tennis, at an arcade cabinet, drinking coffee, and sitting on sofas in conversation"
+          loading="lazy"
+        />
+        <figcaption>
+          <b>Lounge activities</b>
+          <span class="tag tag--illustration">Design illustration</span>
+          <span class="tile-more"
+            >What a benched agent does with its time, as proposed for WP-87. Planned, not
+            built.</span
+          >
+        </figcaption>
+      </figure>
+    </li>
+  </ul>
+  <p class="muted">
     What already binds it: one static frame per state under
     <code>prefers-reduced-motion</code> with a golden proving it, and every phase from the injected
     clock rather than the wall clock, so a capture of a moving floor is reproducible.
   </p>
-  <figure>
-    <img
-      src="media/motion/life-sheet.png"
-      alt="A sheet of twelve motion studies of the DeckHQ figure: thinking, typing, walking, running, standing, waiting, sitting, drinking, and four more, each drawn as a row of key poses"
-      loading="lazy"
-    />
-    <figcaption>
-      The life sheet: twelve ways the figure moves, as proposed for WP-87.
-      <span class="tag tag--illustration">Design illustration</span> &#8212; planned, not built.
-    </figcaption>
-  </figure>
-  <figure>
-    <img
-      src="media/motion/lounge-activities.png"
-      alt="A sheet of lounge activities: figures playing pool and table tennis, at an arcade cabinet, drinking coffee, and sitting on sofas in conversation"
-      loading="lazy"
-    />
-    <figcaption>
-      What a benched agent does with its time, as proposed for WP-87.
-      <span class="tag tag--illustration">Design illustration</span> &#8212; planned, not built.
-    </figcaption>
-  </figure>
 </section>
 
-<section class="feature">
-  <h2>Coming in WP-89: the crew</h2>
-  <p>
-    A session that spawns sub-agents should show them. WP-89 draws three or more live sub-agents
-    smaller on the floor around their parent, each with a laptop, joined by cables carrying data
-    pulses back toward the parent desk, arriving and leaving with the sub-agents themselves.
-  </p>
-  <p>
-    <strong>Not built.</strong> The animation below is a drawing of it. Today sub-agents are on the
-    floor as juniors beside their parent, without the cables.
-  </p>
-  <p>
-    The honesty constraint is already fixed: a cable is a claim about a parent&#8211;child
-    relationship, so where the link is inferred rather than observed no cable is drawn. Juniors
-    never enter the needs-you count unless they raise a hand themselves.
-  </p>
-  <figure>
-    <img
-      src="media/motion/crew.gif"
-      alt="An animation of a crew of small sub-agent figures arriving around a parent desk with laptops, cables running back to the parent with pulses of data travelling along them"
-      loading="lazy"
-    />
+<section class="section" data-reveal>
+  <div class="section-head">
+    <h2>Coming in WP-89: the crew.</h2>
+    <p>
+      A session that spawns sub-agents should show them. WP-89 draws three or more live sub-agents
+      smaller on the floor around their parent, each with a laptop, joined by cables carrying data
+      pulses back toward the parent desk.
+      <strong>Not built.</strong> Today sub-agents are on the floor as juniors beside their parent,
+      without the cables.
+    </p>
+  </div>
+  <figure class="device">
+    <div class="device-frame">
+      <div class="device-bar"><i></i><i></i><i></i><span>WP-89 &#183; proposed</span></div>
+      <img
+        src="media/motion/crew.gif"
+        alt="An animation of a crew of small sub-agent figures arriving around a parent desk with laptops, cables running back to the parent with pulses of data travelling along them"
+        loading="lazy"
+      />
+    </div>
     <figcaption>
       The crew arriving, as proposed for WP-89.
-      <span class="tag tag--illustration">Design illustration</span> &#8212; planned, not built.
+      <span class="tag tag--illustration">Design illustration</span> &#8212; planned, not built. The
+      honesty constraint is already fixed: a cable is a claim about a parent&#8211;child
+      relationship, so where the link is inferred rather than observed no cable is drawn.
     </figcaption>
   </figure>
 </section>
@@ -165,5 +232,9 @@
     committed files against a fresh render on every run, so the source and its outputs cannot drift
     apart.
   </p>
-  <p><a href="look.html">Look</a> &#183; <a href="features.html">Features</a></p>
+  <p>
+    The one colour in it is the amber on the antenna tip, and it is the accent this site is built
+    on.
+  </p>
+  <p><a href="look.html">The look</a> &#183; <a href="features.html">Features</a></p>
 </article>

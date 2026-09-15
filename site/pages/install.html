@@ -1,13 +1,42 @@
-<article class="prose">
-  <h1>Install</h1>
-  <p class="lede">
-    Node 18 or newer, and nothing else. There is no build step, no runtime dependency and no
-    account, whichever route you take.
-  </p>
+<section class="section">
+  <div class="section-head">
+    <h1>Install.</h1>
+    <p class="lede">
+      Node 18 or newer, and nothing else. There is no build step, no runtime dependency and no
+      account, whichever route you take.
+    </p>
+  </div>
+  <ul class="ways">
+    <li>
+      <h3>npx &#8212; the one to start with</h3>
+      <p>Downloads the package, runs it, and leaves no binary behind.</p>
+      <p class="command" data-command="npx deckhq app">npx deckhq app</p>
+    </li>
+    <li>
+      <h3>One line, including Node &#8212; Windows</h3>
+      <p>Checks for Node, offers to install it with <code>winget</code>, then DeckHQ.</p>
+      <p class="command" data-command="irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex">
+        irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
+      </p>
+    </li>
+    <li>
+      <h3>One line, including Node &#8212; macOS and Linux</h3>
+      <p>
+        <code>brew install node</code> on macOS; on Linux the distribution&#8217;s own command is
+        printed for you to run.
+      </p>
+      <p
+        class="command"
+        data-command="curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh"
+      >
+        curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+      </p>
+    </li>
+  </ul>
+</section>
 
-  <h2>npx</h2>
-  <p>The one to start with. It downloads the package, runs it, and leaves no binary behind.</p>
-  <p class="command">npx deckhq app</p>
+<article class="prose">
+  <h2>What <code>npx deckhq app</code> does</h2>
   <p>
     That starts the daemon on <code>127.0.0.1</code> and opens the floor in a window of its own
     &#8212; Chrome or Edge in application mode, no tab strip, no address bar &#8212; and on its
@@ -18,17 +47,14 @@
     and <code>npx deckhq --no-open</code> starts the daemon without a tab.
   </p>
 
-  <h2>One line, including Node</h2>
+  <h2>What the two one-liners do</h2>
   <p>
-    If there is no Node on the machine at all, these two do the whole thing: check for Node 18 or
-    newer, <strong>offer</strong> to install it &#8212;
-    <code>winget install OpenJS.NodeJS.LTS</code> on Windows, <code>brew install node</code> on
-    macOS, the distribution&#8217;s own command printed for you to run on Linux &#8212; then
-    <code>npm install -g deckhq@latest</code>, then the same icon question, then
-    <code>deckhq app</code>.
+    If there is no Node on the machine at all, they do the whole thing: check for Node 18 or newer,
+    <strong>offer</strong> to install it &#8212; <code>winget install OpenJS.NodeJS.LTS</code> on
+    Windows, <code>brew install node</code> on macOS, the distribution&#8217;s own command printed
+    for you to run on Linux &#8212; then <code>npm install -g deckhq@latest</code>, then the same
+    icon question, then <code>deckhq app</code>.
   </p>
-  <p class="command">irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex</p>
-  <p class="command">curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh</p>
   <div class="note">
     <p>
       <strong>Read a script before you pipe it into a shell</strong> &#8212; this one included. They
@@ -59,7 +85,8 @@
     The release job renders a Homebrew formula, a three-file winget manifest and a scoop manifest
     against the sha256 of the tarball the npm registry actually serves, and attaches them to the
     GitHub Release along with a Windows zip. They install Node as a dependency rather than bundling
-    it, and what they install is byte-for-byte what <code>npx deckhq</code> runs.
+    it, and what they install is byte-for-byte what
+    <code>npx deckhq</code> runs.
   </p>
   <div class="note">
     <p>

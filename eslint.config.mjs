@@ -16,6 +16,12 @@ export default [
       // beside them is an ordinary module and stays linted.
       '**/docs/media/motion/*.js',
       '**/*.vsix',
+      // The documentation site's build output — WP-94c. `site/` itself is
+      // linted; `site/dist/` is a copy of it that `node site/build.mjs` writes
+      // and `.gitignore` and `.prettierignore` already exclude. Linting it
+      // reports every finding twice and reports them against a file nobody
+      // edits.
+      'site/dist/**',
     ],
   },
   {

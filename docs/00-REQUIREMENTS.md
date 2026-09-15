@@ -153,6 +153,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-161 | Live where the user already lives | Docs / plugin / extension | done |
 | R-162 | A landing page that explains itself in seconds | Docs / plugin / extension | done |
 | R-163 | The site demonstrates features and configurability; the README stays scannable | Docs / plugin / extension | done |
+| R-164 | The pages look like a product from a company that designs | Docs / plugin / extension | done |
 | R-170 | Tag, then never let a human be the release step | Releases | done |
 | R-171 | Commits are attributed to Darshak Panseriya | Releases | done |
 | R-172 | A product icon worth the product | Releases | done |
@@ -1010,6 +1011,28 @@ The README went from 911 lines to 211 against a 250-line budget enforced by
 wherever one exists and every stale capture says so in its caption. **WP-94b** retakes them after
 WP-89 lands, and replaces the golden hero with a live capture; until then this requirement is done
 and its pictures are dated.
+
+**R-164 — The pages look like a product from a company that designs**
+*Owner, 15 September 2026:* "Make very fancy and attractive pages. Should look like a product by
+Apple, Uber, Netflix, Airbnb, Google level companies."
+*Taken to mean:* not an imitation of any of those five — they do not share a look — but the thing
+they do share: every page is **one system applied**, and nothing is on it that is not in the system.
+**Status:** done. **Implemented by:** WP-94c (`DEVIATIONS.md` §171). One 1.333 type scale fluid with
+`clamp()` (display 42–80 px, body 17–18 px, tabular numerals), an eight-pixel spacing grid, 1200 px
+of content with full-bleed image bands, and one band grammar — a picture, a headline, two lines —
+across Home, Features, Look, Characters and Studio. Light and dark come from one token set through
+`prefers-color-scheme` plus a toggle; neither half was invented, because the dark neutrals are
+`public/style.css`'s and the light ones are the other half of the mark. The accent is the amber on
+the mark's antenna tip, and crimson stays what `03-VISUAL-SPEC.md` §5 says it is.
+**How it is held.** `test/unit/site.test.mjs` measures eighty-one contrast pairs from the
+stylesheet's own literals (worst 4.55:1), holds `style.css` under 40 KB and the scripts under 10 KB,
+holds the home page's first screen under 1.5 MB, and asserts the site renders whole with JavaScript
+off. `site/capture.mjs` drives a real browser: no page wider than its window at 375 or 1440, every
+reveal resolving, nothing hidden under `prefers-reduced-motion`, and the six home captures in
+`MEDIA.md` §4.4.
+**Notes.** This requirement moved type, colour and layout. It moved nothing the site *says*: every
+page, every caption class and every install command is what WP-94a left, and the pictures are still
+dated by R-163's note above.
 
 ### 2.16 Releases
 
