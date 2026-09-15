@@ -440,3 +440,150 @@ export function pinnedProjectsOf(snapshot, opts = {}) {
     pinned: true,
   }));
 }
+
+// ---------------------------------------------------------- the crew (WP-89)
+//
+// `docs/plan/12-MOTION-AND-CREW.md` §3. Here rather than in the renderer for the
+// reason everything else in this file is here: the daemon publishes the crew on
+// every snapshot and the floor draws it, and a rule about who is in a crew with
+// two implementations is a picture and a list that can disagree about the same
+// session.
+
+/**
+ * HOW MANY CONCURRENT JUNIORS MAKE A CREW. §3.2, owner decision 1: *"Three or
+ * more juniors live at once turn the parent's desk into a crew; one or two keep
+ * today's behaviour exactly."* Three is where a row beside a desk stops reading
+ * as *this person's helpers* and starts reading as *a queue*.
+ */
+export const CREW_THRESHOLD = 3;
+
+/**
+ * HOW RECENTLY A JUNIOR'S TRANSCRIPT MUST HAVE GROWN TO COUNT AS `active` —
+ * the junior stall window, and the one number in the crew that is a judgment.
+ *
+ * A junior has no progress, no stop record and no event rate (§3.1). The single
+ * thing that can be observed about one is that its file moved, so `active` is
+ * *"this transcript grew inside the window"* and nothing else.
+ *
+ * SIXTY SECONDS, and neither window already in the tree would do:
+ *
+ *   - `SUBAGENT_IDLE_MS` (five minutes) is when a junior LEAVES the floor.
+ *     Using it here would make `active` true for every junior that is drawn at
+ *     all, by construction, and the grey cable §3.2 asks for would never once
+ *     appear.
+ *   - `settings.stallWindowMs` (ten minutes by default) is longer still, and it
+ *     is a SENIOR's window: it is tuned for how long silence must last before a
+ *     human should look. A junior writes every 1.7 seconds at the median.
+ *
+ * So it comes from the same measurement `SUBAGENT_IDLE_MS` does: 28,813
+ * consecutive-record gaps over 300 real subagent transcripts — p50 1.7 s, p90
+ * 7.9 s, **p99 63.5 s**, p99.9 253 s. A minute is that p99 rounded down. 99% of
+ * the gaps inside a working junior's life are shorter than it, so a junior that
+ * is still writing effectively never flickers to grey; one that has stopped
+ * goes grey within a minute rather than within five.
+ */
+export const CREW_ACTIVE_MS = 60_000;
+
+/**
+ * The most crew members DRAWN. §3.2: *"Twelve juniors are drawn; beyond that a
+ * `+N` chip sits beside the desk"* — the rest reachable from the panel and the
+ * deck, which is where a crew of forty is legible anyway.
+ */
+export const CREW_DRAW_CAP = 12;
+
+/**
+ * IS THIS JUNIOR STILL WRITING? Observed, never inferred: a junior whose
+ * runtime reports no `lastGrowthAt` at all is **not** active, because nothing
+ * said it was. That refusal is what keeps Gemini CLI and OpenCode — which carry
+ * a parent link and nothing else (§3.1) — out of the pulse entirely.
+ * @param {FloorAgent & {lastGrowthAt?:number|null}} agent
+ * @param {number} now ms epoch
+ * @returns {boolean}
+ */
+export function juniorActive(agent, now) {
+  if (!agent) return false;
+  const at = Number(agent.lastGrowthAt);
+  if (!Number.isFinite(at) || at <= 0) return false;
+  const n = Number(now);
+  if (!Number.isFinite(n)) return false;
+  return n - at <= CREW_ACTIVE_MS;
+}
+
+/**
+ * ONE CREW PER PARENT THAT HAS JUNIORS, in a deterministic order.
+ *
+ * Every field on a member is one the adapter reported, or `active`, which is
+ * `juniorActive` over one of them. There is no progress, no success, no failure
+ * and no reason on it — §3.1's list of what is not trackable, applied as the
+ * SHAPE of the record rather than as a comment beside it.
+ *
+ * A junior is in a crew **only because a transcript file exists for it**: this
+ * reads the agent list, and an agent is on that list only because the scan found
+ * its file. Nothing here synthesises a member from a count, so `juniorCount` and
+ * `crew.count` cannot drift.
+ *
+ * Sorted by id — the order `assignSeats` seats them in and `describeJunior`
+ * numbers them in — so the arc, the deck and the panel agree about which junior
+ * is the first one.
+ *
+ * @param {(FloorAgent & Record<string, any>)[]} agents every agent on the snapshot
+ * @param {{now?:number}} [opts]
+ * @returns {{parentId:string, count:number, workflowId:string|null,
+ *   members:{id:string, name:string|null, agentType:string|null,
+ *     workflowId:string|null, spawnedAt:number|null, active:boolean,
+ *     lastGrowthAt:number|null}[]}[]}
+ */
+export function crewsFrom(agents, opts = {}) {
+  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
+  const list = Array.isArray(agents) ? agents : [];
+  /** @type {Map<string, any[]>} */
+  const byParent = new Map();
+  for (const a of list) {
+    if (!a || a.subagent !== true) continue;
+    const parentId = a.parentId == null ? '' : String(a.parentId);
+    if (!parentId) continue;
+    const bucket = byParent.get(parentId) || [];
+    bucket.push(a);
+    byParent.set(parentId, bucket);
+  }
+  /** @type {any[]} */
+  const out = [];
+  for (const [parentId, bucket] of byParent) {
+    const members = bucket
+      .slice()
+      .sort((x, y) => String(x.id).localeCompare(String(y.id)))
+      .map((a) => ({
+        id: String(a.id),
+        // The name the user sees under the body. `label` is the daemon's own
+        // `displayName ?? mk`; a snapshot built before identity ran has none,
+        // and null is said rather than a placeholder invented.
+        name: a.label ?? a.displayName ?? null,
+        agentType: a.subagentType ?? null,
+        workflowId: a.workflowId ?? null,
+        spawnedAt: a.spawnedAt ?? null,
+        active: juniorActive(a, now),
+        lastGrowthAt: a.lastGrowthAt ?? null,
+      }));
+    // One workflow, or none. Four juniors that all name the same `wf_<id>` ARE
+    // one multi-agent workflow; a mixed bucket is a parent running a workflow
+    // and a bare `Task` call at once, and neither half may claim the other.
+    const ids = new Set(members.map((m) => m.workflowId).filter((w) => w));
+    out.push({
+      parentId,
+      count: members.length,
+      workflowId: ids.size === 1 ? [...ids][0] : null,
+      members,
+    });
+  }
+  out.sort((a, b) => a.parentId.localeCompare(b.parentId));
+  return out;
+}
+
+/**
+ * Does this parent's crew draw as a FORMATION — the arc, the laptops and the
+ * cables — or as today's seats beside the desk?
+ * @param {number} count how many juniors this parent has on the floor
+ */
+export function isCrewFormation(count) {
+  return Number(count) >= CREW_THRESHOLD;
+}

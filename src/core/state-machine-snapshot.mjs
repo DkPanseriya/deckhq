@@ -19,6 +19,9 @@ import { LEDGER_TOKENS_VERSION, projectKeyFor } from './ledger.mjs';
 import { buildDemoSnapshot } from './demo-fixture.mjs';
 import { rateCardVersion } from './rates.mjs';
 import { COUNTER_FIELDS, breakdownDelta } from './usage.mjs';
+// WP-89. The crew rule, from the one copy both sides read — see the header of
+// `public/floor-rule.js` for why a browser module is imported here.
+import { crewsFrom } from '../../public/floor-rule.js';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -75,7 +78,7 @@ export class RegistrySnapshot extends RegistryBase {
    * makes "run `claude` and a real one walks in" true within one poll rather
    * than after a reload.
    *
-   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean|string>, scannedAt: number|null, now: number, nowFixed: boolean, demo?: boolean, demoNote?: string}}
+   * @returns {{agents: Agent[], projects: ReturnType<typeof projectsOf>, counts: ReturnType<typeof counts>, crews?: ReturnType<typeof crewsFrom>, settings: import('./store.mjs').Settings, hooks: Record<string,{supported:boolean,installed:boolean}>, degraded: Record<string, boolean|string>, scannedAt: number|null, now: number, nowFixed: boolean, demo?: boolean, demoNote?: string}}
    */
   snapshot() {
     if (this._agents.length === 0 && this._scannedAt !== null) {
@@ -163,6 +166,12 @@ export class RegistrySnapshot extends RegistryBase {
     return {
       agents,
       projects,
+      // WP-89. ONE CREW PER PARENT THAT HAS JUNIORS, built here rather than by
+      // each surface, and built AFTER identity has named the juniors so a
+      // member carries the name the floor draws under it. It is derived from
+      // `agents` and adds no observation: a member exists because a transcript
+      // file does. `docs/plan/12-MOTION-AND-CREW.md` §3.
+      crews: crewsFrom(agents, { now: at }),
       // The gone-home window reaches `counts` for the same reason it reaches
       // the renderer: `counts.drawn` describes what the floor shows, and what
       // the floor shows depends on it (WP-55).

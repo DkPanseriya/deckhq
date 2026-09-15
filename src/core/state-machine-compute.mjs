@@ -361,6 +361,11 @@ export class RegistryCompute extends RegistrySnapshot {
         subagentType: junior && summary ? (summary.subagentType ?? null) : null,
         subagentDescription: junior && summary ? (summary.subagentDescription ?? null) : null,
         spawnedAt: junior && summary ? (summary.spawnedAt ?? null) : null,
+        // WP-89. Both observed, both only ever on a junior, and both null for a
+        // runtime that reports neither — the crew's honesty rule is that an
+        // absent field is never filled in with an inference.
+        workflowId: junior && summary ? (summary.workflowId ?? null) : null,
+        lastGrowthAt: junior && summary ? (summary.lastGrowthAt ?? null) : null,
         juniorCount: 0,
         // §155. Its own id, except at the live end of a resume chain: there it wears the name and
         // the MK number of the chain's earliest session, because that is the identity the user
