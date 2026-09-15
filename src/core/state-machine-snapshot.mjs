@@ -65,6 +65,11 @@ export class RegistrySnapshot extends RegistryBase {
         takenNames: this.identity ? this.identity.takenNames() : [],
         hooks: { ...this._hookStatus },
         writeError: this.store.writeError || null,
+        // WP-92g. The dated table the actors' cost estimates are quoted
+        // against. Read here rather than in the fixture so `buildDemoSnapshot`
+        // stays the pure function of `now` its header promises — the rate card
+        // stats a file under the user's home.
+        rateCardVersion: rateCardVersion(),
         scannedAt: this._scannedAt,
       });
     }
