@@ -28,6 +28,7 @@
 
 import { appearanceHash } from './palette.js';
 import { LOOK } from './look-derive.js';
+import { registerBodyScale, scaleAll } from './plan-scale.js';
 
 // ------------------------------------------------------------- the plants
 
@@ -44,14 +45,14 @@ import { LOOK } from './look-derive.js';
  * At the goldens' fit scale a 2.0 U bush is 28 px and a 2.4 U blade 34, which
  * is not a difference anybody can read — the difference has to be the shape.
  */
-export const PLANT_BROAD = 2.0;
-export const PLANT_BLADE = 2.4;
-export const PLANT_TREE = 3.2;
+export let PLANT_BROAD = 2.0;
+export let PLANT_BLADE = 2.4;
+export let PLANT_TREE = 3.2;
 /** The planter's thickness; its run is the depth of the bay it divides. */
-export const PLANTER_W = 0.9;
+export let PLANTER_W = 0.9;
 
 /** Footprint per kind, so a density test measures what the plan emits. */
-export const PLANT_FOOTPRINTS = Object.freeze({
+export let PLANT_FOOTPRINTS = Object.freeze({
   plant_broad: PLANT_BROAD,
   plant_blade: PLANT_BLADE,
   plant_tree: PLANT_TREE,
@@ -250,14 +251,14 @@ export const DOORMAT_H = 1.8;
 export const DOORMAT_INSET = 3.6;
 
 /** §3.4's reception bookcase: 1.2 U deep, on each long wall. */
-export const BOOKCASE_W = 1.2;
-export const BOOKCASE_MAX_H = 8;
+export let BOOKCASE_W = 1.2;
+export let BOOKCASE_MAX_H = 8;
 /**
  * The shortest run that still reads as a bookcase rather than as a box on a
  * wall. Under it the wall carries nothing, which is §3.5's third option —
  * *"a break-out corner, a planter run, or nothing"* — applied to a wall.
  */
-export const BOOKCASE_MIN_RUN = 3.2;
+export let BOOKCASE_MIN_RUN = 3.2;
 
 // ------------------------------------------------------------ the density
 
@@ -290,7 +291,7 @@ export const CLEAR_PATCH_MAX = 10;
  * §3.5's *"every prop is ≤ 2.0 U from a wall or from what it is attached to"*,
  * extended by WP-85c's acceptance to the kinds this package adds.
  */
-export const PROP_ATTACH_MAX = 2.0;
+export let PROP_ATTACH_MAX = 2.0;
 
 /**
  * THE CLEAR FLOOR ROUND A PERSON (WP-85c's acceptance).
@@ -305,7 +306,7 @@ export const PROP_ATTACH_MAX = 2.0;
  * pool player stands `STAND_OFF` from the table. The rule is about the things
  * that decorate the floor round a person, not about the thing they are using.
  */
-export const CHAR_CLEAR_U = 1.2;
+export let CHAR_CLEAR_U = 1.2;
 
 // ------------------------------------------------------------- the lounge
 
@@ -359,7 +360,7 @@ export const LOUNGE_BAY_ROW_MIN_COUNT = 3;
  */
 export const LOUNGE_BAY_DROP_ORDER = Object.freeze([...LOUNGE_BAY_NAMES].reverse());
 /** The clear floor a planter run keeps either side of itself. */
-export const PLANTER_MARGIN = 0.2;
+export let PLANTER_MARGIN = 0.2;
 
 /**
  * WHICH BAYS THIS LOUNGE LAYS, and it is §3.7's rule with one reading made
@@ -421,3 +422,50 @@ export function loungeBayNames(widthU, opts = {}) {
   }
   return fits(cur) ? cur : names;
 }
+
+// ----------------------------------------------------- the scaling law (§2)
+//
+// *"Plants, broad / blade / tree — 2.0 / 2.4 / 3.2"* and *"prop clearance from a
+// body — 1.2"* are two rows of §2's scaling table, and the rest of the list is
+// the same argument: a planter is a waist-high partition, a bookcase is reached
+// to, and how close a prop may stand to a character is the character's own
+// number. What does NOT move is on the other side of the block and is stated in
+// `plan-scale.js`'s classification: the doormat at a door whose width is the
+// building's, the eight units two identical silhouettes must be apart (a
+// READING distance, on the screen rather than on the floor), the ten-unit clear
+// patch that earns a destination, and the density in U² per prop — a density is
+// a ratio, and a room of larger people has the same amount of floor in it.
+
+const BASE = {
+  PLANT_BROAD,
+  PLANT_BLADE,
+  PLANT_TREE,
+  PLANTER_W,
+  PLANTER_MARGIN,
+  BOOKCASE_W,
+  BOOKCASE_MAX_H,
+  BOOKCASE_MIN_RUN,
+  PROP_ATTACH_MAX,
+  CHAR_CLEAR_U,
+};
+
+registerBodyScale((s) => {
+  ({
+    PLANT_BROAD,
+    PLANT_BLADE,
+    PLANT_TREE,
+    PLANTER_W,
+    PLANTER_MARGIN,
+    BOOKCASE_W,
+    BOOKCASE_MAX_H,
+    BOOKCASE_MIN_RUN,
+    PROP_ATTACH_MAX,
+    CHAR_CLEAR_U,
+  } = scaleAll(BASE, s));
+  PLANT_FOOTPRINTS = Object.freeze({
+    plant_broad: PLANT_BROAD,
+    plant_blade: PLANT_BLADE,
+    plant_tree: PLANT_TREE,
+    planter: PLANTER_W,
+  });
+});

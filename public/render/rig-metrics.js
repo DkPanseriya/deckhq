@@ -16,6 +16,7 @@
  */
 
 import { channelsOf, mixHex, PALETTE } from './palette.js';
+import { registerBodyScale, scaleAll } from './plan-scale.js';
 
 export const TAU = Math.PI * 2;
 export const BASE_U = 14; // reference px-per-unit these proportions were tuned at
@@ -94,9 +95,9 @@ export const MANAGER_SCALE = 1.3; // "a bit bigger" than an agent (uniform scale
  * as named constants rather than deleted, because "the offset is zero" is a
  * decision and `test/unit/lighting.test.mjs` measures it.
  */
-export const SHADOW_RX = 0.86,
-  SHADOW_RY = 0.39,
-  SHADOW_OX = 0,
+export let SHADOW_RX = 0.86,
+  SHADOW_RY = 0.39;
+export const SHADOW_OX = 0,
   SHADOW_OY = 0;
 // ---- B's local frame (WP-79) ----------------------------------------------
 //
@@ -114,7 +115,7 @@ export const SHADOW_RX = 0.86,
 // made here.
 
 /** B's local frame: 1 local unit = this many plan units. */
-export const RIG_UNIT_U = 2.0;
+export let RIG_UNIT_U = 2.0;
 
 /**
  * The local y of the tallest thing B draws — the antenna finial on a standing
@@ -165,9 +166,9 @@ export const RIG_MARK_MIN_PX = 30;
  * clear `max(ICON_MIN_PX, u * 0.9)` of icon on top of the offset below, which
  * at every scale the floor is drawn at is under 1.1 U.
  */
-export const CHROME_TOP_U = 2.35;
-export const CHROME_BUBBLE_U = 3.05;
-export const CHROME_BADGE_U = 3.45;
+export let CHROME_TOP_U = 2.35;
+export let CHROME_BUBBLE_U = 3.05;
+export let CHROME_BADGE_U = 3.45;
 /**
  * The radius, in plan units, of the ring drawn around the selected character.
  *
@@ -178,8 +179,8 @@ export const CHROME_BADGE_U = 3.45;
  * rather than inventing a second estimate (docs/DEVIATIONS.md §16, §35, §38:
  * two representations of the same thing, allowed to disagree).
  */
-export const SELECTION_RING_R = 1.35;
-export const RING_BASE_R = 1.15;
+export let SELECTION_RING_R = 1.35;
+export let RING_BASE_R = 1.15;
 
 /**
  * A standing character's height in plan units, crown to sole.
@@ -200,7 +201,7 @@ export const RING_BASE_R = 1.15;
  * rig spent a third of it on thin splayed limbs and read as 22 px of coloured
  * mass; B fills it.
  */
-export const BODY_HEIGHT_U = RIG_UNIT_U * RIG_CROWN;
+export let BODY_HEIGHT_U = RIG_UNIT_U * RIG_CROWN;
 
 /**
  * Per-element legibility floors, in screen pixels (05-GUI-UX-SPEC.md §6.2's
@@ -338,3 +339,47 @@ export function sansFont(px) {
   }
   return f;
 }
+
+// ----------------------------------------------------- the scaling law (§2)
+//
+// **THE SETTING IS `RIG_UNIT_U`** — 1.6 / 2.0 / 2.5, which is 2.0 × `s` — and
+// `BODY_HEIGHT_U` follows it to §2's 2.02 / 2.52 / 3.15. Everything else here is
+// the same figure's own furniture: the three chrome bands the icon, the bubble
+// and the waiting badge hang at, the ring that is this product's answer to *how
+// wide is a person*, and the contact ellipse under the feet. A figure a quarter
+// larger with its badge at the old height would wear the badge on its head.
+//
+// WHAT DOES NOT MOVE is every number in screen pixels: the legibility floors,
+// the two detail thresholds, and the label's own 11–14 px. §2 says it in one
+// line — *"a large floor gets larger people under the same labels, not larger
+// labels"* — and the two thresholds are floors on what a STROKE resolves at,
+// which is a property of the screen rather than of the person.
+//
+// `scene-lod.js`'s `CHAR_MIN_PX_PER_UNIT` and `CHAR_MAX_PX_PER_UNIT` are
+// quotients of `BODY_HEIGHT_U` and re-derive there, so the 16 px legibility
+// floor and the 72 px ceiling stay floors on the BODY at every size.
+
+const BASE = {
+  RIG_UNIT_U,
+  CHROME_TOP_U,
+  CHROME_BUBBLE_U,
+  CHROME_BADGE_U,
+  SELECTION_RING_R,
+  RING_BASE_R,
+  SHADOW_RX,
+  SHADOW_RY,
+};
+
+registerBodyScale((s) => {
+  ({
+    RIG_UNIT_U,
+    CHROME_TOP_U,
+    CHROME_BUBBLE_U,
+    CHROME_BADGE_U,
+    SELECTION_RING_R,
+    RING_BASE_R,
+    SHADOW_RX,
+    SHADOW_RY,
+  } = scaleAll(BASE, s));
+  BODY_HEIGHT_U = RIG_UNIT_U * RIG_CROWN;
+});

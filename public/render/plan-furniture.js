@@ -12,8 +12,14 @@
  * (`CHAIR = 2 U` is a task chair, `DOOR_WIDTH = 3.5 U` a door), so every number
  * here is a claim about a real piece of furniture.
  *
- * Pure data and one predicate. No DOM, no imports.
+ * Pure data and one predicate. No DOM, and one import: WP-88c's scale registry,
+ * because EVERY LENGTH IN THIS FILE IS A BODY CONSTANT. The owner's sentence is
+ * the classification — *"the size of table, chair, sofa, everything adjusts
+ * automatically"* — and nothing in `11-LOOK-CONTROL-CENTRE.md` §2's
+ * does-not-scale table comes from here. See the block at the foot of the file.
  */
+
+import { registerBodyScale, scaleAll } from './plan-scale.js';
 
 // ------------------------------------------------------------- the seats
 
@@ -32,17 +38,17 @@
  * WP-79's figure is bigger again. A seat you cannot see under the person in it
  * is a seat the picture does not have.
  */
-export const SEAT_TUB = 2.4;
-export const SEAT_TASK = 2.0;
-export const SEAT_STOOL = 1.4;
-export const SEAT_ARMCHAIR = 3.0;
+export let SEAT_TUB = 2.4;
+export let SEAT_TASK = 2.0;
+export let SEAT_STOOL = 1.4;
+export let SEAT_ARMCHAIR = 3.0;
 
 /**
  * Which prop kind is which seat, so the four-footprints rule can be asserted
  * over what the plan actually emits rather than over this file's own constants.
  * A seat kind missing from here is a seat nothing measures.
  */
-export const SEAT_FOOTPRINTS = Object.freeze({
+export let SEAT_FOOTPRINTS = Object.freeze({
   tub_chair: SEAT_TUB,
   chair: SEAT_TASK,
   bar_stool: SEAT_STOOL,
@@ -67,10 +73,10 @@ export const SEAT_FOOTPRINTS = Object.freeze({
  * corner below, which is furniture — §3.5's *"a clear-floor patch larger than
  * 10 U × 10 U gets a destination, not a bigger rug"*.
  */
-export const RUG_CLUSTER_PAD = 1.0;
+export let RUG_CLUSTER_PAD = 1.0;
 
 /** The whiteboard's face, on the west wall: 2.4 U deep, 5.2 U at the least. */
-export const WHITEBOARD_W = 2.4;
+export let WHITEBOARD_W = 2.4;
 
 /**
  * And the most of a wall it may take (§3.4: *"whiteboard 2.4 × ≥5.2, west"*).
@@ -82,11 +88,11 @@ export const WHITEBOARD_W = 2.4;
  * the brightness; this takes the length. Eight units is a real board — 2.4 m —
  * and a wall with more than that spare gets the pinboard under it instead.
  */
-export const WHITEBOARD_MAX_H = 8;
+export let WHITEBOARD_MAX_H = 8;
 
 /** The repo-folder shelf on the east wall, and §3.4's `≤7` on its run. */
-export const SHELF_W = 1.2;
-export const SHELF_MAX_H = 7;
+export let SHELF_W = 1.2;
+export let SHELF_MAX_H = 7;
 
 /**
  * THE PINBOARD (§3.4), the one new fixture in a project room.
@@ -97,10 +103,10 @@ export const SHELF_MAX_H = 7;
  * the eye can tell from the one above it — a shelf is long and full of book
  * tops, a pinboard is short and covered in paper.
  */
-export const PINBOARD_W = 1.2;
-export const PINBOARD_H = 2.8;
+export let PINBOARD_W = 1.2;
+export let PINBOARD_H = 2.8;
 /** Clear wall between the shelf above and the pinboard below it. */
-export const PINBOARD_GAP = 0.8;
+export let PINBOARD_GAP = 0.8;
 
 // ------------------------------------------------------ the break-out corner
 
@@ -127,13 +133,13 @@ export const PINBOARD_GAP = 0.8;
  */
 export const BREAKOUT_CLEAR_RATIO = 2.2;
 /** §3.4's `round rug r 3.2`, said as the diameter the plan actually lays. */
-export const BREAKOUT_RUG_D = 6.4;
+export let BREAKOUT_RUG_D = 6.4;
 /** §3.4's `side table 1.4`. */
-export const BREAKOUT_TABLE = 1.4;
+export let BREAKOUT_TABLE = 1.4;
 /** Clear floor the round rug keeps on every side of itself. */
-export const BREAKOUT_MARGIN = 0.6;
+export let BREAKOUT_MARGIN = 0.6;
 /** The clear patch, on either axis, that the whole group needs. */
-export const BREAKOUT_BAND = BREAKOUT_RUG_D + BREAKOUT_MARGIN * 2;
+export let BREAKOUT_BAND = BREAKOUT_RUG_D + BREAKOUT_MARGIN * 2;
 
 /**
  * Does a clear patch this size get a break-out group?
@@ -157,8 +163,8 @@ export function breakoutFits(bandW, bandH, clearRatio) {
 // ---------------------------------------------------------- the reception
 
 /** The monitor that stands on any desk in the building (§3.4). */
-export const MONITOR_W = 1.6;
-export const MONITOR_H = 0.5;
+export let MONITOR_W = 1.6;
+export let MONITOR_H = 0.5;
 
 /**
  * The in-tray on the manager's desk (§3.4: *"user desk 8–14 × 3 with a monitor
@@ -168,11 +174,11 @@ export const MONITOR_H = 0.5;
  * what made it read as a counter. Two objects at two sizes is what says
  * somebody works here.
  */
-export const DESK_TRAY_W = 2.2;
-export const DESK_TRAY_H = 1.2;
+export let DESK_TRAY_W = 2.2;
+export let DESK_TRAY_H = 1.2;
 
 /** §3.4's water cooler, which was 1.4. */
-export const WATER_COOLER = 1.6;
+export let WATER_COOLER = 1.6;
 
 /**
  * The reception's wool rug: the well less this much a side (§3.4: *"wool rug =
@@ -194,9 +200,9 @@ export const WATER_COOLER = 1.6;
  * it, which is not true of a project room's task rug and is why the two rules
  * differ. `docs/DEVIATIONS.md` §163.
  */
-export const OFFICE_RUG_INSET = 1.0;
+export let OFFICE_RUG_INSET = 1.0;
 /** Clear floor between the rug's near edge and the chairs that stand on it. */
-export const OFFICE_RUG_LEAD = 0.8;
+export let OFFICE_RUG_LEAD = 0.8;
 
 // -------------------------------------------------------------- the lounge
 
@@ -209,15 +215,109 @@ export const OFFICE_RUG_LEAD = 0.8;
  * the counter §3.4 describes, and it is also the count `LOUNGE_BASE_SEATS`
  * always believed in.
  */
-export const LOUNGE_STOOL_PITCH = 4;
-export const LOUNGE_COFFEE_W = 6;
-export const LOUNGE_COFFEE_H = 2.7;
-export const LOUNGE_FRIDGE_W = 2.6;
-export const LOUNGE_FRIDGE_H = 2.4;
-export const LOUNGE_DINING = 7.6;
-export const LOUNGE_POOL_W = 13.5;
-export const LOUNGE_POOL_H = 7;
-export const LOUNGE_TT_W = 12;
-export const LOUNGE_TT_H = 6;
-export const LOUNGE_ARCADE_W = 2.6;
-export const LOUNGE_ARCADE_H = 2;
+export let LOUNGE_STOOL_PITCH = 4;
+export let LOUNGE_COFFEE_W = 6;
+export let LOUNGE_COFFEE_H = 2.7;
+export let LOUNGE_FRIDGE_W = 2.6;
+export let LOUNGE_FRIDGE_H = 2.4;
+export let LOUNGE_DINING = 7.6;
+export let LOUNGE_POOL_W = 13.5;
+export let LOUNGE_POOL_H = 7;
+export let LOUNGE_TT_W = 12;
+export let LOUNGE_TT_H = 6;
+export let LOUNGE_ARCADE_W = 2.6;
+export let LOUNGE_ARCADE_H = 2;
+
+// ----------------------------------------------------- the scaling law (§2)
+//
+// Every length above, times `s`. The two lists are names and no numbers at all,
+// so a base cannot drift from the constant it is the base of; `BASE` is read
+// once, at load, which is the medium set and therefore §2's own column.
+//
+// The three DERIVED values are recomputed rather than scaled, because they are
+// arithmetic over the others and a second multiplication would be a second
+// answer: `SEAT_FOOTPRINTS` is the four seats under the kind names the plan
+// emits, and `BREAKOUT_BAND` is the round rug plus its margin either side.
+
+const BASE = {
+  SEAT_TUB,
+  SEAT_TASK,
+  SEAT_STOOL,
+  SEAT_ARMCHAIR,
+  RUG_CLUSTER_PAD,
+  WHITEBOARD_W,
+  WHITEBOARD_MAX_H,
+  SHELF_W,
+  SHELF_MAX_H,
+  PINBOARD_W,
+  PINBOARD_H,
+  PINBOARD_GAP,
+  BREAKOUT_RUG_D,
+  BREAKOUT_TABLE,
+  BREAKOUT_MARGIN,
+  MONITOR_W,
+  MONITOR_H,
+  DESK_TRAY_W,
+  DESK_TRAY_H,
+  WATER_COOLER,
+  OFFICE_RUG_INSET,
+  OFFICE_RUG_LEAD,
+  LOUNGE_STOOL_PITCH,
+  LOUNGE_COFFEE_W,
+  LOUNGE_COFFEE_H,
+  LOUNGE_FRIDGE_W,
+  LOUNGE_FRIDGE_H,
+  LOUNGE_DINING,
+  LOUNGE_POOL_W,
+  LOUNGE_POOL_H,
+  LOUNGE_TT_W,
+  LOUNGE_TT_H,
+  LOUNGE_ARCADE_W,
+  LOUNGE_ARCADE_H,
+};
+
+registerBodyScale((s) => {
+  ({
+    SEAT_TUB,
+    SEAT_TASK,
+    SEAT_STOOL,
+    SEAT_ARMCHAIR,
+    RUG_CLUSTER_PAD,
+    WHITEBOARD_W,
+    WHITEBOARD_MAX_H,
+    SHELF_W,
+    SHELF_MAX_H,
+    PINBOARD_W,
+    PINBOARD_H,
+    PINBOARD_GAP,
+    BREAKOUT_RUG_D,
+    BREAKOUT_TABLE,
+    BREAKOUT_MARGIN,
+    MONITOR_W,
+    MONITOR_H,
+    DESK_TRAY_W,
+    DESK_TRAY_H,
+    WATER_COOLER,
+    OFFICE_RUG_INSET,
+    OFFICE_RUG_LEAD,
+    LOUNGE_STOOL_PITCH,
+    LOUNGE_COFFEE_W,
+    LOUNGE_COFFEE_H,
+    LOUNGE_FRIDGE_W,
+    LOUNGE_FRIDGE_H,
+    LOUNGE_DINING,
+    LOUNGE_POOL_W,
+    LOUNGE_POOL_H,
+    LOUNGE_TT_W,
+    LOUNGE_TT_H,
+    LOUNGE_ARCADE_W,
+    LOUNGE_ARCADE_H,
+  } = scaleAll(BASE, s));
+  SEAT_FOOTPRINTS = Object.freeze({
+    tub_chair: SEAT_TUB,
+    chair: SEAT_TASK,
+    bar_stool: SEAT_STOOL,
+    armchair: SEAT_ARMCHAIR,
+  });
+  BREAKOUT_BAND = BREAKOUT_RUG_D + BREAKOUT_MARGIN * 2;
+});

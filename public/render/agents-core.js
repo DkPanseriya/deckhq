@@ -8,10 +8,14 @@
  * level-of-detail step.
  *
  * Pure, like every `agents-*` module and `agents.js` itself: no `node:`
- * import, no `document`, no `window`, no canvas. That is what lets
+ * import, no `document`, no `window`, no canvas. Its one import is WP-88c's
+ * scale registry, and the block at the foot of the file says which six of the
+ * constants below move with the agent size and why. That is what lets
  * `test/unit/*.mjs` load this side of the renderer directly under
  * `node --test` (docs/DEVIATIONS.md §122).
  */
+
+import { registerBodyScale, scaleAll } from './plan-scale.js';
 
 /** @typedef {import('./plan.js').Seat} Seat */
 /** @typedef {import('./plan.js').LoungeSpot} LoungeSpot */
@@ -201,10 +205,10 @@ export const EPS = 1e-6;
  * How far from a spot an overflow occupant stands, in plan units. Only ever
  * used when there are more agents than places — see `assignHashed`.
  */
-export const OVERFLOW_RING_R = 1.3;
+export let OVERFLOW_RING_R = 1.3;
 
 /** Pitch between two people sharing one piece of furniture, in plan units. */
-export const SEAT_SPREAD = 2.2;
+export let SEAT_SPREAD = 2.2;
 
 /**
  * How far to the side of its parent a junior stands, in plan units (WP-41).
@@ -224,7 +228,7 @@ export const SEAT_SPREAD = 2.2;
  * the static-file boundary and cannot import from one another, which is the
  * same reason `derivePlacement` exists twice.
  */
-export const JUNIOR_OFFSET = 2.6;
+export let JUNIOR_OFFSET = 2.6;
 
 /**
  * How far BEHIND its parent's chair a junior stands, in plan units.
@@ -240,7 +244,7 @@ export const JUNIOR_OFFSET = 2.6;
  * through its neighbour. A body is `BODY_HEIGHT_U` ≈ 2.52 U, so 2.8 U puts a
  * whole body's clearance between the standing row and the seated one.
  */
-export const JUNIOR_BACK = 2.8;
+export let JUNIOR_BACK = 2.8;
 
 /**
  * How far behind the row in front of it the next RANK of juniors stands
@@ -249,7 +253,7 @@ export const JUNIOR_BACK = 2.8;
  * One body's clearance, the same figure `JUNIOR_BACK` is: a rank is the row
  * behind, and two people one behind the other are two people.
  */
-export const JUNIOR_ROW = 2.8;
+export let JUNIOR_ROW = 2.8;
 
 /**
  * Clear floor a junior keeps inside the walls of the room it is standing in.
@@ -257,7 +261,7 @@ export const JUNIOR_ROW = 2.8;
  * Half a body and a little: a position is a body's CENTRE, so a junior packed
  * exactly onto the wall is a junior drawn half outside it.
  */
-export const JUNIOR_PAD = 1.4;
+export let JUNIOR_PAD = 1.4;
 
 /**
  * How much tighter the juniors may be packed when the room will not hold them
@@ -376,3 +380,31 @@ export function lodForZoom(zoom) {
 export function clampNum(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
+
+// ----------------------------------------------------- the scaling law (§2)
+//
+// Six spacings, all six of them one body wide. `JUNIOR_BACK`'s own comment names
+// the derivation out loud — *"a body is `BODY_HEIGHT_U` ≈ 2.52 U, so 2.8 U puts
+// a junior clear of its parent"* — and a figure a quarter taller standing at the
+// same 2.8 U is a junior drawn through the person it belongs to. `SEAT_SPREAD`
+// and `OVERFLOW_RING_R` are the same sentence about two people sharing one
+// piece of furniture, and `JUNIOR_OFFSET` is one seat pitch by construction.
+//
+// Walk speed and the rotation windows are not here: they are seconds, and a
+// larger person does not walk faster.
+
+const BASE = {
+  OVERFLOW_RING_R,
+  SEAT_SPREAD,
+  JUNIOR_OFFSET,
+  JUNIOR_BACK,
+  JUNIOR_ROW,
+  JUNIOR_PAD,
+};
+
+registerBodyScale((s) => {
+  ({ OVERFLOW_RING_R, SEAT_SPREAD, JUNIOR_OFFSET, JUNIOR_BACK, JUNIOR_ROW, JUNIOR_PAD } = scaleAll(
+    BASE,
+    s,
+  ));
+});

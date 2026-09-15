@@ -32,6 +32,45 @@
 /** @typedef {import('./plan-shapes.js').Arrangement} Arrangement */
 /** @typedef {import('./plan-shapes.js').WorkingSide} WorkingSide */
 
+/**
+ * THE BODY CONSTANTS WENT TO `plan-scale.js` (WP-88c), which is the same remedy
+ * again and for the same two reasons.
+ *
+ * `docs/plan/11-LOOK-CONTROL-CENTRE.md` §2: *"everything a body sets scales by
+ * `s`; everything the building sets does not."* A seat, a pitch between two
+ * people, a desk depth and a sofa run are the first kind and had to become
+ * mutable bindings; everything left in this file is the second kind and is
+ * `const` as it always was. And this file stands at WP-22's 900-line ceiling
+ * with nowhere to put a second declaration of anything.
+ *
+ * Re-exported here rather than moved away, so the twenty-odd modules that
+ * import `SEAT_PITCH` from `plan-units.js` did not change a line — and so this
+ * file is still the one place to look up how big a thing is.
+ */
+export {
+  CHAIR,
+  CHAIR_GAP,
+  CORNER_PLANT_INSET,
+  MINGLE_PITCH,
+  MINGLE_PITCH_MIN,
+  MINGLE_ROW,
+  MINGLE_ROW_MIN,
+  OFFICE_CHAIR_PITCH,
+  OFFICE_CHAIR_ROW,
+  OFFICE_GROWTH_H,
+  OFFICE_GROWTH_W,
+  OFFICE_QUEUE_PITCH,
+  OFFICE_QUEUE_ROW,
+  OFFICE_SEAT_PITCH,
+  OFFICE_SOFA_PITCH,
+  SEAT_PITCH,
+  SOFA_DEPTH,
+  SOFA_MIN_RUN,
+  TABLE_DEPTH,
+  TABLE_GAP,
+  WHITEBOARD_H,
+} from './plan-scale.js';
+
 /** Pixels per unit at scale 1. */
 export const U = 14;
 
@@ -402,12 +441,10 @@ export const BAND_DEPTHS = Object.freeze([1.25, 1.15, 1.05, 0.95, 0.9]);
  */
 export const CORRIDOR = 4;
 
-/** Table geometry. Seats sit along the two long sides. */
-export const SEAT_PITCH = 2.6;
-export const TABLE_DEPTH = 2.6;
-export const CHAIR = 2;
-export const CHAIR_GAP = 0.15;
-export const TABLE_GAP = 3.2;
+/**
+ * Table sizes, largest first. A count and not a length: how many seats a bench
+ * holds does not change with how big the people are.
+ */
 export const TABLE_SIZES = [8, 6, 4, 2];
 
 /**
@@ -443,17 +480,6 @@ export const TABLE_SIZES = [8, 6, 4, 2];
  * wall — clear of the in-room "+" that sits in the corner above them.
  */
 export const FIXTURE_TOP = 0.6;
-
-/**
- * How much of a project room's west wall its whiteboard takes, at the least.
- * It grows with the wall (WP-59c) — a 5.2 U board at the top of a wall the
- * service column made forty units tall is a postage stamp with nothing under
- * it — and `plan-rooms.js` leaves the last of the wall for the corner planting.
- */
-export const WHITEBOARD_H = 5.2;
-
-/** How far a corner plant sits from the two walls it stands between. */
-export const CORNER_PLANT_INSET = 1.2;
 
 /**
  * Floor a room-sized rug leaves clear of its walls, so the corner planting and
@@ -572,30 +598,12 @@ export function pinnedBandHeight(count, workingW, askedBandH) {
   return rows * pinnedRowDepth(askedBandH);
 }
 
-/** Shortest sofa run worth sitting on, in units. */
-export const SOFA_MIN_RUN = 5.2;
-
 /** The reception's smallest useful interior, before the queue grows it. */
 export const OFFICE_MIN_H = 20;
-
-/**
- * How much the reception grows per agent waiting in it. A queue of one gets a
- * small room; a queue of twenty gets the full reception, and past that the
- * loose chairs in the middle take over (see `buildOffice`).
- */
-export const OFFICE_GROWTH_W = 0.8;
-export const OFFICE_GROWTH_H = 0.55;
 
 export const OFFICE_MIN_W = 22;
 export const OFFICE_MAX_W = 46;
 export const OFFICE_MAX_H = 36;
-
-/** Pitch between two people sitting on the same sofa run. */
-export const OFFICE_SEAT_PITCH = 2.6;
-
-/** Grid of the reception's overflow chairs. */
-export const OFFICE_CHAIR_PITCH = 3.2;
-export const OFFICE_CHAIR_ROW = 2.8;
 
 /**
  * THE ONE VISITOR CHAIR AT THE MANAGER'S DESK (WP-93).
@@ -615,41 +623,6 @@ export const OFFICE_CHAIR_ROW = 2.8;
  * nothing left to space.
  */
 export const OFFICE_VISITOR_CHAIRS = 1;
-
-/**
- * HOW FAR APART TWO PEOPLE WAIT, and why it is not the seat pitch.
- *
- * `OFFICE_SEAT_PITCH` (2.6) is how close two bodies may be drawn on one sofa.
- * A person in the waiting area is not only a body: they carry a waiting badge
- * above the head and a name label below it (`03-VISUAL-SPEC.md` §7), and that
- * stack is roughly four units tall. The reception is also the one room the
- * packer may lay on its side (`buildOfficeRow`), so a sofa run that is
- * horizontal on one floor is vertical on the next — and at 2.6 the vertical
- * case drew each name through the badge of the person behind them.
- *
- * So both pitches here clear the whole stack rather than the body, and the
- * queue runs along the axis that ends up horizontal on screen so it spreads
- * rather than stacks.
- */
-export const OFFICE_QUEUE_PITCH = 3.8;
-export const OFFICE_QUEUE_ROW = 6.4;
-
-/**
- * HOW FAR APART TWO PEOPLE SIT ON THE RECEPTION SOFAS (WP-93).
- *
- * `OFFICE_SEAT_PITCH` is 2.6 and is the wrong number here for the reason above:
- * it spaces BODIES, and a waiting session is a body plus a badge plus a name.
- * WP-85b measured the same stack at 5.2 for the chair row it then had — three
- * chairs at 5.2 U read as one piece of seating rather than three unrelated
- * discs — and a sofa run is the same problem with the same answer, on whichever
- * axis the packer ends up laying it.
- *
- * It is what decides how many the sofas hold, and therefore how many stand: a
- * run of length `L` seats `floor(L / OFFICE_SOFA_PITCH)`, spread evenly along
- * it rather than packed from one end, because a sofa with a gap at the end
- * reads as furniture somebody has half filled.
- */
-export const OFFICE_SOFA_PITCH = 5.2;
 
 /**
  * How much of the column's leftover height the reception takes before the
@@ -752,13 +725,8 @@ export function loungeCeiling(n, restH) {
   return Math.max(LOUNGE_MIN_H, (s * Math.max(0, Number(restH) || 0)) / (1 - s));
 }
 
-/**
- * Gap between two furniture groups in the lounge, and the pitch of the
- * standing-room band along its promenade.
- */
+/** Gap between two furniture groups in the lounge. */
 export const LOUNGE_GAP = 2;
-export const MINGLE_PITCH = 2.4;
-export const MINGLE_ROW = 2.4;
 
 /**
  * How close the lounge's furniture may be pushed when the working side beside
@@ -781,8 +749,6 @@ export const MINGLE_ROW = 2.4;
  * than inside each other.
  */
 export const LOUNGE_PACKS = Object.freeze([1, 0.8, 0.65, 0.5]);
-export const MINGLE_PITCH_MIN = 2;
-export const MINGLE_ROW_MIN = 2;
 
 /** Most games tables the lounge will ever lay out. */
 export const LOUNGE_MAX_GAMES = 5;
