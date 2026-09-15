@@ -297,50 +297,9 @@ test('placement() and derivePlacement() are the same function, not two copies', 
   }
 });
 
-test('WP-22: no split module is over 900 lines', async () => {
-  const { readdir, readFile } = await import('node:fs/promises');
-  const path = await import('node:path');
-  const { fileURLToPath } = await import('node:url');
-  const repo = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-  const root = path.join(repo, 'public');
-
-  // [directory, filename prefix, how many modules that split produced].
-  // The WP-22 follow-up added the last groups; the ceiling itself, 900, has
-  // not moved.
-  const groups = [
-    [path.join(root, 'render'), 'plan', 8],
-    [root, 'app', 11],
-    [root, 'panel', 14],
-    [path.join(root, 'render'), 'scene', 9],
-    [path.join(root, 'render'), 'rig', 7],
-    [path.join(repo, 'src', 'core'), 'ledger', 7],
-    [path.join(root, 'render'), 'backdrop', 6],
-    [path.join(root, 'render'), 'agents', 5],
-    [path.join(root, 'render'), 'palette', 4],
-    [path.join(root, 'render'), 'look', 4],
-    [path.join(repo, 'src', 'core'), 'packs', 4],
-    [path.join(repo, 'src', 'core'), 'terminals', 3],
-    [path.join(repo, 'src', 'cli'), 'doctor', 4],
-    [path.join(repo, 'src', 'adapters', 'claude-code'), 'adapter', 6],
-    [path.join(repo, 'src', 'adapters', 'claude-code'), 'hooks', 4],
-    [path.join(repo, 'src', 'core'), 'state-machine', 7],
-    [root, 'settings-ui', 4],
-    [path.join(repo, 'scripts'), 'demo', 4],
-  ];
-  let checked = 0;
-  for (const [dir, prefix, min] of groups) {
-    const files = (await readdir(dir)).filter(
-      (f) => f.startsWith(prefix) && /\.m?js$/.test(f) && !f.endsWith('.test.mjs'),
-    );
-    assert.ok(
-      files.length >= min,
-      `${dir}/${prefix}* did not split into the modules it should have`,
-    );
-    for (const f of files) {
-      const lines = (await readFile(path.join(dir, f), 'utf8')).split('\n').length;
-      assert.ok(lines <= 900, `${f} is ${lines} lines; WP-22's ceiling is 900`);
-      checked++;
-    }
-  }
-  assert.ok(checked >= 110, `expected the whole split, saw ${checked} files`);
-});
+// WP-22's 900-line ceiling used to be checked here, over eighteen prefix
+// groups — which meant it was checked over the files that had already been
+// split and over nothing else, while eight files sat above it unseen. It now
+// lives in `test/unit/line-ceiling.test.mjs`, as a walk of every file under
+// `src/`, `public/`, `scripts/` and `site/` plus a dated exemption table.
+// WP-92b, `docs/DEVIATIONS.md` §180, audit finding A-02.
