@@ -159,6 +159,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-172 | A product icon worth the product | Releases | done |
 | R-180 | This register | Owner-side | in progress |
 | R-181 | Owner-side blockers, named and sequenced for a beginner | Owner-side | in progress |
+| R-182 | The architecture is audited, and every invariant says where it is enforced | Owner-side | in progress |
 | R-190 | A 3D renderer | Declined | declined |
 | R-191 | A manager agent that assigns work down a hierarchy | Declined | declined |
 | R-192 | Human streaks, leaderboards, XP, badges, guilt | Declined | declined |
@@ -1186,6 +1187,27 @@ Release. Open: social preview, Discussions, private vulnerability reporting, VS 
 publisher and PAT, plugin marketplace listing, Homebrew tap and scoop bucket, publisher key custody,
 pack price and storefront, relay decisions, `sound`/`osNotify` defaults, Mac/Linux hand verification
 of the terminal launchers, and the launch posts (the owner posts; no agent posts anywhere).
+
+**R-182 — The architecture is audited, and every invariant says where it is enforced**
+_Owner, 16 September 2026:_ "analyses, evaluates, scrutinises and optimises the architecture of the
+complete product, to make it clean, bug-free, extendable, modular, following good system and product
+engineering… the product is finally working well, no major overhaul; each move should be confident,
+proven, thought through, well implemented, clean sheet, bug free."
+**Interpretation.** A measured map of the code as it actually is — the layers, the dependency graph,
+every cycle, every boundary crossing, every file over the ceiling — plus a register of every product
+invariant with the test or gate that holds it, and a ranked findings list whose every move can be
+proved not to change a pixel or a byte of `/api/state`. Not a refactor, and not permission for one:
+a package that changes behaviour needs an owner question answered first.
+**Why.** The product works, and that is precisely when an audit is cheap and a rewrite is expensive.
+The two defects it found are both in gates rather than in the product, which is the failure mode a
+codebase this well-tested has: the tests are excellent and two of them are looking at a file list
+that stopped being the file list.
+**Status:** done — the audit. **in progress** — the sequence it opened.
+**Implemented by:** WP-91 (`docs/DEVIATIONS.md` §179), `docs/plan/13-ARCHITECTURE-AUDIT.md` and
+`docs/plan/13-audit-map.json`; `08` §9's WP-91 row and §13 item 26. WP-92a–o are planned.
+**Notes.** The audit changed no code by design, and says so in its own header. Its refusals are
+recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
+site, the extension and the plugin were mapped but not audited in depth.
 
 ### 2.18 Declined and deferred
 
