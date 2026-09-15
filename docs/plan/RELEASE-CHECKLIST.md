@@ -94,6 +94,33 @@ gh run list --branch main --limit 1
 Nine combinations — Ubuntu, macOS, Windows × Node 18, 20, 22 — plus the type gate and the Ubuntu
 goldens job. All green. Not "green except Windows".
 
+### 4.1 What the `goldens` job is expected to say
+
+The job runs `npm run goldens:check -- --verbose` on `ubuntu-latest`. Linux has **6 of the 16**
+goldens committed, so the honest report — and the one to expect until the bake package lands — is
+six compared and matching, ten named as not yet baked, and a **green job**:
+
+```
+  ok   demo               27 agents  6.6s  0 px over tolerance (0.000% of budget 0.01%), 0 px moved at all
+  MISS crew               6 agents  6.5s  not yet baked on linux — run `npm run goldens` and commit test/goldens/linux/crew.png; …
+goldens: 6 match, 10 of 16 NOT YET BAKED on linux (crew, crew@reduced, demo@motion, demo@small, look, pinned, three, three@large, three@selected, wide) in …s
+goldens: the captures in test/goldens/.out/linux are the set to commit.
+```
+
+A missing golden is **not** a failure (`docs/DEVIATIONS.md` §180): nothing has been proved or
+disproved about the floor by a photograph with nothing to compare against, and a job that is red for
+a non-pixel reason is a job nobody reads (§87). Read the summary line, not the colour: **`FAIL` on a
+capture, or any `failed (…)` in the summary, is the only red this gate has** and it always means a
+committed golden and a fresh capture disagree.
+
+Three other outcomes are skips, all exit 0 and all say so on their own line: no WebSocket, no
+Chrome, and a Chrome that will not start.
+
+**To bake the ten.** Download the `goldens-linux` artifact from the job, commit its PNGs into
+`test/goldens/linux/`, then add `--strict` to the job's command. With `--strict` a not-yet-baked
+capture exits **2** and names itself, so the set cannot quietly go partial again. Do not turn
+`--strict` on before the set is complete.
+
 ## 5. Inspect the tarball
 
 ```sh
