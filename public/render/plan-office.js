@@ -487,7 +487,13 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // room is furnished rather than bare either side of the desk. TWO KINDS, and
   // never the same one twice: `plantRun` cannot repeat a silhouette (§3.6), so
   // the pair reads as planting rather than as a symmetry.
-  const officeKinds = plantRun('__office__', 2);
+  //
+  // THE TREE IS NOT IN THE RUN. It is already standing at the head of this
+  // room, eight units away, and §3.5's second rule is *"no two identical
+  // silhouettes within 8 U"* — a corner that answered with a second canopy
+  // would be §1.6's finding inside one room. Two kinds and two corners, so the
+  // pair also cannot repeat each other.
+  const officeKinds = plantRun('__office__', 2, ['plant_broad', 'plant_blade']);
   /** @type {readonly ('NW'|'NE')[]} */
   const officeCorners = ['NW', 'NE'];
   officeCorners.forEach((corner, n) => {

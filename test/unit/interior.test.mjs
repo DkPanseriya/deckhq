@@ -494,8 +494,16 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * search settles on. So the constant moved ONCE, deliberately, and the test
  * kept its job — it is the thing that says a later package which claims to move
  * paint has moved a wall.
+ *
+ * AND WP-85c IS THE SECOND TIME, for one reason and not for its props: §3.7's
+ * four named bays are a packing constraint on the lounge, so the lounge is a
+ * different rectangle and every envelope that contains one moved with it.
+ * Nothing in this package moves a PROJECT room by itself — the desk clutter
+ * stands inside a seat's own cell and the planting lost two of its four corners
+ * — which is why the hash moved and the rooms did not change shape.
+ * `docs/DEVIATIONS.md` §164.
  */
-const PLAN_HASH = '47f20830';
+const PLAN_HASH = 'bd8c7a47';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {
