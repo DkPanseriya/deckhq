@@ -133,6 +133,7 @@ function startDemo(population, theme = 'default') {
     );
     let out = '';
     let settled = false;
+    /** @type {() => Promise<void>} */
     const stop = () =>
       new Promise((done) => {
         if (child.exitCode != null) return done();
@@ -223,7 +224,7 @@ function raisePermission(port) {
 
 /* ---------------------------------------------------------------- the floor */
 
-/** @param {import('../src/cli/chrome.mjs').Client} client */
+/** @param {ReturnType<typeof import('../src/cli/chrome.mjs').connect>} client */
 async function evaluate(client, expression) {
   const { result, exceptionDetails } = await client.send('Runtime.evaluate', {
     expression,
@@ -338,7 +339,7 @@ function writePng(img, asset, file) {
   let out = img;
   if (out.width > asset.width) out = boxDownscale(out, asset.width);
   let best = null;
-  for (const filter of [0, 1, 2, 3, 4]) {
+  for (const filter of /** @type {const} */ ([0, 1, 2, 3, 4])) {
     const candidate = encodePng(out, { filter });
     if (!best || candidate.length < best.length) best = candidate;
   }
