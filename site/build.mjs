@@ -184,62 +184,119 @@ const INSTALL_COMMANDS = [
  */
 const IMAGES = [
   // Goldens: the only class whose currency is proved on every CI run.
-  { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden' },
-  { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden' },
-  { to: 'goldens/pinned.png', from: 'test/goldens/win32/pinned.png', class: 'golden' },
-  { to: 'goldens/single.png', from: 'test/goldens/win32/single.png', class: 'golden' },
+  { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden', role: 'hero' },
+  { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden', role: 'crop' },
+  {
+    to: 'goldens/pinned.png',
+    from: 'test/goldens/win32/pinned.png',
+    class: 'golden',
+    role: 'crop',
+  },
+  {
+    to: 'goldens/single.png',
+    from: 'test/goldens/win32/single.png',
+    class: 'golden',
+    role: 'hero',
+  },
   {
     to: 'goldens/demo-night-shift.png',
     from: 'test/goldens/win32/demo@night-shift.png',
     class: 'golden',
+    role: 'crop',
   },
   {
     to: 'goldens/demo-blueprint.png',
     from: 'test/goldens/win32/demo@blueprint.png',
     class: 'golden',
+    role: 'crop',
   },
 
   // Captures. Several are stale — taken before WP-79 gave the figure its
   // current form — and `docs/MEDIA.md` §4.2 lists every one for WP-94b.
-  { to: 'hero.gif', from: 'docs/media/hero.gif', class: 'capture' },
-  { to: 'deck-view.png', from: 'docs/media/deck-view.png', class: 'capture' },
-  { to: 'panel-review-card.png', from: 'docs/media/panel-review-card.png', class: 'capture' },
-  { to: 'permission-card.png', from: 'docs/media/permission-card.png', class: 'capture' },
-  { to: 'app-window.png', from: 'docs/media/app-window.png', class: 'capture' },
-  { to: 'office-cleared.png', from: 'docs/media/office-cleared.png', class: 'capture' },
-  { to: 'wrapped-weekly.png', from: 'docs/media/wrapped-weekly.png', class: 'capture' },
+  { to: 'hero.gif', from: 'docs/media/hero.gif', class: 'capture', role: 'gif' },
+  { to: 'deck-view.png', from: 'docs/media/deck-view.png', class: 'capture', role: 'crop' },
+  {
+    to: 'panel-review-card.png',
+    from: 'docs/media/panel-review-card.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'permission-card.png',
+    from: 'docs/media/permission-card.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  { to: 'app-window.png', from: 'docs/media/app-window.png', class: 'capture', role: 'crop' },
+  {
+    to: 'office-cleared.png',
+    from: 'docs/media/office-cleared.png',
+    class: 'capture',
+    role: 'crop',
+  },
+  {
+    to: 'wrapped-weekly.png',
+    from: 'docs/media/wrapped-weekly.png',
+    class: 'capture',
+    role: 'crop',
+  },
 
   // Illustrations. Every one of these is a drawing of a specification.
-  { to: 'look/presets.png', from: 'docs/media/look/presets.png', class: 'illustration' },
+  {
+    to: 'look/presets.png',
+    from: 'docs/media/look/presets.png',
+    class: 'illustration',
+    role: 'crop',
+  },
   {
     to: 'look/control-centre.png',
     from: 'docs/media/look/control-centre.png',
     class: 'illustration',
+    role: 'crop',
   },
-  { to: 'look/agent-sizes.png', from: 'docs/media/look/agent-sizes.png', class: 'illustration' },
-  { to: 'interior/board.png', from: 'docs/media/interior/board.png', class: 'illustration' },
+  {
+    to: 'look/agent-sizes.png',
+    from: 'docs/media/look/agent-sizes.png',
+    class: 'illustration',
+    role: 'crop',
+  },
+  {
+    to: 'interior/board.png',
+    from: 'docs/media/interior/board.png',
+    class: 'illustration',
+    role: 'hero',
+  },
   {
     to: 'interior/mockup-default.png',
     from: 'docs/media/interior/mockup-default.png',
     class: 'illustration',
+    role: 'hero',
   },
   {
     to: 'design/character-b.png',
     from: 'docs/media/design/character/B.png',
     class: 'illustration',
+    role: 'hero',
   },
   {
     to: 'design/character-in-situ.png',
     from: 'docs/media/design/character/in-situ.png',
     class: 'illustration',
+    role: 'hero',
   },
-  { to: 'motion/life-sheet.png', from: 'docs/media/motion/life-sheet.png', class: 'illustration' },
+  {
+    to: 'motion/life-sheet.png',
+    from: 'docs/media/motion/life-sheet.png',
+    class: 'illustration',
+    role: 'crop',
+  },
   {
     to: 'motion/lounge-activities.png',
     from: 'docs/media/motion/lounge-activities.png',
     class: 'illustration',
+    role: 'crop',
   },
-  { to: 'motion/crew.gif', from: 'docs/media/motion/crew.gif', class: 'illustration' },
+  { to: 'motion/crew.gif', from: 'docs/media/motion/crew.gif', class: 'illustration', role: 'gif' },
 ];
 
 /**
@@ -253,8 +310,32 @@ const ILLUSTRATION_DIRS = ['interior', 'look', 'motion', 'design'];
 /** The words an illustration's caption has to carry. */
 const ILLUSTRATION_LABEL = 'design illustration';
 
-/** A PNG wider than this is downscaled to it on the way into the site. */
-const MAX_IMAGE_WIDTH = 1600;
+/**
+ * What a picture is for, how wide it is served, and what it may weigh — WP-94b.
+ *
+ * The owner's report was that the pictures load slowly and that the ones on
+ * Look do not arrive at all. Locally every one of them resolves, so the defect
+ * is not a path: it is 6.3 MB of Features and 4.0 MB of Look going down a
+ * connection that is not this machine's disk. So every image now declares the
+ * role it plays, the role fixes the width it is served at — the widest the
+ * layout ever shows it, doubled, and no more — and the weight it may reach.
+ *
+ * `hero`  a full-column picture; the page shows it at up to 600 CSS px.
+ * `crop`  a detail of one feature, shown in a card or beside text.
+ * `gif`   motion. Width is the pipeline's to set; the ceiling is the budget.
+ *
+ * The numbers are enforced twice: here, so a build cannot publish an image
+ * over its budget, and in `test/unit/site.test.mjs`, so the gate says which
+ * picture and by how much without anyone running the site.
+ */
+const ROLES = {
+  hero: { width: 1100, budget: 600 * 1024 },
+  crop: { width: 680, budget: 250 * 1024 },
+  gif: { width: 1200, budget: 2.5 * 1024 * 1024 },
+};
+
+/** What a whole page may weigh: its document, its assets, and every picture on it. */
+const PAGE_BUDGET = { 'index.html': 2 * 1024 * 1024, default: 3 * 1024 * 1024 };
 
 /**
  * The one-line installers, copied to the root of the site — WP-75.
@@ -795,7 +876,17 @@ function build() {
     if (!fs.existsSync(from)) throw new Error(`${image.from} is referenced but missing`);
     const to = path.join(OUT, 'media', rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    const result = copyImage(from, to);
+    // A picture the log carries declares no role — it is registered by the
+    // markdown that shows it — and the log shows its images full width, so it
+    // is held to the hero's width and the hero's budget.
+    const role = ROLES[image.role ?? (rel.endsWith('.gif') ? 'gif' : 'hero')];
+    const result = copyImage(from, to, role.width);
+    if (result.bytes > role.budget) {
+      throw new Error(
+        `media/${rel} is ${Math.round(result.bytes / 1024)} KB, over the ` +
+          `${Math.round(role.budget / 1024)} KB budget for a ${image.role ?? 'crop'}`,
+      );
+    }
     bytes += result.bytes;
     if (result.downscaled) downscaled++;
     written++;
@@ -921,8 +1012,29 @@ ${listing}
   // drops files and directories beginning with an underscore.
   write('.nojekyll', '');
 
+  // WP-94b · what a page costs, page by page. The per-image budget above stops
+  // one heavy picture; this stops twelve light ones. It runs last because a
+  // page's weight includes the stylesheet and the scripts, which are copied
+  // above, and it prints the number for every page so a build says where the
+  // weight went rather than only that it was too much.
+  const weights = PAGES.filter((p) => p.slug !== 'log/index').map((page) => ({
+    page: `${page.slug}.html`,
+    bytes: pageWeight(OUT, `${page.slug}.html`),
+  }));
+  for (const { page, bytes: weight } of weights) {
+    const budget = PAGE_BUDGET[page] ?? PAGE_BUDGET.default;
+    if (weight > budget) {
+      throw new Error(
+        `${page} weighs ${Math.round(weight / 1024)} KB, over its ` +
+          `${Math.round(budget / 1024)} KB budget`,
+      );
+    }
+  }
+  const heaviest = weights.reduce((a, b) => (b.bytes > a.bytes ? b : a));
+
   process.stdout.write(
-    `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
+    `site: heaviest page ${heaviest.page} at ${(heaviest.bytes / 1024).toFixed(0)} KB\n` +
+      `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
       ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images` +
       ` at ${(bytes / 1024 / 1024).toFixed(1)} MB, ${downscaled} downscaled,` +
       ` ${INSTALLERS.length} installers)\n`,
@@ -945,13 +1057,13 @@ ${listing}
  * @param {string} from @param {string} to
  * @returns {{bytes: number, downscaled: boolean}}
  */
-function copyImage(from, to) {
+function copyImage(from, to, maxWidth = ROLES.hero.width) {
   const source = fs.readFileSync(from);
   if (path.extname(from).toLowerCase() === '.png') {
     try {
       const img = decodePng(source);
-      if (img.width > MAX_IMAGE_WIDTH) {
-        const small = boxDownscale(img, MAX_IMAGE_WIDTH);
+      if (img.width > maxWidth) {
+        const small = boxDownscale(img, maxWidth);
         // `encodePng` writes one filter for every scanline, and which one wins
         // depends entirely on the picture — a flat floor likes `Up`, a shaded
         // sheet likes `Paeth`. There are three images in this repository wide
@@ -1081,6 +1193,38 @@ function assertMediaIsLabelled(name, body) {
 }
 
 /**
+ * What one page costs a reader who loads it whole — WP-94b.
+ *
+ * The document, the stylesheet, the two scripts, the mark, and every picture
+ * the page shows, lazy ones included: a reader who scrolls to the bottom pays
+ * for all of them, and the owner's report was about exactly that scroll.
+ * Exported so the gate in `test/unit/site.test.mjs` measures the same bytes
+ * this build refuses to publish.
+ *
+ * @param {string} outDir the built site
+ * @param {string} rel a page, e.g. `features.html`
+ * @returns {number} bytes
+ */
+function pageWeight(outDir, rel) {
+  const file = path.join(outDir, rel);
+  const html = fs.readFileSync(file, 'utf8');
+  let bytes = Buffer.byteLength(html);
+  for (const name of ['style.css', 'theme.js', 'site.js', 'deckhq-mark.png']) {
+    const asset = path.join(outDir, name);
+    if (fs.existsSync(asset)) bytes += fs.statSync(asset).size;
+  }
+  const seen = new Set();
+  for (const tag of html.matchAll(/<img\b[^>]*>/g)) {
+    const src = (tag[0].match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    const image = path.resolve(path.dirname(file), src);
+    if (fs.existsSync(image)) bytes += fs.statSync(image).size;
+  }
+  return bytes;
+}
+
+/**
  * The pixel size of an image on disk — WP-94c.
  *
  * PNG through the goldens harness's own decoder; GIF out of its thirteen-byte
@@ -1199,7 +1343,9 @@ export {
   IMAGES,
   ILLUSTRATION_DIRS,
   ILLUSTRATION_LABEL,
-  MAX_IMAGE_WIDTH,
+  ROLES,
+  PAGE_BUDGET,
+  pageWeight,
   PAGES,
   SITE_ORIGIN,
 };

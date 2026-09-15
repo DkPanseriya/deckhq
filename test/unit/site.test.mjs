@@ -447,7 +447,8 @@ test('HONESTY: a mockup is never shown as a screenshot', async () => {
 });
 
 test('no image the site serves is wider than the capture stage', async () => {
-  const { MAX_IMAGE_WIDTH } = await import('../../site/build.mjs');
+  const { ROLES } = await import('../../site/build.mjs');
+  const MAX_IMAGE_WIDTH = Math.max(...Object.values(ROLES).map((r) => r.width));
   const { decodePng } = await import('../../scripts/lib/png.mjs');
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   let checked = 0;
@@ -467,6 +468,55 @@ test('no image the site serves is wider than the capture stage', async () => {
     );
   }
   assert.ok(checked > 10, 'expected the site to carry images');
+});
+
+/* ------------------------------------------------------------------ WP-94b */
+
+test('WEIGHT: every picture is inside the budget for what it is', async () => {
+  const { IMAGES, ROLES } = await import('../../site/build.mjs');
+  let checked = 0;
+  for (const image of IMAGES) {
+    const file = path.join(out, 'media', image.to);
+    if (!fs.existsSync(file)) continue;
+    const role = ROLES[image.role ?? (image.to.endsWith('.gif') ? 'gif' : 'crop')];
+    const size = fs.statSync(file).size;
+    checked++;
+    assert.ok(
+      size <= role.budget,
+      `media/${image.to} is ${Math.round(size / 1024)} KB, over the ` +
+        `${Math.round(role.budget / 1024)} KB budget for a ${image.role}`,
+    );
+  }
+  assert.ok(checked > 10, 'expected the site to carry images');
+});
+
+test('WEIGHT: no page costs more than its budget, read to the bottom', async () => {
+  const { PAGES, PAGE_BUDGET, pageWeight } = await import('../../site/build.mjs');
+  for (const page of PAGES) {
+    if (page.slug === 'log/index') continue;
+    const rel = `${page.slug}.html`;
+    const bytes = pageWeight(out, rel);
+    const budget = PAGE_BUDGET[rel] ?? PAGE_BUDGET.default;
+    assert.ok(
+      bytes <= budget,
+      `${rel} weighs ${Math.round(bytes / 1024)} KB, over its ${Math.round(budget / 1024)} KB budget`,
+    );
+  }
+});
+
+test('WEIGHT: every picture below the fold is lazy, on every page', () => {
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    const where = path.relative(out, page);
+    const tags = [...html.matchAll(/<img\b[^>]*>/g)]
+      .map((m) => m[0])
+      .filter((tag) => /\ssrc="(\.\.\/)*media\//.test(tag));
+    // The first picture on a page is what the reader came for and is fetched
+    // at once; everything under it waits until they scroll to it.
+    for (const tag of tags.slice(1)) {
+      assert.match(tag, /loading="lazy"/, `${where}: a picture below the fold is not lazy: ${tag}`);
+    }
+  }
 });
 
 /* ------------------------------------------------------------------ WP-94c */
