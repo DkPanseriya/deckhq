@@ -1016,10 +1016,8 @@ words *design illustration*, and `test/unit/site.test.mjs` asserts both the page
 pages added — Features, Look, Characters, Studio, Docs — with the `three` golden as the home hero.
 The README went from 911 lines to 211 against a 250-line budget enforced by
 `test/unit/readme.test.mjs`; everything cut is in `docs/GUIDE.md`, verbatim.
-**Notes.** The captures in `docs/media/` almost all predate WP-79, so the site prefers a golden
-wherever one exists and every stale capture says so in its caption. **WP-94b** retakes them after
-WP-89 lands, and replaces the golden hero with a live capture; until then this requirement is done
-and its pictures are dated.
+**Notes.** The dated pictures this row used to carry are gone: **WP-94b** (R-165 below) retook every
+one of them from the running product, and the stale captures are off the pages.
 
 **R-164 — The pages look like a product from a company that designs**
 *Owner, 15 September 2026:* "Make very fancy and attractive pages. Should look like a product by
@@ -1040,8 +1038,35 @@ off. `site/capture.mjs` drives a real browser: no page wider than its window at 
 reveal resolving, nothing hidden under `prefers-reduced-motion`, and the six home captures in
 `MEDIA.md` §4.4.
 **Notes.** This requirement moved type, colour and layout. It moved nothing the site *says*: every
-page, every caption class and every install command is what WP-94a left, and the pictures are still
-dated by R-163's note above.
+page, every caption class and every install command is what WP-94a left. What the site says, and
+what it shows, is R-165.
+
+**R-165 — Current pictures, a page that arrives, and no design journey**
+*Owner, 26 September 2026:* "No defensive writing, remove the AI slop. The homepage visuals are
+outdated; the UI changed many times. Keep the live GIFs, at higher fps. On Features I want a
+zoomed-in snapshot per feature, not the whole window. Images load slowly and the Look page images do
+not load. Show upcoming features nicely, but never the design journey: no options, no what was
+chosen. The character looks, animation and size configuration sheets are features and stay."
+*Taken to mean:* the site shows the build it is published beside, one crop per feature rather than
+one window per feature, at a weight that arrives; upcoming work is shown and labelled as coming; how
+anything was designed is not the product's story to tell.
+**Status:** done. **Implemented by:** WP-94b (`DEVIATIONS.md` §174). `site/assets.json` declares
+every picture (population, viewport, keys, crop rectangle, width) and `scripts/site-assets.mjs`
+takes all fourteen from the running product on the pinned demo clock: nine feature crops, two themed
+room plates, and four GIFs at 25 fps. Every image declares a role that fixes its served width and
+its weight budget (`hero` 1100 px / 600 KB, `crop` 680 px / 250 KB, `gif` 2.5 MB), and a page is
+capped at 2 MB on Home, 3 MB elsewhere. Features went 6.3 MB → 1.4 MB and Look 4.0 MB → 1.6 MB. The
+candidate sheets, the winner band, the four-up comparison, the material board and the interior
+before-and-after are off the site; the five remaining mockups carry a `Coming` tag beside their
+`Design illustration` label.
+**How it is held.** `site/build.mjs` refuses to publish an image or a page over budget.
+`test/unit/site.test.mjs` re-measures both, forbids the slop list and the journey words in the prose
+of every page, holds an em-dash budget of one per 150 words, requires a `Coming` tag on every
+published mockup, and counts GIF frames so a still cannot be published as an animation.
+`site/capture.mjs` walks every page before checking that its pictures loaded.
+**Notes.** The brief asked for GIF frames at a stepped `DECKHQ_NOW`; the daemon reads that at boot,
+so three of the four GIFs step WP-87's `?phase=` instead and the fourth records a real walk
+(§174.3). Nothing has been measured over a real connection to GitHub Pages.
 
 ### 2.16 Releases
 

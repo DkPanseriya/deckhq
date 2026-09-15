@@ -18018,3 +18018,126 @@ Nothing but a capture with motion on could have found it, which is the argument 
 - **Nothing was profiled on a real machine with a hundred agents.** §162.10's admission stands. The
   budget here is asserted as draw-call counts over a hundred figures, which is a shape check and not
   a measurement.
+## 174. WP-94b — the site weighed 6.3 MB and showed a build that no longer exists
+
+The owner, after reading the site WP-94a and WP-94c had built:
+
+> _"No defensive writing, remove the AI slop. The homepage visuals are outdated; the UI changed many
+> times. Keep the live GIFs, at higher fps. On Features I want a zoomed-in snapshot per feature, not
+> the whole window. Images load slowly and the Look page images do not load. Show upcoming features
+> nicely, but never the design journey: no options, no what was chosen. The character looks,
+> animation and size configuration sheets are features and stay."_
+
+**Numbered 174, and 173 was left free.** 172 was the last entry on `main` when this package opened,
+and 173 belongs to WP-81, running beside it and not present in this worktree. There was no 173 in
+the file at the time of writing.
+
+### 174.1 "The Look images do not load" was never a path
+
+Every image on the site resolves locally, and it resolves on the deployed site too. What it did not
+do was arrive: **Features weighed 6.3 MB and Look 4.0 MB**, and the pictures at the bottom of a
+6 MB page do not appear so much as eventually turn up. The nine band shots on Features were
+1600 × 1000 screenshots of the whole window, downscaled to 1600 px and no further, and six of them
+were on more than one page.
+
+So weight became a declared property rather than an accident. Every image names the role it plays,
+and the role fixes both the width it is served at and the weight it may reach: `hero` 1100 px and
+600 KB, `crop` 680 px and 250 KB, `gif` 2.5 MB. A page's whole cost, counting the document, the
+stylesheet, the scripts, the mark and every picture on it including the lazy ones, is capped at 2 MB
+on Home and 3 MB elsewhere. `site/build.mjs` refuses to publish over either, and
+`test/unit/site.test.mjs` names the file and the overage, so the gate is readable without running
+the site.
+
+| Page | Before | After |
+|---|---|---|
+| `features.html` | 6.3 MB | 1.4 MB |
+| `look.html` | 4.0 MB | 1.6 MB |
+| `index.html` | 2.4 MB | 1.5 MB |
+| `characters.html` | 1.5 MB | 0.6 MB |
+
+### 174.2 The pictures are declared now, not taken by hand
+
+`site/assets.json` names every picture the site shows: a fixture population, a viewport, the keys or
+clicks that reach the state, a crop rectangle in CSS pixels, and the width it is written at.
+`scripts/site-assets.mjs` takes all of them in about three minutes, booting one demo daemon per
+picture on a port the OS chooses with `DECKHQ_NOW` pinned to `DEMO_EPOCH`, using the same child and
+the same readiness probe as `scripts/goldens.mjs`.
+
+Fourteen pictures, nine of them crops of the one thing their words are about: the waiting strip, a
+room plate with its juniors, Your Office with four on the sofas and two at the chairs, a lounge bay,
+the idle chip opened, the deck on the queue, the deck on Usage, the panel on a review, and a real
+permission request. The permission card is worth naming: it is raised by
+`scripts/fake-permission-client.mjs` against the running demo, so the route, the hold, the registry
+and the card are the product's own and only the caller is fake.
+
+**A picture a fixture cannot reach is reported and skipped.** The script has no way to stage one; a
+missed crop prints the selector that matched nothing, and the run's tail lists every one. Nothing
+was missed in the end, and that is only true because the permission card was retried with the panel
+open: the card lives in the panel, so raising the request without pressing `j` photographs a floor
+with nothing on it.
+
+### 174.3 The GIFs, and the deviation inside them
+
+Four animations at **25 fps**, against the 10 fps of the old hero: the whole floor, typing and
+thinking at a desk, the lounge, and an agent finishing its turn and walking to Your Office.
+
+The brief asked for frames at a **stepped `DECKHQ_NOW`**. That is not reachable. `DECKHQ_NOW` is
+read by the daemon at boot, so stepping it per frame means one daemon per frame, and a hundred
+daemons is forty minutes for four seconds of video.
+
+What is reachable is WP-87's `?phase=`. The scene reads it into `_phase` and every clip samples from
+it, so stepping `_phase` from 0 to 1 across a hundred frames walks every animation on the floor
+through exactly one cycle: deterministic, repeatable to the pixel, and a loop that closes. Three of
+the four are taken that way. The fourth cannot be, because standing up and crossing the floor is
+navigation driven by the wall clock rather than a clip phase, so `hand-up.gif` records a real walk
+after a real `Stop` hook, buffering frames inside the page the way `scripts/capture-hero.mjs` does.
+
+One cost showed up in the frames: the palette is 255 colours over the whole animation, and the
+stage's near-black margin above the building quantised to a lavender band. The crop moved onto the
+building rather than the palette being spent on a margin nobody looks at.
+
+### 174.4 The journey is off the site
+
+The owner's sharpest rule was upcoming features shown nicely and the design journey never. So the
+four candidate character sheets, the band that said which one won, the four-up comparison at actual
+size, the interior material board and the interior mockup shown against the goldens are gone from
+the pages. Six captures of older builds went with them, off the registry and still in `docs/media/`
+for the log entries that cite them: the app window, the cleared office, Wrapped, the deck, the panel
+and the permission card.
+
+What a mockup may still do is draw something that is **coming**, and it now says so twice: the
+`Design illustration` label it already carried, and a `Coming` tag beside it. Five remain: the
+interior presets, the control centre, agent sizes on two pages, and the crew. WP-87 shipped while
+this package was open, so the life sheet and the lounge-activities sheet were replaced by GIFs of
+the real thing rather than relabelled.
+
+A test holds the rest of it. No `candidate`, `chosen`, `ranking`, `before-and-after`, `direction B`,
+`material board` or `options` in the prose of any page, alongside the slop list: the "not X but Y"
+move, the puffery vocabulary and the reflexive hedge. The pages already passed the slop list. What
+they failed was **the em dash**. The brief asked for none at all; the gate is one per 150 words
+instead, because the mark is legitimate punctuation, the tell is density, and the engineering log
+this site renders is full of them. Six pages were over — `docs.html` at 8 in 398 words, `faq.html`
+at 14, `install.html` at 13, `studio.html` at 12 — and were rewritten with the colons, commas,
+parentheses and full stops each clause actually wanted. No claim changed.
+
+### 174.5 What the camera found
+
+`site/capture.mjs` measured every page at 375 and 1440, and the home page at 375, 768 and 1440 in
+both schemes: no horizontal overflow, one `<h1>` a page, every reveal resolved, every reveal off
+under `prefers-reduced-motion`, and every image loaded.
+
+That last one was not true until this package. **The sweep over the other twelve pages never
+scrolled**, so every picture below the fold was still lazy and unrequested when the probe asked
+whether the images had loaded: the page reported that it was fine because it had never asked for
+anything. It is the same shape as the owner's report about Look, and it was in the checker rather
+than on the page. The sweep walks each page now, and names the files that did not resolve.
+
+Two more things are asserted rather than watched. That a GIF has more than one frame, counted as
+graphic control extensions, because a one-frame GIF is a PNG that costs more and is exactly what a
+capture of a floor that was not moving would produce. And that every picture below the first on a
+page carries `loading="lazy"` and its own `width` and `height`, so nothing moves while the page
+fills.
+
+**Not verified:** how any of this behaves on GitHub Pages over a real connection. The weight is
+measured on disk, the pages are measured in a headless Chrome on `127.0.0.1`, and the owner's
+report was about neither.

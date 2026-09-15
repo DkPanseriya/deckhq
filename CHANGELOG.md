@@ -8,6 +8,44 @@
 
 ### Added
 
+- **The site shows the product as it is now, and weighs a third of what it did — WP-94b.** The
+  owner, after reading the site: _"The homepage visuals are outdated, the UI changed many times.
+  Images load slowly and the Look page images do not load."_ Nothing 404s; Features weighed 6.3 MB
+  and Look 4.0 MB. Every image now declares the role it plays, and the role fixes the width it is
+  served at and the weight it may reach (`hero` 1100 px / 600 KB, `crop` 680 px / 250 KB, `gif`
+  2.5 MB), with a whole-page cap of 2 MB on Home and 3 MB elsewhere. Both are enforced in
+  `site/build.mjs` and again in `test/unit/site.test.mjs`. Features is **1.4 MB**, Look **1.6 MB**,
+  Home **1.5 MB**, Characters **0.6 MB**.
+
+- **`scripts/site-assets.mjs` and `site/assets.json` — the site's pictures, declared and taken from
+  the running product.** Each asset names a fixture population, a viewport, the keys or clicks that
+  reach the state, a crop rectangle in CSS pixels and the width it is written at; the script boots
+  one demo daemon per picture on a port the OS chooses with `DECKHQ_NOW` pinned, takes the shot, and
+  takes it down. Fourteen pictures: nine crops of the one thing their words are about (the waiting
+  strip, a room plate, Your Office, a lounge bay, the idle popover, the deck's Queue and Usage tabs,
+  the panel on a review, and a permission request raised through the real hook endpoint), a themed
+  room plate in each of the other two themes, and four GIFs at **25 fps** against the old hero's 10:
+  the whole floor, typing and thinking, the lounge, and an agent walking to Your Office with its
+  hand up. A picture a fixture cannot reach is reported and skipped, never staged.
+
+- **Upcoming features are shown as coming; the design journey is off the site.** A mockup on a page
+  now carries a `Coming` tag beside its `Design illustration` label, and only five remain: the
+  interior presets, the control centre, agent sizes and the crew. The candidate character sheets,
+  the band that said which one won, the four-up comparison, the material board and the interior
+  mockup-against-goldens are gone, along with six captures of builds from before WP-79 and WP-87.
+
+- **Three copy gates over `site/pages/` — WP-94b.** The slop list (the "not X but Y" move, the
+  puffery vocabulary, the reflexive hedge, and `candidate` / `chosen` / `ranking` /
+  `before-and-after` / `options`), an em-dash budget of one per 150 words, and a rule that an
+  illustration says it is coming where it is shown. Six pages were over the dash budget and were
+  rewritten; no claim changed.
+
+- **`site/capture.mjs` walks a page before believing its pictures loaded.** The sweep over the other
+  twelve pages never scrolled, so every lazy picture was unrequested when it asked whether the images
+  had loaded — the same shape as the owner's report about Look, in the checker rather than on the
+  page. It now walks each page, names any image that did not resolve, and photographs Features and
+  Characters at 1440 in both schemes alongside the six home shots.
+
 - **The documentation site is a product page — WP-94c.** The owner: _"Make very fancy and attractive
   pages. Should look like a product by Apple, Uber, Netflix, Airbnb, Google level companies."_ Those
   five do not share a look; what they share is that every page is **one system applied**. So the
