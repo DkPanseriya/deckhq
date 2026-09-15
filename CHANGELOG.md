@@ -31,6 +31,20 @@
   operable from the keyboard alone: one Tab stop per picker, arrows inside it.
   `docs/DEVIATIONS.md` §176.
 
+- **Agent size, and the furniture follows the people — WP-88c.** The owner: _"the user can set the
+  size of agents compared to screen; someone with 100 agents wants them smaller, someone with 5–10
+  wants them bigger so they are not lost; accordingly the size of table, chair, sofa, everything
+  adjusts automatically."_ **Small**, **medium**, **large** or **auto**, in the Look section and in
+  the palette (`Agents: large`). Everything a body sets moves with it — seats, the pitch between two
+  people, desk and sofa depth, the rugs, the planting, the figure's own chrome — and everything the
+  building sets does not: the corridors, the room padding, the plate band, the parquet, and every
+  label, which stays exactly the size it was. Rooms grow and shrink with their contents, so a floor
+  of five people fills the window and a floor of a hundred still fits with every body readable.
+  **Auto** reads how many people are actually on the floor — large under ten, small over forty —
+  and holds its choice two either side of each threshold so one session starting does not re-plan
+  the building. **Medium is the floor as it shipped, byte for byte.** `?scale=small` paints one tab.
+  `docs/DEVIATIONS.md` §177.
+
 - **A look is a file you own, and unlike a layout it is anonymous — WP-88a.** `deckhq look export >
 my-floor.json`, `deckhq look import my-floor.json`, `deckhq look presets`, plus `GET/POST
 /api/look` and `?look=night-lab` to paint one tab. A look names no project, no path and no
