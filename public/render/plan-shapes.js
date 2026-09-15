@@ -164,7 +164,8 @@ export {};
  * @property {number} y
  * @property {number} angle radians; the occupant faces this direction
  * @property {boolean} [standing] WP-78: a place in the office queue, which has
- *   no chair under it. The rig draws its occupant on its feet.
+ *   no chair under it. The rig draws its occupant on its feet. A sofa cushion
+ *   and the visitor chair are both seats and carry neither this nor `false`.
  */
 
 /**
@@ -211,7 +212,13 @@ export {};
  * @property {Wall[]} walls
  * @property {NavLine[]} nav corridor centrelines; the only walkable routes
  * @property {Map<string, Seat[]>} seats keyed by projectId
- * @property {Seat[]} officeSeats
+ * @property {Seat[]} officeSeats one place per waiting session: the reception's
+ *   sofa cushions nearest the desk first, then the standing queue beside them
+ *   (WP-93). Ordered, and `assignSeats` fills it oldest wait first.
+ * @property {Seat|null} [officeChair] the ONE visitor chair at the manager's
+ *   desk (WP-93). Not in `officeSeats`: it is the only place on the floor a
+ *   user's SELECTION decides, it holds one person, and nobody reaches it by
+ *   waiting. `null` when the reception has no chair.
  * @property {LoungeSpot[]} loungeSpots
  * @property {Seat[]} letGoSpots always empty: an archived session has no place
  *   on the floor at all. Kept so a renderer can ask without a guard.

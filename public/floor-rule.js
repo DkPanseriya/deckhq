@@ -125,10 +125,18 @@ export function isSubagent(agent) {
  * machine that was 21 bodies at desks over one working session, and the room
  * the product is for stopped answering the question the product is for.
  *
- * SELECTING A SESSION MOVES NOBODY. Placement reads `ackState` and
+ * SELECTING A SESSION CHANGES NO ZONE. Placement reads `ackState` and
  * `activityState` and nothing else — there is no `selected` here to read, and
- * the panel's selection is a ring on the floor (`03-VISUAL-SPEC.md` §8), never
- * a walk. Being *waiting* is what walks an agent to the manager's desk.
+ * there must not be: a session the user opens is in exactly the room its state
+ * puts it in, and `model.test.mjs` asserts that an agent carrying every field a
+ * panel might set lands where one carrying none does.
+ *
+ * WHERE INSIDE THE OFFICE it stands is a different question, and since WP-93 it
+ * does have a selection in it: the waiting sit on the reception sofas, and the
+ * one whose panel is open walks to the visitor chair at the manager's desk.
+ * That lives in `render/agents-seats.js` (`assignSeats`), which is seating
+ * within a zone rather than the zone itself, and it takes the selection as an
+ * explicit argument so nothing can mistake it for something observed.
  *
  * @param {FloorAgent} agent
  * @returns {'desk'|'office'|'lounge'|'let_go'}
@@ -173,7 +181,10 @@ export function isDeskAgent(agent) {
 }
 
 /**
- * Is this agent waiting on the user, at the manager's desk?
+ * Is this agent waiting on the user, in the user's office?
+ *
+ * On the sofas since WP-93, or standing beside them; at the manager's desk only
+ * while the user has its panel open.
  *
  * The office population, stated once so the plan, the counts and the plate
  * cannot each derive it. A junior is never here (see `placement`).

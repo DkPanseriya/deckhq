@@ -577,23 +577,23 @@ export const OFFICE_CHAIR_PITCH = 3.2;
 export const OFFICE_CHAIR_ROW = 2.8;
 
 /**
- * THE VISITOR CHAIRS AT THE MANAGER'S DESK (WP-78).
+ * THE ONE VISITOR CHAIR AT THE MANAGER'S DESK (WP-93).
  *
  * The owner, 14 September: _"Nobody sits by default in front of the manager;
  * everybody is waiting on the sofa. Only the agent I open walks up to the
- * manager desk."_ — said about a floor where the one guest chair was filled by
- * whoever happened to be at the head of the queue and the rest sat on sofas
- * around the walls. He wants the opposite: the people who are *waiting on him*
- * at his desk, and the sofas for nobody.
+ * manager desk."_ WP-78 read that as a description of what he did not want and
+ * shipped the opposite — a ROW of two or three chairs, filled by the waiting
+ * queue, with the sofas seating nobody. He said it again on 15 September, as an
+ * instruction this time: _"They all should sit on the sofa. Only the agent I
+ * open walks up to the manager desk."_
  *
- * So there is a ROW of chairs across the front of the desk rather than one, and
- * how many is a function of the desk the room actually got — `OFFICE_MIN_W`
- * gives a 8.8 U desk and two chairs, and anything from 24 U up gives three.
- * Between `MIN` and `MAX` and nothing else: a fourth chair is a boardroom, and
- * a room the user reads first should not look like a meeting.
+ * So there is exactly ONE chair, it is the chair the person being seen sits in,
+ * and it is empty whenever no waiting session is open. A second chair would be
+ * a second answer to "who is being seen", which is the question this chair is
+ * the whole of. `OFFICE_VISITOR_PITCH` went with the row it spaced; there is
+ * nothing left to space.
  */
-export const OFFICE_VISITOR_MIN = 2;
-export const OFFICE_VISITOR_MAX = 3;
+export const OFFICE_VISITOR_CHAIRS = 1;
 
 /**
  * HOW FAR APART TWO PEOPLE WAIT, and why it is not the seat pitch.
@@ -602,52 +602,33 @@ export const OFFICE_VISITOR_MAX = 3;
  * A person in the waiting area is not only a body: they carry a waiting badge
  * above the head and a name label below it (`03-VISUAL-SPEC.md` §7), and that
  * stack is roughly four units tall. The reception is also the one room the
- * packer may lay on its side (`buildOfficeRow`), so a row of chairs that is
+ * packer may lay on its side (`buildOfficeRow`), so a sofa run that is
  * horizontal on one floor is vertical on the next — and at 2.6 the vertical
  * case drew each name through the badge of the person behind them.
  *
  * So both pitches here clear the whole stack rather than the body, and the
- * queue runs along the well's LONGER axis so it spreads rather than stacks.
- *
- * WP-85b BROUGHT THE CHAIR PITCH IN FROM 6.4 TO 5.2 (§3.4). §1.7 measured what
- * 6.4 drew: *"at `OFFICE_VISITOR_PITCH = 6.4 U` the three of them are 90 px
- * apart, reading as three unrelated discs rather than a row"*. The label stack
- * that bought the 6.4 is still four units tall, and the chairs still clear it —
- * the pitch is stated on the chairs and `OFFICE_QUEUE_PITCH` on the queue, and
- * only the queue ever stacks two names in one column. What the tighter pitch
- * buys is a ROW: three chairs at 5.2 span 12.8 U, which reads as one piece of
- * seating rather than as three, and fits two units of reception sooner
- * (`OFFICE_VISITOR_THIRD`).
+ * queue runs along the axis that ends up horizontal on screen so it spreads
+ * rather than stacks.
  */
-export const OFFICE_VISITOR_PITCH = 5.2;
 export const OFFICE_QUEUE_PITCH = 3.8;
 export const OFFICE_QUEUE_ROW = 6.4;
 
 /**
- * The reception interior from which the manager's desk earns a THIRD chair.
- * Below it, two — a room at `OFFICE_MIN_W` has no width to spare once the sofa
- * runs have taken theirs.
+ * HOW FAR APART TWO PEOPLE SIT ON THE RECEPTION SOFAS (WP-93).
  *
- * It fell from 26 to 24 with the pitch (WP-85b): three chairs at 5.2 U span
- * 12.8 U rather than 15.2, so the width that used to hold two now holds three
- * with the same clear floor either side. The rule is unchanged and so is its
- * shape — two or three, off the room's own interior and nothing else.
- */
-export const OFFICE_VISITOR_THIRD = 24;
-
-/**
- * How many chairs stand at the manager's desk in a reception this wide.
+ * `OFFICE_SEAT_PITCH` is 2.6 and is the wrong number here for the reason above:
+ * it spaces BODIES, and a waiting session is a body plus a badge plus a name.
+ * WP-85b measured the same stack at 5.2 for the chair row it then had — three
+ * chairs at 5.2 U read as one piece of seating rather than three unrelated
+ * discs — and a sofa run is the same problem with the same answer, on whichever
+ * axis the packer ends up laying it.
  *
- * A pure function of the room's own interior width, so the plan, the tests and
- * the docs cannot each have their own answer, and so the same floor produces
- * the same chairs on every rebuild. It is the INTERIOR rather than the desk
- * because the desk is itself derived from the interior, and one derivation is
- * easier to keep honest than two.
- * @param {number} interiorW
+ * It is what decides how many the sofas hold, and therefore how many stand: a
+ * run of length `L` seats `floor(L / OFFICE_SOFA_PITCH)`, spread evenly along
+ * it rather than packed from one end, because a sofa with a gap at the end
+ * reads as furniture somebody has half filled.
  */
-export function visitorChairCount(interiorW) {
-  return Number(interiorW) >= OFFICE_VISITOR_THIRD ? OFFICE_VISITOR_MAX : OFFICE_VISITOR_MIN;
-}
+export const OFFICE_SOFA_PITCH = 5.2;
 
 /**
  * How much of the column's leftover height the reception takes before the

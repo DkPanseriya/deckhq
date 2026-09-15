@@ -314,9 +314,9 @@ at L0 by colour **and** icon — colour alone fails for colour-blind users.
 | State | Colour | Icon (above head) | Clip | Location |
 |---|---|---|---|---|
 | `working` | Green `#2E7D63` | none | `type`, with `drink` / `think` / `stretch` interleaved | Project desk |
-| `needs_input` | Amber `#B87333` | **Raised hand**, pulsing | `hand_raise` | User's office, at the manager's desk |
+| `needs_input` | Amber `#B87333` | **Raised hand**, pulsing | `hand_raise` | User's office, on the sofas |
 | `stalled` | Muted amber `#9A7B4F` | Hourglass | `slump` | Project desk |
-| `for_review` | Crimson `#C0392B` | Checkmark in a circle | `stand_wait` | User's office, at the manager's desk |
+| `for_review` | Crimson `#C0392B` | Checkmark in a circle | `stand_wait` | User's office, on the sofas |
 | `ended` | Warm dark grey `#6E6A63` | none | `slump` (seated, still) | Lounge |
 | `benched` | Slate `#7B8794` | none | rotating lounge clips | Lounge |
 | `let_go` | Grey `#BDB7AA` | none | none | Off floor |
@@ -325,12 +325,12 @@ Walking between locations always uses `walk`, in the colour of the destination s
 
 ### 5.1 The occupancy rule
 
-**Amended 14 September 2026 (WP-78).** The Location column above used to read *Project desk* for
-`needs_input`, `stalled` and `ended` alike. The owner: *"Only live working agents are on desks in
-the project rooms. Everyone else is in the lounge area, so I can clearly see which sessions are
-active at the moment."* A room where the session that finished three weeks ago sits in the same pose
-at the same kind of desk as the one that is typing cannot answer that, and on the reference machine
-it was 21 bodies over one working session.
+**Amended 14 September 2026 (WP-78), and again on 15 September (WP-93).** The Location column above
+used to read *Project desk* for `needs_input`, `stalled` and `ended` alike. The owner: *"Only live
+working agents are on desks in the project rooms. Everyone else is in the lounge area, so I can
+clearly see which sessions are active at the moment."* A room where the session that finished three
+weeks ago sits in the same pose at the same kind of desk as the one that is typing cannot answer
+that, and on the reference machine it was 21 bodies over one working session.
 
 Three zones, one question each. This is the contract; `public/floor-rule.js` is the one
 implementation of it, on the side both the daemon and the browser can see.
@@ -338,10 +338,10 @@ implementation of it, on the side both the daemon and the browser can see.
 | Zone | The question it answers | States |
 |---|---|---|
 | **Project desk** | Is this session *working for me* right now? | `working`, `stalled` |
-| **The manager's desk** (user's office) | Is this session *waiting on me* right now? | `needs_input`, `for_review` |
+| **The user's office** | Is this session *waiting on me* right now? | `needs_input`, `for_review` |
 | **The lounge** | Everything else | `ended`, `benched` |
 
-Four rules qualify it, and each one is there because the obvious reading of the table is wrong
+Five rules qualify it, and each one is there because the obvious reading of the table is wrong
 without it:
 
 1. **`stalled` keeps its desk, and it is the one exception.** A stalled session is `working` that
@@ -349,22 +349,45 @@ without it:
    its next line a second from now. Walking it to the lounge would make the floor move on a *timer*
    rather than on an *event*, and it would have to walk back. It stays at its desk, slumped, with
    its stall badge.
-2. **Selecting a session moves nobody.** Placement reads `ackState` and `activityState` and nothing
-   else. Being *waiting* is what walks an agent to the manager's desk; opening one in the panel
-   rings it on the floor (§8) and never moves it.
-3. **The waiting area is chairs first, then a queue.** A row of **two or three visitor chairs**
-   faces the manager's desk — three from a 26 U interior, two below it, and never a fourth — filled
-   in arrival order, oldest wait nearest. Everyone the chairs cannot take stands in a short queue
-   beside the desk, also in arrival order. **Nobody is seated on a sofa**, at any population: the
-   sofa runs are furniture that keeps the middle of the room clear, and the middle of the room is
-   where the queue is. The two waiting states stay visibly different once they are there — a raised
-   hand is still a raised hand, and a finished turn still stands and waits (§4.2 of
-   `01-PRODUCT.md`: *a raised hand at a desk means I am blocked; a person in your office means I
-   finished*; the first half of that sentence now means a raised hand **in your office**).
-4. **A repo with no live session still earns no room, and its finished sessions are still off the
+2. **The waiting sit on the sofas.** The owner, 15 September 2026: *"They all should sit on the
+   sofa. Only the agent I open walks up to the manager desk."* Every waiting session takes a place
+   on one of the reception's three sofa runs, in **arrival order, oldest wait nearest the desk** —
+   which fills the runs from their open ends inward, the way a real waiting room fills. The sofa
+   pitch is `OFFICE_SOFA_PITCH` (5.2 U), which clears a body plus its badge plus its name on
+   whichever axis the packer lays the room. **Whoever the runs cannot seat stands**, in a short
+   queue inside the well the three runs enclose, also in arrival order, beside the seating and
+   **never at the desk**: the well starts 2.4 U below the visitor chair, so a standing place is
+   beside the sofas rather than across the manager's table.
+3. **One visitor chair, and only the session you OPEN sits in it.** There is exactly one chair at
+   the manager's desk, square across it, and it is **empty whenever no waiting session's panel is
+   open**. Open one and that session — and only that session — gets up, walks to the chair and sits
+   facing the manager; close the panel, or open another, and it walks back to its own place, which
+   was held for it rather than closed up behind it. A selected session that is **not** waiting does
+   not move: working stays at its desk, resting stays in the lounge. Under
+   `prefers-reduced-motion` both walks are teleports (§10).
+4. **Occupancy is a pure function of the population plus that one selection.** `placement()` reads
+   `ackState` and `activityState` and nothing else, so the ZONE is the state's alone; the seat
+   inside the office is `assignSeats(plan, agents, { selectedId })`, and `selectedId` is
+   user-owned client state that is never persisted, never written back, and never set by an
+   observed event. **No hook, scan or session end can put anybody in the chair**
+   (`test/unit/occupancy.test.mjs`, `INVARIANT:`).
+5. **A repo with no live session still earns no room, and its finished sessions are still off the
    floor** (WP-50). An `ended` session goes to the lounge only when its own project has a room. A
    project room whose only live session is waiting in the office keeps its room and draws an empty
    desk; that is the dynamic floor behaving as specified, not a defect.
+
+The two waiting states stay visibly different wherever they are sitting — a raised hand is still a
+raised hand, and a finished turn still stands and waits (`01-PRODUCT.md` §4.2: *a raised hand at a
+desk means I am blocked; a person in your office means I finished*; the first half of that sentence
+now means a raised hand **in your office**).
+
+**What WP-78 got wrong, kept here so it is not re-derived.** WP-78 read the owner's sentence as a
+description of the floor he was looking at rather than as the floor he wanted, and put the whole
+waiting queue in a row of two or three chairs at the desk with the sofas seating nobody. It is the
+one place in this product where a shipped package contradicted the owner's own words on purpose
+(`00-REQUIREMENTS.md` R-043 carried that departure for a day). The argument it made — that
+oldest-first is only legible as a queue — survives: the sofas are filled oldest-nearest, which is
+the same ordering read off furniture instead of off a row of chairs.
 
 ### 5.2 The pinned room (WP-77)
 

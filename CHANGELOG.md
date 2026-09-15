@@ -326,6 +326,29 @@ allowlist, plan` — and **left exactly as it was written**. The panel shows all
 
 ### Changed
 
+- **The waiting sit on the sofas; the one you open comes to the desk — WP-93.** The owner, for the
+  third time: _"They all should sit on the sofa. Only the agent I open walks up to the manager
+  desk."_ WP-78 had read the second telling as a description of the floor rather than as the floor he
+  wanted and shipped the opposite — two or three visitor chairs at the manager's desk filled by the
+  whole waiting queue, and three sofa runs seating nobody. This is that departure taken back.
+
+  **Every waiting session now sits on a reception sofa**, in arrival order, oldest wait nearest the
+  desk, at a 5.2 U pitch that clears a body plus its badge plus its name on whichever axis the packer
+  lays the room. Whoever the runs cannot seat **stands** in a short queue inside the well the three
+  runs enclose — beside the seating and never at the desk.
+
+  **The manager's desk has exactly one visitor chair**, square across it, and it is **empty unless
+  you have a waiting session open**. Open one and that session, and only that session, walks to the
+  chair and sits facing him; close the panel or open another and it walks back to its own place,
+  which was held for it rather than closed up behind it. A selected session that is not waiting does
+  not move at all: working stays at its desk, resting stays in the lounge. Reduced motion teleports.
+
+  Which room a session is in is still a pure function of its state — `placement()` has no selection in
+  it, and cannot. The chair is a seat inside the office, chosen by an explicit argument to
+  `assignSeats`, never persisted, and unreachable by any observed event: an `INVARIANT:` test drives a
+  real registry through a hook, a scan and a session end and finds it empty every time.
+  `docs/DEVIATIONS.md` §169, `docs/03-VISUAL-SPEC.md` §5.1, `docs/00-REQUIREMENTS.md` R-043.
+
 - **A shelf stopped competing with the people in the room — WP-85c.** Book spines were the marker
   blue, the marker plum, the cabinet body and the board-game felt: four of the most saturated tokens
   on the floor, tiled twenty to a shelf, on the one piece of furniture that is meant to read as
@@ -673,6 +696,15 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Fixed
 
+- **A re-plan left everybody standing in the building it replaced — WP-93.** Rebuilding the floor
+  after a window resize gave every seat, wall and corridor new coordinates and never moved the people
+  into them; the records went on describing the old building until the next snapshot happened to
+  arrive. On a live floor that healed in a second and read as a hiccup. **Opening the panel is a
+  resize**, so it was reliably visible there — and it was invisible to the whole suite, because the
+  coordinates were internally consistent with a plan that had been thrown away. Found by the first
+  capture of the new `three@selected` golden, which is the first golden of a floor a user has touched.
+  `docs/DEVIATIONS.md` §169.5.
+
 - **The numbered names already on your floor are taken away, once — WP-86.** Growing the pool fixes
   the future and nothing else: an identity is written the first time an agent is seen and never
   reassigned, so a `Livia 2` assigned back when the pool held sixty names would have stayed for as
@@ -859,6 +891,13 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   ground. `docs/DEVIATIONS.md` §139.
 
 ### Testing
+
+- **The golden harness can press a key, and `three@selected` is the first golden of a floor somebody
+  has used — WP-93.** A capture may name keys; they go through the DevTools protocol once the floor
+  has settled, and the floor is settled again before the shot. `three@selected` is the `three`
+  population with `j` pressed — `j` walks the needs-you queue — so the picture is the longest wait
+  sitting in the chair at the manager's desk with its panel open, and the other waiting session still
+  on the sofa. Ten goldens now, all at 0 px on the check. `docs/DEVIATIONS.md` §169.6.
 
 - **`test/unit/identity-migration.test.mjs` is new, and holds the one rename this product allows —
   WP-86.** Thirteen tests over a fixture state file with twelve numbered identities and thirty clean
