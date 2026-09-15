@@ -16893,3 +16893,93 @@ Three fixes came out of 2× crops rather than out of an assertion, which is what
 - **Nothing was judged on a machine other than the goldens' 1600 × 1000**, plus the committed `wide`
   capture at 1920 × 1080. The 2× inspection was of the reception, a project room, a lounge bay and
   one bookcase on the `demo` capture.
+## 165. Direction — the requirements were in the transcripts, and nowhere else
+
+**§164 is absent from this log.** A concurrent package holds it; this entry takes 165 so the two
+cannot collide, and the numbering has a gap until that one lands — the same arrangement §152, §153
+and §155 made before it. If §164 is still missing when both have merged, this sentence is the reason
+and nothing is lost.
+
+No code changed. This is a direction entry: what the owner asked for on **15 September 2026**, what
+was built in answer, and what the answer obliges every package from here on to do.
+
+### 165.1 What the owner said
+
+> _"And over the history of our chats, I have talked about many requirements and user stories or
+> usecases. I want you to document them all, so we have a track of what has been implemented why,
+> and later if we change something we can refer why we did something. And also it is nice spec sheet
+> for our product so maintain that thoroughly and detailed."_
+
+Four things in one sentence: a record of **what** was asked for, a record of **why** it was built
+that way, a reference for the moment somebody wants to change it, and a spec sheet — which is a
+different audience from an engineering log.
+
+### 165.2 Why this file could not answer it
+
+`docs/DEVIATIONS.md` is 163 entries of *departures*: what the code does that a plan document did not
+say, with the measurement that justified it. It is the right record of engineering decisions and the
+wrong record of intentions. Nothing in it says who asked for pinned rooms, or that the reception
+seating that shipped is not the reception seating the owner described, or that the "vertical road"
+for fired employees became a room.
+
+`docs/plan/08-PLAN-V2-100X.md` §9 holds the packages and their acceptance criteria, which is closer,
+but a package is a unit of work and a requirement outlives several of them. WP-72, WP-78, WP-79 and
+WP-85 are four packages against one standing wish — *the floor should look like a place* — and
+nothing in the tree said so.
+
+### 165.3 What was built
+
+`docs/00-REQUIREMENTS.md`, a register of numbered requirements (`R-NNN`, never reused), each carrying
+the owner's own words with their date, the interpretation the team took from them, the reason the
+requirement exists, its status, and what implemented it. Also: seventeen standing principles (`P-NN`)
+that constrain every requirement rather than being finished by one; thirteen user stories in the
+owner's framing; the five open requirements from his 15 September message as WP-86 to WP-90; and a
+closing section for what could **not** be traced to a source.
+
+The owner's words came from the project's own Claude Code transcripts, 30 August to 15 September
+2026, read read-only through a small extraction script that kept records of `type: "user"` with
+human-typed content and dropped tool results, system reminders, scheduled prompts and the
+task-notification blocks that arrive on the same channel. Seventy messages survived that filter out
+of 189 candidates. Several of the earliest survive only inside conversation summaries left by
+compaction; those summaries list the owner's messages verbatim, so the quotes are still his, and the
+register says where the surrounding context is gone.
+
+### 165.4 The rule it imposes
+
+**Every work package adds or updates the requirement it serves.** A package that ships without
+touching a row in `docs/00-REQUIREMENTS.md` has not finished, and a package whose behaviour
+contradicts a row says so in the row rather than in a commit message. One line in `CLAUDE.md` (a new
+file, this package) and an index row in `docs/README.md` point at it.
+
+This is deliberately the same shape as rule 9 in `08` §1.1 — every deviation gets a numbered entry
+here. The two logs answer different questions and are read together: this one says what changed
+against a plan and why; that one says what was asked for and why.
+
+### 165.5 What the register found that nobody had written down
+
+Four things fell out of assembling it, and all four are on the record now rather than in a
+transcript:
+
+1. **WP-78's reception contradicts the owner's own sentence.** On 14 September he asked that
+   "nobody sits by default in front of manager, everybody is waiting on sofa. Only the agent opened,
+   walks upto the manager desk." WP-78 shipped the opposite: the whole waiting queue at the desk,
+   visitor chairs oldest-first then a standing queue, and never a sofa. §153's reasoning is sound —
+   oldest-first is only legible as a queue — but the disagreement had never been stated. It is
+   R-043's notes now.
+2. **The "vertical road" was never built.** The owner asked, 1 September, for 5–8% of the screen as a
+   street that fired employees walk up and down. §45 built The Departed, a room, because an empty
+   road is a hole in a floor plan. R-026.
+3. **§30 is still a RAISE and WP-79 closed it in practice.** Whether per-project colour belongs on
+   the body was left open in August; WP-79 put the **state** colour over the whole body mass, which
+   decides it, and no entry said so. R-054.
+4. **The `claude://code/continue?session=<uuid>` deep link has been unverified since 31 August**
+   (§9), and the owner's related worry — that resuming in a terminal consumes usage his app sessions
+   do not — has never been measured in either direction. R-106.
+
+### 165.6 What this entry does not claim
+
+No requirement's status in the register was taken from a package's own description. Every `done`
+cites a numbered entry in this log or a §9 row already marked done, and anything that could not be
+supported that way is `in progress` or `planned` instead. The register is a reading of the
+transcripts and the documents; it is not a test run, and nothing in it was measured on a machine by
+this package.

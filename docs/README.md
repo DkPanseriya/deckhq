@@ -11,6 +11,7 @@ The blueprint below is complete. Read in order.
 
 | Doc | Contains | Read it before |
 |---|---|---|
+| [00-REQUIREMENTS.md](00-REQUIREMENTS.md) | The requirements register and spec sheet: every requirement the owner asked for, in his own words with its date, what it was taken to mean, why it exists, its status, and what built it. Also the standing principles, the user stories, and what was declined and why. **Every work package adds or updates the requirement it serves** | Starting or scoping any work package |
 | [01-PRODUCT.md](01-PRODUCT.md) | The problem (measured), the invariant, the six-state model, the feature list, what is explicitly out of scope, success criteria, commercial position | Anything |
 | [02-ARCHITECTURE.md](02-ARCHITECTURE.md) | Process model, the `RuntimeAdapter` contract, data model, state determination, the full HTTP API, hook installation, persistence, performance budgets, security | Writing any code |
 | [03-VISUAL-SPEC.md](03-VISUAL-SPEC.md) | Camera and LOD bands, the character rig, all 16 motion clips, state-to-visual mapping, materials, interaction, notifications, accessibility. **§2 (floor generation) is superseded by 05, and again by WP-50 and WP-55; §3's appearance rule is superseded by WP-20** — both say so in place | Writing any renderer code |

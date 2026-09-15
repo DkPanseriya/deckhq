@@ -1016,6 +1016,21 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
 
 ### Documentation
 
+- **`docs/00-REQUIREMENTS.md` — the requirements register and spec sheet — WP-90.** The owner,
+  15 September: _"over the history of our chats, I have talked about many requirements and user
+  stories or usecases. I want you to document them all, so we have a track of what has been
+  implemented why, and later if we change something we can refer why we did something."_ A document,
+  not code. One numbered row per requirement (`R-NNN`, never reused) carrying the owner's own words
+  with their date, the interpretation taken from them, why the requirement exists, its status, and
+  what implemented it — with **every `done` citing a `docs/DEVIATIONS.md` § or a `08` §9 row already
+  marked done**. Plus seventeen standing principles, thirteen user stories in the owner's framing,
+  the five open requirements from his 15 September message (WP-86 names, WP-87 animations, WP-88 the
+  graphics control centre, WP-89 the sub-agent crew, WP-90 this register), what was declined and why
+  (the 3D renderer, the official sponsor track, the standalone executable), and a closing section
+  naming what could not be traced to a source — including the two places where what shipped
+  contradicts what the owner asked for. **New rule, in `CLAUDE.md` and in the register's §0: every
+  work package adds or updates the requirement it serves.** `docs/DEVIATIONS.md` §165.
+
 - **`docs/07-STUDIO-DESIGN.md` — Studio, the design of record for an opt-in mode that turns an idea
   into a real office.** A document, not code: nothing under `src/`, `public/` or `test/` was
   touched and nothing in it has been run. Idea → grill → blueprint → roster → hire → board →

@@ -1,0 +1,1189 @@
+# 00 — Requirements register and spec sheet
+
+**Status:** living register, opened 15 September 2026 (WP-90) · **Owner:** orchestrator ·
+**Sources:** the owner's own words in this project's Claude Code transcripts (30 August –
+15 September 2026), `docs/01-PRODUCT.md`, `docs/plan/08-PLAN-V2-100X.md`, `docs/DEVIATIONS.md`,
+`CHANGELOG.md`, and the design documents named per entry.
+
+---
+
+## 0. How to read this
+
+This file is the product's **requirements register**. One entry per requirement the owner asked
+for, with the owner's own words, what those words were taken to mean, why the requirement exists,
+what state it is in, and what built it. It exists so that a change made in six months can be
+checked against the reason the thing was built in the first place, and so that nobody has to
+re-derive an intention from a diff.
+
+**What each field means.**
+
+- **Id** — `R-NNN`, stable forever. Numbers are never reused. A requirement that is replaced keeps
+  its id and gains a `superseded by` line.
+- **The owner's words** — a short verbatim quote with its date, from the transcripts. Spelling and
+  grammar are the owner's. Where a requirement was restated several times, the clearest statement
+  is quoted and the others are listed by date.
+- **Interpretation** — what the team decided the words meant. This is the part most likely to be
+  wrong, and it is written down so that it can be argued with.
+- **Why** — the reason the requirement is in the product. If this cannot be written, the
+  requirement should not be built.
+- **Status** — `done` · `in progress` · `planned` · `declined` · `superseded`.
+- **Implemented by** — WP ids, `docs/DEVIATIONS.md` § numbers, and commits where they are easy to
+  name. **Every `done` in this file cites a DEVIATIONS § or a §9 row marked done.** A requirement
+  with no citation is not done, whatever the code looks like.
+- **Notes** — trade-offs, and what was explicitly decided against.
+
+**The rule this file imposes on every work package.**
+
+> **Every work package adds or updates the requirement it serves.** A package that ships without a
+> row here has not finished. A package that contradicts a row here must say so in the row, not in a
+> commit message.
+
+This is the same discipline `docs/DEVIATIONS.md` applies to departures from a plan: the log records
+what changed and why; this file records what was asked for and why. They are read together.
+
+**Precedence.** `docs/01-PRODUCT.md` §2 (the invariant) outranks everything. Then
+`docs/plan/08-PLAN-V2-100X.md` §1.1. Then this file. Then the design documents. Where this file and
+the code disagree, the code is the defect until a DEVIATIONS entry says otherwise.
+
+---
+
+## 1. Product principles
+
+The standing rules. These are not requirements that get finished; they are constraints on every
+requirement below. Numbered `P-NN` so a register entry can cite them.
+
+| id | Principle | Source | Date |
+|---|---|---|---|
+| P-01 | **The invariant.** `activityState` is observed; `ackState` is owned by the user. No observed event may clear a user-owned state. | `01-PRODUCT.md` §2; `08` §1.1 rule 1 | blueprint, standing |
+| P-02 | **Observe, never simulate.** Everything on the floor is a real session read through an adapter. No synthetic message, no fabricated progress, no card that moves because a timer said so. Where a runtime cannot tell us something, the surface says so. | `07-STUDIO-DESIGN.md` §1; `ADAPTERS.md` §6 | 8 Sep 2026 |
+| P-03 | **The honesty rule.** A claim in anyone's documentation is a hypothesis until measured on a machine. A figure with no record behind it reads `no data`, never `0`. An unverified adapter says it is unverified. | `08` §1.1 rule 11; §111; §157 | 3 Sep 2026 |
+| P-04 | **Loopback only, zero egress.** 127.0.0.1, no analytics, no update checks, no CDN assets, no telemetry — ever, including after we charge. | `01-PRODUCT.md` §7; `08` §1.1 rule 2 | blueprint, standing |
+| P-05 | **No runtime dependencies in the core.** Dev dependencies are fine. A runtime dependency needs written approval and a changelog line. | `08` §1.1 rule 3 | 3 Sep 2026 |
+| P-06 | **Consent for writes outside the state directory.** Anything written outside `~/.deckhq/` is printed before it is written, tagged, and removable by the thing that wrote it. Hooks, shortcuts, status line, Studio's project directory. | `02-ARCHITECTURE.md`; §150 | standing |
+| P-07 | **Never touch `~/.claude`.** The user's real settings and transcripts are read-only. The same for `~/.codex`. DeckHQ never writes a runtime archive flag. | orchestrator briefs, standing rules in force | 3 Sep 2026 |
+| P-08 | **argv arrays, never shell strings.** Every process launch passes an argument vector. Paths that escape are refused, not clamped. Windows console launch is quoted by one shared module. | §54/WP-54, §98; `src/core/cmdline.mjs` | 3 Sep 2026 |
+| P-09 | **Deterministic goldens.** Nothing ships without a screenshot. Every rendered change regenerates the golden set; every clock-dependent value comes from the injected clock (`DECKHQ_NOW`), never `Date.now()`. | `08` §1.1 rule 10; WP-21 §87; WP-63 §146 | 3–7 Sep 2026 |
+| P-10 | **Reduced motion.** `prefers-reduced-motion` draws one static frame per state. Every animation package carries a golden proving it. | `03-VISUAL-SPEC.md` §9; WP-72/79 criteria | standing |
+| P-11 | **Accessibility via the deck table.** The floor is a picture; the deck is the same data as a semantic table, keyboard-reachable, with every action the floor offers. Nothing is only clickable on canvas. | `05-GUI-UX-SPEC.md` §3; WP-10 §103; WP-84 §156 | standing |
+| P-12 | **Cost is an estimate, never a bill** — and since WP-83, tokens are the default and money is behind a switch that ships off. | `08` §1.1 rule 7; WP-83 §157 | 3 Sep / 14 Sep 2026 |
+| P-13 | **Never score the human.** Agents get names, faces, traits and records. The user never gets a streak, a level, a badge or a guilt message. A test asserts no copy addresses the user in the second person with an implication of fault. | `08` §1.1 rule 6; WP-46 | 3 Sep 2026 |
+| P-14 | **All runtime-format parsing stays inside its adapter.** Nothing outside `src/adapters/` reads a transcript or shells out to a runtime CLI. | `08` §1.1 rule 8 | 3 Sep 2026 |
+| P-15 | **Capture beats features.** Between a feature and every session appearing, capture wins. A session that exists on disk and never appears on the floor is a product failure. | `08` §1.1 rule 4; `01-PRODUCT.md` §6 | 3 Sep 2026 |
+| P-16 | **Free core, MIT, no paywall on capture, the queue or an action.** Paid features are services you opt into. | `01-PRODUCT.md` §7; `08` §1.1 rule 2 | standing |
+| P-17 | **Every deviation is numbered.** `docs/DEVIATIONS.md`, append-only, with its reason and its measurement. | `08` §1.1 rule 9 | standing |
+
+---
+
+## 2. Requirements register
+
+### 2.0 Summary table
+
+| id | Title | Area | Status |
+|---|---|---|---|
+| R-001 | The product is a place to run an AI workforce, not only an ack inbox | Framing | done |
+| R-002 | The floor answers "is anything waiting on me" in under two seconds | Framing | done |
+| R-010 | One line to install, one question to pin | Install / app mode | done |
+| R-011 | Launch as an app, not a terminal plus a browser | Install / app mode | done |
+| R-012 | One-line installers for a stranger's machine | Install / app mode | done |
+| R-013 | A standalone executable for a machine with no Node | Install / app mode | planned |
+| R-020 | One continuous floor, partially divided, not separate square rooms | Floor / layout | done |
+| R-021 | The anchor hierarchy is literal: floor → walls + tables → chairs → agents | Floor / layout | done |
+| R-022 | Tables, rooms and room count adapt to headcount | Floor / layout | done |
+| R-023 | Create a new room, repo, project and agent from the GUI | Floor / layout | done |
+| R-024 | Remove zoom | Floor / layout | superseded |
+| R-025 | The floor uses the whole window and is not cramped | Floor / layout | done |
+| R-026 | Band shares: a small service column, the majority to project rooms | Floor / layout | done |
+| R-027 | One central corridor, two rows, rooms sharing walls | Floor / layout | done |
+| R-028 | Rooms are room-shaped, not thin rectangles | Floor / layout | done |
+| R-029 | Rooms only for active projects; no empty rooms | Floor / layout | done |
+| R-030 | Pin a project room so it survives having nobody in it | Floor / layout | done |
+| R-031 | Idle repos leave the floor and live in a popover | Floor / layout | done |
+| R-032 | The building is the size of what is in it | Floor / layout | done |
+| R-033 | The lounge does not take half the building | Floor / layout | done |
+| R-040 | Agents walk on corridors and never leave the building | Occupancy | done |
+| R-041 | Walking is fast enough to watch | Occupancy | done |
+| R-042 | Nobody stands on the furniture they are using | Occupancy | done |
+| R-043 | Nobody sits across from the manager except the one being reviewed | Occupancy | done, with a departure |
+| R-044 | Only live work is in a project room; everyone else is elsewhere | Occupancy | done |
+| R-045 | Benched agents rest in the lounge; archived agents are "fired" and reversible | Occupancy | done |
+| R-050 | The rig faces the way it is going | Characters | done |
+| R-051 | The animation set: typing, walking, drinking, thinking | Characters | done |
+| R-052 | A boss avatar in a suit, bigger and professional | Characters | done |
+| R-053 | Short names and MK tags instead of session names | Characters | done |
+| R-054 | Per-project appearance so agents are recognisable without reading | Characters | done |
+| R-055 | Agents big enough to find without hunting | Characters | done |
+| R-056 | Character rework: 45°, robot, readable, never furniture | Characters | done |
+| R-057 | Agent size is the user's preference, not the layout's | Characters | planned |
+| R-058 | One conversation is one agent | Characters | done |
+| R-059 | Names never carry a numeric suffix | Characters | planned |
+| R-060 | Character animations: thinking, working, running, lounge activities | Characters | planned |
+| R-061 | A crew animation for sub-agents and multi-agent workflows | Characters | planned |
+| R-070 | Design it like interior architecture, like a real office | Interior | done |
+| R-071 | A lounge you recognise in a second | Interior | done |
+| R-072 | A reception with sofas against the walls and room to breathe | Interior | done |
+| R-073 | Light, depth and honest shadows | Interior | done |
+| R-074 | A full interior pass: materials, furniture, density | Interior | in progress |
+| R-075 | Text legible over the floor | Interior | done |
+| R-076 | Furniture that launches the project it belongs to | Interior | done |
+| R-077 | A graphics control centre with curated, mixable interior options | Interior | planned |
+| R-080 | A whiteboard per room with the project's numbers | Plates / numbers | done |
+| R-081 | The plate's numbers are the ones that need action | Plates / numbers | planned |
+| R-082 | No white pop-up boxes; background only on hover | Plates / numbers | done |
+| R-090 | Per-project and per-session token accounting | Tokens / cost | done |
+| R-091 | Token usage, not money, because people are on subscriptions | Tokens / cost | done |
+| R-100 | Every action available in the GUI | Panels / deck | done |
+| R-101 | A minimal, uncluttered floor with nothing occluded | Panels / deck | done |
+| R-102 | Closing the agent panel closes the panel, not the browser | Panels / deck | done |
+| R-103 | "Fire", not "let go" | Panels / deck | done |
+| R-104 | A way back to the floor from every full-surface view | Panels / deck | done |
+| R-105 | The hooks banner disappears once hooks are installed | Panels / deck | done |
+| R-106 | Resume a session in the surface the user already uses | Panels / deck | in progress |
+| R-110 | OS notification and tab badge when a session needs the user | Notifications | done |
+| R-111 | Sound and OS toasts ship off until the owner says otherwise | Notifications | done |
+| R-120 | Claude Code and Codex, both verified | Adapters | done |
+| R-121 | Gemini CLI and OpenCode, declared unverified | Adapters | done |
+| R-122 | MCP servers are visible, and unknowable things are not guessed | Adapters | done |
+| R-130 | Come with an idea, leave with an office | Studio | in progress |
+| R-131 | Studio hires real sessions and never fakes a task feed | Studio | done |
+| R-132 | A board, a handover mechanism, and tracking that stays on track | Studio | planned |
+| R-140 | Approve from the phone | Relay | planned |
+| R-150 | Monetise without gating the product | Supporter pack | in progress |
+| R-151 | No official sponsor programme for now | Supporter pack | done |
+| R-160 | A documentation site | Docs / plugin / extension | done |
+| R-161 | Live where the user already lives | Docs / plugin / extension | done |
+| R-162 | A landing page that explains itself in seconds | Docs / plugin / extension | done |
+| R-170 | Tag, then never let a human be the release step | Releases | done |
+| R-171 | Commits are attributed to Darshak Panseriya | Releases | done |
+| R-172 | A product icon worth the product | Releases | done |
+| R-180 | This register | Owner-side | in progress |
+| R-181 | Owner-side blockers, named and sequenced for a beginner | Owner-side | in progress |
+| R-190 | A 3D renderer | Declined | declined |
+| R-191 | A manager agent that assigns work down a hierarchy | Declined | declined |
+| R-192 | Human streaks, leaderboards, XP, badges, guilt | Declined | declined |
+
+### 2.1 Product framing
+
+**R-001 — The product is a place to run an AI workforce, not only an ack inbox**
+*Owner, 2 September 2026:* "the only USP is not only the acknowledgement state in manager office
+that people forget taking follow up. Rather it is a system for Entrepreneurs and Builders, who work
+on multiple projects, can easily and intuitively manage their AI team seamlessly same as managing
+in actual office."
+**Interpretation.** The invariant is the mechanism, not the pitch. The product is the surface that
+shows a whole team at once — who is working, who is blocked, who finished, who is free, and what
+each project costs.
+**Why.** The original problem statement was too narrow to justify the floor. The floor is justified
+by the workforce, not by the inbox.
+**Status:** done. **Implemented by:** the 2 September amendment in `docs/01-PRODUCT.md` §1;
+`08` §1.3.
+**Notes.** The invariant is not demoted by this. It is what makes the office honest.
+
+**R-002 — The floor answers "is anything waiting on me" in under two seconds**
+*Owner, 14 September 2026:* "Only live working agents are on desks in the project rooms. Everyone
+else is in the lounge area, so I can clearly see which sessions are active at the moment."
+**Interpretation.** Glanceability is the acceptance criterion for every layout and occupancy
+decision, and it outranks completeness of display.
+**Why.** `01-PRODUCT.md` §3: the user wants what a manager gets for free by walking onto a floor.
+**Status:** done. **Implemented by:** WP-78 (`DEVIATIONS.md` §153), WP-50 (§96), WP-77 (§154).
+
+### 2.2 Install and app mode
+
+**R-010 — One line to install, one question to pin**
+*Owner, 14 September 2026:* "now from user perspective, if I want to share it with someone it is
+alot of friction to have this many step. make it easy to install and use."
+**Interpretation.** One thing to paste, then an icon. Four steps (install Node, global install,
+`deckhq app`, `deckhq shortcut --install --yes`) collapse to `npx deckhq app` plus one prompt.
+**Why.** `08` §1.2: a floor nobody installed reduces nobody's watching. Install friction is the
+tallest step in the funnel.
+**Status:** done. **Implemented by:** WP-75 (`DEVIATIONS.md` §151); `08` §9 WP-75 row marked done;
+`test/integration/tarball.test.mjs` packs, extracts and runs the tarball cold.
+**Notes.** The icon offer is asked once and recorded in `~/.deckhq/installed.json`; off a TTY it
+prints the command rather than hanging a login script. `state.json` keeps its one writer (P-01).
+
+**R-011 — Launch as an app, not a terminal plus a browser**
+*Owner, 6 September 2026:* "Also I sometimes do not like to deploy with terminal and open in
+browser and extra steps. Can it be made like an app, directly can be launched separetely"
+**Interpretation.** `deckhq app` opens the floor in a Chromium application-mode window with its own
+profile, its own taskbar button, no tab strip and no address bar; Desktop and Start Menu shortcuts
+under the consent discipline; optional autostart.
+**Why.** `08` §14: no feature that requires a browser tab to be open is useful to a user who does
+not keep one open.
+**Status:** done. **Implemented by:** WP-62 (`DEVIATIONS.md` §144).
+**Notes.** The browser is deliberately not spawned with `windowsHide`; that flag produced a whole
+browser with no window on the reference machine (§144.1–2).
+
+**R-012 — One-line installers for a stranger's machine**
+*Owner, 14 September 2026:* "make some kind of installer something."
+**Interpretation.** `install.ps1` and `install.sh` served from the docs site: check for Node 18+,
+*offer* to install it, then `npm install -g deckhq@latest`, then the icon question, then
+`deckhq app`.
+**Why.** Same as R-010; "install Node first" is the step the product could stop asking for.
+**Status:** done. **Implemented by:** WP-75 (`DEVIATIONS.md` §151); `scripts/install/`.
+**Notes.** Neither script is in the tarball and nothing in `src/` imports them, so P-05 is
+untouched. They reach winget, brew and npm and no other host (P-04).
+
+**R-013 — A standalone executable for a machine with no Node**
+*Derived from R-010/R-012*, not asked for directly.
+**Interpretation.** One downloadable signed file per platform, built by the release workflow.
+**Why.** Removes the last prerequisite.
+**Status:** planned (WP-76), and recommended **not now**.
+**Implemented by:** — **Notes.** `docs/plan/SEA-FEASIBILITY.md`: a bundler, an asset branch through
+the HTTP layer, ~$300/yr of certificates and ~110 MB per platform, against a WP-75 that already
+gets a stranger to an icon. Explicitly decided against for the current cycle.
+
+### 2.3 Floor and layout
+
+**R-020 — One continuous floor, partially divided, not separate square rooms**
+*Owner, 31 August 2026:* "The office should feel more like continuous single floor plan, partially
+divided by walls, no separate square rooms… Manager office top left, lounge area lower left,
+including games and kitchen."
+**Interpretation.** One envelope, zones tiled inside it, walls belonging to the floor rather than
+to each room.
+**Why.** A grid of detached boxes reads as a diagram; a floor reads as a place.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §21 (zones tile the envelope), §48 (one frame
+per room), §59 (two bands).
+
+**R-021 — The anchor hierarchy is literal: floor → walls + tables → chairs → agents**
+*Owner, 31 August 2026:* "Floor is base, then you can anchor wall and tables on it. Chairs are
+anchored to the table, and agents are anchored to the chairs, indoor plants are anchored to tables"
+**Interpretation.** Anchors are a resolved graph (`wall`, `corner`, `attached`, `centered`, `zone`),
+and seats are derived from *resolved* furniture, not from the layout frame.
+**Why.** Every visible misalignment in the project's history was a thing positioned against the
+wrong parent.
+**Status:** done. **Implemented by:** WP-13; `DEVIATIONS.md` §23, §16 (prop coordinate convention),
+§37 (seats from resolved furniture), §38 (a prop's rect is how it lies; `angle` is only which way it
+faces).
+**Notes.** §16 and §38 are the two conventions that cost the most to learn. They are asserted by
+tests rather than left as comments.
+
+**R-022 — Tables, rooms and room count adapt to headcount**
+*Owner, 31 August 2026:* "according to project size there can be different tables, if certain
+project grows up above 8 agents, we they can have 2 tables in the room. Tables can also be different
+sizes, 2 people, 4 people, 6 people, etc. that adjusts dynamically. ROom size also adapts
+accordingly. and number of rooms also adapts according to how many project the user is working on."
+Restated 3 September: "Desk sizes are dynamic based on active agents, the desks keeps expanding and
+splitting as workers increases."
+**Interpretation.** `tableSizesFor(n)` returns a bill of tables; the room's footprint is the sum of
+its furniture; the floor is the sum of its rooms.
+**Why.** A fixed grid either wastes the screen or hides people behind a "+13".
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §22, §31, §51; WP-50 (§96); WP-55 (§106).
+
+**R-023 — Create a new room, repo, project and agent from the GUI**
+*Owner, 31 August 2026:* "all functionality should be in our GUI only. User should be able to start
+new project, new repo, new agent in any repo, select avatar, name, type instructions, etc. But all
+with minimal interface."
+**Interpretation.** `/api/new-project` (create + `git init`), `/api/agent`, `/api/identity`, the `+`
+button in each room, the command palette.
+**Why.** A control plane that sends you back to a terminal to create things is a viewer.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §25; `src/http/routes/actions.mjs`.
+
+**R-024 — Remove zoom**
+*Owner, 31 August 2026:* "Remove the Zoom feature."
+**Interpretation.** At the time: the camera had a zoom multiplier that fought the fit scale and
+broke LOD. Removed entirely.
+**Why.** It produced states the layout was never designed for.
+**Status:** superseded. **Implemented by:** `DEVIATIONS.md` §27 (removed), then §50 (restored as
+*magnification only* — it cannot shrink below fit).
+**Notes.** The restored form is not the thing that was removed. Recorded here because the two
+entries read as a contradiction otherwise.
+
+**R-025 — The floor uses the whole window and is not cramped**
+*Owner, 6 September 2026:* "Why is UI not full screen wide and very cramped centered."
+Earlier, 1 September: "The floor is not using full screen size available."
+**Interpretation.** The envelope's aspect follows the window; the arrangement switches to two rows
+on wide stages; the rooms fill the working side.
+**Why.** The product's one picture was occupying a third of the screen it was given.
+**Status:** done. **Implemented by:** WP-59a–d (`DEVIATIONS.md` §139, §140, §141, §142); WP-60
+(§145).
+
+**R-026 — Band shares: a small service column, the majority to project rooms**
+*Owner, 1 September 2026:* "on far left make a vertical road, the fired employees walk on the road
+up and down nothing else. hardly 5-8% of screen as street/road for fired people. Then around 30% as
+manager office and lounge area. And 60% plus space for project rooms."
+**Interpretation.** A service column (reception above lounge, The Departed at its foot) at roughly a
+third, and the working band taking the rest.
+**Why.** The project rooms are the subject of the picture; the service rooms are context.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §59 (`SERVICE_SHARE` ~32%, working ~65%;
+measured 25% → 62% of width, 13% → 31% of floor area), §61, §57.
+**Notes.** The literal "vertical road that fired employees walk up and down" was **not** built as a
+road. The Departed became a small tiled room at the foot of the service column with packing boxes,
+a bench and an exit sign (§45), because an empty road is a hole in a floor plan and the room reads
+as somewhere people are leaving *from*. This is a departure from the owner's words and is recorded
+as one.
+
+**R-027 — One central corridor, two rows, rooms sharing walls**
+*Owner, 1 September 2026:* "keep only one shared horizontal corridor in center. So it will be 2 row
+layout… rooms sharing the vertical walls side by side. No more corridor. only one more vertical
+corridor between manager office - lounge area and the project areas."
+**Interpretation.** Exactly two circulation lines: one vertical between the service column and the
+working band, one horizontal through the working band.
+**Why.** Corridors were eating the floor they were supposed to connect.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §60, §61, §53 (corridors get a material of
+their own), §32 (the central corridor), §33 (the nav graph the router uses).
+
+**R-028 — Rooms are room-shaped, not thin rectangles**
+*Owner, 1 September 2026:* "project rooms cannot be very thin rectangles, they are meant to be more
+like rooms closer to square rectangles."
+**Interpretation.** Aspect clamps on every room, and a packer that respects them.
+**Why.** A 38 × 10 cell cannot hold a 5 × 5 desk cluster and reads as a corridor.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §17 (treemap → bin packer), §24 (row tiling),
+§62 (squarified treemap for the working band), §18, §12.
+
+**R-029 — Rooms only for active projects; no empty rooms**
+*Owner, 3 September 2026:* "lets make dynamic project rooms. When nothing is running the floor is
+just one room. When one agent starts working the whole floor is one project room. When multiple
+agents starts working, the floor is divided in active project rooms. So I do not have to see empty
+rooms without any interior or dead projects."
+**Interpretation.** The plan is a function of active projects and active agents, not of the
+repositories on disk.
+**Why.** On the reference machine the old rule drew ten large empty cells across most of the working
+floor for one occupied room.
+**Status:** done. **Implemented by:** WP-50 (`DEVIATIONS.md` §96); `08` §3 B6; supersedes
+`05-LAYOUT-REWORK.md` §6.1 and §6.3.
+
+**R-030 — Pin a project room so it survives having nobody in it**
+*Owner, 3 September 2026:* "I also want to give option to pin certain projects rooms, which I
+everyday work on, which I want to see everyday." Restated 14 September: "to pin any particular
+project rooms for always in room, so that room does not collapse when agents not running, maybe
+downsized according to live agents."
+**Interpretation.** A pinned repo keeps a room with one desk and nobody at it, at most a third of
+the narrowest live room's footprint, with a `N sessions · pinned` plate. It fills out the moment a
+session starts.
+**Why.** R-029 is right and, applied alone, removes the repo the user is about to work in.
+**Status:** done. **Implemented by:** WP-77 (`DEVIATIONS.md` §154); `08` §9 WP-77 row marked done.
+**Notes.** The pin is **user-owned state** and is held to P-01: `pins[projectId]` in `state.json`,
+written by `POST /api/pin` and nothing else, with an `INVARIANT:` test
+(`test/unit/pins.test.mjs`). Pin and unpin from the idle popover or `⌘K`, which offers it for every
+project rather than only the idle ones.
+
+**R-031 — Idle repos leave the floor and live in a popover**
+*Owner, 1 September 2026:* "give me option to archive some rooms as well… it is better to collapse
+that room as well. So not to have non functional clutter. Once those agents are activated, the room
+can pop up automatically." Restated 6 September: "make the idle project list in right bottom corner
+as a pop up list, when hovered or clicked then only opens. So keep less clutter on screen. And
+remaining project room size make it dynamic and full size for live projects."
+**Interpretation.** Idle repos become a corner chip that opens a list on hover or click; the space
+they leave goes to live rooms; a session starting brings the room back with no user action.
+**Why.** Clutter that carries no state is the thing the floor is supposed to be better than.
+**Status:** done. **Implemented by:** WP-60 (`DEVIATIONS.md` §145); earlier forms `DEVIATIONS.md`
+§58, §48 (idle repos collapse to a strip).
+
+**R-032 — The building is the size of what is in it**
+*Derived, 3 September*, from R-022 and R-029.
+**Interpretation.** A room's footprint comes from its occupants and their furniture, and the floor's
+extent is the sum of its rooms, the service column and the corridors. What the building does not
+need is ground, not carpet.
+**Why.** WP-50 drew the right rooms and the treemap still stretched them to tile the window: one
+active project got an 88 × 67 room for a two-seat table.
+**Status:** done. **Implemented by:** WP-55 (`DEVIATIONS.md` §106). Measured: 56.8 × 54.5 units
+instead of 132.4 × 76.3, one 16.7 × 22.9 room instead of 90.4 × 67.1, bodies at 42.6 px instead of
+30.4.
+**Notes.** This supersedes `05-LAYOUT-REWORK.md` §3.1's "no letterbox band wider than 8 px". There
+is ground around the building on purpose now.
+
+**R-033 — The lounge does not take half the building**
+*Owner, 14 September 2026:* "Also now the lounge is very big whole half bottom."
+**Interpretation.** The lounge is sized by its benched population, capped at 25% of stage height at
+five or fewer benched, with a floor minimum below that; the space it gives back goes to live rooms.
+**Why.** A room sized by its furniture rather than its people takes a share of the screen its
+population has not earned.
+**Status:** done. **Implemented by:** WP-77 (`DEVIATIONS.md` §154).
+
+### 2.4 Occupancy and seating
+
+**R-040 — Agents walk on corridors and never leave the building**
+*Owner, 31 August 2026:* "I see agent leaving manager office and goes out of screen in any random
+direction, and appears after few seconds on other side of screen… So bind the walking area on the
+corridor that is there… they cannot just run out of screen or cross the walls anywhere."
+**Interpretation.** A nav graph of corridor centrelines with a `door` and a `navEntry` per room;
+routes go door → navEntry → corridors → navEntry → door, clamped to the floor.
+**Why.** A character walking through a wall destroys the one thing the metaphor is for.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §33, §32.
+
+**R-041 — Walking is fast enough to watch**
+*Owner, 31 August 2026:* "Make walking faster, they are taking alot of time."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §39 (`WALK_SPEED` 4.5 → 13).
+
+**R-042 — Nobody stands on the furniture they are using**
+*Owner, 31 August 2026:* "Now manager office sofa are against wall but agents are siting on floor
+not on the sofa."
+**Interpretation.** Seats are computed from resolved props after anchoring, and a test asserts zero
+unseated at every population.
+**Why.** The bug was invisible to the unit suite and obvious in one screenshot — the case that made
+P-09 a rule.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §37, §43.
+
+**R-043 — Nobody sits across from the manager except the one being reviewed**
+*Owner, 31 August 2026:* "nobody directly sits across the manager, only the one that is being
+called, reviewed will go to manager desk and sit there." Restated 14 September: "And nobody sits by
+default in front of manager, everybody is waiting on sofa. Only the agent opened, walks upto the
+manager desk."
+**Interpretation as built (WP-78).** Every session in a waiting state is **at the manager's desk** —
+two or three visitor chairs oldest-first, then a standing queue, and never a sofa — and selecting
+one moves nobody.
+**Why.** The reception had become a register of everything that had ever run (21 bodies over one
+working session on the reference machine), and the queue's order is the product's answer to "who has
+been waiting longest".
+**Status:** done, **with a departure**. **Implemented by:** WP-78 (`DEVIATIONS.md` §153); the
+`01-PRODUCT.md` §4.2 amendment of 14 September.
+**Notes and trade-off.** The owner's 14 September sentence asks for the opposite of what shipped:
+he asked for everybody on the sofa and only the opened agent at the desk. WP-78 put the waiting
+queue at the desk and kept the sofas for nobody. The reasoning is in §153 — oldest-first ordering is
+only legible as a queue — but **this row is the record that the owner's words and the built
+behaviour differ**, and it is the first thing to re-read if the reception is revisited. The 31
+August half ("selecting one moves nobody") is honoured exactly.
+
+**R-044 — Only live work is in a project room; everyone else is elsewhere**
+*Owner, 14 September 2026:* "Only live working agents are on desks in the project rooms. Everyone
+else is in the lounge area, so I can clearly see which sessions are active at the moment."
+**Interpretation.** A project room holds `working` and `stalled` and nobody else. `needs_input` and
+`for_review` go to the manager's desk; `benched` and `ended` go to the lounge; idle repos are off
+the floor entirely.
+**Why.** R-002. A room that shows everything that has ever run answers no question.
+**Status:** done. **Implemented by:** WP-78 (`DEVIATIONS.md` §153); `01-PRODUCT.md` §4.2 amendment;
+`03-VISUAL-SPEC.md` §5.1.
+**Notes.** `stalled` is the deliberate exception and keeps its desk, because it is live work that has
+gone quiet and may resume.
+
+**R-045 — Benched agents rest in the lounge; archived agents are "fired" and reversible**
+*Owner, 1 September 2026:* "Whichever sessions had last message from the claude and are no longer
+working, change their status to on bench, as they are idle, so they all should results in lounge
+area chilling. All sessions which are archived are employees fired, we should make something like
+funny small room where all fired employees stay, which incase if I remove from archive, are
+considered as rehired."
+**Interpretation.** A one-shot "settle floor" that benches every idle agent; `let_go` driven by the
+desktop app's `isArchived` flag, read-only, reversible.
+**Why.** A benched agent is *available capacity*, and the product should make that read as a good
+thing. Archiving is the user's act and is therefore reversible by the user's act.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §45 (The Departed), §46 (the app's archive
+drives `let_go` and only `let_go`), §47 ("settle floor").
+**Notes.** DeckHQ never *writes* the archive flag (P-07). The link between the app's store and the
+transcript is `cliSessionId`, verified on 43 of 51 app records (§46).
+
+### 2.5 Characters and identity
+
+**R-050 — The rig faces the way it is going**
+*Owner, 31 August 2026:* "the characters have hands on one side and head on other side, looks like
+hands are on backside. very wrong."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §26 (`facingRot = bodyAngle + π/2`; the head's
+dot product with facing was exactly 0).
+
+**R-051 — The animation set: typing, walking, drinking, thinking**
+*Owner, 31 August 2026:* "Typing hands in the front. Sideways hand swinging motion while walking.
+One hand mug coffee drinking. And when it is in thinking mode, then the pop up thought artifact"
+Restated 31 August: "When agents are thinking while working they should have a cloud form beside
+their head kind of like thinking emoji like."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §40 (the thinking cue is a cloud, not three
+dots); `public/render/clips.js`.
+**Notes.** Superseded in form by WP-79's seven poses (§162); the list of *what* is animated is the
+requirement, and it is extended by R-060.
+
+**R-052 — A boss avatar in a suit, bigger and professional**
+*Owner, 31 August 2026:* "make a boss manager avatar, the main, in Suit maybe, also bit bigger,
+professional and fit"
+**Status:** done. **Implemented by:** the `manager` prop painter; `DEVIATIONS.md` §34's reception.
+
+**R-053 — Short names and MK tags instead of session names**
+*Owner, 31 August 2026:* "lets give them some kind of short name or tag rather than session names,
+hovering on it will display the session name and other details. Either they can have minimal names
+like Marco, Dev, Tai… Or Each new project is MKx number and each new agent within is MKx.y number."
+**Interpretation.** Both: an MK identity (project `MKn`, agent `MKn.m`, persisted, never reused) and
+a short display name the user can choose from a pool.
+**Why.** A 36-character uuid is not a person and cannot be pointed at.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §29; `src/core/identity.mjs`, `public/names.js`.
+
+**R-054 — Per-project appearance so agents are recognisable without reading**
+*Owner, 31 August 2026:* "project wise they can have different colour, avatar, clothing, character,
+so they are already recognisable and no need to read all data. User gets used to the appearance."
+**Interpretation.** A per-project identity (hair, accent, glyph) rather than body colour, because
+body colour carries state and crimson is reserved for "needs you".
+**Why.** Two colour systems on one body cannot both be read.
+**Status:** done, with a recorded tension. **Implemented by:** `DEVIATIONS.md` §30 (marked RAISE);
+WP-20 (§105); WP-28 (§133).
+**Notes.** §30 is still a RAISE: whether per-project colour should move onto the body was left open
+and has not been closed. WP-79 (§162) puts the **state** colour over the whole body mass, which
+settles it in practice against the owner's words.
+
+**R-055 — Agents big enough to find without hunting**
+*Owner, 1 September 2026:* "Currently Agents are too small in size and user has to really focus
+where are who. Make them bigger and more recognisable." Then: "they look like fat people. Very big
+round stomach with small head, make it aesthetic."
+**Status:** done. **Implemented by:** the fit-scale clamp at 16–44 px of body (WP-55, §106); rig
+proportions.
+
+**R-056 — Character rework: 45°, robot, readable, never furniture**
+*Owner, 14 September 2026:* "I dont like these current doodle design, make better ones, easy to have
+an overview, fun to look at, and distinguishable from environment. and bit bigger maybe. how about
+actual robot doodle something, but from top view all doodles will look shit. So make them side view
+or 45deg something." Owner's pick, 14 September: "go for it - character letter (B recommended)".
+**Interpretation.** Design first: PNG candidates judged by the owner before any rig code. Identity,
+rarity and traits stay a pure function of the session id.
+**Why.** The characters were being mistaken for furniture, which is the one thing the floor must not
+allow.
+**Status:** done. **Implemented by:** WP-79 (`DEVIATIONS.md` §162); candidates in
+`docs/media/design/character/`; `08` §13.23 records the decision.
+**Notes.** `BODY_HEIGHT_U` stayed 2.52 so the camera did not move; nine goldens rebaked at
+0.31–2.99% of pixels.
+
+**R-057 — Agent size is the user's preference, not the layout's**
+*Owner, 14 September 2026:* "add some kind of customisation, the user can set preference, of sizes
+of agents compared to screen. Someone working with 100 agents may want to see them smaller, someone
+with only 5-10 want to have sizes bigger, so they are not lost in the space."
+**Interpretation.** small / medium / large / auto, with auto derived from the live count (≤ 10
+large, ≤ 40 medium, else small). It changes rig and label scale and **no plan geometry** — the same
+population produces the same room rectangles at all four settings.
+**Why.** The right character size is a function of how many there are, and only the user knows
+which regime they are in.
+**Status:** planned (WP-80). **Notes.** Folded into R-077's control centre by the owner's
+15 September message; WP-80 and WP-88 must not ship two settings for one thing.
+
+**R-058 — One conversation is one agent**
+*Owner, 14 September 2026:* "I see southeast asia trip planning agent named Greta 2 in the room, and
+for same session agent named sena 3 chilling in lounge. So Do thorough bug scans and resolve
+everything."
+**Interpretation.** Resume chains produce several session ids for one conversation; the registry
+believed in all of them.
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §155; the working in
+`docs/plan/BUG-DUPLICATE-AGENT.md`.
+
+**R-059 — Names never carry a numeric suffix**
+*Owner, 15 September 2026:* "I dont like names like Livia 1,2,3. Make list big enough so that we do
+not run out of names."
+**Interpretation.** The pool must exceed any realistic conversation count so the `"<base> N"`
+fallback is never engaged, and the fallback itself should be reconsidered.
+**Why.** A numbered name is the product admitting it ran out, in the one place the user reads most.
+**Status:** planned (**WP-86**). **Implemented by:** partially — WP-84 (`DEVIATIONS.md` §156) raised
+the pool to ≥ 200 with the original sixty frozen in place and order; it currently holds 243 names
+against 92 conversations on the reference machine. The owner reported the suffix again on
+15 September, so either the fallback still engages or the observation predates the merge. WP-86
+owns finishing it.
+**Notes.** The original sixty names and their order are frozen, because goldens paint names.
+
+**R-060 — Character animations: thinking, working, running, lounge activities**
+*Owner, 15 September 2026:* "now that we have robot doodles, make also thinking cloud, working etc
+animation. Also some other animations for playing games or drinking coffee in the lounge. And
+running animation."
+**Interpretation.** The WP-79 robot needs the clip set the old rig had, plus a run cycle and lounge
+activities (games, coffee) that make a benched agent read as available capacity rather than as
+stalled work.
+**Why.** `01-PRODUCT.md` §4.3: watching them enjoy themselves is a deliberate reward for having
+cleared your queue.
+**Status:** planned (**WP-87**). **Notes.** Every clip is bound by P-10 (one static frame under
+reduced motion, with a golden) and P-09 (phase from the injected clock, never `Date.now()`).
+
+**R-061 — A crew animation for sub-agents and multi-agent workflows**
+*Owner, 15 September 2026:* "many times chat sessions do launch background task subagents, or multi
+agent workflow… If a chat session fires another 3+ agents or multiagent workflows, (if that is
+trackable), In our GUI, it launches all those sub agents (smaller in size) all connected by cables
+to the main chat session agent, surrounding around, sat on floor, with their own laptop, feeding the
+data by cables to main agent."
+**Interpretation.** When a session has three or more live sub-agents, the juniors are drawn on the
+floor around the parent with laptops, joined to it by cables, with data pulses along the cables
+toward the parent.
+**Why.** A fan-out is the most impressive thing these runtimes do and the floor currently shows it
+as a number.
+**Status:** planned (**WP-89**). **Implemented by:** the detection half exists — WP-41 (`DEVIATIONS.md`
+§120) attaches subagent transcripts to their parent and draws juniors beside it, and §120 names what
+is measured and what is inferred. WP-89 is the composition, the cables and the pulses.
+**Notes.** The owner's "if that is trackable" is honoured by P-03: where the parent link is inferred
+rather than observed, the floor must not draw a cable that claims otherwise. Juniors are never in
+the needs-you count unless they raise a hand themselves.
+
+### 2.6 Interior
+
+**R-070 — Design it like interior architecture, like a real office**
+*Owner, 31 August 2026:* "So design like an interior design architecture and make it like real
+office."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §31 (furniture is a verb), §64 (project rooms
+are furnished, not just occupied), §44.
+
+**R-071 — A lounge you recognise in a second**
+*Owner, 31 August 2026:* "the lounge area, give it more elements which intuitively feels like it.
+Like TT table or Pool table, coffee machine, fruit bowl, etc. so looking at the room within a second
+one should know what is this room."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §36, §44 (a pool table has to look like a pool
+table).
+**Notes.** The lounge games are the one saturated accent left on the floor and the owner's decision
+(§13.22e) is that they stay, muted 22–26% toward the room's own carpet.
+
+**R-072 — A reception with sofas against the walls and room to breathe**
+*Owner, 31 August 2026:* "The waiting area in the manager office is too boring, make it like a big C
+section Sofa, on each wall, and then additional chairs, table, etc." and "THe manager office waiting
+room is very cramped. Sofa can be against walls, so sofa can be bigger and there feels free space."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §34, §35 (a sofa's rectangle is what says how
+it lies), §55.
+**Notes.** WP-78 (§153) later emptied the sofas of waiting sessions — see R-043's departure. The
+furniture stands; who sits on it changed.
+
+**R-073 — Light, depth and honest shadows**
+*Owner, 14 September 2026:* "the oval shadows sometimes are offset and does not make any sense."
+**Interpretation.** One `LIGHT_DIR` feeds every cast; tall props cast an offset shadow and short
+props and characters do not; a character's contact ellipse is within 1 px of its feet.
+**Why.** WP-72 gave the floor one light and applied it to things with no height, so people read as
+floating.
+**Status:** done. **Implemented by:** WP-72 (`DEVIATIONS.md` §149) for the light; WP-78
+(`DEVIATIONS.md` §153) for the correction, with tall/short declared per prop and a test that fails on
+a prop declaring neither.
+
+**R-074 — A full interior pass: materials, furniture, density**
+*Owner, 14 September 2026:* "I want you to also launch an interior designer expert, and get our tool
+analysed and evaluated in terms of design, the floor, the carpet, the colours, the furniture, the
+layout, the sizing, the items everything. And then improvise thoroughly every aspect of interior…
+make the best interior design first, then UI engineer does the UI interface tweaks a bit only on
+top, not the overhaul. The appearance and the engagement builds the positive experience."
+**Interpretation.** An audit first (`docs/plan/10-INTERIOR-DESIGN.md`), then three packages:
+materials and palette, the furniture set, then props/plants/density and the lounge and reception as
+places. The layout is **not** in scope — WP-55, WP-13, WP-77 and WP-78 already own it.
+**Why.** The audit found a herringbone block twelve times the area of a real one at 1.27–1.43:1
+internal contrast, the whiteboard as the brightest object in frame, a rug up to 2.6× its own desk
+cluster, four identical plants per room, a lounge three fifths bare — and one false written promise:
+`03-VISUAL-SPEC.md` §10 claimed every state colour clears 3:1 against its floor, and `needs_input`
+on the office parquet measured **1.70:1**.
+**Status:** in progress. **Implemented by:** WP-85a done (`DEVIATIONS.md` §160) — eleven tokens per
+theme, a 1.71 U herringbone at 1.08:1, a carpet weave instead of six thousand single-pixel fills,
+and §10 rewritten onto the figure halo and made a test. WP-85b done (`DEVIATIONS.md` §163) — four
+seat kinds at four footprints, a task rug capped at 1.35× its cluster, a whiteboard below the wall
+in luminance, and a break-out corner in any room with the spare floor for one. **WP-85c planned** —
+props, plants, density, and the lounge and reception as places.
+**Notes.** 85a deliberately landed **before** WP-79 so the character candidates were judged on the
+floor they would live on; 85b and 85c come after, because they size furniture against a 34 px robot
+rather than a 22 px rig. Two things in the design were **not adopted and said so**: the wool rug's
+`≤ 12 deep` clause (§57's rule binds first) and "no clear-floor patch larger than 10 U × 10 U"
+(a density statement WP-85c owns).
+
+**R-075 — Text legible over the floor**
+*Owner, 31 August 2026:* "The text in the manager office and lounge area are not visible over brown
+floor. so either do some shading, bold, borderline, or colour contrast something."
+**Interpretation.** Diagnosed as *pattern noise*, not contrast — the ink was already 5.5–8.1:1.
+Fixed with a halo stroke behind plate text, and later by WP-85a quieting the parquet.
+**Status:** done. **Implemented by:** the `plateHalo` stroke in `public/render/scene.js`; WP-85a
+(`DEVIATIONS.md` §160).
+
+**R-076 — Furniture that launches the project it belongs to**
+*Owner, 31 August 2026:* "there can be shelf in the room, clicking which can directly open me the
+repo local folder in explorer. and most of my projects has dashboard.bat file. So there can be
+something in office, clicking which will run that dashboard bat file and open dashboard for me in
+browser." Placement, 31 August: "Put the shelf and the terminal box on right vertical side, below
+plus button, so that the text on top left is not occluded… make the shelf and terminal box a bit
+bigger and visible as like real funiture size."
+**Interpretation.** `discoverActions(cwd)` finds conventional scripts (`dashboard.bat/.cmd/.ps1/.sh`)
+and a `.deckhq.json` manifest; the shelf reveals the repo in the file manager; the terminal box runs
+the action.
+**Why.** The floor should be able to do the things the user opens a terminal for.
+**Status:** done. **Implemented by:** `src/core/actions.mjs`, `src/http/routes/actions.mjs`
+(`/api/reveal`, `/api/run`, `/api/open`); `DEVIATIONS.md` §28 records the CSRF vulnerability this
+feature exposed and closed.
+**Notes.** `isInside()` refuses a path that escapes rather than clamping it (P-08). The CSRF guard
+(Origin + `Sec-Fetch-Site` on mutating routes) was added because loopback alone does not stop
+another web page POSTing to `/api/open` and `/api/send`.
+
+**R-077 — A graphics control centre with curated, mixable interior options**
+*Owner, 15 September 2026:* "I still dont see any option where do I configure overall GUI graphics,
+like office floor carpet and colours, Rugs, tables, chairs, sofa, plant, etc. We do not flood
+everything with too many options, but interior designer carefully crafts options, which can be mixed
+and matched or customised, so we give users some personlise. And same graphics control center give
+also configuration options for agent sizes, (accordingly size of table, chair, sofa everything
+adjusts automatically)."
+**Interpretation.** One settings surface holding designer-curated sets — floor, carpet, colour
+scheme, rugs, tables, chairs, sofas, plants — that combine without producing a bad floor, plus the
+agent-size control from R-057, with furniture scaling to the chosen agent size automatically.
+**Why.** Themes exist (WP-30, §125) and are a whole-floor diff; the owner is asking for per-element
+choice within a curated set, which is a different thing.
+**Status:** planned (**WP-88**). **Notes.** The options are the interior designer's, not a free
+palette: `10-INTERIOR-DESIGN.md`'s material system already derives every theme's tokens from one
+derivation, so a "set" is a token bundle rather than a colour picker. Every combination must still
+pass `assertThemeContrast`, `assertMaterialDiscipline` and the ≥ 3:1 figure-halo guard (P-03 and
+WP-85a). WP-88 **subsumes WP-80**; one setting for agent size, not two.
+
+### 2.7 Plates and numbers
+
+**R-080 — A whiteboard per room with the project's numbers**
+*Owner, 31 August 2026:* "There can be a top view of whiteboard. Hovering on it can dynamically open
+the project related stats like which session used how many tokens, totals, etc."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §65 (the whiteboard opens); WP-57 item 2 (the
+plate's payroll line is painted).
+
+**R-081 — The plate's numbers are the ones that need action**
+*Owner, 14 September 2026:* "Make sure the calculations on the white board of the project rooms are
+right and informative and not just there for the sake of it. make better UI decisions, what users
+care about to see, how they want to see it, how do you make it easy to read at a glance in split
+second and user does not have to spend effort to read it."
+**Interpretation.** The plate says who needs you and for how long, what each agent is doing now, and
+this session's tokens; type sizes rank them so the one figure that needs action is the largest; the
+payroll line is off by default; every figure traces to a ledger record or a transcript field and
+reads `no data` where one is absent.
+**Why.** A number on a plate that nobody acts on is decoration, and `01-PRODUCT.md` §4 says nothing
+on this floor is decorative-only.
+**Status:** planned (WP-81). **Notes.** WP-74 (HUD polish) was **superseded by WP-81**
+(`DEVIATIONS.md` §152): making the plate a card before deciding what is on it was the wrong order.
+
+**R-082 — No white pop-up boxes; background only on hover**
+*Owner, 31 August 2026:* "do not make white background pop up box, maybe just minimal fonts without
+background color." Corrected the same day: "the default names without hovering should be without
+background. But when mouse hovers over it, the pop up opening should have background because it will
+have many details."
+**Status:** done. **Implemented by:** plate text with a halo and no plate fill; the hover card with a
+surface. `DEVIATIONS.md` §63 keeps a clear strip for every room plate.
+
+### 2.8 Token usage and cost
+
+**R-090 — Per-project and per-session token accounting**
+*Blueprint F9*, `01-PRODUCT.md` §5.1: "Which project is eating my quota" is a real, unanswered
+question.
+**Status:** done. **Implemented by:** WP-17/48 the event ledger (`DEVIATIONS.md` §100), WP-26 the
+dated rate card (§111).
+**Notes.** §7 records that token totals on very large transcripts are approximate, and §11 records
+the read budgets (head ≤ 256 KB, tail ≤ 2 MB) that make them so. A tiered read was **rejected**: it
+undersampled big sessions, 2.64M → 0.93M tokens, inverting F9.
+
+**R-091 — Token usage, not money, because people are on subscriptions**
+*Owner, 14 September 2026:* "maybe we do not want today cost, etc because mostly people will have
+subscriptions. So they have different billing system, but it should help them track their token
+usage, where are they going, how much, in which sessions, how much input, cached, output, etc so
+they can make smart decision."
+**Interpretation.** Cost goes behind `settings.showCost`, which ships **off**. What shows in its
+place is token usage per session, per project, per model and per day, split into input, cache read,
+cache write and output, with where the tokens went and the trend against the previous seven days.
+Turning the setting on restores every cost surface exactly as it was.
+**Why.** A dollar figure at public list prices is not a subscriber's bill and not their budget.
+Tokens are what they actually spend and the thing a rate card cannot get wrong.
+**Status:** done. **Implemented by:** WP-83 (`DEVIATIONS.md` §157); `01-PRODUCT.md` §5.1 F9 amended.
+**Notes — P-03 in action.** The plan asserted the adapters already carried the breakdown. They did
+not: every adapter computed the four counters and summed two pairs away before the `SessionSummary`
+left it. WP-83 was therefore a capture change as well as a presentation one. Measured while
+delivering it: Claude Code and OpenCode report all four counters; **Codex and the Gemini CLI report
+no cache-write figure at all**, so a key is present only when the runtime named it, and a column
+nothing named reads `no data` rather than `0`.
+
+### 2.9 Panels, deck and navigation
+
+**R-100 — Every action available in the GUI**
+*Owner, 1 September 2026, to the UX reviewer:* "Evaluate if all basic as well as advanced
+functionality are available and mapped… Like starting new project, new sessions, new agents,
+changing models, checking usage, model configurations, Session states, everything. All
+functionalities should be highly intuitive and easy to figure out… the easy and always needing
+functionalities are not hidden under complex steps."
+**Status:** done. **Implemented by:** the panel, the deck (WP-10, §103), the command palette and
+settings sheet (WP-07, §94), the terminal deck (WP-42, §93) which gives every panel action a CLI
+equivalent through the same `act()` path.
+**Notes.** WP-42's acceptance criterion is the interesting one: *nothing in the CLI can clear a
+user-owned state except an explicit ack or bench command* (P-01).
+
+**R-101 — A minimal, uncluttered floor with nothing occluded**
+*Owner, 31 August 2026:* "The main GUI floor plan should not be cluttered, rather minimal."
+*Owner, 1 September 2026:* "The project white board is hidden under the top left name corner. Avoid
+placing anything there for occlusion avoidance… top right corner is cluttered with plus button for
+new agent, also a tree, and also the shelf. Spread the furniture properly."
+**Status:** done. **Implemented by:** `DEVIATIONS.md` §63 (every room keeps a clear strip for its
+plate), §15 (label priority is not label exemption), `03-VISUAL-SPEC.md` §7.
+
+**R-102 — Closing the agent panel closes the panel, not the browser**
+*Owner, 6 September 2026:* "Closing the side bar of agent is killing the chrome tab entirely, it
+should just close the agent side bar."
+**Status:** done. **Implemented by:** WP-61 (`DEVIATIONS.md` §143) — a stray
+`closeBtn.addEventListener('click', () => close())` in `panel-dom.js` resolved to `window.close`.
+A static gate now fails if any close path reaches `window.close` or a navigation.
+
+**R-103 — "Fire", not "let go"**
+*Owner, 6 September 2026:* "clicking on More for letting agent go, rename it to 'Fire', which
+basically archives the chat"
+**Status:** done. **Implemented by:** WP-61 (`DEVIATIONS.md` §143).
+
+**R-104 — A way back to the floor from every full-surface view**
+*Owner, 14 September 2026:* "ones user clicks the agents tab, or list of all who are waiting, there
+is literally no button to close that panel or go back to floor view"
+**Interpretation.** Every full-surface view carries a visible ✕ top right and a "Back to floor" top
+left, both keyboard-reachable, with `Esc` printed in the view's own title; a static gate enumerates
+views from the stylesheet so one added without a way off it fails.
+**Status:** done. **Implemented by:** WP-84 (`DEVIATIONS.md` §156).
+
+**R-105 — The hooks banner disappears once hooks are installed**
+*Owner, 1 September 2026:* "once hooks are installed, we no longer need to continuously show that to
+user. Can be removed from toolbar."
+**Status:** done. **Implemented by:** the header's hooks state; WP-36 (`DEVIATIONS.md` §83) removed
+the way to create the mismatch the banner existed to warn about.
+
+**R-106 — Resume a session in the surface the user already uses**
+*Owner, 31 August 2026:* "I use my claude code with windows app, is it possible that from our GUI
+when I open a chat, with a button it can directly open exactly that chat session in the windows
+claude code app… for continuity ideally I want to make this product as user should be able to
+continue in either default preference, if he always has been using terminal, then he should be able
+to quickly pick up session in terminal, if in app then in app."
+**Interpretation.** A per-user default continuation surface (app or terminal), and a deep link that
+resolves a *specific* session in the desktop app.
+**Why.** The owner's second worry in the same message: "it seemed like loading in terminal would
+consume usage, as my sessions run in the app."
+**Status:** in progress. **Implemented by:** the terminal launcher (WP-04, `DEVIATIONS.md` §91 —
+ten terminals, twenty-one asserted argv arrays), `/api/resume` and `/api/resume-targets`,
+`src/adapters/claude-code/desktop.mjs`.
+**Notes and honesty.** Whether `claude://code/continue?session=<uuid>` resolves a *specific* session
+is **still unverified** and is listed as such in `DEVIATIONS.md` §9 (unverified paths). Under P-03 it
+must not be claimed anywhere until a machine has confirmed it. The usage worry has not been measured
+either way.
+
+### 2.10 Notifications and sound
+
+**R-110 — OS notification and tab badge when a session needs the user**
+*Blueprint F10*: the window will be buried behind terminals.
+**Status:** done. **Implemented by:** WP-16 (`DEVIATIONS.md` §101); `src/core/notify.mjs` /
+`notify.ps1`.
+**Notes.** §101 records the notification a closed tab cannot send and the PowerShell flag that had to
+change.
+
+**R-111 — Sound and OS toasts ship off until the owner says otherwise**
+*Derived from P-06.* Sound ships off against `05-GUI-UX-SPEC.md` §8's default; `settings.osNotify`
+ships off with no row in the settings sheet.
+**Why.** Flipping sound would make every existing install start making noise on upgrade. Whether a
+background process may raise OS toasts is a different consent from the browser's, and defaulting it
+on because the browser's is on would be deciding for the owner.
+**Status:** done as a default; the **default itself is an open owner decision** (`08` §13.8, §13.9).
+**Implemented by:** WP-15 (`DEVIATIONS.md` §110 — three sounds measured rather than described), WP-16
+(§101). The reason sound is off is pinned by a named test.
+
+### 2.11 Adapters and runtimes
+
+**R-120 — Claude Code and Codex, both verified**
+*Blueprint §9*: two adapters, not one, because a single-adapter product is what a first-party
+feature can obsolete; two also force the interface to be honest.
+**Status:** done. **Implemented by:** Claude Code throughout; Codex verified against a real rollout
+on 4 September (`DEVIATIONS.md` §137, with §135 the prep and §136 three defects found before there
+was anything to break). §8 lists the four things about Codex that are still not verified.
+**Notes.** §95 removed the last shell string in the tree (P-08). Codex liveness is inferred from file
+mtime and the adapter says so (§8, §137).
+
+**R-121 — Gemini CLI and OpenCode, declared unverified**
+*Derived from the adapter interface's purpose.*
+**Status:** done, **unverified**. **Implemented by:** WP-24/25 (`DEVIATIONS.md` §123 — two runtimes
+read from their documentation, and the SQLite file nobody parsed).
+**Notes.** `docs/ADAPTERS.md` §6 makes this a rule, not an apology: an adapter is unverified until it
+has run against real data and **must say so** on every surface. This is P-03 applied to the thing
+most tempting to overstate.
+
+**R-122 — MCP servers are visible, and unknowable things are not guessed**
+*Derived, 8 September*, from a tool name in a transcript reading `mcp__gmail__send`.
+**Interpretation.** An MCP server is configured once and then invisible; when it stops answering the
+agent quietly loses a third of its tools and the session looks identical. Make the servers sayable
+in three places and the tools readable in two, and decline to say anything where the only available
+answer would be a guess.
+**Status:** done. **Implemented by:** WP-64 (`DEVIATIONS.md` §147).
+**Notes.** Both halves started from a documented claim; one of the two hypotheses was wrong when
+measured (P-03).
+
+### 2.12 Studio — idea to office
+
+**R-130 — Come with an idea, leave with an office**
+*Owner, 8 September 2026:* "our base product is the office orchestration. Where user is still in
+charge of creating agents, and defining roles and etc. But we can also have additional feature where
+you define what you want to do or build, it will grill down to plan with user, and accordingly
+suggest which agents or experts needed, and it will create an office, a framework, a task dashboard
+with kanban and things, some handover mechanism, some tracking, some kind of control and to make
+sure things always stay on track, etc. so someone can just come with idea and start building."
+Approval, 8 September: "plan approved".
+**Interpretation.** An **opt-in mode, per project**. Idea → Grill (a real `claude` planner
+interviews the user) → Blueprint → Roster → **Hire** (one real session per role in its own git
+worktree) → Board → Work → Handover → review gate → tracking → budget stop. The base product does
+not change and Studio never becomes the default.
+**Why.** The owner named a second starting point the product had no answer for. The constraint —
+that it must not become a second data path — is what makes it safe to build.
+**Status:** in progress. **Implemented by:** WP-66 done (`DEVIATIONS.md` §150 — the store, three
+schemas, consent, `deckhq studio enable|disable`, the endpoints that need no spawn, four named
+invariant tests including a static one that fails if a second writer of `card.column` ever appears).
+WP-67 done, less the interview (`DEVIATIONS.md` §159 — the brief as a file, schemas generated from
+`src/studio/schema.mjs`, `POST /api/studio/plan` starting a real `claude` through the same
+`openNewSession` call `/api/new-project` makes, artefacts validated on every read). **WP-68 to WP-71
+planned.**
+**Notes.** The name (Studio, over Workshop and Bureau) and eight defaults were decided by the owner
+on 8 September — `08` §13.20. One acceptance criterion of WP-67 is **owed and named as owed**: the
+reference machine's `claude` login is expired (§117), so no planner has run an interview and no
+`blueprint.md` has been written by a model.
+
+**R-131 — Studio hires real sessions and never fakes a task feed**
+*Derived from P-02, and binding on all of WP-66 to WP-71.*
+**Interpretation.** No synthetic message, no fabricated progress, no card that moves because a timer
+said so. A card's column is user-owned in the way `ackState` is: an observed event may *flag* a card
+and may never *move* it. Where a runtime cannot tell us something, the card says so.
+**Why.** A board that invents progress is worse than no board, and it would break P-01 by analogy.
+**Status:** done as a rule and as a gate. **Implemented by:** WP-66 (`DEVIATIONS.md` §150) — the
+static test that fails if a second writer of `card.column` appears.
+
+**R-132 — A board, a handover mechanism, and tracking that stays on track**
+*Same owner message as R-130.*
+**Interpretation.** WP-68 roster and Hire (three roles → three worktrees, three briefs, three
+sessions on the floor within one scan); WP-69 the board tab and card → session, fully keyboard
+reachable; WP-70 handover and the review gate (Accept is the only path from a handover to a column
+change; test counts render as a quotation); WP-71 tracking, drift and the budget stop (every figure
+traces to a ledger record or a handover line; a card over its cap moves only to `blocked` and kills
+nothing).
+**Status:** planned (WP-68, WP-69, WP-70, WP-71 — `08` §9 rows).
+
+### 2.13 Relay
+
+**R-140 — Approve from the phone**
+*Derived from `08` §1 line 4:* the one keystroke that justifies everything is *approve from here*,
+and later *from the phone*.
+**Interpretation.** A relay that is a router which cannot read: end-to-end encrypted, bring-your-own
+storage, no DeckHQ server holding plaintext.
+**Why.** It is the daily dopamine, the reason to keep the daemon up, and the paid tier — and it is
+the only way the product reaches the user when no tab is open (`08` §14).
+**Status:** planned, **design only**. **Implemented by:** `docs/06-RELAY-DESIGN.md`;
+`DEVIATIONS.md` §127 (the eight design decisions). No code. WP-32/33/34 are gated on owner decisions
+— hosting, the `relay.deckhq.dev` domain, the server licence (FSL-1.1-Apache-2.0 recommended,
+BUSL-1.1 the conservative alternative, client half MIT either way), VAPID key custody, retention —
+`08` §13.19.
+
+### 2.14 Supporter pack and monetisation
+
+**R-150 — Monetise without gating the product**
+*Owner, 1 September 2026:* "should it just open source project or can we monetise it a bit"
+**Interpretation.** `08` §1 line 5: sell storage and reach, never the floor. A Supporter pack of
+cosmetics, and later Relay ($9) and Teams ($18/seat) on bring-your-own storage.
+**Why.** vibe-kanban reached 27,900 stars and shut down for lack of a business model; every
+competitor in the category is free. The answer is not a paywall on capture.
+**Status:** in progress. **Implemented by:** WP-45 (`DEVIATIONS.md` §129) — a signed asset pack
+loaded from `~/.deckhq/packs/`, with a test that runs the acceptance script with and without the
+pack and diffs the API responses. **Two of the four planned items shipped free**: floor replay and
+the rate-card editor.
+**Notes — open.** Price and storefront are undecided (`08` §13.14, §13.17): keep $29 and ship more
+themes, drop the price, or make it explicitly a tip jar with cosmetics attached. Nothing sells the
+pack today — no purchase flow, no download page, no price anywhere. The publisher private key is
+unbacked-up on the reference machine and must move to a password manager (§13.18).
+
+**R-151 — No official sponsor programme for now**
+*Owner, 6 September 2026:* "leave sponsor official track aside for while, maybe add something in
+repo, if they want to support by private means, paypal or any other way to receive it. because i
+dont know if I have to comply any official channels for getting sponsored officially."
+**Status:** done. **Implemented by:** `package.json`'s `funding` removed and `.github/FUNDING.yml`
+deleted (commit `f26e8d2`); a "Support" section in the README naming a private channel on request and
+no programme.
+
+### 2.15 Docs site, plugin, extension
+
+**R-160 — A documentation site**
+*Derived from R-010:* a stranger needs somewhere to read before they install.
+**Status:** done. **Implemented by:** WP-29 (`DEVIATIONS.md` §112 — hand-written HTML, no generator,
+no dependency, and the promise it has to keep). It also serves `install.ps1` and `install.sh`.
+**Notes.** Pages is **gated on the owner** (`08` §13.2): `pages.yml` fails on every push because no
+workflow can enable Pages for its own repository. Nothing should link to the site until it is on.
+The owner reported it live on 4 September at `https://dkpanseriya.github.io/deckhq/`.
+
+**R-161 — Live where the user already lives**
+*Derived from `08` §1 line 3 and §14:* the browser tab is one surface among six, not the product.
+**Status:** done. **Implemented by:** Claude Code plugin WP-37 (`DEVIATIONS.md` §102 — hooks carry
+no port; the daemon publishes the one it bound to `~/.deckhq/daemon.json`); status line WP-38 (§92,
+under 20 ms, no daemon); VS Code extension WP-31 (§104 — an iframe rather than a port); floating
+mini-floor WP-39 (§113 — one scene, two render targets); terminal deck WP-42 (§93);
+`deckhq doctor --share` WP-44 (§84).
+**Notes.** Marketplace listings for the plugin and the extension are **owner-side** (`08` §13.5,
+§13.6).
+
+**R-162 — A landing page that explains itself in seconds**
+*Owner, 2 September 2026:* "put some visual, so anyone landing on page can see within seconds, what
+is this about"
+**Status:** done. **Implemented by:** WP-03 (`DEVIATIONS.md` §88 — the hero GIF, and the fact that
+the floor did not walk and there was no encoder to record it with); the README's floor image; the
+1.2.0 Release page carrying the floor, the review card and the GIF.
+
+### 2.16 Releases
+
+**R-170 — Tag, then never let a human be the release step**
+*Derived from `08` §1 line 1.*
+**Status:** done. **Implemented by:** WP-43; `publish.yml` with OIDC trusted publishing, a
+tag/`package.json` guard, the nine-combination matrix, and a `release` job that re-downloads the
+tarball the registry serves and checks it against `dist.integrity`. 1.3.0 released by tag on
+4 September. `DEVIATIONS.md` §81 (the manifests are release assets; winget and scoop install a zip),
+§138 (the release body cap — 1.3.0's notes were 20,581 characters over GitHub's limit and the job
+that would have caught it ran *after* the irreversible step; now capped and pre-checked).
+**Notes.** The owner completed the one-time trusted-publisher setup on 4 September: "npm publisher
+done - DkPanseriya/deckhq publish.yml".
+
+**R-171 — Commits are attributed to Darshak Panseriya**
+*Owner, 1 September 2026:* "Why is all commits on vikalp panseriya name. IT should be me Darshak
+Panseriya"
+**Status:** done. **Implemented by:** repository git identity; recorded in the session memory so it
+survives machine defaults.
+
+**R-172 — A product icon worth the product**
+*Owner, 14 September 2026:* "Make a better and nice icon worth for this product". Owner's pick,
+14 September: "icon number (5 recommended)".
+**Interpretation.** One SVG source in the repository; every PNG size and the `.ico` generated from it
+by scripts that already exist, with no new dependency; the app window, the shortcuts, the favicon,
+the site and the npm README all show that mark and no other; a test fails if a generated asset is
+older than its source.
+**Status:** done. **Implemented by:** WP-82 (`DEVIATIONS.md` §161 — one drawing, eleven files, and a
+rasteriser instead of a screenshot); source at `docs/media/design/icon/5.svg`; decision recorded at
+`08` §13.23.
+
+### 2.17 Owner-side items
+
+**R-180 — This register**
+*Owner, 15 September 2026:* "over the history of our chats, I have talked about many requirements and
+user stories or usecases. I want you to document them all, so we have a track of what has been
+implemented why, and later if we change something we can refer why we did something. And also it is
+nice spec sheet for our product so maintain that thoroughly and detailed."
+**Status:** in progress (**WP-90** — this file). **Implemented by:** `docs/00-REQUIREMENTS.md`;
+`DEVIATIONS.md` §165; the rule in §0 and its one line in `CLAUDE.md`.
+
+**R-181 — Owner-side blockers, named and sequenced for a beginner**
+*Owner, 4 September 2026:* "define what are next steps. Do we have finished finest product. Now
+whetever is blocked from myside, guide me step by step what I need to do. COnsider me beginner."
+**Interpretation.** A standing, ordered list of everything only the owner can do, each with the exact
+clicks.
+**Status:** in progress — it is `08` §13, reordered on 4 September so the things blocking a phase
+gate come first. Closed since: trusted publisher, GitHub Pages source (reported live), the 1.2.0
+Release. Open: social preview, Discussions, private vulnerability reporting, VS Code Marketplace
+publisher and PAT, plugin marketplace listing, Homebrew tap and scoop bucket, publisher key custody,
+pack price and storefront, relay decisions, `sound`/`osNotify` defaults, Mac/Linux hand verification
+of the terminal launchers, and the launch posts (the owner posts; no agent posts anywhere).
+
+### 2.18 Declined and deferred
+
+**R-190 — A 3D renderer**
+*Owner, 14 September 2026:* "I do not see any 3d implementation that we saw in other project, ofcourse
+it is alot of work, but it shows how everything flows, controlled, managed workflow, hierarchy, etc.
+So think and analyse in depth there. and if usable keep it for future."
+**Analysis.** `docs/plan/09-3D-AND-FLOW.md` takes the claim apart. The third dimension contributes
+**mass, a horizon and an occlusion problem**. Everything the owner named is carried by the 2D
+overlay: flow is dashed arcs with travelling dots, hierarchy is a star and the word `LEAD` on a pill
+plus a seat, control is an HTML task rail, progress is `DOING 7 · NEXT 6 · DONE 7` on a card,
+grouping is a floor tint. In the reference project's own capture, `CLIENT ASSETS` sits on top of
+`QUALITY ASSURANCE CHECKER`, `INBOUND LEADS MANAGER` is cut in half by a card, and every character
+faces away from the camera.
+**Status:** **declined** for the free core; the isometric projection shelved; a Supporter pack is the
+only door it gets, and it stays shut until route 1 ships and a pack has a storefront.
+**Why declined.** `03-VISUAL-SPEC.md` §1 forbids perspective by name. A vendored `three.js` is ~600 kB
+added to every install for a view most users will never open, and **a GPU-dependent renderer can have
+no goldens**, which removes the one mechanism this project trusts to catch an invisible regression
+(P-09). `08` §13.21 records the three sub-decisions and their recommendations.
+**Notes.** The *content* the owner wanted from it — flow, hierarchy, blocked-on, progress — is not
+declined. It is WP-77 to WP-83 and the arcs package after them.
+
+**R-191 — A manager agent that assigns work down a hierarchy**
+*Blueprint §5.2.* **Status:** declined. **Why.** Measured failure rates of 41–86% across seven
+frameworks. The user's office is a queue, not an LLM. Studio (R-130) is not this: it proposes a
+roster the user owns and spawns only on an explicit Hire.
+
+**R-192 — Human streaks, leaderboards, XP, badges, guilt**
+*`08` §14, inherited from the v1 plan and reaffirmed.* **Status:** declined (P-13). Also refused:
+any telemetry, any CDN asset, any runtime dependency in the core, any paywall on capture, the queue
+or an action, and any claim not measured on a machine.
+
+---
+
+## 3. User stories and use cases
+
+In the owner's framing. Each links to the requirements that serve it.
+
+**S-01 — "Someone can just come with an idea and start building."** *(8 September)*
+A user with a project idea and no office opens DeckHQ, describes what they want to build, is grilled
+into a plan they edit, is shown a roster of roles they own, presses Hire once, and watches real
+sessions appear at real desks in real worktrees. → R-130, R-131, R-132, R-023.
+
+**S-02 — "I want to see at a glance which sessions are active."** *(14 September)*
+The user opens the floor after lunch. Project rooms hold the people who are working right now.
+Everyone finished or resting is in the lounge. Everyone who needs an answer is at the manager's desk,
+oldest first. The answer takes under two seconds and needs no clicking. → R-002, R-044, R-043,
+R-029, R-031.
+
+**S-03 — "Share it with a friend in one line."** *(14 September)*
+The user pastes one command into a friend's chat. The friend runs it, is asked once whether they want
+an icon, says yes, and has DeckHQ on their Desktop. No Node install instructions, no four-step
+README. → R-010, R-011, R-012, R-013.
+
+**S-04 — "I have 100 agents / I have 5 agents."** *(14 September)*
+A user running a hundred sessions wants small figures so the floor fits; a user running five wants
+big ones so they are not lost in the space. Both set it once, and the furniture follows. → R-057,
+R-077, R-055, R-032.
+
+**S-05 — "I am on a subscription, not a bill."** *(14 September)*
+The user wants to know where the tokens went — which projects, which sessions, input versus cache
+versus output — and does not want a dollar figure computed from list prices they are not paying.
+→ R-091, R-090, P-12.
+
+**S-06 — "I forget to follow up."** *(blueprint, the founding case)*
+Claude finishes a turn and asks a question. The user reads it, thinks *I'll come back to that*, and
+opens another terminal. The session is still standing in the office tomorrow morning, with a
+waiting-time badge, because nothing observed can discharge it. → P-01, R-043, R-110.
+
+**S-07 — "Open the repo, run the dashboard, without a terminal."** *(31 August)*
+The user clicks the shelf in a room and their file manager opens on that repo; clicks the terminal
+box and `dashboard.bat` runs and the dashboard opens in a browser. → R-076, R-100.
+
+**S-08 — "Pick the session back up where I actually work."** *(31 August)*
+The user reviews a session in the panel and then wants it in the surface they use — the Claude Code
+desktop app if that is where they live, a terminal if not — without paying to reload a summary.
+→ R-106, R-100.
+
+**S-09 — "Clear the queue and enjoy watching them enjoy themselves."** *(1 September, implicit in the
+bench/lounge design)*
+An empty waiting area and a full lounge is the reward state. Benched agents play, drink coffee and
+talk. The user is never scored for it. → R-045, R-060, R-071, P-13.
+
+**S-10 — "Pin the repo I work in every day."** *(3 and 14 September)*
+A project the user cares about keeps a room even with nothing running in it, downsized, so the floor
+does not forget it between sessions. → R-030, R-029.
+
+**S-11 — "Watch a fan-out happen."** *(15 September)*
+A session spawns a crew of sub-agents. The floor shows them arriving around their parent with
+laptops and cables, feeding data back, and shows them leave when they finish. → R-061.
+
+**S-12 — "Make it mine."** *(15 September)*
+The user opens a graphics control centre and chooses a floor, a carpet, a colour scheme, rugs, chairs
+and plants from sets a designer put together, plus how big the people are. Nothing they can choose
+produces an illegible floor. → R-077, R-057.
+
+**S-13 — "Manage an AI workforce across many projects the way I would manage an office."**
+*(2 September, the framing amendment)*
+The user is an entrepreneur with several things in flight, twelve terminals in twelve repositories
+and no surface that shows the whole team. → R-001, and everything under §2.3 and §2.4.
+
+---
+
+## 4. Open requirements — the owner's message of 15 September 2026
+
+On record here before their packages exist. All five are **planned**.
+
+| WP | Requirement | Register id |
+|---|---|---|
+| **WP-86** | Names never carry a numeric suffix — the pool is large enough that the `"<base> N"` fallback never engages | R-059 |
+| **WP-87** | Character animations on the WP-79 robot: thinking cloud, working, running, and lounge activities (games, coffee) | R-060 |
+| **WP-88** | A graphics control centre with designer-curated interior options — floor, carpet, colours, rugs, tables, chairs, sofa, plants — that mix and match, plus agent size with furniture scaling automatically | R-077, R-057 |
+| **WP-89** | Sub-agent and multi-agent crew animation: three or more sub-agents draw smaller figures around the parent on the floor, with laptops, cables and data pulses toward the parent | R-061 |
+| **WP-90** | This register | R-180 |
+
+**Constraints that already bind them, before anyone scopes them.**
+
+- WP-87 and WP-89 are motion, so P-10 applies: one static frame per state under
+  `prefers-reduced-motion`, with a golden proving it, and every phase from the injected clock
+  (`DECKHQ_NOW`), never `Date.now()` (P-09).
+- WP-89 is bound by P-02 and P-03: a cable is a claim about a parent–child relationship, so where the
+  link is inferred rather than observed the floor must say so rather than draw it. Juniors never
+  enter the needs-you count unless they raise a hand themselves (WP-41, §120).
+- WP-88 **subsumes WP-80** (R-057). One setting for agent size, not two. Every curated combination
+  must pass `assertThemeContrast`, `assertMaterialDiscipline` and the ≥ 3:1 figure-halo guard that
+  WP-85a made a test (§160), and changing agent size must change no plan geometry — the same
+  population produces the same room rectangles at every setting.
+- WP-86 must keep the original sixty names frozen in place and order, because goldens paint names
+  (WP-84, §156).
+- WP-90 is this file, and its acceptance is the rule in §0: a work package that ships without
+  touching its row here has not finished.
+
+---
+
+## 5. What is not traced to a source
+
+Named so that nobody mistakes silence for evidence.
+
+- **The "vertical road" for fired employees** (R-026) was asked for and was not built as a road. The
+  Departed is a room. Recorded as a departure in R-026's notes.
+- **R-043's reception behaviour contradicts the owner's 14 September sentence.** WP-78 put the
+  waiting queue at the manager's desk; the owner asked for the sofas. The reasoning is in §153 and
+  the disagreement is on the record rather than resolved.
+- **`DEVIATIONS.md` §30 is still a RAISE** — whether per-project colour belongs on the body was never
+  closed; WP-79 settled it in practice without a decision being recorded.
+- **`DEVIATIONS.md` §1 (`ended` has no row in the visual spec) and §3 (`for_review` sticky through
+  session death)** both shipped with the invariant winning and are both still marked RAISE
+  (`08` §13.12).
+- **R-106's deep link is unverified** and must not be claimed until a machine confirms it (§9).
+- **Several owner messages in the earliest sessions survive only inside conversation summaries**, not
+  as raw transcript lines, because the sessions were compacted. Where a quote in this file comes from
+  such a summary it is still verbatim — the summaries list the owner's messages in his own words —
+  but the surrounding context is gone.
