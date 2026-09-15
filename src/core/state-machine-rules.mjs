@@ -21,6 +21,22 @@ import { projectKeyFor } from './ledger.mjs';
 /** @typedef {import('./model.mjs').LiveSession} LiveSession */
 /** @typedef {import('./store.mjs').Store} Store */
 
+/*
+ * THE TWO TYPES THE REGISTRY CHAIN SHARES ARE DECLARED HERE, ONCE (WP-92e).
+ *
+ * `RuntimeAdapter` and `HookEvent` were copy-pasted verbatim into all six
+ * `state-machine-*.mjs` modules, so `tsc` checked each copy against itself and
+ * a drift between two of them was invisible. This module is the pure,
+ * dependency-free end of the chain — every other link already imports from it
+ * — so it is where they live; the other five write
+ * `import('./state-machine-rules.mjs').HookEvent`, which is the device §131
+ * used for `doctor-report.mjs` and §95 for `terminals-catalog.mjs`.
+ *
+ * A JSDoc `import()` in a type position is not a value edge: the audit's own
+ * graph is built after comments are stripped, and nothing below imports
+ * anything new at runtime.
+ */
+
 /**
  * @typedef {object} RuntimeAdapter
  * @property {import('./model.mjs').RuntimeId} id  the same value that prefixes

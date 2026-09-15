@@ -21,31 +21,8 @@ import { projectKeyFor } from './ledger.mjs';
 /** @typedef {import('./model.mjs').LiveSession} LiveSession */
 /** @typedef {import('./store.mjs').Store} Store */
 
-/**
- * @typedef {object} RuntimeAdapter
- * @property {import('./model.mjs').RuntimeId} id  the same value that prefixes
- *   every `Agent.runtime` this adapter produces. It was declared as a bare
- *   `string`, so the two could not be compared (WP-22).
- * @property {string} [label]
- * @property {() => Promise<boolean>} available
- * @property {() => Promise<LiveSession[]>} liveSessions
- * @property {(opts: {maxAgeDays:number, limit:number}) => Promise<SessionSummary[]>} scanSessions
- */
-
-/**
- * @typedef {object} HookEvent
- * @property {string} runtime
- * @property {string} sessionId
- * @property {string} hookEvent
- * @property {string} [cwd]
- * @property {any} [payload]
- * @property {{name:string, summary:string}|null} [tool] parsed by the runtime's
- *   own adapter from a `PreToolUse` payload (WP-52); absent for every other event
- * @property {{agentId:string, parentSessionId:string|null}|null} [subagent]
- *   parsed by the runtime's own adapter from a `SubagentStop` payload (WP-41);
- *   null when the payload names no junior, and absent for every other event
- * @property {number} [at] ms epoch; defaults to Date.now() — override in tests
- */
+/** @typedef {import('./state-machine-rules.mjs').RuntimeAdapter} RuntimeAdapter */
+/** @typedef {import('./state-machine-rules.mjs').HookEvent} HookEvent */
 
 import { RegistryCompute } from './state-machine-compute.mjs';
 import { collapseResumed } from './resume-chain.mjs';
