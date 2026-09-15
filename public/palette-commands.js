@@ -47,6 +47,28 @@ const LOOK_VERBS = Object.freeze([
 ]);
 
 /**
+ * THE FOUR AGENT SIZES, FROM THE KEYBOARD (WP-88c,
+ * `docs/plan/11-LOOK-CONTROL-CENTRE.md` §2).
+ *
+ * Four rows and not a toggle, for the reason the six presets are six rows: a
+ * cycle makes the user press a key until the floor looks right, and the thing
+ * they want is a NAME. The hints are the sentence the setting is for — the
+ * owner's own — rather than the number, because `s = 1.25` says nothing to
+ * somebody looking for bigger people.
+ *
+ * Their labels are not read out of the catalogue the way the presets' are,
+ * because a palette row needs a hint and the catalogue carries none for these;
+ * `palette.test.mjs` asserts the four ids against `AGENT_SIZES` so the two
+ * cannot drift.
+ */
+const AGENT_SIZE_ROWS = Object.freeze([
+  { id: 'small', label: 'small', hint: 'a hundred sessions and every one of them on screen' },
+  { id: 'medium', label: 'medium', hint: 'what ships — the floor this product has always drawn' },
+  { id: 'large', label: 'large', hint: 'five people, and none of them lost on the carpet' },
+  { id: 'auto', label: 'auto', hint: 'large under ten live, small over forty, and it holds' },
+]);
+
+/**
  * Commands: everything that used to be a header button, plus the surfaces
  * §5.3 names. Pure — it reads a context object and returns entries, so the
  * whole table can be asserted in a unit test without a browser.
@@ -297,6 +319,18 @@ export function buildCommandEntries(ctx) {
     })),
     ...(lookPresets.length
       ? LOOK_VERBS.map((verb) => ({ ...verb, run: () => actions[verb.act]() }))
+      : []),
+    // WP-88c · how big the people are. Gated on the same catalogue as the rows
+    // above it, because a size that cannot be applied is a row that does nothing.
+    ...(lookPresets.length
+      ? AGENT_SIZE_ROWS.map((size) => ({
+          id: `cmd:agent-size-${size.id}`,
+          group: 'command',
+          label: `Agents: ${size.label}`,
+          hint: size.hint,
+          keywords: ['agent', 'size', 'scale', 'bigger', 'smaller', 'zoom', 'people', 'look'],
+          run: () => actions.setAgentSize(size.id),
+        }))
       : []),
     {
       id: 'cmd:onboarding',

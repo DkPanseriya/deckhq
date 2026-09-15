@@ -129,3 +129,34 @@ export function pickSessionLook(search, settingLook, known) {
   }
   return preset || settingLook;
 }
+
+/**
+ * `?scale=large` — LAY ONE TAB'S FLOOR AT A SIZE (WP-88c, and WP-80's own
+ * parameter, arriving with the setting that gives it something to say).
+ *
+ * The same three rules as `?theme=` and `?look=`: this tab only, never written
+ * back through `/api/look`, and a value this code did not write may at worst do
+ * nothing. The difference from `?look=` is what crosses the boundary — there,
+ * one preset id out of six, because a look is fifteen options and a URL that
+ * carried all fifteen would hand somebody a floor they did not choose. A size is
+ * ONE of four words and changes no colour at all, so it is safe to name
+ * directly, and it is what the two size goldens are photographed through.
+ *
+ * It applies ON TOP of whichever look this tab is already painting, so
+ * `?look=night-lab&scale=small` is the night lab with a hundred sessions in it.
+ * `sizes` is injected rather than imported, for `known`'s reason in
+ * `pickSessionTheme`: this file stays pure and the caller decides what a size is.
+ *
+ * @param {string} search       the query string
+ * @param {unknown} look        the look this tab would otherwise paint
+ * @param {ReadonlyArray<string>} sizes the settings this build has
+ * @returns {unknown} the look to paint — the one it was handed when nothing applies
+ */
+export function pickSessionScale(search, look, sizes) {
+  const wanted = queryValue(search, 'scale');
+  if (!wanted) return look;
+  const key = String(wanted).trim().toLowerCase();
+  const list = Array.isArray(sizes) ? sizes : [];
+  if (!list.includes(key)) return look;
+  return { ...(look && typeof look === 'object' ? look : {}), agentSize: key };
+}

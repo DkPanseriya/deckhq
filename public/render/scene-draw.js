@@ -11,6 +11,7 @@
  */
 
 import { buildPlan, floorPopulation, U } from './plan.js';
+import { LOOK } from './look-derive.js';
 import {
   bakeBackdrop,
   setLightShadow,
@@ -144,6 +145,13 @@ export function planSignature(snapshot) {
     // changes the building and not only its paint. The whole document, because
     // every key in it is one of those two things.
     `l${JSON.stringify((snapshot && snapshot.settings && snapshot.settings.look) || '')}`,
+    // WP-88c, and it is NOT covered by the line above. `?scale=` and `?look=`
+    // paint this tab without touching `settings.look`, so the size the floor is
+    // actually laid at can differ from the one the snapshot carries — and the
+    // resolved look is the authority on which. It also settles the first paint:
+    // `applyLook` may land after the first snapshot, and a signature that could
+    // not see the difference would keep the medium bake.
+    `a${LOOK.agentSize || ''}`,
   ].join('~');
 }
 
@@ -188,6 +196,10 @@ export class SceneDraw extends SceneHit {
       // its signature have to be asking the gone-home question of one clock.
       now: clockNow(),
       goneHomeDays: (this._snapshot.settings || {}).goneHomeDays,
+      // WP-88c. Off the RESOLVED look rather than off the snapshot, because
+      // `?scale=` and `?look=` paint this tab and write nothing back — the same
+      // reason `planSignature` reads it from there too.
+      agentSize: LOOK.agentSize,
     });
     this._backdrop = bakeBackdrop(this._plan, this._dpr);
     this._fadeFrom = previous;

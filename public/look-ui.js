@@ -81,6 +81,7 @@ const PICKER_NOTES = Object.freeze({
   'rug.task': 'project rooms and break-out corners',
   plants: 'a ceiling rather than a quota — a small room never reaches lush',
   props: 'clear floor per free-standing prop; anchored props are furniture',
+  agentSize: 'the furniture follows the people; the building does not',
 });
 
 /** What each sub-group inside a two-dimensional picker is called. */
@@ -512,11 +513,17 @@ export function createLookSection(opts) {
       );
     }
     const note = PICKER_NOTES[/** @type {keyof typeof PICKER_NOTES} */ (picker.id)];
+    // WP-88c. The one row whose note carries a NUMBER, and it is the number
+    // `auto` is a rule about: *"auto · 27 live"*. Without it `auto` is a word
+    // that has already decided something the user cannot see. `port.live` is
+    // absent on a build with no snapshot yet, and then the row is words alone.
+    const live = picker.id === 'agentSize' ? port.live?.() : null;
+    const count = Number.isFinite(live) ? ` · auto is ${live} live right now` : '';
     widgets.row(
       host,
       picker.label,
       group,
-      `${picker.options.length} options${note ? ` · ${note}` : ''}`,
+      `${picker.options.length} options${note ? ` · ${note}` : ''}${count}`,
     );
     for (const problem of refusalsFor(picker.id)) host.appendChild(refusalRow(problem));
   }
@@ -619,15 +626,14 @@ export function createLookSection(opts) {
       }
     }
     renderIo(s);
-    // WP-88c owns the agent size. It is in the document (`agentSize`, defaulting
-    // to `auto`) and NOTHING READS IT yet — so there is no row for it, on this
-    // sheet's own founding rule: a control ships only if moving it changes
-    // something today (docs/DEVIATIONS.md §58, §94). A picker that repainted
-    // nobody would be the header toggle this sheet exists to have deleted.
+    // WP-88c. The agent size is a row now — the eleventh picker, drawn by the
+    // loop above like every other, because it finally passes this sheet's
+    // founding rule: a control ships only if moving it changes something today
+    // (docs/DEVIATIONS.md §58, §94). The foot says what a URL can do instead.
     const foot = el('p', 'settings-note settings-look-foot');
     foot.textContent =
-      'Agent size arrives with its own package; until it repaints somebody it is not a control. ' +
-      '?look=night-lab paints one tab and writes nothing.';
+      '?look=night-lab and ?scale=large paint one tab and write nothing. Agent size moves the ' +
+      'furniture with the people — the corridors, the room padding and every label stay put.';
     s.appendChild(foot);
     host.appendChild(s);
     return s;
