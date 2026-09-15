@@ -368,6 +368,11 @@ Defects first. Every entry names what it must not change.
 
 ### A-01 · The Linux goldens gate has been failing for a reason that is not a pixel · **defect** · S
 
+> **RESOLVED** by WP-92a, commit `049f7b1` (`docs/DEVIATIONS.md` §180.1). A missing golden is a
+> third outcome — NOT YET BAKED, named, exit 0 — and `--strict` exits 2 when a platform's set is
+> meant to be complete. The verdict moved to `scripts/lib/goldens-gate.mjs` so a test can reach it.
+> The ten Linux goldens are still owed; baking them and turning `--strict` on is its own package.
+
 **Evidence.** `test/goldens/linux/` holds 6 PNGs; `CAPTURES` in `scripts/goldens.mjs` defines 16.
 `scripts/goldens.mjs:733-745` returns `ok: false` for a missing golden whenever the platform
 directory exists, and `failures.length` exits 1. The CI `goldens` job runs `npm run goldens:check`
@@ -386,6 +391,11 @@ exits 1. Then bake and commit the ten Linux goldens in a separate package and tu
 
 ### A-02 · The 900-line cap is enforced only over files that have already been split · **defect** · S
 
+> **RESOLVED** by WP-92b, commit `eabedb2` (`docs/DEVIATIONS.md` §180.2). `test/unit/line-ceiling.test.mjs`
+> walks every non-test file under `src/`, `public/`, `scripts/` and `site/` against a dated exemption
+> table; an exemption whose file has dropped under the cap fails. Three of the eight are booked to
+> WP-92l, 92m and 92n; the other five are marked permanent with a reason each.
+
 **Evidence.** `test/unit/model.test.mjs:300-346` enumerates eighteen prefix groups, 129 files. Eight
 non-test files exceed 900 lines and none is in a group (§1.4's table). No exemption table exists.
 **Move.** Replace the group list with a walk of `src/**` and `public/**`, plus an explicit
@@ -399,6 +409,10 @@ fails when an exempt file is shrunk below the cap; `npm test` otherwise unchange
 **Must not change.** The ceiling is 900. It does not move.
 
 ### A-03 · The draw-path clock guard names six of fifty-eight render modules · **risk** · S
+
+> **RESOLVED** by WP-92c, commit `3e9e866` (`docs/DEVIATIONS.md` §180.3). The guard walks every
+> module under `public/render/` plus any `life`/`scene`/`rig`/`crew` module beside it, with the body
+> of `frameMs()` cut out by shape as the one exception. Proved failing against a temp copy.
 
 **Evidence.** `test/unit/character-life.test.mjs:188-196`. `rig.js` is a 448-line re-export shell
 since §131; the bodies live in `rig-pose.js`, `rig-metrics.js`, `rig-bubble.js` and `rig-traits.js`,

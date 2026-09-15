@@ -1204,7 +1204,12 @@ codebase this well-tested has: the tests are excellent and two of them are looki
 that stopped being the file list.
 **Status:** done — the audit. **in progress** — the sequence it opened.
 **Implemented by:** WP-91 (`docs/DEVIATIONS.md` §179), `docs/plan/13-ARCHITECTURE-AUDIT.md` and
-`docs/plan/13-audit-map.json`; `08` §9's WP-91 row and §13 item 26. WP-92a–o are planned.
+`docs/plan/13-audit-map.json`; `08` §9's WP-91 row and §13 item 26. **WP-92a, WP-92b and WP-92c are
+done** (§180): the goldens gate reports a not-yet-baked golden instead of failing on it, the
+900-line ceiling is checked over every file under `src/`, `public/`, `scripts/` and `site/` against a
+dated exemption table, and the draw-path clock guard walks `public/render/` instead of naming six
+files. All three changed gates only — no product code, all sixteen goldens at 0 px. WP-92d–o are
+planned.
 **Notes.** The audit changed no code by design, and says so in its own header. Its refusals are
 recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
 site, the extension and the plugin were mapped but not audited in depth.
