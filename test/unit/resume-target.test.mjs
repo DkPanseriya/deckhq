@@ -13,23 +13,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import { Readable } from 'node:stream';
 
 import { Store, DEFAULT_SETTINGS, RESUME_TARGETS, TERMINAL_AUTO } from '../../src/core/store.mjs';
 import { adapter, buildAppResumeUri } from '../../src/adapters/claude-code/adapter.mjs';
 import { terminalIds } from '../../src/adapters/claude-code/terminals.mjs';
 import { register as registerSettings } from '../../src/http/routes/settings.mjs';
+import { dropRoot, onRoot, storeRoot } from '../helpers/store-root.mjs';
 
-async function tmpFile() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-resume-'));
-  return { dir, file: path.join(dir, 'state.json') };
-}
+const tmpFile = () => storeRoot('resume');
 
-async function cleanup(dir) {
-  await fs.rm(dir, { recursive: true, force: true });
-}
+/**
+ * Wait for every store opened on this root, then take the root away. Removing
+ * it while a 250 ms debounced write is still owed is the race §185 records —
+ * ENOENT on POSIX, ENOTEMPTY on Windows, and neither is about resuming.
+ */
+const cleanup = (dir) => dropRoot(dir);
 
 // ---------------------------------------------------------- resumeIn / store
 
@@ -41,7 +40,7 @@ test('resumeIn defaults to "terminal"', async () => {
   const { dir, file } = await tmpFile();
   try {
     assert.equal(DEFAULT_SETTINGS.resumeIn, 'terminal');
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     assert.equal(store.settings.resumeIn, 'terminal');
   } finally {
@@ -52,7 +51,7 @@ test('resumeIn defaults to "terminal"', async () => {
 test('resumeIn round-trips through setSettings', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
 
     store.setSettings({ resumeIn: 'app' });
@@ -73,7 +72,7 @@ test('resumeIn round-trips through setSettings', async () => {
 test('setSettings rejects an invalid resumeIn, falling back to the default rather than storing it', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
 
     store.setSettings({ resumeIn: 'app' });
@@ -100,7 +99,7 @@ test('load() sanitizes an invalid resumeIn found on disk instead of treating the
       JSON.stringify({ version: 1, settings: { resumeIn: 'not-a-real-target' } }),
       'utf8',
     );
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     assert.equal(store.settings.resumeIn, 'terminal');
     // A sanitized field is not the same thing as a corrupt file: no
@@ -118,7 +117,7 @@ test('the terminal pin defaults to auto, and detection is what "auto" means', as
   const { dir, file } = await tmpFile();
   try {
     assert.equal(DEFAULT_SETTINGS.terminal, TERMINAL_AUTO);
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     assert.equal(store.settings.terminal, 'auto');
   } finally {
@@ -129,7 +128,7 @@ test('the terminal pin defaults to auto, and detection is what "auto" means', as
 test('a terminal pin round-trips through setSettings and survives unrelated patches', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
 
     store.setSettings({ terminal: 'ghostty' });
@@ -148,7 +147,7 @@ test('a terminal pin round-trips through setSettings and survives unrelated patc
 test('SECURITY: the store keeps anything shell-shaped out of the terminal pin', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     // The store validates by shape, not by membership — the emulator table
     // lives in the adapter and `core/` must not import from there. What it
@@ -185,7 +184,7 @@ test('load() sanitizes a hand-edited terminal pin rather than calling the file c
       JSON.stringify({ version: 1, settings: { terminal: '/usr/bin/sh -c evil' } }),
       'utf8',
     );
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     assert.equal(store.settings.terminal, TERMINAL_AUTO);
     const entries = await fs.readdir(dir);
@@ -234,7 +233,7 @@ async function postSettings(store, body) {
 test('the settings route accepts every emulator id the table offers, on any platform', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     // Including ids for other platforms: a state file that moves between a Mac
     // and a Linux box is not a bad request, and detection ignores a pin it
@@ -252,7 +251,7 @@ test('the settings route accepts every emulator id the table offers, on any plat
 test('the settings route rejects a terminal id no platform has, rather than storing it', async () => {
   const { dir, file } = await tmpFile();
   try {
-    const store = new Store(file);
+    const store = onRoot(dir, new Store(file));
     await store.load();
     store.setSettings({ terminal: 'kitty' });
 
