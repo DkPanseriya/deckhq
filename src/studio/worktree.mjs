@@ -114,7 +114,10 @@ export function checkRoleName(raw) {
   }
   if (name.length > 64) return refuse('role-length', 'it is longer than 64 characters.');
   if (!ROLE_RE.test(name)) {
-    return refuse('role-charset', 'it carries a character outside letters, digits, ".", "_" and "-".');
+    return refuse(
+      'role-charset',
+      'it carries a character outside letters, digits, ".", "_" and "-".',
+    );
   }
   return { name };
 }
