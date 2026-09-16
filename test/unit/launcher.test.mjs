@@ -137,10 +137,10 @@ test('a global deckhq on the PATH wins, and is recorded as an absolute path', ()
     env: { PATH: 'C:\\npm;C:\\other' },
     binPath: 'C:/pkg/bin/deckhq.mjs',
     node: 'C:/node.exe',
-    exists: (p) => p === path.join('C:\\npm', 'deckhq.cmd'),
+    exists: (p) => p === path.win32.join('C:\\npm', 'deckhq.cmd'),
   });
   assert.equal(found.kind, 'global');
-  assert.equal(found.target, path.join('C:\\npm', 'deckhq.cmd'));
+  assert.equal(found.target, path.win32.join('C:\\npm', 'deckhq.cmd'));
   assert.deepEqual(found.argv, ['app']);
 });
 
@@ -163,19 +163,21 @@ test('whichOnPath tries the Windows extensions and only the Windows extensions',
   });
   assert.deepEqual(seen, ['.cmd', '.exe', '.bat', '']);
 
-  // `path.delimiter` is the host's, not the injected platform's: this is a
-  // pure function over strings, and the split is the one thing in it that the
-  // machine running the test decides.
+  // The delimiter and the join are the INJECTED platform's, never the host's,
+  // so this file asserts the same strings on Windows and on Linux. It did not:
+  // written with the host's `path`, a Windows `PATH` split on a POSIX `:` came
+  // apart into `C`, `\a`, and the two assertions above and below were red on
+  // every POSIX CI job while green on the author's machine (§185).
   const posix = [];
   whichOnPath(['deckhq'], {
     platform: 'linux',
-    env: { PATH: ['/a', '/b'].join(path.delimiter) },
+    env: { PATH: ['/a', '/b'].join(path.posix.delimiter) },
     exists: (p) => {
       posix.push(p);
       return false;
     },
   });
-  assert.deepEqual(posix, [path.join('/a', 'deckhq'), path.join('/b', 'deckhq')]);
+  assert.deepEqual(posix, ['/a/deckhq', '/b/deckhq']);
 });
 
 test('SECURITY: a value that could break a shortcut command line is refused', () => {
