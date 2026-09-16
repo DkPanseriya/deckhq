@@ -74,15 +74,6 @@ const EXEMPT = {
       'would put half of one contract in another file. The format knowledge is already out, in ' +
       './parse.mjs.',
   },
-  'public/render/themes.js': {
-    at: 1430,
-    dated: '2026-09-16',
-    splitBy: 'WP-92n',
-    reason:
-      'Three theme tables plus one derivation plus assertThemeContrast. §160 made the derivation ' +
-      'the single source of the shipped floor, so tables-out is the natural seam and it moves no ' +
-      'derivation.',
-  },
   'public/render/clips.js': {
     at: 903,
     dated: '2026-09-16',
