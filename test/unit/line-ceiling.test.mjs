@@ -74,15 +74,6 @@ const EXEMPT = {
       'would put half of one contract in another file. The format knowledge is already out, in ' +
       './parse.mjs.',
   },
-  'src/core/store.mjs': {
-    at: 1230,
-    dated: '2026-09-16',
-    splitBy: 'WP-92l',
-    reason:
-      'Two things: persistence, and twenty sanitisers plus the settings schema. The seam is ' +
-      'real and the audit named it — store.mjs + store-settings.mjs, proved by /api/state ' +
-      'byte-identical and every golden at 0 px.',
-  },
   'public/deck.js': {
     at: 1113,
     dated: '2026-09-16',

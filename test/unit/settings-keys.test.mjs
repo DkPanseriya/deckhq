@@ -47,7 +47,14 @@ const CODE = [
  * is not evidence that anything consumes it — that is precisely how the dead
  * toggle stayed alive.
  */
-const DEFINERS = new Set([path.join(ROOT, 'src', 'core', 'store.mjs'), SETTINGS_ROUTE]);
+const DEFINERS = new Set([
+  path.join(ROOT, 'src', 'core', 'store.mjs'),
+  // WP-92l moved `DEFAULT_SETTINGS` and its twenty sanitisers here. Without
+  // this row the definer would count as a reader of every key it defines, and
+  // the orphan test below would pass for every setting forever.
+  path.join(ROOT, 'src', 'core', 'store-settings.mjs'),
+  SETTINGS_ROUTE,
+]);
 
 test('the route accepts exactly the settings the store persists', () => {
   // Derived in the route from DEFAULT_SETTINGS, so this is really a guard
