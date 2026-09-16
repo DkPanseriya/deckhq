@@ -127,6 +127,7 @@ export function renderReport(report, opts = {}) {
     ),
   );
   lines.push(row('egress', report.egress.note));
+  lines.push(row('swallowed', describeHealth(report.health, report.generatedAt)));
 
   if (report.notes.length || !report.ok) lines.push('');
   for (const problem of report.problems) lines.push(`  ! ${problem}`);
@@ -295,6 +296,33 @@ export function describeDeck(deck, now) {
   const parts = [`${group(deck.waitingNotRunning)}  ← none of these are running`];
   if (deck.oldestWaitAt) parts.push(`oldest ${ago(now - deck.oldestWaitAt)}`);
   return parts.join('; ');
+}
+
+/**
+ * WP-92o, audit A-14: what the running daemon has swallowed since it started.
+ *
+ * "Nothing aggregates what the daemon swallows" was the finding. A scan it
+ * could not read and a ledger write that did not land are both survivable by
+ * design — neither is allowed to fail a refresh or move an agent — and that is
+ * exactly why neither had a surface. "The daemon has been failing quietly for
+ * an hour" is the failure P-15 cares about, and this is the one line that says
+ * so.
+ *
+ * Three integers, no message and no path. The snapshot omits the block
+ * entirely when both counters are zero, so `null` here means either no daemon
+ * or a clean one, and the two are distinguished by `report.deck.found`.
+ *
+ * @param {{scanErrors:number, ledgerErrors:number, lastErrorAt:number|null}|null} health
+ * @param {number} now
+ */
+export function describeHealth(health, now) {
+  if (!health) return 'nothing (or no running DeckHQ to ask)';
+  const parts = [];
+  if (health.scanErrors) parts.push(`${group(health.scanErrors)} scan`);
+  if (health.ledgerErrors) parts.push(`${group(health.ledgerErrors)} ledger`);
+  if (parts.length === 0) return 'nothing';
+  const when = health.lastErrorAt ? `, last ${ago(now - health.lastErrorAt)} ago` : '';
+  return `${parts.join(', ')} since start${when}`;
 }
 
 /** @param {number} n @param {string} word */

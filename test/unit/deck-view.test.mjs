@@ -430,8 +430,11 @@ test('the hint threshold is the spec’s six', () => {
 test('the strip and the deck reach neither /api/ack nor the network at all', () => {
   // Comments stripped, the way test/unit/panel-invariant.test.mjs does it:
   // this module's own header names /api/ack in order to say it never calls it.
-  const src = fs
-    .readFileSync(path.join(PUBLIC, 'deck.js'), 'utf8')
+  // WP-92m split the pure half into `deck-view.js`; both parts are read, so
+  // this is the same claim about the same code. Only the file list changed.
+  const src = ['deck.js', 'deck-view.js']
+    .map((f) => fs.readFileSync(path.join(PUBLIC, f), 'utf8'))
+    .join('\n')
     .replace(/\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm, '$1');
   assert.doesNotMatch(src, /\/api\//);
   assert.doesNotMatch(src, /fetch\(/);

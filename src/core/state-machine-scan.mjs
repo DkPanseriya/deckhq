@@ -112,6 +112,7 @@ export class RegistryScan extends RegistryCompute {
         avail = await adapter.available();
       } catch (err) {
         this.log.warn(`available() failed for adapter ${adapter.id}`, err);
+        this._noteSwallowed('scan');
         continue;
       }
       if (!avail) continue;
@@ -121,6 +122,7 @@ export class RegistryScan extends RegistryCompute {
         for (const item of s) summaries.push(item);
       } catch (err) {
         this.log.warn(`scanSessions failed for adapter ${adapter.id}`, err);
+        this._noteSwallowed('scan');
       }
 
       // WP-23a. What that scan could NOT read, in the runtime's own words —
@@ -144,6 +146,7 @@ export class RegistryScan extends RegistryCompute {
         for (const item of l) live.push(item);
       } catch (err) {
         this.log.warn(`liveSessions failed for adapter ${adapter.id}`, err);
+        this._noteSwallowed('scan');
       }
     }
 
@@ -171,6 +174,7 @@ export class RegistryScan extends RegistryCompute {
       await seedIfNeeded(this.store, this._lastSummaries, clockNow());
     } catch (err) {
       this.log.error('seeding failed', err);
+      this._noteSwallowed('scan');
     }
 
     this._scannedAt = clockNow();

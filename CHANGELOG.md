@@ -1184,6 +1184,17 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   runtime, so the adapter that owns the URL is a documented choice there rather than a default.
   `docs/DEVIATIONS.md` §182.
 
+- **`deckhq doctor` says what the daemon has been quietly failing at — WP-92o.** A scan it could not
+  read and a ledger line that did not land are both survivable by design: neither may fail a refresh
+  or move an agent, and that is exactly why neither had a surface. Three integers are counted now —
+  scans, ledger writes, and when the last of either happened — and printed as one row, `swallowed`,
+  at the bottom of the report: `3 scan, 1 ledger since start, last 1h ago`. Counts and an age; no
+  message, no path, no stack, so the report stays safe to paste into an issue. Local, no new
+  logging, no new file, no egress. **A daemon that has had no trouble carries no `health` key at
+  all**, which is why `/api/state` is byte-for-byte what it was before this package. No error became
+  fatal: a ledger that throws on every write still leaves the agent on the floor with its `ackState`
+  untouched. `docs/DEVIATIONS.md` §183.
+
 ### Testing
 
 - **The golden harness can press a key, and `three@selected` is the first golden of a floor somebody
@@ -1432,6 +1443,30 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   `Math.random()` or `performance.now()` where the client clock belongs. The gate is proved by
   planting §143's line in a temp copy and watching it name the file and the line. No source file
   changed. `docs/DEVIATIONS.md` §182.
+
+- **The three files the exemption table booked for a split are split, and the table is down to its
+  permanent rows — WP-92l, WP-92m, WP-92n.** `src/core/store.mjs` was atomic persistence and a
+  twenty-function settings sanitiser (1,230 → 657, with `store-settings.mjs` at 602);
+  `public/deck.js` was a table renderer and a controller (1,112 → 574, with `deck-view.js` at 567);
+  `public/render/themes.js` was three theme tables, one derivation and a contract (1,429 → 528, with
+  `themes-derive.js` at 768 and `themes-tables.js` at 201). Whole declarations moved with their doc
+  comments and the only edit inside one was `export` on its first line; each original re-exports its
+  new modules, so not one of the thirty-odd importers changed. I-11's ceiling is now enforced over
+  every file in the tree with no dated debt in the table — five permanent rows, each with a rule
+  that outranks the ceiling beside it. Proved rather than asserted: every top-level declaration
+  character for character in exactly one new module, every distinct source line still there the same
+  number of times, all sixteen goldens 0 px after every commit with no PNG changed, and `/api/state`
+  byte-identical on the `three` and `crew` fixtures. `docs/DEVIATIONS.md` §183.
+
+- **`public/` has one import cycle left and it is the documented one — WP-92m.** `deck.js` reached
+  into the Usage tab's exports and `usage.js` reached back for two text helpers. The split closed it
+  with no `wire()` at all — `cut` and `groupDigits` are pure and close over nothing, so both arms
+  point at `deck-view.js`, which imports only the clock. `test/unit/client-graph.test.mjs` asks
+  `public/` and `public/render/` what `cli-graph.test.mjs` asks `src/cli/`, names the one pair that
+  stays (`settings-ui.js` ↔ `settings-ui-rates.js`, §131's documented shape 3) rather than excusing
+  it by silence, and re-asserts §122's zero `public/` → `src/` edges. Proved failing: with the old
+  import back it reads `public/ has a cycle: deck.js -> usage.js -> deck.js`.
+  `docs/DEVIATIONS.md` §183.
 
 ### Packaging
 

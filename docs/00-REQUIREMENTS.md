@@ -1228,7 +1228,17 @@ fixtures, suite 2,456 → 2,486 by addition. **Two of the audit's own claims wer
 corrected in place**: A-05's "zero subscribers is the normal steady state" (two internal listeners
 subscribe for the life of the daemon) and A-08's "the audit found no caller that does not [send a
 runtime]" (three of four in `public/` did not, and landing the refusal alone would have been an
-outage). WP-92l–o are planned.
+outage). **WP-92l, WP-92m, WP-92n and WP-92o are done** (§183), and they close the sequence: the
+three files the exemption table booked for a split are split — `store.mjs` 1,230 → 657 + 602,
+`deck.js` 1,112 → 574 + 567, `themes.js` 1,429 → 528 + 768 + 201 — and the exemption table is down
+to its five permanent rows, so I-11 is now enforced over every file in the tree with no dated debt
+in it. The `deck.js` ↔ `usage.js` cycle closed with the split rather than with a `wire()`, and
+`test/unit/client-graph.test.mjs` holds `public/` and `public/render/` acyclic but for the one pair
+A-07 says stays. `snapshot().health` is three integers a daemon has swallowed since it started,
+**omitted entirely when all of them are zero**, and `deckhq doctor` prints them as its `swallowed`
+row. Findings A-12, A-14 and the rest of A-07 are resolved with commits; **WP-92 is closed.** All
+sixteen goldens 0 px after each, no PNG changed, `/api/state` byte-identical on `three` and `crew`
+and unchanged in every key on `demo`, suite 2,486 → 2,497 by addition.
 **Notes.** The audit changed no code by design, and says so in its own header. Its refusals are
 recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
 site, the extension and the plugin were mapped but not audited in depth.

@@ -197,12 +197,16 @@ test('a hand-edited room order is sanitised the way every other stored value is'
 });
 
 test('the store bounds the room order the same way the document does', () => {
-  // Two constants, one meaning. `store.mjs` restates it rather than importing
+  // Two constants, one meaning. The store restates it rather than importing
   // it (the store is the bottom of the graph); this is what stops them
-  // drifting.
-  const src = fs.readFileSync(new URL('../../src/core/store.mjs', import.meta.url), 'utf8');
+  // drifting. WP-92l moved it to `store-settings.mjs` with the sanitiser that
+  // reads it; it is the same constant and the same claim.
+  const src = fs.readFileSync(
+    new URL('../../src/core/store-settings.mjs', import.meta.url),
+    'utf8',
+  );
   const m = /const MAX_ROOM_ORDER = (\d+);/.exec(src);
-  assert.ok(m, 'MAX_ROOM_ORDER is gone from store.mjs');
+  assert.ok(m, 'MAX_ROOM_ORDER is gone from store-settings.mjs');
   assert.equal(Number(m[1]), MAX_ROOMS);
 });
 

@@ -194,7 +194,11 @@ test('Enter opens a deck row and does nothing on the floor', () => {
 // ------------------------------------------------------- the invariant
 
 test('INVARIANT: the deck acts through the panel and never touches /api/ack', () => {
-  const deck = read('deck.js');
+  // WP-92m split the pure half into `deck-view.js`. Both parts are read for the
+  // three things that must be absent from either; the controller slice below
+  // stays `deck.js`, which is where `createDeckUI` still is. Only the file
+  // list changed — not one assertion did.
+  const deck = read('deck.js') + '\n' + read('deck-view.js');
   assert.doesNotMatch(deck, /\/api\//);
   assert.doesNotMatch(deck, /performAction/);
   assert.doesNotMatch(deck, /pressNumberKey/);

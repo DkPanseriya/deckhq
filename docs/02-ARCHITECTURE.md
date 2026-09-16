@@ -324,17 +324,23 @@ deckhq/
 │   │   ├── model.mjs             # Agent shape, placement, needsYou
 │   │   ├── state-machine.mjs     # hook + poll → activityState
 │   │   ├── store.mjs             # state.json, atomic writes
+│   │   ├── store-settings.mjs    # the settings schema and its sanitisers (WP-92l)
 │   │   ├── paths.mjs             # where state lives, and the legacy migration
 │   │   └── seed.mjs              # first-run seeding
 │   └── http/routes/*.mjs
 ├── public/
 │   ├── index.html
 │   ├── app.js                    # client bootstrap, SSE, panel
+│   ├── deck.js                   # the deck's controller (WP-92m)
+│   ├── deck-view.js              # one queue order, and the DOM it draws (WP-92m)
 │   ├── render/
 │   │   ├── plan.js               # floor generation
 │   │   ├── backdrop.js           # baked materials/furniture
 │   │   ├── rig.js                # character rig
 │   │   ├── clips.js              # motion clips
+│   │   ├── themes.js             # the theme contract, and applying one (WP-92n)
+│   │   ├── themes-tables.js      # the shipped themes, importing nothing (WP-92n)
+│   │   ├── themes-derive.js      # eleven materials → 86 tokens (WP-92n)
 │   │   └── scene.js              # frame loop, LOD, hit-testing
 │   └── style.css
 ├── docs/                         # this blueprint
@@ -362,7 +368,7 @@ of files each costs today, and fourteen ranked findings. Its machine-readable co
 [`plan/13-audit-map.json`](plan/13-audit-map.json), carries every module's size, imports, importers,
 layer, invariants enforced and covering tests, and is regenerated rather than edited.
 
-Four things in that audit correct a reader's expectation of the sections above, and are named here
+Five things in that audit correct a reader's expectation of the sections above, and are named here
 so nobody has to find them:
 
 1. **§2's adapter list is four runtimes, not two.** `claude-code`, `codex`, `gemini-cli` and
@@ -379,6 +385,13 @@ so nobody has to find them:
 4. **§7's `state.json` carries a `STATE_VERSION`, now 2**, with versioned, idempotent, recorded
    migrations in `src/core/state-migrations.mjs` (WP-86, §168). The `version: 1` this section
    describes is what a file written before that carries, and is migrated once.
+
+5. **§7's snapshot may carry a `health` block**, and usually does not (WP-92o, audit A-14,
+   `DEVIATIONS.md` §183.4). Three integers — scans the daemon could not read, ledger writes that
+   did not land, and when the last of either happened — **omitted entirely when both counters are
+   zero**, so a healthy daemon's `/api/state` is byte-for-byte what this section describes.
+   `deckhq doctor` prints them as its `swallowed` row. `writeError` above is unchanged and keeps
+   its own field and its own banner.
 
 §8's performance budget has never been measured on a machine with a hundred agents. That is stated
 in `DEVIATIONS.md` §162.10 and §178 and is repeated here because §8 reads as a set of measurements

@@ -19543,3 +19543,172 @@ the same-origin path is not one of them. Nothing in the tree is broken to watch 
   still on it; `doctor-collect.mjs` still reaches the terminal catalogue through the adapter
   re-export.
 - **A-12 and A-14 are untouched.** They are WP-92l–o.
+
+## 183. WP-92l–o — three files that were each two things, the cycle that closed itself, and the three numbers a daemon had been swallowing
+
+**Date:** 16 September 2026 · **Packages:** WP-92l, WP-92m, WP-92n, WP-92o · **From:**
+`docs/plan/13-ARCHITECTURE-AUDIT.md` findings A-12, A-14 and the rest of A-07 · **Commits:**
+`e44bc4f`, `64e7204`, `dc45985`, and this one
+
+The tail of WP-92, and the end of it. §180's three moves were gates, §181's four were duplicates,
+§182's four were each a different shape. These four are three splits and one feature: the three
+files §180.2's exemption table booked for a split are split, and the daemon can now say what it has
+quietly failed at.
+
+**The table is down to its five permanent rows.** That is the point of the three splits taken
+together: I-11, the 900-line ceiling, is enforced over every file under `src/`, `public/`,
+`scripts/` and `site/`, and there is no dated debt left in the table — only `parse.mjs`,
+`codex/adapter.mjs`, `clips.js`, `goldens.mjs` and `site/build.mjs`, each with a rule that outranks
+the ceiling written beside it.
+
+| file | was | is | and |
+| --- | ---: | ---: | --- |
+| `src/core/store.mjs` | 1,230 | 657 | `store-settings.mjs` 602 |
+| `public/deck.js` | 1,112 | 574 | `deck-view.js` 567 |
+| `public/render/themes.js` | 1,429 | 528 | `themes-derive.js` 768, `themes-tables.js` 201 |
+
+All sixteen goldens are at 0 px after every one of the four and no PNG changed. `/api/state` is
+byte-identical on `three` (14,991 bytes) and `crew` (10,500) after each; `demo` differs in exactly
+the four `lastGrowthAt` values §182 documents as volatile between any two runs of identical code,
+and in nothing else in 38,871 bytes. The suite went 2,486 → 2,497, by addition only.
+
+### 183.1 `store.mjs` is persistence; `store-settings.mjs` is the schema (A-12)
+
+Two things wearing one name: atomic writes, corruption recovery and the debounce, and twenty
+sanitisers plus the settings schema. The audit drew the seam and this is it.
+
+§131's shape 1 throughout — whole declarations move, doc comments with them, and the only edit
+inside one is `export` on its first line. Eight declarations gained the keyword. `SAVE_DEBOUNCE_MS`
+moved the other way, out of the clamp block and into `store.mjs`, because it is the debounce
+window rather than a setting. `defaultData` and `normalize` stayed with persistence: they are the
+shape of the state FILE, not the schema of a settings value.
+
+`store.mjs` re-exports the new module, so the twenty-three files that import it are untouched.
+
+**§131's three checks.** 36/37 top-level declarations appear character for character in exactly one
+module; 851/853 distinct source lines survive at the same count. The exception is the same
+declaration in both: `sanitizeResumeIn`, whose two JSDoc lines said
+`import('./store.mjs').ResumeTarget` and now say `import('./store-settings.mjs').ResumeTarget`,
+because that is where the typedef lives. `store.mjs` gained one line of its own — a
+`@typedef {import('./store-settings.mjs').Settings} Settings` alias, in the shape line 21 already
+used for `AckState`, which is what kept the three `Settings` annotations in the `Store` class
+byte-identical rather than rewritten.
+
+**Two tests read the store as TEXT and follow the move, and one of them had to.**
+`settings-keys.test.mjs` names `store-settings.mjs` as a DEFINER: without that row the module that
+defines every key would have counted as a READER of every key, and the orphan gate — the one WP-07
+wrote because a dead toggle shipped for four months — would have passed for every setting forever.
+`layout-io.test.mjs` reads `MAX_ROOM_ORDER` where it now is. Not one assertion changed in either.
+
+### 183.2 The deck's pure half moves out, and cycle 3 closes with it (A-12, A-07)
+
+`deck.js` was a table renderer plus a keyboard map plus the Usage tab, and half of
+`deck.js` ↔ `usage.js`.
+
+**The seam is the one the file had already drawn for itself**, at the `controller` banner: *"the
+pure half above is what the unit test drives; this half is the wiring."* Everything above it — one
+order, and the DOM it draws — is `deck-view.js`. The controller stays. `deck.js` re-exports, so
+`app.js`, `app-header.js` and three test files are untouched.
+
+**THE CYCLE CLOSED WITHOUT A `wire()`, AND THE MODULE THE AUDIT NAMED COULD NOT HAVE CLOSED IT.**
+A-07 prescribed §122 rule 3: `usage.js` receiving `cut` and `groupDigits` through a wire. A wire
+exists for functions that close over mutable locals, and these two close over nothing — they are
+pure text helpers, and handing them through a setter would have been ceremony around an import.
+A-12 named `deck-usage.js`, the deck's Usage tab, as the module to lift out; that module would have
+had to import `usage.js` while `usage.js` went on importing the text helpers, so the cycle would
+have come back in a new shape with one more module in it. Splitting the PURE half out instead
+leaves `deck-view.js` importing nothing but the clock, and both arms of the old cycle point at it:
+`deck.js` → `usage.js` → `deck-view.js`, one direction, no ring.
+
+`test/unit/client-graph.test.mjs` is the gate, and it asks `public/` what
+`cli-graph.test.mjs` asks `src/cli/`: no cycle in `public/`, none in `public/render/`, the
+deck/usage direction asserted by name, and §122's zero `public/` → `src/` edges. The one cycle
+A-07 says STAYS — `settings-ui.js` ↔ `settings-ui-rates.js`, §131's documented shape 3 — is named
+in the file and asserted to be the only one, so a second cycle of that shape cannot arrive quietly.
+**Proved failing:** with the old import put back, it reads
+`public/ has a cycle: deck.js -> usage.js -> deck.js`.
+
+The three graph functions WP-92i wrote inside `cli-graph.test.mjs` and exported moved whole into
+`test/helpers/module-graph.mjs`, because a test file that imports another test file runs its tests
+twice. Not one line of any of the three changed, and neither did any assertion in `cli-graph`.
+
+**§131's checks.** 29/29 declarations character for character in exactly one module — the scanner
+reads 28, because `buildCrewRow` is the last declaration of the pure half and its slice runs into
+the controller's banner; verified verbatim by hand. 827/827 distinct source lines, same count.
+
+### 183.3 The theme tables, the derivation, and the contract that reads both (A-12)
+
+Three theme tables, one derivation and `assertThemeContrast`. §160 made the derivation the single
+source of the shipped floor, so tables-out is the natural cut and it moves no derivation at all.
+
+`themes-tables.js` **imports nothing** — not the palette, not the derivation, not `themes.js`. That
+is what makes it impossible for a table to depend on the arithmetic that reads it, and it is the
+whole reason the cut is safe.
+
+**One thing the audit did not see: the pack registry is not a table.** `registerPackThemes`
+measures an arriving theme with `assertThemeContrast`, so a `themes-tables.js` holding the registry
+would have imported the contract that imports the tables. It stays in `themes.js` beside the
+contract, and the module below is data and nothing else. The two import-time guards stay in
+`themes.js` too — §131 learnt on `palette.js` that a guard sitting past the last declaration is
+invisible until somebody violates it, and both tests and goldens stay green without one.
+
+**§131's checks.** 55/55 declarations character for character in exactly one module — the scanner
+reads 52, and the three it misses (`CHROME_KEYS`, `materialTokensFor`, `THEME_NAMES`) are each the
+last declaration of a region, running into the next banner; all three verified verbatim.
+1,081/1,083 distinct source lines at the same count; the two are `FIGURE_HALO,` and
+`ON_FLOOR_STATES,` from the old palette import list, which was rewritten per module rather than
+moved. Four declarations gained `export` and nothing else inside one changed: `rgb`,
+`CRIMSON_MIN_DISTANCE`, `DEFAULT_FLOOR`, `DEFAULT_CHROME`.
+
+`themes.js` re-exports both, so the nine modules that import it — four under `src/core/`, four
+under `public/render/` and the shell — are untouched. `interior.test.mjs`, `look-guards.test.mjs`
+and `state-visuals.test.mjs` are green and unchanged.
+
+### 183.4 The three numbers the daemon had been swallowing (A-14)
+
+"Nothing aggregates what the daemon swallows." Ledger writes, dashboard probes, SSE writes, scans
+and `available()` all swallow, and `writeError` was the only failure with a surface. The reason
+none of the others had one is the reason they are dangerous: every one of them is survivable by
+design, so nothing was wrong enough to report and nothing added up.
+
+`snapshot().health` is three integers — `scanErrors`, `ledgerErrors`, `lastErrorAt` — counted in
+the state machine at five swallow sites that already logged and already carried on:
+`available()`, `scanSessions()`, `liveSessions()` and `seedIfNeeded` count a scan;
+`_ledger()`'s record and `_noteLedger()`'s diff count a ledger. `clockNow()`, not `Date.now()`, so
+a pinned clock pins this too. `_noteSwallowed()` cannot throw and changes nothing about what its
+caller does next.
+
+**THE BLOCK IS OMITTED WHEN BOTH COUNTERS ARE ZERO**, which is A-14's own condition and the reason
+`/api/state` is byte-identical after this package rather than three zeros longer. The owner
+accepted the §8 question 6 default — a `health` block is in scope for the free core — and this is
+the cheapest shape of it: local, no egress, no new logging, no new file. `writeError` keeps its own
+field and its own banner. **No error became fatal**, and the test that proves it is the one where a
+ledger that throws on every write leaves the agent on the floor with its `ackState` untouched
+(I-16).
+
+`deckhq doctor` prints one row, `swallowed`, last in the report:
+
+```
+  swallowed       3 scan, 1 ledger since start, last 1h ago
+```
+
+and `nothing (or no running DeckHQ to ask)` otherwise — two ways to be quiet that are deliberately
+not collapsed into one sentence, because a row saying "nothing" with no daemon to ask would be
+claiming a measurement nobody took. The row is counts and an age: no message, no path, no stack,
+which is what keeps `doctor` output safe to paste into an issue. The report's own JSON keeps a
+fixed shape and always carries `health`, as `null` when there is nothing to report — the snapshot
+omits, the report does not, and `--json`'s key-set test says so.
+
+### What is NOT here
+
+- **No behaviour change in the three splits.** Not one bug fixed in passing, not one dead branch
+  deleted, not one name improved. The only edits inside a declaration are the `export` keyword on
+  thirteen first lines and the two JSDoc lines in `sanitizeResumeIn` that name the file a typedef
+  moved to.
+- **No fourth counter.** A-14 names dashboard probes, SSE writes and daemon-file writes as swallow
+  sites too. The two that are counted are the two that live in the state machine, where the
+  counter lives; the others are in the HTTP layer and in `daemon.mjs`, and reaching into the
+  registry from either would be a new edge for a number. That is a package of its own.
+- **`parse.mjs`, `codex/adapter.mjs`, `clips.js`, `goldens.mjs` and `site/build.mjs` are still
+  exempt**, each for the reason written in its row, and none of them was touched.
+- **`settings-ui.js` ↔ `settings-ui-rates.js` is still a cycle**, as A-07 says it should be.

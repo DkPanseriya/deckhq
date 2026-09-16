@@ -39,6 +39,7 @@ import {
   checkState,
   collectReport,
   deckFrom,
+  describeHealth,
   describeNames,
   group,
   PITCH,
@@ -136,7 +137,7 @@ const noDaemon = { probe: async () => false, inspect: async () => null };
 /**
  * A DeckHQ daemon on `port`, and nothing on any other port.
  * @param {number} port
- * @param {{hookHealth?:Map<string,any>, deck?:any}} [what]
+ * @param {{hookHealth?:Map<string,any>, deck?:any, health?:any}} [what]
  */
 function daemonOn(port, what = {}) {
   return {
@@ -153,6 +154,9 @@ function daemonOn(port, what = {}) {
               oldestWaitAt: null,
               total: 0,
             },
+            // WP-92o. `null` is the shape a healthy daemon reports: the
+            // snapshot omits `health` entirely when both counters are zero.
+            health: what.health ?? null,
           }
         : null,
   };
@@ -1175,6 +1179,10 @@ test('--json emits one JSON document with a stable shape', async () => {
     'deck',
     'egress',
     'generatedAt',
+    // WP-92o, audit A-14: what the running daemon has swallowed since it
+    // started, or null. Always present in the REPORT — the doctor's document
+    // has a fixed shape, unlike the snapshot it reads, which omits the block.
+    'health',
     'hooks',
     // WP-86: the pool's size, and how many identities still wear a suffix.
     'names',
@@ -1691,4 +1699,50 @@ test('checkState proves writability by writing, and leaves no probe file behind'
   assert.equal(result.writable, true);
   assert.equal(result.error, null);
   assert.deepEqual(await fsp.readdir(dataDir), []);
+});
+
+// ---------------------------------------------------------------------------
+// WP-92o — what the daemon swallowed (audit A-14)
+// ---------------------------------------------------------------------------
+
+test('the swallowed row says nothing when there is nothing to say', async () => {
+  // Two ways to be quiet: no daemon to ask, and a daemon that has had no
+  // trouble. The snapshot omits `health` for the second, so both arrive here
+  // as null and the row says so without claiming a measurement it never took.
+  const noOne = await collect(realAdapters);
+  assert.equal(noOne.health, null);
+  assert.match(renderReport(noOne, { home: '/home/x' }), /swallowed\s+nothing \(or no running/);
+
+  const clean = await collect(realAdapters, { machine: daemonOn(4317) });
+  assert.equal(clean.health, null);
+  assert.match(renderReport(clean, { home: '/home/x' }), /swallowed\s+nothing \(or no running/);
+});
+
+test('the swallowed row counts scans and ledger writes, and says when the last one was', async () => {
+  const report = await collect(realAdapters, {
+    machine: daemonOn(4317, {
+      health: { scanErrors: 3, ledgerErrors: 1, lastErrorAt: NOW - 90 * 60 * 1000 },
+    }),
+  });
+  assert.deepEqual(report.health, {
+    scanErrors: 3,
+    ledgerErrors: 1,
+    lastErrorAt: NOW - 90 * 60 * 1000,
+  });
+  const text = renderReport(report, { home: '/home/x' });
+  assert.match(text, /swallowed\s+3 scan, 1 ledger since start, last 1h ago/);
+});
+
+test('the row carries three integers and never an error message or a path', () => {
+  // A-14: no new logging, no new file, no egress. The row is a count, which is
+  // what makes it safe to paste into an issue — the bar every other row here
+  // is already held to.
+  const line = describeHealth({ scanErrors: 2, ledgerErrors: 0, lastErrorAt: NOW - 1000 }, NOW);
+  assert.match(line, /^2 scan since start, last .+ ago$/);
+  assert.doesNotMatch(line, /[/\\]|Error|ENOENT/);
+  // A count with no instant behind it still says the count.
+  assert.equal(
+    describeHealth({ scanErrors: 0, ledgerErrors: 4, lastErrorAt: null }, NOW),
+    '4 ledger since start',
+  );
 });

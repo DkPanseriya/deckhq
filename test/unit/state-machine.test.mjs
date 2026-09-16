@@ -1203,3 +1203,63 @@ test('a runtime that IS in use and has no hooks is still flagged', async () => {
   await registry.refresh();
   assert.equal(registry.snapshot().degraded['claude-code'], true);
 });
+
+// ---------------------------------------------------------------------------
+// H. WP-92o — what the daemon swallowed (audit A-14)
+// ---------------------------------------------------------------------------
+
+test('a healthy daemon carries no health key at all', async () => {
+  // The whole reason `/api/state` is byte-identical after WP-92o. A-14's own
+  // condition: the block is omitted when every counter is zero, so a machine
+  // that has had no trouble sends exactly the bytes it sent before.
+  const a = makeAdapter('claude-code', { summaries: [makeSummary('a')], live: [makeLive('a')] });
+  const registry = new Registry({ store: fakeStore(), adapters: [a] });
+  await registry.refresh();
+  const snap = registry.snapshot();
+  assert.equal('health' in snap, false, 'a clean daemon must add no key');
+});
+
+test('a scan that throws is counted, and the refresh still produces a floor', async () => {
+  // The finding, exactly: `scanSessions` swallows. It must go on swallowing —
+  // a runtime that cannot be read may not take the floor down — and the
+  // swallow must now be visible somewhere.
+  const broken = makeAdapter('claude-code', { summaries: [], live: [] });
+  broken.scanSessions = async () => {
+    throw new Error('transcript is not JSON');
+  };
+  const ok = makeAdapter('codex', { summaries: [makeSummary('a')], live: [makeLive('a')] });
+  const registry = new Registry({ store: fakeStore(), adapters: [broken, ok] });
+
+  await registry.refresh();
+  const first = registry.snapshot();
+  assert.equal(first.health.scanErrors, 1, 'the parse failure was not counted');
+  assert.equal(first.health.ledgerErrors, 0);
+  assert.equal(typeof first.health.lastErrorAt, 'number');
+  assert.equal(first.agents.length, 1, 'the other runtime still reached the floor');
+
+  // It counts per occurrence rather than latching, so "failing quietly for an
+  // hour" and "failed once at startup" do not read the same.
+  await registry.refresh();
+  assert.equal(registry.snapshot().health.scanErrors, 2);
+});
+
+test('a ledger that throws is counted separately and changes no agent', async () => {
+  // I-16: a broken ledger changes no agent and no ack byte. That stays true;
+  // the only difference is that the daemon can now say it happened.
+  const a = makeAdapter('claude-code', { summaries: [makeSummary('a')], live: [makeLive('a')] });
+  const ledger = {
+    record() {
+      throw new Error('disk full');
+    },
+    markSeen: () => true,
+    todayTokens: () => ({}),
+  };
+  const registry = new Registry({ store: fakeStore(), adapters: [a], ledger });
+  await registry.refresh();
+
+  const snap = registry.snapshot();
+  assert.ok(snap.health.ledgerErrors > 0, 'a ledger write that did not land was not counted');
+  assert.equal(snap.health.scanErrors, 0, 'a ledger failure is not a scan failure');
+  assert.equal(snap.agents.length, 1);
+  assert.equal(snap.agents[0].ackState, 'active');
+});
