@@ -222,6 +222,12 @@ export class Registry extends RegistryHooks {
     // read, or null. Empty until the first scan, which is also what "we have
     // not looked yet" should mean on the banner.
     this._readLimits = {};
+    // WP-92o, audit A-14. What this daemon has swallowed since it started.
+    // Three numbers and nothing else: a scan that could not be read, a ledger
+    // write that did not land, and when the last of either happened. Local,
+    // no egress, no new logging — every site that increments one already
+    // logged and already carried on, and none of them becomes fatal.
+    this._health = { scanErrors: 0, ledgerErrors: 0, lastErrorAt: null };
     this._startedAt = clockNow();
 
     /** @type {Set<(snapshot: ReturnType<Registry['snapshot']>) => void>} */

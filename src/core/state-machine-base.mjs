@@ -41,6 +41,9 @@ export class RegistryBase {
   _hookHealth;
   /** @type {Record<string, string|null>} */ // WP-23a: what each last scan could NOT read
   _readLimits;
+  /** @type {{scanErrors:number, ledgerErrors:number, lastErrorAt:number|null}} */
+  // WP-92o: what this daemon has swallowed since it started (audit A-14)
+  _health;
   /** @type {any} */ // WP-19's open questions, by session
   _pendingPermissions;
   /** @type {any} */ // WP-41 juniors seen to have stopped

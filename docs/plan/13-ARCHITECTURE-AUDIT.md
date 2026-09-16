@@ -594,6 +594,29 @@ green (the module is in the Node project's reachable set today and stops being s
 
 ### A-12 · Two files over the cap are two things wearing one name · **debt** · M each
 
+> **RESOLVED** by WP-92l, WP-92m and WP-92n, commits `e44bc4f`, `64e7204`, `dc45985`
+> (`docs/DEVIATIONS.md` §183.1–§183.3). `store.mjs` 1,230 → 657 + `store-settings.mjs` 602;
+> `deck.js` 1,112 → 574 + `deck-view.js` 567; `themes.js` 1,429 → 528 + `themes-derive.js` 768 +
+> `themes-tables.js` 201. Shape 1 throughout, each original re-exporting its new modules so no
+> importer changed, and **the exemption table is down to its five permanent rows.**
+>
+> **Two of the three seams are not the ones this finding drew, and both times for a reason the
+> finding could not have seen from a line count.** `deck-usage.js` could not have closed cycle 3:
+> the Usage tab must import `usage.js` while `usage.js` must import `cut` and `groupDigits`, so one
+> module holding both would have rebuilt the ring with an extra node in it. The PURE half came out
+> instead, at the seam `deck.js` had already written into its own banner, and no `wire()` was
+> needed — A-07's prescription exists for functions that close over mutable locals, and those two
+> close over nothing. And `themes-tables.js` could not hold the pack registry: `registerPackThemes`
+> measures an arriving theme with `assertThemeContrast`, so the tables would have imported the
+> contract that imports the tables. The registry stayed with the contract and the tables module
+> imports **nothing at all**.
+>
+> Proof as this finding asked: 36/37, 29/29 and 55/55 top-level declarations character for
+> character in exactly one new module (the scanner under-reads four, each the last declaration of a
+> region running into the next banner; all verified by hand), every distinct source line at the
+> same count bar four that are import-list entries or the two JSDoc lines naming a moved typedef,
+> sixteen goldens 0 px after each commit, `/api/state` byte-identical on `three` and `crew`.
+
 **Evidence.** `src/core/store.mjs` (1,230) is atomic persistence *and* a twenty-function settings
 sanitiser *and* the settings schema. `public/deck.js` (1,113) is a table renderer *and* a keyboard
 map *and* the usage row, and is half of cycle 3. `public/render/themes.js` (1,430) is three theme
@@ -633,6 +656,21 @@ builder, as §131 did for the panel.
 **Must not change.** No client behaviour, in either half.
 
 ### A-14 · Nothing aggregates what the daemon swallows · **debt** · M
+
+> **RESOLVED** by WP-92o (`docs/DEVIATIONS.md` §183.4). `snapshot().health` carries `scanErrors`,
+> `ledgerErrors` and `lastErrorAt`, counted at five swallow sites in the state machine —
+> `available()`, `scanSessions()`, `liveSessions()` and `seedIfNeeded` for a scan, `_ledger()`'s
+> record and `_noteLedger()`'s diff for a ledger — and `deckhq doctor` prints one row, `swallowed`,
+> last in the report. **The block is omitted when both counters are zero**, which is this finding's
+> own condition and why `/api/state` is byte-for-byte unchanged on a clean fixture. No error became
+> fatal: the test that proves it is a ledger throwing on every write while the agent stays on the
+> floor with its `ackState` untouched (I-16). `writeError` keeps its own field and its own banner.
+>
+> **Two of the sites this finding names are NOT counted, deliberately.** Dashboard probes and SSE
+> writes live in the HTTP layer, and daemon-file writes in `daemon.mjs`; reaching into the registry
+> from either to bump a counter would be a new edge for a number. The two that are counted are the
+> two that already live where the counter lives. That is a package of its own and this one says so
+> rather than half-doing it.
 
 **Evidence.** §4. Ledger writes, dashboard probes, daemon-file writes, SSE writes, scans and
 `available()` all swallow. `writeError` is the only failure with a surface.
@@ -692,6 +730,20 @@ WP-92c changes behaviour at all.
 | WP-92m | `deck.js` → `deck.js` + `deck-usage.js`, cycle 3 closed | A-12, A-07 | §131's three checks; `deck*.test.mjs` green; cycle assertion |
 | WP-92n | `themes.js` → tables + derivation | A-12 | §131's three checks; `interior.test.mjs`, `look-guards.test.mjs` green; all 16 goldens 0 px |
 | WP-92o | `snapshot().health`, and `doctor` reads it | A-14 | `/api/state` byte-identical when every counter is zero |
+
+**THE SEQUENCE IS COMPLETE.** All fifteen packages landed on 16 September 2026
+(`docs/DEVIATIONS.md` §180–§183). Every finding in §7 is resolved with a commit, except A-01's
+Linux bake, which is a separate package by the owner's own answer to §8 question 1, and A-13's
+second half, which is the one this audit said would need a builder refactor first. **Sixteen
+goldens at 0 px after every commit, no PNG changed, `/api/state` byte-identical throughout, suite
+2,437 → 2,497 by addition only.** The eight files §1.4 found over the ceiling are five now, each
+with a rule that outranks the ceiling beside it, and none of them is a file doing two things.
+Two cycles of the three §1.2 named are closed; the third is the one this document says stays.
+**Two of this document's own claims were wrong** and are corrected where they were made — A-05's
+"zero subscribers is the normal steady state" and A-08's "the audit found no caller that does
+not [send a runtime]", the second of which would have been an outage — and one of its
+prescriptions was improved on rather than followed, at A-07's `wire()` for `deck ↔ usage`. An
+audit that produced fifteen packages and was wrong twice is the right ratio to record.
 
 **Explicitly out of scope.** No framework. No build step, no bundler, no transpiler — the product
 ships the files it runs. No runtime dependency (P-05). No rewrite of the render pipeline: `plan.js`,

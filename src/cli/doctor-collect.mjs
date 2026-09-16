@@ -80,7 +80,7 @@ export function probeLoopbackPort(port, timeoutMs = 500) {
  * which is not an error.
  *
  * @param {number} port
- * @returns {Promise<{port:number, hookHealth:Map<string,{eventsSeen:number,lastEventAt:number|null}>, deck:any}|null>}
+ * @returns {Promise<{port:number, hookHealth:Map<string,{eventsSeen:number,lastEventAt:number|null}>, deck:any, health:{scanErrors:number,ledgerErrors:number,lastErrorAt:number|null}|null}|null>}
  */
 export async function inspectDaemon(port) {
   /** @type {any} */
@@ -125,7 +125,21 @@ export async function inspectDaemon(port) {
     // The deck is still worth having without the counters.
   }
 
-  return { port, hookHealth, deck: deckFrom(snapshot) };
+  // WP-92o, audit A-14. What the daemon has swallowed since it started, read
+  // straight off the snapshot it already fetched. Absent on a daemon that has
+  // had no trouble, which is the normal case and the reason the key is
+  // omitted rather than sent as three zeros.
+  const health =
+    snapshot.health && typeof snapshot.health === 'object'
+      ? {
+          scanErrors: Number(snapshot.health.scanErrors) || 0,
+          ledgerErrors: Number(snapshot.health.ledgerErrors) || 0,
+          lastErrorAt:
+            typeof snapshot.health.lastErrorAt === 'number' ? snapshot.health.lastErrorAt : null,
+        }
+      : null;
+
+  return { port, hookHealth, deck: deckFrom(snapshot), health };
 }
 
 /**
@@ -611,7 +625,7 @@ export async function collectReport(opts = {}) {
     if (row.installed && row.port != null) row.listening = listening.has(row.port);
   }
 
-  /** @type {{port:number, hookHealth:Map<string,any>, deck:any}|null} */
+  /** @type {{port:number, hookHealth:Map<string,any>, deck:any, health:any}|null} */
   let daemon = null;
   // Prefer the port the hooks target, so a healthy install is identified in
   // one request and the mismatch case is the one that costs a scan.
@@ -762,6 +776,9 @@ export async function collectReport(opts = {}) {
     runtimes,
     hooks,
     deck,
+    // WP-92o, audit A-14. Three integers and nothing else, or null when no
+    // daemon answered or the one that did has swallowed nothing.
+    health: daemon ? daemon.health : null,
     state,
     terminal,
     names,

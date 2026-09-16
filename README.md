@@ -41,9 +41,9 @@ imports them, and they are not in the npm tarball.
 **A step at a time, if you prefer:** `npm install -g deckhq`, then `deckhq app`, then
 `deckhq shortcut --install --yes` for the icon.
 
-**Before you install anything**, `npx deckhq doctor` prints what DeckHQ knows about this machine —
-including the number nobody else counts: sessions that finished their turn, left the agent view
-when their process exited, and are still waiting on you.
+**Before you install anything**, `npx deckhq doctor` prints the number nobody else counts —
+sessions that finished, left the agent view when their process exited, and are still waiting on
+you — and a `swallowed` row: what a running daemon quietly failed at instead of telling you.
 
 ## What you see
 

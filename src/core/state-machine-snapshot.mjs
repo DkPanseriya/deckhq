@@ -177,7 +177,53 @@ export class RegistrySnapshot extends RegistryBase {
       // `nowFixed` is true only under `DECKHQ_NOW`; see `src/core/clock.mjs`.
       now: at,
       nowFixed: fixedNow() !== null,
+      // WP-92o, audit A-14. What this daemon has swallowed since it started,
+      // and ONLY when it has swallowed something. A daemon that has had no
+      // trouble carries no `health` key at all, which is why `/api/state` on a
+      // clean machine is byte-for-byte what it was before this package — the
+      // audit's own condition, and the reason the key is omitted rather than
+      // sent as three zeros.
+      ...this._healthBlock(),
     };
+  }
+
+  /**
+   * `{ health }` when anything has been swallowed, `{}` when nothing has.
+   *
+   * Three integers, no strings, no stack, no path: a count of scans that could
+   * not be read, a count of ledger writes that did not land, and the instant of
+   * the last of either. Nothing here leaves the machine, and nothing here is an
+   * error — every counter is incremented at a site that already logged and
+   * already carried on. `writeError` keeps its own field and its own banner
+   * (A-14: "no error may become fatal").
+   * @returns {{health?: {scanErrors:number, ledgerErrors:number, lastErrorAt:number|null}}}
+   */
+  _healthBlock() {
+    const h = this._health;
+    if (!h || (h.scanErrors === 0 && h.ledgerErrors === 0)) return {};
+    return {
+      health: {
+        scanErrors: h.scanErrors,
+        ledgerErrors: h.ledgerErrors,
+        lastErrorAt: h.lastErrorAt,
+      },
+    };
+  }
+
+  /**
+   * One swallow, counted.
+   *
+   * Called from inside a `catch` that has already decided to carry on, so it
+   * must not be able to throw and must not change what the caller does next.
+   * `clockNow()` rather than `Date.now()`, so a pinned clock pins this too.
+   * @param {'scan'|'ledger'} kind
+   */
+  _noteSwallowed(kind) {
+    const h = this._health;
+    if (!h) return;
+    if (kind === 'scan') h.scanErrors += 1;
+    else h.ledgerErrors += 1;
+    h.lastErrorAt = clockNow();
   }
 
   /**
@@ -300,6 +346,7 @@ export class RegistrySnapshot extends RegistryBase {
       // `record()` is documented not to throw; if a future one does, the
       // state machine is still not the place it takes anything down.
       this.log.debug('ledger record failed', err);
+      this._noteSwallowed('ledger');
     }
   }
 
@@ -397,6 +444,7 @@ export class RegistrySnapshot extends RegistryBase {
       }
     } catch (err) {
       this.log.debug('ledger diff failed', err);
+      this._noteSwallowed('ledger');
     }
   }
 
