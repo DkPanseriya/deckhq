@@ -31,128 +31,17 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// WP-92m moved the three functions this file used to declare — the comment
+// stripper, the specifier scanner and the cycle detector — into a helper, so
+// that `client-graph.test.mjs` can ask `public/` the same question without
+// importing a test file and running its tests twice. Not one line of any of
+// the three changed. Every assertion below is WP-92i's, untouched.
+import { findCycle, graphOf, specifiersOf, stripComments } from '../helpers/module-graph.mjs';
+
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'cli');
 
-/**
- * Source with every comment removed, so what is left is what runs.
- *
- * A small state machine rather than a regular expression: a regular expression
- * cannot tell `// a comment` from the `//` inside a string, and the whole point
- * of stripping is to stop reading strings and comments as code.
- *
- * @param {string} src
- * @returns {string}
- */
-export function stripComments(src) {
-  let out = '';
-  let i = 0;
-  while (i < src.length) {
-    const c = src[i];
-    const next = src[i + 1];
-    if (c === '/' && next === '/') {
-      while (i < src.length && src[i] !== '\n') i += 1;
-      continue;
-    }
-    if (c === '/' && next === '*') {
-      i += 2;
-      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
-      i += 2;
-      continue;
-    }
-    if (c === "'" || c === '"' || c === '`') {
-      const quote = c;
-      out += c;
-      i += 1;
-      while (i < src.length) {
-        out += src[i];
-        if (src[i] === '\\') {
-          i += 2;
-          if (i <= src.length) out += src[i - 1];
-          continue;
-        }
-        if (src[i] === quote) {
-          i += 1;
-          break;
-        }
-        i += 1;
-      }
-      continue;
-    }
-    out += c;
-    i += 1;
-  }
-  return out;
-}
-
-/**
- * Every relative specifier one module names, static and dynamic alike.
- * @param {string} src
- * @returns {string[]}
- */
-export function specifiersOf(src) {
-  const code = stripComments(src);
-  /** @type {string[]} */
-  const found = [];
-  const patterns = [
-    /\bfrom\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\bimport\s+['"]([^'"]+)['"]/g,
-    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-  ];
-  for (const re of patterns) {
-    let m;
-    while ((m = re.exec(code)) !== null) found.push(m[1]);
-  }
-  return found;
-}
-
 /** The `src/cli/` graph: module basename -> the siblings it names. */
-async function cliGraph() {
-  const files = (await readdir(CLI)).filter((f) => f.endsWith('.mjs')).sort();
-  /** @type {Map<string, string[]>} */
-  const graph = new Map();
-  for (const file of files) {
-    const src = await readFile(path.join(CLI, file), 'utf8');
-    const siblings = specifiersOf(src)
-      .filter((s) => s.startsWith('./') && s.endsWith('.mjs'))
-      .map((s) => s.slice(2));
-    graph.set(file, [...new Set(siblings)]);
-  }
-  return graph;
-}
-
-/**
- * The first cycle in a graph, as the path that closes it, or null.
- * @param {Map<string, string[]>} graph
- * @returns {string[]|null}
- */
-export function findCycle(graph) {
-  /** @type {Set<string>} */
-  const done = new Set();
-  /** @type {string[]} */
-  const stack = [];
-
-  /** @param {string} node @returns {string[]|null} */
-  function walk(node) {
-    const at = stack.indexOf(node);
-    if (at !== -1) return [...stack.slice(at), node];
-    if (done.has(node)) return null;
-    stack.push(node);
-    for (const next of graph.get(node) || []) {
-      const cycle = walk(next);
-      if (cycle) return cycle;
-    }
-    stack.pop();
-    done.add(node);
-    return null;
-  }
-
-  for (const node of graph.keys()) {
-    const cycle = walk(node);
-    if (cycle) return cycle;
-  }
-  return null;
-}
+const cliGraph = () => graphOf(CLI, '.mjs');
 
 // ---------------------------------------------------------------------------
 // The graph

@@ -74,14 +74,6 @@ const EXEMPT = {
       'would put half of one contract in another file. The format knowledge is already out, in ' +
       './parse.mjs.',
   },
-  'public/deck.js': {
-    at: 1113,
-    dated: '2026-09-16',
-    splitBy: 'WP-92m',
-    reason:
-      'A table renderer plus a keyboard map plus usage, and the usage half is one arm of the ' +
-      'deck.js <-> usage.js cycle (audit A-07). Splitting deck-usage.js out closes both.',
-  },
   'public/render/themes.js': {
     at: 1430,
     dated: '2026-09-16',

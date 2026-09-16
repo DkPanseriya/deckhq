@@ -42,7 +42,14 @@
  * token count wrong.
  */
 
-import { cut, groupDigits } from './deck.js';
+// WP-92m closes the `deck.js` <-> `usage.js` cycle (audit A-07) by pointing
+// this import at the pure half rather than at the whole module. `deck-view.js`
+// imports nothing but the clock, so there is no edge back: `deck.js` reaches
+// this file for the Usage tab, this file reaches `deck-view.js` for two text
+// helpers, and `deck-view.js` reaches neither. No `wire()` was needed — `cut`
+// and `groupDigits` are pure and close over nothing, which is the condition
+// §122 rule 3 exists to work around.
+import { cut, groupDigits } from './deck-view.js';
 
 /** The three windows the picker offers. Mirrors `WINDOWS` in `src/core/usage.mjs`. */
 export const USAGE_WINDOWS = Object.freeze([
