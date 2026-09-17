@@ -303,8 +303,11 @@ Then open <https://www.npmjs.com/package/deckhq> and check, in this order:
 this is the first time any of it is observed rather than reviewed:
 
 - The notes are the `## 1.3.0` section of `CHANGELOG.md`, opening on the Highlights paragraph.
-- Nine assets: `floor.png`, `panel-review-card.png`, `hero.gif`, `deckhq-1.3.0-win.zip`,
-  `Formula/deckhq.rb`, the three winget manifests and `scoop/deckhq.json`.
+- Eleven assets: `floor.png`, `panel-review-card.png`, `hero.gif`, `deckhq-1.3.0-win.zip`,
+  `Formula/deckhq.rb`, the three winget manifests, `scoop/deckhq.json`, and — from 1.4.0 —
+  `Install-DeckHQ.cmd` and `Install-DeckHQ.command`, the two double-click launchers (WP-76,
+  `docs/DEVIATIONS.md` §186). Download the `.cmd` and check it opens in Notepad with its lines
+  intact: a release cut from a checkout that ignored `.gitattributes` would serve it LF.
 - `packaging/README.md` says what a user does with each. Spot-check one digest against
   `npm view deckhq@1.3.0 dist.integrity`.
 

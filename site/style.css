@@ -910,6 +910,13 @@ figcaption {
   margin: 0 0 var(--s-2);
 }
 
+/* The install band's download buttons sit at the reading edge rather than in
+   the middle of the page, because the section head above them is left-aligned. */
+.actions--start {
+  justify-content: flex-start;
+  margin-top: var(--s-3);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

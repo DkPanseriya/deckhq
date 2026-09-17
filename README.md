@@ -14,6 +14,16 @@ every CI run. [`docs/MEDIA.md`](docs/MEDIA.md) says what every image in this pro
 
 ## Install
 
+**Download and run it**, if you would rather not paste anything into a shell. Each file runs the
+matching one-liner below and carries nothing else.
+
+- Windows: [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd)
+- macOS: [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command)
+
+Windows SmartScreen may warn about the Windows one, because it is unsigned; the one line does the
+same thing and raises no warning. On macOS a downloaded file arrives without its run bit, so the
+first run needs `chmod +x ~/Downloads/Install-DeckHQ.command` in Terminal.
+
 **One line**, if you have Node 18 or newer. It starts the daemon, opens the floor in a window of
 its own, and — the first time only — asks once whether to write a Desktop and Start Menu icon.
 
