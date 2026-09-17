@@ -852,16 +852,6 @@ function build() {
   };
 
   const releases = releaseHighlights(read('CHANGELOG.md'));
-  // `docs/DEVIATIONS.md` links to its neighbours the way a file on disk does.
-  // None of those files is published here, so a relative link becomes a link
-  // into the repository at the path it meant; an image becomes the copy under
-  // `dist/media/`; an anchor and an absolute URL are left alone.
-  const rewriteSrc = (src) => (src.startsWith('media/') ? `../${src}` : src);
-  const rewriteHref = (href) => {
-    if (/^(https?:|mailto:|#)/i.test(href)) return href;
-    const clean = href.replace(/^\.\//, '');
-    return `${REPO}/blob/main/docs/${clean}`;
-  };
 
   // Every picture the site serves is one a page declares. The engineering log
   // is off this site, and so are the pictures that were published only because
