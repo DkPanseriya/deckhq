@@ -19890,6 +19890,33 @@ host at all**, and that the `.cmd` is CRLF throughout.
   with its own version. `package.json`, `package-lock.json`, `plugin/.claude-plugin/plugin.json` and
   `.claude-plugin/marketplace.json` are the four that move together.
 
+### 186.4 `npm publish --dry-run` failed, and only `npm publish --dry-run`
+
+Step 7 of the checklist is the rehearsal: `npm publish --dry-run --access public`, which runs
+`prepublishOnly`, which runs the suite. It was red on one line, and the same suite run as
+`npm test` was green:
+
+```
+✖ `npx deckhq app` works from the tarball, cold
+  AssertionError: expected one tarball, got none
+```
+
+npm hands every flag it was given to its child processes as an `npm_config_*` variable, and
+`test/integration/tarball.test.mjs` builds its child environment from `process.env`. So under the
+dry run, and nowhere else, the `npm pack` inside the test inherited `npm_config_dry_run=true`,
+printed a file list, wrote no `.tgz`, and failed the assertion counting them.
+
+Nothing about the package was wrong. The fix is one line — `npm_config_dry_run: 'false'` beside the
+cache, fund and audit overrides already in that environment block — and the test now does what its
+own header says it does, `npm pack` into a temp directory, whoever its parent is.
+
+**This was never going to be caught by CI.** The `publish` job runs `npm publish`, without
+`--dry-run`, so the variable is absent and the test packs normally; the `verify` matrix runs
+`npm test` directly. The only command that reproduced it is the one a human types once per release,
+immediately before the irreversible step, which is the worst place in this project to meet a red
+line for a reason that is not real. §138 put the release-body check before the publish for the same
+reason.
+
 ### What is NOT here
 
 - **No tag, no push, no publish.** Everything above step 7 of the checklist and nothing at or past

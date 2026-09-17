@@ -218,6 +218,12 @@ This runs the full `prepublishOnly` gate and prints exactly what would be upload
 uploading it. **This is the last reversible step.** Read the output. If the file list differs from
 step 5, stop and find out why.
 
+Until 1.4.0 this command was the only one in the project that failed, and for a reason that was not
+real: npm passes `--dry-run` down to its children as `npm_config_dry_run`, so the `npm pack` inside
+`test/integration/tarball.test.mjs` wrote no tarball and the test counting them failed. The test now
+pins that variable off (`docs/DEVIATIONS.md` §186.4). Expect a green suite and
+`total files: 273`.
+
 ### 7a. Check the release notes will fit — **resolved: the job caps the body, and the pre-check refuses an oversize one before publishing**
 
 ```sh
