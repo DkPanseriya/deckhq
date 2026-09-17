@@ -20154,3 +20154,74 @@ two lines instead of four. 898 lines.
 - **Codex, Gemini CLI and OpenCode are hired unverified.** No terminal has been opened on any of
   them by this project. They are hired, the floor already degrades correctly for them, and the
   response and the panel line both SAY SO.
+
+## 190. Two red tests — a page over the ceiling, and a poll that gave up too early
+
+**Date:** 17 September 2026 · **Package:** red tests on `main` · **Asked for:** the owner, 17
+September 2026
+
+§189 is not in this file at the time of writing — it belongs to a concurrent package — so this
+section takes 190 and says so rather than renumbering around a neighbour. §187 did the same thing
+for the same reason.
+
+Two tests were failing on `main`, for two unrelated reasons. Neither fix changes what the product
+does, and the two small faults found on the way through do.
+
+### 190.1 `scripts/dashboard/template.mjs` was 1,109 lines
+
+WP-22's ceiling is 900, and `I-11` in `test/unit/line-ceiling.test.mjs` says so. The file did not
+grow by being written: it grew when Prettier reformatted §187's one long template string. **No
+exemption row was added.** The file was a stylesheet, a client script and about ninety lines of
+markup and helpers in one template literal, and those are three things:
+
+| file | lines | holds |
+| --- | --- | --- |
+| `scripts/dashboard/template.mjs` | 109 | `pack`, `packData`, `tighten`, the markup, the assembly |
+| `scripts/dashboard/template-css.mjs` | 258 | `CSS` — the stylesheet, verbatim |
+| `scripts/dashboard/template-script.mjs` | 756 | `clientScript(data)` — the client script, verbatim |
+
+The split is a MOVE, and the proof is that it is: `node scripts/dashboard/build.mjs --out <file>
+--tests 1 --goldens 1 --ci green --npm 1.4.0` was run against the tree before the change and again
+after it, and `cmp` says the two 203.8 KB pages are byte-identical. `tighten()` drops leading
+whitespace and blank lines from every line of the page, so the indentation of the new modules costs
+the output nothing.
+
+One thing could not move as a constant. The page footer names two links out of `data.meta.links`,
+so the client script is not static text; it is `clientScript(data)`, a function returning the same
+template literal, and `template.mjs` calls it where the string used to sit.
+
+### 190.2 The footer vanished on the first tab press
+
+Found while reading the script that had just been moved. `renderTab()` rewrites
+`main.innerHTML` on every tab switch, and the boot block appended the footer to `#main` — so the
+footer was visible exactly until the reader pressed a second tab, and then never came back. It is
+inserted after `#main` now, as a sibling, where nothing rewrites it. `test/unit/dashboard.test.mjs`
+holds both halves: that `renderTab()` still rewrites `main.innerHTML` (or the test is guarding the
+wrong mechanism) and that the footer is not parented there.
+
+### 190.3 The tab bar was bound once per render
+
+The same block. `renderChrome()` attached the tab bar's `click` listener, and the listener calls
+`renderChrome()` — so the second press ran the handler twice and re-rendered the page twice, the
+third three times, and so on for as long as the page was open. The bar's element is never replaced,
+only its `innerHTML`, so one delegated listener bound at start-up is all it ever needed. The test
+counts the bindings: exactly one, and none inside `renderChrome()`.
+
+### 190.4 `studio-hire.test.mjs`'s roster poll gave up before the scan had run
+
+The three-role acceptance failed under full-suite load with `docs has no agentId`. Nothing was
+wrong with the route. §188's poll ran 100 rounds of 50 ms — five seconds — and asked for a scan
+only on every tenth round, so about one re-scan a second. The `agentId` record is a write chained
+behind the scan's own listener, and on a machine already running a whole `npm test` the third
+role's write had not landed inside that budget.
+
+The fix is not a bigger number of the same guess. **Every round now turns the crank**: it triggers
+a scan, awaits it, yields once for the chained write, and re-reads `roster.json`; the loop leaves
+the instant all three roles carry an id, which on an idle machine is the first round. The 45-second
+bound is a FAILURE PATH and not a wait — reaching it fails with the round count, the elapsed time
+and the roster it last read, rather than falling through to a bare assertion. The fixture
+`test/fixtures/fake-hire.mjs` now `fsync`s its transcript and its directory before exiting, so the
+first scan is looking at bytes that are certainly on disk.
+
+Proof: the file was run ten times in a row, with a full `npm test` running beside it in the same
+worktree throughout. Ten green, and both parallel suites green as well.
