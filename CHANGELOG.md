@@ -46,6 +46,11 @@
   and the 45-second bound is a failure path — reached, it reports the rounds, the elapsed time and
   the roster. The fake CLI fixture `fsync`s its transcript before exiting. Ten consecutive runs
   green with a full `npm test` running beside them. §190.4.
+- **The project hub's page script is parsed by the suite, and its split is held.** The script is
+  text inside a template literal, so nothing in Node ever read it as JavaScript and a lost brace was
+  a blank page under a green suite. `dashboard.test.mjs` compiles the built page's one `<script>`
+  with `node:vm` — compiled, never run — and `line-ceiling.test.mjs` lists
+  `scripts/dashboard/template*` among the splits that must stay split. §191.
 
 ### Refused, and why
 

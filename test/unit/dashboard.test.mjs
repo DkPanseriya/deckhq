@@ -14,6 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Script } from 'node:vm';
 
 import { build, collect, parseArgs, REPO } from '../../scripts/dashboard/build.mjs';
 import { devRefs, flat, statusOf, tables, section, wpIds } from '../../scripts/dashboard/parse.mjs';
@@ -306,4 +307,21 @@ test('the tab bar is bound once, not once per render', () => {
   );
   const binds = script.match(/getElementById\('tabs'\)\.addEventListener\('click'/g) || [];
   assert.equal(binds.length, 1, 'the tab bar is bound ' + binds.length + ' times');
+});
+
+/**
+ * `docs/DEVIATIONS.md` §191. The client script is source text in a template
+ * literal, interpolated into another one, and nothing in Node ever parses it: a
+ * brace lost in an edit or a seam cut in the wrong place is a blank page in the
+ * browser and a green suite here. The two tests above read the text with
+ * regular expressions, which is not the same as it being JavaScript. Compiled,
+ * never run.
+ */
+test('the page carries one script, and it parses', () => {
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.equal(scripts.length, 1, 'the page carries exactly one executable script');
+  assert.doesNotThrow(() => new Script(scripts[0], { filename: 'hub-page.js' }));
+  for (const name of ['hydrate', 'renderChrome', 'renderTab', 'detailHtml', 'wireTab']) {
+    assert.ok(scripts[0].includes(`function ${name}(`), `${name} is not in the page`);
+  }
 });

@@ -1306,7 +1306,9 @@ without becoming a fifth thing to maintain.
 **Status:** done. **Implemented by:** `scripts/dashboard/build.mjs` (`docs/DEVIATIONS.md` §187),
 with the page itself split move-only into `template.mjs`, `template-css.mjs` and
 `template-script.mjs` to stay under WP-22's 900-line ceiling and no exemption row (§190.1);
-`test/unit/dashboard.test.mjs`; the regeneration line in `docs/README.md`.
+`test/unit/dashboard.test.mjs`, which also compiles the page's one script so that a syntax error in
+it fails the suite and not the browser, and `test/unit/line-ceiling.test.mjs`, which holds the
+split (§191); the regeneration line in `docs/README.md`.
 **Notes.** Four figures the documents do not hold — tests, goldens, CI and the published npm version
 — are flags, and the page prints `not supplied` without them (P-03). Twelve pre-table work packages
 whose status nothing proves read `unknown` rather than being assumed done. The page is capped at

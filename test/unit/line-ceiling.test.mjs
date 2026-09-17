@@ -216,6 +216,7 @@ test('WP-22: the modules that were split are still split', async () => {
     [path.join(REPO, 'src', 'core'), 'state-machine', 7],
     [root, 'settings-ui', 4],
     [path.join(REPO, 'scripts'), 'demo', 4],
+    [path.join(REPO, 'scripts', 'dashboard'), 'template', 3],
   ];
   let checked = 0;
   for (const [dir, prefix, min] of groups) {

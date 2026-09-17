@@ -20276,3 +20276,30 @@ first scan is looking at bytes that are certainly on disk.
 
 Proof: the file was run ten times in a row, with a full `npm test` running beside it in the same
 worktree throughout. Ten green, and both parallel suites green as well.
+
+## 191. The hub's split is held, and its script is parsed
+
+**Date:** 17 September 2026 · **Package:** project hub (§187, §190.1), follow-up · **Gates only:**
+no product code and nothing under `scripts/dashboard/` changed
+
+§190.1 split `scripts/dashboard/template.mjs` three ways and proved the move with `cmp`. Two things
+were left that a proof made once does not cover.
+
+1. **Nothing held the split.** The I-11 walk proves no file is over the ceiling; it cannot prove a
+   split HAPPENED, which is why `line-ceiling.test.mjs` keeps a second list — directory, prefix,
+   how many modules. `scripts/dashboard/template*` ≥ 3 is on it now, beside `scripts/demo*`.
+2. **Nothing parsed the page's script.** It is source text inside a template literal,
+   interpolated into another one, so no import, no lint rule and no test ever reads it as
+   JavaScript — §190's two tests match it with regular expressions. A lost brace is a blank page
+   in a browser and a green suite. `dashboard.test.mjs` now asserts the built page carries exactly
+   one executable `<script>`, compiles it with `node:vm`'s `Script` — compiled, never run — and
+   checks the five functions that span it are in it.
+
+**Measured.** The new test fails on a deliberately unbalanced brace in `template-script.mjs` and
+passes on the tree as it is; the page is untouched, so `cmp` has nothing to say.
+
+**What is NOT here.** `template-script.mjs` is 762 lines by the gate's count, 138 under the
+ceiling. Its `── tabs ──` and `── drawer ──` banners are the seams it will split along when it
+needs to; it does not need to yet, and a split made ahead of need is churn. The hub still has no row
+of its own in `08` §9 — it was asked for directly and lives in R-184 — and this section does not
+invent one.
