@@ -140,9 +140,11 @@ jobs:
   release:
     # The GitHub Release for the tag, once the package is on the registry:
     # notes from the matching CHANGELOG.md section, the two screenshots, a
-    # Windows zip built from the published tarball, and the Homebrew, winget
+    # Windows zip built from the published tarball, the Homebrew, winget
     # and scoop manifests rendered against the sha256 of the bytes the
-    # registry serves. packaging/README.md says what a user does with each.
+    # registry serves, and the two double-click launchers a stranger downloads
+    # instead of pasting a line. packaging/README.md says what a user does with
+    # each.
     needs: publish
     runs-on: ubuntu-latest
     permissions:
@@ -241,6 +243,8 @@ jobs:
             dist/winget/DkPanseriya.DeckHQ.installer.yaml
             dist/winget/DkPanseriya.DeckHQ.locale.en-US.yaml
             dist/scoop/deckhq.json
+            scripts/install/Install-DeckHQ.cmd
+            scripts/install/Install-DeckHQ.command
           )
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" --clobber "${ASSETS[@]}"

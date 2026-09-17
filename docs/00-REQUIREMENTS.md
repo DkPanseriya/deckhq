@@ -84,7 +84,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-002 | The floor answers "is anything waiting on me" in under two seconds | Framing | done |
 | R-010 | One line to install, one question to pin | Install / app mode | done |
 | R-011 | Launch as an app, not a terminal plus a browser | Install / app mode | done |
-| R-012 | One-line installers for a stranger's machine | Install / app mode | done |
+| R-012 | One-line installers, and a file to download and double-click | Install / app mode | done |
 | R-013 | A standalone executable for a machine with no Node | Install / app mode | planned |
 | R-020 | One continuous floor, partially divided, not separate square rooms | Floor / layout | done |
 | R-021 | The anchor hierarchy is literal: floor → walls + tables → chairs → agents | Floor / layout | done |
@@ -214,15 +214,24 @@ not keep one open.
 **Notes.** The browser is deliberately not spawned with `windowsHide`; that flag produced a whole
 browser with no window on the reference machine (§144.1–2).
 
-**R-012 — One-line installers for a stranger's machine**
-*Owner, 14 September 2026:* "make some kind of installer something."
+**R-012 — One-line installers, and a file to download and double-click**
+*Owner, 14 September 2026:* "make some kind of installer something." *Owner, 17 September 2026:* "an
+installer the user can simply download and run, no manual flows."
 **Interpretation.** `install.ps1` and `install.sh` served from the docs site: check for Node 18+,
 *offer* to install it, then `npm install -g deckhq@latest`, then the icon question, then
-`deckhq app`.
-**Why.** Same as R-010; "install Node first" is the step the product could stop asking for.
-**Status:** done. **Implemented by:** WP-75 (`DEVIATIONS.md` §151); `scripts/install/`.
-**Notes.** Neither script is in the tarball and nothing in `src/` imports them, so P-05 is
-untouched. They reach winget, brew and npm and no other host (P-04).
+`deckhq app`. And, for the person who will not paste a line into a shell, one file per platform on
+the Release page that runs the matching line and carries nothing else:
+`Install-DeckHQ.cmd` and `Install-DeckHQ.command`.
+**Why.** Same as R-010; "install Node first" is the step the product could stop asking for, and
+"open a terminal" is the step after it.
+**Status:** done. **Implemented by:** WP-75 (`DEVIATIONS.md` §151) and WP-76's cheap half
+(`DEVIATIONS.md` §186); `scripts/install/`.
+**Notes.** Nothing in `scripts/install/` is in the tarball and nothing in `src/` imports any of it,
+so P-05 is untouched. The scripts reach winget, brew and npm and no other host; the launchers reach
+the Pages origin and no other host, which `test/unit/install-scripts.test.mjs` holds (P-04). Two
+caveats are printed wherever the launchers are offered: SmartScreen may warn about the unsigned
+`.cmd`, and a downloaded `.command` arrives without its run bit. The second is a manual flow, and
+R-013 is what would remove it.
 
 **R-013 — A standalone executable for a machine with no Node**
 *Derived from R-010/R-012*, not asked for directly.
@@ -231,7 +240,9 @@ untouched. They reach winget, brew and npm and no other host (P-04).
 **Status:** planned (WP-76), and recommended **not now**.
 **Implemented by:** — **Notes.** `docs/plan/SEA-FEASIBILITY.md`: a bundler, an asset branch through
 the HTTP layer, ~$300/yr of certificates and ~110 MB per platform, against a WP-75 that already
-gets a stranger to an icon. Explicitly decided against for the current cycle.
+gets a stranger to an icon. Explicitly decided against for the current cycle. 1.4.0 ships the
+download-and-run half of the ask without it (R-012, `DEVIATIONS.md` §186), which leaves exactly two
+things a certificate would buy: no SmartScreen warning on Windows, and no `chmod +x` on macOS.
 
 ### 2.3 Floor and layout
 

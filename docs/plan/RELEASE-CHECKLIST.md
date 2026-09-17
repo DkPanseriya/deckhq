@@ -142,7 +142,8 @@ npm pack --dry-run
 Expect **198 files, 730.1 kB packed, 2.4 MB unpacked** for 1.3.0 (1.2.0 was 42 files and 225 kB;
 the growth is the split modules, the render parts and the two PWA icons). On `main` after WP-66 and
 WP-75 it reads **225 files, 868.3 kB packed, 2.8 MB unpacked** — Studio, `src/cli/pin.mjs` and the
-longer README. Read the list and
+longer README. At 1.4.0 it reads **273 files, 1,162.5 kB packed, 3.47 MB unpacked** — the crew, the
+interior, the Look section and sixty `public/render/` parts. Read the list and
 confirm `bin/`, `src/` (including `src/data/rates.json` and `src/core/publisher-key.mjs`),
 `public/` (including `deck.js`, `palette.js`, `settings-ui.js`, `minifloor.js`, `snapshot.js`,
 `sound.js`, `coach-marks.js`, `floor-rule.js`, all forty `render/*` parts,
@@ -216,6 +217,12 @@ npm publish --dry-run --access public
 This runs the full `prepublishOnly` gate and prints exactly what would be uploaded without
 uploading it. **This is the last reversible step.** Read the output. If the file list differs from
 step 5, stop and find out why.
+
+Until 1.4.0 this command was the only one in the project that failed, and for a reason that was not
+real: npm passes `--dry-run` down to its children as `npm_config_dry_run`, so the `npm pack` inside
+`test/integration/tarball.test.mjs` wrote no tarball and the test counting them failed. The test now
+pins that variable off (`docs/DEVIATIONS.md` §186.4). Expect a green suite and
+`total files: 273`.
 
 ### 7a. Check the release notes will fit — **resolved: the job caps the body, and the pre-check refuses an oversize one before publishing**
 
@@ -303,8 +310,11 @@ Then open <https://www.npmjs.com/package/deckhq> and check, in this order:
 this is the first time any of it is observed rather than reviewed:
 
 - The notes are the `## 1.3.0` section of `CHANGELOG.md`, opening on the Highlights paragraph.
-- Nine assets: `floor.png`, `panel-review-card.png`, `hero.gif`, `deckhq-1.3.0-win.zip`,
-  `Formula/deckhq.rb`, the three winget manifests and `scoop/deckhq.json`.
+- Eleven assets: `floor.png`, `panel-review-card.png`, `hero.gif`, `deckhq-1.3.0-win.zip`,
+  `Formula/deckhq.rb`, the three winget manifests, `scoop/deckhq.json`, and — from 1.4.0 —
+  `Install-DeckHQ.cmd` and `Install-DeckHQ.command`, the two double-click launchers (WP-76,
+  `docs/DEVIATIONS.md` §186). Download the `.cmd` and check it opens in Notepad with its lines
+  intact: a release cut from a checkout that ignored `.gitattributes` would serve it LF.
 - `packaging/README.md` says what a user does with each. Spot-check one digest against
   `npm view deckhq@1.3.0 dist.integrity`.
 

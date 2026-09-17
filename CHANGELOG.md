@@ -6,6 +6,18 @@
 
 ## Unreleased
 
+## 1.4.0 — 2026-09-17
+
+### Highlights
+
+DeckHQ opens as an app, and one line installs it on a machine with no Node — or a file you download
+and run. Every agent is a robot that walks in, sits, types and leaves. The floor is a drawn
+interior, and Look chooses its material, its colour and how big the people are. Seating holds: the
+same session returns to the same chair. A session running three or more sub-agents grows a crew
+around its desk, cabled to it. Counters read tokens, not dollars. Every room carries a plate. A
+resume chain is one agent rather than six. Six hundred names. Studio keeps a store and writes a
+plan; hiring has not landed. And a pass over the architecture.
+
 ### Added
 
 - **The crew — WP-89.** The owner: _"If a chat session fires 3+ agents … the GUI launches all those
