@@ -738,7 +738,7 @@ footer.foot { color: var(--faint); font-size: 11px; margin-top: 22px; display: f
       + '</ul><p class="count">' + D.shipped.length + ' entries in the ' + esc(latest.version) + ' section — see Features.</p></div>';
     h += '<div class="panel"><h2>In progress</h2><ul class="feed">'
       + (inProg.length ? inProg.map(function (r) {
-        return '<li><div class="t">' + link('req', r.id, r.id) + ' ' + md(r.title) + '</div><div class="d">' + esc(r.statusText || '') + '</div></li>';
+        return '<li><div class="t">' + link('req', r.id, r.id) + ' ' + md(r.title) + '</div><div class="d">' + refLinks(r.statusText || '') + '</div></li>';
       }).join('') : '<li class="d">Nothing is marked in progress.</li>')
       + '</ul></div>';
     h += '</div>';

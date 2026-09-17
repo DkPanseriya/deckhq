@@ -380,7 +380,7 @@ export function parseOwnerDecisions(plan, warn) {
   const body = section(plan, /^## 13\. Decisions and actions/, /^## 14\./);
   if (!body) { warn('08-PLAN-V2-100X.md §13: section not found'); return []; }
   const closed = new Set();
-  const closedM = body.match(/Items? ([\d, and]+) (?:are|is) closed/i);
+  const closedM = flat(body.slice(0, 600)).match(/Items? ([\d,\sand]+?)\s+(?:are|is)\s+closed/i);
   if (closedM) for (const n of closedM[1].match(/\d+/g) || []) closed.add(Number(n));
   const lines = body.split('\n');
   const out = [];
