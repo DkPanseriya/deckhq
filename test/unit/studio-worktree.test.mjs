@@ -261,4 +261,3 @@ test('ACCEPTANCE: firing leaves the worktree and the process alone, and says so'
   const branches = await runGit(['branch', '--list', 'studio/backend'], { cwd: root });
   assert.match(branches.stdout, /studio\/backend/);
 });
-

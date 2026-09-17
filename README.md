@@ -143,26 +143,18 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 
 ## Studio
 
-**In progress.** Studio is the opt-in "idea to office" mode, per project: a plan, a roster and a
-six-column board that live in your own repository, and — eventually — one real coding session per
-role. It is off everywhere until you run `deckhq studio enable <project>`.
+**In progress.** Studio is the opt-in "idea to office" mode, per project, off everywhere until
+`deckhq studio enable <project>`. A real `claude` session interviews you in the ordinary panel
+composer and writes a blueprint, a roster and a board into your own repository, with its own tools.
 
-**What exists today is the store, the consent, the planner and Hire.** `enable --yes` writes exactly
-one marked file and records the grant; a real `claude` session then interviews you in the ordinary
-panel composer and writes the blueprint, the roster and the board itself, with its own tools.
-
-**Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** — one row per role on your roster that is
-not already at a desk. Each press gives that role a git worktree of its own
-(`git worktree add … -b studio/<role>`), a brief file in your repository that is yours to edit and
-is never rewritten under a running session, and a real session started in that worktree under that
-brief. It walks onto the floor on the next scan wearing the role's name, and the roster records the
-id the runtime minted. **Firing leaves the worktree and the process alone**, and says so. A role on
-Codex, Gemini CLI or OpenCode is hired and marked _unverified launch_: nobody has opened a terminal
-on those three, and the panel says that rather than pretending.
-
-**What does not exist is the board tab** and the handover gate. The design is
-[`docs/07-STUDIO-DESIGN.md`](docs/07-STUDIO-DESIGN.md); the loop and its remaining unbuilt steps are
-on [the site](https://dkpanseriya.github.io/deckhq/studio.html).
+**Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;**, one row per role not already at a desk.
+Each press gives that role a git worktree of its own (`git worktree add … -b studio/<role>`), a
+brief file that is yours to edit and is never rewritten under a running session, and a real session
+in that worktree under that brief — on the floor within one scan, wearing the role's name. **Firing
+leaves the worktree and the process alone.** A Codex, Gemini CLI or OpenCode role is hired and
+marked _unverified launch_: nobody has opened a terminal on those three. **What does not exist is
+the board tab** and the handover gate — [`docs/07-STUDIO-DESIGN.md`](docs/07-STUDIO-DESIGN.md), and
+[the site](https://dkpanseriya.github.io/deckhq/studio.html).
 
 ## Docs
 

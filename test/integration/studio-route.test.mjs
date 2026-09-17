@@ -371,21 +371,31 @@ test('tracking answers "no data" and invents no number', async () => {
   });
 });
 
-test('the two that still need a package answer 501 and name it', async () => {
-  // WP-67 took `/plan` off this list; it starts a real planner now, and
-  // `test/integration/studio-plan.test.mjs` is where it is tested.
+test('the one that still needs a package answers 501 and names it', async () => {
+  // WP-67 took `/plan` off this list and WP-68 took `/hire`; both start real
+  // sessions now, and `test/integration/studio-plan.test.mjs` and
+  // `test/integration/studio-hire.test.mjs` are where they are tested.
   await withDaemon(async ({ d, a }) => {
     await post(d, '/enable', { cwd: a, confirm: true });
-    for (const [pathname, wp] of [
-      ['/hire', /WP-68/],
-      ['/handover', /WP-70/],
-    ]) {
-      const res = await post(d, pathname, { cwd: a });
-      assert.equal(res.status, 501, pathname);
-      const body = await res.json();
-      assert.match(body.error, wp);
-      assert.equal(Object.keys(body).length, 1, 'a 501 is one line and one key');
-    }
+    const res = await post(d, '/handover', { cwd: a });
+    assert.equal(res.status, 501);
+    const body = await res.json();
+    assert.match(body.error, /WP-70/);
+    assert.equal(Object.keys(body).length, 1, 'a 501 is one line and one key');
+  });
+});
+
+test('a Hire naming no role is refused as a bad request, not as an unbuilt one', async () => {
+  // The distinction the test above used to carry for `/hire`: 501 means "this
+  // package does not exist yet" and 400 means "it does, and you did not name a
+  // role". Confusing the two is how a shipped endpoint reads as missing.
+  await withDaemon(async ({ d, a }) => {
+    await post(d, '/enable', { cwd: a, confirm: true });
+    const res = await post(d, '/hire', { cwd: a, runtime: 'claude-code' });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /name a role to hire/);
+    assert.equal(body.max, 6);
   });
 });
 

@@ -347,9 +347,16 @@ test('ACCEPTANCE: three roles give three worktrees, three briefs and three named
     );
 
     // And the roster now carries an agentId per role, from that same scan.
+    //
     // Polled, not awaited: the record is a write the scan's own listener makes
     // after the scan returns, and pretending otherwise would be a test that
-    // passes because it happened to be slow enough.
+    // passes because it happened to be slow enough. The poll TURNS THE CRANK —
+    // it asks for another scan every few rounds rather than only sleeping —
+    // because that is what a real floor does: the registry polls on a timer, so
+    // a role whose transcript was not on disk yet when one pass ran is found by
+    // the next one. A test with no timer that only slept would be asserting
+    // that every one of the three landed on a single pass, which is a stronger
+    // claim than §4 makes and one a loaded machine can fail on nothing.
     const rosterFile = path.join(studioDir(project), 'roster.json');
     /** @type {any} */
     let roster = { roles: [] };
@@ -357,6 +364,7 @@ test('ACCEPTANCE: three roles give three worktrees, three briefs and three named
       roster = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
       if (roster.roles.every((r) => r.agentId)) break;
       await new Promise((r) => setTimeout(r, 50));
+      if (i % 10 === 9) await d.registry.refresh().catch(() => {});
     }
     assert.deepEqual(roster.roles.map((r) => r.name).sort(), [...names].sort());
     for (const role of roster.roles) {
