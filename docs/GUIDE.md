@@ -4,21 +4,16 @@
 DeckHQ is, how to install it, what it never does, and where it is honest about its limits. This
 file is the long one — every command, every key, every file it touches, and the whole of Studio.
 
-Nothing here was rewritten when it moved: these are the README's own sections, in the README's own
-words, at the point WP-94a cut them out of it.
-
 Every image in this file is a `capture` — DeckHQ photographed on a real machine — and every one of
-them is from September 2026, before the figure took its current form. [`MEDIA.md`](MEDIA.md) is the
-policy that says so, lists which captures are stale, and names WP-94b as the package that retakes
-them.
+them is from September 2026, before the figure took its current form.
 
 | Looking for | Go to |
 |---|---|
 | Install, in every route | [`README.md`](../README.md), and the [site](https://dkpanseriya.github.io/deckhq/install.html) |
-| Why any of this exists | [`01-PRODUCT.md`](01-PRODUCT.md) |
-| How it works inside | [`02-ARCHITECTURE.md`](02-ARCHITECTURE.md) |
+| What it does, with a picture each | The [site](https://dkpanseriya.github.io/deckhq/features.html) |
+| What changed, and when | [`CHANGELOG.md`](../CHANGELOG.md) |
 | Which runtimes, how verified | [`ADAPTERS.md`](ADAPTERS.md) |
-| Where the build departed from its blueprint | [`DEVIATIONS.md`](DEVIATIONS.md) |
+| A security problem | [`SECURITY.md`](../SECURITY.md) |
 
 ---
 
@@ -37,7 +32,7 @@ is done.
 
 ![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](media/floor.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 **Read it in one glance.** The header counts what needs you. Your office, top left, holds the
 sessions that finished and are waiting on your reply — oldest first, with how long they have been
@@ -54,10 +49,10 @@ gets wrong.
 
 > **What you owe is decided by you, never by the runtime.**
 
-`activityState` is _observed_. It changes on its own: a session starts, produces output, blocks,
-goes quiet, exits.
+**What a session is doing** is _observed_. It changes on its own: a session starts, produces
+output, blocks, goes quiet, exits.
 
-`ackState` is _yours_. It changes only when you press a button.
+**What you owe it** is _yours_. It changes only when you press a button.
 
 The waiting area in your office renders your acknowledgement, not the runtime's opinion. **Opening
 a conversation does not clear it. Scrolling past it does not clear it. Reading it does not clear
@@ -123,7 +118,7 @@ space, because "no changes" is itself review-relevant.
 
 ![The review card on the oldest session in the queue: what the agent said rendered as markdown, what changed in the project's working tree at +142 −18 across three files, the 1 Reply, 2 Approve and 3 Bench actions, and the cost estimate as one quiet line](media/panel-review-card.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 The furniture works too. A room's shelf opens that project's folder; its screen runs that
 project's dashboard script. The object is the verb, and it lives in the room the project lives in,
@@ -149,7 +144,7 @@ script. `deckhq app --pin` asks again whenever you want it; `--no-pin` never ask
 
 ![The DeckHQ floor in a Chrome application window on Windows 11: its own title bar reading "(7) DeckHQ" with the DeckHQ mark, no tab strip and no address bar, the queue strip along the top and the office below it](media/app-window.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 `deckhq app` reuses the DeckHQ you already have running — the port you named, the one a running
 daemon published in `~/.deckhq/daemon.json`, the one your installed hooks post to, then 4317
@@ -512,7 +507,7 @@ no Hire yet.
 
 One rule is already fixed, and it is the same rule the queue runs on: **a card's column is yours.**
 No session ending, no test passing, no file appearing and no budget being spent moves a card. They
-flag it; you move it. The design is `docs/07-STUDIO-DESIGN.md`.
+flag it; you move it.
 
 ## Hooks are optional and reversible
 
@@ -561,7 +556,7 @@ These are real, and listed here rather than discovered later.
   agents, because deciding which repo it really belongs to would need evidence nobody has; and a
   deliberate **`--fork-session`** branch would be collapsed into one agent, which has never been
   seen in real data and would be wrong if you use it. Codex, Gemini CLI and OpenCode report no such
-  id, so for those runtimes nothing is inferred and nothing is collapsed. `docs/DEVIATIONS.md` §155.
+  id, so for those runtimes nothing is inferred and nothing is collapsed.
 - **Given names do not run out below 600 sessions.** The pool is 600 first names, and an agent is
   handed one the first time it is seen and keeps it for good. Past 600 live identities on one
   machine you would get `Wren 2`, `Wren 3` — not a duplicate, since no two agents ever wear the same
@@ -570,13 +565,13 @@ These are real, and listed here rather than discovered later.
   upgrading takes each of them away once, keeps the MK number and the face exactly as they were, and
   the panel says _"was Livia 2"_ for a week so the change is not silent. That one-time rename is the
   only thing in DeckHQ that ever changes a name it gave. `deckhq doctor` prints the pool size and
-  how many names still carry a number; it should say 0. `docs/DEVIATIONS.md` §168.
+  how many names still carry a number; it should say 0.
 - **Gemini CLI and OpenCode support is unverified.** Both adapters are implemented against each
   runtime's documented on-disk format or published CLI, and **neither has ever run against real
   data**, because neither runtime is installed on the development machine. Each reports itself
   unavailable cleanly and degrades without throwing, and each says in its own source which
   repository and which date its field names were read from. If you use one of them, telling us what
-  broke is the single most useful thing you can do — `docs/ADAPTERS.md` §6 is the rule that keeps
+  broke is the single most useful thing you can do — [`ADAPTERS.md`](ADAPTERS.md) is the rule that keeps
   this sentence here until somebody does.
 - **Codex support is verified for reading and replying, and not for anything else.** On 4 September
   2026 the adapter was run against real Codex sessions — codex-cli 0.153.1 on Windows, one rollout
@@ -589,7 +584,7 @@ These are real, and listed here rather than discovered later.
   `codex resume --help` and no more; **Codex cannot report a running session**, because it offers
   no machine-readable way to ask, so liveness is inferred from file mtime; and **DeckHQ installs no
   Codex hooks**, so a Codex session waiting on your permission and one that has simply stopped look
-  the same. `docs/DEVIATIONS.md` §8 and §137.
+  the same.
 - **Neither Gemini CLI nor OpenCode can report a running session**, because neither runtime offers
   a way to ask: both list what is stored, not what has a process attached, and DeckHQ will not scan
   your process table to guess. They fall back to the same recency inference Codex uses. OpenCode's
@@ -646,7 +641,7 @@ These are real, and listed here rather than discovered later.
   server list stored **per session** — reads the `system`/`init` event, and **no transcript on the
   development machine carries one**: sixty were sampled and the field was absent from every one,
   so a session's `mcpServers` is absent rather than empty, which is the honest of the two.
-  `docs/DEVIATIONS.md` §147.
+ 
 - **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.
@@ -702,7 +697,7 @@ agent said _"You're absolutely right"_ — and from 1 December, the year so far.
 
 ![Wrapped for the week, over the dimmed floor: turns per room, tokens, spend with its rate card, the longest wait, the room that never slept, the session sent the most, the busiest hour, and the count of one phrase](media/wrapped-weekly.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 Every number is a replay of the event ledger on this machine. Nothing is emailed, uploaded or
 counted anywhere else.
@@ -742,11 +737,11 @@ half-applied. It does name your project folders, so read one before you send it 
 
 ![The floor in the night shift theme: the same office, cooler and dimmer, with the state colours unchanged](media/theme-night-shift.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 ![The floor in the blueprint theme: drafting-table blue with white line work, and the state colours unchanged](media/theme-blueprint.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 **Supporter pack: more themes and avatars; everything that captures, queues or acts is free.** A
 pack is a single signed file — `deckhq pack install <file>` copies it into `~/.deckhq/packs/` and a
@@ -765,7 +760,7 @@ real one, source and all.
 
 ![The settings sheet's theme picker with a Supporter pack installed: the shipped themes and the pack's warehouse and garden beside them](media/pack-picker.png)
 
-_Capture — September 2026, before WP-79 redrew the figures. [`MEDIA.md`](MEDIA.md)._
+_Capture — September 2026, before the figure took its current form._
 
 ## Options
 
@@ -857,9 +852,5 @@ shapes itself rather than driving a browser, so the bytes are the same on every 
 `--check` compares the committed files against a fresh render, and `test/unit/brand-mark.test.mjs`
 does the same on every run, so the source and its outputs cannot drift apart.
 
-Layout, contracts and the reasoning behind every decision are in [`docs/`](README.md). Start
-with [`docs/01-PRODUCT.md`](01-PRODUCT.md) for what this is and
-[`docs/02-ARCHITECTURE.md`](02-ARCHITECTURE.md) for how it works.
-[`docs/DEVIATIONS.md`](DEVIATIONS.md) records every place the build departed from the
-blueprint and why, including the budgets it missed and the claims that did not survive
-measurement.
+What changed and when is in [`CHANGELOG.md`](../CHANGELOG.md). What DeckHQ does, with a picture for
+each of it, is on [the site](https://dkpanseriya.github.io/deckhq/).

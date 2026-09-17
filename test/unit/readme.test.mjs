@@ -17,7 +17,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { INSTALL_COMMANDS } from '../../site/build.mjs';
+import { INSTALL_COMMANDS, INTERNAL } from '../../site/build.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8').replace(/\r\n/g, '\n');
@@ -36,6 +36,38 @@ test('the README stays scannable', () => {
     `README.md is ${lines} lines; the budget is ${MAX_LINES}. ` +
       'Anything longer belongs in docs/GUIDE.md with a link from here.',
   );
+});
+
+test('BLUEPRINT: the README names no internal document, package or section', () => {
+  // WP-95a, and the same list the site is held to. The README is the npm page
+  // and the GitHub front page, so it is the other half of the public face: it
+  // sells the product and it does not hand over the blueprint.
+  //
+  // The one exception is the hero image, which is a file path in this
+  // repository rather than a document a reader is sent to read.
+  const text = readme.replace(/\(test\/goldens\/[^)]*\)/g, '(image)');
+  for (const pattern of INTERNAL) {
+    const hit = pattern.exec(text);
+    assert.equal(hit, null, `README.md names ${hit && hit[0]}, which belongs to the blueprint`);
+  }
+});
+
+test('the Docs table lists only what a user of DeckHQ would open', () => {
+  // WP-95a. The register, the architecture, the visual spec, the plan, the
+  // media policy and the engineering log are off this table: they are how the
+  // thing is built, and this file is for somebody deciding whether to run it.
+  const section = readme.slice(readme.indexOf('\n## Docs'), readme.indexOf('\n## Honest limits'));
+  assert.ok(section.length > 0, 'the README has no Docs section');
+  for (const allowed of ['docs/GUIDE.md', 'CHANGELOG.md', 'SECURITY.md', 'LICENSE']) {
+    assert.ok(section.includes(allowed), `the Docs table does not list ${allowed}`);
+  }
+  for (const m of section.matchAll(/\[`([^`]+)`\]\(([^)\s]+)\)/g)) {
+    assert.match(
+      m[2],
+      /^(docs\/GUIDE\.md|docs\/ADAPTERS\.md|CHANGELOG\.md|SECURITY\.md|LICENSE)$/,
+      `the Docs table links ${m[2]}, which is not a document a user reads`,
+    );
+  }
 });
 
 test('the README prints the install commands exactly as the site does', () => {
@@ -98,11 +130,12 @@ test('nothing the README cut was thrown away', () => {
   assert.ok(readme.includes('docs/GUIDE.md'), 'the README does not link to the guide');
 });
 
-test('every image in the README and the guide says which class it is', () => {
-  // `docs/MEDIA.md`: capture, golden render, or design illustration. A picture
-  // that does not say which is a claim nobody checked.
+test('every image in the README and the guide says what it is', () => {
+  // A screenshot, a capture of the product moving, or a drawing of something
+  // that has not been built. A picture that does not say which is a claim
+  // nobody checked.
   const guide = fs.readFileSync(path.join(root, 'docs', 'GUIDE.md'), 'utf8');
-  const classes = /golden render|capture|design illustration/i;
+  const classes = /screenshot|capture|design illustration/i;
   for (const [name, text] of [
     ['README.md', readme],
     ['docs/GUIDE.md', guide],
