@@ -83,6 +83,21 @@ my-floor.json`, `deckhq look import my-floor.json`, `deckhq look presets`, plus 
   session, so it is a file you can post. A malformed one is refused whole with its reason, and so is
   a legal one whose combination the contrast guards will not paint.
 
+- **The project hub — one page that shows the whole project.** The owner: _"Requirements, user
+  stories, features, all into our dashboard; I like it in a GUI, as a list or tiles that can be
+  opened for more detail."_ `node scripts/dashboard/build.mjs --out dist/deckhq-hub.html` reads the
+  repository's own documents — the requirements register, the plan's work packages and owner
+  decisions, the deviations log, the architecture audit and its map, the Studio loop, the look and
+  motion plans and this changelog — and writes **one self-contained HTML file** with eight tabs:
+  Overview, Work packages, Requirements, User stories, Features, Architecture, Decisions and
+  Releases. Every list searches, filters, sorts and switches between tiles and rows; every tile
+  opens a drawer with the owner's own words, the interpretation, the status and the cross-links to
+  the packages and deviations that built it, deep-linkable as `#req/R-043`, `#wp/WP-88c` or
+  `#dev/172`. The Architecture tab draws the layered module map from `13-audit-map.json` in inline
+  SVG beside the invariants and the findings. Nothing is loaded from anywhere: no font, no CDN, no
+  image. It is a developer tool, not a shipped surface — nothing under `src/` or `public/` moved and
+  no runtime dependency was added. `docs/DEVIATIONS.md` §187.
+
 ### Fixed — floor
 
 - **The wool rug was invisible on night shift and the task rug shouted on blueprint — WP-88a.** Both

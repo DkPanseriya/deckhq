@@ -19928,3 +19928,59 @@ reason.
   `MISS` on linux until somebody bakes them.
 - **No site picture was retaken.** Checklist step 1.1 applies when the interface moved; the site
   changes here are copy and two buttons.
+## 187. The project hub — one page generated from the documents themselves
+
+**Date:** 17 September 2026 · **Package:** project hub · **Asked for:** the owner, 17 September 2026
+
+§186 is not in this file at the time of writing — §184 belongs to the concurrent WP-68 package and
+§186 to the concurrent release package — so this section takes 187 and says so rather than
+renumbering around a neighbour.
+
+The owner: *"Requirements, user stories, features, all into our dashboard; I like it in a GUI, as a
+list or tiles that can be opened for more detail. Work packages, architectural blueprint,
+requirements, user stories, features, everything in the dashboard."*
+
+**Shipped:** `scripts/dashboard/build.mjs`, `parse.mjs` and `template.mjs` — zero dependencies, no
+runtime code touched — write one self-contained HTML page to `--out` (`dist/deckhq-hub.html` by
+default, which is git-ignored). Eight tabs over what the documents already hold: Overview, Work
+packages (111), Requirements (85), User stories (13), Features (155), Architecture, Decisions (the
+186-entry deviations log) and Releases (5). Search, status and area chips, sort, a tiles/rows
+toggle, a drawer per entry with every parsed field and its cross-links, deep links (`#req/R-043`,
+`#wp/WP-88c`, `#dev/172`), `/` to search, arrows to move, Enter to open, Esc to close.
+
+**Why it is generated, not written.** A second hand-maintained status page is a second thing to
+contradict the first. Every figure on this one comes from the file that owns it: the register owns
+requirements, `08` §9 owns packages, this log owns decisions, `13-audit-map.json` owns the module
+counts. A heading that moves empties a tab and the build prints a warning;
+`test/unit/dashboard.test.mjs` fails the moment a collection comes back empty, so the page cannot go
+quietly stale.
+
+**Four numbers the documents do not hold** — the test count, the golden count, CI and the published
+npm version — are flags (`--tests --goldens --ci --npm`). Without them the page prints **not
+supplied**. Rule 11 and P-03: a figure with no record behind it is never a number.
+
+**What the parsers could not settle, and what they do instead.**
+
+1. **Twelve of the 111 packages have no status anywhere.** WP-01, 02, 06, 11, 12, 25, 33–35, 48, 49
+   and 58 predate the §9 tables, and neither a CHANGELOG bullet nor a section of this file names
+   them. They read `unknown` rather than being assumed done.
+2. **`§9` is ambiguous.** It is a deviation in `DEVIATIONS.md §9` and a plan section in `` `08` §9 ``.
+   A bare `§N` is read as a deviation only once the sentence has named DEVIATIONS, and never when
+   another document's name is attached.
+3. **This log issues §48 and §49 twice each** (`## 48. One frame per room` and `## 48. Idle repos
+   collapse to a strip`, and the same for 49). Both entries are real, so both are kept and the
+   second gets the key `48-2` so one deep link means one entry. Nothing is renumbered here.
+4. **The page is capped at 220 KB**, which is less than the prose it draws on. The payload is
+   columnar — a key list and rows, not 630 repeated objects — and long fields are truncated with an
+   ellipsis at the length the page can show. Every entry names the document it came from; the
+   documents remain the source. Built: **215.4 KB**.
+
+**Measured:** eight tabs, both themes, at 375 px and 1440 px in headless Chrome — no console
+message, no horizontal body scroll, the drawer opening, a cross-link followed from a requirement to
+its package, and Esc restoring focus. Sixteen tests in `test/unit/dashboard.test.mjs` hold the
+collections, the ids, the cross-links, the budget, the deep-link ids, and that the page carries no
+external URL, no `<html>`/`<body>` tag and its `<title>` inside the first 8 KB.
+
+**What is NOT here.** No runtime dependency (P-05) and nothing under `src/`, `public/` or `site/`.
+The hub is a developer tool built on demand, not a surface the daemon serves, so it adds no egress
+surface (P-04) and no page for the goldens to photograph.
