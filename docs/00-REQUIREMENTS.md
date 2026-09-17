@@ -1243,6 +1243,31 @@ and unchanged in every key on `demo`, suite 2,486 → 2,497 by addition.
 recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
 site, the extension and the plugin were mapped but not audited in depth.
 
+**R-183 — The suite's verdict is a fact about the product, not about the machine that ran it**
+_Standing rule, `08` §1.1 and the WP-50/WP-51 rows: a green run means **all nine combinations** —
+Ubuntu, macOS and Windows × Node 18, 20 and 22 — plus the goldens job. "Green except Windows" is
+not green, and neither is the reverse._
+**Interpretation.** A test may not read the host for anything the product injects. Where a module
+takes a platform, a clock, a home directory or an environment as a parameter, the test asserts the
+answer for each of them from one process, and it asserts a literal — never a value re-derived
+through the same host facility the code used, because that can only prove the two agree. Where a
+test owns a temp root, it owns the shutdown too: anything with a debounced write is flushed before
+the root goes.
+**Why.** §121.4 recorded the first shape of this — tests that scanned the developer's real home
+directory, so the suite's wall clock swung 5 s to 68 s on one commit and one test took a different
+branch depending on what the laptop happened to be doing. §185 is the same shape three more times:
+the path separator, a 250 ms debounce, and a photograph of a floor taken on a platform nobody can
+re-photograph on. All three were green on the author's Windows and red on CI, which is the worst
+direction for this failure to run in — the machine that decides is the one nobody is looking at.
+**Status:** partly done. Nine test jobs green; the `goldens` job still red on the six stale linux
+goldens §185.4 says to delete.
+**Implemented by:** §185 — `src/core/launcher.mjs` takes its path semantics from the injected
+platform, `test/helpers/store-root.mjs` flushes every store opened on a temp root before removing
+it, and `test/helpers/isolate.mjs` (§124) already holds the home-directory half.
+**Notes.** The rule is about the suite, not the product: none of §185's three defects was reachable
+by a user, and the one production file it touched behaves identically for every caller that injects
+no platform — which is all of them.
+
 ### 2.18 Declined and deferred
 
 **R-190 — A 3D renderer**

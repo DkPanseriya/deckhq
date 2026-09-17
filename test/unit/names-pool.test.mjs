@@ -33,13 +33,11 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import { FROZEN_POOL, ORIGINAL_POOL, SHORT_NAMES, availableNames } from '../../public/names.js';
 import { Store } from '../../src/core/store.mjs';
 import { Identity } from '../../src/core/identity.mjs';
+import { dropRoot, onRoot, storeRoot } from '../helpers/store-root.mjs';
 
 /**
  * The pool exactly as it stood before WP-84 — `git show HEAD:public/names.js`
@@ -505,8 +503,8 @@ test('WP-84: an empty machine still draws its names from the block it always dre
   // hash picks a starting point inside `ORIGINAL_POOL`, so the first name a
   // fresh machine hands out is the same one it handed out before the pool
   // grew; the new names are what the walk REACHES once the old ones are gone.
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-names-'));
-  const store = new Store(path.join(dir, 'state.json'));
+  const { dir, file } = await storeRoot('names');
+  const store = onRoot(dir, new Store(file));
   await store.load();
   const identity = new Identity(store);
   const old = new Set(SHORT_NAMES.slice(0, ORIGINAL_POOL));
@@ -514,14 +512,14 @@ test('WP-84: an empty machine still draws its names from the block it always dre
     const name = identity.describe(`claude-code:sess-${i}`, 'alpha').givenName;
     assert.ok(old.has(name), `"${name}" came from outside the original block on an empty machine`);
   }
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('WP-84: past sixty agents the pool keeps going instead of suffixing', async () => {
   // The whole point. Ninety-two conversations used to mean thirty-two
   // suffixed names; now it means ninety-two names.
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-names-'));
-  const store = new Store(path.join(dir, 'state.json'));
+  const { dir, file } = await storeRoot('names');
+  const store = onRoot(dir, new Store(file));
   await store.load();
   const identity = new Identity(store);
   const seen = new Set();
@@ -532,7 +530,7 @@ test('WP-84: past sixty agents the pool keeps going instead of suffixing', async
     seen.add(name);
   }
   assert.equal(seen.size, 92);
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('WP-86 THE RULE: a suffix cannot occur below 600 live identities', async () => {
@@ -540,8 +538,8 @@ test('WP-86 THE RULE: a suffix cannot occur below 600 live identities', async ()
   // one machine — more than any real one has had — and not one of them wears
   // "Livia 2". A suffix is the marker the pool writes when it has nothing left;
   // this asserts the pool has something left for every one of the 600.
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-names-'));
-  const store = new Store(path.join(dir, 'state.json'));
+  const { dir, file } = await storeRoot('names');
+  const store = onRoot(dir, new Store(file));
   await store.load();
   const identity = new Identity(store);
   const seen = new Set();
@@ -558,5 +556,5 @@ test('WP-86 THE RULE: a suffix cannot occur below 600 live identities', async ()
   }
   assert.deepEqual(suffixed, [], 'the pool ran out before 600 identities');
   assert.equal(seen.size, 600);
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });

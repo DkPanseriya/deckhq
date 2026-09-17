@@ -83,6 +83,19 @@ export function unsafeForPowerShell(value) {
 /**
  * The first executable of any of these names on the PATH, or null.
  *
+ * EVERY path decision here comes from the INJECTED platform, not the host —
+ * the separator PATH is split on and the separator the directory and the name
+ * are joined with, as much as the list of extensions. That is not pedantry: a
+ * `PATH` of `C:\npm;C:\other` split on the host's `path.delimiter` is one
+ * string on Windows and three nonsense ones on Linux, so a function whose
+ * platform is a parameter but whose `path` is the host's is only pure on the
+ * machine it was written on. It was red on all six POSIX CI jobs and green on
+ * the author's Windows for exactly that reason (`docs/DEVIATIONS.md` §185).
+ *
+ * On a machine where the injected platform IS the host's — every production
+ * caller, which passes none — `path.win32`/`path.posix` and `path` are the
+ * same object's behaviour, so nothing a user sees changes.
+ *
  * @param {string[]} names
  * @param {{platform?:string, env?:Record<string,any>,
  *          exists?:(p:string)=>boolean}} deps
@@ -92,15 +105,16 @@ export function whichOnPath(names, deps = {}) {
   const platform = deps.platform || process.platform;
   const env = deps.env || process.env;
   const exists = deps.exists || (() => false);
+  const p = platform === 'win32' ? path.win32 : path.posix;
   const dirs = String(env.PATH || env.Path || '')
-    .split(path.delimiter)
+    .split(p.delimiter)
     .map((d) => d.trim())
     .filter(Boolean);
   const exts = platform === 'win32' ? ['.cmd', '.exe', '.bat', ''] : [''];
   for (const dir of dirs) {
     for (const name of names) {
       for (const ext of exts) {
-        const file = path.join(dir, name + ext);
+        const file = p.join(dir, name + ext);
         if (exists(file)) return file;
       }
     }

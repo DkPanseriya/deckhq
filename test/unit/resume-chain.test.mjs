@@ -25,12 +25,10 @@ import '../helpers/isolate.mjs';
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import { collapseResumed, conversationKey } from '../../src/core/resume-chain.mjs';
 import { Registry } from '../../src/core/state-machine.mjs';
+import { dropRoot, onRoot, storeRoot } from '../helpers/store-root.mjs';
 import { Store } from '../../src/core/store.mjs';
 import { Identity } from '../../src/core/identity.mjs';
 import { agentId } from '../../src/core/model.mjs';
@@ -92,8 +90,8 @@ function makeAdapter(summaries, live = []) {
 }
 
 async function freshStore() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-resume-chain-'));
-  const store = new Store(path.join(dir, 'state.json'));
+  const { dir, file } = await storeRoot('resume-chain');
+  const store = onRoot(dir, new Store(file));
   await store.load();
   return { store, dir };
 }
@@ -220,7 +218,7 @@ test('INVARIANT: one agent per conversation', async () => {
   assert.equal(registry.agents.length, 1);
   assert.equal(registry.agents[0].id, agentId('claude-code', 'new'));
   assert.deepEqual(registry.agents[0].supersedes, [agentId('claude-code', 'old')]);
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('INVARIANT: every agent stands in exactly one placement zone', async () => {
@@ -239,7 +237,7 @@ test('INVARIANT: every agent stands in exactly one placement zone', async () => 
   }
   for (const [id, list] of zones) assert.equal(list.length, 1, `${id} is in ${list.length} zones`);
   assert.equal(zones.size, snap.agents.length, 'an id appeared twice in one snapshot');
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('INVARIANT: no two agents in a snapshot share a name or an MK tag', async () => {
@@ -255,7 +253,7 @@ test('INVARIANT: no two agents in a snapshot share a name or an MK tag', async (
   assert.equal(new Set(tags).size, tags.length, `duplicate MK in ${tags.join(', ')}`);
   // Four origins, twelve transcripts: four people.
   assert.equal(snap.agents.length, 4);
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('a suffix appears ONLY where the base name is genuinely taken', async () => {
@@ -274,7 +272,7 @@ test('a suffix appears ONLY where the base name is genuinely taken', async () =>
       `${a.givenName} is suffixed but nobody wears "${m[1]}"`,
     );
   }
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('IDENTITY: a resume keeps the name and the MK number the user learned', async () => {
@@ -304,7 +302,7 @@ test('IDENTITY: a resume keeps the name and the MK number the user learned', asy
   assert.equal(after[0].givenName, before.givenName, 'the first name survived the resume');
   assert.equal(after[0].mk, before.mk, 'the MK number survived the resume');
   assert.equal(after[0].identityId, agentId('claude-code', 'old'));
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('IDENTITY: a resume spends no new name from the pool', async () => {
@@ -324,7 +322,7 @@ test('IDENTITY: a resume spends no new name from the pool', async () => {
   ];
   await registry.refresh();
   assert.equal(identity.takenNames().length, spentBefore, 'a resume must cost the pool nothing');
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('INVARIANT: collapsing writes no user-owned field, on either member', async () => {
@@ -352,7 +350,7 @@ test('INVARIANT: collapsing writes no user-owned field, on either member', async
   assert.deepEqual(afterAck, beforeAck, 'the superseded session kept the state the user gave it');
   // And the live one is the user's to bench or not, on its own terms.
   assert.equal(registry.agents[0].ackState, 'active');
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test('a superseded session reported alive does not walk back onto the floor', async () => {
@@ -376,7 +374,7 @@ test('a superseded session reported alive does not walk back onto the floor', as
     registry.agents.map((a) => a.id),
     [agentId('claude-code', 'new')],
   );
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 // --------------------------------------------------- D. the untouched cases
@@ -392,7 +390,7 @@ test('an adapter that reports no origin at all behaves exactly as before', async
     assert.equal(a.identityId, a.id);
     assert.deepEqual(a.supersedes, []);
   }
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 // ------------------------------------------------------ E. the owner's data
@@ -422,7 +420,7 @@ test("REGRESSION: the owner's own two sessions are one agent, one name, one zone
   assert.equal(snap.agents[0].id, agentId('claude-code', GRETA), 'the live transcript wins');
   assert.deepEqual(snap.agents[0].supersedes, [agentId('claude-code', SENA)]);
   assert.equal(new Set(snap.agents.map((a) => placement(a))).size, 1, 'one zone');
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
 
 test("REGRESSION: the owner's four-deep chain in the same room is one agent", async () => {
@@ -442,5 +440,5 @@ test("REGRESSION: the owner's four-deep chain in the same room is one agent", as
   assert.equal(registry.agents[0].id, agentId('claude-code', chain[3][0]));
   assert.equal(registry.agents[0].identityId, agentId('claude-code', chain[0][0]));
   assert.equal(registry.agents[0].supersedes.length, 3);
-  await fs.rm(dir, { recursive: true, force: true });
+  await dropRoot(dir);
 });
