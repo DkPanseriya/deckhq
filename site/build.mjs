@@ -1,5 +1,5 @@
 /**
- * The documentation site, built with nothing.
+ * The public site, built with nothing.
  *
  *   node site/build.mjs                 # -> site/dist
  *   node site/build.mjs --out /tmp/x    # anywhere else
@@ -7,20 +7,28 @@
  *
  * There is no site generator here and there is no dependency to add one. The
  * pages in `site/pages/` are hand-written HTML bodies; this script wraps each
- * one in the shared shell, renders `docs/DEVIATIONS.md` into the engineering
- * log, and copies the images the pages reference out of `docs/media/`.
+ * one in the shared shell, renders the release highlights out of
+ * `CHANGELOG.md`, and copies the images the pages reference out of
+ * `docs/media/`.
+ *
+ * WP-95a · this site is the product, not the blueprint. The owner: *"The
+ * website is purely public marketing and PR. Do not put requirements and
+ * architecture docs there. We only put the product public and its features."*
+ * So the pages show what DeckHQ does for the person using it, and nothing here
+ * publishes, renders or links an internal document. `INTERNAL` below is that
+ * rule as a pattern list, applied to every page this script writes, and
+ * `test/unit/site.test.mjs` applies it again to the built site and to the
+ * README.
  *
  * The product makes no outbound network calls of any kind, and its site keeps
  * the same promise: every stylesheet, script, image and font on it is either
  * served from the site's own origin or is not there at all. There is no
  * analytics, no CDN, no web font and no third-party frame.
- * `test/unit/site.test.mjs` asserts that against the sources *and* against
- * what this script emits, so the promise cannot be broken by a build step.
  *
  * The markdown converter below is deliberately small: headings, paragraphs,
  * lists, tables, block quotes, rules, fenced code, and five inline forms.
- * Everything is escaped before anything is added, so a `<script>` inside a
- * deviation entry renders as the six visible characters it is.
+ * Everything is escaped before anything is added, so a `<script>` in a release
+ * note renders as the six visible characters it is.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,14 +60,14 @@ const SITE_ORIGIN = 'https://dkpanseriya.github.io/deckhq';
 /* ------------------------------------------------------------------ pages */
 
 /**
- * The site's pages, in navigation order. `file` is a body fragment in
- * `site/pages/`; everything around it comes from `shell()`.
+ * The site's pages, in navigation order. Each one is a body fragment in
+ * `site/pages/` unless it says `generated`; everything around it comes from
+ * `shell()`. A page with no `nav` is reachable from the footer and from the
+ * pages that link it, and is not on the bar.
  */
 const PAGES = [
   {
     slug: 'index',
-    nav: 'Home',
-    group: 'main',
     title: 'DeckHQ',
     description:
       'Every AI coding session on your machine, on one office floor. It sees the ones your ' +
@@ -68,7 +76,6 @@ const PAGES = [
   {
     slug: 'features',
     nav: 'Features',
-    group: 'main',
     title: 'Features',
     description:
       'The floor, the queue, the review card, permissions, token usage, pinning, app mode, ' +
@@ -77,81 +84,88 @@ const PAGES = [
   {
     slug: 'look',
     nav: 'Look',
-    group: 'main',
     title: 'The look',
-    description:
-      'The three themes that ship today, and the interior presets, control centre and agent ' +
-      'sizes that WP-88 is designed to add.',
+    description: 'Three finishes, and the floor materials, colours and agent sizes you can set.',
   },
   {
     slug: 'characters',
     nav: 'Characters',
-    group: 'main',
     title: 'The characters',
-    description:
-      'The figure on the floor: what it is today, and the motion and crew sheets that WP-87 ' +
-      'and WP-89 are designed against.',
+    description: 'The figure on the floor: a face, a name, a desk, and a walk you can read.',
   },
   {
     slug: 'studio',
     nav: 'Studio',
-    group: 'main',
     title: 'Studio',
     description:
-      'The idea-to-office loop: what exists today — the store, the consent and the planner — ' +
-      'and the eight steps that do not.',
+      'Come with an idea, leave with an office: the plan, the roster and the board that live ' +
+      'in your own repository.',
   },
   {
     slug: 'install',
     nav: 'Install',
-    group: 'main',
     title: 'Install',
     description: 'npx, a global install, the Claude Code plugin, the VS Code extension.',
   },
   {
-    slug: 'docs',
-    nav: 'Docs',
-    group: 'main',
-    title: 'Documentation',
-    description: 'Every document this project keeps, and what each one is for.',
-  },
-  {
-    slug: 'model',
-    nav: 'The model',
-    group: 'more',
-    title: 'The model in 60 seconds',
-    description: 'The six states, and the one rule that decides what you owe.',
-  },
-  {
-    slug: 'hooks-and-privacy',
-    nav: 'Hooks and privacy',
-    group: 'more',
-    title: 'Hooks and privacy',
-    description:
-      'What DeckHQ reads, what it writes, what it asks you first, and where it sends it.',
-  },
-  {
-    slug: 'adapters',
-    nav: 'Adapters',
-    group: 'more',
-    title: 'Adapters',
-    description: 'Which runtimes DeckHQ reads, how verified each one is, and how to add one.',
-  },
-  {
     slug: 'faq',
     nav: 'FAQ',
-    group: 'more',
     title: 'FAQ',
-    description: 'The questions this project is asked most, answered with what has been measured.',
+    description: 'Ten questions about what DeckHQ does, what it costs and what it never sends.',
   },
   {
-    slug: 'log/index',
-    nav: 'Engineering log',
-    group: 'more',
-    title: 'Engineering log',
-    description: '',
+    slug: 'privacy',
+    title: 'Privacy and security',
+    description:
+      'What stays on your machine, what DeckHQ asks before it writes anything, and how to ' +
+      'report a vulnerability.',
+  },
+  {
+    slug: 'changelog',
+    title: 'Changelog',
+    generated: true,
+    description: 'What each release of DeckHQ brought, in a paragraph.',
   },
 ];
+
+/**
+ * What a public page may never say — WP-95a.
+ *
+ * The owner keeps the blueprint private: *"Although it is public on GitHub, I
+ * would not give the blueprint so anybody can build it."* These are the names
+ * that blueprint goes by. A page that carries one of them is either linking an
+ * internal document or narrating how the product is built, and both are off
+ * this site. The same list is applied to `README.md` by
+ * `test/unit/readme.test.mjs`.
+ */
+const INTERNAL = [
+  /docs\/plan/i,
+  /DEVIATIONS/,
+  /00-REQUIREMENTS/,
+  /02-ARCHITECTURE/,
+  /ARCHITECTURE-AUDIT/,
+  /STUDIO-DESIGN/,
+  /RELAY-DESIGN/,
+  /WP-\d/,
+  /§\d/,
+];
+
+/**
+ * Refuse a page that names the blueprint — WP-95a.
+ *
+ * @param {string} name the page, for the message
+ * @param {string} html everything the reader receives
+ */
+function assertNothingInternal(name, html) {
+  for (const pattern of INTERNAL) {
+    const hit = pattern.exec(html);
+    if (hit) {
+      throw new Error(
+        `${name} names ${hit[0]}, which belongs to the blueprint rather than to the product`,
+      );
+    }
+  }
+}
 
 /**
  * The one-line installers as the pages and the README print them — WP-75,
@@ -291,28 +305,12 @@ const IMAGES = [
   // before WP-79 and WP-87, they are still in `docs/media/` for the log entries
   // that cite them, and a log entry's own picture registers itself below.
 
-  // Illustrations. Every one of these is a drawing of a specification, and it
-  // is on a page only because that specification is COMING: `docs/MEDIA.md` §2.
-  // Nothing here is a design option, a candidate or a before-and-after.
-  {
-    to: 'look/presets.png',
-    from: 'docs/media/look/presets.png',
-    class: 'illustration',
-    role: 'crop',
-  },
-  {
-    to: 'look/control-centre.png',
-    from: 'docs/media/look/control-centre.png',
-    class: 'illustration',
-    role: 'crop',
-  },
-  {
-    to: 'look/agent-sizes.png',
-    from: 'docs/media/look/agent-sizes.png',
-    class: 'illustration',
-    role: 'crop',
-  },
-  { to: 'motion/crew.gif', from: 'docs/media/motion/crew.gif', class: 'illustration', role: 'gif' },
+  // No illustrations. A drawing of a specification could be published while the
+  // thing it drew was still coming; the interior picker, agent size and the
+  // crew all shipped in 1.4.0, so the drawings of them are off the site and
+  // what a reader sees is the product. The label and the gate below stay: they
+  // are what makes publishing a mockup a deliberate act rather than an
+  // accident.
 ];
 
 /**
@@ -398,34 +396,20 @@ const MOON = `<svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="curren
 function shell(page) {
   const up = '../'.repeat(page.depth ?? 0);
   const here_ = page.slug;
-  // Two groups on one bar — WP-94a, kept by WP-94c. Twelve links in one flat
-  // row is a list to read rather than a way around, so the product pages lead
-  // and the reference pages sit behind one disclosure after them. Under 45rem
-  // the whole thing collapses into a second disclosure, and both are
-  // `<details>` elements, so the menu opens with scripting switched off.
+  // One flat bar of six — WP-95a. The reference pages that used to sit behind a
+  // "More" disclosure are off the site, so six product links fit in a row and
+  // the disclosure that hid half of them is gone. Under 45rem the row collapses
+  // into a `<details>` menu, which is why the site navigates with scripting
+  // switched off.
   const link = (p, indent) => {
     const href = p.slug === 'index' ? `${up}index.html` : `${up}${p.slug}.html`;
-    const current = p.slug === here_ || (p.slug === 'log/index' && here_.startsWith('log/'));
+    const current = p.slug === here_;
     return `${indent}<a href="${esc(href)}"${current ? ' aria-current="page"' : ''}>${esc(p.nav)}</a>`;
   };
-  const group = (name) => PAGES.filter((p) => (p.group ?? 'main') === name);
-  const main = group('main');
-  const more = group('more');
+  const bar = PAGES.filter((p) => p.nav);
 
-  const nav =
-    main.map((p) => link(p, '          ')).join('\n') +
-    `
-          <details class="nav-more">
-            <summary>More</summary>
-            <div class="nav-more-list">
-${more.map((p) => link(p, '              ')).join('\n')}
-            </div>
-          </details>`;
-
-  const drawer =
-    main.map((p) => link(p, '            ')).join('\n') +
-    '\n            <hr />\n' +
-    more.map((p) => link(p, '            ')).join('\n');
+  const nav = bar.map((p) => link(p, '          ')).join('\n');
+  const drawer = bar.map((p) => link(p, '            ')).join('\n');
 
   const full = page.slug === 'index' ? 'DeckHQ' : `${page.title} — DeckHQ`;
 
@@ -496,25 +480,20 @@ ${page.body.replace(/\n$/, '')}
           </ul>
         </div>
         <div class="foot-col">
-          <h2>Documentation</h2>
+          <h2>Help</h2>
           <ul>
-            <li><a href="${esc(up)}docs.html">All documents</a></li>
-            <li><a href="${esc(up)}model.html">The model in 60 seconds</a></li>
-            <li><a href="${esc(up)}hooks-and-privacy.html">Hooks and privacy</a></li>
-            <li><a href="${esc(up)}adapters.html">Adapters</a></li>
             <li><a href="${esc(up)}faq.html">FAQ</a></li>
-            <li><a href="${esc(up)}log/index.html">Engineering log</a></li>
+            <li><a href="${esc(up)}privacy.html">Privacy and security</a></li>
+            <li><a href="${esc(up)}changelog.html">Changelog</a></li>
+            <li><a href="${REPO}/issues">Report a problem</a></li>
           </ul>
         </div>
         <div class="foot-col">
           <h2>Project</h2>
           <ul>
-            <li><a href="${REPO}">Source</a></li>
+            <li><a href="${REPO}">GitHub</a></li>
             <li><a href="https://www.npmjs.com/package/deckhq">npm</a></li>
-            <li><a href="${REPO}/blob/main/CONTRIBUTING.md">Contributing</a></li>
-            <li><a href="${REPO}/blob/main/SECURITY.md">Security</a></li>
-            <li><a href="${REPO}/blob/main/CHANGELOG.md">Changelog</a></li>
-            <li><a href="${REPO}/blob/main/LICENSE">Licence</a></li>
+            <li><a href="${REPO}/blob/main/LICENSE">Licence &#183; MIT</a></li>
           </ul>
         </div>
       </div>
@@ -795,42 +774,64 @@ function list(block, options) {
   return `<${tag}>\n${rendered}\n</${tag}>`;
 }
 
-/* -------------------------------------------------- the engineering log */
+/* ------------------------------------------------------------- changelog */
 
 /**
- * Split `docs/DEVIATIONS.md` into its `##` entries, respecting code fences so
- * a `## ` inside one is not read as a heading. Entry numbers repeat in the
- * file (two 48s, two 49s), so the file name is the entry's position, which is
- * stable in an append-only log; the number it carries is displayed as written.
+ * The release highlights, out of `CHANGELOG.md` — WP-95a.
+ *
+ * A reader who wants to know what a release brought wants the paragraph, not
+ * the four hundred bullets under it. So this reads only the `### Highlights`
+ * prose of each `## <version> — <date>` section and nothing else: no bullet
+ * lists, no `Added`, no `Fixed`, and therefore none of the package ids and
+ * entry numbers those carry.
+ *
+ * A release written before the highlights paragraph existed is simply not
+ * published here; the whole file is on GitHub, and the page says so.
  *
  * @param {string} md
+ * @returns {{ version: string, date: string, highlights: string }[]}
  */
-function splitEntries(md) {
+function releaseHighlights(md) {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
-  /** @type {{ heading: string, number: string | null, body: string[] }[]} */
-  const entries = [];
-  const preamble = [];
+  /** @type {{ version: string, date: string, highlights: string }[]} */
+  const releases = [];
   let fenced = false;
   let current = null;
+  let inHighlights = false;
 
   for (const line of lines) {
     if (/^```/.test(line)) fenced = !fenced;
-    const heading = !fenced && line.match(/^## (.*)$/);
-    if (heading) {
-      current = { heading: heading[1].trim(), number: null, body: [] };
-      const numbered = current.heading.match(/^(\d+(?:\.\d+)?)\.\s+(.*)$/);
-      if (numbered) {
-        current.number = numbered[1];
-        current.heading = numbered[2];
-      }
-      entries.push(current);
+    if (fenced) {
+      if (inHighlights) current.body.push(line);
       continue;
     }
-    if (current) current.body.push(line);
-    else preamble.push(line);
+
+    const release = line.match(/^## (\d+\.\d+\.\d+)(?:\s+[—-]\s+(.*))?$/);
+    if (release) {
+      current = { version: release[1], date: (release[2] ?? '').trim(), body: [] };
+      releases.push(current);
+      inHighlights = false;
+      continue;
+    }
+    if (/^## /.test(line)) {
+      current = null;
+      inHighlights = false;
+      continue;
+    }
+    const section = line.match(/^### (.*)$/);
+    if (section) {
+      inHighlights = current !== null && section[1].trim().toLowerCase() === 'highlights';
+      continue;
+    }
+    // A bullet ends the paragraph: highlights are prose, and anything listed
+    // under that heading belongs to the full file rather than to this page.
+    if (inHighlights && /^\s*[-*+]\s/.test(line)) inHighlights = false;
+    else if (inHighlights) current.body.push(line);
   }
 
-  return { preamble: preamble.join('\n'), entries };
+  return releases
+    .map((r) => ({ version: r.version, date: r.date, highlights: r.body.join('\n').trim() }))
+    .filter((r) => r.highlights.length > 0);
 }
 
 /* ------------------------------------------------------------------ build */
@@ -850,7 +851,6 @@ function build() {
   }
 
   fs.rmSync(OUT, { recursive: true, force: true });
-  fs.mkdirSync(path.join(OUT, 'log'), { recursive: true });
   fs.mkdirSync(path.join(OUT, 'media'), { recursive: true });
 
   let written = 0;
@@ -860,8 +860,7 @@ function build() {
     written++;
   };
 
-  const deviations = read('docs/DEVIATIONS.md');
-  const { preamble, entries } = splitEntries(deviations);
+  const releases = releaseHighlights(read('CHANGELOG.md'));
   // `docs/DEVIATIONS.md` links to its neighbours the way a file on disk does.
   // None of those files is published here, so a relative link becomes a link
   // into the repository at the path it meant; an image becomes the copy under
@@ -873,15 +872,11 @@ function build() {
     return `${REPO}/blob/main/docs/${clean}`;
   };
 
-  // The log's own images, on top of the registry above. A log entry's picture
-  // is a capture by construction: it is what the package it records was
-  // photographed doing, and it is kept at the path the markdown names.
-  /** @type {Map<string, {from: string, class: string}>} */
+  // Every picture the site serves is one a page declares. The engineering log
+  // is off this site, and so are the pictures that were published only because
+  // a log entry cited them.
+  /** @type {Map<string, {to: string, from: string, class: string, role?: string}>} */
   const media = new Map(IMAGES.map((image) => [image.to, image]));
-  for (const m of deviations.matchAll(/!\[[^\]]*\]\((media\/[^)\s]+)\)/g)) {
-    const rel = m[1].slice('media/'.length);
-    if (!media.has(rel)) media.set(rel, { to: rel, from: `docs/media/${rel}`, class: 'capture' });
-  }
 
   // The images go first, because the pages are measured against them: WP-94c's
   // `addImageDimensions()` reads the size out of the copy the site serves.
@@ -892,10 +887,7 @@ function build() {
     if (!fs.existsSync(from)) throw new Error(`${image.from} is referenced but missing`);
     const to = path.join(OUT, 'media', rel);
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    // A picture the log carries declares no role — it is registered by the
-    // markdown that shows it — and the log shows its images full width, so it
-    // is held to the hero's width and the hero's budget.
-    const role = ROLES[image.role ?? (rel.endsWith('.gif') ? 'gif' : 'hero')];
+    const role = ROLES[image.role ?? (rel.endsWith('.gif') ? 'gif' : 'crop')];
     const result = copyImage(from, to, role.width);
     if (result.bytes > role.budget) {
       throw new Error(
@@ -908,95 +900,42 @@ function build() {
     written++;
   }
 
-  // The hand-written pages. Each one is checked against the media policy
-  // before it is written: a page that shows a mockup without saying so is a
-  // build failure, not a review finding.
-  for (const page of PAGES) {
-    if (page.slug === 'log/index') continue;
-    const source = read(path.join('site', 'pages', `${page.slug}.html`));
-    assertMediaIsLabelled(`${page.slug}.html`, source);
-    const body = addImageDimensions(source, OUT);
-    write(`${page.slug}.html`, shell({ ...page, body, depth: 0 }));
-  }
-
-  const items = entries.map((entry, index) => ({
-    ...entry,
-    file: `${index + 1}.html`,
-    label: entry.number ? `§${entry.number}` : '—',
-  }));
-
-  for (const [index, entry] of items.entries()) {
-    const prev = items[index - 1];
-    const next = items[index + 1];
-    const nav = [
-      prev ? `<a class="pager-prev" href="${prev.file}">← ${esc(prev.label)}</a>` : '<span></span>',
-      next ? `<a class="pager-next" href="${next.file}">${esc(next.label)} →</a>` : '<span></span>',
-    ].join('\n        ');
-
-    const body = addImageDimensions(
-      `      <article class="prose log-entry">
-        <p class="log-back"><a href="index.html">Engineering log</a></p>
-        <p class="log-number">${esc(entry.label)}</p>
-        <h1>${inline(entry.heading, rewriteSrc, rewriteHref)}</h1>
-${indentBlock(markdown(entry.body.join('\n'), { headingOffset: -1, rewriteSrc, rewriteHref }), 8)}
-      </article>
-      <nav class="pager" aria-label="Log entries">
-        ${nav}
-      </nav>`,
-      OUT,
-    );
-
-    const words = plain(entry.heading);
-    write(
-      `log/${entry.file}`,
-      shell({
-        slug: `log/${entry.file.replace(/\.html$/, '')}`,
-        title: `${entry.label} ${words}`.trim(),
-        description: `DeckHQ engineering log ${entry.label}: ${words}`,
-        body,
-        depth: 1,
-      }),
-    );
-  }
-
-  const listing = items
-    .map(
-      (entry) =>
-        `          <li><a href="${entry.file}"><span class="log-index-n">${esc(entry.label)}</span>` +
-        `<span class="log-index-t">${inline(entry.heading, rewriteSrc, rewriteHref)}</span></a></li>`,
-    )
-    .join('\n');
-
-  const indexBody = `      <article class="prose">
-        <h1>Engineering log</h1>
+  // The changelog, as the paragraph each release opens with — WP-95a. A reader
+  // who wants the four hundred bullets has the file on GitHub, which is where
+  // the last line of this page sends them.
+  const changelogBody = `      <article class="prose">
+        <h1>Changelog</h1>
         <p class="lede">
-          Every place the build departed from its own blueprint, with the reason and the
-          measurement. It is written as it goes, not afterwards, which is why it contains the
-          budgets that were missed and the claims that did not survive being run on a machine.
+          What each release brought, in a paragraph. The date is the day that version went out.
         </p>
-${indentBlock(markdown(preamble.replace(/^# .*$/m, '').trim(), { headingOffset: -1, rewriteSrc, rewriteHref }), 8)}
+${releases
+  .map(
+    (release) => `        <section class="release">
+          <h2>${esc(release.version)}${release.date ? ` <span class="release-date">${esc(release.date)}</span>` : ''}</h2>
+${indentBlock(markdown(release.highlights), 10)}
+        </section>`,
+  )
+  .join('\n')}
         <p class="muted">
-          ${items.length} entries, oldest first. The source is
-          <a href="${REPO}/blob/main/docs/DEVIATIONS.md"><code>docs/DEVIATIONS.md</code></a>;
-          this is that file, rendered.
+          Every change, release by release, is in
+          <a href="${REPO}/blob/main/CHANGELOG.md">the full changelog</a> on GitHub.
         </p>
-        <ul class="log-index">
-${listing}
-        </ul>
       </article>`;
 
-  write(
-    'log/index.html',
-    shell({
-      slug: 'log/index',
-      title: 'Engineering log',
-      description:
-        'Every place the DeckHQ build departed from its blueprint, with the reason and the ' +
-        'measurement.',
-      body: indexBody,
-      depth: 1,
-    }),
-  );
+  // The pages. Each one is checked against the media policy before it is
+  // written — a page that shows a mockup without saying so is a build failure,
+  // not a review finding — and then against the blueprint rule, over the whole
+  // document a reader receives rather than over the fragment.
+  for (const page of PAGES) {
+    const source = page.generated
+      ? changelogBody
+      : read(path.join('site', 'pages', `${page.slug}.html`));
+    assertMediaIsLabelled(`${page.slug}.html`, source);
+    const body = addImageDimensions(source, OUT);
+    const html = shell({ ...page, body, depth: 0 });
+    assertNothingInternal(`${page.slug}.html`, html);
+    write(`${page.slug}.html`, html);
+  }
 
   // Static assets. The two scripts are WP-94c and are listed here rather than
   // globbed, so a file dropped into `site/` is not published by accident.
@@ -1033,7 +972,7 @@ ${listing}
   // page's weight includes the stylesheet and the scripts, which are copied
   // above, and it prints the number for every page so a build says where the
   // weight went rather than only that it was too much.
-  const weights = PAGES.filter((p) => p.slug !== 'log/index').map((page) => ({
+  const weights = PAGES.map((page) => ({
     page: `${page.slug}.html`,
     bytes: pageWeight(OUT, `${page.slug}.html`),
   }));
@@ -1051,7 +990,7 @@ ${listing}
   process.stdout.write(
     `site: heaviest page ${heaviest.page} at ${(heaviest.bytes / 1024).toFixed(0)} KB\n` +
       `site: ${written} files -> ${path.relative(root, OUT) || OUT}` +
-      ` (${PAGES.length - 1} pages, ${items.length} log entries, ${media.size} images` +
+      ` (${PAGES.length} pages, ${releases.length} releases, ${media.size} images` +
       ` at ${(bytes / 1024 / 1024).toFixed(1)} MB, ${downscaled} downscaled,` +
       ` ${INSTALLERS.length} installers)\n`,
   );
@@ -1303,13 +1242,15 @@ export {
   markdown,
   inline,
   plain,
-  splitEntries,
+  releaseHighlights,
   safeUrl,
   build,
   imageClass,
   imageSize,
   addImageDimensions,
   assertMediaIsLabelled,
+  assertNothingInternal,
+  INTERNAL,
   INSTALLERS,
   INSTALL_COMMANDS,
   IMAGES,
