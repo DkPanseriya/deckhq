@@ -20028,4 +20028,11 @@ site, the sections now describe what a reader can go and use, and the media regi
 illustration at all** — which is asserted, so the next one has to be added deliberately.
 `media/goldens/` on the site is `media/floor/`, and the `Golden render` tag reads `Screenshot`.
 
-**Not done here.** The internal documents are still in the public repository. WP-95b moves them out.
+**The gate reads the served assets too.** `style.css` and the two scripts are files a reader can
+open at their own URL, and the stylesheet carried seven package ids and two section numbers in its
+header comments. They are gone. Three published files still carry one and are outside this
+package's reach — `install.ps1`, `install.sh` and `deckhq-mark.svg`, from `scripts/` and `public/` —
+and the test says so where it stops.
+
+**Not done here.** The internal documents are still in the public repository. WP-95b moves them out,
+and takes those three comments with them.

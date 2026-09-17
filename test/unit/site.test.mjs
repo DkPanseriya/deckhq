@@ -256,16 +256,23 @@ test('BLUEPRINT: no page names an internal document, a package or a section', as
   // captions, class names and HTML comments — on every built page.
   const { INTERNAL, assertNothingInternal } = await import('../../site/build.mjs');
 
-  const pages = walk(out, ['.html']);
-  assert.ok(pages.length > 0, 'nothing was built');
-  for (const page of pages) {
-    const html = fs.readFileSync(page, 'utf8');
+  // The pages, and the stylesheet and scripts served beside them: a reader can
+  // open `style.css` at its own URL, so a package id in a comment there is as
+  // public as one in a paragraph.
+  //
+  // `install.ps1`, `install.sh` and `deckhq-mark.svg` are published from
+  // `scripts/` and `public/` and each still carries one, which WP-95b takes
+  // with the rest of them.
+  const files = walk(out, ['.html', '.css', '.js']);
+  assert.ok(files.length > 0, 'nothing was built');
+  for (const file of files) {
+    const text = fs.readFileSync(file, 'utf8');
     for (const pattern of INTERNAL) {
-      const hit = pattern.exec(html);
+      const hit = pattern.exec(text);
       assert.equal(
         hit,
         null,
-        `${path.relative(out, page)} names ${hit && hit[0]}, which belongs to the blueprint`,
+        `${path.relative(out, file)} names ${hit && hit[0]}, which belongs to the blueprint`,
       );
     }
   }

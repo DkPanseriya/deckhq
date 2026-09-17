@@ -1,17 +1,17 @@
 /*
- * The documentation site — WP-94c.
+ * The public site.
  *
  * ONE TOKEN SET, TWO SCHEMES. The neutrals are the product's own, copied from
  * `public/style.css` so the site and the floor cannot drift, and the light
- * scheme is the other half of the mark: `public/brand/deckhq-mark.svg` has
- * carried both grounds in one file since WP-82, and its light plate is the
- * paper here. The dark studio and the lit drawing table are one idea from two
- * sides, which is what the product is.
+ * scheme is the other half of the mark: `public/brand/deckhq-mark.svg` carries
+ * both grounds in one file, and its light plate is the paper here. The dark
+ * studio and the lit drawing table are one idea from two sides, which is what
+ * the product is.
  *
  * TWO ACCENTS, AND ONLY ONE OF THEM IS LOUD. The restrained accent is the
  * mark's antenna tip — amber — and it carries rules, current state, the focus
  * ring and the one filled button. Crimson is the product's `for_review` colour
- * and `docs/03-VISUAL-SPEC.md` §5 reserves it for that, so here it appears
+ * and the product reserves it for that, so here it appears
  * only where the page is about something waiting on you. Neither colour sets
  * small text on a ground it does not clear 4.5:1 on; crimson clears none of
  * them in the dark scheme (3.38 on --bg) and therefore sets no text at all.
@@ -267,7 +267,7 @@ body {
   text-decoration: none;
 }
 
-/* WP-82 · the product mark, as the raster rendered from the SVG. */
+/* The product mark, as the raster rendered from the SVG. */
 .brand-mark {
   width: 22px;
   height: 22px;
@@ -780,7 +780,7 @@ figcaption {
   line-height: 1.5;
 }
 
-/* WP-94a · what an image IS, in its own caption. The build refuses a mockup
+/* What an image IS, in its own caption. The build refuses a mockup
    whose caption does not say `design illustration` — `docs/MEDIA.md`. */
 .tag {
   display: inline-block;
@@ -806,7 +806,7 @@ figcaption {
   color: var(--ink-2);
 }
 
-/* WP-94b. What is designed and not built. It sits on the picture's own caption
+/* What is designed and not built. It sits on the picture's own caption
    rather than in a paragraph under it, because the reader who needs it most is
    the one skimming the pictures and reading none of the words. */
 .tag--coming {
@@ -1045,7 +1045,7 @@ figcaption {
   max-width: none;
 }
 
-/* WP-94b: never enlarged. The pictures are crops now, and they are not all the
+/* Never enlarged. The pictures are crops now, and they are not all the
    same shape — a queue strip is 1100 x 49 and a room plate is 480 x 760. A
    narrow one is drawn at the size it was taken and centred; only a picture
    wider than the column is scaled, and only down. */
@@ -1104,7 +1104,7 @@ figcaption {
   border-radius: var(--radius-lg);
 }
 
-/* WP-94b: the crop is the FILE now, not a margin trick over a whole floor.
+/* The crop is the FILE, not a margin trick over a whole floor.
    `site/assets.json` declares the rectangle and the capture pipeline cuts it,
    so the reader downloads a detail rather than a 1600 px floor to see one
    corner of. The box keeps a fixed aspect so three cards line up whatever
@@ -1151,7 +1151,7 @@ figcaption {
 
 /* Five short cards on a deeper ground. The marker is the accent by default;
    `--marker` goes crimson on exactly one band — the one about what you are
-   owed — because §5 says spending crimson on decoration is a bug. */
+   owed — because spending crimson on decoration is a bug. */
 .never {
   background: var(--bg-2);
   border-block: 1px solid var(--line);
