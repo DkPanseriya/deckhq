@@ -29,6 +29,7 @@ const {
   ensureWorktree,
   projectSlug,
   runGit,
+  samePath,
   worktreePathFor,
   worktreesDirFor,
 } = await import('../../src/studio/worktree.mjs');
@@ -49,6 +50,18 @@ async function repo(prefix = 'studio-wt-') {
   await run(['add', 'README.md']);
   await run(['commit', '-qm', 'first']);
   return { dir, root, dataDir: path.join(dir, 'state') };
+}
+
+/**
+ * The same directory under a second name: a symlink, or a junction on Windows,
+ * which needs no privilege. This is every CI runner's temp directory in one
+ * line — macOS reaches `/private/var` through `/var`, and a Windows runner's
+ * `TEMP` is the 8.3 name `RUNNER~1` — and git always answers with the real one.
+ */
+function alias(real, prefix = 'studio-wt-link-') {
+  const link = path.join(scratchDir(prefix), 'link');
+  fs.symlinkSync(real, link, 'junction');
+  return link;
 }
 
 /** A git that records instead of running, for the argv assertions. */
@@ -260,4 +273,50 @@ test('ACCEPTANCE: firing leaves the worktree and the process alone, and says so'
   assert.equal(fs.readFileSync(path.join(made.path, 'work.txt'), 'utf8'), 'an agent wrote this\n');
   const branches = await runGit(['branch', '--list', 'studio/backend'], { cwd: root });
   assert.match(branches.stdout, /studio\/backend/);
+});
+
+// ── one directory, two names — docs/DEVIATIONS.md §192 ───────────────────────
+
+test('a data directory reached through a link is still reused, not refused as occupied', async () => {
+  const { dir, root } = await repo();
+  const real = path.join(dir, 'state');
+  fs.mkdirSync(real, { recursive: true });
+  const dataDir = alias(real);
+
+  const first = await ensureWorktree(root, 'backend', { dataDir });
+  assert.equal(first.created, true);
+  // Git recorded the REAL path; we asked by the link. Same directory.
+  const again = await ensureWorktree(root, 'backend', { dataDir });
+  assert.equal(again.reused, true, 'the second hire did not recognise its own worktree');
+  assert.equal(again.created, false);
+  assert.equal(again.path, first.path);
+
+  const list = await runGit(['worktree', 'list', '--porcelain'], { cwd: root });
+  const paths = list.stdout.split('\n').filter((l) => l.startsWith('worktree '));
+  assert.equal(paths.length, 2, list.stdout);
+});
+
+test('a directory somebody else made is still refused as occupied, link or no link', async () => {
+  const { dir, root } = await repo();
+  const real = path.join(dir, 'state');
+  fs.mkdirSync(real, { recursive: true });
+  const dataDir = alias(real);
+  fs.mkdirSync(worktreePathFor(dataDir, root, 'backend'), { recursive: true });
+  await assert.rejects(
+    () => ensureWorktree(root, 'backend', { dataDir }),
+    (err) => err.reason === 'occupied',
+  );
+});
+
+test('samePath: two names for one directory are the same path, and two directories are not', () => {
+  const real = scratchDir('studio-wt-same-');
+  const link = alias(real);
+  assert.equal(samePath(real, link), true);
+  assert.equal(samePath(path.join(real, 'a'), path.join(link, 'a')), true, 'not there yet');
+  assert.equal(samePath(real, path.dirname(real)), false);
+  assert.equal(samePath(real, ''), false);
+  assert.equal(samePath('', ''), false);
+  // A path that does not exist is compared as written, and never throws.
+  assert.equal(samePath(path.join(real, 'nope'), path.join(real, 'nope')), true);
+  assert.equal(samePath(path.join(real, 'nope'), path.join(real, 'other')), false);
 });

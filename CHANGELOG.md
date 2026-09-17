@@ -23,6 +23,12 @@
 
 ### Fixed
 
+- **Hiring a role a second time no longer fails where a directory has two names.** Studio asked git
+  which worktrees a repository has and compared the answer to its own path as a string. Git answers
+  with the real path, so with a data directory reached through a symlink, a junction or a Windows
+  short name, a role's own worktree was refused as _"already exists and is not a worktree of this
+  repository"_, and the session a Hire started was never matched to its role. Both comparisons are
+  by directory now. `docs/DEVIATIONS.md` §192.
 - **The project hub's footer survives a tab press.** It was appended to `#main`, and every tab
   switch rewrites `main.innerHTML` — so the footer was there until the reader pressed a second tab
   and then gone for good. It is inserted after `#main` now. `docs/DEVIATIONS.md` §190.2.

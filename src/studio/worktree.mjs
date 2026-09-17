@@ -218,6 +218,49 @@ export function runGit(argv, opts) {
 }
 
 /**
+ * A path as the filesystem spells it, so two names for one directory compare
+ * equal.
+ *
+ * Git answers `worktree list` with the REAL path. We build ours by joining onto
+ * a data directory, and that directory may be reached through a symlink
+ * (macOS's `/var` is `/private/var`), a junction, or an 8.3 short name (a
+ * Windows `TEMP` of `C:\Users\RUNNER~1\…`). `realpath` settles all three. The
+ * leaf need not exist yet — a worktree is looked up before it is made — so the
+ * nearest ancestor that does exist is resolved and the rest is joined back on.
+ * Never throws: a path nothing can resolve is returned as `path.resolve` has it.
+ * @param {string} p
+ * @returns {string}
+ */
+export function canonicalPath(p) {
+  const resolved = path.resolve(String(p || ''));
+  /** @type {string[]} */ const tail = [];
+  let head = resolved;
+  for (;;) {
+    try {
+      return path.join(fs.realpathSync.native(head), ...tail);
+    } catch {
+      const up = path.dirname(head);
+      if (up === head) return resolved;
+      tail.unshift(path.basename(head));
+      head = up;
+    }
+  }
+}
+
+/**
+ * Whether two paths name one directory. An empty path names nothing, so it is
+ * never the same as anything — `path.resolve('')` is the working directory, and
+ * a session with no `cwd` must not match a worktree that happens to be it.
+ * @param {string|null|undefined} a
+ * @param {string|null|undefined} b
+ */
+export function samePath(a, b) {
+  if (!a || !b) return false;
+  const [x, y] = [canonicalPath(a), canonicalPath(b)];
+  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+}
+
+/**
  * Every worktree path this repository already knows about.
  * @param {(argv:string[], opts:any) => Promise<{code:number, stdout:string}>} git
  * @param {string} cwd
@@ -267,7 +310,10 @@ export async function ensureWorktree(projectRoot, role, opts) {
   }
 
   const known = await listWorktrees(git, root);
-  const registered = known.some((p) => p === target);
+  // `samePath`, not `===`: git lists the real path and `target` is spelt the
+  // way the data directory was, and a worktree we made ourselves, unrecognised,
+  // falls through to `occupied` below — a second Hire refused by the first.
+  const registered = known.some((p) => samePath(p, target));
   if (registered && fs.existsSync(target)) {
     return { path: target, branch, created: false, reused: true, argv: null, newBranch: false };
   }

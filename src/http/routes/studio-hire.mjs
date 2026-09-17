@@ -38,7 +38,6 @@
  * scan, through the registry's own event, matched by the worktree directory
  * the session is running in (§9 invariant 4).
  */
-import path from 'node:path';
 
 import { sendError, sendJson } from '../server.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
@@ -50,6 +49,7 @@ import {
   WorktreeError,
   checkRoleName,
   ensureWorktree,
+  samePath,
   worktreePathFor,
 } from '../../studio/worktree.mjs';
 
@@ -152,6 +152,11 @@ export function cardForRole(board, roleName, done = ['done']) {
  * planner's match: a worktree belongs to exactly one role, so the newest
  * session running in it is that role's and cannot be anybody else's.
  *
+ * Compared with `samePath()`, not `===`: a session reports the directory it is
+ * running in the way the OS spells it, and the worktree is spelt the way the
+ * data directory was. Where those differ the role was hired and never
+ * recognised — `docs/DEVIATIONS.md` §192.
+ *
  * @param {Array<{id?:string, cwd?:string, lastActivityAt?:number}>} agents
  * @param {string} worktree resolved worktree path
  * @param {Set<string>} taken agent ids already spoken for
@@ -159,13 +164,7 @@ export function cardForRole(board, roleName, done = ['done']) {
 export function roleAmong(agents, worktree, taken) {
   return (
     (Array.isArray(agents) ? agents : [])
-      .filter(
-        (a) =>
-          a &&
-          typeof a.id === 'string' &&
-          !taken.has(a.id) &&
-          path.resolve(String(a.cwd || '')) === worktree,
-      )
+      .filter((a) => a && typeof a.id === 'string' && !taken.has(a.id) && samePath(a.cwd, worktree))
       .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0] || null
   );
 }

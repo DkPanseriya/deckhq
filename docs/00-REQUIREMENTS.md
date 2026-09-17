@@ -992,7 +992,9 @@ WP-67 done, less the interview (`DEVIATIONS.md` §159 — the brief as a file, s
 (`DEVIATIONS.md` §188 — `POST /api/studio/hire`: a git worktree per role with an argv array, a brief
 file the user owns, a session started in that worktree under that brief, `roster.roles[i].agentId`
 recorded by the ordinary scan, a `Studio: hire <role>` palette row per unhired role, and a roster
-line per role in the panel). **WP-69 to WP-71 planned.**
+line per role in the panel; §192 — a worktree and a session are recognised by DIRECTORY and not by
+string, so a data directory reached through a symlink, a junction or a short name no longer has its
+second Hire refused as `occupied` or its `agentId` left unwritten). **WP-69 to WP-71 planned.**
 **Notes.** The name (Studio, over Workshop and Bureau) and eight defaults were decided by the owner
 on 8 September — `08` §13.20. One acceptance criterion of WP-67 is **owed and named as owed**: the
 reference machine's `claude` login is expired (§117), so no planner has run an interview and no

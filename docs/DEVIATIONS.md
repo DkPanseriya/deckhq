@@ -20303,3 +20303,60 @@ ceiling. Its `── tabs ──` and `── drawer ──` banners are the sea
 needs to; it does not need to yet, and a split made ahead of need is churn. The hub still has no row
 of its own in `08` §9 — it was asked for directly and lives in R-184 — and this section does not
 invent one.
+
+## 192. WP-68 — a second Hire was refused by the first, wherever a directory has two names
+
+**Date:** 17 September 2026 · **Package:** WP-68 (§188), follow-up · **Found by:** CI, red on
+`main` on all six macOS and Windows jobs since `bd4e976`, green on all three Ubuntu ones
+
+§190.4 fixed a poll in `studio-hire.test.mjs` and called the suite green. It was green on the
+machine that ran it. CI had been failing the same hire tests since WP-68 merged — five on macOS,
+three on Windows, none on Linux.
+
+**The fault is in the product, not the tests.** `ensureWorktree()` asks git which worktrees the
+repository knows and compares each to the one it is about to make with `===`. Git answers with the
+**real** path. Ours is joined onto the data directory, spelt however that was spelt — and on a
+macOS runner the temp directory `/var/folders/…` is a symlink to `/private/var/folders/…`, and on a
+Windows runner `TEMP` is the 8.3 name `C:\Users\RUNNER~1\…`. Same directory, different string:
+`registered` came back false, the directory existed, and the role's own worktree was refused as
+`occupied` — _"already exists and is not a worktree of this repository"_ — by the hire that made it.
+`roleAmong()` had the same comparison from the other side: a session reports its `cwd` as the OS
+spells it, so on those machines a hired role was never matched and `roster.roles[i].agentId` was
+never written.
+
+A user meets this without CI: a `~/.deckhq` that is a symlink to another disk, a home directory
+under a junction, a project opened through a mapped path. The second Hire of any role fails.
+
+**The fix.** `src/studio/worktree.mjs` gains `canonicalPath()` — `fs.realpathSync.native` over the
+nearest ancestor that exists, with the rest joined back on, because a worktree is looked up before
+it is made; it never throws — and `samePath()`, which compares two of those, case-insensitively on
+Windows. `ensureWorktree()` and `roleAmong()` use it. `samePath` of an empty path is `false`: the
+old `path.resolve(String(a.cwd || ''))` turned a session with **no** `cwd` into the daemon's own
+working directory, which would have matched a worktree that happened to be it.
+
+**What did not change.** The paths DeckHQ reports and launches in are still spelt the way the data
+directory was — `hired[i].worktree`, the launch `cwd`, the argv — so nothing a user sees moved, and
+the `occupied` refusal still refuses a directory somebody else made, link or no link, which has its
+own test.
+
+**Reproduced, then measured.** The runners' condition is one line on any machine: point `TEMP` at a
+junction. On `origin/main` with `TEMP` through a junction, `studio-hire.test.mjs` and
+`studio-worktree.test.mjs` fail **exactly the three tests Windows CI fails** — _hiring the same role
+twice_, _a brief the user edited_, _a real worktree is created_ — 19 pass, 3 fail. On this branch,
+same `TEMP`: 26 pass, 0 fail. The two further macOS failures are the test's own comparisons — a
+child's `process.cwd()` and a scanned session's `cwd` against a joined string — and they now ask
+"the same directory" through `samePath` and `canonicalPath`, which is the claim §4 makes. They
+could not be reproduced on Windows — under a junction they passed before the change as well as
+after — so CI is the measurement for those two.
+
+**What holds it.** Four tests. In `studio-worktree.test.mjs`: a data directory reached through a
+link is reused and not refused; a directory somebody else made is still `occupied` through a link;
+`samePath` over a link, a path not there yet, two different directories and the empty path. In
+`studio-hire.test.mjs`: `roleAmong` matches a session to its worktree under either name, newest
+first, and matches a session with no `cwd` to nothing. Links are `fs.symlinkSync(…, 'junction')`,
+which needs no privilege on Windows and is an ordinary symlink everywhere else.
+
+**What is NOT here.** `describeFire()` still prints the worktree as `path.resolve` has it — it
+compares nothing, it names a path for the user to read. No other `===` between two paths was looked
+for outside `src/studio/` and the hire route; the adapters' `cwd` matching is older, has its own
+tests on all three platforms, and was green throughout.
