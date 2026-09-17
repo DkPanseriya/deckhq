@@ -13,9 +13,17 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  parsePrinciples, parseRequirements, parseStories, parseOpenItems,
-  parseWorkPackages, parseOwnerDecisions, parseDeviations, parseArchitecture,
-  parseStudioLoop, parseFeatureFacts, parseChangelog,
+  parsePrinciples,
+  parseRequirements,
+  parseStories,
+  parseOpenItems,
+  parseWorkPackages,
+  parseOwnerDecisions,
+  parseDeviations,
+  parseArchitecture,
+  parseStudioLoop,
+  parseFeatureFacts,
+  parseChangelog,
 } from './parse.mjs';
 import { renderPage } from './template.mjs';
 
@@ -23,10 +31,18 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(HERE, '..', '..');
 
 export function parseArgs(argv) {
-  const out = { out: 'dist/deckhq-hub.html', tests: null, goldens: null, ci: null, npm: null, quiet: false };
+  const out = {
+    out: 'dist/deckhq-hub.html',
+    tests: null,
+    goldens: null,
+    ci: null,
+    npm: null,
+    quiet: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
-    const take = () => argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[(i += 1)] : '';
+    const take = () =>
+      argv[i + 1] !== undefined && !argv[i + 1].startsWith('--') ? argv[(i += 1)] : '';
     if (a === '--out') out.out = take();
     else if (a === '--tests') out.tests = take();
     else if (a === '--goldens') out.goldens = take();
@@ -53,7 +69,9 @@ function readDoc(repo, rel, warn) {
 
 export function collect(repo = REPO, flags = {}) {
   const warnings = [];
-  const warn = (m) => { warnings.push(m); };
+  const warn = (m) => {
+    warnings.push(m);
+  };
 
   const requirementsMd = readDoc(repo, 'docs/00-REQUIREMENTS.md', warn);
   const planMd = readDoc(repo, 'docs/plan/08-PLAN-V2-100X.md', warn);
@@ -81,7 +99,13 @@ export function collect(repo = REPO, flags = {}) {
 
   const requirements = parseRequirements(requirementsMd, warn);
   const workPackages = parseWorkPackages(
-    { plan: planMd, workplan: workplanMd, studio: studioMd, changelog: changelogMd, deviations: deviationsMd },
+    {
+      plan: planMd,
+      workplan: workplanMd,
+      studio: studioMd,
+      changelog: changelogMd,
+      deviations: deviationsMd,
+    },
     warn,
   );
   const deviations = parseDeviations(deviationsMd, warn);
@@ -89,29 +113,37 @@ export function collect(repo = REPO, flags = {}) {
   // them stays in CHANGELOG.md, which every entry names.
   const changelog = parseChangelog(changelogMd, warn);
   for (const s of changelog.shipped) delete s.detail;
-  const architecture = parseArchitecture({ audit: auditMd, map: auditMap, blueprint: blueprintMd }, warn);
+  const architecture = parseArchitecture(
+    { audit: auditMd, map: auditMap, blueprint: blueprintMd },
+    warn,
+  );
   const studio = parseStudioLoop(studioMd, warn);
   const open = parseOpenItems(requirementsMd, warn);
 
   // Cross-links, built once here so the page never has to scan.
   const devByWp = new Map();
-  for (const d of deviations) for (const wp of d.wps) {
-    if (!devByWp.has(wp)) devByWp.set(wp, []);
-    if (devByWp.get(wp).length < 12) devByWp.get(wp).push(d.n);
-  }
+  for (const d of deviations)
+    for (const wp of d.wps) {
+      if (!devByWp.has(wp)) devByWp.set(wp, []);
+      if (devByWp.get(wp).length < 12) devByWp.get(wp).push(d.n);
+    }
   const reqByWp = new Map();
-  for (const r of requirements) for (const wp of r.wps) {
-    if (!reqByWp.has(wp)) reqByWp.set(wp, []);
-    reqByWp.get(wp).push(r.id);
-  }
+  for (const r of requirements)
+    for (const wp of r.wps) {
+      if (!reqByWp.has(wp)) reqByWp.set(wp, []);
+      reqByWp.get(wp).push(r.id);
+    }
   const storiesByReq = new Map();
-  for (const s of parseStories(requirementsMd, warn)) for (const r of s.requirements) {
-    if (!storiesByReq.has(r)) storiesByReq.set(r, []);
-    storiesByReq.get(r).push(s.id);
-  }
+  for (const s of parseStories(requirementsMd, warn))
+    for (const r of s.requirements) {
+      if (!storiesByReq.has(r)) storiesByReq.set(r, []);
+      storiesByReq.get(r).push(s.id);
+    }
   const stories = parseStories(requirementsMd, () => {});
   for (const wp of workPackages) {
-    wp.devsAll = [...new Set([...(wp.devs || []), ...(devByWp.get(wp.id) || [])])].sort((a, b) => a - b);
+    wp.devsAll = [...new Set([...(wp.devs || []), ...(devByWp.get(wp.id) || [])])].sort(
+      (a, b) => a - b,
+    );
     wp.requirements = reqByWp.get(wp.id) || [];
     // Everything below is either derivable or already said by another field.
     delete wp.devs;
@@ -163,7 +195,8 @@ export function build(flags, repo = REPO) {
   return { data, html };
 }
 
-const isMain = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+const isMain =
+  process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 if (isMain) {
   const flags = parseArgs(process.argv.slice(2));
   const { data, html } = build(flags);
@@ -175,12 +208,14 @@ if (isMain) {
     const n = (v) => (v == null || v === '' ? 'not supplied' : v);
     console.log(`deckhq hub → ${outPath}  (${kb} KB)`);
     console.log(
-      `  requirements ${data.requirements.length} · stories ${data.stories.length} · packages ${data.workPackages.length} ·`
-      + ` deviations ${data.deviations.length} · features ${data.features.length + data.shipped.length} ·`
-      + ` invariants ${data.architecture.invariants.length} · findings ${data.architecture.findings.length} ·`
-      + ` decisions ${data.decisions.length} · releases ${data.releases.length}`,
+      `  requirements ${data.requirements.length} · stories ${data.stories.length} · packages ${data.workPackages.length} ·` +
+        ` deviations ${data.deviations.length} · features ${data.features.length + data.shipped.length} ·` +
+        ` invariants ${data.architecture.invariants.length} · findings ${data.architecture.findings.length} ·` +
+        ` decisions ${data.decisions.length} · releases ${data.releases.length}`,
     );
-    console.log(`  version ${n(data.meta.version)} · npm ${n(data.meta.npm)} · tests ${n(data.meta.tests)} · goldens ${n(data.meta.goldens)} · ci ${n(data.meta.ci)}`);
+    console.log(
+      `  version ${n(data.meta.version)} · npm ${n(data.meta.npm)} · tests ${n(data.meta.tests)} · goldens ${n(data.meta.goldens)} · ci ${n(data.meta.ci)}`,
+    );
     for (const w of data.meta.warnings) console.log(`  warning: ${w}`);
   }
 }

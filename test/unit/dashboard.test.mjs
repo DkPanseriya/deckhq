@@ -84,7 +84,10 @@ test('requirements, stories and packages cross-link both ways', () => {
   assert.ok(r043.devs.length > 0, 'R-043 names no deviation');
   assert.ok(r043.stories.includes('S-02'), 'R-043 is not reachable from S-02');
   for (const id of r043.wps) {
-    assert.ok(data.workPackages.some((w) => w.id === id), `R-043 points at unknown ${id}`);
+    assert.ok(
+      data.workPackages.some((w) => w.id === id),
+      `R-043 points at unknown ${id}`,
+    );
   }
   const s01 = data.stories.find((s) => s.id === 'S-01');
   assert.ok(s01.requirements.length >= 3);
@@ -108,7 +111,10 @@ test('deviations are numbered, keyed uniquely and summarised inside their cap', 
     assert.ok(d.title.length > 3, `deviation ${key} has no title`);
     assert.ok(d.summary.length <= 400, `deviation ${key} summary is over 400 chars`);
   }
-  assert.ok(data.deviations.some((d) => d.n === 1 && d.raise), '§1 is a RAISE and should say so');
+  assert.ok(
+    data.deviations.some((d) => d.n === 1 && d.raise),
+    '§1 is a RAISE and should say so',
+  );
   const dups = data.deviations.filter((d) => d.dup);
   for (const d of dups) assert.match(d.key, /^\d+-\d$/);
 });
@@ -125,7 +131,10 @@ test('the architecture facts come from the audit map, not from prose', () => {
 });
 
 test('the flags are the only unmeasured numbers, and absent they say so', () => {
-  assert.equal(data.meta.version, JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')).version);
+  assert.equal(
+    data.meta.version,
+    JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')).version,
+  );
   const bare = build({}).data;
   assert.equal(bare.meta.tests, null);
   assert.equal(bare.meta.ci, null);
@@ -170,7 +179,10 @@ test('the page is a self-contained artifact fragment', () => {
 });
 
 test('the page loads nothing from anywhere', () => {
-  const allowed = ['https://dkpanseriya.github.io/deckhq/', 'https://github.com/DkPanseriya/deckhq'];
+  const allowed = [
+    'https://dkpanseriya.github.io/deckhq/',
+    'https://github.com/DkPanseriya/deckhq',
+  ];
   const urls = [];
   for (const m of html.matchAll(/(?:src|href)\s*=\s*"([^"]*)"/g)) urls.push(m[1]);
   for (const u of urls) {
@@ -192,7 +204,10 @@ test('the page is inside the 220 KB budget', () => {
 
 test('the page is theme-aware from tokens, not from a media query alone', () => {
   assert.match(html, /:root\s*\{/);
-  assert.match(html, /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)/);
+  assert.match(
+    html,
+    /@media \(prefers-color-scheme: dark\)\s*\{\s*:root:not\(\[data-theme="light"\]\)/,
+  );
   assert.match(html, /:root\[data-theme="dark"\]/);
   assert.match(html, /body\s*\{[^}]*background:\s*var\(--bg\)/);
   assert.match(html, /prefers-reduced-motion/);
@@ -200,17 +215,35 @@ test('the page is theme-aware from tokens, not from a media query alone', () => 
 
 test('every deep-linkable id in the payload exists, and the page knows the shapes', () => {
   const payload = JSON.parse(
-    html.slice(html.indexOf('id="hub-data">') + 14, html.indexOf('</script>', html.indexOf('id="hub-data">'))),
+    html.slice(
+      html.indexOf('id="hub-data">') + 14,
+      html.indexOf('</script>', html.indexOf('id="hub-data">')),
+    ),
   );
-  const un = (p) => p.r.map((row) => Object.fromEntries(p.k.map((k, i) => [k, row[i] === undefined ? '' : row[i]])));
+  const un = (p) =>
+    p.r.map((row) =>
+      Object.fromEntries(p.k.map((k, i) => [k, row[i] === undefined ? '' : row[i]])),
+    );
   const reqs = un(payload.requirements);
   const wps = un(payload.workPackages);
   const devs = un(payload.deviations);
   const stories = un(payload.stories);
-  assert.ok(reqs.some((r) => r.id === 'R-043'), '#req/R-043 has no entry');
-  assert.ok(wps.some((w) => w.id === 'WP-88c'), '#wp/WP-88c has no entry');
-  assert.ok(devs.some((d) => d.n === 172), '#dev/172 has no entry');
-  assert.ok(stories.some((s) => s.id === 'S-01'), '#story/S-01 has no entry');
+  assert.ok(
+    reqs.some((r) => r.id === 'R-043'),
+    '#req/R-043 has no entry',
+  );
+  assert.ok(
+    wps.some((w) => w.id === 'WP-88c'),
+    '#wp/WP-88c has no entry',
+  );
+  assert.ok(
+    devs.some((d) => d.n === 172),
+    '#dev/172 has no entry',
+  );
+  assert.ok(
+    stories.some((s) => s.id === 'S-01'),
+    '#story/S-01 has no entry',
+  );
 
   const wpIdSet = new Set(wps.map((w) => w.id));
   const devSet = new Set(devs.map((d) => d.n));
@@ -221,7 +254,8 @@ test('every deep-linkable id in the payload exists, and the page knows the shape
   const hits = wpRefs.filter((id) => wpIdSet.has(id)).length;
   assert.ok(hits / Math.max(1, wpRefs.length) > 0.8, 'most requirement → package links are dead');
   for (const s of stories) {
-    for (const id of s.requirements || []) assert.ok(reqSet.has(id), `${s.id} points at unknown ${id}`);
+    for (const id of s.requirements || [])
+      assert.ok(reqSet.has(id), `${s.id} points at unknown ${id}`);
   }
   assert.ok([...devSet].every((n) => Number.isInteger(n)));
 });

@@ -20,12 +20,18 @@ export function section(md, startRe, stopRe) {
   const lines = norm(md).split('\n');
   let from = -1;
   for (let i = 0; i < lines.length; i += 1) {
-    if (startRe.test(lines[i])) { from = i + 1; break; }
+    if (startRe.test(lines[i])) {
+      from = i + 1;
+      break;
+    }
   }
   if (from < 0) return '';
   let to = lines.length;
   for (let i = from; i < lines.length; i += 1) {
-    if (stopRe.test(lines[i])) { to = i; break; }
+    if (stopRe.test(lines[i])) {
+      to = i;
+      break;
+    }
   }
   return lines.slice(from, to).join('\n');
 }
@@ -35,7 +41,12 @@ export function tables(md) {
   const out = [];
   const lines = norm(md).split('\n');
   let cur = null;
-  const cells = (line) => line.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  const cells = (line) =>
+    line
+      .replace(/^\s*\|/, '')
+      .replace(/\|\s*$/, '')
+      .split('|')
+      .map((c) => c.trim());
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
     if (/^\s*\|/.test(line)) {
@@ -58,7 +69,9 @@ export function tables(md) {
 
 /** Map free text onto one of the status words the page colours. */
 export function statusOf(text, fallback = 'unknown') {
-  const t = flat(text).toLowerCase().replace(/[*_~`]/g, '');
+  const t = flat(text)
+    .toLowerCase()
+    .replace(/[*_~`]/g, '');
   if (!t) return fallback;
   if (/\bsuperseded\b/.test(t)) return 'superseded';
   if (/\bdeclined\b|\bdropped\b|\brefused\b/.test(t)) return 'declined';
@@ -69,7 +82,10 @@ export function statusOf(text, fallback = 'unknown') {
   return fallback;
 }
 
-const stripMd = (s) => flat(s).replace(/^\*\*|\*\*$/g, '').replace(/~~/g, '');
+const stripMd = (s) =>
+  flat(s)
+    .replace(/^\*\*|\*\*$/g, '')
+    .replace(/~~/g, '');
 
 /** WP ids named anywhere in a string, de-duplicated, in order. */
 export function wpIds(text) {
@@ -135,7 +151,11 @@ export function parseRequirements(md, warn, caps = {}) {
     for (const r of t.rows) {
       const id = (r[0] || '').trim();
       if (!/^R-\d+$/.test(id)) continue;
-      meta.set(id, { title: stripMd(r[1] || ''), area: stripMd(r[2] || ''), status: statusOf(r[3] || '', 'planned') });
+      meta.set(id, {
+        title: stripMd(r[1] || ''),
+        area: stripMd(r[2] || ''),
+        status: statusOf(r[3] || '', 'planned'),
+      });
     }
   }
   if (!meta.size) warn('00-REQUIREMENTS.md §2.0: no summary table found');
@@ -146,7 +166,10 @@ export function parseRequirements(md, warn, caps = {}) {
   let area = '';
   for (let i = 0; i < lines.length; i += 1) {
     const h = lines[i].match(/^### 2\.\d+\s+(.+)$/);
-    if (h) { area = stripMd(h[1]); continue; }
+    if (h) {
+      area = stripMd(h[1]);
+      continue;
+    }
     const m = lines[i].match(/^\*\*(R-\d+)\s*[—–-]\s*(.+?)\*\*\s*$/);
     if (m) marks.push({ id: m[1], title: stripMd(m[2]), area, at: i });
   }
@@ -162,12 +185,15 @@ export function parseRequirements(md, warn, caps = {}) {
     const qi = bl.findIndex((l) => /^[*_](Owner|The owner|Derived|Asked|Owner’s)/i.test(l));
     if (qi >= 0) {
       let txt = bl[qi];
-      for (let j = qi + 1; j < bl.length && bl[j].trim() && !/^\*\*/.test(bl[j]); j += 1) txt += ` ${bl[j]}`;
+      for (let j = qi + 1; j < bl.length && bl[j].trim() && !/^\*\*/.test(bl[j]); j += 1)
+        txt += ` ${bl[j]}`;
       const qm = txt.match(/^[*_](.+?)[*_]\s*([\s\S]*)$/);
       if (qm) {
         const dm = flat(qm[1]).match(/,\s*(\d{1,2} \w+ \d{4})/);
         quoteDate = dm ? dm[1] : '';
-        quote = flat(qm[2], caps.quote || 150).replace(/^["“]\s*/, '').replace(/\s*["”]$/, '');
+        quote = flat(qm[2], caps.quote || 150)
+          .replace(/^["“]\s*/, '')
+          .replace(/\s*["”]$/, '');
       }
     }
     const status = statusOf(FIELD(block, 'Status'), known.status || 'planned');
@@ -192,9 +218,19 @@ export function parseRequirements(md, warn, caps = {}) {
   for (const [id, m] of meta) {
     if (!out.some((r) => r.id === id)) {
       out.push({
-        id, title: m.title, area: m.area, status: m.status, statusText: m.status,
-        quote: '', quoteDate: '', interpretation: '', why: '', implementedBy: '',
-        wps: [], devs: [], notes: '',
+        id,
+        title: m.title,
+        area: m.area,
+        status: m.status,
+        statusText: m.status,
+        quote: '',
+        quoteDate: '',
+        interpretation: '',
+        why: '',
+        implementedBy: '',
+        wps: [],
+        devs: [],
+        notes: '',
       });
     }
   }
@@ -209,14 +245,22 @@ export function parseStories(md, warn) {
   const re = /^\*\*(S-\d+)\s*[—–-]\s*([\s\S]*?)\*\*\s*(?:\*\(([^)]*)\)\*)?\s*$/gm;
   const marks = [];
   let m;
-  while ((m = re.exec(body))) marks.push({ id: m[1], title: stripMd(m[2]).replace(/^["“]|["”]$/g, ''), date: flat(m[3] || ''), at: m.index + m[0].length });
+  while ((m = re.exec(body)))
+    marks.push({
+      id: m[1],
+      title: stripMd(m[2]).replace(/^["“]|["”]$/g, ''),
+      date: flat(m[3] || ''),
+      at: m.index + m[0].length,
+    });
   for (let i = 0; i < marks.length; i += 1) {
     const end = i + 1 < marks.length ? body.lastIndexOf('\n**', marks[i + 1].at) : body.length;
     const text = body.slice(marks[i].at, end > marks[i].at ? end : body.length);
     const reqs = [];
-    for (const r of text.matchAll(/\bR-(\d{3})\b/g)) if (!reqs.includes(`R-${r[1]}`)) reqs.push(`R-${r[1]}`);
+    for (const r of text.matchAll(/\bR-(\d{3})\b/g))
+      if (!reqs.includes(`R-${r[1]}`)) reqs.push(`R-${r[1]}`);
     const principles = [];
-    for (const p of text.matchAll(/\bP-(\d{2})\b/g)) if (!principles.includes(`P-${p[1]}`)) principles.push(`P-${p[1]}`);
+    for (const p of text.matchAll(/\bP-(\d{2})\b/g))
+      if (!principles.includes(`P-${p[1]}`)) principles.push(`P-${p[1]}`);
     out.push({
       id: marks[i].id,
       title: marks[i].title,
@@ -237,7 +281,12 @@ export function parseOpenItems(md, warn) {
     for (const r of t.rows) {
       const wp = stripMd(r[0] || '');
       if (!/^WP-/.test(wp)) continue;
-      items.push({ kind: 'open requirement', wp, text: stripMd(r[1] || ''), requirements: (stripMd(r[2] || '').match(/R-\d+/g) || []) });
+      items.push({
+        kind: 'open requirement',
+        wp,
+        text: stripMd(r[1] || ''),
+        requirements: stripMd(r[2] || '').match(/R-\d+/g) || [],
+      });
     }
   }
   const five = section(md, /^## 5\. What is not traced/, /^## \d/);
@@ -278,7 +327,10 @@ export function parseWorkPackages(sources, warn) {
   const byId = new Map();
   const add = (pkg) => {
     const prev = byId.get(pkg.id);
-    if (!prev) { byId.set(pkg.id, pkg); return; }
+    if (!prev) {
+      byId.set(pkg.id, pkg);
+      return;
+    }
     if (prev.from === 'table' || pkg.from !== 'table') return;
     byId.set(pkg.id, pkg);
   };
@@ -329,7 +381,9 @@ export function parseWorkPackages(sources, warn) {
       const accM = block.match(/\*\*Accepted when[:.]?\*\*([\s\S]*?)(?=\n\n|\n\*\*|$)/);
       for (const id of ids) {
         let statusText = '';
-        const headSt = head.match(/(landed[^·]*|\*\*DONE\*\*|\bDONE\b|superseded[^·]*|absorbed[^·]*|partly landed)/i);
+        const headSt = head.match(
+          /(landed[^·]*|\*\*DONE\*\*|\bDONE\b|superseded[^·]*|absorbed[^·]*|partly landed)/i,
+        );
         if (headSt) statusText = stripMd(headSt[1]);
         if (!statusText) {
           const bodySt = block.match(/\*\*(done|DONE|superseded by [^*]+|landed[^*]*)\*\*/);
@@ -376,7 +430,10 @@ export function parseWorkPackages(sources, warn) {
 
 export function parseOwnerDecisions(plan, warn) {
   const body = section(plan, /^## 13\. Decisions and actions/, /^## 14\./);
-  if (!body) { warn('08-PLAN-V2-100X.md §13: section not found'); return []; }
+  if (!body) {
+    warn('08-PLAN-V2-100X.md §13: section not found');
+    return [];
+  }
   const closed = new Set();
   const closedM = flat(body.slice(0, 600)).match(/Items? ([\d,\sand]+?)\s+(?:are|is)\s+closed/i);
   if (closedM) for (const n of closedM[1].match(/\d+/g) || []) closed.add(Number(n));
@@ -384,10 +441,20 @@ export function parseOwnerDecisions(plan, warn) {
   const out = [];
   let group = '';
   let cur = null;
-  const flush = () => { if (cur) { cur.text = flat(cur.text, 280); out.push(cur); cur = null; } };
+  const flush = () => {
+    if (cur) {
+      cur.text = flat(cur.text, 280);
+      out.push(cur);
+      cur = null;
+    }
+  };
   for (const line of lines) {
     const g = line.match(/^\*\*([^*]+)\*\*\s*$/);
-    if (g) { flush(); group = stripMd(g[1]); continue; }
+    if (g) {
+      flush();
+      group = stripMd(g[1]);
+      continue;
+    }
     const item = line.match(/^(\d{1,2})\.\s+(.*)$/);
     if (item) {
       flush();
@@ -407,7 +474,10 @@ export function parseOwnerDecisions(plan, warn) {
     if (cur) cur.text += ` ${line.trim()}`;
   }
   flush();
-  for (const d of out) { d.wps = wpIds(d.text); d.devs = devRefs(d.text); }
+  for (const d of out) {
+    d.wps = wpIds(d.text);
+    d.devs = devRefs(d.text);
+  }
   if (!out.length) warn('08-PLAN-V2-100X.md §13: no numbered decisions found');
   return out;
 }
@@ -427,7 +497,10 @@ export function parseDeviations(md, warn, cap = 125) {
     const block = lines.slice(marks[k].at + 1, end);
     let para = '';
     for (const line of block) {
-      if (!line.trim()) { if (para) break; continue; }
+      if (!line.trim()) {
+        if (para) break;
+        continue;
+      }
       if (/^\s*[-|>#]/.test(line) && !para) continue;
       para += (para ? ' ' : '') + line.trim();
       if (para.length > cap * 2) break;
@@ -457,17 +530,32 @@ export function parseDeviations(md, warn, cap = 125) {
 
 export function parseArchitecture({ audit = '', map = null, blueprint = '' }, warn) {
   const layers = [];
-  const facts = { modules: 0, edges: 0, cycles: 0, srcToPublic: 0, publicToSrc: 0, capViolators: 0, capChecks: 0, generatedAt: '', repoVersion: '' };
+  const facts = {
+    modules: 0,
+    edges: 0,
+    cycles: 0,
+    srcToPublic: 0,
+    publicToSrc: 0,
+    capViolators: 0,
+    capChecks: 0,
+    generatedAt: '',
+    repoVersion: '',
+  };
   const cycles = [];
   const capExemptions = [];
   if (map && map.layers && map.layers.stats) {
-    const order = (map.layers.order || Object.keys(map.layers.stats));
+    const order = map.layers.order || Object.keys(map.layers.stats);
     const seen = new Set();
     for (const name of order) {
       const s = map.layers.stats[name];
       if (!s) continue;
       seen.add(name);
-      layers.push({ name, count: s.count, lines: s.lines, tier: name.startsWith('public-') ? 'client' : 'server' });
+      layers.push({
+        name,
+        count: s.count,
+        lines: s.lines,
+        tier: name.startsWith('public-') ? 'client' : 'server',
+      });
     }
     for (const [name, s] of Object.entries(map.layers.stats)) {
       if (!seen.has(name)) layers.push({ name, count: s.count, lines: s.lines, tier: 'support' });
@@ -484,14 +572,24 @@ export function parseArchitecture({ audit = '', map = null, blueprint = '' }, wa
     facts.linesSrc = map.totals.linesSrc || 0;
     facts.linesPublic = map.totals.linesPublic || 0;
   }
-  if (map) { facts.generatedAt = map.generatedAt || ''; facts.repoVersion = map.repoVersion || ''; }
+  if (map) {
+    facts.generatedAt = map.generatedAt || '';
+    facts.repoVersion = map.repoVersion || '';
+  }
   for (const c of (map && map.cycles) || []) cycles.push(c);
   if (map && map.cap && Array.isArray(map.cap.violators)) {
-    for (const v of map.cap.violators) capExemptions.push(typeof v === 'string' ? { file: v, lines: 0 } : { file: v.file || v.path || '', lines: v.lines || 0 });
+    for (const v of map.cap.violators)
+      capExemptions.push(
+        typeof v === 'string'
+          ? { file: v, lines: 0 }
+          : { file: v.file || v.path || '', lines: v.lines || 0 },
+      );
   }
   const boundary = {
     rule: (map && map.boundary && map.boundary.rule) || '',
-    srcToPublic: ((map && map.boundary && map.boundary.srcToPublic) || []).map((p) => (Array.isArray(p) ? p : [p, ''])),
+    srcToPublic: ((map && map.boundary && map.boundary.srcToPublic) || []).map((p) =>
+      Array.isArray(p) ? p : [p, ''],
+    ),
   };
 
   const invBody = section(audit, /^## 2\. Invariants/, /^## 3\./);
@@ -509,7 +607,7 @@ export function parseArchitecture({ audit = '', map = null, blueprint = '' }, wa
         text: stripMd(r[1] || ''),
         enforcedIn: stripMd(r[2] || '').replace(/^—$/, ''),
         heldBy: held,
-        modules: key ? (enforced[key].enforcedIn || []) : [],
+        modules: key ? enforced[key].enforcedIn || [] : [],
         status: /convention/i.test(held) || /—/.test(stripMd(r[2] || '')) ? 'in progress' : 'done',
       });
     }
@@ -567,9 +665,15 @@ export function parseStudioLoop(md, warn) {
   for (const m of loop.matchAll(/^\*\*([A-Z][^*]{1,30}?)\.?\*\*\s*([\s\S]*?)(?=\n\n\*\*|$)/gm)) {
     const name = stripMd(m[1]).replace(/\.$/, '');
     const text = flat(m[2], 300);
-    const refs = (text.match(/§\d+(?:\.\d+)?/g) || []);
+    const refs = text.match(/§\d+(?:\.\d+)?/g) || [];
     const builtPkg = done.find((p) => p.done && new RegExp(`\\b${name}\\b`, 'i').test(p.title));
-    steps.push({ name, text, status: builtPkg ? 'done' : 'planned', wp: builtPkg ? builtPkg.id : '', refs });
+    steps.push({
+      name,
+      text,
+      status: builtPkg ? 'done' : 'planned',
+      wp: builtPkg ? builtPkg.id : '',
+      refs,
+    });
   }
   if (!steps.length) warn('07-STUDIO-DESIGN.md §2: no loop steps found');
   return { steps, packages: done };
@@ -584,12 +688,24 @@ export function parseFeatureFacts({ look = '', motion = '' }, warn) {
     for (const r of t.rows) {
       const name = stripMd(r[0] || '');
       if (!name || /^preset$/i.test(name)) continue;
-      presets.push({ group: 'Look preset', title: name, detail: flat(r[1] || '', 200), extra: flat(r[2] || '', 160), source: 'plan/11 §3' });
+      presets.push({
+        group: 'Look preset',
+        title: name,
+        detail: flat(r[1] || '', 200),
+        extra: flat(r[2] || '', 160),
+        source: 'plan/11 §3',
+      });
     }
   }
   const options = [];
   for (const m of look.matchAll(/^### 1\.([a-g])\s+(.+?)\s*$/gm)) {
-    options.push({ group: 'Look option set', title: stripMd(m[2]), detail: '', extra: '', source: `plan/11 §1.${m[1]}` });
+    options.push({
+      group: 'Look option set',
+      title: stripMd(m[2]),
+      detail: '',
+      extra: '',
+      source: `plan/11 §1.${m[1]}`,
+    });
   }
   const animations = [];
   const animBody = section(motion, /^## 2\. Character life/, /^## 3\./);
@@ -601,7 +717,9 @@ export function parseFeatureFacts({ look = '', motion = '' }, warn) {
         group: 'Animation',
         title: name,
         detail: flat(r[1] || '', 260),
-        extra: [stripMd(r[2] || ''), stripMd(r[4] || '') && `reduced: ${stripMd(r[4])}`].filter(Boolean).join(' · '),
+        extra: [stripMd(r[2] || ''), stripMd(r[4] || '') && `reduced: ${stripMd(r[4])}`]
+          .filter(Boolean)
+          .join(' · '),
         source: 'plan/12 §2',
       });
     }
@@ -621,8 +739,10 @@ export function parseChangelog(md, warn, caps = {}) {
     if (m) marks.push({ head: stripMd(m[1]), at: i });
   }
   const releases = [];
-  const shipped = [];
+  // The newest section that has entries: `## Unreleased` is empty right after a release.
+  let shipped = [];
   for (let k = 0; k < marks.length; k += 1) {
+    const sectionEntries = [];
     const end = k + 1 < marks.length ? marks[k + 1].at : lines.length;
     const block = lines.slice(marks[k].at + 1, end).join('\n');
     const head = marks[k].head;
@@ -635,11 +755,15 @@ export function parseChangelog(md, warn, caps = {}) {
     let count = 0;
     for (let i = 0; i < bLines.length; i += 1) {
       const g = bLines[i].match(/^### (.+?)\s*$/);
-      if (g) { group = stripMd(g[1]); continue; }
+      if (g) {
+        group = stripMd(g[1]);
+        continue;
+      }
       const b = bLines[i].match(/^- (.*)$/);
       if (!b) continue;
       let text = b[1];
-      for (let j = i + 1; j < bLines.length && /^\s+\S/.test(bLines[j]); j += 1) text += ` ${bLines[j].trim()}`;
+      for (let j = i + 1; j < bLines.length && /^\s+\S/.test(bLines[j]); j += 1)
+        text += ` ${bLines[j].trim()}`;
       const tm = text.match(/^\*\*(.+?)\*\*/);
       const title = stripMd(tm ? tm[1] : text.split('. ')[0] || text).replace(/\.$/, '');
       const entry = {
@@ -651,10 +775,18 @@ export function parseChangelog(md, warn, caps = {}) {
       };
       count += 1;
       groups.push(entry);
-      if (k === 0) shipped.push({ ...entry, source: version });
+      sectionEntries.push({ ...entry, source: version });
     }
+    if (!shipped.length && sectionEntries.length) shipped = sectionEntries;
     const highlights = groups.slice(0, 6).map((g) => g.title);
-    releases.push({ version, date, headline: head, count, highlights, groups: [...new Set(groups.map((g) => g.group))] });
+    releases.push({
+      version,
+      date,
+      headline: head,
+      count,
+      highlights,
+      groups: [...new Set(groups.map((g) => g.group))],
+    });
   }
   if (!releases.length) warn('CHANGELOG.md: no release headings found');
   return { releases, shipped };

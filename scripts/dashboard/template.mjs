@@ -52,10 +52,8 @@ export function packData(data) {
 
 const LS = String.fromCharCode(0x2028);
 const PS = String.fromCharCode(0x2029);
-const json = (v) => JSON.stringify(v)
-  .replace(/</g, '\\u003c')
-  .split(LS).join('\\u2028')
-  .split(PS).join('\\u2029');
+const json = (v) =>
+  JSON.stringify(v).replace(/</g, '\\u003c').split(LS).join('\\u2028').split(PS).join('\\u2029');
 
 /**
  * Drop the indentation the template is written with. Every line of the page is
@@ -65,7 +63,9 @@ const json = (v) => JSON.stringify(v)
 function tighten(html) {
   return html
     .split('\n')
-    .map((line) => (line.startsWith('<script type="application/json"') ? line : line.replace(/^\s+/, '')))
+    .map((line) =>
+      line.startsWith('<script type="application/json"') ? line : line.replace(/^\s+/, ''),
+    )
     .filter((line) => line !== '')
     .join('\n');
 }
