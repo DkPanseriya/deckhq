@@ -24,6 +24,13 @@ The blueprint below is complete. Read in order.
 | [GUIDE.md](GUIDE.md) | The manual the README used to be: every command, every key, every file DeckHQ reads or writes, and the whole of Studio. The README's own words, moved rather than rewritten (WP-94a) | Answering "how do I…" about the shipped product |
 | [DEVIATIONS.md](DEVIATIONS.md) | 112 numbered departures from the blueprint, each with its reason and its measured numbers, plus the decision closing it. Append-only; the orchestrator numbers it | Reviewing the build, or reading a spec that the code appears to contradict |
 
+**All of it on one page.** `node scripts/dashboard/build.mjs --out dist/deckhq-hub.html --tests N
+--goldens N --ci green --npm X.Y.Z` reads the documents in this directory and writes one
+self-contained HTML file — requirements, user stories, features, work packages, the architecture
+map, the decision log and the releases, each searchable and cross-linked. It is generated, never
+edited; regenerate it after any document here changes. The four flags are the only figures no
+document holds, and without them the page says `not supplied`. `DEVIATIONS.md` §187.
+
 What happens **next** — distribution, the interface redesign, retention, the business — is in
 [`plan/`](plan/README.md), starting with [`plan/08-PLAN-V2-100X.md`](plan/08-PLAN-V2-100X.md).
 This directory covers what DeckHQ **is**; that one covers what it becomes.

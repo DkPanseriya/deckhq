@@ -160,6 +160,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-180 | This register | Owner-side | in progress |
 | R-181 | Owner-side blockers, named and sequenced for a beginner | Owner-side | in progress |
 | R-182 | The architecture is audited, and every invariant says where it is enforced | Owner-side | in progress |
+| R-184 | One dashboard that shows the whole project — requirements, stories, features, packages | Owner-side | done |
 | R-190 | A 3D renderer | Declined | declined |
 | R-191 | A manager agent that assigns work down a hierarchy | Declined | declined |
 | R-192 | Human streaks, leaderboards, XP, badges, guilt | Declined | declined |
@@ -1267,6 +1268,28 @@ it, and `test/helpers/isolate.mjs` (§124) already holds the home-directory half
 **Notes.** The rule is about the suite, not the product: none of §185's three defects was reachable
 by a user, and the one production file it touched behaves identically for every caller that injects
 no platform — which is all of them.
+
+**R-184 — One dashboard that shows the whole project**
+*Owner, 17 September 2026:* "Requirements, user stories, features, all into our dashboard; I like it
+in a GUI, as a list or tiles that can be opened for more detail. Work packages, architectural
+blueprint, requirements, user stories, features, everything in the dashboard. Make it very
+sophisticated and useful."
+**Interpretation.** One page, generated from the documents that already own each fact, with a tab
+per collection — requirements, user stories, features, work packages, the architecture, the decision
+log, releases — a search, filters and a sort on each, and a drawer per entry carrying every parsed
+field and the cross-links between them. Not a new register: a reader for the ones that exist, so
+nothing can drift from its source. Not a shipped surface either — it is built on demand by a script
+and served by nobody, so P-04 and P-05 are untouched.
+**Why.** The register, the plan, the log and the audit are four long documents, and the question
+"where is this product" is answered by reading all four. A generated page answers it in a glance
+without becoming a fifth thing to maintain.
+**Status:** done. **Implemented by:** `scripts/dashboard/build.mjs` (`docs/DEVIATIONS.md` §187);
+`test/unit/dashboard.test.mjs`; the regeneration line in `docs/README.md`.
+**Notes.** Four figures the documents do not hold — tests, goldens, CI and the published npm version
+— are flags, and the page prints `not supplied` without them (P-03). Twelve pre-table work packages
+whose status nothing proves read `unknown` rather than being assumed done. The page is capped at
+220 KB, so long fields are truncated with an ellipsis and every entry names the document it came
+from.
 
 ### 2.18 Declined and deferred
 
