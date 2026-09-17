@@ -751,6 +751,8 @@ export function clientScript(data) {
     + '<span>Site: <a href="${data.meta.links.site}">${data.meta.links.site}</a></span>'
     + '<span>Repository: <a href="${data.meta.links.repo}">${data.meta.links.repo}</a></span>'
     + '<span>Press / to search, arrows to move, Enter to open, Esc to close</span>';
-  document.getElementById('main').appendChild(foot);
+  // After #main, not inside it: renderTab() rewrites main.innerHTML on every
+  // tab switch, and a footer parented there would go with it.
+  document.getElementById('main').insertAdjacentElement('afterend', foot);
 }());`;
 }
