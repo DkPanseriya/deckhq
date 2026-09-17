@@ -11,12 +11,12 @@
     <li>
       <figure class="tile">
         <img
-          src="media/goldens/demo.png"
+          src="media/floor/demo.png"
           alt="The demo floor in the default theme: warm office neutrals, wood and fabric, agents at desks in project rooms"
         />
         <figcaption>
           <b>Default &#8212; the warm office</b>
-          <span class="tag tag--golden">Golden render</span>
+          <span class="tag tag--render">Screenshot</span>
           <span class="tile-more">Herringbone wood, woven carpet, one key light.</span>
         </figcaption>
       </figure>
@@ -24,13 +24,13 @@
     <li>
       <figure class="tile">
         <img
-          src="media/goldens/demo-night-shift.png"
+          src="media/floor/demo-night-shift.png"
           alt="The same demo floor in the night shift theme: cooler and dimmer, with the state colours unchanged"
           loading="lazy"
         />
         <figcaption>
           <b>Night shift</b>
-          <span class="tag tag--golden">Golden render</span>
+          <span class="tag tag--render">Screenshot</span>
           <span class="tile-more"
             >The same office after hours. Cooler, dimmer, same six states.</span
           >
@@ -40,21 +40,21 @@
     <li>
       <figure class="tile">
         <img
-          src="media/goldens/demo-blueprint.png"
+          src="media/floor/demo-blueprint.png"
           alt="The same demo floor in the blueprint theme: white line work on drafting-table blue, with the state colours unchanged"
           loading="lazy"
         />
         <figcaption>
           <b>Blueprint</b>
-          <span class="tag tag--golden">Golden render</span>
+          <span class="tag tag--render">Screenshot</span>
           <span class="tile-more">The floor as a drawing on a drafting table.</span>
         </figcaption>
       </figure>
     </li>
   </ul>
   <p class="shot-note">
-    One populated floor per theme is a committed golden. A theme that quietly failed to reach the
-    bake would fail CI on the next run.
+    Pick one in Settings, or type <code>Look: Night lab</code> into the command palette. Nothing is
+    behind a purchase and nothing is behind an account.
   </p>
 </section>
 
@@ -111,81 +111,60 @@
 
 <section class="section" data-reveal>
   <div class="section-head">
-    <h2>Coming: Look.</h2>
+    <h2>Furnish it yourself.</h2>
     <p>
-      Interior presets, a picker for ground, carpet, wood, fabric and plants, and an agent size that
-      the furniture scales with. <strong>None of it is built.</strong> The three pictures below are
-      the drawings it is designed against, and they are labelled as drawings.
+      <code>&#8984;K</code> &#8594; <strong>Settings</strong> &#8594; <strong>Look</strong> is where
+      the building gets its materials. Six presets to start from, then a floor material per zone, a
+      colour scheme, a furniture set, rugs, planting and the lounge kit.
     </p>
   </div>
-  <ul class="gallery">
+  <ul class="ways">
     <li>
-      <figure class="tile">
-        <img
-          src="media/look/presets.png"
-          alt="Six curated interior presets shown as small floors side by side, each with a different ground, carpet, furniture set and colour scheme"
-          loading="lazy"
-        />
-        <figcaption>
-          <b>Six curated presets</b>
-          <span class="tag tag--coming">Coming</span>
-          <span class="tag tag--illustration">Design illustration</span>
-          <span class="tile-more">Today there are three themes.</span>
-        </figcaption>
-      </figure>
+      <h3>Presets, then the details</h3>
+      <p>
+        Studio oak, Night lab, Paper office, Terrazzo hall, Garden floor, Workshop. Each preset card
+        is a real thumbnail of your floor, painted by the thing that paints the floor, so what you
+        pick is what you get.
+      </p>
     </li>
     <li>
-      <figure class="tile">
-        <img
-          src="media/look/control-centre.png"
-          alt="A mockup of the graphics control centre: rows of swatches for ground, carpet, wood, fabric and plants, with a live preview of the floor beside them"
-          loading="lazy"
-        />
-        <figcaption>
-          <b>The graphics control centre</b>
-          <span class="tag tag--coming">Coming</span>
-          <span class="tag tag--illustration">Design illustration</span>
-          <span class="tile-more">Today there is no picker beyond the three themes.</span>
-        </figcaption>
-      </figure>
+      <h3>Agent size, and the furniture follows</h3>
+      <p>
+        Small, medium, large, or automatic. Five agents can fill the window and a hundred still fit,
+        and the desks, chairs, sofas and rugs resize with the people rather than staying put.
+      </p>
     </li>
     <li>
-      <figure class="tile">
-        <img
-          src="media/look/agent-sizes.png"
-          alt="The same room drawn at four agent sizes, small to large, with the desks and chairs scaling with the figures"
-          loading="lazy"
-        />
-        <figcaption>
-          <b>Agent size, small to large</b>
-          <span class="tag tag--coming">Coming</span>
-          <span class="tag tag--illustration">Design illustration</span>
-          <span class="tile-more">Today there is one agent size.</span>
-        </figcaption>
-      </figure>
+      <h3>You cannot make it unreadable</h3>
+      <p>
+        A combination that would leave a label or a rug too faint to read is refused, the reason
+        appears beside the control that caused it, and nothing changes until you pick something that
+        works.
+      </p>
+    </li>
+    <li>
+      <h3>A floor you can post</h3>
+      <p>
+        <code>deckhq look export</code> writes your interior to a file that names no project, no
+        path and no session, so it is safe to hand to somebody else.
+        <code>deckhq look import</code> puts theirs on.
+      </p>
     </li>
   </ul>
-  <p class="shot-note">
-    Whatever ships has to pass what a theme passes today: <code>assertThemeContrast</code>,
-    <code>assertMaterialDiscipline</code> and the figure-halo guard, on every combination. Agent
-    size changes no geometry &#8212; the same population draws the same room rectangles at every
-    setting.
-  </p>
 </section>
 
 <article class="prose">
   <h2>Packs</h2>
   <p>
-    Extra themes and avatar sets arrive as a single signed file.
+    Extra themes and avatar sets arrive as a single file.
     <code>deckhq pack install &lt;file&gt;</code> copies it into <code>~/.deckhq/packs/</code>
-    and a running DeckHQ picks it up within a second. A pack carries colours and names and nothing
-    else: there is no key in its format for a tier, a licence, an expiry or a feature flag, and a
-    test runs the whole API surface with and without one installed and diffs the responses.
+    and a running DeckHQ picks it up within a second. A pack carries colours and names, and there is
+    nowhere in its format to put a tier, a licence, an expiry or a switch that turns a feature off.
   </p>
   <p>
-    Every theme in a pack goes through the same contrast gates as a theme DeckHQ ships, and every
-    avatar colour is held a fixed distance from every state colour, so an agent can never wear a
-    state. There is no account and no network call anywhere in it.
+    Every theme in a pack is held to the same readability floor as a theme DeckHQ ships, and every
+    avatar colour is kept clear of all six state colours, so an agent can never be mistaken for a
+    state. No account, no network call.
   </p>
   <p><a href="features.html">Features</a> &#183; <a href="characters.html">Characters</a></p>
 </article>

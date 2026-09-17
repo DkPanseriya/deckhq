@@ -53,13 +53,9 @@ const OTHER_PAGES = [
   'characters.html',
   'studio.html',
   'install.html',
-  'docs.html',
-  'model.html',
-  'hooks-and-privacy.html',
-  'adapters.html',
   'faq.html',
-  'log/index.html',
-  'log/1.html',
+  'privacy.html',
+  'changelog.html',
 ];
 
 const TYPES = {
@@ -239,11 +235,9 @@ async function main() {
         }
       }
 
-      // WP-94b · Features and Characters, at the widest, in both schemes. The
-      // home page was the only page photographed until now, and the two pages
-      // whose pictures this package replaced are the two worth having a record
-      // of. The shot is the first screen: what a reader sees before scrolling.
-      for (const page of ['features', 'characters']) {
+      // Features, Characters and the FAQ, at the widest, in both schemes. The
+      // shot is the first screen: what a reader sees before scrolling.
+      for (const page of ['features', 'characters', 'faq']) {
         for (const scheme of SCHEMES) {
           await client.send('Emulation.setDeviceMetricsOverride', {
             width: 1440,

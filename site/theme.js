@@ -1,5 +1,5 @@
 /*
- * The stored colour scheme, applied before the first paint — WP-94c.
+ * The stored colour scheme, applied before the first paint.
  *
  * This is the only script on the site that is not deferred, and it is this
  * small for that reason: it reads one key and sets one attribute. Everything

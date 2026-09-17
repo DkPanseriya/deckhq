@@ -17,14 +17,13 @@
 <div class="bleed" id="floor">
   <div class="hero-shot">
     <img
-      src="media/goldens/three.png"
+      src="media/floor/three.png"
       alt="The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn stand waiting for a reply"
     />
   </div>
   <p class="shot-note">
     Three repositories, nine sessions, two of them waiting on you.
-    <span class="tag tag--golden">Golden render</span> &#8212; a real render of the
-    <code>three</code> fixture, re-checked pixel for pixel on every CI run.
+    <span class="tag tag--render">Screenshot</span>
   </p>
 </div>
 
@@ -185,13 +184,12 @@
       </div>
       <figure class="band-shot">
         <img
-          src="media/goldens/demo-blueprint.png"
+          src="media/floor/demo-blueprint.png"
           alt="The demo floor in the blueprint theme: white line work on drafting-table blue, with the six state colours unchanged"
           loading="lazy"
         />
         <figcaption>
-          Blueprint, on the <code>demo</code> fixture.
-          <span class="tag tag--golden">Golden render</span>
+          The blueprint finish. <span class="tag tag--render">Screenshot</span>
         </figcaption>
       </figure>
     </div>
@@ -235,9 +233,9 @@
     <p><strong>What you owe is decided by you, never by the runtime.</strong></p>
   </blockquote>
   <p>
-    <code>activityState</code> is observed: it changes on its own as a session starts, produces
-    output, blocks, goes quiet, exits. <code>ackState</code> is yours, and it changes only when you
-    press a button. <a href="model.html">The model in 60 seconds</a> is the whole of it.
+    What a session is doing changes on its own: it starts, it types, it blocks, it goes quiet, it
+    exits. What you owe it changes only when you press a button. Reading a message does not clear
+    it, and neither does the session finishing.
   </p>
 </section>
 
@@ -246,38 +244,38 @@
     <h2>What it never does</h2>
     <ul class="never-list never-list--owed">
       <li>
-        <h3>Call anything</h3>
+        <h3>Send your code anywhere</h3>
         <p>
-          No analytics, no update check, no CDN. The only sockets are loopback and the runtimes you
-          start yourself.
+          Your conversations, your file names and your diffs stay on the machine. No analytics, no
+          telemetry, no update check, no cloud.
         </p>
       </li>
       <li>
         <h3>Ask who you are</h3>
         <p>
-          There is no account, no sign-in and no licence key. Every theme and every feature is there
-          on the first run.
+          No account, no sign-in, no licence key. Every theme and every feature is there on the
+          first run.
+        </p>
+      </li>
+      <li>
+        <h3>Touch your Claude settings</h3>
+        <p>
+          Not until you have read the exact lines it would add and said yes. It backs the file up
+          first, and it removes only what it put there.
         </p>
       </li>
       <li>
         <h3>Decide what you owe</h3>
         <p>
-          Reading an item does not discharge it. No session ending and no test passing clears your
+          Reading a message does not clear it. No session ending and no test passing clears your
           queue; an action of yours does.
         </p>
       </li>
       <li>
-        <h3>Block your terminal</h3>
+        <h3>Get in your way</h3>
         <p>
-          The prompt in your shell stays live the whole time. A closed DeckHQ can never stop anybody
-          from working.
-        </p>
-      </li>
-      <li>
-        <h3>Write without asking</h3>
-        <p>
-          Hooks, the status line, the Desktop icon: each prints the literal file and the exact path
-          first, and removes only what it wrote.
+          Your shell prompt stays live the whole time. DeckHQ runs beside your work and never
+          between you and it.
         </p>
       </li>
     </ul>

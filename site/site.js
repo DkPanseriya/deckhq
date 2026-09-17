@@ -1,5 +1,5 @@
 /*
- * Everything on this site that needs a script — WP-94c.
+ * Everything on this site that needs a script.
  *
  * Four things, and the page is whole without any of them: the scheme toggle,
  * the reveal, the copy buttons, and closing a menu. Each one is written as an

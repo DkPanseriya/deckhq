@@ -1311,6 +1311,32 @@ whose status nothing proves read `unknown` rather than being assumed done. The p
 220 KB, so long fields are truncated with an ellipsis and every entry names the document it came
 from.
 
+**R-185 — The public face is the product, and the blueprint stays private**
+_Owner, 17 September 2026:_ "The website is purely public marketing and PR. Do not put requirements
+and architecture docs there. We only put the product public and its features. Redo the website and
+everything accordingly. Although it is public on GitHub, I would not give the blueprint so anybody
+can build it."
+**Interpretation.** The site and the README sell DeckHQ: what it does for the person running it,
+what it looks like, how to install it, what it never does, what changed in each release, and the
+answers to the questions it gets asked. Neither publishes, renders or links a requirement, an
+architecture document, a design, a plan, this register or the decision log, and neither narrates how
+the product is built — module names, invariant names, test counts, goldens, CI, work-package ids or
+section numbers. A feature that is coming may be named as coming; the package that will bring it may
+not be named at all.
+**Why.** The repository is public and the blueprint is not the product. A stranger who lands on the
+site is deciding whether to run DeckHQ, not planning to rebuild it, and a marketing page that opens
+with the architecture answers a question nobody asked while handing over the one thing the owner
+wants kept.
+**Status:** done. **Implemented by:** `INTERNAL` and `assertNothingInternal()` in `site/build.mjs`,
+which refuse to write a page carrying one of nine patterns; `test/unit/site.test.mjs` over every
+built page; `test/unit/readme.test.mjs` over `README.md` and its Docs table
+(`docs/DEVIATIONS.md` §189).
+**Notes.** The site is nine pages: Home, Features, Look, Characters, Studio, Install, FAQ, Privacy
+and security, Changelog. The Docs page, the reference pages and 171 generated log pages are gone.
+The changelog page carries release highlight paragraphs only. The internal documents are still in
+the public repository — WP-95b moves them out, and this row is not complete for the repository until
+it does.
+
 ### 2.18 Declined and deferred
 
 **R-190 — A 3D renderer**

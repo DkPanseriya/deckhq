@@ -9,8 +9,7 @@ zero dependencies.
 
 ![The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn stand waiting for a reply](test/goldens/win32/three.png)
 
-_Golden render — the `three` fixture, drawn by the code on `main` and re-checked pixel for pixel on
-every CI run. [`docs/MEDIA.md`](docs/MEDIA.md) says what every image in this project is._
+_Screenshot — three repositories, nine sessions, two of them waiting on you._
 
 ## Install
 
@@ -34,7 +33,7 @@ curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
 Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
 distribution's own command printed on Linux, never without asking), installs DeckHQ, offers the
 icon, and opens the window. Read them first — [`install.ps1`](scripts/install/install.ps1) and [`install.sh`](scripts/install/install.sh)
-are two short files in this repository, served from the docs site byte for byte, in no tarball and
+are two short files in this repository, served from the site byte for byte, in no tarball and
 imported by nothing. SmartScreen may warn about the unsigned `.cmd`, and a downloaded `.command` arrives without its run bit; the two lines above have neither caveat.
 
 **A step at a time, if you prefer:** `npm install -g deckhq`, then `deckhq app`, then
@@ -49,9 +48,9 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
 - **Every session, not only the live ones.** `claude agents` lists what is _running_. DeckHQ reads
   every transcript on disk, so a session that finished an hour ago is still on the floor with what
   it last said.
-- **A queue only you can clear.** `activityState` is observed and changes on its own. `ackState` is
-  yours and changes only when you press a button. Opening a conversation does not clear it;
-  scrolling past it does not clear it; reading it does not clear it.
+- **A queue only you can clear.** What a session is doing changes on its own. What you owe it
+  changes when you press a button. Opening a conversation does not clear it; scrolling past it does
+  not clear it; reading it does not clear it.
 - **Six states, and two different "needs you" signals.** A raised hand at a desk means _I am
   mid-task and blocked_. A person standing in your office means _I finished; review this_. Those
   need different responses, so they look different and are counted separately.
@@ -68,8 +67,8 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
 - **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` discharges one,
   and `deckhq statusline` gives a status bar `▣ 3 waiting · 1 hand up`.
 
-The whole of it is on the site: [the floor and the features](https://dkpanseriya.github.io/deckhq/features.html),
-and [the manual](docs/GUIDE.md) for every command, key and file.
+All of it, with a picture each, is on the site: [the features](https://dkpanseriya.github.io/deckhq/features.html).
+[The manual](docs/GUIDE.md) has every command, key and file.
 
 ## What it never does
 
@@ -97,9 +96,9 @@ and [the manual](docs/GUIDE.md) for every command, key and file.
 | **Gemini CLI**  | **unverified**                    | Implemented against the runtime's documented on-disk format; never run against real data                               |
 | **OpenCode**    | **unverified**                    | Implemented against the published CLI; never run against real data                                                     |
 
-An adapter is unverified until it has been run against real data from a real install, and it says
-so — in its own header, here, and in the engineering log.
-[`docs/ADAPTERS.md`](docs/ADAPTERS.md) §6 is the rule, and it is why this table exists.
+An adapter is unverified until somebody has run it against real data from a real install, and it
+says so until then — in the app, and here. [`docs/ADAPTERS.md`](docs/ADAPTERS.md) is the rule, and
+it is why this table exists.
 
 ## Run it like an app
 
@@ -147,81 +146,72 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 `deckhq studio enable <project>`. A real `claude` session interviews you in the ordinary panel
 composer and writes a blueprint, a roster and a board into your own repository, with its own tools.
 
+**What exists today is the store, the consent and the planner.** `enable --yes` writes exactly one
+marked file and records the grant; a real `claude` session then interviews you in the ordinary
+panel composer and writes the blueprint, the roster and the board itself, with its own tools.
+
 **Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;**, one row per role not already at a desk.
 Each press gives that role a git worktree of its own (`git worktree add … -b studio/<role>`), a
 brief file that is yours to edit and is never rewritten under a running session, and a real session
 in that worktree under that brief — on the floor within one scan, wearing the role's name. **Firing
 leaves the worktree and the process alone.** A Codex, Gemini CLI or OpenCode role is hired and
-marked _unverified launch_: nobody has opened a terminal on those three. **What does not exist is
-the board tab** and the handover gate — [`docs/07-STUDIO-DESIGN.md`](docs/07-STUDIO-DESIGN.md), and
+marked _unverified launch_: nobody has opened a terminal on those three. **What does not exist yet is the board tab** and the handover gate. The loop is on
 [the site](https://dkpanseriya.github.io/deckhq/studio.html).
 
 ## Docs
 
-| Document                                             | What is in it                                                                                  |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [`docs/GUIDE.md`](docs/GUIDE.md)                     | The manual: every command, every key, every file DeckHQ reads or writes                        |
-| [`docs/00-REQUIREMENTS.md`](docs/00-REQUIREMENTS.md) | The requirements register — every requirement in the owner's words, with its status            |
-| [`docs/02-ARCHITECTURE.md`](docs/02-ARCHITECTURE.md) | Process model, the adapter contract, the HTTP API, persistence, budgets, security              |
-| [`docs/ADAPTERS.md`](docs/ADAPTERS.md)               | How to add a runtime, and §6 — the honesty rule this README is held to                         |
-| [`docs/03-VISUAL-SPEC.md`](docs/03-VISUAL-SPEC.md)   | Camera and LOD bands, the rig, the motion clips, materials, accessibility                      |
-| [`docs/MEDIA.md`](docs/MEDIA.md)                     | What every image here is — capture, golden render or design illustration — and which are stale |
-| [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md)           | Every place the build departed from its blueprint, with the reason and the measurement         |
-| [`CHANGELOG.md`](CHANGELOG.md)                       | What changed and when                                                                          |
+| Document                               | What is in it                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------- |
+| [`docs/GUIDE.md`](docs/GUIDE.md)       | The manual: every command, every key, every file DeckHQ reads or writes |
+| [`CHANGELOG.md`](CHANGELOG.md)         | What changed and when                                                   |
+| [`SECURITY.md`](SECURITY.md)           | How to report a vulnerability, and what happens after you do            |
+| [`LICENSE`](LICENSE)                   | MIT                                                                     |
+| [`docs/ADAPTERS.md`](docs/ADAPTERS.md) | For anyone adding support for another coding tool                       |
 
-The site — [dkpanseriya.github.io/deckhq](https://dkpanseriya.github.io/deckhq/) — has all of it as
-pages, including the engineering log.
+[dkpanseriya.github.io/deckhq](https://dkpanseriya.github.io/deckhq/) is the product site: what it
+does, how it looks, how to install it, and the answers to the questions it gets asked.
 
 ## Honest limits
 
-Real, and listed here rather than discovered later. Each one links to where it is measured.
+Real, and listed here rather than discovered later.
 
-- **Gemini CLI and OpenCode support is unverified.** Both adapters are implemented against each
+- **Gemini CLI and OpenCode support is unverified.** Both adapters are written against each
   runtime's documented on-disk format or published CLI, and **neither has ever run against real
   data**, because neither runtime is installed on the development machine. Each reports itself
-  unavailable cleanly and degrades without throwing.
-- **Codex is verified for reading and replying, and nothing else.** No compressed rollout has been
-  read; "Open in terminal" has never opened a window for Codex; Codex cannot report a running
-  session, so liveness is inferred from file mtime; and DeckHQ installs no Codex hooks, so a Codex
-  session waiting on your permission and one that has simply stopped look the same. §8, §137.
-- **Answering a permission prompt from the panel has been proven once**, against one runtime, one
+  unavailable rather than guessing.
+- **Codex is verified for reading and replying, and nothing else.** No compressed session file has
+  been read; "Open in terminal" has never opened a window for Codex; Codex cannot say which of its
+  sessions are alive, so DeckHQ judges it from when the file was last written; and there are no
+  Codex hooks, so a Codex session waiting on your permission and one that has simply stopped look
+  the same.
+- **Answering a permission prompt from the panel has been run once**, against one runtime, one
   machine, one day — Claude Code 2.1.260 on Windows, 4 September 2026. A streamed reply has been
-  watched once, the same day. §97.
-- **A crew's pulses say a file is moving, not how fast or how far.** A sub-agent transcript carries
-  no progress, no percentage, no success or failure and no stop record, so the only thing DeckHQ can
-  see about a junior is that its file grew between two polls. A cable pulses while that happened
-  inside the last minute and goes grey when it has not; the rate is banded from how recently, not
-  measured as events per second. Nothing on a junior says whether it worked. §178.
-- **The crew is a Claude Code formation.** Gemini CLI and OpenCode report a parent link and no type,
-  no spawn time and no growth, and Codex reports no sub-agents at all — so on those runtimes a
-  junior keeps its seat beside its parent and never gets a cable. §178.
-- **Without hooks, `needs_input` and `stalled` are not distinguishable.** A transcript alone does
-  not separate them, and the header says so rather than showing a confidently wrong picture.
-- **Which sessions are the same resumed conversation is inferred, not reported.** Claude Code gives
-  a resumed chat a new session id and nothing in the file names the one it continues, so DeckHQ
-  matches on the first message record. Measured on 101 real transcripts, where it found 92
-  conversations. A resume from a different working directory stays two agents. §155.
-- **"Open in terminal" is verified on Windows only.** Six macOS emulators and eight Linux ones are
-  implemented against their documented interfaces, unit-tested down to the argument list, and have
-  never been run on a real Mac or a real Linux desktop.
+  watched once, the same day.
+- **A crew's pulses say a file is moving, not how fast or how far.** A sub-agent's transcript
+  carries no progress and no success or failure, so all DeckHQ can see is that the file grew. A
+  cable pulses while that happened recently and goes grey when it stops. Nothing on a junior tells
+  you whether it worked.
+- **The crew is a Claude Code formation.** The other runtimes report too little about sub-agents to
+  draw one, so there a junior keeps its seat beside its parent and never gets a cable.
+- **Without hooks, "waiting on you" and "stopped" are not distinguishable.** A transcript alone
+  does not separate them, and the header says so rather than showing you a confident guess.
+- **Which sessions are the same resumed conversation is a good guess, not a fact.** Claude Code
+  gives a resumed chat a new id and nothing in the file names the one it continues, so DeckHQ
+  matches on the first message. On 101 real transcripts it found 92 conversations. A resume from a
+  different directory stays two agents.
+- **"Open in terminal" is verified on Windows only.** Six macOS terminals and eight Linux ones are
+  written against their documented interfaces and have never been run on a real Mac or a real Linux
+  desktop.
 - **You get tokens, not dollars**, until you turn **Show cost** on. It is an estimate and never a
-  bill: DeckHQ multiplies observed tokens by published list prices, has no idea what your plan
-  charges you, and prints `no rate` rather than `$0.00` for a model its table has no row for.
+  bill: DeckHQ multiplies the tokens it counted by published list prices, has no idea what your
+  plan charges you, and prints `no rate` rather than `$0.00` for a model it has no price for.
 - **MCP server status is only ever as good as `claude mcp list`.** DeckHQ never connects to an MCP
-  server — it asks the runtime once and quotes the answer. §147.
-- **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
-  fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
+  server — it asks the runtime once and quotes the answer.
+- **Token totals for very large transcripts are approximate.** Reads are capped to keep scans fast,
+  so a multi-gigabyte session's history is sampled rather than summed.
 - **Given names do not run out below 600 sessions.** Past 600 live identities on one machine you
-  would get `Wren 2` — not a duplicate, but the pool being smaller than your history. §168.
+  would get `Wren 2` — not a duplicate, but the pool being smaller than your history.
 - **Local only.** One machine, one human. No remote sessions, no team presence, no cloud sync.
-- **Four HTTP routes name a runtime or are refused.** `/api/new-project`, `/api/agent`,
-  `/api/permission/decide` and `/api/resume-targets` used to answer a request with no `runtime` as
-  if it had said Claude Code; they return `400 { error, field: "runtime" }` instead. The floor
-  passes one on every call, so nothing you do changes — a script of yours that relied on the old
-  default needs the field, and the refusal says which. §182.
-
-Section numbers are entries in [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md), which is also
-[the engineering log](https://dkpanseriya.github.io/deckhq/log/index.html) on the site.
 
 ## Support
 
@@ -234,8 +224,9 @@ nothing in the product changes either way.
 ## Contributing
 
 Issues and pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first — it leads
-with the two things that get a change rejected regardless of how good it is: **the invariant**
-above, and **network egress of any kind**. Security policy in [`SECURITY.md`](SECURITY.md).
+with the two things that get a change rejected regardless of how good it is: **letting anything but
+you decide what you owe**, and **sending anything off the machine**. Security policy in
+[`SECURITY.md`](SECURITY.md).
 
 ```bash
 npm install     # dev tooling only; the product itself has zero runtime dependencies

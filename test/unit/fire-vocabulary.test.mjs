@@ -167,8 +167,11 @@ test('WP-61: the docs and the site say Fired, and the six-state table keeps the 
   assert.match(row, /Show fired/, 'and names the view toggle by its new label');
   assert.ok(!/let[ -]go/i.test(readme), 'no "let go" is left in the README');
   assert.ok(!/let[ -]go/i.test(guide.replace(/`let_go`/g, '')), 'no "let go" is left in the guide');
-  const site = fs.readFileSync(path.join(ROOT, 'site/pages/model.html'), 'utf8');
-  assert.ok(site.includes('<code>let_go</code>'), 'the site still names the state id');
+  // WP-95a took the reference pages off the site, so the state id is no longer
+  // printed to a stranger — the marketing page names the state in words. The
+  // vocabulary rule still holds over what is left.
+  const site = fs.readFileSync(path.join(ROOT, 'site/pages/characters.html'), 'utf8');
+  assert.match(site, />Let go</, 'the site names the state in words');
   assert.ok(!/let-go agents/i.test(site), 'and no longer says "let-go agents"');
 });
 
