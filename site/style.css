@@ -313,56 +313,6 @@ body {
   background: var(--accent);
 }
 
-/* WP-94a · two groups on one bar. WP-94c gives the second one a disclosure,
-   so the bar is six links wide instead of twelve. */
-.nav-more {
-  position: relative;
-}
-
-.nav-more > summary {
-  list-style: none;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: var(--t-small);
-  white-space: nowrap;
-}
-
-.nav-more > summary::-webkit-details-marker {
-  display: none;
-}
-
-.nav-more > summary::after {
-  content: '';
-  display: inline-block;
-  width: 0.4em;
-  height: 0.4em;
-  margin-left: 0.45em;
-  border-right: 1.5px solid currentcolor;
-  border-bottom: 1.5px solid currentcolor;
-  transform: translateY(-0.15em) rotate(45deg);
-}
-
-.nav-more > summary:hover,
-.nav-more[open] > summary {
-  color: var(--ink);
-}
-
-.nav-more-list {
-  position: absolute;
-  right: 0;
-  top: calc(100% + var(--s-1));
-  z-index: var(--z-menu);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-1);
-  min-width: 13rem;
-  padding: var(--s-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-}
-
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -846,7 +796,7 @@ figcaption {
   vertical-align: 0.08em;
 }
 
-.tag--golden {
+.tag--render {
   border-color: color-mix(in srgb, var(--state-working) 55%, transparent);
   color: var(--ink-2);
 }
@@ -1650,82 +1600,28 @@ figcaption {
   box-shadow: var(--shadow);
 }
 
-/* ------------------------------------------------------- engineering log */
+/* ------------------------------------------------------------- changelog */
 
-.log-index {
-  list-style: none;
-  padding: 0;
-  margin: var(--s-3) 0 0;
+.release {
+  margin-top: var(--s-5);
+  padding-top: var(--s-3);
   border-top: 1px solid var(--line);
 }
 
-.log-index li {
-  margin: 0;
-}
-
-.log-index a {
-  display: flex;
-  gap: var(--s-2);
-  padding: var(--s-1) 0.2rem;
-  border-bottom: 1px solid var(--line);
-  text-decoration: none;
-  color: var(--ink-2);
-  font-size: var(--t-small);
-}
-
-.log-index a:hover {
-  background: var(--surface);
-  color: var(--ink);
-}
-
-.log-index-n {
-  flex: 0 0 3.4rem;
+.release h2 {
   font-family: var(--font-mono);
-  color: var(--muted);
-  font-size: var(--t-micro);
-  padding-top: 0.2rem;
-}
-
-.log-index-t code {
-  background: none;
-  border: 0;
-  padding: 0;
-}
-
-.log-back,
-.log-number {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--t-small);
-}
-
-.log-number {
-  font-family: var(--font-mono);
-  margin-bottom: var(--s-1);
-}
-
-.log-entry h1 {
-  font-size: var(--t-head);
-  margin-bottom: var(--s-3);
-}
-
-.log-entry h2 {
   font-size: var(--t-sub);
-  margin-top: var(--s-4);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
+  margin-top: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-2);
 }
 
-.pager {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--s-2);
-  max-width: var(--measure);
-  margin: var(--s-5) auto 0;
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
-  font-family: var(--font-mono);
+.release-date {
   font-size: var(--t-small);
+  font-weight: 400;
+  color: var(--muted);
 }
 
 /* ---------------------------------------------------------------- footer */

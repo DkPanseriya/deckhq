@@ -198,22 +198,22 @@ const INSTALL_COMMANDS = [
  */
 const IMAGES = [
   // Goldens: the only class whose currency is proved on every CI run.
-  { to: 'goldens/three.png', from: 'test/goldens/win32/three.png', class: 'golden', role: 'hero' },
-  { to: 'goldens/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden', role: 'crop' },
+  { to: 'floor/three.png', from: 'test/goldens/win32/three.png', class: 'golden', role: 'hero' },
+  { to: 'floor/demo.png', from: 'test/goldens/win32/demo.png', class: 'golden', role: 'crop' },
   {
-    to: 'goldens/single.png',
+    to: 'floor/single.png',
     from: 'test/goldens/win32/single.png',
     class: 'golden',
     role: 'hero',
   },
   {
-    to: 'goldens/demo-night-shift.png',
+    to: 'floor/demo-night-shift.png',
     from: 'test/goldens/win32/demo@night-shift.png',
     class: 'golden',
     role: 'crop',
   },
   {
-    to: 'goldens/demo-blueprint.png',
+    to: 'floor/demo-blueprint.png',
     from: 'test/goldens/win32/demo@blueprint.png',
     class: 'golden',
     role: 'crop',
@@ -420,18 +420,9 @@ function shell(page) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${esc(full)}</title>
     <meta name="description" content="${esc(page.description)}" />
-    <!-- WP-94c · both schemes, from one token set. The page follows the
-         reader's own preference, and the toggle on the bar overrides it in
-         either direction. -->
     <meta name="color-scheme" content="dark light" />
     <link rel="stylesheet" href="${esc(up)}style.css" />
-    <!-- WP-82 · the product mark. The favicon is the SVG, which carries both
-         grounds and follows the reader's own colour-scheme preference — a tab
-         strip belongs to the browser, not to this site. -->
     <link rel="icon" href="${esc(up)}deckhq-mark.svg" type="image/svg+xml" />
-    <!-- The stored scheme, before the first paint. Two dozen lines, no
-         network call, and the only script on this site that is not deferred.
-         Everything the pages do without it is in site/site.js's header. -->
     <script src="${esc(up)}theme.js"></script>
     <script src="${esc(up)}site.js" defer></script>
   </head>

@@ -40,9 +40,8 @@
     </li>
   </ul>
   <p class="muted">
-    The names are the model, not the colour: a state is carried by a pose and a label as well as by
-    a hue, so the floor is legible to a reader who sees neither.
-    <a href="model.html">The model in 60 seconds</a> is the whole of it.
+    A state is carried by a pose and a label as well as by a colour, so the floor still reads if you
+    see colour differently or not at all.
   </p>
 </section>
 
@@ -64,13 +63,12 @@
       </div>
       <figure class="band-shot">
         <img
-          src="media/goldens/single.png"
+          src="media/floor/single.png"
           alt="A DeckHQ floor with one project room: agents at their desks with state-coloured bodies, bright visor faces, and name labels under them"
           loading="lazy"
         />
         <figcaption>
-          The <code>single</code> fixture, rendered by the code on <code>main</code>.
-          <span class="tag tag--golden">Golden render</span>
+          One room, five people. <span class="tag tag--render">Screenshot</span>
         </figcaption>
       </figure>
     </div>
@@ -80,12 +78,11 @@
         <h2>Twelve ways it moves.</h2>
         <p>
           Typing at a screen, a thinking cloud, standing up, walking, running, sitting down, and the
-          lounge activities a benched agent fills its time with. Every phase comes from one injected
-          clock, so two renders at the same instant are the same picture.
+          lounge activities a benched agent fills its time with.
         </p>
         <p>
-          Under <code>prefers-reduced-motion</code> each clip holds one representative pose and
-          nothing moves, with a golden proving the floor still reads.
+          If your system asks for reduced motion, the floor holds still: every figure keeps a pose
+          that says what it is doing, and nothing moves.
         </p>
       </div>
       <figure class="band-shot">
@@ -124,70 +121,58 @@
 
 <section class="section" data-reveal>
   <div class="section-head">
-    <h2>Coming: the crew.</h2>
+    <h2>A session with a crew of its own.</h2>
     <p>
-      A session that spawns sub-agents should show them as a crew: three or more live sub-agents
-      drawn smaller around their parent, each with a laptop, joined by cables carrying pulses back
-      to the parent desk. <strong>Not built.</strong> Today sub-agents are juniors beside their
-      parent, without the cables.
+      When a session sets three or more sub-agents working, its desk becomes a formation: the
+      juniors seated in an arc in front of it with a laptop each, and a cable from every laptop back
+      to the desk.
     </p>
   </div>
-  <figure class="device">
-    <div class="device-frame">
-      <div class="device-bar"><i></i><i></i><i></i><span>Crew &#183; designed</span></div>
-      <img
-        src="media/motion/crew.gif"
-        alt="An animation of a crew of small sub-agent figures arriving around a parent desk with laptops, cables running back to the parent with pulses of data travelling along them"
-        loading="lazy"
-      />
-    </div>
-    <figcaption>
-      The crew arriving. <span class="tag tag--coming">Coming</span>
-      <span class="tag tag--illustration">Design illustration</span> &#8212; one constraint is
-      already fixed: a cable claims a parent&#8211;child relationship, so where the link is inferred
-      rather than observed, no cable is drawn.
-    </figcaption>
-  </figure>
+  <ul class="ways">
+    <li>
+      <h3>A pulse means a file is moving</h3>
+      <p>
+        A cable pulses while that junior is still writing, and goes grey when it stops. It tells you
+        something is happening, and never pretends to know how far along it is.
+      </p>
+    </li>
+    <li>
+      <h3>Twelve, then a count</h3>
+      <p>
+        Twelve juniors are drawn around the desk and the rest become a small chip. Every one of them
+        is still in the panel and in the table, so nobody is lost to the drawing.
+      </p>
+    </li>
+    <li>
+      <h3>No cable without a link</h3>
+      <p>
+        A cable is a claim that one session started another. Where that link is guessed rather than
+        reported, the junior keeps its seat and gets no cable.
+      </p>
+    </li>
+  </ul>
 </section>
 
 <section class="section" data-reveal>
   <div class="section-head">
-    <h2>Coming: agent size.</h2>
+    <h2>As big or as small as you like.</h2>
     <p>
-      One figure size ships. A setting for small to large, with the desks and chairs scaling with
-      the figures and the room rectangles staying exactly where they are, is designed and not built.
+      Agent size is a setting: small, medium, large, or automatic. The desks, chairs, sofas and rugs
+      resize with the people, and the rooms stay where they are, so a floor of five fills the window
+      and a floor of a hundred still fits in it.
     </p>
+    <p><a href="look.html">The look</a> has the rest of what you can change.</p>
   </div>
-  <figure class="band-shot">
-    <img
-      src="media/look/agent-sizes.png"
-      alt="The same room drawn at four agent sizes, small to large, with the desks and chairs scaling with the figures"
-      loading="lazy"
-    />
-    <figcaption>
-      Four sizes of the same room. <span class="tag tag--coming">Coming</span>
-      <span class="tag tag--illustration">Design illustration</span> &#8212;
-      <a href="look.html">The look</a> has the rest of what is coming with it.
-    </figcaption>
-  </figure>
 </section>
 
 <article class="prose">
   <h2>The mark</h2>
   <p>
-    DeckHQ&#8217;s own icon lives once, as
+    DeckHQ&#8217;s icon is
     <a href="https://github.com/DkPanseriya/deckhq/blob/main/public/brand/deckhq-mark.svg"
-      >a hand-written SVG</a
-    >
-    &#8212; six rounded rectangles, both grounds in one file, no font and no external reference
-    &#8212; and every PNG, the <code>favicon.ico</code> and the VS Code tile are rendered from it by
-    a script that rasterises the shapes itself rather than driving a browser. A test compares the
-    committed files against a fresh render on every run, so the source and its outputs cannot drift
-    apart.
-  </p>
-  <p>
-    The one colour in it is the amber on the antenna tip, and it is the accent this site is built
-    on.
+      >one hand-drawn SVG</a
+    >: six rounded rectangles, no font, nothing fetched from anywhere. The one colour in it is the
+    amber on the antenna tip, and that amber is the accent this site is built on.
   </p>
   <p><a href="look.html">The look</a> &#183; <a href="features.html">Features</a></p>
 </article>
