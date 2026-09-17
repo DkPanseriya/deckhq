@@ -64,6 +64,8 @@ import { StudioStore } from '../../studio/store.mjs';
 import { COLUMNS, MAX_CARDS, validateBoard } from '../../studio/schema.mjs';
 import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
 import { registerHire } from './studio-hire.mjs';
+import { roleBriefRel } from '../../studio/brief-role.mjs';
+import { checkRoleName, worktreePathFor } from '../../studio/worktree.mjs';
 import {
   describeDisable,
   describeEnable,
@@ -158,6 +160,50 @@ export function resolveProject(raw) {
 }
 
 /**
+ * The roster's roles, as the page needs them — WP-68, §4.
+ *
+ * Four things per role that the snapshot on its own does not say:
+ *
+ *   `live`      the recorded `agentId` is STILL a session on the floor. Read
+ *               out of the registry here rather than remembered, so a role
+ *               whose terminal the user closed reads as unhired within one
+ *               scan instead of staying hired for ever.
+ *   `worktree`  where its worktree is, or would be.
+ *   `brief`     where its brief is, or would be.
+ *   `hireable`  and, when it is not, the named reason — `checkRoleName()`'s,
+ *               the same one a Hire would answer with. A role name the planner
+ *               suggested and git will not take says so on the card rather
+ *               than on the press.
+ *
+ * Pure apart from the agent list it is handed.
+ *
+ * @param {any} snap `StudioStore.snapshot()`
+ * @param {string} root the project directory
+ * @param {Array<{id?:string}>} agents the registry's own agents
+ * @param {string} [dataDir]
+ */
+export function rolesOf(snap, root, agents, dataDir = DATA_DIR) {
+  const live = new Set((agents || []).map((a) => a?.id).filter(Boolean));
+  const roles = snap?.roster?.roster?.roles || [];
+  return roles.map((role) => {
+    const name = String(role.name || '');
+    const checked = checkRoleName(name);
+    const ok = !('error' in checked);
+    return {
+      name,
+      purpose: role.purpose || '',
+      agentId: role.agentId || null,
+      live: Boolean(role.agentId && live.has(role.agentId)),
+      hireable: ok,
+      refusal: ok ? null : checked.error,
+      reason: ok ? null : checked.reason,
+      worktree: ok ? worktreePathFor(dataDir, root, name) : null,
+      brief: ok ? path.join(snap.dir, roleBriefRel(name)) : null,
+    };
+  });
+}
+
+/**
  * The next free `c<n>` on this board. Ids are the user's to read and to type
  * into a handover filename, so they are short and sequential rather than
  * random.
@@ -239,6 +285,7 @@ export function register(router, ctx) {
     // the floor — read out of the registry here rather than remembered, so a
     // planner the user closed reads as gone within one scan instead of being a
     // link to nothing.
+    const snap = studio.snapshot();
     const planner = store.studioPlannerFor?.(project.projectKey) || null;
     const plannerLive = planner
       ? (ctx.registry?.agents || []).some((a) => a.id === planner.agentId)
@@ -255,7 +302,14 @@ export function register(router, ctx) {
       // prints.
       wouldWrite: plannedPaths(project.root),
       columns: [...COLUMNS],
-      studio: studio.snapshot(),
+      studio: snap,
+      // WP-68. The roster's roles, each with the three things a Hire row needs
+      // and the page cannot work out for itself: whether the recorded
+      // `agentId` is STILL a session on the floor, where its worktree would
+      // go, and whether its name can be hired under at all. The refusal is
+      // carried here rather than discovered on the press, so a name the
+      // planner suggested and git will not take says so before it is clicked.
+      roles: rolesOf(snap, project.root, ctx.registry?.agents || [], dataDir),
     });
   });
 
