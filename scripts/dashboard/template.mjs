@@ -433,7 +433,7 @@ footer.foot { color: var(--faint); font-size: 11px; margin-top: 22px; display: f
     INDEX.dec = {}; INDEX.feat = {}; INDEX.rel = {}; INDEX.arch = {};
     D.requirements.forEach(function (r) { INDEX.req[r.id] = r; });
     D.workPackages.forEach(function (r) { INDEX.wp[r.id] = r; });
-    D.deviations.forEach(function (r) { INDEX.dev[String(r.n)] = r; });
+    D.deviations.forEach(function (r) { INDEX.dev[r.key || String(r.n)] = r; });
     D.stories.forEach(function (r) { INDEX.story[r.id] = r; });
     D.decisions.forEach(function (r) { INDEX.dec[String(r.n)] = r; });
     featureList().forEach(function (r) { INDEX.feat[r.key] = r; });
@@ -561,16 +561,16 @@ footer.foot { color: var(--faint); font-size: 11px; margin-top: 22px; display: f
       kind: 'dev', empty: 'No decision matches.',
       items: function () {
         return D.deviations.map(function (d) {
-          return Object.assign({}, d, { status: d.raise ? 'in progress' : 'done', id: String(d.n) });
+          return Object.assign({}, d, { status: d.raise ? 'in progress' : 'done', id: d.key || String(d.n) });
         });
       },
-      id: function (i) { return String(i.n); },
+      id: function (i) { return i.key || String(i.n); },
       title: function (i) { return i.title; },
       sub: function (i) { return i.summary; },
       area: function (i) { return (i.wps && i.wps[0]) || 'no package'; },
       areaLabel: 'Package',
       sorts: [['n', 'Number'], ['title', 'Title'], ['status', 'State']],
-      search: function (i) { return ['§' + i.n, i.title, i.summary, i.wp].join(' '); }
+      search: function (i) { return ['§' + i.n, i.title, i.summary, (i.wps || []).join(' ')].join(' '); }
     }
   };
   function storyStatus(s) {
@@ -918,7 +918,7 @@ footer.foot { color: var(--faint); font-size: 11px; margin-top: 22px; display: f
       body += chipRow('dev', i.devsAll, 'Decision log');
       body += fieldHtml('Source', esc(i.source));
     } else if (kind === 'dev') {
-      head = { id: '§' + i.n, title: i.title, status: i.raise ? 'in progress' : 'done', statusText: i.raise ? 'RAISE — open question' : 'recorded', meta: 'DEVIATIONS.md' };
+      head = { id: '§' + i.n + (i.dup ? ' (second entry under this number)' : ''), title: i.title, status: i.raise ? 'in progress' : 'done', statusText: i.raise ? 'RAISE — open question' : 'recorded', meta: 'DEVIATIONS.md' };
       body += fieldHtml('What changed, and why', md(i.summary));
       body += chipRow('wp', i.wps || [], 'Work packages');
       var back = D.requirements.filter(function (r) { return (r.devs || []).indexOf(i.n) >= 0; }).map(function (r) { return r.id; });

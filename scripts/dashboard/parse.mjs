@@ -56,8 +56,6 @@ export function tables(md) {
   return out;
 }
 
-const STATUSES = ['done', 'in progress', 'planned', 'declined', 'superseded', 'blocked', 'open'];
-
 /** Map free text onto one of the status words the page colours. */
 export function statusOf(text, fallback = 'unknown') {
   const t = flat(text).toLowerCase().replace(/[*_~`]/g, '');
@@ -161,7 +159,7 @@ export function parseRequirements(md, warn, caps = {}) {
     const bl = lines.slice(mark.at + 1, end);
     let quote = '';
     let quoteDate = '';
-    let qi = bl.findIndex((l) => /^[*_](Owner|The owner|Derived|Asked|Owner’s)/i.test(l));
+    const qi = bl.findIndex((l) => /^[*_](Owner|The owner|Derived|Asked|Owner’s)/i.test(l));
     if (qi >= 0) {
       let txt = bl[qi];
       for (let j = qi + 1; j < bl.length && bl[j].trim() && !/^\*\*/.test(bl[j]); j += 1) txt += ` ${bl[j]}`;
@@ -435,8 +433,14 @@ export function parseDeviations(md, warn, cap = 140) {
       if (para.length > cap * 2) break;
     }
     const wps = wpIds(`${marks[k].title} ${para}`);
+    // The log is append-only and hand-numbered, and two numbers were issued
+    // twice while two agents wrote at once. Both entries are real, so both are
+    // kept: the second gets a suffixed key so a deep link still means one thing.
+    const taken = out.filter((d) => d.n === marks[k].n).length;
     out.push({
       n: marks[k].n,
+      key: taken ? `${marks[k].n}-${taken + 1}` : String(marks[k].n),
+      dup: taken ? 1 : 0,
       title: marks[k].title.replace(/\s*[—–-]\s*\*\*RAISE\*\*\s*$/, ''),
       raise: /RAISE/.test(marks[k].title) || /\*\*RAISE\*\*/.test(para),
       summary: flat(para, cap),
