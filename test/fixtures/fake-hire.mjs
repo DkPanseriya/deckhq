@@ -93,9 +93,27 @@ if (configDir) {
       sessionId,
     },
   ];
-  fs.writeFileSync(
-    path.join(dir, `${sessionId}.jsonl`),
-    `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`,
-    'utf8',
-  );
+  // Written and FLUSHED before this process exits. The test treats the child's
+  // exit as "the transcript is on disk", and the first scan runs right after —
+  // so the bytes have to be there, not in this process's buffers. `fsync` on
+  // the file and then on its directory is the pair that makes both the content
+  // and the directory entry visible to the scan (§190).
+  const file = path.join(dir, `${sessionId}.jsonl`);
+  const fd = fs.openSync(file, 'w');
+  try {
+    fs.writeSync(fd, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`, null, 'utf8');
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  try {
+    const dirFd = fs.openSync(dir, 'r');
+    try {
+      fs.fsyncSync(dirFd);
+    } finally {
+      fs.closeSync(dirFd);
+    }
+  } catch {
+    // Directory fsync is not available on every platform; the file's own is.
+  }
 }
