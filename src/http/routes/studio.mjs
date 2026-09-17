@@ -63,7 +63,7 @@ import { StudioPathError } from '../../studio/paths.mjs';
 import { StudioStore } from '../../studio/store.mjs';
 import { COLUMNS, MAX_CARDS, validateBoard } from '../../studio/schema.mjs';
 import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
-import { registerHire } from './studio-hire.mjs';
+import { UNVERIFIED_LAUNCH, registerHire } from './studio-hire.mjs';
 import { roleBriefRel } from '../../studio/brief-role.mjs';
 import { checkRoleName, worktreePathFor } from '../../studio/worktree.mjs';
 import {
@@ -162,7 +162,7 @@ export function resolveProject(raw) {
 /**
  * The roster's roles, as the page needs them — WP-68, §4.
  *
- * Four things per role that the snapshot on its own does not say:
+ * Six things per role that the snapshot on its own does not say:
  *
  *   `live`      the recorded `agentId` is STILL a session on the floor. Read
  *               out of the registry here rather than remembered, so a role
@@ -174,26 +174,42 @@ export function resolveProject(raw) {
  *               the same one a Hire would answer with. A role name the planner
  *               suggested and git will not take says so on the card rather
  *               than on the press.
+ *   `runtime`   what the live session actually IS, read off the registry. The
+ *               roster carries no runtime field on purpose (§4: roles are the
+ *               user's property and a runtime is a launch decision, not a
+ *               property of the role), so the honest answer for an unhired
+ *               role is `null` rather than a guess.
+ *   `unverified` §4's *unverified launch* sentence when that runtime has one,
+ *               so the roster line can say what cannot be known about a Codex,
+ *               Gemini CLI or OpenCode session instead of drawing it like a
+ *               Claude Code one.
  *
  * Pure apart from the agent list it is handed.
  *
  * @param {any} snap `StudioStore.snapshot()`
  * @param {string} root the project directory
- * @param {Array<{id?:string}>} agents the registry's own agents
+ * @param {Array<{id?:string, runtime?:string}>} agents the registry's own agents
  * @param {string} [dataDir]
  */
 export function rolesOf(snap, root, agents, dataDir = DATA_DIR) {
-  const live = new Set((agents || []).map((a) => a?.id).filter(Boolean));
+  /** id → runtime, for the two answers below that both need the same lookup. */
+  const live = new Map(
+    (agents || []).filter((a) => a?.id).map((a) => [a.id, String(a.runtime || '')]),
+  );
   const roles = snap?.roster?.roster?.roles || [];
   return roles.map((role) => {
     const name = String(role.name || '');
     const checked = checkRoleName(name);
     const ok = !('error' in checked);
+    const isLive = Boolean(role.agentId && live.has(role.agentId));
+    const runtime = isLive ? live.get(role.agentId) || null : null;
     return {
       name,
       purpose: role.purpose || '',
       agentId: role.agentId || null,
-      live: Boolean(role.agentId && live.has(role.agentId)),
+      live: isLive,
+      runtime,
+      unverified: (runtime && UNVERIFIED_LAUNCH[runtime]) || null,
       hireable: ok,
       refusal: ok ? null : checked.error,
       reason: ok ? null : checked.reason,

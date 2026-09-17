@@ -433,6 +433,10 @@ export function buildEntries(ctx) {
  * @param {() => boolean} opts.getLetGoVisible
  * @param {() => boolean} [opts.getRedactSnapshots]
  * @param {() => Array<{id:string, label:string, blurb:string}>} [opts.getLookPresets] WP-88b
+ * @param {() => Array<any>} [opts.getStudioRoles] WP-68
+ * @param {() => Promise<boolean>} [opts.onOpen] WP-68 — anything the list needs
+ *   that is not in the snapshot, fetched when the palette opens. Resolving
+ *   `true` re-renders the list that is already on screen.
  * @param {Record<string, Function>} opts.actions
  */
 export function createPalette(opts) {
@@ -446,6 +450,12 @@ export function createPalette(opts) {
     getLetGoVisible,
     getRedactSnapshots,
     getLookPresets,
+    // WP-68. The roster's roles for the project on screen, so the command list
+    // can carry one `Studio: hire <role>` row per unhired role. A getter and
+    // not a fetch: `buildEntries` is pure and a row cannot wait on a request,
+    // so `onOpen` below re-reads them and re-renders once if they changed.
+    getStudioRoles,
+    onOpen,
     actions,
   } = opts;
 
@@ -460,6 +470,7 @@ export function createPalette(opts) {
       letGoVisible: getLetGoVisible(),
       redactSnapshots: getRedactSnapshots ? getRedactSnapshots() : false,
       lookPresets: getLookPresets ? getLookPresets() : [],
+      studioRoles: getStudioRoles ? getStudioRoles() : [],
       actions,
     };
   }
@@ -619,6 +630,19 @@ export function createPalette(opts) {
     else dialogEl.setAttribute('open', '');
     inputEl.focus();
     inputEl.select();
+    // WP-68. Anything the list needs that is not in the snapshot is fetched
+    // here and drawn on the second render. The palette is already open and
+    // already usable by then: a list that waited for a request before it
+    // appeared would be a palette that is sometimes slow to type into.
+    if (onOpen) {
+      Promise.resolve(onOpen())
+        .then((changed) => {
+          if (changed && dialogEl.open) render();
+        })
+        .catch(() => {
+          /* The rows that are already there are still the right rows. */
+        });
+    }
   }
 
   function close() {

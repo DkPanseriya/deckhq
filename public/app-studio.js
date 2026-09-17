@@ -29,10 +29,136 @@ export const PLANNER_POLL_MS = 2500;
 /** How many times. Thirty seconds, which is more than a scan interval. */
 export const PLANNER_POLL_TRIES = 12;
 
+/**
+ * The runtime a Hire from the palette starts a role on — WP-68, §4.
+ *
+ * Named here and sent on every `/api/studio/hire`, rather than left to the
+ * route's own default, for WP-92j's reason: which of four runtimes a spawn was
+ * about is the caller's to say. It is `claude-code` because that is the one
+ * runtime whose launch §4 does not have to mark *unverified*, and the other
+ * three are hired from the roster editor, where the choice is a visible one
+ * rather than a keystroke.
+ */
+export const HIRE_RUNTIME = 'claude-code';
+
 /** The project the palette's Studio commands act on, or null. */
 export function currentProject() {
   const wanted = projectFilter || findAgent(selectedId)?.projectId;
   return (latestSnapshot?.projects || []).find((p) => p.id === wanted) || null;
+}
+
+/**
+ * The last `GET /api/studio` answer, and the directory it was about.
+ *
+ * One object, not a store: the palette needs the roster's role names to draw a
+ * `Studio: hire <role>` row per unhired role, and a row cannot wait on a fetch.
+ * It is stamped with the project so a stale answer can never be drawn beside a
+ * different project's name — `studioRoles()` returns nothing at all when the
+ * floor has moved on.
+ * @type {{project:string|null, roles:Array<any>}}
+ */
+const cache = { project: null, roles: [] };
+
+/**
+ * The roster's roles for the project the palette is about, or an empty list.
+ *
+ * Empty is the honest answer in three cases that look different and read the
+ * same from a palette row: no project selected, Studio not enabled here, and
+ * the roster not fetched yet. None of them has a role to hire.
+ */
+export function studioRoles() {
+  const project = currentProject();
+  if (!project?.cwd || cache.project !== project.cwd) return [];
+  return cache.roles;
+}
+
+/**
+ * Re-read this project's roster into the cache.
+ *
+ * A GET of files on the user's own disk, made when the palette opens. It
+ * writes nothing and it resolves to whether anything changed, so the caller can
+ * re-render once instead of on every open.
+ *
+ * @param {{fetch?:typeof globalThis.fetch}} [opts] a test seam
+ * @returns {Promise<boolean>} true when the drawn rows would now differ
+ */
+export async function refreshStudioRoles(opts = {}) {
+  const get = opts.fetch || globalThis.fetch;
+  const project = currentProject();
+  const cwd = project?.cwd || '';
+  const before = JSON.stringify(cache);
+  if (!cwd) {
+    cache.project = null;
+    cache.roles = [];
+    return before !== JSON.stringify(cache);
+  }
+  try {
+    const res = await get(`/api/studio?project=${encodeURIComponent(cwd)}`);
+    const body = res.ok ? await res.json() : null;
+    cache.project = cwd;
+    // A project with Studio off has no roster to hire from, and says so by
+    // having no rows — not by a row that would refuse when pressed.
+    cache.roles = body?.enabled && Array.isArray(body.roles) ? body.roles : [];
+  } catch {
+    cache.project = cwd;
+    cache.roles = [];
+  }
+  return before !== JSON.stringify(cache);
+}
+
+/**
+ * Hire one role — `POST /api/studio/hire`, §4.
+ *
+ * One role per press. `{ roles: […] }` exists for the roster editor, where six
+ * checkboxes and one button is the gesture; a palette row is one name, and a
+ * row that started six terminals would be a row nobody presses twice.
+ *
+ * Everything this can refuse is refused by the daemon, in the daemon's own
+ * words, and shown as it was written: a role name git will not take, a runtime
+ * with no `openNewSession`, a project with no consent. None of it is
+ * second-guessed here.
+ *
+ * @param {string} roleName
+ */
+export async function studioHire(roleName) {
+  const project = currentProject();
+  if (!project?.cwd) {
+    toast('Select a session first — a role is hired into a project.', { isError: true });
+    return;
+  }
+  let body;
+  try {
+    const res = await fetch('/api/studio/hire', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cwd: project.cwd, role: roleName, runtime: HIRE_RUNTIME }),
+    });
+    body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+  } catch (err) {
+    toast(`Studio: ${err.message}`, { isError: true });
+    return;
+  }
+  const refused = (body.refused || [])[0];
+  if (refused) {
+    toast(`Studio: ${roleName} — ${refused.error || refused.reason}`, { isError: true });
+    return;
+  }
+  const hired = (body.hired || [])[0];
+  if (!hired) {
+    toast('Studio: nothing was started.', { isError: true });
+    return;
+  }
+  // The id is the runtime's to mint and the scan's to find, so this says what
+  // is true now — a worktree and a brief — and lets the floor say the rest.
+  toast(
+    hired.unverified
+      ? `${roleName} started in ${hired.branch} — ${hired.unverified}`
+      : `${roleName} started in ${hired.branch}. It walks in on the next scan.`,
+    { isError: Boolean(hired.unverified) },
+  );
+  // The role is hired now, so its palette row should be gone by the next open.
+  await refreshStudioRoles();
 }
 
 /**

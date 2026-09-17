@@ -89,7 +89,7 @@ import {
   runProjectDashboard,
   showWhiteboard,
 } from './app-launchers.js';
-import { studioPlan } from './app-studio.js';
+import { refreshStudioRoles, studioHire, studioPlan, studioRoles } from './app-studio.js';
 import { adoptSnapshotClock, now as clockNow } from './clock.js';
 
 // -------------------------------------------------------------- app state
@@ -742,6 +742,8 @@ const paletteUI = createPalette({
   getLetGoVisible: () => letGoVisible,
   getRedactSnapshots: () => redactSnapshots,
   getLookPresets: lookPresets, // WP-88b — empty until the catalogue has loaded
+  getStudioRoles: studioRoles, // WP-68 — one hire row per unhired role
+  onOpen: refreshStudioRoles,
   actions: {
     selectAgent,
     filterToProject,
@@ -759,6 +761,7 @@ const paletteUI = createPalette({
     // close what it is named after would be a coin flip.
     idleProjects: () => idleProjects.open(),
     studioPlan, // WP-67
+    studioHire, // WP-68
     rename: openIdentityDialog,
     // The palette never calls /api/ack itself: it hands the action to the
     // panel's performAction(), the single funnel in the client. THE

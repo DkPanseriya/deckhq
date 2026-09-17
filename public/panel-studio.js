@@ -68,6 +68,43 @@ export function artefactLine(status) {
 }
 
 /**
+ * ONE LINE PER ROLE — WP-68, §4.
+ *
+ * The block already says whether `roster.json` parses. This says what is IN it,
+ * which is the question the three artefact rows cannot answer: who has been
+ * hired, and who is still a name on a list.
+ *
+ * Four states, and they are different things:
+ *
+ *   `not hired`   no `agentId`, or one the scan no longer sees. A role whose
+ *                 terminal the user closed reads this way within one scan,
+ *                 which is right: it has no session, and Hire will start one.
+ *   `hired`       a live session, and its id, because the id is what the user
+ *                 types into every other surface that takes one.
+ *   `unverified`  hired on Codex, Gemini CLI or OpenCode. §4's own sentence,
+ *                 said here rather than implied: a Codex role cannot raise a
+ *                 permission card and reports liveness from file mtime, so a
+ *                 line that drew it exactly like a Claude Code one would be
+ *                 claiming something nobody has measured.
+ *   `cannot hire` a name git will not take a branch from. The daemon's own
+ *                 `refusal`, so the user can go and fix `roster.json`.
+ *
+ * Pure, so `test/unit/panel-studio.test.mjs` drives it without a browser.
+ *
+ * @param {any} role one entry of `GET /api/studio`'s `roles`
+ * @returns {{state:'hired'|'unverified'|'not-hired'|'refused', line:string}}
+ */
+export function roleLine(role) {
+  if (role?.hireable === false) {
+    return { state: 'refused', line: role.refusal || 'this name cannot be a branch' };
+  }
+  if (!role?.live) return { state: 'not-hired', line: 'not hired' };
+  const id = role.agentId ? ` — ${role.agentId}` : '';
+  if (role.unverified) return { state: 'unverified', line: `hired, unverified${id}` };
+  return { state: 'hired', line: `hired${id}` };
+}
+
+/**
  * @param {PanelDom & {toast:(m:string, o?:{isError?:boolean}) => void}} ctx
  */
 export function createStudioPart(ctx) {
@@ -140,6 +177,31 @@ export function createStudioPart(ctx) {
       open.addEventListener('click', () => openArtefact(artefact.name, status.line));
       row.appendChild(open);
 
+      studioList.appendChild(row);
+    }
+
+    // WP-68. The roster, under the three files, one line per role. Only when
+    // there is one: an empty roster is a project the planner has not finished
+    // with, and a heading over nothing would be a promise of a list.
+    const roles = Array.isArray(body.roles) ? body.roles : [];
+    for (const [index, role] of roles.entries()) {
+      const status = roleLine(role);
+      const row = document.createElement('div');
+      row.className =
+        `studio-row studio-row--role studio-role--${status.state}` +
+        (index === 0 ? ' studio-row--role-first' : '');
+
+      const name = document.createElement('span');
+      name.className = 'studio-file';
+      name.textContent = String(role?.name || '');
+
+      const state = document.createElement('span');
+      state.className = 'studio-state';
+      // A validator message and an agent id, both out of files the user or a
+      // planner wrote. `textContent`, never markup (`02-ARCHITECTURE.md` §9).
+      state.textContent = status.line;
+
+      row.append(name, state);
       studioList.appendChild(row);
     }
 

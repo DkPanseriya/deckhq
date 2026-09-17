@@ -69,6 +69,47 @@ const AGENT_SIZE_ROWS = Object.freeze([
 ]);
 
 /**
+ * ONE ROW PER UNHIRED ROLE — WP-68, `docs/07-STUDIO-DESIGN.md` §4.
+ *
+ * A row per role and not one "Studio: hire…" row that then asks which, because
+ * the palette is where you type the name of the thing you want: somebody who
+ * knows they need the docs writer types `docs` and presses Enter, and a row
+ * that opened a second chooser would have made that two questions.
+ *
+ * **Unhired only.** A role whose recorded `agentId` is still a session on the
+ * floor is already at a desk, and a second Hire of it would start a second
+ * terminal in the same worktree under the same brief. It is not drawn as a
+ * disabled row either: the hired role is reachable as a session, by its own
+ * name, in the palette's agent group, which is the row a person actually wants.
+ *
+ * A role git will not take a branch name from — a space, a quote, a `;` — IS
+ * drawn, and says so in its hint, because the reason it cannot be hired is a
+ * thing the user can go and fix in `roster.json`, and a row that vanished would
+ * be a role nobody could find out about. Pressing it still posts, and the
+ * refusal the user is shown is the daemon's own words rather than a second copy
+ * of the rule kept here: `GET /api/studio`'s `refusal` and the Hire's are the
+ * same sentence out of the same `checkRoleName()`.
+ *
+ * @param {{studioRoles?:Array<any>, actions:Record<string, Function>}} ctx
+ */
+export function studioHireRows(ctx) {
+  const roles = Array.isArray(ctx.studioRoles) ? ctx.studioRoles : [];
+  return roles
+    .filter((role) => role && typeof role.name === 'string' && role.name && !role.live)
+    .map((role) => ({
+      id: `cmd:studio-hire:${role.name}`,
+      group: 'command',
+      label: `Studio: hire ${role.name}`,
+      hint: role.hireable
+        ? role.purpose || 'a worktree, a brief, and a session started under it'
+        : role.refusal || 'this name cannot be a branch — edit roster.json',
+      keywords: ['studio', 'hire', 'role', 'worktree', 'brief', role.name],
+      hireable: role.hireable !== false,
+      run: () => ctx.actions.studioHire(role.name),
+    }));
+}
+
+/**
  * Commands: everything that used to be a header button, plus the surfaces
  * §5.3 names. Pure — it reads a context object and returns entries, so the
  * whole table can be asserted in a unit test without a browser.
@@ -193,6 +234,7 @@ export function buildCommandEntries(ctx) {
       keywords: ['studio', 'plan', 'planner', 'grill', 'blueprint', 'roster', 'board', 'idea'],
       run: () => actions.studioPlan(),
     },
+    ...studioHireRows(ctx),
     {
       id: 'cmd:refresh',
       group: 'command',
