@@ -47,6 +47,8 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { samePath } from '../core/same-path.mjs';
+
 /** The directory, under the state directory, that holds every one of them. */
 export const WORKTREES_DIR = 'worktrees';
 
@@ -215,49 +217,6 @@ export function runGit(argv, opts) {
       },
     );
   });
-}
-
-/**
- * A path as the filesystem spells it, so two names for one directory compare
- * equal.
- *
- * Git answers `worktree list` with the REAL path. We build ours by joining onto
- * a data directory, and that directory may be reached through a symlink
- * (macOS's `/var` is `/private/var`), a junction, or an 8.3 short name (a
- * Windows `TEMP` of `C:\Users\RUNNER~1\…`). `realpath` settles all three. The
- * leaf need not exist yet — a worktree is looked up before it is made — so the
- * nearest ancestor that does exist is resolved and the rest is joined back on.
- * Never throws: a path nothing can resolve is returned as `path.resolve` has it.
- * @param {string} p
- * @returns {string}
- */
-export function canonicalPath(p) {
-  const resolved = path.resolve(String(p || ''));
-  /** @type {string[]} */ const tail = [];
-  let head = resolved;
-  for (;;) {
-    try {
-      return path.join(fs.realpathSync.native(head), ...tail);
-    } catch {
-      const up = path.dirname(head);
-      if (up === head) return resolved;
-      tail.unshift(path.basename(head));
-      head = up;
-    }
-  }
-}
-
-/**
- * Whether two paths name one directory. An empty path names nothing, so it is
- * never the same as anything — `path.resolve('')` is the working directory, and
- * a session with no `cwd` must not match a worktree that happens to be it.
- * @param {string|null|undefined} a
- * @param {string|null|undefined} b
- */
-export function samePath(a, b) {
-  if (!a || !b) return false;
-  const [x, y] = [canonicalPath(a), canonicalPath(b)];
-  return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
 }
 
 /**

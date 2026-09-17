@@ -58,6 +58,7 @@ import path from 'node:path';
 import { readJson, sendError, sendJson } from '../server.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
 import { DATA_DIR } from '../../core/paths.mjs';
+import { samePath } from '../../core/same-path.mjs';
 import { projectKeyFor } from '../../core/ledger-record.mjs';
 import { StudioPathError } from '../../studio/paths.mjs';
 import { StudioStore } from '../../studio/store.mjs';
@@ -125,7 +126,7 @@ export function plannerAmong(agents, root, taken) {
           typeof a.id === 'string' &&
           !taken.has(a.id) &&
           String(a.runtime || '') === PLANNER_RUNTIME &&
-          path.resolve(String(a.cwd || '')) === root,
+          samePath(a.cwd, root),
       )
       .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0] || null
   );

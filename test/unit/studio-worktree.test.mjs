@@ -29,7 +29,6 @@ const {
   ensureWorktree,
   projectSlug,
   runGit,
-  samePath,
   worktreePathFor,
   worktreesDirFor,
 } = await import('../../src/studio/worktree.mjs');
@@ -275,7 +274,7 @@ test('ACCEPTANCE: firing leaves the worktree and the process alone, and says so'
   assert.match(branches.stdout, /studio\/backend/);
 });
 
-// ── one directory, two names — docs/DEVIATIONS.md §192 ───────────────────────
+// ── one directory, two names — src/core/same-path.mjs ────────────────────────
 
 test('a data directory reached through a link is still reused, not refused as occupied', async () => {
   const { dir, root } = await repo();
@@ -306,17 +305,4 @@ test('a directory somebody else made is still refused as occupied, link or no li
     () => ensureWorktree(root, 'backend', { dataDir }),
     (err) => err.reason === 'occupied',
   );
-});
-
-test('samePath: two names for one directory are the same path, and two directories are not', () => {
-  const real = scratchDir('studio-wt-same-');
-  const link = alias(real);
-  assert.equal(samePath(real, link), true);
-  assert.equal(samePath(path.join(real, 'a'), path.join(link, 'a')), true, 'not there yet');
-  assert.equal(samePath(real, path.dirname(real)), false);
-  assert.equal(samePath(real, ''), false);
-  assert.equal(samePath('', ''), false);
-  // A path that does not exist is compared as written, and never throws.
-  assert.equal(samePath(path.join(real, 'nope'), path.join(real, 'nope')), true);
-  assert.equal(samePath(path.join(real, 'nope'), path.join(real, 'other')), false);
 });

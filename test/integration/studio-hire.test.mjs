@@ -31,9 +31,8 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const { startDaemon } = await import('../../src/daemon.mjs');
-const { canonicalPath, describeFire, projectSlug, samePath } =
-  await import('../../src/studio/worktree.mjs');
-const { roleAmong } = await import('../../src/http/routes/studio-hire.mjs');
+const { describeFire, projectSlug } = await import('../../src/studio/worktree.mjs');
+const { canonicalPath, samePath } = await import('../../src/core/same-path.mjs');
 const { hireKickoff } = await import('../../src/studio/brief-role.mjs');
 const { MAX_HIRE_AT_ONCE } = await import('../../src/studio/schema.mjs');
 // The adapter registry the daemon itself uses: the same module object, so
@@ -301,7 +300,7 @@ test('ACCEPTANCE: the spawn argv is an array, element by element, with no shell 
     assert.deepEqual(seen.argv, ['--append-system-prompt-file', brief, hireKickoff(brief)]);
     // The process reports its directory the way the OS spells it — `/private/var`
     // for `/var` on macOS, the long name for `RUNNER~1` on Windows — so this is
-    // "the same directory", which is the claim, and not "the same string". §192.
+    // "the same directory", which is the claim, and not "the same string".
     assert.ok(samePath(seen.cwd, worktree), `${seen.cwd} is not ${worktree}`);
     // The brief's BODY is never on the command line.
     assert.ok(!seen.argv.some((a) => a.includes('## 1. The plan')));
@@ -339,7 +338,7 @@ test('ACCEPTANCE: three roles give three worktrees, three briefs and three named
     await settle();
     await d.registry.refresh();
     const state = await (await fetch(`${d.url}api/state`)).json();
-    // A session's `cwd` is the OS's spelling and `worktrees` is ours; §192.
+    // A session's `cwd` is the OS's spelling and `worktrees` is ours.
     const under = canonicalPath(worktrees) + path.sep;
     const mine = (state.agents || []).filter((a) =>
       a.cwd ? canonicalPath(a.cwd).startsWith(under) : false,
@@ -494,25 +493,4 @@ test('ACCEPTANCE: firing leaves the worktree and the process alone, and says so'
     assert.ok(fs.existsSync(hired.worktree));
     assert.equal(fs.readFileSync(marker, 'utf8'), 'an agent did this\n');
   });
-});
-
-// ── one directory, two names — docs/DEVIATIONS.md §192 ───────────────────────
-
-test('a session is matched to its worktree by directory, whichever name the OS reports it under', () => {
-  const real = scratchDir('studio-hire-real-');
-  const link = path.join(scratchDir('studio-hire-link-'), 'link');
-  fs.symlinkSync(real, link, 'junction');
-  const agents = [
-    { id: 'elsewhere', cwd: path.dirname(real), lastActivityAt: 9 },
-    { id: 'no-cwd', lastActivityAt: 8 },
-    { id: 'older', cwd: real, lastActivityAt: 1 },
-    { id: 'newer', cwd: real, lastActivityAt: 2 },
-  ];
-  // Hired by the link, running — as the OS tells it — in the real directory.
-  assert.equal(roleAmong(agents, link, new Set())?.id, 'newer');
-  assert.equal(roleAmong(agents, link, new Set(['newer']))?.id, 'older');
-  assert.equal(roleAmong(agents, link, new Set(['newer', 'older'])), null);
-  // A session with no `cwd` is in no worktree — not even the one this process
-  // happens to be standing in, which is what `path.resolve('')` would say.
-  assert.equal(roleAmong([{ id: 'no-cwd' }], process.cwd(), new Set()), null);
 });

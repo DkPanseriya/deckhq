@@ -42,6 +42,7 @@
 import { sendError, sendJson } from '../server.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
 import { DATA_DIR } from '../../core/paths.mjs';
+import { samePath } from '../../core/same-path.mjs';
 import { StudioStore } from '../../studio/store.mjs';
 import { MAX_HIRE_AT_ONCE } from '../../studio/schema.mjs';
 import { ensureRoleBrief, hireKickoff } from '../../studio/brief-role.mjs';
@@ -49,7 +50,6 @@ import {
   WorktreeError,
   checkRoleName,
   ensureWorktree,
-  samePath,
   worktreePathFor,
 } from '../../studio/worktree.mjs';
 
@@ -155,7 +155,7 @@ export function cardForRole(board, roleName, done = ['done']) {
  * Compared with `samePath()`, not `===`: a session reports the directory it is
  * running in the way the OS spells it, and the worktree is spelt the way the
  * data directory was. Where those differ the role was hired and never
- * recognised — `docs/DEVIATIONS.md` §192.
+ * recognised — `src/core/same-path.mjs` says where they differ.
  *
  * @param {Array<{id?:string, cwd?:string, lastActivityAt?:number}>} agents
  * @param {string} worktree resolved worktree path
