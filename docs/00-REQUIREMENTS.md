@@ -1303,13 +1303,17 @@ and served by nobody, so P-04 and P-05 are untouched.
 **Why.** The register, the plan, the log and the audit are four long documents, and the question
 "where is this product" is answered by reading all four. A generated page answers it in a glance
 without becoming a fifth thing to maintain.
-**Status:** done. **Implemented by:** `scripts/dashboard/build.mjs` (`docs/DEVIATIONS.md` §187);
+**Status:** done. **Implemented by:** `scripts/dashboard/build.mjs` (`docs/DEVIATIONS.md` §187),
+with the page itself split move-only into `template.mjs`, `template-css.mjs` and
+`template-script.mjs` to stay under WP-22's 900-line ceiling and no exemption row (§190.1);
 `test/unit/dashboard.test.mjs`; the regeneration line in `docs/README.md`.
 **Notes.** Four figures the documents do not hold — tests, goldens, CI and the published npm version
 — are flags, and the page prints `not supplied` without them (P-03). Twelve pre-table work packages
 whose status nothing proves read `unknown` rather than being assumed done. The page is capped at
 220 KB, so long fields are truncated with an ellipsis and every entry names the document it came
-from.
+from. Two faults in the client script were found and fixed while the file was being split: the
+footer was parented in `#main` and so vanished on the first tab switch, and the tab bar was bound a
+second time on every render (§190.2, §190.3).
 
 **R-185 — The public face is the product, and the blueprint stays private**
 _Owner, 17 September 2026:_ "The website is purely public marketing and PR. Do not put requirements

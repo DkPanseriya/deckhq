@@ -21,6 +21,32 @@
   with its id, hired-unverified, or the reason the name cannot be hired. **Firing leaves the worktree
   and the process alone, and says so.** `docs/DEVIATIONS.md` §188.
 
+### Fixed
+
+- **The project hub's footer survives a tab press.** It was appended to `#main`, and every tab
+  switch rewrites `main.innerHTML` — so the footer was there until the reader pressed a second tab
+  and then gone for good. It is inserted after `#main` now. `docs/DEVIATIONS.md` §190.2.
+- **The project hub's tab bar is bound once, not once per render.** `renderChrome()` attached the
+  bar's click listener and the listener calls `renderChrome()`, so the nth press ran the handler n
+  times and re-rendered the page n times over. The delegated listener moved to start-up; the bar's
+  element is never replaced, only its `innerHTML`. §190.3.
+
+### Testing
+
+- **`scripts/dashboard/template.mjs` is back under the 900-line ceiling, with no exemption row.**
+  Prettier's reformatting of the one long template string had put it at 1,109 lines. The stylesheet
+  moved verbatim to `template-css.mjs` (258 lines) and the client script to `template-script.mjs`
+  (756 lines, as `clientScript(data)` because the footer interpolates two links); `template.mjs`
+  keeps the helpers, the markup and the assembly at 109. Proved a move and not a rewrite: the built
+  page is **byte-identical** before and after, by `cmp`. §190.1.
+- **`test/integration/studio-hire.test.mjs`'s three-role acceptance no longer fails under load.**
+  Its roster poll ran a fixed five seconds and asked for a scan only every tenth round, so a
+  loaded machine could finish the loop before the third role's `agentId` had been recorded. Every
+  round now triggers a scan and waits for it, the loop leaves the moment all three ids are on disk,
+  and the 45-second bound is a failure path — reached, it reports the rounds, the elapsed time and
+  the roster. The fake CLI fixture `fsync`s its transcript before exiting. Ten consecutive runs
+  green with a full `npm test` running beside them. §190.4.
+
 ### Refused, and why
 
 - **Everything a Hire can refuse is refused before the first worktree exists.** No consent, an

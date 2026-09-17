@@ -351,21 +351,44 @@ test('ACCEPTANCE: three roles give three worktrees, three briefs and three named
     // Polled, not awaited: the record is a write the scan's own listener makes
     // after the scan returns, and pretending otherwise would be a test that
     // passes because it happened to be slow enough. The poll TURNS THE CRANK —
-    // it asks for another scan every few rounds rather than only sleeping —
-    // because that is what a real floor does: the registry polls on a timer, so
-    // a role whose transcript was not on disk yet when one pass ran is found by
-    // the next one. A test with no timer that only slept would be asserting
-    // that every one of the three landed on a single pass, which is a stronger
-    // claim than §4 makes and one a loaded machine can fail on nothing.
+    // EVERY round asks for another scan and waits for it — because that is what
+    // a real floor does: the registry polls on a timer, so a role whose
+    // transcript was not on disk yet when one pass ran is found by the next
+    // one. A test with no timer that only slept would be asserting that every
+    // one of the three landed on a single pass, which is a stronger claim than
+    // §4 makes and one a loaded machine can fail on nothing.
+    //
+    // The ceiling is a FAILURE PATH, not a wait: the loop leaves the instant
+    // the three ids are on disk, which on an idle machine is the first round.
+    // It is generous because the thing it bounds is a whole `npm test` running
+    // beside this one — §190. What it must never be is a guess at how long the
+    // scan takes, which is what a fixed round count was.
     const rosterFile = path.join(studioDir(project), 'roster.json');
+    const readRoster = () => {
+      try {
+        return JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
+      } catch {
+        return { roles: [] };
+      }
+    };
+    const complete = (r) => r.roles.length === names.length && r.roles.every((x) => x.agentId);
+    const deadline = Date.now() + 45_000;
     /** @type {any} */
-    let roster = { roles: [] };
-    for (let i = 0; i < 100; i++) {
-      roster = JSON.parse(fs.readFileSync(rosterFile, 'utf8'));
-      if (roster.roles.every((r) => r.agentId)) break;
-      await new Promise((r) => setTimeout(r, 50));
-      if (i % 10 === 9) await d.registry.refresh().catch(() => {});
+    let roster = readRoster();
+    let turns = 0;
+    while (!complete(roster) && Date.now() < deadline) {
+      await d.registry.refresh().catch(() => {});
+      // The record is chained behind the listener that the refresh just ran,
+      // so yield once before reading the file it writes.
+      await new Promise((r) => setTimeout(r, 25));
+      roster = readRoster();
+      turns += 1;
     }
+    assert.ok(
+      complete(roster),
+      `after ${turns} scans in ${Math.round((45_000 - (deadline - Date.now())) / 1000)}s the ` +
+        `roster is ${JSON.stringify(roster.roles.map((r) => [r.name, r.agentId]))}`,
+    );
     assert.deepEqual(roster.roles.map((r) => r.name).sort(), [...names].sort());
     for (const role of roster.roles) {
       assert.ok(role.agentId, `${role.name} has no agentId`);

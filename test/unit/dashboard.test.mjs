@@ -17,6 +17,7 @@ import { join } from 'node:path';
 
 import { build, collect, parseArgs, REPO } from '../../scripts/dashboard/build.mjs';
 import { devRefs, flat, statusOf, tables, section, wpIds } from '../../scripts/dashboard/parse.mjs';
+import { clientScript } from '../../scripts/dashboard/template-script.mjs';
 
 const data = collect();
 const { html } = build({ tests: '2497', goldens: '16', ci: 'green', npm: '1.3.0' });
@@ -258,4 +259,51 @@ test('every deep-linkable id in the payload exists, and the page knows the shape
       assert.ok(reqSet.has(id), `${s.id} points at unknown ${id}`);
   }
   assert.ok([...devSet].every((n) => Number.isInteger(n)));
+});
+
+/**
+ * `docs/DEVIATIONS.md` §190. The footer was appended to `#main`, and
+ * `renderTab()` rewrites `main.innerHTML` on every tab switch — so the footer
+ * survived exactly until the reader pressed a second tab, and then never came
+ * back. It belongs beside `#main`, not inside it.
+ */
+test('the footer is a sibling of #main, so a tab switch cannot take it with it', () => {
+  const script = clientScript(data);
+  const boot = script.slice(script.indexOf("createElement('footer')"));
+  assert.ok(
+    /function renderTab\(\)\s*\{[\s\S]*?main\.innerHTML\s*=/.test(script),
+    'renderTab() no longer rewrites main.innerHTML — this test guards the wrong mechanism',
+  );
+  assert.ok(
+    !/getElementById\('main'\)\.appendChild\(\s*foot\s*\)/.test(boot),
+    'the footer is appended inside #main again',
+  );
+  assert.match(
+    boot,
+    /getElementById\('main'\)\.insertAdjacentElement\('afterend', foot\)/,
+    'the footer is not inserted after #main',
+  );
+});
+
+/**
+ * `docs/DEVIATIONS.md` §190. `renderChrome()` bound the tab bar's click
+ * listener, and every tab press calls `renderChrome()` again — so the nth press
+ * ran the handler n times and re-rendered the page n times over. The bar's
+ * element is never replaced, only its `innerHTML`, so one delegated listener
+ * bound at start-up is all it ever needed.
+ */
+test('the tab bar is bound once, not once per render', () => {
+  const script = clientScript(data);
+  const body = script.slice(script.indexOf('function renderChrome()'));
+  const chrome = body.slice(0, body.indexOf('\n  function renderTab()'));
+  assert.ok(
+    !/addEventListener/.test(chrome),
+    'renderChrome() binds a listener again — it runs on every tab switch',
+  );
+  assert.ok(
+    /renderChrome\(\); renderTab\(\);/.test(chrome) === false,
+    'renderChrome() should not re-enter itself',
+  );
+  const binds = script.match(/getElementById\('tabs'\)\.addEventListener\('click'/g) || [];
+  assert.equal(binds.length, 1, 'the tab bar is bound ' + binds.length + ' times');
 });
