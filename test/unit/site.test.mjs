@@ -74,19 +74,17 @@ after(() => {
 test('the site builds every page it navigates to', () => {
   for (const rel of [
     'index.html',
-    // WP-94a · the pages that show the product.
+    // WP-95a · the pages that show the product. The reference pages — Docs,
+    // The model, Hooks and privacy, Adapters and the 171-entry engineering log
+    // — are off the site: this is marketing, and the blueprint is private.
     'features.html',
     'look.html',
     'characters.html',
     'studio.html',
-    'docs.html',
-    'model.html',
     'install.html',
-    'hooks-and-privacy.html',
-    'adapters.html',
     'faq.html',
-    'log/index.html',
-    'log/1.html',
+    'privacy.html',
+    'changelog.html',
     'style.css',
     // WP-94c · the two scripts. Everything they do, the page does without
     // them; `site/site.js`'s header says which four things they are.
@@ -126,7 +124,7 @@ test('the one-line installers are published, byte for byte, at the URL the pages
 
 test('every internal link resolves to a file that exists', () => {
   const pages = walk(out, ['.html']);
-  assert.ok(pages.length > 100, 'expected the engineering log to be built as pages');
+  assert.equal(pages.length, 9, 'the site is nine pages');
   for (const page of pages) {
     const html = fs.readFileSync(page, 'utf8');
     for (const m of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
@@ -246,7 +244,74 @@ test('SECURITY: an outbound link goes only where a reader is meant to be sent', 
   }
 });
 
-test('SECURITY: markdown in the log renders as text, never as markup', async () => {
+/* ------------------------------------------------------------------ WP-95a */
+
+test('BLUEPRINT: no page names an internal document, a package or a section', async () => {
+  // The owner: *"The website is purely public marketing and PR. Do not put
+  // requirements and architecture docs there."* and *"Although it is public on
+  // GitHub, I would not give the blueprint so anybody can build it."*
+  //
+  // So the site is held to a pattern list rather than to a reviewer's memory.
+  // It runs over everything the reader receives — links, prose, alt text,
+  // captions, class names and HTML comments — on every built page.
+  const { INTERNAL, assertNothingInternal } = await import('../../site/build.mjs');
+
+  const pages = walk(out, ['.html']);
+  assert.ok(pages.length > 0, 'nothing was built');
+  for (const page of pages) {
+    const html = fs.readFileSync(page, 'utf8');
+    for (const pattern of INTERNAL) {
+      const hit = pattern.exec(html);
+      assert.equal(
+        hit,
+        null,
+        `${path.relative(out, page)} names ${hit && hit[0]}, which belongs to the blueprint`,
+      );
+    }
+  }
+
+  // And the gate refuses one, so this test is not passing on a site that
+  // happens to be clean and a build step that checks nothing.
+  for (const bad of [
+    '<a href="docs/plan/08-PLAN-V2-100X.md">the plan</a>',
+    '<p>See docs/DEVIATIONS.md.</p>',
+    '<p>00-REQUIREMENTS has the row.</p>',
+    '<p>02-ARCHITECTURE, the process model.</p>',
+    '<p>The ARCHITECTURE-AUDIT found three.</p>',
+    '<p>STUDIO-DESIGN is the full version.</p>',
+    '<p>RELAY-DESIGN is the one after.</p>',
+    '<p>WP-88 is designed to add it.</p>',
+    '<p>§178 measured it.</p>',
+  ]) {
+    assert.throws(() => assertNothingInternal('bad.html', bad), /blueprint/, bad);
+  }
+  assert.doesNotThrow(() => assertNothingInternal('good.html', '<p>Six presets, and a rug.</p>'));
+});
+
+test('the changelog publishes the highlights and nothing under them', async () => {
+  const { releaseHighlights } = await import('../../site/build.mjs');
+  const releases = releaseHighlights(fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'));
+
+  assert.ok(releases.length >= 2, 'expected the released versions to carry highlights');
+  for (const release of releases) {
+    assert.match(release.version, /^\d+\.\d+\.\d+$/);
+    assert.ok(release.highlights.length > 80, `${release.version} has almost no highlights`);
+    assert.ok(!/^\s*[-*+]\s/m.test(release.highlights), `${release.version} published a bullet`);
+  }
+
+  // The newest release is on the page, the bullet dump under it is not, and the
+  // full file is one link away.
+  const html = fs.readFileSync(path.join(out, 'changelog.html'), 'utf8');
+  const main = html.slice(html.indexOf('<main id="main">'), html.indexOf('</main>'));
+  assert.ok(main.includes(releases[0].version), 'the newest release is not on the page');
+  assert.ok(!/<[uo]l>/.test(main), 'the changelog page carries a bullet list');
+  assert.match(html, /blob\/main\/CHANGELOG\.md/, 'the page does not link the full changelog');
+
+  // An unreleased section carries no version, so it is never published early.
+  assert.ok(!releases.some((r) => r.version.toLowerCase().includes('unreleased')));
+});
+
+test('SECURITY: markdown renders as text, never as markup', async () => {
   const { markdown, inline, safeUrl } = await import('../../site/build.mjs');
 
   const html = markdown('A <script>alert(1)</script> in a paragraph.');
@@ -269,7 +334,7 @@ test('SECURITY: markdown in the log renders as text, never as markup', async () 
   assert.ok(!img.includes('<img'), 'a data: URL became an image');
 });
 
-test('the markdown converter handles what the log actually contains', async () => {
+test('the markdown converter handles what a release note contains', async () => {
   const { markdown } = await import('../../site/build.mjs');
 
   assert.equal(markdown('# Title'), '<h2>Title</h2>');
@@ -291,27 +356,19 @@ test('the markdown converter handles what the log actually contains', async () =
   assert.equal(markdown('---'), '<hr />');
 });
 
-test('the log renders one page per entry, in the order the file has them', async () => {
-  const { splitEntries } = await import('../../site/build.mjs');
-  const source = fs.readFileSync(path.join(root, 'docs', 'DEVIATIONS.md'), 'utf8');
-  const { entries } = splitEntries(source);
-
-  assert.ok(entries.length > 100, 'expected the whole log');
-  for (const [i] of entries.entries()) {
-    assert.ok(fs.existsSync(path.join(out, 'log', `${i + 1}.html`)), `log entry ${i + 1}`);
+test('the site publishes no page the blueprint used to put here', () => {
+  // WP-95a. The five that went, by the URL they had: a stranger who followed
+  // an old link gets a 404 from GitHub Pages rather than the document.
+  for (const gone of [
+    'docs.html',
+    'model.html',
+    'adapters.html',
+    'hooks-and-privacy.html',
+    'log/index.html',
+    'log/1.html',
+  ]) {
+    assert.ok(!fs.existsSync(path.join(out, gone)), `${gone} is still published`);
   }
-
-  const index = fs.readFileSync(path.join(out, 'log', 'index.html'), 'utf8');
-  assert.ok(index.includes(`${entries.length} entries`), 'the index counts the entries it lists');
-
-  // Entry numbers repeat in the source (two 48s, two 49s), which is why the
-  // file name is the position rather than the number. If that ever stops being
-  // true the log can move to numbered URLs; until then this is the reason.
-  const numbers = entries.map((e) => e.number).filter(Boolean);
-  assert.ok(numbers.length > 0);
-
-  const first = fs.readFileSync(path.join(out, 'log', '1.html'), 'utf8');
-  assert.ok(first.includes('<p class="log-number">'), 'an entry shows the number it carries');
 });
 
 test('the site says nothing the product refuses to say', () => {
@@ -320,7 +377,6 @@ test('the site says nothing the product refuses to say', () => {
   // the product; this is the same rule for the copy around it.
   const banned = [/cannot see/i, /can'?t see/i, /\binvisible\b/i, /\bhides? (them|these|those)\b/i];
   for (const page of walk(out, ['.html'])) {
-    if (path.basename(path.dirname(page)) === 'log') continue; // the log is a record, not copy
     const html = fs.readFileSync(page, 'utf8');
     for (const pattern of banned) {
       assert.ok(!pattern.test(html), `${path.relative(out, page)} matches ${pattern}`);
@@ -372,16 +428,10 @@ test('every image carries alt text, and every photograph carries words', () => {
 
 test('the only hosts anywhere on the site are GitHub, npm and this site', () => {
   // A stricter restatement of the two SECURITY tests above, over every absolute
-  // URL in the written pages whatever attribute or text it sits in: the Pages
-  // origin (printed as a line to copy), and the two places a reader is sent.
-  //
-  // The engineering log is a record rather than copy, and it quotes hosts —
-  // `http://127x0x0x1`, the hostname §115's glob test pins — that are the
-  // subject of an entry rather than a link. Its links and its fetches are
-  // covered by the two SECURITY tests above, which do read it.
+  // URL on every page whatever attribute or text it sits in: the Pages origin
+  // (printed as a line to copy), and the two places a reader is sent.
   const allowed = new Set([...LINKABLE, SELF]);
   for (const page of walk(out, ['.html'])) {
-    if (path.basename(path.dirname(page)) === 'log') continue;
     const html = fs.readFileSync(page, 'utf8');
     for (const m of html.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)) {
       const host = m[1].toLowerCase();
@@ -412,42 +462,33 @@ test('HONESTY: a mockup is never shown as a screenshot', async () => {
     assert.equal(imageClass(image.to), image.class, `${image.to} resolves to the wrong class`);
   }
 
-  // Every illustration on a built page sits in a figure whose caption says so.
-  const illustrations = IMAGES.filter((i) => i.class === 'illustration').map((i) => i.to);
-  let shown = 0;
+  // WP-95a · the site publishes no mockup at all. It used to publish four, for
+  // the interior picker, agent size and the crew; all three shipped in 1.4.0,
+  // so a drawing of them would now be a drawing of something the reader could
+  // have gone and used, which is worse than no picture.
+  assert.equal(
+    IMAGES.filter((i) => i.class === 'illustration').length,
+    0,
+    'the site registry carries a mockup again; give it a "Coming" caption or take it off',
+  );
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
-    for (const figure of html.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
-      const caption = (figure[0].match(/<figcaption[\s>]([\s\S]*?)<\/figcaption>/) ?? ['', ''])[1];
-      for (const img of figure[0].matchAll(/<img[^>]*\ssrc="([^"]+)"/g)) {
-        const rel = img[1].replace(/^(?:\.\.\/)*media\//, '');
-        if (!illustrations.includes(rel)) continue;
-        shown++;
-        assert.ok(
-          caption.toLowerCase().includes(ILLUSTRATION_LABEL),
-          `${path.relative(out, page)} shows the mockup ${rel} without "${ILLUSTRATION_LABEL}"`,
-        );
-      }
-    }
+    assert.ok(
+      !html.toLowerCase().includes(ILLUSTRATION_LABEL),
+      `${path.relative(out, page)} labels something a mockup, and the registry has none`,
+    );
   }
-  // Four, not the eight WP-94a had: since WP-94b a mockup is published only
-  // where it draws something that is COMING, and the design-journey sheets —
-  // the candidates, the material board, the interior before-and-after — are
-  // off the site entirely.
-  assert.ok(shown >= 4, `expected the mockups to be published; found ${shown}`);
 
-  // And the gate refuses a page that forgets. Without this the test above
-  // passes on a site that happens to be correct and a gate that does nothing.
-  const bad = `<figure><img src="media/${illustrations[0]}" alt="x" /><figcaption>The floor.</figcaption></figure>`;
-  assert.throws(() => assertMediaIsLabelled('bad.html', bad), /mockup/);
-  const loose = `<img src="media/${illustrations[0]}" alt="x" />`;
-  assert.throws(() => assertMediaIsLabelled('loose.html', loose), /outside a figure/);
+  // The gate that would catch the next one still works. Both branches it can
+  // still reach are asserted: an image nobody registered, and an image shown
+  // loose. The mockup-caption branch needs a mockup in the registry, and the
+  // first assertion above is what keeps the two in step.
   const unknown = '<img src="media/not-in-the-registry.png" alt="x" />';
   assert.throws(() => assertMediaIsLabelled('unknown.html', unknown), /not in the media registry/);
-
-  // A labelled one is fine.
-  const good = `<figure><img src="media/${illustrations[0]}" alt="x" /><figcaption>A drawing. <span class="tag tag--illustration">Design illustration</span></figcaption></figure>`;
-  assert.doesNotThrow(() => assertMediaIsLabelled('good.html', good));
+  const known = IMAGES[0].to;
+  assert.doesNotThrow(() => assertMediaIsLabelled('good.html', `<img src="media/${known}" />`));
+  assert.equal(imageClass(`media/${known}`), IMAGES[0].class);
+  assert.equal(imageClass('media/nothing.png'), null);
 });
 
 test('no image the site serves is wider than the capture stage', async () => {
@@ -818,17 +859,21 @@ test('the stylesheet and the scripts stay inside their budgets', () => {
   assert.ok(js <= 10 * 1024, `the scripts are ${(js / 1024).toFixed(1)} KB, over 10 KB`);
 });
 
-test('every page carries the skip link, the nav and both menus', () => {
+test('every page carries the skip link, the nav and the menu', () => {
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
     const where = path.relative(out, page);
     assert.match(html, /<a class="skip-link" href="#main">/, `${where} has no skip link`);
     assert.match(html, /<main id="main">/, `${where} has nothing for the skip link to reach`);
     assert.match(html, /<nav class="site-nav" aria-label="Sections">/, `${where} has no nav`);
-    // The wide bar's "More" group and the narrow bar's whole menu. Both are
+    // WP-95a · six links fit on the bar, so the "More" disclosure that hid half
+    // of them is gone and the narrow-screen menu is the only one left. It is a
     // `<details>`, which is the reason the site navigates with scripting off.
-    assert.match(html, /<details class="nav-more">/, `${where} has no More group`);
+    assert.ok(!/nav-more/.test(html), `${where} still carries the More group`);
     assert.match(html, /<details class="nav-toggle">/, `${where} has no narrow-screen menu`);
+    for (const nav of ['Features', 'Look', 'Characters', 'Studio', 'Install', 'FAQ']) {
+      assert.match(html, new RegExp(`>${nav}</a>`), `${where} does not navigate to ${nav}`);
+    }
     assert.match(html, /<footer class="site-foot">/, `${where} has no footer`);
   }
 });
@@ -891,15 +936,15 @@ test('the page works with its scripts removed', () => {
   }
 });
 
-test('the home page leads with the golden, and every band picture is lazy', async () => {
+test('the home page leads with the floor, and every band picture is lazy', async () => {
   const { imageSize } = await import('../../site/build.mjs');
   const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
 
-  // The first picture a stranger sees is the one CI re-checks every run —
-  // WP-94a's rule, kept.
+  // The first picture a stranger sees is a crowded floor, and it is one the
+  // build re-renders from the product on every run.
   const first = home.match(/<img[^>]*\ssrc="(media\/[^"]+)"/);
   assert.ok(first, 'the home page shows no picture from the media directory');
-  assert.equal(first[1], 'media/goldens/three.png', `the hero is ${first[1]}`);
+  assert.equal(first[1], 'media/floor/three.png', `the hero is ${first[1]}`);
 
   // The hero is eager and everything under it is lazy, so what a reader pays
   // for above the fold is one picture.
