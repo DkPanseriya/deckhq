@@ -219,3 +219,21 @@ export async function studioPlan(opts = {}) {
     }
   }
 }
+
+/**
+ * WHAT `app.js` HANDS THE PALETTE — two objects rather than four named fields.
+ *
+ * Grouped here, at the bottom, where every function they name already exists.
+ * Grouping them is not just tidiness: `app.js` stands at WP-22's 900-line
+ * ceiling, and two lines of wiring there instead of four is two more lines it
+ * can spend on the shell that is its actual job.
+ */
+
+/** The two getters `createPalette` takes from Studio. */
+export const studioPalette = {
+  getStudioRoles: studioRoles,
+  onOpen: refreshStudioRoles,
+};
+
+/** The two palette actions Studio owns: plan a project, hire a role. */
+export const studioActions = { studioPlan, studioHire };
