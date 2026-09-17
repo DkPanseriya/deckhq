@@ -102,10 +102,11 @@ test('deviations are numbered, keyed uniquely and summarised inside their cap', 
     assert.ok(Number.isInteger(d.n) && d.n > 0);
     // The log is hand-numbered and two numbers were issued twice; the key is
     // what a deep link uses, and it must be unique even when the number is not.
-    assert.ok(!keys.has(d.key), `deviation key ${d.key} appears twice`);
-    keys.add(d.key);
-    assert.ok(d.title.length > 3, `deviation ${d.key} has no title`);
-    assert.ok(d.summary.length <= 400, `deviation ${d.key} summary is over 400 chars`);
+    const key = d.key || String(d.n);
+    assert.ok(!keys.has(key), `deviation key ${key} appears twice`);
+    keys.add(key);
+    assert.ok(d.title.length > 3, `deviation ${key} has no title`);
+    assert.ok(d.summary.length <= 400, `deviation ${key} summary is over 400 chars`);
   }
   assert.ok(data.deviations.some((d) => d.n === 1 && d.raise), '§1 is a RAISE and should say so');
   const dups = data.deviations.filter((d) => d.dup);

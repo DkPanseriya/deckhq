@@ -414,7 +414,7 @@ export function parseOwnerDecisions(plan, warn) {
 
 // ─── DEVIATIONS.md ───────────────────────────────────────────────────────────
 
-export function parseDeviations(md, warn, cap = 140) {
+export function parseDeviations(md, warn, cap = 125) {
   const lines = norm(md).split('\n');
   const marks = [];
   for (let i = 0; i < lines.length; i += 1) {
@@ -439,12 +439,14 @@ export function parseDeviations(md, warn, cap = 140) {
     const taken = out.filter((d) => d.n === marks[k].n).length;
     out.push({
       n: marks[k].n,
-      key: taken ? `${marks[k].n}-${taken + 1}` : String(marks[k].n),
-      dup: taken ? 1 : 0,
       title: marks[k].title.replace(/\s*[—–-]\s*\*\*RAISE\*\*\s*$/, ''),
       raise: /RAISE/.test(marks[k].title) || /\*\*RAISE\*\*/.test(para),
       summary: flat(para, cap),
       wps,
+      // Last, and empty for the 184 entries whose number is already unique, so
+      // the packed payload drops the column for them.
+      key: taken ? `${marks[k].n}-${taken + 1}` : '',
+      dup: taken ? 1 : '',
     });
   }
   if (!out.length) warn('DEVIATIONS.md: no numbered entries found');
@@ -642,7 +644,7 @@ export function parseChangelog(md, warn, caps = {}) {
       const title = stripMd(tm ? tm[1] : text.split('. ')[0] || text).replace(/\.$/, '');
       const entry = {
         group,
-        title: flat(title, 110),
+        title: flat(title, 95),
         detail: flat(text.replace(/^\*\*.+?\*\*\.?\s*/, ''), caps.detail || 90),
         wps: wpIds(text),
         devs: devRefs(text),
