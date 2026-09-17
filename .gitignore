@@ -27,3 +27,9 @@ site/.survey/
 
 # Agent worktrees, created by the orchestrator. Never committed.
 .claude/worktrees/
+
+# The private planning repository — WP-95b. The blueprint (requirements,
+# architecture, specifications, plan, deviations, designer mockups and the hub
+# generator) lives in its own git repository mounted here. It is never part of
+# the public tree; when it is absent, everything that needs it skips.
+/internal/

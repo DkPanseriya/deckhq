@@ -55,7 +55,16 @@ const argv = process.argv.slice(2);
 const explicit = argv.filter((a) => !a.startsWith('-'));
 const flags = argv.filter((a) => a.startsWith('-') && a !== '--no-canary');
 const canaryOn = !argv.includes('--no-canary');
-const files = explicit.length ? explicit : collect(path.join(root, 'test'));
+/**
+ * The private planning repository's own tests — WP-95b.
+ *
+ * `internal/` holds the documents the public tree no longer carries, and the
+ * tooling that parses them. Its tests run when it is mounted and simply are
+ * not there when it is not, which is how CI on a clean clone stays green
+ * without pretending the tooling was checked.
+ */
+const internalTests = collect(path.join(root, 'internal', 'test'));
+const files = explicit.length ? explicit : [...collect(path.join(root, 'test')), ...internalTests];
 
 if (files.length === 0) {
   process.stderr.write('no test files found under test/\n');

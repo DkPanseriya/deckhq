@@ -8,13 +8,12 @@ export default [
       '**/node_modules/**',
       'coverage/**',
       '.claude/**',
-      '**/docs/media/design/**',
-      // The motion mockups' browser-side pages, for the same reason as
-      // `design/` above: they are classic scripts loaded over `file://` (no
-      // modules, because file:// blocks module CORS), so `var` and globals are
-      // the language they are written in rather than a lapse. `render.mjs`
-      // beside them is an ordinary module and stays linted.
-      '**/docs/media/motion/*.js',
+      // The private planning repository — WP-95b. It is a separate git
+      // repository mounted here, it carries its own tooling, and it is absent
+      // on every machine but a maintainer's. Linting it from the public
+      // configuration would fail on the machines that have it and pass on the
+      // ones that do not, which is the opposite of a gate.
+      'internal/**',
       '**/*.vsix',
       // The documentation site's build output — WP-94c. `site/` itself is
       // linted; `site/dist/` is a copy of it that `node site/build.mjs` writes
