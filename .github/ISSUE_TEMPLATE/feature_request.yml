@@ -10,7 +10,7 @@ body:
         **The invariant.** No observed event may clear a user-owned state. Opening a conversation,
         reading it, or scrolling past it must never remove it from your waiting area — only an
         explicit action does. A proposal that needs this relaxed will be declined, however
-        convenient it is. See `docs/01-PRODUCT.md` §2.
+        convenient it is.
 
         **No network egress.** DeckHQ makes no outbound calls of any kind and has no runtime
         dependencies. A feature that needs the network does not go in the core.

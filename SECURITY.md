@@ -62,10 +62,9 @@ loopback, and must not carry `Sec-Fetch-Site: cross-site`. A cross-origin reques
 `Origin` the attacking page cannot forge. Anything else is refused with a 403 and logged. `GET`
 requests are unaffected.
 
-This is recorded in full in [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md) §28, including the note that
-`docs/02-ARCHITECTURE.md` §9's original reasoning — "no authentication is required precisely
-because it is not reachable from the network" — is incomplete. Two named `SECURITY:` tests in
-`test/integration/daemon.test.mjs` fail if the guard is removed.
+The earlier reasoning — "no authentication is required precisely because it is not reachable from
+the network" — was incomplete, and this guard is what replaced it. Two named `SECURITY:` tests in
+`test/integration/daemon.test.mjs` fail if it is removed.
 
 ### Static serving cannot escape its directory
 
@@ -91,8 +90,8 @@ those two DeckHQ builds the command line itself, in `src/core/cmdline.mjs`, and 
 `windowsVerbatimArguments`. Every value is double-quoted, where those metacharacters are literal;
 the two characters that can escape a double-quoted `cmd` argument, `"` and `%`, are **refused**
 rather than escaped, because nothing can make them safe and neither belongs in a session id or a
-project path. `docs/DEVIATIONS.md` §98 records the defect this replaced, measured on a real
-machine, and the tests that keep it out.
+project path. The defect this replaced was measured on a real machine, and the
+tests that keep it out are in the suite.
 
 On macOS, three applications (Terminal.app, iTerm2, Warp) accept only a shell line or a file. For
 those, DeckHQ writes a short `#!/bin/sh` wrapper with every value single-quoted and passes only its
