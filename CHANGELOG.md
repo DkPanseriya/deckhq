@@ -29,6 +29,14 @@
 
 ### Fixed
 
+- **A session is recognised by its directory, not by how the directory was spelt.** DeckHQ finds
+  the session it has just started by the folder it started it in, and compared two spellings of
+  that folder as strings. Where a folder has two names — a symlink (every macOS temp directory), a
+  junction, a Windows short name — the two never matched: a name chosen with `+` was never applied,
+  a Studio planner and a hired role were never recognised, and **hiring a role a second time was
+  refused** as _"already exists and is not a worktree of this repository"_ by the hire that made
+  it. All four comparisons are by directory now, in one place, `src/core/same-path.mjs`. A session
+  that reports no folder at all no longer matches the folder DeckHQ itself was started in.
 - **The project hub's footer survives a tab press.** It was appended to `#main`, and every tab
   switch rewrites `main.innerHTML` — so the footer was there until the reader pressed a second tab
   and then gone for good. It is inserted after `#main` now. `docs/DEVIATIONS.md` §190.2.

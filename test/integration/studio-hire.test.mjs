@@ -32,6 +32,7 @@ import { fileURLToPath } from 'node:url';
 
 const { startDaemon } = await import('../../src/daemon.mjs');
 const { describeFire, projectSlug } = await import('../../src/studio/worktree.mjs');
+const { canonicalPath, samePath } = await import('../../src/core/same-path.mjs');
 const { hireKickoff } = await import('../../src/studio/brief-role.mjs');
 const { MAX_HIRE_AT_ONCE } = await import('../../src/studio/schema.mjs');
 // The adapter registry the daemon itself uses: the same module object, so
@@ -297,7 +298,10 @@ test('ACCEPTANCE: the spawn argv is an array, element by element, with no shell 
       fs.readFileSync(path.join(argvDir, path.basename(worktree) + '.json'), 'utf8'),
     );
     assert.deepEqual(seen.argv, ['--append-system-prompt-file', brief, hireKickoff(brief)]);
-    assert.equal(path.resolve(seen.cwd), worktree);
+    // The process reports its directory the way the OS spells it — `/private/var`
+    // for `/var` on macOS, the long name for `RUNNER~1` on Windows — so this is
+    // "the same directory", which is the claim, and not "the same string".
+    assert.ok(samePath(seen.cwd, worktree), `${seen.cwd} is not ${worktree}`);
     // The brief's BODY is never on the command line.
     assert.ok(!seen.argv.some((a) => a.includes('## 1. The plan')));
   });
@@ -334,8 +338,10 @@ test('ACCEPTANCE: three roles give three worktrees, three briefs and three named
     await settle();
     await d.registry.refresh();
     const state = await (await fetch(`${d.url}api/state`)).json();
+    // A session's `cwd` is the OS's spelling and `worktrees` is ours.
+    const under = canonicalPath(worktrees) + path.sep;
     const mine = (state.agents || []).filter((a) =>
-      path.resolve(a.cwd || '').startsWith(worktrees),
+      a.cwd ? canonicalPath(a.cwd).startsWith(under) : false,
     );
     assert.equal(mine.length, 3, `found ${mine.length} sessions in the worktrees`);
     assert.deepEqual(

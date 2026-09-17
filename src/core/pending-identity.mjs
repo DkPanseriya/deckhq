@@ -40,6 +40,7 @@
 
 import path from 'node:path';
 import { now as clockNow } from './clock.mjs';
+import { samePath } from './same-path.mjs';
 
 /**
  * How long a queued identity waits for its session.
@@ -132,12 +133,7 @@ export function createPendingIdentities(opts = {}) {
     for (let i = 0; i < queue.length; i++) {
       const p = queue[i];
       const match = list
-        .filter(
-          (a) =>
-            path.resolve(String(a.cwd || '')) === p.cwd &&
-            !a.displayName &&
-            !claimed.has(a.id ?? a),
-        )
+        .filter((a) => samePath(a.cwd, p.cwd) && !a.displayName && !claimed.has(a.id ?? a))
         .sort((a, b) => (b.lastActivityAt || 0) - (a.lastActivityAt || 0))[0];
       if (!match) continue;
       claimed.add(match.id ?? match);

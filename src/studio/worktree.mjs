@@ -47,6 +47,8 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { samePath } from '../core/same-path.mjs';
+
 /** The directory, under the state directory, that holds every one of them. */
 export const WORKTREES_DIR = 'worktrees';
 
@@ -267,7 +269,10 @@ export async function ensureWorktree(projectRoot, role, opts) {
   }
 
   const known = await listWorktrees(git, root);
-  const registered = known.some((p) => p === target);
+  // `samePath`, not `===`: git lists the real path and `target` is spelt the
+  // way the data directory was, and a worktree we made ourselves, unrecognised,
+  // falls through to `occupied` below — a second Hire refused by the first.
+  const registered = known.some((p) => samePath(p, target));
   if (registered && fs.existsSync(target)) {
     return { path: target, branch, created: false, reused: true, argv: null, newBranch: false };
   }
