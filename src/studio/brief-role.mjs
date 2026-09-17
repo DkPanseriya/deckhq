@@ -45,12 +45,29 @@ export const MAX_BLUEPRINT_LINES = 120;
 
 /**
  * The one sentence a hired role's session is started WITH, as its first
- * prompt. Fixed text: §9's rule is that nothing interpolated into argv is a
- * value somebody typed, and the brief travels as a FILE beside it.
+ * prompt — and it NAMES the brief rather than carrying it (§4).
+ *
+ * Why a path is in here at all, when `PLANNER_KICKOFF` has none: the planner
+ * only ever runs under Claude Code, whose `openNewSession` takes a
+ * `systemPromptFile`. A role may be hired on a runtime that has no such
+ * option — Codex's `openNewSession` takes `instructions` and nothing else —
+ * and a brief the runtime was never told about is a brief nobody reads.
+ *
+ * What §9 actually forbids is a brief's BODY on a command line and a shell
+ * string with user data in it. Neither happens: this is ONE argv element in an
+ * array `execFile`/`spawn` passes through untouched, and the only part of the
+ * path a person typed is the role name, which `checkRoleName()` has already
+ * cut down to letters, digits, `.`, `_` and `-` (`src/studio/worktree.mjs`).
+ *
+ * @param {string} briefFile absolute path to the role's brief
+ * @returns {string}
  */
-export const HIRE_KICKOFF =
-  'Read the brief you were started with, then begin the card it names. ' +
-  'If the card is missing or wrong, say so and stop.';
+export function hireKickoff(briefFile) {
+  return (
+    `Your brief is ${briefFile}. Read it first, then begin the card it names. ` +
+    'If the card is missing or wrong, say so in the panel and stop.'
+  );
+}
 
 /** `briefs/<role>.md`, relative to the studio directory. */
 export function roleBriefRel(role) {

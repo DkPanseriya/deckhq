@@ -8,7 +8,7 @@
  *   POST /api/studio/card                create, edit or MOVE a card
  *   GET  /api/studio/tracking?project=   §7's numbers
  *   POST /api/studio/plan                start or continue the planner — WP-67
- *   POST /api/studio/hire                501 — WP-68
+ *   POST /api/studio/hire                `{role}` or `{roles}` — worktrees, briefs, the spawn
  *   POST /api/studio/handover            501 — WP-70
  *
  * Loopback only, and a cross-site POST is refused before it reaches here, by
@@ -63,6 +63,7 @@ import { StudioPathError } from '../../studio/paths.mjs';
 import { StudioStore } from '../../studio/store.mjs';
 import { COLUMNS, MAX_CARDS, validateBoard } from '../../studio/schema.mjs';
 import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
+import { registerHire } from './studio-hire.mjs';
 import {
   describeDisable,
   describeEnable,
@@ -73,7 +74,6 @@ import {
 
 /** What a package that does not exist yet answers with, and why. */
 const NOT_YET = {
-  '/api/studio/hire': 'worktrees, briefs and the spawn land in WP-68; nothing runs in this build',
   '/api/studio/handover': 'the handover watcher and the review gate land in WP-70',
 };
 
@@ -666,6 +666,12 @@ export function register(router, ctx) {
   // -------------------------------------------------------------------------
   // The two that still need a package, and say so
   // -------------------------------------------------------------------------
+
+  // WP-68. Its own file: hiring is a worktree, a brief and a spawn per role,
+  // and none of it belongs in the route that reads three artefacts back. It is
+  // handed the two helpers above so a Hire reads a body and answers a missing
+  // grant exactly as every other write here does.
+  registerHire(router, ctx, { projectFromBody, consentFor });
 
   for (const [pathname, why] of Object.entries(NOT_YET)) {
     router.post(pathname, (_req, res) => sendError(res, 501, why));

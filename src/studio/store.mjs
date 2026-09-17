@@ -288,6 +288,49 @@ export class StudioStore {
   }
 
   /**
+   * Write one role's `agentId`, and nothing else — WP-68, §4.
+   *
+   * This is the ONE field of the roster DeckHQ writes. Everything else in
+   * `roster.json` is the planner's to propose and the user's to edit (§4), so
+   * this reads the file, replaces one string, and writes it back through the
+   * same validator every other write goes through. A roster that does not
+   * parse is left exactly as it is: the user is going to fix it by hand, and
+   * quarantining their file to record an id would be a trade nobody agreed to.
+   *
+   * `agentId` is never guessed. The caller passes an id the ORDINARY scan
+   * found, which is why Studio keeps no session list of its own (§9 invariant
+   * 4, and `test/unit/studio-invariant.test.mjs` fails on one).
+   *
+   * @param {string} roleName matched case-insensitively, as the schema's
+   *   duplicate check matches
+   * @param {string|null} agentId null clears it, which is what Fire does
+   * @returns {Promise<{recorded:boolean, why?:string, roster?:any, file?:string}>}
+   */
+  async recordRoleAgent(roleName, agentId) {
+    const current = this.readRoster();
+    if (current.error) return { recorded: false, why: current.error };
+    if (!current.present) return { recorded: false, why: 'there is no roster.json' };
+
+    const want = String(roleName || '')
+      .trim()
+      .toLowerCase();
+    const roles = current.roster.roles || [];
+    const at = roles.findIndex((r) => String(r.name || '').toLowerCase() === want);
+    if (at < 0) return { recorded: false, why: `no role called "${roleName}"` };
+
+    const id = agentId == null ? null : String(agentId).trim() || null;
+    if (roles[at].agentId === id) return { recorded: false, why: 'unchanged' };
+
+    const next = {
+      ...current.roster,
+      roles: roles.map((r, i) => (i === at ? { ...r, agentId: id } : r)),
+    };
+    const result = await this.writeRoster(next);
+    if ('error' in result) return { recorded: false, why: result.error };
+    return { recorded: true, roster: result.roster, file: result.file };
+  }
+
+  /**
    * `blueprint.md`, as text.
    * @returns {{present:boolean, blueprint:string|null, error?:string, line?:number|null}}
    */
