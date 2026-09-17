@@ -6,6 +6,29 @@
 
 ## Unreleased
 
+### Changed
+
+- **The website is the product now, and the blueprint is not on it — WP-95a.** The owner: _"The
+  website is purely public marketing and PR. Do not put requirements and architecture docs there.
+  We only put the product public and its features."_ The site was eleven pages **and 171 generated
+  ones** — the whole decision log, an entry per page — plus a Docs page linking every document in
+  `docs/`. It is nine marketing pages now: Home, Features, Look, Characters, Studio, Install, FAQ,
+  **Privacy and security** (new, in plain words, with the route for reporting a vulnerability) and
+  **Changelog** (new, generated from the `Highlights` paragraph of each release and nothing under
+  it). The bar is six links with no "More" disclosure; the footer is GitHub, npm, the licence and
+  privacy. A gate in `site/build.mjs` refuses to write any page carrying `docs/plan`, `DEVIATIONS`,
+  `00-REQUIREMENTS`, `02-ARCHITECTURE`, `ARCHITECTURE-AUDIT`, `STUDIO-DESIGN`, `RELAY-DESIGN`, a
+  work-package id or a section number, and the same list runs over `README.md`, whose Docs table
+  now lists only the guide, the changelog, the security policy, the licence and `ADAPTERS.md`.
+  `docs/DEVIATIONS.md` §189.
+
+### Fixed
+
+- **The site no longer says three shipped features are unbuilt — WP-95a.** Look, agent size and the
+  crew landed in 1.4.0, and Look and Characters still carried _"None of it is built"_ over four
+  mockups of them. Those pages describe what you can go and use, and the site publishes no mockup
+  at all.
+
 ## 1.4.0 — 2026-09-17
 
 ### Highlights

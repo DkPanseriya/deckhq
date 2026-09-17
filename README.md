@@ -33,7 +33,7 @@ curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
 Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
 distribution's own command printed on Linux, never without asking), installs DeckHQ, offers the
 icon, and opens the window. Read them first — [`install.ps1`](scripts/install/install.ps1) and [`install.sh`](scripts/install/install.sh)
-are two short files in this repository, served from the docs site byte for byte, in no tarball and
+are two short files in this repository, served from the site byte for byte, in no tarball and
 imported by nothing. SmartScreen may warn about the unsigned `.cmd`, and a downloaded `.command` arrives without its run bit; the two lines above have neither caveat.
 
 **A step at a time, if you prefer:** `npm install -g deckhq`, then `deckhq app`, then

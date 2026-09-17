@@ -19984,3 +19984,48 @@ external URL, no `<html>`/`<body>` tag and its `<title>` inside the first 8 KB.
 **What is NOT here.** No runtime dependency (P-05) and nothing under `src/`, `public/` or `site/`.
 The hub is a developer tool built on demand, not a surface the daemon serves, so it adds no egress
 surface (P-04) and no page for the goldens to photograph.
+
+## 189. WP-95a — the public face is the product, not the blueprint
+
+**Date:** 17 September 2026 · **Package:** WP-95a · **Asked for:** the owner, 17 September 2026
+
+§188 is not in this file at the time of writing — it belongs to a concurrent package — so this
+section takes 189 and says so rather than renumbering around a neighbour.
+
+The owner: _"The website is purely public marketing and PR. Do not put requirements and
+architecture docs there. We only put the product public and its features. Redo the website and
+everything accordingly. Although it is public on GitHub, I would not give the blueprint so anybody
+can build it."_
+
+**What the site was publishing.** Eleven hand-written pages and **171 generated pages**: the whole
+of this file, one page per `##` entry, plus an index. A Docs page listed and linked every document
+in `docs/`, including the register, the architecture, the visual spec, the relay and Studio designs
+and the plan. The nav carried a "More" group of five reference pages behind a disclosure.
+
+**What went.** `docs.html`, `model.html`, `adapters.html`, `hooks-and-privacy.html` and every
+`log/*.html`, with the markdown renderer's `splitEntries()` and the log's own images. The "More"
+disclosure went with them: six product links fit on one bar.
+
+**What arrived.** `privacy.html`, a short page in plain words — what stays on the machine, what
+DeckHQ asks before it writes anything, where to report a vulnerability — and `changelog.html`,
+generated from `CHANGELOG.md`'s `### Highlights` **paragraphs only**. `releaseHighlights()` stops
+at the first bullet under that heading, so no release's four hundred bullets, package ids or
+section numbers reach the page; a release written before that heading existed is not published, and
+the page links the full file instead.
+
+**The gate.** `INTERNAL` in `site/build.mjs` is nine patterns — `docs/plan`, `DEVIATIONS`,
+`00-REQUIREMENTS`, `02-ARCHITECTURE`, `ARCHITECTURE-AUDIT`, `STUDIO-DESIGN`, `RELAY-DESIGN`,
+`WP-\d`, `§\d` — and `assertNothingInternal()` runs it over the **whole document** each page emits,
+HTML comments and class names included, before the file is written. It caught two comments in the
+page shell itself on the first run. `test/unit/site.test.mjs` runs the same list over the built site
+and asserts the gate throws on one example of every pattern; `test/unit/readme.test.mjs` runs it
+over `README.md`, and asserts the Docs table links nothing but the guide, the changelog, the
+security policy, the licence and `ADAPTERS.md`.
+
+**Two claims that had gone stale.** The interior picker, agent size and the crew shipped in 1.4.0,
+and the site still said _"None of it is built"_ over four mockups of them. Those mockups are off the
+site, the sections now describe what a reader can go and use, and the media registry carries **no
+illustration at all** — which is asserted, so the next one has to be added deliberately.
+`media/goldens/` on the site is `media/floor/`, and the `Golden render` tag reads `Screenshot`.
+
+**Not done here.** The internal documents are still in the public repository. WP-95b moves them out.
