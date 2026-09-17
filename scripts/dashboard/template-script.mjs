@@ -276,11 +276,6 @@ export function clientScript(data) {
         + ' aria-selected="' + (S.tab === t.id ? 'true' : 'false') + '">' + esc(t.label)
         + (c ? '<span class="cnt num">' + c + '</span>' : '') + '</button>';
     }).join('');
-    tabs.addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-tab]');
-      if (!b) return;
-      S.tab = b.dataset.tab; save(); renderChrome(); renderTab();
-    });
   }
 
   // ── tabs ──────────────────────────────────────────────────────────────────
@@ -727,6 +722,15 @@ export function clientScript(data) {
     openDetail(kind, id);
   });
   window.addEventListener('hashchange', function () { if (!fromHash(false)) closeDrawer(true); });
+
+  // Bound once, here rather than in renderChrome(): renderChrome() runs again
+  // on every tab switch and only rewrites the bar's innerHTML, so binding there
+  // stacked one more listener — and one more re-render — on each press.
+  document.getElementById('tabs').addEventListener('click', function (e) {
+    var b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    S.tab = b.dataset.tab; save(); renderChrome(); renderTab();
+  });
 
   document.getElementById('theme').addEventListener('click', function () {
     var root = document.documentElement;

@@ -284,3 +284,26 @@ test('the footer is a sibling of #main, so a tab switch cannot take it with it',
     'the footer is not inserted after #main',
   );
 });
+
+/**
+ * `docs/DEVIATIONS.md` §190. `renderChrome()` bound the tab bar's click
+ * listener, and every tab press calls `renderChrome()` again — so the nth press
+ * ran the handler n times and re-rendered the page n times over. The bar's
+ * element is never replaced, only its `innerHTML`, so one delegated listener
+ * bound at start-up is all it ever needed.
+ */
+test('the tab bar is bound once, not once per render', () => {
+  const script = clientScript(data);
+  const body = script.slice(script.indexOf('function renderChrome()'));
+  const chrome = body.slice(0, body.indexOf('\n  function renderTab()'));
+  assert.ok(
+    !/addEventListener/.test(chrome),
+    'renderChrome() binds a listener again — it runs on every tab switch',
+  );
+  assert.ok(
+    /renderChrome\(\); renderTab\(\);/.test(chrome) === false,
+    'renderChrome() should not re-enter itself',
+  );
+  const binds = script.match(/getElementById\('tabs'\)\.addEventListener\('click'/g) || [];
+  assert.equal(binds.length, 1, 'the tab bar is bound ' + binds.length + ' times');
+});
