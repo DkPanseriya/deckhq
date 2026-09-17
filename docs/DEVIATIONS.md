@@ -19712,3 +19712,116 @@ omits, the report does not, and `--json`'s key-set test says so.
 - **`parse.mjs`, `codex/adapter.mjs`, `clips.js`, `goldens.mjs` and `site/build.mjs` are still
   exempt**, each for the reason written in its row, and none of them was touched.
 - **`settings-ui.js` ↔ `settings-ui-rates.js` is still a cycle**, as A-07 says it should be.
+
+## 185. CI — two tests that only ran on Windows, and six photographs of a floor that no longer exists
+
+**Date:** 17 September 2026 · **Package:** CI repair · **From:** run `35082743661` on `75b5f15` ·
+**Commits:** `a449c7b`, `906f6df`, and this one
+
+§184 is the concurrent WP-68 package's. At the time of writing it had not landed, so this section
+takes 185 and says so rather than renumbering around a neighbour.
+
+Nine test jobs and the goldens job, and eight of the ten were red, on a suite that is green on this
+Windows machine at Node 22. Nothing in the product was wrong. Three separate things were:
+
+| job(s) | line | cause |
+| --- | --- | --- |
+| all six POSIX | `not ok 1013`, `not ok 1015` | a pure function over an injected platform, using the host's `path` |
+| all seven | `not ok 1341` | a temp root removed while the store still owed a debounced write |
+| `goldens` | `6 of 16 failed` | six linux goldens last baked before three deliberate re-layouts of the floor |
+
+None of the three is a bug a user could reach, and none of the three fixes touches product
+behaviour. What they have in common is worth naming: **each one is a test that was measuring the
+machine it ran on.** §121.4 recorded that shape once for the home directory; this is the same shape
+for the path separator, for the clock, and for the platform a photograph was taken on.
+
+### 185.1 `whichOnPath` took the platform as a parameter and the separator from the host
+
+`src/core/launcher.mjs`'s `whichOnPath` is documented as pure — the platform, the environment and
+the "does this file exist" predicate are all injected — and `test/unit/launcher.test.mjs` asserts
+the exact lookup for Windows and for POSIX from one process. It then split `PATH` on
+`path.delimiter` and joined with `path.join`, both of which are the **host's**.
+
+On Windows the injected platform and the host agree, so the file was green here and red on all six
+POSIX jobs:
+
+- `not ok 1013` — a `PATH` of `C:\npm;C:\other` split on a POSIX `:` comes apart into `C`,
+  `\npm;C`, `\other`. Nothing matched `C:\npm\deckhq.cmd`, so `resolveLauncher` reported the `node`
+  fallback where the test asserted `global`.
+- `not ok 1015` — one injected Windows directory became two, so the extension probe was called
+  eight times and the test asserted four.
+
+The platform now picks `path.win32` or `path.posix` and both the delimiter and the join come from
+it. **Every production caller injects no platform**, so the platform is the host's and the two are
+the same behaviour: `deckhq shortcut` and `deckhq autostart` resolve exactly what they resolved
+before. The test's own expectations are literal strings now rather than re-derivations through the
+host's `path` — a test that computes its expectation the same way the code computes its answer can
+only ever prove the two agree, which is what let this sit.
+
+### 185.2 A temp root removed out from under a 250 ms debounce
+
+`Store.save()` is debounced by 250 ms, and `Store.flush()` exists because the daemon must not lose
+that write on shutdown. `test/unit/occupancy.test.mjs`'s chair invariant drove a real `Registry`
+through five mutations and then removed its temp root without flushing. The race was reported two
+different ways, which is why it read as two different bugs:
+
+- POSIX — the write lands after the directory is gone: `[store] error failed to write
+  /tmp/deckhq-chair-…/state.json … ENOENT`, which sets `store.writeError`.
+- Windows — the write lands while `rm` is walking the directory: `ENOTEMPTY: directory not empty,
+  rmdir …`, which failed the test from the teardown line. This was windows-latest 20's **only** red
+  line.
+
+`test/helpers/store-root.mjs` is the pattern `store.test.mjs`, `ledger.test.mjs`, `pins.test.mjs`
+and six others already use — flush, then remove — with the one thing those files have that the
+broken ones did not: the store and the `rm` are usually in different scopes, so the root remembers
+what was opened on it (`onRoot`) and `dropRoot` waits for all of it. Applied to the four files that
+made a store in a temp root and removed the root without flushing: `occupancy`, `names-pool`,
+`resume-chain`, `resume-target`.
+
+**The store still swallows the failed write and still counts it in `health`.** That is what §183
+asked for and it is untouched; what changes is that the suite stops manufacturing the failure.
+
+### 185.3 The fourteen `scanSessions failed … transcript is not JSON` warnings are a fixture
+
+Not a leak. `test/unit/state-machine.test.mjs`'s WP-92o test replaces `scanSessions` with one that
+throws, twice, to prove `health.scanErrors` counts per occurrence rather than latching — two lines
+per job, seven jobs, fourteen lines. The message is the fixture's own string.
+
+### 185.4 The goldens job — NOT fixed here, and why
+
+`--strict` is already off and the not-yet-baked path works exactly as §180 built it: ten linux
+captures reported `MISS` and cost the job nothing. The six that failed are the six that **are**
+committed, and they failed by 69–83 % of all pixels — not a drift, a different floor.
+
+`test/goldens/linux/*.png` were baked once, from CI run `33838763899` (`fbd8969`), and never again.
+`test/goldens/win32/demo.png` has been regenerated three times since — WP-93, WP-87, WP-81 — each
+time by whoever changed the floor, in the same commit. That loop cannot run for linux: `npm run
+goldens` writes `test/goldens/<host platform>/` and nobody working on this product has a Linux
+machine, so the linux set was stale on the first floor change after it was baked and will be stale
+again after the next one.
+
+So the gate is right and the data is wrong. The fix is to **remove the six**, which returns linux to
+the honest state of a platform with no set — sixteen `MISS`, exit 0, and all sixteen captures in the
+uploaded artifact for a deliberate bake per `docs/plan/RELEASE-CHECKLIST.md` §4.1.
+
+**That deletion is not in this commit**: the agent doing this work was refused permission to remove
+tracked files and, rather than reach for a weaker fix it did not believe in, left the decision with
+the owner. The weaker fix considered and rejected was to make a mismatch on a *partial* set report
+`STALE` instead of `FAIL` — defensible (a set nothing can re-bake is a set nothing is maintaining)
+but it would relax the one rule this gate has, and `test/unit/goldens-gate.test.mjs` already holds
+the opposite on purpose: *a golden that exists and disagrees stays red, strict or not*. Deleting six
+files nobody can maintain is a smaller change than teaching the gate to forgive.
+
+Until they go, the `goldens` job stays red and the nine test jobs are green.
+
+### What is NOT here
+
+- **No golden was baked, regenerated or edited.** Nothing under `public/` changed, so nothing a
+  camera could see changed.
+- **No product behaviour changed.** One production file is touched, `src/core/launcher.mjs`, and
+  only where the injected platform disagrees with the host — which no caller outside the suite does.
+- **`store.mjs` is untouched.** The ENOENT it logged was a real failed write and it was right to
+  count it (§183). The test was wrong to cause it.
+- **The remaining `os.tmpdir()` roots are left alone.** `store-root.mjs` went to the four files that
+  own a `Store` and remove their root; a test that makes a temp directory with no store in it is not
+  in this race.

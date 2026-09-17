@@ -97,8 +97,8 @@ goldens job. All green. Not "green except Windows".
 ### 4.1 What the `goldens` job is expected to say
 
 The job runs `npm run goldens:check -- --verbose` on `ubuntu-latest`. Linux has **6 of the 16**
-goldens committed, so the honest report — and the one to expect until the bake package lands — is
-six compared and matching, ten named as not yet baked, and a **green job**:
+goldens committed, and the shape of a green report is six compared and matching, ten named as not
+yet baked:
 
 ```
   ok   demo               27 agents  6.6s  0 px over tolerance (0.000% of budget 0.01%), 0 px moved at all
@@ -106,6 +106,18 @@ six compared and matching, ten named as not yet baked, and a **green job**:
 goldens: 6 match, 10 of 16 NOT YET BAKED on linux (crew, crew@reduced, demo@motion, demo@small, look, pinned, three, three@large, three@selected, wide) in …s
 goldens: the captures in test/goldens/.out/linux are the set to commit.
 ```
+
+**The six are stale, and this job is RED until they go** (`docs/DEVIATIONS.md` §185.4). They were
+baked once, from run `33838763899`, and the floor has been deliberately re-laid out three times
+since — WP-93, WP-87, WP-81 — each time regenerating `test/goldens/win32/` and each time leaving
+linux behind, because `npm run goldens` only ever writes the **host** platform's set and nobody
+working on this product has a Linux machine. Run `35082743661` reported all six failing by 69–83 %
+of all pixels: not a drift, a different floor. The fix is to **delete**
+`test/goldens/linux/{demo,demo@blueprint,demo@night-shift,empty,reference,single}.png`, which
+returns linux to the honest state of a platform with no set at all — sixteen `MISS`, exit 0, and
+all sixteen captures in the uploaded artifact, ready for the bake below. Do not patch the gate to
+forgive them: a golden that exists and disagrees is the one red this gate has, and
+`test/unit/goldens-gate.test.mjs` holds that on purpose.
 
 A missing golden is **not** a failure (`docs/DEVIATIONS.md` §180): nothing has been proved or
 disproved about the floor by a photograph with nothing to compare against, and a job that is red for

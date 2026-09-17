@@ -1195,7 +1195,27 @@ from ⌘K → Show fired.` It says **kept** rather than **archived** because tha
   fatal: a ledger that throws on every write still leaves the agent on the floor with its `ackState`
   untouched. `docs/DEVIATIONS.md` §183.
 
+- **`deckhq shortcut` resolves a global `deckhq` the way the platform it is installing for does.**
+  `whichOnPath` took the platform as a parameter and then split `PATH` and joined its directories
+  with the **host's** separators, so the lookup it performed for an injected platform was only the
+  right lookup on a machine of that platform. No user could reach it — nothing in the product
+  injects a platform, so the host's separators were always the right ones — but it made a function
+  documented as pure into one that was pure on Windows only, and it turned two cross-platform tests
+  into tests of the runner. `docs/DEVIATIONS.md` §185.1.
+
 ### Testing
+
+- **CI is green on all nine test jobs again, and the three reasons it was not are each a test that
+  was measuring the machine it ran on.** The suite was green on Windows at Node 22 and red on eight
+  of nine jobs (run `35082743661`). `not ok 1013` and `not ok 1015` on all six POSIX jobs were
+  §185.1's host separators. `not ok 1341` — the visitor-chair invariant — was a temp root removed
+  while its `Store` still owed a 250 ms debounced write, which reads as `ENOENT` on POSIX and as
+  `ENOTEMPTY` on Windows and was windows-latest 20's only red line; `test/helpers/store-root.mjs`
+  now owns the root, remembers the stores opened on it and flushes every one before it goes, and
+  `occupancy`, `names-pool`, `resume-chain` and `resume-target` use it. The store still swallows a
+  failed write and still counts it in `health` (§183) — the suite has stopped manufacturing the
+  failure. The fourteen `scanSessions failed … transcript is not JSON` lines in the logs are a
+  deliberate fixture, not a leak. `docs/DEVIATIONS.md` §185.
 
 - **The golden harness can press a key, and `three@selected` is the first golden of a floor somebody
   has used — WP-93.** A capture may name keys; they go through the DevTools protocol once the floor
