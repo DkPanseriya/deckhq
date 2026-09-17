@@ -6,6 +6,44 @@
 
 ## Unreleased
 
+### Added
+
+- **Hire — WP-68.** Studio's roster now starts people. `POST /api/studio/hire` takes `{ role }` or
+  `{ roles: […] }` and, per role, does four things: `git worktree add <state>/worktrees/<project>-<role>
+-b studio/<role>`, an **argv array** with no shell anywhere in it; a brief file under
+  `.deckhq/studio/briefs/<role>.md`, which is never regenerated under a running session and never
+  overwritten when the user has edited it (the regeneration goes beside it as `<role>.next.md`); a
+  session started **in that worktree, under that brief**, where the brief's path is on the command
+  line and the brief's body never is; and `roster.roles[i].agentId` written down when the ORDINARY
+  scan finds the session — no private session list, matched by the worktree directory it is running
+  in. The command palette carries one **`Studio: hire <role>`** row per role that is not already at a
+  desk, and the panel's Studio block grows a line per role beneath the three files: not hired, hired
+  with its id, hired-unverified, or the reason the name cannot be hired. **Firing leaves the worktree
+  and the process alone, and says so.** `docs/DEVIATIONS.md` §188.
+
+### Refused, and why
+
+- **Everything a Hire can refuse is refused before the first worktree exists.** No consent, an
+  unknown runtime, a runtime with no `openNewSession` (refused **by name**, never silently skipped),
+  a role that is not in `roster.json`, a role name carrying a space, a quote, a `;`, a leading dash
+  or a path separator — git is never asked to escape a name, and a seventh role in one press is
+  refused **with the count**, because "too many" is not a number anybody can act on. A failure after
+  that point is reported per role rather than rolled back: a worktree that exists is a fact.
+
+### Known gaps
+
+- **Hired roles have not been measured doing work.** The one real run of WP-68 made two worktrees,
+  two briefs and two real `claude` sessions on the reference machine, and the ordinary scan found
+  both and wrote both ids into `roster.json` — but the stored login on that machine is expired
+  (`OAuth session expired and could not be refreshed`), so neither session got past authentication.
+  §188.1 records it verbatim. One `claude login` is what is owed.
+- **A Codex, Gemini CLI or OpenCode role is hired _unverified_.** No terminal has ever been opened
+  on those three by this project. They are hired, the floor degrades for them exactly as it already
+  does, and both the response and the panel's roster line say so rather than pretending.
+- **There is no roster screen.** Roles are added, renamed and rewritten by editing `roster.json`,
+  which the panel opens in your editor, and the daemon validates with the path and the line of
+  anything it refuses. The board tab is WP-69 and the handover is WP-70.
+
 ## 1.4.0 — 2026-09-17
 
 ### Highlights

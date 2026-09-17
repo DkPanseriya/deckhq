@@ -19928,3 +19928,173 @@ reason.
   `MISS` on linux until somebody bakes them.
 - **No site picture was retaken.** Checklist step 1.1 applies when the interface moved; the site
   changes here are copy and two buttons.
+
+## 188. WP-68 — one worktree, one brief and one spawn per role, and a login that is still expired
+
+**Date:** 17 September 2026 · **Package:** WP-68 · **Commits:** `664a0ac`, `2e1f093`, `35eaee5`,
+`8b0940b`, `5c2e0f7`, `31e2dac`, `e35c1d6`, and this one
+
+`docs/07-STUDIO-DESIGN.md` §4's Hire, built. Per role: `git worktree add` with an argv array, a
+brief file under `.deckhq/studio/briefs/`, a session started in that worktree under that brief, and
+`roster.roles[i].agentId` written down when the ORDINARY scan finds the session. All four
+acceptance criteria are met, three of them against a real `claude` binary; what is not met is the
+half of criterion (1) that needs the model to answer, and the reason is §159's standing one.
+
+### 188.1 The real run, and what it did and did not prove
+
+A throwaway `git init` repository under the worktree's own temp directory, a daemon on a temp state
+file, `POST /api/studio/enable`, a two-role `roster.json`, then one `POST /api/studio/hire` naming
+both. Against Claude Code **2.1.260**, the owner's own binary, on 17 September 2026. The harness
+added `--print --output-format json` so a reply could be read without two terminal windows opening
+on the owner's desktop; those three flags are the harness's and the four below are the route's.
+
+**What is real and worked.** Two worktrees, made by a real `git worktree add`:
+
+```
+…/.tmp-wp68/state/worktrees/orbital-backend  3491c6a [studio/backend]
+…/.tmp-wp68/state/worktrees/orbital-docs     3491c6a [studio/docs]
+```
+
+Two briefs, 1,224 and 1,209 bytes. Two real `claude` processes, each started with:
+
+```json
+["claude",
+ "--append-system-prompt-file",
+ "…\\orbital\\.deckhq\\studio\\briefs\\backend.md",
+ "Your brief is …\\backend.md. Read it first, then begin the card it names. If the card is missing or wrong, say so in the panel and stop."]
+```
+
+and the one thing worth having most — **the ordinary scan found both sessions and the daemon wrote
+both ids down**, within one pass, each wearing its role name:
+
+```
+[daemon] info studio role "backend" is claude-code:462e097b-7333-4bcd-8c3d-c2f20ed86f3e
+[daemon] info studio role "docs" is claude-code:d0df0824-671b-47a2-aeca-2dd8376316fa
+```
+
+Those are the `session_id`s the real binary minted. Nothing in `src/studio/` found them: the
+registry found them on its own poll, by the worktree directory each session is running in, and the
+route wrote down an id. `roster.json` afterwards holds both, and `GET /api/studio` reported both
+roles `live: true`, `runtime: "claude-code"`, `unverified: null`.
+
+**What the machine refused to let us measure.** Verbatim, from both runs:
+
+```
+"is_error": true, "num_turns": 1, "permission_denials": [],
+"result": "Failed to authenticate: OAuth session expired and could not be refreshed"
+```
+
+This is §159.1's condition, unchanged and still standing, and §117 and §97.5 before it. The half of
+criterion (1) that says the hired roles *do work* is therefore **still owed one `claude login`**.
+Everything up to the API call is real, and the identity mechanism §4 names — a role name attaching
+to the newest session in that directory — is now proven against a real binary rather than a fake
+one, which is more than WP-67 could say.
+
+No other project, session or directory of the owner's was touched: the state directory was a temp
+one, the project was a temp one, both worktrees were removed with `git worktree remove --force`,
+and the whole temp tree was deleted afterwards. Nothing under `~/.claude` or `~/.codex` was
+modified by this package.
+
+### 188.2 Everything is refused before anything is made
+
+A Hire of six roles whose fourth name carries a `;` must leave no worktree behind, and the only way
+to promise that is to validate the WHOLE request — consent, the runtime, the count, every role
+name, every role's presence in `roster.json` — before the first `git worktree add`, rather than
+half way through it. That is what the route does, and the three refusal tests each assert that the
+worktrees directory does not exist afterwards.
+
+A failure AFTER that point is deliberately **not** rolled back. It is reported per role: the ones
+that worked are `hired`, the one that failed is in `refused` with its reason and its path. A
+worktree that exists is a fact git has been told about, and unwinding it would mean deleting a
+directory on the strength of a later, unrelated error.
+
+### 188.3 The seventh role is refused with the count
+
+`MAX_HIRE_AT_ONCE` is six, §11.7's owner default. Seven is refused **with the number seven in the
+body**, because "too many" is not a thing anybody can act on:
+
+> one Hire starts at most 6 roles and this one names 7. Six terminal windows is already a lot of
+> windows, and the seventh is where a mistake stops being one you can close. Hire in two presses.
+
+### 188.4 Two argv elements name the brief, and neither carries it
+
+`openNewSession(worktreePath, { systemPromptFile, instructions })`. `systemPromptFile` is the
+brief's PATH, which the Claude Code adapter turns into `--append-system-prompt-file <path>`;
+`instructions` is one sentence that also names the path, for the runtimes whose `openNewSession`
+takes nothing else — Codex's takes `instructions` alone. The brief's BODY is never on a command
+line and no value is ever interpolated into a shell string.
+`test/integration/studio-hire.test.mjs` asserts the array element by element **after** it has been
+through `execFile`, from a file the fixture wrote, rather than from the object the route built.
+
+### 188.5 The role-to-id record keeps no session list
+
+§9 invariant 4 says DeckHQ keeps one session list and the registry owns it. So the route keeps a
+map of roles it has STARTED and not yet seen — which contains no session, by construction — and
+matches them on the registry's own event, by the worktree directory. A worktree belongs to exactly
+one role, so the newest session in it is that role's and cannot be anybody else's. The writes are
+chained one after another: three roles matched in one scan pass is three read-modify-writes of the
+same `roster.json`, and three in flight at once is two lost ids.
+
+### 188.6 A NUL byte made a route file binary
+
+`8b0940b` shipped `src/http/routes/studio-hire.mjs` with the awaiting-map key separator written as
+two **literal NUL bytes**. Git calls any file with a NUL in the first 8 KiB binary, so that file had
+no diff, no blame, no merge and no review for four commits. `5c2e0f7` replaced them with the
+`\u0000` escape, which is the same separator and leaves the file text. Worth recording because
+nothing failed: lint passed, types passed, the tests passed, and the only symptom was
+`Bin 0 -> 15907 bytes` in a stat line nobody reads.
+
+### 188.7 A hire row per role, not one row that asks which
+
+The palette carries one `Studio: hire <role>` row per role that is **not already at a desk**. Not a
+single "hire…" row that then opens a chooser: the palette is where you type the name of the thing
+you want, and a second question would have undone that. A role already live is not drawn at all —
+it is reachable as a session, under its own name, in the palette's agent group, which is the row a
+person actually wants.
+
+A role name git will not take a branch from **is** drawn, and pressing it still posts. The refusal
+the user is shown is then the daemon's own words out of the same `checkRoleName()` the Hire uses,
+rather than a second copy of the rule kept in the page. `GET /api/studio`'s `refusal` field carries
+the same sentence, so the hint says it before the press as well.
+
+### 188.8 The roster carries no runtime, and `rolesOf` does not invent one
+
+A runtime is a launch decision, not a property of a role the user owns (§4), so `roster.json` has
+no `runtime` field and this package did not add one. `GET /api/studio`'s `roles[i].runtime` is read
+off the REGISTRY — what the live session actually is — and is `null` for a role nobody has hired.
+`unverified` beside it is §4's own sentence for Codex, Gemini CLI and OpenCode, so the panel's
+roster line can say what cannot be known about those three instead of drawing them like a Claude
+Code session.
+
+### 188.9 `/api/studio/hire` has a runtime default, and the client sends one anyway
+
+§4's contract is `{ role }` on its own, so the route keeps `body.runtime || DEFAULT_HIRE_RUNTIME` —
+a named constant with the reason beside it, which is the shape WP-92j allowed `permission.mjs` to
+keep and which the `|| 'claude-code'` gate does not match. The CLIENT is held to naming one all the
+same: `/api/studio/hire` is a row in `test/unit/runtime-required.test.mjs`'s `CALLERS` table, the
+one row there whose route does not answer 400. The reason is A-08's rather than the route's — a
+Hire is a spawn, §4 makes the runtime a real choice between four of them, and a page that let the
+daemon pick would be a page that never showed the user which one it picked.
+
+### 188.10 `public/app.js` hit the ceiling, and the wiring moved rather than the ceiling
+
+Four fields of Studio wiring put `app.js` at 901 lines against WP-22's 900-line ceiling. No
+exemption row was added. `app-studio.js` now exports `studioPalette` and `studioActions` — two
+grouped objects, defined where the functions they name already live — and `app.js` spreads them in
+two lines instead of four. 898 lines.
+
+### 188.11 What is not done
+
+- **The roster EDITOR is server-side only.** `POST /api/studio/roster` validates and writes, with
+  the path and the line of anything it refuses, and `GET /api/studio` reports every role. There is
+  no roster *screen*: the palette hires and the panel lists, and editing a role is editing
+  `roster.json`, which the panel's `[ open ]` button opens in the user's editor. §4's "add, remove,
+  rename, rewrite the prompt" is therefore done in a text editor, which is the file's own promise —
+  DeckHQ reads these files and never rewrites them.
+- **No card is written by a Hire.** `POST /api/studio/card` is the only writer of a column and
+  `test/unit/studio-invariant.test.mjs` fails on a second one. A hired role picks up the first
+  unfinished card assigned to it, and the brief names it; nothing moves it. WP-69 and WP-70 own the
+  board and the handover.
+- **Codex, Gemini CLI and OpenCode are hired unverified.** No terminal has been opened on any of
+  them by this project. They are hired, the floor already degrades correctly for them, and the
+  response and the panel line both SAY SO.

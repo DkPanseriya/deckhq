@@ -147,13 +147,22 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 six-column board that live in your own repository, and — eventually — one real coding session per
 role. It is off everywhere until you run `deckhq studio enable <project>`.
 
-**What exists today is the store, the consent and the planner.** `enable --yes` writes exactly one
-marked file and records the grant; a real `claude` session then interviews you in the ordinary
+**What exists today is the store, the consent, the planner and Hire.** `enable --yes` writes exactly
+one marked file and records the grant; a real `claude` session then interviews you in the ordinary
 panel composer and writes the blueprint, the roster and the board itself, with its own tools.
 
-**What does not exist is Hire** — no worktree, no role session, no board tab. The design is
-[`docs/07-STUDIO-DESIGN.md`](docs/07-STUDIO-DESIGN.md); the loop and its eight unbuilt steps are on
-[the site](https://dkpanseriya.github.io/deckhq/studio.html).
+**Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** — one row per role on your roster that is
+not already at a desk. Each press gives that role a git worktree of its own
+(`git worktree add … -b studio/<role>`), a brief file in your repository that is yours to edit and
+is never rewritten under a running session, and a real session started in that worktree under that
+brief. It walks onto the floor on the next scan wearing the role's name, and the roster records the
+id the runtime minted. **Firing leaves the worktree and the process alone**, and says so. A role on
+Codex, Gemini CLI or OpenCode is hired and marked _unverified launch_: nobody has opened a terminal
+on those three, and the panel says that rather than pretending.
+
+**What does not exist is the board tab** and the handover gate. The design is
+[`docs/07-STUDIO-DESIGN.md`](docs/07-STUDIO-DESIGN.md); the loop and its remaining unbuilt steps are
+on [the site](https://dkpanseriya.github.io/deckhq/studio.html).
 
 ## Docs
 

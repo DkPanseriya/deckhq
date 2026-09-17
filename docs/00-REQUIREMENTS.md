@@ -987,12 +987,18 @@ schemas, consent, `deckhq studio enable|disable`, the endpoints that need no spa
 invariant tests including a static one that fails if a second writer of `card.column` ever appears).
 WP-67 done, less the interview (`DEVIATIONS.md` §159 — the brief as a file, schemas generated from
 `src/studio/schema.mjs`, `POST /api/studio/plan` starting a real `claude` through the same
-`openNewSession` call `/api/new-project` makes, artefacts validated on every read). **WP-68 to WP-71
-planned.**
+`openNewSession` call `/api/new-project` makes, artefacts validated on every read). WP-68 done
+(`DEVIATIONS.md` §188 — `POST /api/studio/hire`: a git worktree per role with an argv array, a brief
+file the user owns, a session started in that worktree under that brief, `roster.roles[i].agentId`
+recorded by the ordinary scan, a `Studio: hire <role>` palette row per unhired role, and a roster
+line per role in the panel). **WP-69 to WP-71 planned.**
 **Notes.** The name (Studio, over Workshop and Bureau) and eight defaults were decided by the owner
 on 8 September — `08` §13.20. One acceptance criterion of WP-67 is **owed and named as owed**: the
 reference machine's `claude` login is expired (§117), so no planner has run an interview and no
-`blueprint.md` has been written by a model.
+`blueprint.md` has been written by a model. WP-68's real run hit the same wall from the other side
+(§188.1): two worktrees, two briefs and two real `claude` sessions were made, the ordinary scan
+found both and wrote both ids into `roster.json`, and both sessions then answered `OAuth session
+expired and could not be refreshed`. **What the two owe is one `claude login` between them.**
 
 **R-131 — Studio hires real sessions and never fakes a task feed**
 *Derived from P-02, and binding on all of WP-66 to WP-71.*
@@ -1011,7 +1017,10 @@ reachable; WP-70 handover and the review gate (Accept is the only path from a ha
 change; test counts render as a quotation); WP-71 tracking, drift and the budget stop (every figure
 traces to a ledger record or a handover line; a card over its cap moves only to `blocked` and kills
 nothing).
-**Status:** planned (WP-68, WP-69, WP-70, WP-71 — `08` §9 rows).
+**Status:** WP-68 done (`DEVIATIONS.md` §188); WP-69, WP-70, WP-71 planned — `08` §9 rows. The
+board tab is the next of the four, and until it exists a Hire picks up the first unfinished card
+already assigned to the role and moves nothing: `POST /api/studio/card` remains the only writer of
+a column, and the static test that fails on a second one still passes.
 
 ### 2.13 Relay
 
