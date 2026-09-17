@@ -8,3 +8,7 @@ vscode/.vscodeignore
 # `node site/build.mjs` renders into `site/dist/` is generated, gitignored, and
 # not a file anybody edits.
 site/dist/
+
+# The private planning repository — WP-95b. Its own repository, its own
+# formatting; absent on every machine but a maintainer's.
+internal/

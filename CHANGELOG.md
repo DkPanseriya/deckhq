@@ -21,6 +21,12 @@
   with its id, hired-unverified, or the reason the name cannot be hired. **Firing leaves the worktree
   and the process alone, and says so.** `docs/DEVIATIONS.md` §188.
 
+### Changed
+
+- **Planning documents moved to a private repository.** The requirements, architecture,
+  specifications, plan, deviations and designer mockups are no longer part of this repository;
+  the source, its tests, the manual and the adapter contract stay public and MIT.
+
 ### Fixed
 
 - **The project hub's footer survives a tab press.** It was appended to `#main`, and every tab

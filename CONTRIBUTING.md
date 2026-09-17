@@ -7,7 +7,7 @@ code.
 ## 1. The invariant is not negotiable
 
 > **What the user owes is decided by the user, never by the runtime.**
-> — [`docs/01-PRODUCT.md`](docs/01-PRODUCT.md) §2
+> — the rule this project is built on
 
 `activityState` is _observed_. It changes on its own: a session starts, produces output, blocks,
 goes quiet, exits.
@@ -108,11 +108,10 @@ that break on one platform and pass on the others, so be suspicious of both.
 - **Tests pass on all three platforms.** Watch the CI matrix, not just your own machine.
 - **The `INVARIANT:` tests are untouched.** See §1.
 - **No new runtime dependency.** See §3.
-- **Deviations are documented.** If the implementation departs from what
-  [`docs/`](docs/) specifies — a different algorithm, a missed budget, a constraint the plan did not
-  anticipate — append a numbered entry to [`docs/DEVIATIONS.md`](docs/DEVIATIONS.md) with the reason
-  and, where there is one, the measurement. That log is the most useful document in this repository.
-  Being wrong in it is fine; being silent is not.
+- **Departures are written down.** If the implementation departs from what the tests, the guide or
+  `docs/ADAPTERS.md` say — a different algorithm, a missed budget, a constraint nobody anticipated
+  — say so in the pull request with the reason and, where there is one, the measurement. Being
+  wrong out loud is fine; being silent is not.
 - **A screenshot, if you touched the floor.** Anything under `public/render/` or `public/style.css`
   needs a before-and-after image in the PR. The three worst bugs in this project's history were
   invisible to the whole unit suite and obvious in one PNG.

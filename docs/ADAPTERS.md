@@ -37,8 +37,7 @@ release.
 
 ## 2. The contract
 
-The authoritative definition is [`02-ARCHITECTURE.md` §2](02-ARCHITECTURE.md#2-the-adapter-interface).
-Reproduced here with what each method owes you in practice.
+This is the authoritative definition of the interface, with what each method owes you in practice.
 
 ```ts
 interface RuntimeAdapter {
@@ -66,7 +65,7 @@ interface RuntimeAdapter {
   version?(): Promise<string | null>;
   countCatchphrase?(opts: { since: number; until?: number }): Promise<CatchphraseCount>;
   watchConversation?(...): ...;
-  // WP-64. What `doctor`'s "mcp servers" row prints. Omit it and there is no
+  // What `doctor`'s "mcp servers" row prints. Omit it and there is no
   // row at all for your runtime — which is right, and is not the same thing as
   // a row that says zero. Never throw, never spawn without a timeout, and
   // never return a server's target: a target can be a URL with a token in it.
@@ -115,11 +114,11 @@ no argument is legal and the type gate enforces the `= {}` default.
   changelog as a known gap. `costEstimate` comes from `estimateCost()`, which returns `null` — not
   `$0.00` — when the rate card has no row for the model.
 
-#### Sub-agents, and the two fields the crew reads (WP-89)
+#### Sub-agents, and the two fields the crew reads
 
 A junior is an ordinary `SessionSummary` with `subagent: true`, `parentSessionId`, `subagentType`
-and `spawnedAt`. Two more fields decide whether it is drawn as part of a **crew** — the formation
-`docs/plan/12-MOTION-AND-CREW.md` §3 describes — and both are optional:
+and `spawnedAt`. Two more fields decide whether it is drawn as part of a **crew** — juniors that walk
+and work together rather than as separate agents — and both are optional:
 
 | field | what it is | absent means |
 |---|---|---|
@@ -137,7 +136,7 @@ and `spawnedAt`. Two more fields decide whether it is drawn as part of a **crew*
 it costs one field and no extra I/O — and `journal.jsonl` beside it is the workflow's own log and
 not a subagent. `lastGrowthAt` is the transcript's own mtime, which the scan already stats.
 
-**A runtime that reports neither still works.** Its juniors keep WP-41's seat beside their parent,
+**A runtime that reports neither still works.** Its juniors keep their seat beside their parent,
 they are counted, they are clickable and they are in the deck; they simply never form an arc with
 cables, because nothing observed would drive one. That refusal is the honesty rule (§6) applied to a
 whole feature rather than to a field.
@@ -158,7 +157,7 @@ export function fooResumeCommand(sessionId) {
 }
 ```
 
-A session id and a prompt arrive from an HTTP request body ([`DEVIATIONS.md` §28](DEVIATIONS.md)).
+A session id and a prompt arrive from an HTTP request body, which is to say from outside.
 Each must be **one element** of the array and never concatenated into a longer one, so the only
 thing that ever parses them is the runtime's own argument parser. Test it with a hostile id:
 
@@ -184,7 +183,7 @@ hook mechanism *and* you can test writing to it. See [§5](#5-hooks-and-the-line
 These are the rules that survive contact with a runtime changing its format under you.
 
 1. **All parsing lives in `parse.mjs`.** Nothing outside `src/adapters/<id>/` may read a transcript
-   or shell out to a runtime CLI ([`08` §1.1 rule 8](plan/08-PLAN-V2-100X.md)). If a route needs to
+   or shell out to a runtime CLI. If a route needs to
    know what a payload means, it asks the adapter — that is why `hooks.toolSummary` and
    `hooks.permissionRequest` exist on the Claude Code adapter.
 2. **Head the file with the shapes you handle**, as a numbered list, and update that list *before*
@@ -197,7 +196,7 @@ These are the rules that survive contact with a runtime changing its format unde
    can cut the last line mid-object and a tail read can cut the first, which is what
    `linesFromChunk(text, {dropFirstPartial, dropLastPartial})` is for.
 5. **Cache anything that costs a process.** If a read spawns the runtime's CLI, put a TTL on it.
-   [`DEVIATIONS.md` §77](DEVIATIONS.md) is the case that made this a rule: `claude agents --json`
+   One measured case made this a rule: `claude agents --json`
    on every 5 s poll cost ~12% of a core at idle, and a 60 s TTL removed it. The OpenCode adapter
    caches its roster for 60 s for exactly this reason.
 6. **Duplicate the byte-window helpers rather than sharing them.** `readHead`, `readTail`,
@@ -206,7 +205,7 @@ These are the rules that survive contact with a runtime changing its format unde
    duplicated lines, and it means you can copy one file and own all of it without any chance of
    breaking another runtime.
 7. **`archived` is answered fresh on every scan, never cached.** An absent flag means "this runtime
-   cannot report it" and must never be read as "not archived" ([`DEVIATIONS.md` §46](DEVIATIONS.md)).
+   cannot report it" and must never be read as "not archived".
 
 ---
 
@@ -344,7 +343,7 @@ So the bar is high, and it is not "the runtime has hooks":
   and says so. Gemini CLI's note says *"Gemini CLI does have a hooks mechanism … but DeckHQ does not
   install or read it yet"*, and there is a test asserting it does **not** claim otherwise. Reusing
   Codex's sentence would be a false statement about somebody else's product, which
-  [`08` §1.1 rule 11](plan/08-PLAN-V2-100X.md) forbids as firmly as a false statement about ours.
+  this project forbids as firmly as a false statement about ours.
 - **A plugin API is not this interface.** OpenCode's plugins are JavaScript modules loaded into the
   agent. Installing one is a different consent conversation from "here is the JSON we will add",
   and it deserves a package that designs it rather than a paragraph that assumes it.
@@ -357,12 +356,11 @@ works.
 ## 6. The honesty rule
 
 **An adapter is UNVERIFIED until it has been run against real data from a real install, and it must
-say so — in its own header, in `DEVIATIONS.md`, and in the README's Honest limits.**
+say so — in its own header, in the `CHANGELOG.md` entry, and in the README's Honest limits.**
 
-This is the rule that matters most in this document, and it comes from
-[`08` §1.1 rule 11](plan/08-PLAN-V2-100X.md): *a claim in anyone's documentation is a hypothesis
-until measured on a machine*. A runtime's own docs can be out of date, can describe a version you
-do not have, or can disagree with its source. Two examples from this repository, both found while
+This is the rule that matters most in this document: *a claim in anyone's documentation is a
+hypothesis until measured on a machine*. A runtime's own docs can be out of date, can describe a
+version you do not have, or can disagree with its source. Two examples from this repository, both found while
 writing the adapters that ship here:
 
 - Gemini CLI's documentation describes the per-project directory as a `<project_hash>`. Its source
@@ -376,10 +374,9 @@ So:
 
 1. Say it in the `parse.mjs` header: what was read, from which repository and file, on what date,
    and whether it was checked against a real profile.
-2. Say it in `DEVIATIONS.md` with a number.
+2. Say it in the `CHANGELOG.md` entry for the release that ships it.
 3. Say it in the README's **Honest limits**, in a sentence a user will understand — the model is
-   [`DEVIATIONS.md` §8](DEVIATIONS.md), which has said Codex is unverified since the day it was
-   written.
+   the line that has said Codex is unverified since the day it was written.
 4. When somebody does run it against real data: fix what breaks, then **delete the warnings in the
    same commit**. A stale "unverified" is its own kind of dishonesty.
 
@@ -455,7 +452,7 @@ Cover, at minimum: **title**, **cwd**, **last activity**, **tokens** (if the for
 - [ ] Synthetic fixture with the awkward cases
 - [ ] `test/unit/<id>-parse.test.mjs` — format pinned, degradation proved
 - [ ] One line in `src/adapters/index.mjs`, one union member in `RuntimeId`
-- [ ] `DEVIATIONS.md` entry, README Honest limits line if unverified
+- [ ] `CHANGELOG.md` entry, README Honest limits line if unverified
 - [ ] `npm run lint && npm run format:check && npm run typecheck && npm test`
 
 Open a pull request. If `ADAPTERS.md` did not tell you something you needed, say so in it — that is

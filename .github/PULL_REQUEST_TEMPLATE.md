@@ -10,16 +10,16 @@ Closes #
       Node 18, 20 and 22. Green on your own machine is not the same thing — path handling and
       process spawning are where this project breaks on one OS and passes on the others.
 - [ ] **The `INVARIANT:` tests are untouched.** No observed event may clear a user-owned state
-      (`docs/01-PRODUCT.md` §2). If a test named `INVARIANT:` had to be relaxed, skipped or
+      — the rule this project is built on. If a test named `INVARIANT:` had to be relaxed, skipped or
       rewritten to make this pass, this is the wrong change — say so below and open an issue
       instead.
 - [ ] **No new runtime dependency.** `package.json` still has no `dependencies` block. Dev
       dependencies are fine.
 - [ ] **No new network egress.** Nothing added that makes an outbound call: no analytics, no
       update check, no CDN font, script or image.
-- [ ] **Deviations are documented.** Anything that departs from `docs/` — a different algorithm, a
-      missed budget, a constraint the plan did not anticipate — has a numbered entry appended to
-      `docs/DEVIATIONS.md` with the reason and the measurement.
+- [ ] **Departures are written down.** Anything that departs from what the tests, the guide or
+      `docs/ADAPTERS.md` say — a different algorithm, a missed budget, a constraint nobody
+      anticipated — is said here, with the reason and the measurement.
 - [ ] **Screenshot attached, if the floor changed.** Anything under `public/render/` or
       `public/style.css` needs a before-and-after image. The three worst bugs in this project's
       history were invisible to the whole unit suite and obvious in one PNG.
