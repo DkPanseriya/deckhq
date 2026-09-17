@@ -1543,6 +1543,31 @@ button {
 .studio-row--problem .studio-state {
   color: var(--ink);
 }
+
+/* WP-68 · the roster, one line per role, under the three files. A rule above
+   the first of them, because the roles are a different list from the files and
+   an unbroken run of six lines would read as one. `--refused` earns the accent
+   rule for the same reason `--problem` does: a role name git will not take is
+   a thing in a file the user has to go and fix. `--unverified` does not — §4's
+   sentence is a caveat about a runtime, not an error in anything. */
+.studio-row--role-first {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--line);
+}
+.studio-row--role .studio-file {
+  font-family: var(--font-sans);
+}
+.studio-role--refused {
+  border-left-color: var(--accent);
+}
+.studio-role--refused .studio-state {
+  color: var(--ink);
+}
+.studio-role--hired .studio-state,
+.studio-role--unverified .studio-state {
+  color: var(--ink-2);
+}
 .studio-open {
   appearance: none;
   background: none;

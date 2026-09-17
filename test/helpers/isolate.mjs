@@ -137,6 +137,9 @@ export function daemonScratch(prefix = 'daemon-') {
  * @param {string} [opts.sessionId]
  * @param {string} [opts.title]
  * @param {string} [opts.project]  directory name under the isolated home
+ * @param {string} [opts.cwd]      an absolute directory instead of `project` —
+ *   WP-68, whose sessions run in a git worktree under the state directory
+ *   rather than anywhere under the isolated home
  * @param {boolean} [opts.turnEnded]  false leaves the user turn last
  * @param {number} [opts.ageMs]  how long ago the turn happened
  * @returns {{id:string, cwd:string, dir:string, file:string, title:string, remove:() => void}}
@@ -150,7 +153,7 @@ export function writeClaudeSession(opts = {}) {
     ageMs = 60_000,
   } = opts;
 
-  const cwd = path.join(HOME, 'code', project);
+  const cwd = opts.cwd ? path.resolve(opts.cwd) : path.join(HOME, 'code', project);
   const slug = cwd.replace(/[\\/:]+/g, '-');
   const dir = path.join(PROJECTS_DIR, slug);
   fs.mkdirSync(dir, { recursive: true });

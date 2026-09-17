@@ -350,7 +350,7 @@ is a re-read on every `GET /api/studio` rather than a watcher — there is no ca
 more to the point, no watcher that could ever write a file back. §9 invariant 3 (*brief files are
 the user's*) landed here rather than in WP-68, because this package writes a brief.
 
-### WP-68 · Roster and Hire · `AB` · L · P3 · after WP-67
+### WP-68 · Roster and Hire · `AB` · L · P3 · after WP-67 · **DONE**
 
 The roster editor's server half, `git worktree add`, the brief file, the spawn, the role→`agentId`
 record.
@@ -359,6 +359,30 @@ the floor within one scan, each wearing its role name; (2) `git worktree` takes 
 role name with a space, a quote or a `;` is refused rather than escaped; (3) a runtime with no
 `openNewSession` is refused with a named reason; (4) firing leaves the worktree and the process
 alone, and says so.
+
+**Met:** all four, and (1), (2) and (4) against the owner's real `claude` 2.1.260 as well as against
+the fake-CLI fixture. `docs/DEVIATIONS.md` §188 records the run: two worktrees, two briefs, two real
+sessions, and both ids written into `roster.json` by the ordinary scan.
+
+**Deviations, and the reason for each:**
+
+- **The interview behind a hired role has still not been measured.** The two real sessions both
+  answered `OAuth session expired and could not be refreshed` — §159.1's standing condition, and
+  §117 before it. Everything up to the API call is real; what is owed is one `claude login`.
+- **The roster editor is the server half only.** `POST /api/studio/roster` validates and writes with
+  the path and the line of anything it refuses, and `GET /api/studio` reports every role with what
+  the file cannot say — `live`, `runtime`, `unverified`, `hireable` and the refusal. There is no
+  roster *screen*: the palette hires, the panel lists, and a role is edited by editing `roster.json`,
+  which the panel opens in the user's editor. §4 makes roles the user's property and the file says
+  DeckHQ never rewrites them, so a form over it would have been a second place a role lived.
+- **`roster.json` gained no `runtime` field.** A runtime is a launch decision, not a property of a
+  role, so an unhired role honestly reports `runtime: null` and a hired one reports what the
+  registry says its session actually is.
+- **A Hire writes no card and moves no column.** It picks up the first unfinished card already
+  assigned to the role and names it in the brief. `POST /api/studio/card` is still the only writer
+  of a column, and `test/unit/studio-invariant.test.mjs` still fails on a second one.
+- **`POST /api/studio/hire` keeps a runtime default** — §4's contract is `{ role }` on its own —
+  but every caller in `public/` names one, and WP-92j's client grep gate holds it to that.
 
 ### WP-69 · The board tab, and card → session · `PE` + `UX` · L · P3 · after WP-66
 

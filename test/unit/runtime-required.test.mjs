@@ -174,6 +174,13 @@ const CALLERS = [
   { route: '/api/permission/decide', field: 'runtime' },
   // A GET, and its runtime rides in the query string as `id`.
   { route: '/api/resume-targets', field: 'id' },
+  // WP-68. The one row here whose route does NOT answer 400 without a runtime:
+  // `POST /api/studio/hire` has a documented default, because §4's contract is
+  // `{ role }` on its own. The gate is on the CLIENT anyway, and for A-08's
+  // reason rather than the route's: a Hire is a spawn, §4 makes the runtime a
+  // real per-role choice between four of them, and a page that let the daemon
+  // pick would be a page that never showed the user which one it picked.
+  { route: '/api/studio/hire', field: 'runtime' },
 ];
 
 /** Every `.js` under `public/`, flat — the client is one directory. */
