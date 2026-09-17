@@ -123,6 +123,14 @@ test('`npx deckhq app` works from the tarball, cold', { timeout: 300_000 }, (t) 
     npm_config_update_notifier: 'false',
     npm_config_fund: 'false',
     npm_config_audit: 'false',
+    // The checklist's step 7 is `npm publish --dry-run`, which runs
+    // `prepublishOnly`, which runs this file. npm passes every flag it was
+    // given to its children as `npm_config_*`, so the `npm pack` below
+    // inherited `npm_config_dry_run=true`, printed a file list, wrote no
+    // tarball, and failed here with "expected one tarball, got none" — on the
+    // one command whose whole purpose is to rehearse the release.
+    // `docs/DEVIATIONS.md` §186.4.
+    npm_config_dry_run: 'false',
   };
   delete env.CLAUDE_CONFIG_DIR;
   delete env.DECKHQ_PORT;

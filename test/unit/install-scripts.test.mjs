@@ -169,6 +169,94 @@ test('both installers are idempotent by construction: nothing is deleted or over
   }
 });
 
+// ---------------------------------------------------------------------------
+// The double-click launchers — WP-76
+// ---------------------------------------------------------------------------
+
+/**
+ * `Install-DeckHQ.cmd` and `Install-DeckHQ.command` are the two files a person
+ * downloads from the Release page and double-clicks. Each one carries the
+ * matching one-liner and nothing else, so there is exactly one installer per
+ * platform and the launcher cannot drift away from it.
+ */
+const CMD = path.join(DIR, 'Install-DeckHQ.cmd');
+const COMMAND = path.join(DIR, 'Install-DeckHQ.command');
+
+test('both double-click launchers exist', () => {
+  assert.ok(fs.existsSync(CMD), 'scripts/install/Install-DeckHQ.cmd is missing');
+  assert.ok(fs.existsSync(COMMAND), 'scripts/install/Install-DeckHQ.command is missing');
+});
+
+test('SECURITY: a launcher reaches the Pages origin and no other host', () => {
+  // A file a stranger runs by double-clicking it, with no shell in front of
+  // them to read it in. The only URL either may name is the one the README and
+  // the site already print.
+  for (const [name, file] of [
+    ['Install-DeckHQ.cmd', CMD],
+    ['Install-DeckHQ.command', COMMAND],
+  ]) {
+    const text = fs.readFileSync(file, 'utf8');
+    const hosts = [...text.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) => m[1].toLowerCase());
+    assert.ok(hosts.length > 0, `${name} names no URL at all`);
+    for (const host of hosts) {
+      assert.equal(host, 'dkpanseriya.github.io', `${name} names ${host}`);
+    }
+  }
+
+  assert.match(
+    fs.readFileSync(CMD, 'utf8'),
+    /irm https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.ps1 \| iex/,
+    'Install-DeckHQ.cmd does not run the published PowerShell installer',
+  );
+  assert.match(
+    fs.readFileSync(COMMAND, 'utf8'),
+    /curl -fsSL https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.sh \| sh/,
+    'Install-DeckHQ.command does not run the published shell installer',
+  );
+});
+
+test('Install-DeckHQ.cmd is CRLF, and waits before the window closes', () => {
+  // `cmd.exe` reads a `.cmd` line by line and a lone LF ending can leave a
+  // trailing character on the last token of a line. `.gitattributes` carries
+  // `*.cmd text eol=crlf`, so this holds on a Linux checkout too — which is
+  // where the release job packs it.
+  const bytes = fs.readFileSync(CMD);
+  const text = bytes.toString('utf8');
+  const lf = (text.match(/\n/g) ?? []).length;
+  const crlf = (text.match(/\r\n/g) ?? []).length;
+  assert.equal(crlf, lf, `Install-DeckHQ.cmd has ${lf - crlf} bare LF line ending(s)`);
+  assert.match(text, /^@echo off\r\n/, 'Install-DeckHQ.cmd does not open with @echo off');
+  // Double-clicked, the window disappears on the last line and takes the
+  // installer's own output with it.
+  assert.match(text, /\r\npause\r?\n?$/, 'Install-DeckHQ.cmd does not pause at the end');
+});
+
+test('Install-DeckHQ.command is executable in git, or macOS will not run it', (t) => {
+  // The download from a Release keeps the mode the tar carried; a 100644 here
+  // means a double-click on macOS opens the file in a text editor instead.
+  const out = spawnSync('git', ['ls-files', '-s', '--', 'scripts/install/Install-DeckHQ.command'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (out.error || out.status !== 0 || !out.stdout.trim()) {
+    t.skip('no git, or the file is not tracked yet');
+    return;
+  }
+  assert.match(
+    out.stdout,
+    /^100755 /,
+    `Install-DeckHQ.command is ${out.stdout.split(' ')[0]}; run \`git update-index --chmod=+x\``,
+  );
+});
+
+test('each launcher says, in words, what it is about to do', () => {
+  // The person running this one has no terminal open and did not read a README
+  // to get here. The first thing the window prints is a sentence.
+  assert.match(fs.readFileSync(CMD, 'utf8'), /^echo DeckHQ: this installs DeckHQ/m);
+  assert.match(fs.readFileSync(COMMAND, 'utf8'), /^echo "DeckHQ: this installs DeckHQ/m);
+});
+
 test('neither installer is in the npm tarball', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   assert.ok(

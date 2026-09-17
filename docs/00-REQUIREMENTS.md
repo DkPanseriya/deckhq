@@ -84,7 +84,7 @@ requirement below. Numbered `P-NN` so a register entry can cite them.
 | R-002 | The floor answers "is anything waiting on me" in under two seconds | Framing | done |
 | R-010 | One line to install, one question to pin | Install / app mode | done |
 | R-011 | Launch as an app, not a terminal plus a browser | Install / app mode | done |
-| R-012 | One-line installers for a stranger's machine | Install / app mode | done |
+| R-012 | One-line installers, and a file to download and double-click | Install / app mode | done |
 | R-013 | A standalone executable for a machine with no Node | Install / app mode | planned |
 | R-020 | One continuous floor, partially divided, not separate square rooms | Floor / layout | done |
 | R-021 | The anchor hierarchy is literal: floor → walls + tables → chairs → agents | Floor / layout | done |
@@ -214,15 +214,24 @@ not keep one open.
 **Notes.** The browser is deliberately not spawned with `windowsHide`; that flag produced a whole
 browser with no window on the reference machine (§144.1–2).
 
-**R-012 — One-line installers for a stranger's machine**
-*Owner, 14 September 2026:* "make some kind of installer something."
+**R-012 — One-line installers, and a file to download and double-click**
+*Owner, 14 September 2026:* "make some kind of installer something." *Owner, 17 September 2026:* "an
+installer the user can simply download and run, no manual flows."
 **Interpretation.** `install.ps1` and `install.sh` served from the docs site: check for Node 18+,
 *offer* to install it, then `npm install -g deckhq@latest`, then the icon question, then
-`deckhq app`.
-**Why.** Same as R-010; "install Node first" is the step the product could stop asking for.
-**Status:** done. **Implemented by:** WP-75 (`DEVIATIONS.md` §151); `scripts/install/`.
-**Notes.** Neither script is in the tarball and nothing in `src/` imports them, so P-05 is
-untouched. They reach winget, brew and npm and no other host (P-04).
+`deckhq app`. And, for the person who will not paste a line into a shell, one file per platform on
+the Release page that runs the matching line and carries nothing else:
+`Install-DeckHQ.cmd` and `Install-DeckHQ.command`.
+**Why.** Same as R-010; "install Node first" is the step the product could stop asking for, and
+"open a terminal" is the step after it.
+**Status:** done. **Implemented by:** WP-75 (`DEVIATIONS.md` §151) and WP-76's cheap half
+(`DEVIATIONS.md` §186); `scripts/install/`.
+**Notes.** Nothing in `scripts/install/` is in the tarball and nothing in `src/` imports any of it,
+so P-05 is untouched. The scripts reach winget, brew and npm and no other host; the launchers reach
+the Pages origin and no other host, which `test/unit/install-scripts.test.mjs` holds (P-04). Two
+caveats are printed wherever the launchers are offered: SmartScreen may warn about the unsigned
+`.cmd`, and a downloaded `.command` arrives without its run bit. The second is a manual flow, and
+R-013 is what would remove it.
 
 **R-013 — A standalone executable for a machine with no Node**
 *Derived from R-010/R-012*, not asked for directly.
@@ -231,7 +240,9 @@ untouched. They reach winget, brew and npm and no other host (P-04).
 **Status:** planned (WP-76), and recommended **not now**.
 **Implemented by:** — **Notes.** `docs/plan/SEA-FEASIBILITY.md`: a bundler, an asset branch through
 the HTTP layer, ~$300/yr of certificates and ~110 MB per platform, against a WP-75 that already
-gets a stranger to an icon. Explicitly decided against for the current cycle.
+gets a stranger to an icon. Explicitly decided against for the current cycle. 1.4.0 ships the
+download-and-run half of the ask without it (R-012, `DEVIATIONS.md` §186), which leaves exactly two
+things a certificate would buy: no SmartScreen warning on Windows, and no `chmod +x` on macOS.
 
 ### 2.3 Floor and layout
 
@@ -1242,6 +1253,31 @@ and unchanged in every key on `demo`, suite 2,486 → 2,497 by addition.
 **Notes.** The audit changed no code by design, and says so in its own header. Its refusals are
 recorded with it: nothing was profiled, nothing was run against a hundred-agent machine, and the
 site, the extension and the plugin were mapped but not audited in depth.
+
+**R-183 — The suite's verdict is a fact about the product, not about the machine that ran it**
+_Standing rule, `08` §1.1 and the WP-50/WP-51 rows: a green run means **all nine combinations** —
+Ubuntu, macOS and Windows × Node 18, 20 and 22 — plus the goldens job. "Green except Windows" is
+not green, and neither is the reverse._
+**Interpretation.** A test may not read the host for anything the product injects. Where a module
+takes a platform, a clock, a home directory or an environment as a parameter, the test asserts the
+answer for each of them from one process, and it asserts a literal — never a value re-derived
+through the same host facility the code used, because that can only prove the two agree. Where a
+test owns a temp root, it owns the shutdown too: anything with a debounced write is flushed before
+the root goes.
+**Why.** §121.4 recorded the first shape of this — tests that scanned the developer's real home
+directory, so the suite's wall clock swung 5 s to 68 s on one commit and one test took a different
+branch depending on what the laptop happened to be doing. §185 is the same shape three more times:
+the path separator, a 250 ms debounce, and a photograph of a floor taken on a platform nobody can
+re-photograph on. All three were green on the author's Windows and red on CI, which is the worst
+direction for this failure to run in — the machine that decides is the one nobody is looking at.
+**Status:** partly done. Nine test jobs green; the `goldens` job still red on the six stale linux
+goldens §185.4 says to delete.
+**Implemented by:** §185 — `src/core/launcher.mjs` takes its path semantics from the injected
+platform, `test/helpers/store-root.mjs` flushes every store opened on a temp root before removing
+it, and `test/helpers/isolate.mjs` (§124) already holds the home-directory half.
+**Notes.** The rule is about the suite, not the product: none of §185's three defects was reachable
+by a user, and the one production file it touched behaves identically for every caller that injects
+no platform — which is all of them.
 
 ### 2.18 Declined and deferred
 

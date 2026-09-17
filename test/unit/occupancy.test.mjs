@@ -35,9 +35,6 @@ import '../helpers/isolate.mjs';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 
 import { buildPlan } from '../../public/render/plan.js';
 import { buildOffice, seatOffice, OFFICE_QUEUE_ZONE } from '../../public/render/plan-office.js';
@@ -47,6 +44,7 @@ import { placement, waitingSince } from '../../public/floor-rule.js';
 import { Registry } from '../../src/core/state-machine.mjs';
 import { agentId } from '../../src/core/model.mjs';
 import { Store } from '../../src/core/store.mjs';
+import { dropRoot, onRoot, storeRoot } from '../helpers/store-root.mjs';
 
 const NOW = 1_800_000_000_000;
 const MIN = 60_000;
@@ -445,8 +443,8 @@ test('INVARIANT: no observed event ever puts anybody in the visitor chair', asyn
     },
     hooks: { supported: true, installed: async () => false },
   };
-  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'deckhq-chair-'));
-  const store = new Store(path.join(dir, 'state.json'));
+  const { dir, file } = await storeRoot('chair');
+  const store = onRoot(dir, new Store(file));
   await store.load();
   const registry = new Registry({
     store,
@@ -499,7 +497,11 @@ test('INVARIANT: no observed event ever puts anybody in the visitor chair', asyn
     waitingSnap.agents.some((a) => placement(a) === 'office'),
     'no session was ever in the office, so the invariant was never tested',
   );
-  await fsp.rm(dir, { recursive: true, force: true });
+  // `dropRoot`, not `rm`: the registry has been mutated five times and the
+  // store's 250 ms debounce is still owed a write. Removing the root without
+  // waiting for it is what made this the only red test on windows-latest 20
+  // (ENOTEMPTY) and one of three on every POSIX job (ENOENT) — §185.
+  await dropRoot(dir);
 });
 
 // ---------------------------------------------- what WP-78 settled, unchanged

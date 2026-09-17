@@ -21,9 +21,7 @@ its own, and — the first time only — asks once whether to write a Desktop an
 npx deckhq app
 ```
 
-**No Node on the machine?** One line does that too. Each of these checks for Node 18 or newer,
-**offers** to install it (`winget` on Windows, `brew` on macOS, your distribution's own command
-printed on Linux — never without asking), installs DeckHQ, offers the icon, and opens the window.
+**No Node on the machine?** Download and run [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd) on Windows or [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command) on macOS, or paste the matching line, which is all either file carries:
 
 ```powershell
 irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
@@ -33,10 +31,11 @@ irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
 curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
 ```
 
-Read them before you run them — [`install.ps1`](scripts/install/install.ps1) and
-[`install.sh`](scripts/install/install.sh) are two short files in this repository, served from the
-docs site byte for byte as they are here. They are not part of the package: nothing DeckHQ runs
-imports them, and they are not in the npm tarball.
+Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
+distribution's own command printed on Linux, never without asking), installs DeckHQ, offers the
+icon, and opens the window. Read them first — [`install.ps1`](scripts/install/install.ps1) and [`install.sh`](scripts/install/install.sh)
+are two short files in this repository, served from the docs site byte for byte, in no tarball and
+imported by nothing. SmartScreen may warn about the unsigned `.cmd`, and a downloaded `.command` arrives without its run bit; the two lines above have neither caveat.
 
 **A step at a time, if you prefer:** `npm install -g deckhq`, then `deckhq app`, then
 `deckhq shortcut --install --yes` for the icon.

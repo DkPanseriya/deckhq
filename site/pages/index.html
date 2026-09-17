@@ -286,9 +286,27 @@
 
 <section class="section" data-reveal>
   <div class="section-head">
-    <h2>Three ways in.</h2>
+    <h2>Download it, or paste a line.</h2>
     <p>Node 18 or newer, and nothing else. No build step, no runtime dependency, no account.</p>
   </div>
+  <div class="actions actions--start">
+    <a
+      class="btn btn--primary"
+      href="https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd"
+      >Download for Windows</a
+    >
+    <a
+      class="btn btn--primary"
+      href="https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command"
+      >Download for macOS</a
+    >
+  </div>
+  <p class="muted">
+    Each file runs the matching line below and carries nothing else. Windows SmartScreen may warn
+    about the Windows one because it is unsigned; the one line does the same thing and raises no
+    warning. On macOS a downloaded file arrives without its run bit, so the first run needs
+    <code>chmod +x ~/Downloads/Install-DeckHQ.command</code> in Terminal.
+  </p>
   <ul class="ways">
     <li>
       <h3>You already have Node</h3>

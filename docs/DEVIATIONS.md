@@ -19712,3 +19712,219 @@ omits, the report does not, and `--json`'s key-set test says so.
 - **`parse.mjs`, `codex/adapter.mjs`, `clips.js`, `goldens.mjs` and `site/build.mjs` are still
   exempt**, each for the reason written in its row, and none of them was touched.
 - **`settings-ui.js` ↔ `settings-ui-rates.js` is still a cycle**, as A-07 says it should be.
+
+## 185. CI — two tests that only ran on Windows, and six photographs of a floor that no longer exists
+
+**Date:** 17 September 2026 · **Package:** CI repair · **From:** run `35082743661` on `75b5f15` ·
+**Commits:** `a449c7b`, `906f6df`, and this one
+
+§184 is the concurrent WP-68 package's. At the time of writing it had not landed, so this section
+takes 185 and says so rather than renumbering around a neighbour.
+
+Nine test jobs and the goldens job, and eight of the ten were red, on a suite that is green on this
+Windows machine at Node 22. Nothing in the product was wrong. Three separate things were:
+
+| job(s) | line | cause |
+| --- | --- | --- |
+| all six POSIX | `not ok 1013`, `not ok 1015` | a pure function over an injected platform, using the host's `path` |
+| all seven | `not ok 1341` | a temp root removed while the store still owed a debounced write |
+| `goldens` | `6 of 16 failed` | six linux goldens last baked before three deliberate re-layouts of the floor |
+
+None of the three is a bug a user could reach, and none of the three fixes touches product
+behaviour. What they have in common is worth naming: **each one is a test that was measuring the
+machine it ran on.** §121.4 recorded that shape once for the home directory; this is the same shape
+for the path separator, for the clock, and for the platform a photograph was taken on.
+
+### 185.1 `whichOnPath` took the platform as a parameter and the separator from the host
+
+`src/core/launcher.mjs`'s `whichOnPath` is documented as pure — the platform, the environment and
+the "does this file exist" predicate are all injected — and `test/unit/launcher.test.mjs` asserts
+the exact lookup for Windows and for POSIX from one process. It then split `PATH` on
+`path.delimiter` and joined with `path.join`, both of which are the **host's**.
+
+On Windows the injected platform and the host agree, so the file was green here and red on all six
+POSIX jobs:
+
+- `not ok 1013` — a `PATH` of `C:\npm;C:\other` split on a POSIX `:` comes apart into `C`,
+  `\npm;C`, `\other`. Nothing matched `C:\npm\deckhq.cmd`, so `resolveLauncher` reported the `node`
+  fallback where the test asserted `global`.
+- `not ok 1015` — one injected Windows directory became two, so the extension probe was called
+  eight times and the test asserted four.
+
+The platform now picks `path.win32` or `path.posix` and both the delimiter and the join come from
+it. **Every production caller injects no platform**, so the platform is the host's and the two are
+the same behaviour: `deckhq shortcut` and `deckhq autostart` resolve exactly what they resolved
+before. The test's own expectations are literal strings now rather than re-derivations through the
+host's `path` — a test that computes its expectation the same way the code computes its answer can
+only ever prove the two agree, which is what let this sit.
+
+### 185.2 A temp root removed out from under a 250 ms debounce
+
+`Store.save()` is debounced by 250 ms, and `Store.flush()` exists because the daemon must not lose
+that write on shutdown. `test/unit/occupancy.test.mjs`'s chair invariant drove a real `Registry`
+through five mutations and then removed its temp root without flushing. The race was reported two
+different ways, which is why it read as two different bugs:
+
+- POSIX — the write lands after the directory is gone: `[store] error failed to write
+  /tmp/deckhq-chair-…/state.json … ENOENT`, which sets `store.writeError`.
+- Windows — the write lands while `rm` is walking the directory: `ENOTEMPTY: directory not empty,
+  rmdir …`, which failed the test from the teardown line. This was windows-latest 20's **only** red
+  line.
+
+`test/helpers/store-root.mjs` is the pattern `store.test.mjs`, `ledger.test.mjs`, `pins.test.mjs`
+and six others already use — flush, then remove — with the one thing those files have that the
+broken ones did not: the store and the `rm` are usually in different scopes, so the root remembers
+what was opened on it (`onRoot`) and `dropRoot` waits for all of it. Applied to the four files that
+made a store in a temp root and removed the root without flushing: `occupancy`, `names-pool`,
+`resume-chain`, `resume-target`.
+
+**The store still swallows the failed write and still counts it in `health`.** That is what §183
+asked for and it is untouched; what changes is that the suite stops manufacturing the failure.
+
+### 185.3 The fourteen `scanSessions failed … transcript is not JSON` warnings are a fixture
+
+Not a leak. `test/unit/state-machine.test.mjs`'s WP-92o test replaces `scanSessions` with one that
+throws, twice, to prove `health.scanErrors` counts per occurrence rather than latching — two lines
+per job, seven jobs, fourteen lines. The message is the fixture's own string.
+
+### 185.4 The goldens job — NOT fixed here, and why
+
+`--strict` is already off and the not-yet-baked path works exactly as §180 built it: ten linux
+captures reported `MISS` and cost the job nothing. The six that failed are the six that **are**
+committed, and they failed by 69–83 % of all pixels — not a drift, a different floor.
+
+`test/goldens/linux/*.png` were baked once, from CI run `33838763899` (`fbd8969`), and never again.
+`test/goldens/win32/demo.png` has been regenerated three times since — WP-93, WP-87, WP-81 — each
+time by whoever changed the floor, in the same commit. That loop cannot run for linux: `npm run
+goldens` writes `test/goldens/<host platform>/` and nobody working on this product has a Linux
+machine, so the linux set was stale on the first floor change after it was baked and will be stale
+again after the next one.
+
+So the gate is right and the data is wrong. The fix is to **remove the six**, which returns linux to
+the honest state of a platform with no set — sixteen `MISS`, exit 0, and all sixteen captures in the
+uploaded artifact for a deliberate bake per `docs/plan/RELEASE-CHECKLIST.md` §4.1.
+
+**That deletion is not in this commit**: the agent doing this work was refused permission to remove
+tracked files and, rather than reach for a weaker fix it did not believe in, left the decision with
+the owner. The weaker fix considered and rejected was to make a mismatch on a *partial* set report
+`STALE` instead of `FAIL` — defensible (a set nothing can re-bake is a set nothing is maintaining)
+but it would relax the one rule this gate has, and `test/unit/goldens-gate.test.mjs` already holds
+the opposite on purpose: *a golden that exists and disagrees stays red, strict or not*. Deleting six
+files nobody can maintain is a smaller change than teaching the gate to forgive.
+
+Until they go, the `goldens` job stays red and the nine test jobs are green.
+
+### What is NOT here
+
+- **No golden was baked, regenerated or edited.** Nothing under `public/` changed, so nothing a
+  camera could see changed.
+- **No product behaviour changed.** One production file is touched, `src/core/launcher.mjs`, and
+  only where the injected platform disagrees with the host — which no caller outside the suite does.
+- **`store.mjs` is untouched.** The ENOENT it logged was a real failed write and it was right to
+  count it (§183). The test was wrong to cause it.
+- **The remaining `os.tmpdir()` roots are left alone.** `store-root.mjs` went to the four files that
+  own a `Store` and remove their root; a test that makes a temp directory with no store in it is not
+  in this race.
+
+## 186. Release 1.4.0 — two files a stranger double-clicks, and the certificate that is still not bought
+
+**Date:** 17 September 2026 · **Package:** release preparation · **Commits:** `918311c`, `89a20f0`,
+`20d81c5`, `f1a95f1`, and this one
+
+The owner asked for "an installer the user can simply download and run, no manual flows". The
+literal answer to that is WP-76, a signed `deckhq.exe`, and `docs/plan/SEA-FEASIBILITY.md`
+recommends **not now**: a bundler, an asset branch through the HTTP layer, about $300 a year of
+certificates and about 110 MB per platform. That recommendation stands and nothing here changes it.
+
+What is here is the cheap half of the same ask. A person who will not paste a line into PowerShell
+is not asking for a compiled binary; they are asking for a file with an icon that they can
+double-click. That file is three lines long.
+
+### 186.1 The two launchers
+
+`scripts/install/Install-DeckHQ.cmd` and `scripts/install/Install-DeckHQ.command` each run the
+one-liner this project already publishes, and carry nothing else:
+
+| file | what it runs | why it is shaped that way |
+| --- | --- | --- |
+| `Install-DeckHQ.cmd` | `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm …/install.ps1 \| iex"` | `-ExecutionPolicy Bypass` for this one process only, because a machine that never ran a script has `Restricted`; `pause` at the end, because a `.cmd` run from Explorer takes its window and the installer's output with it when the last line finishes |
+| `Install-DeckHQ.command` | `curl -fsSL …/install.sh \| sh` | `.command` is the extension Finder opens in Terminal; the executable bit is in git (`git update-index --chmod=+x`), so the mode survives a checkout |
+
+**Neither launcher is a second installer.** It is the same script, fetched from the same Pages
+origin, doing the same asking: Node 18 or newer offered rather than installed, the icon offered
+rather than written, safe to run twice. A launcher that duplicated any of that would be a second
+thing to keep true, and the honest test for that is the one written:
+`test/unit/install-scripts.test.mjs` asserts each file names `dkpanseriya.github.io` and **no other
+host at all**, and that the `.cmd` is CRLF throughout.
+
+### 186.2 Two things they cannot do, said where they are offered
+
+- **Windows SmartScreen may warn.** The file is unsigned, which is the same $300 a year WP-76 is
+  deferred over. The README, the site's Install page and the home install band all say so, and all
+  three say the one-line paste does the same thing and raises no warning.
+- **A downloaded `.command` arrives without its run bit.** The executable bit is in the tree and in
+  the release asset, and a browser download does not keep it, so the first double-click on macOS can
+  fail. The same three places say so and print `chmod +x ~/Downloads/Install-DeckHQ.command`. This
+  is a manual flow, which is exactly what the ask wanted gone — it is recorded here rather than
+  hidden, and it is the strongest remaining argument for eventually paying for WP-76.
+
+### 186.3 What the checklist surfaced
+
+- **The release job now uploads eleven assets, not nine.** `docs/plan/RELEASE-CHECKLIST.md` step 10
+  is updated to name them, and to say to open the downloaded `.cmd` and check its line endings.
+- **The tarball is unchanged in kind and larger in size.** 273 files, 1,162.5 kB packed, 3.47 MB
+  unpacked, against 225 files and 868.3 kB at 1.3.0. No `scripts/`, no `test/`, no `docs/`, no
+  `.claude/`, no golden; `src/studio/briefs/planner.md`, all ten brand assets and the sixty
+  `public/render/` parts present. Neither launcher is in it, which is the same rule as the two
+  scripts they run: an installer inside the package it installs is of no use to anyone.
+- **The release body fits, because the cap does its job.** The raw `1.4.0` section is 138,232
+  characters, well over the 125,000 a GitHub Release body takes.
+  `changelog-section.mjs --release-body --max-chars 120000 1.4.0` renders **99,539** — the
+  Highlights whole, then bullets in heading order to the 100,000 budget, then a line linking the
+  full section at the tag — and exits 0. The pre-check in `publish.yml` runs that exact command
+  before `npm publish`, so this was observed and not assumed (§138).
+- **The README ceiling is a real gate and it fired.** The first draft of the Install section added
+  eleven lines and `test/unit/readme.test.mjs` failed at 260 against 250. The section was folded
+  down rather than the ceiling raised; the README is 249 lines.
+- **`vscode/package.json` stays on 0.1.0.** The checklist's step 6 says it is a different artifact
+  with its own version. `package.json`, `package-lock.json`, `plugin/.claude-plugin/plugin.json` and
+  `.claude-plugin/marketplace.json` are the four that move together.
+
+### 186.4 `npm publish --dry-run` failed, and only `npm publish --dry-run`
+
+Step 7 of the checklist is the rehearsal: `npm publish --dry-run --access public`, which runs
+`prepublishOnly`, which runs the suite. It was red on one line, and the same suite run as
+`npm test` was green:
+
+```
+✖ `npx deckhq app` works from the tarball, cold
+  AssertionError: expected one tarball, got none
+```
+
+npm hands every flag it was given to its child processes as an `npm_config_*` variable, and
+`test/integration/tarball.test.mjs` builds its child environment from `process.env`. So under the
+dry run, and nowhere else, the `npm pack` inside the test inherited `npm_config_dry_run=true`,
+printed a file list, wrote no `.tgz`, and failed the assertion counting them.
+
+Nothing about the package was wrong. The fix is one line — `npm_config_dry_run: 'false'` beside the
+cache, fund and audit overrides already in that environment block — and the test now does what its
+own header says it does, `npm pack` into a temp directory, whoever its parent is.
+
+**This was never going to be caught by CI.** The `publish` job runs `npm publish`, without
+`--dry-run`, so the variable is absent and the test packs normally; the `verify` matrix runs
+`npm test` directly. The only command that reproduced it is the one a human types once per release,
+immediately before the irreversible step, which is the worst place in this project to meet a red
+line for a reason that is not real. §138 put the release-body check before the publish for the same
+reason.
+
+### What is NOT here
+
+- **No tag, no push, no publish.** Everything above step 7 of the checklist and nothing at or past
+  it.
+- **No signed executable.** WP-76's acceptance criterion is a signed binary per platform and it is
+  not met. The row in `08-PLAN-V2-100X.md` §9 says so.
+- **Nothing under `public/` changed**, so no golden moved and none was re-baked. The six stale
+  linux goldens §185.4 deleted are still deleted, and the `goldens` job still reports sixteen
+  `MISS` on linux until somebody bakes them.
+- **No site picture was retaken.** Checklist step 1.1 applies when the interface moved; the site
+  changes here are copy and two buttons.
