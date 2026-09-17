@@ -142,7 +142,8 @@ npm pack --dry-run
 Expect **198 files, 730.1 kB packed, 2.4 MB unpacked** for 1.3.0 (1.2.0 was 42 files and 225 kB;
 the growth is the split modules, the render parts and the two PWA icons). On `main` after WP-66 and
 WP-75 it reads **225 files, 868.3 kB packed, 2.8 MB unpacked** — Studio, `src/cli/pin.mjs` and the
-longer README. Read the list and
+longer README. At 1.4.0 it reads **273 files, 1,162.5 kB packed, 3.47 MB unpacked** — the crew, the
+interior, the Look section and sixty `public/render/` parts. Read the list and
 confirm `bin/`, `src/` (including `src/data/rates.json` and `src/core/publisher-key.mjs`),
 `public/` (including `deck.js`, `palette.js`, `settings-ui.js`, `minifloor.js`, `snapshot.js`,
 `sound.js`, `coach-marks.js`, `floor-rule.js`, all forty `render/*` parts,

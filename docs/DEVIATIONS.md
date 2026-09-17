@@ -19825,3 +19825,79 @@ Until they go, the `goldens` job stays red and the nine test jobs are green.
 - **The remaining `os.tmpdir()` roots are left alone.** `store-root.mjs` went to the four files that
   own a `Store` and remove their root; a test that makes a temp directory with no store in it is not
   in this race.
+
+## 186. Release 1.4.0 — two files a stranger double-clicks, and the certificate that is still not bought
+
+**Date:** 17 September 2026 · **Package:** release preparation · **Commits:** `918311c`, `89a20f0`,
+`20d81c5`, `f1a95f1`, and this one
+
+The owner asked for "an installer the user can simply download and run, no manual flows". The
+literal answer to that is WP-76, a signed `deckhq.exe`, and `docs/plan/SEA-FEASIBILITY.md`
+recommends **not now**: a bundler, an asset branch through the HTTP layer, about $300 a year of
+certificates and about 110 MB per platform. That recommendation stands and nothing here changes it.
+
+What is here is the cheap half of the same ask. A person who will not paste a line into PowerShell
+is not asking for a compiled binary; they are asking for a file with an icon that they can
+double-click. That file is three lines long.
+
+### 186.1 The two launchers
+
+`scripts/install/Install-DeckHQ.cmd` and `scripts/install/Install-DeckHQ.command` each run the
+one-liner this project already publishes, and carry nothing else:
+
+| file | what it runs | why it is shaped that way |
+| --- | --- | --- |
+| `Install-DeckHQ.cmd` | `powershell -NoProfile -ExecutionPolicy Bypass -Command "irm …/install.ps1 \| iex"` | `-ExecutionPolicy Bypass` for this one process only, because a machine that never ran a script has `Restricted`; `pause` at the end, because a `.cmd` run from Explorer takes its window and the installer's output with it when the last line finishes |
+| `Install-DeckHQ.command` | `curl -fsSL …/install.sh \| sh` | `.command` is the extension Finder opens in Terminal; the executable bit is in git (`git update-index --chmod=+x`), so the mode survives a checkout |
+
+**Neither launcher is a second installer.** It is the same script, fetched from the same Pages
+origin, doing the same asking: Node 18 or newer offered rather than installed, the icon offered
+rather than written, safe to run twice. A launcher that duplicated any of that would be a second
+thing to keep true, and the honest test for that is the one written:
+`test/unit/install-scripts.test.mjs` asserts each file names `dkpanseriya.github.io` and **no other
+host at all**, and that the `.cmd` is CRLF throughout.
+
+### 186.2 Two things they cannot do, said where they are offered
+
+- **Windows SmartScreen may warn.** The file is unsigned, which is the same $300 a year WP-76 is
+  deferred over. The README, the site's Install page and the home install band all say so, and all
+  three say the one-line paste does the same thing and raises no warning.
+- **A downloaded `.command` arrives without its run bit.** The executable bit is in the tree and in
+  the release asset, and a browser download does not keep it, so the first double-click on macOS can
+  fail. The same three places say so and print `chmod +x ~/Downloads/Install-DeckHQ.command`. This
+  is a manual flow, which is exactly what the ask wanted gone — it is recorded here rather than
+  hidden, and it is the strongest remaining argument for eventually paying for WP-76.
+
+### 186.3 What the checklist surfaced
+
+- **The release job now uploads eleven assets, not nine.** `docs/plan/RELEASE-CHECKLIST.md` step 10
+  is updated to name them, and to say to open the downloaded `.cmd` and check its line endings.
+- **The tarball is unchanged in kind and larger in size.** 273 files, 1,162.5 kB packed, 3.47 MB
+  unpacked, against 225 files and 868.3 kB at 1.3.0. No `scripts/`, no `test/`, no `docs/`, no
+  `.claude/`, no golden; `src/studio/briefs/planner.md`, all ten brand assets and the sixty
+  `public/render/` parts present. Neither launcher is in it, which is the same rule as the two
+  scripts they run: an installer inside the package it installs is of no use to anyone.
+- **The release body fits, because the cap does its job.** The raw `1.4.0` section is 138,232
+  characters, well over the 125,000 a GitHub Release body takes.
+  `changelog-section.mjs --release-body --max-chars 120000 1.4.0` renders **99,539** — the
+  Highlights whole, then bullets in heading order to the 100,000 budget, then a line linking the
+  full section at the tag — and exits 0. The pre-check in `publish.yml` runs that exact command
+  before `npm publish`, so this was observed and not assumed (§138).
+- **The README ceiling is a real gate and it fired.** The first draft of the Install section added
+  eleven lines and `test/unit/readme.test.mjs` failed at 260 against 250. The section was folded
+  down rather than the ceiling raised; the README is 249 lines.
+- **`vscode/package.json` stays on 0.1.0.** The checklist's step 6 says it is a different artifact
+  with its own version. `package.json`, `package-lock.json`, `plugin/.claude-plugin/plugin.json` and
+  `.claude-plugin/marketplace.json` are the four that move together.
+
+### What is NOT here
+
+- **No tag, no push, no publish.** Everything above step 7 of the checklist and nothing at or past
+  it.
+- **No signed executable.** WP-76's acceptance criterion is a signed binary per platform and it is
+  not met. The row in `08-PLAN-V2-100X.md` §9 says so.
+- **Nothing under `public/` changed**, so no golden moved and none was re-baked. The six stale
+  linux goldens §185.4 deleted are still deleted, and the `goldens` job still reports sixteen
+  `MISS` on linux until somebody bakes them.
+- **No site picture was retaken.** Checklist step 1.1 applies when the interface moved; the site
+  changes here are copy and two buttons.
