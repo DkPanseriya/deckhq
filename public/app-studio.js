@@ -13,15 +13,8 @@
  * mode that is off on every project until somebody turns it on.
  */
 
-import {
-  findAgent,
-  latestSnapshot,
-  panel,
-  projectFilter,
-  selectAgent,
-  selectedId,
-  toast,
-} from './app-state.js';
+import { currentProject, panel, selectAgent, toast } from './app-state.js';
+import { openStudioBoard } from './board-ui.js';
 
 /** How often the page asks whether the scan has found the planner yet. */
 export const PLANNER_POLL_MS = 2500;
@@ -40,12 +33,6 @@ export const PLANNER_POLL_TRIES = 12;
  * rather than a keystroke.
  */
 export const HIRE_RUNTIME = 'claude-code';
-
-/** The project the palette's Studio commands act on, or null. */
-export function currentProject() {
-  const wanted = projectFilter || findAgent(selectedId)?.projectId;
-  return (latestSnapshot?.projects || []).find((p) => p.id === wanted) || null;
-}
 
 /**
  * The last `GET /api/studio` answer, and the directory it was about.
@@ -235,5 +222,12 @@ export const studioPalette = {
   onOpen: refreshStudioRoles,
 };
 
-/** The two palette actions Studio owns: plan a project, hire a role. */
-export const studioActions = { studioPlan, studioHire };
+/**
+ * The palette actions Studio owns: plan a project, hire a role, open the board.
+ *
+ * `studioBoard` is `board-ui.js`'s own opener, passed through rather than
+ * wrapped: the board is a surface with a life of its own — it is also opened
+ * from the panel's Studio block — and a wrapper here would be a second door
+ * with a second chance to be subtly different from the first.
+ */
+export const studioActions = { studioPlan, studioHire, studioBoard: openStudioBoard };

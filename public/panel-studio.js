@@ -26,6 +26,10 @@
  */
 
 import { currentId, displayedAgent } from './panel-state.js';
+// WP-69. The board's own opener. This block is drawn only for a project that
+// has granted Studio consent, so it IS the Studio-enabled project's way in —
+// the other is `Studio: board` in ⌘K.
+import { openStudioBoard } from './board-ui.js';
 
 /** @typedef {ReturnType<typeof import('./panel-dom.js').buildPanelDom>} PanelDom */
 
@@ -176,6 +180,21 @@ export function createStudioPart(ctx) {
       open.setAttribute('aria-label', `Open ${artefact.name} in your editor`);
       open.addEventListener('click', () => openArtefact(artefact.name, status.line));
       row.appendChild(open);
+
+      // WP-69, §5.4. `board.json` is the one artefact this product can DRAW,
+      // so its row carries the way to it. Beside `[ open ]` rather than
+      // instead of it: the file is still the user's to edit, and the board is
+      // a second reading of it rather than a replacement for the text.
+      if (artefact.key === 'board') {
+        const board = document.createElement('button');
+        board.type = 'button';
+        board.className = 'studio-open';
+        board.textContent = '[ board ]';
+        board.disabled = status.state !== 'valid';
+        board.setAttribute('aria-label', 'Open the Studio board for this project');
+        board.addEventListener('click', () => openStudioBoard());
+        row.appendChild(board);
+      }
 
       studioList.appendChild(row);
     }

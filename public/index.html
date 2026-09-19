@@ -271,6 +271,55 @@
           <div class="surface-body" id="deck-body"></div>
         </div>
 
+        <!-- WP-69, docs/07-STUDIO-DESIGN.md §5.4. The Studio board: six
+             columns beside the floor, and a real table underneath carrying the
+             same cards in the same order, so a screen reader gets the board a
+             sighted reader gets — the deck's rule (§10), not a new one.
+
+             A full-surface view, so it carries what every one of them carries
+             (WP-84, public/surfaces.js): "Back to floor" top left, the
+             shortcut in the title, ✕ top right, and Escape.
+
+             Hidden on every floor in the product as it ships: Studio is opt-in
+             per project and off by default everywhere (§1), and this opens
+             only from `Studio: board` in ⌘K or the panel's Studio block. Its
+             contents are built by public/board-ui.js; this is the shell. -->
+        <div
+          class="studio-board"
+          id="studio-board"
+          tabindex="-1"
+          role="group"
+          aria-label="The Studio board. Six columns, and every card as a table."
+          data-surface="studio-board"
+          hidden
+        >
+          <div class="surface-chrome">
+            <button type="button" class="surface-back" id="studio-board-back">
+              <span class="surface-arrow" aria-hidden="true">←</span> Back to floor
+            </button>
+            <h2 class="surface-title" id="surface-title-studio-board">
+              Studio board <kbd>Esc</kbd>
+            </h2>
+            <button
+              type="button"
+              class="surface-close"
+              id="studio-board-close"
+              aria-label="Close the Studio board (Esc)"
+            >
+              ✕
+            </button>
+          </div>
+          <div class="board-bar">
+            <p class="board-project" id="board-project"></p>
+            <button type="button" class="btn" id="board-new-card">New card</button>
+          </div>
+          <p class="board-hint" id="board-hint">
+            Drag a card between columns, or focus one and press
+            <kbd>[</kbd> and <kbd>]</kbd> — the arrow keys do the same. <kbd>Enter</kbd> opens it.
+          </p>
+          <div class="surface-body" id="studio-board-body"></div>
+        </div>
+
         <!-- The idle projects (WP-60). This was a column of repo names drawn
              down the bottom-right of the canvas, permanently, every line of it
              saying "nobody is working here" — the largest thing on the floor of
@@ -517,6 +566,109 @@
       </div>
       <div class="dialog-foot">
         <button type="button" class="btn btn--primary" id="identity-go">Save</button>
+      </div>
+    </dialog>
+
+    <!-- WP-69 · the card editor (docs/07-STUDIO-DESIGN.md §5.4). One small
+         dialog for creating a card and for editing one: the same five fields
+         and the same route (`POST /api/studio/card`, op `create` or `edit`), so
+         there is one shape a card can have and one place it is refused.
+
+         It is also where the board ASKS. §5.4: dragging a card into Ready with
+         no assignee "asks which role and refuses rather than choosing" — and
+         the place an assignee is named is this dialog, so that is where the
+         question is put rather than in a second box that would then have to
+         hand over to this one anyway. Built by public/board-card.js. -->
+    <dialog id="card-dialog" class="dialog" aria-labelledby="card-dialog-title">
+      <form method="dialog" class="dialog-head">
+        <h2 id="card-dialog-title">Card</h2>
+        <button type="submit" class="icon-btn" id="card-dialog-close" aria-label="Close">
+          &times;
+        </button>
+      </form>
+      <div class="dialog-body">
+        <p class="dialog-ask" id="card-ask" hidden></p>
+
+        <label class="field">
+          <span class="field-label">Title</span>
+          <input
+            type="text"
+            id="card-title"
+            class="field-input"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="200"
+            placeholder="What is done when this card is done"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Acceptance criteria</span>
+          <textarea
+            id="card-acceptance"
+            class="field-input"
+            rows="4"
+            placeholder="One per line"
+          ></textarea>
+        </label>
+        <p class="field-note">
+          One per line. These are what the brief tells the session it is being measured against, and
+          a card with none says so rather than pretending.
+        </p>
+
+        <label class="field">
+          <span class="field-label">Milestone (optional)</span>
+          <input
+            type="text"
+            id="card-milestone"
+            class="field-input"
+            spellcheck="false"
+            autocomplete="off"
+            maxlength="64"
+            placeholder="m2"
+          />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Assignee role</span>
+          <select id="card-role" class="field-input"></select>
+        </label>
+        <p class="field-note">
+          From roster.json. A card with no assignee is a card nobody has agreed to, and moving one
+          into Ready asks for a role rather than picking one.
+        </p>
+
+        <div class="field-pair">
+          <label class="field">
+            <span class="field-label">Budget — tokens</span>
+            <input
+              type="text"
+              id="card-tokens"
+              class="field-input"
+              inputmode="numeric"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="none"
+            />
+          </label>
+          <label class="field">
+            <span class="field-label">Budget — minutes</span>
+            <input
+              type="text"
+              id="card-minutes"
+              class="field-input"
+              inputmode="numeric"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="none"
+            />
+          </label>
+        </div>
+
+        <p class="dialog-error" id="card-error" hidden></p>
+      </div>
+      <div class="dialog-foot">
+        <button type="button" class="btn btn--primary" id="card-save">Save card</button>
       </div>
     </dialog>
 
