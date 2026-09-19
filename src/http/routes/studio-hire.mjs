@@ -34,6 +34,8 @@
  *
  * It writes no card and no column — `POST /api/studio/card` is the only writer
  * of a column and `test/unit/studio-invariant.test.mjs` fails on a second one.
+ * WP-69's `{ cardId }` does not change that: it says which card the BRIEF is
+ * about, the board having already been written by the move that led here.
  * It keeps no session list: the role→`agentId` record comes from the ORDINARY
  * scan, through the registry's own event, matched by the worktree directory
  * the session is running in (§9 invariant 4).
@@ -146,6 +148,55 @@ export function cardForRole(board, roleName, done = ['done']) {
 }
 
 /**
+ * THE CARD A HIRE WAS ASKED FOR — WP-69, `docs/07-STUDIO-DESIGN.md` §5.4.
+ *
+ * §5.4: *dragging a card into Ready with an assignee spawns or continues that
+ * role's session with the card as its brief.* That is a different question
+ * from `cardForRole()` above, which answers "what is this role's next card"
+ * for a Hire pressed from the palette. Here the user has named a card, and the
+ * brief must carry THAT one — otherwise a board with two cards on a role would
+ * quietly start the wrong one, and the drag the user just made would have had
+ * no effect on what the session was told to do.
+ *
+ * Refused rather than fallen back on, in both failure shapes, because a fall
+ * back to `cardForRole()` is exactly the silent wrong-card this exists to stop:
+ *
+ *   `card-unknown`     no card with that id on this board
+ *   `card-not-theirs`  the card is assigned to a different role. §5.4 says the
+ *                      board asks and never guesses, and reassigning a card as
+ *                      a side effect of a Hire would be a column writer in all
+ *                      but name — the assignee is a card EDIT, through
+ *                      `POST /api/studio/card`.
+ *
+ * @param {{cards?:Array<any>}} board
+ * @param {string} roleName the role being hired
+ * @param {string} cardId
+ * @returns {{card:any}|{error:string, reason:string}}
+ */
+export function cardAsked(board, roleName, cardId) {
+  const card = (board?.cards || []).find((c) => String(c.id || '') === cardId);
+  if (!card) {
+    return {
+      error:
+        `there is no card called "${cardId}" on this board. A Hire that named a card and then ` +
+        'started a different one would be a board you could not trust.',
+      reason: 'card-unknown',
+    };
+  }
+  const on = String(card.role || '');
+  if (on.toLowerCase() !== String(roleName || '').toLowerCase()) {
+    return {
+      error:
+        `card "${cardId}" is assigned to ${on ? `"${on}"` : 'nobody'}, not to "${roleName}". ` +
+        'Change the assignee on the card first — that is an edit, and an edit is the only ' +
+        'thing that changes one.',
+      reason: 'card-not-theirs',
+    };
+  }
+  return { card };
+}
+
+/**
  * The session a hire turned into, or null.
  *
  * Matched by the WORKTREE DIRECTORY, which is what makes this simpler than the
@@ -252,6 +303,20 @@ export function registerHire(router, ctx, helpers) {
       });
     }
 
+    // WP-69. A card id, when the board sent one. One role only: `{ roles: […] }`
+    // is six people and one card cannot be six people's work, so naming both is
+    // refused rather than applied to whichever role came first.
+    const cardId = typeof body.cardId === 'string' ? body.cardId.trim() : '';
+    if (cardId && asked.roles.length !== 1) {
+      return sendJson(res, 400, {
+        error:
+          'a cardId names the work for one role, and this Hire names ' +
+          `${asked.roles.length}. Hire them one at a time, or leave the card out and each ` +
+          'role picks up the first card already assigned to it.',
+        reason: 'card-many-roles',
+      });
+    }
+
     const runtime = String(body.runtime || DEFAULT_HIRE_RUNTIME);
     const adapter = ctx.adapters?.getAdapter?.(runtime);
     if (!adapter) return sendError(res, 404, `Unknown runtime "${runtime}"`);
@@ -299,10 +364,29 @@ export function registerHire(router, ctx, helpers) {
       plan.push({ name: checked.name, role });
     }
 
+    const board = studio.readBoard().board || { cards: [] };
+    // WP-69. Resolved HERE, with everything else that can be refused, and
+    // before the first `git worktree add` — §188.2's rule, and a named card
+    // that does not exist is exactly the kind of request that must leave no
+    // worktree behind.
+    /** @type {any} */
+    let named = null;
+    if (cardId) {
+      const found = cardAsked(board, plan[0].name, cardId);
+      if ('error' in found) {
+        return sendJson(res, 400, {
+          error: found.error,
+          reason: found.reason,
+          role: plan[0].name,
+          cardId,
+        });
+      }
+      named = found.card;
+    }
+
     // ---- From here on, per role, and a failure is reported rather than -----
     // ---- rolled back: a worktree that exists is a fact.                 ----
 
-    const board = studio.readBoard().board || { cards: [] };
     const live = new Set((ctx.registry?.agents || []).map((a) => a.id));
     const startedAt = clockNow();
     /** @type {any[]} */
@@ -325,7 +409,10 @@ export function registerHire(router, ctx, helpers) {
         continue;
       }
 
-      const card = cardForRole(board, name);
+      // The card the board named, when it named one; otherwise the role's own
+      // next card. Never both and never a fallback between them — see
+      // `cardAsked()`.
+      const card = named || cardForRole(board, name);
       // §6.1: a brief is never regenerated under a running session. "Running"
       // is the ordinary registry answer about the id the roster already holds.
       const running = !!(role.agentId && live.has(role.agentId));
