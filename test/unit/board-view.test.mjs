@@ -116,7 +116,12 @@ const BOARD = {
   version: 1,
   projectKey: '1f4a9c3e7b20d581',
   cards: [
-    card({ id: 'c3', title: 'Refund path returns the fee', column: 'in_progress', role: 'backend' }),
+    card({
+      id: 'c3',
+      title: 'Refund path returns the fee',
+      column: 'in_progress',
+      role: 'backend',
+    }),
     card({ id: 'c1', title: 'Write the schema', column: 'backlog', role: 'backend' }),
     card({
       id: 'c7',
@@ -267,12 +272,7 @@ test('a card shows its title, its assignee, its acceptance count, its budget and
   assert.equal(byClass(c2, 'board-card-role')[0].textContent, 'docs');
   assert.deepEqual(
     byClass(c2, 'board-chip').map((chip) => chip.textContent),
-    [
-      '3 criteria',
-      '400,000 tokens · 90 min',
-      '80% spent, 1/4 criteria met',
-      'outside milestone 2',
-    ],
+    ['3 criteria', '400,000 tokens · 90 min', '80% spent, 1/4 criteria met', 'outside milestone 2'],
   );
   // Both counts, because §11.5 shows both and either trips the stop.
   assert.equal(budgetText(BOARD.cards[3]), '400,000 tokens · 90 min');
