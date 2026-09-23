@@ -24,9 +24,24 @@
  * the focus on the role control. Nothing is started; the caller has already
  * decided not to guess.
  *
- * Every string is set with `textContent` or through a form value. There is no
- * `innerHTML` in this file.
+ * ## And it is where a handover is reviewed from the board (WP-70)
+ *
+ * §6's two presses are on the panel, where the session's own diff is. They
+ * are here too, because the board is where a person looks at a card: a chip
+ * says a handover arrived, and opening the card shows what it said and offers
+ * the same two answers. The wording, the section order and the columns Accept
+ * may name are IMPORTED from `panel-handover.js` rather than restated — two
+ * copies of a sentence is two sentences, and this one is a quotation.
+ *
+ * The handover is DRAWN, never edited: it is a file the agent wrote.
+ *
+ * Every string is set with `textContent`, through a form value, or through
+ * `renderMarkdown`, which builds DOM and never touches `innerHTML`. There is
+ * no `innerHTML` in this file.
  */
+
+import { renderMarkdown } from './markdown.js';
+import { ACCEPT_COLUMNS, SECTION_LABELS, handoverState } from './panel-handover.js';
 
 /** The dialog's own elements, looked up once. @param {Document} doc */
 function partsOf(doc) {
@@ -43,6 +58,16 @@ function partsOf(doc) {
     error: doc.getElementById('card-error'),
     save: /** @type {any} */ (doc.getElementById('card-save')),
     close: /** @type {any} */ (doc.getElementById('card-dialog-close')),
+    // WP-70. Absent in a document built before this package, which is why
+    // every use below is optional-chained: this dialog is also driven by
+    // `test/unit/board-card.test.mjs` against a stub.
+    handover: /** @type {any} */ (doc.getElementById('card-handover')),
+    handoverState: doc.getElementById('card-handover-state'),
+    handoverQuote: /** @type {any} */ (doc.getElementById('card-handover-quote')),
+    handoverBody: doc.getElementById('card-handover-body'),
+    handoverColumn: /** @type {any} */ (doc.getElementById('card-handover-column')),
+    handoverAccept: /** @type {any} */ (doc.getElementById('card-handover-accept')),
+    handoverBounce: /** @type {any} */ (doc.getElementById('card-handover-bounce')),
   };
 }
 
@@ -117,11 +142,15 @@ export function acceptanceText(card) {
  * Wire the card editor.
  *
  * @param {{document?:Document,
- *          onSave:(card:any, cardId:string|null) => Promise<{error?:string}|void>}} opts
- *   `onSave` is the CALLER'S — this module posts nothing. It resolves to
- *   `{ error }` when the daemon refused, and the message is shown inline and
- *   the dialog stays open, because a refusal that closed the form would take
- *   the user's typing with it.
+ *          onSave:(card:any, cardId:string|null) => Promise<{error?:string}|void>,
+ *          onDecide?:(decision:'accept'|'bounce', extra:{column?:string, note?:string},
+ *                     cardId:string) => Promise<{error?:string}|void>,
+ *          ask?:(question:string) => (string|null)}} opts
+ *   `onSave` and `onDecide` are the CALLER'S — this module posts nothing.
+ *   Each resolves to `{ error }` when the daemon refused, and the message is
+ *   shown inline and the dialog stays open, because a refusal that closed the
+ *   form would take the user's typing with it. `ask` is the bounce note's
+ *   prompt, a seam so a test can answer it.
  */
 export function createCardEditor(opts) {
   const doc = opts.document || document;
@@ -183,9 +212,10 @@ export function createCardEditor(opts) {
   }
 
   /**
-   * @param {{card?:any, roles?:Array<any>, ask?:string|null}} what
+   * @param {{card?:any, roles?:Array<any>, ask?:string|null, handover?:any}} what
    *   `card` absent means create. `ask` is §5.4's question, shown above the
    *   fields when the board sent the user here rather than the user opening it.
+   *   `handover` is WP-70's, and a card with none simply has no block.
    */
   function open(what = {}) {
     const card = what.card || null;
@@ -204,6 +234,7 @@ export function createCardEditor(opts) {
       el.ask.textContent = what.ask || '';
       el.ask.hidden = !what.ask;
     }
+    showHandover(card ? what.handover || null : null);
     if (el.save) el.save.textContent = card ? 'Save card' : 'Create card';
     el.dialog?.showModal?.();
     // The question, if there was one, is about the role — so that is where the
@@ -237,10 +268,98 @@ export function createCardEditor(opts) {
     }
   }
 
+  /**
+   * Draw the handover this card has, or take the block away.
+   *
+   * It is drawn, not edited. The state line, the section order and the
+   * columns Accept offers all come from `panel-handover.js`, so the board and
+   * the panel say the same words about the same file.
+   *
+   * @param {any} handover one entry of `GET /api/studio`'s `handovers`
+   */
+  function showHandover(handover) {
+    if (!el.handover) return;
+    if (!handover) {
+      el.handover.hidden = true;
+      if (el.handoverBody) el.handoverBody.textContent = '';
+      return;
+    }
+    if (el.handoverState) el.handoverState.textContent = handoverState(handover);
+    if (el.handoverQuote) {
+      // The count is the AGENT'S sentence, whole, as the daemon built it.
+      // Nothing here parses a number out of it (§7).
+      el.handoverQuote.textContent = handover.quote || '';
+      el.handoverQuote.hidden = !handover.quote;
+    }
+    if (el.handoverBody) {
+      el.handoverBody.textContent = '';
+      for (const [key, label] of SECTION_LABELS) {
+        const text = handover.sections?.[key];
+        const part = doc.createElement('div');
+        part.className = 'handover-part';
+        const head = doc.createElement('h4');
+        head.className = 'handover-part-heading';
+        head.textContent = label;
+        part.appendChild(head);
+        if (text == null || !String(text).trim()) {
+          const gap = doc.createElement('p');
+          gap.className = 'handover-missing';
+          gap.textContent = text == null ? 'not in the handover.' : 'nothing under the heading.';
+          part.appendChild(gap);
+        } else {
+          part.appendChild(renderMarkdown(String(text), doc));
+        }
+        el.handoverBody.appendChild(part);
+      }
+    }
+    if (el.handoverColumn) {
+      el.handoverColumn.textContent = '';
+      for (const column of ACCEPT_COLUMNS) {
+        const option = doc.createElement('option');
+        option.value = column;
+        option.textContent = column;
+        el.handoverColumn.appendChild(option);
+      }
+    }
+    el.handover.hidden = false;
+  }
+
+  /**
+   * @param {'accept'|'bounce'} decision
+   */
+  async function decide(decision) {
+    if (busy || !editingId || typeof opts.onDecide !== 'function') return;
+    /** @type {{column?:string, note?:string}} */
+    const extra = {};
+    if (decision === 'accept') extra.column = el.handoverColumn?.value || ACCEPT_COLUMNS[0];
+    else {
+      const asker = opts.ask || ((q) => globalThis.prompt?.(q));
+      const note = asker('Why is this going back? The note joins their next brief.');
+      // An empty answer is a CANCEL, not a bounce with no reason: the daemon
+      // refuses a note-less bounce, and sending one to be refused would be
+      // this dialog turning a change of mind into an error message.
+      if (note == null || !String(note).trim()) return;
+      extra.note = String(note).trim();
+    }
+    busy = true;
+    try {
+      const outcome = await opts.onDecide(decision, extra, editingId);
+      if (outcome && outcome.error) {
+        showError(outcome.error);
+        return;
+      }
+      close();
+    } finally {
+      busy = false;
+    }
+  }
+
+  el.handoverAccept?.addEventListener?.('click', () => void decide('accept'));
+  el.handoverBounce?.addEventListener?.('click', () => void decide('bounce'));
   el.save?.addEventListener?.('click', () => void save());
   // The ✕ is a `type="submit"` inside a `method="dialog"` form, which is how
   // every other dialog in this document closes; nothing here calls a global.
   el.close?.addEventListener?.('click', () => showError(null));
 
-  return { open, close, save, isOpen: () => Boolean(el.dialog?.open) };
+  return { open, close, save, decide, isOpen: () => Boolean(el.dialog?.open) };
 }

@@ -183,6 +183,30 @@ export function buildPanelDom() {
   studioNote.className = 'review-note studio-note';
   studioSection.append(studioHeading, studioList, studioNote);
 
+  // WP-70 · THE HANDOVER, above WHAT IT SAID and beside WHAT CHANGED
+  // (`07-STUDIO-DESIGN.md` §6). This session believes its card is done and has
+  // written a file saying so; the diff of its worktree is already drawn at the
+  // bottom of this same panel, because a hired role's session runs IN that
+  // worktree and `/api/changes` follows the session. So the two halves of a
+  // review are on one screen: what it says it did, and what the tree says.
+  //
+  // Hidden on every session that has no handover, which is all of them until
+  // an agent writes one.
+  const handoverSection = document.createElement('section');
+  handoverSection.className = 'review-section studio-handover';
+  handoverSection.setAttribute('aria-label', 'Handover');
+  handoverSection.hidden = true;
+  const handoverHeading = document.createElement('h3');
+  handoverHeading.className = 'review-heading';
+  handoverHeading.textContent = 'Handover';
+  const handoverState = document.createElement('p');
+  handoverState.className = 'review-note handover-state';
+  const handoverBody = document.createElement('div');
+  handoverBody.className = 'handover-body';
+  const handoverActions = document.createElement('div');
+  handoverActions.className = 'handover-actions';
+  handoverSection.append(handoverHeading, handoverState, handoverBody, handoverActions);
+
   const saidSection = document.createElement('section');
   saidSection.className = 'review-section';
   const saidHeading = document.createElement('h3');
@@ -252,7 +276,14 @@ export function buildPanelDom() {
   changedFoot.appendChild(expandAllBtn);
   changedSection.append(changedHeadRow, changedEl);
 
-  body.append(permissionSection, studioSection, saidSection, threadDetails, changedSection);
+  body.append(
+    permissionSection,
+    studioSection,
+    handoverSection,
+    saidSection,
+    threadDetails,
+    changedSection,
+  );
 
   // Actions: three weighted buttons on 1/2/3, everything else behind ⋯ more.
   const actionsWrap = document.createElement('div');
@@ -325,6 +356,11 @@ export function buildPanelDom() {
     studioHeading,
     studioList,
     studioNote,
+    handoverSection,
+    handoverHeading,
+    handoverState,
+    handoverBody,
+    handoverActions,
     saidSection,
     saidHeading,
     saidEl,

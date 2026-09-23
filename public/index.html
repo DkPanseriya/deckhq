@@ -666,6 +666,26 @@
           </label>
         </div>
 
+        <!-- WP-70 · the handover, when this card has one
+             (docs/07-STUDIO-DESIGN.md §6). It is drawn here rather than made
+             editable: a handover is a file the AGENT wrote, and the two
+             presses under it are the only things this dialog does about it.
+             Accept names the column, because a handover does not get to. -->
+        <section class="card-handover" id="card-handover" hidden>
+          <h3 class="field-label">Handover</h3>
+          <p class="field-note" id="card-handover-state"></p>
+          <blockquote class="handover-quote" id="card-handover-quote" hidden></blockquote>
+          <div class="card-handover-body" id="card-handover-body"></div>
+          <div class="handover-actions">
+            <label class="sr-only" for="card-handover-column">Move the card to</label>
+            <select id="card-handover-column" class="handover-column"></select>
+            <button type="button" class="btn btn--primary" id="card-handover-accept">
+              Accept handover
+            </button>
+            <button type="button" class="btn" id="card-handover-bounce">Bounce</button>
+          </div>
+        </section>
+
         <p class="dialog-error" id="card-error" hidden></p>
       </div>
       <div class="dialog-foot">

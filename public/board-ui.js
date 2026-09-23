@@ -119,6 +119,10 @@ export function createBoardUI(opts) {
     createCardEditor({
       document: doc,
       onSave: (card, cardId) => saveCard(card, cardId),
+      // WP-70, §6. The board's copy of the review gate. `/api/studio/handover`
+      // is the SECOND and last writer of a column, and it writes one only
+      // because the user named it in this dialog.
+      onDecide: (decision, extra, cardId) => decideHandover(decision, extra, cardId),
     });
 
   /** The board as it currently stands, never shared with the renderer. */
@@ -127,6 +131,49 @@ export function createBoardUI(opts) {
   const rolesNow = () => (Array.isArray(snapshot?.roles) ? snapshot.roles : []);
   /** @param {string} id */
   const cardById = (id) => boardNow().cards.find((c) => String(c.id) === String(id)) || null;
+
+  /**
+   * The newest handover for one card, or null.
+   *
+   * The unattached ones (`cardId: null`) match nothing here by construction,
+   * which is what keeps them unattached: they are in the snapshot, and the
+   * panel and this board both decline to draw them on a card they do not name.
+   * @param {string} id
+   */
+  const handoverFor = (id) =>
+    (Array.isArray(snapshot?.handovers) ? snapshot.handovers : [])
+      .filter((h) => h && h.cardId === id)
+      .sort((a, b) => (b.mtime || 0) - (a.mtime || 0))[0] || null;
+
+  /**
+   * Accept or Bounce, as one POST. The response is the board, so the surface
+   * is reloaded from the daemon rather than patched here: a card that just
+   * moved through the second funnel should be drawn from what the funnel
+   * wrote.
+   * @param {'accept'|'bounce'} decision
+   * @param {{column?:string, note?:string}} extra
+   * @param {string} cardId
+   */
+  async function decideHandover(decision, extra, cardId) {
+    try {
+      const res = await get('/api/studio/handover', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cwd, cardId, decision, ...extra }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { error: body.error || `HTTP ${res.status}` };
+      say(
+        decision === 'accept'
+          ? `${cardId} accepted — it is in ${extra.column}.`
+          : `${cardId} bounced — the note joins the next brief.`,
+      );
+      await load();
+      return {};
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
 
   /** A role's live session id, or null. The registry's answer, never a guess. */
   function agentIdFor(roleName) {
@@ -284,6 +331,7 @@ export function createBoardUI(opts) {
       editor.open({
         card,
         roles: rolesNow(),
+        handover: handoverFor(card.id),
         ask:
           `${card.id} is in Ready and has no assignee. A session is started for a role, so ` +
           'name one — the board does not choose for you.',
@@ -361,7 +409,9 @@ export function createBoardUI(opts) {
     el.addEventListener('focus', () => {
       focused = id;
     });
-    el.addEventListener('dblclick', () => editor.open({ card: cardById(id), roles: rolesNow() }));
+    el.addEventListener('dblclick', () =>
+      editor.open({ card: cardById(id), roles: rolesNow(), handover: handoverFor(id) }),
+    );
     el.addEventListener('keydown', (event) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       const direction = MOVE_KEYS[event.key];
@@ -372,7 +422,7 @@ export function createBoardUI(opts) {
       }
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        editor.open({ card: cardById(id), roles: rolesNow() });
+        editor.open({ card: cardById(id), roles: rolesNow(), handover: handoverFor(id) });
       }
     });
     el.addEventListener('dragstart', (event) => {
