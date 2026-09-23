@@ -27,6 +27,12 @@ import {
   selectAgent,
   selectNextGoneHome,
 } from './app-state.js';
+// WP-69. The Studio board owns its own elements and builds itself on first
+// use, so the key map reaches it directly rather than through a field `app.js`
+// would have to hand in — `app.js` stands at WP-22's 900-line ceiling and a
+// surface that is hidden on every floor as the product ships has nothing to
+// add to the shell.
+import { closeStudioBoard, studioBoardOpen } from './board-shell.js';
 
 /** @type {() => boolean} */
 let dismissCard = () => false;
@@ -127,6 +133,17 @@ export function handleKeydown(e) {
       // whatever is topmost. docs' whiteboard note: "closes ... on Esc".
       if (!el.whiteboardOverlay.hidden) {
         hideWhiteboard();
+        break;
+      }
+      // WP-69 · the Studio board. It replaces the floor and is opened on
+      // purpose, from a palette row or a control in the panel, so Escape
+      // closes it whenever it is up — the whiteboard's rule rather than the
+      // deck's, which waits for an Escape that has nothing else to do. The
+      // difference is that the deck is a keystroke away and this is not: you
+      // arrive here deliberately, and leaving should cost the same one key
+      // wherever the panel happens to be.
+      if (studioBoardOpen()) {
+        closeStudioBoard();
         break;
       }
       // WP-84 · Escape is a way back to the floor from every full-surface

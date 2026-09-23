@@ -502,11 +502,52 @@ will never overwrite it. A regeneration is written beside it as `planner.next.md
 what runs. **Claude Code only** for now — another runtime is refused by name rather than handed a
 brief nobody has run it against.
 
-Hiring a roster is the next package. Nothing in the roster runs until you press Hire, and there is
-no Hire yet.
+Nothing in the roster runs until you press Hire. `⌘K` → **`Studio: hire <role>`** gives that role a
+git worktree of its own, a brief file you may edit, and a real session in that worktree under that
+brief — on the floor within one scan, wearing the role's name.
 
-One rule is already fixed, and it is the same rule the queue runs on: **a card's column is yours.**
-No session ending, no test passing, no file appearing and no budget being spent moves a card. They
+### The Studio board
+
+`⌘K` → **`Studio: board`**, or the **`[ board ]`** control beside `board.json` in the panel's Studio
+block. It replaces the floor inside the stage and carries the same two ways out every full-surface
+view in DeckHQ carries: **`← Back to floor`** at the top left, a **✕** at the top right, and `Esc`.
+Closing it selects the assignee of the last card you clicked, so you land on that desk.
+
+Six columns, in this order, which is also the order they are read in: **Backlog, Ready, In progress,
+Review, Done, Blocked.** Each column draws its name and its count whether or not it has anything in
+it. Each card shows its title, the role it is assigned to — with that role's own robot, drawn from
+the same identity as the one at its desk, or the word `nobody` — how many acceptance criteria it
+carries, its budget, and a chip per flag raised against it.
+
+Underneath the columns is a **real `<table>`** of the same cards in the same order, with a caption
+and a row header per card. It is drawn for an empty board too, so a screen reader never gets
+nothing at all.
+
+**The keyboard.** Every card is a tab stop, and every move is a keystroke:
+
+| Key                        | What it does                                                    |
+| -------------------------- | --------------------------------------------------------------- |
+| `Tab` / `Shift`+`Tab`      | walk the cards, in board order                                    |
+| `]` or `→`                 | move the focused card one column to the right                     |
+| `[` or `←`                 | move it one column to the left                                    |
+| `Enter` or `Space`         | open the card editor on it                                        |
+| `Esc`                      | back to the floor                                                 |
+
+At either end the board says so — _"already in the last column"_ — rather than wrapping around.
+Dragging a card into a column is the same move by the same route. A move is shown at once, and if
+DeckHQ refuses it the card returns to the column it came from and the refusal is quoted to you.
+
+**New card**, at the top right, and `Enter` on a card you already have, both open the same editor:
+title, acceptance criteria one per line, milestone, assignee and budget. A refusal is shown beside
+the field it is about, and what you typed stays where you typed it.
+
+**A card in Ready starts the work.** Move one into **Ready** and the role on it gets it: a role with
+no session is hired with this card as its brief; a role already at a desk is sent the card as the
+next thing to do. **A card with no assignee asks which role, and never chooses for you** — nothing
+is started, and the card stays where you put it.
+
+One rule is fixed, and it is the same rule the queue runs on: **a card's column is yours.** No
+session ending, no test passing, no file appearing and no budget being spent moves a card. They
 flag it; you move it.
 
 ## Hooks are optional and reversible

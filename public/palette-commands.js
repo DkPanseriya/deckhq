@@ -234,6 +234,24 @@ export function buildCommandEntries(ctx) {
       keywords: ['studio', 'plan', 'planner', 'grill', 'blueprint', 'roster', 'board', 'idea'],
       run: () => actions.studioPlan(),
     },
+    {
+      // WP-69, §5.4. The board is a tab beside the floor and this is how it is
+      // reached without a mouse. Like the planner row it is present whether or
+      // not this project has Studio on, and a project that has not gets the
+      // board saying so with the command that turns it on — a row that
+      // appeared only when Studio was enabled would be a row almost nobody
+      // could find twice (§159.5).
+      //
+      // No accelerator, for the reason every Studio row has none: the
+      // accelerators are for the two-keystroke everyday commands, and Studio
+      // is off on every project until somebody turns it on.
+      id: 'cmd:studio-board',
+      group: 'command',
+      label: 'Studio: board',
+      hint: 'the six columns, and every card as a table',
+      keywords: ['studio', 'board', 'kanban', 'cards', 'column', 'backlog', 'ready', 'review'],
+      run: () => actions.studioBoard(),
+    },
     ...studioHireRows(ctx),
     {
       id: 'cmd:refresh',

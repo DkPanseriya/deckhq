@@ -13,15 +13,12 @@
  * mode that is off on every project until somebody turns it on.
  */
 
-import {
-  findAgent,
-  latestSnapshot,
-  panel,
-  projectFilter,
-  selectAgent,
-  selectedId,
-  toast,
-} from './app-state.js';
+import { currentProject, panel, selectAgent, toast } from './app-state.js';
+import { openStudioBoard } from './board-shell.js';
+// WP-69. One name for the runtime a client-side Hire starts a role on, shared
+// with the board's hand-off. `board-ui.js` rather than here because that file
+// is the one a test can import.
+import { HIRE_RUNTIME } from './board-ui.js';
 
 /** How often the page asks whether the scan has found the planner yet. */
 export const PLANNER_POLL_MS = 2500;
@@ -32,20 +29,19 @@ export const PLANNER_POLL_TRIES = 12;
 /**
  * The runtime a Hire from the palette starts a role on — WP-68, §4.
  *
- * Named here and sent on every `/api/studio/hire`, rather than left to the
- * route's own default, for WP-92j's reason: which of four runtimes a spawn was
- * about is the caller's to say. It is `claude-code` because that is the one
- * runtime whose launch §4 does not have to mark *unverified*, and the other
- * three are hired from the roster editor, where the choice is a visible one
- * rather than a keystroke.
+ * Sent on every `/api/studio/hire`, rather than left to the route's own
+ * default, for WP-92j's reason: which of four runtimes a spawn was about is
+ * the caller's to say. It is `claude-code` because that is the one runtime
+ * whose launch §4 does not have to mark *unverified*, and the other three are
+ * hired from the roster editor, where the choice is a visible one rather than
+ * a keystroke.
+ *
+ * WP-69 gave the board a Hire too, and a second copy of this string is how the
+ * two doors end up starting different runtimes. It is declared once, in
+ * `board-ui.js`, and re-exported here so the name still reads where WP-68 put
+ * it.
  */
-export const HIRE_RUNTIME = 'claude-code';
-
-/** The project the palette's Studio commands act on, or null. */
-export function currentProject() {
-  const wanted = projectFilter || findAgent(selectedId)?.projectId;
-  return (latestSnapshot?.projects || []).find((p) => p.id === wanted) || null;
-}
+export { HIRE_RUNTIME };
 
 /**
  * The last `GET /api/studio` answer, and the directory it was about.
@@ -235,5 +231,12 @@ export const studioPalette = {
   onOpen: refreshStudioRoles,
 };
 
-/** The two palette actions Studio owns: plan a project, hire a role. */
-export const studioActions = { studioPlan, studioHire };
+/**
+ * The palette actions Studio owns: plan a project, hire a role, open the board.
+ *
+ * `studioBoard` is `board-ui.js`'s own opener, passed through rather than
+ * wrapped: the board is a surface with a life of its own — it is also opened
+ * from the panel's Studio block — and a wrapper here would be a second door
+ * with a second chance to be subtly different from the first.
+ */
+export const studioActions = { studioPlan, studioHire, studioBoard: openStudioBoard };

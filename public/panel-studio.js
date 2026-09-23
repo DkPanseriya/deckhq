@@ -27,6 +27,28 @@
 
 import { currentId, displayedAgent } from './panel-state.js';
 
+/**
+ * THE BOARD IS REACHED BY A DYNAMIC IMPORT, AND THAT IS NOT AN ACCIDENT.
+ *
+ * `board-shell.js` is a DOM module: it reaches `app-state.js`, whose `el`
+ * table is built from `document.getElementById` at module scope. A STATIC
+ * import of it here would make this file — and `panel.js`, which builds this
+ * part — impossible to load under `node --test`, and four test files that have
+ * nothing to do with Studio (`permission-keys`, `rates`, `studio-roster-ui`,
+ * `subagents`) would fail at import with `document is not defined` before a
+ * single assertion ran. They did, for exactly one commit.
+ *
+ * So the opener arrives the way `panel-header.js` reaches the rig and
+ * `app-floor.js` reaches the renderer: `await import()` at the moment of use.
+ * The pure half of this file (`artefactState`, `artefactLine`, `roleLine`)
+ * stays importable in a bare Node process, which is what those tests assert
+ * against.
+ */
+async function openStudioBoard() {
+  const mod = await import('./board-shell.js');
+  mod.openStudioBoard();
+}
+
 /** @typedef {ReturnType<typeof import('./panel-dom.js').buildPanelDom>} PanelDom */
 
 /**
@@ -176,6 +198,21 @@ export function createStudioPart(ctx) {
       open.setAttribute('aria-label', `Open ${artefact.name} in your editor`);
       open.addEventListener('click', () => openArtefact(artefact.name, status.line));
       row.appendChild(open);
+
+      // WP-69, §5.4. `board.json` is the one artefact this product can DRAW,
+      // so its row carries the way to it. Beside `[ open ]` rather than
+      // instead of it: the file is still the user's to edit, and the board is
+      // a second reading of it rather than a replacement for the text.
+      if (artefact.key === 'board') {
+        const board = document.createElement('button');
+        board.type = 'button';
+        board.className = 'studio-open';
+        board.textContent = '[ board ]';
+        board.disabled = status.state !== 'valid';
+        board.setAttribute('aria-label', 'Open the Studio board for this project');
+        board.addEventListener('click', () => void openStudioBoard());
+        row.appendChild(board);
+      }
 
       studioList.appendChild(row);
     }

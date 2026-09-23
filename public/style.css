@@ -4421,3 +4421,258 @@ textarea.field-input {
   transition: none;
 }
 /* WP-60 · the idle-projects chip and its list — end ---------------------- */
+
+/* ======================================== WP-69 · the Studio board
+
+   docs/07-STUDIO-DESIGN.md §5.4. Six columns beside the floor, and a real
+   table underneath carrying the same cards in the same order (the deck's rule,
+   §10) — the table is `.sr-only`, because it says what the columns already
+   show and a surface that says everything twice on screen is one nobody reads.
+
+   EVERY COLOUR HERE IS A TOKEN. Not one raw hex: the eight chrome tokens are
+   what `applyChromeTheme()` rewrites per theme (public/render/themes.js), so
+   the board is themed by the same mechanism as everything else on this bar and
+   test/unit/board-theme.test.mjs can measure its contrast in all three themes
+   without a browser. `--line-2`, `--accent*` and `--focus` are the
+   stylesheet's own derivations over those eight, used the way the deck and the
+   panel already use them. */
+
+.studio-board {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+.studio-board:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+.studio-board > .surface-chrome {
+  flex: 0 0 auto;
+}
+
+.board-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem 0;
+}
+/* The project the board is about, in the mono face every path in this product
+   is written in. It wraps rather than pushing the button off the bar. */
+.board-project {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.board-hint {
+  flex: 0 0 auto;
+  margin: 0.35rem 0 0;
+  padding: 0 0.75rem 0.5rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.board-hint kbd {
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--line-2);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+}
+
+.studio-board > .surface-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.board-scroll {
+  min-height: 100%;
+  padding: 0 0.75rem 1rem;
+}
+
+/* Six columns of equal width, side by side, scrolling sideways together on a
+   window too narrow for them. Never wrapping to two rows: a kanban whose
+   columns reflow is a kanban whose order the eye has to reconstruct. */
+.board-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(14rem, 1fr);
+  gap: 0.6rem;
+  align-items: start;
+  min-width: max-content;
+}
+.board-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+.board-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.board-col-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+.board-drop {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  /* A floor to drop on: an empty column has to be a target, and a target of
+     nothing is a target nobody can hit. */
+  min-height: 4.5rem;
+  padding: 0.45rem;
+}
+.board-drop.is-over {
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px var(--accent-soft-line);
+  border-radius: 0 0 5px 5px;
+}
+
+.board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--surface-2);
+  cursor: grab;
+  text-align: left;
+}
+.board-card:hover {
+  background: var(--surface-3);
+}
+.board-card:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.board-card.is-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+.board-card-title {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.board-card-who {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  min-height: 22px;
+}
+/* The face, drawn by the floor's own rig at 2x and shown at 22 px. A role with
+   no live session has no canvas at all — a face is a pure function of the
+   session id (§105), so there is nothing to draw. */
+.board-face {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+}
+.board-card-role {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.board-card-role--none {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+}
+.board-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+}
+.board-chip {
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* A flag is the one chip allowed to be loud, and it is still only a border:
+   §5.2 says a flag may say something and may never move a card, so it marks
+   the edge rather than shouting in the ink (the rule .btn--danger keeps for
+   the same reason). Its text wraps, because a planner's sentence is a
+   sentence. */
+.board-chip--flag {
+  border-color: var(--accent-soft-line);
+  color: var(--ink-2);
+  white-space: normal;
+}
+
+.board-empty {
+  margin: 0 auto;
+  padding: 3rem 1rem;
+  max-width: 34rem;
+  text-align: center;
+  color: var(--muted);
+}
+.board-empty-head {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  color: var(--ink-2);
+}
+.board-empty-body {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+/* A board.json that does not parse is reported and nothing is drawn over it
+   (§150.2 item 5). The accent marks it; the words are the daemon's. */
+.board-broken .board-empty-head {
+  display: inline-block;
+  padding-bottom: 2px;
+  border-bottom: 2px solid var(--accent);
+  color: var(--ink);
+}
+
+/* The card editor's two budget fields, side by side on a wide dialog and
+   stacked on a narrow one. */
+.field-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.75rem;
+}
+/* §5.4's question, above the fields it is about. */
+.dialog-ask {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--accent-soft-line);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+/* WP-69 · the Studio board — end ----------------------------------------- */

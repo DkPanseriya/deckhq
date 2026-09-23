@@ -491,6 +491,23 @@ export function setProjectFilter(v) {
   projectFilter = v;
 }
 
+/**
+ * THE PROJECT A PROJECT-SHAPED COMMAND ACTS ON, or null (WP-67, WP-69).
+ *
+ * The room the floor is filtered to, else the project of the session in the
+ * panel. Both of those are "the repo the user is looking at" and neither is a
+ * guess: with no filter and nothing selected the answer is honestly nothing,
+ * and the caller says so rather than picking a project for somebody.
+ *
+ * Here rather than in `app-studio.js`, where it was written, because the
+ * Studio board asks the same question and a second copy of this rule is how
+ * the palette and the board end up acting on two different repos.
+ */
+export function currentProject() {
+  const wanted = projectFilter || findAgent(selectedId)?.projectId;
+  return (latestSnapshot?.projects || []).find((p) => p.id === wanted) || null;
+}
+
 // ------------------------------------------------------------- utilities
 
 /** @param {number} n */

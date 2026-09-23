@@ -226,8 +226,43 @@ export const POPULATIONS = {
    * whole of the point: two still writing, two gone quiet, one caught mid-fold.
    */
   crew: () => [['orbital-api', 'Audit every call site of the token bucket', 'working', 0.05, 2.4]],
+  /**
+   * WP-69's FLOOR, for the `board` golden: one repo, three people in it.
+   *
+   * ONE REPO, and that is the whole reason this is its own population rather
+   * than a flag on `three`. The board draws THE PROJECT IN VIEW, which is the
+   * room the floor is filtered to or the project of the session in the panel;
+   * the capture reaches it by selecting somebody, and on a floor with three
+   * repos on it which room that lands in is a fact about the queue rather
+   * than about the board. With one repo there is nothing to land in but
+   * `orbital-api`, which is the repo `writeStudioFixture()` enables Studio on.
+   *
+   * THREE SESSIONS, in roster order, because §4's claim is that a hired agent
+   * is the same character on the board as on the floor: two of the eight cards
+   * carry an `agentId`, and the robot on those cards is drawn from the same
+   * identity as the robot at the desk behind the board.
+   *
+   * One of them is `for_review` so the needs-you queue is not empty — the
+   * capture's way in is the same `j` `three@selected` uses.
+   */
+  board: () => [
+    ['orbital-api', 'Backfill the events table', 'working', 2.1, 0.4],
+    ['orbital-api', 'Status page reads the backfill', 'for_review', 5.2, 1.6],
+    ['orbital-api', 'Fixtures for the re-run assertion', 'working', 0.8, 1.3],
+  ],
   reference: referenceSessions,
 };
+
+/**
+ * The project the `board` population enables Studio on, or null (WP-69).
+ *
+ * `PINNED_PROJECTS`'s construction and its reason: the directory is inside the
+ * fixture and the fixture is rebuilt on every run, so the NAME is written here
+ * and `demo-floor.mjs` turns it into a path against the root it just built.
+ * Null for every other population, which is what keeps every other golden a
+ * photograph of a floor with Studio off — as it is on every install.
+ */
+export const STUDIO_PROJECT = POPULATION === 'board' ? 'orbital-api' : null;
 
 /**
  * The project folders the `pinned` population pins (WP-77), by name. The floor

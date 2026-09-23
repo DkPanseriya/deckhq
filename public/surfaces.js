@@ -80,6 +80,17 @@ export const SURFACES = Object.freeze([
     title: 'Settings',
     owner: 'app.js',
   }),
+  // WP-69. `studio-board` rather than `board`, which the PROJECT board (the
+  // whiteboard scrim) already holds: two views called the same thing is how a
+  // close ends up wired to the wrong one, and the id is what `wireSurfaceControls`
+  // is looked up by. §156.1 said this view would get the same bar when it
+  // arrived, and this is that.
+  Object.freeze({
+    id: 'studio-board',
+    hostId: 'studio-board',
+    title: 'Studio board',
+    owner: 'board-shell.js',
+  }),
 ]);
 
 /** The classes the chrome uses, named once so the test and the CSS agree. */

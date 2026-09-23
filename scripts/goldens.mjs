@@ -304,6 +304,31 @@ const CAPTURES = [
     query: `phase=${CREW_PHASE}`,
   },
   { name: 'crew@reduced', population: 'crew', theme: 'default' },
+  // WP-69 · THE STUDIO BOARD, and it is the product's only golden of a surface
+  // with rows in it rather than a floor or a form.
+  //
+  // §5.4's acceptance is partly a claim about a picture — six columns in board
+  // order, a card carrying its assignee's own robot, a column with nothing in
+  // it still drawing its head and its count, and the real `<table>` underneath
+  // scrolled past the columns. Every one of those is asserted over a DOM in
+  // `board-view.test.mjs`, and not one of them says whether the result is
+  // LEGIBLE: eight cards at this stage size, four chips on the widest of them,
+  // and a canvas face at 28 px beside a title that must not wrap into it.
+  //
+  // The way in is the way a person has, `look`'s rule. `j` selects the session
+  // at the head of the needs-you queue, which on the `board` population is the
+  // one repo the fixture enabled Studio on — the board draws the project in
+  // view, and without a selection there is no project to draw. Then the
+  // palette, `studio board` typed into it, and Enter. `Studio: board` carries
+  // no accelerator (no Studio row does), so this capture types rather than
+  // chords, which is also the path the command's own keywords are ranked on.
+  {
+    name: 'board',
+    population: 'board',
+    theme: 'default',
+    press: 'j',
+    command: 'studio board',
+  },
   ...THEME_NAMES.filter((theme) => theme !== 'default').map((theme) => ({
     name: `demo@${theme.replace(/\s+/g, '-')}`,
     population: 'demo',
