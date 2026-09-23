@@ -6,6 +6,36 @@
 
 ## Unreleased
 
+### Added
+
+- **The Studio board.** A project with Studio on now has its cards as a board, beside the floor:
+  six columns — Backlog, Ready, In progress, Review, Done, Blocked — with each card showing its
+  title, who it is assigned to and that person's own robot, how many acceptance criteria it has,
+  its budget and any flags raised against it. `⌘K` → **Studio: board** opens it, and so does the
+  **board** control beside `board.json` in the panel. `Esc`, the ✕ and **Back to floor** all close
+  it, and closing it selects the assignee of the last card you clicked, so you land on that desk.
+
+  Underneath the columns is a **real table** of the same cards in the same order, so a screen
+  reader gets the whole board rather than a pile of boxes.
+
+  **Every card is reachable and every move is performable from the keyboard.** Tab walks the cards;
+  `[` and `]` — or the left and right arrows — move the focused card one column, and say where it
+  went; `Enter` opens it for editing. Dragging does the same thing. A move you make is shown
+  immediately and, if DeckHQ refuses it, the card goes back where it was and you are told why in
+  DeckHQ's own words rather than left looking at a card that silently moved back.
+
+  **A card's column stays yours.** A session ending, a hook arriving and a scan completing move no
+  card — they flag it, and you move it.
+
+- **A card can start the work.** Move a card into **Ready** and the role it is assigned to gets it:
+  if that role has no session yet, it is hired with this card as its brief; if it already has one,
+  the card is sent as the next thing to do. **A card with nobody on it asks who, and never
+  guesses** — nothing is started until you say.
+
+- **Cards are written from the board.** New card, or Enter on one you have, opens an editor for the
+  title, the acceptance criteria, the milestone, the assignee and the budget. Anything DeckHQ
+  refuses is shown beside the field it is about, with what you typed still in it.
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights
