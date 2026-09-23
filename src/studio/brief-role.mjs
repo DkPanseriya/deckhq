@@ -39,6 +39,7 @@
 import path from 'node:path';
 
 import { DIRS, FILES } from './paths.mjs';
+import { handoverInstruction } from './handover.mjs';
 
 /** How many lines of blueprint a brief carries before it is cut. */
 export const MAX_BLUEPRINT_LINES = 120;
@@ -179,7 +180,7 @@ export function cardSection(card) {
  * @param {{role:any, projectRoot:string, worktree:string|null, card:any,
  *          blueprint:string|null, handover:{name:string, text:string}|null,
  *          bounce:{name:string, text:string}|null, rules:string|null,
- *          rulesPath:string}} parts
+ *          rulesPath:string, handoversDir:string}} parts
  * @returns {string}
  */
 export function renderRoleBrief(parts) {
@@ -242,8 +243,19 @@ export function renderRoleBrief(parts) {
   out.push(`From \`${parts.rulesPath}\`. They are the user\u2019s; follow them.`, '');
   out.push(String(parts.rules || '').trim() || '(the rules file is empty)');
 
+  // WP-70, \u00a76. The one instruction that makes a handover exist at all. It
+  // lives under the rules rather than above them because it is what you do
+  // LAST, and it is one wording out of `handover.mjs` rather than a second
+  // description of the same file kept here.
+  out.push(
+    '',
+    '## 5. When you think the card is done',
+    '',
+    handoverInstruction(parts.handoversDir),
+  );
+
   if (role.systemPrompt) {
-    out.push('', '## 5. What the roster says about you', '', String(role.systemPrompt).trim());
+    out.push('', '## 6. What the roster says about you', '', String(role.systemPrompt).trim());
   }
   out.push('');
   return out.join('\n');
@@ -283,6 +295,7 @@ export function roleBriefText(store, role, opts = {}) {
     bounce,
     rules: store.readRules(),
     rulesPath: store.pathOf(FILES.rules),
+    handoversDir: store.pathOf(DIRS.handovers),
   });
 }
 

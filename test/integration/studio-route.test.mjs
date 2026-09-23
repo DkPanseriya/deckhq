@@ -371,17 +371,24 @@ test('tracking answers "no data" and invents no number', async () => {
   });
 });
 
-test('the one that still needs a package answers 501 and names it', async () => {
-  // WP-67 took `/plan` off this list and WP-68 took `/hire`; both start real
-  // sessions now, and `test/integration/studio-plan.test.mjs` and
-  // `test/integration/studio-hire.test.mjs` are where they are tested.
+test('nothing answers 501 any more, and §5.3’s table is whole', async () => {
+  // WP-67 took `/plan` off this list, WP-68 took `/hire` and WP-70 took
+  // `/handover`, which was the last one. The distinction the 501 carried is
+  // still worth holding from the other side: a route that EXISTS must refuse
+  // a bad request as a bad request, because 501 means "this package does not
+  // exist yet" and a shipped endpoint answering it reads as missing.
+  // `test/integration/studio-handover.test.mjs` is where the route is tested.
+  // `/plan` and `/hire` are deliberately NOT posted here: both start a real
+  // session, and a test that opened a terminal window on the machine running
+  // it would be a test nobody could run twice. Their own integration files
+  // drive them, through the `launchTerminal` seam.
   await withDaemon(async ({ d, a }) => {
     await post(d, '/enable', { cwd: a, confirm: true });
     const res = await post(d, '/handover', { cwd: a });
-    assert.equal(res.status, 501);
+    assert.notEqual(res.status, 501, '/handover still answers 501');
+    assert.equal(res.status, 400);
     const body = await res.json();
-    assert.match(body.error, /WP-70/);
-    assert.equal(Object.keys(body).length, 1, 'a 501 is one line and one key');
+    assert.match(body.error, /decision is one of accept or bounce/);
   });
 });
 

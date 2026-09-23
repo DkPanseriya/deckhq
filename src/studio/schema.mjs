@@ -336,11 +336,20 @@ export function validateBoard(value, opts = {}) {
         }
         const flag = /** @type {any} */ (rawFlag);
         const at = Number(flag.at);
-        flags.push({
+        /** @type {any} */
+        const kept = {
           kind: cleanText(flag.kind, 32).trim() || 'note',
           text: cleanText(flag.text, MAX_TEXT).trim(),
           at: Number.isFinite(at) ? at : 0,
-        });
+        };
+        // WP-70, §6. A handover flag names the FILE it came from, so the
+        // review surface can open the thing the agent actually wrote rather
+        // than a paraphrase of it. Added only when there is one, so every
+        // board written before this build stays byte-identical through a
+        // read and a write.
+        const from = cleanText(flag.path, 1024).trim();
+        if (from) kept.path = from;
+        flags.push(kept);
       }
     }
 

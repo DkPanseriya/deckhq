@@ -106,6 +106,13 @@ test('INVARIANT: the only writers of a card column are the card route and the bu
     'studio/brief.mjs': ['column: COLUMNS[0]'],
     // The budget stop (§8). Asserted below to reach `blocked` and nowhere else.
     'studio/budget.mjs': ['card.column = BLOCKED_COLUMN'],
+    // WP-70, §5.2's SECOND funnel and the last one: *"a handover the user has
+    // **accepted** in the review card"*. `POST /api/studio/handover` with
+    // `decision:'accept'`, and the column is the one the USER named in the
+    // request — `ACCEPT_COLUMNS` is asserted below to be `review` and `done`
+    // and nothing else. The watch in the same file writes flags and never
+    // this, which is the whole reason the two halves share a header.
+    'http/routes/studio-handover.mjs': ['column: target'],
     // The user's own press, and the only funnel in the HTTP layer.
     'http/routes/studio.mjs': [
       // op: 'move' — the drag or the key press.
@@ -123,6 +130,32 @@ test('INVARIANT: the only writers of a card column are the card route and the bu
   for (const [file, writes] of Object.entries(expected)) {
     assert.deepEqual(actual[file], [...writes].sort(), `${file} writes a column somewhere new`);
   }
+});
+
+test('INVARIANT: there are exactly two column writers, and Accept reaches two columns', async () => {
+  // §5.2: *"A column changes on exactly two things — the user dragging or
+  // pressing, or a handover the user has accepted in the review card."* The
+  // test above holds "no third writer"; this one holds THE COUNT, so a future
+  // package that added a route and a row to `expected` in the same commit
+  // would still have to come past this line.
+  const ROUTES = ['/api/studio/card', '/api/studio/handover'];
+  /** @type {string[]} */
+  const writers = [];
+  for (const file of sources('studio', 'http')) {
+    if (columnWrites(fs.readFileSync(file, 'utf8')).length === 0) continue;
+    const body = stripComments(fs.readFileSync(file, 'utf8'));
+    for (const route of ROUTES) if (body.includes(route)) writers.push(route);
+  }
+  assert.deepEqual(
+    [...new Set(writers)].sort(),
+    [...ROUTES].sort(),
+    'the HTTP funnels a column moves through are exactly these two',
+  );
+
+  // And Accept may name two of the six. Not `blocked`, which is §8's stop and
+  // the budget's alone; not the three where work has not finished.
+  const { ACCEPT_COLUMNS } = await import('../../src/http/routes/studio-handover.mjs');
+  assert.deepEqual([...ACCEPT_COLUMNS], ['review', 'done']);
 });
 
 test('INVARIANT: the budget stop can reach `blocked` and no other column', async () => {
