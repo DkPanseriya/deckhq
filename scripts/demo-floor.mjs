@@ -76,6 +76,7 @@ import {
   JUNIORS,
   PINNED_PROJECTS,
   SESSIONS,
+  STUDIO_PROJECT,
   JUNIOR_PARENT,
 } from './demo-populations.mjs';
 import { projectIdFromCwd } from '../src/core/model.mjs';
@@ -87,6 +88,7 @@ import {
   writeLedgerFixture,
   writeProjectDirs,
   writeSettings,
+  writeStudioFixture,
   writeTranscript,
   writeSubagent,
 } from './demo-write.mjs';
@@ -217,6 +219,16 @@ if (POPULATION === 'crew') {
   }
 }
 
+// WP-69. Studio, on one project, for the `board` capture. After the
+// transcripts, because the roster names the sessions the fixture just wrote,
+// and before `state.json`, which is where the grant goes.
+const studio = STUDIO_PROJECT
+  ? await writeStudioFixture(
+      path.join(root, STUDIO_PROJECT),
+      built.filter((s) => s.project === STUDIO_PROJECT).map((s) => s.agentId),
+    )
+  : null;
+
 // Seed ack state so the lounge is populated the moment the daemon starts,
 // and so seeding does not re-derive something else on first run.
 // Ack state the daemon restores on start. `reviewSince` is what actually puts
@@ -271,6 +283,14 @@ fs.writeFileSync(
       pins: Object.fromEntries(
         PINNED_PROJECTS.map((name) => [projectIdFromCwd(path.join(root, name)), { at: NOW }]),
       ),
+      // WP-69. The Studio grant, for the one population that has one. The
+      // store reads `studio.consent` straight out of this file, so seeding it
+      // here is the same grant `POST /api/studio/enable` would have recorded —
+      // and `{}` on every other population, which is every install.
+      studio: {
+        consent: studio ? { [studio.projectKey]: studio.consent } : {},
+        planner: {},
+      },
     },
     null,
     2,

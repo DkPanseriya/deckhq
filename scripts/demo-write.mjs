@@ -506,6 +506,173 @@ export async function writeLedgerFixture(sessions) {
   return { days: files.size, records: [...files.values()].reduce((a, b) => a + b.length, 0) };
 }
 
+/**
+ * A STUDIO PROJECT, for the `board` golden — WP-69, §5.
+ *
+ * `scripts/goldens.mjs`'s `board` capture photographs the six columns, so it
+ * needs a project with Studio enabled on it, a roster, and cards. All three
+ * are written HERE rather than driven through `POST /api/studio/enable` and
+ * `/card`, for the reason every other fixture in this file is written rather
+ * than performed: the demo builds a machine and then starts a daemon over it,
+ * and a golden that depended on a sequence of requests landing in order would
+ * be a golden that could fail for a reason that has nothing to do with the
+ * picture.
+ *
+ * What it writes is what `enable` writes — the same paths, and a `README.md`
+ * carrying the same marker on its first line, so `deckhq studio disable` on
+ * the fixture would still find and remove it. The grant itself goes into
+ * `state.json` beside the rest of the seeded state (`demo-floor.mjs`), because
+ * that is where the store keeps it.
+ *
+ * THE BOARD IS EIGHT CARDS ACROSS THE SIX COLUMNS, and the spread is the point
+ * of the picture: every column has at least one card, so none of the six can go
+ * missing unnoticed; two of them hold two, so a stack is photographed as well
+ * as a single; one card has no assignee at all (so *"nobody"* is photographed
+ * rather than a blank) and no acceptance criteria either; three carry budgets;
+ * and one carries two flag chips beside a three-criterion count, which is the
+ * widest a card gets. Every value is fixed and every timestamp is an offset
+ * from the pinned clock, so two runs produce the same file byte for byte.
+ *
+ * @param {string} projectRoot the fixture project the board belongs to
+ * @param {string[]} agentIds the three sessions, in roster order
+ * @returns {Promise<{projectKey:string, dir:string, consent:{grantedAt:number, root:string}}>}
+ */
+export async function writeStudioFixture(projectRoot, agentIds) {
+  const { projectKeyFor } = await import('../src/core/ledger.mjs');
+  // `readmeText()` puts the marker on the first line itself, so the fixture's
+  // README is the product's, not a copy of it that could drift.
+  const { readmeText } = await import('../src/studio/consent.mjs');
+  const root = path.resolve(projectRoot);
+  const projectKey = projectKeyFor(root);
+  const dir = path.join(root, '.deckhq', 'studio');
+  fs.mkdirSync(path.join(dir, 'briefs'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'handovers'), { recursive: true });
+
+  const write = (name, text) => fs.writeFileSync(path.join(dir, name), text, 'utf8');
+  write('README.md', readmeText(root));
+  write(
+    'blueprint.md',
+    [
+      '# Orbital API — the events backfill',
+      '',
+      'Three people and one milestone: the events table has to hold every event the',
+      'public API has ever emitted, and the backfill has to be re-runnable.',
+      '',
+      '## m1 — the backfill is re-runnable',
+      '',
+      'A second run over the same window writes nothing new, and says so.',
+      '',
+    ].join('\n'),
+  );
+
+  const roles = [
+    { name: 'backend', purpose: 'Owns the events table and the backfill.' },
+    { name: 'frontend', purpose: 'Owns the status page the backfill reports to.' },
+    { name: 'tests', purpose: 'Owns the fixtures and the re-run assertion.' },
+  ];
+  write(
+    'roster.json',
+    `${JSON.stringify(
+      {
+        version: 1,
+        projectKey,
+        roles: roles.map((role, i) => ({
+          ...role,
+          systemPrompt: `You are the ${role.name} on this project.`,
+          allowedTools: [],
+          permissionPolicy: 'ask',
+          // The ids of the sessions the fixture actually wrote, so the board's
+          // faces are the SAME robots standing on the floor behind it (§4).
+          agentId: agentIds[i] || null,
+        })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  /** @param {number} h hours before the pinned clock */
+  const ago = (h) => NOW - h * HOUR;
+  const card = (id, title, column, extra = {}) => ({
+    id,
+    title,
+    acceptance: [],
+    milestone: 'm1',
+    role: null,
+    column,
+    budget: null,
+    agentId: null,
+    worktree: null,
+    handover: null,
+    flags: [],
+    updatedAt: ago(4),
+    ...extra,
+  });
+
+  write(
+    'board.json',
+    `${JSON.stringify(
+      {
+        version: 1,
+        projectKey,
+        cards: [
+          card('c1', 'Page the backfill in windows', 'backlog', {
+            role: 'backend',
+            acceptance: ['a window is a day', 'a partial window is re-run whole'],
+          }),
+          card('c2', 'Decide what a duplicate is', 'backlog'),
+          card('c3', 'Fixtures for the re-run assertion', 'ready', {
+            role: 'tests',
+            acceptance: ['a failing test first'],
+            budget: { tokens: 400000, minutes: 90 },
+          }),
+          card('c4', 'Backfill the events table', 'in_progress', {
+            role: 'backend',
+            acceptance: ['a failing test first', 'npm test green', 'the guide says so'],
+            budget: { tokens: 1200000, minutes: 240 },
+            agentId: agentIds[0] || null,
+            flags: [
+              { kind: 'budget', text: '80% spent, 1/3 criteria met', at: ago(2) },
+              { kind: 'scope', text: 'touching the status page too', at: ago(1) },
+            ],
+            updatedAt: ago(1),
+          }),
+          card('c5', 'Status page reads the backfill', 'in_progress', {
+            role: 'frontend',
+            acceptance: ['the page says which window is running'],
+            agentId: agentIds[1] || null,
+            updatedAt: ago(3),
+          }),
+          card('c6', 'Rate limiter for the public API', 'review', {
+            role: 'backend',
+            acceptance: ['a failing test first', 'npm test green'],
+            handover: '.deckhq/studio/handovers/c6.md',
+            updatedAt: ago(6),
+          }),
+          card('c7', 'Move the events schema to a migration', 'done', {
+            role: 'backend',
+            acceptance: ['npm test green'],
+            updatedAt: ago(26),
+          }),
+          card('c8', 'Connection pool exhaustion', 'blocked', {
+            role: 'tests',
+            acceptance: ['a failing test first'],
+            budget: { tokens: 200000, minutes: 45 },
+            flags: [{ kind: 'budget', text: 'stopped on cost', at: ago(9) }],
+            updatedAt: ago(9),
+          }),
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+
+  // The grant the store will read. Written by the caller into `state.json`,
+  // because that is the one file the daemon restores its state from.
+  return { projectKey, dir, consent: { grantedAt: ago(30), root } };
+}
+
 /** An empty settings file for the fake machine. Hooks are installed later. */
 export function writeSettings() {
   fs.mkdirSync(CLAUDE_DIR, { recursive: true });
