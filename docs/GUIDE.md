@@ -550,6 +550,51 @@ One rule is fixed, and it is the same rule the queue runs on: **a card's column 
 session ending, no test passing, no file appearing and no budget being spent moves a card. They
 flag it; you move it.
 
+### Handover
+
+There is no magic in it. Every hired role's brief ends with one instruction: **when you believe the
+card is done, write `.deckhq/studio/handovers/<cardId>.md`**, with four headings —
+
+    ## What changed
+    ## Tests run
+    ## Open questions
+    ## Next step
+
+The filename is the card id and nothing else: card `c7`'s handover is `c7.md`. The agent writes an
+ordinary file with its ordinary tools. DeckHQ writes none of it and never will.
+
+**DeckHQ watches that folder.** When a file appears or changes, the card it names gets a
+`handover` flag — a chip on the board — and points at the file. **The card does not move.** That is
+the same rule as everywhere else in Studio: an observed event may flag a card and may never move
+it.
+
+**The review is the panel you already have.** Open the session that wrote the handover and it is
+there, above _What it said_ and above _What changed_ — so the handover's claims and the diff of
+that session's own worktree are on one screen. Under the heading is a line saying which of the four
+sections are missing, if any: **a section the agent left out is reported, never invented.**
+
+**Test counts are a quotation.** The block says _"the handover says 41 passed"_ and attributes it to
+the handover. DeckHQ runs nothing to check it and never prints the figure in its own voice. If the
+agent wrote a count it did not see, what you are reading is the agent's claim, marked as one.
+
+**Two answers, and both are yours:**
+
+| Press                | What happens                                                                  |
+| -------------------- | ----------------------------------------------------------------------------- |
+| **Accept handover**  | you name the column — **Review** or **Done** — and the card moves there         |
+| **Bounce**           | you write a note; the card stays exactly where it is                            |
+
+Accept is the only path from a handover to a column change, and the column is the one **you** name:
+the handover does not get to ask. A bounce writes `.deckhq/studio/handovers/<cardId>.bounce.md`,
+which is part three of that role's next brief, so a card that comes back comes back with the reason.
+Neither press messages the session, kills anything or starts anything.
+
+The same handover and the same two presses are on the **card editor** in the board, because the
+board is where you look at a card.
+
+**A handover naming a card the board does not have is shown _unattached_, not dropped.** A typo in a
+filename is visible rather than silent.
+
 ## Hooks are optional and reversible
 
 Without hooks, DeckHQ infers state from transcripts: it can tell you a session is alive and
