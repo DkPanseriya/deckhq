@@ -37,14 +37,6 @@
  * lights that desk*) — on the way out, so the floor is what you land on.
  */
 
-import {
-  announce,
-  currentProject,
-  latestSnapshot,
-  palette,
-  selectAgent,
-  toast,
-} from './app-state.js';
 import { wireSurfaceControls } from './surfaces.js';
 import { createCardEditor } from './board-card.js';
 import {
@@ -83,9 +75,18 @@ const MOVE_KEYS = /** @type {Record<string, 1|-1>} */ ({
 /**
  * Build the board's controller over a set of elements.
  *
- * Everything it touches is injected, so `test/unit/board-ui.test.mjs` can drive
- * the whole of it — a keyboard move, a refusal and its revert, the hand-off and
- * its refusal — against stubs, with no browser and no socket.
+ * EVERYTHING IT TOUCHES ARRIVES THROUGH THIS ARGUMENT — the document, the
+ * fetch, the toast, the project in view, the selection, the live region. Not
+ * one of them is read off a module this file imports, which is what lets
+ * `test/unit/board-ui.test.mjs` drive the whole of it — a keyboard move, a
+ * refusal and its revert, and the hand-off in all three of its shapes —
+ * against stubs, with no browser and no socket. `public/board-shell.js` is
+ * where the page's real ones are handed in, and it is the only module that
+ * reaches `app-state.js`.
+ *
+ * The defaults below are inert rather than clever: a board built with no
+ * `getProject` has no project and says so, and one built with no `notify`
+ * swallows its toast. Nothing here falls back to a global.
  *
  * @param {{host:any, body:any, projectEl?:any, newCardEl?:any, stageEl?:any,
  *          document?:any, fetch?:typeof globalThis.fetch,
@@ -96,12 +97,12 @@ const MOVE_KEYS = /** @type {Record<string, 1|-1>} */ ({
  *          drawFaces?:(root:any) => void}} opts
  */
 export function createBoardUI(opts) {
-  const doc = opts.document || document;
+  const doc = opts.document || globalThis.document;
   /** @type {typeof globalThis.fetch} */
   const get = (url, init) => (opts.fetch || globalThis.fetch)(url, init);
-  const say = opts.notify || toast;
-  const project = opts.getProject || currentProject;
-  const select = opts.onSelect || selectAgent;
+  const say = opts.notify || (() => {});
+  const project = opts.getProject || (() => null);
+  const select = opts.onSelect || (() => {});
 
   let open = false;
   /** The `GET /api/studio` answer this board was painted from. */
@@ -507,122 +508,4 @@ export function createBoardUI(opts) {
     saveCard,
     editor,
   };
-}
-
-// ---------------------------------------------------------------- the one
-//
-// The board is opened from two places and owns its own elements, so it builds
-// itself on first use rather than being wired from `app.js` — which stands at
-// WP-22's 900-line ceiling, and which has nothing to add to a surface that is
-// hidden on every floor in the product as it ships (§1).
-
-/** @type {ReturnType<typeof createBoardUI>|null} */
-let theBoard = null;
-
-/** Build it once, over the elements `index.html` ships. */
-function board() {
-  if (theBoard) return theBoard;
-  const host = document.getElementById('studio-board');
-  const body = document.getElementById('studio-board-body');
-  if (!host || !body) return null;
-  theBoard = createBoardUI({
-    host,
-    body,
-    projectEl: document.getElementById('board-project'),
-    newCardEl: document.getElementById('board-new-card'),
-    stageEl: document.querySelector('.stage'),
-    // The shell's own live region, deduped, so the board speaks where every
-    // other surface speaks rather than into a second one of its own.
-    announce,
-    drawFaces,
-  });
-  return theBoard;
-}
-
-/** Open the Studio board on the project in view. */
-export function openStudioBoard() {
-  board()?.open();
-}
-
-/** Close it. Escape's route in, from `app-keys.js`. */
-export function closeStudioBoard() {
-  board()?.close();
-}
-
-/** Is it up? `app-keys.js` asks before spending an Escape on it. */
-export function studioBoardOpen() {
-  return Boolean(theBoard?.isOpen());
-}
-
-// ----------------------------------------------------------------- the face
-//
-// §4: a hired agent is the same character on the board, the floor and the deck,
-// and a face is a pure function of the session id (§105). So a card's face is
-// drawn by the SAME `rig.drawCharacter()` the floor and the panel's close-up
-// use, from the same identity and appearance — never a second drawing of a
-// robot. A role with no live session has no canvas at all (`board-view.js`),
-// because it has no session id and therefore has no face.
-//
-// One static pose, drawn once per paint. Nothing animates: §9 of the GUI spec
-// gives the floor the right to move and gives chrome beside it none.
-
-/** @type {any} */
-let rig = null;
-/** @type {any} */
-let clips = null;
-let facesLoaded = false;
-
-async function loadFaceModules() {
-  if (facesLoaded) return;
-  facesLoaded = true;
-  try {
-    rig = await import('./render/rig.js');
-  } catch (err) {
-    console.debug('[deckhq] render/rig.js not available for the board', err);
-  }
-  try {
-    clips = await import('./render/clips.js');
-  } catch (err) {
-    console.debug('[deckhq] render/clips.js not available for the board', err);
-  }
-}
-
-/** @param {any} root the painted board */
-function drawFaces(root) {
-  const canvases = [...root.querySelectorAll('canvas.board-face')];
-  if (canvases.length === 0) return;
-  if (!rig?.drawCharacter || !clips?.sampleClip) {
-    void loadFaceModules().then(() => {
-      if (rig?.drawCharacter && clips?.sampleClip) drawFaces(root);
-    });
-    return;
-  }
-  for (const canvas of canvases) {
-    const id = canvas.getAttribute('data-agent');
-    const agent = (latestSnapshot?.agents || []).find((a) => a.id === id);
-    if (!agent) continue;
-    const ctx = canvas.getContext?.('2d');
-    if (!ctx) continue;
-    try {
-      const pose = clips.sampleClip('type', 0, true);
-      rig.drawCharacter(ctx, pose, {
-        x: canvas.width / 2,
-        y: canvas.height * 0.96,
-        u: canvas.height / 2.9,
-        lod: 2,
-        color: palette?.STATE_COLORS?.[agent.activityState] || '#888888',
-        state: agent.activityState,
-        walking: false,
-        seconds: 0,
-        label: null,
-        icon: null,
-        badge: null,
-        selected: false,
-        identity: palette?.identityFor?.(agent.projectMk, agent.avatar),
-        appearance: palette?.appearanceOf?.(agent),
-      });
-    } catch (err) {
-      console.debug('[deckhq] drawCharacter failed on a board card', err);
-    }
-  }
 }

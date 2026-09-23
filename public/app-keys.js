@@ -32,7 +32,7 @@ import {
 // would have to hand in — `app.js` stands at WP-22's 900-line ceiling and a
 // surface that is hidden on every floor as the product ships has nothing to
 // add to the shell.
-import { closeStudioBoard, studioBoardOpen } from './board-ui.js';
+import { closeStudioBoard, studioBoardOpen } from './board-shell.js';
 
 /** @type {() => boolean} */
 let dismissCard = () => false;

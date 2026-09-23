@@ -30,10 +30,10 @@ import { currentId, displayedAgent } from './panel-state.js';
 /**
  * THE BOARD IS REACHED BY A DYNAMIC IMPORT, AND THAT IS NOT AN ACCIDENT.
  *
- * `board-ui.js` is a DOM module: it reaches `app-state.js`, whose `el` table
- * is built from `document.getElementById` at module scope. A STATIC import of
- * it here would make this file — and `panel.js`, which builds this part —
- * impossible to load under `node --test`, and four test files that have
+ * `board-shell.js` is a DOM module: it reaches `app-state.js`, whose `el`
+ * table is built from `document.getElementById` at module scope. A STATIC
+ * import of it here would make this file — and `panel.js`, which builds this
+ * part — impossible to load under `node --test`, and four test files that have
  * nothing to do with Studio (`permission-keys`, `rates`, `studio-roster-ui`,
  * `subagents`) would fail at import with `document is not defined` before a
  * single assertion ran. They did, for exactly one commit.
@@ -45,7 +45,7 @@ import { currentId, displayedAgent } from './panel-state.js';
  * against.
  */
 async function openStudioBoard() {
-  const mod = await import('./board-ui.js');
+  const mod = await import('./board-shell.js');
   mod.openStudioBoard();
 }
 

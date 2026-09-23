@@ -89,7 +89,7 @@ export const SURFACES = Object.freeze([
     id: 'studio-board',
     hostId: 'studio-board',
     title: 'Studio board',
-    owner: 'board-ui.js',
+    owner: 'board-shell.js',
   }),
 ]);
 
