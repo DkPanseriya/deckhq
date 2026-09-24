@@ -503,8 +503,14 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * stands inside a seat's own cell and the planting lost two of its four corners
  * — which is why the hash moved and the rooms did not change shape.
  * `docs/DEVIATIONS.md` §164.
+ *
+ * AND THE AUDIT'S F2 AND F3 ARE THE THIRD, and here moving the rooms is the
+ * point: the building is stretched to the window's shape once its arrangement
+ * is chosen, so the rooms take the width the search could not use and a
+ * column's rows end on the lounge's baseline. Every envelope on this ladder is
+ * the window's shape now rather than the sum of its parts.
  */
-const PLAN_HASH = 'bd8c7a47';
+const PLAN_HASH = '15de7c48';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {

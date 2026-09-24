@@ -62,11 +62,13 @@ import {
   MIN_PROJECT_ROOM_W,
   OFFICE_MAX_W,
   OFFICE_MIN_W,
+  OFFICE_ROW_ASPECT_MAX,
   OFFICE_ROW_MAX_DEPTH,
   OFFICE_ROW_MAX_W,
   OFFICE_SEAT_PITCH,
   PLATE_BAND,
   ROOM_FILL_MAX,
+  ROOM_FILL_STRETCH_MAX,
   ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
   SERVICE_W_STEP,
@@ -287,7 +289,7 @@ export function createRowFloor(deps) {
    * unchanged: the rooms grow DEEPER into the row the reception set, and what
    * stops them is the bare carpet rather than an axis bound.
    */
-  const rowOne = (askedW, roomsW, asked) => {
+  const rowOne = (askedW, roomsW, asked, minH1 = 0) => {
     // BOTH ROWS FILL ONE WIDTH, so row one is as wide as row two needs it to
     // be — which since WP-60 is the narrowest a lounge may be laid, and nothing
     // else. The reception absorbs the difference exactly as the lounge absorbs
@@ -307,7 +309,7 @@ export function createRowFloor(deps) {
     // user action and never a derived one.
     const pinH = reserveOf(asked, roomsW);
     let front = measureFront(owWanted, 0);
-    let h1 = Math.max(front.room.h, asked + pinH, MARGIN * 4);
+    let h1 = Math.max(front.room.h, asked + pinH, MARGIN * 4, minH1);
     // A row deeper than a reception can be is not a row this arrangement can
     // lay: the office would leave a strip of nothing under it, which is the
     // one thing the service side has never done. The column takes that floor.
@@ -372,17 +374,21 @@ export function createRowFloor(deps) {
    * rebuilt to the cell it was given needs a different amount of floor from
    * the one it bid with — with the rows' arithmetic in place of the column's.
    *
-   * @param {NonNullable<ReturnType<typeof envelopeFor>>} chosen
+   * @param {NonNullable<ReturnType<typeof envelopeFor>> & {minH1?: number,
+   *   minH2?: number, flowW?: number[]}} chosen `fitRows` adds the three
+   *   optional fields: the depths the stretch asks of each row, and how wide
+   *   each room's desks were composed before it
    * @param {(i:number, cell:{w:number,h:number}, aspect:number) => void} rebuild
    */
   const layRows = (chosen, rebuild) => {
     let roomsW = chosen.roomsW;
     let asked = chosen.asked;
-    let row = rowOne(chosen.askedW, roomsW, asked);
+    const minH1 = chosen.minH1 || 0;
+    let row = rowOne(chosen.askedW, roomsW, asked, minH1);
     let laid = { cells: [], corridors: [] };
     for (let pass = 0; pass < 8; pass++) {
       floor.invalidateBands();
-      row = rowOne(chosen.askedW, roomsW, asked) || row;
+      row = rowOne(chosen.askedW, roomsW, asked, minH1) || row;
       laid = projectRooms.length
         ? layWorkingFloor({ x: row.ow, y: 0, w: roomsW, h: row.bandH }, 1)
         : { cells: [], corridors: [] };
@@ -396,8 +402,9 @@ export function createRowFloor(deps) {
         // and its planting, never to a second row of desks.
         const natural0 = naturalOf(i);
         const flowH = Math.min(cell.h, natural0.h * ROOM_HEIGHT_STRETCH_MAX);
+        const flowW = Math.min(cell.w, chosen.flowW?.[i] ?? Infinity); // see `fitRows`
         const aspect =
-          Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, flowH - ROOM_PAD * 2 - PLATE_BAND);
+          Math.max(1, flowW - ROOM_PAD * 2) / Math.max(1, flowH - ROOM_PAD * 2 - PLATE_BAND);
         rebuild(i, cell, aspect);
         const natural = naturalOf(i);
         worstW = Math.max(worstW, natural.w / cell.w);
@@ -409,6 +416,7 @@ export function createRowFloor(deps) {
     }
 
     const back = rowTwo(row.W, chosen.pack, row.h1 + CORRIDOR);
+    back.h2 = Math.max(back.h2, chosen.minH2 || 0);
     return {
       W: row.W,
       H: row.h1 + CORRIDOR + back.h2,
@@ -496,5 +504,64 @@ export function createRowFloor(deps) {
     return oneRow() ? best() : null;
   };
 
-  return { envelopeFor, layRows, oneRow, searchRows };
+  /** The floor the rooms' furniture needs, all of it. */
+  const naturalArea = () =>
+    projectRooms.reduce((a, _, i) => a + naturalOf(i).w * naturalOf(i).h, 0);
+
+  /**
+   * TWO ROWS, STRETCHED TO THE WINDOW (audit F2). The column's rule on the
+   * other arrangement: once two rows are chosen, what the search could not
+   * make the window's shape is spent inside the building rather than left as
+   * ground above and below it. A building too WIDE for the window grows both
+   * rows deeper, each by its share of the height — row one's rooms and
+   * reception to the reception's own depth cap, the lounge by what is left, and
+   * it lays its bays to the height it is given. One too NARROW widens row one's
+   * reception and rooms in proportion — the rooms only as far as
+   * `ROOM_FILL_STRETCH_MAX`, the reception growing its waiting area by the
+   * rest — and the lounge under them takes it too because it spans the
+   * building. Re-laid until it is the shape, which is one pass or two.
+   *
+   * @param {any} chosen the two-row envelope `betterArrangement` took
+   * @param {(i:number, cell:{w:number,h:number}, aspect:number) => void} rebuild
+   * @param {number} targetAspect the window's shape
+   */
+  const fitRows = (chosen, rebuild, targetAspect) => {
+    let laid = layRows(chosen, rebuild);
+    const unstretched = { W: laid.W, H: laid.H };
+    // The desks keep the composition the unstretched row gave them; what the
+    // stretch adds is clear floor round them (`place` centres them in it).
+    const flowW = projectRooms.map((_, i) => laid.laid.cells[i]?.w ?? Infinity);
+    let want = { ...chosen, flowW };
+    for (let pass = 0; pass < 6; pass++) {
+      const off = laid.W / laid.H / targetAspect;
+      // A room stops at `ROOM_FILL_STRETCH_MAX` of its furniture's floor, past
+      // which it is a hall, on either axis; the service rooms take the rest.
+      const area = ROOM_FILL_STRETCH_MAX * naturalArea();
+      if (Math.abs(Math.log(off)) < 0.005) break;
+      if (off < 1) {
+        // The rooms first, to that bound; then the reception grows its waiting
+        // area, but only as far as its row's depth already allows
+        // (`OFFICE_ROW_ASPECT_MAX`), since a deeper reception is a taller
+        // building and a wider one again; then the rooms take the rest.
+        const W = laid.H * targetAspect;
+        const hallW = projectRooms.length ? area / Math.max(1, laid.bandH) : 0;
+        const officeMax = Math.max(laid.ow, (laid.h1 - PLATE_BAND) * OFFICE_ROW_ASPECT_MAX);
+        let roomsW = Math.max(laid.roomsW, Math.min(hallW, W - laid.ow));
+        const ow = Math.min(officeMax, W - roomsW);
+        roomsW = Math.max(roomsW, W - ow);
+        want = { ...want, askedW: ow, roomsW };
+      } else {
+        const extra = laid.W / targetAspect - laid.H;
+        const hallH = projectRooms.length ? area / laid.roomsW + laid.pinH : Infinity;
+        const cap = Math.min(OFFICE_ROW_MAX_DEPTH + PLATE_BAND, Math.max(laid.h1, hallH));
+        const h1 = Math.min(cap, laid.h1 + (extra * laid.h1) / (laid.h1 + laid.h2));
+        want = { ...want, minH1: h1, minH2: laid.h2 + extra - (h1 - laid.h1) };
+      }
+      floor.invalidateBands();
+      laid = layRows(want, rebuild);
+    }
+    return { ...laid, unstretched };
+  };
+
+  return { envelopeFor, fitRows, layRows, oneRow, searchRows };
 }
