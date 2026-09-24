@@ -312,6 +312,15 @@ const CAPTURES = [
     query: `phase=${CREW_PHASE}`,
   },
   { name: 'crew@reduced', population: 'crew', theme: 'default' },
+  // BUG 201 · A SENIOR WAITING ON YOU WITH ITS CREW STILL WORKING. The owner's
+  // floor had thirteen working juniors drawn round the reception sofa their
+  // parent was waiting on, and their room's desks empty. This holds the
+  // opposite: the senior on the sofa, the crew's arc cabled to its room's
+  // primary desk with the senior's name on it and the `+1` chip beside it, and
+  // two top-level sessions at their own desks in two other rooms. Reduced
+  // motion, like `crew@reduced`, so the picture is the placement and not a
+  // pulse's phase.
+  { name: 'crew-waiting', population: 'crew-waiting', theme: 'default' },
   // WP-69 · THE STUDIO BOARD, and it is the product's only golden of a surface
   // with rows in it rather than a floor or a form.
   //
