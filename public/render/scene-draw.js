@@ -18,34 +18,19 @@ import {
   ENVELOPE_SHADOW_BLUR_PX,
   ENVELOPE_SHADOW_DIST_PX,
 } from './backdrop.js';
-import {
-  badgeBox,
-  characterBox,
-  drawBadge,
-  drawCharacter,
-  formatElapsed,
-  labelBox,
-} from './rig.js';
+import { badgeBox, drawBadge, drawCharacter, formatElapsed } from './rig.js';
 import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
-import { lodForZoom, rigSeatOf, worldToScreen } from './agents.js';
+import { rigSeatOf, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
-import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.js';
+import { layoutPlate, resolveBadgeCollisions } from './scene-labels.js';
+import { planFrameLabels } from './scene-frame-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
-import {
-  colorForAgent,
-  stateForAgent,
-  agentLabelFor,
-  iconForAgent,
-  isNeedsYouAgent,
-  frameMs,
-  animMs,
-} from './scene-agent.js';
+import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
-import { CREW_SCALE, crewCableLive, crewChipAt } from './crew.js';
+import { CREW_SCALE, crewCableLive } from './crew.js';
 import { drawCrews } from './crew-draw.js';
-import { BODY_HEIGHT_U, CHROME_BADGE_U } from './rig-metrics.js';
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
@@ -413,13 +398,9 @@ export class SceneDraw extends SceneHit {
       }
     }
 
-    // LOD keys off the effective px-per-unit, which is now simply the fit
-    // scale — there is no user zoom multiplier any more. VISUAL-SPEC 1.1's
-    // bands (0.7 / 1.4) were written against an absolute world-to-pixel
-    // ratio, so this must keep reading the real px-per-unit rather than a
-    // fixed band: a big floor's fit scale can land in any of the three
-    // bands depending on the viewport it happens to be fitted to.
-    const lod = lodForZoom(this._scale() / U);
+    // LOD is the drawn figure's height (`scene-lod.js`), and it only ever
+    // takes detail off a body: names, plate lines and crews draw at every tier.
+    const lod = this._lod();
     const records = [...this._runtime.all()].filter((rec) => {
       const s = worldToScreen(rec, camera);
       return s.x > -60 && s.x < viewW + 60 && s.y > -60 && s.y < viewH + 60;
@@ -450,7 +431,7 @@ export class SceneDraw extends SceneHit {
     let badgePlan = null;
     /** @type {{id:string,x:number,y:number,w:number,h:number}[]} */
     const badgeBoxes = [];
-    if (lod >= 1 && this._scale() >= BADGE_MIN_PX_PER_UNIT) {
+    if (this._scale() >= BADGE_MIN_PX_PER_UNIT) {
       const items = [];
       for (const rec of records) {
         const agent = this._agentsById.get(rec.id);
@@ -476,90 +457,39 @@ export class SceneDraw extends SceneHit {
       }
     }
 
-    // Name-label collision pass (tech-lead review finding 1): measure every
-    // label that will actually be drawn this frame, in the same order
-    // characters paint in, and resolve overlaps before any of them are
-    // drawn — a label can only be nudged away from one already placed if it
-    // knows that one exists yet.
-    //
-    // AND THE BODIES AND THE BADGES ARE IN IT (WP-79). A label hangs below its
-    // own character's feet, and two things now reach into that strip of floor:
-    // the character standing in FRONT of it — one sofa row down, one desk
-    // nearer the reader — and the waiting badge of the character BEHIND it,
-    // which since WP-79 hangs `CHROME_BADGE_U` up rather than 2.35 because a
-    // taller figure pushed the whole over-head slot up with it. Both were
-    // always geometry; while a figure was 22 px of readable mass inside a 48 px
-    // box the first was invisible and the second did not reach. So both are
-    // added to the pass as PINNED obstacles: each claims its space and is never
-    // moved, and a label that cannot clear them is nudged down and then dropped
-    // — the rule this pass already had ("a missing label beats an unreadable
-    // smear"). Measured over the three populations in
-    // `test/unit/scene-math.test.mjs`: zero label-on-body overlaps, and at
-    // least four labels in five still drawn.
-    let labelPlan = null;
-    if (lod >= 1) {
-      const items = [];
-      for (const rec of records) {
-        const s = worldToScreen(rec, camera);
-        const box = characterBox(s.x, s.y, charU);
-        items.push({ id: `body:${rec.id}`, ...box, pin: true });
-        // WP-89 · A CREW PARENT'S RAISED HAND IS A PINNED OBSTACLE TOO.
-        //
-        // §4: a junior's name is never drawn over it. The hand and the badge
-        // share the over-head slot, which reaches `CHROME_BADGE_U` above the
-        // contact — above `characterBox`, which stops at the crown — so a crew
-        // parent claims that strip whether or not it happens to be waiting. It
-        // is the same rule WP-79 gave bodies and badges, applied to the one
-        // thing this formation crowds.
-        if (this._crewCounts.has(rec.id)) {
-          items.push({
-            id: `hand:${rec.id}`,
-            x: box.x,
-            y: s.y - charU * CHROME_BADGE_U,
-            w: box.w,
-            h: charU * (CHROME_BADGE_U - BODY_HEIGHT_U),
-            pin: true,
-          });
-          // And the crew's own chip, which is drawn under the bodies and would
-          // otherwise have a junior's name painted straight over it. Measured
-          // generously rather than exactly — an obstacle may claim more than it
-          // uses, and `drawChip` has the real text.
-          if (rec.targetSeat) {
-            const chip = worldToScreen(crewChipAt(rec.targetSeat), camera);
-            const cw = charU * 3.4;
-            const ch = charU * 0.8;
-            items.push({
-              id: `chip:${rec.id}`,
-              x: chip.x - cw / 2,
-              y: chip.y - ch / 2,
-              w: cw,
-              h: ch,
-              pin: true,
-            });
-          }
-        }
-      }
-      for (const box of badgeBoxes) items.push({ ...box, pin: true });
-      for (const rec of records) {
-        const agent = this._agentsById.get(rec.id);
-        const agentLabel = agent && this._labelFor(agent, rec);
-        if (!agentLabel) continue;
-        const s = worldToScreen(rec, camera);
-        // The CHARACTER scale, not the world scale — the label hangs off the
-        // body and has to be measured in the frame the body is drawn in.
-        const box = labelBox(ctx, s.x, s.y, charU, agentLabel);
-        items.push({
-          id: rec.id,
-          x: box.x,
-          y: box.y,
-          w: box.w,
-          h: box.h,
-          pin: rec.id === this._selectedId,
-          keep: isNeedsYouAgent(agent),
-        });
-      }
-      labelPlan = resolveLabelCollisions(items);
+    // THE PLATES ARE LAID OUT BEFORE ANY NAME IS SET (audit F7). They are still
+    // painted last, over the characters, but a name that hangs below an
+    // office row into the lounge's band has to know the plate is there, so
+    // each plate's rows and rect are measured here, once, and the same layout
+    // is handed to `_drawRoomPlate` below.
+    /** @type {Map<string, any>} */
+    const plates = new Map();
+    for (const room of this._plan ? this._plan.rooms : []) {
+      // A corridor has no name and no data line.
+      if (room.kind === 'corridor') continue;
+      plates.set(room.id, layoutPlate(ctx, room, this._platePlanFor(room), camera));
     }
+
+    // Name-label collision pass (tech-lead review finding 1), at EVERY level
+    // of detail since the 24 September audit: every body, badge, crew hand and
+    // chip and every room plate is a pinned obstacle, and every name is placed
+    // around them — `scene-frame-labels.js` has the rule and its test.
+    const labels = planFrameLabels(ctx, {
+      records,
+      agentsById: this._agentsById,
+      camera,
+      charU,
+      crewCounts: this._crewCounts,
+      badgeBoxes,
+      plateBoxes: [...plates.values()].map((p) => p.rect),
+      selectedId: this._selectedId,
+      uOf: (rec) => {
+        const a = this._agentsById.get(rec.id) || rec.agent;
+        return a && a.subagent === true
+          ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
+          : charU;
+      },
+    });
 
     // WP-89 · THE CREWS, UNDER THE BODIES. §1.5: everything this design draws
     // sits under the chrome band, and a cable that ran over a face would be the
@@ -583,7 +513,7 @@ export class SceneDraw extends SceneHit {
     });
 
     for (const rec of records) {
-      this._drawCharacterAt(rec, camera, lod, labelPlan, badgePlan);
+      this._drawCharacterAt(rec, camera, lod, labels, badgePlan);
     }
 
     // The aggregate pills, over the characters whose own badges they replace.
@@ -617,7 +547,7 @@ export class SceneDraw extends SceneHit {
         // ellipsised and hit-registered every frame anyway, which on the
         // current plan is two thirds of the rooms on the floor.
         if (room.kind === 'corridor') continue;
-        this._drawRoomPlate(room, camera);
+        this._drawRoomPlate(room, camera, plates.get(room.id));
         // The whiteboard/shelf/screen/"+" are project-room fixtures only —
         // the office and lounge have neither a project to launch nor a
         // whiteboard.
@@ -645,27 +575,7 @@ export class SceneDraw extends SceneHit {
     return seat && seat.crew === true ? CREW_SCALE : JUNIOR_SCALE;
   }
 
-  /**
-   * THE NAME UNDER A FIGURE, and the one place a crew member's differs (WP-89).
-   *
-   * §3.2: *"Each junior carries its `agentType` as its label."* A crew of five
-   * `MK1.2j1 … MK1.2j5` says which parent they belong to — which the arc around
-   * that parent already says, loudly — and nothing about what any of them is
-   * doing; `Explore`, `general-purpose` is the one fact the sidecar reliably
-   * carries (§3.1: *"a junior reliably has a TYPE"*).
-   *
-   * Only a member of a FORMATION, and only where a type was actually observed: a
-   * junior beside its parent in the old way keeps its MK tag, and so does a crew
-   * member whose runtime reported no type. Nothing is invented.
-   * @param {any} agent @param {any} rec
-   */
-  _labelFor(agent, rec) {
-    const seat = rec && rec.targetSeat;
-    if (seat && seat.crew === true && agent.subagentType) return String(agent.subagentType);
-    return agentLabelFor(agent);
-  }
-
-  _drawCharacterAt(rec, camera, lod, labelPlan, badgePlan) {
+  _drawCharacterAt(rec, camera, lod, labels, badgePlan) {
     const ctx = this.ctx;
     // WP-87: a record whose id has LEFT the snapshot is kept for `despawn`'s
     // 0.42 s so the figure can fold away, and for those few frames the only
@@ -681,24 +591,15 @@ export class SceneDraw extends SceneHit {
       agent.subagent === true
         ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
         : this._characterScale();
-    // Look up this frame's label-collision resolution (built once, before
-    // any character is drawn — see `_draw`). `labelPlan` is null at lod 0,
-    // where no label is gated to draw anyway (VISUAL-SPEC §7: "shown at L1
-    // and above").
-    let label = null;
-    let labelOffsetY = 0;
-    const agentLabel = this._labelFor(agent, rec);
-    if (lod >= 1 && agentLabel) {
-      const plan = labelPlan ? labelPlan.get(rec.id) : { offsetY: 0 };
-      if (plan) {
-        label = agentLabel;
-        labelOffsetY = plan.offsetY;
-      }
-      // `plan === undefined` (id absent from the map) never happens for a
-      // title-bearing agent — every such record was added to `items` in
-      // `_draw` — but `plan === null` (dropped by collision resolution)
-      // means: draw the character, not the label.
-    }
+    // This frame's name and where it goes, resolved once before any character
+    // is drawn (`planFrameLabels` in `_draw`). No text is a crew member whose
+    // type another member of its formation carries; a `null` placement is a
+    // resting figure's name the lounge had no room for.
+    const text = labels ? labels.texts.get(rec.id) : null;
+    const spot = text ? labels.plan.get(rec.id) : null;
+    const label = spot ? text : null;
+    const labelOffsetY = spot ? spot.offsetY : 0;
+    const labelOffsetX = spot ? spot.offsetX || 0 : 0;
     const s = worldToScreen(rec, camera);
     // While mid-walk, sample `walk` — or `run`, on the one trip that runs
     // (WP-87, `12-MOTION-AND-CREW.md` §2) — regardless of `rec.clip`, which
@@ -718,7 +619,24 @@ export class SceneDraw extends SceneHit {
     const now = animMs();
     const pinned = this._phase;
     const t = pinned === null ? (now - rec.clipStartedAt) / 1000 : pinned * clipDuration(clipName);
-    const pose = sampleClip(clipName, t, this._reduced);
+    // WP-87 · everything this figure is doing beyond its pose, from the snapshot
+    // and the clock (`life.js`); a shared scratch `drawCharacter` reads at once.
+    // Asked BEFORE the pose, because an ended figure whose power-down has run
+    // is STILL (`life.still`): it holds the clip's still frame, as under
+    // reduced motion, rather than breathing through the slump for ever.
+    const life = characterLife(agent, {
+      nowMs: now,
+      state: stateForAgent(agent),
+      lod,
+      reduced: this._reduced,
+      pinned,
+      flickerAt: rec.flickerAt ?? null,
+      spawnAt: rec.spawnAt ?? null,
+      leftAt: rec.leftAt ?? null,
+      walking,
+      running,
+    });
+    const pose = sampleClip(clipName, t, this._reduced || life.still);
     // `pose.bodyAngle` from a clip is a small relative sway (e.g. arcade's lean), not an
     // absolute facing — every clip except `arcade` leaves it at 0. The character's actual
     // facing (seat orientation, or direction of travel while walking) is `rec.angle`.
@@ -747,8 +665,7 @@ export class SceneDraw extends SceneHit {
     // pill for the whole row, drawn once in `_draw`. The icon and the name are
     // untouched — suppressing a badge says "the times are on the plate and in
     // the panel", never "this person is not waiting".
-    const waitingMs =
-      lod >= 1 && this._scale() >= BADGE_MIN_PX_PER_UNIT ? waitingBadgeMs(agent) : null;
+    const waitingMs = this._scale() >= BADGE_MIN_PX_PER_UNIT ? waitingBadgeMs(agent) : null;
     const badge =
       waitingMs !== null && (!badgePlan || badgePlan.drawn.has(rec.id))
         ? formatElapsed(waitingMs)
@@ -785,21 +702,7 @@ export class SceneDraw extends SceneHit {
       // `performance.now()`, which nothing could pin).
       seconds: now / 1000,
       phase: pinned,
-      // WP-87 · everything this figure is doing beyond its pose, computed from
-      // the snapshot and the clock in `life.js`. It is a shared scratch object:
-      // `drawCharacter` reads it synchronously and nothing holds on to it.
-      life: characterLife(agent, {
-        nowMs: now,
-        state: stateForAgent(agent),
-        lod,
-        reduced: this._reduced,
-        pinned,
-        flickerAt: rec.flickerAt ?? null,
-        spawnAt: rec.spawnAt ?? null,
-        leftAt: rec.leftAt ?? null,
-        walking,
-        running,
-      }),
+      life,
       // WP-97 · sitting where the seat says: a desk, a sofa, or a crew's floor
       // with the laptop's lid open exactly as far as its cable is live.
       seat: rigSeatOf(rec, pose),
@@ -807,6 +710,7 @@ export class SceneDraw extends SceneHit {
       // Resolved once per frame by `_draw`'s collision pass; the rig gates it.
       label,
       labelOffsetY,
+      labelOffsetX,
       icon,
       badge,
       // WP-52: what this session is doing right now, straight off the

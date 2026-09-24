@@ -457,6 +457,7 @@ export function loungeHoldMs(sessionId, cycleIndex = 0) {
  * @property {number} scale    spawn/despawn size multiplier, 0..1
  * @property {number} fade     spawn/despawn opacity, 0..1
  * @property {boolean} running this trip is a run rather than a walk
+ * @property {boolean} [still] an ended figure whose power-down has run: no bob, no blink
  */
 
 /** @type {Life} */
@@ -470,6 +471,7 @@ const _life = {
   scale: 1,
   fade: 1,
   running: false,
+  still: false,
 };
 
 /**
@@ -491,6 +493,7 @@ function rest() {
   _life.scale = 1;
   _life.fade = 1;
   _life.running = false;
+  _life.still = false;
   return _life;
 }
 
@@ -544,6 +547,11 @@ export function characterLife(agent, opts) {
     // §1.4's list of refusals: *"no animation at all on `let_go`"*. A let-go
     // session is drawn powered down and is not animated into it.
     life.power = state === 'let_go' ? 1 : powerDown(now, agent.lastActivityAt, phaseOpts);
+    // §2's table: `ended` is a slump, "seated, still". Once the one-shot
+    // power-down has run, nothing on the figure moves — not the slump's
+    // breathing, not the antenna bob, not the visor blink (audit F9: every
+    // ended body in the lounge drew 1-2 px of motion between two frames).
+    life.still = life.power >= 1;
     return life;
   }
 

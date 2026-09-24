@@ -511,6 +511,30 @@ test('HONESTY · nothing animates on `let_go`', () => {
   assert.equal(life.flicker, 0);
 });
 
+test('HONESTY · an ended figure is STILL once its power-down has run (audit F9)', () => {
+  // §2's table: `ended` is a slump, "seated, still". Motion ON, two clocks
+  // 1.7 s apart, both after the 1.6 s one-shot: the frames are byte-identical —
+  // no slump breathing, no antenna bob, no visor blink.
+  const ended = agent('e', { activityState: 'ended', lastActivityAt: NOW - 60_000 });
+  const at = (now) => drawOne(ended, { now, state: 'ended', clip: 'slump' });
+  for (const t of [NOW, NOW + 850, NOW + 3_333]) {
+    assert.equal(JSON.stringify(at(t)), JSON.stringify(at(t + 1_700)), `moved at +${t - NOW} ms`);
+  }
+  const life = characterLife(ended, { nowMs: NOW, state: 'ended', lod: 2 });
+  assert.equal(life.still, true);
+  // While the one-shot is still playing it is NOT still: the power-down is the
+  // one thing an ending figure does.
+  const ending = agent('e2', { activityState: 'ended', lastActivityAt: NOW - 300 });
+  assert.equal(characterLife(ending, { nowMs: NOW, state: 'ended', lod: 2 }).still, false);
+  assert.notEqual(
+    JSON.stringify(drawOne(ending, { now: NOW, state: 'ended', clip: 'slump' })),
+    JSON.stringify(drawOne(ending, { now: NOW + 900, state: 'ended', clip: 'slump' })),
+    'the power-down itself did not play',
+  );
+  // And a live figure keeps its idle life.
+  assert.equal(characterLife(agent('w'), { nowMs: NOW, state: 'working', lod: 2 }).still, false);
+});
+
 test('HONESTY · a timestamp the daemon never reported animates nothing', () => {
   assert.equal(sinceS(NOW, undefined), -1);
   assert.equal(sinceS(NOW, null), -1);
