@@ -203,6 +203,9 @@ const OPEN_SETTLE = 0.02;
  *      it was a different shape. `OPEN_SETTLE` is the band inside which two
  *      arrangements are the same answer — two points, a tenth of the gap this
  *      exists to close — so a floor does not refold itself to buy a rounding.
+ *      Read as a share of the WINDOW since WP-99 ({@link windowOpen}), so
+ *      the ground a building leaves beside itself is paid for in the same
+ *      unit as the floor inside it that nobody stands on.
  *   3. **And then the shape** (§139), for the two that are equally full.
  *
  * Ranks 2 and 3 are the opposite way round from `better`'s, and deliberately.
@@ -212,8 +215,8 @@ const OPEN_SETTLE = 0.02;
  * trade: a two-row building is not a narrower one, it is a differently folded
  * one, and the fill is the only reason to prefer it.
  *
- * @param {{workOpen:number, aspectErr:number}} a
- * @param {{workOpen:number, aspectErr:number}} b
+ * @param {{workOpen:number, aspectErr:number, open:number}} a
+ * @param {{workOpen:number, aspectErr:number, open:number}} b
  */
 export function betterArrangement(a, b) {
   const bar = Math.log(1 + ASPECT_TOLERANCE);
@@ -244,6 +247,32 @@ export function betterArrangement(a, b) {
   // window to within a few points, which is the ordinary case and was never
   // the case it was measured on.
   if (Math.abs(a.aspectErr - b.aspectErr) > bar) return a.aspectErr < b.aspectErr;
-  if (Math.abs(a.workOpen - b.workOpen) > OPEN_SETTLE) return a.workOpen < b.workOpen;
+  // 2. THE OPEN FLOOR — AND, ACROSS THE ACCEPTANCE, IN THE WINDOW'S UNIT (WP-99).
+  //
+  // `workOpen` is a share of each arrangement's OWN working side, and the two
+  // sides are not the same size: a column's is the half of the building beside
+  // the lounge, two rows' is the whole width of row one. That is a fair race
+  // while both buildings are the window's shape, and it is the wrong one when
+  // only one of them is: the arrangement past `ASPECT_TOLERANCE` is spending
+  // the window, and ranked raw, 19% of a column's half-building outweighed nine
+  // points of window left dark — the `demo` floor was drawn 2.23:1 on a 1.84:1
+  // stage with a band of ground above and below it. So where the two straddle
+  // the acceptance, both costs are read in the one unit the owner sees: what
+  // the building leaves dark, plus what it covers and nobody stands on. WP-60's
+  // own case still folds, because there the column left half its side bare.
+  const straddle = a.aspectErr > bar !== b.aspectErr > bar;
+  const [oa, ob] = straddle ? [windowOpen(a), windowOpen(b)] : [a.workOpen, b.workOpen];
+  if (Math.abs(oa - ob) > OPEN_SETTLE) return oa < ob;
   return a.aspectErr < b.aspectErr - 1e-4;
+}
+
+/**
+ * The share of the window an arrangement does not use (WP-99): the ground
+ * beside the building, which is `1 - exp(-aspectErr)` of the stage once the
+ * camera fits the binding axis, and the open floor inside the building, which
+ * is `open` of what is left.
+ * @param {{aspectErr:number, open:number}} c
+ */
+export function windowOpen(c) {
+  return 1 - Math.exp(-c.aspectErr) * (1 - c.open);
 }
