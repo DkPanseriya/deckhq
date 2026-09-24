@@ -303,3 +303,65 @@ test('bug 201: the room counts a desk for the crew anchor when the parent is awa
   assert.equal(pop.desks.get('career-ops'), 1);
   assert.equal(pop.waiting, 1, 'the senior, and none of its juniors');
 });
+
+/**
+ * Audit F4: a crew whose juniors run in git worktrees. Each worktree-isolated
+ * junior reports its own worktree as its cwd, so five siblings can name five
+ * repos; keyed by their own repo they were five crews of one and no arc formed.
+ * @param {object|null} parentOver the parent's fields, or null for no parent
+ */
+function worktreeCrew(parentOver) {
+  const parent = parentOver && agent('claude-code:p', parentOver);
+  const wt = (k) => `career-ops-claude-worktrees-agent-${k}`;
+  const agents = [
+    ...(parent ? [parent] : []),
+    junior(jid(1), 'claude-code:p', { projectId: wt('a') }),
+    junior(jid(2), 'claude-code:p', { projectId: wt('b') }),
+    junior(jid(3), 'claude-code:p', { projectId: wt('c') }),
+    junior(jid(4), 'claude-code:p', { projectId: parent ? 'career-ops' : wt('d') }),
+    junior(jid(5), 'claude-code:p', { projectId: parent ? 'career-ops' : wt('e') }),
+  ];
+  const projects = [
+    { id: 'career-ops', name: 'career-ops', sessionCount: 1, activeCount: 1 },
+    ...['a', 'b', 'c', 'd', 'e'].map((k) => ({
+      id: wt(k),
+      name: `agent-${k}`,
+      sessionCount: 0,
+      activeCount: 1,
+    })),
+  ];
+  return { agents, projects };
+}
+
+for (const [label, over] of [
+  ['at its desk', {}],
+  ['on the sofa', { activityState: 'for_review', reviewSince: NOW - MIN }],
+]) {
+  test(`audit F4: juniors in worktrees of the parent's repo form one arc, parent ${label}`, () => {
+    const { agents, projects } = worktreeCrew(over);
+    const pop = floorPopulation(agents, { now: NOW });
+    assert.deepEqual(pop.crews.get('career-ops'), [5], 'one crew of five, in the parent’s room');
+    assert.equal(pop.crews.size, 1, 'no worktree has a crew of its own');
+    const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+    const seats = assignSeats(plan, agents);
+    const home = room(plan, 'project', 'career-ops');
+    for (const j of agents.filter((a) => a.subagent)) {
+      const s = seats.get(j.id);
+      assert.equal(s?.crew, true, `${j.id} is in the arc`);
+      assert.equal(s?.crewOf, 'claude-code:p');
+      assert.ok(inside(s, home), `${j.id} is in the parent's room`);
+    }
+  });
+}
+
+test('audit F4: with the parent off the snapshot, its worktree juniors still share one room', () => {
+  const { agents, projects } = worktreeCrew(null);
+  const pop = floorPopulation(agents, { now: NOW });
+  assert.deepEqual([...pop.crews.values()], [[5]], 'one crew, not five crews of one');
+  const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+  const seats = assignSeats(plan, agents);
+  assert.ok(
+    agents.every((j) => seats.get(j.id)?.crew === true),
+    'every junior is in the one arc',
+  );
+});

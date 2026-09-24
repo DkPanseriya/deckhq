@@ -194,6 +194,13 @@ export function agentIndex(agents) {
  * parent's helper whether the parent is at a desk, on a sofa or in the lounge,
  * so the room does not depend on where the parent is — only on who it is.
  *
+ * ONE CREW, ONE ROOM (audit F4). With the parent absent from the snapshot the
+ * juniors still share one home: otherwise five siblings in five worktrees are
+ * five rooms of one junior each and never reach `CREW_THRESHOLD`. The shared
+ * home is the siblings' repo that is a prefix of the most sibling repos (a
+ * worktree's project id starts with its repo's), then the shortest, then the
+ * first by id order — a function of the snapshot, never of arrival order.
+ *
  * @param {FloorAgent} agent
  * @param {Map<string, FloorAgent>} [byId] `agentIndex` of the same snapshot
  * @returns {string}
@@ -202,8 +209,32 @@ export function homeProjectOf(agent, byId) {
   if (isSubagent(agent) && agent.parentId != null && byId) {
     const parent = byId.get(String(agent.parentId));
     if (parent && parent.projectId != null) return String(parent.projectId);
+    const shared = orphanHome(String(agent.parentId), byId);
+    if (shared) return shared;
   }
   return agent.projectId == null ? '' : String(agent.projectId);
+}
+
+/**
+ * The one repo the juniors of a parent NOT on the snapshot share
+ * (`homeProjectOf`). A walk of the snapshot per call, and only ever made for
+ * such a junior — rare, since a parent outlives its juniors on the scan.
+ * @param {string} parentId
+ * @param {Map<string, FloorAgent>} byId
+ * @returns {string}
+ */
+function orphanHome(parentId, byId) {
+  /** @type {string[]} */
+  const list = [];
+  for (const a of byId.values()) {
+    if (isSubagent(a) && String(a.parentId) === parentId && a.projectId != null)
+      list.push(String(a.projectId));
+  }
+  const covers = (p) => list.filter((q) => q.startsWith(p)).length;
+  const ranked = [...new Set(list)].sort(
+    (a, b) => covers(b) - covers(a) || a.length - b.length || (a < b ? -1 : 1),
+  );
+  return ranked[0] || '';
 }
 
 /**
