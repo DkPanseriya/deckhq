@@ -206,6 +206,8 @@ let _fx = 0,
   _tx = 0,
   _ty = 0;
 let _lid = 1;
+/** A laptop's shell, seen from behind the lid. */
+const LAPTOP_SHELL = '#D6DAE0';
 
 /**
  * Resolve one character's geometry into the scratch above.
@@ -498,17 +500,19 @@ export function drawRigBase(ctx) {
 export function drawRigLaptop(ctx) {
   if (_k.seat !== 'floor') return;
   const top = _k.by + 0.06;
-  const lid = 0.17 * _lid;
+  const lid = 0.19 * _lid;
   if (lid > 0.01) {
-    lRoundRect(ctx, 0, top + lid / 2, 0.4, lid, 0.02, 0);
-    paint(ctx, PALETTE.monitorBody);
+    // The back of the lid, in a laptop's own silver rather than the monitor's
+    // dark: at a crew member's 20 px, dark on a dark-green lap is one lump.
+    lRoundRect(ctx, 0, top + lid / 2, 0.42, lid, 0.03, 0);
+    paint(ctx, LAPTOP_SHELL);
     // The screen's own light, spilling over the top edge toward the reader.
-    lRoundRect(ctx, 0, top + lid - 0.012, 0.3, 0.018, 0.009, 0);
+    lRoundRect(ctx, 0, top + lid - 0.014, 0.32, 0.024, 0.012, 0);
     ctx.fillStyle = PALETTE.monitorScreenGlow;
     ctx.fill();
   }
-  lRoundRect(ctx, 0, top - 0.02, 0.46, 0.05, 0.02, 0);
-  paint(ctx, PALETTE.monitorBody);
+  lRoundRect(ctx, 0, top - 0.02, 0.48, 0.055, 0.025, 0);
+  paint(ctx, LAPTOP_SHELL);
 }
 
 /** The far arm: the first thing to go below `RIG_DETAIL_MIN_PX`. */
@@ -721,11 +725,7 @@ export function drawRigCrown(ctx) {
  * excluded. What the over-head chrome hangs off.
  */
 export function rigTopY() {
-  return Math.max(
-    crownTop(_id.crown, _hy, _hr, _droop),
-    _hy + _hr * 1.14,
-    _aRy + MITT_R + 0.04,
-  );
+  return Math.max(crownTop(_id.crown, _hy, _hr, _droop), _hy + _hr * 1.14, _aRy + MITT_R + 0.04);
 }
 
 /** The local y of the top of the raised hand. */

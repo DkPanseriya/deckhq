@@ -150,6 +150,30 @@ export function seatedAt(placement, seat) {
   return !(seat && /** @type {{standing?: boolean}} */ (seat).standing === true);
 }
 
+/**
+ * WHERE THE FIGURE IS SITTING, for the rig (WP-97): `'desk'`, `'sofa'`,
+ * `'floor'`, or null for standing.
+ *
+ * A crew member sits on the floor with its laptop (WP-89). A benched agent in
+ * the lounge sits when the activity its clip plays is a sitting one — a sofa, a
+ * board game, a book — and stands at the pool table and the arcade. Anybody
+ * else sits wherever {@link seatedAt} says there is a chair: a desk sits at a
+ * task chair, and the reception's sofa runs and its one visitor chair (WP-93)
+ * both sit back. A queue place, an overflow ring and a junior beside its
+ * parent are all bare carpet, and nobody walking is sitting.
+ * @param {{path?:unknown[], targetSeat?:any, placement?:string, seated?:boolean}|null} rec
+ * @param {{seated?:boolean}|null} [pose] the clip's pose, for the lounge
+ * @returns {'desk'|'sofa'|'floor'|null}
+ */
+export function rigSeatOf(rec, pose) {
+  if (!rec || (Array.isArray(rec.path) && rec.path.length > 0)) return null;
+  const seat = rec.targetSeat || null;
+  if (seat && seat.crew === true) return 'floor';
+  if (rec.placement === 'lounge') return pose && pose.seated === true ? 'sofa' : null;
+  if (!rec.seated || (seat && (seat.junior === true || seat.overflow === true))) return null;
+  return rec.placement === 'office' ? 'sofa' : rec.placement === 'desk' ? 'desk' : null;
+}
+
 export function samePoint(a, b) {
   if (a === b) return true;
   if (!a || !b) return false;

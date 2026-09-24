@@ -296,7 +296,10 @@ const SEATED = {};
 for (const state of RIG_STATES) {
   SEATED[state] = {};
   for (const seat of RIG_SEATS) {
-    SEATED[state][seat] = [seatPose(RIG_POSES[state], seat, false), seatPose(RIG_POSES[state], seat, true)];
+    SEATED[state][seat] = [
+      seatPose(RIG_POSES[state], seat, false),
+      seatPose(RIG_POSES[state], seat, true),
+    ];
   }
 }
 
