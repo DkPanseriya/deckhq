@@ -6,6 +6,16 @@
 
 ## Unreleased
 
+## 1.6.0 — 2026-09-24
+
+### Highlights
+
+Studio is complete, from an idea to tracked work. Plan, hire a role, and move its cards across a
+six-column board, from the keyboard if you like. A role hands its work back in a file you accept
+or bounce; each card shows the tokens and time it spent; a regular pass flags drift; and a card
+over its budget is blocked. The robots sit — at desks, on sofas, cross-legged with laptops. The
+board fits any window, the floor fills the window again, and Linux screenshots are now checked too.
+
 ### Added
 
 - **The Studio board.** A project with Studio on now has its cards as a board, beside the floor:
