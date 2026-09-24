@@ -263,9 +263,14 @@ const ASPECTS = [1.2, 1.6, 1.78, 2.06, 2.2];
  * `betterArrangement`'s first rank was a bar rather than a distance. Every
  * assertion in this file passed, because none of them was ever asked at the
  * size the product renders at.
+ *
+ * 1600 x 870 is the same correction for the goldens' own window (WP-99): the
+ * `demo` capture's canvas, which this list held only as the window around it.
+ * The goldens' floors themselves are asked in `golden-floor-fill.test.mjs`.
  */
 const STAGES = [
   [1600, 1000],
+  [1600, 870],
   [1920, 1080],
   [1920, 950],
   [2560, 1440],

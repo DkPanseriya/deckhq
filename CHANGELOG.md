@@ -124,6 +124,16 @@
   wave, the page flip and the stall still animate on a seated robot, and a seated robot drawn small
   simplifies to one shorter shape rather than to a smudge of legs.
 
+### Fixed
+
+- **The floor fills the window again when it has five or six busy projects.** Such a floor could be
+  laid as one long row of rooms with the lounge underneath, a building much wider than the window,
+  so it was drawn with a dark band above it and another below — on the 1600 × 1000 demo floor the
+  building used rows 206–922 of 1000. When one way of laying the floor fits the window and the
+  other does not, the two are now compared by how much of the whole window each leaves unused,
+  rather than by how much of its own rooms' side is bare. The demo floor now uses the full height,
+  rows 130–999. Floors that already fitted the window are laid exactly as before.
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights
