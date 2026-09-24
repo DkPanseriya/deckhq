@@ -697,9 +697,9 @@ export function juniorActive(agent, now) {
  * its file. Nothing here synthesises a member from a count, so `juniorCount` and
  * `crew.count` cannot drift.
  *
- * Sorted by id — the order `assignSeats` seats them in and `describeJunior`
- * numbers them in — so the arc, the deck and the panel agree about which junior
- * is the first one.
+ * Sorted by id — the order `assignSeats` seats them in — so the arc, the deck
+ * and the panel agree about which junior is the first one. A junior's LABEL is
+ * not this order: it is numbered once and keeps it (`juniorOrdinals`, audit F6).
  *
  * @param {(FloorAgent & Record<string, any>)[]} agents every agent on the snapshot
  * @param {{now?:number}} [opts]
