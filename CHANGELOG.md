@@ -15,6 +15,13 @@
   used. Only the most recent 64 numbers per session are remembered for subagents that have
   finished, so the file does not grow with every subagent ever run.
 
+### Testing
+
+- **The look import and export tests touch nothing outside the test.** Once in a full run,
+  `look-io.test.mjs` passed every test and still exited with a failure, with no message. Its
+  command-line tests now replace every connection, file and output with a stand-in, and a check
+  at the end fails with a name if anything the tests started is still running.
+
 ## 1.6.1 — 2026-09-24
 
 ### Highlights
