@@ -54,6 +54,9 @@ export class RegistryBase {
   _lastSummaries;
   /** @type {Map<string,string>} */ // survivor agent id -> the id whose name it wears (§155)
   _identityOf;
+  /** @type {Map<string, {next:number, of:Map<string, number>}>|undefined} */
+  // audit F6: each parent's junior numbers, handed out once (`juniorOrdinals`)
+  _juniorOrdinals;
   /** @type {Map<string,string[]>} */ // survivor agent id -> the ids it absorbed, oldest first
   _absorbed;
   /** @type {string|null} */ // the snapshot signature last emitted
