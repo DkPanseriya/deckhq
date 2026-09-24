@@ -112,7 +112,8 @@ export function budgetStopped(card) {
  * @param {{projectFromBody:(req:any,res:any)=>Promise<any>,
  *          consentFor:(key:string)=>any,
  *          resolveProject:(raw:unknown)=>any}} helpers
- * @returns {{tick:() => Promise<any>, checkBudgets:(root:string) => Promise<any[]>,
+ * @returns {{tick:() => Promise<any>,
+ *            checkBudgets:(root:string, records?:() => Promise<any[]>) => Promise<any[]>,
  *            runPass:(root:string) => Promise<any>, stop:() => void}}
  */
 export function registerDrift(router, ctx, helpers) {
@@ -173,12 +174,22 @@ export function registerDrift(router, ctx, helpers) {
    * Block every card in `in_progress` that has crossed its cap, then post
    * each one's session its one message.
    * @param {string} root
+   * @param {() => Promise<any[]>} [records] the ledger, read on demand
    * @returns {Promise<Array<{cardId:string, which:string, agentId:string|null, posted:boolean}>>}
    */
-  function checkBudgets(root) {
+  function checkBudgets(root, records = ledgerRecords) {
     return serial(async () => {
       const at = clockNow();
-      const input = inputsFor(root, await ledgerRecords());
+      // The ledger is read only for a board that has something it could stop:
+      // a card in progress with a cap. Most boards, most minutes, have none,
+      // and ninety days of ledger is not a thing to read once a minute for
+      // nothing.
+      const peek = new StudioStore(root, { log }).readBoard();
+      const capped = (peek.board?.cards || []).some(
+        (c) => c.column === WORK_COLUMN && (c.budget?.tokens || c.budget?.minutes),
+      );
+      if (peek.error || !capped) return [];
+      const input = inputsFor(root, await records());
       if (input.current.error) return [];
       const board = {
         ...input.current.board,
@@ -354,9 +365,12 @@ export function registerDrift(router, ctx, helpers) {
    */
   async function tick() {
     const out = [];
+    /** One read of the ledger per tick, shared by every project that needs it. */
+    let once = /** @type {Promise<any[]>|null} */ (null);
+    const records = () => (once ??= ledgerRecords());
     for (const [key, root] of consented()) {
       try {
-        const stops = await checkBudgets(root);
+        const stops = await checkBudgets(root, records);
         const passed = await schedule.tick(key);
         out.push({ projectKey: key, stops, pass: passed });
       } catch (err) {
