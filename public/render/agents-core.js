@@ -42,6 +42,9 @@ import { registerBodyScale, scaleAll } from './plan-scale.js';
  *   crew?: boolean,
  *   crewIndex?: number,
  *   crewOf?: string,
+ *   crewAnchor?: {x:number, y:number, angle?:number},
+ *   crewAway?: boolean,
+ *   crewTotal?: number,
  *   laptop?: {x:number, y:number, angle:number},
  *   port?: {x:number, y:number},
  *   route?: {x:number, y:number}[],
@@ -73,7 +76,8 @@ import { registerBodyScale, scaleAll } from './plan-scale.js';
  * @property {boolean} [subagent]   WP-41: this is a junior. Read by
  *   `derivePlacement`, and it was not declared here even though the whole
  *   junior seating pass turns on it.
- * @property {string|null} [parentId]  the senior it stands beside.
+ * @property {string|null} [parentId]  the senior that spawned it — whose desk it
+ *   sits beside when that senior is at one (bug 201).
  */
 
 /**

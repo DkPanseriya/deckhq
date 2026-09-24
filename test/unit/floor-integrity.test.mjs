@@ -44,7 +44,12 @@ import {
   SERVICE_W_STEP,
 } from '../../public/render/plan-units.js';
 import { assignSeats, AgentRuntime, derivePlacement } from '../../public/render/agents.js';
-import { idleProjectsOf } from '../../public/floor-rule.js';
+import {
+  agentIndex,
+  CREW_DRAW_CAP,
+  homeProjectOf,
+  idleProjectsOf,
+} from '../../public/floor-rule.js';
 // The fit is the other half of WP-59 and the two only mean anything together:
 // an envelope the shape of the window that the camera then refuses to grow
 // into it is the same picture as a small building. `scene.js` imports cleanly
@@ -1947,32 +1952,32 @@ test('no agent is drawn outside the room it stands in, juniors included', () => 
   // seat pitch further out than the last and nothing ever asked where the wall
   // was.
   //
-  // A JUNIOR'S ROOM IS ITS PARENT'S. That is the whole of WP-41's rule
-  // ("a junior is only ever beside its parent") and it is why this cannot be
-  // asked of `derivePlacement`, which answers `desk` for a junior standing in
-  // a lounge beside a benched senior.
+  // A JUNIOR'S ZONE IS ITS OWN (bug 201). WP-41 said "a junior is only ever
+  // beside its parent" and this test used to ask for the parent's room — which
+  // is exactly how a senior waiting on a reception sofa came to have its
+  // thirteen working juniors drawn in the office. A junior is placed by its own
+  // state like anybody else; the only thing its parent decides is the ROOM a
+  // desk-bound junior works in (`homeProjectOf`).
   const PAD = 0.5;
   for (const spec of [...POPULATIONS, JUNIORS]) {
     const { projects, agents } = floor(spec);
-    const byId = new Map(agents.map((a) => [a.id, a]));
+    const byId = agentIndex(agents);
     for (const [stageW, stageH] of STAGES) {
       const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
       const seats = assignSeats(plan, agents);
       const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
       const roomFor = (a) => {
-        if (a.subagent === true) {
-          const parent = byId.get(String(a.parentId));
-          return parent ? roomFor(parent) : null;
-        }
         const p = derivePlacement(a);
-        if (p === 'desk')
-          return plan.rooms.find((r) => r.kind === 'project' && r.id === a.projectId);
+        if (p === 'desk') {
+          const home = homeProjectOf(a, byId);
+          return plan.rooms.find((r) => r.kind === 'project' && r.id === home);
+        }
         if (p === 'office') return plan.rooms.find((r) => r.kind === 'office');
         return plan.rooms.find((r) => r.kind === 'lounge');
       };
       for (const a of agents) {
         const seat = seats.get(a.id);
-        if (!seat) continue; // let go, gone home, or a junior with no parent drawn
+        if (!seat) continue; // let go, gone home, or a crew member past the cap
         const room = roomFor(a);
         assert.ok(room, `${where}: ${a.id} has a seat and no room`);
         assert.ok(
@@ -1989,29 +1994,35 @@ test('no agent is drawn outside the room it stands in, juniors included', () => 
   }
 });
 
-test("the lounge's packed row of juniors is inside the lounge", () => {
-  // The same property, stated on the one case it was broken in, so a
-  // regression names itself. Sixteen juniors beside a benched senior: they are
-  // all drawn, all in the lounge, and no two of them are in the same place.
+test("a benched senior's sixteen working juniors are in their project room, apart", () => {
+  // The same property, stated on the case it was broken in, so a regression
+  // names itself. WP-59d found sixteen juniors beside a benched senior drawn
+  // half outside the lounge; bug 201 found that they should never have been in
+  // the lounge at all — they are WORKING, and the senior's bench is the user's
+  // word about the senior. So: all in the project room, no two in the same
+  // place, and every one drawn that the crew's cap allows (an arc draws
+  // `CREW_DRAW_CAP`; the rows it falls back to draw everybody).
   const { projects, agents } = floor(JUNIORS);
   for (const [stageW, stageH] of STAGES) {
     const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
     const seats = assignSeats(plan, agents);
-    const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+    const room = plan.rooms.find((r) => r.kind === 'project' && r.id === 'p0');
     const juniors = agents.filter((a) => a.parentId === 'b0');
     assert.equal(juniors.length, 16, 'the fixture has to hold the row that broke');
+    const arc = juniors.some((j) => seats.get(j.id)?.crew === true);
+    assert.equal(juniors.filter((j) => seats.has(j.id)).length, arc ? CREW_DRAW_CAP : 16);
     const seen = new Set();
     for (const j of juniors) {
       const seat = seats.get(j.id);
-      assert.ok(seat, `${j.id} is not drawn at all`);
+      if (!seat) continue;
       assert.ok(
-        seat.x >= lounge.x &&
-          seat.x <= lounge.x + lounge.w &&
-          seat.y >= lounge.y &&
-          seat.y <= lounge.y + lounge.h,
+        seat.x >= room.x &&
+          seat.x <= room.x + room.w &&
+          seat.y >= room.y &&
+          seat.y <= room.y + room.h,
         `${j.id} stands at ${seat.x.toFixed(1)},${seat.y.toFixed(1)}, outside the ` +
-          `${lounge.w.toFixed(1)}x${lounge.h.toFixed(1)} lounge at ` +
-          `${lounge.x.toFixed(1)},${lounge.y.toFixed(1)} (${stageW}x${stageH})`,
+          `${room.w.toFixed(1)}x${room.h.toFixed(1)} p0 room at ` +
+          `${room.x.toFixed(1)},${room.y.toFixed(1)} (${stageW}x${stageH})`,
       );
       const key = `${seat.x.toFixed(2)}:${seat.y.toFixed(2)}`;
       assert.ok(!seen.has(key), `two juniors are standing at ${key}`);
