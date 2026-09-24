@@ -7,7 +7,7 @@
 forgot, and it remembers what's waiting on you even after you've read it. Local, private, MIT,
 zero dependencies.
 
-![The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn stand waiting for a reply](test/goldens/win32/three.png)
+![The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn sit waiting for a reply](test/goldens/win32/three.png)
 
 _Screenshot — three repositories, nine sessions, two of them waiting on you._
 
@@ -52,13 +52,13 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
   changes when you press a button. Opening a conversation does not clear it; scrolling past it does
   not clear it; reading it does not clear it.
 - **Six states, and two different "needs you" signals.** A raised hand at a desk means _I am
-  mid-task and blocked_. A person standing in your office means _I finished; review this_. Those
+  mid-task and blocked_. A person waiting in your office means _I finished; review this_. Those
   need different responses, so they look different and are counted separately.
 - **A review card, not a notification.** Click anyone and the panel has how long they have been
   waiting, what they said as the markdown they actually wrote, and what changed in that project's
   working tree — then `1` reply, `2` approve, `3` bench.
 - **The crew, when a session fires three or more sub-agents.** The desk becomes a formation: the
-  juniors on the floor in an arc around it, a laptop each, and a cable from each laptop to the desk
+  juniors cross-legged in an arc around it, a laptop on each lap, and a cable from each to the desk
   with a pulse running up it while that junior's transcript is still being written. A junior that
   has stopped keeps its cable and it goes grey. Twelve are drawn; beyond that a `+N` chip, with the
   rest in the panel and in the deck.

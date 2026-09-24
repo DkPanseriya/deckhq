@@ -68,12 +68,12 @@ goes idle the item is "complete" and disappears. That is the bug this product ex
 | `working`     | Live and producing output                          | Its project desk         | Typing, occasional coffee                                                          |
 | `needs_input` | Live, blocked on a question or a permission prompt | **Stays at its desk**    | **Raises a hand**, pulsing ring                                                    |
 | `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                                                     |
-| `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Standing in the waiting area with a waiting-time badge                             |
+| `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Sitting on a sofa in the waiting area with a waiting-time badge                    |
 | `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                                                 |
 | `let_go`      | Off the floor                                      | Hidden                   | **Fired** — off the floor; the chat is kept and reachable from `⌘K` → "Show fired" |
 
 **The two "needs you" signals are deliberately different.** A raised hand at a desk means _I am
-mid-task and blocked_. A person standing in your office means _I finished; review this_. Those
+mid-task and blocked_. A person waiting in your office means _I finished; review this_. Those
 need different responses from you, so they look different and are counted separately.
 
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
