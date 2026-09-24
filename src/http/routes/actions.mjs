@@ -20,6 +20,7 @@ import { RESUME_TARGETS } from '../../core/store.mjs';
 import { SendHub } from '../../core/sends.mjs';
 import { createPendingIdentities } from '../../core/pending-identity.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
+import { startTurn } from '../send-turn.mjs';
 
 /**
  * `git init` in a directory. argv array, never a shell string — the path is
@@ -35,13 +36,13 @@ function gitInit(cwd) {
   });
 }
 
-const SEND_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_SEND_CHARS = 100_000;
 
 /**
  * @param {import('../server.mjs').Router} router
  * @param {{registry:any, adapters:any, log:any, store:any, sends:any, identity:any,
- *          pendingIdentities?:any}} ctx
+ *          pendingIdentities?:any,
+ *          studioSendRefusal?:(id:string) => ({error:string, cardId:string}|null)}} ctx
  *   `store`, `sends` and `identity` were read here and not declared (WP-22).
  *   `pendingIdentities` is WRITTEN here, not read: see the note beside it.
  */
@@ -231,55 +232,23 @@ export function register(router, ctx) {
     const agent = registry.agents.find((a) => a.id === id);
     if (!agent) return sendError(res, 404, 'Unknown session');
 
-    let adapter;
+    // WP-71, `docs/07-STUDIO-DESIGN.md` §8. A session whose Studio card
+    // crossed its budget is sent no further work, and the refusal names the
+    // card and the cap rather than failing quietly. The reason is read from
+    // `board.json` on every send — the stop is a file, so moving the card out
+    // of Blocked lifts it with nothing to reset.
+    const refusal = ctx.studioSendRefusal?.(id) || null;
+    if (refusal) {
+      return sendJson(res, 409, { error: refusal.error, reason: 'budget', cardId: refusal.cardId });
+    }
+
+    let started;
     try {
-      adapter = adapterFor(id);
+      started = startTurn({ ...ctx, sends }, agent, text);
     } catch (err) {
       return sendError(res, 404, err.message);
     }
-
-    const { sendId, signal } = sends.begin({ agentId: id });
-
-    // The turn, running in the background. Nothing below writes to `res`.
-    const turn = adapter
-      .send(splitAgentId(id).sessionId, text, {
-        cwd: agent.cwd,
-        timeoutMs: SEND_TIMEOUT_MS,
-        // WP-23a. The `codex` binary the user pinned, if they did. Every
-        // adapter takes an options object it is free to ignore, and only the
-        // Codex one reads this — the alternative was an adapter reaching into
-        // `state.json`, which inverts the layering (`02-ARCHITECTURE.md` §2)
-        // exactly as `terminal` above would have.
-        codexBin: store.settings.codexBin,
-        signal,
-        onEvent: (event) => sends.publish(sendId, event),
-      })
-      .then(
-        (result) => {
-          registry.noteSent?.(id, { chars: text.length, ok: result.ok !== false });
-          // An adapter that produced no `result` event of its own — an older
-          // runtime, a crash, a timeout — still has to close the turn on the
-          // wire, or the panel would sit typing forever.
-          if (!result.ok) {
-            sends.publish(sendId, { type: 'error', error: result.error || 'Send failed' });
-          }
-          sends.publish(sendId, { type: 'done', ok: result.ok !== false });
-          return result;
-        },
-        (err) => {
-          log.warn('send failed', id, err.message);
-          sends.publish(sendId, { type: 'error', error: err.message || 'Send failed' });
-          sends.publish(sendId, { type: 'done', ok: false });
-          return { ok: false, error: err.message };
-        },
-      )
-      .finally(() => sends.end(sendId));
-
-    // Awaited only so an unhandled rejection cannot escape; `turn` never
-    // rejects, because `.then`'s second argument already absorbs it.
-    turn.catch(() => {});
-
-    return sendJson(res, 202, { ok: true, id, sendId });
+    return sendJson(res, 202, { ok: true, id, sendId: started.sendId });
   });
 
   /**

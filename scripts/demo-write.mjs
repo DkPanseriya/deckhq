@@ -533,6 +533,15 @@ export async function writeLedgerFixture(sessions) {
  * widest a card gets. Every value is fixed and every timestamp is an offset
  * from the pinned clock, so two runs produce the same file byte for byte.
  *
+ * WP-71 adds two things to the picture. Every card is in milestone `m1`, and
+ * four of them carry the user's ticks, so the board draws ONE milestone header
+ * with a burn-down over it; and `c8` is blocked the way the budget stop
+ * actually blocks a card — a move into Blocked and a budget flag at the same
+ * instant — so its tracking strip reads the minutes between its two moves.
+ * A card's token figure is whatever the fixture ledger holds for its session;
+ * a card with no session reads `no data`, which is the picture of a figure
+ * nobody measured.
+ *
  * @param {string} projectRoot the fixture project the board belongs to
  * @param {string[]} agentIds the three sessions, in roster order
  * @returns {Promise<{projectKey:string, dir:string, consent:{grantedAt:number, root:string}}>}
@@ -661,6 +670,8 @@ export async function writeStudioFixture(projectRoot, agentIds) {
           card('c4', 'Backfill the events table', 'in_progress', {
             role: 'backend',
             acceptance: ['a failing test first', 'npm test green', 'the guide says so'],
+            // WP-71. The user's own tick, which the milestone's burn-down counts.
+            acceptanceDone: ['a failing test first'],
             budget: { tokens: 1200000, minutes: 240 },
             agentId: agentIds[0] || null,
             flags: [
@@ -684,6 +695,7 @@ export async function writeStudioFixture(projectRoot, agentIds) {
           card('c6', 'Rate limiter for the public API', 'review', {
             role: 'backend',
             acceptance: ['a failing test first', 'npm test green'],
+            acceptanceDone: ['a failing test first', 'npm test green'],
             handover: 'c6.md',
             flags: [{ kind: 'handover', text: 'waiting on you', at: ago(6), path: handoverFile }],
             updatedAt: ago(6),
@@ -691,13 +703,29 @@ export async function writeStudioFixture(projectRoot, agentIds) {
           card('c7', 'Move the events schema to a migration', 'done', {
             role: 'backend',
             acceptance: ['npm test green'],
+            acceptanceDone: ['npm test green'],
             updatedAt: ago(26),
           }),
+          // WP-71, §8. The budget stop, as it actually writes a card: the move
+          // into Blocked and the budget flag carry the same instant, which is
+          // how `/api/send` knows this session is refused and the board knows
+          // the stop — not the user — put it there. Forty-six minutes on the
+          // card against a cap of forty-five, between the two moves.
           card('c8', 'Connection pool exhaustion', 'blocked', {
             role: 'tests',
             acceptance: ['a failing test first'],
             budget: { tokens: 200000, minutes: 45 },
-            flags: [{ kind: 'budget', text: 'stopped on cost', at: ago(9) }],
+            flags: [
+              {
+                kind: 'budget',
+                text: '46 of 45 minutes on the card, 0/1 criteria met',
+                at: ago(9),
+              },
+            ],
+            moves: [
+              { from: 'ready', to: 'in_progress', at: ago(9) - 46 * 60 * 1000 },
+              { from: 'in_progress', to: 'blocked', at: ago(9) },
+            ],
             updatedAt: ago(9),
           }),
         ],

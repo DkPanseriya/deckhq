@@ -77,6 +77,13 @@ export const MAX_CARDS = 500;
 export const MAX_ROLES = 32;
 export const MAX_ACCEPTANCE = 32;
 export const MAX_FLAGS = 32;
+/**
+ * WP-71. How many column moves a card remembers. The newest are kept: §7's
+ * "time on the card" is measured between the LAST move in and the move out,
+ * and a card dragged back and forth sixty-four times has a history nobody is
+ * going to read past the end of.
+ */
+export const MAX_MOVES = 64;
 export const MAX_TOOLS = 64;
 export const MAX_TITLE = 200;
 export const MAX_TEXT = 500;
@@ -212,6 +219,30 @@ export function emptyBoard(projectKey) {
  */
 export function emptyRoster(projectKey) {
   return { version: ROSTER_VERSION, projectKey: String(projectKey || ''), roles: [] };
+}
+
+/**
+ * A card's move history with one more move on the end — WP-71, §7.
+ *
+ * Pure: it returns a NEW array and writes nothing, so calling it is not a
+ * column write and it is not one of the writers. Each of the three column
+ * writers (`POST /api/studio/card`, Accept in `POST /api/studio/handover`,
+ * and `blockForBudget()`) puts its result on the card in the same statement
+ * that changes `column`, which is how "time on the card between its two
+ * column moves" comes to have a record behind it. A move to the column the
+ * card is already in is not a move and adds nothing.
+ *
+ * @param {unknown} moves the card's current history, or anything
+ * @param {string} from the column it was in
+ * @param {string} to the column it is going to
+ * @param {number} at when
+ * @returns {Array<{from:string, to:string, at:number}>}
+ */
+export function appendMove(moves, from, to, at) {
+  const list = Array.isArray(moves) ? moves.filter((m) => isPlainObject(m)) : [];
+  if (String(from) === String(to)) return list.slice(-MAX_MOVES);
+  const next = [...list, { from: String(from), to: String(to), at: Number(at) || 0 }];
+  return next.slice(-MAX_MOVES);
 }
 
 /**
@@ -353,8 +384,52 @@ export function validateBoard(value, opts = {}) {
       }
     }
 
+    // WP-71, §7's burn-down. The criteria the USER ticked, by their text, so
+    // a tick stays with its criterion when the list is reordered and falls
+    // away when the criterion is deleted. User-owned like the column: only
+    // the card editor writes it, and nothing observed ever ticks one.
+    const acceptanceDone = [];
+    if (card.acceptanceDone != null) {
+      if (!Array.isArray(card.acceptanceDone)) {
+        return fail(
+          'acceptanceDone is an array of the criteria you ticked',
+          `${where}.acceptanceDone`,
+          lineOfKey(raw, 'acceptanceDone', i + 1),
+        );
+      }
+      for (const line of card.acceptanceDone) {
+        const text = cleanText(line, MAX_TEXT).trim();
+        if (text && acceptance.includes(text) && !acceptanceDone.includes(text)) {
+          acceptanceDone.push(text);
+        }
+      }
+    }
+
+    // WP-71. Every column move, `{from, to, at}`, written by the three column
+    // writers and by nothing else (`test/unit/studio-invariant.test.mjs`).
+    const moves = [];
+    if (card.moves != null) {
+      if (!Array.isArray(card.moves)) {
+        return fail('moves is an array', `${where}.moves`, lineOfKey(raw, 'moves', i + 1));
+      }
+      for (const [j, rawMove] of card.moves.slice(-MAX_MOVES).entries()) {
+        const move = /** @type {any} */ (rawMove);
+        const known = (v) => /** @type {readonly string[]} */ (COLUMNS).includes(v);
+        const at = Number(move?.at);
+        if (!isPlainObject(move) || !known(move.from) || !known(move.to) || !Number.isFinite(at)) {
+          return fail(
+            'a move is {from, to, at}, with two of the six columns and a time',
+            `${where}.moves[${j}]`,
+            null,
+          );
+        }
+        moves.push({ from: move.from, to: move.to, at });
+      }
+    }
+
     const updatedAt = Number(card.updatedAt);
-    cards.push({
+    /** @type {any} */
+    const out = {
       id,
       title: cleanText(card.title, MAX_TITLE).trim(),
       acceptance,
@@ -367,7 +442,13 @@ export function validateBoard(value, opts = {}) {
       handover: card.handover == null ? null : cleanText(card.handover, 1024).trim() || null,
       flags,
       updatedAt: Number.isFinite(updatedAt) ? updatedAt : 0,
-    });
+    };
+    // Both WP-71 fields are written only when they hold something, so every
+    // board written before this build reads and writes back byte-identical —
+    // the rule `flag.path` above keeps, for the same reason.
+    if (acceptanceDone.length) out.acceptanceDone = acceptanceDone;
+    if (moves.length) out.moves = moves;
+    cards.push(out);
   }
 
   return { board: { version: BOARD_VERSION, projectKey, cards } };

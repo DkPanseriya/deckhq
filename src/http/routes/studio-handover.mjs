@@ -49,7 +49,7 @@ import path from 'node:path';
 import { sendError, sendJson } from '../server.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
 import { StudioStore } from '../../studio/store.mjs';
-import { COLUMNS, MAX_FLAGS, validateBoard } from '../../studio/schema.mjs';
+import { COLUMNS, MAX_FLAGS, appendMove, validateBoard } from '../../studio/schema.mjs';
 import { DIRS } from '../../studio/paths.mjs';
 import { bounceRel } from '../../studio/brief-role.mjs';
 import { cardIdForName, handoverFlag, watchHandovers } from '../../studio/handover.mjs';
@@ -272,7 +272,12 @@ export function registerHandover(router, ctx, helpers) {
       }
       // THE SECOND COLUMN WRITE IN THE TREE, and the user's own press. The
       // handover asked for nothing: this column is the one they named.
-      board.cards[index] = { ...before, column: target, updatedAt: at };
+      board.cards[index] = {
+        ...before,
+        column: target,
+        moves: appendMove(before.moves, before.column, target, at),
+        updatedAt: at,
+      };
     } else {
       const note = String(body.note ?? '').trim();
       if (!note) {

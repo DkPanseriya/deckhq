@@ -547,8 +547,9 @@ next thing to do. **A card with no assignee asks which role, and never chooses f
 is started, and the card stays where you put it.
 
 One rule is fixed, and it is the same rule the queue runs on: **a card's column is yours.** No
-session ending, no test passing, no file appearing and no budget being spent moves a card. They
-flag it; you move it.
+session ending, no test passing and no file appearing moves a card. They flag it; you move it. The
+one exception is a card that runs past its budget, which DeckHQ moves to **Blocked** and nowhere
+else — see [Tracking and the budget stop](#tracking-and-the-budget-stop).
 
 ### Handover
 
@@ -594,6 +595,54 @@ board is where you look at a card.
 
 **A handover naming a card the board does not have is shown _unattached_, not dropped.** A typo in a
 filename is visible rather than silent.
+
+### Tracking and the budget stop
+
+**Every card carries a tracking strip**, and every figure on it comes from a file you can open:
+
+| Figure         | Where it comes from                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| Tokens         | your ledger's token records for the card's session, while the card was **In progress**      |
+| Time           | the card's own record of its moves — the time between a move into In progress and out of it |
+| Tests          | the handover's _Tests run_ section, quoted: _"the handover says 43 passed"_                 |
+| Cost           | only with **Show cost** on: the list-price estimate, with the rate card's date              |
+| Burn-down      | the acceptance criteria **you** ticked, against the cards left in the milestone             |
+
+**A figure with nothing behind it says `no data`, never zero.** A card with no session, no moves
+and no handover has no numbers on it at all. A card whose session is known but which was never
+moved into In progress is measured over its whole session, and says `(session)` beside the figure.
+A cost the rate card cannot price — a model it has no row for, or a record that did not name one —
+says `no rate` rather than a smaller number. Nothing is estimated or projected.
+
+`board.json` gains two fields for this, both written only when they hold something: `moves`, one
+`{from, to, at}` per column move, written by the three things that can move a card and by nothing
+else; and `acceptanceDone`, the criteria you ticked in the card editor's **Criteria met** list.
+
+`GET /api/studio/tracking?project=<dir>` returns the same figures as JSON, per card and per
+milestone.
+
+**The PM pass.** Every 30 minutes — and whenever you `POST /api/studio/pm-pass` with `{ cwd }` —
+the planner session is sent the blueprint, the board and the handovers written since the last pass,
+through the same send path your own messages take, and asked to answer with flags:
+`[{ "cardId": "c7", "kind": "scope", "text": "outside milestone 2" }]`. Each becomes a `drift` flag
+on its card. **A flag never moves a card, reassigns a role or stops a session.** A flag for a card
+the board does not have is dropped, and an answer with no flags in it is recorded as such. The
+planner's answer ends its turn, so it arrives in your queue like any other session that has
+finished. With no planner on the floor, the pass says so and does nothing.
+
+**The budget stop.** A card's budget is tokens, minutes, or both, and either one trips it. When a
+card **in progress** crosses its budget, DeckHQ does three things and no more:
+
+1. moves the card to **Blocked**, with a `budget` flag saying what was spent — the only column
+   change DeckHQ ever makes, and the only column it can make it to;
+2. refuses to send that card's session any further work: a send answers with the card and the
+   budget named, until you move the card out of Blocked (raise its budget first, or the next check,
+   a minute later, stops it again);
+3. sends the session **one** message asking it to stop and write its handover.
+
+**DeckHQ does not kill the session.** A session in a terminal is not DeckHQ's child and there is
+nothing DeckHQ could honestly promise about stopping it, so it does not try. A card in Review or
+Done that ran over is left alone: it has finished spending.
 
 ## Hooks are optional and reversible
 

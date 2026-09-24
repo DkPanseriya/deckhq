@@ -49,6 +49,7 @@ import {
   renderEmptyBoard,
   stepColumn,
 } from './board-view.js';
+import { renderMilestones } from './board-track.js';
 
 /**
  * The runtime a Hire started from the client runs a role on.
@@ -109,6 +110,11 @@ export function createBoardUI(opts) {
   let snapshot = /** @type {any} */ (null);
   /** The project directory it was about, so a stale answer is never drawn. */
   let cwd = '';
+  /** `GET /api/studio/tracking`'s answer for the same project, or null. */
+  let tracking = /** @type {any} */ (null);
+  /** @param {string} cardId */
+  const trackingFor = (cardId) =>
+    (tracking?.cards || []).find((/** @type {any} */ t) => t.cardId === cardId) || null;
   /** The card the keyboard acts on. */
   let focused = /** @type {string|null} */ (null);
   /** The desk to light on the way out (§5.4). */
@@ -236,7 +242,14 @@ export function createBoardUI(opts) {
     const scroller = doc.createElement('div');
     scroller.className = 'board-scroll';
     if (board.cards.length === 0) scroller.appendChild(renderEmptyBoard(doc));
-    else scroller.appendChild(renderBoardColumns(board, { agentIdFor }, doc));
+    else {
+      // WP-71, §7. The milestone header, then the columns with a tracking
+      // strip on each card. Both come from `GET /api/studio/tracking`; when
+      // that has not answered, neither is drawn rather than drawn empty.
+      const header = renderMilestones(tracking?.milestones, doc);
+      if (header) scroller.appendChild(header);
+      scroller.appendChild(renderBoardColumns(board, { agentIdFor, trackingFor }, doc));
+    }
     // The table is drawn even for an empty board: it is the accessible reading
     // of the surface, and a reading that disappeared when the answer was "none"
     // would be the one case a screen reader got nothing at all.
@@ -497,14 +510,23 @@ export function createBoardUI(opts) {
       return;
     }
     try {
-      const res = await get(`/api/studio?project=${encodeURIComponent(cwd)}`);
+      const query = `?project=${encodeURIComponent(cwd)}`;
+      const [res, tracked] = await Promise.all([
+        get(`/api/studio${query}`),
+        // WP-71. A GET as well, and it writes nothing either. A tracking
+        // answer that failed is no strip at all, not a strip of zeros.
+        get(`/api/studio/tracking${query}`).catch(() => null),
+      ]);
       const body = res.ok ? await res.json() : null;
+      const figures = tracked?.ok ? await tracked.json().catch(() => null) : null;
       // The floor may have moved on while that was in flight. A board drawn
       // under another project's name is worse than no board at all.
       if (cwd !== (project()?.cwd || '')) return;
       snapshot = body;
+      tracking = figures;
     } catch {
       snapshot = null;
+      tracking = null;
     }
     paint();
   }

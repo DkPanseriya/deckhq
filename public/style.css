@@ -4696,6 +4696,61 @@ textarea.field-input {
   white-space: normal;
 }
 
+/* WP-71, §7. The tracking strip: three figures in the chips' own mono, and a
+   figure with nothing behind it drawn as the words "no data" — dimmer, never
+   a zero. The tests quotation wraps, because it is the handover's sentence. */
+.board-card-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  margin: 0.35rem 0 0;
+  padding-top: 0.3rem;
+  border-top: 1px dashed var(--line-2);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--ink-2);
+}
+.board-track.is-no-data {
+  color: var(--muted);
+}
+.board-track--tests {
+  flex-basis: 100%;
+  white-space: normal;
+}
+
+/* The milestone header: one line per milestone, its burn-down as a native bar. */
+.board-milestones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.2rem;
+  margin: 0 0 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+}
+.board-milestone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.board-burn {
+  width: 5rem;
+  height: 0.4rem;
+  accent-color: var(--accent);
+}
+
+/* The card editor's tick list. */
+.card-ticks {
+  border: 0;
+  padding: 0;
+}
+.card-tick {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  padding: 0.15rem 0;
+}
+
 .board-empty {
   margin: 0 auto;
   padding: 3rem 1rem;

@@ -40,6 +40,8 @@
  * name — is written with `textContent`. There is no `innerHTML` in this file.
  */
 
+import { buildTrackStrip, trackSentence } from './board-track.js';
+
 /**
  * The six columns in board order, with what each is called on screen.
  *
@@ -275,7 +277,7 @@ function make(doc, tag, className) {
  * hired has no face and drawing one would be inventing a person.
  *
  * @param {any} card
- * @param {{agentIdFor?:(role:string) => string|null}} opts
+ * @param {{agentIdFor?:(role:string) => string|null, trackingFor?:(cardId:string) => any}} opts
  * @param {any} doc
  */
 export function buildCard(card, opts, doc) {
@@ -285,7 +287,13 @@ export function buildCard(card, opts, doc) {
   el.setAttribute('draggable', 'true');
   el.setAttribute('tabindex', '0');
   el.setAttribute('role', 'button');
-  el.setAttribute('aria-label', cardLabel(card));
+  // WP-71. The card's tracking, when the board has it, is part of the card —
+  // so it is part of the card's name too, in the same words the strip shows.
+  const track = opts.trackingFor?.(String(card?.id || '')) || null;
+  el.setAttribute(
+    'aria-label',
+    track ? `${cardLabel(card)} ${trackSentence(track)}` : cardLabel(card),
+  );
 
   const title = make(doc, 'p', 'board-card-title');
   title.textContent = String(card?.title || '').trim() || '(untitled)';
@@ -323,6 +331,7 @@ export function buildCard(card, opts, doc) {
     }
     el.appendChild(row);
   }
+  if (track) el.appendChild(buildTrackStrip(track, doc));
   return el;
 }
 
@@ -333,7 +342,7 @@ export function buildCard(card, opts, doc) {
  * places, and six announced lists would be six boards.
  *
  * @param {{cards?:Array<any>}|null|undefined} board
- * @param {{agentIdFor?:(role:string) => string|null}} opts
+ * @param {{agentIdFor?:(role:string) => string|null, trackingFor?:(cardId:string) => any}} opts
  * @param {any} doc
  */
 export function renderBoardColumns(board, opts, doc) {
