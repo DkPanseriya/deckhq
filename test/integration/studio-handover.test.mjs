@@ -289,10 +289,13 @@ test('ACCEPTANCE: Accept moves the card to the column the user named, and nothin
     assert.equal(was.column, 'in_progress');
 
     // And nothing else. Every other field of that card, and every other card,
-    // byte for byte — `updatedAt` excepted, which is what a move stamps.
+    // byte for byte — `updatedAt` and `moves` excepted, which are what a move
+    // stamps. WP-71 added `moves`, the record §7's time on the card is
+    // measured from, and it holds exactly this one move.
+    assert.deepEqual(now.moves, [{ from: 'in_progress', to: 'done', at: now.updatedAt }]);
     assert.deepEqual(
-      { ...now, column: null, updatedAt: 0 },
-      { ...was, column: null, updatedAt: 0 },
+      { ...now, column: null, updatedAt: 0, moves: null },
+      { ...was, column: null, updatedAt: 0, moves: null },
       'Accept changed something other than the column',
     );
     assert.deepEqual(
