@@ -132,30 +132,79 @@ test('INVARIANT: the only writers of a card column are the card route and the bu
   }
 });
 
-test('INVARIANT: there are exactly two column writers, and Accept reaches two columns', async () => {
-  // §5.2: *"A column changes on exactly two things — the user dragging or
-  // pressing, or a handover the user has accepted in the review card."* The
-  // test above holds "no third writer"; this one holds THE COUNT, so a future
-  // package that added a route and a row to `expected` in the same commit
-  // would still have to come past this line.
-  const ROUTES = ['/api/studio/card', '/api/studio/handover'];
-  /** @type {string[]} */
-  const writers = [];
+test('INVARIANT: there are exactly three column writers, and Accept reaches two columns', async () => {
+  // §5.2 names two things a column changes on — the user dragging or
+  // pressing, and a handover the user has accepted — and §8 names the one
+  // exception, the budget stop. WP-70 held THE COUNT at two HTTP funnels
+  // because the budget stop had no caller yet. WP-71 gives it one
+  // (`http/routes/studio-drift.mjs`), so the count moves to three, and the
+  // reason is on this line rather than in a commit message:
+  // `blockForBudget()` is a system write, it is a STOP and not progress, and
+  // the test below holds that it reaches `blocked` and nothing else. The count
+  // is still the point — a package that added a fourth writer and a row to
+  // `expected` in one commit meets a line that says "three".
+  const WRITERS = {
+    // The user's drag or key press.
+    'http/routes/studio.mjs': '/api/studio/card',
+    // The user's Accept on a handover.
+    'http/routes/studio-handover.mjs': '/api/studio/handover',
+    // The budget stop (§8). The only writer no person presses.
+    'studio/budget.mjs': 'blockForBudget',
+  };
+  // The two rows of the allow-map above that put a column value in an object
+  // and are NOT writers: the normaliser copies one it has already checked,
+  // and the planner brief's example is text in a prompt.
+  const NOT_WRITERS = new Set(['studio/schema.mjs', 'studio/brief.mjs']);
+  /** @type {Record<string, string>} */
+  const writers = {};
   for (const file of sources('studio', 'http')) {
+    if (NOT_WRITERS.has(label(file))) continue;
     if (columnWrites(fs.readFileSync(file, 'utf8')).length === 0) continue;
     const body = stripComments(fs.readFileSync(file, 'utf8'));
-    for (const route of ROUTES) if (body.includes(route)) writers.push(route);
+    const name = /** @type {Record<string, string>} */ (WRITERS)[label(file)];
+    assert.ok(name && body.includes(name), `${label(file)} writes a column and is not a funnel`);
+    writers[label(file)] = name;
   }
-  assert.deepEqual(
-    [...new Set(writers)].sort(),
-    [...ROUTES].sort(),
-    'the HTTP funnels a column moves through are exactly these two',
-  );
+  assert.deepEqual(writers, WRITERS, 'the column writers are exactly these three');
 
   // And Accept may name two of the six. Not `blocked`, which is §8's stop and
   // the budget's alone; not the three where work has not finished.
   const { ACCEPT_COLUMNS } = await import('../../src/http/routes/studio-handover.mjs');
   assert.deepEqual([...ACCEPT_COLUMNS], ['review', 'done']);
+});
+
+test("INVARIANT: a card's move history is written by the three column writers and nothing else", () => {
+  // WP-71, §7. "Time on the card" is measured between two column moves, so
+  // the record of a move is written exactly where a move happens. An edit, a
+  // flag, a PM pass or a tracking read that could write `moves` could make a
+  // card's time say anything it liked.
+  /** @param {string} src */
+  const movesWrites = (src) => {
+    const body = stripComments(src);
+    /** @type {string[]} */
+    const found = [];
+    for (const re of [/[\w.\]]+\.moves\s*=\s*[^=][^;\n]*/g, /(?:^|[{,(\s])moves\s*:\s*[^,\n]*/gm]) {
+      for (const m of body.matchAll(re)) found.push(m[0].trim().replace(/\s+/g, ' '));
+    }
+    return found.sort();
+  };
+  /** @type {Record<string, string[]>} */
+  const actual = {};
+  for (const file of sources('studio', 'http')) {
+    const writes = movesWrites(fs.readFileSync(file, 'utf8'));
+    if (writes.length) actual[label(file)] = writes;
+  }
+  assert.deepEqual(actual, {
+    // The normaliser, copying a history `validateBoard` has already checked.
+    'studio/schema.mjs': ['out.moves = moves'],
+    // The budget stop.
+    'studio/budget.mjs': ['card.moves = appendMove(card.moves, card.column, BLOCKED_COLUMN, at)'],
+    // The user's move, and the user's Accept.
+    'http/routes/studio.mjs': ['moves: appendMove(before.moves'],
+    'http/routes/studio-handover.mjs': [
+      'moves: appendMove(before.moves',
+    ],
+  });
 });
 
 test('INVARIANT: the budget stop can reach `blocked` and no other column', async () => {

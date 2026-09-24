@@ -23,13 +23,17 @@
  * posts one message asking it to stop and write a handover — and that is all
  * it can honestly claim.
  *
- * WP-66 SHIPS THE FUNNEL, NOT THE CAP. Nothing calls this yet: there is no
- * per-card ledger fold, no cost accounting and no clock on a column move until
- * **WP-71**. What exists here is the single, named, tested doorway that WP-71
- * will use, so that the invariant is provable before the feature that needs it
- * is written rather than after.
+ * WP-66 shipped the funnel and WP-71 is what calls it: `src/studio/tracking.mjs`
+ * folds the ledger per card, `crossedBudget()` there says which cap a card has
+ * crossed, and `src/http/routes/studio-drift.mjs` calls this, writes the
+ * board, refuses sends and posts the one message. It is the THIRD column
+ * writer in the tree and the only one no person presses; the static gate in
+ * `test/unit/studio-invariant.test.mjs` names all three with a reason on each.
+ *
+ * It records the move as well (`appendMove`), in the same statement, so §7's
+ * "time on the card" ends where the stop began rather than running on.
  */
-import { BLOCKED_COLUMN } from './schema.mjs';
+import { BLOCKED_COLUMN, MAX_FLAGS, appendMove } from './schema.mjs';
 
 /**
  * Move one card to `blocked` because its cap was crossed, and flag it with
@@ -50,11 +54,14 @@ export function blockForBudget(board, cardId, reason) {
   if (!card) return { moved: false, card: null };
   if (card.column === BLOCKED_COLUMN) return { moved: false, card };
 
+  const at = Number(reason?.at) || 0;
+  card.moves = appendMove(card.moves, card.column, BLOCKED_COLUMN, at);
   card.column = BLOCKED_COLUMN;
-  card.flags = [
+  const flags = [
     ...(Array.isArray(card.flags) ? card.flags : []),
-    { kind: 'budget', text: String(reason?.text || ''), at: Number(reason?.at) || 0 },
+    { kind: 'budget', text: String(reason?.text || ''), at },
   ];
-  card.updatedAt = Number(reason?.at) || card.updatedAt || 0;
+  card.flags = flags.slice(-MAX_FLAGS);
+  card.updatedAt = at || card.updatedAt || 0;
   return { moved: true, card };
 }

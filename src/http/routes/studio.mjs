@@ -62,7 +62,7 @@ import { samePath } from '../../core/same-path.mjs';
 import { projectKeyFor } from '../../core/ledger-record.mjs';
 import { StudioPathError } from '../../studio/paths.mjs';
 import { StudioStore } from '../../studio/store.mjs';
-import { COLUMNS, MAX_CARDS, validateBoard } from '../../studio/schema.mjs';
+import { COLUMNS, MAX_CARDS, appendMove, validateBoard } from '../../studio/schema.mjs';
 import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
 import { UNVERIFIED_LAUNCH, registerHire } from './studio-hire.mjs';
 import { registerHandover } from './studio-handover.mjs';
@@ -531,8 +531,12 @@ export function register(router, ctx) {
       // A new card starts in `backlog` unless the user named a column, which
       // they are entitled to do: creating a card straight into `done` is a
       // person recording something they already did.
+      // A new card has no history: `moves` is written by a move and nothing
+      // else, so a client that sent one is not believed.
+      const fresh = { ...patch };
+      delete fresh.moves;
       board.cards.push({
-        ...patch,
+        ...fresh,
         id,
         column: typeof patch.column === 'string' ? patch.column : 'backlog',
         updatedAt: at,
@@ -557,6 +561,9 @@ export function register(router, ctx) {
         }
         delete patch.column;
         delete patch.id;
+        // WP-71. The move history belongs to the three column writers, so an
+        // edit cannot rewrite the record "time on the card" is measured from.
+        delete patch.moves;
         board.cards[index] = { ...before, ...patch, updatedAt: at };
       } else {
         const target = typeof body.column === 'string' ? body.column.trim() : '';
@@ -567,8 +574,14 @@ export function register(router, ctx) {
             `"${target}" is not a column. The six are ${COLUMNS.join(', ')}.`,
           );
         }
-        // The move. One line, one funnel, and it is a user's press.
-        board.cards[index] = { ...before, column: target, updatedAt: at };
+        // The move. One line, one funnel, and it is a user's press — and, from
+        // WP-71, the record of it that §7's time on the card is measured from.
+        board.cards[index] = {
+          ...before,
+          column: target,
+          moves: appendMove(before.moves, before.column, target, at),
+          updatedAt: at,
+        };
       }
     }
 
