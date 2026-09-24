@@ -28,7 +28,7 @@ import {
 } from './rig.js';
 import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
-import { lodForZoom, worldToScreen } from './agents.js';
+import { lodForZoom, rigSeatOf, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
 import { resolveBadgeCollisions, resolveLabelCollisions } from './scene-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
@@ -43,7 +43,7 @@ import {
 } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
-import { CREW_SCALE, crewChipAt } from './crew.js';
+import { CREW_SCALE, crewCableLive, crewChipAt } from './crew.js';
 import { drawCrews } from './crew-draw.js';
 import { BODY_HEIGHT_U, CHROME_BADGE_U } from './rig-metrics.js';
 
@@ -800,10 +800,11 @@ export class SceneDraw extends SceneHit {
         walking,
         running,
       }),
-      // `label`/`labelOffsetY` were resolved once for the whole frame above
-      // (`_draw`'s collision pass) — drawCharacter still truncates to 18
-      // chars and gates on lod >= 1 itself, this only decides *whether* and
-      // *where* to draw it.
+      // WP-97 · sitting where the seat says: a desk, a sofa, or a crew's floor
+      // with the laptop's lid open exactly as far as its cable is live.
+      seat: rigSeatOf(rec, pose),
+      laptop: rec.targetSeat?.crew ? crewCableLive(agent, now, { reduced: this._reduced }) : null,
+      // Resolved once per frame by `_draw`'s collision pass; the rig gates it.
       label,
       labelOffsetY,
       icon,

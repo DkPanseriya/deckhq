@@ -1,7 +1,7 @@
 /**
  * PAINTING A CREW — WP-89, `docs/plan/12-MOTION-AND-CREW.md` §3.2.
  *
- * The cables, the laptops, the pulses and the `+N` chip. Everything here is
+ * The cables, the pulses and the `+N` chip. Everything here is
  * drawn BEFORE the bodies and therefore under them — §1.5: *"Everything in this
  * document is drawn before the chrome band — cloud, pulse, cable and dust puff
  * all sit under it"* — so a cable never runs over a face and a pulse never over
@@ -11,6 +11,13 @@
  * runs once per plan. This file walks the records it is given, strokes the
  * polyline it finds on each seat, and puts at most four dots on it. No route is
  * searched, no object is allocated per cable and no `Path2D` per frame (§1.3).
+ *
+ * THE LAPTOP IS ON THE KNEES NOW (WP-97). It used to be drawn here, on the
+ * floor one `CREW_LAPTOP_GAP` in front of its junior, because the rig had no
+ * way to sit. B sits cross-legged with the laptop on its lap and the rig draws
+ * it — with this file's own `crewCableLive` as the lid — so the cable's last
+ * run goes from that point up to the member's feet, under the body, and into
+ * the laptop it feeds.
  *
  * TWO GATES, BOTH OF THEM §1.4's:
  *
@@ -39,9 +46,6 @@ import { sansFont } from './rig-metrics.js';
 const CABLE_W_U = 0.2;
 /** Pulse radius in plan units. */
 const PULSE_R_U = 0.28;
-/** The laptop, in plan units: the base it stands on, and the lid at full open. */
-const LAPTOP_W_U = 0.9;
-const LAPTOP_D_U = 0.5;
 /** Below this many px per unit a cable is a smudge and a pulse is a flicker. */
 export const CREW_MIN_PX_PER_UNIT = 10;
 /** The same gate the waiting badge uses (§1.3): under it, pulses stop. */
@@ -74,7 +78,7 @@ export function crewRecords(records) {
 }
 
 /**
- * Draw every crew's cables, laptops and pulses, then its `+N` chip.
+ * Draw every crew's cables and pulses, then its `+N` chip.
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {{records:Iterable<any>, agentsById:Map<string,any>, camera:any,
@@ -105,7 +109,7 @@ export function drawCrews(ctx, view) {
   ctx.restore();
 }
 
-/** One member's cable, laptop and pulses. */
+/** One member's cable and pulses. The laptop is the rig's (WP-97). */
 function drawOne(ctx, view, rec, pulses, px) {
   const seat = rec.targetSeat;
   const route = seat.route;
@@ -125,10 +129,8 @@ function drawOne(ctx, view, rec, pulses, px) {
   ctx.strokeStyle = live > 0 ? STATE_COLORS.working : STATE_COLORS.ended;
   ctx.globalAlpha = 0.35 + 0.45 * live;
   ctx.lineWidth = Math.max(1, CABLE_W_U * px);
-  strokeFromPort(ctx, view, route, extent);
+  strokeFromPort(ctx, view, route, extent, rec);
   ctx.globalAlpha = 1;
-
-  drawLaptop(ctx, view, seat, live, px);
 
   if (!pulses) return;
   const count = agent ? crewPulseCount(agent, view.nowMs) : 0;
@@ -162,9 +164,11 @@ function drawOne(ctx, view, rec, pulses, px) {
  *
  * From the port rather than from the laptop because that is which way a cable
  * arrives and leaves: §3.2 has it *"draw on from the desk outward"* when a
- * junior appears and retract the same way when one goes.
+ * junior appears and retract the same way when one goes. Fully drawn, it runs
+ * on from the laptop's floor point to the member's own feet (WP-97): the
+ * laptop is on its knees.
  */
-function strokeFromPort(ctx, view, route, extent) {
+function strokeFromPort(ctx, view, route, extent, rec) {
   const pts = route;
   let total = 0;
   for (let i = 0; i + 1 < pts.length; i++)
@@ -188,30 +192,11 @@ function strokeFromPort(ctx, view, route, extent) {
     const s = worldToScreen(pts[i - 1], view.camera);
     ctx.lineTo(s.x, s.y);
   }
-  ctx.stroke();
-}
-
-/**
- * One laptop, open while its junior is writing and folded once it has stopped.
- * Two rectangles and no rotation matrix: `ctx.save`/`ctx.rotate` per part is
- * what §1.3 forbids, so the lid is drawn as a foreshortened base instead.
- */
-function drawLaptop(ctx, view, seat, live, px) {
-  const s = worldToScreen(seat.laptop, view.camera);
-  const w = LAPTOP_W_U * px;
-  const d = LAPTOP_D_U * px;
-  // The lid, BEHIND the base so the base reads as the near edge: full height
-  // open, nothing at all folded flat. Drawn first for the same reason a monitor
-  // is drawn before the desk it stands on.
-  const lid = d * 1.15 * live;
-  if (lid > 0.5) {
-    ctx.fillStyle = PALETTE.monitorBody;
-    ctx.fillRect(s.x - w / 2, s.y - d / 2 - lid, w, lid);
-    ctx.fillStyle = PALETTE.monitorScreenGlow;
-    ctx.fillRect(s.x - w / 2 + 1, s.y - d / 2 - lid + 1, Math.max(1, w - 2), Math.max(1, lid - 2));
+  if (extent >= 1 && rec && Number.isFinite(rec.x) && Number.isFinite(rec.y)) {
+    const feet = worldToScreen(rec, view.camera);
+    ctx.lineTo(feet.x, feet.y);
   }
-  ctx.fillStyle = PALETTE.monitorBody;
-  ctx.fillRect(s.x - w / 2, s.y - d / 2, w, d);
+  ctx.stroke();
 }
 
 /**
