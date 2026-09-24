@@ -30,6 +30,8 @@ import assert from 'node:assert/strict';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats } from '../../public/render/agents.js';
 import { CREW_DRAW_CAP, floorPopulation, placement } from '../../public/floor-rule.js';
+import { crewChipAt, crewNameAt } from '../../public/render/crew.js';
+import { drawCrews } from '../../public/render/crew-draw.js';
 
 const NOW = 1_800_000_000_000;
 const MIN = 60_000;
@@ -242,6 +244,54 @@ test('bug 201: a junior spawned into a worktree works in its parent’s room', (
   const seats = assignSeats(plan, agents);
   assert.equal(room(plan, 'project', 'career-ops-wt-agent'), undefined, 'no room of its own');
   assert.ok(inside(seats.get(wt.id), room(plan, 'project', 'career-ops')));
+});
+
+test('bug 201: the away crew’s desk carries the parent’s name, and the chip counts the desk', () => {
+  const { agents, projects, parent } = ownersFloor();
+  parent.label = 'MK4.1';
+  const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+  const seats = assignSeats(plan, agents);
+  const records = agents
+    .filter((a) => seats.get(a.id)?.crew === true)
+    .map((a) => ({ id: a.id, agent: a, targetSeat: seats.get(a.id), x: 0, y: 0 }));
+  /** @type {{text:string, x:number, y:number}[]} */
+  const texts = [];
+  const ctx = new Proxy(
+    { measureText: (t) => ({ width: String(t).length * 6 }) },
+    {
+      get: (target, key) =>
+        key === 'fillText'
+          ? (text, x, y) => texts.push({ text, x, y })
+          : key in target
+            ? target[key]
+            : () => {},
+      set: () => true,
+    },
+  );
+  const camera = { U: 20, zoom: 1, panX: 0, panY: 0 };
+  drawCrews(/** @type {any} */ (ctx), {
+    records,
+    agentsById: new Map(agents.map((a) => [a.id, a])),
+    camera,
+    scale: 20,
+    charU: 30,
+    lod: 2,
+    reduced: false,
+    pinned: 0,
+    nowMs: NOW,
+    // The parent's own seat is the office sofa; nothing may be drawn there.
+    seatOf: () => ({ x: -1000, y: -1000, angle: 0 }),
+    crewCounts: new Map([[parent.id, 13]]),
+  });
+  const anchor = records[0].targetSeat.crewAnchor;
+  const name = texts.find((t) => t.text === 'MK4.1');
+  assert.ok(name, 'the desk says whose crew it is');
+  const at = crewNameAt(anchor);
+  assert.ok(Math.hypot(name.x - at.x * 20, name.y - at.y * 20) < 1e-6, 'on that desk');
+  const chip = texts.find((t) => t.text === '+1');
+  assert.ok(chip, 'thirteen at the desk, twelve drawn: +1');
+  const c = crewChipAt(anchor);
+  assert.ok(Math.hypot(chip.x - c.x * 20, chip.y - c.y * 20) < 1e-6, 'beside the desk');
 });
 
 test('bug 201: the room counts a desk for the crew anchor when the parent is away', () => {

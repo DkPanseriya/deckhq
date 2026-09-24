@@ -546,6 +546,21 @@ export function crewChipAt(anchor) {
 }
 
 /**
+ * WHERE THE PARENT'S NAME SITS ON A DESK IT IS AWAY FROM (bug 201): on the desk
+ * top, past the port line the cables end on — half as far again as
+ * `CREW_PORT_OFFSET`, so the plate is on the table and clear of the ports. A
+ * length off the port line rather than a constant of its own, so it scales
+ * with the people exactly as the ports do.
+ * @param {{x:number,y:number,angle?:number}} anchor the desk's chair
+ * @returns {{x:number,y:number}}
+ */
+export function crewNameAt(anchor) {
+  const facing = typeof anchor.angle === 'number' ? anchor.angle : 0;
+  const d = CREW_PORT_OFFSET * 1.5;
+  return { x: anchor.x + Math.cos(facing) * d, y: anchor.y + Math.sin(facing) * d };
+}
+
+/**
  * How many members are drawn, and how many the chip stands for.
  * @param {number} n
  * @returns {{drawn:number, overflow:number}}
