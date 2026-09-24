@@ -77,6 +77,17 @@
   of Blocked and sending works again — raise its budget first, or the next check stops it again. This is the only time DeckHQ itself
   moves a card, and Blocked is the only place it can move one to.
 
+- **The board fits the window.** All six columns are on screen at once, with the panel open or
+  shut — the board gives the panel its room and arranges itself in what is left, and it never
+  scrolls sideways. Where six side by side will not fit, it becomes two rows of three; in a narrow
+  space (under 900 px) it shows one column at a time, with a row of buttons naming all six and how
+  many cards each holds — tap one to see it, or drag a card onto one to move it there. An empty
+  column is a thin strip with its name on its side, and opens when you point at it or drag a card
+  over it. Column names stay in view as you scroll. A card is four short lines: its title, who has
+  it, one row of chips, and one line of figures — `400k tok · 12 min · says 43 passed` — or a
+  single `no data` when there are none yet. The project's path shows its last two folders (point
+  at it for the whole path), and the how-to line is behind a **?** beside **New card**.
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights

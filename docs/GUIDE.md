@@ -519,6 +519,15 @@ it. Each card shows its title, the role it is assigned to — with that role's o
 the same identity as the one at its desk, or the word `nobody` — how many acceptance criteria it
 carries, its budget, and a chip per flag raised against it.
 
+**It fits the window.** The board takes the width the panel leaves it and never scrolls sideways.
+While every column fits at 168 px it is one row, and an empty column is a 36 px strip with its name
+on its side that opens when you point at it, focus it or drag a card over it. When six no longer
+fit it is two rows of three, in the same order. Under 900 px it shows one column at a time, with a
+row of buttons above it naming all six and their counts: press one to show that column, or drag a
+card onto one to move the card there. The column names stay at the top as a long column scrolls.
+The project's path on the bar is its last two folders, and pointing at it shows the whole path; the
+how-to line is behind the **?** beside **New card**.
+
 Underneath the columns is a **real `<table>`** of the same cards in the same order, with a caption
 and a row header per card. It is drawn for an empty board too, so a screen reader never gets
 nothing at all.
@@ -609,7 +618,9 @@ filename is visible rather than silent.
 | Burn-down      | the acceptance criteria **you** ticked, against the cards left in the milestone             |
 
 **A figure with nothing behind it says `no data`, never zero.** A card with no session, no moves
-and no handover has no numbers on it at all. A card whose session is known but which was never
+and no handover has no numbers on it at all: its strip is one line reading `no data`, once. A card
+with some figures shows those on its one line — `400k tok · 12 min · says 43 passed` — and pointing
+at the line gives every figure in full, including the ones that have `no data`. A card whose session is known but which was never
 moved into In progress is measured over its whole session, and says `(session)` beside the figure.
 A cost the rate card cannot price — a model it has no row for, or a record that did not name one —
 says `no rate` rather than a smaller number. Nothing is estimated or projected.
