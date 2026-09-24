@@ -19,6 +19,8 @@ import {
   GONE_HOME_DAYS,
   ON_THE_FLOOR,
   WAITING_STATES,
+  agentIndex,
+  homeProjectOf,
   isActiveAgent,
   isDeskAgent,
   isGoneHome,
@@ -377,11 +379,13 @@ export function counts(agents, opts = {}) {
   // Which projects have a room: one with at least one active agent on the
   // floor. A session at a desk in a project with no room is not drawn — there
   // is nowhere to draw it — which is what "N finished" counts.
+  // Keyed on each agent's HOME room (bug 201): a junior's is its parent's.
+  const byId = agentIndex(agents);
   const activeProjects = new Set();
   for (const a of agents) {
     if (a.ackState !== 'active') continue;
     if (!ON_THE_FLOOR.includes(a.activityState)) continue;
-    activeProjects.add(String(a.projectId ?? ''));
+    activeProjects.add(homeProjectOf(a, byId));
   }
 
   let drawnAtDesk = 0;
@@ -414,7 +418,7 @@ export function counts(agents, opts = {}) {
     // lounge now — but it still counts exactly the people the floor has
     // nowhere to draw: an active session whose project earned no room.
     const where = placement(a);
-    const hasRoom = activeProjects.has(String(a.projectId ?? ''));
+    const hasRoom = activeProjects.has(homeProjectOf(a, byId));
     if (where === 'desk') {
       atDesk++;
       if (hasRoom) drawnAtDesk++;

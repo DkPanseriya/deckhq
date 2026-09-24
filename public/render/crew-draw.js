@@ -35,6 +35,7 @@ import {
   crewCableExtent,
   crewCableLive,
   crewChipAt,
+  crewNameAt,
   crewPulseCount,
   pointAlong,
 } from './crew.js';
@@ -210,7 +211,15 @@ function strokeFromPort(ctx, view, route, extent, rec) {
  * WORKING as well, because the pulses that would otherwise have said so are off.
  */
 function drawChip(ctx, view, parentId, members) {
-  const total = view.crewCounts.get(parentId) ?? members.length;
+  // The desk the crew is cabled to, and how many are AT it — read off the seat
+  // `assignSeats` wrote, because since bug 201 neither is the parent's: the
+  // parent may be on a reception sofa while its crew works at the room's
+  // primary desk, and a junior that finished is resting in the lounge rather
+  // than being one of the `+N` this chip stands for.
+  const seat = members[0] && members[0].targetSeat;
+  const anchor = (seat && seat.crewAnchor) || view.seatOf(parentId);
+  if (seat && seat.crewAway === true) drawAwayName(ctx, view, parentId, anchor);
+  const total = (seat && seat.crewTotal) ?? view.crewCounts.get(parentId) ?? members.length;
   const over = total - members.length;
   const working = view.reduced
     ? members.filter((rec) => {
@@ -226,9 +235,28 @@ function drawChip(ctx, view, parentId, members) {
       ? `+${over}`
       : '';
   if (!text || view.lod < 1) return;
-  const anchor = view.seatOf(parentId);
   if (!anchor) return;
-  const at = worldToScreen(crewChipAt(anchor), view.camera);
+  plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text);
+}
+
+/**
+ * THE PARENT'S NAME ON THE DESK ITS CREW IS CABLED TO, when the parent is not
+ * sitting at it (bug 201). The crew works in the project room whatever its
+ * parent is doing; the cables say which desk, and this says whose — a small
+ * plate on the desk rather than a body in the chair, because the parent is
+ * somewhere else on the floor (usually on the reception sofa, waiting on you).
+ * Only a name the snapshot carries: none, and nothing is drawn.
+ */
+function drawAwayName(ctx, view, parentId, anchor) {
+  if (!anchor || view.lod < 1) return;
+  const parent = view.agentsById.get(parentId);
+  const name = parent && (parent.label ?? parent.displayName);
+  if (!name) return;
+  plate(ctx, view, worldToScreen(crewNameAt(anchor), view.camera), String(name));
+}
+
+/** One small plate — the chip's halo and ink — centred on a screen point. */
+function plate(ctx, view, at, text) {
   const fontPx = Math.max(10, Math.min(14, view.charU * 0.42));
   ctx.font = sansFont(fontPx);
   const w = ctx.measureText(text).width + fontPx * 0.9;

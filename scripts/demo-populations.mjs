@@ -164,6 +164,30 @@ export function referenceSessions() {
 }
 
 /**
+ * BUG 201's CREW: thirteen juniors of a senior that is waiting on you.
+ *
+ * Thirteen because that is what the owner's floor had, and because it is one
+ * over `CREW_DRAW_CAP`, so the capture also shows the `+1` chip sitting beside
+ * the desk rather than beside the sofa. Every one is inside `CREW_ACTIVE_MS` or
+ * a few minutes past it — all still `working`, since their turns have not ended
+ * — and each is stamped once with its own `quietSeconds` rather than kept alive,
+ * so the capture is a pure function of the pinned clock, as `crew`'s is.
+ */
+export const WAITING_CREW_PARENT = 'Sweep the job board for stale listings';
+const WAITING_QUIET = [0, 5, 10, 20, 30, 45, 70, 90, 120, 150, 180, 210, 240];
+const WAITING_TYPES = ['Explore', 'general-purpose', 'test-engineer', 'code-reviewer'];
+export const WAITING_CREW_JUNIORS = WAITING_QUIET.map((quietSeconds, i) => ({
+  agentId: `ad3m00000000002${String(i).padStart(2, '0')}`,
+  agentType: WAITING_TYPES[i % WAITING_TYPES.length],
+  description: `Check listing batch ${i + 1}`,
+  text: `Reading listing batch ${i + 1} for dead links.`,
+  tool: { name: 'Read', input: { file_path: `data/listings-${i + 1}.json` } },
+  ageMinutes: quietSeconds / 60,
+  quietSeconds,
+  workflow: null,
+}));
+
+/**
  * Named fixtures. `scripts/goldens.mjs` photographs each of these; add one
  * here and a golden for it will be generated on the next `npm run goldens`.
  * @type {Record<string, () => Array<[string, string, string, number, number]>>}
@@ -226,6 +250,26 @@ export const POPULATIONS = {
    * whole of the point: two still writing, two gone quiet, one caught mid-fold.
    */
   crew: () => [['orbital-api', 'Audit every call site of the token bucket', 'working', 0.05, 2.4]],
+  /**
+   * BUG 201'S FLOOR: a senior WAITING ON YOU with a crew still working.
+   *
+   * The owner's own shape: _"many sessions running, but nobody on the desk,
+   * they are rather shown working in boss office."_ His `career-ops` senior had
+   * finished its turn and was on the reception sofa for review while thirteen
+   * of its juniors were still writing; the floor stood all thirteen round the
+   * sofa and left their room's desks empty. What this capture has to show: the
+   * senior on the sofa in Your Office, and its crew in `orbital-api` — an arc
+   * cabled to the room's primary desk, the senior's name on that desk, and the
+   * `+1` chip for the thirteenth — beside two top-level sessions working at
+   * their own desks in two other rooms, one of them running `Bash`.
+   *
+   * The juniors are `WAITING_CREW_JUNIORS` below.
+   */
+  'crew-waiting': () => [
+    ['orbital-api', WAITING_CREW_PARENT, 'for_review', 0.05, 2.4],
+    ['checkout-flow', 'Rate limiter for the public API', 'working', 0.4, 0.4],
+    ['design-system', 'Token pipeline to Figma', 'working', 0.8, 1.3],
+  ],
   /**
    * WP-69's FLOOR, for the `board` golden: one repo, three people in it.
    *

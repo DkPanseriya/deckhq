@@ -13,7 +13,13 @@
  * `node --test` (docs/DEVIATIONS.md §122).
  */
 
-import { isCrewFormation, placement, waitingSince } from '../floor-rule.js';
+import {
+  agentIndex,
+  homeProjectOf,
+  isCrewFormation,
+  placement,
+  waitingSince,
+} from '../floor-rule.js';
 import { crewArc, crewSplit } from './crew.js';
 import {
   hashString,
@@ -288,36 +294,41 @@ export function assignSeats(plan, agents, opts = {}) {
   // person on the floor" instead of two that can disagree.
   const hidden = (plan && plan.hidden) || null;
   /**
-   * WP-41. Juniors, by parent id. They are held back from the hashed seating
-   * pass on purpose: a junior does not take a chair of its own, it stands
-   * beside the person who spawned it, and its position is only knowable once
-   * that person has a seat. They still COUNT as occupants — `buildPlan` sized
-   * the table with them in it (`plan.js`'s `floorPopulation`), which is what
-   * gives a senior with three juniors a four-seater to stand around.
+   * WP-41. WORKING juniors, by parent id. They are held back from the hashed
+   * seating pass on purpose: a junior whose parent is at a desk does not take a
+   * chair of its own, it stands beside that desk, and its position is only
+   * knowable once the parent has a seat. They still COUNT as occupants —
+   * `buildPlan` sized the table with them in it (`floorPopulation`), which is
+   * what gives a senior with three juniors a four-seater to stand around.
+   *
+   * ONLY THE ONES AT A DESK (bug 201). A junior is placed by its own state:
+   * one that finished rests in the lounge and one with its hand up waits in the
+   * office, through the same passes as everybody else below.
    * @type {Map<string, AgentLike[]>}
    */
   const juniorsByParent = new Map();
   /**
-   * WP-89. Where each senior ended up, so the crew pass can ask. A formation is
-   * a thing that happens AT A DESK — §3.2 is about *"the parent's desk"* — and a
-   * benched senior in the lounge or one waiting on a reception sofa has no desk
-   * to put an arc in front of and no floor to spare beside the sofas. Those keep
-   * WP-59d's wrapping rows, whatever the count.
+   * WP-89. Where each senior ended up, so the junior pass can ask whether the
+   * parent has a DESK to sit beside. Since bug 201 the answer decides only which
+   * desk the juniors are at — the parent's, or one of the room's own — and never
+   * which room: a senior waiting on a reception sofa or resting in the lounge
+   * leaves its working juniors in the project room they are working in.
    * @type {Map<string, string>}
    */
   const placementById = new Map();
+  const byId = agentIndex(agents);
 
   for (const agent of agents) {
     if (hidden && hidden.has(agent.id)) continue;
-    if (agent.subagent === true) {
+    const p = derivePlacement(agent);
+    if (agent.subagent === true && p === 'desk') {
       const parent = agent.parentId == null ? '' : String(agent.parentId);
       const list = juniorsByParent.get(parent) || [];
       list.push(agent);
       juniorsByParent.set(parent, list);
       continue;
     }
-    const p = derivePlacement(agent);
-    placementById.set(String(agent.id), p);
+    if (agent.subagent !== true) placementById.set(String(agent.id), p);
     if (p === 'let_go') {
       letGoAgents.push(agent);
     } else if (p === 'desk') {
@@ -381,70 +392,8 @@ export function assignSeats(plan, agents, opts = {}) {
 
   assignHashed(loungeAgents, plan.loungeSpots || [], result);
 
-  // WP-41, last: the juniors, once every senior has a seat to stand beside.
-  // Deterministic — sorted by id, alternating left and right — so the same
-  // three juniors line up the same way on every push and nobody shuffles.
-  //
-  // WP-59d: INSIDE THE ROOM THE PARENT IS IN, whichever room that is. The row
-  // wraps at the walls rather than walking through them (`juniorSpots`), which
-  // is the whole of the fix for a benched senior with sixteen juniors drawing
-  // half of them outside the lounge.
-  const roomAt = (p) =>
-    ((plan && plan.rooms) || []).find(
-      (r) =>
-        r.kind !== 'corridor' &&
-        p.x >= r.x - 0.01 &&
-        p.x <= r.x + r.w + 0.01 &&
-        p.y >= r.y - 0.01 &&
-        p.y <= r.y + r.h + 0.01,
-    ) || null;
-  for (const [parentId, list] of juniorsByParent) {
-    const anchor = result.get(parentId);
-    // A junior whose parent is not on the floor at all: it went home, it was
-    // let go, or the scan caught the junior a poll before its parent. Nothing
-    // to stand beside, so nothing is drawn — `sync` drops the record for the
-    // same reason it drops an archived session, rather than parking a body on
-    // the floor's origin.
-    if (!anchor) continue;
-    const ordered = [...list].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const room = roomAt(anchor);
-    const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
-
-    // WP-89 · THREE OR MORE AND THE DESK BECOMES A CREW.
-    //
-    // §3.2's threshold, and the rest of this block is the fallback ladder it
-    // asks for: the arc if the room has floor for it, WP-59d's wrapping rows if
-    // it has not, and — for a pinned room, which has no seats at all — nothing,
-    // because the parent never got a seat and the loop above already skipped it.
-    // At or below two the seats are exactly what they were, which is what keeps
-    // every committed golden at 0 px: the `demo` floor's senior has two.
-    //
-    // Only the first `CREW_DRAW_CAP` members are seated. A member with no seat
-    // gets no record and nothing drawn (`AgentRuntime#sync`), which is what the
-    // `+N` chip stands for — the rest are in the panel and in the deck.
-    const { drawn } = crewSplit(ordered.length);
-    if (isCrewFormation(ordered.length) && placementById.get(parentId) === 'desk') {
-      const arc = crewArc(anchor, room, drawn, deskFootprints(room));
-      if (arc.fits) {
-        for (let i = 0; i < drawn; i++) {
-          result.set(ordered[i].id, {
-            ...arc.seats[i],
-            kind: anchor.kind,
-            junior: true,
-            crew: true,
-            crewIndex: i,
-            crewOf: parentId,
-          });
-        }
-        continue;
-      }
-    }
-
-    const spots = juniorSpots(anchor, room, ordered.length);
-    ordered.forEach((junior, i) => {
-      result.set(junior.id, { ...spots[i], angle, kind: anchor.kind, junior: true });
-    });
-  }
+  // WP-41, last: the working juniors, once every senior has a seat.
+  seatJuniors(plan, juniorsByParent, placementById, byId, result);
   // Archived sessions are off the floor entirely — no room, no seat, nothing
   // drawn. They are still counted in the header and still listed in the panel;
   // they simply do not take screen space away from the rooms in play. `sync`
@@ -452,4 +401,140 @@ export function assignSeats(plan, agents, opts = {}) {
   void letGoAgents;
 
   return result;
+}
+
+/**
+ * WHERE THE WORKING JUNIORS SIT — at a desk in their room, always (bug 201).
+ *
+ * The owner, 24 September: _"many sessions running, but nobody on the desk,
+ * they are rather shown working in boss office."_ This pass used to stand every
+ * junior beside its parent's seat, WHEREVER that seat was, so a senior waiting
+ * on a reception sofa drew its thirteen working juniors round the sofa and left
+ * the room they were working in with thirteen empty desks. Occupancy is per
+ * agent and by its own state; the parent answers only WHICH desk:
+ *
+ *   - the parent is at a desk: beside that desk, exactly as before — WP-41's
+ *     seat pitch for one or two, WP-89's arc for three or more, WP-59d's
+ *     wrapping rows when the room has no floor for an arc;
+ *   - the parent is not (on a sofa, in the lounge, ended, gone): one or two take
+ *     a desk each in the room, and three or more are the same arc, cabled to
+ *     the room's PRIMARY desk — the first one no senior is sitting at, which
+ *     `floorPopulation` counted for exactly this — with the parent's name on it
+ *     (`crewAway`, drawn by `crew-draw.js`).
+ *
+ * The room is the junior's HOME room (`homeProjectOf`): its parent's, which a
+ * worktree-isolated junior's own cwd is not. Deterministic throughout — parents
+ * in id order, juniors in id order — so nobody shuffles between pushes.
+ *
+ * @param {Plan} plan
+ * @param {Map<string, AgentLike[]>} juniorsByParent the juniors AT A DESK
+ * @param {Map<string, string>} placementById every senior's zone
+ * @param {Map<string, any>} byId `agentIndex` of the whole snapshot
+ * @param {Map<string, PlacedSeat>} result written into
+ */
+function seatJuniors(plan, juniorsByParent, placementById, byId, result) {
+  const rooms = (plan && plan.rooms) || [];
+  const roomAt = (p) =>
+    rooms.find(
+      (r) =>
+        r.kind !== 'corridor' &&
+        p.x >= r.x - 0.01 &&
+        p.x <= r.x + r.w + 0.01 &&
+        p.y >= r.y - 0.01 &&
+        p.y <= r.y + r.h + 0.01,
+    ) || null;
+  const deskSeats = (pid) => (plan && plan.seats && plan.seats.get(pid)) || [];
+  const byIdOrder = (a, b) => String(a.id).localeCompare(String(b.id));
+  // The desks a senior already sits at, by identity: `assignHashed` hands out
+  // the plan's own seat objects.
+  const taken = new Set(result.values());
+  /** @type {{pid:string, parentId:string, ordered:AgentLike[]}[]} */
+  const awayCrews = [];
+  /** @type {Map<string, AgentLike[]>} */
+  const ownDesks = new Map();
+
+  for (const parentId of [...juniorsByParent.keys()].sort()) {
+    const ordered = [...(juniorsByParent.get(parentId) || [])].sort(byIdOrder);
+    const desk = placementById.get(parentId) === 'desk' ? result.get(parentId) : null;
+    if (desk) {
+      seatAround(desk, roomAt(desk), parentId, ordered, false, result);
+      continue;
+    }
+    // Keyed as `floorPopulation` keys a crew — room and parent — so the arc
+    // drawn here is the arc the room was sized for.
+    /** @type {Map<string, AgentLike[]>} */
+    const byRoom = new Map();
+    for (const j of ordered) {
+      const pid = homeProjectOf(j, byId);
+      byRoom.set(pid, [...(byRoom.get(pid) || []), j]);
+    }
+    for (const [pid, group] of byRoom) {
+      if (isCrewFormation(group.length)) awayCrews.push({ pid, parentId, ordered: group });
+      else ownDesks.set(pid, [...(ownDesks.get(pid) || []), ...group]);
+    }
+  }
+
+  for (const { pid, parentId, ordered } of awayCrews) {
+    const seats = deskSeats(pid);
+    const desk = seats.find((s) => !taken.has(s)) || seats[0];
+    // A repo with a working agent in it always has a room with a desk
+    // (`splitProjectsByOccupancy`, `desksIn`'s floor of one), so this is a
+    // guard against a hand-built plan rather than a case the floor produces.
+    if (!desk) continue;
+    taken.add(desk);
+    const room = rooms.find((r) => r.kind === 'project' && String(r.id) === pid) || roomAt(desk);
+    seatAround(desk, room, parentId, ordered, true, result);
+  }
+  for (const [pid, list] of ownDesks) {
+    assignHashed(
+      list,
+      deskSeats(pid).filter((s) => !taken.has(s)),
+      result,
+    );
+  }
+}
+
+/**
+ * One parent's working juniors around one desk: the arc for three or more
+ * where the room has floor for it, WP-59d's wrapping rows otherwise.
+ *
+ * WP-89 · §3.2's threshold and its fallback ladder. At or below two the seats
+ * are exactly what they were beside a parent, which keeps the `demo` floor's
+ * two juniors to the pixel. Only the first `CREW_DRAW_CAP` members of an arc
+ * are seated; a member with no seat gets no record and nothing drawn
+ * (`AgentRuntime#sync`), which is what the `+N` chip stands for.
+ *
+ * @param {PlacedSeat} desk the parent's seat, or the room's primary desk
+ * @param {any} room the room that desk is in
+ * @param {string} parentId
+ * @param {AgentLike[]} ordered sorted by id
+ * @param {boolean} away the parent is not at this desk (bug 201)
+ * @param {Map<string, PlacedSeat>} result
+ */
+function seatAround(desk, room, parentId, ordered, away, result) {
+  const angle = typeof desk.angle === 'number' ? desk.angle : 0;
+  if (isCrewFormation(ordered.length)) {
+    const { drawn } = crewSplit(ordered.length);
+    const arc = crewArc(desk, room, drawn, deskFootprints(room));
+    if (arc.fits) {
+      for (let i = 0; i < drawn; i++) {
+        result.set(ordered[i].id, {
+          ...arc.seats[i],
+          kind: desk.kind,
+          junior: true,
+          crew: true,
+          crewIndex: i,
+          crewOf: parentId,
+          crewAnchor: { x: desk.x, y: desk.y, angle },
+          crewTotal: ordered.length,
+          ...(away ? { crewAway: true } : {}),
+        });
+      }
+      return;
+    }
+  }
+  const spots = juniorSpots(desk, room, ordered.length);
+  ordered.forEach((junior, i) => {
+    result.set(junior.id, { ...spots[i], angle, kind: desk.kind, junior: true });
+  });
 }

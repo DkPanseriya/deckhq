@@ -141,21 +141,69 @@ export function isSubagent(agent) {
  * within a zone rather than the zone itself, and it takes the selection as an
  * explicit argument so nothing can mistake it for something observed.
  *
+ * THE USER'S ACK WINS OVER THE OBSERVED STATE. A benched session is in the
+ * lounge whatever it is doing — `working|benched` and `needs_input|benched`
+ * both occur on real machines, because `benched` is user-owned and only the
+ * user moves it (`docs/GUIDE.md`: "Park it in the lounge until you recall
+ * it"). Benching is the user saying "not at a desk", and a scan does not
+ * overrule it. `junior-occupancy.test.mjs` holds both cases.
+ *
  * @param {FloorAgent} agent
  * @returns {'desk'|'office'|'lounge'|'let_go'}
  */
 export function placement(agent) {
   if (agent.ackState === 'let_go') return 'let_go';
-  // WP-41. A junior is only ever beside its parent. It cannot be benched (the
-  // user is never offered the button) and it never stands in the office: its
-  // finished turn is handed to its parent, not to you, so putting it in the
-  // waiting area would queue work nobody can discharge.
-  if (isSubagent(agent)) return 'desk';
+  // A JUNIOR IS PLACED BY ITS OWN STATE, NEVER BY ITS PARENT'S (bug 201). This
+  // used to return `desk` for every junior, and `assignSeats` then stood each
+  // one beside its parent wherever the parent was — so a senior waiting on the
+  // reception sofa had its thirteen working juniors drawn working in the
+  // office, and the room they were working in had thirteen empty desks. A
+  // junior is `working` or `ended` (`state-machine-compute.mjs` never gives one
+  // `for_review`), may raise its own hand, and is never benched; each of those
+  // goes to the zone it would put anybody else in. Which DESK a working junior
+  // takes is `assignSeats`'s question, and the parent only answers that one.
   if (agent.ackState === 'benched') return 'lounge';
   const state = agent.activityState;
   if (/** @type {readonly string[]} */ (WAITING_STATES).includes(state)) return 'office';
   if (/** @type {readonly string[]} */ (AT_DESK_STATES).includes(state)) return 'desk';
   return 'lounge';
+}
+
+/**
+ * Every agent by id, for the one question below that needs a second agent.
+ * @param {FloorAgent[]} agents
+ * @returns {Map<string, FloorAgent>}
+ */
+export function agentIndex(agents) {
+  /** @type {Map<string, FloorAgent>} */
+  const out = new Map();
+  for (const a of Array.isArray(agents) ? agents : []) {
+    if (a && a.id != null) out.set(String(a.id), a);
+  }
+  return out;
+}
+
+/**
+ * THE PROJECT ROOM A SESSION WORKS IN (bug 201).
+ *
+ * Its own repo — with one exception. A junior whose parent is on the snapshot
+ * works in its PARENT's room, because a subagent run with worktree isolation
+ * reports the worktree as its cwd: a repo with no session of its own, which
+ * would otherwise be a room of one junior away from the person who spawned it
+ * (or, since such a repo has `sessionCount` 0, no room at all). It is the
+ * parent's helper whether the parent is at a desk, on a sofa or in the lounge,
+ * so the room does not depend on where the parent is — only on who it is.
+ *
+ * @param {FloorAgent} agent
+ * @param {Map<string, FloorAgent>} [byId] `agentIndex` of the same snapshot
+ * @returns {string}
+ */
+export function homeProjectOf(agent, byId) {
+  if (isSubagent(agent) && agent.parentId != null && byId) {
+    const parent = byId.get(String(agent.parentId));
+    if (parent && parent.projectId != null) return String(parent.projectId);
+  }
+  return agent.projectId == null ? '' : String(agent.projectId);
 }
 
 /**
@@ -173,10 +221,10 @@ export function isActiveAgent(agent) {
 /**
  * Does this agent occupy a DESK in its project's room?
  *
- * Everything `placement()` calls `desk`, which since WP-78 is working, stalled
- * and every junior standing beside its parent — and no longer an `ended`
- * session, which is in the lounge. It is what "desks equal agents at desks"
- * counts and what sizes a project room's tables.
+ * Everything `placement()` calls `desk`, which since WP-78 is working and
+ * stalled — juniors included, by their own state since bug 201 — and no longer
+ * an `ended` session, which is in the lounge. It is what "desks equal agents at
+ * desks" counts and what sizes a project room's tables.
  * @param {FloorAgent} agent
  */
 export function isDeskAgent(agent) {
@@ -190,7 +238,8 @@ export function isDeskAgent(agent) {
  * while the user has its panel open.
  *
  * The office population, stated once so the plan, the counts and the plate
- * cannot each derive it. A junior is never here (see `placement`).
+ * cannot each derive it. A junior is here only when it has raised its own
+ * hand (`needs_input`), which is the one junior state `needsYou()` counts.
  * @param {FloorAgent} agent
  */
 export function isWaitingAgent(agent) {
@@ -291,20 +340,32 @@ export function floorPopulation(agents, opts = {}) {
   const seniorPlacement = new Map();
 
   const bump = (map, key) => map.set(key, (map.get(key) || 0) + 1);
+  const byId = agentIndex(list);
 
   for (const a of list) {
     if (!a || a.ackState === 'let_go') continue;
-    const pid = a.projectId == null ? '' : String(a.projectId);
+    // The room this agent is counted in (`homeProjectOf`): its own repo, or a
+    // junior's parent's. `known` and `lastActivity` stay on its OWN repo too —
+    // they describe the repo's sessions, and a worktree a junior ran in must
+    // still be known, or `splitProjectsByOccupancy` would fall back to the
+    // record's own counts and draw that worktree a room of nobody.
+    const pid = homeProjectOf(a, byId);
+    const own = a.projectId == null ? '' : String(a.projectId);
+    // WP-89, bug 201: a crew is the juniors AT A DESK. A finished one rests in
+    // the lounge and a raised hand waits in the office, like anyone else, and
+    // neither is in the formation the desk draws.
     if (isSubagent(a)) {
-      if (a.parentId != null && pid) bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
+      if (a.parentId != null && pid && isDeskAgent(a))
+        bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
     } else if (a.id != null) {
       seniorPlacement.set(String(a.id), placement(a));
     }
-    if (pid) {
-      known.add(pid);
+    if (own) {
+      known.add(own);
       const at = Number(a.lastActivityAt) || 0;
-      if (at > (lastActivity.get(pid) || 0)) lastActivity.set(pid, at);
+      if (at > (lastActivity.get(own) || 0)) lastActivity.set(own, at);
     }
+    if (pid) known.add(pid);
     if (a.ackState === 'benched') {
       if (isGoneHome(a, now, goneHomeDays)) goneHome.add(String(a.id));
       else benchedDrawn++;
@@ -339,13 +400,18 @@ export function floorPopulation(agents, opts = {}) {
     if (n < CREW_THRESHOLD) continue;
     const cut = key.indexOf(' ');
     const pid = key.slice(0, cut);
-    // A formation only happens at a desk (`assignSeats`); a benched senior with
-    // sixteen juniors in the lounge keeps WP-59d's rows and keeps its desks.
-    if (seniorPlacement.get(key.slice(cut + 1)) !== 'desk') continue;
+    // A formation happens at a DESK, and since bug 201 it happens whether or
+    // not the parent is sitting at it: juniors that are working are in the
+    // room, so their arc is too. With the parent at its desk the arc is in
+    // front of that desk, which is already counted. With the parent away —
+    // waiting on a sofa, benched, ended, gone — the arc is cabled to the
+    // room's primary desk instead (`assignSeats`), and that desk is counted
+    // here, empty, with the parent's name on it.
+    const parentAtDesk = seniorPlacement.get(key.slice(cut + 1)) === 'desk';
     const sizes = crews.get(pid) || [];
     sizes.push(n);
     crews.set(pid, sizes);
-    desks.set(pid, Math.max(0, (desks.get(pid) || 0) - n));
+    desks.set(pid, Math.max(0, (desks.get(pid) || 0) - n + (parentAtDesk ? 0 : 1)));
   }
   for (const sizes of crews.values()) sizes.sort((a, b) => b - a);
 
@@ -416,8 +482,16 @@ export function splitProjectsByOccupancy(projects, pop) {
       ? (pop.active.get(idOf(p)) ?? 0)
       : (p.activeCount ?? p.sessionCount ?? 0);
   const isIdle = (p) => activeIn(p) === 0;
+  // A REPO WITH A LIVE AGENT IN IT IS A ROOM, WHATEVER ITS SESSION COUNT SAYS
+  // (bug 201). `sessionCount` counts the sessions the user started and not the
+  // juniors (`model.mjs` `projects()`), so a repo whose only live agent is a
+  // junior with no parent on the snapshot read 0 and was dropped here — and a
+  // working session with no room has no desk and is not drawn at all. Only for
+  // a repo the population KNOWS, so a caller that hands over a bare record is
+  // judged by that record's own counts exactly as before.
+  const live = (p) => (p.sessionCount ?? 0) > 0 || (pop.known.has(idOf(p)) && !isIdle(p));
   const visible = (Array.isArray(projects) ? projects : []).filter(
-    (p) => (p.sessionCount ?? 0) > 0 && !(isIdle(p) && p.archived),
+    (p) => live(p) && !(isIdle(p) && p.archived),
   );
   const resting = visible.filter(isIdle);
   return {
@@ -425,6 +499,31 @@ export function splitProjectsByOccupancy(projects, pop) {
     pinned: resting.filter((p) => p.pinned === true),
     idle: resting.filter((p) => p.pinned !== true).map((p) => lineOf(p, pop)),
   };
+}
+
+/**
+ * WHO THE FLOOR DRAWS NOBODY FOR: an agent who went home, and an active agent
+ * that is not on the floor in its own right (ended, almost always) in a repo
+ * with no live room. `buildPlan`'s `hidden`, here since bug 201 because the
+ * repo it asks about is the agent's HOME room (`homeProjectOf`) — a finished
+ * junior of a live parent rests in the lounge like anyone else of that room.
+ * @param {FloorAgent[]} agents
+ * @param {Set<string>} roomIds the repos that earned a full room
+ * @param {ReturnType<typeof floorPopulation>} pop
+ * @returns {Set<string>}
+ */
+export function offTheFloor(agents, roomIds, pop) {
+  const list = Array.isArray(agents) ? agents : [];
+  const byId = agentIndex(list);
+  const hidden = new Set(pop.goneHome);
+  for (const a of list) {
+    if (!a || a.ackState !== 'active') continue;
+    // Working, hand up, gone quiet, waiting: the session is on the floor in
+    // its own right and its project has a room by definition.
+    if (isActiveAgent(a)) continue;
+    if (!roomIds.has(homeProjectOf(a, byId))) hidden.add(String(a.id));
+  }
+  return hidden;
 }
 
 /** The shape one line of either list carries. @param {any} p @param {any} pop */

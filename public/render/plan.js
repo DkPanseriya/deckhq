@@ -56,7 +56,7 @@
  * so no import anywhere had to change.
  */
 
-import { floorPopulation, isActiveAgent, splitProjectsByOccupancy } from '../floor-rule.js';
+import { floorPopulation, offTheFloor, splitProjectsByOccupancy } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
@@ -172,15 +172,7 @@ export function buildPlan(projects, agents, opts = {}) {
   // does not exist. A PINNED room is not in it either (WP-77): pinning kept the
   // room, not the people, and its room has no seat to draw anybody on.
   const roomIds = new Set(activeProjects.map(idOf));
-  /** @type {Set<string>} */
-  const hidden = new Set(pop.goneHome);
-  for (const a of list) {
-    if (!a || a.ackState !== 'active') continue;
-    // Working, hand up, gone quiet, waiting: the session is on the floor in
-    // its own right and its project has a room by definition.
-    if (isActiveAgent(a)) continue;
-    if (!roomIds.has(String(a.projectId))) hidden.add(String(a.id));
-  }
+  const hidden = offTheFloor(list, roomIds, pop);
 
   // THE LOUNGE HOLDS THE BENCHED **AND** THE ENDED (WP-78). `08` B6's rule is
   // untouched — an `ended` session in a repo nobody is working in is still a line

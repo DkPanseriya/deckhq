@@ -72,6 +72,7 @@ import {
 } from './agents-core.js';
 import { planWalk, doorFor } from './agents-nav.js';
 import { derivePlacement } from './agents-seats.js';
+import { agentIndex, homeProjectOf } from '../floor-rule.js';
 import { pickNextActivity, pickNextActivityFromClips, initialClipFor } from './agents-activity.js';
 // WP-87. `./life.js` is the one new static import this file takes, and it does
 // not break the rule the header states above: `life.js` is pure, imports only
@@ -408,9 +409,13 @@ export class AgentRuntime {
     const replanned = plan !== this._plan;
     this._plan = plan || null;
     const findRoom = (id) => rooms.find((r) => r.id === id) || null;
+    // A desk is in the agent's HOME room — a junior's is its parent's (bug 201).
+    const byId = agentIndex(agents);
     const roomFor = (placement, agent) => {
-      if (placement === 'desk')
-        return rooms.find((r) => r.kind === 'project' && r.id === agent.projectId) || null;
+      if (placement === 'desk') {
+        const home = homeProjectOf(agent, byId);
+        return rooms.find((r) => r.kind === 'project' && r.id === home) || null;
+      }
       if (placement === 'office') return rooms.find((r) => r.kind === 'office') || null;
       if (placement === 'lounge') return rooms.find((r) => r.kind === 'lounge') || null;
       return null;
@@ -431,11 +436,11 @@ export class AgentRuntime {
       if (placement === 'let_go') continue;
       if (hidden && hidden.has(agent.id)) continue;
       const seat = seatMap ? seatMap.get(agent.id) || null : null;
-      // WP-41. A junior with no seat has no parent on the floor to stand
-      // beside (`assignSeats` places one only when the parent has a seat).
-      // Same rule as an archived session: no seat, no record, nothing drawn —
-      // rather than falling through to the room-centre fallback, which would
-      // stack every orphaned junior on one spot.
+      // WP-41, WP-89. A junior with no seat is a crew member past
+      // `CREW_DRAW_CAP` — the `+N` chip — since bug 201 gave a working junior
+      // a desk whatever its parent is doing. Same rule as an archived session:
+      // no seat, no record, nothing drawn — rather than falling through to the
+      // room-centre fallback, which would stack every one of them on one spot.
       if (agent.subagent === true && !seat) continue;
       seen.add(agent.id);
       const existed = this._records.has(agent.id);

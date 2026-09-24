@@ -213,16 +213,31 @@ test('§3.2: three or more is a crew; two or fewer keep the seats they had', () 
   }
 });
 
-test('§3.2: a benched senior in the lounge keeps WP-59d rows however many juniors it has', () => {
+test('§3.2, bug 201: a benched senior’s working crew stays at the room’s desk', () => {
+  // It used to follow the senior into the lounge and stand there in WP-59d's
+  // rows. A working junior is placed by its own state: the crew is in the
+  // project room, cabled to the room's primary desk, with the senior's name on
+  // it — and the senior is in the lounge, where the user's bench put it.
   const { agents, projects } = crewFloor(6);
   agents[0].ackState = 'benched';
   const plan = buildPlan(projects, agents, { stage: { w: 1600, h: 1000 }, now: NOW });
   const seats = assignSeats(plan, agents);
+  const room = plan.rooms.find((r) => r.kind === 'project' && r.id === 'p');
+  const desks = plan.seats.get('p') || [];
+  assert.equal(desks.length, 1, 'one desk: the one the crew is cabled to');
   for (const j of agents.filter((a) => a.subagent)) {
     const seat = seats.get(j.id);
-    assert.ok(seat, 'nothing is dropped in the lounge');
-    assert.notEqual(seat.crew, true, 'a formation is a thing that happens at a desk');
+    assert.ok(seat, 'nothing is dropped');
+    assert.equal(seat.crew, true, 'six working juniors are a formation');
+    assert.equal(seat.crewAway, true, 'and their parent is not at the desk');
+    assert.equal(seat.crewAnchor.x, desks[0].x);
+    assert.equal(seat.crewAnchor.y, desks[0].y);
+    assert.ok(seat.x >= room.x && seat.x <= room.x + room.w, 'inside the project room');
+    assert.ok(seat.y >= room.y && seat.y <= room.y + room.h, 'inside the project room');
   }
+  const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+  const senior = seats.get(agents[0].id);
+  assert.ok(senior.x >= lounge.x && senior.x <= lounge.x + lounge.w, 'the senior rests');
 });
 
 // ------------------------------------------------- 4. the arc's geometry

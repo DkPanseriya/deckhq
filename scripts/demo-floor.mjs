@@ -78,6 +78,8 @@ import {
   SESSIONS,
   STUDIO_PROJECT,
   JUNIOR_PARENT,
+  WAITING_CREW_JUNIORS,
+  WAITING_CREW_PARENT,
 } from './demo-populations.mjs';
 import { projectIdFromCwd } from '../src/core/model.mjs';
 import {
@@ -214,6 +216,17 @@ if (POPULATION === 'crew') {
   const parent = built.find((s) => s.title === CREW_PARENT);
   if (parent) {
     for (const junior of CREW_JUNIORS) {
+      writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
+    }
+  }
+}
+
+// Bug 201. Thirteen working juniors on a senior that has finished its turn and
+// is waiting on the reception sofa: the crew belongs at its room's desk.
+if (POPULATION === 'crew-waiting') {
+  const parent = built.find((s) => s.title === WAITING_CREW_PARENT);
+  if (parent) {
+    for (const junior of WAITING_CREW_JUNIORS) {
       writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
     }
   }

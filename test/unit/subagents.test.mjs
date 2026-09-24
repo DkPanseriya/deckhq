@@ -634,10 +634,23 @@ test('counts() agrees with needsYou() about juniors, breakdown included', () => 
   assert.equal(c.total, 4, 'juniors are still counted as people on the floor');
 });
 
-test('a junior is only ever beside its parent: never the office, never the lounge', () => {
-  assert.equal(placement(agent({ activityState: 'for_review' })), 'office');
-  assert.equal(placement(agent({ activityState: 'for_review', subagent: true })), 'desk');
-  assert.equal(placement(agent({ ackState: 'benched', subagent: true })), 'desk');
+test('a junior is placed by its own state, exactly as anybody else is (bug 201)', () => {
+  // WP-41 said "a junior is only ever beside its parent" and answered `desk`
+  // for every junior, so a senior waiting on the reception sofa had its working
+  // juniors drawn working in the office. A junior's ZONE is its own state's;
+  // its parent only decides which desk a working one sits at (`assignSeats`).
+  assert.equal(placement(agent({ activityState: 'working', subagent: true })), 'desk');
+  assert.equal(placement(agent({ activityState: 'stalled', subagent: true })), 'desk');
+  assert.equal(placement(agent({ activityState: 'needs_input', subagent: true })), 'office');
+  assert.equal(placement(agent({ activityState: 'ended', subagent: true })), 'lounge');
+  assert.equal(placement(agent({ ackState: 'benched', subagent: true })), 'lounge');
+  for (const activityState of ['working', 'needs_input', 'stalled', 'for_review', 'ended']) {
+    for (const ackState of ['active', 'benched', 'let_go']) {
+      const a = agent({ activityState, ackState });
+      const j = agent({ activityState, ackState, subagent: true });
+      assert.equal(placement(j), placement(a), `junior ${activityState}/${ackState}`);
+    }
+  }
   // The renderer's mirror of the same rule must agree, on every case.
   for (const activityState of ['working', 'needs_input', 'stalled', 'for_review', 'ended']) {
     for (const ackState of ['active', 'benched', 'let_go']) {
@@ -1045,18 +1058,21 @@ test('a junior takes no chair: it stands one seat pitch beside its parent, and b
   assert.notDeepEqual([b.x, b.y], [20, 20]);
 });
 
-test('a junior whose parent is not on the floor is not drawn at all', () => {
+test('a working junior whose parent is not on the floor still works at a desk', () => {
+  // It used to be dropped — "nothing to stand beside" — which was the same
+  // inherited placement bug 201 is about: a junior that is WORKING is a session
+  // at work, and it sits at a desk in its room whatever became of its parent.
+  const desk = { x: 1, y: 1, angle: 0 };
   const orphan = agent({
     id: 'claude-code:j1',
     projectId: 'p',
     subagent: true,
     parentId: 'claude-code:gone',
   });
-  const seats = assignSeats(
-    { seats: new Map([['p', [{ x: 1, y: 1, angle: 0 }]]]), officeSeats: [], loungeSpots: [] },
-    [orphan],
-  );
-  assert.equal(seats.size, 0, 'nothing to stand beside, so nothing on the floor');
+  const seats = assignSeats({ seats: new Map([['p', [desk]]]), officeSeats: [], loungeSpots: [] }, [
+    orphan,
+  ]);
+  assert.equal(seats.get(orphan.id), desk, 'its own desk in its own room');
 });
 
 // ---------------------------------------------------------------------------
