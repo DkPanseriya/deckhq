@@ -331,7 +331,7 @@ export function floorPopulation(agents, opts = {}) {
   /** Newest activity per project — the idle list's third column. */
   const lastActivity = new Map();
   /**
-   * WP-89. How many juniors each parent has, keyed `<projectId> <parentId>`,
+   * WP-89. How many juniors each parent has, keyed `<projectId> NUL <parentId>`,
    * so `crews` below can say how much extra FLOOR each room's formations need.
    * @type {Map<string, number>}
    */
@@ -356,7 +356,7 @@ export function floorPopulation(agents, opts = {}) {
     // neither is in the formation the desk draws.
     if (isSubagent(a)) {
       if (a.parentId != null && pid && isDeskAgent(a))
-        bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
+        bump(juniorsPerParent, `${pid}\u0000${String(a.parentId)}`);
     } else if (a.id != null) {
       seniorPlacement.set(String(a.id), placement(a));
     }
@@ -398,7 +398,7 @@ export function floorPopulation(agents, opts = {}) {
   const crews = new Map();
   for (const [key, n] of juniorsPerParent) {
     if (n < CREW_THRESHOLD) continue;
-    const cut = key.indexOf(' ');
+    const cut = key.indexOf('\u0000');
     const pid = key.slice(0, cut);
     // A formation happens at a DESK, and since bug 201 it happens whether or
     // not the parent is sitting at it: juniors that are working are in the
