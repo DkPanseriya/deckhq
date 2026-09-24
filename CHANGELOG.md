@@ -91,11 +91,12 @@ board fits any window, the floor fills the window again, and Linux screenshots a
 
 - **The Linux goldens are baked on Linux, by CI, and committed by a person.** `npm run goldens`
   only writes the platform it runs on, so the Linux set could only be baked on a Linux machine, and
-  `test/goldens/linux/` is empty today: CI's `goldens` job reports all 17 captures as not yet
-  baked, and passes. A new manual workflow, **Goldens bake** (`.github/workflows/goldens-bake.yml`,
+  until this release `test/goldens/linux/` was empty and CI's `goldens` job reported every capture
+  as not yet baked. A new manual workflow, **Goldens bake** (`.github/workflows/goldens-bake.yml`,
   optional `populations` input), runs the bake on `ubuntu-latest` with Node 22 and the runner's own
   Chrome, prints one line per capture, and uploads `test/goldens/linux/` as `goldens-linux-<sha>`
-  for 7 days. It has only the default read token and never pushes.
+  for 7 days. It has only the default read token and never pushes. The Linux set now holds all 18
+  captures, baked by that workflow and committed after a look.
   `node scripts/goldens-import.mjs <dir-or-zip>` puts a downloaded artifact into
   `test/goldens/linux/`. Every file has to be `<capture>.png` for a capture that
   `node scripts/goldens.mjs --list` (new) names, and has to be a PNG, or the whole import is
@@ -107,6 +108,9 @@ board fits any window, the floor fills the window again, and Linux screenshots a
   refused 1.4.0 and 1.5.0, which were both tagged with an empty Linux set. Pushes and pull
   requests stay non-strict. `test/unit/goldens-import.test.mjs` holds the importer and the shape
   of both workflows (13 tests).
+
+### Changed
+
 - **The board fits the window.** All six columns are on screen at once, with the panel open or
   shut — the board gives the panel its room and arranges itself in what is left, and it never
   scrolls sideways. Where six side by side will not fit, it becomes two rows of three; in a narrow
@@ -117,9 +121,6 @@ board fits any window, the floor fills the window again, and Linux screenshots a
   it, one row of chips, and one line of figures — `400k tok · 12 min · says 43 passed` — or a
   single `no data` when there are none yet. The project's path shows its last two folders (point
   at it for the whole path), and the how-to line is behind a **?** beside **New card**.
-
-### Changed
-
 - **The robots sit down.** Until now every figure on the floor stood, including the ones at a
   desk, on a sofa and in a crew. A session at its desk now sits at the chair with its hands on the
   keys; a session waiting in Your Office, and a benched one on a lounge sofa or at the board-game
