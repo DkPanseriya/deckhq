@@ -24,7 +24,7 @@ import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './pa
 import { rigSeatOf, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
 import { layoutPlate, resolveBadgeCollisions } from './scene-labels.js';
-import { planFrameLabels } from './scene-frame-labels.js';
+import { buildingRect, planFrameLabels } from './scene-frame-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
@@ -483,6 +483,7 @@ export class SceneDraw extends SceneHit {
       badgeBoxes,
       plateBoxes: [...plates.values()].map((p) => p.rect),
       selectedId: this._selectedId,
+      bounds: this._plan ? buildingRect(this._plan, camera) : undefined,
       uOf: (rec) => {
         const a = this._agentsById.get(rec.id) || rec.agent;
         return a && a.subagent === true

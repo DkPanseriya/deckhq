@@ -96,14 +96,27 @@ function labelGroups(records, agentsById) {
 }
 
 /**
+ * The building's rect on screen: the `bounds` no name may leave.
+ * @param {{width:number, height:number}} plan
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ */
+export function buildingRect(plan, camera) {
+  const a = worldToScreen({ x: 0, y: 0 }, camera);
+  const b = worldToScreen({ x: plan.width, y: plan.height }, camera);
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+}
+
+/**
  * Every obstacle a name must clear this frame, then every name, through the
  * frame's collision pass.
  *
  * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
  * @param {{records:any[], agentsById:Map<string,any>, camera:any, charU:number,
  *   crewCounts:Map<string,number>, badgeBoxes?:any[], plateBoxes?:any[],
- *   selectedId?:string|null, uOf?:(rec:any)=>number}} view `records` in paint order;
- *   `uOf` is the scale a figure is DRAWN at (a junior's is smaller), `charU` by default
+ *   selectedId?:string|null, uOf?:(rec:any)=>number,
+ *   bounds?:{x:number,y:number,w:number,h:number}}} view `records` in paint order;
+ *   `uOf` is the scale a figure is DRAWN at (a junior's is smaller), `charU` by default;
+ *   `bounds` is the building's screen rect (`resolveLabelCollisions`)
  * @returns {{plan:Map<string,{offsetY:number, offsetX?:number}|null>,
  *   texts:Map<string,string>, obstacles:any[], labels:any[]}}
  */
@@ -158,7 +171,8 @@ export function planFrameLabels(ctx, view) {
     const alts = (members.get(rec.id) || []).map((id) => [at.get(id).x - s.x, at.get(id).y - s.y]);
     // Measured at the scale this figure is DRAWN at, because that is the scale
     // `drawLabel` hangs it at: a crew member's name sits under a smaller body.
-    const box = labelBox(ctx, s.x, s.y, view.uOf ? view.uOf(rec) : charU, text);
+    const u = view.uOf ? view.uOf(rec) : charU;
+    const box = labelBox(ctx, s.x, s.y, u, text);
     const live = isLiveAgent(agent);
     const item = {
       id: rec.id,
@@ -169,10 +183,13 @@ export function planFrameLabels(ctx, view) {
       pin: rec.id === view.selectedId,
       keep: live,
       alts,
+      // Over the head, clear of the icon-and-badge slot: where a name goes when
+      // the floor under its feet is a wall, a plate or somebody else's name.
+      up: s.y - u * CHROME_BADGE_U - box.h - box.y,
     };
     tiers[live ? (isNeedsYouAgent(agent) ? 0 : 1) : 2].push(item);
   }
   const labels = tiers.flat();
-  const plan = resolveLabelCollisions([...obstacles, ...labels]);
+  const plan = resolveLabelCollisions([...obstacles, ...labels], view.bounds);
   return { plan, texts, obstacles, labels };
 }

@@ -88,7 +88,8 @@ export function plateScaleFor(worldScale) {
  * walls a live name always finds a spot (`floor-labels.test.mjs`).
  *
  * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
- *   pin?:boolean, alts?:number[][]}[]} items
+ *   pin?:boolean, alts?:number[][], up?:number}[]} items `up`: the offsetY that
+ *   puts this label over its figure's head instead of under its feet
  *   `x,y,w,h`: the label's un-offset screen-space box (top-left + size).
  * @returns {Map<string, {offsetY:number, offsetX?:number}|null>} per-id
  *   result; `null` means "do not draw this label this frame".
@@ -395,13 +396,25 @@ export function plateLinesFor(room, snapshot, plan) {
   return platePlanFor(room, snapshot, plan).lines;
 }
 
-export function resolveLabelCollisions(items) {
+/**
+ * See the note above `ellipsise` for the rule; `bounds` is the building's
+ * screen rect, which no name may leave sideways or upwards.
+ * @param {any[]} items
+ * @param {{x:number, y:number, w:number, h:number}} [bounds]
+ * @returns {Map<string, {offsetY:number, offsetX?:number}|null>}
+ */
+export function resolveLabelCollisions(items, bounds) {
   /** @type {{x:number,y:number,w:number,h:number}[]} */
   const placed = [];
   const result = new Map();
 
   const overlaps = (a, b) =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  // `bounds`, when given, is the building on screen: a name is never centred past
+  // its side walls or over its top one (a sideways step from a figure on the
+  // west wall used to hang the name off the floor and off the canvas).
+  const inside = (a, b) =>
+    a.x + a.w / 2 >= b.x && a.x + a.w / 2 <= b.x + b.w && a.y + a.h / 2 >= b.y;
 
   // `pin` is an exemption and `keep` is only a priority. Making needs-you
   // labels exempt collapsed in the case that matters most: every agent in the
@@ -426,9 +439,11 @@ export function resolveLabelCollisions(items) {
     // from this one — a crew's `Explore ×3` belongs to any of its three.
     for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
       for (const [fx, fy] of spots) {
+        if (fy === LABEL_UP && typeof it.up !== 'number') continue;
         const offsetX = bx + fx * it.w;
-        const offsetY = by + fy * it.h;
+        const offsetY = by + (fy === LABEL_UP ? it.up : fy * it.h);
         const rect = { x: it.x + offsetX, y: it.y + offsetY, w: it.w, h: it.h };
+        if (bounds && !inside(rect, bounds)) continue;
         if (!placed.some((p) => overlaps(rect, p))) {
           chosen = offsetX === 0 ? { offsetY } : { offsetY, offsetX };
           placed.push(rect);
@@ -454,12 +469,22 @@ export function resolveLabelCollisions(items) {
 const LABEL_SPOTS_DOWN = Object.freeze(
   Array.from({ length: MAX_LABEL_OFFSET_ATTEMPTS + 1 }, (_, i) => Object.freeze([0, i])),
 );
+/**
+ * "Over the head" rather than a depth: the item's own `up`, the offset that
+ * sets the label clear above its icon-and-badge slot. Tried after every near
+ * spot below the feet and before any far one, because a name three rows down
+ * past a room's plate reads as a label for whoever is standing there.
+ */
+const LABEL_UP = 1e9;
 const LABEL_SPOTS = Object.freeze([
   ...LABEL_SPOTS_DOWN,
   ...[0, 1, 2].flatMap((fy) => [
     [-0.6, fy],
     [0.6, fy],
   ]),
+  [0, LABEL_UP],
+  [-0.6, LABEL_UP],
+  [0.6, LABEL_UP],
   [0, 3],
   ...[0, 1, 2, 3].flatMap((fy) => [
     [-1.15, fy],

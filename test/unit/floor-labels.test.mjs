@@ -31,6 +31,7 @@ import { characterBox, drawCharacter } from '../../public/render/rig.js';
 import { sampleClip } from '../../public/render/clips.js';
 import { STATE_COLORS } from '../../public/render/palette.js';
 import {
+  buildingRect,
   isLiveAgent,
   frameLabelTexts,
   planFrameLabels,
@@ -95,6 +96,7 @@ function frameAt(viewW, viewH) {
       badgeBoxes: [],
       plateBoxes: plates.map((p) => p.rect),
       selectedId: null,
+      bounds: buildingRect(plan, camera),
       uOf: (rec) =>
         rec.agent.subagent === true
           ? characterScaleFor(scale * (rec.targetSeat.crew ? CREW_SCALE : JUNIOR_SCALE))
@@ -182,6 +184,12 @@ test('F7 · no name lands on a body, a plate or another name', () => {
         w: item.w,
         h: item.h,
       });
+    }
+    // And no name is centred off the building's side walls.
+    const b = buildingRect(f.plan, f.camera);
+    for (const r of placed) {
+      const cx = r.x + r.w / 2;
+      assert.ok(cx >= b.x && cx <= b.x + b.w, `${w}x${h}: ${r.id} stepped off the floor`);
     }
     let onBody = 0;
     let onPlate = 0;
