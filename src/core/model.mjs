@@ -361,6 +361,12 @@ export function needsYou(agent) {
  * `drawn` is a display filter over observed fields — nothing here writes, and
  * the needs-you numeral and its breakdown are untouched.
  *
+ * "At desk" is `placement() === 'desk'` — the one function `assignSeats` seats
+ * by — so it is working and stalled sessions, juniors included, and never an
+ * ended, benched or waiting one (audit F5; `junior-occupancy.test.mjs` asks it
+ * of the seated floor). A crew member past the draw cap still counts: it is at
+ * the desk, and the `+N` chip is how the floor draws it.
+ *
  * @param {Agent[]} agents
  * @param {{now?:number, goneHomeDays?:number}} [opts]
  */

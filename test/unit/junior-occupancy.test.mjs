@@ -32,6 +32,7 @@ import { assignSeats } from '../../public/render/agents.js';
 import { CREW_DRAW_CAP, floorPopulation, placement } from '../../public/floor-rule.js';
 import { crewChipAt, crewNameAt } from '../../public/render/crew.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
+import { counts } from '../../src/core/model.mjs';
 
 const NOW = 1_800_000_000_000;
 const MIN = 60_000;
@@ -302,4 +303,103 @@ test('bug 201: the room counts a desk for the crew anchor when the parent is awa
   assert.deepEqual(pop.crews.get('career-ops'), [13]);
   assert.equal(pop.desks.get('career-ops'), 1);
   assert.equal(pop.waiting, 1, 'the senior, and none of its juniors');
+});
+
+/**
+ * Audit F5: the header's "at desk" is the people the floor puts at a desk —
+ * working or stalled, top-level or junior, in a room — off the one `placement`
+ * the seating reads. An ended, benched or waiting session is never at a desk.
+ * Asked of the floor itself: every desk-placed agent is seated inside a project
+ * room, or is a crew member past the draw cap that the `+N` chip stands for.
+ */
+test('audit F5: "at desk" counts exactly who the floor seats at a desk', () => {
+  const { agents, projects, parent } = ownersFloor();
+  // The audit's own shape on top of the owner's: finished juniors (which the
+  // header used to count at desks) and a stalled senior at its desk.
+  for (let i = 20; i < 24; i++) {
+    agents.push(junior(jid(i), parent.id, { activityState: 'ended' }));
+  }
+  agents.push(agent('claude-code:stuck', { projectId: 'deckhq', activityState: 'stalled' }));
+  const c = counts(agents, { now: NOW });
+  // 13 working juniors + 2 working seniors + 1 stalled senior. Not the waiting
+  // parent, not the 4 ended juniors, not the benched pair.
+  assert.equal(c.drawn.atDesk, 16);
+  assert.equal(c.drawn.waiting, 1, 'the parent on the sofa, and none of its crew');
+  assert.equal(c.drawn.benched, 2);
+
+  const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+  const seats = assignSeats(plan, agents);
+  const projectRooms = plan.rooms.filter((r) => r.kind === 'project');
+  let seated = 0;
+  let chip = 0;
+  for (const a of agents) {
+    const s = seats.get(a.id);
+    if (!s) continue;
+    if (projectRooms.some((r) => inside(s, r))) seated++;
+    if (s.crew === true && s.crewIndex === 0) chip += s.crewTotal - CREW_DRAW_CAP;
+  }
+  assert.equal(chip, 1, 'thirteen at the desk, twelve drawn');
+  assert.equal(seated + chip, c.drawn.atDesk, 'the header and the floor are one count');
+});
+
+/**
+ * Audit F4: a crew whose juniors run in git worktrees. Each worktree-isolated
+ * junior reports its own worktree as its cwd, so five siblings can name five
+ * repos; keyed by their own repo they were five crews of one and no arc formed.
+ * @param {object|null} parentOver the parent's fields, or null for no parent
+ */
+function worktreeCrew(parentOver) {
+  const parent = parentOver && agent('claude-code:p', parentOver);
+  const wt = (k) => `career-ops-claude-worktrees-agent-${k}`;
+  const agents = [
+    ...(parent ? [parent] : []),
+    junior(jid(1), 'claude-code:p', { projectId: wt('a') }),
+    junior(jid(2), 'claude-code:p', { projectId: wt('b') }),
+    junior(jid(3), 'claude-code:p', { projectId: wt('c') }),
+    junior(jid(4), 'claude-code:p', { projectId: parent ? 'career-ops' : wt('d') }),
+    junior(jid(5), 'claude-code:p', { projectId: parent ? 'career-ops' : wt('e') }),
+  ];
+  const projects = [
+    { id: 'career-ops', name: 'career-ops', sessionCount: 1, activeCount: 1 },
+    ...['a', 'b', 'c', 'd', 'e'].map((k) => ({
+      id: wt(k),
+      name: `agent-${k}`,
+      sessionCount: 0,
+      activeCount: 1,
+    })),
+  ];
+  return { agents, projects };
+}
+
+for (const [label, over] of [
+  ['at its desk', {}],
+  ['on the sofa', { activityState: 'for_review', reviewSince: NOW - MIN }],
+]) {
+  test(`audit F4: juniors in worktrees of the parent's repo form one arc, parent ${label}`, () => {
+    const { agents, projects } = worktreeCrew(over);
+    const pop = floorPopulation(agents, { now: NOW });
+    assert.deepEqual(pop.crews.get('career-ops'), [5], 'one crew of five, in the parent’s room');
+    assert.equal(pop.crews.size, 1, 'no worktree has a crew of its own');
+    const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+    const seats = assignSeats(plan, agents);
+    const home = room(plan, 'project', 'career-ops');
+    for (const j of agents.filter((a) => a.subagent)) {
+      const s = seats.get(j.id);
+      assert.equal(s?.crew, true, `${j.id} is in the arc`);
+      assert.equal(s?.crewOf, 'claude-code:p');
+      assert.ok(inside(s, home), `${j.id} is in the parent's room`);
+    }
+  });
+}
+
+test('audit F4: with the parent off the snapshot, its worktree juniors still share one room', () => {
+  const { agents, projects } = worktreeCrew(null);
+  const pop = floorPopulation(agents, { now: NOW });
+  assert.deepEqual([...pop.crews.values()], [[5]], 'one crew, not five crews of one');
+  const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+  const seats = assignSeats(plan, agents);
+  assert.ok(
+    agents.every((j) => seats.get(j.id)?.crew === true),
+    'every junior is in the one arc',
+  );
 });

@@ -338,7 +338,7 @@ export function loadRateCard(opts = {}) {
   const overrideFile = opts.overrideFile || OVERRIDE_RATES_FILE;
   const maxAgeMs = opts.maxAgeMs ?? RECHECK_MS;
   const now = opts.now ?? clockNow();
-  const key = `${builtinFile} ${overrideFile}`;
+  const key = `${builtinFile}\u0000${overrideFile}`;
 
   const cached = CACHE.get(key);
   if (cached && now - cached.checkedAt < maxAgeMs) return cached.card;

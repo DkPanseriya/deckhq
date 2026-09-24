@@ -57,6 +57,7 @@ import {
   crewArc,
   crewCableExtent,
   crewCableLive,
+  crewChipText,
   crewFootprint,
   crewPulseCount,
   crewRadius,
@@ -67,6 +68,7 @@ import {
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats } from '../../public/render/agents.js';
 import { deskFootprints } from '../../public/render/agents-seats.js';
+import { drawCrews } from '../../public/render/crew-draw.js';
 import { crewGroups, queueGroups } from '../../public/deck.js';
 import { workflowIdFromDir } from '../../src/adapters/claude-code/parse.mjs';
 import { listSubagentFiles } from '../../src/adapters/claude-code/adapter-scan.mjs';
@@ -407,6 +409,56 @@ test('§3.2: twelve are drawn and the rest are a chip', () => {
   // And the snapshot still carries all twenty, so the panel and the deck have
   // them: the chip stands for sessions, not for sessions that were forgotten.
   assert.equal(crewsFrom(agents, { now: NOW })[0].count, 20);
+});
+
+test('audit F10: the chip is +N for the undrawn, and "working" is over the whole crew', () => {
+  // The arithmetic, on its own.
+  assert.equal(crewChipText(13, 12, null), '+1');
+  assert.equal(crewChipText(12, 12, null), '', 'nothing undrawn, nothing to say');
+  assert.equal(crewChipText(13, 12, 7), '+1 · 7/13 working');
+  assert.equal(crewChipText(5, 5, 2), '2/5 working');
+  assert.equal(crewChipText(13, 12, 20), '+1 · 13/13 working', 'never more than the crew');
+
+  // And on the floor: thirteen at the desk, the even-numbered six of the drawn
+  // twelve and the undrawn thirteenth writing. The audit's chip read "6/13".
+  const quiet = NOW - 10 * CREW_ACTIVE_MS;
+  const { agents, projects } = crewFloor(13, (i) => ({
+    lastGrowthAt: i === 12 || i % 2 === 0 ? NOW : quiet,
+  }));
+  const plan = buildPlan(projects, agents, { stage: { w: 1600, h: 1000 }, now: NOW });
+  const seats = assignSeats(plan, agents);
+  const records = agents
+    .filter((a) => seats.get(a.id)?.crew === true)
+    .map((a) => ({ id: a.id, agent: a, targetSeat: seats.get(a.id), x: 0, y: 0 }));
+  assert.equal(records.length, CREW_DRAW_CAP);
+  /** @type {string[]} */
+  const texts = [];
+  const ctx = new Proxy(
+    { measureText: (t) => ({ width: String(t).length * 6 }) },
+    {
+      get: (target, key) =>
+        key === 'fillText'
+          ? (text) => texts.push(String(text))
+          : key in target
+            ? target[key]
+            : () => {},
+      set: () => true,
+    },
+  );
+  drawCrews(/** @type {any} */ (ctx), {
+    records,
+    agentsById: new Map(agents.map((a) => [a.id, a])),
+    camera: { U: 20, zoom: 1, panX: 0, panY: 0 },
+    scale: 20,
+    charU: 30,
+    lod: 2,
+    reduced: true,
+    pinned: 0,
+    nowMs: NOW,
+    seatOf: (id) => seats.get(id),
+    crewCounts: new Map(),
+  });
+  assert.ok(texts.includes('+1 · 7/13 working'), `the chip read ${JSON.stringify(texts)}`);
 });
 
 // --------------------------------------------------------- 7. the pulses

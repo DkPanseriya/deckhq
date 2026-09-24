@@ -298,7 +298,7 @@ export function orderRooms(projects, order) {
  * The separator between two fields of the change key. A unit separator, which
  * is not a character any of the fields below legitimately contains.
  */
-const K = '';
+const K = '\u001f';
 
 /**
  * One field of the change key, for a field that carries free text.
@@ -306,8 +306,8 @@ const K = '';
  * LENGTH-PREFIXED, and that is the whole reason this is a function rather than
  * a `+`. A title is whatever the user typed and `lastText` is whatever the
  * model wrote; either could in principle contain the separator, and without a
- * length in front of it `title='ab', lastText='c'` and `title='a',
- * lastText='bc'` are the same string. With one they are not, at any
+ * length in front of it `title='a\u001fb', lastText='c'` and `title='a',
+ * lastText='b\u001fc'` are the same string. With one they are not, at any
  * position, because the reader would have to agree about the lengths too.
  *
  * A value that is not a string at all — an adapter double in a test, a field a
@@ -318,7 +318,7 @@ const K = '';
  * @returns {string}
  */
 function text(v) {
-  return typeof v === 'string' ? v.length + K + v : ' ';
+  return typeof v === 'string' ? v.length + K + v : '\u0000';
 }
 
 /**

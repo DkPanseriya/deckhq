@@ -974,6 +974,39 @@ test("a junior wears its parent's tag and takes no MK number or name of its own"
   assert.deepEqual(Object.keys(state.names), [agentId('claude-code', PARENT_ID)]);
 });
 
+test('audit F6: a junior keeps its label while siblings come and go', async () => {
+  const identity = new Identity({ identity: {}, touch() {} });
+  const T = 1_800_000_000_000;
+  // Spawn order is not id order, on purpose: the first batch is numbered by
+  // spawn, and nothing after it is numbered by position at all.
+  const j = (id, n) => junior(id, { spawnedAt: T + n * 1000, lastActivityAt: T + 60_000 });
+  const adapter = fakeAdapter([summary(PARENT_ID), j('c', 1), j('a', 2), j('b', 3)]);
+  const registry = new Registry({
+    store: fakeStore(),
+    adapters: [adapter],
+    identity,
+    log: { debug() {}, info() {}, warn() {}, error() {} },
+  });
+  registry.setHookStatus({ 'claude-code': { supported: true, installed: true } });
+  const labels = async () => {
+    await registry.refresh();
+    const snap = registry.snapshot();
+    const mk = snap.agents.find((a) => a.id === agentId('claude-code', PARENT_ID)).mk;
+    return Object.fromEntries(
+      snap.agents
+        .filter((a) => a.subagent)
+        .map((a) => [a.id.slice(a.id.indexOf(':') + 1), a.label.slice(mk.length)]),
+    );
+  };
+  assert.deepEqual(await labels(), { c: 'j1', a: 'j2', b: 'j3' });
+  // `c` finishes and leaves: `a` and `b` are still who they were.
+  adapter.set([summary(PARENT_ID), j('a', 2), j('b', 3)]);
+  assert.deepEqual(await labels(), { a: 'j2', b: 'j3' });
+  // A new sibling that sorts FIRST by id takes the next number, not `j1`.
+  adapter.set([summary(PARENT_ID), j('a', 2), j('b', 3), j('0', 4)]);
+  assert.deepEqual(await labels(), { a: 'j2', b: 'j3', 0: 'j4' });
+});
+
 // ---------------------------------------------------------------------------
 // 5. plan.js / agents.js — the table grows and the juniors stand beside
 // ---------------------------------------------------------------------------

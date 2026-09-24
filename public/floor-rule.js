@@ -194,6 +194,13 @@ export function agentIndex(agents) {
  * parent's helper whether the parent is at a desk, on a sofa or in the lounge,
  * so the room does not depend on where the parent is — only on who it is.
  *
+ * ONE CREW, ONE ROOM (audit F4). With the parent absent from the snapshot the
+ * juniors still share one home: otherwise five siblings in five worktrees are
+ * five rooms of one junior each and never reach `CREW_THRESHOLD`. The shared
+ * home is the siblings' repo that is a prefix of the most sibling repos (a
+ * worktree's project id starts with its repo's), then the shortest, then the
+ * first by id order — a function of the snapshot, never of arrival order.
+ *
  * @param {FloorAgent} agent
  * @param {Map<string, FloorAgent>} [byId] `agentIndex` of the same snapshot
  * @returns {string}
@@ -202,8 +209,32 @@ export function homeProjectOf(agent, byId) {
   if (isSubagent(agent) && agent.parentId != null && byId) {
     const parent = byId.get(String(agent.parentId));
     if (parent && parent.projectId != null) return String(parent.projectId);
+    const shared = orphanHome(String(agent.parentId), byId);
+    if (shared) return shared;
   }
   return agent.projectId == null ? '' : String(agent.projectId);
+}
+
+/**
+ * The one repo the juniors of a parent NOT on the snapshot share
+ * (`homeProjectOf`). A walk of the snapshot per call, and only ever made for
+ * such a junior — rare, since a parent outlives its juniors on the scan.
+ * @param {string} parentId
+ * @param {Map<string, FloorAgent>} byId
+ * @returns {string}
+ */
+function orphanHome(parentId, byId) {
+  /** @type {string[]} */
+  const list = [];
+  for (const a of byId.values()) {
+    if (isSubagent(a) && String(a.parentId) === parentId && a.projectId != null)
+      list.push(String(a.projectId));
+  }
+  const covers = (p) => list.filter((q) => q.startsWith(p)).length;
+  const ranked = [...new Set(list)].sort(
+    (a, b) => covers(b) - covers(a) || a.length - b.length || (a < b ? -1 : 1),
+  );
+  return ranked[0] || '';
 }
 
 /**
@@ -331,7 +362,7 @@ export function floorPopulation(agents, opts = {}) {
   /** Newest activity per project — the idle list's third column. */
   const lastActivity = new Map();
   /**
-   * WP-89. How many juniors each parent has, keyed `<projectId> <parentId>`,
+   * WP-89. How many juniors each parent has, keyed `<projectId> NUL <parentId>`,
    * so `crews` below can say how much extra FLOOR each room's formations need.
    * @type {Map<string, number>}
    */
@@ -356,7 +387,7 @@ export function floorPopulation(agents, opts = {}) {
     // neither is in the formation the desk draws.
     if (isSubagent(a)) {
       if (a.parentId != null && pid && isDeskAgent(a))
-        bump(juniorsPerParent, `${pid} ${String(a.parentId)}`);
+        bump(juniorsPerParent, `${pid}\u0000${String(a.parentId)}`);
     } else if (a.id != null) {
       seniorPlacement.set(String(a.id), placement(a));
     }
@@ -398,7 +429,7 @@ export function floorPopulation(agents, opts = {}) {
   const crews = new Map();
   for (const [key, n] of juniorsPerParent) {
     if (n < CREW_THRESHOLD) continue;
-    const cut = key.indexOf(' ');
+    const cut = key.indexOf('\u0000');
     const pid = key.slice(0, cut);
     // A formation happens at a DESK, and since bug 201 it happens whether or
     // not the parent is sitting at it: juniors that are working are in the
@@ -666,9 +697,9 @@ export function juniorActive(agent, now) {
  * its file. Nothing here synthesises a member from a count, so `juniorCount` and
  * `crew.count` cannot drift.
  *
- * Sorted by id — the order `assignSeats` seats them in and `describeJunior`
- * numbers them in — so the arc, the deck and the panel agree about which junior
- * is the first one.
+ * Sorted by id — the order `assignSeats` seats them in — so the arc, the deck
+ * and the panel agree about which junior is the first one. A junior's LABEL is
+ * not this order: it is numbered once and keeps it (`juniorOrdinals`, audit F6).
  *
  * @param {(FloorAgent & Record<string, any>)[]} agents every agent on the snapshot
  * @param {{now?:number}} [opts]

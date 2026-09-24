@@ -45,6 +45,7 @@ import { registerBodyScale, scaleAll } from './plan-scale.js';
  *   crewAnchor?: {x:number, y:number, angle?:number},
  *   crewAway?: boolean,
  *   crewTotal?: number,
+ *   crewIds?: string[],
  *   laptop?: {x:number, y:number, angle:number},
  *   port?: {x:number, y:number},
  *   route?: {x:number, y:number}[],

@@ -35,6 +35,7 @@ import {
   crewCableExtent,
   crewCableLive,
   crewChipAt,
+  crewChipText,
   crewNameAt,
   crewPulseCount,
   pointAlong,
@@ -208,7 +209,8 @@ function strokeFromPort(ctx, view, route, extent, rec) {
  * from the parent's panel and from the deck.
  *
  * Under reduced motion the same chip carries the count of members that are
- * WORKING as well, because the pulses that would otherwise have said so are off.
+ * WORKING as well, because the pulses that would otherwise have said so are off
+ * — over the whole crew, not the drawn part of it (`crewChipText`).
  */
 function drawChip(ctx, view, parentId, members) {
   // The desk the crew is cabled to, and how many are AT it — read off the seat
@@ -220,20 +222,16 @@ function drawChip(ctx, view, parentId, members) {
   const anchor = (seat && seat.crewAnchor) || view.seatOf(parentId);
   if (seat && seat.crewAway === true) drawAwayName(ctx, view, parentId, anchor);
   const total = (seat && seat.crewTotal) ?? view.crewCounts.get(parentId) ?? members.length;
-  const over = total - members.length;
+  // Audit F10: "working" is over the WHOLE crew at the desk — the seat carries
+  // every member's id — not over the twelve that happen to be drawn.
+  const ids = (seat && seat.crewIds) || members.map((rec) => rec.id);
   const working = view.reduced
-    ? members.filter((rec) => {
-        const a = view.agentsById.get(rec.id) || rec.agent;
+    ? ids.filter((id) => {
+        const a = view.agentsById.get(id) || members.find((rec) => rec.id === id)?.agent;
         return a && crewCableLive(a, view.nowMs, { reduced: true }) > 0;
       }).length
-    : 0;
-  const text = view.reduced
-    ? over > 0
-      ? `+${over} · ${working}/${total} working`
-      : `${working}/${total} working`
-    : over > 0
-      ? `+${over}`
-      : '';
+    : null;
+  const text = crewChipText(total, members.length, working);
   if (!text || view.lod < 1) return;
   if (!anchor) return;
   plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text);
