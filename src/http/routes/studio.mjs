@@ -6,7 +6,8 @@
  *   POST /api/studio/disable             removes tagged files only
  *   POST /api/studio/roster              replace the roster the user edited
  *   POST /api/studio/card                create, edit or MOVE a card
- *   GET  /api/studio/tracking?project=   §7's numbers
+ *   GET  /api/studio/tracking?project=   §7's numbers — WP-71, in `studio-drift.mjs`
+ *   POST /api/studio/pm-pass             a PM pass now — WP-71, likewise
  *   POST /api/studio/plan                start or continue the planner — WP-67
  *   POST /api/studio/hire                `{role}` or `{roles}` — worktrees, briefs, the spawn
  *   POST /api/studio/handover            Accept or Bounce — WP-70
@@ -66,6 +67,7 @@ import { COLUMNS, MAX_CARDS, appendMove, validateBoard } from '../../studio/sche
 import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
 import { UNVERIFIED_LAUNCH, registerHire } from './studio-hire.mjs';
 import { registerHandover } from './studio-handover.mjs';
+import { registerDrift } from './studio-drift.mjs';
 import { readHandovers } from '../../studio/handover.mjs';
 import { roleBriefRel } from '../../studio/brief-role.mjs';
 import { checkRoleName, worktreePathFor } from '../../studio/worktree.mjs';
@@ -604,25 +606,14 @@ export function register(router, ctx) {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/studio/tracking — §7, with nothing behind it yet
+  // GET /api/studio/tracking, POST /api/studio/pm-pass, and the budget stop
   // -------------------------------------------------------------------------
 
-  router.get('/api/studio/tracking', (_req, res, url) => {
-    const project = resolveProject(url.searchParams.get('project'));
-    if ('error' in project) return sendError(res, 400, project.error);
-    // §7: "A card with no ledger records reads `no data` rather than zero" —
-    // the refusal the rate card already makes for a model it cannot price.
-    // WP-71 folds the ledger; until it does, EVERY card reads no data, and
-    // saying so is the whole content of this response. No number is invented
-    // here, not even a zero.
-    sendJson(res, 200, {
-      project: project.root,
-      projectKey: project.projectKey,
-      cards: [],
-      note: 'no data',
-      why: 'the per-card ledger fold, the burn-down and the cap land in WP-71',
-    });
-  });
+  // WP-71. Its own file, on `studio-hire.mjs`'s terms: §7's fold, §8's PM
+  // pass and §8's hard stop — the THIRD column writer, which may reach
+  // `blocked` and nothing else — with what each may not do in its header.
+  const drift = registerDrift(router, ctx, { projectFromBody, consentFor, resolveProject });
+  ctx.studioDriftTick = drift.tick;
 
   // -------------------------------------------------------------------------
   // POST /api/studio/plan — the planner session (WP-67, §2 Grill and §3)
@@ -784,7 +775,10 @@ export function register(router, ctx) {
     consentFor,
     watchOptions: ctx.studioWatchOptions,
   });
-  ctx.stopStudioWatch = handover.stop;
+  ctx.stopStudioWatch = () => {
+    handover.stop();
+    drift.stop();
+  };
   ctx.studioHandoverSettled = handover.settled;
   startWatching = handover.watchProject;
 }

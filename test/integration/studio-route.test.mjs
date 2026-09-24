@@ -363,9 +363,14 @@ test('tracking answers "no data" and invents no number', async () => {
     await post(d, '/card', { cwd: a, op: 'create', card: { title: 'One' } });
     const res = await get(d, `/tracking?project=${encodeURIComponent(a)}`);
     assert.equal(res.status, 200);
-    assert.deepEqual(res.body.cards, []);
-    assert.equal(res.body.note, 'no data');
-    assert.match(res.body.why, /WP-71/);
+    // WP-71 replaced the empty shape with the fold. The card is there, and a
+    // card with no ledger records, no moves and no handover reads `no data`
+    // in every figure.
+    assert.equal(res.body.cards.length, 1);
+    assert.equal(res.body.cards[0].cardId, 'c1');
+    assert.equal(res.body.cards[0].status, 'no data');
+    assert.deepEqual(res.body.cards[0].tokens, { status: 'no data' });
+    assert.deepEqual(res.body.milestones, []);
     // Not one number anywhere in the body — not even a zero.
     assert.equal(/[:[]\s*\d/.test(JSON.stringify(res.body)), false, JSON.stringify(res.body));
   });
