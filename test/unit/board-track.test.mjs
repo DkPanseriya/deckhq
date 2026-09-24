@@ -14,8 +14,10 @@ import assert from 'node:assert/strict';
 import {
   NO_DATA,
   buildTrackStrip,
+  compactCount,
   milestoneText,
   renderMilestones,
+  trackLine,
   trackParts,
   trackSentence,
 } from '../../public/board-track.js';
@@ -75,12 +77,48 @@ test('a measured card reads its figures, and its tests as the handover’s sente
   );
 });
 
-test('INVARIANT: a card with no data draws the words, and no digit at all', () => {
+// WP-96 moved this invariant's picture and kept its rule. It asserted three
+// `no data`s, one per figure; the card now has ONE line, and a card with nothing
+// measured says `no data` on it once. The rule it holds is unchanged and is
+// still asserted: the words, never a digit, and dimmed as absence. What each
+// figure lacks is still said, per figure, in the sentence the card is named by.
+test('INVARIANT: a card with no data draws the words once, and no digit at all', () => {
   const strip = buildTrackStrip(EMPTY, fakeDoc());
   const all = texts(strip).join(' ');
-  assert.equal(all, [NO_DATA, NO_DATA, NO_DATA].join(' '));
+  assert.equal(all, NO_DATA);
   assert.equal(/\d/.test(all), false);
-  assert.ok(strip.children.every((c) => /is-no-data/.test(c.className)));
+  assert.match(strip.className, /is-no-data/);
+  assert.equal(
+    trackSentence(EMPTY),
+    'Tokens: no data. Time on the card: no data. Tests run: no data.',
+  );
+});
+
+test('WP-96: one tracking line per card, and `no data` at most once on it', () => {
+  assert.equal(trackLine(MEASURED), '1.4k tok · 30 min · says 43 passed');
+  assert.equal(
+    trackLine({
+      ...MEASURED,
+      tokens: { status: 'ok', total: 400_000, scope: 'card' },
+      time: { status: 'ok', minutes: 12, open: false },
+    }),
+    '400k tok · 12 min · says 43 passed',
+  );
+  // A card with some figures shows those, and does not pad the line with the
+  // absent ones — they are in the tooltip's sentence, which says so.
+  const partial = { ...EMPTY, tokens: { status: 'ok', total: 1_300_000, scope: 'session' } };
+  assert.equal(trackLine(partial), '1.3M tok (session)');
+  const strip = buildTrackStrip(partial, fakeDoc());
+  assert.equal(strip.attrs.title, trackSentence(partial));
+  assert.match(strip.attrs.title, /Time on the card: no data\./);
+  for (const entry of [MEASURED, EMPTY, partial, { cardId: 'x' }, null]) {
+    const line = texts(buildTrackStrip(entry, fakeDoc())).join(' ');
+    assert.ok(line.split(NO_DATA).length - 1 <= 1, `"${line}" says no data more than once`);
+  }
+  assert.deepEqual(
+    [850, 1365, 400_000, 999_499, 999_500, 1_300_000, 12_345_678].map(compactCount),
+    ['850', '1.4k', '400k', '999k', '1M', '1.3M', '12M'],
+  );
 });
 
 test('a cost carries list price and the dated rate card, and an unpriceable one no number', () => {

@@ -25,8 +25,13 @@ import assert from 'node:assert/strict';
 
 import {
   BOARD_COLUMNS,
+  COLUMN_GAP_PX,
   COLUMN_IDS,
+  COLUMN_MIN_PX,
   EMPTY_BOARD_LINES,
+  RAIL_PX,
+  STACK_BELOW_PX,
+  arrangeColumns,
   acceptanceCount,
   boardOrder,
   budgetText,
@@ -38,7 +43,9 @@ import {
   columnLabel,
   renderBoardColumns,
   renderBoardTable,
+  renderColumnPicker,
   renderEmptyBoard,
+  shortPath,
   stepColumn,
 } from '../../public/board-view.js';
 import { COLUMNS } from '../../src/studio/schema.mjs';
@@ -383,4 +390,80 @@ test('an empty board says how to get a card rather than that there are none', ()
   assert.match(text, /plan this project/);
   assert.match(text, /board\.json/);
   assert.equal(EMPTY_BOARD_LINES.length, 2);
+});
+
+// ------------------------------------------------------- WP-96 · the fit
+
+test('WP-96: arrangeColumns is the row, then two rows of three, then a stack', () => {
+  // The row: six at their floor and five gaps fit, so all six sit side by side.
+  const rowNeeds = 6 * COLUMN_MIN_PX + 5 * COLUMN_GAP_PX;
+  assert.deepEqual(arrangeColumns(rowNeeds, 6), { mode: 'row', perRow: 6, rows: 1, rails: 0 });
+  // 1600 with the panel open leaves the board about 1144 px — still one row.
+  assert.equal(arrangeColumns(1144, 6).mode, 'row');
+  // One pixel short and it is two rows of three, never a sideways scroll.
+  assert.deepEqual(arrangeColumns(rowNeeds - 1, 6), { mode: 'grid', perRow: 3, rows: 2, rails: 0 });
+  assert.equal(arrangeColumns(STACK_BELOW_PX, 6).mode, 'grid');
+  // Under the stack line, one column at a time.
+  assert.deepEqual(arrangeColumns(STACK_BELOW_PX - 1, 6), {
+    mode: 'stack',
+    perRow: 1,
+    rows: 6,
+    rails: 0,
+  });
+  assert.equal(arrangeColumns(375, 6).mode, 'stack');
+  // Empty columns are rails in the row, so they buy the row back.
+  const withRails = 5 * COLUMN_MIN_PX + RAIL_PX + 5 * COLUMN_GAP_PX;
+  assert.ok(withRails >= STACK_BELOW_PX);
+  assert.equal(arrangeColumns(withRails, 6).mode, 'grid');
+  assert.deepEqual(arrangeColumns(withRails, 6, 1), { mode: 'row', perRow: 6, rows: 1, rails: 1 });
+  // Unmeasured — the first paint, or no browser at all — is the row.
+  for (const w of [0, NaN, undefined, -5]) assert.equal(arrangeColumns(w, 6).mode, 'row');
+  // Pure: the same answer twice.
+  assert.deepEqual(arrangeColumns(1000, 6, 1), arrangeColumns(1000, 6, 1));
+});
+
+test('WP-96: an empty column is marked for the rail, and the picked one for the stack', () => {
+  const drawn = renderBoardColumns({ cards: [BOARD.cards[1]] }, { picked: 'ready' }, doc);
+  const cols = byClass(drawn, 'board-col');
+  assert.deepEqual(
+    cols.map((c) => c.className),
+    [
+      'board-col',
+      'board-col is-empty is-picked',
+      'board-col is-empty',
+      'board-col is-empty',
+      'board-col is-empty',
+      'board-col is-empty',
+    ],
+  );
+  // The rail keeps the head's words: the name and the count, nothing abbreviated.
+  assert.equal(byClass(cols[1], 'board-col-head')[0].textContent, 'Ready0');
+});
+
+test('WP-96: the picker names all six with their counts, and is a drop target', () => {
+  const picker = renderColumnPicker(BOARD, 'review', doc);
+  const buttons = byClass(picker, 'board-pick');
+  assert.deepEqual(
+    buttons.map((b) => b.textContent),
+    ['Backlog2', 'Ready1', 'In progress1', 'Review1', 'Done1', 'Blocked1'],
+  );
+  assert.deepEqual(
+    buttons.map((b) => b.getAttribute('data-column')),
+    [...COLUMNS],
+  );
+  assert.deepEqual(
+    buttons.map((b) => b.getAttribute('aria-pressed')),
+    ['false', 'false', 'false', 'true', 'false', 'false'],
+  );
+  assert.ok(buttons.every((b) => b.tagName === 'BUTTON' && b.getAttribute('type') === 'button'));
+});
+
+test('WP-96: the project path is its last two segments', () => {
+  assert.equal(
+    shortPath('C:\\Users\\samco\\AppData\\Local\\Temp\\code\\orbital-api'),
+    '\u2026\\code\\orbital-api',
+  );
+  assert.equal(shortPath('/home/me/code/orbital-api'), '\u2026/code/orbital-api');
+  assert.equal(shortPath('/srv/app'), '/srv/app');
+  assert.equal(shortPath(''), '');
 });
