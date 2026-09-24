@@ -6,6 +6,16 @@
 
 ## Unreleased
 
+## 1.6.1 — 2026-09-24
+
+### Highlights
+
+A patch for what the first real floor showed. Working subagents were drawn beside a waiting parent
+in your office; they now sit at the desks in their project room. On a busy floor, names and room
+plate lines no longer vanish, and the building fills your window instead of leaving dark bands.
+Subagents in worktrees form one crew, "at desk" counts only the sessions at desks, a subagent keeps
+its name, and a finished session stays still.
+
 ### Fixed
 
 - **Working subagents sit at the desks in their project room, not in your office.** With several
