@@ -251,12 +251,19 @@ export function idlePhase(seconds, reduced, pinned) {
 /** The three seats, in the order the tests walk them. */
 export const RIG_SEATS = Object.freeze(['desk', 'sofa', 'floor']);
 
-/** How far each seat lowers the barrel's bottom edge, local units. */
-const SEAT_DROP = Object.freeze({ desk: 0.08, sofa: 0.09, floor: 0.15 });
+/**
+ * How far each seat lowers the barrel's bottom edge, local units. None is
+ * under 0.09, and that floor is measured rather than chosen: with the raised
+ * hand held where it stands, it is the drop that puts the WHOLE mitt — not
+ * only its top — above the largest dome the identity hash can deal.
+ */
+const SEAT_DROP = Object.freeze({ desk: 0.1, sofa: 0.09, floor: 0.15 });
 /** The extra drop of the short silhouette drawn below `RIG_DETAIL_MIN_PX`. */
 const SHORT_DROP = 0.035;
 /** A mitt at or above this local height is a raised hand, and never sinks. */
 const RAISED_Y = 0.9;
+/** The lowest a sunk mitt goes: `MITT_R` (declared below) and a hair. */
+const SINK_FLOOR = 0.08;
 /** A standing pose (`for_review`) is seated from this bottom edge. */
 const STAND_BY = 0.22;
 
@@ -264,13 +271,16 @@ const STAND_BY = 0.22;
  * One seated skeleton, from a state's standing one. Pure, and called only at
  * module load: `SEATED` below holds every answer, so `drawCharacter` looks one
  * up rather than allocating one.
- * @param {any} k @param {'desk'|'sofa'|'floor'} seat @param {boolean} short
+ * @param {any} k @param {string} seat one of `RIG_SEATS` @param {boolean} short
  */
 function seatPose(k, seat, short) {
   const base = k.stand ? STAND_BY : k.by;
-  const by = Math.max(0.05, base - SEAT_DROP[seat] - (short ? SHORT_DROP : 0));
+  const by = Math.max(0.05, base - SEAT_DROP[seat]) - (short ? SHORT_DROP : 0);
   const drop = k.by - by;
-  const sink = (a) => (a[1] >= RAISED_Y ? a : Object.freeze([a[0], a[1] - drop]));
+  // A hand that sinks stops where its mitt rests on the floor: `ended` holds
+  // its hands at 0.07, and sunk a whole seat's height they would be under it.
+  const sink = (a) =>
+    a[1] >= RAISED_Y ? a : Object.freeze([a[0], Math.max(SINK_FLOOR, a[1] - drop)]);
   // The crew's hands go to the laptop on the knees, not to where a standing
   // pose happened to hold them; a raised hand is still a raised hand.
   const lap = (a, x) => (a[1] >= RAISED_Y ? a : Object.freeze([x, by + 0.13]));
@@ -391,9 +401,10 @@ export let _rHx = 0,
  * @param {{aR:number[], aL:number[]}} k
  * @param {number} [dR] @param {number} [dL] WP-97's typing tap: how far each
  *   mitt is lifted off the pose, local units. Zero for anything standing.
+ * @param {number} [xR] WP-97's wave: how far the raised hand sways sideways.
  */
-export function rigArms(k, dR, dL) {
-  _rHx = lx(k.aR[0]);
+export function rigArms(k, dR, dL, xR) {
+  _rHx = lx(k.aR[0] + (xR || 0));
   _rHy = ly(k.aR[1] + (dR || 0));
   _lHx = lx(k.aL[0]);
   _lHy = ly(k.aL[1] + (dL || 0));

@@ -249,17 +249,21 @@ export function rigSetup(k, id, tints, h, phase, dim, life, pose, lid) {
   _phase = phase || 0;
   _frame = k.walk ? walkFrame(phase * 2) : 0;
   _lid = typeof lid === 'number' && Number.isFinite(lid) ? Math.max(0, Math.min(1, lid)) : 1;
-  // THE TYPING TAP (WP-97). The rig never read the clip's arms: a standing B
-  // holds its state pose and the `type` clip reached it only as a bob. A seated
-  // figure has its hands on keys, so the key-down arm's mitt lifts a little —
-  // which is what makes the four frames of `type` four different pictures.
+  // THE TYPING TAP AND THE WAVE (WP-97). The rig never read the clip's arms: a
+  // standing B holds its state pose, and `type` and `hand_raise` reached it
+  // only as a bob and a floor ring. A seated figure's hands are the only thing
+  // left moving above the waist, so the key-down arm's mitt lifts a little and
+  // a raised hand sways sideways with the wave — never down, so it clears the
+  // dome at every frame. That is what makes each strip's frames different
+  // pictures on a seated body.
   const tapR = k.seat && pose ? keyTap(pose.armR) : 0;
   const tapL = k.seat && pose ? keyTap(pose.armL) : 0;
-  _aRx = k.aR[0];
+  const wave = k.seat && pose ? handWave(pose.armR) : 0;
+  _aRx = k.aR[0] + wave;
   _aRy = k.aR[1] + tapR;
   _aLx = k.aL[0];
   _aLy = k.aL[1] + tapL;
-  rigArms(k, tapR, tapL);
+  rigArms(k, tapR, tapL, wave);
 }
 
 /**
@@ -271,6 +275,17 @@ function keyTap(arm) {
   if (!arm || arm.hand !== 'key') return 0;
   const d = (Number(arm.shoulder) - 2.05) * 0.35;
   return d > 0 ? Math.min(0.04, d) : 0;
+}
+
+/**
+ * How far a raised hand sways out with the wave, local units: `hand_raise`
+ * swings the shoulder between 2.85 and 3.0 rad, and its midpoint is still.
+ * @param {{shoulder:number, hand:string}|undefined} arm
+ */
+function handWave(arm) {
+  if (!arm || arm.hand !== 'raised') return 0;
+  const d = (Number(arm.shoulder) - 2.9) * 0.4;
+  return Number.isFinite(d) ? Math.max(-0.03, Math.min(0.03, d)) : 0;
 }
 
 /**
