@@ -32,6 +32,7 @@ import { assignSeats } from '../../public/render/agents.js';
 import { CREW_DRAW_CAP, floorPopulation, placement } from '../../public/floor-rule.js';
 import { crewChipAt, crewNameAt } from '../../public/render/crew.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
+import { counts } from '../../src/core/model.mjs';
 
 const NOW = 1_800_000_000_000;
 const MIN = 60_000;
@@ -302,6 +303,43 @@ test('bug 201: the room counts a desk for the crew anchor when the parent is awa
   assert.deepEqual(pop.crews.get('career-ops'), [13]);
   assert.equal(pop.desks.get('career-ops'), 1);
   assert.equal(pop.waiting, 1, 'the senior, and none of its juniors');
+});
+
+/**
+ * Audit F5: the header's "at desk" is the people the floor puts at a desk —
+ * working or stalled, top-level or junior, in a room — off the one `placement`
+ * the seating reads. An ended, benched or waiting session is never at a desk.
+ * Asked of the floor itself: every desk-placed agent is seated inside a project
+ * room, or is a crew member past the draw cap that the `+N` chip stands for.
+ */
+test('audit F5: "at desk" counts exactly who the floor seats at a desk', () => {
+  const { agents, projects, parent } = ownersFloor();
+  // The audit's own shape on top of the owner's: finished juniors (which the
+  // header used to count at desks) and a stalled senior at its desk.
+  for (let i = 20; i < 24; i++) {
+    agents.push(junior(jid(i), parent.id, { activityState: 'ended' }));
+  }
+  agents.push(agent('claude-code:stuck', { projectId: 'deckhq', activityState: 'stalled' }));
+  const c = counts(agents, { now: NOW });
+  // 13 working juniors + 2 working seniors + 1 stalled senior. Not the waiting
+  // parent, not the 4 ended juniors, not the benched pair.
+  assert.equal(c.drawn.atDesk, 16);
+  assert.equal(c.drawn.waiting, 1, 'the parent on the sofa, and none of its crew');
+  assert.equal(c.drawn.benched, 2);
+
+  const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+  const seats = assignSeats(plan, agents);
+  const projectRooms = plan.rooms.filter((r) => r.kind === 'project');
+  let seated = 0;
+  let chip = 0;
+  for (const a of agents) {
+    const s = seats.get(a.id);
+    if (!s) continue;
+    if (projectRooms.some((r) => inside(s, r))) seated++;
+    if (s.crew === true && s.crewIndex === 0) chip += s.crewTotal - CREW_DRAW_CAP;
+  }
+  assert.equal(chip, 1, 'thirteen at the desk, twelve drawn');
+  assert.equal(seated + chip, c.drawn.atDesk, 'the header and the floor are one count');
 });
 
 /**
