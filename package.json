@@ -1,6 +1,6 @@
 {
   "name": "deckhq",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Every AI coding session on your machine, on one office floor. It sees the ones your terminal forgot, and remembers what's waiting on you even after you've read it. Local, private, zero dependencies.",
   "keywords": [
     "claude-code",

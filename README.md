@@ -108,10 +108,9 @@ deckhq shortcut --install --yes   # + a Desktop and Start Menu icon for it
 deckhq autostart --install --yes  # + the daemon, quietly, when you log in
 ```
 
-`deckhq app` reuses the DeckHQ you already have running and starts one if none answers, then opens
-the floor in **Chrome or Edge in application mode** — no tab strip, no address bar, its own taskbar
-button, its own browser profile. Closing the window costs nothing: the daemon outlives it, which is
-the whole point.
+`deckhq app` reuses a running DeckHQ or starts one, then opens the floor in **Chrome or Edge in
+application mode** — no tab strip, no address bar, its own taskbar button, its own browser profile.
+Closing the window costs nothing: the daemon outlives it, which is the whole point.
 
 Both installers print every path they would write and the exact command each will run **before**
 `--yes`, tag every file they create, and remove only what they tagged. **Windows is the platform
@@ -145,7 +144,8 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 Studio is the opt-in "idea to office" mode, per project, off until `deckhq studio enable <project>`
 writes one marked file; a real `claude` session then interviews you and writes the blueprint, the
 roster and the board. The loop is complete — plan, hire, board, handover, tracking, drift, budget —
-and is on [the site](https://dkpanseriya.github.io/deckhq/studio.html).
+and is on [the site](https://dkpanseriya.github.io/deckhq/studio.html). **Not yet watched:** a real
+planner interview, or a hired session's real reply — the maintainer's `claude` login has expired.
 
 **Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** gives a role a git worktree of its own,
 a brief file that is yours to edit, and a real session there under that brief, on the floor within
