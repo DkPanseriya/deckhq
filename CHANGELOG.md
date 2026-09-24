@@ -77,6 +77,22 @@
   of Blocked and sending works again — raise its budget first, or the next check stops it again. This is the only time DeckHQ itself
   moves a card, and Blocked is the only place it can move one to.
 
+### Changed
+
+- **The robots sit down.** Until now every figure on the floor stood, including the ones at a
+  desk, on a sofa and in a crew. A session at its desk now sits at the chair with its hands on the
+  keys; a session waiting in Your Office, and a benched one on a lounge sofa or at the board-game
+  table, sits back on the cushions with its legs out; and a crew of juniors sits cross-legged on
+  the floor with each laptop on its knees — the lid open while that junior is writing and shut once
+  it has stopped, exactly as the floor laptop did, and the cable now runs into it. Anyone walking,
+  queueing, or standing beside a parent's desk stays on their feet.
+
+  **Nothing you read moved.** Each figure's name, halo, shadow and click target sit where they did,
+  under its feet; only the body above them is lower. A raised hand stays exactly where it was, so
+  seated it clears the robot's head by more than it did standing, at every zoom. The typing, the
+  wave, the page flip and the stall still animate on a seated robot, and a seated robot drawn small
+  simplifies to one shorter shape rather than to a smudge of legs.
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights
