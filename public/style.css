@@ -1595,6 +1595,71 @@ button {
 /* ====================================================== end WP-67 block */
 
 /* ======================================================================
+   WP-70 · THE HANDOVER, and the two presses under it
+   (docs/07-STUDIO-DESIGN.md §6.) An agent has stopped and says the card is
+   done. It sits between the Studio artefacts and WHAT IT SAID, above the
+   conversation and above the worktree diff, because it is the thing being
+   reviewed rather than a fact about the session.
+
+   The accent is a rule on the left edge, never accent-coloured small text —
+   this stylesheet's standing contract, and the same shape `--problem` uses
+   one block above. The quotation is drawn AS a quotation: indented, in the
+   mono face, with a rule down its side, because it is the agent's words and
+   not DeckHQ's figure (§7).
+   ====================================================================== */
+
+.studio-handover {
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+}
+.handover-state {
+  margin-top: 0.15rem;
+}
+.handover-file {
+  font-size: 0.66rem;
+  color: var(--muted);
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+.handover-quote {
+  margin: 0.45rem 0;
+  padding: 0.25rem 0 0.25rem 0.6rem;
+  border-left: 2px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.handover-part {
+  margin-top: 0.5rem;
+}
+.handover-part-heading {
+  margin: 0 0 0.15rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.handover-missing {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.handover-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.handover-column {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+/* ====================================================== end WP-70 block */
+
+/* ======================================================================
    WP-19 · THE PERMISSION CARD (docs/DEVIATIONS.md §86.5, §97)
    A question the runtime is holding a socket open for, so it sits at the top
    of the review body, above WHAT IT SAID. It is the one card on this screen

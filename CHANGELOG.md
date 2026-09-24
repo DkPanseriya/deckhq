@@ -36,6 +36,22 @@
   title, the acceptance criteria, the milestone, the assignee and the budget. Anything DeckHQ
   refuses is shown beside the field it is about, with what you typed still in it.
 
+- **The handover, and the review gate.** A hired role's brief now carries one instruction: when it
+  believes a card is done, it writes `.deckhq/studio/handovers/<cardId>.md` with what changed, the
+  tests it ran and their real counts, open questions and the next step. DeckHQ watches that folder.
+  When a handover lands, **the card is flagged and never moved** — the flag shows as a chip on the
+  board — and the session's review card shows the handover above what it said, next to the diff of
+  its own worktree, so you can read what it claims beside what it actually changed.
+
+  Two answers, and they are yours: **Accept handover**, where you name the column the card moves to
+  — Review or Done — or **Bounce**, with a note. A bounce leaves the card where it is and the note
+  arrives in that role's next brief, so it comes back knowing why.
+
+  **Test counts are quoted, never believed.** The panel says _"the handover says 41 passed"_ and
+  attributes it; DeckHQ runs nothing to check it and never prints the figure as its own. A handover
+  that leaves a section out is reported as missing rather than filled in, and a handover whose
+  filename matches no card is shown **unattached** rather than quietly dropped.
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights

@@ -127,7 +127,14 @@ export function roleLine(role) {
 }
 
 /**
- * @param {PanelDom & {toast:(m:string, o?:{isError?:boolean}) => void}} ctx
+ * @param {PanelDom & {toast:(m:string, o?:{isError?:boolean}) => void,
+ *          onStudio?:(body:any, id:string|null) => void}} ctx
+ *   WP-70 added `onStudio`. The one `GET /api/studio` this part already makes
+ *   per panel open carries the handovers too, and a second fetch of the same
+ *   snapshot for the block below this one would be a second answer to one
+ *   question. It is called on EVERY outcome, including "Studio is off here",
+ *   so the handover block hides itself rather than staying on a session it no
+ *   longer describes.
  */
 export function createStudioPart(ctx) {
   const { studioSection, studioList, studioNote, toast } = ctx;
@@ -151,7 +158,10 @@ export function createStudioPart(ctx) {
     const id = agent?.id || null;
     shownFor = null;
     studioSection.hidden = true;
-    if (!cwd) return;
+    if (!cwd) {
+      ctx.onStudio?.(null, id);
+      return;
+    }
     fetch(`/api/studio?project=${encodeURIComponent(cwd)}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
@@ -159,12 +169,14 @@ export function createStudioPart(ctx) {
         // flight. A block describing somebody else's project is worse than no
         // block at all.
         if (!body || currentId !== id) return;
+        ctx.onStudio?.(body, id);
         if (!body.enabled) return;
         shownFor = cwd;
         render(body);
       })
       .catch(() => {
         /* Studio is off, or the daemon is busy. The block stays away. */
+        ctx.onStudio?.(null, id);
       });
   }
 

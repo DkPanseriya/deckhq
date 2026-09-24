@@ -9,7 +9,7 @@
  *   GET  /api/studio/tracking?project=   §7's numbers
  *   POST /api/studio/plan                start or continue the planner — WP-67
  *   POST /api/studio/hire                `{role}` or `{roles}` — worktrees, briefs, the spawn
- *   POST /api/studio/handover            501 — WP-70
+ *   POST /api/studio/handover            Accept or Bounce — WP-70
  *
  * Loopback only, and a cross-site POST is refused before it reaches here, by
  * the guard in `src/daemon.mjs` that every other route stands behind. Nothing
@@ -65,6 +65,8 @@ import { StudioStore } from '../../studio/store.mjs';
 import { COLUMNS, MAX_CARDS, validateBoard } from '../../studio/schema.mjs';
 import { PLANNER_KICKOFF, ensurePlannerBrief } from '../../studio/brief.mjs';
 import { UNVERIFIED_LAUNCH, registerHire } from './studio-hire.mjs';
+import { registerHandover } from './studio-handover.mjs';
+import { readHandovers } from '../../studio/handover.mjs';
 import { roleBriefRel } from '../../studio/brief-role.mjs';
 import { checkRoleName, worktreePathFor } from '../../studio/worktree.mjs';
 import {
@@ -74,11 +76,6 @@ import {
   enable as enableStudio,
   plannedPaths,
 } from '../../studio/consent.mjs';
-
-/** What a package that does not exist yet answers with, and why. */
-const NOT_YET = {
-  '/api/studio/handover': 'the handover watcher and the review gate land in WP-70',
-};
 
 /**
  * The one runtime that has a planner brief — WP-67, and `docs/ADAPTERS.md` §6.
@@ -238,7 +235,10 @@ export function nextCardId(board) {
 /**
  * @param {import('../server.mjs').Router} router
  * @param {{store:any, log:any, dataDir?:string, registry?:any, adapters?:any,
- *          pendingIdentities?:any, launchTerminal?:(opts:any) => Promise<any>}} ctx
+ *          pendingIdentities?:any, launchTerminal?:(opts:any) => Promise<any>,
+ *          studioWatchOptions?:{pollMs?:number, debounceMs?:number},
+ *          stopStudioWatch?:() => void,
+ *          studioHandoverSettled?:() => Promise<any>}} ctx
  *   WP-67 added the last four. `registry` is read for one thing and one thing
  *   only — whether an agent id is still a session on the floor — and never
  *   copied; `launchTerminal` is the test seam `src/daemon.mjs` documents.
@@ -246,6 +246,14 @@ export function nextCardId(board) {
 export function register(router, ctx) {
   const dataDir = ctx.dataDir || DATA_DIR;
   const { store } = ctx;
+
+  /**
+   * Start watching one project's handovers. Assigned at the bottom of this
+   * function, where WP-70's half is registered; inert until then, so the
+   * order the two halves are wired in cannot matter.
+   * @type {(root:string) => void}
+   */
+  let startWatching = () => {};
 
   /** The grant for a project, or null. */
   const consentFor = (projectKey) => store.studioConsentFor?.(projectKey) ?? null;
@@ -327,6 +335,13 @@ export function register(router, ctx) {
       // carried here rather than discovered on the press, so a name the
       // planner suggested and git will not take says so before it is clicked.
       roles: rolesOf(snap, project.root, ctx.registry?.agents || [], dataDir),
+      // WP-70, §6. Every handover on disk, parsed into its four sections,
+      // with the card it names — or `cardId: null`, which is the unattached
+      // one: *"a handover for an unknown card id is shown unattached rather
+      // than dropped"*. Read here rather than remembered, like the three
+      // artefacts above it, so there is nothing cached to go stale and
+      // nothing that could ever write one back.
+      handovers: consent ? readHandovers(studio, snap?.board?.board?.cards || []) : [],
     });
   });
 
@@ -372,6 +387,10 @@ export function register(router, ctx) {
     try {
       const result = await enableStudio(root, { dataDir, store, now: clockNow() });
       await store.flush?.();
+      // WP-70. The directory exists from this moment, so the watch on it
+      // starts from this moment too — rather than at the next daemon start,
+      // which is when a project enabled today would otherwise be looked at.
+      startWatching(root);
       return sendJson(res, 200, {
         ok: true,
         confirmed: true,
@@ -744,9 +763,17 @@ export function register(router, ctx) {
   // grant exactly as every other write here does.
   registerHire(router, ctx, { projectFromBody, consentFor });
 
-  for (const [pathname, why] of Object.entries(NOT_YET)) {
-    router.post(pathname, (_req, res) => sendError(res, 501, why));
-  }
+  // WP-70. Its own file, on `studio-hire.mjs`'s terms: the directory watch
+  // that FLAGS a card, and the one route besides `/api/studio/card` that may
+  // write a column — and only after the user has named it.
+  const handover = registerHandover(router, ctx, {
+    projectFromBody,
+    consentFor,
+    watchOptions: ctx.studioWatchOptions,
+  });
+  ctx.stopStudioWatch = handover.stop;
+  ctx.studioHandoverSettled = handover.settled;
+  startWatching = handover.watchProject;
 }
 
 /**

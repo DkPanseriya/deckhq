@@ -93,6 +93,7 @@ import { createRecordsPart } from './panel-records.js';
 import { createTraitsPart } from './panel-traits.js';
 import { createComposerPart } from './panel-composer.js';
 import { createStudioPart } from './panel-studio.js';
+import { createHandoverPart } from './panel-handover.js';
 import { createLivePart } from './panel-live.js';
 
 // Everything the panel used to define itself, re-exported from where it now
@@ -175,7 +176,19 @@ export function createPanel(opts) {
 
   const header = createHeaderPart({ ...dom, getSnapshot });
   const permission = createPermissionPart({ ...dom, toast, announce });
-  const studio = createStudioPart({ ...dom, toast });
+  // WP-70 · the handover block, fed by the ONE `GET /api/studio` the Studio
+  // part already makes per panel open. `refreshStudio()` after a decision so
+  // the block reflects the board it just wrote rather than the board it read.
+  const handover = createHandoverPart({
+    ...dom,
+    toast,
+    onDecided: () => refreshStudio(),
+  });
+  const studio = createStudioPart({
+    ...dom,
+    toast,
+    onStudio: (body, id) => (body ? handover.render(body, id) : handover.hide()),
+  });
   const said = createSaidPart({ ...dom, getSnapshot });
   const changes = createChangesPart({ ...dom, getSnapshot, toast });
   const actions = createActionsPart({

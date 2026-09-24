@@ -218,7 +218,8 @@ function envHoldMs() {
  *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
  *           notify?: boolean, daemonFile?: string, snapshotDir?: string,
  *           packsDir?: string, ratesFile?: string,
- *           launchTerminal?: (opts:any) => Promise<any> }} [opts]
+ *           launchTerminal?: (opts:any) => Promise<any>,
+ *           studioWatchOptions?: {pollMs?:number, debounceMs?:number} }} [opts]
  *   `daemonFile` overrides where the bound port is published; it defaults to
  *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
  *   caller named no state file.
@@ -366,6 +367,12 @@ export async function startDaemon(opts = {}) {
     // `test/fixtures/fake-planner.mjs` in place of `claude`, which is how the
     // argv this route builds is asserted element by element.
     launchTerminal: opts.launchTerminal,
+    // WP-70. The handover watch's debounce and poll intervals, overridable
+    // for the reason `launchTerminal` is: an integration test that had to
+    // wait a real second per tick is an integration test somebody skips.
+    // Undefined in production, where `src/core/watch-path.mjs`'s own numbers
+    // are the answer.
+    studioWatchOptions: opts.studioWatchOptions,
     port: null,
   };
   registerState(router, ctx);
@@ -506,6 +513,9 @@ export async function startDaemon(opts = {}) {
     // SendHub.shutdown() for what that does and does not promise.
     sends.shutdown();
     notifier.stop();
+    // WP-70. Every handover directory this daemon is watching. Set by
+    // `registerStudio`; absent on a build where Studio was never wired.
+    ctx.stopStudioWatch?.();
     clearDaemonFile({ file: daemonFile });
     registry.stop();
     await store.flush?.();

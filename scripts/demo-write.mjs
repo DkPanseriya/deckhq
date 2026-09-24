@@ -593,6 +593,38 @@ export async function writeStudioFixture(projectRoot, agentIds) {
 
   /** @param {number} h hours before the pinned clock */
   const ago = (h) => NOW - h * HOUR;
+
+  // WP-70, §6. One handover, written by "the backend role", in the four
+  // headings `src/studio/handover.mjs` parses. Its counts are the agent's
+  // sentence, and the panel draws them as *"the handover says 41 passed"* —
+  // which is the thing the picture is for: a figure this product quotes and
+  // does not own (§7).
+  const handoverFile = path.join(dir, 'handovers', 'c6.md');
+  fs.writeFileSync(
+    handoverFile,
+    [
+      '# Handover for c6',
+      '',
+      '## What changed',
+      '',
+      'A token bucket per API key, and the 429 body that names the window.',
+      '',
+      '## Tests run',
+      '',
+      'npm test — 41 passed, 0 failed',
+      '',
+      '## Open questions',
+      '',
+      'The bucket is per process. Two processes is two buckets; is that the cap you meant?',
+      '',
+      '## Next step',
+      '',
+      'Move the bucket behind the store so it survives a restart.',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+
   const card = (id, title, column, extra = {}) => ({
     id,
     title,
@@ -643,10 +675,17 @@ export async function writeStudioFixture(projectRoot, agentIds) {
             agentId: agentIds[1] || null,
             updatedAt: ago(3),
           }),
+          // WP-70, §6. The one card with a handover: the FILE is written
+          // below, the card names it by filename — which is what
+          // `readDoc('handovers', name)` and the next brief both take — and
+          // the flag is the one an observed event is allowed to write. The
+          // card is in `review` and stays there: the chip is what a handover
+          // does to a board, and a column is the user's (§5.2).
           card('c6', 'Rate limiter for the public API', 'review', {
             role: 'backend',
             acceptance: ['a failing test first', 'npm test green'],
-            handover: '.deckhq/studio/handovers/c6.md',
+            handover: 'c6.md',
+            flags: [{ kind: 'handover', text: 'waiting on you', at: ago(6), path: handoverFile }],
             updatedAt: ago(6),
           }),
           card('c7', 'Move the events schema to a migration', 'done', {
