@@ -35,8 +35,8 @@ The commands you ran and the counts the runner printed, **in its words**. For ex
 
     npm test — 2044 tests, 2043 passing, 1 skipped
 
-DeckHQ quotes this line back to the user and attributes it to you: it shows *"the handover says
-2043 passing"*. It runs nothing to check it, and it never prints the figure in its own voice. A
+DeckHQ quotes this line back to the user and attributes it to you: it shows _"the handover says
+2043 passing"_. It runs nothing to check it, and it never prints the figure in its own voice. A
 count you did not see is a lie this product will repeat, so write what you saw and, if you ran
 nothing, say that instead.
 
