@@ -70,7 +70,8 @@ function defaultData() {
     ack: {},
     // MK numbering and user-chosen names. Assigned once and kept forever, so
     // a tag the user has learned never moves. See core/identity.mjs.
-    identity: { projects: {}, agents: {}, projectOf: {}, names: {}, nextProject: 1 },
+    // `juniors` (audit F6): each parent's junior numbers, `parent id → {next, of}`.
+    identity: { projects: {}, agents: {}, projectOf: {}, names: {}, nextProject: 1, juniors: {} },
     // Project ids the user has collapsed off the floor. Purely a view
     // preference — it never affects what is captured or what any agent is
     // doing, and an id in here that no longer exists is harmless.
@@ -112,6 +113,7 @@ function normalize(parsed) {
     projectOf: isPlainObject(rawIdentity.projectOf) ? { ...rawIdentity.projectOf } : {},
     names: isPlainObject(rawIdentity.names) ? { ...rawIdentity.names } : {},
     nextProject: typeof rawIdentity.nextProject === 'number' ? rawIdentity.nextProject : 1,
+    juniors: sanitizeJuniorBooks(rawIdentity.juniors),
   };
   const archivedProjects = isPlainObject(parsed.archivedProjects)
     ? { ...parsed.archivedProjects }
@@ -140,6 +142,30 @@ function normalize(parsed) {
     layout,
     studio,
   };
+}
+
+/**
+ * The identity block's junior books (audit F6), read back from disk. Additive:
+ * a file without the key — every file before this build — reads as no books,
+ * which is what an in-memory build would have started from, so no version bump.
+ * A malformed book is dropped rather than guessed at.
+ * @param {unknown} raw
+ * @returns {Record<string, {next: number, of: Record<string, number>}>}
+ */
+function sanitizeJuniorBooks(raw) {
+  /** @type {Record<string, {next: number, of: Record<string, number>}>} */
+  const out = {};
+  if (!isPlainObject(raw)) return out;
+  for (const [parent, book] of Object.entries(/** @type {Record<string, any>} */ (raw))) {
+    if (!isPlainObject(book) || !Number.isInteger(book.next) || book.next < 0) continue;
+    /** @type {Record<string, number>} */
+    const of = {};
+    for (const [id, n] of Object.entries(isPlainObject(book.of) ? book.of : {})) {
+      if (Number.isInteger(n) && n > 0 && n <= book.next) of[id] = n;
+    }
+    out[parent] = { next: book.next, of };
+  }
+  return out;
 }
 
 export class Store {

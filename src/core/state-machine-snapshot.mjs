@@ -99,12 +99,12 @@ export class RegistrySnapshot extends RegistryBase {
       return { ...a, ...id };
     });
     if (this.identity) {
-      const ordinals = juniorOrdinals(this._juniorOrdinals, agents);
-      this._juniorOrdinals = ordinals;
+      // Audit F6: a junior's number is handed out once and kept in state.json.
+      const numbers = this.identity.juniorNumbers(agents);
       agents.forEach((a, i) => {
         if (a.subagent !== true) return;
         const key = String(a.parentId ?? '');
-        const n = ordinals.get(key)?.of.get(String(a.id)) ?? 0;
+        const n = numbers.get(String(a.id)) ?? 0;
         const id = this.identity.describeJunior(described.get(key) || null, a.projectId, n);
         agents[i] = { ...a, ...id };
       });
@@ -504,48 +504,4 @@ export class RegistrySnapshot extends RegistryBase {
       }
     }
   }
-}
-
-/**
- * A JUNIOR'S NUMBER IS ITS OWN FOR ITS LIFETIME (audit F6).
- *
- * `MK1.2j3` used to be the junior's rank among its siblings ON THIS PUSH, so a
- * sibling finishing renumbered every junior after it: six of twenty-one labels
- * changed on the owner's floor inside four minutes, and a name read a minute
- * ago pointed at somebody else. Now each junior is numbered once, the first
- * time it is seen, with the next number its parent has not handed out, and it
- * keeps that number while the parent has juniors on the snapshot. Juniors first
- * seen together are numbered in spawn order (then id), so a daemon restart over
- * the same crew hands out the same numbers.
- *
- * In memory only, like the rest of a junior's identity (`describeJunior`): the
- * book of a parent with no juniors left is dropped, which bounds it by the
- * crews on the floor rather than by every junior a week ever spawned.
- *
- * @param {Map<string, {next:number, of:Map<string, number>}>|undefined} previous
- * @param {any[]} agents
- * @returns {Map<string, {next:number, of:Map<string, number>}>}
- */
-export function juniorOrdinals(previous, agents) {
-  /** @type {Map<string, any[]>} */
-  const byParent = new Map();
-  for (const a of agents) {
-    if (!a || a.subagent !== true) continue;
-    const key = String(a.parentId ?? '');
-    byParent.set(key, [...(byParent.get(key) || []), a]);
-  }
-  /** @param {any} a */
-  const spawned = (a) => (Number.isFinite(Number(a.spawnedAt)) ? Number(a.spawnedAt) : Infinity);
-  /** @type {Map<string, {next:number, of:Map<string, number>}>} */
-  const out = new Map();
-  for (const [key, list] of byParent) {
-    const was = previous && previous.get(key);
-    const book = { next: was ? was.next : 0, of: new Map(was ? was.of : []) };
-    const fresh = list
-      .filter((a) => !book.of.has(String(a.id)))
-      .sort((x, y) => spawned(x) - spawned(y) || String(x.id).localeCompare(String(y.id)));
-    for (const a of fresh) book.of.set(String(a.id), ++book.next);
-    out.set(key, book);
-  }
-  return out;
 }

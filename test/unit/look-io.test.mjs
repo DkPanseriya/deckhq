@@ -36,6 +36,51 @@ import { LOOK_HELP, runLook } from '../../src/cli/look.mjs';
 /** The document for a preset, whole. @param {string} id */
 const docFor = (id) => buildLookDocument({ look: /** @type {any} */ (presetById(id)).look });
 
+/**
+ * Where a stub daemon "listens". Port 0 is never a listening port, so a stub
+ * that leaked into the real `postLook` could reach nobody — not a developer's
+ * daemon on 4317, and not another test file's daemon either.
+ */
+const STUB_PORT = 0;
+
+/**
+ * Every dependency `runLook` has, stubbed, so this file does no I/O at all: no
+ * socket, no `state.json`, no file, and nothing on this process's own stdout,
+ * which under `node --test` is the reporter's channel. A test overrides what it
+ * is about; a dependency it did not mean to reach fails it by name instead of
+ * reaching the machine.
+ * @param {Record<string, any>} [overrides]
+ */
+function cliDeps(overrides = {}) {
+  /** @param {string} what */
+  const refuse = (what) => async () => {
+    throw new Error(`look-io reached the real ${what}`);
+  };
+  return {
+    write: () => {},
+    error: () => {},
+    read: refuse('readLook'),
+    find: refuse('findDaemon'),
+    post: refuse('postLook'),
+    readFile: () => {
+      throw new Error('look-io reached the real filesystem');
+    },
+    ...overrides,
+  };
+}
+
+// Nothing here may outlive its test. Every `runLook` call is awaited and every
+// dependency is a stub, so when the last test ends the only handles left are
+// the process's own stdio pipes. A timer, socket or pending write still alive
+// here would, once the tests had reported, surface as nothing but a non-zero
+// exit — the runner drops a child's stderr once it has exited — so it is made
+// to fail loudly, by name, while there is still a report to put it in.
+test.after(() => {
+  const stdio = new Set(['PipeWrap', 'TTYWrap']);
+  const live = process.getActiveResourcesInfo().filter((r) => !stdio.has(r));
+  assert.deepEqual(live, [], `look-io left async work running: ${live.join(', ')}`);
+});
+
 // ------------------------------------------------------------- the document
 
 test('§4: the document is a fixed point — export, import, export is the same bytes', () => {
@@ -189,12 +234,12 @@ test('`deckhq look` prints its help, lists the presets, and exports the document
   const write = (/** @type {string} */ s) => out.push(s);
   const error = (/** @type {string} */ s) => err.push(s);
 
-  assert.equal(await runLook([], { write, error }), 2);
+  assert.equal(await runLook([], cliDeps({ write, error })), 2);
   assert.ok(out.join('').includes('deckhq look'));
   assert.ok(LOOK_HELP.includes('anonymous'));
 
   out.length = 0;
-  assert.equal(await runLook(['presets'], { write, error }), 0);
+  assert.equal(await runLook(['presets'], cliDeps({ write, error })), 0);
   for (const id of ['studio-oak', 'night-lab', 'workshop']) {
     assert.ok(out.join('').includes(id), `presets did not list ${id}`);
   }
@@ -202,11 +247,14 @@ test('`deckhq look` prints its help, lists the presets, and exports the document
   out.length = 0;
   err.length = 0;
   assert.equal(
-    await runLook(['export'], {
-      write,
-      error,
-      read: async () => ({ look: docFor('garden-floor'), source: 'state' }),
-    }),
+    await runLook(
+      ['export'],
+      cliDeps({
+        write,
+        error,
+        read: async () => ({ look: docFor('garden-floor'), source: 'state' }),
+      }),
+    ),
     0,
   );
   const exported = JSON.parse(out.join(''));
@@ -219,16 +267,19 @@ test('`deckhq look import` refuses a bad file with its reason, and sends nothing
   /** @type {string[]} */
   const err = [];
   let posted = 0;
-  const code = await runLook(['import', 'bad.json'], {
-    write: () => {},
-    error: (s) => err.push(s),
-    readFile: () => JSON.stringify({ ...docFor('studio-oak'), scheme: 'neon' }),
-    find: async () => ({ port: 4317, snapshot: {} }),
-    post: async () => {
-      posted++;
-      return { ok: true, status: 200, body: {} };
-    },
-  });
+  const code = await runLook(
+    ['import', 'bad.json'],
+    cliDeps({
+      write: () => {},
+      error: (s) => err.push(s),
+      readFile: () => JSON.stringify({ ...docFor('studio-oak'), scheme: 'neon' }),
+      find: async () => ({ port: STUB_PORT, snapshot: {} }),
+      post: async () => {
+        posted++;
+        return { ok: true, status: 200, body: {} };
+      },
+    }),
+  );
   assert.equal(code, 1);
   assert.equal(posted, 0, 'a refused file was sent to the daemon anyway');
   assert.match(err.join(''), /Nothing was changed/);
@@ -242,13 +293,16 @@ test('`deckhq look import` prints the problems list when the ids are real and th
     floors: { ...docFor('studio-oak').floors, office: 'wide-ash', lounge: 'polished-concrete' },
     rugs: { wool: { tone: 'sage', pattern: 'plain' }, task: { tone: 'sage', pattern: 'plain' } },
   };
-  const code = await runLook(['import', 'refused.json'], {
-    write: () => {},
-    error: (s) => err.push(s),
-    readFile: () => JSON.stringify(refused),
-    find: async () => ({ port: 4317, snapshot: {} }),
-    post: async () => ({ ok: true, status: 200, body: {} }),
-  });
+  const code = await runLook(
+    ['import', 'refused.json'],
+    cliDeps({
+      write: () => {},
+      error: (s) => err.push(s),
+      readFile: () => JSON.stringify(refused),
+      find: async () => ({ port: STUB_PORT, snapshot: {} }),
+      post: async () => ({ ok: true, status: 200, body: {} }),
+    }),
+  );
   assert.equal(code, 1);
   assert.match(err.join(''), /rug\.wool/);
   assert.match(err.join(''), /would not read/);
@@ -257,12 +311,15 @@ test('`deckhq look import` prints the problems list when the ids are real and th
 test('`deckhq look import` needs a daemon, and says so rather than editing state.json', async () => {
   /** @type {string[]} */
   const err = [];
-  const code = await runLook(['import', 'good.json'], {
-    write: () => {},
-    error: (s) => err.push(s),
-    readFile: () => JSON.stringify(docFor('night-lab')),
-    find: async () => null,
-  });
+  const code = await runLook(
+    ['import', 'good.json'],
+    cliDeps({
+      write: () => {},
+      error: (s) => err.push(s),
+      readFile: () => JSON.stringify(docFor('night-lab')),
+      find: async () => null,
+    }),
+  );
   assert.equal(code, 2);
   assert.match(err.join(''), /start deckhq/);
 });
@@ -270,16 +327,19 @@ test('`deckhq look import` needs a daemon, and says so rather than editing state
 test('`deckhq look import` applies a good file, and `--yes` is accepted', async () => {
   /** @type {any} */
   let sent = null;
-  const code = await runLook(['import', 'good.json', '--yes'], {
-    write: () => {},
-    error: () => {},
-    readFile: () => JSON.stringify(docFor('terrazzo-hall')),
-    find: async () => ({ port: 4317, snapshot: {} }),
-    post: async (_port, body) => {
-      sent = body;
-      return { ok: true, status: 200, body: { ok: true } };
-    },
-  });
+  const code = await runLook(
+    ['import', 'good.json', '--yes'],
+    cliDeps({
+      write: () => {},
+      error: () => {},
+      readFile: () => JSON.stringify(docFor('terrazzo-hall')),
+      find: async () => ({ port: STUB_PORT, snapshot: {} }),
+      post: async (_port, body) => {
+        sent = body;
+        return { ok: true, status: 200, body: { ok: true } };
+      },
+    }),
+  );
   assert.equal(code, 0);
   assert.equal(sent.preset, 'terrazzo-hall');
   assert.equal(sent.kind, LOOK_KIND);

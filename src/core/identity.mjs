@@ -186,7 +186,7 @@ export class Identity {
    * `given` is the one this class assigns and never reassigns. The record type
    * used to name only the first two while `givenName()`, `_usedNames()` and
    * `takenNames()` all read and wrote the third (WP-22).
-   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null, formerName?: string|null, renamedAt?: number|null}>, nextProject: number}}
+   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null, formerName?: string|null, renamedAt?: number|null}>, nextProject: number, juniors: Record<string, {next: number, of: Record<string, number>}>}}
    */
   _state() {
     const s = this.store.identity;
@@ -195,6 +195,7 @@ export class Identity {
     if (!s.names) s.names = {};
     if (!s.projectOf) s.projectOf = {};
     if (typeof s.nextProject !== 'number') s.nextProject = 1;
+    if (!s.juniors) s.juniors = {};
     return s;
   }
 
@@ -333,7 +334,8 @@ export class Identity {
   }
 
   /**
-   * A junior's identity (WP-41), which is DERIVED AND NEVER PERSISTED.
+   * A junior's identity (WP-41): no MK number and no name of its own, only its
+   * parent's tag and the `j<n>` that `juniorNumbers` keeps for it.
    *
    * `describe()` above assigns and stores an MK number and a first name the
    * first time it sees an agent, and never reassigns either — which is exactly
@@ -344,8 +346,8 @@ export class Identity {
    * (`_usedNames` is what the picker avoids, and it never shrinks).
    *
    * So a junior wears its parent's tag with a suffix: `MK1.2j1`, `MK1.2j2`.
-   * It says whose junior it is, it is short enough for a floor label, and it
-   * writes nothing. The junior's FACE is unaffected — `appearanceFor()` is a
+   * It says whose junior it is, it is short enough for a floor label, and all
+   * it writes is that one number in its parent's bounded book. The junior's FACE is unaffected — `appearanceFor()` is a
    * pure function of the session id (§105), so a junior looks like itself and
    * like nobody else without any of this.
    *
@@ -368,12 +370,31 @@ export class Identity {
       // user's or the daemon's word for a session, and a junior is neither.
       displayName: null,
       givenName: null,
-      // A junior's identity is never persisted, so there is nothing WP-86's
+      // A junior was never given a name, so there is nothing WP-86's
       // migration could ever have renamed.
       formerName: null,
       avatar: null,
       label: mk,
     };
+  }
+
+  /**
+   * Each junior's `j<n>`, handed out once and kept in `state.json` (audit F6).
+   *
+   * The number is the junior's identity in the same sense an MK number is a
+   * session's: once `MK1.2j3` has been read, it must keep meaning that junior
+   * through siblings leaving AND through a daemon restart. So the books live in
+   * the identity block beside the MK numbers, under `juniors`, and follow the
+   * same rules — see `assignJuniorNumbers`. The MK number and the first name
+   * stay unassigned for a junior, for WP-41's reasons (above).
+   *
+   * @param {any[]} agents the snapshot's agents; juniors carry `parentId`
+   * @returns {Map<string, number>} junior agent id → its number
+   */
+  juniorNumbers(agents) {
+    const { numbers, changed } = assignJuniorNumbers(this._state().juniors, agents);
+    if (changed) this.store.touch();
+    return numbers;
   }
 
   /**
@@ -390,4 +411,67 @@ export class Identity {
     }
     return out;
   }
+}
+
+/**
+ * How many of a parent's most recent junior numbers keep their holder's id on
+ * file after the junior has left the snapshot. Older entries of juniors not on
+ * the snapshot are dropped, which bounds the book by parents rather than by
+ * every junior a week ever spawned; `next` is never dropped, so a number is
+ * never handed out twice either way.
+ */
+export const JUNIOR_BOOK_KEEP = 64;
+
+/**
+ * A JUNIOR'S NUMBER IS ITS OWN (audit F6).
+ *
+ * Each junior is numbered once, the first time it is seen, with the next number
+ * its parent has not handed out; juniors first seen together are numbered in
+ * spawn order, then id. A number is never reassigned: `next` only grows, and a
+ * junior on the snapshot is never dropped from its parent's book, so siblings
+ * leaving — before or across a restart — renumber nobody.
+ *
+ * `books` is the persisted `identity.juniors` block, `parent id → {next, of:
+ * {junior id → n}}`, mutated in place.
+ *
+ * @param {Record<string, {next:number, of:Record<string, number>}>} books
+ * @param {any[]} agents
+ * @returns {{numbers: Map<string, number>, changed: boolean}}
+ */
+export function assignJuniorNumbers(books, agents) {
+  /** @type {Map<string, any[]>} */
+  const byParent = new Map();
+  for (const a of agents) {
+    if (!a || a.subagent !== true) continue;
+    const key = String(a.parentId ?? '');
+    byParent.set(key, [...(byParent.get(key) || []), a]);
+  }
+  /** @param {any} a */
+  const spawned = (a) => (Number.isFinite(Number(a.spawnedAt)) ? Number(a.spawnedAt) : Infinity);
+  /** @type {Map<string, number>} */
+  const numbers = new Map();
+  let changed = false;
+  for (const [key, list] of byParent) {
+    if (!books[key]) {
+      books[key] = { next: 0, of: {} };
+      changed = true;
+    }
+    const book = books[key];
+    const fresh = list
+      .filter((a) => typeof book.of[String(a.id)] !== 'number')
+      .sort((x, y) => spawned(x) - spawned(y) || String(x.id).localeCompare(String(y.id)));
+    for (const a of fresh) {
+      book.next += 1;
+      book.of[String(a.id)] = book.next;
+      changed = true;
+    }
+    const here = new Set(list.map((a) => String(a.id)));
+    for (const [id, n] of Object.entries(book.of)) {
+      if (here.has(id) || n > book.next - JUNIOR_BOOK_KEEP) continue;
+      delete book.of[id];
+      changed = true;
+    }
+    for (const a of list) numbers.set(String(a.id), book.of[String(a.id)]);
+  }
+  return { numbers, changed };
 }
