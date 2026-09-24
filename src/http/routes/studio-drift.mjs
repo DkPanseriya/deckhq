@@ -79,8 +79,8 @@ export function stopMessage(cardId, spent, handoverPath) {
     'Please stop work on it now, and write your handover to',
     `${handoverPath}`,
     'with what changed, the tests you ran and their real counts, open questions, and the next step.',
-    'DeckHQ will send this session no further work until the card is moved out of Blocked or its',
-    'budget is raised. This is the only message DeckHQ will send about it.',
+    'DeckHQ will send this session no further work until the user moves the card out of Blocked.',
+    'This is the only message DeckHQ will send about it.',
   ].join('\n');
 }
 
@@ -267,7 +267,8 @@ export function registerDrift(router, ctx, helpers) {
           cardId: card.id,
           error:
             `Studio stopped sending to this session: card ${card.id} crossed its budget ` +
-            `(${flag.text}). Move the card out of Blocked, or raise its budget, to send again.`,
+            `(${flag.text}). Move the card out of Blocked to send again — raising its budget ` +
+            'first, or the next check stops it again.',
         };
       }
     }

@@ -236,7 +236,7 @@ export function register(router, ctx) {
     // crossed its budget is sent no further work, and the refusal names the
     // card and the cap rather than failing quietly. The reason is read from
     // `board.json` on every send — the stop is a file, so moving the card out
-    // of Blocked or raising its budget lifts it with nothing to reset.
+    // of Blocked lifts it with nothing to reset.
     const refusal = ctx.studioSendRefusal?.(id) || null;
     if (refusal) {
       return sendJson(res, 409, { error: refusal.error, reason: 'budget', cardId: refusal.cardId });

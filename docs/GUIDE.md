@@ -636,7 +636,8 @@ card **in progress** crosses its budget, DeckHQ does three things and no more:
 1. moves the card to **Blocked**, with a `budget` flag saying what was spent — the only column
    change DeckHQ ever makes, and the only column it can make it to;
 2. refuses to send that card's session any further work: a send answers with the card and the
-   budget named, until you move the card out of Blocked or raise its budget;
+   budget named, until you move the card out of Blocked (raise its budget first, or the next check,
+   a minute later, stops it again);
 3. sends the session **one** message asking it to stop and write its handover.
 
 **DeckHQ does not kill the session.** A session in a terminal is not DeckHQ's child and there is

@@ -74,7 +74,7 @@
   (and says which card and which budget when you try), and sends the session **one** message asking
   it to stop and write its handover. **DeckHQ does not kill the session**: it did not start the
   terminal it runs in and it cannot promise to stop it, so it does not claim to. Move the card out
-  of Blocked, or raise its budget, and sending works again. This is the only time DeckHQ itself
+  of Blocked and sending works again — raise its budget first, or the next check stops it again. This is the only time DeckHQ itself
   moves a card, and Blocked is the only place it can move one to.
 
 ## 1.5.0 — 2026-09-19
