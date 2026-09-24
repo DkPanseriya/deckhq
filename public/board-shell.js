@@ -55,6 +55,8 @@ function board() {
     body,
     projectEl: document.getElementById('board-project'),
     newCardEl: document.getElementById('board-new-card'),
+    helpEl: document.getElementById('board-help'),
+    hintEl: document.getElementById('board-hint'),
     stageEl: document.querySelector('.stage'),
     // The shell's own live region, deduped, so the board speaks where every
     // other surface speaks rather than into a second one of its own.

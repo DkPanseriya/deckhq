@@ -425,6 +425,77 @@ test('the daemon’s refusal of a save is returned to the dialog, not toasted aw
 
 // --------------------------------------------------------- with no project
 
+// ------------------------------------------------------- WP-96 · the fit
+
+test('WP-96: the board arranges itself for its width, and a stacked one follows the card', async () => {
+  const wide = build();
+  wide.body.clientWidth = 1600;
+  wide.ui.open();
+  await wide.ui.refresh();
+  assert.equal(wide.body.querySelector('.board-scroll').getAttribute('data-arrange'), 'row');
+
+  const it = build();
+  it.body.clientWidth = 600;
+  it.ui.open();
+  await it.ui.refresh();
+  const scroller = it.body.querySelector('.board-scroll');
+  assert.equal(scroller.getAttribute('data-arrange'), 'stack');
+  const pickedCol = () =>
+    it.body
+      .querySelectorAll('.board-col')
+      .filter((c) => c.classList.contains('is-picked'))
+      .map((c) => c.getAttribute('data-column'));
+  // The first column with a card in it is the one in view.
+  assert.deepEqual(pickedCol(), ['backlog']);
+
+  // The picker shows another column in place — no repaint, no request.
+  const before = it.calls.length;
+  it.body.querySelector('.board-pick[data-column="blocked"]').fire('click');
+  assert.deepEqual(pickedCol(), ['blocked']);
+  assert.equal(
+    it.body.querySelector('.board-pick[data-column="blocked"]').getAttribute('aria-pressed'),
+    'true',
+  );
+  assert.equal(it.calls.length, before);
+
+  // A keyboard move on a stacked board takes the view with the card.
+  cardEl(it, 'c4').fire('keydown', { key: '[' });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(pickedCol(), ['done']);
+});
+
+test('WP-96: the bar shows the path’s last two segments, and the hint is behind “?”', async () => {
+  const projectEl = new StubNode('p');
+  const helpEl = new StubNode('button');
+  const hintEl = new StubNode('p');
+  hintEl.hidden = true;
+  const ui = createBoardUI({
+    host: new StubNode('section'),
+    body: new StubNode('div'),
+    projectEl,
+    helpEl,
+    hintEl,
+    document: doc,
+    editor: { open: () => {}, close: () => {} },
+    getProject: () => PROJECT,
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ project: '/home/me/code/orbital-api', enabled: true, studio: {} }),
+    }),
+  });
+  ui.open();
+  await ui.refresh();
+  assert.equal(projectEl.textContent, '…/code/orbital-api');
+  assert.equal(projectEl.getAttribute('title'), '/home/me/code/orbital-api');
+  helpEl.fire('click');
+  assert.equal(hintEl.hidden, false);
+  assert.equal(helpEl.getAttribute('aria-expanded'), 'true');
+  helpEl.fire('click');
+  assert.equal(hintEl.hidden, true);
+  assert.equal(helpEl.getAttribute('aria-expanded'), 'false');
+});
+
 test('no project in view is said plainly, and nothing is fetched', async () => {
   const it = build({ project: null });
   it.ui.open();

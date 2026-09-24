@@ -312,9 +312,20 @@
           </div>
           <div class="board-bar">
             <p class="board-project" id="board-project"></p>
+            <button
+              type="button"
+              class="btn board-help"
+              id="board-help"
+              aria-expanded="false"
+              aria-controls="board-hint"
+              aria-label="How to move a card"
+              title="How to move a card"
+            >
+              ?
+            </button>
             <button type="button" class="btn" id="board-new-card">New card</button>
           </div>
-          <p class="board-hint" id="board-hint">
+          <p class="board-hint" id="board-hint" hidden>
             Drag a card between columns, or focus one and press
             <kbd>[</kbd> and <kbd>]</kbd> — the arrow keys do the same. <kbd>Enter</kbd> opens it.
           </p>

@@ -42,11 +42,15 @@ import { createCardEditor } from './board-card.js';
 import {
   NO_PROJECT_LINE,
   READY_COLUMN,
+  arrangeColumns,
   cardMessage,
+  cardsByColumn,
   columnLabel,
   renderBoardColumns,
   renderBoardTable,
+  renderColumnPicker,
   renderEmptyBoard,
+  shortPath,
   stepColumn,
 } from './board-view.js';
 import { renderMilestones } from './board-track.js';
@@ -64,6 +68,12 @@ import { renderMilestones } from './board-track.js';
  * *unverified*.
  */
 export const HIRE_RUNTIME = 'claude-code';
+
+/**
+ * `.board-scroll`'s own side padding, twice — what the columns do not get of
+ * the body's width. The stylesheet's `0.75rem` at the root's 16 px.
+ */
+const SCROLL_GUTTER_PX = 24;
 
 /** The keys that move a card one column, and which way each goes. */
 const MOVE_KEYS = /** @type {Record<string, 1|-1>} */ ({
@@ -95,7 +105,8 @@ const MOVE_KEYS = /** @type {Record<string, 1|-1>} */ ({
  *          getProject?:() => any, onSelect?:(id:string) => void,
  *          notify?:(text:string, opts?:{isError?:boolean}) => void,
  *          announce?:(text:string) => void,
- *          drawFaces?:(root:any) => void}} opts
+ *          drawFaces?:(root:any) => void, helpEl?:any, hintEl?:any,
+ *          ResizeObserver?:any}} opts
  */
 export function createBoardUI(opts) {
   const doc = opts.document || globalThis.document;
@@ -119,6 +130,10 @@ export function createBoardUI(opts) {
   let focused = /** @type {string|null} */ (null);
   /** The desk to light on the way out (§5.4). */
   let pendingSelection = /** @type {string|null} */ (null);
+  /** The column a stacked board shows (WP-96). */
+  let picked = /** @type {string|null} */ (null);
+  /** Watches the board's width while it is open, so it re-arranges itself. */
+  let observer = /** @type {any} */ (null);
 
   const editor =
     opts.editor ||
@@ -205,7 +220,10 @@ export function createBoardUI(opts) {
   function paint() {
     opts.body.textContent = '';
     if (opts.projectEl) {
-      opts.projectEl.textContent = snapshot?.project ? String(snapshot.project) : '';
+      // WP-96. The last two segments on the bar, the whole path on hover.
+      const full = snapshot?.project ? String(snapshot.project) : '';
+      opts.projectEl.textContent = shortPath(full);
+      opts.projectEl.setAttribute?.('title', full);
     }
     if (opts.newCardEl) opts.newCardEl.hidden = !snapshot?.enabled;
 
@@ -248,7 +266,13 @@ export function createBoardUI(opts) {
       // that has not answered, neither is drawn rather than drawn empty.
       const header = renderMilestones(tracking?.milestones, doc);
       if (header) scroller.appendChild(header);
-      scroller.appendChild(renderBoardColumns(board, { agentIdFor, trackingFor }, doc));
+      const groups = cardsByColumn(board);
+      if (!groups.some((g) => g.id === picked)) {
+        picked = (groups.find((g) => g.cards.length) || groups[0]).id;
+      }
+      scroller.appendChild(renderColumnPicker(board, picked, doc));
+      scroller.appendChild(renderBoardColumns(board, { agentIdFor, trackingFor, picked }, doc));
+      arrange(scroller);
     }
     // The table is drawn even for an empty board: it is the accessible reading
     // of the surface, and a reading that disappeared when the answer was "none"
@@ -258,10 +282,51 @@ export function createBoardUI(opts) {
 
     for (const el of opts.body.querySelectorAll('.board-card')) bindCard(el);
     for (const drop of opts.body.querySelectorAll('.board-drop')) bindDrop(drop);
+    for (const pick of opts.body.querySelectorAll('.board-pick')) {
+      bindDrop(pick);
+      pick.addEventListener('click', () => pickColumn(pick.getAttribute('data-column')));
+    }
     opts.drawFaces?.(opts.body);
     if (focused) {
       const el = opts.body.querySelector(`.board-card[data-card="${cssId(focused)}"]`);
       el?.focus?.();
+    }
+  }
+
+  /**
+   * WP-96. Lay the painted board out for the width it has — `arrangeColumns()`
+   * decides, this only measures and writes the answer where the stylesheet
+   * reads it. Called on every paint and whenever the board changes width (the
+   * panel opening beside it, the window resizing), and it never repaints: a
+   * card being dragged when the panel opens is still the same element.
+   * @param {any} [scroller]
+   */
+  function arrange(scroller = opts.body.querySelector?.('.board-scroll')) {
+    if (!scroller) return;
+    const groups = cardsByColumn(boardNow());
+    const empty = groups.filter((g) => g.cards.length === 0).length;
+    const width = Number(opts.body.clientWidth || 0) - SCROLL_GUTTER_PX;
+    const layout = arrangeColumns(width, groups.length, empty);
+    if (scroller.getAttribute?.('data-arrange') !== layout.mode) {
+      scroller.setAttribute('data-arrange', layout.mode);
+    }
+    scroller.style?.setProperty?.('--board-per-row', String(layout.perRow));
+  }
+
+  /**
+   * Show one column on a stacked board. In place, not a repaint, so the
+   * picker button that was pressed keeps the focus.
+   * @param {string|null} column
+   */
+  function pickColumn(column) {
+    if (!column) return;
+    picked = column;
+    for (const col of opts.body.querySelectorAll('.board-col')) {
+      if (col.getAttribute('data-column') === column) col.classList?.add?.('is-picked');
+      else col.classList?.remove?.('is-picked');
+    }
+    for (const pick of opts.body.querySelectorAll('.board-pick')) {
+      pick.setAttribute('aria-pressed', String(pick.getAttribute('data-column') === column));
     }
   }
 
@@ -287,6 +352,9 @@ export function createBoardUI(opts) {
     // Optimistic, and the previous column is held so the revert is exact.
     card.column = column;
     focused = cardId;
+    // A stacked board follows the card, so the card the keyboard just moved
+    // is still on screen to be moved again.
+    picked = column;
     paint();
     opts.announce?.(`${card.title || cardId} moved to ${columnLabel(column)}.`);
 
@@ -303,6 +371,7 @@ export function createBoardUI(opts) {
       // THE REVERT. The card goes back where it was and the daemon's own
       // sentence is what the user reads — the board never invents a reason.
       card.column = was;
+      picked = was;
       paint();
       const line = body?.line == null ? '' : ` (line ${body.line})`;
       say(`Studio: ${err.message}${line}`, { isError: true });
@@ -542,6 +611,11 @@ export function createBoardUI(opts) {
     opts.host.hidden = false;
     paint();
     opts.host.focus?.();
+    const Observer = opts.ResizeObserver || globalThis.ResizeObserver;
+    if (Observer && !observer) {
+      observer = new Observer(() => arrange());
+      observer.observe(opts.body);
+    }
     void load();
     opts.announce?.('The Studio board. Six columns, oldest first inside each.');
   }
@@ -551,6 +625,8 @@ export function createBoardUI(opts) {
     open = false;
     opts.stageEl?.classList?.remove?.('is-studio-board');
     opts.host.hidden = true;
+    observer?.disconnect?.();
+    observer = null;
     // The body, not the host: the host carries the chrome, and emptying it
     // would delete the ✕ that was just clicked (WP-84, §156.1).
     opts.body.textContent = '';
@@ -567,6 +643,13 @@ export function createBoardUI(opts) {
 
   wireSurfaceControls(opts.host, () => closeBoard());
   opts.newCardEl?.addEventListener?.('click', () => editor.open({ roles: rolesNow() }));
+  // WP-96. The how-to sentence is behind a `?`, open when asked for.
+  opts.helpEl?.addEventListener?.('click', () => {
+    if (!opts.hintEl) return;
+    const show = Boolean(opts.hintEl.hidden);
+    opts.hintEl.hidden = !show;
+    opts.helpEl.setAttribute('aria-expanded', String(show));
+  });
 
   return {
     open: openBoard,
