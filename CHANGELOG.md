@@ -6,6 +6,21 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Working subagents sit at the desks in their project room, not in your office.** With several
+  sessions running, the desks could be empty and everyone shown working in the office. Subagents
+  were placed beside their parent session wherever it was, so when the parent finished its turn and
+  sat on the office sofa to wait for review, its thirteen still-working subagents stood round the
+  sofa. Each session is now placed by its own state. A working subagent takes a desk in its
+  parent's project room: beside the parent's desk when the parent is at one, and its own desk when
+  it is not. Three or more work in the usual arc, cabled to the room's first free desk, with the
+  parent's name on that desk and the `+N` chip beside it. A subagent that has finished rests in the
+  lounge, and one that needs your input waits in your office. A project with a working session in
+  it always has a room, even when that session is a subagent running in a worktree with no session
+  of its own. A benched session stays in the lounge even when it is working again, because the
+  bench is yours to lift.
+
 ## 1.6.0 — 2026-09-24
 
 ### Highlights
