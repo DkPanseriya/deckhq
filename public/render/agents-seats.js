@@ -517,6 +517,9 @@ function seatAround(desk, room, parentId, ordered, away, result) {
     const { drawn } = crewSplit(ordered.length);
     const arc = crewArc(desk, room, drawn, deskFootprints(room));
     if (arc.fits) {
+      // Every member's id, drawn or not, so the chip can count the whole crew
+      // (audit F10). One array, shared by every seat of this crew.
+      const crewIds = ordered.map((j) => String(j.id));
       for (let i = 0; i < drawn; i++) {
         result.set(ordered[i].id, {
           ...arc.seats[i],
@@ -527,6 +530,7 @@ function seatAround(desk, room, parentId, ordered, away, result) {
           crewOf: parentId,
           crewAnchor: { x: desk.x, y: desk.y, angle },
           crewTotal: ordered.length,
+          crewIds,
           ...(away ? { crewAway: true } : {}),
         });
       }

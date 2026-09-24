@@ -571,6 +571,29 @@ export function crewSplit(n) {
   return { drawn, overflow: count - drawn };
 }
 
+/**
+ * WHAT THE `+N` CHIP SAYS (audit F10). Two numbers, each over one population:
+ *
+ *   - `+N` is the members at the desk that are NOT drawn — `total - drawn`;
+ *   - `W/T working` (reduced motion only, where the pulses that would say it are
+ *     off) is over the WHOLE crew, drawn or not. It used to count only the drawn
+ *     twelve over a total of thirteen, which read "6/13" while seven worked.
+ *
+ * @param {number} total every junior at the desk
+ * @param {number} drawn how many of them have a body on the floor
+ * @param {number|null} working how many of the whole crew are working, or null
+ *   when the chip does not say
+ * @returns {string} empty when there is nothing to say
+ */
+export function crewChipText(total, drawn, working) {
+  const t = Math.max(0, Math.floor(total) || 0);
+  const over = t - Math.min(t, Math.max(0, Math.floor(drawn) || 0));
+  const plus = over > 0 ? `+${over}` : '';
+  if (working == null) return plus;
+  const w = Math.min(t, Math.max(0, Math.floor(working) || 0));
+  return plus ? `${plus} · ${w}/${t} working` : `${w}/${t} working`;
+}
+
 // ----------------------------------------------------- the scaling law (§2)
 //
 // Seven lengths, and every one of them is set by a person: the chord between two
