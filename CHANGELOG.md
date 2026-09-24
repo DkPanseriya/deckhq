@@ -20,6 +20,23 @@
   it always has a room, even when that session is a subagent running in a worktree with no session
   of its own. A benched session stays in the lounge even when it is working again, because the
   bench is yours to lift.
+- **Subagents running in git worktrees form one crew.** A subagent started in its own worktree
+  reports that worktree as its project, so five subagents of one session could be five crews of one
+  and the arc never formed. They are now grouped under the parent's project, and they still share
+  one room when the parent is not on the floor.
+- **"At desk" counts the sessions at desks.** The header counted every subagent as at a desk,
+  including finished ones and ones shown in your office. It now counts exactly the working and
+  stalled sessions the floor seats at a desk, subagents included, and never a finished, benched or
+  waiting one.
+- **A subagent keeps its name.** Subagent names were numbered by position among the ones running,
+  so when one finished, the others after it were renamed and a name you had just read pointed at a
+  different subagent. Each subagent is now numbered once, when it first appears, and keeps that
+  number.
+- **The crew chip counts one crew.** With reduced motion on, the chip counted working subagents
+  among the twelve drawn but divided by the whole crew, so it read "6/13 working" while seven
+  were. Both numbers are now over the whole crew, and `+N` is only the subagents not drawn.
+- **Source files no longer contain raw NUL bytes.** Four files used one as a separator, which made
+  search tools treat them as binary. They use an escape now, and a test keeps it that way.
 
 ## 1.6.0 — 2026-09-24
 
