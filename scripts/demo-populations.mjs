@@ -295,7 +295,48 @@ export const POPULATIONS = {
     ['orbital-api', 'Fixtures for the re-run assertion', 'working', 0.8, 1.3],
   ],
   reference: referenceSessions,
+  /** A heavy machine: 137 sessions in 40 repos, plus a 13-member crew. */
+  large: largeSessions,
 };
+
+/**
+ * A HEAVY MACHINE: the `demo` and `reference` floors together, plus fifteen more
+ * repos and one for a crew, 137 sessions across 40 projects. With `WAITING_CREW_JUNIORS` on its
+ * working crew parent that is 150 agents, which is the size of floor a label
+ * or a plate line has to survive at a laptop-sized window.
+ *
+ * Built, not listed, and dealt by index like `reference`: 41 rows over the new
+ * repos, working, waiting, gone quiet, ended within the week and benched.
+ */
+function largeSessions() {
+  const extra = [
+    'payments-ledger',
+    'feature-flags',
+    'email-renderer',
+    'image-resizer',
+    'geo-service',
+    'chat-widget',
+    'admin-portal',
+    'pricing-engine',
+    'invoice-pdf',
+    'audit-trail',
+    'webhooks-relay',
+    'search-ui',
+    'onboarding-bot',
+    'i18n-strings',
+    'crash-reporter',
+  ];
+  const deal = ['working', 'for_review', 'idle', 'benched', 'needs_input', 'idle', 'working'];
+  /** @type {Array<[string, string, string, number, number]>} */
+  const rows = [...DEMO_SESSIONS, ...referenceSessions()];
+  rows.push(['job-board', WAITING_CREW_PARENT, 'working', 0.05, 2.4]);
+  for (let n = 0; n < 40; n++) {
+    const state = n === 11 ? 'stalled' : deal[n % deal.length];
+    const hours = state === 'idle' ? 3 + ((n * 11) % 90) : state === 'benched' ? 30 + n * 9 : 1;
+    rows.push([extra[n % extra.length], `Ticket ${n + 1}: ${state} work`, state, hours, 0.3]);
+  }
+  return rows;
+}
 
 /**
  * The project the `board` population enables Studio on, or null (WP-69).

@@ -81,20 +81,24 @@ export function plateScaleFor(worldScale) {
  *
  * Every other item is tried at its natural position, then at up to
  * `MAX_LABEL_OFFSET_ATTEMPTS` positions each one label-height further down;
- * if none of those clear every already-placed label, it is dropped rather
- * than drawn overlapping — the work order is explicit that a missing label
- * beats an unreadable smear.
+ * a `keep` item (a live agent's name, since the 24 September audit) then tries
+ * the sideways spots in `LABEL_SPOTS` too. If none of those clear every
+ * already-placed box, it is dropped rather than drawn overlapping — a missing
+ * label beats an unreadable smear, and on a floor that is not full to the
+ * walls a live name always finds a spot (`floor-labels.test.mjs`).
  *
- * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean}[]} items
+ * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
+ *   pin?:boolean, alts?:number[][], up?:number}[]} items `up`: the offsetY that
+ *   puts this label over its figure's head instead of under its feet
  *   `x,y,w,h`: the label's un-offset screen-space box (top-left + size).
- * @returns {Map<string, {offsetY:number}|null>} per-id result; `null` means
- *   "do not draw this label this frame".
+ * @returns {Map<string, {offsetY:number, offsetX?:number}|null>} per-id
+ *   result; `null` means "do not draw this label this frame".
  */
 /**
  * Trim text with an ellipsis until it fits maxW at the context's current
  * font. Binary search rather than character-by-character, so a long room name
  * costs a handful of measureText calls per frame, not dozens.
- * @param {CanvasRenderingContext2D} ctx
+ * @param {{measureText:(t:string)=>{width:number}}} ctx
  * @param {string} text
  * @param {number} maxW
  */
@@ -392,13 +396,25 @@ export function plateLinesFor(room, snapshot, plan) {
   return platePlanFor(room, snapshot, plan).lines;
 }
 
-export function resolveLabelCollisions(items) {
+/**
+ * See the note above `ellipsise` for the rule; `bounds` is the building's
+ * screen rect, which no name may leave sideways or upwards.
+ * @param {any[]} items
+ * @param {{x:number, y:number, w:number, h:number}} [bounds]
+ * @returns {Map<string, {offsetY:number, offsetX?:number}|null>}
+ */
+export function resolveLabelCollisions(items, bounds) {
   /** @type {{x:number,y:number,w:number,h:number}[]} */
   const placed = [];
   const result = new Map();
 
   const overlaps = (a, b) =>
     a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  // `bounds`, when given, is the building on screen: a name is never centred past
+  // its side walls or over its top one (a sideways step from a figure on the
+  // west wall used to hang the name off the floor and off the canvas).
+  const inside = (a, b) =>
+    a.x + a.w / 2 >= b.x && a.x + a.w / 2 <= b.x + b.w && a.y + a.h / 2 >= b.y;
 
   // `pin` is an exemption and `keep` is only a priority. Making needs-you
   // labels exempt collapsed in the case that matters most: every agent in the
@@ -415,21 +431,68 @@ export function resolveLabelCollisions(items) {
   }
 
   for (const it of [...kept, ...rest]) {
-    let chosenOffset = null;
-    for (let attempt = 0; attempt <= MAX_LABEL_OFFSET_ATTEMPTS; attempt++) {
-      const offsetY = attempt * it.h;
-      const rect = { x: it.x, y: it.y + offsetY, w: it.w, h: it.h };
-      if (!placed.some((p) => overlaps(rect, p))) {
-        chosenOffset = offsetY;
-        placed.push(rect);
-        break;
+    let chosen = null;
+    // A kept label (a live agent's) may also step sideways before it gives up;
+    // one in the lounge gets the straight-down attempts and is then dropped.
+    const spots = it.keep ? LABEL_SPOTS : LABEL_SPOTS_DOWN;
+    // `alts`: other figures the same label may hang under instead, as offsets
+    // from this one — a crew's `Explore ×3` belongs to any of its three.
+    for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
+      for (const [fx, fy] of spots) {
+        if (fy === LABEL_UP && typeof it.up !== 'number') continue;
+        const offsetX = bx + fx * it.w;
+        const offsetY = by + (fy === LABEL_UP ? it.up : fy * it.h);
+        const rect = { x: it.x + offsetX, y: it.y + offsetY, w: it.w, h: it.h };
+        if (bounds && !inside(rect, bounds)) continue;
+        if (!placed.some((p) => overlaps(rect, p))) {
+          chosen = offsetX === 0 ? { offsetY } : { offsetY, offsetX };
+          placed.push(rect);
+          break;
+        }
       }
+      if (chosen) break;
     }
-    result.set(it.id, chosenOffset === null ? null : { offsetY: chosenOffset });
+    result.set(it.id, chosen);
   }
 
   return result;
 }
+
+/**
+ * WHERE A LABEL MAY GO, IN THE ORDER IT IS TRIED (audit F1/F7), as fractions of
+ * its own width and height. Straight down first — the old rule, and every label
+ * that fitted before lands exactly where it did — then half a label to either
+ * side at each of those depths, then a full step aside. A live agent's name is
+ * never dropped while one of these is clear; only a lounge label is, and only
+ * after the straight-down attempts.
+ */
+const LABEL_SPOTS_DOWN = Object.freeze(
+  Array.from({ length: MAX_LABEL_OFFSET_ATTEMPTS + 1 }, (_, i) => Object.freeze([0, i])),
+);
+/**
+ * "Over the head" rather than a depth: the item's own `up`, the offset that
+ * sets the label clear above its icon-and-badge slot. Tried after every near
+ * spot below the feet and before any far one, because a name three rows down
+ * past a room's plate reads as a label for whoever is standing there.
+ */
+const LABEL_UP = 1e9;
+const LABEL_SPOTS = Object.freeze([
+  ...LABEL_SPOTS_DOWN,
+  ...[0, 1, 2].flatMap((fy) => [
+    [-0.6, fy],
+    [0.6, fy],
+  ]),
+  [0, LABEL_UP],
+  [-0.6, LABEL_UP],
+  [0.6, LABEL_UP],
+  [0, 3],
+  ...[0, 1, 2, 3].flatMap((fy) => [
+    [-1.15, fy],
+    [1.15, fy],
+  ]),
+  [-0.6, 3],
+  [0.6, 3],
+]);
 
 /**
  * WP-60. WHICH WAITING BADGES MAY BE DRAWN, AND WHAT STANDS FOR THE ONES THAT
@@ -558,9 +621,124 @@ export const PLATE_ROWS = Object.freeze([
 /** How far a row's descenders reach below its baseline, for the band fit. */
 const PLATE_DESCENT = 3;
 
+/**
+ * THE SMALLEST A PLATE ROW IS EVER SET (audit F1/F8). A plate whose band is
+ * too short for its rows at their stated size is set tighter, down to these,
+ * before a row is dropped: 11 px is §3.8's floor and the name label's, so a
+ * plate at its tightest is still read at the size every name on the floor is.
+ */
+export const PLATE_MIN_ROWS = Object.freeze([
+  { px: 11, lead: 11 }, // 0 title
+  { px: 11.5, lead: 12 }, // 1 hero
+  { px: 11, lead: 11 }, // 2 doing
+  { px: 11, lead: 11 }, // 3 tertiary
+]);
+const PLATE_MIN_DESCENT = 2.5;
+
+/**
+ * THE COLLAPSE ORDER, WRITTEN DOWN (audit F8): which rows a plate keeps, from
+ * most rows to fewest. The title and the hero are never dropped. When the band
+ * cannot hold all four, the doing line goes first — each figure already says
+ * what it is doing in its own bubble — and the tokens line, which is said
+ * nowhere else on the floor, goes last. So a band with room for two lines under
+ * the title carries the hero and the tokens.
+ */
+export const PLATE_KEEP_ORDER = Object.freeze([
+  Object.freeze([0, 1, 2, 3]),
+  Object.freeze([0, 1, 3]),
+  Object.freeze([0, 1]),
+]);
+
 /** The state dot's radius, and the gap it leaves before the hero's first glyph. */
 const PLATE_DOT_R = 2.6;
 const PLATE_DOT_GAP = 9;
+
+/**
+ * WHERE EVERY ROW OF ONE PLATE GOES, without drawing anything, so the frame's
+ * label pass can treat the plate as an obstacle before a single name is set.
+ *
+ * The rows are chosen by `PLATE_KEEP_ORDER` against the band's height in px.
+ * A set of rows that does not fit at its stated size is set tighter, towards
+ * `PLATE_MIN_ROWS`, before the next set down is tried; the last set — title
+ * and hero — is drawn at its tightest whatever the band says, because it is
+ * never dropped. Across, a hero too wide for the plate loses its `· oldest`
+ * tail, then collapses to the state dot and its count.
+ *
+ * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
+ * @param {any} room
+ * @param {PlatePlan} plate
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ */
+export function layoutPlate(ctx, room, plate, camera) {
+  const topLeft = worldToScreen({ x: room.x, y: room.y }, camera);
+  const worldScale = camera.zoom * camera.U;
+  const roomW = room.w * worldScale;
+  const k = plateScaleFor(worldScale);
+  // The east end of the band belongs to the in-room "+" (`PLUS_CLEAR_U`).
+  const plusClear = room.kind === 'project' ? PLUS_CLEAR_U * worldScale : 0;
+  const maxW = Math.max(60 * k, roomW - 6 * k - Math.max(6 * k, plusClear));
+  const x = topLeft.x + 6 * k;
+  const bandPx = (Number(room.plateBand) || PLATE_BAND) * worldScale;
+  const present = (i) => i < 2 || !!plate.lines[i];
+
+  let keep = PLATE_KEEP_ORDER[PLATE_KEEP_ORDER.length - 1];
+  let t = 1;
+  for (const set of PLATE_KEEP_ORDER) {
+    const rows = set.filter(present);
+    const full = rows.reduce((s, i) => s + PLATE_ROWS[i].lead * k, PLATE_DESCENT * k);
+    const tight = rows.reduce((s, i) => s + PLATE_MIN_ROWS[i].lead, PLATE_MIN_DESCENT);
+    if (full <= bandPx) {
+      keep = set;
+      t = 0;
+      break;
+    }
+    if (tight <= bandPx) {
+      keep = set;
+      t = full > tight ? (full - bandPx) / (full - tight) : 0;
+      break;
+    }
+  }
+  const size = (i, key) => {
+    const stated = PLATE_ROWS[i][key] * k;
+    return stated + (Math.min(stated, PLATE_MIN_ROWS[i][key]) - stated) * t;
+  };
+  const descent = PLATE_DESCENT * k + (PLATE_MIN_DESCENT - PLATE_DESCENT * k) * t;
+
+  const rows = [];
+  let widest = 0;
+  let cursor = 0;
+  let top = null;
+  let bottom = topLeft.y;
+  for (const i of keep) {
+    let text = plate.lines[i] || '';
+    if (!text) continue;
+    const row = PLATE_ROWS[i];
+    const px = size(i, 'px');
+    cursor += size(i, 'lead');
+    const y = topLeft.y + cursor;
+    const font = `${row.weight} ${px.toFixed(2)}px ${row.mono ? FONT_MONO : FONT_UI}`;
+    ctx.font = font;
+    const dotted = i === 1 && plate.dot ? PLATE_DOT_GAP * k : 0;
+    // The hero shortens rather than truncates: a cut number is a wrong number.
+    if (i === 1 && ctx.measureText(text).width + dotted > maxW) text = plate.heroHead;
+    if (i === 1 && dotted && ctx.measureText(text).width + dotted > maxW) {
+      const count = /^\d+/.exec(text);
+      if (count) text = count[0];
+    }
+    if (i === 2 && plate.doing.length > 1 && ctx.measureText(text).width > maxW) {
+      text = plate.doing[0];
+    }
+    text = ellipsise(ctx, text, maxW - dotted);
+    if (!text) continue;
+    const w = ctx.measureText(text).width + dotted;
+    widest = Math.max(widest, w);
+    if (top === null) top = y - px;
+    bottom = y + descent;
+    rows.push({ i, text, font, x, y, px, dotted, halo: row.halo * (px / row.px) });
+  }
+  const y0 = top ?? topLeft.y;
+  return { rows, k, rect: { x, y: y0, w: widest, h: Math.max(0, bottom - y0) } };
+}
 
 export class SceneLabels extends SceneCamera {
   /**
@@ -576,51 +754,23 @@ export class SceneLabels extends SceneCamera {
    * near-white, so the brightest thing behind a plate is now exactly the
    * brightest surface a room is allowed (`themes.js`).
    *
-   * THE PLATE COLLAPSES FROM THE BOTTOM, IN RANK ORDER. `PLATE_BAND` is the
-   * furniture-free strip across the top of every room, and §7's "a label never
-   * covers furniture" holds only while the plate stays inside it. So the band's
-   * height in pixels decides how many rows are drawn: the tertiary line goes
-   * first, then the doing line, and a plate too narrow for its hero drops the
-   * `· oldest …` tail rather than ellipsising a number. The title and the hero
-   * are never dropped — between them they are the whole plate.
+   * Where each row goes is `layoutPlate`'s: the band decides how many rows are
+   * drawn, in `PLATE_KEEP_ORDER`, and the title and the hero are never dropped.
+   * `layout` is the one the frame already measured for its label pass; a caller
+   * without one gets it measured here.
    */
-  _drawRoomPlate(room, camera) {
+  _drawRoomPlate(room, camera, layout) {
     const ctx = this.ctx;
-    const topLeft = worldToScreen({ x: room.x, y: room.y }, camera);
     const plate = this._platePlanFor(room);
-    // A plate belongs to its room and must not spill over the corridor into
-    // the neighbour: clamp it to the room's own width and ellipsise instead.
-    const worldScale = camera.zoom * camera.U;
-    const roomW = room.w * worldScale;
-    // Every measurement below is stated at `PLATE_BASE_SCALE` and multiplied
-    // by this, so the plate keeps its proportion to the door it is on.
-    const k = plateScaleFor(worldScale);
-    // The plate's own half of the band. The east end of it belongs to the
-    // in-room "+" (`PLUS_CLEAR_U`), which stands in this same strip and was
-    // being written straight through at 3x on `orbital-api` — a room's chrome
-    // colliding with a room's chrome, which no furniture rule could have
-    // caught because neither of them is furniture.
-    const plusClear = room.kind === 'project' ? PLUS_CLEAR_U * worldScale : 0;
-    const maxW = Math.max(60 * k, roomW - 6 * k - Math.max(6 * k, plusClear));
-    const x = topLeft.x + 6 * k;
-    const bandPx = (Number(room.plateBand) || PLATE_BAND) * worldScale;
+    const laid = layout || layoutPlate(ctx, room, plate, camera);
+    const k = laid.k;
 
     ctx.save();
-    // The 2D context is shared with the rig, which can leave textAlign at
-    // 'center' after drawing a name label or a badge. Text state is global,
-    // so anything that draws text must assert what it needs rather than
-    // inherit it.
+    // Text state is global and the rig can leave textAlign at 'center'.
     ctx.textAlign = 'left';
     ctx.textBaseline = 'alphabetic';
-
-    // A halo, not a card.
-    //
-    // The ink already clears 4.5:1 against every floor tone, so this is not a
-    // contrast problem — it is a PATTERN problem. Over the herringbone in the
-    // office and the lounge, small glyphs sit on top of high-frequency plank
-    // seams and simply disappear into them. A pale outline separates the
-    // letterforms from whatever is behind them without putting a box back on
-    // the floor, which is what the user asked to be rid of.
+    // A halo, not a card: a pale outline separates the letterforms from the
+    // herringbone seams behind them without putting a box back on the floor.
     ctx.lineJoin = 'round';
     ctx.miterLimit = 2;
 
@@ -630,71 +780,34 @@ export class SceneLabels extends SceneCamera {
       PALETTE.plateInkSecondary,
       PALETTE.plateInkTertiary,
     ];
-    let widest = 0;
-    let cursor = 0;
-    let lastY = topLeft.y + PLATE_ROWS[0].lead * k;
-    for (let i = 0; i < PLATE_ROWS.length; i++) {
-      const row = PLATE_ROWS[i];
-      let text = plate.lines[i] || '';
-      // An empty slot takes no space: a room with nothing running closes the
-      // gap rather than leaving a hole where its doing line would have been.
-      if (!text) continue;
-      const baseline = cursor + row.lead;
-      // The band is the contract (§7). A row whose descenders would leave it
-      // is not drawn, and every row below it goes with it — the ranking above
-      // is exactly the order they are worth dropping in.
-      if (i > 0 && (baseline + PLATE_DESCENT) * k > bandPx) break;
-      const y = topLeft.y + baseline * k;
-      ctx.font = `${row.weight} ${(row.px * k).toFixed(2)}px ${row.mono ? FONT_MONO : FONT_UI}`;
-      // The hero is the one line that shortens rather than truncates: `2 need
-      // you · oldest 1…` is a worse sentence than `2 need you`, and a cut
-      // number is a wrong number.
-      const dotted = i === 1 && plate.dot ? PLATE_DOT_GAP * k : 0;
-      if (i === 1 && ctx.measureText(text).width + dotted > maxW) text = plate.heroHead;
-      // Two people doing two things is one entry too many for a narrow door.
-      if (i === 2 && plate.doing.length > 1 && ctx.measureText(text).width > maxW) {
-        text = plate.doing[0];
-      }
-      text = ellipsise(ctx, text, maxW - dotted);
-      if (!text) continue;
-      if (dotted) {
-        // State is never colour alone on this floor (`style.css`, the header's
-        // own breakdown): the dot is the state, the words beside it say the
-        // same thing, and the ink they are set in is the ink everything else
-        // on the plate uses. The dot clears 3:1 against the plate's ground and
-        // the text clears 4.5:1 — the split `10-INTERIOR-DESIGN.md` §1.3 had
-        // to make on the characters, made again here.
+    for (const row of laid.rows) {
+      ctx.font = row.font;
+      if (row.dotted) {
+        // State is never colour alone on this floor: the dot is the state, the
+        // words beside it say the same thing.
+        const cy = row.y - row.px / 3;
         ctx.beginPath();
-        ctx.arc(x + PLATE_DOT_R * k, y - (row.px / 3) * k, PLATE_DOT_R * k, 0, Math.PI * 2);
+        ctx.arc(row.x + PLATE_DOT_R * k, cy, PLATE_DOT_R * k, 0, Math.PI * 2);
         ctx.fillStyle = PALETTE.plateHalo;
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(x + PLATE_DOT_R * k, y - (row.px / 3) * k, PLATE_DOT_R * 0.72 * k, 0, Math.PI * 2);
+        ctx.arc(row.x + PLATE_DOT_R * k, cy, PLATE_DOT_R * 0.72 * k, 0, Math.PI * 2);
         ctx.fillStyle = plate.dot;
         ctx.fill();
       }
       ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = row.halo * k;
-      ctx.strokeText(text, x + dotted, y);
-      ctx.fillStyle = ink[i];
-      ctx.fillText(text, x + dotted, y);
-      widest = Math.max(widest, ctx.measureText(text).width + dotted);
-      cursor = baseline;
-      lastY = y;
+      ctx.lineWidth = row.halo;
+      ctx.strokeText(row.text, row.x + row.dotted, row.y);
+      ctx.fillStyle = ink[row.i];
+      ctx.fillText(row.text, row.x + row.dotted, row.y);
     }
     ctx.restore();
 
-    // No card is drawn (above), but a room plate is still click-to-filter
-    // (VISUAL-SPEC §8) — the hit rect wraps the text itself rather than a
-    // drawn plate. Every line that was drawn is inside it: a plate you can
-    // read is a plate you can click. `tooltip` rides along so the hover can
-    // say what the plate stopped saying (WP-81).
-    const top = topLeft.y + (PLATE_ROWS[0].lead - 11) * k;
+    // No card is drawn, but a room plate is still click-to-filter (VISUAL-SPEC
+    // §8): the hit rect wraps every line that was drawn, and `tooltip` rides
+    // along so the hover can say what the plate does not (WP-81).
     this._plateRects.push({
-      x,
-      y: top,
-      w: widest,
-      h: lastY + 4 * k - top,
+      ...laid.rect,
       kind: room.kind === 'project' ? 'project' : room.kind,
       id: room.id,
       tooltip: plate.tooltip,

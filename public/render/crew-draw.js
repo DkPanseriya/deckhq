@@ -48,7 +48,12 @@ import { sansFont } from './rig-metrics.js';
 const CABLE_W_U = 0.2;
 /** Pulse radius in plan units. */
 const PULSE_R_U = 0.28;
-/** Below this many px per unit a cable is a smudge and a pulse is a flicker. */
+/**
+ * Below this many px per unit a cable is drawn at its thinnest, one screen px,
+ * rather than not at all (audit F1): at the owner's own window the floor sat at
+ * 8 px per unit and a 13-member crew drew twelve bodies with no cable, no desk
+ * and no chip, so one member simply went missing. The cable IS the crew.
+ */
 export const CREW_MIN_PX_PER_UNIT = 10;
 /** The same gate the waiting badge uses (§1.3): under it, pulses stop. */
 export const PULSE_MIN_PX_PER_UNIT = 14;
@@ -91,11 +96,9 @@ export function crewRecords(records) {
 export function drawCrews(ctx, view) {
   const crews = crewRecords(view.records);
   if (!crews.size) return;
-  // One gate for the whole pass, asked of the WORLD scale: a cable is a fact
-  // about the floor, not about how large the people on it are drawn.
-  if (view.scale < CREW_MIN_PX_PER_UNIT) return;
   // `scale` IS px-per-unit: the camera's `U * zoom` is the same number, and
-  // `_scale()` is what every other gate on this floor is asked of.
+  // `_scale()` is what every other gate on this floor is asked of. Under
+  // `CREW_MIN_PX_PER_UNIT` the cable thins to one px; it is never dropped.
   const px = view.scale;
   const pulses = !view.reduced && view.scale >= PULSE_MIN_PX_PER_UNIT;
 
@@ -130,7 +133,7 @@ function drawOne(ctx, view, rec, pulses, px) {
   // phase.
   ctx.strokeStyle = live > 0 ? STATE_COLORS.working : STATE_COLORS.ended;
   ctx.globalAlpha = 0.35 + 0.45 * live;
-  ctx.lineWidth = Math.max(1, CABLE_W_U * px);
+  ctx.lineWidth = px < CREW_MIN_PX_PER_UNIT ? 1 : Math.max(1, CABLE_W_U * px);
   strokeFromPort(ctx, view, route, extent, rec);
   ctx.globalAlpha = 1;
 
@@ -232,7 +235,7 @@ function drawChip(ctx, view, parentId, members) {
       }).length
     : null;
   const text = crewChipText(total, members.length, working);
-  if (!text || view.lod < 1) return;
+  if (!text) return;
   if (!anchor) return;
   plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text);
 }
@@ -246,7 +249,7 @@ function drawChip(ctx, view, parentId, members) {
  * Only a name the snapshot carries: none, and nothing is drawn.
  */
 function drawAwayName(ctx, view, parentId, anchor) {
-  if (!anchor || view.lod < 1) return;
+  if (!anchor) return;
   const parent = view.agentsById.get(parentId);
   const name = parent && (parent.label ?? parent.displayName);
   if (!name) return;

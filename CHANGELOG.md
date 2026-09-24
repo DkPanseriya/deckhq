@@ -37,6 +37,21 @@
   were. Both numbers are now over the whole crew, and `+N` is only the subagents not drawn.
 - **Source files no longer contain raw NUL bytes.** Four files used one as a separator, which made
   search tools treat them as binary. They use an escape now, and a test keeps it that way.
+- **A busy floor in a laptop-sized window keeps its names and its counts.** With about 150 sessions
+  in a window around 1400 x 800, the floor dropped to its lowest level of detail and stopped drawing
+  every name, every room's `N need you` line, and the cables and `+N` chip of a subagent crew.
+  Detail is now decided by how tall a person is drawn, and the smallest people only lose their
+  outline, chest mark and far arm. Names, the `need you` line, cables and the `+N` chip are drawn at
+  every size. A room plate that is short on space sets its lines smaller before it drops one, drops
+  the "doing" line before today's tokens, and never drops the `need you` line. When the plate is too
+  narrow for that line it shortens to the dot and the number.
+- **Names no longer land on room plates, people or each other.** Names under the bottom row of your
+  office were drawn over the Lounge plate, and a crew of subagents printed the same type five times
+  on top of itself. Room plates now count as obstacles. A name that has no room below its person
+  moves to the side, or above the person's head. A crew shows each type once, with a count, such as
+  `general-purpose ×5`.
+- **Finished sessions sit still.** A session that has ended used to keep bobbing and blinking in the
+  lounge after it powered down. It now powers down once and stays still.
 
 ## 1.6.0 — 2026-09-24
 

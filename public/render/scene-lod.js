@@ -14,6 +14,8 @@
 
 import { registerBodyScale } from './plan-scale.js';
 import { BODY_HEIGHT_U, LEGIBILITY_MIN_PX } from './rig.js';
+import { RIG_DETAIL_MIN_PX } from './rig-metrics.js';
+import { rigHeight } from './rig-pose.js';
 import { SceneBase } from './scene-base.js';
 
 // ---------------------------------------------------------------------------
@@ -106,6 +108,35 @@ export function characterScaleFor(worldScale) {
  */
 export const JUNIOR_SCALE = 0.8;
 
+/**
+ * THE LEVEL OF DETAIL IS A FACT ABOUT THE FIGURE, NOT THE FLOOR (audit F1).
+ *
+ * It used to be `lodForZoom(px per unit / U)`, with L0 below 0.7, and at the
+ * owner's own window — a 690 px stage, 8 px per unit — that put a 150-agent
+ * floor at L0, where the tier took every name, every plate's `need you` line,
+ * the crew's cables and its `+N` with it. None of those had a size reason to
+ * go: a name is held to 11 px whatever the scale.
+ *
+ * So the tier is read off the one number the rig already drops detail by: the
+ * figure's drawn height (`rigHeight`). Under `RIG_DETAIL_MIN_PX` (30 px) it is
+ * L0, and L0 means only what WP-79 says — no rim halo, no chest glyph, no far
+ * limb, the tool as its icon, and §1.3's slow life (the thinking cloud, the
+ * page flip, the slump) held still. The visor and the raised hand are drawn at
+ * every tier, and so are names, plate lines, cables and chips. It does not
+ * read the agent count: a crowded floor is only L0 where its people are small.
+ */
+export const LOD_FULL_MIN_PX = 40;
+
+/**
+ * @param {number} figurePx the figure's drawn height in screen px
+ * @returns {0|1|2}
+ */
+export function lodForFigure(figurePx) {
+  const h = Number(figurePx) || 0;
+  if (h < RIG_DETAIL_MIN_PX) return 0;
+  return h < LOD_FULL_MIN_PX ? 1 : 2;
+}
+
 export class SceneLod extends SceneBase {
   /** The px-per-unit the floor is actually drawn at: fit scale times zoom. */
   _scale() {
@@ -123,6 +154,11 @@ export class SceneLod extends SceneBase {
    */
   _characterScale() {
     return characterScaleFor(this._scale());
+  }
+
+  /** This frame's level of detail: `lodForFigure` of a senior's drawn height. */
+  _lod() {
+    return lodForFigure(rigHeight(this._characterScale()));
   }
 }
 

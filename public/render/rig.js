@@ -294,19 +294,21 @@ export function labelBox(ctx, ox, oy, u, rawLabel) {
  * @param {number} ox @param {number} oy @param {number} u
  * @param {string} rawLabel
  * @param {number} [offsetY]
+ * @param {number} [offsetX] the collision pass's sideways step, 0 for none
  */
-export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY) {
+export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX) {
   const box = labelBox(ctx, ox, oy, u, rawLabel);
   const dy = offsetY || 0;
+  const lx = ox + (offsetX || 0);
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = sansFont(labelFontSize(u)); // labelBox already set it; re-assert before drawing
   ctx.lineWidth = Math.max(2, u * 0.16);
   ctx.strokeStyle = 'rgba(255,253,249,0.95)';
-  ctx.strokeText(box.text, ox, box.top + dy);
+  ctx.strokeText(box.text, lx, box.top + dy);
   ctx.fillStyle = PALETTE.inkWarm;
-  ctx.fillText(box.text, ox, box.top + dy);
+  ctx.fillText(box.text, lx, box.top + dy);
   // Text alignment is global context state. Leaking 'center' out of here
   // pushed every room plate's text off its position.
   ctx.restore();
@@ -335,6 +337,7 @@ export const REST_LIFE = Object.freeze({
   scale: 1,
   fade: 1,
   running: false,
+  still: false,
 });
 
 /**
@@ -370,7 +373,7 @@ export const REST_LIFE = Object.freeze({
  * @param {CanvasRenderingContext2D} ctx
  * @param {import('./clips.js').Pose} pose
  * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string, state?:string,
- *   label?:string, labelOffsetY?:number, icon?:'hand'|'hourglass'|'check'|null,
+ *   label?:string, labelOffsetY?:number, labelOffsetX?:number, icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
  *   phase?:number|null, life?:import('./life.js').Life|null,
@@ -394,7 +397,7 @@ export const REST_LIFE = Object.freeze({
  *   as a bubble with the summary at `lod >= 1`, as a tool-class icon at L0 and
  *   under reduced motion, and not at all when a state icon or a waiting badge
  *   already occupies the space above the head.
- *   `labelOffsetY`: vertical screen-px nudge applied to the label only.
+ *   `labelOffsetY`, `labelOffsetX`: screen-px nudges applied to the label only.
  *   `identity` (CONTRACTS-WP15.md §2): project appearance from
  *   `palette.js`'s `identityFor` — the chest badge, its glyph, and the boots.
  *   `appearance` (WP-20): who this particular session is, from
@@ -441,7 +444,10 @@ export function drawCharacter(ctx, pose, opts) {
   const id = rigIdentity(opts.identity || null, appearance);
   const dead = state === 'ended' || state === 'let_go';
   const tints = rigTints(color, dead);
-  const phase = idlePhase(opts.seconds, reduced, opts.phase ?? null);
+  // An ended figure whose power-down has run is STILL (audit F9, `life.still`):
+  // no idle phase and no bob, exactly as under reduced motion.
+  const still = reduced || life.still === true;
+  const phase = idlePhase(opts.seconds, still, opts.phase ?? null);
 
   // The fold-away and the pop-in fade as well as scale, because a figure that
   // only shrank would read as walking away from the camera. `1` skips the
@@ -469,7 +475,7 @@ export function drawCharacter(ctx, pose, opts) {
 
   // The body's own vertical breathing, from the clip. `bob` is stated in px at
   // BASE_U, so it is scaled into this zoom exactly as it always was.
-  const by = oy + (reduced ? 0 : pose.bob * (u / BASE_U));
+  const by = oy + (still ? 0 : pose.bob * (u / BASE_U));
   rigFrame(ox, by, h);
   rigSetup(k, id, tints, h, phase, lod === 0, life, pose, opts.laptop ?? null);
 
@@ -535,7 +541,9 @@ export function drawCharacter(ctx, pose, opts) {
   }
 
   if (opts.badge) drawBadge(ctx, ox, oy, u, opts.badge, color);
-  if (lod >= 1 && opts.label) drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY);
+  // A name at EVERY level of detail (audit F1): it is held to 11 px whatever
+  // the scale, so L0 has no size reason to drop it.
+  if (opts.label) drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY, opts.labelOffsetX);
 
   if (prevAlpha !== null) ctx.globalAlpha = prevAlpha;
 }

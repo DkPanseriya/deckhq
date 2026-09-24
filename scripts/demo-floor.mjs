@@ -223,7 +223,7 @@ if (POPULATION === 'crew') {
 
 // Bug 201. Thirteen working juniors on a senior that has finished its turn and
 // is waiting on the reception sofa: the crew belongs at its room's desk.
-if (POPULATION === 'crew-waiting') {
+if (POPULATION === 'crew-waiting' || POPULATION === 'large') {
   const parent = built.find((s) => s.title === WAITING_CREW_PARENT);
   if (parent) {
     for (const junior of WAITING_CREW_JUNIORS) {
