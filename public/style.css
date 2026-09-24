@@ -4617,7 +4617,8 @@ textarea.field-input {
 .board-scroll[data-arrange='stack'] .board-columns {
   display: block;
 }
-.board-scroll[data-arrange='stack'] .board-col:not(.is-picked) {
+.board-scroll[data-arrange='stack'] .board-col:not(.is-picked),
+.board-scroll[data-arrange='stack'] .board-col-head {
   display: none;
 }
 
@@ -4811,9 +4812,10 @@ textarea.field-input {
   color: var(--muted);
 }
 /* ONE row of chips. A flag is drawn first (it is the chip that asks for
-   something), cut short at the row's width if it must be; the rest follow
-   and what does not fit is clipped. Every chip's whole text is its tooltip
-   and is in the card's name. */
+   something). Long chips give way with an ellipsis rather than being cut
+   mid-word by the row's edge — the criteria count, which is short, never
+   does — and what still does not fit is clipped. Every chip's whole text is
+   its tooltip and is in the card's name. */
 .board-card-chips {
   display: flex;
   flex-wrap: nowrap;
@@ -4823,7 +4825,8 @@ textarea.field-input {
   overflow: hidden;
 }
 .board-chip {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 5ch;
   max-width: 100%;
   padding: 0.05rem 0.35rem;
   border: 1px solid var(--line-2);
@@ -4839,8 +4842,12 @@ textarea.field-input {
    §5.2 says a flag may say something and may never move a card, so it marks
    the edge rather than shouting in the ink (the rule .btn--danger keeps for
    the same reason). */
+.board-chip--acceptance {
+  flex-shrink: 0;
+}
 .board-chip--flag {
   order: -1;
+  flex-shrink: 0.3;
   border-color: var(--accent-soft-line);
   color: var(--ink-2);
 }
