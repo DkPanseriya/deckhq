@@ -80,7 +80,7 @@ export function workStretches(moves, now) {
   /** @type {Array<{since:number, until:number, open:boolean}>} */
   const out = [];
   let since = /** @type {number|null} */ (null);
-  for (const move of Array.isArray(moves) ? moves : []) {
+  for (const move of Array.isArray(moves) ? [...moves] : []) {
     const at = finite(move?.at);
     if (at == null) continue;
     if (move.from === WORK_COLUMN && since != null) {
@@ -216,7 +216,6 @@ export function trackCard(card, opts) {
     cardId: String(card?.id || ''),
     status: measured ? 'ok' : NO_DATA,
     milestone: card?.milestone || null,
-    column: card?.column || null,
     agentId,
     tokens,
     time,

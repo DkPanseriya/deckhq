@@ -240,7 +240,8 @@ export function nextCardId(board) {
  *          pendingIdentities?:any, launchTerminal?:(opts:any) => Promise<any>,
  *          studioWatchOptions?:{pollMs?:number, debounceMs?:number},
  *          stopStudioWatch?:() => void,
- *          studioHandoverSettled?:() => Promise<any>}} ctx
+ *          studioHandoverSettled?:() => Promise<any>,
+ *          studioDriftTick?:() => Promise<any>}} ctx
  *   WP-67 added the last four. `registry` is read for one thing and one thing
  *   only — whether an agent id is still a session on the floor — and never
  *   copied; `launchTerminal` is the test seam `src/daemon.mjs` documents.

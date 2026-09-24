@@ -108,7 +108,7 @@ export function budgetStopped(card) {
 /**
  * @param {import('../server.mjs').Router} router
  * @param {{store:any, log:any, registry?:any, adapters?:any, sends?:any, ledger?:any,
- *          studioTickMs?:number, studioSendRefusal?:any}} ctx
+ *          ratesFile?:string, studioTickMs?:number, studioSendRefusal?:any}} ctx
  * @param {{projectFromBody:(req:any,res:any)=>Promise<any>,
  *          consentFor:(key:string)=>any,
  *          resolveProject:(raw:unknown)=>any}} helpers
@@ -188,7 +188,11 @@ export function registerDrift(router, ctx, helpers) {
       /** @type {Array<{cardId:string, which:string, agentId:string|null, text:string}>} */
       const stopped = [];
       for (const t of tracked.cards) {
-        if (!t.crossed || t.column !== WORK_COLUMN) continue;
+        // Only work in flight is stopped. A card in Review or Done that ran
+        // over has finished spending; blocking it would be moving finished
+        // work backwards, which the stop may never do.
+        const where = board.cards.find((c) => c.id === t.cardId)?.column;
+        if (!t.crossed || where !== WORK_COLUMN) continue;
         // THE THIRD COLUMN WRITER, and the only one no person presses. It
         // reaches `blocked` and nothing else; see `src/studio/budget.mjs`.
         const done = blockForBudget(board, t.cardId, { text: t.crossed.text, at });

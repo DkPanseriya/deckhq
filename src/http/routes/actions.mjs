@@ -41,7 +41,8 @@ const MAX_SEND_CHARS = 100_000;
 /**
  * @param {import('../server.mjs').Router} router
  * @param {{registry:any, adapters:any, log:any, store:any, sends:any, identity:any,
- *          pendingIdentities?:any}} ctx
+ *          pendingIdentities?:any,
+ *          studioSendRefusal?:(id:string) => ({error:string, cardId:string}|null)}} ctx
  *   `store`, `sends` and `identity` were read here and not declared (WP-22).
  *   `pendingIdentities` is WRITTEN here, not read: see the note beside it.
  */

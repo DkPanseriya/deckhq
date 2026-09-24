@@ -25,7 +25,7 @@ export const SEND_TIMEOUT_MS = 10 * 60 * 1000;
  * answers as a 404. `turn` never rejects: an adapter that failed resolves to
  * `{ok:false, error}` after the error and the `done` have been published.
  *
- * @param {{adapters:any, sends:any, store:any, registry:any, log:any}} ctx
+ * @param {{adapters?:any, sends?:any, store?:any, registry?:any, log?:any}} ctx
  * @param {{id:string, cwd?:string}} agent the registry's own agent
  * @param {string} text
  * @returns {{sendId:string, turn:Promise<{ok:boolean, text?:string, error?:string}>}}

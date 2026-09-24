@@ -55,6 +55,10 @@ function partsOf(doc) {
     role: /** @type {any} */ (doc.getElementById('card-role')),
     tokens: /** @type {any} */ (doc.getElementById('card-tokens')),
     minutes: /** @type {any} */ (doc.getElementById('card-minutes')),
+    // WP-71. The criteria the user has ticked, for §7's burn-down. Optional for
+    // the same reason the handover block below is.
+    ticks: /** @type {any} */ (doc.getElementById('card-ticks')),
+    ticksList: doc.getElementById('card-ticks-list'),
     error: doc.getElementById('card-error'),
     save: /** @type {any} */ (doc.getElementById('card-save')),
     close: /** @type {any} */ (doc.getElementById('card-dialog-close')),
@@ -106,7 +110,10 @@ export function parseCount(raw, what) {
  * Pure, so `test/unit/board-card.test.mjs` drives it without a dialog.
  *
  * @param {{title:string, acceptance:string, milestone:string, role:string,
- *          tokens:string, minutes:string}} values
+ *          tokens:string, minutes:string, done?:string[]}} values
+ *   `done` is WP-71's: the criteria ticked in the list, by their text. A tick
+ *   whose criterion the user has just deleted from the textarea is dropped
+ *   here, and the daemon drops it again if it was not.
  * @returns {{card:any}|{error:string}}
  */
 export function cardFromForm(values) {
@@ -130,7 +137,19 @@ export function cardFromForm(values) {
       ? null
       : { tokens: tokens.value, minutes: minutes.value };
 
-  return { card: { title, acceptance, milestone: milestone || null, role: role || null, budget } };
+  const done = Array.isArray(values.done) ? values.done : [];
+  const acceptanceDone = acceptance.filter((line) => done.includes(line));
+
+  return {
+    card: {
+      title,
+      acceptance,
+      acceptanceDone,
+      milestone: milestone || null,
+      role: role || null,
+      budget,
+    },
+  };
 }
 
 /** The lines the acceptance textarea shows for a card. */
@@ -174,7 +193,42 @@ export function createCardEditor(opts) {
       role: el.role?.value ?? '',
       tokens: el.tokens?.value ?? '',
       minutes: el.minutes?.value ?? '',
+      done: ticked(),
     };
+  }
+
+  /** The criteria currently ticked in the list, by their text. */
+  function ticked() {
+    const boxes = el.ticksList?.querySelectorAll?.('input[type="checkbox"]') || [];
+    return [...boxes]
+      .filter((box) => box.checked)
+      .map((box) => String(box.getAttribute('data-criterion') || ''));
+  }
+
+  /**
+   * One checkbox per criterion the card carries, ticked where the user
+   * ticked it (WP-71). Built from the card as it was opened: a criterion
+   * typed into the textarea since is ticked the next time, once it exists.
+   * @param {any} card
+   */
+  function fillTicks(card) {
+    if (!el.ticksList) return;
+    el.ticksList.textContent = '';
+    const criteria = Array.isArray(card?.acceptance) ? card.acceptance.filter(Boolean) : [];
+    const done = Array.isArray(card?.acceptanceDone) ? card.acceptanceDone : [];
+    for (const line of criteria) {
+      const label = doc.createElement('label');
+      label.className = 'card-tick';
+      const box = /** @type {any} */ (doc.createElement('input'));
+      box.type = 'checkbox';
+      box.setAttribute('data-criterion', String(line));
+      box.checked = done.includes(line);
+      const text = doc.createElement('span');
+      text.textContent = String(line);
+      label.append(box, text);
+      el.ticksList.appendChild(label);
+    }
+    if (el.ticks) el.ticks.hidden = criteria.length === 0;
   }
 
   /**
@@ -230,6 +284,7 @@ export function createCardEditor(opts) {
       el.minutes.value = card?.budget?.minutes == null ? '' : String(card.budget.minutes);
     }
     fillRoles(what.roles || [], card?.role || null);
+    fillTicks(card);
     if (el.ask) {
       el.ask.textContent = what.ask || '';
       el.ask.hidden = !what.ask;

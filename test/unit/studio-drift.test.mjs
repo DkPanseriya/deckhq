@@ -455,3 +455,33 @@ test('a PM pass with no planner on the floor says so, and writes nothing', async
     s.drift.stop();
   }
 });
+
+test('the planner’s answer is parsed tolerantly and believed narrowly', async () => {
+  const { parseFlags } = await import('../../src/studio/pm-pass.mjs');
+  const ids = ['c1', 'c2'];
+  const flag = { cardId: 'c1', kind: 'Scope', text: 'outside m2' };
+  // Bare, fenced, wrapped in prose, and inside an object.
+  for (const answer of [
+    JSON.stringify([flag]),
+    `Sure.\n\`\`\`json\n${JSON.stringify([flag])}\n\`\`\``,
+    `I found one: ${JSON.stringify([flag])} and that is all.`,
+    JSON.stringify({ flags: [flag] }),
+  ]) {
+    assert.deepEqual(parseFlags(answer, ids).flags, [
+      { cardId: 'c1', kind: 'scope', text: 'outside m2' },
+    ]);
+  }
+  // A duplicate, a card the board does not have, and a flag with no text.
+  const out = parseFlags(
+    JSON.stringify([flag, flag, { cardId: 'c9', text: 'x' }, { cardId: 'c2', kind: 'k' }]),
+    ids,
+  );
+  assert.equal(out.flags.length, 1);
+  assert.equal(out.dropped, 3);
+  // No array at all is zero flags and a reason, not an error.
+  assert.deepEqual(parseFlags('Everything looks fine to me.', ids), {
+    flags: [],
+    dropped: 0,
+    reason: 'the planner answered with no JSON array',
+  });
+});

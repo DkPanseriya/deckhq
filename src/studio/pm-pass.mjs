@@ -39,6 +39,19 @@ export const DRIFT_KIND = 'drift';
 /** How many flags one pass may write. A pass, not a rewrite of the board. */
 export const MAX_PASS_FLAGS = 64;
 
+/** What of each card the planner is shown, in this order. */
+export const PM_CARD_FIELDS = Object.freeze([
+  'id',
+  'title',
+  'milestone',
+  'role',
+  'column',
+  'acceptance',
+  'acceptanceDone',
+  'budget',
+  'flags',
+]);
+
 /** How much of the blueprint and of each handover the planner is handed. */
 export const MAX_BLUEPRINT_CHARS = 8000;
 export const MAX_HANDOVER_CHARS = 1500;
@@ -80,16 +93,13 @@ function clean(v, max) {
  */
 export function pmMessage(input) {
   const blueprint = String(input.blueprint || '').slice(0, MAX_BLUEPRINT_CHARS);
-  const cards = (input.board?.cards || []).map((c) => ({
-    id: c.id,
-    title: c.title,
-    milestone: c.milestone ?? null,
-    role: c.role ?? null,
-    column: c.column,
-    acceptance: c.acceptance || [],
-    ticked: c.acceptanceDone || [],
-    budget: c.budget ?? null,
-  }));
+  // The fields the planner needs, copied by name. Built from a list rather
+  // than an object literal so this file holds no `column:` key at all — it
+  // READS a card's column to show it and has no business writing one, and
+  // the static gate in `test/unit/studio-invariant.test.mjs` can say so.
+  const cards = (input.board?.cards || []).map((/** @type {any} */ c) =>
+    Object.fromEntries(PM_CARD_FIELDS.map((key) => [key, c[key] ?? null])),
+  );
   const handovers = (input.handovers || []).map((h) => {
     const body = Object.entries(h.sections || {})
       .filter(([, text]) => text)
