@@ -4522,11 +4522,13 @@ textarea.field-input {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.75rem 0;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
 }
 /* The project the board is about, in the mono face every path in this product
-   is written in. It wraps rather than pushing the button off the bar. */
+   is written in. WP-96: its last two segments, on one line — the whole path is
+   the tooltip, because a temp directory's full name was the widest thing on
+   the bar and said the least. */
 .board-project {
   flex: 1 1 auto;
   margin: 0;
@@ -4534,12 +4536,25 @@ textarea.field-input {
   font-family: var(--font-mono);
   font-size: 0.7rem;
   color: var(--muted);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* WP-96. The how-to sentence, behind a `?` beside New card. */
+.board-help {
+  min-width: 1.9rem;
+  padding-inline: 0.5rem;
+  font-weight: 600;
+}
+.board-help[aria-expanded='true'] {
+  background: var(--surface-3);
+  color: var(--ink);
+  border-color: var(--line-2);
 }
 .board-hint {
   flex: 0 0 auto;
-  margin: 0.35rem 0 0;
-  padding: 0 0.75rem 0.5rem;
+  margin: 0;
+  padding: 0 0.75rem 0.6rem;
   font-size: 0.72rem;
   color: var(--muted);
 }
@@ -4557,31 +4572,87 @@ textarea.field-input {
   min-height: 0;
   overflow: auto;
 }
+/* WP-96: never sideways. The columns are arranged for the width the board
+   has (`arrangeColumns()` in public/board-view.js, applied by board-ui.js as
+   `data-arrange`), so nothing here is ever wider than the body. */
 .board-scroll {
   min-height: 100%;
   padding: 0 0.75rem 1rem;
+  overflow-x: hidden;
 }
 
-/* Six columns of equal width, side by side, scrolling sideways together on a
-   window too narrow for them. Never wrapping to two rows: a kanban whose
-   columns reflow is a kanban whose order the eye has to reconstruct. */
+/* ---- the three arrangements (WP-96)
+
+   ROW    the six side by side, sharing the width, none under 168 px
+          (`COLUMN_MIN_PX`). An empty column is a 36 px rail (`RAIL_PX`) with
+          its name on its side, and opens on hover, focus and drag-over.
+   GRID   two rows of three, in board order left to right, top to bottom.
+   STACK  one column, and a picker above it naming all six with counts.
+
+   The pixel figures are board-view.js's constants, which the arrangement is
+   computed from; they are written twice because a stylesheet cannot import. */
 .board-columns {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(14rem, 1fr);
-  gap: 0.6rem;
-  align-items: start;
-  min-width: max-content;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
 }
 .board-col {
+  position: relative;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  min-width: 168px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface);
 }
+.board-scroll[data-arrange='grid'] .board-columns {
+  display: grid;
+  grid-template-columns: repeat(var(--board-per-row, 3), minmax(0, 1fr));
+}
+.board-scroll[data-arrange='grid'] .board-col,
+.board-scroll[data-arrange='stack'] .board-col {
+  min-width: 0;
+}
+.board-scroll[data-arrange='stack'] .board-columns {
+  display: block;
+}
+.board-scroll[data-arrange='stack'] .board-col:not(.is-picked),
+.board-scroll[data-arrange='stack'] .board-col-head {
+  display: none;
+}
+
+/* The rail. Only in the row, where width is what is short; in the grid and
+   the stack an empty column is drawn as itself. It stretches to the row's
+   height, and its drop target fills it, so the whole rail takes a card. */
+.board-scroll[data-arrange='row'] .board-col.is-empty {
+  align-self: stretch;
+  min-width: 36px;
+}
+.board-scroll[data-arrange='row'] .board-col.is-empty:not(:hover, :focus-within, :has(.is-over)) {
+  flex: 0 0 36px;
+}
+.board-scroll[data-arrange='row']
+  .board-col.is-empty:not(:hover, :focus-within, :has(.is-over))
+  .board-col-head {
+  position: absolute;
+  inset: 0 0 auto;
+  justify-content: flex-start;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 0;
+  writing-mode: vertical-rl;
+  pointer-events: none;
+}
+.board-scroll[data-arrange='row'] .board-col.is-empty .board-drop {
+  flex: 1 1 auto;
+}
+
+/* The heads stay in view while a long column scrolls under them. */
 .board-col-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -4589,25 +4660,31 @@ textarea.field-input {
   margin: 0;
   padding: 0.45rem 0.6rem;
   border-bottom: 1px solid var(--line);
+  border-radius: 6px 6px 0 0;
+  background: var(--surface);
   font-family: var(--font-mono);
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+  white-space: nowrap;
 }
 .board-col-count {
   font-variant-numeric: tabular-nums;
   color: var(--ink-2);
 }
+.board-col.is-empty .board-col-count {
+  color: var(--muted);
+}
 .board-drop {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
   /* A floor to drop on: an empty column has to be a target, and a target of
      nothing is a target nobody can hit. */
-  min-height: 4.5rem;
-  padding: 0.45rem;
+  min-height: 3.5rem;
+  padding: 0.4rem;
 }
 .board-drop.is-over {
   background: var(--accent-soft);
@@ -4615,11 +4692,65 @@ textarea.field-input {
   border-radius: 0 0 5px 5px;
 }
 
+/* The stacked board's picker: six buttons, each a name and a count, and each
+   a drop target. It sticks, so the counts stay in view down a long column. */
+.board-picker {
+  display: none;
+}
+.board-scroll[data-arrange='stack'] .board-picker {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0.5rem;
+  padding: 0.25rem 0;
+  background: var(--bg);
+}
+.board-pick {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+.board-pick:hover {
+  color: var(--ink-2);
+  border-color: var(--line-2);
+}
+.board-pick:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.board-pick[aria-pressed='true'] {
+  background: var(--surface-3);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+.board-pick.is-over {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-line);
+}
+.board-pick-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+}
+
+/* ---- the card (WP-96: four lines at most — the title, who, one row of
+   chips, one tracking line — so a column shows its cards rather than one). */
 .board-card {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  padding: 0.45rem 0.55rem;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
   border: 1px solid var(--line-2);
   border-radius: 5px;
   background: var(--surface-2);
@@ -4637,10 +4768,16 @@ textarea.field-input {
   opacity: 0.5;
   cursor: grabbing;
 }
+/* Two lines of title, then an ellipsis; the whole title is the card's name. */
 .board-card-title {
+  display: -webkit-box;
   margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   font-size: 0.8rem;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
@@ -4649,73 +4786,87 @@ textarea.field-input {
   align-items: center;
   gap: 0.35rem;
   margin: 0;
-  min-height: 22px;
+  min-width: 0;
+  min-height: 20px;
 }
-/* The face, drawn by the floor's own rig at 2x and shown at 22 px. A role with
+/* The face, drawn by the floor's own rig at 2x and shown at 20 px. A role with
    no live session has no canvas at all — a face is a pure function of the
    session id (§105), so there is nothing to draw. */
 .board-face {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
 }
 .board-card-role {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--ink-2);
-  overflow-wrap: anywhere;
 }
 .board-card-role--none {
   font-weight: 400;
   font-style: italic;
   color: var(--muted);
 }
+/* ONE row of chips. A flag is drawn first (it is the chip that asks for
+   something). Long chips give way with an ellipsis rather than being cut
+   mid-word by the row's edge — the criteria count, which is short, never
+   does — and what still does not fit is clipped. Every chip's whole text is
+   its tooltip and is in the card's name. */
 .board-card-chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.25rem;
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .board-chip {
+  flex: 0 1 auto;
+  min-width: 5ch;
+  max-width: 100%;
   padding: 0.05rem 0.35rem;
   border: 1px solid var(--line-2);
   border-radius: 999px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 0.62rem;
   color: var(--muted);
-  white-space: nowrap;
 }
 /* A flag is the one chip allowed to be loud, and it is still only a border:
    §5.2 says a flag may say something and may never move a card, so it marks
    the edge rather than shouting in the ink (the rule .btn--danger keeps for
-   the same reason). Its text wraps, because a planner's sentence is a
-   sentence. */
+   the same reason). */
+.board-chip--acceptance {
+  flex-shrink: 0;
+}
 .board-chip--flag {
+  order: -1;
+  flex-shrink: 0.3;
   border-color: var(--accent-soft-line);
   color: var(--ink-2);
-  white-space: normal;
 }
 
-/* WP-71, §7. The tracking strip: three figures in the chips' own mono, and a
-   figure with nothing behind it drawn as the words "no data" — dimmer, never
-   a zero. The tests quotation wraps, because it is the handover's sentence. */
+/* WP-71, §7, and WP-96's one line. The figures that exist, in the chips' own
+   mono; a card with none says "no data" once, dimmer — never a zero. */
 .board-card-track {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.6rem;
-  margin: 0.35rem 0 0;
-  padding-top: 0.3rem;
+  margin: 0.1rem 0 0;
+  padding-top: 0.25rem;
   border-top: 1px dashed var(--line-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 0.6rem;
   color: var(--ink-2);
 }
-.board-track.is-no-data {
+.board-card-track.is-no-data {
   color: var(--muted);
-}
-.board-track--tests {
-  flex-basis: 100%;
-  white-space: normal;
 }
 
 /* The milestone header: one line per milestone, its burn-down as a native bar. */

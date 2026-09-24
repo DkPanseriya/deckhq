@@ -243,9 +243,16 @@ export const MOTION_PHASE = 0.25;
  * the palette's own key, the command's accelerator, Enter. No test seam is added
  * to the client for it, so what this photographs is the path a user has.
  *
+ * A capture may also CLICK one control after its command (WP-96), named by a
+ * selector, for a state that has no key of its own. `board` is the Studio board
+ * with the panel shut by its own ✕: the board is opened on the project of the
+ * session in the panel, and closing the panel afterwards is how a person gets
+ * the board the whole window wide. A selector that matches nothing fails the
+ * capture, `scrollTo`'s rule.
+ *
  * @type {ReadonlyArray<{name:string, population:string, theme:string,
  *   stage?:{w:number, h:number}, press?:string, motion?:boolean, query?:string,
- *   command?:string, scrollTo?:string}>}
+ *   command?:string, click?:string, scrollTo?:string}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
@@ -323,8 +330,23 @@ const CAPTURES = [
   // palette, `studio board` typed into it, and Enter. `Studio: board` carries
   // no accelerator (no Studio row does), so this capture types rather than
   // chords, which is also the path the command's own keywords are ranked on.
+  //
+  // WP-96 · TWO OF IT. `board` is the board with the panel then shut by its own
+  // ✕, so the board has the whole window: all six columns in one row. The
+  // panel-open board it used to be showed two of the six and hid four behind a
+  // sideways scroll, and it is kept as `board@panel` because that is the case
+  // the fix is FOR — the board yielding width to the panel and still showing
+  // every column (at 1600 x 1000 it is still one row; see `arrangeColumns()`).
   {
     name: 'board',
+    population: 'board',
+    theme: 'default',
+    press: 'j',
+    command: 'studio board',
+    click: '#panel button[aria-label="Close panel"]',
+  },
+  {
+    name: 'board@panel',
     population: 'board',
     theme: 'default',
     press: 'j',
@@ -961,6 +983,20 @@ const run = withChrome(
               await pressChord(client, 'k', 2);
               await pressKeys(client, capture.command);
               await pressEnter(client);
+              await sleep(SETTLE_MS);
+            }
+            if (capture.click) {
+              enter(`clicking ${capture.click} ("${name}")`);
+              const { result } = await client.send('Runtime.evaluate', {
+                returnByValue: true,
+                expression: `(() => {
+                  const el = document.querySelector(${JSON.stringify(capture.click)});
+                  if (!el) return false;
+                  el.click();
+                  return true;
+                })()`,
+              });
+              if (!result.value) throw new Error(`${capture.click} is not on the page`);
               await sleep(SETTLE_MS);
             }
             if (capture.scrollTo) {

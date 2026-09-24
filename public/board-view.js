@@ -253,6 +253,73 @@ export function cardMessage(card) {
   return lines.join('\n');
 }
 
+// ----------------------------------------------------------- the arrangement
+//
+// WP-96. THE BOARD FITS THE WINDOW. Before this a column was as wide as its
+// widest card, so with the panel open two of the six were on screen and the
+// other four were behind a sideways scroll: the board's state was not visible
+// at a glance, which is the one thing a kanban is for. Three regimes now, and
+// the board never scrolls sideways in any of them:
+//
+//   row    all six side by side, each at least `COLUMN_MIN_PX`; an EMPTY column
+//          is a `RAIL_PX` rail with its name turned on its side, and opens on
+//          hover, focus and drag-over;
+//   grid   when six no longer fit, two rows of three — the order still reads
+//          left to right, top to bottom, which is the order `[`/`]` walk;
+//   stack  under `STACK_BELOW_PX`, one column at a time and a picker naming
+//          all six with their counts, so the counts stay at a glance.
+//
+// The width is the BOARD's, not the window's: the panel takes its share first
+// and the board arranges itself in what is left.
+
+/** The narrowest a column with cards in it is drawn in the row. */
+export const COLUMN_MIN_PX = 168;
+/** An empty column in the row: a rail with its name on its side. */
+export const RAIL_PX = 36;
+/** The gap between columns, `.board-columns`' own. */
+export const COLUMN_GAP_PX = 8;
+/** Under this, the columns stack and a picker chooses the one in view. */
+export const STACK_BELOW_PX = 900;
+
+/**
+ * How `count` columns are laid out in `width` pixels, `empty` of them empty.
+ *
+ * Pure, and the whole decision: `board-ui.js` measures and applies it, and
+ * `test/unit/board-view.test.mjs` walks the three regimes through it. A width
+ * that could not be measured (zero, or not a number) is the row — the first
+ * paint, before layout, and every test with no browser.
+ *
+ * @param {number} width the board's inner width, in CSS pixels
+ * @param {number} count how many columns
+ * @param {number} [empty] how many of them have no card
+ * @returns {{mode:'row'|'grid'|'stack', perRow:number, rows:number, rails:number}}
+ */
+export function arrangeColumns(width, count, empty = 0) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  const rails = Math.min(n, Math.max(0, Math.floor(Number(empty) || 0)));
+  const w = Number(width);
+  if (!Number.isFinite(w) || w <= 0) return { mode: 'row', perRow: n, rows: n ? 1 : 0, rails };
+  if (w < STACK_BELOW_PX) return { mode: 'stack', perRow: 1, rows: n, rails: 0 };
+  const need = (n - rails) * COLUMN_MIN_PX + rails * RAIL_PX + Math.max(0, n - 1) * COLUMN_GAP_PX;
+  if (need <= w) return { mode: 'row', perRow: n, rows: n ? 1 : 0, rails };
+  const perRow = Math.ceil(n / 2);
+  return { mode: 'grid', perRow, rows: Math.ceil(n / perRow), rails: 0 };
+}
+
+/**
+ * A project directory as its last two segments, `…/code/orbital-api`, in the
+ * separator the path itself uses. The whole path goes in the tooltip; this is
+ * what fits on the bar.
+ * @param {string} dir
+ */
+export function shortPath(dir) {
+  const full = String(dir || '');
+  const sep = full.includes('\\') && !full.includes('/') ? '\\' : '/';
+  const parts = full.split(/[\\/]+/).filter(Boolean);
+  if (parts.length <= 2) return full;
+  return `…${sep}${parts.slice(-2).join(sep)}`;
+}
+
 // --------------------------------------------------------------- the picture
 
 /** @param {any} doc @param {string} tag @param {string} [className] */
@@ -326,6 +393,9 @@ export function buildCard(card, opts, doc) {
     const row = make(doc, 'p', 'board-card-chips');
     for (const chip of chips) {
       const span = make(doc, 'span', `board-chip board-chip--${chip.kind.split(' ')[0]}`);
+      // One row of chips (WP-96), so a long flag is cut short on screen; the
+      // tooltip and the card's name both carry it whole.
+      span.setAttribute('title', chip.text);
       span.textContent = chip.text;
       row.appendChild(span);
     }
@@ -341,15 +411,23 @@ export function buildCard(card, opts, doc) {
  * Presentational, for the reason in the header: this is one list drawn in six
  * places, and six announced lists would be six boards.
  *
+ * An empty column carries `is-empty`, which the row draws as a rail (WP-96),
+ * and the column `opts.picked` names carries `is-picked`, which is the one a
+ * stacked board shows.
+ *
  * @param {{cards?:Array<any>}|null|undefined} board
- * @param {{agentIdFor?:(role:string) => string|null, trackingFor?:(cardId:string) => any}} opts
+ * @param {{agentIdFor?:(role:string) => string|null, trackingFor?:(cardId:string) => any,
+ *          picked?:string|null}} opts
  * @param {any} doc
  */
 export function renderBoardColumns(board, opts, doc) {
   const wrap = make(doc, 'div', 'board-columns');
   wrap.setAttribute('role', 'presentation');
   for (const column of cardsByColumn(board)) {
-    const section = make(doc, 'section', 'board-col');
+    const classes = ['board-col'];
+    if (!column.cards.length) classes.push('is-empty');
+    if (opts.picked === column.id) classes.push('is-picked');
+    const section = make(doc, 'section', classes.join(' '));
     section.setAttribute('data-column', column.id);
     section.setAttribute('role', 'presentation');
 
@@ -367,6 +445,37 @@ export function renderBoardColumns(board, opts, doc) {
     for (const card of column.cards) drop.appendChild(buildCard(card, opts, doc));
     section.appendChild(drop);
     wrap.appendChild(section);
+  }
+  return wrap;
+}
+
+/**
+ * The stacked board's picker (WP-96): the six columns as six buttons, each
+ * with its count, the one in view pressed. A button is also a drop target, so
+ * a card can still be dragged to a column that is not on screen.
+ *
+ * Drawn on every paint and shown only when the board is stacked, so switching
+ * regime is a stylesheet's business rather than a repaint's.
+ *
+ * @param {{cards?:Array<any>}|null|undefined} board
+ * @param {string|null} picked
+ * @param {any} doc
+ */
+export function renderColumnPicker(board, picked, doc) {
+  const wrap = make(doc, 'div', 'board-picker');
+  wrap.setAttribute('role', 'group');
+  wrap.setAttribute('aria-label', 'Column in view');
+  for (const column of cardsByColumn(board)) {
+    const button = make(doc, 'button', 'board-pick');
+    button.setAttribute('type', 'button');
+    button.setAttribute('data-column', column.id);
+    button.setAttribute('aria-pressed', String(column.id === picked));
+    const name = make(doc, 'span', 'board-pick-name');
+    name.textContent = column.label;
+    const count = make(doc, 'span', 'board-pick-count');
+    count.textContent = String(column.cards.length);
+    button.append(name, count);
+    wrap.appendChild(button);
   }
   return wrap;
 }
