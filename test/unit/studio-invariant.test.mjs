@@ -201,9 +201,7 @@ test("INVARIANT: a card's move history is written by the three column writers an
     'studio/budget.mjs': ['card.moves = appendMove(card.moves, card.column, BLOCKED_COLUMN, at)'],
     // The user's move, and the user's Accept.
     'http/routes/studio.mjs': ['moves: appendMove(before.moves'],
-    'http/routes/studio-handover.mjs': [
-      'moves: appendMove(before.moves',
-    ],
+    'http/routes/studio-handover.mjs': ['moves: appendMove(before.moves'],
   });
 });
 
