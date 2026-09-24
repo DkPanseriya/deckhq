@@ -6,6 +6,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A subagent keeps its number when DeckHQ restarts.** Subagent numbers were kept in memory, so
+  restarting DeckHQ after some subagents had finished could renumber the ones still running.
+  Each number is now saved in `~/.deckhq/state.json` with the other names and numbers, so a
+  subagent keeps it across restarts, and a new subagent takes the next number its parent has not
+  used. Only the most recent 64 numbers per session are remembered for subagents that have
+  finished, so the file does not grow with every subagent ever run.
+
 ## 1.6.1 — 2026-09-24
 
 ### Highlights

@@ -965,8 +965,9 @@ test("a junior wears its parent's tag and takes no MK number or name of its own"
   assert.equal(juniors[0].label, `${parent.mk}j1`);
   assert.equal(juniors[0].givenName, null, 'a junior is never given a first name');
   assert.equal(juniors[0].displayName, null);
-  // Nothing about either junior was persisted: the identity table knows the
-  // parent and the project, and nobody else. This is the thing that would
+  // Neither junior took an MK number or a name: the identity table knows the
+  // parent and the project, and nobody else (the `j<n>` each one wears is kept
+  // in the parent's bounded junior book, audit F6). This is the thing that would
   // otherwise fill `~/.deckhq` with hundreds of thirty-second sessions and
   // drain the first-name pool.
   const state = identityStore.identity;

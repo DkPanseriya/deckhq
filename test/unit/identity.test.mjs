@@ -9,7 +9,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Store } from '../../src/core/store.mjs';
-import { Identity } from '../../src/core/identity.mjs';
+import { Identity, JUNIOR_BOOK_KEEP } from '../../src/core/identity.mjs';
 import { SHORT_NAMES } from '../../public/names.js';
 
 async function freshStore() {
@@ -227,5 +227,50 @@ test('WP-20 INVARIANT: naming an agent writes no user-owned field', async () => 
   // was invented, and no project was archived or un-archived.
   assert.deepEqual(store.allAck(), {});
   assert.deepEqual(store.archivedProjects(), []);
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('audit F6 STABILITY: a junior keeps its number across a restart with a sibling gone', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'deckhq-identity-'));
+  const file = path.join(dir, 'state.json');
+  /** @param {string} id @param {number} spawnedAt */
+  const junior = (id, spawnedAt) => ({ id, parentId: 'p1', subagent: true, spawnedAt });
+
+  const first = new Store(file);
+  await first.load();
+  const id1 = new Identity(first);
+  // Spawn order, not id order: c, a, b.
+  const before = id1.juniorNumbers([junior('c', 1), junior('a', 2), junior('b', 3)]);
+  assert.deepEqual(Object.fromEntries(before), { c: 1, a: 2, b: 3 });
+  await first.flush();
+
+  // The daemon restarts from disk; `c` has finished and is no longer on the floor.
+  const second = new Store(file);
+  await second.load();
+  const id2 = new Identity(second);
+  const after = id2.juniorNumbers([junior('a', 2), junior('b', 3), junior('0', 4)]);
+  assert.equal(after.get('a'), 2, 'a keeps its number');
+  assert.equal(after.get('b'), 3, 'b keeps its number');
+  assert.equal(after.get('0'), 4, "a new junior takes the next unused number, never c's");
+  // Juniors still take no MK number and no name of their own.
+  assert.deepEqual(second.identity.agents, {});
+  assert.deepEqual(second.identity.names, {});
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test("audit F6: a parent's junior book is bounded, and a number is never handed out twice", async () => {
+  const { store, dir } = await freshStore();
+  const id = new Identity(store);
+  /** @param {number} n */
+  const junior = (n) => ({ id: `j${n}`, parentId: 'p1', subagent: true, spawnedAt: n });
+  const stays = junior(0);
+  for (let n = 1; n <= JUNIOR_BOOK_KEEP * 3; n++) id.juniorNumbers([stays, junior(n)]);
+  const book = store.identity.juniors.p1;
+  assert.equal(book.next, JUNIOR_BOOK_KEEP * 3 + 1);
+  assert.equal(book.of.j0, 1, 'a junior still on the floor is never dropped');
+  assert.ok(Object.keys(book.of).length <= JUNIOR_BOOK_KEEP + 1, 'departed juniors age out');
+  // One that aged out and comes back gets a fresh number, not somebody else's.
+  assert.equal(id.juniorNumbers([junior(1)]).get('j1'), JUNIOR_BOOK_KEEP * 3 + 2);
+  await store.flush();
   await fs.rm(dir, { recursive: true, force: true });
 });
