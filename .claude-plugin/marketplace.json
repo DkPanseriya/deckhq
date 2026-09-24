@@ -10,7 +10,7 @@
       "name": "deckhq",
       "source": "./plugin",
       "description": "Every AI coding session on your machine, on one office floor. Local, private, zero dependencies.",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "author": { "name": "Darshak Panseriya" },
       "homepage": "https://github.com/DkPanseriya/deckhq#readme",
       "repository": "https://github.com/DkPanseriya/deckhq",
