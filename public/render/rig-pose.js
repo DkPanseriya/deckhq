@@ -226,6 +226,96 @@ export function idlePhase(seconds, reduced, pinned) {
   return p;
 }
 
+// ------------------------------------------------------------- sitting down
+//
+// WP-97. Until this package every figure on the floor stood, including the
+// ones at a desk, on a sofa and in a crew — the rig had no way to sit. These
+// are the three ways B sits, and each one is a function of the STATE pose
+// rather than a seventh set of numbers per state, so the upper body keeps
+// saying exactly what it said standing:
+//
+//   desk   at a task chair, hands to the keys: shins down to the floor, the
+//          knees tucked under the barrel, the body a chair's height lower.
+//   sofa   reclined: the body tipped back, the legs out along the cushion.
+//   floor  cross-legged, a laptop on the knees — a crew member (WP-89).
+//
+// THE FEET POINT DOES NOT MOVE. The frame's origin is still the ground
+// contact, so the label, the halo, the contact shadow, the hit box and the
+// chrome above the head all hang off the same point they always did; what
+// moves is how far above it the body is drawn.
+//
+// THE RAISED HAND DOES NOT MOVE EITHER. Every hand below `RAISED_Y` sinks with
+// the body; a raised one stays exactly where `needs_input` put it, so a seated
+// figure's hand clears its own dome by MORE than a standing one's does.
+
+/** The three seats, in the order the tests walk them. */
+export const RIG_SEATS = Object.freeze(['desk', 'sofa', 'floor']);
+
+/** How far each seat lowers the barrel's bottom edge, local units. */
+const SEAT_DROP = Object.freeze({ desk: 0.08, sofa: 0.09, floor: 0.15 });
+/** The extra drop of the short silhouette drawn below `RIG_DETAIL_MIN_PX`. */
+const SHORT_DROP = 0.035;
+/** A mitt at or above this local height is a raised hand, and never sinks. */
+const RAISED_Y = 0.9;
+/** A standing pose (`for_review`) is seated from this bottom edge. */
+const STAND_BY = 0.22;
+
+/**
+ * One seated skeleton, from a state's standing one. Pure, and called only at
+ * module load: `SEATED` below holds every answer, so `drawCharacter` looks one
+ * up rather than allocating one.
+ * @param {any} k @param {'desk'|'sofa'|'floor'} seat @param {boolean} short
+ */
+function seatPose(k, seat, short) {
+  const base = k.stand ? STAND_BY : k.by;
+  const by = Math.max(0.05, base - SEAT_DROP[seat] - (short ? SHORT_DROP : 0));
+  const drop = k.by - by;
+  const sink = (a) => (a[1] >= RAISED_Y ? a : Object.freeze([a[0], a[1] - drop]));
+  // The crew's hands go to the laptop on the knees, not to where a standing
+  // pose happened to hold them; a raised hand is still a raised hand.
+  const lap = (a, x) => (a[1] >= RAISED_Y ? a : Object.freeze([x, by + 0.13]));
+  return Object.freeze({
+    lean: seat === 'sofa' ? Math.min(k.lean, -0.16) : k.lean,
+    by,
+    hy: k.hy - drop,
+    hrot: k.hrot,
+    aR: seat === 'floor' ? lap(k.aR, 0.2) : sink(k.aR),
+    aL: seat === 'floor' ? lap(k.aL, -0.19) : sink(k.aL),
+    sq: k.sq,
+    card: k.card || 0,
+    seat,
+    short: short ? 1 : 0,
+  });
+}
+
+/**
+ * Every seated skeleton, as `SEATED[state][seat][short]`. Built once, and
+ * nested rather than keyed by a joined string so a lookup builds nothing.
+ */
+const SEATED = {};
+for (const state of RIG_STATES) {
+  SEATED[state] = {};
+  for (const seat of RIG_SEATS) {
+    SEATED[state][seat] = [seatPose(RIG_POSES[state], seat, false), seatPose(RIG_POSES[state], seat, true)];
+  }
+}
+
+/**
+ * The pose for a state in a seat — or, for no seat, the standing one.
+ *
+ * `short` is the silhouette below `RIG_DETAIL_MIN_PX`: the legs merge into one
+ * low mass and the body sits a little lower still. The visor and the raised
+ * hand are not in it; nothing about sitting touches either.
+ * @param {string} state
+ * @param {string|null|undefined} seat `'desk'`, `'sofa'`, `'floor'`, or none
+ * @param {boolean} [short]
+ */
+export function rigSeatedPose(state, seat, short) {
+  if (seat !== 'desk' && seat !== 'sofa' && seat !== 'floor') return rigPoseFor(state);
+  const row = SEATED[state] || SEATED.ended;
+  return row[seat][short ? 1 : 0];
+}
+
 /**
  * Which of B's two walk frames to draw, from the clip's own leg phase. Two
  * frames, so this is a step function rather than a blend.
@@ -296,12 +386,14 @@ export let _rHx = 0,
  * result; so does the rim pass, which needs an arm's geometry before the body
  * is painted over it.
  * @param {{aR:number[], aL:number[]}} k
+ * @param {number} [dR] @param {number} [dL] WP-97's typing tap: how far each
+ *   mitt is lifted off the pose, local units. Zero for anything standing.
  */
-export function rigArms(k) {
+export function rigArms(k, dR, dL) {
   _rHx = lx(k.aR[0]);
-  _rHy = ly(k.aR[1]);
+  _rHy = ly(k.aR[1] + (dR || 0));
   _lHx = lx(k.aL[0]);
-  _lHy = ly(k.aL[1]);
+  _lHy = ly(k.aL[1] + (dL || 0));
 }
 
 /**

@@ -192,6 +192,20 @@ let _frame = 0; // which walk frame
 let _flicker = 0; // visor flash on a real tool call, 0..1
 let _power = 0; // power-down, 0 lit .. 1 dark
 let _card = 1; // how open the held page is, 0 edge-on .. 1 flat
+// WP-97 · sitting. The mitts in local units (the pose's, plus the typing tap),
+// one leg's slab, and the laptop lid a crew member holds on its knees.
+let _aRx = 0,
+  _aRy = 0,
+  _aLx = 0,
+  _aLy = 0;
+let _fx = 0,
+  _fy = 0,
+  _fw = 0,
+  _fh = 0,
+  _fa = 0,
+  _tx = 0,
+  _ty = 0;
+let _lid = 1;
 
 /**
  * Resolve one character's geometry into the scratch above.
@@ -203,8 +217,12 @@ let _card = 1; // how open the held page is, 0 edge-on .. 1 flat
  * @param {boolean} dim force the reduced drawing (L0)
  * @param {import('./life.js').Life|null} [life] WP-87's character life. Omitted
  *   — the manager's avatar, a caller that predates it — every term rests.
+ * @param {import('./clips.js').Pose|null} [pose] WP-97: the clip's pose, read
+ *   for the typing tap on a seated figure and for nothing else.
+ * @param {number|null} [lid] WP-97: how open the laptop on a crew member's
+ *   knees is, 0 shut .. 1 open. Omitted, it is open.
  */
-export function rigSetup(k, id, tints, h, phase, dim, life) {
+export function rigSetup(k, id, tints, h, phase, dim, life, pose, lid) {
   _flicker = life ? life.flicker : 0;
   _power = life ? life.power : 0;
   _card = life ? life.card : 1;
@@ -228,7 +246,29 @@ export function rigSetup(k, id, tints, h, phase, dim, life) {
   _droop = tints.dead ? (_power > 0 ? _power : 1) : k.lean > 0.18 ? 0.7 : 0;
   _phase = phase || 0;
   _frame = k.walk ? walkFrame(phase * 2) : 0;
-  rigArms(k);
+  _lid = typeof lid === 'number' && Number.isFinite(lid) ? Math.max(0, Math.min(1, lid)) : 1;
+  // THE TYPING TAP (WP-97). The rig never read the clip's arms: a standing B
+  // holds its state pose and the `type` clip reached it only as a bob. A seated
+  // figure has its hands on keys, so the key-down arm's mitt lifts a little —
+  // which is what makes the four frames of `type` four different pictures.
+  const tapR = k.seat && pose ? keyTap(pose.armR) : 0;
+  const tapL = k.seat && pose ? keyTap(pose.armL) : 0;
+  _aRx = k.aR[0];
+  _aRy = k.aR[1] + tapR;
+  _aLx = k.aL[0];
+  _aLy = k.aL[1] + tapL;
+  rigArms(k, tapR, tapL);
+}
+
+/**
+ * How far a typing arm lifts its mitt, local units: the `type` clip's key-down
+ * shoulder is 0.1 rad past its rest, and that becomes 0.035 of lift.
+ * @param {{shoulder:number, hand:string}|undefined} arm
+ */
+function keyTap(arm) {
+  if (!arm || arm.hand !== 'key') return 0;
+  const d = (Number(arm.shoulder) - 2.05) * 0.35;
+  return d > 0 ? Math.min(0.04, d) : 0;
 }
 
 /**
@@ -251,6 +291,20 @@ function basePath(ctx, grow) {
     lRoundRect(ctx, 0, k.by * 0.6, _bw * 0.9 + g, k.by * 1.35 + g, k.by * 0.5, 0);
     return false;
   }
+  if (k.seat && k.short) {
+    // WP-97 · the short silhouette: below `RIG_DETAIL_MIN_PX` two folded legs
+    // are four pixels of noise, so the lap is one low mass under the barrel.
+    const tall = k.by + 0.05;
+    const wide = k.seat === 'floor' ? 1.2 : 0.95;
+    const off = k.seat === 'sofa' ? _bw * 0.18 : 0;
+    lRoundRect(ctx, off, tall / 2, _bw * wide + g, tall + g, tall * 0.45, 0);
+    return false;
+  }
+  if (k.seat) {
+    footGeom(0);
+    lRoundRect(ctx, _fx, _fy, _fw + g, _fh + g, _fw * 0.45, _fa);
+    return true;
+  }
   const lift = k.walk && _frame === 0 ? 0.03 : 0;
   lRoundRect(
     ctx,
@@ -267,6 +321,11 @@ function basePath(ctx, grow) {
 function baseFootB(ctx, grow) {
   const g = grow || 0;
   const k = _k;
+  if (k.seat) {
+    footGeom(1);
+    lRoundRect(ctx, _fx, _fy, _fw + g, _fh + g, _fw * 0.45, _fa);
+    return;
+  }
   const lift = k.walk && _frame === 1 ? 0.03 : 0;
   lRoundRect(
     ctx,
@@ -277,6 +336,46 @@ function baseFootB(ctx, grow) {
     _bw * 0.14,
     k.recline ? -0.65 : 0,
   );
+}
+
+/**
+ * One leg as a slab from `(ax, ay)` to `(bx, by)`, `t` thick, into the leg
+ * scratch. The toe is the `b` end, which is where the boot goes.
+ */
+function slab(ax, ay, bx, by, t) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  _fx = (ax + bx) / 2;
+  _fy = (ay + by) / 2;
+  _fw = t;
+  _fh = Math.hypot(dx, dy) + t;
+  _fa = Math.atan2(-dx, dy);
+  _tx = bx;
+  _ty = by;
+}
+
+/**
+ * WP-97 · where leg `i` (0 left, 1 right) of a SEATED figure is. Every end
+ * that touches the floor is lifted by half the leg's thickness, so a rounded
+ * toe rests on the ground contact rather than through it.
+ * @param {number} i
+ */
+function footGeom(i) {
+  const k = _k;
+  const s = i === 0 ? -1 : 1;
+  const t = _bw * 0.3;
+  if (k.seat === 'desk') {
+    // Knees together under the barrel's front edge, shins down to the floor,
+    // the feet a little apart: a robot on a task chair, seen from the front.
+    slab(s * _bw * 0.19, k.by + 0.03, s * _bw * 0.29, t / 2, t);
+  } else if (k.seat === 'sofa') {
+    // Stretched out along the cushion, away from the way the body leans.
+    if (i === 0) slab(-_bw * 0.08, k.by + 0.02, _bw * 0.62, t / 2 + 0.02, t * 0.92);
+    else slab(_bw * 0.14, k.by + 0.01, _bw * 0.9, t / 2 + 0.06, t * 0.92);
+  } else {
+    // Cross-legged: knees out wide past the barrel, feet tucked in the middle.
+    slab(s * _bw * 0.66, 0.1, -s * _bw * 0.1, t * 0.42, t * 0.84);
+  }
 }
 
 function barrelPath(ctx, grow) {
@@ -290,11 +389,11 @@ function domePath(ctx, grow) {
 }
 
 function nearArmPath(ctx) {
-  lLimb(ctx, _bx + _bw * 0.4, _by + _bh * 0.2, _k.aR[0], _k.aR[1]);
+  lLimb(ctx, _bx + _bw * 0.4, _by + _bh * 0.2, _aRx, _aRy);
 }
 
 function farArmPath(ctx) {
-  lLimb(ctx, _bx - _bw * 0.4, _by + _bh * 0.2, _k.aL[0], _k.aL[1]);
+  lLimb(ctx, _bx - _bw * 0.4, _by + _bh * 0.2, _aLx, _aLy);
 }
 
 // ---------------------------------------------------------------- the rim
@@ -371,13 +470,45 @@ export function drawRigBase(ctx) {
   }
   // The boots: the project's deep tone, a band across the front of each foot.
   // One of the three "small elements" identity is allowed (design README).
-  if (_detail && two) {
+  if (_detail && two && _k.seat) {
+    // Seated, the boot is a cap on the toe end of each leg.
+    ctx.fillStyle = _id.boot;
+    for (let i = 0; i < 2; i++) {
+      footGeom(i);
+      lEllipse(ctx, _tx, _ty, _fw * 0.5, _fw * 0.36, 0);
+      ctx.fill();
+    }
+  } else if (_detail && two) {
     ctx.fillStyle = _id.boot;
     lRoundRect(ctx, -_bw * 0.22, _k.by * 0.22, _bw * 0.34, _k.by * 0.4, _bw * 0.08, 0);
     ctx.fill();
     lRoundRect(ctx, _bw * 0.24, _k.by * 0.22, _bw * 0.34, _k.by * 0.4, _bw * 0.08, 0);
     ctx.fill();
   }
+}
+
+/**
+ * WP-97 · the laptop on a crew member's knees: the base across the lap and,
+ * while the junior's transcript is moving, the back of the lid standing up
+ * from it. It folds exactly as WP-89's floor laptop did — `_lid` is the same
+ * number — and it is drawn over the barrel and under the near arm, so the
+ * mitt lands on the keys.
+ * @param {CanvasRenderingContext2D} ctx
+ */
+export function drawRigLaptop(ctx) {
+  if (_k.seat !== 'floor') return;
+  const top = _k.by + 0.06;
+  const lid = 0.17 * _lid;
+  if (lid > 0.01) {
+    lRoundRect(ctx, 0, top + lid / 2, 0.4, lid, 0.02, 0);
+    paint(ctx, PALETTE.monitorBody);
+    // The screen's own light, spilling over the top edge toward the reader.
+    lRoundRect(ctx, 0, top + lid - 0.012, 0.3, 0.018, 0.009, 0);
+    ctx.fillStyle = PALETTE.monitorScreenGlow;
+    ctx.fill();
+  }
+  lRoundRect(ctx, 0, top - 0.02, 0.46, 0.05, 0.02, 0);
+  paint(ctx, PALETTE.monitorBody);
 }
 
 /** The far arm: the first thing to go below `RIG_DETAIL_MIN_PX`. */
@@ -593,13 +724,13 @@ export function rigTopY() {
   return Math.max(
     crownTop(_id.crown, _hy, _hr, _droop),
     _hy + _hr * 1.14,
-    _k.aR[1] + MITT_R + 0.04,
+    _aRy + MITT_R + 0.04,
   );
 }
 
 /** The local y of the top of the raised hand. */
 export function rigHandTopY() {
-  return _k.aR[1] + MITT_R;
+  return _aRy + MITT_R;
 }
 
 // ------------------------------------------------------------- the state mark

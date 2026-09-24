@@ -62,13 +62,21 @@ import {
   CHROME_BADGE_U,
   MANAGER_SUIT,
   MANAGER_SCALE,
+  RIG_DETAIL_MIN_PX,
   labelFontSize,
   truncateLabel,
   monoFont,
   sansFont,
   rigTints,
 } from './rig-metrics.js';
-import { idlePhase, rigFrame, rigHeight, rigPoseFor, roundRectFill } from './rig-pose.js';
+import {
+  idlePhase,
+  rigFrame,
+  rigHeight,
+  rigPoseFor,
+  rigSeatedPose,
+  roundRectFill,
+} from './rig-pose.js';
 import {
   drawContactShadow,
   drawFigureHalo,
@@ -79,6 +87,7 @@ import {
   drawRigCrown,
   drawRigDome,
   drawRigFarArm,
+  drawRigLaptop,
   drawRigNearArm,
   drawRigVisor,
   haloRimWidth,
@@ -365,6 +374,7 @@ export const REST_LIFE = Object.freeze({
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
  *   phase?:number|null, life?:import('./life.js').Life|null,
+ *   seat?:string|null, laptop?:number|null,
  *   identity?:{hair:string, accent:string, glyph:string}|null,
  *   appearance?:import('./palette.js').Appearance|null }} opts
  *   `life` (WP-87): what this figure is doing beyond its pose — the visor
@@ -392,6 +402,9 @@ export const REST_LIFE = Object.freeze({
  *   mitts, the barrel's width, the dome's size, the crown accessory, the brow
  *   bar, and a rarity marker on a minority of agents. Neither channel touches
  *   the barrel's fill or the visor's tint: the state owns both.
+ *   `seat` (WP-97): `'desk'`, `'sofa'` or `'floor'` — the figure is drawn
+ *   sitting there, its feet point still `(x, y)`. Omitted, or while walking,
+ *   it stands. `laptop` is how open a `'floor'` sitter's laptop lid is, 0..1.
  */
 export function drawCharacter(ctx, pose, opts) {
   // WP-87 · what this figure is doing beyond its pose, from `life.js`. A caller
@@ -418,11 +431,16 @@ export function drawCharacter(ctx, pose, opts) {
   // `rec.clip` does not say until the walk ends. The pose is the fallback for
   // a caller that has nothing to add.
   const walking = opts.walking === true || (pose.seated === false && pose.legPhase > 0);
-  const k = rigPoseFor(walking ? 'walking' : state);
+  const h = rigHeight(u);
+  // WP-97 · SITTING. A figure with a seat sits in it unless it is walking; the
+  // short silhouette is the one the LOD drop list already draws small figures
+  // with, and it touches nothing but the legs and the height.
+  const k = walking
+    ? rigPoseFor('walking')
+    : rigSeatedPose(state, opts.seat, lod === 0 || h < RIG_DETAIL_MIN_PX);
   const id = rigIdentity(opts.identity || null, appearance);
   const dead = state === 'ended' || state === 'let_go';
   const tints = rigTints(color, dead);
-  const h = rigHeight(u);
   const phase = idlePhase(opts.seconds, reduced, opts.phase ?? null);
 
   // The fold-away and the pop-in fade as well as scale, because a figure that
@@ -453,12 +471,13 @@ export function drawCharacter(ctx, pose, opts) {
   // BASE_U, so it is scaled into this zoom exactly as it always was.
   const by = oy + (reduced ? 0 : pose.bob * (u / BASE_U));
   rigFrame(ox, by, h);
-  rigSetup(k, id, tints, h, phase, lod === 0, life);
+  rigSetup(k, id, tints, h, phase, lod === 0, life, pose, opts.laptop ?? null);
 
   drawFigureRim(ctx, haloRimWidth(u));
   drawRigBase(ctx);
   drawRigFarArm(ctx);
   drawRigBarrel(ctx);
+  drawRigLaptop(ctx);
 
   if (pose.prop === 'cue') drawCueBehind(ctx, u);
 
