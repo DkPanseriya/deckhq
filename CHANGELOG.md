@@ -77,6 +77,27 @@
   of Blocked and sending works again — raise its budget first, or the next check stops it again. This is the only time DeckHQ itself
   moves a card, and Blocked is the only place it can move one to.
 
+### Testing
+
+- **The Linux goldens are baked on Linux, by CI, and committed by a person.** `npm run goldens`
+  only writes the platform it runs on, so the Linux set could only be baked on a Linux machine, and
+  `test/goldens/linux/` is empty today: CI's `goldens` job reports all 17 captures as not yet
+  baked, and passes. A new manual workflow, **Goldens bake** (`.github/workflows/goldens-bake.yml`,
+  optional `populations` input), runs the bake on `ubuntu-latest` with Node 22 and the runner's own
+  Chrome, prints one line per capture, and uploads `test/goldens/linux/` as `goldens-linux-<sha>`
+  for 7 days. It has only the default read token and never pushes.
+  `node scripts/goldens-import.mjs <dir-or-zip>` puts a downloaded artifact into
+  `test/goldens/linux/`. Every file has to be `<capture>.png` for a capture that
+  `node scripts/goldens.mjs --list` (new) names, and has to be a PNG, or the whole import is
+  refused and nothing is placed. It reads the artifact zip without a dependency. An empty input
+  exits 2. CONTRIBUTING.md has the four steps.
+- **A release refuses to ship with a gap in a Linux set that exists.** `publish.yml` gains a
+  `goldens` job, and `publish` now needs it. It runs with `--strict` when `test/goldens/linux/` holds
+  at least one PNG, and without it when the directory has none. `--strict` on its own would have
+  refused 1.4.0 and 1.5.0, which were both tagged with an empty Linux set. Pushes and pull
+  requests stay non-strict. `test/unit/goldens-import.test.mjs` holds the importer and the shape
+  of both workflows (13 tests).
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights
