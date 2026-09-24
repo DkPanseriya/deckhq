@@ -29,7 +29,8 @@ name: Publish
 # After that, every release is `git push origin vX.Y.Z` and nothing else.
 #
 # The publish is gated on the full test matrix passing first, so a tag on a
-# broken commit cannot reach the registry.
+# broken commit cannot reach the registry — and on the linux goldens, which
+# are `--strict` here once a linux set exists (the rule is above the job).
 
 on:
   push:
@@ -63,8 +64,58 @@ jobs:
       - name: Test
         run: npm test
 
+  # The linux goldens, again, on the tag — and this time a hole in the set
+  # stops the release.
+  #
+  # CI's `goldens` job runs on every push WITHOUT `--strict`: a capture with no
+  # golden is reported NOT YET BAKED and costs nothing, because a gate that is
+  # red for a reason that is not a pixel is a gate nobody reads. A release is
+  # the one moment that should not be true, so here:
+  #
+  #   RULE: `--strict` when `test/goldens/linux/` holds at least one PNG;
+  #         without it when the directory holds none.
+  #
+  # `--strict` alone would have refused 1.4.0 and 1.5.0, both tagged with an
+  # empty linux set: every capture MISS, exit 2, no release. An empty set has
+  # nothing to be complete against — there is no linux set yet, and saying so
+  # is the non-strict report's job. The first PNG committed is the decision to
+  # have one, and from then on every capture must have its golden or the tag
+  # does not ship: bake the missing ones with `goldens-bake.yml`.
+  #
+  # Unchanged from CI: a golden that disagrees with its capture is red strict or
+  # not, and no Chrome, no WebSocket or a Chrome that will not start is a
+  # SKIPPED line and exit 0. Same runner, Node and budget as ci.yml's job.
+  goldens:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check goldens (strict once linux has a set)
+        run: |
+          if [ -n "$(find test/goldens/linux -maxdepth 1 -name '*.png' -print -quit 2> /dev/null)" ]; then
+            echo "test/goldens/linux/ has a set: --strict, so a capture with no golden stops this release"
+            npm run goldens:check -- --verbose --strict
+          else
+            echo "test/goldens/linux/ has no PNG: no set to be complete, so the check runs without --strict"
+            npm run goldens:check -- --verbose
+          fi
+      - name: Upload captures and diffs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldens-linux-check-${{ github.ref_name }}
+          path: test/goldens/.out/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
+
   publish:
-    needs: verify
+    # The goldens job too, so a release cannot ship with a hole in a linux set
+    # that exists (see the rule above it).
+    needs: [verify, goldens]
     runs-on: ubuntu-latest
     permissions:
       contents: read

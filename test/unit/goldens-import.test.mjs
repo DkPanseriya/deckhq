@@ -204,3 +204,36 @@ test('the command line exits non-zero with no argument and on an empty directory
   assert.equal(empty.status, EXIT_NO_INPUT, empty.stderr);
   assert.match(empty.stderr, /has no files in it/);
 });
+
+// ----------------------------------------------- the workflows around it
+
+/** @param {string} name */
+const workflow = (name) => fs.readFileSync(path.join(REPO, '.github', 'workflows', name), 'utf8');
+
+test('the bake workflow is manual, read-only, never pushes, and uploads goldens-linux-<sha>', () => {
+  const yml = workflow('goldens-bake.yml').replace(/\r\n/g, '\n');
+  assert.match(yml, /^on:\n {2}workflow_dispatch:/m);
+  assert.match(yml, /^permissions:\n {2}contents: read$/m);
+  assert.doesNotMatch(yml, /: write\b|git push|git commit/);
+  assert.match(yml, /npm run goldens -- /);
+  assert.doesNotMatch(yml, /goldens:check|--check/);
+  assert.match(yml, /name: goldens-linux-\$\{\{ github\.sha \}\}/);
+  assert.match(yml, /path: test\/goldens\/linux\/\n/);
+  assert.match(yml, /retention-days: 7\n/);
+  // The input reaches the shell through the environment, never the script text.
+  assert.doesNotMatch(yml, /run: [^\n]*\$\{\{ inputs\./);
+  assert.match(yml, /POPULATIONS: \$\{\{ inputs\.populations \}\}/);
+});
+
+test('--strict runs on a v* tag only once a linux PNG exists, and never on a push', () => {
+  const ci = workflow('ci.yml').replace(/\r\n/g, '\n');
+  assert.match(ci, /run: npm run goldens:check -- --verbose\n/);
+  assert.doesNotMatch(ci.replace(/^\s*#.*$/gm, ''), /--strict/);
+
+  const publish = workflow('publish.yml').replace(/\r\n/g, '\n');
+  assert.match(publish, /^on:\n {2}push:\n {4}tags: \['v\*'\]/m);
+  assert.match(publish, /find test\/goldens\/linux -maxdepth 1 -name '\*\.png'/);
+  assert.match(publish, /npm run goldens:check -- --verbose --strict\n/);
+  assert.match(publish, /npm run goldens:check -- --verbose\n/);
+  assert.match(publish, /needs: \[verify, goldens\]/);
+});
