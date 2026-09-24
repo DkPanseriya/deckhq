@@ -91,8 +91,12 @@ jobs:
   # and a Chrome that will not start (each says so and exits 0); plus no
   # goldens committed for this platform yet — see DEVIATIONS.md §87 and §114,
   # this is the state linux is in today. In every case the fresh captures are
-  # uploaded below, which is how the first linux set gets generated and
-  # committed.
+  # uploaded below, to be looked at.
+  #
+  # NOT `--strict`, on purpose, on every push and pull request. The set to
+  # commit is baked by `goldens-bake.yml` and imported with
+  # `scripts/goldens-import.mjs`; the strict run is publish.yml's, on a `v*`
+  # tag, once `test/goldens/linux/` holds any PNG at all.
   #
   # Budget: WP-21 asks for under 90 s. Measured 26-28 s for all four
   # populations on a Windows laptop; the timeout is a hang guard, not the

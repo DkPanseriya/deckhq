@@ -14,6 +14,7 @@
  *   node scripts/goldens.mjs [--check] [--strict] [--only NAME] [--theme NAME]
  *                            [--settle MS] [--stage WxH] [--keep] [--verbose]
  *                            [--deadline S] [--budget S]
+ *   node scripts/goldens.mjs --list    # every capture name, one per line, and exit
  *
  * `--strict` says this platform's set is meant to be COMPLETE, so a capture
  * with no golden yet exits non-zero instead of being reported as not yet baked.
@@ -335,6 +336,22 @@ const CAPTURES = [
     theme,
   })),
 ];
+
+/**
+ * `--list` prints every capture's name, one per line, and exits before any
+ * guard — no Chrome, no WebSocket, no demo. It is how the capture list reaches
+ * something that must not run a browser to learn it: `scripts/goldens-import.mjs`
+ * refuses any file that is not one of these names, and the bake workflow prints
+ * what it baked against this list. One list, read from here, so a capture added
+ * above cannot be forgotten by either.
+ */
+if (has('--list')) {
+  const names = `${CAPTURES.map((c) => c.name).join('\n')}\n`;
+  // Wait for the write, because stdout on a pipe is asynchronous on some
+  // platforms and `process.exit` does not flush it.
+  await new Promise((resolve) => process.stdout.write(names, resolve));
+  process.exit(0);
+}
 
 /**
  * The stage every committed golden is photographed on. One size, so a golden

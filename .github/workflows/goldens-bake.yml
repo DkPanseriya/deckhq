@@ -1,0 +1,107 @@
+name: Goldens bake
+
+# Bakes the LINUX goldens, on Linux, and hands them to a person to commit.
+#
+# Goldens are per platform because Chrome's text rendering is the operating
+# system's: the same floor on Windows and on Ubuntu differs in every label, so
+# `test/goldens/win32/` cannot stand in for `test/goldens/linux/`. And
+# `npm run goldens` only ever writes the HOST platform's set, so a maintainer
+# without a Linux desktop cannot bake the linux one at all — which is how the
+# last linux set went stale after three re-layouts of the floor and had to be
+# deleted. This workflow is the Linux desktop.
+#
+# To run it: Actions -> Goldens bake -> Run workflow (or
+# `gh workflow run goldens-bake.yml`). Then download the `goldens-linux-<sha>`
+# artifact from the run, and
+#
+#     node scripts/goldens-import.mjs <the downloaded zip or directory>
+#
+# LOOK at the pictures, and commit `test/goldens/linux/`. CONTRIBUTING.md has
+# the same steps.
+#
+# It never pushes. A golden is a claim that a picture is RIGHT, and that is a
+# person's call, made by looking; a job that committed its own output would be
+# a gate that approves itself. So the token is the default read-only one and
+# the only thing the run produces is an artifact that expires in a week.
+
+on:
+  workflow_dispatch:
+    inputs:
+      populations:
+        description: >-
+          Captures or populations to bake, space-separated (e.g. "demo three@selected").
+          Empty bakes every capture. `node scripts/goldens.mjs --list` names them.
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  bake:
+    runs-on: ubuntu-latest
+    # The bake's own whole-run budget is 6 minutes per invocation (goldens.mjs
+    # `--budget`), and a list of populations is one invocation each. This is a
+    # hang guard, not the budget.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # The CDP client needs the global WebSocket, unflagged from Node 22.
+          node-version: 22
+
+      # No install step, exactly as the CI `goldens` job: the harness is node
+      # builtins, our own PNG codec over node:zlib, and the Google Chrome the
+      # ubuntu runner image already ships. The same Chrome the check job
+      # compares with is the one that bakes, which is what makes the set
+      # comparable at all.
+
+      - name: Bake
+        # The input reaches the shell through the environment, never by
+        # interpolation into the script text, and each word must look like a
+        # capture or population name before it is passed on.
+        env:
+          POPULATIONS: ${{ inputs.populations }}
+        run: |
+          set -euo pipefail
+          set -f
+          if [ -z "${POPULATIONS//[[:space:]]/}" ]; then
+            npm run goldens -- --verbose
+          else
+            for name in $POPULATIONS; do
+              case "$name" in
+                *[!A-Za-z0-9@_-]*)
+                  echo "goldens-bake: \"$name\" is not a capture or population name"
+                  exit 2
+                  ;;
+              esac
+              npm run goldens -- --only "$name" --verbose
+            done
+          fi
+
+      - name: What was baked
+        # One line per capture the gate takes, baked or not, so the run page
+        # says what the artifact holds without downloading it.
+        if: always()
+        run: |
+          LIST="$(node scripts/goldens.mjs --list | while read -r name; do
+            file="test/goldens/linux/${name}.png"
+            if [ -f "$file" ]; then
+              printf '  baked      %-20s %9s bytes  sha256 %s\n' "$name" \
+                "$(stat -c %s "$file")" "$(sha256sum "$file" | cut -c1-16)"
+            else
+              printf '  not baked  %s\n' "$name"
+            fi
+          done)"
+          echo "$LIST"
+          printf '### Linux goldens, %s\n\n```\n%s\n```\n' "${GITHUB_SHA:0:7}" "$LIST" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the linux set
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldens-linux-${{ github.sha }}
+          path: test/goldens/linux/
+          if-no-files-found: error
+          retention-days: 7

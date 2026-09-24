@@ -103,6 +103,27 @@ CI runs lint, format check and the full suite on Ubuntu, macOS and Windows again
 22 — all nine combinations must be green. Path handling and process spawning are the two places
 that break on one platform and pass on the others, so be suspicious of both.
 
+### Baking the Linux goldens
+
+`npm run goldens` photographs the floor and writes `test/goldens/<your platform>/`; `npm run
+goldens:check` compares against it. The sets are per platform because Chrome draws text with the
+operating system's fonts, and the command only ever writes the platform it runs on. So if you change
+something the floor draws, regenerate your own platform's set in the same commit, and bake the Linux
+one on Linux, through CI:
+
+1. Actions → **Goldens bake** → **Run workflow** (or `gh workflow run goldens-bake.yml`). Leave
+   _populations_ empty to bake every capture, or name some: `demo three@selected`.
+2. Download the `goldens-linux-<sha>` artifact from the run (the zip, or `gh run download`).
+3. `node scripts/goldens-import.mjs <the zip or directory>`. It places each `<capture>.png` into
+   `test/goldens/linux/` and names any capture still not baked. A file that is not a capture's PNG
+   refuses the whole import, and nothing is placed.
+4. Look at the pictures, then commit `test/goldens/linux/`.
+
+The workflow never pushes. Committing a golden says the picture is right, and a person decides that
+by looking at it. CI's `goldens` job reports a capture with no Linux golden as not yet baked and
+passes. A `v*` tag runs the same check with `--strict` once `test/goldens/linux/` holds any PNG, so
+a release cannot ship with a gap in the set.
+
 ## What a pull request needs
 
 - **Tests pass on all three platforms.** Watch the CI matrix, not just your own machine.
