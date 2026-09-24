@@ -22,15 +22,25 @@
  */
 
 import {
+  BASELINE_REACH,
   CELL_OCCUPANCY_RATIO_MAX,
   CORRIDOR,
   HEIGHT_BAND_RATIO,
+  MAX_WORKING_ROWS,
+  MIN_PROJECT_ROOM_W,
+  OFFICE_COLUMN_MIN,
+  OFFICE_STRETCH_SHARE_MAX,
   PLATE_BAND,
   PROJECT_ASPECT_LIMIT,
   ROOM_FILL_COLUMN_MAX,
+  ROOM_FILL_STRETCH_MAX,
   ROOM_HEIGHT_STRETCH_MAX,
   ROOM_PAD,
   ROOM_WIDTH_STRETCH_MAX,
+  SERVICE_COLUMN_MAX,
+  SERVICE_MAX_W,
+  SERVICE_W_STEP,
+  STRETCH_OPEN_SETTLE,
   WORKING_HEADROOM,
 } from './plan-units.js';
 
@@ -303,8 +313,10 @@ export function createWorkingFloor(
    * @param {number} rowCount
    * @param {number} availW the working floor's width
    * @param {number} fillMax the bare-carpet bound in force
+   * @param {number} [widthMax] how far a room's width is taken to stretch; a
+   *   stretched column (audit F2) passes `Infinity`, since its rooms take all of it
    */
-  const bandDepthCeiling = (rowCount, availW, fillMax) => {
+  const bandDepthCeiling = (rowCount, availW, fillMax, widthMax = ROOM_WIDTH_STRETCH_MAX) => {
     const bands = bandsOf(rowCount);
     if (!bands.length || availW <= 0) return 0;
     const bandNaturalH = bands.map((band) =>
@@ -320,7 +332,7 @@ export function createWorkingFloor(
         naturalW += nat.w;
         shallowest = Math.min(shallowest, nat.h);
       }
-      const w = Math.min(availW, naturalW * ROOM_WIDTH_STRETCH_MAX);
+      const w = Math.min(availW, naturalW * widthMax);
       const deepest = (fillMax * shallowest * naturalW) / Math.max(1e-6, w);
       usable = Math.min(usable, deepest / (bandNaturalH[r] / totalNaturalH));
     });
@@ -638,8 +650,19 @@ export function createWorkingFloor(
       // below is unchanged: the strip is simply not theirs to fill.
       const roomsH = Math.max(1, H - reserve);
       const order = fillOrder(chosen.rowCount, workingW, roomsH, Math.min(asked, roomsH));
-      forced = order.forced;
-      bandH = Math.min(order.bandH, roomsH);
+      // A STRETCHED column's rooms end on the lounge's baseline (audit F3):
+      // `stretchColumn` has already chosen that height, so the rows take it —
+      // as far as `BASELINE_REACH` of the depth they asked or
+      // `ROOM_FILL_STRETCH_MAX` of their floor, whichever
+      // reaches further. Past both a room is a hall, and the rest stays open.
+      const reach = chosen.fillAll
+        ? Math.max(
+            asked * BASELINE_REACH,
+            bandDepthCeiling(chosen.rowCount, workingW, ROOM_FILL_STRETCH_MAX, Infinity),
+          )
+        : 0;
+      bandH = Math.min(chosen.fillAll ? Math.max(asked, reach) : order.bandH, roomsH);
+      forced = chosen.fillAll ? bandH > asked + 1e-6 : order.forced;
       laid = projectRooms.length
         ? layWorkingFloor({ x: workingX, y: 0, w: workingW, h: bandH }, chosen.rowCount)
         : { cells: [], corridors: [] };
@@ -659,8 +682,11 @@ export function createWorkingFloor(
         // what `buildProjectRoom` spreads into it.
         const natural0 = naturalOf(i);
         const flowH = Math.min(cell.h, natural0.h * ROOM_HEIGHT_STRETCH_MAX);
+        // And no WIDER than the unstretched floor laid it (audit F2): the width
+        // a stretch adds is clear floor round desks composed as they were.
+        const flowW = Math.min(cell.w, chosen.flowW?.[i] ?? Infinity);
         const interiorAspect =
-          Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, flowH - ROOM_PAD * 2 - PLATE_BAND);
+          Math.max(1, flowW - ROOM_PAD * 2) / Math.max(1, flowH - ROOM_PAD * 2 - PLATE_BAND);
         rebuild(i, cell, interiorAspect);
         const natural = naturalOf(i);
         worstW = Math.max(worstW, natural.w / cell.w);
@@ -671,12 +697,178 @@ export function createWorkingFloor(
       asked *= Math.min(worstH, 1.25);
       H = Math.max(H, asked + reserve);
     }
-    return { H, W, workingW, workingX, laid, bandH, forced, pinH: reserve };
+    return { H, W, workingW, workingX, laid, bandH, forced, pinH: reserve, asked };
+  };
+
+  /**
+   * THE COLUMN, STRETCHED TO THE WINDOW (audit F2 and F3).
+   *
+   * The search picks the arrangement; this spends what it could not. Every
+   * candidate the search can reach has its rooms at their natural width, so a
+   * column whose lounge sets the height came out 1.56:1 on a 1.95:1 window
+   * and the camera drew the difference as ground either side. So once the
+   * arrangement is chosen the building is made the window's shape exactly:
+   *
+   *   - the ROOMS take the extra width, and their desks stay centred in it
+   *     (`place` in `plan.js`), so it is clear floor inside a room rather than
+   *     ground outside the building;
+   *   - the room rows and the lounge END ON ONE BASELINE. Three ways there:
+   *     the rows grow deeper (to `ROOM_FILL_STRETCH_MAX`, past which a room is
+   *     a hall), the rooms are dealt into MORE rows, or the column comes down
+   *     to the rows by laying the lounge WIDER, which is shorter — its bays
+   *     shelf-pack into fewer rows. They are priced as WP-99 prices two
+   *     arrangements, by the share of the window each leaves unused — here the
+   *     open floor under the rows, the carpet inside a room past
+   *     `ROOM_FILL_STRETCH_MAX` (a hall is unused floor with walls round it),
+   *     and the scale given up against the smallest candidate. A tie (two
+   *     points) goes to the fewer rows and the narrower column, so the rooms
+   *     stay the subject.
+   *
+   * Nothing here scales a body or a piece of furniture: every width it
+   * changes is a room's rectangle, and every room is rebuilt into it.
+   *
+   * @param {any} chosen the envelope the search chose
+   * @param {any} fitted what `layColumn` made of it
+   * @param {number} targetAspect the window's shape
+   * @param {(sw:number, pack:number) => any} measure the service column at a
+   *   width, office and lounge both built to it
+   * @param {boolean} [restack] whether more rows are on offer (see `fitColumn`)
+   */
+  const stretchColumn = (chosen, fitted, targetAspect, measure, restack = true) => {
+    // A floor with no working side has no rooms to share the width, so the
+    // column itself widens towards the window's shape — the lounge's bays
+    // re-pack into it — and what `SERVICE_MAX_W` cannot reach stays ground.
+    const bare = fitted.workingW <= 1e-6;
+    const pinH = fitted.pinH || 0;
+    bandCache.clear(); // `layColumn` has just rebuilt the rooms under the deal
+    shapeCache.clear();
+    const sw0 = chosen.measured.w;
+    const maxRows = Math.min(projectRooms.length, MAX_WORKING_ROWS);
+    const found = [];
+    const lastRows = restack ? Math.max(chosen.rowCount, maxRows) : chosen.rowCount;
+    for (let rows = chosen.rowCount; rows <= lastRows; rows++) {
+      const own = rows === chosen.rowCount;
+      const shape = workingShape(rows);
+      const asked = !projectRooms.length ? 0 : own ? (fitted.asked ?? fitted.bandH) : shape.h;
+      const workW0 = own ? fitted.workingW : Math.max(shape.w, MIN_PROJECT_ROOM_W);
+      for (let sw = sw0; sw <= Math.max(sw0, SERVICE_MAX_W) + 1e-6; sw += SERVICE_W_STEP) {
+        const svc = sw === sw0 ? chosen.measured : measure(sw, chosen.pack);
+        let H = own && sw === sw0 ? fitted.H : Math.max(svc.h, asked + pinH);
+        const W = bare ? svc.w + CORRIDOR : Math.max(svc.w + CORRIDOR + workW0, H * targetAspect);
+        H = Math.max(H, W / targetAspect);
+        // The rooms stay the subject: a column only widens past where the
+        // search left it while it is under its share of the building.
+        if (sw > sw0 && projectRooms.length >= 2 && svc.w > W * SERVICE_COLUMN_MAX) break;
+        // And the reception, which grows with the column, stays the size of
+        // its queue rather than of the building (its column floor included).
+        const officeA = svc.w * Math.max(svc.office.room.h, H * OFFICE_COLUMN_MIN);
+        if (sw > sw0 && officeA > W * H * OFFICE_STRETCH_SHARE_MAX) break;
+        const workW = W - svc.w - CORRIDOR;
+        const reach = projectRooms.length
+          ? Math.max(
+              asked * BASELINE_REACH,
+              bandDepthCeiling(rows, workW, ROOM_FILL_STRETCH_MAX, Infinity),
+            )
+          : 0;
+        // What nobody stands on: the open floor under the rows, and the floor
+        // inside a room past `ROOM_FILL_STRETCH_MAX` of its furniture's — a
+        // hall's worth of carpet is unused whether or not it has a wall round it.
+        const depth = Math.min(H - pinH, reach);
+        const open = bare ? 0 : ((H - pinH - depth) * workW + hallOf(rows, workW, depth)) / (W * H);
+        // A bare floor keeps its ground, so there the cost is the shape.
+        const size = bare ? Math.abs(Math.log(W / svc.h / targetAspect)) : W * H;
+        found.push({ svc, W, H, rows, asked, open, size });
+      }
+    }
+    if (!found.length) return chosen;
+    // THE UNUSED SHARE (WP-99's `windowOpen`, read across stretches rather than
+    // across arrangements). Every candidate is the window's shape, so what one
+    // leaves unused is its open floor (above) plus the scale it gives up against the
+    // smallest building on offer: the same furniture in a building 1.2 times
+    // the area is drawn at 1/1.2 of the size. Two points apart is a tie, and a
+    // tie keeps the earlier candidate — fewer rows, then the narrower column.
+    const least = Math.min(...found.map((c) => c.size));
+    const unused = (c) => (bare ? c.size : 1 - (least / c.size) * (1 - c.open));
+    let best = found[0];
+    for (const c of found) if (unused(c) < unused(best) - STRETCH_OPEN_SETTLE) best = c;
+    return {
+      ...chosen,
+      measured: best.svc,
+      H: best.H,
+      rowCount: best.rows,
+      workingW: Math.max(0, best.W - best.svc.w - CORRIDOR),
+      asked: best.asked,
+      fillAll: true,
+      flowW: projectRooms.map((_, i) => fitted.laid.cells[i]?.w ?? Infinity),
+    };
+  };
+
+  /**
+   * The carpet a working side laid `rows` deep in `workW x depth` would put
+   * inside its rooms past `ROOM_FILL_STRETCH_MAX` of their furniture's floor,
+   * room by room: each band's depth shared as `bandDepthCeiling` shares it, and
+   * each room's width as its furniture's share of its band's.
+   * @param {number} rows @param {number} workW @param {number} depth
+   */
+  const hallOf = (rows, workW, depth) => {
+    const bands = bandsOf(rows);
+    const deep = bands.map((band) => band.reduce((a, it) => Math.max(a, naturalOf(it.i).h), 1));
+    const total = deep.reduce((a, b) => a + b, 0) || 1;
+    const net = Math.max(0, depth - CORRIDOR * (bands.length - 1));
+    let hall = 0;
+    bands.forEach((band, r) => {
+      const d = (net * deep[r]) / total;
+      const wide = band.reduce((a, it) => a + naturalOf(it.i).w, 0) || 1;
+      for (const it of band) {
+        const n = naturalOf(it.i);
+        hall += Math.max(0, ((workW * n.w) / wide) * d - ROOM_FILL_STRETCH_MAX * n.w * n.h);
+      }
+    });
+    return hall;
+  };
+
+  /**
+   * Lay the column, stretch it, and lay it again — and if the stretch's new
+   * row count would not hold its rooms (the fit loop had to grow the building
+   * off the window's shape to seat them), take the stretch at the row count
+   * the search chose instead. More rows is priced from the rooms' natural
+   * sizes and the cells are dealt by occupancy, so a deal can ask a room for
+   * less width than its desks need; this is where that is caught. A stretch
+   * that still does not hold is not taken, and the rooms are put back as the
+   * search laid them.
+   *
+   * @param {any} chosen @param {(i:number, cell:any, aspect:number) => void} rebuild
+   * @param {number} targetAspect @param {(sw:number, pack:number) => any} measure
+   */
+  const fitColumn = (chosen, rebuild, targetAspect, measure) => {
+    const before = layColumn(chosen, rebuild);
+    const laidRooms = projectRooms.slice(); // the rooms as `before` laid them
+    let stretched = stretchColumn(chosen, before, targetAspect, measure);
+    let fitted = layColumn(stretched, rebuild);
+    const off = (f) => Math.abs(Math.log(f.W / f.H / targetAspect));
+    const held = (f) => off(f) <= Math.max(Math.log(1.02), off(before));
+    if (!held(fitted) && stretched.rowCount !== chosen.rowCount) {
+      const again = layColumn(chosen, rebuild);
+      stretched = stretchColumn(chosen, again, targetAspect, measure, false);
+      fitted = layColumn(stretched, rebuild);
+    }
+    // And a stretch the fit loop could not hold at all is not taken: the rooms
+    // re-deal themselves as they are rebuilt, and a deal that runs away from
+    // the window's shape is a worse floor than the one the search laid.
+    if (!held(fitted)) {
+      laidRooms.forEach((room, i) => (projectRooms[i] = room));
+      bandCache.clear();
+      shapeCache.clear();
+      return { chosen, fitted: before, before };
+    }
+    return { chosen: stretched, fitted, before };
   };
 
   return {
     bandsOf,
+    fitColumn,
     layColumn,
+    stretchColumn,
     // The depth ladder's ceiling, exported since WP-59d: arrangement B grows
     // its rooms into the row its reception set, which is step (a) of the same
     // fill order read on the other axis, and there is one copy of the rule.

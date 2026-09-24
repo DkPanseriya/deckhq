@@ -254,6 +254,39 @@ export const WORKING_OPEN_MAX = 0.05;
 export const ROOM_FILL_COLUMN_MAX = 1 / 0.58;
 
 /**
+ * HOW FAR A STRETCH MAY GROW A ROOM (audit F2, F3): `1 / 0.4`, a band's
+ * shallowest room at most 60% bare carpet, five points inside the ballroom
+ * guard `floor-integrity.test.mjs` holds every room to.
+ *
+ * `stretchColumn` prices the ways to end the rows on the lounge's baseline
+ * against it, `layColumn` lays a stretched column's rows to the baseline as far
+ * as it (or `BASELINE_REACH` of their asked depth) reaches, and
+ * `fitRows` lets a row's rooms grow this wide before the reception takes the
+ * rest. Where it binds — one small room beside a full lounge on a tall window —
+ * what is left is open floor under the rooms, as before.
+ */
+export const ROOM_FILL_STRETCH_MAX = 1 / 0.4;
+
+/**
+ * How much deeper than they asked a stretched column's rows always grow to end
+ * on the lounge's baseline (audit F3), whatever the bare carpet says: a strip
+ * of open floor a few units deep under a whole row of rooms is the quadrant
+ * the owner saw, and closing it costs each room a few units of clear floor.
+ * Past this the area bound above decides.
+ */
+export const BASELINE_REACH = 1.15;
+
+/** Two ways to stretch a column this close are one answer (WP-99's `OPEN_SETTLE`). */
+export const STRETCH_OPEN_SETTLE = 0.02;
+
+/**
+ * The most of the building the reception may take once a stretch has widened
+ * the column past where the search left it (audit F2) — five points under the
+ * fifth `floor-integrity`'s "the reception should not dominate the floor" holds.
+ */
+export const OFFICE_STRETCH_SHARE_MAX = 0.15;
+
+/**
  * HOW UNEQUAL TWO CELLS IN ONE ROW MAY BE (WP-60).
  *
  * The owner's floor has a twenty-four session project beside three one-session

@@ -20,6 +20,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildPlan, ASPECT_TOLERANCE } from '../../public/render/plan.js';
+import { CORRIDOR, MARGIN } from '../../public/render/plan-units.js';
 import { computeFill, computeTargetAspect, FILL_MIN_SHORT } from '../../public/render/scene.js';
 
 const NOW = 1_800_000_000_000;
@@ -89,7 +90,10 @@ const CAPTURES = /** @type {const} */ ([
   ['wide', 'three', 1920, 950],
 ]);
 
-/** @param {{sessions:number[], agents:Row[]}} floor @param {number} w @param {number} h */
+/**
+ * @param {{sessions:number[], agents:Row[], pinned?:number[]}} floor
+ * @param {number} w @param {number} h
+ */
 function planOf(floor, w, h) {
   const projects = floor.sessions.map((n, i) => ({
     id: `p${i}`,
@@ -97,6 +101,7 @@ function planOf(floor, w, h) {
     sessionCount: n,
     tokens: 1000 * (i + 1),
     needsYou: 0,
+    pinned: Boolean(floor.pinned?.includes(i)),
   }));
   const agents = floor.agents.map(([room, act, ack, minutes, parent], i) => ({
     id: `a${i}`,
@@ -128,5 +133,152 @@ for (const [name, floorName, w, h] of CAPTURES) {
       fill.coverH >= FILL_MIN_SHORT - EPS,
       `${name}: the building covers ${(fill.coverH * 100).toFixed(0)}% of the stage's height`,
     );
+  });
+}
+
+// ------------------------------------------ audit F2 and F3: the window, filled
+
+/**
+ * `scripts/demo-populations.mjs`'s `reference` floor, as the same compact
+ * table: eighteen repos of 13 down to 1 sessions, 47 benched, one working, two
+ * waiting on review, the rest idle — ages in whole hours from two to a month.
+ * @returns {{sessions:number[], agents:Row[]}}
+ */
+function referenceFloor() {
+  const sessions = [13, 9, 7, 6, 5, 4, 4, 3, 3, 3, 3, 2, 2, 2, 1, 1, 1, 1];
+  /** @type {Row[]} */
+  const agents = [];
+  let n = 0;
+  let benched = 0;
+  sessions.forEach((count, room) => {
+    for (let k = 0; k < count; k++, n++) {
+      const minutes = (2 + ((n * 37) % 120) * 6) * 60;
+      if (n === 0) agents.push([room, 'working', 'active', minutes, -1]);
+      else if (n < 3) agents.push([room, 'for_review', 'active', minutes, -1]);
+      else if (benched < 47 && n % 10 !== 5) {
+        benched++;
+        agents.push([room, 'ended', 'benched', minutes, -1]);
+      } else agents.push([room, 'ended', 'active', minutes, -1]);
+    }
+  });
+  return { sessions, agents };
+}
+
+/**
+ * The owner's floor from the audit, anonymised to its counts: twelve waiting on
+ * review, thirty-three in the lounge, one senior at a desk with a crew of
+ * thirteen, and five more one-desk rooms. It is the floor that drew a column
+ * 133.9 x 86 on every window from 1420 x 690 to 2560 x 1310 — a quarter of the
+ * width dark, and a 83.9 x 14.8 U corridor under the rooms.
+ * @returns {{sessions:number[], agents:Row[]}}
+ */
+function ownerFloor() {
+  /** @type {Row[]} */
+  const agents = [];
+  for (let k = 0; k < 12; k++) agents.push([k % 6, 'for_review', 'active', 5 + k, -1]);
+  for (let k = 0; k < 33; k++)
+    agents.push([k % 6, 'ended', k % 2 ? 'benched' : 'active', 20 + k, -1]);
+  const senior = agents.length;
+  agents.push([0, 'working', 'active', 1, -1]);
+  for (let k = 1; k <= 5; k++) agents.push([k, 'working', 'active', 2 + k, -1]);
+  for (let k = 0; k < 13; k++) agents.push([0, 'working', 'active', 1, senior]);
+  const sessions = [0, 0, 0, 0, 0, 0];
+  for (const [room, , , , parent] of agents) if (parent < 0) sessions[room]++;
+  return { sessions, agents };
+}
+
+/**
+ * A large floor: 150 agents over 40 repos, every state, ages spread over five
+ * hours. Deterministic, so the plan is a pure function of it.
+ * @returns {{sessions:number[], agents:Row[]}}
+ */
+function largeFloor() {
+  const states = /** @type {const} */ ([
+    ['working', 'active'],
+    ['ended', 'benched'],
+    ['ended', 'active'],
+    ['for_review', 'active'],
+    ['working', 'active'],
+    ['needs_input', 'active'],
+    ['ended', 'benched'],
+    ['ended', 'active'],
+    ['stalled', 'active'],
+    ['ended', 'benched'],
+  ]);
+  const sessions = Array.from({ length: 40 }, () => 0);
+  /** @type {Row[]} */
+  const agents = [];
+  for (let i = 0; i < 150; i++) {
+    const room = (i * 7) % 40;
+    const [act, ack] = states[i % states.length];
+    sessions[room]++;
+    agents.push([room, act, ack, 1 + ((i * 13) % 300), -1]);
+  }
+  return { sessions, agents };
+}
+
+/** @type {Record<string, {sessions:number[], agents:Row[], pinned?:number[]}>} */
+const FILLED = {
+  demo: FLOORS.demo,
+  three: FLOORS.three,
+  pinned: { ...FLOORS.three, pinned: [3] },
+  reference: referenceFloor(),
+  owner: ownerFloor(),
+  large: largeFloor(),
+};
+
+/** Real windows, and the canvas each gives the floor once the chrome is off it. */
+const WINDOWS = [
+  [1600, 1000],
+  [1920, 1080],
+  [2000, 1154],
+  [2000, 1182],
+  [2560, 1440],
+  [1366, 768],
+];
+const CHROME_H = 130;
+
+/** Audit F2's number: the building covers this much of both axes. */
+const FILL_BOTH_MIN = 0.96;
+
+for (const [name, floor] of Object.entries(FILLED)) {
+  test(`${name}: the building fills the window on both axes, at every real window size`, () => {
+    for (const [winW, winH] of WINDOWS) {
+      const [w, h] = [winW, winH - CHROME_H];
+      const plan = planOf(floor, w, h);
+      const fill = computeFill(plan.width, plan.height, w, h);
+      const where = `${name} at ${winW}x${winH}: a ${plan.arrangement} ${plan.width.toFixed(1)} x ${plan.height.toFixed(1)}`;
+      assert.ok(!fill.capped, `${where} is held back by the character cap`);
+      assert.ok(
+        Math.min(fill.coverW, fill.coverH) >= FILL_BOTH_MIN,
+        `${where} covers ${(fill.coverW * 100).toFixed(1)}% of the width and ` +
+          `${(fill.coverH * 100).toFixed(1)}% of the height`,
+      );
+      // No band of ground either side wider than the envelope's own margin.
+      const bandW = (Math.max(0, 1 - fill.coverW) * w) / 2;
+      const bandH = (Math.max(0, 1 - fill.coverH) * h) / 2;
+      assert.ok(
+        Math.max(bandW, bandH) <= MARGIN * fill.scale + 0.5,
+        `${where} leaves a band of ground ${Math.max(bandW, bandH).toFixed(0)} px wide, ` +
+          `past the ${(MARGIN * fill.scale).toFixed(0)} px margin`,
+      );
+    }
+  });
+
+  test(`${name}: no open floor under the rooms bigger than a corridor square (F3)`, () => {
+    for (const [winW, winH] of WINDOWS) {
+      const plan = planOf(floor, winW, winH - CHROME_H);
+      for (const r of plan.rooms) {
+        if (r.kind !== 'corridor' || r.thoroughfare !== false) continue;
+        // The pinned strip's gap is WP-77's and not this: a room somebody kept
+        // is laid small on purpose, beside floor held for the next one pinned.
+        if (r.id.startsWith('__pinned-')) continue;
+        assert.ok(
+          r.w * r.h <= CORRIDOR * CORRIDOR + 1e-6,
+          `${name} at ${winW}x${winH}: ${r.id} is ${r.w.toFixed(1)} x ${r.h.toFixed(1)} U of ` +
+            `open floor in a ${plan.arrangement} building`,
+        );
+      }
+    }
   });
 }

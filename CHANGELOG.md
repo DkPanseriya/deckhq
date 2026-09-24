@@ -52,6 +52,17 @@
   `general-purpose ×5`.
 - **Finished sessions sit still.** A session that has ended used to keep bobbing and blinking in the
   lounge after it powered down. It now powers down once and stays still.
+- **The office fills your window.** On a wide window the building used to stop short and leave
+  dark ground down both sides, a quarter of the width on a busy floor, or above and below it when
+  the floor was laid in two rows. The building is now the shape of the window, so it fills it edge
+  to edge. The project rooms take the extra width as open floor round their desks, which stay where
+  they were. The lounge can widen and come down to meet them, and the reception grows its waiting
+  area. A one-room floor on a very wide or very tall window can still leave some ground, rather
+  than turn its one room into a hall.
+- **No empty strip under the project rooms.** When the lounge was taller than the rows of rooms
+  beside it, the difference was left as a bare strip of floor under the rooms. The rows and the
+  lounge now end on the same line: the rooms grow a little deeper, move into another row, or the
+  lounge is laid wider and shorter, whichever leaves the least of your window unused.
 
 ## 1.6.0 — 2026-09-24
 

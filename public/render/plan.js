@@ -217,9 +217,9 @@ export function buildPlan(projects, agents, opts = {}) {
   // furniture, so once its width is chosen the rest follows. The search below
   // picks that width.
   const serviceCache = new Map();
-  const measureService = (sw, pack = 1) => {
+  const measureService = (sw, pack = 1, wide = false) => {
     const key = Math.round(sw);
-    const cacheKey = `${key}@${pack}`;
+    const cacheKey = `${key}@${pack}${wide ? 'w' : ''}`;
     let got = serviceCache.get(cacheKey);
     if (got) return got;
     // `h: 0` on purpose — this measures what the column NEEDS at that width.
@@ -234,7 +234,8 @@ export function buildPlan(projects, agents, opts = {}) {
     // The office is NOT packed (WP-59c). The lounge's spacing is a comfort
     // setting; the reception's queue is not, and the room the product is
     // about does not get smaller because the floor beside it is short.
-    const o = buildOffice(waitingCount, { w: Math.min(key, OFFICE_MAX_W), h: 0 });
+    // `wide` is the stretch (audit F2): the column may pass the office's own cap.
+    const o = buildOffice(waitingCount, { w: key, h: 0 }, { maxW: wide ? key : OFFICE_MAX_W });
     const colW = o.room.w;
     const l = buildLounge(benchedCount, { w: colW, h: 0 }, goneHomeCount, pack);
     // The lounge takes the column's width whatever its blocks packed to: open
@@ -301,7 +302,9 @@ export function buildPlan(projects, agents, opts = {}) {
     (i) => Math.max(1, activeProjects[i].sessionCount ?? desksIn(activeProjects[i])),
     reserve,
   );
-  const { costWorkingFloor, fillOrder, invalidateBands, layColumn, workingShape } = workingFloor;
+  const { costWorkingFloor, fillOrder, invalidateBands, fitColumn, layColumn, workingShape } =
+    workingFloor;
+  const wideService = (sw, pack) => measureService(sw, pack, true);
 
   // THE SECOND ARRANGEMENT (WP-59d): the office beside the rooms over the
   // lounge. Its own module for the same reason the working floor is one —
@@ -520,11 +523,14 @@ export function buildPlan(projects, agents, opts = {}) {
     }
   }
 
-  // The floor, laid. The two arrangements return two different records — a
-  // column has a working side and a spine width, two rows have a row height
-  // each — and everything below reads the fields its own branch put there,
-  // which is why this is the one place the two are the same variable.
-  const fitted = /** @type {any} */ (rows ? rowFloor.layRows(rows, rebuildInto) : settle(chosen));
+  // The floor, laid — two records, and everything below reads its own branch's
+  // fields — AND STRETCHED TO THE WINDOW (audit F2, F3): `stretchColumn`, `fitRows`.
+  const col = rows ? null : fitColumn(chosen, rebuildInto, targetAspect, wideService);
+  if (col) chosen = col.chosen;
+  const fitted = /** @type {any} */ (
+    col ? col.fitted : rowFloor.fitRows(rows, rebuildInto, targetAspect)
+  );
+  const unstretched = col ? col.before : fitted.unstretched;
   const { laid, W, bandH } = fitted;
   const forced = fitted.forced;
   let { H } = fitted;
@@ -572,7 +578,7 @@ export function buildPlan(projects, agents, opts = {}) {
       );
 
   if (!rows) {
-    office = buildOffice(waitingCount, { w: serviceW, h: officeH });
+    office = buildOffice(waitingCount, { w: serviceW, h: officeH }, { maxW: serviceW });
     office.room.x = serviceX;
     office.room.y = 0;
     office.room.w = serviceW;
@@ -814,6 +820,8 @@ export function buildPlan(projects, agents, opts = {}) {
     openH: Math.max(0, workingBottom - pinH - slackY),
     /** The depth the pinned strip took along the bottom of it (WP-77). */
     pinnedH: pinH,
+    /** How far the stretch to the window (audit F2, F3) changed the area. */
+    stretched: Math.abs(1 - (unstretched.W * unstretched.H) / Math.max(1e-6, W * H)),
   };
 
   return {

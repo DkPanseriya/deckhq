@@ -1044,12 +1044,33 @@ function bareCarpet(room) {
  * pass when the column made it (`fillOrder` in `plan.js`).
  */
 function carpetBound(plan) {
-  void plan;
+  // A building the window STRETCHED (audit F2) gave its rooms the width the
+  // search could not use, and the owner chose that over ground either side:
+  // the rooms share it as clear floor round desks that stay where they were.
+  // It is held to its own ceiling, measured over this matrix like the other.
+  if (plan.working.stretched > STRETCH_NOTICED) {
+    return {
+      max: STRETCHED_CARPET_CEILING,
+      case: 'the building was stretched to the window and its rooms share the width',
+    };
+  }
   return {
     max: BARE_CARPET_CEILING,
     case: 'WP-60 reports the bare carpet rather than bounding it',
   };
 }
+
+/** A stretch smaller than this is rounding, not a stretch. */
+const STRETCH_NOTICED = 0.01;
+
+/**
+ * THE BALLROOM GUARD ON A STRETCHED BUILDING (audit F2), measured rather than
+ * chosen like the one below: over sixteen populations at five aspects and
+ * three stages the worst stretched room is a single one-desk room on a wide
+ * window, where the reception has grown its waiting area as far as its row
+ * allows and the room takes the rest.
+ */
+const STRETCHED_CARPET_CEILING = 0.75;
 
 /**
  * THE CEILING A ROOM MAY NOT PASS, AND IT IS NOT THE BOUND IT USED TO BE.
@@ -1135,32 +1156,40 @@ test('the bare carpet is a number the plan reports, and the floor agrees with it
   }
 });
 
-test('the building is the sum of its parts, not the shape of the window', () => {
-  // The envelope is the service column, the spine and the working floor its
-  // rooms need, side by side — so a floor with one small project comes out
-  // SMALL, and `fitToWindow` draws it larger rather than the plan inventing
-  // carpet to fill a 1600 x 900 stage.
+test("the building's rooms are the sum of their parts, and the window sets only its shape", () => {
+  // The rooms are what their furniture needs, so a floor with one small
+  // project has one small project's worth of ROOMS — §106's rule, and it is
+  // unchanged. What changed is the envelope (audit F2): it used to be the sum
+  // too, and `fitToWindow` drew a small one larger with ground either side of
+  // it. The owner measured that ground at a quarter of his window. So now the
+  // building is stretched to the window's shape and the rooms share the width
+  // as clear floor, which makes the ENVELOPE's width a statement about the
+  // window rather than about the rooms — and the rooms are what is asserted.
   const planFor = (spec) => {
     const { projects, agents } = floor(spec);
     return buildPlan(projects, agents, { targetAspect: 1.78, now: NOW });
   };
   const one = planFor({ projects: [2], benched: 2 });
   const many = planFor({ projects: [4, 4, 4, 4, 4, 4], benched: 2 });
-  assert.ok(
-    many.width > one.width * 1.3,
-    `six projects (${many.width.toFixed(0)} U) should make a much wider building than one (${one.width.toFixed(0)} U)`,
-  );
-  // WP-59 moved this number from 1.4 to 1.3 and it is worth saying why, because
-  // the direction is the opposite of the one §106 was defending. A floor with
-  // one room now spends what a wide window offers on its service column and on
-  // open plan rather than leaving it as ground, so the SMALL floor got wider —
-  // not the large one. What §106's rule is actually about is the rooms, and
-  // that is unchanged and asserted here directly: the six-project floor has six
-  // rooms' worth of rooms in it.
+  for (const plan of [one, many]) {
+    assert.ok(
+      Math.abs(Math.log(plan.width / plan.height / 1.78)) < 0.02,
+      `a ${plan.width.toFixed(0)} x ${plan.height.toFixed(0)} building on a 1.78:1 window`,
+    );
+  }
+  const natural = (plan) =>
+    plan.rooms
+      .filter((r) => r.kind === 'project')
+      .reduce((a, r) => a + r.natural.w * r.natural.h, 0);
   const roomArea = (plan) =>
     plan.rooms.filter((r) => r.kind === 'project').reduce((a, r) => a + r.w * r.h, 0);
   assert.ok(
-    roomArea(many) > roomArea(one) * 4,
+    natural(many) > natural(one) * 4,
+    `six project rooms' furniture (${natural(many).toFixed(0)} U²) should need far more ` +
+      `floor than one's (${natural(one).toFixed(0)} U²)`,
+  );
+  assert.ok(
+    roomArea(many) > roomArea(one) * 2,
     `six project rooms (${roomArea(many).toFixed(0)} U²) should hold far more than one (${roomArea(one).toFixed(0)} U²)`,
   );
 
