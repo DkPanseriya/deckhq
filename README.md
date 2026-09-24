@@ -142,30 +142,30 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 
 ## Studio
 
-**In progress.** Studio is the opt-in "idea to office" mode, per project, off everywhere until
-`deckhq studio enable <project>`. `enable --yes` writes one marked file and records the grant; a
-real `claude` session then interviews you and writes the blueprint, the roster and the board.
+Studio is the opt-in "idea to office" mode, per project, off until `deckhq studio enable <project>`
+writes one marked file; a real `claude` session then interviews you and writes the blueprint, the
+roster and the board. The loop is complete — plan, hire, board, handover, tracking, drift, budget —
+and is on [the site](https://dkpanseriya.github.io/deckhq/studio.html).
 
-**Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;**, one row per role not already at a desk.
-Each press gives that role a git worktree of its own, a brief file that is yours to edit and is
-never rewritten under a running session, and a real session in that worktree under that brief — on
-the floor within one scan, wearing the role's name. **Firing leaves the worktree and the process
-alone**, and Codex, Gemini CLI and OpenCode roles are marked _unverified launch_.
+**Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** gives a role a git worktree of its own,
+a brief file that is yours to edit, and a real session there under that brief, on the floor within
+one scan. **Firing leaves the worktree and the process alone**; Codex, Gemini CLI and OpenCode roles
+are marked _unverified launch_.
 
-**The board is a view beside the floor.** `⌘K` → **Studio: board**. Six columns — Backlog, Ready, In
-progress, Review, Done, Blocked — each card carrying its title, its assignee and that role's own
-robot, its acceptance count, its budget and its flags, with a real table of the same cards
-underneath for a screen reader. Drag a card, or move it with `[` and `]`; moving one into **Ready**
-hires the role on it. **A column is yours**: nothing DeckHQ observes ever moves a card.
+**The board is a view beside the floor.** `⌘K` → **Studio: board**: six columns, each card with its
+title, assignee and robot, acceptance count, budget and flags, and a real table underneath for a
+screen reader. Drag a card or move it with `[` and `]`; moving one into **Ready** hires its role.
+**A column is yours**: nothing DeckHQ observes moves a card, bar the budget stop.
 
-**The handover closes the loop.** A role's brief tells it to write
-`.deckhq/studio/handovers/<cardId>.md` when it thinks a card is done. DeckHQ watches that folder:
-the card is **flagged, never moved**, and its review card shows the handover beside the diff of its
-own worktree. Press **Accept handover** and name the column, or **Bounce** with a note that joins
-the role's next brief. Counts are quoted — _"the handover says 41 passed"_ — never DeckHQ's own.
+**The handover brings work back.** A role writes `.deckhq/studio/handovers/<cardId>.md` when it
+thinks a card is done; the card is **flagged, never moved**, and its review card shows the handover
+beside its worktree's diff. **Accept handover** and name the column, or **Bounce** with a note for
+the next brief. Counts are quoted — _"the handover says 41 passed"_ — never DeckHQ's own.
 
-**Not there yet: tracking** — the per-card cost, the burn-down and the budget stop. The loop is on
-[the site](https://dkpanseriya.github.io/deckhq/studio.html).
+**Tracking, drift and the budget.** Each card shows its tokens, time in progress and quoted tests —
+`no data`, never zero, where nothing was recorded — and each milestone its burn-down. Every 30
+minutes the planner flags drift, and a flag moves nothing. A card past its budget goes to
+**Blocked**, its session gets one message to stop and no more work, and **nothing is killed**.
 
 ## Docs
 

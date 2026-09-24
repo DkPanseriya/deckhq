@@ -52,6 +52,31 @@
   that leaves a section out is reported as missing rather than filled in, and a handover whose
   filename matches no card is shown **unattached** rather than quietly dropped.
 
+- **Tracking, on every card.** Each card on the board now shows how many tokens its session spent
+  while the card was in progress, how long it spent in progress, and the tests its handover says it
+  ran, quoted as the handover's own sentence. Every figure comes from a file you can open — your
+  ledger, the card's own record of when it was moved, the handover — and **a figure with nothing
+  behind it says `no data`, never zero**. With **Show cost** on, a card also shows its list-price
+  estimate with the date of the rate card, and a model the rate card cannot price shows `no rate`
+  instead of a number.
+
+- **Milestones and the burn-down.** Above the columns, one line per milestone: how many of its
+  acceptance criteria are ticked and how many of its cards are left. The ticks are yours — the card
+  editor has a checklist of the card's criteria — and nothing DeckHQ observes ever ticks one.
+
+- **The PM pass.** Every 30 minutes, and whenever you ask, the planner is handed the blueprint, the
+  board and the handovers since the last pass, and asked what has drifted. What it says appears as
+  flags on the cards and in the planner's review card. **A flag never moves a card**, reassigns a
+  role or stops a session; what to do about it is your call.
+
+- **The budget stop.** When a card in progress runs past its budget — tokens or minutes, whichever
+  comes first — DeckHQ moves it to **Blocked**, stops sending that role's session any more work
+  (and says which card and which budget when you try), and sends the session **one** message asking
+  it to stop and write its handover. **DeckHQ does not kill the session**: it did not start the
+  terminal it runs in and it cannot promise to stop it, so it does not claim to. Move the card out
+  of Blocked, or raise its budget, and sending works again. This is the only time DeckHQ itself
+  moves a card, and Blocked is the only place it can move one to.
+
 ## 1.5.0 — 2026-09-19
 
 ### Highlights
