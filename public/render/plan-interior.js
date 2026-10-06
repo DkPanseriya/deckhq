@@ -556,7 +556,11 @@ export function furnishRoom(room, seats = []) {
         if (fresh) b.rows.push([g]);
         else b.rows[row].push(g);
         groups.push(g);
-        if (clear()) return true;
+        // Never two alike side by side: three sofa groups in a line are a
+        // showroom, and the same three round a room are three places.
+        const line = [...b.rows[row]].sort((p, q) => p.rank - q.rank);
+        const alike = line.some((m, i) => i > 0 && m.kind === line[i - 1].kind);
+        if (!alike && clear()) return true;
         // It lands on something: take it back out and try the next way.
         groups.pop();
         if (fresh) b.rows.pop();
