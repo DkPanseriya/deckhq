@@ -247,14 +247,16 @@ export function juniorSpots(anchor, room, n) {
  * `desk-group` is left out on purpose: it is the box around the tables AND the
  * chairs and the clearance between them, it contains the parent's own seat by
  * construction, and treating it as solid would mean no cable could reach a port
- * at all.
+ * at all. So are the zones a room is furnished with past its desks
+ * (`plan-interior.js`): a meeting table or a sofa group is never on a crew's
+ * floor, so there is nothing of theirs for a cable to be routed round.
  * @param {{x:number,y:number,zones?:{id?:string,x:number,y:number,w:number,h:number}[]}|null} room
  * @returns {{x:number,y:number,w:number,h:number}[]}
  */
 export function deskFootprints(room) {
   if (!room || !Array.isArray(room.zones)) return [];
   return room.zones
-    .filter((z) => String(z.id ?? '') !== 'desk-group')
+    .filter((z) => !/^(desk-group|(meeting|seating)-\d+)$/.test(String(z.id ?? '')))
     .map((z) => ({ x: room.x + z.x, y: room.y + z.y, w: z.w, h: z.h }));
 }
 

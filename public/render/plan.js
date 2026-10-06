@@ -67,6 +67,7 @@ import { awayRooms, floorPopulation, offTheFloor } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { layClassic } from './plan-classic.js';
 import { layProportioned } from './plan-grid.js';
+import { furnishRoom } from './plan-interior.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
 import { SCALE_MIN_PX_PER_UNIT, measureProportions, proportionFaults } from './plan-proportions.js';
 import { crewFloorFor } from './plan-rooms.js';
@@ -89,11 +90,13 @@ import { ASPECT_MAX, ASPECT_MIN, DEFAULT_ASPECT, DOOR_WIDTH, clamp } from './pla
  * @param {ProjectLike[]} projects
  * @param {AgentLike[]} agents
  * @param {{ targetAspect?: number, stage?: {w:number, h:number},
- *   goneHomeDays?: number, now?: number, agentSize?: string }} [opts]
+ *   goneHomeDays?: number, now?: number, agentSize?: string, furnish?: boolean }} [opts]
  *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test and
  *   a golden are both pure functions of their fixture. `stage` is the canvas the
  *   floor will be drawn on (WP-59), read only for its SHAPE, and `targetAspect`
  *   is that number stated directly — pass either. `agentSize` is WP-88c's.
+ *   `furnish: false` leaves every room as its desks left it, which is how the
+ *   furnishing is measured against the floor it was given (`plan-interior.js`).
  * @returns {Plan}
  */
 export function buildPlan(projects, agents, opts = {}) {
@@ -281,6 +284,9 @@ export function buildPlan(projects, agents, opts = {}) {
   // The walkable network. Agents are confined to it — see buildNavLines.
   const nav = buildNavLines(rooms, W, H);
   assignDoors(rooms, nav.lines);
+  // Every room is furnished into the rectangle it ended up with, round the
+  // desks it was built for and clear of the door it has just been given.
+  if (opts.furnish !== false) for (const pr of projectRooms) furnishRoom(pr.room, pr.seats);
 
   /** @type {Door[]} */
   const doors = [];

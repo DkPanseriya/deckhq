@@ -33,6 +33,7 @@ import * as SCALE from '../../public/render/plan-scale.js';
 import * as UNITS from '../../public/render/plan-units.js';
 import * as FURNITURE from '../../public/render/plan-furniture.js';
 import * as PROPS from '../../public/render/plan-props.js';
+import * as INTERIOR from '../../public/render/plan-interior.js';
 import * as RIG from '../../public/render/rig-metrics.js';
 import * as CORE from '../../public/render/agents-core.js';
 import * as FLOORPAINT from '../../public/render/backdrop-floor.js';
@@ -60,6 +61,7 @@ const MODULES = {
   'plan-units.js': UNITS,
   'plan-furniture.js': FURNITURE,
   'plan-props.js': PROPS,
+  'plan-interior.js': INTERIOR,
   'rig-metrics.js': RIG,
   'agents-core.js': CORE,
   'backdrop-floor.js': FLOORPAINT,

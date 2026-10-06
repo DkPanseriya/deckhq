@@ -164,6 +164,7 @@ export const PROP_HEIGHT = Object.freeze({
   armchair: 'tall',
   bar_counter: 'tall',
   board_game_table: 'tall',
+  board_stand: 'tall',
   bookshelf: 'tall',
   counter: 'tall',
   desk: 'tall',
@@ -171,6 +172,8 @@ export const PROP_HEIGHT = Object.freeze({
   exit_sign: 'tall',
   foosball: 'tall',
   fridge: 'tall',
+  // A meeting table is a table: you walk round it, and it casts like a desk.
+  meeting_table: 'tall',
   pinboard: 'tall',
   pool_table: 'tall',
   reception_desk: 'tall',
@@ -210,6 +213,8 @@ export const PROP_HEIGHT = Object.freeze({
   chair: 'short',
   coffee_machine: 'short',
   coffee_table: 'short',
+  // Waist-high storage against a wall: it casts onto the floor it stands on.
+  credenza: 'short',
   desk_tray: 'short',
   fruit_bowl: 'short',
   lamp: 'short',
