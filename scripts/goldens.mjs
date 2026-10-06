@@ -243,6 +243,9 @@ export const MOTION_PHASE = 0.25;
  * the palette's own key, the command's accelerator, Enter. No test seam is added
  * to the client for it, so what this photographs is the path a user has.
  *
+ * `look-bar` uses the `press` field too, with `L`: the header's Look popover,
+ * open over the `three` floor.
+ *
  * A capture may also CLICK one control after its command (WP-96), named by a
  * selector, for a state that has no key of its own. `board` is the Studio board
  * with the panel shut by its own ✕: the board is opened on the project of the
@@ -289,6 +292,15 @@ const CAPTURES = [
   // `small` is where LEGIBILITY goes: twenty-seven people at 0.8, every body over
   // the 16 px floor and every name still clear of a head, which is the `demo`
   // floor's own question. The other twelve are `medium` and must not move at all.
+  // THE HEADER'S LOOK POPOVER, open. The header carries two buttons now — Look
+  // and Settings — and the first opens a popover with the three controls people
+  // reach for: agent size, theme and the six presets, as thumbnails out of the
+  // Look section's own cache. It is the product's only golden of chrome hanging
+  // OVER the floor, and what it holds is the thing no DOM assertion can: that
+  // the popover lands under its button, inside the window, with six legible
+  // pictures in it. `L` is the floor's own key for it, so the way in is the way
+  // a person has — `three@selected`'s rule.
+  { name: 'look-bar', population: 'three', theme: 'default', press: 'L' },
   { name: 'three@large', population: 'three', theme: 'default', query: 'scale=large' },
   { name: 'demo@small', population: 'demo', theme: 'default', query: 'scale=small' },
   // WP-89 · THE CREW, TWICE, AND THE PAIR IS THE POINT.

@@ -617,7 +617,7 @@ button {
 /* The gear's eight teeth are one dashed circle: 52.78 round at r 8.4, so a
    tooth and its gap are 6.6, and the offset centres a tooth on each axis. */
 .tool-icon-teeth {
-  stroke-width: 2.6;
+  stroke-width: 2.8;
   stroke-linecap: butt;
   stroke-dasharray: 2.75 3.847;
   stroke-dashoffset: 1.375;
@@ -4056,6 +4056,57 @@ textarea.field-input {
    The first settings surface this product has had. Sections separated by a
    hairline rule, never a card; the hook consent screen is the last one.
    ====================================================================== */
+/* THE SECTION NAV. Seven sections in one scroll, and the one people open the
+   sheet for is the fifth — so their names ride at the top of the sheet, one
+   click from each. It bleeds to the sheet's edges over the body's own padding
+   and carries the sheet's own ground, so a row scrolling under it disappears
+   behind a surface rather than showing through a strip of text.
+
+   `public/settings-ui-nav.js` builds it from the sections that are there. */
+.settings-nav {
+  position: sticky;
+  /* Minus the body's own padding: a sticky box is held inside the scroller's
+     CONTENT box, so `top: 0` parks it one rem down with rows showing above. */
+  top: -1rem;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin: -1rem -1.1rem 0.9rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.settings-nav-btn {
+  padding: 0.28rem 0.55rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+.settings-nav-btn:hover {
+  color: var(--ink);
+}
+.settings-nav-btn[aria-current='true'] {
+  color: var(--ink);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+/* A jump lands the heading under the nav, not behind it; and a section that
+   was focused by the jump is a place, not a control, so it draws no ring. */
+.settings-section {
+  scroll-margin-top: 2.75rem;
+}
+.settings-section:focus {
+  outline: none;
+}
 .settings-section + .settings-section {
   margin-top: 1.4rem;
   padding-top: 1.1rem;
@@ -4376,6 +4427,11 @@ textarea.field-input {
   align-items: stretch;
   gap: 0.5rem;
 }
+/* The agent size is the section's first row and the preset cards follow it;
+   a row of words needs air before a grid of pictures. */
+#settings-look .settings-row + .settings-look-presets {
+  margin-top: 0.6rem;
+}
 .settings-look-group {
   display: flex;
   flex-direction: column;
@@ -4388,6 +4444,9 @@ textarea.field-input {
 .settings-look-chips {
   display: grid;
   grid-template-columns: repeat(auto-fill, 4.9rem);
+  /* From the left, under the row's own label: these rows are stacked, and
+     `.settings-choice`'s end alignment is for a control beside its label. */
+  justify-content: start;
   gap: 0.35rem;
   max-height: none;
   overflow: visible;
