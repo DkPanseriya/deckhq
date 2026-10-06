@@ -136,6 +136,13 @@ class StubNode {
     return null;
   }
   set textContent(v) {
+    // What a browser does, and the thing a stub that only cleared its children
+    // hid: a focused control that is taken out of the document loses the
+    // focus AT ONCE, to the body. The sheet empties itself to redraw, so by
+    // the time anything asks, `activeElement` no longer names the old button.
+    const doc = globalThis.document;
+    const inside = (node) => node === doc.activeElement || node.children.some(inside);
+    if (doc.activeElement && this.children.some(inside)) doc.activeElement = doc.body;
     this.children = [];
     this._text = String(v);
   }

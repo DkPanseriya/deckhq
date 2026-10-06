@@ -521,8 +521,12 @@ export function createLookSection(opts) {
   /**
    * Draw the section into the sheet, or draw nothing at all.
    * @param {HTMLElement} host
+   * @param {any} [focused] the element that had the keyboard BEFORE the sheet
+   *   emptied itself to redraw. The sheet has to say, because by the time this
+   *   runs the browser has already moved the focus off a button that is no
+   *   longer in the document — `activeElement` is the body by then.
    */
-  function renderInto(host) {
+  function renderInto(host, focused = doc.activeElement) {
     const c = cat();
     if (!c) return null;
     // Hear the daemon's last word before drawing — quietly, because this IS the
@@ -531,8 +535,7 @@ export function createLookSection(opts) {
     // Which control has the keyboard, before every one of them is replaced.
     let keep = picked;
     picked = '';
-    const active = doc.activeElement;
-    if (!keep && active) for (const [key, node] of stops) if (node === active) keep = key;
+    if (!keep && focused) for (const [key, node] of stops) if (node === focused) keep = key;
     stops.clear();
     const current = shown();
     const s = widgets.section(

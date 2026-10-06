@@ -518,6 +518,11 @@ export function createSettingsUI(opts) {
   bodyEl.addEventListener('scroll', syncNav, { passive: true });
 
   function render() {
+    // Who has the keyboard, read BEFORE the body is emptied: emptying it takes
+    // the focused control out of the document and the browser moves the focus
+    // to the body at once. The Look section puts it back on the control that
+    // replaced that one — without this an arrow key moved a choice exactly once.
+    const focused = document.activeElement;
     bodyEl.textContent = '';
     // The nav is the sheet's first child and is FILLED LAST, from the sections
     // that were actually drawn below it — so it cannot name a section this
@@ -531,7 +536,7 @@ export function createSettingsUI(opts) {
     // WP-88b, §4: *"a Look section inside the existing settings sheet, between
     // Floor and Data"*. Floor is the theme and the motion — the whole window;
     // Look is what the building is made of, which is one step in.
-    lookSection.renderInto(bodyEl);
+    lookSection.renderInto(bodyEl, focused);
     renderData(bodyEl);
     renderHooks(bodyEl);
     navEntries = fillSectionNav(document, navEl, bodyEl);
