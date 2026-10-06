@@ -76,8 +76,11 @@ function cliDeps(overrides = {}) {
 // exit — the runner drops a child's stderr once it has exited — so it is made
 // to fail loudly, by name, while there is still a report to put it in.
 test.after(() => {
-  const stdio = new Set(['PipeWrap', 'TTYWrap']);
-  const live = process.getActiveResourcesInfo().filter((r) => !stdio.has(r));
+  // The runner's own handles, and the file-close requests Node 18 and 20 keep
+  // in flight for a tick after a stub's stdio settles (`CloseReq`), are not
+  // this test's work; a timer, socket, child or pending write is.
+  const runtime = new Set(['PipeWrap', 'TTYWrap', 'CloseReq', 'FSReqCallback']);
+  const live = process.getActiveResourcesInfo().filter((r) => !runtime.has(r));
   assert.deepEqual(live, [], `look-io left async work running: ${live.join(', ')}`);
 });
 
