@@ -51,6 +51,7 @@ import {
   paintWallSegment,
   paintDoorSwing,
   paintThresholdBand,
+  paintLightsOff,
   DESK_POOL_MARGIN_U,
   DOOR_POOL_R_U,
   LIT_PROP_KINDS,
@@ -276,6 +277,8 @@ export function bakeBackdrop(plan, dpr = 1) {
   // Baked, static, and free at L0 — `docs/plan/10-INTERIOR-DESIGN.md` §4:
   // reduced motion costs nothing because nothing here moves.
   for (const room of plan.rooms) {
+    // A room with the lights off has no pool over its desk: that is the light.
+    if (room.dim) continue;
     for (const prop of room.props || []) {
       if (!LIT_PROP_KINDS.includes(prop.kind)) continue;
       const pw = prop.w * u;
@@ -314,6 +317,8 @@ export function bakeBackdrop(plan, dpr = 1) {
     for (const prop of room.props || []) {
       paintProp(ctx, prop, u);
     }
+    // LIGHTS OFF, last: the veil dims the furniture with the floor under it.
+    if (room.dim) paintLightsOff(ctx, room.x * u, room.y * u, room.w * u, room.h * u);
   }
 
   return { canvas, wpx, hpx };

@@ -423,6 +423,34 @@ export function paintRoomSlabEdge(ctx, x, y, w, h) {
 
 // -------------------------------------------------------------- walls/doors
 
+/** Half the thickest wall, in baked pixels: where a room's own floor starts. */
+const LIGHTS_OFF_INSET_PX = 3;
+
+/**
+ * A ROOM WITH THE LIGHTS OFF (`plan-proportions.js` (e)).
+ *
+ * One veil in the theme's `lightsOff` token over the room's floor and
+ * everything standing on it, painted after the furniture so the desk dims with
+ * the carpet under it. Inside the walls: a wall is shared with the lit room
+ * next door, and half a dimmed partition reads as a smudge.
+ *
+ * Nothing is removed and nothing changes size — the room is the room it would
+ * be with somebody at the desk — and the plate is live text drawn over the
+ * bake on its own halo, so it reads as it does anywhere (`plateGroundOverDim`).
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} rx @param {number} ry @param {number} rw @param {number} rh
+ *   the room's rectangle in baked pixels
+ */
+export function paintLightsOff(ctx, rx, ry, rw, rh) {
+  const inset = LIGHTS_OFF_INSET_PX;
+  if (rw <= inset * 2 || rh <= inset * 2) return;
+  ctx.save();
+  ctx.fillStyle = PALETTE.lightsOff;
+  ctx.fillRect(rx + inset, ry + inset, rw - inset * 2, rh - inset * 2);
+  ctx.restore();
+}
+
 /**
  * Paint one wall segment.
  *

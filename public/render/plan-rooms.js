@@ -173,10 +173,9 @@ export function buildPinnedRoom(project, cell) {
     // is painted by the same painter, and a new room kind would be three
     // painters and a plate rule for a rectangle that differs only in what is
     // in it.
-    // An AWAY room (`awayRooms` in floor-rule.js) is laid exactly like this
-    // and is not pinned: its people are on the office sofas, and its plate
-    // says `N need you` the way a live room's does (`platePlanFor`).
-    ...(project.away === true ? { away: true } : { pinned: true }),
+    pinned: true,
+    // Nobody is in it, so its lights are off (`plan-proportions.js` (e)).
+    dim: true,
     walls: 'partial',
     floor: 'carpet',
     plateLines: [
@@ -190,11 +189,7 @@ export function buildPinnedRoom(project, cell) {
       // fact there is. Nothing is running, so there is no "need you", no
       // "working" and no doing line — the room's whole claim on the floor is
       // that the user asked for it, and how big the repo it stands for is.
-      // An away room's line is the live plate's hero (`platePlanFor` draws the
-      // live one from the snapshot; this is the fallback with no snapshot).
-      project.away === true
-        ? `${project.needsYou ?? sessionCount} need you`
-        : `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
+      `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
       '',
       '',
     ],
@@ -817,6 +812,10 @@ export function buildProjectRoom(
     // than leaving them against the left wall, and `buildPlan` sums it to size
     // the working floor.
     natural: { w: naturalW, h: naturalH },
+    // AWAY: everybody this repo has on the floor is waiting in the office
+    // (`awayRooms`). The room is the room it would be with somebody at the
+    // desk, and its lights are off.
+    ...(project.away === true ? { away: true, dim: true } : {}),
     walls: 'partial',
     floor: 'carpet',
     // WP-81's four slots, and the plan's own copy of them. A live plate is

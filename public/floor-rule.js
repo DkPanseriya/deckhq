@@ -533,40 +533,33 @@ export function splitProjectsByOccupancy(projects, pop) {
 }
 
 /**
- * AWAY ROOMS: a repo whose sessions are all in the office keeps a narrow room.
+ * AWAY ROOMS: a repo whose sessions are all in the office has its lights off.
  *
  * Every live agent of such a repo is waiting on you — on a sofa in Your Office,
- * not at a desk in its room — so the room it kept was a full-sized one with
- * nobody in it, five of them on the owner's floor beside the one room somebody
- * was working in. It stays a room (its plate is where `N need you` is said, and
- * a repo with sessions on the floor is never a line), but it is laid as a
- * pinned room is: in the strip, one desk, at most `PINNED_AREA_SHARE` of the
- * smallest live room. It grows back the moment one of its sessions works or
- * stalls, because that puts somebody at a desk (`pop.desks`).
+ * not at a desk in its room. The room is still that repo's room: its plate is
+ * where `N need you` is said, and a repo with sessions on the floor is never a
+ * line. So it keeps the room it would have with somebody in it — one desk, the
+ * same module, the same shape — and is flagged `away`, which the plan carries
+ * to the room as `dim` and the backdrop paints as a room with the lights off
+ * (`plan-proportions.js` (e)). The lights come back the moment one of its
+ * sessions works or stalls, because that puts somebody at a desk (`pop.desks`).
  *
- * Only beside a live room: a floor where EVERY repo is away has nothing for a
- * narrow room to be narrow beside, and keeps the rooms it had.
+ * It was once laid as a narrow strip room, a third of a live one. On the
+ * owner's floor that drew four slots showing a desk top under one hall.
  *
- * @param {any[]} projects the floor's projects, in its own order, which the strip keeps
+ * @param {any[]} projects the floor's projects, in its own order
  * @param {ReturnType<typeof floorPopulation>} pop
- * @returns {{rooms:any[], strip:any[], onFloor:any[]}} `rooms`: the repos that
- *   get a full room; `strip`: the pinned and the away (flagged `away: true`), in
- *   floor order; `onFloor`: every repo with a room of either size
+ * @returns {{rooms:any[], strip:any[], onFloor:any[]}} `rooms`: every repo
+ *   with sessions on the floor, in floor order, the away ones as a copy flagged
+ *   `away: true`; `strip`: the pinned, empty ones; `onFloor`: the same repos as
+ *   `rooms`, as they were given
  */
 export function awayRooms(projects, pop) {
   const split = splitProjectsByOccupancy(projects, pop);
   const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
   const isAway = (p) => pop.known.has(idOf(p)) && (pop.desks.get(idOf(p)) ?? 0) === 0;
-  const away = new Set(split.active.filter(isAway).map(idOf));
-  const rooms = split.active.filter((p) => !away.has(idOf(p)));
-  if (!away.size || !rooms.length) {
-    return { rooms: split.active, strip: split.pinned, onFloor: split.active };
-  }
-  const pinned = new Set(split.pinned.map(idOf));
-  const strip = (Array.isArray(projects) ? projects : [])
-    .filter((p) => pinned.has(idOf(p)) || away.has(idOf(p)))
-    .map((p) => (away.has(idOf(p)) ? { ...p, away: true } : p));
-  return { rooms, strip, onFloor: split.active };
+  const rooms = split.active.map((p) => (isAway(p) ? { ...p, away: true } : p));
+  return { rooms, strip: split.pinned, onFloor: split.active };
 }
 
 /**

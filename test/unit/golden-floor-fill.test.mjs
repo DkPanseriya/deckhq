@@ -300,7 +300,7 @@ function hash32(s) {
  * the reception's rectangle at every real window is the one it was before
  * that rule, to the last bit.
  */
-const OFFICE_HASH = 'd01bf1fe';
+const OFFICE_HASH = '532f374b';
 
 test('demo, three, reference and large: the reception is the rectangle it was', () => {
   const lines = [];

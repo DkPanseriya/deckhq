@@ -50,7 +50,7 @@ export {};
  *   keeps a room with nothing running in it. User-owned state from
  *   `state.json`, never derived — see `src/core/store.mjs`.
  * @property {boolean} [away] set by `awayRooms` (floor-rule.js) on the copy the
- *   strip is laid from: every live session of this repo is waiting in the
+ *   room is built from: every live session of this repo is waiting in the
  *   office. Derived per plan, never stored.
  * @property {number} [lastActivityAt] ms epoch of the newest session in it
  * @property {number|null} [todaySpend] WP-26's payroll meter; see `payrollLine`
@@ -154,9 +154,12 @@ export {};
  *   `PINNED_AREA_SHARE` of the narrowest live room's footprint. Absent on every
  *   live room, so `room.pinned === true` is the whole of the test.
  * @property {boolean} [away] project rooms only: a repo whose sessions are all
- *   waiting in the office (`awayRooms`), laid in the strip as a pinned room is
- *   — one desk, at most `PINNED_AREA_SHARE` of the narrowest live room — with
- *   a live room's plate. Never both `pinned` and `away`.
+ *   waiting in the office (`awayRooms`). The room it would be with somebody at
+ *   the desk, with a live room's plate. Never both `pinned` and `away`.
+ * @property {boolean} [dim] project rooms only: nobody is at a desk in it — it
+ *   is `away` or `pinned` — so the backdrop draws it with the lights off
+ *   (`plan-proportions.js` (e)): floor and furniture under the `lightsOff`
+ *   veil, no pool of light on its desk, its plate as readable as any other.
  * @property {boolean} [landscape] the reception, laid on its side for a row
  *   (WP-59d): the waiting area runs along its width and the desk is at one
  *   end. `seatOffice` reads it to walk the runs in queue order.
