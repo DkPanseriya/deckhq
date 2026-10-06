@@ -27,6 +27,12 @@
   thin line joins it to its figure. A name in the lounge that has no free spot next to its figure
   is not drawn.
 
+- **Your office no longer takes the whole width when your projects are waiting on you.** With
+  several projects shrunk to small rooms, the office could stretch across most of the window: a
+  long empty rug with the waiting sessions along its edges. The office is now only as wide as its
+  sofas need. The extra width goes to the project rooms, so the small rooms stand in one row, and
+  the lounge below gets any height left over.
+
 - **A subagent keeps its number when DeckHQ restarts.** Subagent numbers were kept in memory, so
   restarting DeckHQ after some subagents had finished could renumber the ones still running.
   Each number is now saved in `~/.deckhq/state.json` with the other names and numbers, so a
