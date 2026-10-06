@@ -173,7 +173,10 @@ export function buildPinnedRoom(project, cell) {
     // is painted by the same painter, and a new room kind would be three
     // painters and a plate rule for a rectangle that differs only in what is
     // in it.
-    pinned: true,
+    // An AWAY room (`awayRooms` in floor-rule.js) is laid exactly like this
+    // and is not pinned: its people are on the office sofas, and its plate
+    // says `N need you` the way a live room's does (`platePlanFor`).
+    ...(project.away === true ? { away: true } : { pinned: true }),
     walls: 'partial',
     floor: 'carpet',
     plateLines: [
@@ -187,7 +190,11 @@ export function buildPinnedRoom(project, cell) {
       // fact there is. Nothing is running, so there is no "need you", no
       // "working" and no doing line — the room's whole claim on the floor is
       // that the user asked for it, and how big the repo it stands for is.
-      `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
+      // An away room's line is the live plate's hero (`platePlanFor` draws the
+      // live one from the snapshot; this is the fallback with no snapshot).
+      project.away === true
+        ? `${project.needsYou ?? sessionCount} need you`
+        : `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
       '',
       '',
     ],

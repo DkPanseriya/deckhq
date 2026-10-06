@@ -111,7 +111,9 @@ export function createHeaderPart(ctx) {
     // this is nearly always a name over a tag rather than a bare tag. The tag
     // stays underneath as the sub-label: it is what makes the session
     // locatable by project, and a name never replaces it.
-    const name = a.displayName || a.givenName || null;
+    // A junior's name is its own field (identity.mjs `describeJunior`): beside
+    // its parent's tag it reads "Marta, junior of MK1.2".
+    const name = a.displayName || a.givenName || a.juniorName || null;
     if (name) {
       const nameEl = document.createElement('span');
       nameEl.className = 'mk-chip-label';

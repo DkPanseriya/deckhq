@@ -26,11 +26,7 @@ import { worldToScreen } from './agents.js';
 import { SceneCamera } from './scene-camera.js';
 import { now as clockNow } from '../clock.js';
 
-// Name-label collision resolution (tech-lead review finding 1,
-// docs/DEVIATIONS.md "Findings from review"): how many extra candidate
-// positions (each one label-height further down) a non-priority label gets
-// before it is dropped rather than drawn overlapping.
-export const MAX_LABEL_OFFSET_ATTEMPTS = 2;
+export { MAX_LABEL_OFFSET_ATTEMPTS, resolveLabelCollisions } from './label-spots.js';
 
 export const FONT_UI = "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif";
 // Every number is set in the mono face so tabular-nums-style stability holds on canvas,
@@ -68,32 +64,6 @@ export function plateScaleFor(worldScale) {
   return Math.min(PLATE_MAX_GROWTH, Math.max(1, s / PLATE_BASE_SCALE));
 }
 
-/**
- * Resolve overlapping name labels for one frame (tech-lead review finding 1,
- * docs/DEVIATIONS.md "Findings from review": labels collide with desk
- * furniture and with each other at L1). `items` should already be in the
- * caller's priority/paint order — earlier items get first claim on space.
- *
- * `pin: true` (the selected agent only) is placed unconditionally at
- * their natural position and contribute to what later items must avoid, but
- * are themselves never nudged or dropped — moving or hiding the one label
- * that says "this is the agent waiting on you" would defeat the point of it.
- *
- * Every other item is tried at its natural position, then at up to
- * `MAX_LABEL_OFFSET_ATTEMPTS` positions each one label-height further down;
- * a `keep` item (a live agent's name, since the 24 September audit) then tries
- * the sideways spots in `LABEL_SPOTS` too. If none of those clear every
- * already-placed box, it is dropped rather than drawn overlapping — a missing
- * label beats an unreadable smear, and on a floor that is not full to the
- * walls a live name always finds a spot (`floor-labels.test.mjs`).
- *
- * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
- *   pin?:boolean, alts?:number[][], up?:number}[]} items `up`: the offsetY that
- *   puts this label over its figure's head instead of under its feet
- *   `x,y,w,h`: the label's un-offset screen-space box (top-left + size).
- * @returns {Map<string, {offsetY:number, offsetX?:number}|null>} per-id
- *   result; `null` means "do not draw this label this frame".
- */
 /**
  * Trim text with an ellipsis until it fits maxW at the context's current
  * font. Binary search rather than character-by-character, so a long room name
@@ -395,104 +365,6 @@ export function doingEntriesFor(agents) {
 export function plateLinesFor(room, snapshot, plan) {
   return platePlanFor(room, snapshot, plan).lines;
 }
-
-/**
- * See the note above `ellipsise` for the rule; `bounds` is the building's
- * screen rect, which no name may leave sideways or upwards.
- * @param {any[]} items
- * @param {{x:number, y:number, w:number, h:number}} [bounds]
- * @returns {Map<string, {offsetY:number, offsetX?:number}|null>}
- */
-export function resolveLabelCollisions(items, bounds) {
-  /** @type {{x:number,y:number,w:number,h:number}[]} */
-  const placed = [];
-  const result = new Map();
-
-  const overlaps = (a, b) =>
-    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-  // `bounds`, when given, is the building on screen: a name is never centred past
-  // its side walls or over its top one (a sideways step from a figure on the
-  // west wall used to hang the name off the floor and off the canvas).
-  const inside = (a, b) =>
-    a.x + a.w / 2 >= b.x && a.x + a.w / 2 <= b.x + b.w && a.y + a.h / 2 >= b.y;
-
-  // `pin` is an exemption and `keep` is only a priority. Making needs-you
-  // labels exempt collapsed in the case that matters most: every agent in the
-  // waiting area is for_review, so all of them were exempt at once and the
-  // office turned into an unreadable band of overlapping names. Exactly one
-  // label — the selected agent's — is ever truly exempt.
-  const pinned = items.filter((it) => it.pin);
-  const kept = items.filter((it) => it.keep && !it.pin);
-  const rest = items.filter((it) => !it.keep && !it.pin);
-
-  for (const it of pinned) {
-    placed.push({ x: it.x, y: it.y, w: it.w, h: it.h });
-    result.set(it.id, { offsetY: 0 });
-  }
-
-  for (const it of [...kept, ...rest]) {
-    let chosen = null;
-    // A kept label (a live agent's) may also step sideways before it gives up;
-    // one in the lounge gets the straight-down attempts and is then dropped.
-    const spots = it.keep ? LABEL_SPOTS : LABEL_SPOTS_DOWN;
-    // `alts`: other figures the same label may hang under instead, as offsets
-    // from this one — a crew's `Explore ×3` belongs to any of its three.
-    for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
-      for (const [fx, fy] of spots) {
-        if (fy === LABEL_UP && typeof it.up !== 'number') continue;
-        const offsetX = bx + fx * it.w;
-        const offsetY = by + (fy === LABEL_UP ? it.up : fy * it.h);
-        const rect = { x: it.x + offsetX, y: it.y + offsetY, w: it.w, h: it.h };
-        if (bounds && !inside(rect, bounds)) continue;
-        if (!placed.some((p) => overlaps(rect, p))) {
-          chosen = offsetX === 0 ? { offsetY } : { offsetY, offsetX };
-          placed.push(rect);
-          break;
-        }
-      }
-      if (chosen) break;
-    }
-    result.set(it.id, chosen);
-  }
-
-  return result;
-}
-
-/**
- * WHERE A LABEL MAY GO, IN THE ORDER IT IS TRIED (audit F1/F7), as fractions of
- * its own width and height. Straight down first — the old rule, and every label
- * that fitted before lands exactly where it did — then half a label to either
- * side at each of those depths, then a full step aside. A live agent's name is
- * never dropped while one of these is clear; only a lounge label is, and only
- * after the straight-down attempts.
- */
-const LABEL_SPOTS_DOWN = Object.freeze(
-  Array.from({ length: MAX_LABEL_OFFSET_ATTEMPTS + 1 }, (_, i) => Object.freeze([0, i])),
-);
-/**
- * "Over the head" rather than a depth: the item's own `up`, the offset that
- * sets the label clear above its icon-and-badge slot. Tried after every near
- * spot below the feet and before any far one, because a name three rows down
- * past a room's plate reads as a label for whoever is standing there.
- */
-const LABEL_UP = 1e9;
-const LABEL_SPOTS = Object.freeze([
-  ...LABEL_SPOTS_DOWN,
-  ...[0, 1, 2].flatMap((fy) => [
-    [-0.6, fy],
-    [0.6, fy],
-  ]),
-  [0, LABEL_UP],
-  [-0.6, LABEL_UP],
-  [0.6, LABEL_UP],
-  [0, 3],
-  ...[0, 1, 2, 3].flatMap((fy) => [
-    [-1.15, fy],
-    [1.15, fy],
-  ]),
-  [-0.6, 3],
-  [0.6, 3],
-]);
 
 /**
  * WP-60. WHICH WAITING BADGES MAY BE DRAWN, AND WHAT STANDS FOR THE ONES THAT

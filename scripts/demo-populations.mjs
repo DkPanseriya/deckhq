@@ -295,6 +295,49 @@ export const POPULATIONS = {
     ['orbital-api', 'Fixtures for the re-run assertion', 'working', 0.8, 1.3],
   ],
   reference: referenceSessions,
+  /**
+   * EVERYBODY IS WAITING ON YOU: sixteen sessions on the office's three sofa
+   * runs from five repos nobody is working in, and one repo with somebody at a
+   * desk and two juniors beside them. Two questions in one picture: every name
+   * on the sofas sits next to its own body, and the five repos whose people are
+   * all in the office keep a narrow room each while the working one keeps its
+   * full size.
+   */
+  away: () => [
+    ...[
+      ['orbital-api', 5],
+      ['checkout-flow', 4],
+      ['design-system', 3],
+      ['data-pipeline', 2],
+      ['infra-terraform', 2],
+    ].flatMap(([repo, n], r) =>
+      Array.from({ length: Number(n) }, (_, i) => {
+        const k = r * 5 + i;
+        const state = k % 4 === 3 ? 'needs_input' : 'for_review';
+        return /** @type {[string, string, string, number, number]} */ ([
+          String(repo),
+          `Waiting ${k + 1}: ${state} in ${repo}`,
+          state,
+          1 + k * 3.5,
+          0.4 + (k % 5) * 0.3,
+        ]);
+      }),
+    ),
+    // `JUNIOR_PARENT`, written out: the constant is declared below this table.
+    ['mobile-app', 'Dark mode audit across 40 components', 'working', 0.3, 1.1],
+    // A full lounge, as on the owner's floor: it is what makes the building
+    // small and the office's sofas crowded.
+    ...Array.from({ length: 40 }, (_, n) => {
+      const repo = ['orbital-api', 'checkout-flow', 'design-system', 'data-pipeline'][n % 4];
+      return /** @type {[string, string, string, number, number]} */ ([
+        repo,
+        `Finished ${n + 1} in ${repo}`,
+        'idle',
+        2 + n * 1.5,
+        0.3,
+      ]);
+    }),
+  ],
   /** A heavy machine: 137 sessions in 40 repos, plus a 13-member crew. */
   large: largeSessions,
 };

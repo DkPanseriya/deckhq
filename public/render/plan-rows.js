@@ -66,6 +66,7 @@ import {
   OFFICE_ROW_MAX_DEPTH,
   OFFICE_ROW_MAX_W,
   OFFICE_SEAT_PITCH,
+  PINNED_ROW_MIN_W,
   PLATE_BAND,
   ROOM_FILL_MAX,
   ROOM_FILL_STRETCH_MAX,
@@ -76,6 +77,18 @@ import {
 } from './plan-units.js';
 
 /** @typedef {import('./plan-units.js').Room} Room */
+
+/**
+ * The narrowest a working side is laid while the strip has rooms in it: as
+ * many strip rooms side by side as there are, up to three, and never less than
+ * one project room. Five away rooms beside one working room otherwise stacked
+ * up under it, the reception grew to match, and the whole floor was drawn at
+ * 60% of the scale it had before they were narrowed.
+ * @param {number} count rooms in the pinned strip, pinned and away
+ */
+export function workingMinWidth(count) {
+  return Math.max(MIN_PROJECT_ROOM_W, Math.min(3, Math.max(0, count)) * PINNED_ROW_MIN_W);
+}
 
 /**
  * @param {object} deps
@@ -89,12 +102,14 @@ import {
  *   ceiling is a function of (WP-77)
  * @param {(askedBandH:number, workingW:number) => number} [deps.reserve] the
  *   pinned strip's depth along the bottom of row one (WP-77)
+ * @param {number} [deps.minW] the narrowest the working side is laid (`workingMinWidth`)
  * @param {ReturnType<typeof import('./plan-envelope.js').createWorkingFloor>} deps.floor
  */
 export function createRowFloor(deps) {
   const { projectRooms, naturalOf, office, waiting, floor } = deps;
   const benched = Math.max(0, Number(deps.benched) || 0);
   const reserveOf = deps.reserve || (() => 0);
+  const minW = deps.minW ?? MIN_PROJECT_ROOM_W;
   const { bandDepthCeiling, bandsOf, costWorkingFloor, layWorkingFloor, workingShape } = floor;
 
   /**
@@ -221,7 +236,7 @@ export function createRowFloor(deps) {
    */
   const envelopeFor = (askedW, bandDepth, pack) => {
     const shape = workingShape(1);
-    const roomsW = projectRooms.length ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
+    const roomsW = projectRooms.length ? Math.max(shape.w, minW) : 0;
     const asked = projectRooms.length ? shape.h * bandDepth : 0;
     const row = rowOne(askedW, roomsW, asked);
     if (!row) return null;

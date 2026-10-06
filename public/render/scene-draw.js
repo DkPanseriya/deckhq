@@ -598,9 +598,12 @@ export class SceneDraw extends SceneHit {
     // resting figure's name the lounge had no room for.
     const text = labels ? labels.texts.get(rec.id) : null;
     const spot = text ? labels.plan.get(rec.id) : null;
-    const label = spot ? text : null;
+    // A name the pass shrank or abbreviated carries its own text and size.
+    const label = spot ? spot.text || text : null;
     const labelOffsetY = spot ? spot.offsetY : 0;
     const labelOffsetX = spot ? spot.offsetX || 0 : 0;
+    const labelPx = spot ? spot.px : undefined;
+    const labelLeader = spot ? spot.leader === true : false;
     const s = worldToScreen(rec, camera);
     // While mid-walk, sample `walk` — or `run`, on the one trip that runs
     // (WP-87, `12-MOTION-AND-CREW.md` §2) — regardless of `rec.clip`, which
@@ -712,6 +715,8 @@ export class SceneDraw extends SceneHit {
       label,
       labelOffsetY,
       labelOffsetX,
+      labelPx,
+      labelLeader,
       icon,
       badge,
       // WP-52: what this session is doing right now, straight off the

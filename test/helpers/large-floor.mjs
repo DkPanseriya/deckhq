@@ -10,11 +10,13 @@
  */
 
 import {
+  JUNIOR_PARENT,
+  JUNIORS,
   POPULATIONS,
   WAITING_CREW_JUNIORS,
   WAITING_CREW_PARENT,
 } from '../../scripts/demo-populations.mjs';
-import { SHORT_NAMES } from '../../public/names.js';
+import { JUNIOR_MARK, SHORT_NAMES } from '../../public/names.js';
 
 export const LARGE_NOW = 1_800_000_000_000;
 const HOUR = 3_600_000;
@@ -23,7 +25,47 @@ const HOUR = 3_600_000;
  * @returns {{projects:any[], agents:any[]}}
  */
 export function largeFloor(now = LARGE_NOW) {
-  const rows = POPULATIONS.large();
+  return floorOf(POPULATIONS.large(), now, WAITING_CREW_PARENT, WAITING_CREW_JUNIORS);
+}
+
+/**
+ * THE AWAY FLOOR: the `away` demo population — sixteen waiting from five repos
+ * nobody is at a desk in, one working repo with two juniors — as the snapshot
+ * would carry it.
+ * @returns {{projects:any[], agents:any[]}}
+ */
+export function awayFloor(now = LARGE_NOW) {
+  return floorOf(POPULATIONS.away(), now, JUNIOR_PARENT, JUNIORS);
+}
+
+/**
+ * THE CROWDED OFFICE: the `away` floor with somebody working in each of the
+ * five repos, so all six keep a full room and the reception is laid narrow —
+ * sixteen waiting on three sofa runs and a standing row in front of the top
+ * one, the office the owner's floor of 6 October showed.
+ * @returns {{projects:any[], agents:any[]}}
+ */
+export function crowdedOfficeFloor(now = LARGE_NOW) {
+  const repos = [
+    'orbital-api',
+    'checkout-flow',
+    'design-system',
+    'data-pipeline',
+    'infra-terraform',
+  ];
+  /** @type {Array<[string, string, string, number, number]>} */
+  const working = repos.map((repo) => [repo, `At a desk in ${repo}`, 'working', 0.2, 0.5]);
+  return floorOf([...POPULATIONS.away(), ...working], now, JUNIOR_PARENT, JUNIORS);
+}
+
+/**
+ * @param {Array<[string, string, string, number, number]>} rows
+ * @param {number} now
+ * @param {string} parentTitle the row whose session the juniors hang off
+ * @param {ReadonlyArray<{agentType:string}>} juniors
+ * @returns {{projects:any[], agents:any[]}}
+ */
+function floorOf(rows, now, parentTitle, juniors) {
   /** @type {Map<string, any>} */
   const projects = new Map();
   const agents = [];
@@ -53,7 +95,7 @@ export function largeFloor(now = LARGE_NOW) {
       a.needsInputSince = at;
     } else if (state === 'benched') a.ackState = 'benched';
     else if (state === 'let_go') a.ackState = 'let_go';
-    if (title === WAITING_CREW_PARENT) parentId = id;
+    if (title === parentTitle) parentId = id;
     agents.push(a);
     const p = projects.get(project) || {
       id: project,
@@ -74,11 +116,12 @@ export function largeFloor(now = LARGE_NOW) {
     projects.set(project, p);
   });
   const parent = agents.find((a) => a.id === parentId);
-  WAITING_CREW_JUNIORS.forEach((j, i) => {
+  juniors.forEach((j, i) => {
     agents.push({
       id: `claude-code:j${String(i).padStart(2, '0')}`,
       projectId: parent.projectId,
-      label: `${parent.label}.j${i + 1}`,
+      // As the daemon labels a junior: a name from the pool and the junior mark.
+      label: `${SHORT_NAMES[(rows.length + i) % SHORT_NAMES.length]}${JUNIOR_MARK}`,
       subagent: true,
       parentId: parent.id,
       subagentType: j.agentType,

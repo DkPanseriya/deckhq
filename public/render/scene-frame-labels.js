@@ -26,10 +26,17 @@
  */
 
 import { characterBox, labelBox } from './rig.js';
-import { BODY_HEIGHT_U, CHROME_BADGE_U } from './rig-metrics.js';
+import {
+  BODY_HEIGHT_U,
+  CHROME_BADGE_U,
+  labelFontSize,
+  LABEL_MIN_PX,
+  SELECTION_RING_R,
+} from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
 import { crewChipAt } from './crew.js';
-import { resolveLabelCollisions } from './scene-labels.js';
+import { abbreviateName, resolveLabelCollisions } from './label-spots.js';
+import { JUNIOR_MARK } from '../names.js';
 import { agentLabelFor, isNeedsYouAgent } from './scene-agent.js';
 
 /** A session at a desk or waiting on the user: its name is never dropped. */
@@ -174,6 +181,16 @@ export function planFrameLabels(ctx, view) {
     const u = view.uOf ? view.uOf(rec) : charU;
     const box = labelBox(ctx, s.x, s.y, u, text);
     const live = isLiveAgent(agent);
+    // The same name smaller, in the order it may shrink before it may leave
+    // its figure (`label-spots.js`): the minimum size, then the abbreviation.
+    const variants = [];
+    if (labelFontSize(u) > LABEL_MIN_PX + 0.01) {
+      variants.push({ ...labelBox(ctx, s.x, s.y, u, text, LABEL_MIN_PX), px: LABEL_MIN_PX });
+    }
+    const short = abbreviateName(text, JUNIOR_MARK);
+    if (short !== text) {
+      variants.push({ ...labelBox(ctx, s.x, s.y, u, short, LABEL_MIN_PX), px: LABEL_MIN_PX });
+    }
     const item = {
       id: rec.id,
       x: box.x,
@@ -186,6 +203,12 @@ export function planFrameLabels(ctx, view) {
       // Over the head, clear of the icon-and-badge slot: where a name goes when
       // the floor under its feet is a wall, a plate or somebody else's name.
       up: s.y - u * CHROME_BADGE_U - box.h - box.y,
+      // The near ring is measured from here: the feet, the body's height and
+      // its half-width, at the scale this figure is drawn at.
+      feet: { x: s.x, y: s.y },
+      bh: u * BODY_HEIGHT_U,
+      side: u * SELECTION_RING_R,
+      variants,
     };
     tiers[live ? (isNeedsYouAgent(agent) ? 0 : 1) : 2].push(item);
   }

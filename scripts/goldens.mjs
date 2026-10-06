@@ -321,6 +321,10 @@ const CAPTURES = [
   // motion, like `crew@reduced`, so the picture is the placement and not a
   // pulse's phase.
   { name: 'crew-waiting', population: 'crew-waiting', theme: 'default' },
+  // Sixteen sessions waiting on the office's three sofa runs, from five repos
+  // nobody is at a desk in, and one working repo with two juniors: every name
+  // next to its own body, the five away rooms narrow, the working room full.
+  { name: 'away', population: 'away', theme: 'default' },
   // WP-69 · THE STUDIO BOARD, and it is the product's only golden of a surface
   // with rows in it rather than a floor or a form.
   //
