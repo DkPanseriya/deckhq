@@ -67,6 +67,18 @@ export const ORIGINAL_POOL = 60;
  */
 export const FROZEN_POOL = 243;
 
+/**
+ * THE JUNIOR MARK: what follows a junior's name wherever it is drawn —
+ * `Marta·jr`. A junior (a subagent its parent started) takes a given name
+ * from this same pool, chosen by its own id (`identity.mjs`'s
+ * `pickJuniorName`), and may share one with a top-level session — they are
+ * different people — so the mark is what tells them apart at a glance: a
+ * middle dot, then `jr`, set in the label's own face and size. Short enough
+ * that a name and its mark fit the label the name alone used to; the
+ * visual spec calls it the junior mark.
+ */
+export const JUNIOR_MARK = '·jr';
+
 export const SHORT_NAMES = Object.freeze([
   'Marco',
   'Tai',

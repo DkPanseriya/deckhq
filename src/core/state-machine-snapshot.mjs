@@ -99,13 +99,15 @@ export class RegistrySnapshot extends RegistryBase {
       return { ...a, ...id };
     });
     if (this.identity) {
-      // Audit F6: a junior's number is handed out once and kept in state.json.
-      const numbers = this.identity.juniorNumbers(agents);
+      // Audit F6: a junior's number and name are handed out once and kept in
+      // state.json; the name is what is drawn, the number only orders.
+      const { numbers, names } = this.identity.juniors(agents);
       agents.forEach((a, i) => {
         if (a.subagent !== true) return;
         const key = String(a.parentId ?? '');
         const n = numbers.get(String(a.id)) ?? 0;
-        const id = this.identity.describeJunior(described.get(key) || null, a.projectId, n);
+        const name = names.get(String(a.id)) ?? null;
+        const id = this.identity.describeJunior(described.get(key) || null, a.projectId, n, name);
         agents[i] = { ...a, ...id };
       });
     }

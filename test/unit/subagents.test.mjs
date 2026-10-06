@@ -44,6 +44,7 @@ import { counts, needsYou, placement, projects, isSubagent } from '../../src/cor
 import { Registry } from '../../src/core/state-machine.mjs';
 import { agentId } from '../../src/core/model.mjs';
 import { Identity } from '../../src/core/identity.mjs';
+import { JUNIOR_MARK, SHORT_NAMES } from '../../public/names.js';
 import { floorPopulation, tableSizesFor, isDeskAgent } from '../../public/render/plan.js';
 import { assignSeats, derivePlacement, JUNIOR_OFFSET } from '../../public/render/agents.js';
 import {
@@ -940,7 +941,7 @@ test('no user action is available on a junior, from any surface', async () => {
   assert.deepEqual(store.writes, [], 'a refused action writes nothing');
 });
 
-test("a junior wears its parent's tag and takes no MK number or name of its own", async () => {
+test("a junior wears a name from the pool and its parent's tag, and takes no MK number or session name", async () => {
   // The smallest store surface `Identity` uses: an `identity` bag and a
   // `touch()` that would persist it.
   const identityStore = { identity: {}, touch() {} };
@@ -960,19 +961,32 @@ test("a junior wears its parent's tag and takes no MK number or name of its own"
   const parent = snap.agents.find((a) => a.id === agentId('claude-code', PARENT_ID));
   const juniors = snap.agents.filter((a) => a.subagent).sort((a, b) => a.id.localeCompare(b.id));
   assert.equal(juniors.length, 2);
-  assert.equal(juniors[0].mk, `${parent.mk}j1`);
-  assert.equal(juniors[1].mk, `${parent.mk}j2`);
-  assert.equal(juniors[0].label, `${parent.mk}j1`);
-  assert.equal(juniors[0].givenName, null, 'a junior is never given a first name');
+  // The tag is the parent's with the junior mark; the number orders and is
+  // never part of anything drawn.
+  assert.equal(juniors[0].mk, `${parent.mk}${JUNIOR_MARK}`);
+  assert.equal(juniors[1].mk, `${parent.mk}${JUNIOR_MARK}`);
+  assert.deepEqual(
+    juniors.map((j) => j.juniorNumber),
+    [1, 2],
+  );
+  for (const j of juniors) {
+    assert.ok(SHORT_NAMES.includes(j.juniorName), `${j.juniorName} is from the pool`);
+    assert.equal(j.label, `${j.juniorName}${JUNIOR_MARK}`);
+    assert.doesNotMatch(j.label, /\d/, 'no number is drawn');
+  }
+  assert.notEqual(juniors[0].juniorName, juniors[1].juniorName, 'siblings never share a name');
+  assert.equal(juniors[0].givenName, null, 'a junior takes no session name');
   assert.equal(juniors[0].displayName, null);
-  // Neither junior took an MK number or a name: the identity table knows the
-  // parent and the project, and nobody else (the `j<n>` each one wears is kept
-  // in the parent's bounded junior book, audit F6). This is the thing that would
-  // otherwise fill `~/.deckhq` with hundreds of thirty-second sessions and
-  // drain the first-name pool.
+  // Neither junior took an MK number or a session name: the identity table
+  // knows the parent and the project, and nobody else (the number and name
+  // each one wears are kept in the parent's bounded junior book, audit F6).
+  // This is the thing that would otherwise fill `~/.deckhq` with hundreds of
+  // thirty-second sessions and drain the session-name pool.
   const state = identityStore.identity;
   assert.deepEqual(Object.keys(state.agents), [agentId('claude-code', PARENT_ID)]);
   assert.deepEqual(Object.keys(state.names), [agentId('claude-code', PARENT_ID)]);
+  const book = state.juniors[agentId('claude-code', PARENT_ID)];
+  assert.deepEqual(Object.values(book.named).sort(), juniors.map((j) => j.juniorName).sort());
 });
 
 test('audit F6: a junior keeps its label while siblings come and go', async () => {
@@ -989,23 +1003,33 @@ test('audit F6: a junior keeps its label while siblings come and go', async () =
     log: { debug() {}, info() {}, warn() {}, error() {} },
   });
   registry.setHookStatus({ 'claude-code': { supported: true, installed: true } });
-  const labels = async () => {
+  /** Each junior's number, and its label, by its own short id. */
+  const juniorsNow = async () => {
     await registry.refresh();
     const snap = registry.snapshot();
-    const mk = snap.agents.find((a) => a.id === agentId('claude-code', PARENT_ID)).mk;
-    return Object.fromEntries(
-      snap.agents
-        .filter((a) => a.subagent)
-        .map((a) => [a.id.slice(a.id.indexOf(':') + 1), a.label.slice(mk.length)]),
-    );
+    const mine = snap.agents.filter((a) => a.subagent);
+    const key = (a) => a.id.slice(a.id.indexOf(':') + 1);
+    return {
+      numbers: Object.fromEntries(mine.map((a) => [key(a), a.juniorNumber])),
+      labels: Object.fromEntries(mine.map((a) => [key(a), a.label])),
+    };
   };
-  assert.deepEqual(await labels(), { c: 'j1', a: 'j2', b: 'j3' });
-  // `c` finishes and leaves: `a` and `b` are still who they were.
+  const first = await juniorsNow();
+  assert.deepEqual(first.numbers, { c: 1, a: 2, b: 3 });
+  for (const label of Object.values(first.labels)) assert.ok(label.endsWith(JUNIOR_MARK));
+  // `c` finishes and leaves: `a` and `b` are still who they were, by number
+  // and by name.
   adapter.set([summary(PARENT_ID), j('a', 2), j('b', 3)]);
-  assert.deepEqual(await labels(), { a: 'j2', b: 'j3' });
-  // A new sibling that sorts FIRST by id takes the next number, not `j1`.
+  const second = await juniorsNow();
+  assert.deepEqual(second.numbers, { a: 2, b: 3 });
+  assert.deepEqual(second.labels, { a: first.labels.a, b: first.labels.b });
+  // A new sibling that sorts FIRST by id takes the next number, not 1, and a
+  // name none of its siblings wears.
   adapter.set([summary(PARENT_ID), j('a', 2), j('b', 3), j('0', 4)]);
-  assert.deepEqual(await labels(), { a: 'j2', b: 'j3', 0: 'j4' });
+  const third = await juniorsNow();
+  assert.deepEqual(third.numbers, { a: 2, b: 3, 0: 4 });
+  assert.equal(third.labels.a, first.labels.a);
+  assert.ok(![first.labels.a, first.labels.b].includes(third.labels['0']));
 });
 
 // ---------------------------------------------------------------------------

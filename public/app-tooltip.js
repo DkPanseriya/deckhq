@@ -88,7 +88,7 @@ export function showTooltip(agentId) {
   // have one, the rarity word: one quiet adjective, never a number and never
   // a count of what the user has collected (docs/plan/08 §1.1 rule 6).
   const mk = agent.mk || agent.id;
-  const name = agent.displayName || agent.givenName || null;
+  const name = agent.displayName || agent.givenName || agent.juniorName || null;
   const tag = document.createElement('div');
   tag.className = 'tooltip-tag';
   if (name) {

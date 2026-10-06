@@ -36,6 +36,7 @@ import {
 import { worldToScreen } from './agents.js';
 import { crewChipAt } from './crew.js';
 import { abbreviateName, resolveLabelCollisions } from './label-spots.js';
+import { JUNIOR_MARK } from '../names.js';
 import { agentLabelFor, isNeedsYouAgent } from './scene-agent.js';
 
 /** A session at a desk or waiting on the user: its name is never dropped. */
@@ -186,7 +187,7 @@ export function planFrameLabels(ctx, view) {
     if (labelFontSize(u) > LABEL_MIN_PX + 0.01) {
       variants.push({ ...labelBox(ctx, s.x, s.y, u, text, LABEL_MIN_PX), px: LABEL_MIN_PX });
     }
-    const short = abbreviateName(text);
+    const short = abbreviateName(text, JUNIOR_MARK);
     if (short !== text) {
       variants.push({ ...labelBox(ctx, s.x, s.y, u, short, LABEL_MIN_PX), px: LABEL_MIN_PX });
     }

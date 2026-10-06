@@ -16,7 +16,7 @@ import {
   WAITING_CREW_JUNIORS,
   WAITING_CREW_PARENT,
 } from '../../scripts/demo-populations.mjs';
-import { SHORT_NAMES } from '../../public/names.js';
+import { JUNIOR_MARK, SHORT_NAMES } from '../../public/names.js';
 
 export const LARGE_NOW = 1_800_000_000_000;
 const HOUR = 3_600_000;
@@ -120,7 +120,8 @@ function floorOf(rows, now, parentTitle, juniors) {
     agents.push({
       id: `claude-code:j${String(i).padStart(2, '0')}`,
       projectId: parent.projectId,
-      label: `${parent.label}.j${i + 1}`,
+      // As the daemon labels a junior: a name from the pool and the junior mark.
+      label: `${SHORT_NAMES[(rows.length + i) % SHORT_NAMES.length]}${JUNIOR_MARK}`,
       subagent: true,
       parentId: parent.id,
       subagentType: j.agentType,

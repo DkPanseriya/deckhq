@@ -240,18 +240,31 @@ test('audit F6 STABILITY: a junior keeps its number across a restart with a sibl
   await first.load();
   const id1 = new Identity(first);
   // Spawn order, not id order: c, a, b.
-  const before = id1.juniorNumbers([junior('c', 1), junior('a', 2), junior('b', 3)]);
-  assert.deepEqual(Object.fromEntries(before), { c: 1, a: 2, b: 3 });
+  const before = id1.juniors([junior('c', 1), junior('a', 2), junior('b', 3)]);
+  assert.deepEqual(Object.fromEntries(before.numbers), { c: 1, a: 2, b: 3 });
+  // Each takes a name from the pool, and no two siblings share one.
+  assert.equal(new Set(before.names.values()).size, 3);
+  for (const name of before.names.values()) assert.ok(SHORT_NAMES.includes(name), name);
   await first.flush();
 
   // The daemon restarts from disk; `c` has finished and is no longer on the floor.
   const second = new Store(file);
   await second.load();
   const id2 = new Identity(second);
-  const after = id2.juniorNumbers([junior('a', 2), junior('b', 3), junior('0', 4)]);
+  const both = id2.juniors([junior('a', 2), junior('b', 3), junior('0', 4)]);
+  const after = both.numbers;
   assert.equal(after.get('a'), 2, 'a keeps its number');
   assert.equal(after.get('b'), 3, 'b keeps its number');
   assert.equal(after.get('0'), 4, "a new junior takes the next unused number, never c's");
+  // THE JUNIOR NAMES: the same junior keeps its name across the restart, read
+  // back from `identity.juniors` rather than dealt again.
+  assert.equal(both.names.get('a'), before.names.get('a'), 'a keeps its name');
+  assert.equal(both.names.get('b'), before.names.get('b'), 'b keeps its name');
+  assert.ok(
+    ![...before.names.values()].includes(both.names.get('0')),
+    'a new junior takes a name none of its siblings in the book holds',
+  );
+  assert.equal(second.identity.juniors.p1.named.a, before.names.get('a'));
   // Juniors still take no MK number and no name of their own.
   assert.deepEqual(second.identity.agents, {});
   assert.deepEqual(second.identity.names, {});
@@ -269,6 +282,11 @@ test("audit F6: a parent's junior book is bounded, and a number is never handed 
   assert.equal(book.next, JUNIOR_BOOK_KEEP * 3 + 1);
   assert.equal(book.of.j0, 1, 'a junior still on the floor is never dropped');
   assert.ok(Object.keys(book.of).length <= JUNIOR_BOOK_KEEP + 1, 'departed juniors age out');
+  assert.deepEqual(
+    Object.keys(book.named).sort(),
+    Object.keys(book.of).sort(),
+    'and their names with them',
+  );
   // One that aged out and comes back gets a fresh number, not somebody else's.
   assert.equal(id.juniorNumbers([junior(1)]).get('j1'), JUNIOR_BOOK_KEEP * 3 + 2);
   await store.flush();

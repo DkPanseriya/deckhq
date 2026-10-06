@@ -148,12 +148,14 @@ function normalize(parsed) {
  * The identity block's junior books (audit F6), read back from disk. Additive:
  * a file without the key — every file before this build — reads as no books,
  * which is what an in-memory build would have started from, so no version bump.
- * A malformed book is dropped rather than guessed at.
+ * A malformed book is dropped rather than guessed at. `named` (the junior
+ * names) is additive the same way: a book without it reads as no names yet,
+ * and a name is kept only beside a number it belongs to.
  * @param {unknown} raw
- * @returns {Record<string, {next: number, of: Record<string, number>}>}
+ * @returns {Record<string, {next: number, of: Record<string, number>, named: Record<string, string>}>}
  */
 function sanitizeJuniorBooks(raw) {
-  /** @type {Record<string, {next: number, of: Record<string, number>}>} */
+  /** @type {Record<string, {next: number, of: Record<string, number>, named: Record<string, string>}>} */
   const out = {};
   if (!isPlainObject(raw)) return out;
   for (const [parent, book] of Object.entries(/** @type {Record<string, any>} */ (raw))) {
@@ -163,7 +165,12 @@ function sanitizeJuniorBooks(raw) {
     for (const [id, n] of Object.entries(isPlainObject(book.of) ? book.of : {})) {
       if (Number.isInteger(n) && n > 0 && n <= book.next) of[id] = n;
     }
-    out[parent] = { next: book.next, of };
+    /** @type {Record<string, string>} */
+    const named = {};
+    for (const [id, name] of Object.entries(isPlainObject(book.named) ? book.named : {})) {
+      if (id in of && typeof name === 'string' && name.trim()) named[id] = name;
+    }
+    out[parent] = { next: book.next, of, named };
   }
   return out;
 }

@@ -40,7 +40,7 @@
  * that already asks that question). Guarded in identity.test.mjs.
  */
 
-import { ORIGINAL_POOL, SHORT_NAMES } from '../../public/names.js';
+import { JUNIOR_MARK, ORIGINAL_POOL, SHORT_NAMES } from '../../public/names.js';
 import { now as clockNow } from './clock.mjs';
 
 /**
@@ -54,6 +54,16 @@ import { now as clockNow } from './clock.mjs';
  *                                      away, for the week after it did (§168)
  * @property {string|null} avatar
  * @property {string} label         displayName ?? givenName ?? mk
+ * @property {number} [juniorNumber] a junior's `n` in its parent's book: kept
+ *                                   for ordering, never drawn
+ */
+
+/**
+ * One parent's junior book in `state.json`'s `identity.juniors`: the next
+ * number to hand out, each junior's number, and (since the junior names) each
+ * junior's given name. `named` is additive: a book written before it has none,
+ * and the names are dealt on the next snapshot.
+ * @typedef {{next: number, of: Record<string, number>, named?: Record<string, string>}} JuniorBook
  */
 
 /**
@@ -186,7 +196,7 @@ export class Identity {
    * `given` is the one this class assigns and never reassigns. The record type
    * used to name only the first two while `givenName()`, `_usedNames()` and
    * `takenNames()` all read and wrote the third (WP-22).
-   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null, formerName?: string|null, renamedAt?: number|null}>, nextProject: number, juniors: Record<string, {next: number, of: Record<string, number>}>}}
+   * @returns {{projects: Record<string, number>, agents: Record<string, number>, projectOf: Record<string, string>, names: Record<string, {name?: string|null, avatar?: string|null, given?: string|null, formerName?: string|null, renamedAt?: number|null}>, nextProject: number, juniors: Record<string, JuniorBook>}}
    */
   _state() {
     const s = this.store.identity;
@@ -334,8 +344,18 @@ export class Identity {
   }
 
   /**
-   * A junior's identity (WP-41): no MK number and no name of its own, only its
-   * parent's tag and the `j<n>` that `juniorNumbers` keeps for it.
+   * A junior's identity (WP-41): no MK number of its own, a given name from
+   * the pool kept in its parent's book (`juniors`), and the junior mark.
+   *
+   * THE JUNIOR NAMES (owner, 6 October). A floor of `MK129.5j8` labels was a
+   * floor of serial numbers where every other figure had a name. A junior is
+   * now `Marta·jr` on the floor (`JUNIOR_MARK`), and its tag is its parent's
+   * with the same mark, `MK1.2·jr`, so the panel's chip reads "Marta, junior of
+   * MK1.2" and the number `n` that orders siblings is kept (`juniorNumber`) but
+   * never drawn. The name is not a `givenName`: a junior may share one with a
+   * top-level session (they are different people), and `givenName` is what
+   * `deckhq open <name>` resolves — a junior must never make a session's own
+   * name ambiguous.
    *
    * `describe()` above assigns and stores an MK number and a first name the
    * first time it sees an agent, and never reassigns either — which is exactly
@@ -345,9 +365,9 @@ export class Identity {
    * identity table without bound, and drain the finite first-name pool
    * (`_usedNames` is what the picker avoids, and it never shrinks).
    *
-   * So a junior wears its parent's tag with a suffix: `MK1.2j1`, `MK1.2j2`.
-   * It says whose junior it is, it is short enough for a floor label, and all
-   * it writes is that one number in its parent's bounded book. The junior's FACE is unaffected — `appearanceFor()` is a
+   * So a junior's number and name live in its parent's bounded book and
+   * nowhere else, and the names it takes are not taken from anybody: the
+   * session picker never sees them. The junior's FACE is unaffected — `appearanceFor()` is a
    * pure function of the session id (§105), so a junior looks like itself and
    * like nobody else without any of this.
    *
@@ -357,44 +377,54 @@ export class Identity {
    * @param {IdentityRecord} parent the parent's own record, from `describe()`
    * @param {string} projectId
    * @param {number} index 1-based, in a stable order the caller decides
-   * @returns {IdentityRecord}
+   * @param {string|null} [name] its name from the book (`juniors`)
+   * @returns {IdentityRecord & {juniorName: string|null}}
    */
-  describeJunior(parent, projectId, index) {
+  describeJunior(parent, projectId, index, name = null) {
     const projectMk = this.projectMk(projectId);
-    const mk = `${parent && parent.mk ? parent.mk : `MK${projectMk}`}j${index}`;
+    const mk = `${parent && parent.mk ? parent.mk : `MK${projectMk}`}${JUNIOR_MARK}`;
     return {
       projectMk,
       agentMk: parent && Number.isFinite(parent.agentMk) ? parent.agentMk : 0,
       mk,
-      // A junior is never renamed and never named: both of these are the
-      // user's or the daemon's word for a session, and a junior is neither.
+      // A junior is never renamed and has no session name: both of these are
+      // the user's or the daemon's word for a session, and a junior is neither.
       displayName: null,
       givenName: null,
-      // A junior was never given a name, so there is nothing WP-86's
-      // migration could ever have renamed.
+      // Nothing WP-86's migration could ever have renamed.
       formerName: null,
       avatar: null,
-      label: mk,
+      juniorName: name || null,
+      juniorNumber: index,
+      label: name ? `${name}${JUNIOR_MARK}` : mk,
     };
   }
 
   /**
-   * Each junior's `j<n>`, handed out once and kept in `state.json` (audit F6).
-   *
-   * The number is the junior's identity in the same sense an MK number is a
-   * session's: once `MK1.2j3` has been read, it must keep meaning that junior
-   * through siblings leaving AND through a daemon restart. So the books live in
-   * the identity block beside the MK numbers, under `juniors`, and follow the
-   * same rules — see `assignJuniorNumbers`. The MK number and the first name
-   * stay unassigned for a junior, for WP-41's reasons (above).
+   * Each junior's number and name, handed out once and kept in `state.json`
+   * (`assignJuniorNumbers`).
+   * @param {any[]} agents the snapshot's agents; juniors carry `parentId`
+   * @returns {{numbers: Map<string, number>, names: Map<string, string>}}
+   */
+  juniors(agents) {
+    const { numbers, names, changed } = assignJuniorNumbers(this._state().juniors, agents);
+    if (changed) this.store.touch();
+    return { numbers, names };
+  }
+
+  /**
+   * Each junior's number `n`, handed out once and kept in `state.json` (audit
+   * F6). It orders a parent's juniors and is never drawn; the junior's NAME is
+   * what is (`juniors`). Both are identity in the sense an MK number is: kept
+   * through siblings leaving AND through a daemon restart, in the identity
+   * block beside the MK numbers, by the rules in `assignJuniorNumbers`. The MK
+   * number and the session name stay unassigned for a junior (above).
    *
    * @param {any[]} agents the snapshot's agents; juniors carry `parentId`
    * @returns {Map<string, number>} junior agent id → its number
    */
   juniorNumbers(agents) {
-    const { numbers, changed } = assignJuniorNumbers(this._state().juniors, agents);
-    if (changed) this.store.touch();
-    return numbers;
+    return this.juniors(agents).numbers;
   }
 
   /**
@@ -423,20 +453,43 @@ export class Identity {
 export const JUNIOR_BOOK_KEEP = 64;
 
 /**
- * A JUNIOR'S NUMBER IS ITS OWN (audit F6).
+ * A JUNIOR'S NAME: the pool's, chosen by its own id.
+ *
+ * The same hash a session's name starts from (`nameHash`), over the whole
+ * pool rather than its original block — a junior's start has no history to
+ * keep — walking forward past the names its siblings in the same book hold, so
+ * two juniors of one parent never share one. A top-level session may well hold
+ * the same name: they are different people, and the junior mark says which.
+ * @param {string} juniorId
+ * @param {Set<string>} siblings names already in the book, lower-cased
+ * @returns {string}
+ */
+export function pickJuniorName(juniorId, siblings) {
+  const start = nameHash(String(juniorId)) % SHORT_NAMES.length;
+  for (let i = 0; i < SHORT_NAMES.length; i++) {
+    const candidate = SHORT_NAMES[(start + i) % SHORT_NAMES.length];
+    if (!siblings.has(candidate.toLowerCase())) return candidate;
+  }
+  return SHORT_NAMES[start];
+}
+
+/**
+ * A JUNIOR'S NUMBER AND NAME ARE ITS OWN (audit F6, and the junior names).
  *
  * Each junior is numbered once, the first time it is seen, with the next number
  * its parent has not handed out; juniors first seen together are numbered in
  * spawn order, then id. A number is never reassigned: `next` only grows, and a
  * junior on the snapshot is never dropped from its parent's book, so siblings
- * leaving — before or across a restart — renumber nobody.
+ * leaving — before or across a restart — renumber nobody. Its name is dealt
+ * once too, in number order (`pickJuniorName`), kept beside the number under
+ * `named`, and dropped only with it.
  *
  * `books` is the persisted `identity.juniors` block, `parent id → {next, of:
- * {junior id → n}}`, mutated in place.
+ * {junior id → n}, named: {junior id → name}}`, mutated in place.
  *
- * @param {Record<string, {next:number, of:Record<string, number>}>} books
+ * @param {Record<string, JuniorBook>} books
  * @param {any[]} agents
- * @returns {{numbers: Map<string, number>, changed: boolean}}
+ * @returns {{numbers: Map<string, number>, names: Map<string, string>, changed: boolean}}
  */
 export function assignJuniorNumbers(books, agents) {
   /** @type {Map<string, any[]>} */
@@ -450,13 +503,17 @@ export function assignJuniorNumbers(books, agents) {
   const spawned = (a) => (Number.isFinite(Number(a.spawnedAt)) ? Number(a.spawnedAt) : Infinity);
   /** @type {Map<string, number>} */
   const numbers = new Map();
+  /** @type {Map<string, string>} */
+  const names = new Map();
   let changed = false;
   for (const [key, list] of byParent) {
     if (!books[key]) {
-      books[key] = { next: 0, of: {} };
+      books[key] = { next: 0, of: {}, named: {} };
       changed = true;
     }
     const book = books[key];
+    if (!book.named) book.named = {};
+    const named = book.named;
     const fresh = list
       .filter((a) => typeof book.of[String(a.id)] !== 'number')
       .sort((x, y) => spawned(x) - spawned(y) || String(x.id).localeCompare(String(y.id)));
@@ -469,9 +526,24 @@ export function assignJuniorNumbers(books, agents) {
     for (const [id, n] of Object.entries(book.of)) {
       if (here.has(id) || n > book.next - JUNIOR_BOOK_KEEP) continue;
       delete book.of[id];
+      delete named[id];
       changed = true;
     }
-    for (const a of list) numbers.set(String(a.id), book.of[String(a.id)]);
+    // Names in number order, so who gets which is a function of the book.
+    const taken = new Set(Object.values(named).map((n) => n.toLowerCase()));
+    const unnamed = list
+      .map((a) => String(a.id))
+      .filter((id) => typeof named[id] !== 'string')
+      .sort((x, y) => book.of[x] - book.of[y]);
+    for (const id of unnamed) {
+      named[id] = pickJuniorName(id, taken);
+      taken.add(named[id].toLowerCase());
+      changed = true;
+    }
+    for (const a of list) {
+      numbers.set(String(a.id), book.of[String(a.id)]);
+      names.set(String(a.id), named[String(a.id)]);
+    }
   }
-  return { numbers, changed };
+  return { numbers, names, changed };
 }
