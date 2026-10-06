@@ -811,6 +811,8 @@ These are real, and listed here rather than discovered later.
 | `P`                 | Float the office — a small always-on-top window over your terminal       |
 | `G`                 | Step through the agents who went home, newest activity first             |
 | `I`                 | The repos nobody is working in — `P` on a row pins one a room of its own |
+| `L`                 | Look — agent size, theme and the floor presets, from the header button   |
+| `,`                 | Settings — the whole sheet, its sections named across the top            |
 | `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk  |
 | `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot     |
 | `Esc`               | Close the panel — or dismiss the day's card, if one is up                |
@@ -818,6 +820,15 @@ These are real, and listed here rather than discovered later.
 | `0`                 | Back to fit — which is also the minimum                                  |
 | `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                    |
 | Drag / scroll       | Pan, whenever the floor is bigger than the window                        |
+
+`L` opens what the **Look** button in the header opens: a small panel with **agent size** (small,
+medium, large, auto), the three themes, and the six floor presets as thumbnails. A click changes the
+floor straight away, and a choice that would leave the floor unreadable is refused with the reason
+and changes nothing. `Esc`, `L` again or a click anywhere else closes it. **All look options…**
+opens the full Look section in Settings — every floor material, the colour scheme, the furniture
+set, the rugs, the planting, the props and the lounge kit. `,` and the gear beside the Look button
+open Settings at the top, where a row of section names — State, Notifications, Resume, Floor, Look,
+Data, Hooks — jumps to each. Neither key does anything while you are typing in a field.
 
 `I` opens the list of repos nobody is working in — a quiet chip in the corner of the floor, and the
 names behind it. **Pinning one keeps it a room** even with nothing running in it: a small room, one
@@ -874,8 +885,9 @@ stays there.
 
 The floor comes in three finishes, all free and none of them gated: the default warm office,
 **night shift** — the same office after hours, cooler and dimmer — and **blueprint**, the floor as
-a drawing on a drafting table, in white line work on blue. `⌘K` → Settings → Floor → Theme, and
-hovering a swatch repaints the whole window so you can see it before you choose it. A theme
+a drawing on a drafting table, in white line work on blue. Pick one from the **Look** button in
+the header (`L`), or in Settings → Floor → Theme, where hovering a swatch repaints the whole window
+so you can see it before you choose it. A theme
 repaints materials and neutrals and nothing else: **the six state colours never move**, so a
 raised hand is the same amber in every theme and red still means one thing, and every theme is
 measured against the same contrast floors before it can be selected — a theme that failed one

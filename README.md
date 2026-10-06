@@ -121,18 +121,18 @@ Details, and the `?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](do
 
 ## Change the look
 
-`⌘K` → **Settings** opens a **Look** section: six presets — Studio oak, Night lab, Paper office,
-Terrazzo hall, Garden floor, Workshop — then a floor material per zone, a colour scheme, a
-furniture set, two rugs, the planting, the prop density and the lounge kit. **56 options over eleven
-pickers**, every chip a real swatch painted by the floor painter itself, and a live preview with
-the contrast it measured underneath. `⌘K` → `Look: Night lab` puts a whole preset on in two
-keystrokes. **Agent size** is in there too — small, medium, large or auto — and the table, the
-chair, the sofa and the rug follow the people while the corridors, the room padding and every label
-stay exactly where they were, so a floor of five fills the window and a floor of a hundred still
-fits. Nothing you can choose produces an illegible floor: a combination that would leave a
-rug unreadable on the floor under it is **refused with the reason and changes nothing**, and all
-three themes still apply on top. A look is a file you own, and unlike a layout it names no project,
-no path and no session — so it is one you can post:
+**Look** in the header, or `L`, opens the three you reach for most — **agent size**, theme, and the
+six presets. **All look options…** opens the whole section in Settings (the gear, or `,`): presets
+— Studio oak, Night lab, Paper office, Terrazzo hall, Garden floor, Workshop — then a floor material
+per zone, a colour scheme, a furniture set, two rugs, the planting, the prop density and the lounge
+kit. **56 options over eleven pickers**, every chip a real swatch painted by the floor painter
+itself, with a live preview and the contrast it measured. `⌘K` → `Look: Night lab` puts a whole
+preset on in two keystrokes. **Agent size** — small, medium, large or auto — moves the table, chair,
+sofa and rug with the people while the corridors, the room padding and every label stay put, so a
+floor of five fills the window and a floor of a hundred still fits. Nothing you can choose produces
+an illegible floor: a combination that would leave a rug unreadable on the floor under it is
+**refused with the reason and changes nothing**, and all three themes still apply on top. A look is
+a file you own, and unlike a layout it names no project, no path and no session — so you can post it:
 
 ```bash
 deckhq look export > my-floor.json   # or the section's Export button
