@@ -356,6 +356,22 @@ export function buildCommandEntries(ctx) {
       keywords: ['preferences', 'options', 'configure'],
       run: () => actions.openSettings(),
     },
+    // The header's Look button, by name. No accelerator — `l` is "Show fired"'s
+    // — so the hint carries the floor's own key, the way Idle projects carries
+    // `I`. Gated on the catalogue like every look row below: without it there
+    // is no Look section to open.
+    ...(lookPresets.length
+      ? [
+          {
+            id: 'cmd:look',
+            group: 'command',
+            label: 'Look',
+            hint: 'floors, furniture, rugs, plants and agent size — L',
+            keywords: ['look', 'appearance', 'design', 'floor', 'furniture', 'customise', 'size'],
+            run: () => actions.openLook(),
+          },
+        ]
+      : []),
     // WP-88b · the look, from the keyboard.
     //
     // Six presets and three verbs, and NOT one row per option: the catalogue is

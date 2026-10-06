@@ -547,6 +547,380 @@ button {
   }
 }
 
+/* ------------------------------------------- header · look and settings
+
+   Two controls beside the palette hint, because a setting nobody can find is
+   a setting the product does not have. They are quiet on purpose — the header
+   is a headline and the numeral is still the loudest thing on it — but they
+   are BUTTONS, with a hairline and a label, where the palette hint is only a
+   hint: these are the things the owner went looking for and could not see.
+
+   The popover is anchored to the Look button by CSS rather than measured in
+   script, `.idle-popover`'s reasoning: a measured popover has to re-measure on
+   every resize and every re-render, and each of those is a frame it can be in
+   the wrong place.
+
+   z-index 50, and it is the header's only layer: above everything the stage
+   draws for itself (`.idle-popover` at 5, `.tooltip` at 40) and below the
+   three things that must stay on top of it — the coach layer, the toast and
+   the whiteboard scrim, all at 60.
+
+   `public/look-ui-bar.js`. */
+.tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  /* `.btn`'s own box, stated: 0.72rem type at 1.5, 0.42rem above and below,
+     and the hairline. The icon-only button has no line of type to set its
+     height, so the two would otherwise differ by two pixels in one row. */
+  height: 2.05rem;
+  padding: 0 0.65rem;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.tool-btn:hover,
+.tool-btn[aria-expanded='true'] {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.tool-btn[aria-expanded='true'] {
+  background: var(--surface-3);
+}
+.tool-btn:active {
+  transform: translateY(0.5px);
+}
+.tool-btn--icon {
+  width: 2.05rem;
+  padding: 0;
+}
+.tool-icon {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* The gear's eight teeth are one dashed circle: 52.78 round at r 8.4, so a
+   tooth and its gap are 6.6, and the offset centres a tooth on each axis. */
+.tool-icon-teeth {
+  stroke-width: 2.8;
+  stroke-linecap: butt;
+  stroke-dasharray: 2.75 3.847;
+  stroke-dashoffset: 1.375;
+}
+
+.lookbar {
+  position: relative;
+  display: flex;
+}
+.look-popover {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  width: 23rem;
+  max-width: calc(100vw - 1.5rem);
+  max-height: calc(100vh - 6rem);
+  overflow-y: auto;
+  padding: 0.85rem 0.9rem 0.65rem;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  transform-origin: top right;
+  animation: lookbar-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes lookbar-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.lookbar-row {
+  min-width: 0;
+}
+.lookbar-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+.lookbar-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.lookbar-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+/* A segmented control: one well, the chosen segment raised out of it. The
+   well is the darkest ground there is, so the raised segment is a step UP in
+   lightness — chosen reads as lit, which is this window's whole language. */
+.lookbar-seg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.lookbar-seg-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-width: max-content;
+  padding: 0.36rem 0.5rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.lookbar-seg-btn:hover {
+  color: var(--ink);
+}
+.lookbar-seg-btn[aria-checked='true'] {
+  background: var(--surface-3);
+  border-color: var(--line-2);
+  color: var(--ink);
+}
+.lookbar-swatch {
+  display: inline-flex;
+  gap: 2px;
+}
+.lookbar-swatch i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+
+/* Six presets, three across: a thumbnail is a picture of four floors, and at
+   six across it is a row of colour chips nobody could tell apart. */
+.lookbar-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.lookbar-preset {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  padding: 0.25rem 0.25rem 0.3rem;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.lookbar-preset:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.lookbar-preset[aria-checked='true'] {
+  background: var(--surface-2);
+  border-color: var(--ink-2);
+  color: var(--ink);
+}
+.lookbar-preset canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 2px;
+}
+.lookbar-preset .lookbar-item-label {
+  padding: 0 0.15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The guard's sentence. `.settings-look-refusal`'s construction: the crimson
+   is a border and a ring, never the words — it measures under the text floor
+   on every ground here. */
+.lookbar-refusal {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+.lookbar-refusal-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+}
+
+.lookbar-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.74rem;
+}
+.lookbar-all {
+  color: var(--ink-2);
+}
+.lookbar-foot-keys {
+  font-size: 0.68rem;
+  color: var(--muted);
+}
+
+/* The hint. `.coach-card`'s surface and `.coach-card`'s pointer, one line
+   long, hung from the same anchor as the popover — which is why the two can
+   never be on screen together: opening the popover is what dismisses it. */
+.look-hint {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: max-content;
+  max-width: calc(100vw - 1.5rem);
+  padding: 0.5rem 0.55rem 0.5rem 0.8rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  animation: lookbar-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.look-hint::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 1.6rem;
+  width: 10px;
+  height: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-right: none;
+  border-bottom: none;
+  transform: rotate(45deg);
+}
+.look-hint-dismiss {
+  flex: 0 0 auto;
+  padding: 0.25rem 0.55rem;
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+.look-hint-dismiss:hover {
+  border-color: var(--ink-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .look-popover,
+  :root:not([data-motion='no-preference']) .look-hint {
+    animation: none;
+  }
+}
+[data-motion='reduce'] .look-popover,
+[data-motion='reduce'] .look-hint {
+  animation: none;
+}
+
+/* A narrow window wraps the header, and the Look button can land anywhere on
+   its row — so the popover and the hint stop hanging from the button and hang
+   from the header instead, a margin in from each edge. The label goes with
+   the palette hint's; the icon and the accessible name stay. */
+@media (max-width: 860px) {
+  .tool-label {
+    display: none;
+  }
+  .tool-btn {
+    width: 2.05rem;
+    padding: 0;
+  }
+}
+@media (max-width: 620px) {
+  .topbar {
+    position: relative;
+  }
+  .lookbar {
+    position: static;
+  }
+  .look-popover,
+  .look-hint {
+    top: calc(100% + 0.4rem);
+    left: 0.75rem;
+    right: 0.75rem;
+    width: auto;
+    max-width: none;
+  }
+  .look-hint::before {
+    display: none;
+  }
+}
+
 /* ----------------------------------------------------------------- app */
 .app {
   flex: 1 1 auto;
@@ -3682,6 +4056,57 @@ textarea.field-input {
    The first settings surface this product has had. Sections separated by a
    hairline rule, never a card; the hook consent screen is the last one.
    ====================================================================== */
+/* THE SECTION NAV. Seven sections in one scroll, and the one people open the
+   sheet for is the fifth — so their names ride at the top of the sheet, one
+   click from each. It bleeds to the sheet's edges over the body's own padding
+   and carries the sheet's own ground, so a row scrolling under it disappears
+   behind a surface rather than showing through a strip of text.
+
+   `public/settings-ui-nav.js` builds it from the sections that are there. */
+.settings-nav {
+  position: sticky;
+  /* Minus the body's own padding: a sticky box is held inside the scroller's
+     CONTENT box, so `top: 0` parks it one rem down with rows showing above. */
+  top: -1rem;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  margin: -1rem -1.1rem 0.9rem;
+  padding: 0.5rem 0.8rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.settings-nav-btn {
+  padding: 0.28rem 0.55rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+.settings-nav-btn:hover {
+  color: var(--ink);
+}
+.settings-nav-btn[aria-current='true'] {
+  color: var(--ink);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+/* A jump lands the heading under the nav, not behind it; and a section that
+   was focused by the jump is a place, not a control, so it draws no ring. */
+.settings-section {
+  scroll-margin-top: 2.75rem;
+}
+.settings-section:focus {
+  outline: none;
+}
 .settings-section + .settings-section {
   margin-top: 1.4rem;
   padding-top: 1.1rem;
@@ -4002,6 +4427,11 @@ textarea.field-input {
   align-items: stretch;
   gap: 0.5rem;
 }
+/* The agent size is the section's first row and the preset cards follow it;
+   a row of words needs air before a grid of pictures. */
+#settings-look .settings-row + .settings-look-presets {
+  margin-top: 0.6rem;
+}
 .settings-look-group {
   display: flex;
   flex-direction: column;
@@ -4014,6 +4444,9 @@ textarea.field-input {
 .settings-look-chips {
   display: grid;
   grid-template-columns: repeat(auto-fill, 4.9rem);
+  /* From the left, under the row's own label: these rows are stacked, and
+     `.settings-choice`'s end alignment is for a control beside its label. */
+  justify-content: start;
   gap: 0.35rem;
   max-height: none;
   overflow: visible;

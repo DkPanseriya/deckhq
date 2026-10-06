@@ -5,8 +5,9 @@
  * surface at all: the stall window, the poll interval, notifications and
  * sound were reachable only by POSTing to `/api/settings` by hand.
  *
- * Opened from the palette (`⌘K` → Settings, or `,`). Six sections — state,
- * notifications, resume, floor, data, hooks — and the hook consent screen is
+ * Opened from the header's Settings button, from `,` on the floor, and from the
+ * palette (`⌘K` → Settings). Seven sections — state, notifications, resume,
+ * floor, look, data, hooks — under a nav that names them, and the hook consent screen is
  * one of them rather than a dialog of its own, because "do I let DeckHQ write
  * to my Claude settings file" is a setting.
  *
@@ -30,6 +31,7 @@
  *   settings-ui-widgets.js  the controls: section, row, toggle, number,
  *                           choice, theme picker, avatar picker
  *   settings-ui-rates.js    WP-45's rate-card editor
+ *   settings-ui-nav.js      the section nav, derived from the sections drawn
  * ============================================================================
  */
 
@@ -37,6 +39,7 @@ import { current, about, setCurrent, setAbout } from './settings-ui-state.js';
 import { createSettingsWidgets } from './settings-ui-widgets.js';
 import { createRatesSection } from './settings-ui-rates.js';
 import { NO_LOOK, createLookSection } from './look-ui.js';
+import { currentSection, fillSectionNav, markCurrentSection } from './settings-ui-nav.js';
 
 export { current, about } from './settings-ui-state.js';
 
@@ -489,8 +492,26 @@ export function createSettingsUI(opts) {
     host.appendChild(hooksSection);
   }
 
+  /** The section nav as last drawn: its element, and one entry per section. */
+  let navEl = /** @type {HTMLElement|null} */ (null);
+  /** @type {Array<{id:string, title:string, button:any}>} */
+  let navEntries = [];
+
+  /** Mark the section the sheet is standing on. Reads layout; never mid-render. */
+  function syncNav() {
+    if (!navEl || navEntries.length === 0) return;
+    const id = currentSection(navEl, navEntries, (sid) => document.getElementById(sid));
+    markCurrentSection(navEntries, id);
+  }
+  bodyEl.addEventListener('scroll', syncNav, { passive: true });
+
   function render() {
     bodyEl.textContent = '';
+    // The nav is the sheet's first child and is FILLED LAST, from the sections
+    // that were actually drawn below it — so it cannot name a section this
+    // build does not have, and nobody maintains a second list of them.
+    navEl = document.createElement('nav');
+    bodyEl.appendChild(navEl);
     renderState(bodyEl);
     renderNotifications(bodyEl);
     renderResume(bodyEl);
@@ -501,12 +522,14 @@ export function createSettingsUI(opts) {
     lookSection.renderInto(bodyEl);
     renderData(bodyEl);
     renderHooks(bodyEl);
+    navEntries = fillSectionNav(document, navEl, bodyEl);
+    syncNav();
   }
 
   /**
    * @param {'hooks'|'look'|null} [focusSection] jump straight to one section,
-   *   which is how the palette's "Install hooks", the degraded banner and
-   *   WP-88b's `Look: …` rows arrive.
+   *   which is how the header's Look button, the palette's "Install hooks", the
+   *   degraded banner and WP-88b's `Look: …` rows arrive.
    */
   async function open(focusSection = null) {
     setCurrent({ ...(getSnapshot()?.settings || {}) });
@@ -522,13 +545,18 @@ export function createSettingsUI(opts) {
     // `settings-look` is WP-88b's; `settings-hooks` is the consent screen's.
     // One line for both, because "jump to a section" is one behaviour.
     const anchor = focusSection ? `settings-${focusSection}` : '';
+    // Opened with no section named, the sheet starts at its top — including
+    // when it was last closed half way down.
     if (anchor) document.getElementById(anchor)?.scrollIntoView({ block: 'start' });
+    else bodyEl.scrollTop = 0;
+    syncNav();
     // Both are facts about disk, both are wanted by the same section, and
     // neither is worth a second round trip's latency in series.
     await Promise.all([loadAbout(), loadRates()]);
     if (dialogEl.open) {
       render();
       if (anchor) document.getElementById(anchor)?.scrollIntoView({ block: 'start' });
+      syncNav();
     }
   }
 

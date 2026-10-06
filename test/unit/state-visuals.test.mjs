@@ -509,17 +509,37 @@ test('no author rule can force a closed <dialog> on screen', () => {
 
 test('the header is a headline, not a toolbar', () => {
   // GUI/UX spec §5.2. Six buttons left the header; only the palette hint and
-  // one primary action remain. A regression here is someone quietly putting
+  // one primary action remained. A regression here is someone quietly putting
   // a button back "just this once".
+  //
+  // TWO CAME BACK, ON PURPOSE, AND THE RULE IS TIGHTER FOR IT. The owner,
+  // looking at his own floor: "I still don't see any bar anywhere, any settings
+  // options, to configure floor design, agent sizes, etc." A headline with no
+  // visible way to the settings was a product whose settings did not exist for
+  // the person who paid for them, so the header carries Look and Settings now
+  // (`public/look-ui-bar.js`, `test/unit/look-bar.test.mjs`). This used to
+  // count buttons; it NAMES them now, so the next one has to be argued for by
+  // id rather than slipped in under a number.
   const html = fs.readFileSync(path.join(HERE, '..', '..', 'public', 'index.html'), 'utf8');
   const header = /<header class="topbar"[\s\S]*?<\/header>/.exec(html);
   assert.ok(header, 'the header is gone');
-  const buttons = header[0].match(/<button\b/g) || [];
+  const buttons = [...header[0].matchAll(/<button\b[^>]*?\bid="([^"]+)"/g)].map((m) => m[1]);
   assert.equal(
+    (header[0].match(/<button\b/g) || []).length,
     buttons.length,
-    3,
-    'the header carries the palette hint, one primary action and the degraded ' +
-      "banner's link, and nothing else. Everything else belongs in ⌘K.",
+    'a header button with no id cannot be accounted for',
+  );
+  assert.deepEqual(
+    buttons.sort(),
+    [
+      'degraded-link', //      the degraded banner's own link, only while degraded
+      'look-btn', //           the look: agent size, theme, preset
+      'look-hint-dismiss', //  the one-time hint's one dismiss, only while it shows
+      'new-agent-btn', //      the one primary action
+      'palette-btn', //        the palette hint — everything else
+      'settings-btn', //       the settings sheet
+    ],
+    'the header carries these six and nothing else. Everything else belongs in ⌘K.',
   );
   assert.match(header[0], /id="new-agent-btn"[^>]*>\s*\+ New agent/);
   assert.match(header[0], /id="palette-btn"/);

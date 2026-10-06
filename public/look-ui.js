@@ -609,11 +609,20 @@ export function createLookSection(opts) {
         'with the reason. All three themes still apply on top.',
     );
     s.id = LOOK_SECTION_ID;
+    // AGENT SIZE IS THE FIRST CONTROL, above the presets. It is the one row in
+    // this section people arrive already knowing they want — "make them bigger"
+    // is a sentence somebody says; "change the corridor to loop pile" is not —
+    // and as the eleventh picker it sat below six cards, a preview and ten
+    // rows of chips, which is under the fold on every screen this sheet has
+    // been opened on. It is still read out of the catalogue like every other
+    // row; only where it is drawn is decided here.
+    const size = c.LOOK_PICKERS.find((/** @type {any} */ p) => p.id === 'agentSize');
+    if (size) renderPicker(s, c, current, size);
     renderPresets(s, c, current);
     renderState(s, c, current);
     renderPreview(s, current);
     const rows = new Set([...c.LOOK_PICKERS.map((/** @type {any} */ p) => p.id), 'lounge']);
-    for (const picker of c.LOOK_PICKERS) renderPicker(s, c, current, picker);
+    for (const picker of c.LOOK_PICKERS) if (picker !== size) renderPicker(s, c, current, picker);
     renderLoungeKit(s, c, current);
     // A refusal nobody's hand caused, naming a row this section does not draw —
     // an imported document, or the daemon refusing on a theme this tab is not
@@ -626,8 +635,8 @@ export function createLookSection(opts) {
       }
     }
     renderIo(s);
-    // WP-88c. The agent size is a row now — the eleventh picker, drawn by the
-    // loop above like every other, because it finally passes this sheet's
+    // WP-88c. The agent size is a row now — the eleventh picker in the
+    // catalogue and the first one drawn — because it finally passes this sheet's
     // founding rule: a control ships only if moving it changes something today
     // (docs/DEVIATIONS.md §58, §94). The foot says what a URL can do instead.
     const foot = el('p', 'settings-note settings-look-foot');

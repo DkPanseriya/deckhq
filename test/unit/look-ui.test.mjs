@@ -220,6 +220,26 @@ test('the section draws one row per picker in the catalogue, and never a list of
   }
 });
 
+test('Agent size is the first control in the section, above the preset cards — and drawn once', () => {
+  // The owner could not find it. As the catalogue's eleventh picker it was
+  // drawn below six cards, a preview and ten rows of chips; it is the first
+  // thing in the section now, and still a row built from the catalogue.
+  const { draw } = mount();
+  const section = draw().children[0];
+  const groups = byRole(section, 'radiogroup').map((g) => g.getAttribute('aria-label'));
+  assert.equal(groups[0], 'Agent size');
+  assert.equal(groups[1], 'Preset');
+  assert.equal(groups.filter((label) => label === 'Agent size').length, 1);
+  // Every other picker is still there, in the catalogue's own order.
+  const rest = LOOK_PICKERS.filter((p) => p.id !== 'agentSize').map((p) => p.label);
+  const labels = byClass(section, 'settings-label').map((n) => n.textContent);
+  assert.deepEqual(
+    labels.filter((label) => rest.includes(label)),
+    rest,
+  );
+  assert.equal(labels[0], 'Agent size');
+});
+
 test('every picker’s dimensions partition its own options exactly', () => {
   // The two-dimensional pickers — a rug is a tone AND a pattern — are split by
   // membership in the catalogue's own id tables. If a third dimension were ever

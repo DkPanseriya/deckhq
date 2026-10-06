@@ -273,6 +273,9 @@ fs.writeFileSync(
         stallWindowMs: 2 * MINUTE,
         notifications: false,
         onboarded: true,
+        // The one-line hint under the header's Look button, marked seen for
+        // `onboarded`'s reason: it would otherwise be in every photograph.
+        seenLookHint: true,
         // The day's card (WP-18) and Wrapped (WP-27) are marked already shown,
         // for exactly the reason `onboarded` is: this floor exists to be
         // photographed, and a capture taken after 22:00 — or on a Monday, or

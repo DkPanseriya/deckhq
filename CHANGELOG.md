@@ -6,6 +6,34 @@
 
 ## Unreleased
 
+### Highlights
+
+The floor's settings are in the header now. A **Look** button opens agent size, theme and the six
+floor presets right under it, and a gear opens Settings. Nothing about them is new except that you
+can find them.
+
+### Added
+
+- **A Look button in the header.** Click it, or press `L`, and a small panel opens under it with
+  the three things people change most: **agent size** (small, medium, large, auto), **theme**, and
+  the **six presets** as thumbnails. A click changes the floor straight away. `Esc`, `L` again or
+  a click anywhere else closes it. **All look options…** at the bottom opens the full Look section.
+  If a choice would leave the floor unreadable, the panel says why under the control and changes
+  nothing.
+- **A Settings button in the header.** The gear beside Look opens the settings sheet. `,` does the
+  same from the floor. `Ctrl K` → Settings still works.
+- **Section names at the top of Settings.** State, Notifications, Resume, Floor, Look, Data and
+  Hooks are listed across the top of the sheet and stay there as you scroll. Click one to jump to
+  it.
+- **A one-time pointer to the Look button.** The first time you open a version that has it, one
+  line under the button says "Change the floor, the furniture and the agent size here." Press
+  **Got it**, or just use the button, and it does not come back.
+
+### Changed
+
+- **Agent size is the first thing in the Look section.** It used to sit under the six presets, the
+  preview and ten rows of options, so you had to scroll to find it.
+
 ## 1.6.2 — 2026-10-06
 
 ### Highlights
