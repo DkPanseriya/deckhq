@@ -519,6 +519,23 @@ export function createRowFloor(deps) {
     return oneRow() ? best() : null;
   };
 
+  /**
+   * The widest the rooms beside a strip use for anything: their furniture's
+   * floor at the hall bound, or the narrowest side that stands the whole strip
+   * in one row, whichever is wider. Past it the width is clear floor and
+   * nothing else, so a stretch that overshot gives it back once (`fitRows`).
+   * @param {{bandH:number}} laid @param {number} area the rooms' hall-bound floor
+   */
+  const stripRoomsCap = (laid, area) => {
+    const hallW = projectRooms.length ? area / Math.max(1, laid.bandH) : 0;
+    const oneRowH = reserveOf(laid.bandH, 1e6);
+    let w = PINNED_ROW_MIN_W;
+    for (let k = 1; k < 64 && reserveOf(laid.bandH, w) > oneRowH + 1e-6; k++) {
+      w += PINNED_ROW_MIN_W;
+    }
+    return Math.max(hallW, w, minW);
+  };
+
   /** The floor the rooms' furniture needs, all of it. */
   const naturalArea = () =>
     projectRooms.reduce((a, _, i) => a + naturalOf(i).w * naturalOf(i).h, 0);
@@ -536,17 +553,38 @@ export function createRowFloor(deps) {
    * rest — and the lounge under them takes it too because it spans the
    * building. Re-laid until it is the shape, which is one pass or two.
    *
+   * WHERE THE STRIP SETS THE ROOMS' WIDTH, THE RECEPTION IS AS WIDE AS WHAT IS
+   * IN IT. `workingMinWidth` lays the rooms side as wide as three strip rooms
+   * when the live rooms want less, and the strip's second row then makes row
+   * one deep and the building tall. The reception was the one thing in row one
+   * that could take the width such a building asks for, and on the `away`
+   * floor it took 92 of 134 units: an empty rug with sixteen people along its
+   * edges. On such a floor the reception is laid at its contents (its sofa
+   * runs at the seat pitch, beside its desk), whatever the search asked of it,
+   * and every unit of spare width goes to the rooms side, where it first
+   * stands the strip in one row and then is clear floor round desks that stay
+   * centred. Once the rooms side is past what it can use (`stripRoomsCap`) a
+   * building still too wide is made deeper at the lounge, by the rule below.
+   * Every other floor is laid as audit F2 left it.
+   *
    * @param {any} chosen the two-row envelope `betterArrangement` took
    * @param {(i:number, cell:{w:number,h:number}, aspect:number) => void} rebuild
    * @param {number} targetAspect the window's shape
    */
   const fitRows = (chosen, rebuild, targetAspect) => {
+    floor.invalidateBands();
+    const stripSets = projectRooms.length > 0 && minW > workingShape(1).w + 1e-6;
     let laid = layRows(chosen, rebuild);
     const unstretched = { W: laid.W, H: laid.H };
+    if (stripSets && laid.ow > OFFICE_MIN_W) {
+      floor.invalidateBands();
+      laid = layRows({ ...chosen, askedW: OFFICE_MIN_W }, rebuild);
+    }
     // The desks keep the composition the unstretched row gave them; what the
     // stretch adds is clear floor round them (`place` centres them in it).
     const flowW = projectRooms.map((_, i) => laid.laid.cells[i]?.w ?? Infinity);
-    let want = { ...chosen, flowW };
+    let want = { ...chosen, askedW: stripSets ? OFFICE_MIN_W : chosen.askedW, flowW };
+    let narrowed = false;
     for (let pass = 0; pass < 6; pass++) {
       const off = laid.W / laid.H / targetAspect;
       // A room stops at `ROOM_FILL_STRETCH_MAX` of its furniture's floor, past
@@ -560,11 +598,22 @@ export function createRowFloor(deps) {
         // building and a wider one again; then the rooms take the rest.
         const W = laid.H * targetAspect;
         const hallW = projectRooms.length ? area / Math.max(1, laid.bandH) : 0;
-        const officeMax = Math.max(laid.ow, (laid.h1 - PLATE_BAND) * OFFICE_ROW_ASPECT_MAX);
+        const officeMax = stripSets
+          ? laid.ow
+          : Math.max(laid.ow, (laid.h1 - PLATE_BAND) * OFFICE_ROW_ASPECT_MAX);
         let roomsW = Math.max(laid.roomsW, Math.min(hallW, W - laid.ow));
         const ow = Math.min(officeMax, W - roomsW);
         roomsW = Math.max(roomsW, W - ow);
         want = { ...want, askedW: ow, roomsW };
+      } else if (stripSets && !narrowed && laid.roomsW > stripRoomsCap(laid, area) + 1e-6) {
+        // Overshot: the strip went to one row, the building came out shorter,
+        // and the rooms side is past its use. Give the width back once — the
+        // lounge's depth steps with its bays, so a second time can oscillate.
+        narrowed = true;
+        want = {
+          ...want,
+          roomsW: Math.max(stripRoomsCap(laid, area), laid.H * targetAspect - laid.ow),
+        };
       } else {
         const extra = laid.W / targetAspect - laid.H;
         const hallH = projectRooms.length ? area / laid.roomsW + laid.pinH : Infinity;
