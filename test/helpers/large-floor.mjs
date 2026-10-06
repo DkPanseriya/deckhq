@@ -39,6 +39,26 @@ export function awayFloor(now = LARGE_NOW) {
 }
 
 /**
+ * THE CROWDED OFFICE: the `away` floor with somebody working in each of the
+ * five repos, so all six keep a full room and the reception is laid narrow —
+ * sixteen waiting on three sofa runs and a standing row in front of the top
+ * one, the office the owner's floor of 6 October showed.
+ * @returns {{projects:any[], agents:any[]}}
+ */
+export function crowdedOfficeFloor(now = LARGE_NOW) {
+  const repos = [
+    'orbital-api',
+    'checkout-flow',
+    'design-system',
+    'data-pipeline',
+    'infra-terraform',
+  ];
+  /** @type {Array<[string, string, string, number, number]>} */
+  const working = repos.map((repo) => [repo, `At a desk in ${repo}`, 'working', 0.2, 0.5]);
+  return floorOf([...POPULATIONS.away(), ...working], now, JUNIOR_PARENT, JUNIORS);
+}
+
+/**
  * @param {Array<[string, string, string, number, number]>} rows
  * @param {number} now
  * @param {string} parentTitle the row whose session the juniors hang off

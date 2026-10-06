@@ -20,7 +20,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { awayFloor, largeFloor, LARGE_NOW } from '../helpers/large-floor.mjs';
+import { crowdedOfficeFloor, largeFloor, LARGE_NOW } from '../helpers/large-floor.mjs';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
@@ -386,10 +386,11 @@ test('F1 · a crew’s cables and its +N chip are drawn at L0', () => {
 // ---------------------------------------------------------------------------
 
 test('near ring · sixteen waiting on the office sofas: every name within 1.2 body heights of its feet, no overlaps', () => {
-  // The owner's window (2000 x 1185, a 970 px stage) over the `away` floor:
+  // The owner's window (2000 x 1185, a 970 px stage) over the crowded office:
   // sixteen waiting on three sofa runs, the top run with a standing row in
-  // front of it, and a full lounge — the shape that put those names on the rug.
-  const f = frameAt(2000, 970, awayFloor);
+  // front of it, six full rooms and a full lounge — the shape that put those
+  // names on the rug.
+  const f = frameAt(2000, 970, crowdedOfficeFloor);
   const waiting = f.records.filter(
     (r) =>
       r.agent.subagent !== true && /for_review|needs_input/.test(String(r.agent.activityState)),

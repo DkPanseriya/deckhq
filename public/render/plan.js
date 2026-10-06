@@ -56,12 +56,12 @@
  * so no import anywhere had to change.
  */
 
-import { floorPopulation, offTheFloor, splitProjectsByOccupancy } from '../floor-rule.js';
+import { awayRooms, floorPopulation, offTheFloor } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { createWorkingFloor } from './plan-envelope.js';
 import { assignDoors, buildNavLines, corridorRoom, deriveWalls } from './plan-nav.js';
 import { buildProjectRoom, crewFloorFor, layPinnedStrip } from './plan-rooms.js';
-import { createRowFloor } from './plan-rows.js';
+import { createRowFloor, workingMinWidth } from './plan-rows.js';
 import { better, betterArrangement, score } from './plan-search.js';
 import { DEFAULT_AGENT_SIZE, sizeForPopulation } from './plan-scale.js';
 import { buildOffice, buildOfficeRow, seatOffice } from './plan-office.js';
@@ -77,7 +77,6 @@ import {
   LOUNGE_PACKS,
   MARGIN,
   MAX_WORKING_ROWS,
-  MIN_PROJECT_ROOM_W,
   OFFICE_ASPECT_MIN,
   OFFICE_COLUMN_MIN,
   OFFICE_MAX_W,
@@ -153,10 +152,9 @@ export function buildPlan(projects, agents, opts = {}) {
   // PINNED it, which is WP-77's middle case and the one thing on this floor
   // that is not derived from what was observed. `pinned` comes off
   // `state.json` through the snapshot and nothing here may write it.
-  const { active: activeProjects, pinned: pinnedProjects } = splitProjectsByOccupancy(
-    projects,
-    pop,
-  );
+  // A repo whose people are all waiting in the office joins the strip, narrow
+  // (`awayRooms`): `onFloor` is every repo with a room of either size.
+  const { rooms: activeProjects, strip: pinnedProjects, onFloor } = awayRooms(projects, pop);
 
   // ---- who the floor draws nobody for.
   //
@@ -171,7 +169,7 @@ export function buildPlan(projects, agents, opts = {}) {
   // project idle?" answered no for it and left its sessions drawn in a room that
   // does not exist. A PINNED room is not in it either (WP-77): pinning kept the
   // room, not the people, and its room has no seat to draw anybody on.
-  const roomIds = new Set(activeProjects.map(idOf));
+  const roomIds = new Set(onFloor.map(idOf));
   const hidden = offTheFloor(list, roomIds, pop);
 
   // THE LOUNGE HOLDS THE BENCHED **AND** THE ENDED (WP-78). `08` B6's rule is
@@ -296,6 +294,7 @@ export function buildPlan(projects, agents, opts = {}) {
   // wherever nothing is pinned, so such a floor is laid as WP-60 left it.
   const reserve = (askedBandH, workingW) =>
     pinnedBandHeight(pinnedProjects.length, workingW, askedBandH);
+  const minW = workingMinWidth(pinnedProjects.length);
   const workingFloor = createWorkingFloor(
     projectRooms,
     naturalOf,
@@ -318,6 +317,7 @@ export function buildPlan(projects, agents, opts = {}) {
     waiting: waitingCount,
     benched: benchedCount,
     reserve,
+    minW,
     floor: workingFloor,
     office: (w, depth) => buildOfficeRow(waitingCount, { w, h: depth }),
     lounge: (w, h, pack) => buildLounge(benchedCount, { w, h }, goneHomeCount, pack),
@@ -351,8 +351,7 @@ export function buildPlan(projects, agents, opts = {}) {
     const asked = projectRooms.length ? shape.h * bandDepth : 0;
     // A floor with nothing live in it but something PINNED still has a working
     // side: the pinned strip stands on it (WP-77).
-    const workingW =
-      projectRooms.length || pinnedProjects.length ? Math.max(shape.w, MIN_PROJECT_ROOM_W) : 0;
+    const workingW = projectRooms.length || pinnedProjects.length ? Math.max(shape.w, minW) : 0;
     // The height the working side has to fill is the COLUMN's, and the fill
     // order above is what it may do about it (WP-59c) — less the pinned strip.
     const pinH = reserve(asked, workingW);
@@ -662,7 +661,10 @@ export function buildPlan(projects, agents, opts = {}) {
   // `layPinnedStrip` is the rule; this is its rectangle. `pinH` is zero unless
   // the strip was actually laid: a reservation nothing stood in is a hole, and
   // every rectangle in `rooms` tiles the envelope exactly.
-  const wantPinH = Math.min(Math.max(0, fitted.pinH || 0), Math.max(0, workingBottom - slackY));
+  const pinTop = Math.max(0, workingBottom - slackY);
+  const pinAsk = Math.min(Math.max(0, fitted.pinH || 0), pinTop);
+  // A sliver the rooms stopped short of is the strip's, not a band of open floor.
+  const wantPinH = pinAsk > 0 && pinTop - pinAsk <= CORRIDOR ? pinTop : pinAsk;
   const live = projectRooms.map((pr) => pr.room.w * pr.room.h);
   const strip =
     wantPinH > 0.01

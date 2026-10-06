@@ -49,6 +49,9 @@ export {};
  * @property {boolean} [pinned] the user pinned this project's room (WP-77): it
  *   keeps a room with nothing running in it. User-owned state from
  *   `state.json`, never derived — see `src/core/store.mjs`.
+ * @property {boolean} [away] set by `awayRooms` (floor-rule.js) on the copy the
+ *   strip is laid from: every live session of this repo is waiting in the
+ *   office. Derived per plan, never stored.
  * @property {number} [lastActivityAt] ms epoch of the newest session in it
  * @property {number|null} [todaySpend] WP-26's payroll meter; see `payrollLine`
  * @property {boolean} [todaySpendIsToday] whether that figure is today's
@@ -150,6 +153,10 @@ export {};
  *   user PINNED keeps with nobody in it — one desk, nobody at it, and at most
  *   `PINNED_AREA_SHARE` of the narrowest live room's footprint. Absent on every
  *   live room, so `room.pinned === true` is the whole of the test.
+ * @property {boolean} [away] project rooms only: a repo whose sessions are all
+ *   waiting in the office (`awayRooms`), laid in the strip as a pinned room is
+ *   — one desk, at most `PINNED_AREA_SHARE` of the narrowest live room — with
+ *   a live room's plate. Never both `pinned` and `away`.
  * @property {boolean} [landscape] the reception, laid on its side for a row
  *   (WP-59d): the waiting area runs along its width and the desk is at one
  *   end. `seatOffice` reads it to walk the runs in queue order.

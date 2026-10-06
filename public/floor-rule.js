@@ -533,6 +533,43 @@ export function splitProjectsByOccupancy(projects, pop) {
 }
 
 /**
+ * AWAY ROOMS: a repo whose sessions are all in the office keeps a narrow room.
+ *
+ * Every live agent of such a repo is waiting on you — on a sofa in Your Office,
+ * not at a desk in its room — so the room it kept was a full-sized one with
+ * nobody in it, five of them on the owner's floor beside the one room somebody
+ * was working in. It stays a room (its plate is where `N need you` is said, and
+ * a repo with sessions on the floor is never a line), but it is laid as a
+ * pinned room is: in the strip, one desk, at most `PINNED_AREA_SHARE` of the
+ * smallest live room. It grows back the moment one of its sessions works or
+ * stalls, because that puts somebody at a desk (`pop.desks`).
+ *
+ * Only beside a live room: a floor where EVERY repo is away has nothing for a
+ * narrow room to be narrow beside, and keeps the rooms it had.
+ *
+ * @param {any[]} projects the floor's projects, in its own order, which the strip keeps
+ * @param {ReturnType<typeof floorPopulation>} pop
+ * @returns {{rooms:any[], strip:any[], onFloor:any[]}} `rooms`: the repos that
+ *   get a full room; `strip`: the pinned and the away (flagged `away: true`), in
+ *   floor order; `onFloor`: every repo with a room of either size
+ */
+export function awayRooms(projects, pop) {
+  const split = splitProjectsByOccupancy(projects, pop);
+  const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
+  const isAway = (p) => pop.known.has(idOf(p)) && (pop.desks.get(idOf(p)) ?? 0) === 0;
+  const away = new Set(split.active.filter(isAway).map(idOf));
+  const rooms = split.active.filter((p) => !away.has(idOf(p)));
+  if (!away.size || !rooms.length) {
+    return { rooms: split.active, strip: split.pinned, onFloor: split.active };
+  }
+  const pinned = new Set(split.pinned.map(idOf));
+  const strip = (Array.isArray(projects) ? projects : [])
+    .filter((p) => pinned.has(idOf(p)) || away.has(idOf(p)))
+    .map((p) => (away.has(idOf(p)) ? { ...p, away: true } : p));
+  return { rooms, strip, onFloor: split.active };
+}
+
+/**
  * WHO THE FLOOR DRAWS NOBODY FOR: an agent who went home, and an active agent
  * that is not on the floor in its own right (ended, almost always) in a repo
  * with no live room. `buildPlan`'s `hidden`, here since bug 201 because the
