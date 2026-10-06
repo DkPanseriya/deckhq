@@ -132,6 +132,12 @@ const HALL_MAX = CORRIDOR * 4;
  */
 const OFFICE_FULL = 1;
 
+/**
+ * How many rooms make a floor that only gets easier to lay as it grows: with
+ * this many, no row is ever short of rooms to fill it.
+ */
+const MANY_ROOMS = 8;
+
 /** The lounge is measured on whole units of width, between these. */
 const LOUNGE_W_MIN = 20;
 const LOUNGE_W_MAX = 240;
@@ -560,24 +566,36 @@ export function layProportioned(input) {
    * at the same width, by keeping more of the lounge.
    * @param {number[]} rowCounts @param {boolean} capped @param {number} from
    * @param {Candidate|null} [held] the building to beat, and @param {number} [by] how far
+   * @param {number} [ceiling] the widest building worth finding at all
    */
-  const search = (rowCounts, capped, from, held = null, by = WIDTH_TIE) => {
+  const search = (rowCounts, capped, from, held = null, by = WIDTH_TIE, ceiling = WIDTH_MAX) => {
     let best = held;
+    /** @param {typeof bandsAt} at @param {number} rows @param {number} deep */
+    const consider = (at, rows, deep) => {
+      const first = best === held;
+      const gain = first ? by : WIDTH_TIE;
+      // Nothing wider than what it has to beat is worth looking for.
+      const limit = Math.min(ceiling, !best ? WIDTH_MAX : first ? best.W * (1 - gain) : best.W);
+      if (limit < from) return;
+      // A floor of many rooms only gets easier to lay as it grows, so one that
+      // does not fit at the limit does not fit under it either. A floor of a
+      // few can be too WIDE for them, and is looked for the long way.
+      const eases = needs.length >= MANY_ROOMS || rows > ROWS_MAX;
+      if (eases && !at(limit, rows, deep, capped)) return;
+      const got = smallest((W) => at(W, rows, deep, capped), from, limit);
+      if (!got) return;
+      const smaller = !best || got.W < best.W * (1 - gain);
+      const fuller = best && best !== held && got.W <= best.W + EPS && got.kept > best.kept;
+      if (smaller || fuller) best = got;
+    };
     for (const rows of rowCounts) {
       for (const at of [bandsAt, columnAt]) {
-        for (let deep = -1; deep < (rows > 1 ? rows : 0); deep++) {
-          const first = best === held;
-          const gain = first ? by : WIDTH_TIE;
-          // Nothing wider than what it has to beat is worth looking for.
-          const limit = !best ? WIDTH_MAX : first ? best.W * (1 - gain) : best.W;
-          // A floor of many rows only gets easier to lay as it grows, so one
-          // that does not fit at the limit does not fit under it either.
-          if (best && rows > ROWS_MAX && !at(limit, rows, deep, capped)) continue;
-          const got = smallest((W) => at(W, rows, deep, capped), from, limit);
-          if (!got) continue;
-          const smaller = !best || got.W < best.W * (1 - gain);
-          const fuller = best && best !== held && got.W <= best.W + EPS && got.kept > best.kept;
-          if (smaller || fuller) best = got;
+        consider(at, rows, -1);
+        // One row deeper than the rest: every row in turn inside the norm, and
+        // past it only for the way of laying the floor that is already ahead.
+        const ahead = best && best !== held && best.rows === rows && best.deep === -1;
+        if (rows > 1 && (rows <= ROWS_MAX || ahead)) {
+          for (let deep = 0; deep < rows; deep++) consider(at, rows, deep);
         }
       }
     }
@@ -729,8 +747,15 @@ export function layProportioned(input) {
   // Two rows first: it is the floor with one corridor that everything opens on.
   const order = [2, 1, ...norm.filter((r) => r > 2)];
   const more = Array.from({ length: ROWS_LIMIT - ROWS_MAX }, (_, i) => ROWS_MAX + 1 + i);
-  const laid = (/** @type {boolean} */ capped, /** @type {number} */ from) =>
-    search(more, capped, from, search(order, capped, from), ROWS_EXTRA_GAIN);
+  const laid = (/** @type {boolean} */ capped, /** @type {number} */ from, ceiling = WIDTH_MAX) =>
+    search(
+      more,
+      capped,
+      from,
+      search(order, capped, from, null, WIDTH_TIE, ceiling),
+      ROWS_EXTRA_GAIN,
+      ceiling,
+    );
 
   // FIRST AT ITS CONTENTS, and that is the floor wherever it is no wider than
   // the window is at the scale the floor is designed for.
@@ -747,7 +772,7 @@ export function layProportioned(input) {
   if (!chosen || chosen.W > nominal + EPS) {
     // THEN AT THE NOMINAL WIDTH, the service rooms held to their caps. Wider
     // than that only as far as the rooms themselves need.
-    let held = laid(true, Math.max(nominal, least));
+    let held = laid(true, Math.max(nominal, least), chosen ? chosen.W : WIDTH_MAX);
     // AND WHERE THE ROOMS TOOK IT PAST THE NOMINAL WIDTH, THE LOUNGE IS NOT
     // WHAT PAYS FOR THEIR LAST FEW PER CENT. The smallest building the rooms
     // fit in is the one where every service room has given up everything it
