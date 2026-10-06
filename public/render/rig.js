@@ -259,14 +259,16 @@ export const LABEL_DROP_U = 1.62;
  * @param {number} oy character origin y (screen px)
  * @param {number} u px per plan unit at the current zoom
  * @param {string} rawLabel
+ * @param {number} [px] the size to set it in, when the collision pass shrank
+ *   it (`label-spots.js`); `labelFontSize(u)` otherwise
  * @returns {{text:string, x:number, y:number, w:number, h:number, top:number}}
  *   `x,y,w,h`: the text's bounding box (screen space, before any collision
  *   offset). `top`: the text's un-offset draw y (baseline `'top'`), reused
  *   by `drawLabel` so measurement and paint never drift apart.
  */
-export function labelBox(ctx, ox, oy, u, rawLabel) {
+export function labelBox(ctx, ox, oy, u, rawLabel, px) {
   const text = truncateLabel(rawLabel);
-  const fontPx = labelFontSize(u);
+  const fontPx = px || labelFontSize(u);
   ctx.font = sansFont(fontPx);
   const textW = ctx.measureText(text).width;
   const padX = Math.max(3, u * 0.18);
@@ -295,15 +297,32 @@ export function labelBox(ctx, ox, oy, u, rawLabel) {
  * @param {string} rawLabel
  * @param {number} [offsetY]
  * @param {number} [offsetX] the collision pass's sideways step, 0 for none
+ * @param {{px?:number, leader?:boolean}} [form] the collision pass's smaller
+ *   size, and whether the label left its figure's near ring: a name that moved
+ *   further draws a 1 px leader from its own edge to the feet it names
  */
-export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX) {
-  const box = labelBox(ctx, ox, oy, u, rawLabel);
+export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
+  const px = (form && form.px) || labelFontSize(u);
+  const box = labelBox(ctx, ox, oy, u, rawLabel, px);
   const dy = offsetY || 0;
   const lx = ox + (offsetX || 0);
   ctx.save();
+  if (form && form.leader) {
+    // From the point of the label's box nearest the feet, to the feet.
+    const bx = box.x + (offsetX || 0);
+    const by = box.y + dy;
+    ctx.globalAlpha = 0.55;
+    ctx.strokeStyle = PALETTE.inkWarm;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(Math.min(Math.max(ox, bx), bx + box.w), Math.min(Math.max(oy, by), by + box.h));
+    ctx.lineTo(ox, oy);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.font = sansFont(labelFontSize(u)); // labelBox already set it; re-assert before drawing
+  ctx.font = sansFont(px); // labelBox already set it; re-assert before drawing
   ctx.lineWidth = Math.max(2, u * 0.16);
   ctx.strokeStyle = 'rgba(255,253,249,0.95)';
   ctx.strokeText(box.text, lx, box.top + dy);
@@ -373,7 +392,8 @@ export const REST_LIFE = Object.freeze({
  * @param {CanvasRenderingContext2D} ctx
  * @param {import('./clips.js').Pose} pose
  * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string, state?:string,
- *   label?:string, labelOffsetY?:number, labelOffsetX?:number, icon?:'hand'|'hourglass'|'check'|null,
+ *   label?:string, labelOffsetY?:number, labelOffsetX?:number, labelPx?:number, labelLeader?:boolean,
+ *   icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
  *   phase?:number|null, life?:import('./life.js').Life|null,
@@ -398,6 +418,7 @@ export const REST_LIFE = Object.freeze({
  *   under reduced motion, and not at all when a state icon or a waiting badge
  *   already occupies the space above the head.
  *   `labelOffsetY`, `labelOffsetX`: screen-px nudges applied to the label only.
+ *   `labelPx`, `labelLeader`: the collision pass's smaller size, and its leader line.
  *   `identity` (CONTRACTS-WP15.md §2): project appearance from
  *   `palette.js`'s `identityFor` — the chest badge, its glyph, and the boots.
  *   `appearance` (WP-20): who this particular session is, from
@@ -543,7 +564,10 @@ export function drawCharacter(ctx, pose, opts) {
   if (opts.badge) drawBadge(ctx, ox, oy, u, opts.badge, color);
   // A name at EVERY level of detail (audit F1): it is held to 11 px whatever
   // the scale, so L0 has no size reason to drop it.
-  if (opts.label) drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY, opts.labelOffsetX);
+  if (opts.label) {
+    const form = { px: opts.labelPx, leader: opts.labelLeader };
+    drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY, opts.labelOffsetX, form);
+  }
 
   if (prevAlpha !== null) ctx.globalAlpha = prevAlpha;
 }

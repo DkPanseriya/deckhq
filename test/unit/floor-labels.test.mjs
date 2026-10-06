@@ -20,7 +20,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { largeFloor, LARGE_NOW } from '../helpers/large-floor.mjs';
+import { awayFloor, largeFloor, LARGE_NOW } from '../helpers/large-floor.mjs';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
@@ -40,6 +40,12 @@ import { layoutPlate, platePlanFor, PLATE_KEEP_ORDER } from '../../public/render
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { floorPopulation, crewsFrom } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
+import { BODY_HEIGHT_U } from '../../public/render/rig-metrics.js';
+import {
+  abbreviateName,
+  NEAR_REACH,
+  resolveLabelCollisions,
+} from '../../public/render/label-spots.js';
 
 /** Measures like a canvas: width in proportion to the font's px size. */
 function measuringCtx() {
@@ -54,6 +60,23 @@ function measuringCtx() {
 
 const hits = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
+/**
+ * The box a label is DRAWN in: its own, or the smaller form the pass chose
+ * (`spot.text`/`spot.px`), at the pass's offset.
+ * @param {any} item @param {{offsetY:number, offsetX?:number, text?:string, px?:number}} spot
+ */
+function drawnBox(item, spot) {
+  const form = spot.px ? item.variants.find((v) => v.px === spot.px && v.text === spot.text) : item;
+  assert.ok(form, `${item.id}: the pass chose a form the item does not have`);
+  return {
+    id: item.id,
+    x: form.x + (spot.offsetX || 0),
+    y: form.y + spot.offsetY,
+    w: form.w,
+    h: form.h,
+  };
+}
+
 /** The owner's CSS stage (690 px under the header) and the full window's. */
 const STAGES = [
   [1420, 690],
@@ -61,10 +84,10 @@ const STAGES = [
 ];
 
 /** Build one frame of the large floor at a stage, the way `_draw` does. */
-function frameAt(viewW, viewH) {
+function frameAt(viewW, viewH, floor = largeFloor) {
   adoptSnapshotClock({ now: LARGE_NOW, nowFixed: true });
   try {
-    const { projects, agents } = largeFloor();
+    const { projects, agents } = floor();
     const plan = buildPlan(projects, agents, { stage: { w: viewW, h: viewH }, now: LARGE_NOW });
     const seats = assignSeats(plan, agents);
     const { scale } = computeFill(plan.width, plan.height, viewW, viewH);
@@ -176,14 +199,7 @@ test('F7 · no name lands on a body, a plate or another name', () => {
     const placed = [];
     for (const item of f.labels.labels) {
       const spot = f.labels.plan.get(item.id);
-      if (!spot) continue;
-      placed.push({
-        id: item.id,
-        x: item.x + (spot.offsetX || 0),
-        y: item.y + spot.offsetY,
-        w: item.w,
-        h: item.h,
-      });
+      if (spot) placed.push(drawnBox(item, spot));
     }
     // And no name is centred off the building's side walls.
     const b = buildingRect(f.plan, f.camera);
@@ -361,4 +377,94 @@ test('F1 · a crew’s cables and its +N chip are drawn at L0', () => {
   assert.ok(f.scale < 10, `the stage was meant to be tight, got ${f.scale} px/U`);
   assert.ok(strokes.length >= 12, `${strokes.length} cables at L0`);
   assert.ok(texts.includes('+1'), `no +N chip at L0: ${texts.join(', ')}`);
+});
+
+// ---------------------------------------------------------------------------
+// NAMES STAY NEXT TO THEIR BODIES (the owner's floor, 6 October): five names
+// sat in a row across the office rug, a label-height under the standing row in
+// front of the top sofa, each clear of everything and none of them anybody's.
+// ---------------------------------------------------------------------------
+
+test('near ring · sixteen waiting on the office sofas: every name within 1.2 body heights of its feet, no overlaps', () => {
+  // The owner's window (2000 x 1185, a 970 px stage) over the `away` floor:
+  // sixteen waiting on three sofa runs, the top run with a standing row in
+  // front of it, and a full lounge — the shape that put those names on the rug.
+  const f = frameAt(2000, 970, awayFloor);
+  const waiting = f.records.filter(
+    (r) =>
+      r.agent.subagent !== true && /for_review|needs_input/.test(String(r.agent.activityState)),
+  );
+  assert.equal(waiting.length, 16);
+  const rows = new Set(waiting.map((r) => Math.round(worldToScreen(r, f.camera).y)));
+  assert.ok(rows.size >= 3, `the sixteen sit in ${rows.size} rows`);
+  assert.equal(NEAR_REACH, 1.2);
+  const bh = f.charU * BODY_HEIGHT_U;
+  const placed = [];
+  for (const item of f.labels.labels) {
+    const spot = f.labels.plan.get(item.id);
+    if (spot) placed.push(drawnBox(item, spot));
+  }
+  for (const rec of waiting) {
+    const spot = f.labels.plan.get(rec.id);
+    assert.ok(spot, `${rec.agent.label} lost its name`);
+    assert.notEqual(spot.leader, true, `${rec.agent.label} left its body`);
+    const box = placed.find((p) => p.id === rec.id);
+    const s = worldToScreen(rec, f.camera);
+    const d = Math.hypot(box.x + box.w / 2 - s.x, box.y + box.h / 2 - s.y) / bh;
+    assert.ok(d <= 1.2, `${rec.agent.label}'s name is ${d.toFixed(2)} body heights from its feet`);
+  }
+  // Zero overlaps: no name on a body, on a plate, or on another name.
+  const bodies = f.records.map((r) => {
+    const s = worldToScreen(r, f.camera);
+    return characterBox(s.x, s.y, f.charU);
+  });
+  const plates = f.plates.map((p) => p.rect).filter((r) => r.w > 0);
+  let overlaps = 0;
+  for (const [i, rect] of placed.entries()) {
+    for (const b of bodies) if (hits(rect, b)) overlaps++;
+    for (const p of plates) if (hits(rect, p)) overlaps++;
+    for (let j = i + 1; j < placed.length; j++) if (hits(rect, placed[j])) overlaps++;
+  }
+  assert.equal(overlaps, 0);
+});
+
+test('near ring · a crowded name shrinks, then abbreviates, and only then moves, with a leader', () => {
+  assert.equal(abbreviateName('Cassio'), 'Cass.');
+  assert.equal(abbreviateName('Nova'), 'Nova', 'four letters is already as short as it gets');
+  assert.equal(abbreviateName('general-purpose ×3'), 'general-purpose ×3');
+  assert.equal(abbreviateName('Marta·jr', '·jr'), 'Mart.·jr', 'a junior keeps its mark');
+  // One figure, feet at (100, 100), a body 40 px tall, between two pinned walls
+  // that leave a 32 px gap under it and a ceiling over its head.
+  const label = (w) => ({ x: 100 - w / 2, y: 120, w, h: 14 });
+  const walls = [
+    { id: 'west', x: 0, y: 40, w: 84, h: 110, pin: true },
+    { id: 'east', x: 116, y: 40, w: 200, h: 110, pin: true },
+    { id: 'ceiling', x: 0, y: 0, w: 316, h: 40, pin: true },
+  ];
+  const item = {
+    id: 'a',
+    ...label(40),
+    keep: true,
+    up: -60,
+    feet: { x: 100, y: 100 },
+    bh: 40,
+    side: 12,
+    variants: [
+      { ...label(36), text: 'Cassio', px: 11 },
+      { ...label(30), text: 'Cass.', px: 11 },
+    ],
+  };
+  // 40 px and the shrunk 36 px do not fit the gap; the abbreviation does.
+  assert.deepEqual(resolveLabelCollisions([...walls, item]).get('a'), {
+    offsetY: 0,
+    text: 'Cass.',
+    px: 11,
+  });
+  // Fill the gap: nothing near is clear, so the name moves, and says whose it is.
+  const closed = [...walls, { id: 'gap', x: 84, y: 40, w: 32, h: 110, pin: true }];
+  const moved = resolveLabelCollisions([...closed, item]).get('a');
+  assert.equal(moved?.leader, true);
+  assert.equal(moved?.text, 'Cass.');
+  // A resting figure's name is not drawn rather than moved away from its body.
+  assert.equal(resolveLabelCollisions([...closed, { ...item, keep: false }]).get('a'), null);
 });

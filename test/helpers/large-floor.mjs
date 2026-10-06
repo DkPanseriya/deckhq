@@ -10,6 +10,8 @@
  */
 
 import {
+  JUNIOR_PARENT,
+  JUNIORS,
   POPULATIONS,
   WAITING_CREW_JUNIORS,
   WAITING_CREW_PARENT,
@@ -23,7 +25,27 @@ const HOUR = 3_600_000;
  * @returns {{projects:any[], agents:any[]}}
  */
 export function largeFloor(now = LARGE_NOW) {
-  const rows = POPULATIONS.large();
+  return floorOf(POPULATIONS.large(), now, WAITING_CREW_PARENT, WAITING_CREW_JUNIORS);
+}
+
+/**
+ * THE AWAY FLOOR: the `away` demo population — sixteen waiting from five repos
+ * nobody is at a desk in, one working repo with two juniors — as the snapshot
+ * would carry it.
+ * @returns {{projects:any[], agents:any[]}}
+ */
+export function awayFloor(now = LARGE_NOW) {
+  return floorOf(POPULATIONS.away(), now, JUNIOR_PARENT, JUNIORS);
+}
+
+/**
+ * @param {Array<[string, string, string, number, number]>} rows
+ * @param {number} now
+ * @param {string} parentTitle the row whose session the juniors hang off
+ * @param {ReadonlyArray<{agentType:string}>} juniors
+ * @returns {{projects:any[], agents:any[]}}
+ */
+function floorOf(rows, now, parentTitle, juniors) {
   /** @type {Map<string, any>} */
   const projects = new Map();
   const agents = [];
@@ -53,7 +75,7 @@ export function largeFloor(now = LARGE_NOW) {
       a.needsInputSince = at;
     } else if (state === 'benched') a.ackState = 'benched';
     else if (state === 'let_go') a.ackState = 'let_go';
-    if (title === WAITING_CREW_PARENT) parentId = id;
+    if (title === parentTitle) parentId = id;
     agents.push(a);
     const p = projects.get(project) || {
       id: project,
@@ -74,7 +96,7 @@ export function largeFloor(now = LARGE_NOW) {
     projects.set(project, p);
   });
   const parent = agents.find((a) => a.id === parentId);
-  WAITING_CREW_JUNIORS.forEach((j, i) => {
+  juniors.forEach((j, i) => {
     agents.push({
       id: `claude-code:j${String(i).padStart(2, '0')}`,
       projectId: parent.projectId,

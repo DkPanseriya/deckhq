@@ -199,7 +199,7 @@ const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
 // WP-41. The juniors, once their parent's transcript exists to hang them off.
 // Only the `demo` population has them: `reference` photographs `08` §0's
 // machine, which had none, and `single` and `empty` are controls.
-if (POPULATION === 'demo') {
+if (POPULATION === 'demo' || POPULATION === 'away') {
   const parent = built.find((s) => s.title === JUNIOR_PARENT);
   if (parent) {
     for (const junior of JUNIORS) {
