@@ -429,10 +429,13 @@ const LIGHTS_OFF_INSET_PX = 3;
 /**
  * A ROOM WITH THE LIGHTS OFF (`plan-proportions.js` (e)).
  *
- * One veil in the theme's `lightsOff` token over the room's floor and
- * everything standing on it, painted after the furniture so the desk dims with
- * the carpet under it. Inside the walls: a wall is shared with the lit room
- * next door, and half a dimmed partition reads as a smudge.
+ * Two fills over the room's floor and everything standing on it, painted after
+ * the furniture so the desk dims with the carpet under it: the `lightsOff` veil
+ * takes the light, and `lightsOffMute` through a `saturation` blend takes a
+ * third of the colour. Both are neutral, so every pixel keeps its hue and the
+ * desk keeps its edge against the carpet (`dimmedBy` is the same arithmetic).
+ * Inside the walls: a wall is shared with the lit room next door, and half a
+ * dimmed partition reads as a smudge.
  *
  * Nothing is removed and nothing changes size — the room is the room it would
  * be with somebody at the desk — and the plate is live text drawn over the
@@ -448,6 +451,13 @@ export function paintLightsOff(ctx, rx, ry, rw, rh) {
   ctx.save();
   ctx.fillStyle = PALETTE.lightsOff;
   ctx.fillRect(rx + inset, ry + inset, rw - inset * 2, rh - inset * 2);
+  // A context without the blend keeps `source-over`, and is not given the grey
+  // as a second veil: the room is then dark at full colour, never fogged.
+  ctx.globalCompositeOperation = 'saturation';
+  if (ctx.globalCompositeOperation === 'saturation') {
+    ctx.fillStyle = PALETTE.lightsOffMute;
+    ctx.fillRect(rx + inset, ry + inset, rw - inset * 2, rh - inset * 2);
+  }
   ctx.restore();
 }
 
