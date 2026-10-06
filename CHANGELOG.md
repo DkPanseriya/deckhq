@@ -8,18 +8,21 @@
 
 ### Highlights
 
-The floor's settings are in the header now. A **Look** button opens agent size, theme and the six
-floor presets right under it, and a gear opens Settings. Nothing about them is new except that you
-can find them.
+The floor's settings are in the header now, and there are four of them: a **Look** button opens
+agent size, theme, style and density right under it, and a gear opens Settings. Everything finer —
+which floor is in the corridor, which rug, which plants — is still there, one click further, under
+**Advanced**. And a choice you make now stays chosen.
 
 ### Added
 
 - **A Look button in the header.** Click it, or press `L`, and a small panel opens under it with
-  the three things people change most: **agent size** (small, medium, large, auto), **theme**, and
-  the **six presets** as thumbnails. A click changes the floor straight away. `Esc`, `L` again or
-  a click anywhere else closes it. **All look options…** at the bottom opens the full Look section.
-  If a choice would leave the floor unreadable, the panel says why under the control and changes
-  nothing.
+  the four things people change most: **agent size** (small, medium, large, auto), **theme**,
+  **style** (the six presets, as thumbnails) and **density**. A click changes the floor straight
+  away. `Esc`, `L` again or a click anywhere else closes it. **All look options…** at the bottom
+  opens the full Look section. If a choice would leave the floor unreadable, the panel says why
+  under the control and changes nothing.
+- **Density.** One control, Calm / Normal / Lively, for how many plants and props are on the floor.
+  It moves the two together. If you want them different, set each one under Advanced.
 - **A Settings button in the header.** The gear beside Look opens the settings sheet. `,` does the
   same from the floor. `Ctrl K` → Settings still works.
 - **Section names at the top of Settings.** State, Notifications, Resume, Floor, Look, Data and
@@ -31,8 +34,32 @@ can find them.
 
 ### Changed
 
-- **Agent size is the first thing in the Look section.** It used to sit under the six presets, the
-  preview and ten rows of options, so you had to scroll to find it.
+- **The Look section is four choices, and an Advanced section you open if you want it.** Agent
+  size, theme, style and density are at the top, with the live preview. The floor material for each
+  zone, the colour scheme, the furniture set, the rugs, the plants, the props and the lounge kit
+  are under **Advanced**, grouped as Floors, Furniture and textiles, and Plants and props. Advanced
+  starts shut, remembers whether you left it open, and tells you what you changed while it is shut:
+  "Advanced — 2 changes from Studio oak". **Reset to preset**, Export and Import are inside it.
+- **Choosing a style no longer changes your agent size.** Picking Workshop used to make everyone
+  small, and picking Garden floor made everyone large. A style is the floor; the size is yours.
+  "Edited" now means the style was edited, and the palette's `Look: …` commands follow the same
+  rule.
+- **Theme is in the Look section.** It moved from Floor, so it sits beside the other three and
+  there is one place to change it in Settings. Pointing at a theme still previews it.
+
+### Fixed
+
+- **A choice in the Look section stays highlighted.** You would click Large, or a floor, or a rug;
+  the floor changed, and a moment later the highlight jumped back to what it was before. The floor
+  was right and the control was wrong. It now shows what you chose, and goes back only if the
+  choice is refused — with the reason under it.
+- **A second change no longer undoes the first.** Because the section was working from the look it
+  was opened with, changing the colour scheme after the agent size quietly put the agent size
+  back. Each change is now made on top of the last one.
+- **Arrow keys keep working in the Look section.** Moving a choice with an arrow key lost the
+  keyboard's place after one step. The focus now stays on the option you moved to.
+- **The Look button and Settings always agree.** A theme changed in Settings could show as the old
+  one in the Look panel until the floor next refreshed.
 
 ## 1.6.2 — 2026-10-06
 
