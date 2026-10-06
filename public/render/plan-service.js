@@ -64,6 +64,19 @@ import { LOOK } from './look-derive.js';
 // --------------------------------------------------------------- the lounge
 
 /**
+ * The room depth under which a lounge is ONE ROW of bays: it cannot hold a
+ * second shelf of furniture, so a bay that does not fit is given up rather
+ * than wrapped (§3.7, `loungeBayNames`). `buildLounge` asks this of the depth
+ * it is given, and `plan-grid.js` asks it of a depth it is about to give.
+ * @param {number} [pack] how tightly the lounge is laid; it closes the bay gap
+ */
+export function loungeOneRowBelow(pack = 1) {
+  const gap = LOUNGE_GAP * clamp(Number(pack) || 1, LOUNGE_PACKS[LOUNGE_PACKS.length - 1], 1);
+  const bayGap = Math.min(gap, PLANTER_W + PLANTER_MARGIN * 2);
+  return PLATE_BAND + MARGIN * 2 + LOUNGE_SOFA_GROUP_H * 2 + bayGap;
+}
+
+/**
  * The lounge: a rest area, a games room and a coffee spot in one.
  *
  * Unlike the project rooms, this is furnished whether or not anyone is in it —
@@ -490,8 +503,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   // than against the deepest block, because the deepest block is a games table
   // on a floor that has one and the living room on a floor that does not, and a
   // rule about the shape of the room may not change with the population in it.
-  const depthBudget = fit && fit.h > 0 ? fit.h - PLATE_BAND - MARGIN * 2 : Infinity;
-  const oneRow = depthBudget < LOUNGE_SOFA_GROUP_H * 2 + bayGap;
+  const oneRow = fit && fit.h > 0 ? fit.h < loungeOneRowBelow(packing) : false;
   const present = new Set(blocks.map((b) => BAY_OF[b.id]));
   // WP-88a, §1.g: THE KIT IS A CEILING TOO. Four checkboxes over these bays, and
   // `sitting` may not be turned off — a lounge with no place to sit is a field

@@ -62,7 +62,9 @@
 import { awayRooms, floorPopulation, offTheFloor } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { layClassic } from './plan-classic.js';
+import { layProportioned } from './plan-grid.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
+import { measureProportions, proportionFaults } from './plan-proportions.js';
 import { crewFloorFor } from './plan-rooms.js';
 import { DEFAULT_AGENT_SIZE, sizeForPopulation } from './plan-scale.js';
 import { seatOffice } from './plan-office.js';
@@ -156,19 +158,27 @@ export function buildPlan(projects, agents, opts = {}) {
   // Sized by who is DRAWN: agents who went home are on the door plate only.
   const benchedCount = pop.benchedDrawn + restingCount;
 
-  // ---- THE FLOOR, LAID. The envelope search and both arrangements are
-  // `plan-classic.js`'s: every room, corridor and strip comes back placed.
+  // ---- THE FLOOR, LAID, and every room, corridor and strip comes back placed.
+  //
+  // A FLOOR WITH A PROJECT ROOM ON IT IS LAID TO THE RULEBOOK
+  // (`plan-proportions.js`): the rooms the majority of the building, every one
+  // of them a room's shape, in a grid with nothing left over — `plan-grid.js`.
+  // A floor with none has nothing for those rules to be about, and its office
+  // and lounge share the building as they always have (`plan-classic.js`),
+  // which is also what a floor no legal grid was found for falls back to.
   const crewIn = (p) => crewFloorFor(pop, idOf(p));
-  const layout = layClassic({
-    targetAspect,
-    waitingCount,
-    benchedCount,
-    goneHomeCount,
-    activeProjects,
-    pinnedProjects,
-    desksIn,
-    crewIn,
-  });
+  const live = new Map(activeProjects.map((p) => [idOf(p), p]));
+  const kept = new Set(pinnedProjects.map(idOf));
+  const gridRooms = (Array.isArray(projects) ? projects : [])
+    .filter((p) => live.has(idOf(p)) || kept.has(idOf(p)))
+    .map((p) => ({ project: live.get(idOf(p)) ?? p, pinned: !live.has(idOf(p)) }));
+  const shared = { targetAspect, waitingCount, benchedCount, goneHomeCount, desksIn, crewIn };
+  const layout =
+    layProportioned({
+      ...shared,
+      rooms: gridRooms,
+      crewSizeIn: (p) => pop.crews.get(idOf(p))?.[0] ?? 0,
+    }) || layClassic({ ...shared, activeProjects, pinnedProjects });
   const { W, H, office, lounge, projectRooms, working } = layout;
   const strip = { rooms: layout.stripRooms };
 
@@ -249,6 +259,7 @@ export function buildPlan(projects, agents, opts = {}) {
       width: DOOR_WIDTH,
     });
   }
+  const measure = measureProportions({ width: W, height: H, rooms });
 
   return {
     width: W,
@@ -256,7 +267,11 @@ export function buildPlan(projects, agents, opts = {}) {
     targetAspect,
     agentSize: sized.size, // what `auto` resolved to here; §2's `s` beside it
     agentScale: sized.s,
-    arrangement: /** @type {'column'|'two-rows'} */ (layout.rows ? 'two-rows' : 'column'),
+    arrangement: layout.arrangement,
+    // What the floor's proportions ARE, measured off the rectangles below, and
+    // the rules of `plan-proportions.js` it breaks — none, on a floor the grid
+    // laid. A record and not a claim: the tests re-measure it.
+    proportions: { ...measure, faults: proportionFaults(measure) },
     working,
     rooms,
     walls,

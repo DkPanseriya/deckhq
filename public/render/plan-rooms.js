@@ -55,7 +55,13 @@ import {
   WHITEBOARD_W,
   breakoutFits,
 } from './plan-furniture.js';
-import { plantsPerProjectRoom, PLANT_FOOTPRINTS, deskClutterFor, plantRun } from './plan-props.js';
+import {
+  CHAR_CLEAR_U,
+  plantsPerProjectRoom,
+  PLANT_FOOTPRINTS,
+  deskClutterFor,
+  plantRun,
+} from './plan-props.js';
 import { crewFootprint } from './crew.js';
 
 /** @typedef {import('./plan-units.js').ProjectLike} ProjectLike */
@@ -779,6 +785,20 @@ export function buildProjectRoom(
   cornersUsed.forEach((corner, n) => {
     const kind = cornerKinds[n];
     const size = PLANT_FOOTPRINTS[kind] || 2.4;
+    // AND NOT IN A CORNER SOMEBODY SITS IN (§3.9). A room laid at exactly its
+    // furniture has a desk row one pad from the wall, and the largest plant is
+    // nearly a pad across: its canopy would stand a fifth of a unit from a
+    // seated figure's feet. §3.6's two is a ceiling, so that corner goes bare.
+    const px = corner === 'SW' ? CORNER_PLANT_INSET : finalW - CORNER_PLANT_INSET - size;
+    const py = corner === 'SW' ? finalH - CORNER_PLANT_INSET - size : CORNER_PLANT_INSET;
+    const crowded = seats.some((s) => {
+      const fx = s.x + slackX;
+      const fy = s.y + slackY;
+      const gx = Math.max(0, px - (fx + 0.5), fx - 0.5 - (px + size));
+      const gy = Math.max(0, py - (fy + 0.5), fy - 0.5 - (py + size));
+      return Math.hypot(gx, gy) < CHAR_CLEAR_U;
+    });
+    if (crowded) return;
     props.push({
       kind,
       w: size,

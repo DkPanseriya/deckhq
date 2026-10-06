@@ -31,13 +31,13 @@
  * there is one. They are what the product is for; a floor whose service rooms
  * are the larger half is a lobby with desks in it.
  */
-export const ROOMS_SHARE_MIN = 0.55;
+export const ROOMS_AREA_MIN = 0.55;
 
 /** Your Office takes at most a fifth: a reception is read first, not most. */
-export const OFFICE_SHARE_MAX = 0.2;
+export const OFFICE_AREA_MAX = 0.2;
 
 /** The lounge takes at most a quarter: rest is a corner of an office, not half of it. */
-export const LOUNGE_SHARE_MAX = 0.25;
+export const LOUNGE_AREA_MAX = 0.25;
 
 // --------------------------------------------------------------- (b) shape
 
@@ -190,36 +190,69 @@ function narrowest(footprints, depth) {
  * its furniture. Where a bound binds, the rooms it does not bind share what is
  * left, so the widths always sum to the row exactly: no leftover cell.
  *
+ * `give` is for a row that shares its band with a service room. The rooms come
+ * first: they take the width up to the widest shape they may be, and only what
+ * is past that — at most `give` — is handed back to the room beside them. The
+ * widths then sum to less than `width`, and the caller widens its neighbour.
+ *
  * @param {number[]} weights
  * @param {number} width the row's width
  * @param {number} depth the row's depth
  * @param {({w:number,h:number}[]|undefined)[]} [footprints] per room
+ * @param {number} [give] the most of `width` the rooms may leave untaken
  * @returns {number[]|null} one width per room, or null where no legal split exists
  */
-export function splitRow(weights, width, depth, footprints = []) {
+export function splitRow(weights, width, depth, footprints = [], give = 0) {
   const n = weights.length;
   if (!n || !(width > 0) || !(depth > 0)) return null;
   const hi = ROOM_RATIO_MAX * depth;
   const lo = weights.map((_, i) => narrowest(footprints[i], depth));
   if (lo.some((v) => v > hi + EPS)) return null;
-  const sum = (/** @type {number[]} */ list) => list.reduce((a, v) => a + v, 0);
-  if (sum(lo) > width + EPS || n * hi < width - EPS) return null;
-  // Water-filling: one scale on the weights, found by bisection. The clamped
-  // sum is monotone in it, so sixty halvings are exact to a float.
-  const at = (/** @type {number} */ k) =>
-    weights.map((m, i) => Math.min(hi, Math.max(lo[i], k * m)));
-  let a = 0;
-  let b = (hi / Math.max(1e-9, Math.min(...weights))) * 2;
-  for (let i = 0; i < 60; i++) {
-    const mid = (a + b) / 2;
-    if (sum(at(mid)) < width) a = mid;
-    else b = mid;
+  let least = 0;
+  for (const v of lo) least += v;
+  if (least > width + EPS) return null;
+  if (n * hi < width - EPS) return width - n * hi <= give + EPS ? weights.map(() => hi) : null;
+  // Water-filling. Share what is left by weight; hold whichever side is the
+  // further out of bounds at its bound; share again. Each pass holds at least
+  // one room, so it ends in at most `n` of them and the sum is the row.
+  /** @type {number[]} */
+  const out = Array(n).fill(-1);
+  let rest = width;
+  let open = 0;
+  for (const m of weights) open += m;
+  for (let pass = 0; pass <= n; pass++) {
+    const k = rest / Math.max(1e-12, open);
+    let under = 0;
+    let over = 0;
+    for (let i = 0; i < n; i++) {
+      if (out[i] >= 0) continue;
+      const v = k * weights[i];
+      if (v < lo[i]) under += lo[i] - v;
+      else if (v > hi) over += v - hi;
+    }
+    const low = under >= over;
+    let held = false;
+    for (let i = 0; i < n; i++) {
+      if (out[i] >= 0) continue;
+      const v = k * weights[i];
+      if (under + over <= EPS) out[i] = v;
+      else if (low ? v < lo[i] : v > hi) {
+        out[i] = low ? lo[i] : hi;
+        rest -= out[i];
+        open -= weights[i];
+        held = true;
+      }
+    }
+    if (!held) break;
   }
-  const out = at(b);
   // The last float of error goes to the widest room, where it is smallest.
   let widest = 0;
-  for (let i = 1; i < n; i++) if (out[i] > out[widest]) widest = i;
-  out[widest] += width - sum(out);
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    total += out[i];
+    if (out[i] > out[widest]) widest = i;
+  }
+  out[widest] += width - total;
   return out;
 }
 
@@ -233,7 +266,8 @@ export function splitRow(weights, width, depth, footprints = []) {
  * dealt the same way on every machine.
  *
  * @param {number[]} weights
- * @param {{w:number,d:number}[]} bands each row's width and depth, top to bottom
+ * @param {{w:number,d:number,give?:number}[]} bands each row's width and depth,
+ *   top to bottom, and what it may hand back to a service room (`splitRow`)
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @returns {{starts:number[], widths:number[][]}|null} `starts[k]` is the first
  *   room of row k
@@ -244,13 +278,28 @@ export function dealRows(weights, bands, footprints = []) {
   if (!rows || n < rows) return null;
   const total = weights.reduce((a, v) => a + v, 0);
   const unit = bands.reduce((a, b) => a + b.w * b.d, 0) / Math.max(1e-9, total);
+  // How many rooms a row can hold at all is a matter of the shape bounds, and
+  // most runs are outside it: asked first, it is what keeps forty rooms cheap.
+  const most = bands.map((b) => Math.floor(b.w / (ROOM_RATIO_MIN * b.d) + EPS));
+  const fewest = bands.map((b) =>
+    Math.max(1, Math.ceil((b.w - (b.give ?? 0)) / (ROOM_RATIO_MAX * b.d) - EPS)),
+  );
+  const sumOf = (/** @type {number[]} */ list) => list.reduce((a, v) => a + v, 0);
+  if (n > sumOf(most) || n < sumOf(fewest)) return null;
   /** @type {Map<string, {cost:number, widths:number[]}|null>} */
   const memo = new Map();
   const row = (/** @type {number} */ k, /** @type {number} */ i, /** @type {number} */ j) => {
+    if (j - i > most[k] || j - i < fewest[k]) return null;
     const key = `${k}:${i}:${j}`;
     if (memo.has(key)) return memo.get(key);
     const band = bands[k];
-    const widths = splitRow(weights.slice(i, j), band.w, band.d, footprints.slice(i, j));
+    const widths = splitRow(
+      weights.slice(i, j),
+      band.w,
+      band.d,
+      footprints.slice(i, j),
+      band.give ?? 0,
+    );
     let got = null;
     if (widths) {
       let cost = 0;
@@ -272,7 +321,7 @@ export function dealRows(weights, bands, footprints = []) {
   best[0][0] = { cost: 0, from: -1 };
   for (let k = 1; k <= rows; k++) {
     for (let j = k; j <= n - (rows - k); j++) {
-      for (let i = k - 1; i < j; i++) {
+      for (let i = Math.max(k - 1, j - most[k - 1]); i <= j - fewest[k - 1]; i++) {
         if (!Number.isFinite(best[k - 1][i].cost)) continue;
         const got = row(k - 1, i, j);
         if (!got) continue;
@@ -303,22 +352,29 @@ const FLATTEN = Object.freeze([1, 0.8, 0.6, 0.4, 0.2, 0]);
 /**
  * THE GRID: every room a cell, every row one depth, nothing left over.
  *
+ * A row's rooms end at its band's right edge. Where a band has `give` and its
+ * rooms did not take all of it, they start that much in from the left, and
+ * `taken[k]` says how much of the band they used.
+ *
  * @param {number[]} weights one per room, in floor order
- * @param {{x:number,y:number,w:number,d:number}[]} bands the rectangle each row
- *   of rooms has, top to bottom
+ * @param {{x:number,y:number,w:number,d:number,give?:number}[]} bands the
+ *   rectangle each row of rooms has, top to bottom
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @returns {{cells:{x:number,y:number,w:number,h:number,row:number}[],
- *   spread:number, flatten:number}|null} null where no deal keeps every rule
+ *   taken:number[], spread:number, flatten:number}|null} null where no deal
+ *   keeps every rule
  */
 export function layGrid(weights, bands, footprints = []) {
   for (const power of FLATTEN) {
     const flat = weights.map((m) => Math.pow(Math.max(1e-6, m), power));
     const deal = dealRows(flat, bands, footprints);
-    if (!deal) continue;
+    // Whether a legal deal exists is a matter of shapes, not of weights.
+    if (!deal) return null;
     /** @type {{x:number,y:number,w:number,h:number,row:number}[]} */
     const cells = [];
+    const taken = deal.widths.map((widths) => widths.reduce((a, v) => a + v, 0));
     deal.widths.forEach((widths, k) => {
-      let x = bands[k].x;
+      let x = bands[k].x + bands[k].w - taken[k];
       for (const w of widths) {
         cells.push({ x, y: bands[k].y, w, h: bands[k].d, row: k });
         x += w;
@@ -326,7 +382,7 @@ export function layGrid(weights, bands, footprints = []) {
     });
     const areas = cells.map((c) => c.w * c.h);
     const spread = Math.max(...areas) / Math.max(1e-9, Math.min(...areas));
-    if (spread <= ROOM_AREA_SPREAD_MAX + EPS) return { cells, spread, flatten: power };
+    if (spread <= ROOM_AREA_SPREAD_MAX + EPS) return { cells, taken, spread, flatten: power };
   }
   return null;
 }
@@ -411,16 +467,16 @@ export function proportionFaults(m) {
   if (!m.rooms) return [];
   const pct = (/** @type {number} */ v) => `${(v * 100).toFixed(1)}%`;
   const out = [];
-  if (m.shares.rooms < ROOMS_SHARE_MIN - EPS) {
+  if (m.shares.rooms < ROOMS_AREA_MIN - EPS) {
     out.push(
-      `project rooms have ${pct(m.shares.rooms)} of the building, under ${pct(ROOMS_SHARE_MIN)}`,
+      `project rooms have ${pct(m.shares.rooms)} of the building, under ${pct(ROOMS_AREA_MIN)}`,
     );
   }
-  if (m.shares.office > OFFICE_SHARE_MAX + EPS) {
-    out.push(`the office has ${pct(m.shares.office)}, over ${pct(OFFICE_SHARE_MAX)}`);
+  if (m.shares.office > OFFICE_AREA_MAX + EPS) {
+    out.push(`the office has ${pct(m.shares.office)}, over ${pct(OFFICE_AREA_MAX)}`);
   }
-  if (m.shares.lounge > LOUNGE_SHARE_MAX + EPS) {
-    out.push(`the lounge has ${pct(m.shares.lounge)}, over ${pct(LOUNGE_SHARE_MAX)}`);
+  if (m.shares.lounge > LOUNGE_AREA_MAX + EPS) {
+    out.push(`the lounge has ${pct(m.shares.lounge)}, over ${pct(LOUNGE_AREA_MAX)}`);
   }
   if (m.ratioMin < ROOM_RATIO_MIN - EPS || m.ratioMax > ROOM_RATIO_MAX + EPS) {
     out.push(

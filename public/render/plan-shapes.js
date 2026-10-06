@@ -249,13 +249,23 @@ export {};
  * @property {Set<string>} goneHome the subset of `hidden` that went home
  * @property {WorkingSide} working what the working side did with the height
  *   the service column gave it (WP-59c)
- * @property {Arrangement} arrangement which shape the envelope search chose
- *   (WP-59d): `column` is the service column beside the working side, which
- *   every floor before this package was laid as; `two-rows` is the office
- *   beside the rooms over the lounge beside the strip.
+ * @property {Arrangement} arrangement how the building is laid. `column` is the
+ *   service rooms one over the other down the left, a spine, and the rooms
+ *   beside them. `bands` is the office at the left end of the top row of rooms
+ *   and the lounge at the left end of the bottom one (`plan-grid.js`).
+ *   `two-rows` is the classic office over a full-width lounge (WP-59d), which
+ *   only a floor with no project room is still laid in.
+ * @property {Proportions} proportions the floor's area budget and its rooms'
+ *   shapes, MEASURED off `rooms`, and the rules of `plan-proportions.js` they
+ *   break. A record, like `working`: the tests re-measure it.
  */
 
-/** @typedef {'column'|'two-rows'} Arrangement */
+/** @typedef {'column'|'bands'|'two-rows'} Arrangement */
+
+/**
+ * @typedef {ReturnType<typeof import('./plan-proportions.js').measureProportions>
+ *   & {faults: string[]}} Proportions
+ */
 
 /**
  * @typedef {object} WorkingSide
@@ -272,7 +282,11 @@ export {};
  *   is the room untouched
  * @property {number} openH (c) — the open plan left under the rooms, in units
  * @property {number} [pinnedH] the depth the pinned strip took along the bottom
- *   of the working side (WP-77); `0` on every floor with nothing pinned
+ *   of the working side (WP-77); `0` on every floor with nothing pinned, and
+ *   on every floor the grid laid, where a pinned room is a cell like any other
+ * @property {number} [rows] a floor the grid laid: how many rows of rooms
+ * @property {number} [flatten] and how far the module weights were flattened
+ *   to hold the spread — `1` is 1 : 1.5 : 2.25 as written, `0` is all equal
  *
  * There used to be a `stripCols` between (a) and (b) — the columns the idle
  * strip had been laid in — because the strip standing its lines up was a step

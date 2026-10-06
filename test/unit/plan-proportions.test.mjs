@@ -11,12 +11,12 @@ import assert from 'node:assert/strict';
 
 import {
   LIGHTS_OFF_DIM,
-  LOUNGE_SHARE_MAX,
+  LOUNGE_AREA_MAX,
   MODULE_WEIGHTS,
-  OFFICE_SHARE_MAX,
+  OFFICE_AREA_MAX,
   PINNED_SPREAD,
   PINNED_WEIGHT,
-  ROOMS_SHARE_MIN,
+  ROOMS_AREA_MIN,
   ROOM_AREA_SPREAD_MAX,
   ROOM_RATIO_MAX,
   ROOM_RATIO_MIN,
@@ -37,11 +37,11 @@ const EPS = 1e-6;
 const sum = (list) => list.reduce((a, v) => a + v, 0);
 
 test('the budget adds up: rooms, office and lounge leave floor for the corridors', () => {
-  assert.equal(ROOMS_SHARE_MIN, 0.55);
-  assert.equal(OFFICE_SHARE_MAX, 0.2);
-  assert.equal(LOUNGE_SHARE_MAX, 0.25);
+  assert.equal(ROOMS_AREA_MIN, 0.55);
+  assert.equal(OFFICE_AREA_MAX, 0.2);
+  assert.equal(LOUNGE_AREA_MAX, 0.25);
   // Both caps met at once still leave the rooms their floor and nothing over.
-  assert.ok(ROOMS_SHARE_MIN + OFFICE_SHARE_MAX + LOUNGE_SHARE_MAX <= 1 + EPS);
+  assert.ok(ROOMS_AREA_MIN + OFFICE_AREA_MAX + LOUNGE_AREA_MAX <= 1 + EPS);
   assert.ok(ROOM_RATIO_MIN === 0.7 && ROOM_RATIO_MAX === 1.8);
   assert.ok(ROWS_MAX === 3 && ROW_DEPTH_SPREAD_MAX === 0.15);
   assert.ok(LIGHTS_OFF_DIM > 0.3 && LIGHTS_OFF_DIM < 0.4);

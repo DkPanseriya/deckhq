@@ -18,9 +18,13 @@ import {
   LOUNGE_MIN_H,
   LOUNGE_SHARE_MAX,
   LOUNGE_SHARE_MIN,
-  PINNED_AREA_SHARE,
   loungeShareFor,
 } from '../../public/render/plan-units.js';
+import {
+  LOUNGE_AREA_MAX,
+  ROOM_RATIO_MAX,
+  ROOM_RATIO_MIN,
+} from '../../public/render/plan-proportions.js';
 
 /**
  * WP-77 — the pin, and the lounge that earns its size.
@@ -294,11 +298,15 @@ test('a pinned repo is a room, an unpinned one is a line, and never both', () =>
   assert.ok(!drawn.includes('idle0'), 'an unpinned idle repo still costs no floor');
 });
 
-test('a pinned room is at most a third of a live room, on every floor it shares', () => {
-  // "Downsized according to live agents", made a guarantee rather than an aim.
-  // Against the NARROWEST live room, because that is the comparison a person
-  // makes: the pinned room has to read as the small one beside every room with
-  // somebody in it.
+test('a pinned room is the small room in its row, and still a room', () => {
+  // "Downsized according to live agents" (WP-77). It was a guarantee of a
+  // third of the narrowest live room, laid in a strip of its own along the
+  // bottom of the working side — which is a row of slots, and on the owner's
+  // floor a row of slots is what he asked to have removed.
+  //
+  // A pinned room is a cell of the grid now (`plan-proportions.js` (e)): the
+  // smallest module there is, never wider than a live room beside it, and held
+  // to a room's shape like every other.
   const shapes = [
     { live: [2, 1, 1], pinned: [3], benched: 4 },
     { live: [2, 1, 1], pinned: [3, 2, 1], benched: 4 },
@@ -313,15 +321,29 @@ test('a pinned room is at most a third of a live room, on every floor it shares'
       const rooms = plan.rooms.filter((r) => r.kind === 'project');
       const pinned = rooms.filter((r) => r.pinned === true);
       const live = rooms.filter((r) => r.pinned !== true);
+      const where = `${JSON.stringify(spec)} at ${targetAspect}:1`;
       assert.equal(pinned.length, (spec.pinned ?? []).length, 'a pinned repo lost its room');
-      const smallest = Math.min(...live.map((r) => r.w * r.h));
+      const largest = Math.max(...live.map((r) => r.w * r.h));
       for (const room of pinned) {
-        const ratio = (room.w * room.h) / smallest;
+        assert.equal(room.dim, true, `${where}: ${room.id} has nobody in it and its lights on`);
+        const ratio = room.w / room.h;
         assert.ok(
-          ratio <= PINNED_AREA_SHARE + 1e-6,
-          `${room.id} is ${(ratio * 100).toFixed(0)}% of the narrowest live room at ${targetAspect}:1`,
+          ratio >= ROOM_RATIO_MIN - 1e-6 && ratio <= ROOM_RATIO_MAX + 1e-6,
+          `${where}: ${room.id} is ${room.w.toFixed(1)} x ${room.h.toFixed(1)}, a strip`,
         );
+        assert.ok(
+          room.w * room.h <= largest + 1e-6,
+          `${where}: ${room.id} is the largest room on the floor`,
+        );
+        for (const other of live) {
+          if (Math.abs(other.y - room.y) > 0.01) continue;
+          assert.ok(
+            room.w <= other.w + 1e-6,
+            `${where}: ${room.id} is ${room.w.toFixed(1)} U beside ${other.id} at ${other.w.toFixed(1)}`,
+          );
+        }
       }
+      assert.deepEqual(plan.proportions.faults, [], where);
     }
   }
 });
@@ -423,10 +445,11 @@ test('the lounge ceiling is a ladder in the count and nothing else', () => {
 });
 
 test('the lounge is sized by who is in it, on a 1600 x 1000 stage', () => {
-  // THE MEASUREMENT THIS PACKAGE EXISTS FOR. Before it, the `three`-shaped
-  // floor drew a lounge 27.7 of 57.1 units tall — 49% of the building — with
-  // NOBODY IN IT, and the identical 27.7 with fifteen people in it. Its height
-  // was `LOUNGE_ROW_ASPECT_MAX` and `ROOM_FILL_MAX` arguing about a ratio.
+  // THE MEASUREMENT WP-77 EXISTED FOR. Before it, the `three`-shaped floor
+  // drew a lounge 27.7 of 57.1 units tall — 49% of the building — with NOBODY
+  // IN IT. It was then bounded by a ceiling on its height; it is bounded now by
+  // its share of the building's AREA (`LOUNGE_SHARE_MAX`), which is the same
+  // sentence said so that it holds whichever way the lounge lies.
   const empty = buildPlan(...Object.values(floor({ live: [2, 1, 1], benched: 0 })), {
     stage: STAGE,
     now: NOW,
@@ -444,33 +467,29 @@ test('the lounge is sized by who is in it, on a 1600 x 1000 stage', () => {
     loungeOf(empty).h >= LOUNGE_MIN_H - 1e-6,
     `an empty lounge is ${loungeOf(empty).h.toFixed(1)} U, under the ${LOUNGE_MIN_H} U minimum`,
   );
-
-  // THE CEILING, and the honest statement of it. It bounds the PADDING and
-  // never the contents, so where the two disagree the minimum wins: on a 48.8 U
-  // building `LOUNGE_MIN_H` is 40% of the height rather than 25%, and it is the
-  // eight units of padding above it that this removed. `docs/DEVIATIONS.md`
-  // §154 has the numbers.
-  const ceiling = Math.max(LOUNGE_MIN_H, LOUNGE_SHARE_MIN * five.height);
-  assert.ok(
-    loungeOf(five).h <= ceiling + 1e-6,
-    `five benched got a ${loungeOf(five).h.toFixed(1)} U lounge, over its ${ceiling.toFixed(1)} U ceiling`,
-  );
-  // And the padding is gone: the room is what its furniture needs, not what a
-  // proportion wanted.
-  assert.ok(
-    loungeOf(five).h <= loungeOf(five).natural.h + 1e-6,
-    'the lounge is still being padded past its own contents',
-  );
+  for (const plan of [empty, five]) {
+    const lounge = loungeOf(plan);
+    const share = (lounge.w * lounge.h) / (plan.width * plan.height);
+    assert.ok(
+      share <= LOUNGE_AREA_MAX + 1e-6,
+      `the lounge is ${(share * 100).toFixed(1)}% of the building`,
+    );
+  }
+  // And five people have five seats: nobody stands in a lounge with room.
+  const seats = five.loungeSpots
+    .filter((sp) => sp.kind !== 'chat')
+    .reduce((a, sp) => a + (sp.capacity ?? 1), 0);
+  assert.ok(seats >= 5, `five benched and ${seats} seats`);
 });
 
 test('the lounge grows for the people it has to hold, and nothing else does', () => {
-  const heightOf = (benched) => {
+  const placesFor = (benched) => {
     const { projects, agents } = floor({ live: [2, 1, 1], benched });
     const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
-    return plan.rooms.find((r) => r.kind === 'lounge').h;
+    return plan.loungeSpots.reduce((a, sp) => a + (sp.capacity ?? 1), 0);
   };
-  const quietHouse = heightOf(0);
-  const crowd = heightOf(60);
+  const quietHouse = placesFor(0);
+  const crowd = placesFor(60);
   assert.ok(crowd > quietHouse, 'sixty people in the lounge must not fit in an empty one');
-  assert.equal(heightOf(0), heightOf(0), 'and the answer is a function of the population');
+  assert.equal(placesFor(0), placesFor(0), 'and the answer is a function of the population');
 });

@@ -64,7 +64,7 @@ import {
  * @param {(p: ProjectLike) => number} input.desksIn agents at desks in a repo
  * @param {(p: ProjectLike) => ({w:number,h:number}|undefined)} input.crewIn
  *   the floor a repo's largest crew formation asks for (WP-89)
- * @returns {{W:number, H:number, rows:boolean,
+ * @returns {{W:number, H:number, rows:boolean, arrangement:'column'|'two-rows',
  *   office:{room:Room, officeSeats:any[]}, lounge:{room:Room, loungeSpots:any[]},
  *   projectRooms:{room:Room, seats:Seat[]}[], stripRooms:Room[], corridors:Room[],
  *   working:any}} every rectangle placed; `corridors` is the spine, then the
@@ -648,6 +648,7 @@ export function layClassic(input) {
     W,
     H,
     rows: Boolean(rows),
+    arrangement: /** @type {'column'|'two-rows'} */ (rows ? 'two-rows' : 'column'),
     office,
     lounge,
     projectRooms,
