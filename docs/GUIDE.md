@@ -79,6 +79,10 @@ need different responses from you, so they look different and are counted separa
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
 yours. `for_review` is entered automatically and can only be _left_ by you.
 
+A subagent is drawn under a first name with the junior mark after it, `Marta·jr`: the name comes
+from the same pool as everyone else's, is kept in `~/.deckhq/state.json` so it survives a restart,
+and may match a session's name, since the mark says which is which; the panel shows its parent.
+
 ## Run the floor, don't just watch it
 
 Click anyone and the panel opens beside the floor with the review material already in front of

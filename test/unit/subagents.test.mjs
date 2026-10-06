@@ -1264,3 +1264,19 @@ test('the panel says "junior of <parent>" on one and "3 juniors" on the other', 
   assert.equal(juniorMetaFor(jr, { agents: [jr] }), 'junior');
   assert.equal(juniorMetaFor(null, snap), null);
 });
+
+test("a junior sharing a session's first name never makes `deckhq open <name>` ambiguous", async () => {
+  const { resolveId } = await import('../../src/cli/deck.mjs');
+  const session = { id: 'claude-code:s1', mk: 'MK1.1', givenName: 'Marta', label: 'Marta' };
+  const junior = {
+    id: 'claude-code:j1',
+    subagent: true,
+    parentId: 'claude-code:s2',
+    mk: `MK1.2${JUNIOR_MARK}`,
+    givenName: null,
+    juniorName: 'Marta',
+    label: `Marta${JUNIOR_MARK}`,
+  };
+  assert.deepEqual(resolveId([session, junior], 'marta'), { id: 'claude-code:s1' });
+  assert.deepEqual(resolveId([session, junior], 'MK1.1'), { id: 'claude-code:s1' });
+});

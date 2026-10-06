@@ -6,7 +6,26 @@
 
 ## Unreleased
 
+### Changed
+
+- **Subagents have names.** A subagent used to be labelled with its parent's tag and a number,
+  `MK129.5j8`. It now gets a first name from the same list as everyone else, with a small junior
+  mark after it, `Marta·jr`, and keeps that name when DeckHQ restarts. The panel shows its parent
+  beside it. A subagent can share a first name with one of your sessions; the mark tells them
+  apart, and `deckhq open <name>` still finds the session.
+- **A project whose sessions are all waiting on you gets a small room.** If everyone from a
+  project is on the sofas in your office and nobody is at a desk, the project keeps a room, but a
+  small one along the bottom of the working side, with one desk and its `N need you` line. The
+  room grows back to full size as soon as one of its sessions starts working again.
+
 ### Fixed
+
+- **Names stay next to the person they belong to.** In a crowded office, names could end up a row
+  or two away from the people they named, across the rug. A name now goes under the figure, over
+  its head, or beside it. If none of those spots is free, the name is drawn smaller, then cut to
+  four letters and a dot (`Cass.`). Only after that can it move further away, and when it does, a
+  thin line joins it to its figure. A name in the lounge that has no free spot next to its figure
+  is not drawn.
 
 - **A subagent keeps its number when DeckHQ restarts.** Subagent numbers were kept in memory, so
   restarting DeckHQ after some subagents had finished could renumber the ones still running.

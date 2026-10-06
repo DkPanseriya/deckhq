@@ -216,9 +216,10 @@ function nearSpots(it, form) {
 
 /**
  * `Cassio` → `Cass.`: the first four letters and a dot, the last form a name
- * takes before it may leave its figure. A junior's mark is kept after it
- * (`Marta·jr` → `Mart.·jr`), and anything that is not one name — a crew's
- * `general-purpose ×3` — is left whole, because four letters of it say nothing.
+ * takes before it may leave its figure. A junior keeps its mark, whose own dot
+ * is the abbreviation's (`Marta·jr` → `Mart·jr`), and anything that is not one
+ * name — a crew's `general-purpose ×3` — is left whole, because four letters of
+ * it say nothing.
  * @param {string} text
  * @param {string} [mark] a suffix to keep, outside the abbreviation
  * @returns {string}
@@ -228,7 +229,7 @@ export function abbreviateName(text, mark = '') {
   const tail = mark && s.endsWith(mark) ? mark : '';
   const base = tail ? s.slice(0, -tail.length) : s;
   if (base.length <= 4 || /[\s×]/.test(base)) return s;
-  return `${base.slice(0, 4)}.${tail}`;
+  return tail ? `${base.slice(0, 4)}${tail}` : `${base.slice(0, 4)}.`;
 }
 
 /**

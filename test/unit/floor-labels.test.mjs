@@ -433,7 +433,8 @@ test('near ring · a crowded name shrinks, then abbreviates, and only then moves
   assert.equal(abbreviateName('Cassio'), 'Cass.');
   assert.equal(abbreviateName('Nova'), 'Nova', 'four letters is already as short as it gets');
   assert.equal(abbreviateName('general-purpose ×3'), 'general-purpose ×3');
-  assert.equal(abbreviateName('Marta·jr', '·jr'), 'Mart.·jr', 'a junior keeps its mark');
+  assert.equal(abbreviateName('Marta·jr', '·jr'), 'Mart·jr', 'a junior keeps its mark');
+  assert.equal(abbreviateName('Ines·jr', '·jr'), 'Ines·jr');
   // One figure, feet at (100, 100), a body 40 px tall, between two pinned walls
   // that leave a 32 px gap under it and a ceiling over its head.
   const label = (w) => ({ x: 100 - w / 2, y: 120, w, h: 14 });
