@@ -337,12 +337,16 @@ export function dealRows(weights, bands, footprints = []) {
   );
   const sumOf = (/** @type {number[]} */ list) => list.reduce((a, v) => a + v, 0);
   if (n > sumOf(most) || n < sumOf(fewest)) return null;
-  /** @type {Map<string, {cost:number, widths:number[]}|null>} */
-  const memo = new Map();
+  // One answer per (row, first room, last room), kept in a flat table: this is
+  // asked a few hundred times a floor and a few hundred floors a search.
+  const span = n + 1;
+  /** @type {({cost:number, widths:number[]}|null|undefined)[]} */
+  const memo = new Array(rows * span * span);
   const row = (/** @type {number} */ k, /** @type {number} */ i, /** @type {number} */ j) => {
     if (j - i > most[k] || j - i < fewest[k]) return null;
-    const key = `${k}:${i}:${j}`;
-    if (memo.has(key)) return memo.get(key);
+    const key = (k * span + i) * span + j;
+    const known = memo[key];
+    if (known !== undefined) return known;
     const band = bands[k];
     const widths = splitRow(
       weights.slice(i, j),
@@ -361,31 +365,33 @@ export function dealRows(weights, bands, footprints = []) {
       });
       got = { cost, widths };
     }
-    memo.set(key, got);
+    memo[key] = got;
     return got;
   };
-  // best[k][j]: the cheapest deal of the first j rooms into the first k rows.
-  /** @type {{cost:number, from:number}[][]} */
-  const best = Array.from({ length: rows + 1 }, () =>
-    Array.from({ length: n + 1 }, () => ({ cost: Infinity, from: -1 })),
-  );
-  best[0][0] = { cost: 0, from: -1 };
+  // cost[k][j]: the cheapest deal of the first j rooms into the first k rows,
+  // and from[k][j] where its last row starts.
+  const cost = new Float64Array((rows + 1) * span).fill(Infinity);
+  const from = new Int32Array((rows + 1) * span).fill(-1);
+  cost[0] = 0;
   for (let k = 1; k <= rows; k++) {
     for (let j = k; j <= n - (rows - k); j++) {
       for (let i = Math.max(k - 1, j - most[k - 1]); i <= j - fewest[k - 1]; i++) {
-        if (!Number.isFinite(best[k - 1][i].cost)) continue;
+        const before = cost[(k - 1) * span + i];
+        if (before === Infinity) continue;
         const got = row(k - 1, i, j);
         if (!got) continue;
-        const cost = best[k - 1][i].cost + got.cost;
-        if (cost < best[k][j].cost - 1e-12) best[k][j] = { cost, from: i };
+        if (before + got.cost < cost[k * span + j] - 1e-12) {
+          cost[k * span + j] = before + got.cost;
+          from[k * span + j] = i;
+        }
       }
     }
   }
-  if (!Number.isFinite(best[rows][n].cost)) return null;
+  if (cost[rows * span + n] === Infinity) return null;
   const starts = Array(rows).fill(0);
   const widths = Array(rows).fill(null);
   for (let k = rows, j = n; k >= 1; k--) {
-    const i = best[k][j].from;
+    const i = from[k * span + j];
     starts[k - 1] = i;
     widths[k - 1] = /** @type {{widths:number[]}} */ (row(k - 1, i, j)).widths;
     j = i;
@@ -398,7 +404,7 @@ export function dealRows(weights, bands, footprints = []) {
  * family is "about" 1 : 1.5 : 2.25; a floor whose rows cannot hold those areas
  * inside the spread bound is laid at a gentler family rather than at a strip.
  */
-const FLATTEN = Object.freeze([1, 0.8, 0.6, 0.4, 0.2, 0]);
+const FLATTEN = Object.freeze([1, 0.7, 0.4, 0]);
 
 /**
  * THE GRID: every room a cell, every row one depth, nothing left over.
@@ -418,8 +424,18 @@ const FLATTEN = Object.freeze([1, 0.8, 0.6, 0.4, 0.2, 0]);
  *   keeps every rule
  */
 export function layGrid(weights, bands, footprints = [], empty = []) {
+  // How many rooms the rows can hold between them, counted before anything is
+  // built: most of what a search asks is a grid with too many rooms for it, or
+  // too few, and that is two sums.
+  let most = 0;
+  let fewest = 0;
+  for (const b of bands) {
+    most += Math.floor(b.w / (ROOM_RATIO_MIN * b.d) + EPS);
+    fewest += Math.max(1, Math.ceil((b.w - (b.give ?? 0)) / (ROOM_RATIO_MAX * b.d) - EPS));
+  }
+  if (weights.length > most || weights.length < fewest) return null;
   for (const power of FLATTEN) {
-    const flat = weights.map((m) => Math.pow(Math.max(1e-6, m), power));
+    const flat = power === 1 ? weights : weights.map((m) => Math.pow(Math.max(1e-6, m), power));
     const deal = dealRows(flat, bands, footprints);
     // Whether a legal deal exists is a matter of shapes, not of weights.
     if (!deal) return null;

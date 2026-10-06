@@ -122,6 +122,16 @@ const DEEP_ROW = 1 + ROW_DEPTH_SPREAD_MAX - 0.01;
  */
 const HALL_MAX = CORRIDOR * 4;
 
+/**
+ * A reception laid at its contents, against one held at its cap (0). There is
+ * no third: the reception gives way to its CAP and to nothing else. Laid
+ * narrower so that the rooms beside it could have the width, nineteen people
+ * waiting stood shoulder to shoulder in a room a twentieth of the building and
+ * eight of their names had nowhere to be drawn — and who is waiting on you is
+ * the one thing this floor is for.
+ */
+const OFFICE_FULL = 1;
+
 /** The lounge is measured on whole units of width, between these. */
 const LOUNGE_W_MIN = 20;
 const LOUNGE_W_MAX = 240;
@@ -187,31 +197,54 @@ export function layProportioned(input) {
     return { w: r.w, h: r.h };
   };
   // The reception upright. The width its queue asks for — a sofa place a head
-  // round three walls — and, at a width, how deep it comes out.
+  // round three walls — and, at a width, how deep it comes out: at its
+  // contents, or HELD to that width with whoever its sofas cannot seat standing.
   const officeWide = Math.ceil(buildOffice(waitingCount).room.w - EPS);
-  /** @type {Map<number, {w:number,h:number}>} */
+  /** @type {Map<string, {w:number,h:number}>} */
   const officeCols = new Map();
-  const officeColAt = (/** @type {number} */ w) => {
-    let got = officeCols.get(w);
+  const officeColAt = (/** @type {number} */ w, hold = false) => {
+    const key = `${w}|${hold ? 1 : 0}`;
+    let got = officeCols.get(key);
     if (!got) {
-      const r = buildOffice(waitingCount, { w, h: 0 }, { maxW: w }).room;
+      const r = buildOffice(waitingCount, { w, h: 0 }, { maxW: w, hold }).room;
       got = { w: r.w, h: r.h };
-      officeCols.set(w, got);
+      officeCols.set(key, got);
     }
     return got;
+  };
+  /**
+   * THE RECEPTIONS A BAND MAY GIVE, at a depth, fullest first
+   * (`plan-proportions.js` (f)). Its contents — a sofa place for everybody
+   * waiting — where that is inside its share of the building. And where it is
+   * not, and the floor is being held to its caps, the one AT the cap: its sofa
+   * runs as long as that room's walls, the rest of the queue standing.
+   * @param {number} d @param {number} area @param {boolean} capped
+   * @returns {{w:number, hold:boolean, tier:number}[]}
+   */
+  const officesInBand = (d, area, capped) => {
+    const cap = (OFFICE_AREA_MAX * area) / d;
+    const want = officeRowAt(d);
+    const out = [];
+    if (want.h <= d + EPS && want.w <= cap + EPS) {
+      out.push({ w: want.w, hold: false, tier: OFFICE_FULL });
+    }
+    if (!capped || out.length) return out;
+    const r = buildOfficeRow(waitingCount, { w: cap, h: d }, { hold: true }).room;
+    if (r.w <= cap + EPS && r.h <= d + EPS) out.push({ w: cap, hold: true, tier: 0 });
+    return out;
   };
   // The lounge at a width, with at most so many games tables: how deep its
   // bays and its one standing row come out, and how many it SEATS. Two answers
   // per width, because a lounge too shallow for a second shelf gives a bay up
   // rather than wrapping it (§3.7), and a bay given up is seats given up.
-  /** @type {Map<string, {w:number,h:number,seats:number,games:number}>} */
+  /** @type {Map<number, {w:number,h:number,seats:number,games:number}>} */
   const lounges = new Map();
   const loungeAt = (
     /** @type {number} */ w,
     /** @type {boolean} */ oneRow,
     /** @type {number} */ games,
   ) => {
-    const key = `${w}|${oneRow ? 1 : 0}|${games}`;
+    const key = (w * 2 + (oneRow ? 1 : 0)) * 16 + (Number.isFinite(games) ? games : 15);
     let got = lounges.get(key);
     if (!got) {
       const fit = { w, h: oneRow ? LOUNGE_MIN_H : 0 };
@@ -231,6 +264,11 @@ export function layProportioned(input) {
   // people do not need a games room laid for them to be a lounge.
   const whole = loungeAt(LOUNGE_W_MAX, false, Infinity);
   const seatsWanted = Math.min(benchedCount, whole.seats);
+  // WHAT A FLOOR KEPT OF ITS SERVICE ROOMS, as one number to compare two ways
+  // of laying it by: the reception's tier first — a seat for somebody waiting
+  // on you is what the product is for — and the lounge's games tables after.
+  const keptOf = (/** @type {number} */ tier, /** @type {number} */ games) => tier * 10 + games;
+  const wholeKept = keptOf(OFFICE_FULL, whole.games);
   // The narrowest whole-unit lounge that holds its bays inside a depth, with
   // at most `games` tables, seating everybody it should where `seated` is set.
   const loungeWidthFor = (
@@ -304,8 +342,8 @@ export function layProportioned(input) {
    * BANDS at one width: the office and the lounge at the left ends of the top
    * and bottom rows, the rooms across the rest of every row.
    * @param {number} W @param {number} rows @param {number} deep
-   * @param {boolean} capped @param {number} [least] the fewest games tables
-   *   the lounge may be laid with
+   * @param {boolean} capped @param {number} [least] the least it may keep
+   *   of its service rooms (`keptOf`)
    */
   const bandsAt = (W, rows, deep, capped, least = 0) => {
     if (rows < 2 || needs.length < rows) return null;
@@ -316,8 +354,6 @@ export function layProportioned(input) {
     if (!(Math.min(...depths) > PLATE_BAND)) return null;
     const dTop = depths[0];
     const dBottom = depths[rows - 1];
-    const office = officeRowAt(dTop);
-    if (office.h > dTop + EPS || office.w * dTop > OFFICE_AREA_MAX * area + EPS) return null;
     const tops = rowTops(under, depths);
     // Past two rows the corridors are joined by a lane down the left edge.
     const lane = rows >= 3 ? CORRIDOR : 0;
@@ -328,29 +364,38 @@ export function layProportioned(input) {
       (dTop - PLATE_BAND) * OFFICE_ROW_ASPECT_MAX,
     );
     const loungeMax = (LOUNGE_AREA_MAX * area) / dBottom;
-    // The fullest lounge the rooms beside it leave the width for.
+    // The fullest reception, and then the fullest lounge, that the rooms beside
+    // them leave the width for: the lounge gives up its games before the
+    // reception gives up a seat.
+    const lounges = loungesInBand(dBottom, area, capped, 0);
+    let office = null;
     let lounge = null;
     let grid = null;
-    for (const option of loungesInBand(dBottom, area, capped, least)) {
-      const bands = tops.map((y, k) => {
-        const d = depths[k];
-        if (k === 0) {
-          const give = Math.max(0, officeMax - office.w) + HALL_MAX;
-          return { x: office.w, y, w: W - office.w, d, give };
-        }
-        if (k === rows - 1) {
-          const give = Math.max(0, loungeMax - option.w) + HALL_MAX;
-          return { x: option.w, y, w: W - option.w, d, give };
-        }
-        return { x: lane, y, w: W - lane, d };
-      });
-      const got = layGrid(weights, bands, footprints, empty);
-      if (!got || areaOf(got.cells) < ROOMS_AREA_MIN * area - EPS) continue;
-      lounge = option;
-      grid = got;
-      break;
+    for (const desk of lounges.length ? officesInBand(dTop, area, capped) : []) {
+      for (const option of lounges) {
+        if (keptOf(desk.tier, option.kept) < least) continue;
+        const bands = tops.map((y, k) => {
+          const d = depths[k];
+          if (k === 0) {
+            const give = Math.max(0, officeMax - desk.w) + HALL_MAX;
+            return { x: desk.w, y, w: W - desk.w, d, give };
+          }
+          if (k === rows - 1) {
+            const give = Math.max(0, loungeMax - option.w) + HALL_MAX;
+            return { x: option.w, y, w: W - option.w, d, give };
+          }
+          return { x: lane, y, w: W - lane, d };
+        });
+        const got = layGrid(weights, bands, footprints, empty);
+        if (!got || areaOf(got.cells) < ROOMS_AREA_MIN * area - EPS) continue;
+        office = desk;
+        lounge = option;
+        grid = got;
+        break;
+      }
+      if (grid) break;
     }
-    if (!lounge || !grid) return null;
+    if (!office || !lounge || !grid) return null;
     // WHAT A ROW'S ROOMS DID NOT TAKE. Its service room first, to its cap; and
     // what is past the cap is a HALL between the two — circulation, the one
     // thing the budget leaves unbounded — at least a corridor wide, so that it
@@ -369,7 +414,7 @@ export function layProportioned(input) {
       }
       return room >= own - EPS ? { room, hall: hall > EPS ? hall : 0 } : null;
     };
-    const top = beside(0, office.w, officeMax);
+    const top = beside(0, office.w, Math.max(office.w, officeMax));
     const bottom = beside(rows - 1, lounge.w, loungeMax);
     if (!top || !bottom) return null;
     return {
@@ -386,8 +431,9 @@ export function layProportioned(input) {
       grid,
       office: { x: 0, y: 0, w: top.room, h: dTop },
       lounge: { x: 0, y: tops[rows - 1], w: bottom.room, h: dBottom },
+      hold: office.hold,
       games: lounge.games,
-      kept: lounge.kept,
+      kept: keptOf(office.tier, lounge.kept),
       halls: [
         { x: top.room, y: 0, w: top.hall, h: dTop },
         { x: bottom.room, y: tops[rows - 1], w: bottom.hall, h: dBottom },
@@ -401,8 +447,8 @@ export function layProportioned(input) {
    * the first one that holds its contents is the one that leaves the rooms the
    * most; held to its caps, the fullest lounge any width of it has room for.
    * @param {number} W @param {number} rows @param {number} deep
-   * @param {boolean} capped @param {number} [least] the fewest games tables
-   *   the lounge may be laid with
+   * @param {boolean} capped @param {number} [least] the least it may keep
+   *   of its service rooms (`keptOf`)
    */
   const columnAt = (W, rows, deep, capped, least = 0) => {
     if (needs.length < rows) return null;
@@ -414,18 +460,24 @@ export function layProportioned(input) {
     if (!(Math.min(...depths) > PLATE_BAND)) return null;
     const tops = rowTops(under, depths);
     let best = null;
-    for (let sw = Math.max(OFFICE_MIN_W, officeWide); sw + CORRIDOR < W; sw++) {
+    // The reception at its contents: a column as wide as its queue asks, where
+    // that is inside its cap. Where it is not, and the floor is being held to
+    // its caps, the reception is HELD to whatever width the column is.
+    const hold = capped && officeColAt(officeWide).h * officeWide > OFFICE_AREA_MAX * area + EPS;
+    const narrowest = hold ? OFFICE_MIN_W : Math.max(OFFICE_MIN_W, officeWide);
+    for (let sw = narrowest; sw + CORRIDOR < W; sw++) {
       const roomsW = W - sw - CORRIDOR;
       // A wider column only leaves the rooms less.
       if (roomsW * total < ROOMS_AREA_MIN * area - EPS) break;
-      const office = officeColAt(sw);
       const officeMax = (OFFICE_AREA_MAX * area) / sw;
       const loungeMax = (LOUNGE_AREA_MAX * area) / sw;
+      const office = officeColAt(sw, hold);
+      const tier = hold ? 0 : OFFICE_FULL;
       if (office.w > sw + EPS || office.h > officeMax + EPS) continue;
       // The lounge with everything in it, or — where the floor is held to its
       // caps — the one with the most games tables that the column has room for.
       let lounge = null;
-      for (let games = whole.games; games >= least && !lounge; games--) {
+      for (let games = whole.games; games >= 0 && !lounge; games--) {
         const all = games === whole.games;
         const got = loungeAt(sw, false, all ? Infinity : games);
         const fits = got.w <= sw + EPS && office.h + got.h <= H + EPS && got.h <= loungeMax + EPS;
@@ -434,8 +486,9 @@ export function layProportioned(input) {
         }
         if (!capped) break;
       }
-      // A wider column is only worth laying for a fuller lounge.
-      if (!lounge || (best && lounge.kept <= best.kept)) continue;
+      // A wider column is only worth laying for fuller service rooms.
+      const kept = lounge ? keptOf(tier, lounge.kept) : -1;
+      if (!lounge || kept < least || (best && kept <= best.kept)) continue;
       // What the column has past its contents is the lounge's first, then the
       // reception's, each to its cap. A column with floor left after both is
       // wider than the service rooms may be, and the next one is wider still.
@@ -463,11 +516,12 @@ export function layProportioned(input) {
         grid,
         office: { x: 0, y: 0, w: sw, h: officeH },
         lounge: { x: 0, y: officeH, w: sw, h: H - officeH },
+        hold,
         games: lounge.games,
-        kept: lounge.kept,
+        kept,
         halls: /** @type {{x:number,y:number,w:number,h:number}[]} */ ([]),
       };
-      if (best.kept >= whole.games) break;
+      if (best.kept >= wholeKept) break;
     }
     return best;
   };
@@ -550,10 +604,11 @@ export function layProportioned(input) {
 
   /** Every room of one candidate, built and placed; null if one did not fit. */
   const build = (/** @type {Candidate} */ c) => {
+    const held = { hold: c.hold };
     const office =
       c.family === 'bands'
-        ? buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h })
-        : buildOffice(waitingCount, { w: c.office.w, h: c.office.h }, { maxW: c.office.w });
+        ? buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h }, held)
+        : buildOffice(waitingCount, c.office, { maxW: c.office.w, ...held });
     if (office.room.w > c.office.w + 0.01 || office.room.h > c.office.h + 0.01) return null;
     const cell = { w: c.lounge.w, h: c.lounge.h };
     const lounge = buildLounge(benchedCount, cell, goneHomeCount, 1, { maxGames: c.games });
@@ -700,7 +755,7 @@ export function layProportioned(input) {
     // and may be the difference between a lounge and a sofa with a chip on it.
     // So: the fullest lounge any way of laying that slightly wider building
     // has, at the smallest width that still has it.
-    if (held && held.W > nominal + EPS && held.kept < whole.games) {
+    if (held && held.W > nominal + EPS && held.kept < wholeKept) {
       const limit = Math.min(held.W * (1 + SERVICE_SLACK), chosen ? chosen.W : Infinity);
       /** @type {Candidate|null} */
       let fuller = null;
