@@ -225,6 +225,8 @@ export {};
  * @property {number} width
  * @property {number} height
  * @property {number} targetAspect
+ * @property {number|null} [stageW] the stage's width in pixels the floor was
+ *   laid for, or null where the caller named a shape and no size
  * @property {string} agentSize which of `small` | `medium` | `large` this floor
  *   was laid at (WP-88c). `auto` never appears here: it is a SETTING, and this
  *   is what it resolved to for this population.
@@ -247,6 +249,13 @@ export {};
  * @property {Door[]} doors
  * @property {Set<string>} hidden agent ids the plan draws nobody for
  * @property {Set<string>} goneHome the subset of `hidden` that went home
+ * @property {{count:number, ids:Set<string>, x:number, y:number, w:number,
+ *   h:number}|null} [loungeOverflow] the people IN the lounge the floor does
+ *   not draw: everybody past its seats and its one standing row, longest-rested
+ *   first (`plan-proportions.js` (g)). `ids` is who, and the rectangle is where
+ *   their `+N resting` chip stands. Not part of `hidden`: they are on the
+ *   lounge's plate and in the header's count. `null` on a floor whose lounge
+ *   has a place for everybody in it.
  * @property {WorkingSide} working what the working side did with the height
  *   the service column gave it (WP-59c)
  * @property {Arrangement} arrangement how the building is laid. `column` is the

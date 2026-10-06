@@ -554,6 +554,8 @@ export class SceneDraw extends SceneHit {
         // whiteboard.
         if (room.kind === 'project') this._drawRoomFixtures(room, camera);
       }
+      // The lounge's `+N resting`, where it holds more people than it draws.
+      this._drawLoungeChip(camera);
     }
 
     ctx.restore();

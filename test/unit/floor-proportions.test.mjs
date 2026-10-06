@@ -18,9 +18,17 @@ import assert from 'node:assert/strict';
 
 import { LARGE_NOW, ownerShapedFloor, populationFloor } from '../helpers/large-floor.mjs';
 import { buildPlan } from '../../public/render/plan.js';
-import { computeFill } from '../../public/render/scene-camera.js';
+import {
+  STAGE_REBUILD_THRESHOLD,
+  computeFill,
+  shouldRebuildStage,
+} from '../../public/render/scene-camera.js';
+import { MIN_SCALE } from '../../public/render/scene-lod.js';
+import { BODY_HEIGHT_U, RIG_DETAIL_MIN_PX } from '../../public/render/rig-metrics.js';
+import { resetAgentScale } from '../../public/render/plan-scale.js';
 import {
   LOUNGE_AREA_MAX,
+  NOMINAL_PX_PER_UNIT,
   OFFICE_AREA_MAX,
   ROOMS_AREA_MIN,
   ROOM_AREA_SPREAD_MAX,
@@ -29,8 +37,10 @@ import {
   ROWS_LIMIT,
   ROWS_MAX,
   ROW_DEPTH_SPREAD_MAX,
+  SCALE_MIN_PX_PER_UNIT,
   WINDOW_FILL_MIN,
   measureProportions,
+  nominalWidth,
   proportionFaults,
 } from '../../public/render/plan-proportions.js';
 
@@ -233,4 +243,95 @@ test('crowded, the owner’s floor: five rooms of two sizes, four of them dark, 
   // What the picture showed, and what it shows now.
   const shares = measureProportions(plan).shares;
   assert.ok(shares.lounge <= 0.25 + EPS && shares.rooms >= 0.55 - EPS, JSON.stringify(shares));
+});
+
+// ------------------------------------------------------------- (i) the scale
+
+test('the two scales the rulebook names are the renderer’s own', () => {
+  // `plan-proportions.js` imports nothing, so it states both numbers itself.
+  assert.equal(SCALE_MIN_PX_PER_UNIT, MIN_SCALE);
+  // The nominal scale is the last at which a figure keeps its detail.
+  resetAgentScale();
+  const figure = NOMINAL_PX_PER_UNIT * BODY_HEIGHT_U;
+  assert.ok(figure >= RIG_DETAIL_MIN_PX, `a ${figure.toFixed(1)} px figure at the nominal scale`);
+  assert.ok((NOMINAL_PX_PER_UNIT - 1) * BODY_HEIGHT_U < RIG_DETAIL_MIN_PX, 'a scale to spare');
+});
+
+test('a floor is laid at its contents, or held to the window at the nominal scale', () => {
+  for (const [name, make] of Object.entries(FLOORS)) {
+    const floor = make();
+    for (const [winW, winH] of WINDOWS) {
+      const { plan, stage } = planAt(floor, winW, winH);
+      const where = `${name} at ${winW}x${winH}`;
+      const { contentsW, nominalW, capped } = plan.working;
+      assert.equal(nominalW, nominalWidth(stage, plan.targetAspect), where);
+      // Never wider than its contents: nothing is padded to a scale.
+      if (contentsW > 0)
+        assert.ok(plan.width <= contentsW + 1e-6, `${where}: wider than it need be`);
+      if (contentsW > 0 && contentsW <= nominalW + 1e-6) {
+        // It fits at the nominal scale, so it is its contents and nothing gave way.
+        assert.ok(Math.abs(plan.width - contentsW) < 1e-6, `${where}: not laid at its contents`);
+        assert.equal(capped, false, `${where}: a service room was held back for nothing`);
+      } else if (capped) {
+        // It does not, and holding the service rooms to their caps bought a
+        // smaller building: no smaller than the window at the nominal scale,
+        // which is the building the caps are held in.
+        assert.ok(plan.width >= nominalW - 1e-6, `${where}: held under the nominal scale`);
+        assert.ok(plan.width < contentsW, `${where}: held back and no smaller for it`);
+      }
+      // Otherwise it is past the nominal scale AT its contents: nothing the
+      // service rooms could give up would have let the rooms stand in less.
+    }
+  }
+});
+
+test('the body size follows the scale down before a floor of forty repos scrolls', () => {
+  const floor = populationFloor('large');
+  const at = (/** @type {number} */ w, /** @type {number} */ h, agentSize = 'medium') =>
+    buildPlan(floor.projects, floor.agents, { stage: { w, h }, now: LARGE_NOW, agentSize });
+  try {
+    // On a 1600 px window twenty-two rooms fit at the size they were asked for.
+    const wide = at(1600, 870);
+    assert.equal(wide.agentSize, 'medium');
+    assert.ok(1600 / wide.width >= SCALE_MIN_PX_PER_UNIT - 1e-6);
+    // On the owner's 1420 they do not, and the floor is laid a size smaller
+    // rather than left to scroll — with every rule still kept.
+    const narrow = at(1420, 690);
+    assert.equal(narrow.agentSize, 'small');
+    assert.ok(1420 / narrow.width >= SCALE_MIN_PX_PER_UNIT - 1e-6, `${narrow.width} U at 1420 px`);
+    assert.deepEqual(narrow.proportions.faults, []);
+    // A floor that is already at the smallest size has nowhere to go.
+    assert.equal(at(1420, 690, 'small').agentSize, 'small');
+    // And a floor that fits is never made smaller than it was asked to be.
+    const small = populationFloor('demo');
+    const demo = buildPlan(small.projects, small.agents, {
+      stage: { w: 1420, h: 690 },
+      now: LARGE_NOW,
+      agentSize: 'large',
+    });
+    assert.equal(demo.agentSize, 'large');
+  } finally {
+    resetAgentScale();
+  }
+});
+
+test('a plan is laid for a width as well as a shape, and laid again when the window is another', () => {
+  const floor = ownerShapedFloor();
+  const { plan } = planAt(floor, 2000, 1185);
+  assert.equal(plan.stageW, 2000);
+  assert.equal(shouldRebuildStage(2000, plan.stageW), false);
+  assert.equal(shouldRebuildStage(2000 * (1 + STAGE_REBUILD_THRESHOLD) - 1, plan.stageW), false);
+  assert.equal(shouldRebuildStage(2560, plan.stageW), true);
+  assert.equal(shouldRebuildStage(1366, plan.stageW), true);
+  // A plan laid for a shape alone has no width to drift from.
+  const shaped = buildPlan(floor.projects, floor.agents, { targetAspect: 1.9, now: LARGE_NOW });
+  assert.equal(shaped.stageW, null);
+  assert.equal(shouldRebuildStage(1366, shaped.stageW), false);
+  // And the same floor on a laptop's window is a narrower building, not a
+  // smaller picture of the same one.
+  const laptop = planAt(floor, 1366, 768).plan;
+  assert.ok(
+    laptop.width < plan.width,
+    `${laptop.width} U on a laptop, ${plan.width} U on a monitor`,
+  );
 });

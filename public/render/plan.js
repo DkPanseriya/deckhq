@@ -59,15 +59,17 @@
  * so no import anywhere had to change.
  */
 
+import { behindTheChip } from '../floor-resting.js';
 import { awayRooms, floorPopulation, offTheFloor } from '../floor-rule.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { layClassic } from './plan-classic.js';
 import { layProportioned } from './plan-grid.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
-import { measureProportions, proportionFaults } from './plan-proportions.js';
+import { SCALE_MIN_PX_PER_UNIT, measureProportions, proportionFaults } from './plan-proportions.js';
 import { crewFloorFor } from './plan-rooms.js';
-import { DEFAULT_AGENT_SIZE, sizeForPopulation } from './plan-scale.js';
+import { DEFAULT_AGENT_SIZE, SIZE_IDS, sizeForPopulation } from './plan-scale.js';
 import { seatOffice } from './plan-office.js';
+import { LOUNGE_CHIP_ZONE } from './plan-service.js';
 import { ASPECT_MAX, ASPECT_MIN, DEFAULT_ASPECT, DOOR_WIDTH, clamp } from './plan-units.js';
 
 // ------------------------------------------------------------------ the plan
@@ -176,10 +178,22 @@ export function buildPlan(projects, agents, opts = {}) {
   const layout =
     layProportioned({
       ...shared,
+      stage,
       rooms: gridRooms,
       crewSizeIn: (p) => pop.crews.get(idOf(p))?.[0] ?? 0,
     }) || layClassic({ ...shared, activeProjects, pinnedProjects });
   const { W, H, office, lounge, projectRooms, working } = layout;
+
+  // THE BODY SIZE FOLLOWS THE SCALE DOWN (`plan-proportions.js` (i)). A floor
+  // whose rooms need a building too wide for this window at the smallest scale
+  // a floor is drawn at would scroll. Before that, the same floor is laid a
+  // body size smaller: smaller people need less desk, less sofa and less of a
+  // crew's arc, so the rooms stay rooms and more of them fit.
+  const fits = stageAspect ? Math.min(Number(stage.w) / W, Number(stage.h) / H) : Infinity;
+  const smaller = SIZE_IDS[SIZE_IDS.indexOf(sized.size) - 1];
+  if (fits < SCALE_MIN_PX_PER_UNIT - 1e-6 && smaller && gridRooms.length) {
+    return buildPlan(projects, agents, { ...opts, agentSize: smaller });
+  }
   const strip = { rooms: layout.stripRooms };
 
   const rooms = [
@@ -223,6 +237,33 @@ export function buildPlan(projects, agents, opts = {}) {
     if (kz) lounge.room.kitchenZone = { x: kz.x, y: kz.y, w: kz.w, h: kz.h };
   }
 
+  // WHO IS BEHIND THE LOUNGE'S CHIP (`plan-proportions.js` (g)). The lounge
+  // laid a place for so many people — its seats and one standing row — and
+  // everybody past that, longest-rested first, is `+N resting` on a chip at
+  // the end of that row and a row each in the deck (`floor-resting.js`).
+  //
+  // NOT IN `hidden`. They are in the lounge: on its plate, and in the header's
+  // count of who the floor holds. What the floor declines is to draw sixty
+  // portraits of them, and `assignSeats` and the runtime read this set for it.
+  const places = lounge.loungeSpots.reduce((a, sp) => a + Math.max(1, sp.capacity ?? 1), 0);
+  const behind = behindTheChip(list, hidden, places);
+  const chipZone = lounge.room.zones.find((z) => z.id === LOUNGE_CHIP_ZONE) || {
+    x: lounge.room.x + lounge.room.w - 8,
+    y: lounge.room.y + lounge.room.h - 4,
+    w: 6,
+    h: 2,
+  };
+  const loungeOverflow = behind.size
+    ? {
+        count: behind.size,
+        ids: behind,
+        x: chipZone.x,
+        y: chipZone.y,
+        w: chipZone.w,
+        h: chipZone.h,
+      }
+    : null;
+
   /** @type {Map<string, Seat[]>} */
   const seats = new Map();
   for (const pr of projectRooms) {
@@ -265,6 +306,10 @@ export function buildPlan(projects, agents, opts = {}) {
     width: W,
     height: H,
     targetAspect,
+    // The stage's width in pixels, where the caller had one: the floor is laid
+    // for it as well as for its shape (`nominalWidth`), so the scene lays it
+    // again when the window is a different size at the same shape.
+    stageW: stageAspect ? Number(stage.w) : null,
     agentSize: sized.size, // what `auto` resolved to here; §2's `s` beside it
     agentScale: sized.s,
     arrangement: layout.arrangement,
@@ -284,6 +329,9 @@ export function buildPlan(projects, agents, opts = {}) {
     // Who the floor draws nobody for, decided once here rather than twice.
     hidden,
     goneHome: pop.goneHome,
+    // Who is in the lounge and not drawn, and where their chip stands; null
+    // on every floor whose lounge has a place for everybody in it.
+    loungeOverflow,
   };
 }
 

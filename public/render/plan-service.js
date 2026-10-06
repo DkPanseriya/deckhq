@@ -55,6 +55,7 @@ import {
   plantRun,
 } from './plan-props.js';
 import { LOOK } from './look-derive.js';
+import { restingOnFloor } from './plan-proportions.js';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Zone} Zone */
@@ -62,6 +63,15 @@ import { LOOK } from './look-derive.js';
 /** @typedef {import('./plan-units.js').LoungeSpot} LoungeSpot */
 
 // --------------------------------------------------------------- the lounge
+
+/** The zone the `+N resting` chip is drawn in, where the lounge has one. */
+export const LOUNGE_CHIP_ZONE = 'lounge-chip';
+/**
+ * The floor the chip is given at the end of the standing row: wide enough for
+ * `+999 resting` at the smallest scale the floor is drawn at, and a body tall.
+ */
+const LOUNGE_CHIP_W = 8;
+const LOUNGE_CHIP_H = 2.2;
 
 /**
  * The room depth under which a lounge is ONE ROW of bays: it cannot hold a
@@ -101,8 +111,20 @@ export function loungeOneRowBelow(pack = 1) {
  *   benched stand closer together, which is the whole of it. The service
  *   column sets the building's height, so this is what stops a lounge
  *   dictating an empty lot on the working side.
+ * @param {{maxGames?: number}} [opts] `maxGames`: the most games tables this
+ *   lounge is laid with — fewer than its people would earn, where the room it
+ *   has been given is at its share of the building and cannot hold them all
+ *   (`plan-proportions.js` (g)). The people a table would have seated stand,
+ *   or are behind the chip.
+ * @returns {{room: Room, loungeSpots: LoungeSpot[], behindChip: number, games: number}}
+ *   `behindChip`: how many of `benchedCount` have no place drawn for them;
+ *   `games`: how many games tables it was laid with
  */
-export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
+export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1, opts = {}) {
+  const maxGames = Math.min(
+    LOUNGE_MAX_GAMES,
+    Number.isFinite(Number(opts.maxGames)) ? Math.max(0, Number(opts.maxGames)) : Infinity,
+  );
   const packing = clamp(Number(pack) || 1, LOUNGE_PACKS[LOUNGE_PACKS.length - 1], 1);
   const gap = LOUNGE_GAP * packing;
   const minglePitch = Math.max(MINGLE_PITCH_MIN, MINGLE_PITCH * packing);
@@ -339,7 +361,7 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   let capacity = LOUNGE_BASE_SEATS;
   /** @param {number} seats the table this call would add */
   const wants = (seats) => {
-    if (benchedCount <= 0 || games >= LOUNGE_MAX_GAMES) return false;
+    if (benchedCount <= 0 || games >= maxGames) return false;
     if (games > 0 && capacity >= benchedCount) return false;
     games++;
     capacity += seats;
@@ -713,13 +735,21 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
   // Standing conversations need no furniture, so they take the promenade
   // along the bottom of the lounge once every seat is spoken for.
   //
-  // The count is a HARD guarantee, not a decoration: `assignSeats` gives one
-  // agent one spot, so a lounge with fewer spots than benched agents stacks
-  // the remainder on top of each other. The band therefore grows until every
-  // benched agent has somewhere of their own to stand.
+  // ONE ROW OF THEM, AND THEN A CHIP (`plan-proportions.js` (g)). The band
+  // used to grow until every benched agent had somewhere to stand, and on the
+  // owner's floor that was sixty figures in one line across a lounge that had
+  // become 40% of the building to hold them. A crowd that size is a number,
+  // not sixty portraits: the lounge draws its seats and one row of people
+  // standing, as many as its width holds, and everybody past that is `+N
+  // resting` on a chip at the end of the row — still a row in the deck, which
+  // is where a crowd is read.
+  //
+  // What `assignSeats` is handed is still one spot a person: the plan hides
+  // exactly the people this did not lay a place for (`buildPlan`).
   const furniture = boundsOf([...props, ...zones]);
   const seated = spots.reduce((a, sp) => a + sp.capacity, 0);
   const missing = Math.max(0, benchedCount - seated);
+  let behindChip = 0;
   if (missing > 0) {
     // ALONG THE WHOLE WIDTH IT WAS GIVEN (WP-59d), not along the furniture.
     // In a column the two are the same number — the clusters shelf-pack to
@@ -729,26 +759,47 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     // and left the rest bare. The promenade is the one thing in this room that
     // can be any width at all, so it takes the room's.
     const bandW = Number.isFinite(budgetW) ? budgetW : furniture.w;
-    const perRow = Math.max(2, 2 * Math.floor(bandW / (minglePitch * 2)));
-    const rows = Math.ceil(missing / perRow);
+    const across = (/** @type {number} */ w) =>
+      Math.max(2, 2 * Math.floor(Math.max(0, w) / (minglePitch * 2)));
+    let perRow = across(bandW);
+    let on = restingOnFloor(benchedCount, seated, perRow);
+    // A row that ends in a chip ends a chip short.
+    if (on.chip > 0) {
+      perRow = across(bandW - LOUNGE_CHIP_W);
+      on = restingOnFloor(benchedCount, seated, perRow);
+    }
+    behindChip = on.chip;
+    const standing = on.standing;
+    const rows = Math.max(1, Math.ceil(standing / perRow));
     const bandY = furniture.y + furniture.h + gap;
+    const right = furniture.x + Math.max(furniture.w, bandW);
     zones.push({
       id: 'lounge-mingle',
       x: furniture.x,
       y: bandY - 1.2,
-      w: Math.max(furniture.w, bandW),
+      w: right - furniture.x,
       h: rows * mingleRow + 2.4,
     });
+    // Where the chip is drawn: the end of the row, at the height of a body.
+    if (behindChip > 0) {
+      zones.push({
+        id: LOUNGE_CHIP_ZONE,
+        x: right - LOUNGE_CHIP_W,
+        y: bandY - LOUNGE_CHIP_H,
+        w: LOUNGE_CHIP_W,
+        h: LOUNGE_CHIP_H,
+      });
+    }
     let made = 0;
     for (let r = 0; r < rows; r++) {
-      for (let c = 0; c + 1 < perRow && made < missing; c += 2) {
+      for (let c = 0; c + 1 < perRow && made < standing; c += 2) {
         const bx = furniture.x + 1.2 + c * minglePitch;
         const by = bandY + r * mingleRow;
         const a = `lounge-chat-${r}-${c}a`;
         const b = `lounge-chat-${r}-${c}b`;
         spots.push({ id: a, kind: 'chat', x: bx, y: by, angle: 0, capacity: 1, partnerOf: b });
         made++;
-        if (made < missing) {
+        if (made < standing) {
           spots.push({
             id: b,
             kind: 'chat',
@@ -810,5 +861,5 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1) {
     zones,
     kitchenZone: kitchen ? { x: kitchen.x, y: kitchen.y, w: kitchen.w, h: kitchen.h } : undefined,
   };
-  return { room, loungeSpots: spots };
+  return { room, loungeSpots: spots, behindChip, games };
 }

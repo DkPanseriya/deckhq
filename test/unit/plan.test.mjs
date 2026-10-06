@@ -206,8 +206,15 @@ test('the lounge furnishes itself to the benched population, and never dominates
   // its contents. What must still adapt is the FURNITURE: an empty lounge is
   // a sofa group and a counter, and games appear only as people arrive to
   // use them.
+  //
+  // Asked of a floor with four small projects on it. On one with sixteen, three
+  // of them large, the ROOMS are what take the building past the scale it is
+  // designed at, and the lounge gives up games tables before it makes them
+  // smaller still (`plan-proportions.js` (g), (i)) — which is a different
+  // rule, and `floor-proportions.test.mjs` holds it.
+  const four = () => [1, 2, 1, 3].map((c, i) => makeProject(`proj-${i}`, c));
   const measure = (benchedCount) => {
-    const plan = buildPlan(bigProjects(), benchedAgents(benchedCount));
+    const plan = buildPlan(four(), benchedAgents(benchedCount));
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
     assert.ok(lounge, 'lounge zone must always be present');
     const kinds = new Set(lounge.props.map((prop) => prop.kind));
@@ -247,7 +254,7 @@ test('the lounge furnishes itself to the benched population, and never dominates
   }
   assert.ok(busy.spots > empty.spots, 'more benched agents means more places to be');
   assert.ok(
-    empty.share < 0.35 && busy.share < 0.35,
+    empty.share <= 0.25 + 1e-6 && busy.share <= 0.25 + 1e-6,
     `the lounge must not dominate the floor (${(empty.share * 100).toFixed(1)}% / ${(busy.share * 100).toFixed(1)}%)`,
   );
 });

@@ -165,3 +165,16 @@ export function plateTertiaryLine(project, showCost) {
   const tail = tokens.startsWith('today ') && money.startsWith('today ') ? money.slice(6) : money;
   return `${tokens} · ${tail}`;
 }
+
+/**
+ * THE LOUNGE'S CHIP (`plan-proportions.js` (g)): the people the lounge holds
+ * and does not draw, as a number. `+12 resting`, and nothing at all for
+ * nobody — a chip for zero is not drawn.
+ *
+ * @param {number} count
+ * @returns {string}
+ */
+export function restingChipLine(count) {
+  const n = Math.max(0, Math.floor(Number(count) || 0));
+  return n > 0 ? `+${n} resting` : '';
+}

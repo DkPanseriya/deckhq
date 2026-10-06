@@ -374,13 +374,26 @@ test('every agent on the floor has a place of its own', () => {
     // does anyone the plan hides — an agent who went home, or one at a desk in
     // a project with no room. Everybody the floor DRAWS gets a place of their
     // own; that is what `plan.hidden` exists to keep honest.
-    const onFloor = agents.filter((a) => a.ackState !== 'let_go' && !plan.hidden.has(a.id));
+    //
+    // AND THE LOUNGE DRAWS ITS SEATS AND ONE STANDING ROW (`plan-proportions.js`
+    // (g)). Everybody it holds past that is `plan.loungeOverflow`: on the
+    // lounge's plate, on its chip as a number, and given no place.
+    const behind = plan.loungeOverflow ? plan.loungeOverflow.ids : new Set();
+    const onFloor = agents.filter(
+      (a) => a.ackState !== 'let_go' && !plan.hidden.has(a.id) && !behind.has(a.id),
+    );
     assert.equal(seats.size, onFloor.length, 'every agent on the floor must be given a place');
     for (const a of agents) {
-      if (plan.hidden.has(a.id)) {
-        assert.ok(!seats.has(a.id), `${a.id} is hidden and was still given a seat`);
+      if (plan.hidden.has(a.id) || behind.has(a.id)) {
+        assert.ok(!seats.has(a.id), `${a.id} is not drawn and was still given a seat`);
       }
     }
+    for (const id of behind) {
+      const a = agents.find((x) => x.id === id);
+      assert.equal(derivePlacement(a), 'lounge', `${id} is behind the lounge's chip and not in it`);
+      assert.ok(!plan.hidden.has(id), `${id} is behind the chip AND hidden`);
+    }
+    assert.equal(plan.loungeOverflow ? plan.loungeOverflow.count : 0, behind.size);
 
     const seen = new Map();
     for (const [id, seat] of seats) {
@@ -410,6 +423,7 @@ test('every agent stands inside the room its placement names', () => {
     for (const a of agents) {
       if (a.ackState === 'let_go') continue; // off the floor entirely
       if (plan.hidden.has(a.id)) continue; // went home, or a desk with no room
+      if (plan.loungeOverflow && plan.loungeOverflow.ids.has(a.id)) continue; // behind the chip
       // A junior's room is its PARENT's, wherever that is, so
       // `derivePlacement` — which answers `desk` for one standing in a lounge
       // — cannot name it. `no agent is drawn outside the room it stands in`

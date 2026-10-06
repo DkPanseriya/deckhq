@@ -75,6 +75,15 @@ export const MODULE_L_CREW = 6;
 export const ROOM_AREA_SPREAD_MAX = 2.5;
 
 /**
+ * A SMALLER MODULE IS NOT THE BIGGER ROOM. A short last row stretches its
+ * rooms, so a one-desk room there may come out larger than a team's room in a
+ * full row — by up to this much, which reads as two rooms of a size. Past it
+ * the floor is saying the opposite of what is in the rooms, and that deal is
+ * not laid.
+ */
+export const MODULE_ORDER_SLACK = 1.25;
+
+/**
  * A PINNED room nobody is in may stay small — this much of a one-desk room —
  * but never so small that the largest room passes the spread bound against it
  * (`PINNED_SPREAD` leaves the grid's own stretch some room under 2.5).
@@ -118,6 +127,48 @@ export const LOUNGE_STANDING_ROWS = 1;
 
 /** The building covers at least this much of the window on both axes (audit F2). */
 export const WINDOW_FILL_MIN = 0.96;
+
+// ---------------------------------------------------------------- (i) scale
+
+/**
+ * THE SCALE THE SERVICE ROOMS ARE HELD AT: twelve pixels to a unit, which is a
+ * figure thirty pixels tall — the height under which the figure loses its rim,
+ * its chest glyph and its far limb (`RIG_DETAIL_MIN_PX`). A window that many
+ * pixels wide is a building this many units wide, and that building is what
+ * the office and the lounge are held to their caps IN: past it the reception's
+ * queue stands and the lounge shows its chip, rather than everybody on the
+ * floor being drawn without their detail so that a crowd can all sit down.
+ * Only the ROOMS' own needs take a building past it ((i): the scale drops
+ * before a room becomes a strip). A floor that needs less is laid smaller, and
+ * drawn larger.
+ */
+export const NOMINAL_PX_PER_UNIT = 12;
+
+/**
+ * The stage a floor is laid for when the caller names a shape and no pixels:
+ * the goldens' own canvas, a 1600 x 1000 window less its chrome.
+ */
+export const REFERENCE_STAGE = Object.freeze({ w: 1600, h: 870 });
+
+/**
+ * The smallest scale a floor is drawn at before it scrolls (`MIN_SCALE` in
+ * `scene-lod.js`, which this file may not import; a test holds the two equal).
+ * A floor whose rooms need a building too wide for the window at this scale
+ * is laid a body size smaller before it is left to scroll.
+ */
+export const SCALE_MIN_PX_PER_UNIT = 7.5;
+
+/**
+ * The widest building the nominal scale gives a stage, in units.
+ * @param {{w?:number, h?:number}|undefined|null} stage the canvas, in pixels
+ * @param {number} aspect the shape the building is laid to
+ */
+export function nominalWidth(stage, aspect) {
+  const px = Number(stage?.w) > 0 && Number(stage?.h) > 0 ? Number(stage?.w) : 0;
+  if (px > 0) return px / NOMINAL_PX_PER_UNIT;
+  // No pixels: the reference stage's area, in the shape asked for.
+  return Math.sqrt(REFERENCE_STAGE.w * REFERENCE_STAGE.h * aspect) / NOMINAL_PX_PER_UNIT;
+}
 
 /** Comparisons on laid geometry, in plan units. */
 const EPS = 1e-6;
@@ -360,11 +411,13 @@ const FLATTEN = Object.freeze([1, 0.8, 0.6, 0.4, 0.2, 0]);
  * @param {{x:number,y:number,w:number,d:number,give?:number}[]} bands the
  *   rectangle each row of rooms has, top to bottom
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
+ * @param {boolean[]} [empty] rooms nobody is in (a pinned one): never larger
+ *   than a room of a bigger module, with no slack at all
  * @returns {{cells:{x:number,y:number,w:number,h:number,row:number}[],
  *   taken:number[], spread:number, flatten:number}|null} null where no deal
  *   keeps every rule
  */
-export function layGrid(weights, bands, footprints = []) {
+export function layGrid(weights, bands, footprints = [], empty = []) {
   for (const power of FLATTEN) {
     const flat = weights.map((m) => Math.pow(Math.max(1e-6, m), power));
     const deal = dealRows(flat, bands, footprints);
@@ -382,7 +435,19 @@ export function layGrid(weights, bands, footprints = []) {
     });
     const areas = cells.map((c) => c.w * c.h);
     const spread = Math.max(...areas) / Math.max(1e-9, Math.min(...areas));
-    if (spread <= ROOM_AREA_SPREAD_MAX + EPS) return { cells, taken, spread, flatten: power };
+    if (spread > ROOM_AREA_SPREAD_MAX + EPS) continue;
+    // And the modules are still in order: the largest room of a smaller
+    // module against the smallest room of each bigger one.
+    const kinds = [...new Set(weights)].sort((a, b) => a - b);
+    const range = kinds.map((m) => {
+      const own = areas.filter((_, i) => weights[i] === m);
+      const slack = weights.some((w, i) => w === m && empty[i]) ? 1 : MODULE_ORDER_SLACK;
+      return { least: Math.min(...own), most: Math.max(...own), slack };
+    });
+    const ordered = range.every((r, a) =>
+      range.slice(a + 1).every((bigger) => r.most <= bigger.least * r.slack + EPS),
+    );
+    if (ordered) return { cells, taken, spread, flatten: power };
   }
   return null;
 }

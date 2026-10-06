@@ -12,10 +12,13 @@ import assert from 'node:assert/strict';
 import {
   LIGHTS_OFF_DIM,
   LOUNGE_AREA_MAX,
+  MODULE_ORDER_SLACK,
   MODULE_WEIGHTS,
+  NOMINAL_PX_PER_UNIT,
   OFFICE_AREA_MAX,
   PINNED_SPREAD,
   PINNED_WEIGHT,
+  REFERENCE_STAGE,
   ROOMS_AREA_MIN,
   ROOM_AREA_SPREAD_MAX,
   ROOM_RATIO_MAX,
@@ -27,6 +30,7 @@ import {
   layGrid,
   measureProportions,
   moduleFor,
+  nominalWidth,
   pinnedWeight,
   proportionFaults,
   restingOnFloor,
@@ -272,4 +276,50 @@ test('a floor with no project room is held to none of the room rules', () => {
     { kind: 'lounge', x: 0, y: 28, w: 100, h: 32 },
   ]);
   assert.deepEqual(proportionFaults(measureProportions(plan)), []);
+});
+
+test('a smaller module is not the bigger room: past a quarter over, the deal is not laid', () => {
+  // Three one-desk rooms in a row and a team's alone in the next: the team's
+  // room is the largest, and the family is in order.
+  const grid = layGrid(
+    [1, 1, 1, 1.5],
+    [
+      { x: 0, y: 0, w: 66, d: 30 },
+      { x: 0, y: 34, w: 40, d: 30 },
+    ],
+  );
+  assert.ok(grid);
+  const areas = grid.cells.map((c) => c.w * c.h);
+  for (const small of areas.slice(0, 3)) {
+    assert.ok(small <= areas[3] * MODULE_ORDER_SLACK + EPS, `${small} beside a team's ${areas[3]}`);
+  }
+  // One row is 54 wide for a single one-desk room and the other 28 for a
+  // team's: the only deal is the one where the small module is twice the big.
+  const backwards = [
+    { x: 0, y: 0, w: 54, d: 30 },
+    { x: 0, y: 34, w: 28, d: 30 },
+  ];
+  assert.equal(layGrid([1, 1.5], backwards), null);
+  assert.ok(layGrid([1.5, 1], backwards), 'the same bands, the modules the right way round');
+});
+
+test('a room nobody is in is never larger than one somebody is: no slack at all', () => {
+  // By shape alone the last room, alone in its row, is 30 wide beside two of 25.
+  const bands = [
+    { x: 0, y: 0, w: 50, d: 30 },
+    { x: 0, y: 34, w: 30, d: 30 },
+  ];
+  assert.ok(layGrid([1, 1, 0.6], bands), 'a small room a fifth larger than its neighbours');
+  assert.equal(layGrid([1, 1, 0.6], bands, [], [false, false, true]), null);
+});
+
+test('the nominal scale: a window is so many units wide, and a shape alone is the reference stage', () => {
+  assert.equal(NOMINAL_PX_PER_UNIT, 12);
+  assert.equal(nominalWidth({ w: 2000, h: 1055 }, 1.9), 2000 / 12);
+  assert.equal(nominalWidth({ w: 1366, h: 638 }, 2.14), 1366 / 12);
+  // No pixels: the reference stage's area, laid to the shape asked for.
+  const wide = nominalWidth(undefined, 2);
+  assert.ok(Math.abs(wide * (wide / 2) - (REFERENCE_STAGE.w * REFERENCE_STAGE.h) / 144) < 1e-6);
+  assert.equal(nominalWidth({ w: 0, h: 0 }, 2), wide);
+  assert.equal(nominalWidth(null, 2), wide);
 });

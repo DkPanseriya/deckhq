@@ -510,7 +510,7 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * column's rows end on the lounge's baseline. Every envelope on this ladder is
  * the window's shape now rather than the sum of its parts.
  */
-const PLAN_HASH = 'e9e97af2';
+const PLAN_HASH = '268d632f';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {
