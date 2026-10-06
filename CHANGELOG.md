@@ -60,6 +60,17 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   keyboard's place after one step. The focus now stays on the option you moved to.
 - **The Look button and Settings always agree.** A theme changed in Settings could show as the old
   one in the Look panel until the floor next refreshed.
+- **Wait badges and names in a full office are readable.** With sixteen sessions waiting, the
+  ones standing stood right in front of the ones sitting: their badges landed on the heads behind
+  them, and the names of the people on the sofa were pushed two rows away or across the wall. A
+  badge is now over its own head and a name under its own feet, or right beside the body where the
+  next person's badge is below it, and nobody else's name is put between the two. The people
+  standing stand a full row in front of the sofa, in the gaps between the people sitting, and a
+  second row stands in the gaps of the first.
+- **The corner of the sofas is left empty once somebody has to stand.** While everyone waiting
+  fits on the sofas they all sit. When one more arrives, the two end cushions of the back sofa are
+  left free, so two people's badges no longer meet in the corner. Sixteen waiting are now eleven
+  sitting and five standing, where they were twelve and four.
 
 ### Changed
 
@@ -69,6 +80,25 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   floor with five projects, sixteen sessions waiting and seventy-nine resting, on a 2000 x 1185
   window, the rooms went from 28% of the building to 59%, the lounge from 50% to 22%, and your
   office from 16% to 13%.
+- **Rooms are furnished.** A project room is much bigger than its desks now, and the rest of it
+  was empty carpet. Each room is furnished for its size. A team's room (two to four desks) gets a
+  small meeting table and a credenza along a wall. A big team's room gets a table for six or eight
+  with a standing whiteboard at its head, a shelving wall and a planter beside each corner plant. A
+  room that still has a lot of open floor after that gets more, the quietest pieces first —
+  storage against the walls, then a table, then a sofa with two armchairs — until less than 45%
+  of its floor is open. A room that is the size of its desks gets nothing. On the 2000 x 1185
+  floor above, the five rooms went from 46–66% open floor to 34–41%; two rooms of two and three
+  desks on a 1440 x 1000 window went from 75% and 77% to 40% and 42%.
+- **The new furniture stays out of the way.** The desks are where they were, with the meeting
+  table and the sofas on the far side of the room and storage against the walls. Nothing is put in
+  front of the door, in the strip where the room's name is written, behind a desk where a junior
+  stands, or where a crew sits — a room with a crew has no meeting table. The new pieces are in the
+  pale wood of the lounge's tables and are not lit, so the working desks are still what you see
+  first. Nobody is ever drawn sitting in a meeting chair.
+- **A room with the lights off looks dimmed, not olive.** The dimming was a brown veil, which
+  turned a pale carpet khaki. A dark room is now the same colours as a lit one, about a quarter
+  less light and a third less colourful, in all three themes. Its name and its `N need you` line
+  are as easy to read as before, and the desk still stands out of the carpet.
 - **Every room is the shape of a room.** One project could get a hall while the others got thin
   strips showing only a desk top. Rooms now stand in rows of the same depth, each between 0.7 and
   1.8 times as wide as it is deep, and no room is more than two and a half times the size of the
@@ -112,6 +142,18 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   every room's shape, the largest room against the smallest, the row depths, and that the building
   covers at least 96% of the window both ways. `node test/helpers/measure-proportions.mjs` prints
   the same numbers.
+- **Room furnishing is measured.** `room-interior.test.mjs` furnishes 66 rooms on twelve floors
+  and checks that no more than 45% of any room's floor is more than 2.2 units from something. By
+  size of room, the average went from 45% to 39% (one desk), 51% to 34% (a team) and 29% to 19% (a
+  big team), and the emptiest room of each from 66%, 77% and 56% to 45%, 45% and 32%. It also
+  checks that nothing is in front of a door, in a name strip, behind a desk or on a crew's floor,
+  that no seat is ever put on a meeting chair, and that the same floor is furnished the same way
+  twice.
+- **A dimmed room is measured in every theme.** Lit carpet against dimmed: the hue moves by under
+  4°, the lightness falls by 24–25%, and a dimmed desk is 1.36:1 or better against its carpet.
+- **A full office is checked with its badges.** Sixteen waiting at two window sizes: no badge, name
+  or body overlaps another, every badge is over its own head, and no name is put between another
+  session's badge and name.
 - **Floors of one to four projects are checked in ten shapes of window.** Eight small floors, each
   empty, lightly used and with seventy-nine resting and sixteen waiting, on canvases from 4:3 to an
   ultrawide: every rule holds on all 240, and the smallest is drawn at 9.2 pixels per unit.
@@ -120,12 +162,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 - **A floor with one or two projects has large rooms.** The rooms get at least 55% of the building
   however few they are, and your office and the lounge need a minimum of floor for their
-  furniture, so a single one-desk project gets a room far bigger than its desk needs.
+  furniture, so a single one-desk project gets a room far bigger than its desk needs. Such a room
+  is furnished with everything there is — up to three tables and three sofa groups — and is
+  still about half open floor (49–65% on the floors measured, where it was 81–88%).
 - **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.
-- **The new floor pictures are not baked.** Every golden moves with this change, and
-  `goldens.mjs` has two new captures with no golden yet: `crowded` and `pair`.
 
 ## 1.6.2 — 2026-10-06
 

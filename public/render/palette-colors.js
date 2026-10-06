@@ -322,11 +322,14 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
   lightPool: 'rgba(255,233,196,0.1)',
 
   /**
-   * A ROOM WITH THE LIGHTS OFF (`plan-proportions.js` (e)). One veil, the
-   * theme's dark at `LIGHTS_OFF_DIM`, laid over the floor and the furniture of
-   * a room nobody is at a desk in. `themes.js` derives it from the ink.
+   * A ROOM WITH THE LIGHTS OFF (`plan-proportions.js` (e)). Two fills over the
+   * floor and the furniture of a room nobody is at a desk in: a neutral veil
+   * that takes `LIGHTS_OFF_STEP` of the carpet's lightness, and the grey a
+   * `saturation` blend takes `LIGHTS_OFF_DIM` of the colour towards. Neither
+   * has a hue, so the room keeps its own. `themes.js` derives both.
    */
-  lightsOff: 'rgba(50,40,29,0.35)',
+  lightsOff: 'rgba(0,0,0,0.263)',
+  lightsOffMute: 'rgba(218,218,218,0.35)',
 
   // ---- walls, partitions, doors ----
   wallFill: '#F4F1EA', // near-white, 5px thick

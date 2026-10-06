@@ -191,7 +191,8 @@ export function layProportioned(input) {
         footprints.push({ w: n.w, h: n.h });
       }
     }
-    return { project, pinned: false, desks, crew, weight: MODULE_WEIGHTS[module], footprints };
+    const weight = MODULE_WEIGHTS[module];
+    return { project, pinned: false, desks, crew, module, weight, footprints };
   });
   const small = pinnedWeight(needs.filter((n) => !n.pinned).map((n) => n.weight));
   for (const n of needs) if (n.pinned) n.weight = small;
@@ -642,7 +643,7 @@ export function layProportioned(input) {
       }
       const built = roomInto(need, rect);
       if (!built) return null;
-      Object.assign(built.room, rect);
+      Object.assign(built.room, rect, { module: need.module });
       projectRooms.push({ room: built.room, seats: built.seats });
     }
 

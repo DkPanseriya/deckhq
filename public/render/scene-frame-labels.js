@@ -20,6 +20,11 @@
  *      formation that share a type carry ONE label, under whichever of them has room,
  *      `general-purpose ×5`.
  *
+ * And one from the owner's office of sixteen: **a wait badge and its name are
+ * one unit.** The badge is over the head, the name under the feet (or, where
+ * the next person's badge is there, beside the body), and the floor between
+ * the two belongs to that figure: nobody else's name is set in it.
+ *
  * A LIVE agent's name (anyone at a desk or waiting on you) is tried at every
  * spot `resolveLabelCollisions` knows before it is given up; only a resting
  * figure's name in the lounge is dropped when its floor is full.
@@ -161,7 +166,31 @@ export function planFrameLabels(ctx, view) {
       }
     }
   }
-  for (const box of view.badgeBoxes || []) obstacles.push({ ...box, pin: true });
+  const screenOf = new Map(records.map((rec) => [String(rec.id), rec]));
+  /** @type {Set<string>} the figures drawn under a wait badge of their own */
+  const badged = new Set();
+  for (const box of view.badgeBoxes || []) {
+    obstacles.push({ ...box, pin: true });
+    const id = /^badge:/.test(String(box.id)) ? String(box.id).slice(6) : '';
+    const rec = screenOf.get(id);
+    if (!rec) continue;
+    badged.add(id);
+    // The slot between a badge and the head under it, where the state icon is
+    // drawn: pinned, so no name is set between a figure and its own badge.
+    const u = view.uOf ? view.uOf(rec) : charU;
+    const head = worldToScreen(rec, camera).y - u * BODY_HEIGHT_U;
+    const under = box.y + box.h;
+    if (head > under) {
+      obstacles.push({
+        id: `slot:${id}`,
+        x: box.x,
+        y: under,
+        w: box.w,
+        h: head - under,
+        pin: true,
+      });
+    }
+  }
   for (const [i, box] of (view.plateBoxes || []).entries()) {
     obstacles.push({ id: `plate:${i}`, x: box.x, y: box.y, w: box.w, h: box.h, pin: true });
   }
@@ -199,6 +228,7 @@ export function planFrameLabels(ctx, view) {
       h: box.h,
       pin: rec.id === view.selectedId,
       keep: live,
+      unit: badged.has(String(rec.id)),
       alts,
       // Over the head, clear of the icon-and-badge slot: where a name goes when
       // the floor under its feet is a wall, a plate or somebody else's name.

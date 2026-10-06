@@ -11,6 +11,9 @@ import assert from 'node:assert/strict';
 
 import {
   LIGHTS_OFF_DIM,
+  LIGHTS_OFF_STEP,
+  LIGHTS_OFF_STEP_MAX,
+  LIGHTS_OFF_STEP_MIN,
   LOUNGE_AREA_MAX,
   MODULE_ORDER_SLACK,
   MODULE_WEIGHTS,
@@ -49,6 +52,7 @@ test('the budget adds up: rooms, office and lounge leave floor for the corridors
   assert.ok(ROOM_RATIO_MIN === 0.7 && ROOM_RATIO_MAX === 1.8);
   assert.ok(ROWS_MAX === 3 && ROW_DEPTH_SPREAD_MAX === 0.15);
   assert.ok(LIGHTS_OFF_DIM > 0.3 && LIGHTS_OFF_DIM < 0.4);
+  assert.ok(LIGHTS_OFF_STEP_MIN < LIGHTS_OFF_STEP && LIGHTS_OFF_STEP < LIGHTS_OFF_STEP_MAX);
 });
 
 test('three modules, in the ratio 1 : 1.5 : 2.25, and two steps stay under the spread', () => {

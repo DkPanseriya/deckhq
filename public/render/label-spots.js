@@ -32,6 +32,11 @@
  * a name that does is drawn with a 1 px leader to its feet (`leader: true`). A
  * resting figure's name in the lounge that has no near spot is not drawn.
  *
+ * A NAME UNDER A WAIT BADGE IS HALF OF A UNIT (`unit`). It is never set over
+ * the head, where the badge already is, and under the feet it takes the floor
+ * between the feet and itself as well, so no other figure's name is ever set
+ * between a body and its own.
+ *
  * An item with no `feet` is placed by the old rule exactly, which is what the
  * pure tests of this function in `scene-math.test.mjs` hold.
  */
@@ -64,7 +69,8 @@ export const NEAR_REACH = 1.2;
  * label beats an unreadable smear.
  *
  * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
- *   pin?:boolean, alts?:number[][], up?:number, feet?:{x:number, y:number},
+ *   pin?:boolean, unit?:boolean, alts?:number[][], up?:number,
+ *   feet?:{x:number, y:number},
  *   bh?:number, side?:number,
  *   variants?:{x:number, y:number, w:number, h:number, text:string, px:number}[]}[]} items
  *   `x,y,w,h`: the label's un-offset screen box; `up`: the offsetY that puts it
@@ -126,8 +132,11 @@ export function resolveLabelCollisions(items, bounds) {
         if (!form) continue;
         for (const [dx, dy] of nearSpots(it, form)) {
           const rect = { x: form.x + dx, y: form.y + dy, w: form.w, h: form.h };
-          if (!free(rect)) continue;
-          placed.push(rect);
+          // Under its own feet a unit's name claims the floor up to them.
+          const gap = it.unit && dy === 0 ? Math.max(0, rect.y - it.feet.y) : 0;
+          const claim = gap > 0 ? { ...rect, y: it.feet.y, h: rect.h + gap } : rect;
+          if (!free(claim)) continue;
+          placed.push(claim);
           result.set(it.id, spotOf(it, form, dx, dy, false));
           break;
         }
@@ -151,7 +160,7 @@ export function resolveLabelCollisions(items, bounds) {
       // from this one — a crew's `Explore ×3` belongs to any of its three.
       for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
         for (const [fx, fy] of spots) {
-          if (fy === LABEL_UP && typeof it.up !== 'number') continue;
+          if (fy === LABEL_UP && (it.unit || typeof it.up !== 'number')) continue;
           const offsetX = bx + fx * form.w;
           const offsetY = by + (fy === LABEL_UP ? upFor(it, form) : fy * form.h);
           const rect = { x: form.x + offsetX, y: form.y + offsetY, w: form.w, h: form.h };
@@ -202,7 +211,7 @@ function nearSpots(it, form) {
   /** @param {number[]} fs @param {number} dy */
   const slide = (fs, dy) =>
     fs.flatMap((f) => [(-f * form.w) / 16, (f * form.w) / 16].map((dx) => [dx, dy]));
-  const up = typeof it.up === 'number' ? upFor(it, form) : null;
+  const up = typeof it.up === 'number' && !it.unit ? upFor(it, form) : null;
   const spots = [
     [0, 0],
     ...slide([1, 2, 3, 4], 0),
