@@ -145,10 +145,16 @@ test('the settings sheet offers every setting a person can meaningfully change',
   // through `/api/settings`: the section posts it to `/api/look`, which
   // measures the whole combination against every shipped theme and refuses it
   // WHOLE rather than sanitising it into a floor nobody chose.
+  //
+  // `seenLookHint` is the eleventh, and it is `onboarded`'s twin: whether the
+  // one-line hint under the header's Look button has been shown. A fact, set
+  // once by dismissing it or by using the button, and read by
+  // `public/look-ui-bar.js`.
   const sheetOwned = new Set(SETTINGS_KEYS);
   const exempt = new Set([
     'approveText',
     'onboarded',
+    'seenLookHint',
     'editor',
     'terminal',
     'codexBin',
@@ -200,4 +206,5 @@ test('the defaults are the quiet ones', () => {
   assert.equal(DEFAULT_SETTINGS.reducedMotion, 'system');
   assert.ok(DEFAULT_SETTINGS.soundVolume <= 0.5, 'the default volume is not low');
   assert.equal(DEFAULT_SETTINGS.onboarded, false);
+  assert.equal(DEFAULT_SETTINGS.seenLookHint, false);
 });

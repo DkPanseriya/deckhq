@@ -50,13 +50,16 @@ let floatOffice = () => {};
 let toggleIdleProjects = () => {};
 /** @type {any} */
 let paletteUI = null;
+/** The header's Look and Settings buttons (`look-ui-bar.js`). @type {any} */
+let lookBar = null;
 
 /**
  * Hand the map the actions it fires. Called once, from `app.js`, before the
  * listeners are registered.
  * @param {{dismissCard:() => boolean, hideWhiteboard:() => void,
  *   toggleRedaction:() => void, saveCard:() => void, takeSnapshot:() => void,
- *   floatOffice:() => void, toggleIdleProjects:() => void, paletteUI:any}} actions
+ *   floatOffice:() => void, toggleIdleProjects:() => void, paletteUI:any,
+ *   lookBar?:any}} actions
  */
 export function wireKeyboard(actions) {
   ({
@@ -68,6 +71,7 @@ export function wireKeyboard(actions) {
     floatOffice,
     toggleIdleProjects,
     paletteUI,
+    lookBar,
   } = actions);
 }
 
@@ -243,6 +247,19 @@ export function handleKeydown(e) {
     case 'i':
     case 'I':
       toggleIdleProjects();
+      break;
+    // The header's two buttons, from the keyboard. `L` opens the Look popover
+    // — agent size, theme, preset — and pressed again it closes, the idle
+    // list's rule. `,` opens the settings sheet at the top, which is the key
+    // the palette's own Settings row has always carried as its accelerator.
+    // Both sit behind this map's guards like every other key on the floor:
+    // inert in a text field, inert under a modal, inert with a modifier held.
+    case 'l':
+    case 'L':
+      lookBar?.toggle();
+      break;
+    case ',':
+      lookBar?.openSettings();
       break;
     default:
       return;

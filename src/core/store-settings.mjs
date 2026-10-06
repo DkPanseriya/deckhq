@@ -93,6 +93,8 @@ export const MOTION_MODES = /** @type {const} */ (['system', 'reduce', 'no-prefe
  *                                       this build ships. A name from an
  *                                       installed pack, never a colour table.
  * @property {boolean} onboarded         first run is over
+ * @property {boolean} seenLookHint      the header's Look button has been pointed
+ *                                       out once, and is not pointed out again
  */
 
 /**
@@ -200,6 +202,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // directions, and `src/core/rates.mjs` is untouched by this package.
   showCost: false,
   onboarded: false,
+  // The header's Look and Settings buttons arrived in a release, to people who
+  // had been using the floor for months without them. One line under the Look
+  // button says what it is for, once, and this is the bit that makes it once:
+  // `onboarded`'s shape and `onboarded`'s reason — a fact about what this
+  // person has been shown, not a preference. `public/look-ui-bar.js` reads it.
+  seenLookHint: false,
 });
 
 /** The keys above whose value is a plain boolean, so a stray string cannot land. */
@@ -211,6 +219,7 @@ const BOOLEAN_SETTINGS = Object.freeze([
   'sound',
   'showCost',
   'onboarded',
+  'seenLookHint',
 ]);
 
 /** An approval is one line the user would have typed; anything longer is a reply. */

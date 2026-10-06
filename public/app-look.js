@@ -26,11 +26,13 @@ import { now as clockNow } from './clock.js';
 import { floorPopulation } from './floor-rule.js';
 import {
   applyLookSetting,
+  applyThemeSetting,
   latestSnapshot,
   lookGuards,
   lookOptions,
   lookPictures,
   paintedTheme,
+  themes,
   toast,
 } from './app-state.js';
 
@@ -163,6 +165,36 @@ export function createLookPort() {
     apply: postLook,
     exportLook,
     importLook,
+  };
+}
+
+/**
+ * THE THEMING PORT the settings sheet and the header's Look popover are handed
+ * (WP-30).
+ *
+ * The sheet is handed the themes rather than importing them: they live in
+ * `render/`, every import from there is dynamic and defensive, and the sheet
+ * has to stay importable in Node for `settings-keys.test.mjs`. Read through
+ * `themes` on each call, because the module arrives after this port is built —
+ * `loadRenderModules` is awaited later.
+ *
+ * It lived inline in `app.js` until a second surface needed the same three
+ * functions; two copies of "which themes can this build paint" is one copy too
+ * many.
+ */
+export function createThemingPort() {
+  return {
+    // `allThemes()` rather than `THEMES`: the picker offers what the product
+    // can paint, which is the shipped table plus whatever an installed pack
+    // registered (WP-45). `THEMES` stays the shipped table and stays frozen.
+    list: () =>
+      themes?.allThemes
+        ? themes.allThemes()
+        : themes && Array.isArray(themes.THEMES)
+          ? themes.THEMES
+          : [],
+    apply: (/** @type {string} */ name) => applyThemeSetting(name),
+    swatches: (/** @type {any} */ theme) => (themes?.swatchesFor ? themes.swatchesFor(theme) : []),
   };
 }
 

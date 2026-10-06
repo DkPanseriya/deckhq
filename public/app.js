@@ -25,7 +25,8 @@ import { createSettingsUI } from './settings-ui.js';
 import { createCoachMarks } from './coach-marks.js';
 import { createIdlePopover } from './idle-projects.js';
 import { exportLayout, importLayout } from './app-layout.js';
-import { createLookPort, lookPaletteActions, lookPresets } from './app-look.js';
+import { createLookPort, createThemingPort, lookPaletteActions, lookPresets } from './app-look.js';
+import { wireLookBar } from './app-lookbar.js';
 import { setProjectArchived, setProjectPinned } from './app-rooms.js';
 import { createClearedTracker } from './office-cleared.js';
 import { FALLBACK_STATE_COLORS } from './state-palette.js';
@@ -52,7 +53,6 @@ import {
   setSceneOwner,
   sessionTheme,
   sounds,
-  themes,
   toast,
 } from './app-state.js';
 import { createReplay } from './replay.js';
@@ -256,6 +256,7 @@ function handleSnapshot(snapshot) {
   panel.refresh();
   if (coachMarks.isRunning()) coachMarks.reposition();
   if (first) maybeShowOnboarding(snapshot.settings);
+  lookBar.refresh(); // after the tour has had its chance to start
 }
 
 /** GET /api/state once at boot, retrying with backoff if the daemon is unreachable. */
@@ -637,24 +638,7 @@ const settingsUI = createSettingsUI({
   getSnapshot: () => latestSnapshot,
   toast,
   hooks: hooksUI,
-  // WP-30. The sheet is handed the themes rather than importing them: they
-  // live in `render/`, every import from there is dynamic and defensive, and
-  // the sheet has to stay importable in Node for `settings-keys.test.mjs`.
-  // Read through `themes` on each call, because the module arrives after this
-  // line runs — `loadRenderModules` is awaited later.
-  theming: {
-    // `allThemes()` rather than `THEMES`: the picker offers what the product
-    // can paint, which is the shipped table plus whatever an installed pack
-    // registered (WP-45). `THEMES` stays the shipped table and stays frozen.
-    list: () =>
-      themes?.allThemes
-        ? themes.allThemes()
-        : themes && Array.isArray(themes.THEMES)
-          ? themes.THEMES
-          : [],
-    apply: (name) => applyThemeSetting(name),
-    swatches: (theme) => (themes?.swatchesFor ? themes.swatchesFor(theme) : []),
-  },
+  theming: createThemingPort(), // WP-30 — handed the themes, never importing them
   // WP-45. Empty on every install with no pack, and the sheet draws no row
   // for an empty list — so nothing about this advertises a purchase.
   avatars: {
@@ -668,6 +652,10 @@ const settingsUI = createSettingsUI({
 // function every full-surface view's controls go through. `settingsUI.close()`
 // is the sheet's own; nothing here is a bare global (§143).
 wireSurfaceControls(el.settingsDialog, () => settingsUI.close());
+
+// The header's Look and Settings buttons, the popover under the first and the
+// one-line hint that points at it once. `public/look-ui-bar.js`.
+const lookBar = wireLookBar({ settingsUI, tourRunning: () => coachMarks.isRunning() });
 
 // WP-45. Floor replay, and it is FREE — it reads the ledger the user already
 // owns, and a feature that reads your own records cannot be sold (see
@@ -771,7 +759,8 @@ const paletteUI = createPalette({
     exportLayout,
     importLayout,
     ...lookPaletteActions, // WP-88b · a preset name, a reset, and the two files
-    openSettings: () => settingsUI.open(),
+    openSettings: () => lookBar.openSettings(),
+    openLook: () => lookBar.openLook(),
     openHooks: () => settingsUI.open('hooks'),
     installApp, // WP-62 — Chrome's own offer, or the one command that always works
     openOnboarding: showOnboarding,
@@ -826,6 +815,7 @@ wireKeyboard({
   floatOffice,
   toggleIdleProjects: () => idleProjects.toggle(),
   paletteUI,
+  lookBar,
 });
 document.addEventListener('keydown', handlePaletteKey);
 document.addEventListener('keydown', handleKeydown);
