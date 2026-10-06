@@ -41,7 +41,8 @@ import {
   normalizeLook,
 } from '../../public/render/look-options.js';
 import { validateLook } from '../../public/render/look-guards.js';
-import { LOOK_HINT_TEXT, createLookBar } from '../../public/look-ui-bar.js';
+import { LOOK_HINT_TEXT, LOOK_KEY, SETTINGS_KEY, createLookBar } from '../../public/look-ui-bar.js';
+import { buildCommandEntries } from '../../public/palette-commands.js';
 import {
   currentSection,
   fillSectionNav,
@@ -374,6 +375,49 @@ test('clicking Look opens the popover under it; clicking Settings opens the shee
   m.settingsBtnEl.fire('click');
   assert.deepEqual(m.sheets, [null], 'Settings opens the sheet with no section named — its top');
   assert.equal(m.popoverEl.hidden, true, 'the sheet is modal; the popover does not stay under it');
+});
+
+test('both keys are listed where keys are looked up: the palette, and the guide’s table', () => {
+  // One name for each key: the constant, the button's own attribute, the docs.
+  assert.equal(tagOf('look-btn').tag.includes(`aria-keyshortcuts="${LOOK_KEY}"`), true);
+  assert.equal(tagOf('settings-btn').tag.includes(`aria-keyshortcuts="${SETTINGS_KEY}"`), true);
+  const ran = [];
+  const actions = new Proxy({}, { get: (_t, name) => () => void ran.push(String(name)) });
+  const presets = PRESETS.map((p) => ({ id: p.id, label: p.label, blurb: p.blurb }));
+  const entries = buildCommandEntries({
+    snapshot: { settings: {}, projects: [], agents: [] },
+    letGoVisible: false,
+    lookPresets: presets,
+    actions,
+  });
+
+  const look = entries.find((e) => e.id === 'cmd:look');
+  assert.ok(look, 'the palette has no row for the Look button');
+  assert.equal(look.label, 'Look');
+  assert.match(
+    look.hint,
+    /— L$/,
+    'the Look row must carry the floor key, as Idle projects carries I',
+  );
+  look.run();
+  assert.deepEqual(ran, ['openLook']);
+
+  const settings = entries.find((e) => e.id === 'cmd:settings');
+  assert.equal(settings.accel, SETTINGS_KEY, 'the palette shows , beside Settings as its key');
+  settings.run();
+  assert.deepEqual(ran, ['openLook', 'openSettings']);
+
+  // Without a renderer there is no Look section to open, and no row offering one.
+  const bare = buildCommandEntries({ snapshot: { settings: {} }, letGoVisible: false, actions });
+  assert.equal(
+    bare.some((e) => e.id === 'cmd:look'),
+    false,
+  );
+
+  const guide = fs.readFileSync(path.resolve(HERE, '../../docs/GUIDE.md'), 'utf8');
+  const keyboard = guide.slice(guide.indexOf('## Keyboard'));
+  assert.match(keyboard, /^\| `L` +\| Look\b/m, 'docs/GUIDE.md’s key table has no row for L');
+  assert.match(keyboard, /^\| `,` +\| Settings\b/m, 'docs/GUIDE.md’s key table has no row for ,');
 });
 
 // ---------------------------------------------- 2 · the three controls
