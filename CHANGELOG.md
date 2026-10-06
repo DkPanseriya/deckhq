@@ -6,6 +6,63 @@
 
 ## Unreleased
 
+### Changed
+
+- **The project rooms get most of the floor.** The lounge and your office could take more than
+  half the building between them, with the project rooms squeezed into what was left. The rooms
+  now get at least 55% of it, your office at most a fifth and the lounge at most a quarter. On a
+  floor with five projects, sixteen sessions waiting and seventy-nine resting, on a 2000 x 1185
+  window, the rooms went from 28% of the building to 59%, the lounge from 50% to 22%, and your
+  office from 16% to 13%.
+- **Every room is the shape of a room.** One project could get a hall while the others got thin
+  strips showing only a desk top. Rooms now stand in rows of the same depth, each between 0.7 and
+  1.8 times as wide as it is deep, and no room is more than two and a half times the size of the
+  smallest. A room comes in one of three sizes: one desk, a team of two to four, or a team of five
+  or more.
+- **A project whose sessions are all waiting on you keeps its room, with the lights off.** In
+  1.6.2 such a project shrank to a small room along the bottom. It now keeps the room it would
+  have with somebody at the desk: the same size and shape, one empty desk, dimmed, with its name
+  and its `N need you` line as easy to read as before. The lights come back when one of its
+  sessions starts working again. A pinned project with nothing running is drawn the same way, as
+  the small room in its row.
+- **A crowd in the lounge is a number.** Resting sessions used to stand in rows until everyone had
+  a place, which could be sixty figures in a line. The lounge now shows the people on its seats
+  and one row standing, and the rest as a `+N resting` chip at the end of that row. Clicking the
+  chip opens the deck on a new **Resting** tab that lists everyone in the lounge, most recent
+  first. The lounge's plate and the header still count all of them.
+- **When more sessions are waiting than your office has sofas for, the rest stand.** Your office
+  is as big as its sofas and its desk need, up to a fifth of the building. Past that it stops
+  growing: the sofas fill, and the remaining sessions stand in the queue beside them. Everyone
+  waiting is still drawn and named.
+- **A full lounge or a long queue no longer shrinks everything else.** The floor is first laid out
+  with everything it wants. If that is too big to draw at 12 pixels per unit in your window (a
+  30-pixel figure, the smallest that keeps its detail), your office and the lounge are held to
+  their share instead, and the lounge gives up games tables before your office gives up a seat.
+  Only the project rooms can make the building bigger than that.
+- **A very busy floor is drawn with smaller people before it scrolls.** If the rooms need more
+  width than the window has at the smallest scale, the floor is laid out one agent size smaller.
+  With 22 rooms on a 1420-pixel-wide window this is the difference between scrolling and fitting.
+  On a 1366-pixel window that floor is still 3% wider than the window, and scrolls.
+
+### Testing
+
+- **The floor's proportions are measured on every demo floor.** `floor-proportions.test.mjs` lays
+  out nine floors at four window sizes and checks each rule on the result: the three area shares,
+  every room's shape, the largest room against the smallest, the row depths, and that the building
+  covers at least 96% of the window both ways. `node test/helpers/measure-proportions.mjs` prints
+  the same numbers.
+
+### Known gaps
+
+- **A floor with one or two projects has large rooms.** The rooms get at least 55% of the building
+  however few they are, and your office and the lounge need a minimum of floor for their
+  furniture, so a single one-desk project gets a room far bigger than its desk needs.
+- **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
+  to there: more rooms than that cannot keep a room's shape in three rows without the building
+  becoming much larger.
+- **The new floor pictures are not baked.** Every golden moves with this change, and
+  `goldens.mjs` has a new `crowded` capture with no golden yet.
+
 ## 1.6.2 — 2026-10-06
 
 ### Highlights
