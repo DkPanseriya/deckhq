@@ -50,6 +50,10 @@ empty desk and **the lights off**, and the lights come back when one of them goe
 lounge draws its seats and one row of people standing; a bigger crowd is a **`+N resting`** chip at
 the end of that row, and clicking it opens the deck on everybody resting. When more people are
 waiting than your office has sofas for inside its fifth, the rest stand in the queue beside them.
+Where your office and the lounge stand depends on the window and on how many rooms there are: one
+over the other down the left, at the left ends of the top and bottom rows, or — for two or three
+rooms in a window that is neither wide nor tall — side by side across the top with the rooms behind
+them.
 
 ## The one rule
 

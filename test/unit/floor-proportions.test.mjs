@@ -247,6 +247,139 @@ test('crowded, the owner’s floor: five rooms of two sizes, four of them dark, 
 
 // ------------------------------------------------------------- (i) the scale
 
+/**
+ * A floor of a few rooms, made here: `sizes` people at desks per repo, so many
+ * waiting in the first of them and so many resting.
+ * @param {number[]} sizes @param {number} resting @param {number} waiting
+ */
+function fewRooms(sizes, resting, waiting) {
+  const base = { ackState: 'active', lastActivityAt: LARGE_NOW - 60_000 };
+  const projects = sizes.map((n, i) => ({ id: `p${i}`, name: `p${i}`, sessionCount: n }));
+  const agents = sizes.flatMap((n, i) =>
+    Array.from({ length: n }, (_, k) => ({
+      ...base,
+      id: `p${i}-${k}`,
+      projectId: `p${i}`,
+      activityState: 'working',
+    })),
+  );
+  for (let k = 0; k < waiting; k++) {
+    agents.push({
+      ...base,
+      id: `w${k}`,
+      projectId: 'p0',
+      activityState: 'for_review',
+      reviewSince: LARGE_NOW - 60_000 * (k + 1),
+    });
+  }
+  for (let k = 0; k < resting; k++) {
+    agents.push({
+      id: `b${k}`,
+      projectId: 'p0',
+      activityState: 'ended',
+      ackState: 'benched',
+      lastActivityAt: LARGE_NOW - 60_000 * k,
+    });
+  }
+  return { projects, agents };
+}
+
+/**
+ * THE FLOORS MOST PEOPLE HAVE: one to four repos. Canvases from 4:3 to an
+ * ultrawide, because what a few rooms can be laid as turns on the window's
+ * shape more than a full floor's does.
+ */
+const FEW = [[1], [1, 1], [2, 2], [5, 1], [8, 3], [1, 1, 1], [3, 2, 2], [1, 1, 1, 1]];
+const CROWDS = [
+  [0, 0],
+  [12, 3],
+  [79, 16],
+];
+const CANVASES = [
+  [1200, 900],
+  [1400, 1000],
+  [1600, 1000],
+  [1600, 940],
+  [1600, 900],
+  [1600, 870],
+  [1366, 638],
+  [1920, 950],
+  [2000, 1055],
+  [2560, 1000],
+];
+/**
+ * The smallest a floor of a few rooms is drawn, in pixels a unit, with the
+ * lounge and the queue as full as the owner's. Measured at 9.2 on the worst of
+ * these — two rooms on a 1366 px laptop under seventy-nine resting — and held a
+ * little under it. Before the front was a way of laying a floor, two rooms on
+ * a 1600 x 1000 canvas were a building 296 U wide: 5.4.
+ */
+const FEW_SCALE_MIN = 9;
+
+test('a floor of one to four rooms keeps every rule in every shape of window, at a size worth drawing', () => {
+  let worst = Infinity;
+  let worstAt = '';
+  /** @type {Record<string, number>} */
+  const laid = {};
+  for (const sizes of FEW) {
+    for (const [resting, waiting] of CROWDS) {
+      const floor = fewRooms(sizes, resting, waiting);
+      for (const [w, h] of CANVASES) {
+        const plan = buildPlan(floor.projects, floor.agents, {
+          stage: { w, h },
+          now: LARGE_NOW,
+        });
+        const where = `[${sizes}] with ${resting} resting and ${waiting} waiting on ${w}x${h}`;
+        assert.deepEqual(plan.proportions.faults, [], where);
+        assert.equal(plan.agentSize, 'medium', `${where}: drawn a size down`);
+        const scale = w / plan.width;
+        if (scale < worst) {
+          worst = scale;
+          worstAt = `${where}, a ${plan.arrangement} ${plan.width.toFixed(0)} U wide`;
+        }
+        laid[plan.arrangement] = (laid[plan.arrangement] || 0) + 1;
+      }
+    }
+  }
+  assert.ok(worst >= FEW_SCALE_MIN, `${worst.toFixed(2)} px a unit: ${worstAt}`);
+  // All three ways of laying a floor are in use, and none of these is classic.
+  assert.ok(laid.column > 0 && laid.bands > 0 && laid.front > 0, JSON.stringify(laid));
+  assert.equal(laid['two-rows'] || 0, 0);
+  console.log(
+    `\n    smallest: ${worst.toFixed(2)} px a unit — ${worstAt}; ${JSON.stringify(laid)}`,
+  );
+});
+
+test('two rooms in a window neither wide nor tall: the front, and the rooms side by side behind it', () => {
+  const floor = fewRooms([2, 2], 0, 0);
+  const plan = buildPlan(floor.projects, floor.agents, {
+    stage: { w: 1600, h: 1000 },
+    now: LARGE_NOW,
+  });
+  assert.equal(plan.arrangement, 'front');
+  assert.deepEqual(plan.proportions.faults, []);
+  const office = plan.rooms.find((r) => r.kind === 'office');
+  const lounge = plan.rooms.find((r) => r.kind === 'lounge');
+  const spine = plan.rooms.find((r) => r.id === '__spine__');
+  const rooms = plan.rooms.filter((r) => r.kind === 'project');
+  // One band across the top, the corridor under it wall to wall.
+  assert.equal(office.y, 0);
+  assert.equal(lounge.y, 0);
+  assert.ok(Math.abs(office.h - lounge.h) < EPS);
+  assert.ok(Math.abs(lounge.x + lounge.w - plan.width) < EPS);
+  assert.ok(Math.abs(spine.w - plan.width) < EPS && Math.abs(spine.y - office.h) < EPS);
+  // And the two rooms behind it, side by side, one depth, the whole width.
+  assert.equal(rooms.length, 2);
+  assert.ok(Math.abs(rooms[0].h - rooms[1].h) < EPS && Math.abs(rooms[0].y - rooms[1].y) < EPS);
+  assert.ok(Math.abs(rooms[0].w + rooms[1].w - plan.width) < EPS);
+  for (const room of rooms) {
+    const ratio = room.w / room.h;
+    assert.ok(ratio >= ROOM_RATIO_MIN - EPS && ratio <= ROOM_RATIO_MAX + EPS, `${ratio}`);
+  }
+  // Drawn at a size worth drawing: this floor was 208 U wide, 7.7 px a unit.
+  assert.ok(1600 / plan.width >= 14, `${plan.width} U on 1600 px`);
+});
+
 test('the two scales the rulebook names are the renderer’s own', () => {
   // `plan-proportions.js` imports nothing, so it states both numbers itself.
   assert.equal(SCALE_MIN_PX_PER_UNIT, MIN_SCALE);

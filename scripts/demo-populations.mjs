@@ -349,6 +349,30 @@ export const POPULATIONS = {
    * `plan-proportions.js` was written against.
    */
   crowded: crowdedSessions,
+  /**
+   * TWO REPOS, which is the floor most people have. Three at desks in one and
+   * two in the other, two waiting, four resting.
+   *
+   * Its own population because two rooms are the hardest count to lay well:
+   * one over the other each is too wide to be a room, and side by side beside
+   * the service column each is too narrow until the building is enormous. On
+   * a window neither wide nor tall this is the floor laid with a FRONT — the
+   * reception and the lounge across the top, the two rooms side by side behind
+   * them (`plan-grid.js`).
+   */
+  pair: () => [
+    ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
+    ['orbital-api', 'Backfill the events table', 'working', 0.6, 1.6],
+    ['orbital-api', 'Flaky websocket reconnect test', 'working', 1.4, 0.9],
+    ['orbital-api', 'Postgres connection pool exhaustion', 'for_review', 6.5, 0.7],
+    ['orbital-api', 'Paginate the audit log', 'benched', 66, 0.5],
+    ['orbital-api', 'Retire the v1 webhooks', 'benched', 81, 0.3],
+    ['checkout-flow', 'Apple Pay in the express lane', 'working', 1.2, 2.2],
+    ['checkout-flow', 'Tax rounding off by a cent', 'working', 0.4, 0.5],
+    ['checkout-flow', 'Saved cards for guests', 'needs_input', 3.8, 1.1],
+    ['checkout-flow', 'Address autocomplete', 'benched', 58, 0.6],
+    ['checkout-flow', 'Coupon stacking rules', 'benched', 74, 0.4],
+  ],
 };
 
 /** @returns {Array<[string, string, string, number, number]>} */

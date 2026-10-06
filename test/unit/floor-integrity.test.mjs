@@ -1800,14 +1800,16 @@ test('the plan says which arrangement it was laid in, and the floor agrees', () 
   // it is re-derived here rather than trusted: a column has its spine running
   // down between two rooms of one width, and bands — like the two rows a floor
   // with no project room may still be laid in — have it running across, under
-  // the reception and over the lounge.
+  // the reception and over the lounge. A FRONT has it running across under
+  // both of them: the two service rooms are one band, wall to wall, and every
+  // project room is behind the corridor.
   for (const spec of POPULATIONS) {
     const { projects, agents } = floor(spec);
     for (const [stageW, stageH] of STAGES) {
       const plan = buildPlan(projects, agents, { stage: { w: stageW, h: stageH }, now: NOW });
       const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
       assert.ok(
-        ['column', 'bands', 'two-rows'].includes(plan.arrangement),
+        ['column', 'bands', 'front', 'two-rows'].includes(plan.arrangement),
         `${where}: the plan does not say how it was laid`,
       );
       const spine = plan.rooms.find((r) => r.id === '__spine__');
@@ -1815,9 +1817,29 @@ test('the plan says which arrangement it was laid in, and the floor agrees', () 
       const lounge = plan.rooms.find((r) => r.kind === 'lounge');
       const rooms = plan.rooms.filter((r) => r.kind === 'project');
       // Bands are the grid's, and the classic two rows a floor with no room's.
-      assert.equal(plan.arrangement === 'bands' && rooms.length === 0, false, where);
+      const gridded = plan.arrangement === 'bands' || plan.arrangement === 'front';
+      assert.equal(gridded && rooms.length === 0, false, where);
       assert.equal(plan.arrangement === 'two-rows' && rooms.length > 0, false, where);
-      if (plan.arrangement !== 'column') {
+      if (plan.arrangement === 'front') {
+        assert.ok(spine.w > spine.h, `${where}: the corridor of a front runs across it`);
+        assert.ok(
+          Math.abs(spine.w - plan.width) < 0.01 && Math.abs(spine.y - office.h) < 0.01,
+          `${where}: the corridor is not under the front, wall to wall`,
+        );
+        assert.ok(
+          office.x === 0 && office.y === 0 && lounge.y === 0,
+          `${where}: the front is not the top of the building`,
+        );
+        assert.ok(
+          Math.abs(office.h - lounge.h) < 0.01 &&
+            Math.abs(lounge.x + lounge.w - plan.width) < 0.01 &&
+            lounge.x >= office.x + office.w - 0.01,
+          `${where}: the reception and the lounge are not one band, end to end`,
+        );
+        for (const room of rooms) {
+          assert.ok(room.y >= spine.y + spine.h - 0.01, `${where}: ${room.id} is in the front`);
+        }
+      } else if (plan.arrangement !== 'column') {
         assert.ok(spine.w > spine.h, `${where}: the corridor of a floor in rows runs across it`);
         assert.ok(office.y < spine.y && lounge.y >= spine.y, `${where}: the rows are not stacked`);
       } else {

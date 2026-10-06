@@ -333,6 +333,11 @@ const CAPTURES = [
   // shape, the lounge at its seats and one standing row with `+N resting` at
   // the end of it. `plan-proportions.js` is the rulebook this is a picture of.
   { name: 'crowded', population: 'crowded', theme: 'default', stage: { w: 2000, h: 1185 } },
+  // AND THE FLOOR MOST PEOPLE HAVE: two repos, on a window neither wide nor
+  // tall. The reception and the lounge across the front, the two rooms side by
+  // side behind them — the third way of laying a floor, and the only one in
+  // which two rooms are both a room's shape at this window's.
+  { name: 'pair', population: 'pair', theme: 'default', stage: { w: 1440, h: 1000 } },
   // WP-69 · THE STUDIO BOARD, and it is the product's only golden of a surface
   // with rows in it rather than a floor or a form.
   //

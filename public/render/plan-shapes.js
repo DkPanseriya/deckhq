@@ -269,7 +269,7 @@ export {};
  *   break. A record, like `working`: the tests re-measure it.
  */
 
-/** @typedef {'column'|'bands'|'two-rows'} Arrangement */
+/** @typedef {'column'|'bands'|'front'|'two-rows'} Arrangement */
 
 /**
  * @typedef {ReturnType<typeof import('./plan-proportions.js').measureProportions>

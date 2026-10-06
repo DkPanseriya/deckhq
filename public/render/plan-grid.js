@@ -5,21 +5,25 @@
  * into — the smallest one of the window's shape in which every one of them
  * holds, so the people on it are drawn as large as the rules allow.
  *
- * TWO FAMILIES, and both are grids of rooms beside the two service rooms:
+ * THREE FAMILIES, and each is a grid of rooms and the two service rooms:
  *
- *     bands                              column
- *     +--------+-------------------+     +--------+-+----------------+
- *     | office | rooms             |     | office | | rooms          |
- *     +--------+-------------------+     |        |s+----------------+
- *     |        the corridor        |     +--------+p|   a corridor   |
- *     +-----------+----------------+     | lounge |i+----------------+
- *     | lounge    | rooms          |     |        |n| rooms          |
- *     +-----------+----------------+     +--------+e+----------------+
+ *     bands                        column                  front
+ *     +--------+-------------+     +--------+-+-------+    +--------+--------+
+ *     | office | rooms       |     | office | | rooms |    | office | lounge |
+ *     +--------+-------------+     |        |s+-------+    +--------+--------+
+ *     |     the corridor     |     +--------+p| a corr|    |  the corridor   |
+ *     +-----------+----------+     | lounge |i+-------+    +--------+--------+
+ *     | lounge    | rooms    |     |        |n| rooms |    | rooms  | rooms  |
+ *     +-----------+----------+     +--------+e+-------+    +--------+--------+
  *
  * In BANDS the office is the left end of the top row and the lounge the left
  * end of the bottom one, each as wide as what is in it, and the rooms take the
  * rest of every row. In a COLUMN the two stand one over the other down the
- * left and the rooms are a plain grid beside them. Rows of rooms are one depth
+ * left and the rooms are a plain grid beside them. In a FRONT they are side by
+ * side across the top and the rooms are the rows behind: the floor for two or
+ * three rooms in a window neither wide nor tall, where one over the other each
+ * is too wide to be a room and side by side beside a column each is too narrow
+ * until the building is enormous (`FRONT_GAIN`). Rows of rooms are one depth
  * each — near-equal: one row may be up to `ROW_DEPTH_SPREAD_MAX` deeper than
  * the rest, for a room or a lounge that needs it — and every row has a
  * corridor along one of its edges (`corridorsBetween`).
@@ -44,7 +48,8 @@
  * Nothing here is scored. A candidate keeps every rule or it is not a
  * candidate, and among the ones that do the smallest building wins — which is
  * a search over one number, the building's width, per family, row count and
- * which row is the deep one.
+ * which row is the deep one. What the two service rooms ask of it is measured
+ * in `plan-grid-service.js`.
  *
  * Pure geometry. No DOM, no clock, no randomness.
  */
@@ -56,6 +61,7 @@ import { OFFICE_FULL, measureService } from './plan-grid-service.js';
 import { buildLounge } from './plan-service.js';
 import {
   CORRIDOR,
+  LOUNGE_MIN_H,
   OFFICE_MIN_W,
   OFFICE_ROW_ASPECT_MAX,
   PLATE_BAND,
@@ -67,6 +73,7 @@ import {
   MODULE_WEIGHTS,
   OFFICE_AREA_MAX,
   ROOMS_AREA_MIN,
+  ROOM_RATIO_MIN,
   ROWS_LIMIT,
   ROWS_MAX,
   ROW_DEPTH_SPREAD_MAX,
@@ -102,6 +109,17 @@ const WIDTH_TIE = 0.03;
  * a floor that is plainly drawn larger with it, not for a few per cent.
  */
 const ROWS_EXTRA_GAIN = 0.12;
+/**
+ * And THE FRONT replaces bands or a column only by being this much smaller. It
+ * spends a whole band of the building on the two service rooms, so it is the
+ * floor for where the other two cannot be had at a sensible size — two rooms
+ * in a window neither wide nor tall — and not a third taste.
+ */
+const FRONT_GAIN = 0.12;
+/** The rows of rooms a front is laid over: past two it is corridors. */
+const FRONT_ROWS = Object.freeze([1, 2]);
+/** The shallowest a front is tried at: a lounge is never shallower. */
+const FRONT_DEPTH_MIN = Math.ceil(LOUNGE_MIN_H);
 /**
  * How much wider than the rooms strictly need a building is laid so that a
  * service room keeps its furniture. Six per cent is one pixel in sixteen of a
@@ -147,7 +165,7 @@ const DESK_ASPECTS = Object.freeze([4, ROOM_ASPECT_MAX, 1, 0.5]);
  * @param {(p: ProjectLike) => ({w:number,h:number}|undefined)} input.crewIn
  *   the floor a repo's largest crew formation asks for (WP-89)
  * @param {(p: ProjectLike) => number} input.crewSizeIn how many are in it
- * @returns {null | {W:number, H:number, rows:false, arrangement:'bands'|'column',
+ * @returns {null | {W:number, H:number, rows:false, arrangement:'bands'|'column'|'front',
  *   office:{room:Room, officeSeats:any[]},
  *   lounge:{room:Room, loungeSpots:any[], behindChip:number},
  *   projectRooms:{room:Room, seats:Seat[]}[], stripRooms:Room[], corridors:Room[],
@@ -398,7 +416,106 @@ export function layProportioned(input) {
     return best;
   };
 
-  /** @typedef {NonNullable<ReturnType<typeof bandsAt>|ReturnType<typeof columnAt>>} Candidate */
+  /**
+   * THE FRONT at one width: the reception and the lounge side by side across
+   * the top — front of house — the spine under them, and the rooms in the rows
+   * behind. It is the floor for a FEW rooms in a window neither wide nor tall.
+   * Two rooms one over the other are each too wide to be a room there; side by
+   * side beside a column they are too narrow until the building is enormous.
+   * Here they stand side by side in a row as deep as their shape wants, and
+   * the service rooms have the band that is left.
+   *
+   * The front is tried shallowest first, so the first depth that holds its
+   * contents is the one that leaves the rooms the most; held to its caps, the
+   * fullest service rooms any depth of it has room for.
+   * @param {number} W @param {number} rows @param {number} deep
+   * @param {boolean} capped @param {number} [least] the least it may keep
+   *   of its service rooms (`keptOf`)
+   */
+  const frontAt = (W, rows, deep, capped, least = 0) => {
+    if (!FRONT_ROWS.includes(rows) || needs.length < rows) return null;
+    // At ANY width: the rows are at least the rooms' share of the depth, a room
+    // is at least `ROOM_RATIO_MIN` of its row's depth wide, and a row is no
+    // wider than the building. More rooms than that allows is not a front.
+    const most = (rows * rows * targetAspect * DEEP_ROW) / (ROOM_RATIO_MIN * ROOMS_AREA_MIN);
+    if (needs.length > most) return null;
+    const H = W / targetAspect;
+    const area = W * H;
+    // The front is the first band of `rows + 1`, and is cut like one.
+    const under = corridorsBetween(rows + 1);
+    const ways = CORRIDOR * under.filter(Boolean).length;
+    // Two rows behind it are joined by a lane beside the first of them.
+    const lane = rows >= 2 ? CORRIDOR : 0;
+    // The deepest a front may be is what the rooms' share leaves it.
+    const deepest = H - ways - ROOMS_AREA_MIN * H;
+    let best = null;
+    for (let d = FRONT_DEPTH_MIN; d <= deepest + EPS; d++) {
+      const lounges = loungesInBand(d, area, capped, 0);
+      // The fullest reception, and the fullest lounge that fits beside it.
+      let desk = null;
+      let option = null;
+      for (const o of lounges.length ? officesInBand(d, area, capped) : []) {
+        option = lounges.find((l) => o.w + l.w <= W + EPS) || null;
+        if (option) {
+          desk = o;
+          break;
+        }
+      }
+      const kept = desk && option ? keptOf(desk.tier, option.kept) : -1;
+      if (!desk || !option || kept < least || (best && kept <= best.kept)) continue;
+      const depths = [d, ...depthsOf(H - ways - d, rows, deep)];
+      if (!(Math.min(...depths) > PLATE_BAND)) break;
+      const tops = rowTops(under, depths);
+      const bands = depths.slice(1).map((depth, k) => {
+        const x = k === 0 ? lane : 0;
+        return { x, y: tops[k + 1], w: W - x, d: depth };
+      });
+      const grid = layGrid(weights, bands, footprints, empty);
+      if (!grid || areaOf(grid.cells) < ROOMS_AREA_MIN * area - EPS) continue;
+      // What the two do not need of the band is the lounge's first, then the
+      // reception's, each to its cap; past both caps it is a hall between
+      // them, at least a corridor wide.
+      const officeMax = Math.min(
+        (OFFICE_AREA_MAX * area) / d,
+        (d - PLATE_BAND) * OFFICE_ROW_ASPECT_MAX,
+      );
+      let hall = W - desk.w - option.w;
+      let loungeW = option.w + Math.min(hall, Math.max(0, (LOUNGE_AREA_MAX * area) / d - option.w));
+      hall = W - desk.w - loungeW;
+      const officeW = desk.w + Math.min(hall, Math.max(0, officeMax - desk.w));
+      hall = W - officeW - loungeW;
+      if (hall > EPS && hall < CORRIDOR) {
+        loungeW -= CORRIDOR - hall;
+        hall = CORRIDOR;
+      }
+      if (loungeW < option.w - EPS) continue;
+      best = {
+        family: /** @type {const} */ ('front'),
+        rows,
+        deep,
+        capped,
+        W,
+        H,
+        depths,
+        under,
+        tops,
+        lane,
+        grid,
+        office: { x: 0, y: 0, w: officeW, h: d },
+        lounge: { x: W - loungeW, y: 0, w: loungeW, h: d },
+        hold: desk.hold,
+        games: option.games,
+        kept,
+        halls: hall > EPS ? [{ x: officeW, y: 0, w: hall, h: d }] : [],
+      };
+      if (kept >= wholeKept) break;
+    }
+    return best;
+  };
+
+  /** The ways of laying a floor, by the name a candidate carries. */
+  const ways = { bands: bandsAt, column: columnAt, front: frontAt };
+  /** @typedef {NonNullable<ReturnType<typeof bandsAt>|ReturnType<typeof columnAt>|ReturnType<typeof frontAt>>} Candidate */
 
   /**
    * The smallest building one way of laying it keeps every rule in, looking
@@ -433,8 +550,17 @@ export function layProportioned(input) {
    * @param {number[]} rowCounts @param {boolean} capped @param {number} from
    * @param {Candidate|null} [held] the building to beat, and @param {number} [by] how far
    * @param {number} [ceiling] the widest building worth finding at all
+   * @param {(typeof bandsAt)[]} [among] the ways of laying it to look at
    */
-  const search = (rowCounts, capped, from, held = null, by = WIDTH_TIE, ceiling = WIDTH_MAX) => {
+  const search = (
+    rowCounts,
+    capped,
+    from,
+    held = null,
+    by = WIDTH_TIE,
+    ceiling = WIDTH_MAX,
+    among = [bandsAt, columnAt],
+  ) => {
     let best = held;
     /** @param {typeof bandsAt} at @param {number} rows @param {number} deep */
     const consider = (at, rows, deep) => {
@@ -455,7 +581,7 @@ export function layProportioned(input) {
       if (smaller || fuller) best = got;
     };
     for (const rows of rowCounts) {
-      for (const at of [bandsAt, columnAt]) {
+      for (const at of among) {
         consider(at, rows, -1);
         // One row deeper than the rest: every row in turn inside the norm, and
         // past it only for the way of laying the floor that is already ahead.
@@ -490,9 +616,9 @@ export function layProportioned(input) {
   const build = (/** @type {Candidate} */ c) => {
     const held = { hold: c.hold };
     const office =
-      c.family === 'bands'
-        ? buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h }, held)
-        : buildOffice(waitingCount, c.office, { maxW: c.office.w, ...held });
+      c.family === 'column'
+        ? buildOffice(waitingCount, c.office, { maxW: c.office.w, ...held })
+        : buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h }, held);
     if (office.room.w > c.office.w + 0.01 || office.room.h > c.office.h + 0.01) return null;
     const cell = { w: c.lounge.w, h: c.lounge.h };
     const lounge = buildLounge(benchedCount, cell, goneHomeCount, 1, { maxGames: c.games });
@@ -524,7 +650,7 @@ export function layProportioned(input) {
     // the building's width; in a column the spine is the building's height.
     /** @type {Room[]} */
     const corridors = [];
-    const across = c.family === 'bands' ? 0 : c.office.w + CORRIDOR;
+    const across = c.family === 'column' ? c.office.w + CORRIDOR : 0;
     if (c.family === 'column') {
       corridors.push(corridorRoom({ id: '__spine__', x: c.office.w, y: 0, w: CORRIDOR, h: c.H }));
     }
@@ -532,7 +658,7 @@ export function layProportioned(input) {
     const served = [];
     c.under.forEach((has, k) => {
       if (!has) return;
-      const spine = c.family === 'bands' && !served.length;
+      const spine = c.family !== 'column' && !served.length;
       corridors.push(
         corridorRoom({
           id: spine ? '__spine__' : `__corridor-${served.length}__`,
@@ -613,15 +739,11 @@ export function layProportioned(input) {
   // Two rows first: it is the floor with one corridor that everything opens on.
   const order = [2, 1, ...norm.filter((r) => r > 2)];
   const more = Array.from({ length: ROWS_LIMIT - ROWS_MAX }, (_, i) => ROWS_MAX + 1 + i);
-  const laid = (/** @type {boolean} */ capped, /** @type {number} */ from, ceiling = WIDTH_MAX) =>
-    search(
-      more,
-      capped,
-      from,
-      search(order, capped, from, null, WIDTH_TIE, ceiling),
-      ROWS_EXTRA_GAIN,
-      ceiling,
-    );
+  const laid = (/** @type {boolean} */ capped, /** @type {number} */ from, ceiling = WIDTH_MAX) => {
+    const usual = search(order, capped, from, null, WIDTH_TIE, ceiling);
+    const front = search([...FRONT_ROWS], capped, from, usual, FRONT_GAIN, ceiling, [frontAt]);
+    return search(more, capped, from, front, ROWS_EXTRA_GAIN, ceiling);
+  };
 
   // FIRST AT ITS CONTENTS, and that is the floor wherever it is no wider than
   // the window is at the scale the floor is designed for.
@@ -651,7 +773,7 @@ export function layProportioned(input) {
       /** @type {Candidate|null} */
       let fuller = null;
       for (const rows of [...order, ...more]) {
-        for (const way of [bandsAt, columnAt]) {
+        for (const way of [bandsAt, columnAt, frontAt]) {
           for (let deep = -1; deep < (rows > 1 ? rows : 0); deep++) {
             const got = way(limit, rows, deep, true, (fuller || held).kept + 1);
             if (got) fuller = got;
@@ -659,7 +781,7 @@ export function layProportioned(input) {
         }
       }
       if (fuller) {
-        const way = fuller.family === 'bands' ? bandsAt : columnAt;
+        const way = ways[fuller.family];
         const kept = fuller.kept;
         let below = held.W;
         let above = limit;
@@ -680,7 +802,7 @@ export function layProportioned(input) {
 
   // A room built into its cell can come out a hair past what it bid with. The
   // same way of laying it, a little larger, until every room fits.
-  const at = chosen.family === 'bands' ? bandsAt : columnAt;
+  const at = ways[chosen.family];
   let width = chosen.W;
   for (let grow = 0; grow < 12; grow++) {
     const built = build(chosen);

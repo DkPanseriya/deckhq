@@ -44,9 +44,16 @@ const LOUNGE_W_MAX = 240;
  */
 export function measureService(waitingCount, benchedCount, goneHomeCount) {
   // The reception on its side, at a depth: as wide as its queue's sofa runs.
+  /** @type {Map<number, {w:number,h:number}>} */
+  const officeRows = new Map();
   const officeRowAt = (/** @type {number} */ d) => {
-    const r = buildOfficeRow(waitingCount, { w: 0, h: d }).room;
-    return { w: r.w, h: r.h };
+    let got = officeRows.get(d);
+    if (!got) {
+      const r = buildOfficeRow(waitingCount, { w: 0, h: d }).room;
+      got = { w: r.w, h: r.h };
+      officeRows.set(d, got);
+    }
+    return got;
   };
   // The reception upright. The width its queue asks for — a sofa place a head
   // round three walls — and, at a width, how deep it comes out: at its

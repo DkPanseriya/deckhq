@@ -39,6 +39,12 @@
   30-pixel figure, the smallest that keeps its detail), your office and the lounge are held to
   their share instead, and the lounge gives up games tables before your office gives up a seat.
   Only the project rooms can make the building bigger than that.
+- **Two projects are two rooms side by side, in any shape of window.** With your office and the
+  lounge down the left, two rooms in a window about one and a half times as wide as it is tall
+  could only keep a room's shape in a very large building, with everybody in it drawn small. Your
+  office and the lounge now go side by side across the top there, with the rooms in a row behind
+  them. Two projects on a 1600 x 1000 canvas went from a building 208 units wide, drawn at 7.7
+  pixels per unit, to one 107 wide at 15.
 - **A very busy floor is drawn with smaller people before it scrolls.** If the rooms need more
   width than the window has at the smallest scale, the floor is laid out one agent size smaller.
   With 22 rooms on a 1420-pixel-wide window this is the difference between scrolling and fitting.
@@ -51,6 +57,9 @@
   every room's shape, the largest room against the smallest, the row depths, and that the building
   covers at least 96% of the window both ways. `node test/helpers/measure-proportions.mjs` prints
   the same numbers.
+- **Floors of one to four projects are checked in ten shapes of window.** Eight small floors, each
+  empty, lightly used and with seventy-nine resting and sixteen waiting, on canvases from 4:3 to an
+  ultrawide: every rule holds on all 240, and the smallest is drawn at 9.2 pixels per unit.
 
 ### Known gaps
 
@@ -61,7 +70,7 @@
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.
 - **The new floor pictures are not baked.** Every golden moves with this change, and
-  `goldens.mjs` has a new `crowded` capture with no golden yet.
+  `goldens.mjs` has two new captures with no golden yet: `crowded` and `pair`.
 
 ## 1.6.2 — 2026-10-06
 
