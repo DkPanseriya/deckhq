@@ -248,8 +248,15 @@ state.setLook(null, catalogue, guards, null);
 state.setThemes({ THEMES, themeByName, swatchesFor: () => [], applyTheme: (name) => name });
 
 const el = (id) => documentStub.getElementById(id);
-/** Long enough for the section's debounce and the daemon's answer. */
-const SETTLE_MS = 170;
+// The sheet reads `/api/about` and `/api/rates` when it opens and says so, at
+// debug level, when this daemon has neither. Eighty openings of that is noise.
+console.debug = () => {};
+/**
+ * Long enough for the daemon's answer. The debounce is 0 here — `wireLookBar`
+ * below sets it on the store both surfaces share — because a debounce is a
+ * property of a hand on a keyboard, not of the thing being posted.
+ */
+const SETTLE_MS = 5;
 const tick = (ms = SETTLE_MS) => new Promise((resolve) => setTimeout(resolve, ms));
 const all = (node, out = []) => {
   out.push(node);
@@ -378,8 +385,7 @@ test('every picker in the catalogue is a radio group in the sheet, by its own na
   for (const picker of LOOK_PICKERS) {
     const dimensions = dimensionsFor(picker, catalogue);
     for (const dimension of dimensions) {
-      const label =
-        dimensions.length > 1 ? `${picker.label} — ${dimension.label}` : picker.label;
+      const label = dimensions.length > 1 ? `${picker.label} — ${dimension.label}` : picker.label;
       const g = group(sheetLook(), label);
       assert.ok(g, `"${label}" is in the catalogue and the sheet draws no group for it`);
       assert.equal(role(g, 'radio').length, dimension.ids.length, label);

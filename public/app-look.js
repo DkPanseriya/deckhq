@@ -24,6 +24,8 @@
 
 import { now as clockNow } from './clock.js';
 import { floorPopulation } from './floor-rule.js';
+import { createLookStore } from './look-ui-store.js';
+import { saveSetting } from './app-notify.js';
 import {
   applyLookSetting,
   applyThemeSetting,
@@ -32,6 +34,7 @@ import {
   lookOptions,
   lookPictures,
   paintedTheme,
+  sessionTheme,
   themes,
   toast,
 } from './app-state.js';
@@ -60,7 +63,9 @@ export async function postLook(look) {
     // once `kind` and `version` come off it.
     const { kind: _kind, version: _version, ...applied } = body.look || {};
     applyLookSetting(applied);
-    return { ok: true };
+    // The answer goes back to the caller as well as to the floor: the look
+    // store holds "what the daemon last accepted", and this is it.
+    return { ok: true, look: applied };
   } catch (err) {
     return { ok: false, error: /** @type {any} */ (err).message };
   }
@@ -126,6 +131,9 @@ export function importLook() {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       const { kind: _kind, version: _version, ...applied } = body.look || {};
       applyLookSetting(applied);
+      // `applyLookSetting` stamped the snapshot; the store hears it from there,
+      // and tells whichever surface is open.
+      lookStore().refresh();
       toast(`Look applied: “${applied.preset}”.`);
     } catch (err) {
       toast(`${err.message} Nothing was changed.`, { isError: true });
@@ -151,9 +159,20 @@ export function importLook() {
  * makes the Look section ABSENT on a build whose renderer did not load, which is
  * the honest answer: there is nothing to paint a swatch with and no guard to
  * refuse with.
+ *
+ * ## One port, and one store on it
+ *
+ * The settings sheet and the header's Look bar are each handed "the look
+ * port", and they must be handed the SAME one, because the port carries the
+ * look store (`look-ui-store.js`): what the daemon last accepted, what was just
+ * chosen, and the last refusal. Two ports would be two stores, and two stores
+ * is the defect this arrangement replaced — a control in one surface showing a
+ * look the other had already changed. So this builds it once and answers with
+ * it every time it is asked.
  */
 export function createLookPort() {
-  return {
+  if (sharedPort) return sharedPort;
+  const port = {
     catalogue: () => lookOptions,
     validate: (/** @type {any} */ next, /** @type {any} */ theme) =>
       lookGuards ? lookGuards.validateLook(next, theme) : { ok: true, problems: [] },
@@ -165,8 +184,33 @@ export function createLookPort() {
     apply: postLook,
     exportLook,
     importLook,
+    /** @type {any} */
+    store: null,
   };
+  const theming = createThemingPort();
+  port.store = createLookStore({
+    port,
+    // What the daemon last PUSHED. `postLook` and `saveSetting` both stamp
+    // their answers onto the same snapshot, so a write made by the palette is
+    // heard here as well as one made by a surface.
+    read: () => latestSnapshot?.settings || null,
+    saveSetting,
+    theming: {
+      ...theming,
+      // `?theme=` paints one tab and writes nothing (WP-64), so what is painted
+      // after a save is the stored theme seen through that override — exactly
+      // what the next snapshot would paint anyway.
+      apply: (/** @type {string} */ name) => applyThemeSetting(sessionTheme(name)),
+    },
+  });
+  sharedPort = port;
+  return port;
 }
+/** @type {any} */
+let sharedPort = null;
+
+/** The one look store in this shell. See `createLookPort`. */
+export const lookStore = () => createLookPort().store;
 
 /**
  * THE THEMING PORT the settings sheet and the header's Look popover are handed

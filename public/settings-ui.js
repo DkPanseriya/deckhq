@@ -246,16 +246,28 @@ export function createSettingsUI(opts) {
   // pending change and its own refusals, so it is built once and re-rendered
   // with the sheet rather than rebuilt: a rebuild would drop the refusal the
   // user is reading the moment anything else on this sheet saved.
+  //
+  // THE LOOK IS NOT READ OUT OF `current`. `current` is the copy of the settings
+  // this sheet took when it was opened, refreshed by this sheet's own saves —
+  // and a look is not saved through this sheet, it is posted to `/api/look` by
+  // the look store. Reading `current.look` here is what made a chosen chip go
+  // back to where it was the moment the daemon answered: the answer landed in
+  // the store's hands and the section drew the copy. So the section is handed
+  // the store the port carries — the one the header's Look bar has too — and
+  // `current.look` is only what a store made for a port without one starts on.
   const lookSection = createLookSection({
     doc: document,
     widgets,
     look: lookPort,
+    store: lookPort.store,
     getLook: () => current.look,
     toast,
   });
   widgets.wire({ render });
   rates.wire({ render });
-  lookSection.wire({ render });
+  // The store also speaks while the sheet is shut — the bar changed the look, a
+  // snapshot arrived — and a shut sheet has nothing to redraw.
+  lookSection.wire({ render: () => void (dialogEl.open && render()) });
 
   // --------------------------------------------------------------- sections
 
@@ -568,7 +580,12 @@ export function createSettingsUI(opts) {
   // wears once the sheet is gone. Bound once, on the dialog itself, so it
   // catches Escape and the backdrop as well as the close button — `render()`
   // rebuilds the picker's buttons and would drop a listener bound to one.
-  dialogEl.addEventListener('close', () => applyThemeSetting(current.theme));
+  dialogEl.addEventListener('close', () => {
+    applyThemeSetting(current.theme);
+    // A look that was shown and is still waiting out its debounce is sent on
+    // the way out rather than dropped: the person saw the control move.
+    void lookSection.flush();
+  });
 
   return { open, close, isOpen: () => dialogEl.open };
 }

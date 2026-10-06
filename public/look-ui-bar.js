@@ -42,7 +42,7 @@
  * Every string that reaches the page goes through `textContent`.
  */
 
-import { LOOK_DEBOUNCE_MS } from './look-ui.js';
+import { createLookStore } from './look-ui-store.js';
 
 /** The hint's one line. In `index.html` too, where a test can read it. */
 export const LOOK_HINT_TEXT = 'Change the floor, the furniture and the agent size here.';
@@ -73,27 +73,31 @@ const sentence = (/** @type {string} */ s) => (s ? `${s[0].toUpperCase()}${s.sli
  * @param {() => boolean} [opts.isBusy]  true while a tour or a modal has the
  *   screen, so the hint waits its turn
  * @param {(text:string) => void} [opts.announce]
- * @param {number} [opts.debounceMs]
+ * @param {any} [opts.store]             the look store both surfaces share
+ * @param {number} [opts.debounceMs]     read only by a store made here
  */
 export function createLookBar(opts) {
   const { doc, buttonEl, popoverEl, hintEl, hintDismissEl, settingsBtnEl } = opts;
   const { look: port, theming, getSettings, saveSetting, openSheet } = opts;
   const isBusy = opts.isBusy || (() => false);
   const announce = opts.announce || (() => {});
-  const debounceMs = opts.debounceMs ?? LOOK_DEBOUNCE_MS;
+  /**
+   * The look, the theme, what is pending and the last refusal all live in the
+   * store (`look-ui-store.js`), and the shell hands this bar the SAME store it
+   * hands the settings sheet — so the two cannot show different floors. A bar
+   * given none makes its own out of the same ports.
+   */
+  const store =
+    opts.store ||
+    createLookStore({
+      port,
+      theming,
+      read: getSettings,
+      saveSetting,
+      debounceMs: opts.debounceMs,
+    });
 
   let shown = false;
-  /** A look that has been shown and not yet confirmed. @type {any} */
-  let pending = null;
-  /** A theme that has been clicked and not yet stored. @type {string|null} */
-  let themePending = null;
-  /**
-   * The last refusal, and which row the hand was on when it happened.
-   * @type {{from:string, problems:any[]}|null}
-   */
-  let refusal = null;
-  /** @type {any} */
-  let timer = null;
   /** What the popover was last drawn from, so a snapshot that changed nothing redraws nothing. */
   let drawn = '';
   /** The radio to put focus back on after a redraw: `group:id`. */
@@ -106,11 +110,7 @@ export function createLookBar(opts) {
   let hintDismissed = false;
 
   const cat = () => port?.catalogue?.() || null;
-  const settings = () => getSettings() || {};
-  const themes = () => {
-    const list = theming?.list?.();
-    return Array.isArray(list) ? list : [];
-  };
+  const themes = () => store.themes();
   /** Is there anything to put in a popover? Without a renderer there is not. */
   const hasControls = () => Boolean(cat()) || themes().length > 1;
 
@@ -121,60 +121,6 @@ export function createLookBar(opts) {
     if (text !== undefined) node.textContent = text;
     return node;
   };
-
-  // --------------------------------------------------------------- applying
-
-  /**
-   * Measure a look, then either show it and post it, or refuse it and change
-   * nothing. `look-ui.js`'s `choose`, for a popover: the guard runs first, on
-   * the theme the floor is painted in, and only a look that passes is sent.
-   * @param {any} next @param {string} from the row the hand is on
-   */
-  function chooseLook(next, from) {
-    const verdict = port.validate ? port.validate(next, port.theme?.()) : { ok: true };
-    if (!verdict.ok) {
-      refusal = { from, problems: verdict.problems || [] };
-      pending = null;
-      render();
-      return;
-    }
-    refusal = null;
-    pending = next;
-    render();
-    if (timer) clearTimeout(timer);
-    const post = async () => {
-      timer = null;
-      const result = await port.apply(next);
-      pending = null;
-      if (result && !result.ok) {
-        // The daemon measures against EVERY shipped theme, so this is the look
-        // that reads here and would not on another one.
-        refusal = {
-          from,
-          problems: result.problems?.length
-            ? result.problems
-            : [{ reason: result.error || 'that look was refused' }],
-        };
-      }
-      render();
-    };
-    if (debounceMs <= 0) return void post();
-    timer = setTimeout(post, debounceMs);
-  }
-
-  /**
-   * Store a theme, then paint what was STORED — the settings sheet's own order,
-   * because the store is the authority on what landed.
-   * @param {string} name
-   */
-  async function chooseTheme(name) {
-    themePending = name;
-    render();
-    const saved = await saveSetting({ theme: name });
-    themePending = null;
-    if (saved) theming.apply(saved.theme);
-    render();
-  }
 
   // ---------------------------------------------------------------- pieces
 
@@ -249,8 +195,7 @@ export function createLookBar(opts) {
 
   /** The guard's sentence, under the row that caused it. @param {any} host @param {string} from */
   function drawRefusals(host, from) {
-    if (!refusal || refusal.from !== from) return;
-    for (const problem of refusal.problems) {
+    for (const problem of store.refusalsFor(from)) {
       const box = el('div', 'lookbar-refusal');
       box.setAttribute('role', 'status');
       const dot = el('span', 'lookbar-refusal-dot');
@@ -278,10 +223,10 @@ export function createLookBar(opts) {
         itemClass: 'lookbar-seg-btn',
         options: picker.options.map((/** @type {any} */ o) => ({ id: o.id, label: o.label })),
         value: String(current.agentSize),
-        onChange: (next) => chooseLook({ ...current, agentSize: next }, 'size'),
+        onChange: (next) => void store.choosePath('agentSize', next, 'agentSize'),
       }),
     );
-    drawRefusals(wrap, 'size');
+    drawRefusals(wrap, 'agentSize');
     host.appendChild(wrap);
   }
 
@@ -289,8 +234,8 @@ export function createLookBar(opts) {
   function drawTheme(host) {
     const list = themes();
     if (list.length < 2) return;
-    const value = themePending ?? (settings().theme || 'default');
-    host.appendChild(
+    const value = store.theme();
+    const wrap = host.appendChild(
       row(
         'Theme',
         '',
@@ -305,7 +250,7 @@ export function createLookBar(opts) {
             // not this stylesheet's to declare.
             const dots = el('span', 'lookbar-swatch');
             dots.setAttribute('aria-hidden', 'true');
-            for (const colour of theming.swatches?.(theme) || []) {
+            for (const colour of store.swatches(theme)) {
               const dot = el('i');
               dot.style.background = colour;
               dots.appendChild(dot);
@@ -318,10 +263,11 @@ export function createLookBar(opts) {
             };
           }),
           value,
-          onChange: (next) => void chooseTheme(next),
+          onChange: (next) => void store.chooseTheme(next),
         }),
       ),
     );
+    drawRefusals(wrap, 'theme');
   }
 
   /** @param {any} host @param {any} c @param {any} current */
@@ -357,7 +303,7 @@ export function createLookBar(opts) {
         value: String(current.preset),
         // A preset is a whole look, its agent size included — the sheet's rule
         // and the palette's, kept here so the three cannot disagree.
-        onChange: (next) => chooseLook(c.lookForPreset(next), 'preset'),
+        onChange: (next) => void store.choose(c.lookForPreset(next), 'preset'),
       }),
     );
     drawRefusals(wrap, 'preset');
@@ -366,25 +312,27 @@ export function createLookBar(opts) {
 
   /** Everything the popover is drawn from, as one comparable string. */
   function signature() {
-    const s = settings();
     return JSON.stringify([
       Boolean(cat()),
-      pending ?? s.look ?? null,
-      themePending ?? s.theme ?? '',
+      store.look(),
+      store.theme(),
       themes().map((t) => t.name),
       port?.theme?.() ?? '',
-      refusal,
+      store.refusal(),
     ]);
   }
 
   function render() {
     if (!shown) return;
+    // Hear the daemon's last word before drawing — quietly, because this IS
+    // the redraw a subscriber would have asked for.
+    store.refresh({ silent: true });
     drawn = signature();
     stops.clear();
     popoverEl.textContent = '';
     const c = cat();
     if (c) {
-      const current = c.normalizeLook(pending ?? settings().look);
+      const current = store.look();
       drawSize(popoverEl, c, current);
       drawTheme(popoverEl);
       drawPresets(popoverEl, c, current);
@@ -427,7 +375,7 @@ export function createLookBar(opts) {
     dismissHint();
     if (!hasControls()) return openLook();
     shown = true;
-    refusal = null;
+    store.clearRefusal();
     focusKey = '';
     popoverEl.hidden = false;
     buttonEl.setAttribute('aria-expanded', 'true');
@@ -444,13 +392,10 @@ export function createLookBar(opts) {
   function close(how = {}) {
     if (!shown) return;
     shown = false;
-    if (timer) clearTimeout(timer);
     // A change that was shown but not yet sent is sent on the way out rather
     // than dropped: the person saw the control move.
-    if (timer && pending) void port.apply(pending);
-    timer = null;
-    pending = null;
-    refusal = null;
+    void store.flush();
+    store.clearRefusal();
     focusKey = '';
     popoverEl.hidden = true;
     popoverEl.textContent = '';
@@ -534,6 +479,10 @@ export function createLookBar(opts) {
     close();
   });
 
+  // The store says when the look or the theme moved: a choice here, the
+  // daemon's answer to it, or a push the settings sheet or another tab caused.
+  store.subscribe(() => render());
+
   return {
     open,
     close,
@@ -542,10 +491,14 @@ export function createLookBar(opts) {
     openLook,
     openSettings,
     dismissHint,
+    store,
     /** A snapshot arrived: the hint may be due, and an open popover may be stale. */
     refresh() {
       paintHint();
-      if (shown && !pending && !themePending && signature() !== drawn) render();
+      // Loud, not silent: the settings sheet subscribes to the same store, and
+      // this is the one place the shell says "the daemon pushed".
+      store.refresh();
+      if (shown && signature() !== drawn) render();
     },
   };
 }

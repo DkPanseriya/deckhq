@@ -38,19 +38,11 @@
  * ============================================================================
  */
 
-/**
- * How long a change waits before it is posted.
- *
- * Arrow keys walk a picker, and a user holding one down would otherwise post —
- * and re-bake the floor behind the sheet — once per option crossed. 140 ms is
- * long enough to swallow a walk and short enough that a single click feels
- * immediate; the chips and the preview move on the keystroke either way,
- * because they read the pending look rather than the stored one.
- *
- * Tests pass 0, which applies synchronously — a debounce is a property of a
- * hand on a keyboard, not of the thing being posted.
- */
-export const LOOK_DEBOUNCE_MS = 140;
+import { LOOK_DEBOUNCE_MS, at, createLookStore, withPath } from './look-ui-store.js';
+
+// The debounce is the store's. It is named here too because this is where the
+// bar and the tests have always imported it from.
+export { LOOK_DEBOUNCE_MS };
 
 /** The section's element id, so the palette and the golden can jump to it. */
 export const LOOK_SECTION_ID = 'settings-look';
@@ -91,32 +83,6 @@ const DIMENSION_LABELS = Object.freeze({
   family: 'Family',
   density: 'Density',
 });
-
-/** Read `a.b.c` off a look. @param {any} obj @param {string} path */
-function at(obj, path) {
-  return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
-}
-
-/**
- * A look with one path set — a copy, never a mutation.
- *
- * The look the section is showing is `current.look`, which came from the
- * daemon's own answer; writing into it would make a refused change permanent in
- * the one place the refusal was supposed to leave alone.
- *
- * @param {any} look @param {string} path @param {unknown} value
- */
-function withPath(look, path, value) {
-  const keys = path.split('.');
-  const out = Array.isArray(look) ? look.slice() : { ...look };
-  let node = out;
-  for (let i = 0; i < keys.length - 1; i++) {
-    node[keys[i]] = { ...node[keys[i]] };
-    node = node[keys[i]];
-  }
-  node[keys[keys.length - 1]] = value;
-  return out;
-}
 
 /**
  * THE DIMENSIONS INSIDE ONE PICKER, derived from the catalogue.
@@ -209,100 +175,55 @@ export function swatchSpecFor(picker, optionId, look, cat) {
  * @param {any} opts.doc                   `document`, or a stub
  * @param {{section:Function, row:Function}} opts.widgets  the sheet's own parts
  * @param {any} opts.look                  the port (see `NO_LOOK`)
- * @param {() => any} opts.getLook         what `settings.look` says
+ * @param {any} [opts.store]               the look store both surfaces share
+ *   (`look-ui-store.js`). The shell hands the sheet and the header's bar the
+ *   SAME one; a section given none makes its own, which is one surface with
+ *   one store and is what a test of this file alone wants.
+ * @param {() => any} [opts.getLook]       what the daemon last said the look
+ *   is — read only by a store this section had to make for itself
  * @param {(msg:string, o?:any) => void} opts.toast
  * @param {number} [opts.debounceMs]
  */
 export function createLookSection(opts) {
-  const { doc, widgets, look: port, getLook, toast } = opts;
-  const debounceMs = opts.debounceMs ?? LOOK_DEBOUNCE_MS;
-
+  const { doc, widgets, look: port, toast } = opts;
   /**
-   * The look the section is SHOWING, which is not always the look the daemon has
-   * confirmed: a chip moves on the keystroke and the post follows. `null` means
-   * "whatever the daemon last said", which is the state after every reconcile.
-   * @type {any}
-   */
-  let pending = null;
-  /**
-   * The last refusal: the guard's problems, and which control the person was
-   * holding when it happened.
+   * THE LOOK, AND EVERYTHING ABOUT IT THAT CHANGES, lives in the store: what
+   * the daemon last accepted, what was just chosen and is not answered yet, and
+   * the last refusal with the control the hand was on. This section holds no
+   * copy of any of it — it held one once, read out of the settings the sheet
+   * was opened with, and that is why a chosen chip used to go back.
    *
-   * `from` is what decides WHERE the reason is drawn, and it is not
+   * A refusal's `from` is what decides WHERE the reason is drawn, and it is not
    * `problem.picker`. A guard names the row a problem BELONGS to — put terrazzo
-   * in the office and the problem is the corridor's, because the corridor is the
-   * zone that lost its edge — but the control that just refused to move is the
-   * office's, and a sentence that appears two rows away from the chip somebody
-   * clicked reads as an unrelated complaint. The reason names both zones and
-   * both materials, so nothing is lost by putting it where the hand is.
-   *
-   * `from` is `null` for a refusal nobody's hand caused — an import, or the
-   * daemon refusing on a theme this tab is not painted in — and then each
-   * problem goes to the row the guard named.
-   * @type {{from:string|null, problems:any[]}}
+   * in the office and the problem is the corridor's — but the control that just
+   * refused to move is the office's, and a sentence two rows away from the chip
+   * somebody clicked reads as an unrelated complaint.
    */
-  let refusals = { from: null, problems: [] };
-  /** @type {any} */
-  let timer = null;
+  const store =
+    opts.store ||
+    createLookStore({
+      port,
+      read: () => ({ look: opts.getLook?.() }),
+      debounceMs: opts.debounceMs,
+    });
   /** Late-bound: the sheet's re-render. @type {() => void} */
   let render = () => {};
+  /**
+   * WHERE THE KEYBOARD IS, ACROSS A REDRAW. Every choice redraws the sheet, and
+   * a redraw replaces the button the hand was on — so an arrow key used to move
+   * the choice once and then leave the focus on a button that was no longer in
+   * the document. Every control here is registered under a key, and a redraw
+   * puts the focus back on the control with the key it had.
+   * @type {Map<string, any>}
+   */
+  const stops = new Map();
+  /** The control a hand just used, for a click that did not move the focus. */
+  let picked = '';
 
   const cat = () => port.catalogue?.();
-  const shown = () => {
-    const c = cat();
-    return c ? c.normalizeLook(pending ?? getLook()) : null;
-  };
-
-  // --------------------------------------------------------------- applying
-
-  /**
-   * Measure a candidate, then either show it and post it, or refuse it and
-   * change nothing.
-   *
-   * The order is the whole of rule 2: the guard runs first, on the theme the
-   * floor is actually painted in, and only a look that passes is ever shown.
-   * @param {any} next
-   * @param {string|null} [from] the picker the person was holding, if any
-   */
-  function choose(next, from = null) {
-    const c = cat();
-    if (!c) return;
-    const verdict = port.validate(next, port.theme());
-    if (!verdict.ok) {
-      refusals = { from, problems: verdict.problems };
-      pending = null;
-      render();
-      return;
-    }
-    refusals = { from: null, problems: [] };
-    pending = next;
-    render();
-    if (timer) clearTimeout(timer);
-    const post = async () => {
-      timer = null;
-      const result = await port.apply(next);
-      if (!result || result.ok) {
-        // The daemon's answer is the authority; drop the optimistic copy and
-        // let the next render read what actually landed.
-        pending = null;
-        render();
-        return;
-      }
-      // Refused by the daemon — which measures against EVERY shipped theme, so
-      // this is the look that reads here and would not on night shift. No
-      // `from`: the hand that caused it moved some time ago.
-      refusals = {
-        from: null,
-        problems: result.problems?.length
-          ? result.problems
-          : [{ picker: '', option: '', reason: result.error || 'that look was refused' }],
-      };
-      pending = null;
-      render();
-    };
-    if (debounceMs <= 0) return void post();
-    timer = setTimeout(post, debounceMs);
-  }
+  const shown = () => store.look();
+  /** @param {any} next @param {string|null} [from] the control the hand was on */
+  const choose = (next, from = null) => void store.choose(next, from);
 
   // ---------------------------------------------------------------- pieces
 
@@ -365,7 +286,10 @@ export function createLookSection(opts) {
       const text = el('span', 'settings-look-chip-label');
       text.textContent = option.label;
       btn.appendChild(text);
+      const key = `${spec.label}:${option.id}`;
+      stops.set(key, btn);
       btn.addEventListener('click', () => {
+        picked = key;
         if (option.id !== spec.value) spec.onChange(option.id);
       });
       btn.addEventListener('keydown', (/** @type {any} */ event) => {
@@ -380,6 +304,7 @@ export function createLookSection(opts) {
         // the floor follows the arrow key and the debounce swallows the walk.
         buttons[target].focus?.();
         const id = spec.options[target].id;
+        picked = `${spec.label}:${id}`;
         if (id !== spec.value) spec.onChange(id);
       });
       buttons.push(btn);
@@ -397,8 +322,7 @@ export function createLookSection(opts) {
    * @param {string} rowId
    */
   function refusalsFor(rowId) {
-    if (refusals.from) return refusals.from === rowId ? refusals.problems : [];
-    return refusals.problems.filter((p) => p.picker === rowId);
+    return store.refusalsFor(rowId);
   }
 
   /**
@@ -601,6 +525,15 @@ export function createLookSection(opts) {
   function renderInto(host) {
     const c = cat();
     if (!c) return null;
+    // Hear the daemon's last word before drawing — quietly, because this IS the
+    // redraw a subscriber would have asked for.
+    store.refresh({ silent: true });
+    // Which control has the keyboard, before every one of them is replaced.
+    let keep = picked;
+    picked = '';
+    const active = doc.activeElement;
+    if (!keep && active) for (const [key, node] of stops) if (node === active) keep = key;
+    stops.clear();
     const current = shown();
     const s = widgets.section(
       'Look',
@@ -629,10 +562,12 @@ export function createLookSection(opts) {
     // painted in. It still has to be READ somewhere, so it is read here rather
     // than dropped: a refusal that changed nothing and said nothing would be
     // indistinguishable from a control that silently did not work.
-    if (!refusals.from) {
-      for (const problem of refusals.problems.filter((p) => !rows.has(p.picker))) {
-        s.appendChild(refusalRow(problem));
-      }
+    const refusal = store.refusal();
+    if (refusal && !rows.has(refusal.from)) {
+      const orphans = refusal.from
+        ? refusal.problems
+        : refusal.problems.filter((/** @type {any} */ p) => !rows.has(p.picker));
+      for (const problem of orphans) s.appendChild(refusalRow(problem));
     }
     renderIo(s);
     // WP-88c. The agent size is a row now — the eleventh picker in the
@@ -645,21 +580,34 @@ export function createLookSection(opts) {
       'furniture with the people — the corridors, the room padding and every label stay put.';
     s.appendChild(foot);
     host.appendChild(s);
+    // The redraw replaced the control the hand was on; put the hand back. Only
+    // when it WAS on one of these — a redraw caused by another section's save
+    // must not pull the focus down here.
+    if (keep) stops.get(keep)?.focus?.({ preventScroll: true });
     return s;
   }
 
   return {
     renderInto,
+    store,
     wire: (/** @type {{render:() => void}} */ o) => {
       ({ render } = o);
+      // The store says when the look moved — a choice here, the daemon's
+      // answer to it, or a push that the header's bar or another tab caused.
+      store.subscribe(() => render());
     },
-    /** For tests and for the sheet's close: drop an unposted change. */
+    /**
+     * The sheet is opening: start from what the daemon has, with no stale
+     * reason on screen and the focus wherever the sheet puts it.
+     */
     reset: () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      pending = null;
-      refusals = { from: null, problems: [] };
+      store.clearRefusal();
+      store.refresh({ silent: true });
+      picked = '';
+      stops.clear();
     },
+    /** The sheet is closing: a change that was shown is sent, not dropped. */
+    flush: () => store.flush(),
     toast,
   };
 }
