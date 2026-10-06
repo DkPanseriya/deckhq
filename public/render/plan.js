@@ -51,6 +51,9 @@
  *   plan-classic.js  the envelope search itself, both arrangements and the
  *                    rectangles they come out as — `buildPlan`'s middle, moved
  *                    whole when this file stood at 899 lines
+ *   plan-proportions.js  the designer's rulebook: shares, shapes, modules, rows
+ *   plan-grid.js     the building laid to it, wherever there is a room to lay
+ *   plan-grid-service.js  what that building asks of the reception and lounge
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, imported by both sides (WP-22).
