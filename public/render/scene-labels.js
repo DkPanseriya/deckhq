@@ -14,12 +14,13 @@
  * (docs/03-VISUAL-SPEC.md §7).
  */
 
-import { formatTokens, plateHeroLine, plateTertiaryLine } from './plan.js';
+import { formatTokens, plateHeroLine, plateTertiaryLine, restingChipLine } from './plan.js';
 // Straight from the dimensions module rather than through `plan.js`: this is a
 // leaf of pure numbers, and `plan.js` is already at the 900-line ceiling.
 import { PLATE_BAND, PLUS_CLEAR_U } from './plan-units.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { formatElapsed } from './rig.js';
+import { labelFontSize, sansFont } from './rig-metrics.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 import { waitingSince } from '../floor-rule.js';
 import { worldToScreen } from './agents.js';
@@ -684,6 +685,43 @@ export class SceneLabels extends SceneCamera {
       id: room.id,
       tooltip: plate.tooltip,
     });
+  }
+
+  /**
+   * THE LOUNGE'S CHIP: `+N resting`, at the end of its one standing row
+   * (`plan-proportions.js` (g)). The people the lounge is holding and not
+   * drawing, as a number — on the plate's own halo and in the plate's own ink,
+   * so it reads as part of the room's signage and at the same contrast.
+   *
+   * It is live text and not baked, because who is behind it is the plan's and
+   * the plan changes with the snapshot. It is the one thing in the lounge that
+   * is clicked: `_fixtureRects` carries it as `resting`, and the app opens the
+   * deck on exactly those people.
+   */
+  _drawLoungeChip(camera) {
+    const chip = this._plan && this._plan.loungeOverflow;
+    if (!chip || !(chip.count > 0)) return;
+    const ctx = this.ctx;
+    const at = worldToScreen({ x: chip.x + chip.w / 2, y: chip.y + chip.h / 2 }, camera);
+    const text = restingChipLine(chip.count);
+    const px = labelFontSize(this._characterScale());
+    ctx.save();
+    ctx.font = sansFont(px);
+    const w = ctx.measureText(text).width + px * 1.1;
+    const h = px * 1.7;
+    const box = { x: at.x - w / 2, y: at.y - h / 2, w, h };
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = PALETTE.plateHalo;
+    ctx.fillRect(box.x, box.y, box.w, box.h);
+    ctx.strokeStyle = PALETTE.plateInkTertiary;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+    ctx.fillStyle = PALETTE.plateInk;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, at.x, at.y + 0.5);
+    ctx.restore();
+    this._fixtureRects.push({ ...box, kind: 'resting', id: '__lounge__' });
   }
 
   _platePlanFor(room) {

@@ -55,7 +55,13 @@ import {
   WHITEBOARD_W,
   breakoutFits,
 } from './plan-furniture.js';
-import { plantsPerProjectRoom, PLANT_FOOTPRINTS, deskClutterFor, plantRun } from './plan-props.js';
+import {
+  CHAR_CLEAR_U,
+  plantsPerProjectRoom,
+  PLANT_FOOTPRINTS,
+  deskClutterFor,
+  plantRun,
+} from './plan-props.js';
 import { crewFootprint } from './crew.js';
 
 /** @typedef {import('./plan-units.js').ProjectLike} ProjectLike */
@@ -173,10 +179,9 @@ export function buildPinnedRoom(project, cell) {
     // is painted by the same painter, and a new room kind would be three
     // painters and a plate rule for a rectangle that differs only in what is
     // in it.
-    // An AWAY room (`awayRooms` in floor-rule.js) is laid exactly like this
-    // and is not pinned: its people are on the office sofas, and its plate
-    // says `N need you` the way a live room's does (`platePlanFor`).
-    ...(project.away === true ? { away: true } : { pinned: true }),
+    pinned: true,
+    // Nobody is in it, so its lights are off (`plan-proportions.js` (e)).
+    dim: true,
     walls: 'partial',
     floor: 'carpet',
     plateLines: [
@@ -190,11 +195,7 @@ export function buildPinnedRoom(project, cell) {
       // fact there is. Nothing is running, so there is no "need you", no
       // "working" and no doing line — the room's whole claim on the floor is
       // that the user asked for it, and how big the repo it stands for is.
-      // An away room's line is the live plate's hero (`platePlanFor` draws the
-      // live one from the snapshot; this is the fallback with no snapshot).
-      project.away === true
-        ? `${project.needsYou ?? sessionCount} need you`
-        : `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
+      `${sessionCount} session${sessionCount === 1 ? '' : 's'} · pinned`,
       '',
       '',
     ],
@@ -784,6 +785,20 @@ export function buildProjectRoom(
   cornersUsed.forEach((corner, n) => {
     const kind = cornerKinds[n];
     const size = PLANT_FOOTPRINTS[kind] || 2.4;
+    // AND NOT IN A CORNER SOMEBODY SITS IN (§3.9). A room laid at exactly its
+    // furniture has a desk row one pad from the wall, and the largest plant is
+    // nearly a pad across: its canopy would stand a fifth of a unit from a
+    // seated figure's feet. §3.6's two is a ceiling, so that corner goes bare.
+    const px = corner === 'SW' ? CORNER_PLANT_INSET : finalW - CORNER_PLANT_INSET - size;
+    const py = corner === 'SW' ? finalH - CORNER_PLANT_INSET - size : CORNER_PLANT_INSET;
+    const crowded = seats.some((s) => {
+      const fx = s.x + slackX;
+      const fy = s.y + slackY;
+      const gx = Math.max(0, px - (fx + 0.5), fx - 0.5 - (px + size));
+      const gy = Math.max(0, py - (fy + 0.5), fy - 0.5 - (py + size));
+      return Math.hypot(gx, gy) < CHAR_CLEAR_U;
+    });
+    if (crowded) return;
     props.push({
       kind,
       w: size,
@@ -817,6 +832,10 @@ export function buildProjectRoom(
     // than leaving them against the left wall, and `buildPlan` sums it to size
     // the working floor.
     natural: { w: naturalW, h: naturalH },
+    // AWAY: everybody this repo has on the floor is waiting in the office
+    // (`awayRooms`). The room is the room it would be with somebody at the
+    // desk, and its lights are off.
+    ...(project.away === true ? { away: true, dim: true } : {}),
     walls: 'partial',
     floor: 'carpet',
     // WP-81's four slots, and the plan's own copy of them. A live plate is

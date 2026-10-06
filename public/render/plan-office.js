@@ -58,6 +58,12 @@ import {
   plantRun,
 } from './plan-props.js';
 
+/**
+ * How far a held reception closes its standing queue up, loosest first: the
+ * pitch as laid, down to half of it. See `buildOffice`.
+ */
+const QUEUE_TIGHTEN = Object.freeze([0.85, 0.7, 0.6, 0.5]);
+
 /** The prefix every standing queue place carries, as a zone id. */
 export const OFFICE_QUEUE_ZONE = 'office-queue-';
 /** The prefix every visitor chair carries, as a prop and a zone id. */
@@ -170,13 +176,16 @@ function deskCentreOf(room) {
  *
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the interior this room has been given
- * @param {{maxW?:number, landscape?:boolean}} [opts] `maxW` overrides
+ * @param {{maxW?:number, landscape?:boolean, hold?:boolean}} [opts] `maxW` overrides
  *   `OFFICE_MAX_W` — in a row that cap is read on the other axis and is the
  *   room's DEPTH (WP-59d). `landscape` says this room is about to be reflected
  *   in the diagonal by `buildOfficeRow`, which is the only thing the QUEUE
  *   needs to know: a queue must spread along whichever axis ends up horizontal
  *   on screen, because that is the axis a name label and a waiting badge have
- *   room on (WP-78).
+ *   room on (WP-78). `hold` lays the room AT the size it is given rather
+ *   than at the size its queue would like: it is at its share of the building
+ *   (`plan-proportions.js` (f)), so its sofa runs are as long as that room's
+ *   walls, and everybody they cannot seat stands in the queue beside them.
  */
 export function buildOffice(waitingCount, fit, opts = {}) {
   const maxW = Math.max(OFFICE_MIN_W, Number(opts.maxW) || OFFICE_MAX_W);
@@ -195,8 +204,9 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // working rooms. It still never shrinks below a room somebody could stand a
   // desk and a sofa in.
   const want = Math.max(0, waitingCount);
-  const wantW = clamp(OFFICE_MIN_W + want * OFFICE_GROWTH_W, OFFICE_MIN_W, maxW);
-  const wantH = clamp(OFFICE_MIN_H + want * OFFICE_GROWTH_H, OFFICE_MIN_H, OFFICE_MAX_H);
+  const grows = opts.hold ? 0 : want;
+  const wantW = clamp(OFFICE_MIN_W + grows * OFFICE_GROWTH_W, OFFICE_MIN_W, maxW);
+  const wantH = clamp(OFFICE_MIN_H + grows * OFFICE_GROWTH_H, OFFICE_MIN_H, OFFICE_MAX_H);
   const IN_W = clamp(Math.max(wantW, fit ? Math.min(fit.w, maxW) : 0), OFFICE_MIN_W, maxW);
   // Never wider than a room: the reception is the one room the user looks at
   // first, and a 2:1 reception reads as a corridor with a desk at one end.
@@ -372,12 +382,12 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   const wellWFor = () => Math.max(CHAIR, IN_W - 2 * (PAD + SOFA_D) - QUEUE_PAD * 2);
   const wellHFor = (height) => Math.max(CHAIR, height - PAD - SOFA_D - bandTop - QUEUE_PAD * 2);
   // `+ 1` because a lane count is places, not gaps: a run of exactly one pitch
-  // holds two people, at either end of it.
-  const lanesIn = (len) => Math.max(1, Math.floor(len / OFFICE_QUEUE_PITCH) + 1);
-  const layFor = (major, minor) => {
-    const lanes = lanesIn(major);
+  // holds two people, at either end of it. `tight` closes the line up (below).
+  const lanesIn = (len, tight) => Math.max(1, Math.floor(len / (OFFICE_QUEUE_PITCH * tight)) + 1);
+  const layFor = (major, minor, tight = 1) => {
+    const lanes = lanesIn(major, tight);
     const files = Math.max(1, Math.ceil(queued / lanes));
-    return { lanes, files, fits: (files - 1) * OFFICE_QUEUE_ROW <= minor };
+    return { lanes, files, tight, fits: (files - 1) * OFFICE_QUEUE_ROW * tight <= minor };
   };
   const wellW0 = wellWFor();
   const wellH0 = wellHFor(IN_H);
@@ -387,16 +397,27 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // room's depth with each name drawn through the badge behind it.
   let alongX = !opts.landscape;
   let lay = alongX ? layFor(wellW0, wellH0) : layFor(wellH0, wellW0);
+  // A ROOM HELD AT ITS SHARE OF THE BUILDING CLOSES ITS QUEUE UP BEFORE IT
+  // GROWS (`plan-proportions.js` (f)). A queue's pitch is a comfortable one, a
+  // name and a badge a head; at its cap a reception has more people standing
+  // than that has floor for, so they stand nearer, down to half of it. Past
+  // that the room is too small for its queue and says so by coming out larger.
+  if (opts.hold && queued > 0 && !lay.fits) {
+    for (const tight of QUEUE_TIGHTEN) {
+      lay = alongX ? layFor(wellW0, wellH0, tight) : layFor(wellH0, wellW0, tight);
+      if (lay.fits) break;
+    }
+  }
   // Laid down the room and too wide for it: fall back to across the room, which
   // is the arrangement the room can GROW to hold.
   if (!alongX && !lay.fits) {
     alongX = true;
-    lay = layFor(wellW0, wellH0);
+    lay = layFor(wellW0, wellH0, lay.tight);
   }
   // The room is at least as tall as its own contents: the desk band, a sofa
   // run somebody can actually sit on, the back run and the wall pad. Clamping
   // the RUN instead (the old rule) let a short room overlap its own back sofa.
-  const queueDepth = queued > 0 ? (alongX ? (lay.files - 1) * OFFICE_QUEUE_ROW : 0) : 0;
+  const queueDepth = queued > 0 ? (alongX ? (lay.files - 1) * OFFICE_QUEUE_ROW * lay.tight : 0) : 0;
   const IN_H_FINAL = Math.max(
     IN_H,
     bandTop + SOFA_MIN_RUN + SOFA_D + PAD * 2,
@@ -614,8 +635,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   for (let i = 0; i < queued; i++) {
     const lane = i % lay.lanes;
     const file = Math.floor(i / lay.lanes);
-    const along = lane * OFFICE_QUEUE_PITCH;
-    const back = file * OFFICE_QUEUE_ROW;
+    const along = lane * OFFICE_QUEUE_PITCH * lay.tight;
+    const back = file * OFFICE_QUEUE_ROW * lay.tight;
     const qx = clampX(wellX + QUEUE_PAD + (alongX ? along : back));
     const qy = clampY(wellY + QUEUE_PAD + (alongX ? back : along));
     zones.push({
@@ -692,8 +713,10 @@ const TRANSPOSED_ID = new Map([
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the ROW cell this reception has been
  *   given — `w` along the row, `h` its depth.
+ * @param {{hold?:boolean}} [opts] `hold`: lay it at the width it is given,
+ *   not at the width its queue would like (see `buildOffice`)
  */
-export function buildOfficeRow(waitingCount, fit) {
+export function buildOfficeRow(waitingCount, fit, opts = {}) {
   // The box the portrait room is asked for, read back to front: its WIDTH is
   // the row's depth (less the plate band, which is a room's and not an
   // interior's), and its HEIGHT is the row's width. The aspect floor is the
@@ -717,9 +740,15 @@ export function buildOfficeRow(waitingCount, fit) {
   );
   const portrait = {
     w: depth,
-    h: Math.max(rowW, OFFICE_MIN_H + want * (OFFICE_GROWTH_W + OFFICE_GROWTH_H)) + PLATE_BAND,
+    h:
+      Math.max(rowW, OFFICE_MIN_H + (opts.hold ? 0 : want) * (OFFICE_GROWTH_W + OFFICE_GROWTH_H)) +
+      PLATE_BAND,
   };
-  const built = buildOffice(waitingCount, portrait, { maxW: depth, landscape: true });
+  const built = buildOffice(waitingCount, portrait, {
+    maxW: depth,
+    landscape: true,
+    hold: opts.hold === true,
+  });
   const room = built.room;
   const rename = (id) => (id == null ? id : (TRANSPOSED_ID.get(id) ?? id));
 

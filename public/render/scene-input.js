@@ -16,6 +16,7 @@ import {
   clamp,
   computeTargetAspect,
   shouldRebuildAspect,
+  shouldRebuildStage,
   RESIZE_DEBOUNCE_MS,
   ZOOM_MIN,
   ZOOM_MAX,
@@ -261,7 +262,12 @@ export class SceneInput extends SceneDraw {
   _checkAspectRebuild() {
     if (!this._plan) return;
     const target = computeTargetAspect(this._viewW, this._viewH);
-    if (!shouldRebuildAspect(target, this._plan.targetAspect)) return;
+    if (
+      !shouldRebuildAspect(target, this._plan.targetAspect) &&
+      !shouldRebuildStage(this._viewW, this._plan.stageW)
+    ) {
+      return;
+    }
     this._rebuildPlan(target);
     // AND PUT THE PEOPLE INTO THE NEW BUILDING (WP-93).
     //

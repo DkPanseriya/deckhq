@@ -510,7 +510,7 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * column's rows end on the lounge's baseline. Every envelope on this ladder is
  * the window's shape now rather than the sum of its parts.
  */
-const PLAN_HASH = '15de7c48';
+const PLAN_HASH = 'a5ca933f';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {
@@ -821,7 +821,14 @@ test('§3.4: the break-out corner appears exactly where the threshold says it do
       assert.equal(fits, false, `${room.id} could hold a break-out group and has none`);
     }
   }
-  assert.ok(withGroup > 0 && without > 0, 'the threshold has to bite both ways to mean anything');
+  // Both ways, room by room, above. The ladder itself is mostly rooms WITH one
+  // now: a room is a share of a building whose rooms are its larger part, so
+  // few are too small for a second destination. The rule's own floor is asked
+  // directly, so the threshold is still seen to bite.
+  assert.ok(withGroup > 0, 'no room on the ladder has a break-out corner');
+  assert.equal(breakoutFits(BREAKOUT_BAND, BREAKOUT_BAND, BREAKOUT_CLEAR_RATIO + 0.01), true);
+  assert.equal(breakoutFits(BREAKOUT_BAND - 0.1, BREAKOUT_BAND, 99), false);
+  assert.equal(breakoutFits(BREAKOUT_BAND, BREAKOUT_BAND, BREAKOUT_CLEAR_RATIO), false);
   report('the break-out corner', [
     ['rooms with one', String(withGroup)],
     ['rooms without', String(without)],

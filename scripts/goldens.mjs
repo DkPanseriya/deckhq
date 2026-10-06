@@ -162,8 +162,9 @@ const RUN_BUDGET_MS = Number(opt('--budget', 360)) * 1000;
  * band.
  *
  * `pinned` is WP-77's, and it is `three` with one repo pinned: the same nine
- * sessions, so the two captures differ in exactly one thing and the strip along
- * the bottom of the working side is the whole of what moved.
+ * sessions, so the two captures differ in exactly one thing — the room a
+ * pinned repo keeps with nobody in it, its lights off, a cell of the grid like
+ * any other and the small one in its row.
  */
 const POPULATIONS = ['demo', 'empty', 'single', 'three', 'pinned', 'reference'];
 
@@ -355,8 +356,20 @@ const CAPTURES = [
   { name: 'crew-waiting', population: 'crew-waiting', theme: 'default' },
   // Sixteen sessions waiting on the office's three sofa runs, from five repos
   // nobody is at a desk in, and one working repo with two juniors: every name
-  // next to its own body, the five away rooms narrow, the working room full.
+  // next to its own body, the five away rooms the size they would be with
+  // somebody in them and their lights off, the working room lit.
   { name: 'away', population: 'away', theme: 'default' },
+  // THE PROPORTIONS OF THE FLOOR, on a floor the shape of the owner's and at
+  // his window: five repos, four of them away; sixteen waiting; seventy-nine
+  // resting. The rooms the majority of the building and every one a room's
+  // shape, the lounge at its seats and one standing row with `+N resting` at
+  // the end of it. `plan-proportions.js` is the rulebook this is a picture of.
+  { name: 'crowded', population: 'crowded', theme: 'default', stage: { w: 2000, h: 1185 } },
+  // AND THE FLOOR MOST PEOPLE HAVE: two repos, on a window neither wide nor
+  // tall. The reception and the lounge across the front, the two rooms side by
+  // side behind them — the third way of laying a floor, and the only one in
+  // which two rooms are both a room's shape at this window's.
+  { name: 'pair', population: 'pair', theme: 'default', stage: { w: 1440, h: 1000 } },
   // WP-69 · THE STUDIO BOARD, and it is the product's only golden of a surface
   // with rows in it rather than a floor or a form.
   //

@@ -293,6 +293,7 @@ export function assignSeats(plan, agents, opts = {}) {
   // it — and both are the plan's call, so there is one answer to "is this
   // person on the floor" instead of two that can disagree.
   const hidden = (plan && plan.hidden) || null;
+  const behindChip = (plan && plan.loungeOverflow && plan.loungeOverflow.ids) || null;
   /**
    * WP-41. WORKING juniors, by parent id. They are held back from the hashed
    * seating pass on purpose: a junior whose parent is at a desk does not take a
@@ -321,6 +322,8 @@ export function assignSeats(plan, agents, opts = {}) {
   for (const agent of agents) {
     if (hidden && hidden.has(agent.id)) continue;
     const p = derivePlacement(agent);
+    // In the lounge and behind its chip: counted there, drawn nowhere.
+    if (p === 'lounge' && behindChip && behindChip.has(String(agent.id))) continue;
     if (agent.subagent === true && p === 'desk') {
       const parent = agent.parentId == null ? '' : String(agent.parentId);
       const list = juniorsByParent.get(parent) || [];

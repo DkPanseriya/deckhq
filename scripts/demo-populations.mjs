@@ -340,7 +340,66 @@ export const POPULATIONS = {
   ],
   /** A heavy machine: 137 sessions in 40 repos, plus a 13-member crew. */
   large: largeSessions,
+  /**
+   * A FLOOR THE SHAPE OF THE OWNER'S, with nobody's real names on it: five
+   * repos, one with two people at a desk and four whose people are all waiting
+   * in the office; sixteen waiting, seventy-nine resting, twenty-eight benched
+   * for longer than a week. On his 2000 x 1185 window the lounge had 40% of
+   * that building and four of its five rooms were strips. It is the floor
+   * `plan-proportions.js` was written against.
+   */
+  crowded: crowdedSessions,
+  /**
+   * TWO REPOS, which is the floor most people have. Three at desks in one and
+   * two in the other, two waiting, four resting.
+   *
+   * Its own population because two rooms are the hardest count to lay well:
+   * one over the other each is too wide to be a room, and side by side beside
+   * the service column each is too narrow until the building is enormous. On
+   * a window neither wide nor tall this is the floor laid with a FRONT — the
+   * reception and the lounge across the top, the two rooms side by side behind
+   * them (`plan-grid.js`).
+   */
+  pair: () => [
+    ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
+    ['orbital-api', 'Backfill the events table', 'working', 0.6, 1.6],
+    ['orbital-api', 'Flaky websocket reconnect test', 'working', 1.4, 0.9],
+    ['orbital-api', 'Postgres connection pool exhaustion', 'for_review', 6.5, 0.7],
+    ['orbital-api', 'Paginate the audit log', 'benched', 66, 0.5],
+    ['orbital-api', 'Retire the v1 webhooks', 'benched', 81, 0.3],
+    ['checkout-flow', 'Apple Pay in the express lane', 'working', 1.2, 2.2],
+    ['checkout-flow', 'Tax rounding off by a cent', 'working', 0.4, 0.5],
+    ['checkout-flow', 'Saved cards for guests', 'needs_input', 3.8, 1.1],
+    ['checkout-flow', 'Address autocomplete', 'benched', 58, 0.6],
+    ['checkout-flow', 'Coupon stacking rules', 'benched', 74, 0.4],
+  ],
 };
+
+/** @returns {Array<[string, string, string, number, number]>} */
+function crowdedSessions() {
+  const repos = ['atlas', 'birch', 'cedar', 'delta', 'ember'];
+  /** @type {Array<[string, string, string, number, number]>} */
+  const rows = [
+    ['atlas', 'Rework the importer, first half', 'working', 0.2, 0.5],
+    ['atlas', 'Rework the importer, second half', 'working', 0.3, 0.5],
+  ];
+  // Sixteen waiting on you: eight from the working repo, eight from the rest.
+  [8, 3, 2, 2, 1].forEach((count, r) => {
+    for (let k = 0; k < count; k++) {
+      rows.push([repos[r], `Waiting ${k + 1} in ${repos[r]}`, 'for_review', 30 + r * 7 + k * 3, 1]);
+    }
+  });
+  // Seventy-nine resting: finished sessions of those repos, and recent benches.
+  for (let k = 0; k < 79; k++) {
+    const state = k % 3 === 2 ? 'benched' : 'idle';
+    rows.push([repos[k % 5], `Finished ${k + 1} in ${repos[k % 5]}`, state, 2 + (k % 40), 0.3]);
+  }
+  // Twenty-eight who went home: benched, and quiet for longer than a week.
+  for (let k = 0; k < 28; k++) {
+    rows.push([repos[k % 5], `Parked ${k + 1} in ${repos[k % 5]}`, 'benched', 24 * 9 + k, 0.2]);
+  }
+  return rows;
+}
 
 /**
  * A HEAVY MACHINE: the `demo` and `reference` floors together, plus fifteen more

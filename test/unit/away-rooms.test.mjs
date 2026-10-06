@@ -1,14 +1,17 @@
 /**
- * AWAY ROOMS: a repo whose sessions are all waiting in the office keeps a
- * narrow room (the owner's floor of 6 October).
+ * AWAY ROOMS: a repo whose sessions are all waiting in the office keeps its
+ * room, with the lights off (the owner's floor of 6 October).
  *
- * Five repos had everybody on the reception sofas and nobody at a desk, and
- * each of them still kept a full room beside the one room somebody was working
- * in. The rule (`awayRooms` in `public/floor-rule.js`): such a repo keeps a
- * room, laid as a pinned one is — in the strip, one desk, at most a third of
- * the smallest live room — with a live room's plate, and it grows back the
- * moment one of its sessions works. Asked of the real plan over the `away`
- * demo population (`test/helpers/large-floor.mjs`).
+ * Five repos had everybody on the reception sofas and nobody at a desk. They
+ * were first laid as narrow strip rooms, a third of a live one, and on the
+ * owner's own window that drew four slots showing a desk top under one hall:
+ * _"we cannot make one room very big and the others really thin rectangles."_
+ *
+ * The rule now (`awayRooms` in `public/floor-rule.js`, `plan-proportions.js`
+ * (e)): such a repo keeps the room it would have with somebody at the desk —
+ * the same module, the same shape, one desk with nobody at it — and is drawn
+ * dimmed, its plate intact. Asked of the real plan over the `away` demo
+ * population (`test/helpers/large-floor.mjs`).
  */
 
 import test from 'node:test';
@@ -20,9 +23,18 @@ import { assignSeats } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
 import { layoutPlate, platePlanFor } from '../../public/render/scene-labels.js';
 import { plateHeroLine } from '../../public/render/plan-plate.js';
-import { buildOfficeRow } from '../../public/render/plan-office.js';
 import { awayRooms, floorPopulation } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
+import { DIM_PLATE_CONTRAST_MIN, LIGHTS_OFF_DIM } from '../../public/render/plan-proportions.js';
+import {
+  allThemes,
+  contrastRatio,
+  dimmed,
+  materialTokensFor,
+  plateGroundOverDim,
+  relativeLuminance,
+} from '../../public/render/themes.js';
+import { DEFAULT_PALETTE } from '../../public/render/palette.js';
 
 const AWAY = ['orbital-api', 'checkout-flow', 'design-system', 'data-pipeline', 'infra-terraform'];
 const STAGES = [
@@ -36,25 +48,41 @@ function planAt(floor, w, h) {
   return buildPlan(floor.projects, floor.agents, { stage: { w, h }, now: LARGE_NOW });
 }
 
-const area = (r) => r.w * r.h;
-
-test('five away repos beside one working repo: the working room is at least 3x each away room', () => {
+test('five away repos beside one working repo: every one keeps a room, and none is squashed', () => {
   for (const [w, h] of STAGES) {
     const plan = planAt(awayFloor(), w, h);
     const rooms = plan.rooms.filter((r) => r.kind === 'project');
     const working = rooms.find((r) => r.id === 'mobile-app');
-    assert.ok(working && working.away !== true && working.pinned !== true, `${w}x${h}`);
+    assert.ok(working && working.away !== true && working.dim !== true, `${w}x${h}`);
     const away = rooms.filter((r) => r.away === true);
     assert.deepEqual(away.map((r) => r.id).sort(), [...AWAY].sort(), `${w}x${h}`);
     for (const r of away) {
-      assert.ok(
-        area(working) >= 3 * area(r) - 1e-6,
-        `${w}x${h}: ${r.id} is ${area(r).toFixed(0)} U² beside a ${area(working).toFixed(0)} U² working room`,
-      );
+      assert.equal(r.dim, true, `${r.id} has its lights off`);
       assert.notEqual(r.pinned, true, 'an away room is not a pinned one');
-      // One desk, and nobody seated in the room: its people are on the sofas.
-      assert.ok(r.props.filter((p) => p.kind === 'desk').length <= 1, `${r.id} has one desk`);
-      assert.equal((plan.seats.get(r.id) || []).length, 0, `${r.id} seats nobody`);
+      // Its desk is there, with its chair, and nobody is at it.
+      assert.equal(r.props.filter((p) => p.kind === 'desk').length, 1, `${r.id} has one desk`);
+      assert.ok(
+        r.props.some((p) => p.kind === 'chair'),
+        `${r.id}'s desk has its chair`,
+      );
+      // The furniture a one-desk room needs fits inside it: not a strip.
+      assert.ok(r.w >= r.natural.w - 1e-6 && r.h >= r.natural.h - 1e-6, `${r.id} is squashed`);
+    }
+  }
+});
+
+test('nobody is seated in an away room: its people are on the sofas', () => {
+  const floor = awayFloor();
+  const plan = planAt(floor, 2000, 970);
+  const seats = assignSeats(plan, floor.agents);
+  for (const id of AWAY) {
+    const room = plan.rooms.find((r) => r.id === id);
+    for (const a of floor.agents.filter((x) => x.projectId === id)) {
+      const at = seats.get(a.id);
+      if (!at) continue;
+      const inside =
+        at.x > room.x && at.x < room.x + room.w && at.y > room.y && at.y < room.y + room.h;
+      assert.ok(!inside, `${a.id} is drawn in ${id}, which has its lights off`);
     }
   }
 });
@@ -80,11 +108,10 @@ test('an away room keeps its plate: the need-you line is the one a live room wou
       const project = floor.projects.find((p) => p.id === id);
       const plate = platePlanFor(room, snapshot, plan);
       // Exactly the plan a live room of this repo gets.
-      const { away: _away, ...asLive } = room;
+      const { away: _away, dim: _dim, ...asLive } = room;
       assert.deepEqual(plate, platePlanFor(asLive, snapshot, plan), id);
       assert.equal(plate.heroHead, plateHeroLine(project), id);
       assert.match(plate.lines[1], new RegExp(`^${project.needsYou} need you`), id);
-      // And the narrow room still draws it, at the owner's window.
       const hero = layoutPlate(ctx, room, plate, camera).rows.find((r) => r.i === 1);
       assert.ok(
         hero && hero.text.startsWith(`${project.needsYou} need you`),
@@ -96,20 +123,24 @@ test('an away room keeps its plate: the need-you line is the one a live room wou
   }
 });
 
-test('an away room grows back the moment one of its sessions works', () => {
+test('the lights come back the moment one of its sessions works, and the room does not move', () => {
   const floor = awayFloor();
   const before = planAt(floor, 2000, 970).rooms.find((r) => r.id === 'checkout-flow');
   assert.equal(before.away, true);
-  const agents = floor.agents.map((a) =>
-    a.projectId === 'checkout-flow' && a.activityState === 'for_review'
-      ? { ...a, activityState: 'working', reviewSince: null }
-      : a,
-  );
+  assert.equal(before.dim, true);
+  // ONE session of the repo goes back to its desk.
+  let moved = false;
+  const agents = floor.agents.map((a) => {
+    if (moved || a.projectId !== 'checkout-flow' || a.activityState !== 'for_review') return a;
+    moved = true;
+    return { ...a, activityState: 'working', reviewSince: null };
+  });
+  assert.ok(moved);
   const after = planAt({ projects: floor.projects, agents }, 2000, 970);
   const room = after.rooms.find((r) => r.id === 'checkout-flow');
   assert.notEqual(room.away, true);
+  assert.notEqual(room.dim, true);
   assert.notEqual(room.pinned, true);
-  assert.ok(area(room) > 3 * area(before), 'a full room again');
   assert.ok((after.seats.get('checkout-flow') || []).length >= 1, 'with a desk to sit at');
 });
 
@@ -121,36 +152,75 @@ test('an away repo is still on the floor: its finished sessions rest in the loun
     (a) => a.projectId === 'orbital-api' && a.activityState === 'ended',
   );
   assert.ok(resting.length > 0);
-  for (const a of resting) assert.ok(seats.has(a.id), `${a.id} has no seat`);
+  const drawn = resting.filter((a) => seats.has(a.id)).length;
+  const behindChip = plan.loungeOverflow?.count ?? 0;
+  assert.ok(drawn > 0 || behindChip > 0, 'nobody from an away repo is in the lounge');
 });
 
-test('a floor where every repo is away keeps the rooms it had', () => {
+test('a floor where every repo is away has every room dark, and every room a room', () => {
   const floor = awayFloor();
   const projects = floor.projects.filter((p) => p.id !== 'mobile-app');
   const agents = floor.agents.filter((a) => a.projectId !== 'mobile-app');
   const pop = floorPopulation(agents, { now: LARGE_NOW });
   const split = awayRooms(projects, pop);
   assert.equal(split.rooms.length, AWAY.length);
+  assert.ok(split.rooms.every((p) => p.away === true));
   assert.equal(split.strip.length, 0);
   const plan = planAt({ projects, agents }, 2000, 970);
-  assert.equal(plan.rooms.filter((r) => r.away === true).length, 0);
+  const rooms = plan.rooms.filter((r) => r.kind === 'project');
+  assert.equal(rooms.length, AWAY.length);
+  assert.ok(rooms.every((r) => r.away === true && r.dim === true));
 });
 
-test('the reception does not take the width the away rooms gave up: its sofas, at most 40%', () => {
-  // The fault on this floor at 1600 x 1000: the reception was 92 of 134 U, a
-  // bare rug with the sixteen waiting along its two long edges. It is as wide
-  // as its contents now, and the building still fills the window.
+test('`awayRooms` flags a copy: the project record it was handed is never written to', () => {
   const floor = awayFloor();
-  const { waiting } = floorPopulation(floor.agents, { now: LARGE_NOW });
-  assert.equal(waiting, 16);
-  for (const [w, h] of [[1600, 870], ...STAGES]) {
-    const plan = planAt(floor, w, h);
-    const office = plan.rooms.find((r) => r.kind === 'office');
-    const contents = buildOfficeRow(waiting, { w: 0, h: office.h }).room.w;
-    const where = `${w}x${h}: a ${office.w.toFixed(1)} U reception in a ${plan.width.toFixed(1)} U building`;
-    assert.ok(office.w <= 0.4 * plan.width + 1e-6, where);
-    assert.ok(office.w <= contents + 1e-6, `${where}, its sofas need ${contents.toFixed(1)}`);
-    const fill = computeFill(plan.width, plan.height, w, h);
-    assert.ok(Math.min(fill.coverW, fill.coverH) >= 0.96, `${where} leaves ground showing`);
+  const pop = floorPopulation(floor.agents, { now: LARGE_NOW });
+  const split = awayRooms(floor.projects, pop);
+  assert.ok(floor.projects.every((p) => !('away' in p)));
+  assert.deepEqual(
+    split.rooms.map((p) => p.id),
+    split.onFloor.map((p) => p.id),
+    'the rooms are every repo on the floor, in floor order',
+  );
+  assert.deepEqual(
+    split.rooms
+      .filter((p) => p.away)
+      .map((p) => p.id)
+      .sort(),
+    [...AWAY].sort(),
+  );
+});
+
+test('lights off is a token, about a third towards the theme’s dark, on every theme', () => {
+  assert.equal(DEFAULT_PALETTE.lightsOff, materialTokensFor(allThemes()[0]).lightsOff);
+  for (const theme of allThemes()) {
+    const veil = materialTokensFor(theme).lightsOff;
+    const m = /^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/.exec(veil);
+    assert.ok(m, `${theme.name}: ${veil}`);
+    assert.equal(Number(m[4]), LIGHTS_OFF_DIM);
+    // A dimmed carpet is darker than the lit one, on a light theme and a dark.
+    const lit = theme.floor.carpet;
+    const off = dimmed(theme.floor, lit);
+    assert.ok(
+      relativeLuminance(off) < relativeLuminance(lit),
+      `${theme.name}: lights off made the carpet lighter`,
+    );
+    // And it still reads as that room's floor rather than as a hole in it.
+    assert.ok(contrastRatio(off, lit) < 2.6, `${theme.name}: ${contrastRatio(off, lit)}`);
+    assert.ok(contrastRatio(off, lit) > 1.15, `${theme.name}: the dim cannot be seen`);
+  }
+});
+
+test('a dimmed room’s plate is intact: every rank of its text is at least 4.5:1', () => {
+  for (const theme of allThemes()) {
+    const tokens = materialTokensFor(theme);
+    const behind = plateGroundOverDim(theme.floor, theme.floor.carpet);
+    for (const rank of ['plateInk', 'plateInkSecondary', 'plateInkTertiary']) {
+      const ratio = contrastRatio(tokens[rank], behind);
+      assert.ok(
+        ratio >= DIM_PLATE_CONTRAST_MIN,
+        `${theme.name}: ${rank} is ${ratio.toFixed(2)}:1 on a dimmed room's plate`,
+      );
+    }
   }
 });

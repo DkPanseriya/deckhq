@@ -530,6 +530,48 @@ export function renderDeckTable(agents, opts, doc) {
 }
 
 /**
+ * THE RESTING TABLE: everybody in the lounge, in the order it is handed —
+ * most recent first (`floor-resting.js`). The queue's own rows, so a session
+ * reads the same here as it does while it is waiting; the first column is how
+ * long it has rested rather than how long it has waited, and its heading says
+ * so. No groups and no crews: a resting junior is a row like anyone.
+ *
+ * @param {any[]} agents
+ * @param {{now?:number, selectedId?:string|null}} opts
+ * @param {{createElement:(tag:string)=>any}} doc
+ */
+export function renderRestingTable(agents, opts, doc) {
+  const table = doc.createElement('table');
+  table.className = 'deck-table';
+
+  const caption = doc.createElement('caption');
+  caption.className = 'sr-only';
+  caption.textContent = 'Resting in the lounge, most recently active first.';
+  table.appendChild(caption);
+
+  const thead = doc.createElement('thead');
+  const headRow = doc.createElement('tr');
+  for (const col of COLUMNS) {
+    const th = doc.createElement('th');
+    th.setAttribute('scope', 'col');
+    th.className = col.className;
+    th.textContent = col.key === 'waiting' ? 'Resting' : col.label;
+    headRow.appendChild(th);
+  }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+
+  const tbody = doc.createElement('tbody');
+  tbody.className = 'deck-group';
+  tbody.setAttribute('data-group', 'resting');
+  for (const agent of Array.isArray(agents) ? agents : []) {
+    tbody.appendChild(buildRow(agent, opts, doc));
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+/**
  * ONE CREW, AS ONE ROW UNDER ITS PARENT (WP-89 §3.2).
  *
  * A `<details>` whose summary is the count and whose body is one line per

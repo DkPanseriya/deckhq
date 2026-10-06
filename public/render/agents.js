@@ -422,6 +422,7 @@ export class AgentRuntime {
     };
 
     const hidden = (plan && plan.hidden) || null;
+    const behindChip = (plan && plan.loungeOverflow && plan.loungeOverflow.ids) || null;
     const seen = new Set();
     for (const agent of agents) {
       const placement = derivePlacement(agent);
@@ -435,6 +436,9 @@ export class AgentRuntime {
       // who went home, and an agent at a desk in a project with no room.
       if (placement === 'let_go') continue;
       if (hidden && hidden.has(agent.id)) continue;
+      // And of anyone behind the lounge's chip (`plan.loungeOverflow`): they are
+      // in the lounge and on its plate, and the floor draws a number for them.
+      if (placement === 'lounge' && behindChip && behindChip.has(String(agent.id))) continue;
       const seat = seatMap ? seatMap.get(agent.id) || null : null;
       // WP-41, WP-89. A junior with no seat is a crew member past
       // `CREW_DRAW_CAP` — the `+N` chip — since bug 201 gave a working junior

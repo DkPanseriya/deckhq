@@ -19,6 +19,7 @@
  */
 
 import { FIGURE_HALO, ON_FLOOR_STATES, STATE_COLORS } from './palette.js';
+import { LIGHTS_OFF_DIM } from './plan-proportions.js';
 import { DEFAULT_FLOOR } from './themes-tables.js';
 
 // ---------------------------------------------------------------- colour maths
@@ -348,6 +349,37 @@ export function plateGroundOver(floor, ground) {
 
 /** How opaque the halo behind a plate's letterforms is. */
 export const PLATE_HALO_ALPHA = 0.92;
+
+/**
+ * WHAT A ROOM WITH THE LIGHTS OFF IS DIMMED TOWARDS (`plan-proportions.js` (e)).
+ *
+ * The theme's own dark: its ink on a light floor, and the far side of its
+ * ground on a dark one — the same direction the plate halo already goes there,
+ * so a dark theme's unlit room is darker than its lit ones and not lighter.
+ * @param {Record<string,string>} floor a theme's eleven floor keys
+ */
+export function lightsOffBase(floor) {
+  return lightInkFor(floor.ink) ? shade(floor.ground, -0.55) : floor.ink;
+}
+
+/**
+ * A ground with the lights off: `LIGHTS_OFF_DIM` of the way to that dark.
+ * @param {Record<string,string>} floor @param {string} ground
+ */
+export function dimmed(floor, ground) {
+  return mix(ground, lightsOffBase(floor), LIGHTS_OFF_DIM);
+}
+
+/**
+ * The colour a plate's letters are read against in a room with the lights off:
+ * the halo over the dimmed ground. No pool of light — an unlit room has none.
+ * `plateGroundOver`'s other case, held to the same 4.5:1.
+ * @param {Record<string,string>} floor @param {string} ground
+ */
+export function plateGroundOverDim(floor, ground) {
+  const haloBase = lightInkFor(floor.ink) ? shade(floor.ground, -0.55) : floor.wall;
+  return mix(dimmed(floor, ground), haloBase, PLATE_HALO_ALPHA);
+}
 
 /**
  * Which of the two devices a theme uses, everywhere the answer is needed: light
@@ -765,5 +797,9 @@ export function materialTokensFor(theme, look = {}) {
     // it, so the same pool at the light theme's strength would wash a night
     // corridor out to the colour of its own line work.
     lightPool: alpha(LIGHT_POOL_COLOR, lightInk ? LIGHT_POOL_ALPHA_DARK : LIGHT_POOL_ALPHA_LIGHT),
+    // ---- a room with the lights off (`plan-proportions.js` (e)) ----
+    // One veil over the floor and the furniture of a room nobody is at a desk
+    // in. A token, so a theme's unlit room is dimmed towards ITS dark.
+    lightsOff: alpha(lightsOffBase({ ink, ground }), LIGHTS_OFF_DIM),
   };
 }

@@ -141,8 +141,16 @@ export class SceneHit extends SceneLabels {
     // fresh every draw by `_drawRoomFixtures`) rather than by array push
     // order, so the priority holds regardless of how that array was filled.
     // A click on the "+" (or any of these) must never fall through to the
-    // character or room plate that might sit behind or near it.
-    for (const kind of /** @type {const} */ (['new-agent', 'shelf', 'screen', 'whiteboard'])) {
+    // character or room plate that might sit behind or near it. The lounge's
+    // `+N resting` chip is the last of them: it stands at the end of a row of
+    // people, and a click on it is a click on the number, not on a neighbour.
+    for (const kind of /** @type {const} */ ([
+      'new-agent',
+      'shelf',
+      'screen',
+      'whiteboard',
+      'resting',
+    ])) {
       const hit = this._hitTestFixtureKind(sx, sy, kind);
       if (hit) return hit;
     }
@@ -177,7 +185,7 @@ export class SceneHit extends SceneLabels {
    * (called once per kind, in priority order, from `_hitTest`) rather than
    * one generic scan so priority is explicit and independent of paint order.
    * @param {number} sx @param {number} sy
-   * @param {'new-agent'|'shelf'|'screen'|'whiteboard'} kind
+   * @param {'new-agent'|'shelf'|'screen'|'whiteboard'|'resting'} kind
    */
   _hitTestFixtureKind(sx, sy, kind) {
     for (const f of this._fixtureRects) {

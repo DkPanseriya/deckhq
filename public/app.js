@@ -91,6 +91,7 @@ import {
 } from './app-launchers.js';
 import { studioActions, studioPalette } from './app-studio.js';
 import { adoptSnapshotClock, now as clockNow } from './clock.js';
+import { restingAgentsOf } from './floor-resting.js';
 
 // -------------------------------------------------------------- app state
 /**
@@ -118,25 +119,19 @@ let clearedTimers = [];
  * kinds this pass adds; anything unrecognised falls back to `'agent'` so a
  * future kind degrades to the old behaviour instead of throwing.
  * @param {unknown} hit
- * @returns {{kind:'agent'|'project'|'whiteboard'|'new-agent'|'shelf'|'screen',
+ * @returns {{kind:'agent'|'project'|'whiteboard'|'new-agent'|'shelf'|'screen'|'resting',
  *   id:string}|null} `'shelf'` (the project folder) and `'screen'` (the
  *   dashboard) were added to the body and to two call sites without being
  *   added here, so both of those branches were unreachable to a checker (WP-22).
+ *   `'resting'` is the lounge's `+N resting` chip.
  */
 function normaliseHit(hit) {
   if (!hit) return null;
   if (typeof hit === 'string') return { kind: 'agent', id: hit };
   const h = /** @type {any} */ (hit);
   if (!h.id) return null;
-  const kind =
-    h.kind === 'project' ||
-    h.kind === 'whiteboard' ||
-    h.kind === 'new-agent' ||
-    h.kind === 'shelf' ||
-    h.kind === 'screen'
-      ? h.kind
-      : 'agent';
-  return { kind, id: String(h.id) };
+  const known = ['project', 'whiteboard', 'new-agent', 'shelf', 'screen', 'resting'];
+  return { kind: known.includes(h.kind) ? h.kind : 'agent', id: String(h.id) };
 }
 
 // ---------------------------------------------------- the office cleared
@@ -473,6 +468,7 @@ setDeckUI(
     // replays the ledger and touches no ack state.
     loadUsage,
     getUsageNames: usageNames,
+    getResting: () => restingAgentsOf(latestSnapshot, { now: clockNow() }),
   }),
 );
 
@@ -880,6 +876,7 @@ async function main() {
       revealProjectFolder,
       runProjectDashboard,
       showTooltip,
+      openResting: () => deckUI?.openResting(),
     }),
   ]);
   connectEvents();

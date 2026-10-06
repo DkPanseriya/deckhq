@@ -53,6 +53,7 @@ import {
   queueCursor,
   queueStep,
   renderDeckTable,
+  renderRestingTable,
   rowLabel,
 } from './deck-view.js';
 
@@ -111,6 +112,8 @@ const CHIP_GAP = 8;
  *   window's usage. INJECTED rather than done here, because nothing in this
  *   module fetches — see the header — and because a test can then drive the
  *   whole Usage tab from a fixture.
+ * @param {() => any[]} [opts.getResting] everybody in the lounge, most recent
+ *   first (`floor-resting.js`): the Resting tab's rows
  * @param {() => {projectNames:Record<string,string>, sessionNames:Record<string,string>}}
  *   [opts.getUsageNames] the two lookups that turn a ledger hash into a name.
  *   A key with nothing on the floor stays a hash, which is honest.
@@ -361,7 +364,34 @@ export function createDeckUI(opts) {
     if (deckOpen && tab === 'usage') paintUsage();
   }
 
-  /** @param {'queue'|'usage'} next */
+  /**
+   * THE RESTING TAB: everybody the lounge is holding, most recent first. It is
+   * where the lounge's `+N resting` chip leads — the floor draws the lounge's
+   * seats and one standing row, and the rest of a crowd is a number there and
+   * a row each here. A read like the queue's: a click opens that session.
+   */
+  function paintResting() {
+    bodyEl.textContent = '';
+    const resting = opts.getResting?.() || [];
+    if (resting.length === 0) {
+      const empty = document.createElement('p');
+      empty.className = 'deck-empty';
+      empty.textContent = 'Nobody is resting.';
+      bodyEl.appendChild(empty);
+      return;
+    }
+    const scroller = document.createElement('div');
+    scroller.className = 'deck-scroll';
+    const view = { now: clockNow(), selectedId: getSelectedId() };
+    scroller.appendChild(renderRestingTable(resting, view, document));
+    bodyEl.appendChild(scroller);
+    for (const row of bodyEl.querySelectorAll('.deck-row')) {
+      const id = row.getAttribute('data-id');
+      if (id) row.addEventListener('click', () => onSelect(id, { openPanel: true }));
+    }
+  }
+
+  /** @param {'queue'|'usage'|'resting'} next */
   function setTab(next) {
     if (tab === next) return;
     tab = next;
@@ -376,6 +406,10 @@ export function createDeckUI(opts) {
       if (usageData) paintUsage();
       else void loadUsage();
       announce?.('Usage. Where the tokens went.');
+    } else if (tab === 'resting') {
+      paintResting();
+      const n = (opts.getResting?.() || []).length;
+      announce?.(`Resting. ${n} in the lounge, most recent first.`);
     } else {
       render();
       announce?.('The queue.');
@@ -461,6 +495,7 @@ export function createDeckUI(opts) {
     if (showHint) hintEl.textContent = `${queue.length} waiting · press Tab for the deck`;
 
     if (deckOpen && tab === 'queue') paintDeck(queue, now, cursorFor(queue));
+    if (deckOpen && tab === 'resting') paintResting();
   }
 
   // ------------------------------------------------------------- behaviour
@@ -505,6 +540,7 @@ export function createDeckUI(opts) {
       render();
     }
     deckEl.focus();
+    if (tab === 'resting') return;
     const n = getQueue().length;
     announce?.(
       n === 0 ? 'The deck. Nothing is waiting on you.' : `The deck. ${n} waiting, oldest first.`,
@@ -526,6 +562,13 @@ export function createDeckUI(opts) {
   function toggle() {
     if (deckOpen) close();
     else open();
+  }
+
+  /** The deck, on the people in the lounge: what the floor's chip opens. */
+  function openResting() {
+    setTab('resting');
+    open();
+    paintResting();
   }
 
   /** The id every key in the strip and the deck acts on. */
@@ -556,7 +599,7 @@ export function createDeckUI(opts) {
     for (const button of opts.tabsEl.querySelectorAll('.deck-tab')) {
       button.addEventListener('click', () => {
         const next = button.getAttribute('data-tab');
-        if (next === 'queue' || next === 'usage') setTab(next);
+        if (next === 'queue' || next === 'usage' || next === 'resting') setTab(next);
       });
     }
   }
@@ -574,6 +617,7 @@ export function createDeckUI(opts) {
     open,
     close,
     toggle,
+    openResting,
     isOpen,
     cursor,
     setTab,

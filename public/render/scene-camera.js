@@ -93,6 +93,31 @@ export function shouldRebuildAspect(currentTargetAspect, planTargetAspect) {
 }
 
 /**
+ * How far a stage's width may drift from the one a plan was laid for before
+ * the plan is laid again. A plan is laid for a SHAPE, and since the floor's
+ * proportions were budgeted it is laid for a SIZE as well: the service rooms
+ * are held to their caps in the building the window is at the nominal scale
+ * (`plan-proportions.js` (i)), so a window dragged from a laptop's width to a
+ * monitor's at one aspect is a different floor. A tenth is past any resize
+ * that is a nudge and well inside one that is a different window.
+ */
+export const STAGE_REBUILD_THRESHOLD = 0.1;
+
+/**
+ * True when the stage is no longer the width the plan was laid for.
+ * @param {number} stageW the stage's width now, in px
+ * @param {number|null|undefined} laidW the width the plan was laid for; a plan
+ *   laid for a shape alone has none, and never asks to be laid again
+ * @returns {boolean}
+ */
+export function shouldRebuildStage(stageW, laidW) {
+  const was = Number(laidW) || 0;
+  const now = Number(stageW) || 0;
+  if (!(was > 0) || !(now > 0)) return false;
+  return Math.abs(now / was - 1) > STAGE_REBUILD_THRESHOLD;
+}
+
+/**
  * Px-per-unit that makes a `planW x planH` (unit) floor exactly *contain*
  * (fit entirely inside, no scroll/overflow) a `viewW x viewH` (px) stage.
  * This is the one and only scale the floor is ever drawn at — there is no

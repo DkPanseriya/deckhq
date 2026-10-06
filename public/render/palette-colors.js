@@ -321,6 +321,13 @@ export const BASE_PALETTE = /** @type {Record<string, string>} */ ({
    */
   lightPool: 'rgba(255,233,196,0.1)',
 
+  /**
+   * A ROOM WITH THE LIGHTS OFF (`plan-proportions.js` (e)). One veil, the
+   * theme's dark at `LIGHTS_OFF_DIM`, laid over the floor and the furniture of
+   * a room nobody is at a desk in. `themes.js` derives it from the ink.
+   */
+  lightsOff: 'rgba(50,40,29,0.35)',
+
   // ---- walls, partitions, doors ----
   wallFill: '#F4F1EA', // near-white, 5px thick
   wallEdge: '#d2cfc9',

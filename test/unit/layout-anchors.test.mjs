@@ -83,10 +83,15 @@ function rectGap(a, b) {
   return Math.hypot(dx, dy);
 }
 
-/** Distance from a prop's rect to the nearest of its room's four walls. */
+/**
+ * Distance from a prop's rect to the nearest of its room's four walls. The
+ * north one is read under the plate band: a room's contents start there
+ * (`resolveAnchors`), so a sofa run along the top of a reception laid on its
+ * side stands against the band and not three units off the wall.
+ */
 function wallDist(prop, room) {
   const L = room.x;
-  const T = room.y;
+  const T = room.y + (room.plateBand ?? 0);
   const R = room.x + room.w;
   const B = room.y + room.h;
   return Math.min(prop.x - L, R - (prop.x + prop.w), prop.y - T, B - (prop.y + prop.h));
@@ -163,9 +168,11 @@ test('§3.9 chair and plant offsets are identical in the smallest and the larges
   const byArea = [...projectRooms].sort((a, b) => a.w * a.h - b.w * b.h);
   const smallest = byArea[0];
   const largest = byArea[byArea.length - 1];
+  // A room is one of three modules now (`plan-proportions.js` (c)), so the
+  // largest is at most two and a half times the smallest rather than ten.
   assert.ok(
-    largest.w * largest.h > smallest.w * smallest.h * 2,
-    'sanity: the fixture must actually contain rooms of very different sizes',
+    largest.w * largest.h > smallest.w * smallest.h * 1.4,
+    'sanity: the fixture must actually contain rooms of different sizes',
   );
 
   // Density is fixed by the furniture, never rescaled per zone: a chair is

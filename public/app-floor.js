@@ -97,7 +97,9 @@ export function applyTendencies(map) {
  *   filterToProject:(id:string|null) => void, openNewAgentDialog:(id:string) => void,
  *   showWhiteboard:(id:string) => void, revealProjectFolder:(id:string) => Promise<void>,
  *   runProjectDashboard:(id:string) => Promise<void>,
- *   showTooltip:(id:string|null) => void}} actions
+ *   showTooltip:(id:string|null) => void, openResting:() => void}} actions
+ *   `openResting` opens the deck on the people in the lounge: what the
+ *   lounge's `+N resting` chip is for.
  */
 export async function loadRenderModules({
   normaliseHit,
@@ -108,6 +110,7 @@ export async function loadRenderModules({
   revealProjectFolder,
   runProjectDashboard,
   showTooltip,
+  openResting,
 }) {
   // WP-45. Started here rather than awaited here: what an installed pack
   // brings is a fact about disk that only the daemon can read, and the two
@@ -180,6 +183,7 @@ export async function loadRenderModules({
           if (sel.kind === 'whiteboard') return showWhiteboard(sel.id);
           if (sel.kind === 'shelf') return revealProjectFolder(sel.id);
           if (sel.kind === 'screen') return runProjectDashboard(sel.id);
+          if (sel.kind === 'resting') return openResting();
           selectAgent(sel.id);
         },
         onHover: (hit) => {
@@ -195,7 +199,12 @@ export async function loadRenderModules({
           // tooltip rather than a second floating card: a title attribute
           // costs no paint, no layout and no keyboard trap, and it is read
           // aloud by a screen reader that the canvas cannot otherwise reach.
-          const plate = sel && sel.kind === 'project' ? scene.plateTooltipFor(sel.id) : '';
+          const plate =
+            sel && sel.kind === 'project'
+              ? scene.plateTooltipFor(sel.id)
+              : sel && sel.kind === 'resting'
+                ? 'Everybody resting in the lounge. Open the list.'
+                : '';
           if (plate) el.canvas.title = plate;
           else el.canvas.removeAttribute('title');
         },

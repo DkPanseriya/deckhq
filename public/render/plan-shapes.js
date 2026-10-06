@@ -50,7 +50,7 @@ export {};
  *   keeps a room with nothing running in it. User-owned state from
  *   `state.json`, never derived — see `src/core/store.mjs`.
  * @property {boolean} [away] set by `awayRooms` (floor-rule.js) on the copy the
- *   strip is laid from: every live session of this repo is waiting in the
+ *   room is built from: every live session of this repo is waiting in the
  *   office. Derived per plan, never stored.
  * @property {number} [lastActivityAt] ms epoch of the newest session in it
  * @property {number|null} [todaySpend] WP-26's payroll meter; see `payrollLine`
@@ -154,9 +154,12 @@ export {};
  *   `PINNED_AREA_SHARE` of the narrowest live room's footprint. Absent on every
  *   live room, so `room.pinned === true` is the whole of the test.
  * @property {boolean} [away] project rooms only: a repo whose sessions are all
- *   waiting in the office (`awayRooms`), laid in the strip as a pinned room is
- *   — one desk, at most `PINNED_AREA_SHARE` of the narrowest live room — with
- *   a live room's plate. Never both `pinned` and `away`.
+ *   waiting in the office (`awayRooms`). The room it would be with somebody at
+ *   the desk, with a live room's plate. Never both `pinned` and `away`.
+ * @property {boolean} [dim] project rooms only: nobody is at a desk in it — it
+ *   is `away` or `pinned` — so the backdrop draws it with the lights off
+ *   (`plan-proportions.js` (e)): floor and furniture under the `lightsOff`
+ *   veil, no pool of light on its desk, its plate as readable as any other.
  * @property {boolean} [landscape] the reception, laid on its side for a row
  *   (WP-59d): the waiting area runs along its width and the desk is at one
  *   end. `seatOffice` reads it to walk the runs in queue order.
@@ -222,6 +225,8 @@ export {};
  * @property {number} width
  * @property {number} height
  * @property {number} targetAspect
+ * @property {number|null} [stageW] the stage's width in pixels the floor was
+ *   laid for, or null where the caller named a shape and no size
  * @property {string} agentSize which of `small` | `medium` | `large` this floor
  *   was laid at (WP-88c). `auto` never appears here: it is a SETTING, and this
  *   is what it resolved to for this population.
@@ -244,15 +249,32 @@ export {};
  * @property {Door[]} doors
  * @property {Set<string>} hidden agent ids the plan draws nobody for
  * @property {Set<string>} goneHome the subset of `hidden` that went home
+ * @property {{count:number, ids:Set<string>, x:number, y:number, w:number,
+ *   h:number}|null} [loungeOverflow] the people IN the lounge the floor does
+ *   not draw: everybody past its seats and its one standing row, longest-rested
+ *   first (`plan-proportions.js` (g)). `ids` is who, and the rectangle is where
+ *   their `+N resting` chip stands. Not part of `hidden`: they are on the
+ *   lounge's plate and in the header's count. `null` on a floor whose lounge
+ *   has a place for everybody in it.
  * @property {WorkingSide} working what the working side did with the height
  *   the service column gave it (WP-59c)
- * @property {Arrangement} arrangement which shape the envelope search chose
- *   (WP-59d): `column` is the service column beside the working side, which
- *   every floor before this package was laid as; `two-rows` is the office
- *   beside the rooms over the lounge beside the strip.
+ * @property {Arrangement} arrangement how the building is laid. `column` is the
+ *   service rooms one over the other down the left, a spine, and the rooms
+ *   beside them. `bands` is the office at the left end of the top row of rooms
+ *   and the lounge at the left end of the bottom one (`plan-grid.js`).
+ *   `two-rows` is the classic office over a full-width lounge (WP-59d), which
+ *   only a floor with no project room is still laid in.
+ * @property {Proportions} proportions the floor's area budget and its rooms'
+ *   shapes, MEASURED off `rooms`, and the rules of `plan-proportions.js` they
+ *   break. A record, like `working`: the tests re-measure it.
  */
 
-/** @typedef {'column'|'two-rows'} Arrangement */
+/** @typedef {'column'|'bands'|'front'|'two-rows'} Arrangement */
+
+/**
+ * @typedef {ReturnType<typeof import('./plan-proportions.js').measureProportions>
+ *   & {faults: string[]}} Proportions
+ */
 
 /**
  * @typedef {object} WorkingSide
@@ -269,7 +291,11 @@ export {};
  *   is the room untouched
  * @property {number} openH (c) — the open plan left under the rooms, in units
  * @property {number} [pinnedH] the depth the pinned strip took along the bottom
- *   of the working side (WP-77); `0` on every floor with nothing pinned
+ *   of the working side (WP-77); `0` on every floor with nothing pinned, and
+ *   on every floor the grid laid, where a pinned room is a cell like any other
+ * @property {number} [rows] a floor the grid laid: how many rows of rooms
+ * @property {number} [flatten] and how far the module weights were flattened
+ *   to hold the spread — `1` is 1 : 1.5 : 2.25 as written, `0` is all equal
  *
  * There used to be a `stripCols` between (a) and (b) — the columns the idle
  * strip had been laid in — because the strip standing its lines up was a step

@@ -10,6 +10,8 @@
  */
 
 import {
+  CREW_JUNIORS,
+  CREW_PARENT,
   JUNIOR_PARENT,
   JUNIORS,
   POPULATIONS,
@@ -56,6 +58,41 @@ export function crowdedOfficeFloor(now = LARGE_NOW) {
   /** @type {Array<[string, string, string, number, number]>} */
   const working = repos.map((repo) => [repo, `At a desk in ${repo}`, 'working', 0.2, 0.5]);
   return floorOf([...POPULATIONS.away(), ...working], now, JUNIOR_PARENT, JUNIORS);
+}
+
+/** Whose juniors each demo population carries, as `demo-floor.mjs` attaches them. */
+const CREWS = /** @type {Record<string, [string, ReadonlyArray<{agentType:string}>]>} */ ({
+  demo: [JUNIOR_PARENT, JUNIORS],
+  away: [JUNIOR_PARENT, JUNIORS],
+  crew: [CREW_PARENT, CREW_JUNIORS],
+  'crew-waiting': [WAITING_CREW_PARENT, WAITING_CREW_JUNIORS],
+  large: [WAITING_CREW_PARENT, WAITING_CREW_JUNIORS],
+});
+
+/**
+ * ANY DEMO POPULATION, as the snapshot would carry it. `pinned` is the `three`
+ * floor with the repo `demo-floor.mjs` pins on it marked pinned.
+ * @param {string} name a key of `POPULATIONS`
+ * @returns {{projects:any[], agents:any[]}}
+ */
+export function populationFloor(name, now = LARGE_NOW) {
+  const [parent, juniors] = CREWS[name] || ['', []];
+  const floor = floorOf(POPULATIONS[name](), now, parent, juniors);
+  if (name === 'pinned') {
+    for (const p of floor.projects) if (p.id === 'data-pipeline') p.pinned = true;
+  }
+  return floor;
+}
+
+/**
+ * A FLOOR THE SHAPE OF THE OWNER'S, with nobody's real names on it: the
+ * `crowded` demo population. Five repos, one with two people at a desk and
+ * four whose people are all waiting in the office; sixteen waiting,
+ * seventy-nine resting, twenty-eight gone home.
+ * @returns {{projects:any[], agents:any[]}}
+ */
+export function ownerShapedFloor(now = LARGE_NOW) {
+  return floorOf(POPULATIONS.crowded(), now, '', []);
 }
 
 /**

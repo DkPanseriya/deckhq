@@ -41,6 +41,20 @@ people in it are that project's sessions: typing if they are working, **hand up*
 blocked on a question, slumped if they have gone quiet. The lounge holds agents you have reviewed
 and benched — available capacity, resting, ready for the next job.
 
+**How the floor is shared out.** The project rooms get most of the building: at least 55% of it,
+with your office held to a fifth and the lounge to a quarter. Every room is the shape of a room,
+between 0.7 and 1.8 times as wide as it is deep, and none is more than two and a half times the
+size of the smallest. A room comes in one of three sizes: one desk, a team of two to four, a team of
+five or more. A project whose people are all waiting in your office keeps the room it had, with one
+empty desk and **the lights off**, and the lights come back when one of them goes back to work. The
+lounge draws its seats and one row of people standing; a bigger crowd is a **`+N resting`** chip at
+the end of that row, and clicking it opens the deck on everybody resting. When more people are
+waiting than your office has sofas for inside its fifth, the rest stand in the queue beside them.
+Where your office and the lounge stand depends on the window and on how many rooms there are: one
+over the other down the left, at the left ends of the top and bottom rows, or — for two or three
+rooms in a window that is neither wide nor tall — side by side across the top with the rooms behind
+them.
+
 ## The one rule
 
 An office is only worth having if it tells the truth about who is waiting on you. This is the rule
@@ -828,9 +842,9 @@ Look button open Settings at the top, where a row of section names — State, No
 Floor, Look, Data, Hooks — jumps to each. Neither key does anything while you are typing in a field.
 
 `I` opens the list of repos nobody is working in — a quiet chip in the corner of the floor, and the
-names behind it. **Pinning one keeps it a room** even with nothing running in it: a small room, one
-desk, nobody at it, and a plate that says `pinned`, which fills out into a full room the moment you
-start a session there. `P` on a row pins and unpins; so does `Pin` / `Unpin` in `⌘K`. The pin lives
+names behind it. **Pinning one keeps it a room** even with nothing running in it: the small room in
+its row, one desk, nobody at it, the lights off, and a plate that says `pinned`. It becomes a lit
+room of its own size the moment you start a session there. `P` on a row pins and unpins; so does `Pin` / `Unpin` in `⌘K`. The pin lives
 in `state.json` and nothing your agents do can clear it.
 
 With a permission card open in the panel — a session with its hand up, asking before it runs
@@ -876,7 +890,8 @@ it. `Tab` swaps between them and leaves the panel where it is. It is a real tabl
 same order, same actions — so a screen reader reaches everything the floor shows, and the floor is
 never the only way to get to anything. Whenever something is waiting, a strip of chips under the
 header carries the queue's shape without leaving the floor at all: oldest on the left, and it
-stays there.
+stays there. The deck's **Resting** tab is the lounge as a list: everybody in it, most recent
+first, including the ones the floor shows only as a number on the lounge's `+N resting` chip.
 
 ## Change the look
 
