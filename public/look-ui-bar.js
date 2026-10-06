@@ -10,22 +10,27 @@
  * into a palette, and a scroll. A setting nobody can find is a setting the
  * product does not have.
  *
- * So the header carries two buttons now, and this is what they do:
+ * So the header carries two buttons, and this is what they do:
  *
- *   - **Look** opens a small popover with the three controls people actually
- *     reach for — agent size, theme, preset — and a link to the whole section.
+ *   - **Look** opens a small popover with the four high-level choices — agent
+ *     size, theme, style and density — and a link to the whole section.
  *   - **Settings** opens the sheet at the top.
+ *
+ * The four are the same four the top of the sheet's Look section draws, out of
+ * the same list (`outsideControls`) and the same store. Nothing finer is here:
+ * a floor material per zone belongs under Advanced, in the sheet.
  *
  * ============================================================================
  * FOUR RULES, AND THE FIRST THREE ARE `look-ui.js`'s
  *
- * 1. **The catalogue is the popover.** The four sizes and the six presets are
- *    read out of the catalogue the Look section reads; nothing here restates
- *    one. The themes come from the theming port for the same reason.
+ * 1. **The catalogue is the popover.** The sizes, the presets and the density
+ *    steps are read out of the catalogue the Look section reads; nothing here
+ *    restates one. The themes come from the theming port for the same reason.
  *
- * 2. **A refusal changes nothing and says why.** A look is measured by the
- *    guard BEFORE it is shown or posted. Refused, the guard's own sentence is
- *    drawn under the control that was touched, and nothing is sent.
+ * 2. **A control shows what the daemon last accepted.** It moves on the click
+ *    and goes back only on a refusal, with the guard's own sentence under the
+ *    control that was touched. The look, what is pending and the refusal are
+ *    the store's (`look-ui-store.js`) — the settings sheet reads the same one.
  *
  * 3. **Nothing here imports the renderer**, and nothing here touches a global.
  *    The document, the elements, the ports and the two writes all arrive as
@@ -42,7 +47,8 @@
  * Every string that reaches the page goes through `textContent`.
  */
 
-import { LOOK_DEBOUNCE_MS } from './look-ui.js';
+import { createLookStore } from './look-ui-store.js';
+import { createLookParts, outsideControls } from './look-ui-parts.js';
 
 /** The hint's one line. In `index.html` too, where a test can read it. */
 export const LOOK_HINT_TEXT = 'Change the floor, the furniture and the agent size here.';
@@ -50,9 +56,6 @@ export const LOOK_HINT_TEXT = 'Change the floor, the furniture and the agent siz
 /** The floor keys the two buttons answer to, named once for the tooltips. */
 export const LOOK_KEY = 'L';
 export const SETTINGS_KEY = ',';
-
-/** `night shift` → `Night shift`: a theme's name, as a label beside "Small". */
-const sentence = (/** @type {string} */ s) => (s ? `${s[0].toUpperCase()}${s.slice(1)}` : s);
 
 /**
  * @param {object} opts
@@ -73,27 +76,31 @@ const sentence = (/** @type {string} */ s) => (s ? `${s[0].toUpperCase()}${s.sli
  * @param {() => boolean} [opts.isBusy]  true while a tour or a modal has the
  *   screen, so the hint waits its turn
  * @param {(text:string) => void} [opts.announce]
- * @param {number} [opts.debounceMs]
+ * @param {any} [opts.store]             the look store both surfaces share
+ * @param {number} [opts.debounceMs]     read only by a store made here
  */
 export function createLookBar(opts) {
   const { doc, buttonEl, popoverEl, hintEl, hintDismissEl, settingsBtnEl } = opts;
   const { look: port, theming, getSettings, saveSetting, openSheet } = opts;
   const isBusy = opts.isBusy || (() => false);
   const announce = opts.announce || (() => {});
-  const debounceMs = opts.debounceMs ?? LOOK_DEBOUNCE_MS;
+  /**
+   * The look, the theme, what is pending and the last refusal all live in the
+   * store (`look-ui-store.js`), and the shell hands this bar the SAME store it
+   * hands the settings sheet — so the two cannot show different floors. A bar
+   * given none makes its own out of the same ports.
+   */
+  const store =
+    opts.store ||
+    createLookStore({
+      port,
+      theming,
+      read: getSettings,
+      saveSetting,
+      debounceMs: opts.debounceMs,
+    });
 
   let shown = false;
-  /** A look that has been shown and not yet confirmed. @type {any} */
-  let pending = null;
-  /** A theme that has been clicked and not yet stored. @type {string|null} */
-  let themePending = null;
-  /**
-   * The last refusal, and which row the hand was on when it happened.
-   * @type {{from:string, problems:any[]}|null}
-   */
-  let refusal = null;
-  /** @type {any} */
-  let timer = null;
   /** What the popover was last drawn from, so a snapshot that changed nothing redraws nothing. */
   let drawn = '';
   /** The radio to put focus back on after a redraw: `group:id`. */
@@ -105,292 +112,89 @@ export function createLookBar(opts) {
   /** Dismissed in this tab; the daemon may not have answered yet. */
   let hintDismissed = false;
 
+  const parts = createLookParts({
+    doc,
+    stops,
+    onPick: (key) => {
+      focusKey = key;
+    },
+  });
+  const { el } = parts;
   const cat = () => port?.catalogue?.() || null;
-  const settings = () => getSettings() || {};
-  const themes = () => {
-    const list = theming?.list?.();
-    return Array.isArray(list) ? list : [];
-  };
+  const themes = () => store.themes();
   /** Is there anything to put in a popover? Without a renderer there is not. */
   const hasControls = () => Boolean(cat()) || themes().length > 1;
-
-  /** @param {string} tag @param {string} [className] @param {string} [text] */
-  const el = (tag, className, text) => {
-    const node = doc.createElement(tag);
-    if (className) node.className = className;
-    if (text !== undefined) node.textContent = text;
-    return node;
-  };
-
-  // --------------------------------------------------------------- applying
-
-  /**
-   * Measure a look, then either show it and post it, or refuse it and change
-   * nothing. `look-ui.js`'s `choose`, for a popover: the guard runs first, on
-   * the theme the floor is painted in, and only a look that passes is sent.
-   * @param {any} next @param {string} from the row the hand is on
-   */
-  function chooseLook(next, from) {
-    const verdict = port.validate ? port.validate(next, port.theme?.()) : { ok: true };
-    if (!verdict.ok) {
-      refusal = { from, problems: verdict.problems || [] };
-      pending = null;
-      render();
-      return;
-    }
-    refusal = null;
-    pending = next;
-    render();
-    if (timer) clearTimeout(timer);
-    const post = async () => {
-      timer = null;
-      const result = await port.apply(next);
-      pending = null;
-      if (result && !result.ok) {
-        // The daemon measures against EVERY shipped theme, so this is the look
-        // that reads here and would not on another one.
-        refusal = {
-          from,
-          problems: result.problems?.length
-            ? result.problems
-            : [{ reason: result.error || 'that look was refused' }],
-        };
-      }
-      render();
-    };
-    if (debounceMs <= 0) return void post();
-    timer = setTimeout(post, debounceMs);
-  }
-
-  /**
-   * Store a theme, then paint what was STORED — the settings sheet's own order,
-   * because the store is the authority on what landed.
-   * @param {string} name
-   */
-  async function chooseTheme(name) {
-    themePending = name;
-    render();
-    const saved = await saveSetting({ theme: name });
-    themePending = null;
-    if (saved) theming.apply(saved.theme);
-    render();
-  }
 
   // ---------------------------------------------------------------- pieces
 
   /**
-   * One radio group on a roving tabindex: one Tab stop, arrows inside it, Home
-   * and End to the ends. It selects as it moves, and the debounce in
-   * `chooseLook` is what keeps a held arrow from re-baking the floor per step.
+   * One of the four controls: its name, a quiet note beside it, the control,
+   * and under it the reason if it just refused.
    *
-   * @param {object} spec
-   * @param {string} spec.name       the group's key, for focus across a redraw
-   * @param {string} spec.label      its accessible name
-   * @param {string} spec.className
-   * @param {string} spec.itemClass
-   * @param {Array<{id:string, label:string, title?:string, parts?:any[]}>} spec.options
-   * @param {string} spec.value
-   * @param {(next:string) => void} spec.onChange
+   * Three are words in a segmented control. The fourth is the six presets as
+   * thumbnails — the settings sheet's own, out of the same cache and under the
+   * same key, so opening the sheet after this paints nothing twice.
+   *
+   * @param {any} host @param {any} control one of `outsideControls(store)`
    */
-  function radioGroup(spec) {
-    const group = el('div', spec.className);
-    group.setAttribute('role', 'radiogroup');
-    group.setAttribute('aria-label', spec.label);
-    const known = spec.options.some((o) => o.id === spec.value);
-    /** @type {any[]} */
-    const buttons = [];
-    /** @param {number} index */
-    const pick = (index) => {
-      const id = spec.options[index].id;
-      focusKey = `${spec.name}:${id}`;
-      if (id !== spec.value) spec.onChange(id);
-    };
-    spec.options.forEach((option, index) => {
-      const btn = el('button', spec.itemClass);
-      btn.type = 'button';
-      btn.setAttribute('role', 'radio');
-      const on = option.id === spec.value;
-      btn.setAttribute('aria-checked', String(on));
-      btn.setAttribute('tabindex', String(on || (index === 0 && !known) ? 0 : -1));
-      if (option.title) btn.title = option.title;
-      for (const part of option.parts || []) btn.appendChild(part);
-      btn.appendChild(el('span', 'lookbar-item-label', option.label));
-      btn.addEventListener('click', () => pick(index));
-      btn.addEventListener('keydown', (/** @type {any} */ event) => {
-        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-        let target = null;
-        if (step) target = (index + step + buttons.length) % buttons.length;
-        else if (event.key === 'Home') target = 0;
-        else if (event.key === 'End') target = buttons.length - 1;
-        if (target === null) return;
-        event.preventDefault?.();
-        buttons[target].focus?.();
-        pick(target);
-      });
-      stops.set(`${spec.name}:${option.id}`, btn);
-      buttons.push(btn);
-      group.appendChild(btn);
-    });
-    return group;
-  }
-
-  /**
-   * A row: its name, an optional quiet note beside it, and its control.
-   * @param {string} label @param {string} note @param {any} control
-   */
-  function row(label, note, control) {
+  function drawControl(host, control) {
+    const pictures = control.id === 'preset';
     const wrap = el('div', 'lookbar-row');
     const head = el('div', 'lookbar-row-head');
-    head.appendChild(el('span', 'lookbar-label', label));
-    if (note) head.appendChild(el('span', 'lookbar-note', note));
-    wrap.append(head, control);
-    return wrap;
-  }
-
-  /** The guard's sentence, under the row that caused it. @param {any} host @param {string} from */
-  function drawRefusals(host, from) {
-    if (!refusal || refusal.from !== from) return;
-    for (const problem of refusal.problems) {
-      const box = el('div', 'lookbar-refusal');
-      box.setAttribute('role', 'status');
-      const dot = el('span', 'lookbar-refusal-dot');
-      dot.setAttribute('aria-hidden', 'true');
-      box.append(
-        dot,
-        el('span', 'lookbar-refusal-text', `${problem.reason}. Nothing was changed.`),
-      );
-      host.appendChild(box);
-    }
-  }
-
-  /** @param {any} host @param {any} c @param {any} current */
-  function drawSize(host, c, current) {
-    const picker = (c.LOOK_PICKERS || []).find((/** @type {any} */ p) => p.id === 'agentSize');
-    if (!picker) return;
-    const live = port.live?.();
-    const wrap = row(
-      picker.label,
-      Number.isFinite(live) ? `${live} on the floor` : '',
-      radioGroup({
-        name: 'size',
-        label: picker.label,
-        className: 'lookbar-seg',
-        itemClass: 'lookbar-seg-btn',
-        options: picker.options.map((/** @type {any} */ o) => ({ id: o.id, label: o.label })),
-        value: String(current.agentSize),
-        onChange: (next) => chooseLook({ ...current, agentSize: next }, 'size'),
-      }),
-    );
-    drawRefusals(wrap, 'size');
-    host.appendChild(wrap);
-  }
-
-  /** @param {any} host */
-  function drawTheme(host) {
-    const list = themes();
-    if (list.length < 2) return;
-    const value = themePending ?? (settings().theme || 'default');
-    host.appendChild(
-      row(
-        'Theme',
-        '',
-        radioGroup({
-          name: 'theme',
-          label: 'Theme',
-          className: 'lookbar-seg',
-          itemClass: 'lookbar-seg-btn',
-          options: list.map((theme) => {
-            // Three dots: the wood, the carpet, the chrome. Set as data with
-            // `style`, the settings sheet's own device — a theme's colours are
-            // not this stylesheet's to declare.
-            const dots = el('span', 'lookbar-swatch');
-            dots.setAttribute('aria-hidden', 'true');
-            for (const colour of theming.swatches?.(theme) || []) {
-              const dot = el('i');
-              dot.style.background = colour;
-              dots.appendChild(dot);
-            }
-            return {
-              id: theme.name,
-              label: sentence(theme.name),
-              title: theme.blurb,
-              parts: [dots],
-            };
-          }),
-          value,
-          onChange: (next) => void chooseTheme(next),
-        }),
-      ),
-    );
-  }
-
-  /** @param {any} host @param {any} c @param {any} current */
-  function drawPresets(host, c, current) {
-    const presets = c.PRESETS || [];
-    if (!presets.length) return;
-    const now = presets.find((/** @type {any} */ p) => p.id === current.preset);
-    const edited = !c.sameLook(current, c.lookForPreset(current.preset));
-    const wrap = row(
-      'Preset',
-      `${now ? now.label : current.preset}${edited ? ' · edited' : ''}`,
-      radioGroup({
-        name: 'preset',
-        label: 'Preset',
-        className: 'lookbar-presets',
-        itemClass: 'lookbar-preset',
-        options: presets.map((/** @type {any} */ preset) => {
-          // The settings sheet's own thumbnail, out of the same cache and under
-          // the same key — so opening the sheet after this paints nothing twice.
+    head.appendChild(el('span', 'lookbar-label', control.label));
+    if (control.note) head.appendChild(el('span', 'lookbar-note', control.note));
+    const group = parts.radioGroup({
+      name: control.id,
+      label: control.label,
+      className: pictures ? 'lookbar-presets' : 'lookbar-seg',
+      itemClass: pictures ? 'lookbar-preset' : 'lookbar-seg-btn',
+      options: control.options.map((/** @type {any} */ o) => {
+        /** @type {any[]} */
+        const before = [];
+        if (o.theme) before.push(parts.swatchDots(store.swatches(o.theme)));
+        if (o.preset) {
           const shot = port.picture?.({
             kind: 'thumbnail',
-            look: preset.look,
-            key: `preset:${preset.id}`,
+            look: o.preset.look,
+            key: `preset:${o.preset.id}`,
           });
           if (shot?.setAttribute) shot.setAttribute('aria-hidden', 'true');
-          return {
-            id: preset.id,
-            label: preset.label,
-            title: preset.blurb,
-            parts: shot ? [shot] : [],
-          };
-        }),
-        value: String(current.preset),
-        // A preset is a whole look, its agent size included — the sheet's rule
-        // and the palette's, kept here so the three cannot disagree.
-        onChange: (next) => chooseLook(c.lookForPreset(next), 'preset'),
+          if (shot) before.push(shot);
+        }
+        return { id: o.id, label: o.label, title: o.title, parts: before };
       }),
-    );
-    drawRefusals(wrap, 'preset');
+      value: control.value,
+      onChange: control.onChange,
+    });
+    wrap.append(head, group);
+    for (const problem of store.refusalsFor(control.id)) {
+      wrap.appendChild(parts.refusalBox(problem, 'lookbar-refusal'));
+    }
     host.appendChild(wrap);
   }
 
   /** Everything the popover is drawn from, as one comparable string. */
   function signature() {
-    const s = settings();
     return JSON.stringify([
       Boolean(cat()),
-      pending ?? s.look ?? null,
-      themePending ?? s.theme ?? '',
-      themes().map((t) => t.name),
+      store.look(),
+      store.theme(),
+      themes().map((/** @type {any} */ t) => t.name),
       port?.theme?.() ?? '',
-      refusal,
+      port?.live?.() ?? '',
+      store.refusal(),
     ]);
   }
 
   function render() {
     if (!shown) return;
+    // Hear the daemon's last word before drawing — quietly, because this IS
+    // the redraw a subscriber would have asked for.
+    store.refresh({ silent: true });
     drawn = signature();
     stops.clear();
     popoverEl.textContent = '';
-    const c = cat();
-    if (c) {
-      const current = c.normalizeLook(pending ?? settings().look);
-      drawSize(popoverEl, c, current);
-      drawTheme(popoverEl);
-      drawPresets(popoverEl, c, current);
-    } else {
-      drawTheme(popoverEl);
-    }
+    for (const control of outsideControls(store)) drawControl(popoverEl, control);
     const foot = el('div', 'lookbar-foot');
     const all = el('button', 'link-btn lookbar-all', 'All look options…');
     all.type = 'button';
@@ -427,7 +231,7 @@ export function createLookBar(opts) {
     dismissHint();
     if (!hasControls()) return openLook();
     shown = true;
-    refusal = null;
+    store.clearRefusal();
     focusKey = '';
     popoverEl.hidden = false;
     buttonEl.setAttribute('aria-expanded', 'true');
@@ -444,13 +248,10 @@ export function createLookBar(opts) {
   function close(how = {}) {
     if (!shown) return;
     shown = false;
-    if (timer) clearTimeout(timer);
     // A change that was shown but not yet sent is sent on the way out rather
     // than dropped: the person saw the control move.
-    if (timer && pending) void port.apply(pending);
-    timer = null;
-    pending = null;
-    refusal = null;
+    void store.flush();
+    store.clearRefusal();
     focusKey = '';
     popoverEl.hidden = true;
     popoverEl.textContent = '';
@@ -534,6 +335,10 @@ export function createLookBar(opts) {
     close();
   });
 
+  // The store says when the look or the theme moved: a choice here, the
+  // daemon's answer to it, or a push the settings sheet or another tab caused.
+  store.subscribe(() => render());
+
   return {
     open,
     close,
@@ -542,10 +347,14 @@ export function createLookBar(opts) {
     openLook,
     openSettings,
     dismissHint,
+    store,
     /** A snapshot arrived: the hint may be due, and an open popover may be stale. */
     refresh() {
       paintHint();
-      if (shown && !pending && !themePending && signature() !== drawn) render();
+      // Loud, not silent: the settings sheet subscribes to the same store, and
+      // this is the one place the shell says "the daemon pushed".
+      store.refresh();
+      if (shown && signature() !== drawn) render();
     },
   };
 }

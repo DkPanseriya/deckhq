@@ -246,16 +246,28 @@ export function createSettingsUI(opts) {
   // pending change and its own refusals, so it is built once and re-rendered
   // with the sheet rather than rebuilt: a rebuild would drop the refusal the
   // user is reading the moment anything else on this sheet saved.
+  //
+  // THE LOOK IS NOT READ OUT OF `current`. `current` is the copy of the settings
+  // this sheet took when it was opened, refreshed by this sheet's own saves —
+  // and a look is not saved through this sheet, it is posted to `/api/look` by
+  // the look store. Reading `current.look` here is what made a chosen chip go
+  // back to where it was the moment the daemon answered: the answer landed in
+  // the store's hands and the section drew the copy. So the section is handed
+  // the store the port carries — the one the header's Look bar has too — and
+  // `current.look` is only what a store made for a port without one starts on.
   const lookSection = createLookSection({
     doc: document,
     widgets,
     look: lookPort,
+    store: lookPort.store,
     getLook: () => current.look,
     toast,
   });
   widgets.wire({ render });
   rates.wire({ render });
-  lookSection.wire({ render });
+  // The store also speaks while the sheet is shut — the bar changed the look, a
+  // snapshot arrived — and a shut sheet has nothing to redraw.
+  lookSection.wire({ render: () => void (dialogEl.open && render()) });
 
   // --------------------------------------------------------------- sections
 
@@ -379,7 +391,12 @@ export function createSettingsUI(opts) {
     // WP-30. Free, and it gates nothing: every theme this build ships is in
     // this row for everybody. The Supporter pack (docs/plan/03 §5) sells MORE
     // themes later; it does not take one away.
-    if (shippedThemes().length > 1) {
+    //
+    // It is drawn HERE only on a build that has no Look section to draw it in:
+    // the theme is one of the four things on the outside of Look now (agent
+    // size, theme, style, density), and two Theme rows on one sheet would be
+    // two controls for one setting.
+    if (shippedThemes().length > 1 && !lookSection.drawsTheme()) {
       row(
         s,
         'Theme',
@@ -506,6 +523,11 @@ export function createSettingsUI(opts) {
   bodyEl.addEventListener('scroll', syncNav, { passive: true });
 
   function render() {
+    // Who has the keyboard, read BEFORE the body is emptied: emptying it takes
+    // the focused control out of the document and the browser moves the focus
+    // to the body at once. The Look section puts it back on the control that
+    // replaced that one — without this an arrow key moved a choice exactly once.
+    const focused = document.activeElement;
     bodyEl.textContent = '';
     // The nav is the sheet's first child and is FILLED LAST, from the sections
     // that were actually drawn below it — so it cannot name a section this
@@ -519,7 +541,7 @@ export function createSettingsUI(opts) {
     // WP-88b, §4: *"a Look section inside the existing settings sheet, between
     // Floor and Data"*. Floor is the theme and the motion — the whole window;
     // Look is what the building is made of, which is one step in.
-    lookSection.renderInto(bodyEl);
+    lookSection.renderInto(bodyEl, focused);
     renderData(bodyEl);
     renderHooks(bodyEl);
     navEntries = fillSectionNav(document, navEl, bodyEl);
@@ -568,7 +590,15 @@ export function createSettingsUI(opts) {
   // wears once the sheet is gone. Bound once, on the dialog itself, so it
   // catches Escape and the backdrop as well as the close button — `render()`
   // rebuilds the picker's buttons and would drop a listener bound to one.
-  dialogEl.addEventListener('close', () => applyThemeSetting(current.theme));
+  dialogEl.addEventListener('close', () => {
+    // The stored theme is the look store's to say when the Look section drew
+    // the Theme row: it was chosen there, and `current` never heard about it.
+    if (lookSection.drawsTheme()) lookSection.store.previewTheme(null);
+    else applyThemeSetting(current.theme);
+    // A look that was shown and is still waiting out its debounce is sent on
+    // the way out rather than dropped: the person saw the control move.
+    void lookSection.flush();
+  });
 
   return { open, close, isOpen: () => dialogEl.open };
 }

@@ -1,56 +1,61 @@
 /**
- * THE LOOK SECTION — WP-88b. `docs/plan/11-LOOK-CONTROL-CENTRE.md` §4, and the
- * mockup at `docs/media/look/control-centre.png`.
+ * THE LOOK SECTION of the settings sheet — WP-88b, redrawn simple-outside,
+ * detail-inside.
  *
- * WP-88a shipped the catalogue, the derivation and the guards and **no UI, by
- * design** (docs/DEVIATIONS.md §175). This is the surface: six preset cards, a
- * live preview with the numbers the guards refused on beneath it, one row per
- * picker in the catalogue, the lounge kit, and export / import.
+ * WP-88a shipped the catalogue, the derivation and the guards and no UI. WP-88b
+ * built the surface: six preset cards, a live preview, one row per picker in
+ * the catalogue, the lounge kit, export and import — all of it at one weight,
+ * which is what its owner said of it: *"there are too many options for many
+ * details like plants, rug, corridor etc. Hide them under advanced … Keep
+ * high-level abstract settings like agent size, theme, etc. on the outside."*
+ *
+ * So the section is two things now:
+ *
+ *   OUTSIDE   Agent size · Theme · Style (the six presets) · Density, and the
+ *             live preview. The same four the header's Look bar offers, from
+ *             the same list (`outsideControls`).
+ *   ADVANCED  everything else in the catalogue, under three headings, in a
+ *             disclosure that is shut until somebody opens it
+ *             (`look-ui-advanced.js`).
  *
  * ============================================================================
- * FOUR RULES THIS FILE IS BUILT AROUND
+ * FIVE RULES THIS FILE IS BUILT AROUND
  *
- * 1. **The catalogue is the section.** Every row, every chip and every label
- *    below is read out of `LOOK_PICKERS`; nothing here restates an option.
- *    A package that adds a floor material gets a chip for it and a package that
- *    removes one loses the chip, without anybody editing this file — which is
- *    the same construction the option tables themselves use as an allowlist.
+ * 1. **The catalogue is the section.** Every option on this surface is read out
+ *    of `LOOK_PICKERS`, the presets and the themes; nothing here restates one.
+ *    A package that adds a floor material gets a chip for it without anybody
+ *    editing this file.
  *
- * 2. **A refusal changes nothing and says why.** A change is measured by
- *    `validateLook` BEFORE it is applied. Refused, it draws a row under the
- *    picker with the guard's own sentence in it, leaves the control exactly
- *    where it was, and posts nothing at all. `validateLayout`'s whole-or-one-
- *    error discipline, applied to a picker.
+ * 2. **A control shows what the daemon last accepted.** It moves on the click
+ *    and goes back ONLY on a refusal, with the guard's own sentence under it.
+ *    This file holds no look of its own: the look, what is pending and the last
+ *    refusal are the store's (`look-ui-store.js`), and the header's bar reads
+ *    the same store.
  *
  * 3. **Nothing here imports the renderer.** `settings-ui.js` must stay
- *    importable under `node --test` (`settings-keys.test.mjs`), and every
- *    import from `render/**` in this product is dynamic and defensive. So the
- *    catalogue, the guard and the painter all arrive through a PORT, exactly as
- *    WP-30's themes and WP-45's avatars do — and that is also what lets
- *    `test/unit/look-ui.test.mjs` hand this the real tables and a DOM stub and
- *    assert the section it builds.
+ *    importable under `node --test`, and every import from `render/**` in this
+ *    product is dynamic and defensive. So the catalogue, the guard and the
+ *    painter arrive through a PORT, exactly as the themes and the avatars do.
  *
- * 4. **Every control is operable from the keyboard alone.** Each picker is a
+ * 4. **Every control is operable from the keyboard alone.** Each choice is a
  *    real `radiogroup` on a roving tabindex: one Tab stop per group, arrows
- *    inside it, Home and End to the ends. The lounge kit is four `checkbox`es,
- *    which are individually tabbable because a kit is not a choice between four
- *    things. `:focus-visible` is the stylesheet's own ring, unchanged.
+ *    inside it, Home and End to the ends. The lounge kit is four `checkbox`es.
+ *    The disclosures are real `<details>`. And a redraw puts the focus back on
+ *    the control it took it from.
+ *
+ * 5. **Simple outside.** A row is on the outside only if somebody arrives
+ *    already knowing they want it. "Make them bigger" is a sentence people say;
+ *    "change the corridor to loop pile" is not.
  * ============================================================================
  */
 
-/**
- * How long a change waits before it is posted.
- *
- * Arrow keys walk a picker, and a user holding one down would otherwise post —
- * and re-bake the floor behind the sheet — once per option crossed. 140 ms is
- * long enough to swallow a walk and short enough that a single click feels
- * immediate; the chips and the preview move on the keystroke either way,
- * because they read the pending look rather than the stored one.
- *
- * Tests pass 0, which applies synchronously — a debounce is a property of a
- * hand on a keyboard, not of the thing being posted.
- */
-export const LOOK_DEBOUNCE_MS = 140;
+import { LOOK_DEBOUNCE_MS, OUTSIDE_PICKER_IDS, createLookStore } from './look-ui-store.js';
+import { createLookParts, outsideControls } from './look-ui-parts.js';
+import { createAdvanced, dimensionsFor, swatchSpecFor } from './look-ui-advanced.js';
+
+// Named here too, because this is where the bar and the tests have always
+// imported them from.
+export { LOOK_DEBOUNCE_MS, dimensionsFor, swatchSpecFor };
 
 /** The section's element id, so the palette and the golden can jump to it. */
 export const LOOK_SECTION_ID = 'settings-look';
@@ -63,262 +68,75 @@ export const LOOK_SECTION_ID = 'settings-look';
 export const NO_LOOK = Object.freeze({ catalogue: () => null });
 
 /**
- * A row's one-line character, under its name.
- *
- * COPY, and the only hand-written thing in this file. The options are never
- * hand-written; a picker the catalogue grows and this table does not know falls
- * back to counting its own options, which is true of every picker that will ever
- * exist rather than of the ten that exist today.
- */
-const PICKER_NOTES = Object.freeze({
-  'floor.office': 'the open floor, and the reception on it',
-  'floor.corridor': 'circulation, not decoration',
-  'floor.rooms': 'a project room — an agent’s name is read on it',
-  'floor.lounge': 'hard floors, soft rugs',
-  scheme: 'hue and chroma, never lightness — all three themes still apply on top',
-  furniture: 'silhouettes only; footprints and anchors do not move',
-  'rug.wool': 'reception and lounge',
-  'rug.task': 'project rooms and break-out corners',
-  plants: 'a ceiling rather than a quota — a small room never reaches lush',
-  props: 'clear floor per free-standing prop; anchored props are furniture',
-  agentSize: 'the furniture follows the people; the building does not',
-});
-
-/** What each sub-group inside a two-dimensional picker is called. */
-const DIMENSION_LABELS = Object.freeze({
-  tone: 'Tone',
-  pattern: 'Pattern',
-  family: 'Family',
-  density: 'Density',
-});
-
-/** Read `a.b.c` off a look. @param {any} obj @param {string} path */
-function at(obj, path) {
-  return path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
-}
-
-/**
- * A look with one path set — a copy, never a mutation.
- *
- * The look the section is showing is `current.look`, which came from the
- * daemon's own answer; writing into it would make a refused change permanent in
- * the one place the refusal was supposed to leave alone.
- *
- * @param {any} look @param {string} path @param {unknown} value
- */
-function withPath(look, path, value) {
-  const keys = path.split('.');
-  const out = Array.isArray(look) ? look.slice() : { ...look };
-  let node = out;
-  for (let i = 0; i < keys.length - 1; i++) {
-    node[keys[i]] = { ...node[keys[i]] };
-    node = node[keys[i]];
-  }
-  node[keys[keys.length - 1]] = value;
-  return out;
-}
-
-/**
- * THE DIMENSIONS INSIDE ONE PICKER, derived from the catalogue.
- *
- * Eight of the ten pickers are one choice out of a list. Two are two choices out
- * of one list: a rug is a tone AND a pattern, and the planting is a family AND a
- * density — §1.d and §1.e say so, and `LOOK_PICKERS` carries both dimensions'
- * options in one `options` array because a picker is a ROW, not a variable.
- *
- * The split is by membership in the catalogue's own id tables rather than by a
- * list written here, and `look-ui.test.mjs` asserts that the dimensions of every
- * picker partition that picker's options exactly — so a catalogue that grew a
- * third rug dimension would fail there rather than silently lose a chip.
- *
- * @param {any} picker
- * @param {any} cat the catalogue namespace
- * @returns {Array<{path:string, label:string, ids:ReadonlyArray<string>}>}
- */
-export function dimensionsFor(picker, cat) {
-  /** @param {string} key @param {ReadonlyArray<string>} ids */
-  const dim = (key, ids) => ({
-    path: `${picker.path}.${key}`,
-    label: DIMENSION_LABELS[/** @type {keyof typeof DIMENSION_LABELS} */ (key)] || key,
-    ids: picker.options
-      .map((/** @type {any} */ o) => o.id)
-      .filter((/** @type {string} */ id) => ids.includes(id)),
-  });
-  if (picker.id.startsWith('rug.')) {
-    return [dim('tone', cat.RUG_TONE_IDS), dim('pattern', cat.RUG_PATTERN_IDS)];
-  }
-  if (picker.id === 'plants') {
-    return [dim('family', cat.PLANT_FAMILY_IDS), dim('density', cat.PLANT_DENSITY_IDS)];
-  }
-  return [
-    {
-      path: picker.path,
-      label: picker.label,
-      ids: picker.options.map((/** @type {any} */ o) => o.id),
-    },
-  ];
-}
-
-/**
- * What a chip for this option should be painted with, or `null` for an option no
- * painter can draw.
- *
- * Three of the eleven groups have no picture and that is deliberate rather than
- * unfinished: a furniture set, a planting density and a prop density are things
- * a 46 x 28 chip cannot show honestly, and a chip that showed *something* for
- * them would be decoration standing where a measurement belongs. They are words,
- * and the preview above shows what they do to a floor.
- *
- * @param {any} picker @param {string} optionId @param {any} look @param {any} cat
- * @returns {{kind:'swatch', look:any, zone:string, rug:string|null, key:string}|null}
- */
-export function swatchSpecFor(picker, optionId, look, cat) {
-  /** @param {any} next @param {string} zone @param {string|null} rug */
-  const spec = (next, zone, rug) => ({
-    kind: /** @type {'swatch'} */ ('swatch'),
-    look: next,
-    zone,
-    rug,
-    key: `${picker.id}:${optionId}:${zone}:${rug || '-'}:${next.scheme}`,
-  });
-  if (picker.id.startsWith('floor.')) {
-    const zone = picker.id.slice('floor.'.length);
-    return spec(withPath(look, picker.path, optionId), zone, null);
-  }
-  if (picker.id === 'scheme') {
-    // The office floor under that scheme: a scheme is a temperature over the
-    // floor the user already has, so the honest chip is their own floor in it.
-    return spec(withPath(look, 'scheme', optionId), 'office', null);
-  }
-  if (picker.id.startsWith('rug.')) {
-    const role = picker.id.slice('rug.'.length);
-    const key = cat.RUG_TONE_IDS.includes(optionId) ? 'tone' : 'pattern';
-    const zone = role === 'wool' ? 'office' : 'rooms';
-    const next = withPath(look, `${picker.path}.${key}`, optionId);
-    // A rug is shown on the floor it actually lies on, which is §1.d's whole
-    // finding: a tone means nothing until it has a floor under it.
-    return { ...spec(next, zone, role), key: `rug:${role}:${optionId}:${zone}:${next.scheme}` };
-  }
-  return null;
-}
-
-/**
  * Build the Look section.
  *
  * @param {object} opts
  * @param {any} opts.doc                   `document`, or a stub
  * @param {{section:Function, row:Function}} opts.widgets  the sheet's own parts
  * @param {any} opts.look                  the port (see `NO_LOOK`)
- * @param {() => any} opts.getLook         what `settings.look` says
+ * @param {any} [opts.store]               the look store both surfaces share
+ *   (`look-ui-store.js`). The shell hands the sheet and the header's bar the
+ *   SAME one; a section given none makes its own, which is one surface with
+ *   one store and is what a test of this file alone wants.
+ * @param {() => any} [opts.getLook]       what the daemon last said the look
+ *   is — read only by a store this section had to make for itself
+ * @param {{get?:(key:string) => string|null, set?:(key:string, value:string) => void}} [opts.prefs]
+ *   what this browser remembers about which disclosures are open
  * @param {(msg:string, o?:any) => void} opts.toast
  * @param {number} [opts.debounceMs]
  */
 export function createLookSection(opts) {
-  const { doc, widgets, look: port, getLook, toast } = opts;
-  const debounceMs = opts.debounceMs ?? LOOK_DEBOUNCE_MS;
-
+  const { doc, widgets, look: port, toast } = opts;
   /**
-   * The look the section is SHOWING, which is not always the look the daemon has
-   * confirmed: a chip moves on the keystroke and the post follows. `null` means
-   * "whatever the daemon last said", which is the state after every reconcile.
-   * @type {any}
-   */
-  let pending = null;
-  /**
-   * The last refusal: the guard's problems, and which control the person was
-   * holding when it happened.
+   * THE LOOK, AND EVERYTHING ABOUT IT THAT CHANGES, lives in the store: what
+   * the daemon last accepted, what was just chosen and is not answered yet, and
+   * the last refusal with the control the hand was on. This section holds no
+   * copy of any of it — it held one once, read out of the settings the sheet
+   * was opened with, and that is why a chosen chip used to go back.
    *
-   * `from` is what decides WHERE the reason is drawn, and it is not
+   * A refusal's `from` is what decides WHERE the reason is drawn, and it is not
    * `problem.picker`. A guard names the row a problem BELONGS to — put terrazzo
-   * in the office and the problem is the corridor's, because the corridor is the
-   * zone that lost its edge — but the control that just refused to move is the
-   * office's, and a sentence that appears two rows away from the chip somebody
-   * clicked reads as an unrelated complaint. The reason names both zones and
-   * both materials, so nothing is lost by putting it where the hand is.
-   *
-   * `from` is `null` for a refusal nobody's hand caused — an import, or the
-   * daemon refusing on a theme this tab is not painted in — and then each
-   * problem goes to the row the guard named.
-   * @type {{from:string|null, problems:any[]}}
+   * in the office and the problem is the corridor's — but the control that just
+   * refused to move is the office's, and a sentence two rows away from the chip
+   * somebody clicked reads as an unrelated complaint.
    */
-  let refusals = { from: null, problems: [] };
-  /** @type {any} */
-  let timer = null;
+  const store =
+    opts.store ||
+    createLookStore({
+      port,
+      read: () => ({ look: opts.getLook?.() }),
+      debounceMs: opts.debounceMs,
+    });
   /** Late-bound: the sheet's re-render. @type {() => void} */
   let render = () => {};
-
-  const cat = () => port.catalogue?.();
-  const shown = () => {
-    const c = cat();
-    return c ? c.normalizeLook(pending ?? getLook()) : null;
-  };
-
-  // --------------------------------------------------------------- applying
-
   /**
-   * Measure a candidate, then either show it and post it, or refuse it and
-   * change nothing.
-   *
-   * The order is the whole of rule 2: the guard runs first, on the theme the
-   * floor is actually painted in, and only a look that passes is ever shown.
-   * @param {any} next
-   * @param {string|null} [from] the picker the person was holding, if any
+   * WHERE THE KEYBOARD IS, ACROSS A REDRAW. Every choice redraws the sheet, and
+   * a redraw replaces the button the hand was on — so an arrow key used to move
+   * the choice once and then leave the focus on a button that was no longer in
+   * the document. Every control here is registered under a key, and a redraw
+   * puts the focus back on the control with the key it had.
+   * @type {Map<string, any>}
    */
-  function choose(next, from = null) {
-    const c = cat();
-    if (!c) return;
-    const verdict = port.validate(next, port.theme());
-    if (!verdict.ok) {
-      refusals = { from, problems: verdict.problems };
-      pending = null;
-      render();
-      return;
-    }
-    refusals = { from: null, problems: [] };
-    pending = next;
-    render();
-    if (timer) clearTimeout(timer);
-    const post = async () => {
-      timer = null;
-      const result = await port.apply(next);
-      if (!result || result.ok) {
-        // The daemon's answer is the authority; drop the optimistic copy and
-        // let the next render read what actually landed.
-        pending = null;
-        render();
-        return;
-      }
-      // Refused by the daemon — which measures against EVERY shipped theme, so
-      // this is the look that reads here and would not on night shift. No
-      // `from`: the hand that caused it moved some time ago.
-      refusals = {
-        from: null,
-        problems: result.problems?.length
-          ? result.problems
-          : [{ picker: '', option: '', reason: result.error || 'that look was refused' }],
-      };
-      pending = null;
-      render();
-    };
-    if (debounceMs <= 0) return void post();
-    timer = setTimeout(post, debounceMs);
-  }
+  const stops = new Map();
+  /** The control a hand just used, for a click that did not move the focus. */
+  let picked = '';
 
-  // ---------------------------------------------------------------- pieces
-
-  /** @param {string} tag @param {string} [className] */
-  const el = (tag, className) => {
-    const node = doc.createElement(tag);
-    if (className) node.className = className;
-    return node;
-  };
+  const parts = createLookParts({
+    doc,
+    stops,
+    onPick: (key) => {
+      picked = key;
+    },
+  });
+  const { el } = parts;
+  const cat = () => port.catalogue?.();
 
   /**
    * A picture, or the honest gap where one would be.
    *
    * The port paints; this only ever asks. On a build with no renderer `picture`
-   * returns nothing and the chip is its label alone, which is still a working
-   * control — the section degrades to words rather than to a broken grid.
+   * returns nothing and the control is its label alone, which is still a
+   * working control — the section degrades to words rather than to a broken grid.
    * @param {any} spec
    */
   function picture(spec) {
@@ -327,339 +145,164 @@ export function createLookSection(opts) {
     return node;
   }
 
-  /**
-   * ONE RADIO GROUP, ON A ROVING TABINDEX.
-   *
-   * `role="radiogroup"` with `role="radio"` children rather than the sheet's
-   * `aria-pressed` buttons, and the difference is the one §4 asks for: a
-   * radiogroup is ONE Tab stop with arrows inside it, so a keyboard user crosses
-   * this section in eleven stops rather than in fifty-two.
-   *
-   * @param {object} spec
-   * @param {string} spec.label
-   * @param {Array<{id:string, label:string, chip?:any}>} spec.options
-   * @param {string} spec.value
-   * @param {(next:string) => void} spec.onChange
-   */
-  function radioGroup(spec) {
-    const group = el('div', 'picker settings-choice settings-look-chips');
-    group.setAttribute('role', 'radiogroup');
-    group.setAttribute('aria-label', spec.label);
-    /** @type {any[]} */
-    const buttons = [];
+  const advanced = createAdvanced({
+    parts,
+    widgets,
+    store,
+    picture,
+    prefs: opts.prefs || port.prefs,
+  });
 
-    spec.options.forEach((option, index) => {
-      const btn = el('button', 'picker-btn settings-look-chip');
-      btn.type = 'button';
-      btn.setAttribute('role', 'radio');
-      const on = option.id === spec.value;
-      btn.setAttribute('aria-checked', String(on));
-      // The roving stop: the chosen chip is the group's Tab stop, and if the
-      // look somehow holds an option this group does not offer, the first chip
-      // is — a group with no reachable control would be a group off the keyboard.
-      btn.setAttribute(
-        'tabindex',
-        String(on || (index === 0 && !spec.options.some((o) => o.id === spec.value)) ? 0 : -1),
-      );
-      if (option.chip) btn.appendChild(option.chip);
-      const text = el('span', 'settings-look-chip-label');
-      text.textContent = option.label;
-      btn.appendChild(text);
-      btn.addEventListener('click', () => {
-        if (option.id !== spec.value) spec.onChange(option.id);
-      });
-      btn.addEventListener('keydown', (/** @type {any} */ event) => {
-        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-        let target = null;
-        if (step) target = (index + step + buttons.length) % buttons.length;
-        else if (event.key === 'Home') target = 0;
-        else if (event.key === 'End') target = buttons.length - 1;
-        if (target === null) return;
-        event.preventDefault?.();
-        // Move the focus, then the choice: a radiogroup selects as it moves, so
-        // the floor follows the arrow key and the debounce swallows the walk.
-        buttons[target].focus?.();
-        const id = spec.options[target].id;
-        if (id !== spec.value) spec.onChange(id);
-      });
-      buttons.push(btn);
-      group.appendChild(btn);
-    });
-    return group;
-  }
+  // ------------------------------------------------------------ the outside
 
   /**
-   * The problems that belong under one row, and the ids they were claimed by.
+   * One of the four outside controls, as a row of the sheet.
    *
-   * With a `from`, EVERY problem goes under the control the hand was on, so a
-   * refusal is one row and it is the one the person is looking at. Without one,
-   * each problem goes to the row the guard named.
-   * @param {string} rowId
+   * Three of them are words and sit beside their label like every other row on
+   * this sheet. The fourth is six pictures, and a row of pictures gets the full
+   * width under its label.
+   *
+   * @param {any} host @param {any} control one of `outsideControls(store)`
    */
-  function refusalsFor(rowId) {
-    if (refusals.from) return refusals.from === rowId ? refusals.problems : [];
-    return refusals.problems.filter((p) => p.picker === rowId);
-  }
-
-  /**
-   * The guard's sentence, in its own row under the control that caused it.
-   * @param {any} problem
-   */
-  function refusalRow(problem) {
-    const box = el('div', 'settings-look-refusal');
-    box.setAttribute('role', 'status');
-    const dot = el('span', 'settings-look-refusal-dot');
-    dot.setAttribute('aria-hidden', 'true');
-    const text = el('span', 'settings-look-refusal-text');
-    // The guard's own words, plus the one sentence the guard cannot say because
-    // it does not know it was a person who asked: nothing happened.
-    text.textContent = `${problem.reason}. Nothing was changed.`;
-    box.append(dot, text);
-    return box;
-  }
-
-  // --------------------------------------------------------------- the rows
-
-  /** @param {HTMLElement} host @param {any} c @param {any} current */
-  function renderPresets(host, c, current) {
-    const strip = el('div', 'settings-look-presets');
-    strip.setAttribute('role', 'radiogroup');
-    strip.setAttribute('aria-label', 'Preset');
-    /** @type {any[]} */
-    const cards = [];
-    c.PRESETS.forEach((/** @type {any} */ preset, /** @type {number} */ index) => {
-      const card = el('button', 'settings-look-preset');
-      card.type = 'button';
-      card.setAttribute('role', 'radio');
-      const on = preset.id === current.preset;
-      card.setAttribute('aria-checked', String(on));
-      card.setAttribute('tabindex', String(on ? 0 : -1));
-      const shot = picture({ kind: 'thumbnail', look: preset.look, key: `preset:${preset.id}` });
-      if (shot) card.appendChild(shot);
-      const name = el('span', 'settings-look-preset-name');
-      name.textContent = preset.label;
-      const blurb = el('span', 'settings-look-preset-blurb');
-      blurb.textContent = preset.blurb;
-      card.append(name, blurb);
-      card.addEventListener('click', () => choose(c.lookForPreset(preset.id)));
-      card.addEventListener('keydown', (/** @type {any} */ event) => {
-        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-        let target = null;
-        if (step) target = (index + step + cards.length) % cards.length;
-        else if (event.key === 'Home') target = 0;
-        else if (event.key === 'End') target = cards.length - 1;
-        if (target === null) return;
-        event.preventDefault?.();
-        cards[target].focus?.();
-        choose(c.lookForPreset(c.PRESETS[target].id));
-      });
-      cards.push(card);
-      strip.appendChild(card);
-    });
-    host.appendChild(strip);
-  }
-
-  /** @param {HTMLElement} host @param {any} c @param {any} current */
-  function renderState(host, c, current) {
-    const line = el('div', 'settings-look-state');
-    const preset = c.PRESETS.find((/** @type {any} */ p) => p.id === current.preset);
-    const edited = !c.sameLook(current, c.lookForPreset(current.preset));
-    const name = el('span', 'settings-look-state-name');
-    name.textContent = `${preset ? preset.label : current.preset}${edited ? ' · edited' : ''}`;
-    const reset = el('button', 'btn');
-    reset.type = 'button';
-    reset.textContent = 'Reset to preset';
-    if (!edited) reset.setAttribute('disabled', '');
-    reset.setAttribute(
-      'aria-label',
-      `Reset every option to ${preset ? preset.label : current.preset}`,
-    );
-    reset.addEventListener('click', () => choose(c.lookForPreset(current.preset)));
-    line.append(name, reset);
-    host.appendChild(line);
-  }
-
-  /** @param {HTMLElement} host @param {any} current */
-  function renderPreview(host, current) {
-    const wrap = el('div', 'settings-look-preview');
-    const shot = picture({ kind: 'preview', look: current, key: 'preview' });
-    if (shot) wrap.appendChild(shot);
-    const metrics = el('p', 'settings-look-metrics mono');
-    const measured = port.metrics?.(current, port.theme()) || [];
-    metrics.textContent = measured.length
-      ? `live preview · ${measured.map((m) => `${m.label} ${m.ratio.toFixed(2)}:1`).join('  ·  ')}`
-      : 'live preview';
-    wrap.appendChild(metrics);
-    host.appendChild(wrap);
-  }
-
-  /** @param {HTMLElement} host @param {any} c @param {any} current @param {any} picker */
-  function renderPicker(host, c, current, picker) {
-    const group = el('div', 'settings-look-group');
-    const dimensions = dimensionsFor(picker, c);
-    for (const dimension of dimensions) {
-      const options = dimension.ids.map((id) => {
-        const option = picker.options.find((/** @type {any} */ o) => o.id === id);
-        const spec = swatchSpecFor(picker, id, current, c);
-        return { id, label: option ? option.label : id, chip: spec ? picture(spec) : null };
-      });
-      group.appendChild(
-        radioGroup({
-          label: dimensions.length > 1 ? `${picker.label} — ${dimension.label}` : picker.label,
-          options,
-          value: String(at(current, dimension.path)),
-          onChange: (next) => choose(withPath(current, dimension.path, next), picker.id),
+  function renderOutside(host, control) {
+    if (control.id === 'preset') {
+      const strip = parts.radioGroup({
+        name: control.id,
+        label: control.label,
+        className: 'settings-look-presets',
+        itemClass: 'settings-look-preset',
+        labelClass: 'settings-look-preset-name',
+        options: control.options.map((/** @type {any} */ o) => {
+          const shot = picture({
+            kind: 'thumbnail',
+            look: o.preset.look,
+            key: `preset:${o.preset.id}`,
+          });
+          return { id: o.id, label: o.label, title: o.title, parts: shot ? [shot] : [] };
         }),
-      );
-    }
-    const note = PICKER_NOTES[/** @type {keyof typeof PICKER_NOTES} */ (picker.id)];
-    // WP-88c. The one row whose note carries a NUMBER, and it is the number
-    // `auto` is a rule about: *"auto · 27 live"*. Without it `auto` is a word
-    // that has already decided something the user cannot see. `port.live` is
-    // absent on a build with no snapshot yet, and then the row is words alone.
-    const live = picker.id === 'agentSize' ? port.live?.() : null;
-    const count = Number.isFinite(live) ? ` · auto is ${live} live right now` : '';
-    widgets.row(
-      host,
-      picker.label,
-      group,
-      `${picker.options.length} options${note ? ` · ${note}` : ''}${count}`,
-    );
-    for (const problem of refusalsFor(picker.id)) host.appendChild(refusalRow(problem));
-  }
-
-  /** @param {HTMLElement} host @param {any} c @param {any} current */
-  function renderLoungeKit(host, c, current) {
-    const group = el('div', 'picker settings-choice settings-look-chips');
-    group.setAttribute('role', 'group');
-    group.setAttribute('aria-label', 'Lounge kit');
-    for (const bay of c.LOUNGE_KIT_BAYS) {
-      const locked = bay === c.LOUNGE_KIT_REQUIRED;
-      const btn = el('button', 'picker-btn settings-look-chip settings-look-bay');
-      btn.type = 'button';
-      btn.setAttribute('role', 'checkbox');
-      btn.setAttribute('aria-checked', String(Boolean(current.lounge[bay])));
-      btn.setAttribute('tabindex', '0');
-      // THE LOCKED BAY IS `aria-disabled`, NOT `disabled`, and the difference is
-      // the one thing this row has to get right. A `disabled` button is out of
-      // the tab order, so a keyboard user meets a kit of four with three
-      // controls in it and no account of the fourth; this one is reachable,
-      // announced as checked and unavailable, and the row's own note beside it
-      // carries §1.g's reason — *"a lounge with no place to sit is a field
-      // again"*. Clicking it does nothing, because there is nothing it could
-      // honestly do: `normalizeLook` puts the sitting bay back on whatever a
-      // document says, so a post would be a round trip that returned the look
-      // it was given and called it a change.
-      if (locked) btn.setAttribute('aria-disabled', 'true');
-      const text = el('span', 'settings-look-chip-label');
-      text.textContent = bay === 'cafe' ? 'café' : bay;
-      btn.appendChild(text);
-      btn.addEventListener('click', () => {
-        if (locked) return;
-        choose(withPath(current, `lounge.${bay}`, !current.lounge[bay]), 'lounge');
+        value: control.value,
+        onChange: control.onChange,
       });
-      group.appendChild(btn);
+      const row = widgets.row(host, control.label, strip, control.note);
+      row.className += ' settings-row--stack';
+    } else {
+      const seg = parts.radioGroup({
+        name: control.id,
+        label: control.label,
+        className: 'lookbar-seg settings-look-seg',
+        itemClass: 'lookbar-seg-btn',
+        options: control.options.map((/** @type {any} */ o) => ({
+          id: o.id,
+          label: o.label,
+          title: o.title,
+          parts: o.theme ? [parts.swatchDots(store.swatches(o.theme))] : [],
+        })),
+        value: control.value,
+        onChange: control.onChange,
+        // A theme is the one choice whose value cannot be read off a label, so
+        // pointing at one paints the window in it and leaving puts it back.
+        // It never saves: only a click does.
+        onPreview: control.id === 'theme' ? (id) => store.previewTheme(id) : undefined,
+      });
+      widgets.row(host, control.label, seg, control.help);
     }
-    widgets.row(
-      host,
-      'Lounge kit',
-      group,
-      `${c.LOUNGE_KIT_BAYS.length} bays · sitting is always on — a lounge with nowhere to sit is a field again`,
-    );
-    for (const problem of refusalsFor('lounge')) host.appendChild(refusalRow(problem));
+    for (const problem of store.refusalsFor(control.id)) {
+      host.appendChild(parts.refusalBox(problem, 'settings-look-refusal'));
+    }
   }
 
-  /** @param {HTMLElement} host */
-  function renderIo(host) {
-    const group = el('div', 'settings-look-io');
-    const save = el('button', 'btn');
-    save.type = 'button';
-    save.textContent = 'Export';
-    save.setAttribute('aria-label', 'Export this look as a file');
-    save.addEventListener('click', () => port.exportLook?.());
-    const load = el('button', 'btn');
-    load.type = 'button';
-    load.textContent = 'Import';
-    load.setAttribute('aria-label', 'Import a look from a file');
-    load.addEventListener('click', () => port.importLook?.());
-    group.append(save, load);
-    widgets.row(
-      host,
-      'This look, as a file',
-      group,
-      'It names no project, no path and no session — a look is anonymous, so it is a file you ' +
-        'can post. A bad one is refused whole and changes nothing.',
-    );
+  /** @param {any} host @param {any} current */
+  function renderPreview(host, current) {
+    const shot = picture({ kind: 'preview', look: current, key: 'preview' });
+    if (!shot) return;
+    const wrap = el('div', 'settings-look-preview');
+    wrap.append(shot, el('p', 'settings-look-caption', 'Live preview'));
+    host.appendChild(wrap);
   }
 
   // --------------------------------------------------------------- the whole
 
+  /** The ids of the rows on the outside, as drawn. */
+  const outsideIds = () => outsideControls(store).map((c) => c.id);
+
   /**
    * Draw the section into the sheet, or draw nothing at all.
    * @param {HTMLElement} host
+   * @param {any} [focused] the element that had the keyboard BEFORE the sheet
+   *   emptied itself to redraw. The sheet has to say, because by the time this
+   *   runs the browser has already moved the focus off a button that is no
+   *   longer in the document — `activeElement` is the body by then.
    */
-  function renderInto(host) {
+  function renderInto(host, focused = doc.activeElement) {
     const c = cat();
     if (!c) return null;
-    const current = shown();
-    const s = widgets.section(
-      'Look',
-      'Start from a preset, then change anything. Every combination is measured before it is ' +
-        'offered, and one that would leave a rug unreadable on the floor under it is refused ' +
-        'with the reason. All three themes still apply on top.',
-    );
+    // Hear the daemon's last word before drawing — quietly, because this IS the
+    // redraw a subscriber would have asked for.
+    store.refresh({ silent: true });
+    // Which control has the keyboard, before every one of them is replaced.
+    let keep = picked;
+    picked = '';
+    if (!keep && focused) for (const [key, node] of stops) if (node === focused) keep = key;
+    stops.clear();
+
+    const current = store.look();
+    const s = widgets.section('Look', 'How the office looks. A change applies as you click it.');
     s.id = LOOK_SECTION_ID;
-    // AGENT SIZE IS THE FIRST CONTROL, above the presets. It is the one row in
-    // this section people arrive already knowing they want — "make them bigger"
-    // is a sentence somebody says; "change the corridor to loop pile" is not —
-    // and as the eleventh picker it sat below six cards, a preview and ten
-    // rows of chips, which is under the fold on every screen this sheet has
-    // been opened on. It is still read out of the catalogue like every other
-    // row; only where it is drawn is decided here.
-    const size = c.LOOK_PICKERS.find((/** @type {any} */ p) => p.id === 'agentSize');
-    if (size) renderPicker(s, c, current, size);
-    renderPresets(s, c, current);
-    renderState(s, c, current);
+    const outside = outsideControls(store);
+    for (const control of outside) renderOutside(s, control);
     renderPreview(s, current);
-    const rows = new Set([...c.LOOK_PICKERS.map((/** @type {any} */ p) => p.id), 'lounge']);
-    for (const picker of c.LOOK_PICKERS) if (picker !== size) renderPicker(s, c, current, picker);
-    renderLoungeKit(s, c, current);
+    advanced.renderInto(s, c, current);
+
     // A refusal nobody's hand caused, naming a row this section does not draw —
     // an imported document, or the daemon refusing on a theme this tab is not
     // painted in. It still has to be READ somewhere, so it is read here rather
     // than dropped: a refusal that changed nothing and said nothing would be
     // indistinguishable from a control that silently did not work.
-    if (!refusals.from) {
-      for (const problem of refusals.problems.filter((p) => !rows.has(p.picker))) {
-        s.appendChild(refusalRow(problem));
+    const rows = new Set([...outside.map((o) => o.id), ...advanced.rowIds(c)]);
+    const refusal = store.refusal();
+    if (refusal && !rows.has(refusal.from)) {
+      const orphans = refusal.from
+        ? refusal.problems
+        : refusal.problems.filter((/** @type {any} */ p) => !rows.has(p.picker));
+      for (const problem of orphans) {
+        s.appendChild(parts.refusalBox(problem, 'settings-look-refusal'));
       }
     }
-    renderIo(s);
-    // WP-88c. The agent size is a row now — the eleventh picker in the
-    // catalogue and the first one drawn — because it finally passes this sheet's
-    // founding rule: a control ships only if moving it changes something today
-    // (docs/DEVIATIONS.md §58, §94). The foot says what a URL can do instead.
-    const foot = el('p', 'settings-note settings-look-foot');
-    foot.textContent =
-      '?look=night-lab and ?scale=large paint one tab and write nothing. Agent size moves the ' +
-      'furniture with the people — the corridors, the room padding and every label stay put.';
-    s.appendChild(foot);
+
     host.appendChild(s);
+    // The redraw replaced the control the hand was on; put the hand back. Only
+    // when it WAS on one of these — a redraw caused by another section's save
+    // must not pull the focus down here.
+    if (keep) stops.get(keep)?.focus?.({ preventScroll: true });
     return s;
   }
 
   return {
     renderInto,
+    store,
+    /** Is the theme one of this section's rows on this build? The sheet's Floor
+     *  section keeps its own Theme row only when it is not. */
+    drawsTheme: () => Boolean(cat()) && outsideIds().includes('theme'),
+    /** The catalogue pickers on the outside — the rest are under Advanced. */
+    outsidePickers: OUTSIDE_PICKER_IDS,
     wire: (/** @type {{render:() => void}} */ o) => {
       ({ render } = o);
+      // The store says when the look moved — a choice here, the daemon's
+      // answer to it, or a push that the header's bar or another tab caused.
+      store.subscribe(() => render());
     },
-    /** For tests and for the sheet's close: drop an unposted change. */
+    /**
+     * The sheet is opening: start from what the daemon has, with no stale
+     * reason on screen and the focus wherever the sheet puts it.
+     */
     reset: () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      pending = null;
-      refusals = { from: null, problems: [] };
+      store.clearRefusal();
+      store.refresh({ silent: true });
+      picked = '';
+      stops.clear();
     },
+    /** The sheet is closing: a change that was shown is sent, not dropped. */
+    flush: () => store.flush(),
     toast,
   };
 }

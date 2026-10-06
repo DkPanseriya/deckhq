@@ -16,7 +16,7 @@
 import { createLookBar } from './look-ui-bar.js';
 import { createLookPort, createThemingPort } from './app-look.js';
 import { saveSetting } from './app-notify.js';
-import { announce, applyThemeSetting, latestSnapshot, sessionTheme } from './app-state.js';
+import { announce, latestSnapshot } from './app-state.js';
 
 /**
  * @param {object} deps
@@ -26,7 +26,10 @@ import { announce, applyThemeSetting, latestSnapshot, sessionTheme } from './app
  */
 export function wireLookBar(deps) {
   const { settingsUI, tourRunning } = deps;
-  const theming = createThemingPort();
+  // The SAME port the settings sheet was handed, and therefore the same look
+  // store: `createLookPort` builds one and answers with it every time.
+  const look = createLookPort();
+  if (deps.debounceMs !== undefined) look.store.setDebounce(deps.debounceMs);
   return createLookBar({
     doc: document,
     buttonEl: document.getElementById('look-btn'),
@@ -34,14 +37,9 @@ export function wireLookBar(deps) {
     hintEl: document.getElementById('look-hint'),
     hintDismissEl: document.getElementById('look-hint-dismiss'),
     settingsBtnEl: document.getElementById('settings-btn'),
-    look: createLookPort(),
-    theming: {
-      ...theming,
-      // `?theme=` paints one tab and writes nothing (WP-64), so what is painted
-      // after a save is the stored theme seen through that override — exactly
-      // what the next snapshot would paint anyway.
-      apply: (name) => applyThemeSetting(sessionTheme(name)),
-    },
+    look,
+    store: look.store,
+    theming: createThemingPort(),
     getSettings: () => latestSnapshot?.settings || null,
     saveSetting,
     announce,

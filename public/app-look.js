@@ -24,6 +24,8 @@
 
 import { now as clockNow } from './clock.js';
 import { floorPopulation } from './floor-rule.js';
+import { createLookStore } from './look-ui-store.js';
+import { saveSetting } from './app-notify.js';
 import {
   applyLookSetting,
   applyThemeSetting,
@@ -32,6 +34,7 @@ import {
   lookOptions,
   lookPictures,
   paintedTheme,
+  sessionTheme,
   themes,
   toast,
 } from './app-state.js';
@@ -43,7 +46,8 @@ import {
  * draw the reason in and nothing to do with a stack trace.
  *
  * @param {unknown} look the look document's body — no `kind`, no `version`
- * @returns {Promise<{ok:boolean, problems?:any[], error?:string}>}
+ * @returns {Promise<{ok:boolean, look?:any, problems?:any[], error?:string}>} `look` is
+ *   what the daemon stored, on a success
  */
 export async function postLook(look) {
   try {
@@ -60,7 +64,9 @@ export async function postLook(look) {
     // once `kind` and `version` come off it.
     const { kind: _kind, version: _version, ...applied } = body.look || {};
     applyLookSetting(applied);
-    return { ok: true };
+    // The answer goes back to the caller as well as to the floor: the look
+    // store holds "what the daemon last accepted", and this is it.
+    return { ok: true, look: applied };
   } catch (err) {
     return { ok: false, error: /** @type {any} */ (err).message };
   }
@@ -126,6 +132,9 @@ export function importLook() {
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
       const { kind: _kind, version: _version, ...applied } = body.look || {};
       applyLookSetting(applied);
+      // `applyLookSetting` stamped the snapshot; the store hears it from there,
+      // and tells whichever surface is open.
+      lookStore().refresh();
       toast(`Look applied: “${applied.preset}”.`);
     } catch (err) {
       toast(`${err.message} Nothing was changed.`, { isError: true });
@@ -151,9 +160,20 @@ export function importLook() {
  * makes the Look section ABSENT on a build whose renderer did not load, which is
  * the honest answer: there is nothing to paint a swatch with and no guard to
  * refuse with.
+ *
+ * ## One port, and one store on it
+ *
+ * The settings sheet and the header's Look bar are each handed "the look
+ * port", and they must be handed the SAME one, because the port carries the
+ * look store (`look-ui-store.js`): what the daemon last accepted, what was just
+ * chosen, and the last refusal. Two ports would be two stores, and two stores
+ * is the defect this arrangement replaced — a control in one surface showing a
+ * look the other had already changed. So this builds it once and answers with
+ * it every time it is asked.
  */
 export function createLookPort() {
-  return {
+  if (sharedPort) return sharedPort;
+  const port = {
     catalogue: () => lookOptions,
     validate: (/** @type {any} */ next, /** @type {any} */ theme) =>
       lookGuards ? lookGuards.validateLook(next, theme) : { ok: true, problems: [] },
@@ -165,8 +185,64 @@ export function createLookPort() {
     apply: postLook,
     exportLook,
     importLook,
+    prefs: lookPrefs,
+    /** @type {any} */
+    store: null,
   };
+  const theming = createThemingPort();
+  port.store = createLookStore({
+    port,
+    // What the daemon last PUSHED. `postLook` and `saveSetting` both stamp
+    // their answers onto the same snapshot, so a write made by the palette is
+    // heard here as well as one made by a surface.
+    read: () => latestSnapshot?.settings || null,
+    saveSetting,
+    theming: {
+      ...theming,
+      // `?theme=` paints one tab and writes nothing (WP-64), so what is painted
+      // after a save is the stored theme seen through that override — exactly
+      // what the next snapshot would paint anyway.
+      apply: (/** @type {string} */ name) => applyThemeSetting(sessionTheme(name)),
+    },
+  });
+  sharedPort = port;
+  return port;
 }
+/** @type {any} */
+let sharedPort = null;
+
+/** The one look store in this shell. See `createLookPort`. */
+export const lookStore = () => createLookPort().store;
+
+/**
+ * WHAT THIS BROWSER REMEMBERS ABOUT THE LOOK SECTION: which disclosures are
+ * open. Advanced is shut until somebody opens it, and then it stays the way
+ * they left it — per browser, because it is a fact about a person at a screen
+ * and not about the floor, so it has no business in `state.json`.
+ *
+ * `globalThis.localStorage`, reached inside the two functions and inside a
+ * `try`: some browsers expose the object and throw on use, and a sheet that
+ * cannot remember a disclosure must still open.
+ */
+const PREF_PREFIX = 'deckhq.look.';
+const lookPrefs = Object.freeze({
+  /** @param {string} key @returns {string|null} */
+  get(key) {
+    try {
+      return globalThis.localStorage.getItem(PREF_PREFIX + key);
+    } catch {
+      return null;
+    }
+  },
+  /** @param {string} key @param {string} value */
+  set(key, value) {
+    try {
+      globalThis.localStorage.setItem(PREF_PREFIX + key, value);
+    } catch {
+      // not remembered; the section keeps it for this tab
+    }
+  },
+});
 
 /**
  * THE THEMING PORT the settings sheet and the header's Look popover are handed
@@ -216,17 +292,36 @@ export const lookPresets = () =>
  * keyboard.
  */
 export const lookPaletteActions = Object.freeze({
-  setLookPreset: (/** @type {string} */ id) => postLook(lookOptions?.lookForPreset(id)),
-  resetLook: () =>
-    postLook(lookOptions?.lookForPreset((latestSnapshot?.settings?.look || {}).preset)),
-  // WP-88c. One key of the stored look rather than a preset, and that is the
-  // difference between this and every row above it: a size is not a floor, so
-  // choosing one must leave the floor the user chose exactly as it is.
+  // Through the store, like the two surfaces, so the palette's rules are theirs:
+  // a preset is a STYLE and leaves the agent size where the person put it, and
+  // a size is not a floor, so choosing one leaves the floor exactly as it is.
+  // Sent at once — a debounce is for a hand walking a picker, not for a command.
+  setLookPreset: (/** @type {string} */ id) => atOnce((store) => store.choosePreset(id)),
+  resetLook: () => atOnce((store) => store.resetStyle()),
   setAgentSize: (/** @type {string} */ id) =>
-    postLook({ ...(latestSnapshot?.settings?.look || {}), agentSize: id }),
+    atOnce((store) => store.choosePath('agentSize', id, 'agentSize')),
   exportLook,
   importLook,
 });
+
+/**
+ * Run one palette command against the store: hear the daemon first, choose,
+ * and send without waiting out the debounce.
+ *
+ * The palette has no row to draw a refusal under, so a refusal is a toast — the
+ * guard's own sentence, and the one it cannot say for itself. Before this a
+ * refused palette command did nothing and said nothing.
+ * @param {(store:any) => any} choose
+ */
+async function atOnce(choose) {
+  const store = lookStore();
+  store.refresh();
+  await (choose(store) ?? store.flush());
+  const refused = store.refusal();
+  if (!refused?.problems?.length) return;
+  toast(`${refused.problems[0].reason}. Nothing was changed.`, { isError: true });
+  store.clearRefusal();
+}
 
 /**
  * HOW MANY PEOPLE THE FLOOR IS DRAWING RIGHT NOW (WP-88c).

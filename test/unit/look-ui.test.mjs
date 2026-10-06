@@ -23,6 +23,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   DEFAULT_LOOK,
@@ -38,6 +39,14 @@ import { lookMetrics, validateLook } from '../../public/render/look-guards.js';
 import { resolveLook } from '../../public/render/look-derive.js';
 import { buildLookDocument, validateLookDocument } from '../../src/core/look.mjs';
 import { createLookSection, dimensionsFor, swatchSpecFor } from '../../public/look-ui.js';
+import {
+  ADVANCED_GROUPS,
+  OUTSIDE_PICKER_IDS,
+  advancedGroups,
+  createLookStore,
+  densityLevels,
+} from '../../public/look-ui-store.js';
+import { THEMES } from '../../public/render/themes.js';
 import {
   LOOK_THUMB_DRAW_BUDGET,
   THUMB_H,
@@ -135,7 +144,18 @@ const byClass = (root, cls) => find(root, (n) => String(n.className).split(/\s+/
  */
 function mount(opts = {}) {
   const posted = [];
+  const saves = [];
+  const painted = [];
+  /**
+   * What the DAEMON holds, and — separately — what it last PUSHED to this tab.
+   * They are two variables on purpose. This harness used to keep one, which the
+   * post wrote and the section read, and that is exactly the arrangement the
+   * product did not have: the section read a copy nobody updated, the chosen
+   * chip went back, and every test here passed. `pushed` moves only when a
+   * test says the daemon pushed.
+   */
   let stored = opts.look || DEFAULT_LOOK;
+  const pushed = { look: stored, theme: 'default' };
   const host = new StubNode('div');
   const widgets = createSettingsWidgets({
     theming: { swatches: () => [] },
@@ -143,27 +163,44 @@ function mount(opts = {}) {
     applyThemeSetting: (/** @type {string} */ n) => n,
     availableAvatarSets: () => [],
   });
+  const port = {
+    catalogue: () => catalogue,
+    validate: validateLook,
+    metrics: lookMetrics,
+    theme: () => 'default',
+    live: () => 9,
+    picture: () => (opts.pictures ? new StubNode('canvas') : null),
+    apply: async (/** @type {any} */ next) => {
+      posted.push(next);
+      const answer = opts.apply ? opts.apply(next) : { ok: true };
+      if (!answer.ok) return answer;
+      stored = normalizeLook(next);
+      return { ...answer, look: stored };
+    },
+    exportLook: () => {},
+    importLook: () => {},
+  };
+  const store = createLookStore({
+    port,
+    read: () => pushed,
+    debounceMs: 0,
+    theming: {
+      list: () => THEMES,
+      apply: (/** @type {string} */ name) => void painted.push(name),
+      swatches: () => [],
+    },
+    saveSetting: async (/** @type {any} */ patch) => {
+      saves.push(patch);
+      return { ...pushed, ...patch };
+    },
+  });
   const section = createLookSection({
     doc,
     widgets,
-    debounceMs: 0,
-    getLook: () => stored,
+    store,
+    look: port,
+    prefs: opts.prefs,
     toast: () => {},
-    look: {
-      catalogue: () => catalogue,
-      validate: validateLook,
-      metrics: lookMetrics,
-      theme: () => 'default',
-      picture: () => (opts.pictures ? new StubNode('canvas') : null),
-      apply: async (/** @type {any} */ next) => {
-        posted.push(next);
-        const answer = opts.apply ? opts.apply(next) : { ok: true };
-        if (answer.ok) stored = normalizeLook(next);
-        return answer;
-      },
-      exportLook: () => {},
-      importLook: () => {},
-    },
   });
   const draw = () => {
     host.children = [];
@@ -171,8 +208,13 @@ function mount(opts = {}) {
     return host;
   };
   section.wire({ render: draw });
-  return { section, host, posted, draw, look: () => stored };
+  return { section, store, host, posted, saves, painted, pushed, draw, look: () => stored };
 }
+
+/** The Advanced disclosure, as drawn. */
+const advancedOf = (root) => byClass(root, 'settings-look-advanced')[0];
+/** Is `node` inside `ancestor`? The stub has no `contains`, so: by search. */
+const within = (ancestor, node) => all(ancestor).includes(node);
 
 /** The radiogroup for one picker dimension, by its accessible name. */
 function groupNamed(root, label) {
@@ -212,32 +254,264 @@ test('the section draws one row per picker in the catalogue, and never a list of
     }
   }
   for (const bay of LOUNGE_KIT_BAYS) {
-    const name = bay === 'cafe' ? 'café' : bay;
     assert.ok(
-      byRole(root, 'checkbox').some((n) => n.textContent === name),
+      byRole(root, 'checkbox').some((n) => n.textContent.toLowerCase() === bayName(bay)),
       `the lounge kit has no checkbox for "${bay}"`,
     );
   }
 });
 
-test('Agent size is the first control in the section, above the preset cards — and drawn once', () => {
-  // The owner could not find it. As the catalogue's eleventh picker it was
-  // drawn below six cards, a preview and ten rows of chips; it is the first
-  // thing in the section now, and still a row built from the catalogue.
+/** A bay as the kit names it, lower-cased: `cafe` is written `café`. */
+const bayName = (bay) => (bay === 'cafe' ? 'café' : bay);
+
+// ------------------------------------------- simple outside, detail inside
+
+test('the outside is exactly four controls — agent size, theme, style, density — and nothing else', () => {
+  // The owner: "Keep high-level abstract settings like agent size, theme, etc.
+  // on the outside." Four, in this order, and every other control on the
+  // section is inside the disclosure.
   const { draw } = mount();
-  const section = draw().children[0];
-  const groups = byRole(section, 'radiogroup').map((g) => g.getAttribute('aria-label'));
-  assert.equal(groups[0], 'Agent size');
-  assert.equal(groups[1], 'Preset');
-  assert.equal(groups.filter((label) => label === 'Agent size').length, 1);
-  // Every other picker is still there, in the catalogue's own order.
-  const rest = LOOK_PICKERS.filter((p) => p.id !== 'agentSize').map((p) => p.label);
-  const labels = byClass(section, 'settings-label').map((n) => n.textContent);
+  const root = draw();
+  const advanced = advancedOf(root);
+  assert.ok(advanced, 'there is no Advanced disclosure');
+
+  const outside = byRole(root, 'radiogroup').filter((g) => !within(advanced, g));
   assert.deepEqual(
-    labels.filter((label) => rest.includes(label)),
-    rest,
+    outside.map((g) => g.getAttribute('aria-label')),
+    ['Agent size', 'Theme', 'Style', 'Density'],
   );
-  assert.equal(labels[0], 'Agent size');
+  assert.deepEqual(
+    byRole(root, 'checkbox').filter((b) => !within(advanced, b)),
+    [],
+    'a lounge bay is outside the disclosure',
+  );
+  // The only buttons outside it are those four groups' own options.
+  const options = new Set(outside.flatMap((g) => byRole(g, 'radio')));
+  const loose = find(root, (n) => n.tagName === 'BUTTON').filter(
+    (b) => !within(advanced, b) && !options.has(b),
+  );
+  assert.deepEqual(loose, [], 'something other than the four controls is on the outside');
+
+  // Each of the four is the catalogue's, the themes' or the presets' own list.
+  const count = (label) => byRole(groupNamed(root, label), 'radio').length;
+  assert.equal(count('Agent size'), LOOK_PICKERS.find((p) => p.id === 'agentSize').options.length);
+  assert.equal(count('Theme'), THEMES.length);
+  assert.equal(count('Style'), PRESETS.length);
+  assert.equal(count('Density'), densityLevels(catalogue).length);
+  // And the only catalogue picker out here is the one the store names.
+  assert.deepEqual([...OUTSIDE_PICKER_IDS], ['agentSize']);
+});
+
+test('Advanced is shut by default and holds every other picker in the catalogue — derived, not listed', () => {
+  const { draw } = mount();
+  const root = draw();
+  const advanced = advancedOf(root);
+  // The golden that photographs the inside opens it by this id.
+  assert.equal(advanced.id, 'settings-look-advanced');
+  assert.match(
+    readFileSync(new URL('../../scripts/goldens.mjs', import.meta.url), 'utf8'),
+    /click: '#settings-look-advanced > summary',\s+scrollTo: 'settings-look-advanced'/,
+  );
+  // A real disclosure: the browser's own element, so the keyboard, the marker
+  // and the expanded state are not this product's to get wrong.
+  assert.equal(advanced.tagName, 'DETAILS');
+  assert.equal(advanced.children[0].tagName, 'SUMMARY');
+  assert.equal(advanced.open, false, 'Advanced is open before anybody opened it');
+
+  // Every picker that is not on the outside has its row in here, and no other.
+  const inside = LOOK_PICKERS.filter((p) => !OUTSIDE_PICKER_IDS.includes(p.id));
+  const labels = byClass(advanced, 'settings-label').map((n) => n.textContent);
+  assert.deepEqual(
+    labels.filter((label) => inside.some((p) => p.label === label)).sort(),
+    inside.map((p) => p.label).sort(),
+  );
+  assert.ok(labels.includes('Lounge kit'));
+  assert.equal(byRole(advanced, 'checkbox').length, LOUNGE_KIT_BAYS.length);
+  for (const picker of inside) {
+    const dimensions = dimensionsFor(picker, catalogue);
+    for (const d of dimensions) {
+      const label = dimensions.length > 1 ? `${picker.label} — ${d.label}` : picker.label;
+      const g = groupNamed(advanced, label);
+      assert.ok(g, `"${label}" is not under Advanced`);
+      assert.equal(byRole(g, 'radio').length, d.ids.length);
+    }
+  }
+
+  // Three headings, each a disclosure of its own, and between them they hold
+  // every inside picker exactly once — the outside and the inside together are
+  // the catalogue.
+  const subs = byClass(advanced, 'settings-look-sub');
+  assert.deepEqual(
+    subs.map((d) => [d.tagName, d.children[0].tagName, d.children[0].textContent]),
+    ADVANCED_GROUPS.map((g) => ['DETAILS', 'SUMMARY', g.label]),
+  );
+  assert.deepEqual(
+    ADVANCED_GROUPS.map((g) => g.label),
+    ['Floors', 'Furniture and textiles', 'Plants and props'],
+  );
+  const grouped = advancedGroups(catalogue).flatMap((g) => g.pickers.map((p) => p.id));
+  assert.deepEqual([...grouped].sort(), inside.map((p) => p.id).sort());
+  assert.deepEqual(
+    [...grouped, ...OUTSIDE_PICKER_IDS].sort(),
+    LOOK_PICKERS.map((p) => p.id).sort(),
+  );
+  // A picker the catalogue grows tomorrow lands under a heading without
+  // anybody editing a list.
+  const grown = { ...catalogue, LOOK_PICKERS: [...LOOK_PICKERS, { id: 'lighting', path: 'x' }] };
+  assert.ok(advancedGroups(grown).some((g) => g.pickers.some((p) => p.id === 'lighting')));
+});
+
+test('the closed disclosure says what is in it, and stays the way it was left', () => {
+  const clean = mount();
+  assert.equal(
+    advancedOf(clean.draw()).children[0].textContent,
+    'Advanced — no changes from Studio oak',
+  );
+  const edited = mount({
+    look: normalizeLook({ ...DEFAULT_LOOK, scheme: 'cool', props: { density: 'busy' } }),
+  });
+  const summary = advancedOf(edited.draw()).children[0];
+  assert.equal(summary.textContent, 'Advanced — 2 changes from Studio oak');
+  // The heading each change is under says so too.
+  const subs = byClass(edited.host, 'settings-look-sub').map((d) => d.children[0].textContent);
+  assert.deepEqual(subs, [
+    'Floors — 1 change',
+    'Furniture and textiles',
+    'Plants and props — 1 change',
+  ]);
+
+  // Remembered per browser: opening it writes, and the next sheet reads.
+  const kept = new Map();
+  const prefs = { get: (k) => kept.get(k) ?? null, set: (k, v) => void kept.set(k, v) };
+  const first = mount({ prefs });
+  const details = advancedOf(first.draw());
+  details.fire('toggle'); // the browser reporting the state it was built with
+  assert.equal(kept.size, 0, 'being drawn is not being opened');
+  details.open = true;
+  details.fire('toggle');
+  assert.equal(kept.get('advanced'), 'open');
+  // A redraw in this tab keeps it, and so does a new sheet in this browser.
+  assert.equal(advancedOf(first.draw()).open, true);
+  assert.equal(advancedOf(mount({ prefs }).draw()).open, true);
+  // The headings inside start open, and shutting one is remembered the same way.
+  const sub = byClass(first.draw(), 'settings-look-sub')[0];
+  assert.equal(sub.open, true);
+  sub.open = false;
+  sub.fire('toggle');
+  assert.equal(kept.get('group.floors'), 'closed');
+  assert.equal(byClass(mount({ prefs }).draw(), 'settings-look-sub')[0].open, false);
+});
+
+test('a reason is never drawn inside a shut disclosure', () => {
+  const kept = new Map([
+    ['advanced', 'closed'],
+    ['group.floors', 'closed'],
+  ]);
+  const prefs = { get: (k) => kept.get(k) ?? null, set: (k, v) => void kept.set(k, v) };
+  const { draw } = mount({ prefs });
+  assert.equal(advancedOf(draw()).open, false);
+  chip(groupNamed(draw(), 'Office floor'), 'Terrazzo').fire('click');
+  const root = draw();
+  assert.equal(byClass(root, 'settings-look-refusal').length, 1);
+  assert.equal(advancedOf(root).open, true, 'the reason is inside a shut Advanced');
+  assert.equal(byClass(root, 'settings-look-sub')[0].open, true, 'and inside a shut Floors');
+  // Opened for the reason, not for good: nothing was remembered.
+  assert.equal(kept.get('advanced'), 'closed');
+});
+
+test('a preset is a style: choosing one leaves the agent size alone, and "edited" is about the style', () => {
+  // The second way a highlight "went back to the default": choose Large, choose
+  // a preset, and Medium was lit again. Workshop ships at `small`.
+  assert.equal(lookForPreset('workshop').agentSize, 'small');
+  const { draw, posted } = mount({ look: normalizeLook({ ...DEFAULT_LOOK, agentSize: 'large' }) });
+
+  // A size is not an edit: the style is Studio oak's, untouched.
+  let root = draw();
+  assert.equal(advancedOf(root).children[0].textContent, 'Advanced — no changes from Studio oak');
+  assert.equal(
+    find(root, (n) => n.textContent === 'Reset to preset')[0].getAttribute('disabled'),
+    '',
+  );
+
+  chip(groupNamed(root, 'Style'), 'Workshop').fire('click');
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].preset, 'workshop');
+  assert.equal(posted[0].agentSize, 'large', 'the preset reset the agent size');
+  assert.ok(
+    sameLook({ ...posted[0], agentSize: 'small' }, lookForPreset('workshop')),
+    'the preset did not apply its whole style',
+  );
+  root = draw();
+  assert.equal(chip(groupNamed(root, 'Agent size'), 'Large').getAttribute('aria-checked'), 'true');
+  assert.equal(chip(groupNamed(root, 'Style'), 'Workshop').getAttribute('aria-checked'), 'true');
+  assert.equal(advancedOf(root).children[0].textContent, 'Advanced — no changes from Workshop');
+});
+
+test('Density is one control over two options: plants and props move together', () => {
+  const levels = densityLevels(catalogue);
+  assert.deepEqual(
+    levels.map((l) => l.label),
+    ['Calm', 'Normal', 'Lively'],
+  );
+  // Each step is the pair at that position in the catalogue's own two tables.
+  assert.deepEqual(
+    levels.map((l) => [l.plants, l.props]),
+    catalogue.PLANT_DENSITY_IDS.map((id, i) => [id, catalogue.PROP_DENSITY_IDS[i]]),
+  );
+
+  const { draw, posted } = mount();
+  assert.equal(chip(groupNamed(draw(), 'Density'), 'Normal').getAttribute('aria-checked'), 'true');
+  chip(groupNamed(draw(), 'Density'), 'Lively').fire('click');
+  assert.deepEqual(
+    [posted[0].plants.density, posted[0].props.density],
+    [catalogue.PLANT_DENSITY_IDS.at(-1), catalogue.PROP_DENSITY_IDS.at(-1)],
+  );
+  // Nothing else about the look moved.
+  assert.ok(
+    sameLook(
+      { ...posted[0], plants: DEFAULT_LOOK.plants, props: DEFAULT_LOOK.props },
+      DEFAULT_LOOK,
+    ),
+  );
+  let root = draw();
+  assert.equal(chip(groupNamed(root, 'Density'), 'Lively').getAttribute('aria-checked'), 'true');
+  // The two pickers under Advanced show the same thing — it is one look.
+  assert.equal(
+    chip(groupNamed(root, 'Planting — Density'), 'Lush').getAttribute('aria-checked'),
+    'true',
+  );
+  assert.equal(chip(groupNamed(root, 'Prop density'), 'Busy').getAttribute('aria-checked'), 'true');
+
+  // Set apart under Advanced, they are no step at all — and it says where.
+  chip(groupNamed(root, 'Prop density'), 'Quiet').fire('click');
+  root = draw();
+  const density = groupNamed(root, 'Density');
+  assert.deepEqual(
+    byRole(density, 'radio').map((b) => b.getAttribute('aria-checked')),
+    ['false', 'false', 'false'],
+  );
+  assert.equal(byRole(density, 'radio')[0].getAttribute('tabindex'), '0', 'no way in by Tab');
+  assert.ok(find(root, (n) => /set separately, under Advanced/.test(n._text || '')).length > 0);
+});
+
+test('Theme is stored first and painted second, and a pointer over one only previews it', async () => {
+  const { draw, saves, painted, store } = mount();
+  const theme = () => groupNamed(draw(), 'Theme');
+  assert.equal(chip(theme(), 'Default').getAttribute('aria-checked'), 'true');
+
+  chip(theme(), 'Blueprint').fire('pointerenter');
+  assert.deepEqual(painted, ['blueprint'], 'pointing at a theme did not show it');
+  assert.deepEqual(saves, [], 'pointing at a theme saved it');
+  theme().fire('pointerleave');
+  assert.deepEqual(painted, ['blueprint', 'default'], 'leaving did not put the stored one back');
+
+  chip(theme(), 'Night shift').fire('click');
+  assert.equal(chip(theme(), 'Night shift').getAttribute('aria-checked'), 'true');
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(saves, [{ theme: 'night shift' }]);
+  assert.equal(painted.at(-1), 'night shift');
+  assert.equal(store.storedTheme(), 'night shift');
+  assert.equal(chip(theme(), 'Night shift').getAttribute('aria-checked'), 'true');
 });
 
 test('every picker’s dimensions partition its own options exactly', () => {
@@ -255,27 +529,32 @@ test('every picker’s dimensions partition its own options exactly', () => {
 
 test('the six preset cards are there, the current one is checked, and it says so', () => {
   const { draw } = mount();
-  const strip = byRole(draw(), 'radiogroup').find((g) => g.getAttribute('aria-label') === 'Preset');
+  const strip = byRole(draw(), 'radiogroup').find((g) => g.getAttribute('aria-label') === 'Style');
   assert.ok(strip, 'the preset strip is gone');
   const cards = byRole(strip, 'radio');
   assert.equal(cards.length, PRESETS.length);
   assert.equal(cards.length, 6, '§3 promises six starting points');
   const checked = cards.filter((c) => c.getAttribute('aria-checked') === 'true');
   assert.equal(checked.length, 1);
-  assert.ok(checked[0].textContent.startsWith('Studio oak'));
-  // Each card carries its own one-line character, straight off the catalogue.
+  assert.equal(checked[0].textContent, 'Studio oak');
+  // Each card is its name, straight off the catalogue, and its one-line
+  // character is the card's tooltip rather than six sentences on the sheet.
   for (const preset of PRESETS) {
     assert.ok(
-      cards.some((c) => c.textContent === `${preset.label}${preset.blurb}`),
+      cards.some((c) => c.textContent === preset.label && c.title === preset.blurb),
       `the ${preset.id} card lost its name or its blurb`,
     );
   }
 });
 
-test('the numbers under the preview are the guard’s own, not a second measurement', () => {
+test('the measured numbers are the guard’s own, not a second measurement — and they are a detail', () => {
   const { draw } = mount();
-  const line = byClass(draw(), 'settings-look-metrics')[0];
-  assert.ok(line, 'the live preview reports nothing');
+  const root = draw();
+  const line = byClass(root, 'settings-look-metrics')[0];
+  assert.ok(line, 'the section reports nothing the guard measured');
+  // Contrast ratios are not what somebody choosing a floor came for: they are
+  // under Advanced, with the rest of the detail.
+  assert.ok(within(advancedOf(root), line), 'the contrast figures are on the outside');
   for (const m of lookMetrics(DEFAULT_LOOK, 'default')) {
     assert.ok(
       line.textContent.includes(`${m.label} ${m.ratio.toFixed(2)}:1`),
@@ -345,19 +624,39 @@ test('the refusal is drawn under the control the hand was on, not two rows away'
   // that lost its edge — but the chip that refused to move is the office's.
   const { draw } = mount();
   chip(groupNamed(draw(), 'Office floor'), 'Terrazzo').fire('click');
-  const rows = draw().children[0].children;
-  const at = rows.findIndex((n) => String(n.className).includes('settings-look-refusal'));
-  assert.ok(at > 0, 'no refusal row was drawn');
+  const root = draw();
+  const refusal = byClass(root, 'settings-look-refusal')[0];
+  assert.ok(refusal, 'no refusal row was drawn');
+  const rows = find(root, (n) => n.children.includes(refusal))[0].children;
+  const at = rows.indexOf(refusal);
   assert.ok(
     rows[at - 1].textContent.startsWith('Office floor'),
     `the refusal sits under "${rows[at - 1].textContent.slice(0, 24)}", not under the office floor`,
   );
 });
 
+test('a refusal on the outside is drawn under the outside control that was touched', () => {
+  // A guard that refuses every look but the shipped one, so a preset is refused.
+  const { draw, posted, store } = mount();
+  store.port.validate = (next) =>
+    sameLook(next, DEFAULT_LOOK)
+      ? { ok: true, problems: [] }
+      : { ok: false, problems: [{ picker: 'floor.office', reason: 'not on this floor' }] };
+  chip(groupNamed(draw(), 'Style'), 'Night lab').fire('click');
+  assert.deepEqual(posted, []);
+  const root = draw();
+  const refusal = byClass(root, 'settings-look-refusal')[0];
+  assert.match(refusal.textContent, /not on this floor\. Nothing was changed\./);
+  const rows = find(root, (n) => n.children.includes(refusal))[0].children;
+  assert.ok(rows[rows.indexOf(refusal) - 1].textContent.startsWith('Style'));
+  assert.ok(!within(advancedOf(root), refusal), 'the reason was put under the guard’s row instead');
+  assert.equal(chip(groupNamed(root, 'Style'), 'Studio oak').getAttribute('aria-checked'), 'true');
+});
+
 test('the locked lounge bay is reachable, checked, and accounted for', () => {
   const { draw, posted } = mount();
   const root = draw();
-  const sitting = byRole(root, 'checkbox').find((b) => b.textContent === 'sitting');
+  const sitting = byRole(root, 'checkbox').find((b) => b.textContent === 'Sitting');
   // `aria-disabled` rather than `disabled`: still in the tab order, so a
   // keyboard user does not meet a kit of four with three controls in it.
   assert.equal(sitting.getAttribute('aria-disabled'), 'true');
@@ -367,19 +666,17 @@ test('the locked lounge bay is reachable, checked, and accounted for', () => {
   assert.deepEqual(posted, [], 'turning the sitting bay off was posted');
   assert.equal(
     byRole(draw(), 'checkbox')
-      .find((b) => b.textContent === 'sitting')
+      .find((b) => b.textContent === 'Sitting')
       .getAttribute('aria-checked'),
     'true',
   );
-  // And the row says WHY, in §1.g's own words, beside the control rather than
-  // after it has been pressed.
-  const note = find(root, (n) => /sitting is always on/.test(n.textContent || ''))[0];
+  // And the row says so beside the control rather than after it was pressed.
+  const note = find(root, (n) => /Sitting is always on/.test(n._text || ''))[0];
   assert.ok(note, 'nothing on this row accounts for the bay that will not move');
-  assert.match(note.textContent, /a lounge with nowhere to sit is a field again/);
 
   // The other three do move.
   byRole(draw(), 'checkbox')
-    .find((b) => b.textContent === 'games')
+    .find((b) => b.textContent === 'Games')
     .fire('click');
   assert.equal(posted.length, 1);
   assert.equal(normalizeLook(posted[0]).lounge.games, false);
@@ -391,8 +688,12 @@ test('reset puts every option back to the preset the look started from', () => {
   const { draw, posted } = mount({ look: edited });
 
   const root = draw();
-  assert.match(byClass(root, 'settings-look-state-name')[0].textContent, /Studio oak · edited/);
+  assert.ok(
+    find(root, (n) => n._text === 'Studio oak · edited').length > 0,
+    'the Style row does not say the style was edited',
+  );
   const reset = find(root, (n) => n.textContent === 'Reset to preset')[0];
+  assert.ok(within(advancedOf(root), reset), 'the reset is not with the options it resets');
   assert.ok(reset, 'there is no way back to the preset');
   assert.equal(reset.getAttribute('disabled'), null, 'the way back is disabled on an edited look');
   reset.fire('click');

@@ -811,7 +811,7 @@ These are real, and listed here rather than discovered later.
 | `P`                 | Float the office — a small always-on-top window over your terminal       |
 | `G`                 | Step through the agents who went home, newest activity first             |
 | `I`                 | The repos nobody is working in — `P` on a row pins one a room of its own |
-| `L`                 | Look — agent size, theme and the floor presets, from the header button   |
+| `L`                 | Look — agent size, theme, style and density, from the header button      |
 | `,`                 | Settings — the whole sheet, its sections named across the top            |
 | `S`                 | Snapshot the office: floor + stats, on your clipboard and saved to disk  |
 | `Shift+S`           | Redact — swap every project name for its MK tag in the next snapshot     |
@@ -821,14 +821,11 @@ These are real, and listed here rather than discovered later.
 | `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                    |
 | Drag / scroll       | Pan, whenever the floor is bigger than the window                        |
 
-`L` opens what the **Look** button in the header opens: a small panel with **agent size** (small,
-medium, large, auto), the three themes, and the six floor presets as thumbnails. A click changes the
-floor straight away, and a choice that would leave the floor unreadable is refused with the reason
-and changes nothing. `Esc`, `L` again or a click anywhere else closes it. **All look options…**
-opens the full Look section in Settings — every floor material, the colour scheme, the furniture
-set, the rugs, the planting, the props and the lounge kit. `,` and the gear beside the Look button
-open Settings at the top, where a row of section names — State, Notifications, Resume, Floor, Look,
-Data, Hooks — jumps to each. Neither key does anything while you are typing in a field.
+`L` opens what the **Look** button in the header opens: a small panel with the four high-level
+choices — see [Change the look](#change-the-look). `Esc`, `L` again or a click anywhere else closes
+it, and **All look options…** opens the full Look section in Settings. `,` and the gear beside the
+Look button open Settings at the top, where a row of section names — State, Notifications, Resume,
+Floor, Look, Data, Hooks — jumps to each. Neither key does anything while you are typing in a field.
 
 `I` opens the list of repos nobody is working in — a quiet chip in the corner of the floor, and the
 names behind it. **Pinning one keeps it a room** even with nothing running in it: a small room, one
@@ -881,12 +878,45 @@ never the only way to get to anything. Whenever something is waiting, a strip of
 header carries the queue's shape without leaving the floor at all: oldest on the left, and it
 stays there.
 
+## Change the look
+
+The **Look** button in the header (`L`) and the top of Settings → Look offer the same four choices,
+and they are the only ones you see until you ask for more:
+
+| Choice         | What it does                                                                          |
+| -------------- | ------------------------------------------------------------------------------------- |
+| **Agent size** | Small, Medium, Large, or Auto — Auto picks a size that fits everyone on the floor     |
+| **Theme**      | Default, Night shift or Blueprint. In Settings, pointing at one previews it           |
+| **Style**      | Six presets as thumbnails: a whole floor — materials, colours, furniture, rugs        |
+| **Density**    | Calm, Normal or Lively — how many plants and props, moved together                    |
+
+A click changes the floor straight away and the choice stays lit. If a choice would leave the floor
+unreadable it is refused: the control stays where it was and the reason is written under it.
+Choosing a style changes the floor and **leaves your agent size alone**.
+
+Under those four, in Settings, is the live preview and then **Advanced**, which is shut until you
+open it and stays the way you left it in that browser. It holds everything fine-grained, under
+three headings you can fold away:
+
+- **Floors** — a material for the office, the corridor, the project rooms and the lounge, and the
+  colour scheme washed over them.
+- **Furniture and textiles** — the furniture set, the two rugs (a tone and a pattern each), and
+  which corners the lounge has. Sitting is always on.
+- **Plants and props** — the plant family, and the plant and prop densities one at a time, for when
+  Calm, Normal and Lively are not the mix you want.
+
+While it is shut, its heading counts what you have changed — _Advanced — 2 changes from Studio
+oak_ — and **Reset to preset** inside it puts the style back without touching your agent size.
+Export and Import are in there too: a look file names no project, path or session, so it is safe
+to share, and one that does not fit is refused whole. To try a look in one tab without saving it,
+add `?look=night-lab` or `?scale=large` to the address.
+
 ## Themes, and the floor as a file
 
 The floor comes in three finishes, all free and none of them gated: the default warm office,
 **night shift** — the same office after hours, cooler and dimmer — and **blueprint**, the floor as
 a drawing on a drafting table, in white line work on blue. Pick one from the **Look** button in
-the header (`L`), or in Settings → Floor → Theme, where hovering a swatch repaints the whole window
+the header (`L`), or in Settings → Look → Theme, where pointing at one repaints the whole window
 so you can see it before you choose it. A theme
 repaints materials and neutrals and nothing else: **the six state colours never move**, so a
 raised hand is the same amber in every theme and red still means one thing, and every theme is
