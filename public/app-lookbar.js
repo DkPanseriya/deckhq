@@ -22,6 +22,7 @@ import { announce, applyThemeSetting, latestSnapshot, sessionTheme } from './app
  * @param {object} deps
  * @param {{open:(section?:any) => any}} deps.settingsUI  the settings sheet
  * @param {() => boolean} deps.tourRunning  the first-run coach marks are up
+ * @param {number} [deps.debounceMs]  tests pass 0 — see `LOOK_DEBOUNCE_MS`
  */
 export function wireLookBar(deps) {
   const { settingsUI, tourRunning } = deps;
@@ -44,6 +45,7 @@ export function wireLookBar(deps) {
     getSettings: () => latestSnapshot?.settings || null,
     saveSetting,
     announce,
+    debounceMs: deps.debounceMs,
     openSheet: (section) => void settingsUI.open(section),
     // The hint waits for the screen: three coach marks on a first run, or
     // whatever modal is up. It is one line and it can afford to be late.
