@@ -20,6 +20,7 @@ import { assignSeats } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
 import { layoutPlate, platePlanFor } from '../../public/render/scene-labels.js';
 import { plateHeroLine } from '../../public/render/plan-plate.js';
+import { buildOfficeRow } from '../../public/render/plan-office.js';
 import { awayRooms, floorPopulation } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
 
@@ -133,4 +134,23 @@ test('a floor where every repo is away keeps the rooms it had', () => {
   assert.equal(split.strip.length, 0);
   const plan = planAt({ projects, agents }, 2000, 970);
   assert.equal(plan.rooms.filter((r) => r.away === true).length, 0);
+});
+
+test('the reception does not take the width the away rooms gave up: its sofas, at most 40%', () => {
+  // The fault on this floor at 1600 x 1000: the reception was 92 of 134 U, a
+  // bare rug with the sixteen waiting along its two long edges. It is as wide
+  // as its contents now, and the building still fills the window.
+  const floor = awayFloor();
+  const { waiting } = floorPopulation(floor.agents, { now: LARGE_NOW });
+  assert.equal(waiting, 16);
+  for (const [w, h] of [[1600, 870], ...STAGES]) {
+    const plan = planAt(floor, w, h);
+    const office = plan.rooms.find((r) => r.kind === 'office');
+    const contents = buildOfficeRow(waiting, { w: 0, h: office.h }).room.w;
+    const where = `${w}x${h}: a ${office.w.toFixed(1)} U reception in a ${plan.width.toFixed(1)} U building`;
+    assert.ok(office.w <= 0.4 * plan.width + 1e-6, where);
+    assert.ok(office.w <= contents + 1e-6, `${where}, its sofas need ${contents.toFixed(1)}`);
+    const fill = computeFill(plan.width, plan.height, w, h);
+    assert.ok(Math.min(fill.coverW, fill.coverH) >= 0.96, `${where} leaves ground showing`);
+  }
 });
