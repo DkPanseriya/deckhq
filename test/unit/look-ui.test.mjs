@@ -23,6 +23,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   DEFAULT_LOOK,
@@ -305,6 +306,12 @@ test('Advanced is shut by default and holds every other picker in the catalogue 
   const { draw } = mount();
   const root = draw();
   const advanced = advancedOf(root);
+  // The golden that photographs the inside opens it by this id.
+  assert.equal(advanced.id, 'settings-look-advanced');
+  assert.match(
+    readFileSync(new URL('../../scripts/goldens.mjs', import.meta.url), 'utf8'),
+    /click: '#settings-look-advanced > summary',\s+scrollTo: 'settings-look-advanced'/,
+  );
   // A real disclosure: the browser's own element, so the keyboard, the marker
   // and the expanded state are not this product's to get wrong.
   assert.equal(advanced.tagName, 'DETAILS');

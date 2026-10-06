@@ -477,3 +477,38 @@ test('an arrow key moves the choice, and the focus is still on it after the redr
     'the focus was left on a button the redraw threw away',
   );
 });
+
+// ------------------------------------------- the third way in: the palette
+
+test('the palette goes through the same store: a preset keeps the agent size, and the surfaces show it', async () => {
+  const { lookPaletteActions } = await import('../../public/app-look.js');
+  reset({ look: normalizeLook({ ...DEFAULT_LOOK, agentSize: 'large' }) });
+
+  // Workshop ships at `small`. A preset is a style; the size is the person's.
+  await lookPaletteActions.setLookPreset('workshop');
+  assert.deepEqual([stored.look.preset, stored.look.agentSize], ['workshop', 'large']);
+
+  await lookPaletteActions.setAgentSize('small');
+  await lookPaletteActions.setLookPreset('night-lab');
+  await lookPaletteActions.resetLook();
+  assert.deepEqual([stored.look.preset, stored.look.agentSize], ['night-lab', 'small']);
+
+  // No push since: both surfaces open on what the palette was just told.
+  SURFACES.bar.open();
+  assert.equal(checkedIndex(group(el('look-popover'), 'Agent size')), 0);
+  SURFACES.bar.close();
+  await SURFACES.sheet.open();
+  assert.equal(checkedIndex(group(sheetLook(), 'Agent size')), 0);
+  const styles = role(group(sheetLook(), 'Style'), 'radio');
+  assert.equal(styles[checkedIndex(group(sheetLook(), 'Style'))].textContent, 'Night lab');
+});
+
+test('the sheet has one Theme row, and it is the Look section’s', async () => {
+  reset();
+  await SURFACES.sheet.open();
+  const labels = all(el('settings-body'))
+    .filter((n) => String(n.className).split(/\s+/).includes('settings-label'))
+    .map((n) => n.textContent);
+  assert.equal(labels.filter((label) => label === 'Theme').length, 1);
+  assert.ok(group(sheetLook(), 'Theme'));
+});

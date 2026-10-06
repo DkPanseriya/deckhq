@@ -65,6 +65,9 @@ const DIMENSION_LABELS = Object.freeze({
 /** The lounge kit's row id — it is not a catalogue picker (§1.g). */
 export const LOUNGE_ROW = 'lounge';
 
+/** The disclosure's element id. `scripts/goldens.mjs` opens it by this. */
+export const ADVANCED_ID = 'settings-look-advanced';
+
 /**
  * THE DIMENSIONS INSIDE ONE PICKER, derived from the catalogue.
  *
@@ -399,6 +402,8 @@ export function createAdvanced(ctx) {
       paths.length ? `${changes(paths.length)} from ${preset}` : `no changes from ${preset}`,
       groups.some(groupRefused),
     );
+    // An id, so the golden that photographs the inside can find and open it.
+    details.id = ADVANCED_ID;
     const body = el('div', 'settings-look-advanced-body');
 
     // What is in here, and the one way back out of it.

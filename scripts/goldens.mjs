@@ -236,10 +236,11 @@ export const MOTION_PHASE = 0.25;
  *
  * A capture may also open a SURFACE through the command palette and scroll to a
  * section of it (WP-88b). `look` is the settings sheet standing on the Look
- * section, with the six preset thumbnails painted, and it is the one golden this
- * product has of a form rather than of a floor — because §4's whole claim is
- * that a swatch is painted by the real floor painter, and the only thing that
- * can check a painter is a picture. It is reached the way a person reaches it:
+ * section, with the six style thumbnails painted, and with `look@advanced` it
+ * is the one pair of goldens this product has of a form rather than of a floor
+ * — because §4's whole claim is that a swatch is painted by the real floor
+ * painter, and the only thing that can check a painter is a picture. It is
+ * reached the way a person reaches it:
  * the palette's own key, the command's accelerator, Enter. No test seam is added
  * to the client for it, so what this photographs is the path a user has.
  *
@@ -271,12 +272,31 @@ const CAPTURES = [
   // WP-88b. `,` is the Settings command's accelerator, so the palette's key,
   // then one character, then Enter — the two-keystroke promise §5.3 is accepted
   // against, used here as the way in.
+  //
+  // What it photographs is the OUTSIDE of the section: agent size, theme, the
+  // six style thumbnails, density, the live preview, and Advanced shut with its
+  // one-line summary. That is the section as everybody first meets it.
   {
     name: 'look',
     population: 'three',
     theme: 'default',
     command: ',',
     scrollTo: 'settings-look',
+  },
+  // AND THE INSIDE, because that is where the swatches went. §4's claim — every
+  // chip is painted by the real floor painter — is a claim about the pickers,
+  // and the pickers are under Advanced now, shut by default; `look` alone would
+  // no longer photograph a single swatch. So the disclosure is opened by a click
+  // on its own summary, the way a person opens it (`board`'s rule), and the
+  // sheet is scrolled to it: the three headings, and the floor and colour-scheme
+  // chips under the first.
+  {
+    name: 'look@advanced',
+    population: 'three',
+    theme: 'default',
+    command: ',',
+    click: '#settings-look-advanced > summary',
+    scrollTo: 'settings-look-advanced',
   },
   // WP-88c · THE TWO SIZES, through `?scale=` (`public/url-options.js`).
   //
@@ -293,9 +313,9 @@ const CAPTURES = [
   // the 16 px floor and every name still clear of a head, which is the `demo`
   // floor's own question. The other twelve are `medium` and must not move at all.
   // THE HEADER'S LOOK POPOVER, open. The header carries two buttons now — Look
-  // and Settings — and the first opens a popover with the three controls people
-  // reach for: agent size, theme and the six presets, as thumbnails out of the
-  // Look section's own cache. It is the product's only golden of chrome hanging
+  // and Settings — and the first opens a popover with the four high-level
+  // choices: agent size, theme, style (the six presets, as thumbnails out of the
+  // Look section's own cache) and density. It is the product's only golden of chrome hanging
   // OVER the floor, and what it holds is the thing no DOM assertion can: that
   // the popover lands under its button, inside the window, with six legible
   // pictures in it. `L` is the floor's own key for it, so the way in is the way
