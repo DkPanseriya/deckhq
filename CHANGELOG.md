@@ -6,6 +6,15 @@
 
 ## Unreleased
 
+## 1.6.2 — 2026-10-06
+
+### Highlights
+
+Subagents now have first names, with a small junior mark (`Marta·jr`), and keep their names and
+numbers when DeckHQ restarts. Names stay next to the people they belong to, even in a crowded
+office. A project whose sessions are all waiting on you shrinks to a small room, and your office is
+only as wide as its sofas, so the rooms get the space.
+
 ### Changed
 
 - **Subagents have names.** A subagent used to be labelled with its parent's tag and a number,
