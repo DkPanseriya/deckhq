@@ -20,14 +20,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { crowdedOfficeFloor, largeFloor, LARGE_NOW } from '../helpers/large-floor.mjs';
+import {
+  crowdedOfficeFloor,
+  largeFloor,
+  LARGE_NOW,
+  ownerShapedFloor,
+} from '../helpers/large-floor.mjs';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
 import { characterScaleFor, JUNIOR_SCALE, lodForFigure } from '../../public/render/scene-lod.js';
 import { CREW_SCALE } from '../../public/render/crew.js';
 import { rigHeight } from '../../public/render/rig-pose.js';
-import { characterBox, drawCharacter } from '../../public/render/rig.js';
+import { badgeBox, characterBox, drawCharacter, formatElapsed } from '../../public/render/rig.js';
 import { sampleClip } from '../../public/render/clips.js';
 import { STATE_COLORS } from '../../public/render/palette.js';
 import {
@@ -36,7 +41,14 @@ import {
   frameLabelTexts,
   planFrameLabels,
 } from '../../public/render/scene-frame-labels.js';
-import { layoutPlate, platePlanFor, PLATE_KEEP_ORDER } from '../../public/render/scene-labels.js';
+import {
+  layoutPlate,
+  platePlanFor,
+  PLATE_KEEP_ORDER,
+  resolveBadgeCollisions,
+} from '../../public/render/scene-labels.js';
+import { queueLay, queuePlace, sofaPlacesOn } from '../../public/render/plan-office-seats.js';
+import { OFFICE_SEAT_PITCH } from '../../public/render/plan-units.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { floorPopulation, crewsFrom } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
@@ -83,8 +95,12 @@ const STAGES = [
   [2000, 1024],
 ];
 
-/** Build one frame of the large floor at a stage, the way `_draw` does. */
-function frameAt(viewW, viewH, floor = largeFloor) {
+/**
+ * Build one frame of the large floor at a stage, the way `_draw` does. With
+ * `badges`, the wait badges are measured and resolved first, as the floor does,
+ * and the names are set round them.
+ */
+function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
   adoptSnapshotClock({ now: LARGE_NOW, nowFixed: true });
   try {
     const { projects, agents } = floor();
@@ -110,13 +126,26 @@ function frameAt(viewW, viewH, floor = largeFloor) {
     const crewCounts = new Map(
       crewsFrom(agents, { now: LARGE_NOW }).map((c) => [c.parentId, c.count]),
     );
+    const waits = [];
+    for (const rec of badges ? records : []) {
+      const a = rec.agent;
+      if (a.ackState !== 'active' || a.activityState !== 'for_review' || !a.reviewSince) continue;
+      const s = worldToScreen(rec, camera);
+      const ms = LARGE_NOW - a.reviewSince;
+      const box = badgeBox(ctx, s.x, s.y, charU, formatElapsed(ms));
+      waits.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
+    }
+    const badgePlan = resolveBadgeCollisions(waits);
+    const badgeBoxes = waits
+      .filter((it) => badgePlan.drawn.has(it.id))
+      .map((it) => ({ ...it, id: `badge:${it.id}` }));
     const labels = planFrameLabels(ctx, {
       records,
       agentsById,
       camera,
       charU,
       crewCounts,
-      badgeBoxes: [],
+      badgeBoxes,
       plateBoxes: plates.map((p) => p.rect),
       selectedId: null,
       bounds: buildingRect(plan, camera),
@@ -137,6 +166,8 @@ function frameAt(viewW, viewH, floor = largeFloor) {
       plates,
       labels,
       crewCounts,
+      badgePlan,
+      badgeBoxes,
     };
   } finally {
     adoptSnapshotClock(null);
@@ -469,4 +500,185 @@ test('near ring · a crowded name shrinks, then abbreviates, and only then moves
   assert.equal(moved?.text, 'Cass.');
   // A resting figure's name is not drawn rather than moved away from its body.
   assert.equal(resolveLabelCollisions([...closed, { ...item, keep: false }]).get('a'), null);
+});
+
+// ---------------------------------------------------------------------------
+// THE OFFICE OF SIXTEEN, WITH ITS BADGES (the owner's floor at 2000 x 1185):
+// where the top sofa met the corner, wait badges and names stood in a stack,
+// a name two rows from its body and another figure's badge between them.
+// ---------------------------------------------------------------------------
+
+const OFFICES_OF_SIXTEEN = /** @type {const} */ ([
+  ['the crowded office', 2000, 970, crowdedOfficeFloor],
+  ['the owner-shaped floor', 2000, 1060, ownerShapedFloor],
+]);
+
+test('the office of sixteen · badges, names and bodies never overlap, and a badge stays over its own head', () => {
+  for (const [name, w, h, floor] of OFFICES_OF_SIXTEEN) {
+    const f = frameAt(w, h, floor, { badges: true });
+    const waiting = f.records.filter(
+      (r) => r.agent.ackState === 'active' && /for_review|needs_input/.test(r.agent.activityState),
+    );
+    assert.equal(waiting.length, 16, name);
+    // Nobody's time was folded into a pill: every badge that exists is drawn.
+    assert.equal(f.badgePlan.pills.length, 0, `${name}: badges collided into a pill`);
+    assert.ok(f.badgeBoxes.length >= 12, `${name}: ${f.badgeBoxes.length} badges`);
+
+    const bh = f.charU * BODY_HEIGHT_U;
+    const at = new Map(f.records.map((r) => [r.id, worldToScreen(r, f.camera)]));
+    const bodies = f.records.map((r) => ({
+      id: r.id,
+      ...characterBox(at.get(r.id).x, at.get(r.id).y, f.charU),
+    }));
+    const names = [];
+    for (const item of f.labels.labels) {
+      const spot = f.labels.plan.get(item.id);
+      if (spot) names.push(drawnBox(item, spot));
+    }
+    const found = { badgeOnBadge: 0, badgeOnBody: 0, nameOnBody: 0, nameOnBadge: 0, nameOnName: 0 };
+    for (const [i, b] of f.badgeBoxes.entries()) {
+      const own = b.id.slice(6);
+      for (const body of bodies) if (body.id !== own && hits(b, body)) found.badgeOnBody++;
+      for (let j = i + 1; j < f.badgeBoxes.length; j++)
+        if (hits(b, f.badgeBoxes[j])) found.badgeOnBadge++;
+      // Over its own head, and near it: the top of the head to the badge's
+      // centre is under a body and a half.
+      const s = at.get(own);
+      assert.ok(Math.abs(b.x + b.w / 2 - s.x) < 0.5, `${name}: a badge is not over its head`);
+      const rise = s.y - bh - (b.y + b.h / 2);
+      assert.ok(rise > 0 && rise <= 1.5 * bh, `${name}: a badge is ${rise / bh} bodies up`);
+    }
+    for (const [i, n] of names.entries()) {
+      for (const body of bodies) if (hits(n, body)) found.nameOnBody++;
+      for (const b of f.badgeBoxes) if (hits(n, b)) found.nameOnBadge++;
+      for (let j = i + 1; j < names.length; j++) if (hits(n, names[j])) found.nameOnName++;
+    }
+    assert.deepEqual(
+      found,
+      { badgeOnBadge: 0, badgeOnBody: 0, nameOnBody: 0, nameOnBadge: 0, nameOnName: 0 },
+      name,
+    );
+
+    // THE UNIT. Every badged figure keeps its name beside it: under the feet or
+    // against the body, never over the badge, never on a leader — and nobody
+    // else's name is set between the badge and the head or the feet and the name.
+    let under = 0;
+    for (const b of f.badgeBoxes) {
+      const id = b.id.slice(6);
+      const s = at.get(id);
+      const spot = f.labels.plan.get(id);
+      const mine = names.find((n) => n.id === id);
+      assert.ok(spot && mine, `${name}: ${f.agentsById.get(id).label} lost its name`);
+      assert.notEqual(spot.leader, true, `${name}: ${f.agentsById.get(id).label} left its body`);
+      assert.ok(mine.y + mine.h / 2 > s.y - bh, `${name}: a name was set over its own badge`);
+      const reach = Math.hypot(mine.x + mine.w / 2 - s.x, mine.y + mine.h / 2 - s.y) / bh;
+      assert.ok(reach <= NEAR_REACH + 1e-6, `${name}: a name is ${reach} bodies from its feet`);
+      const column = [{ x: b.x, y: b.y, w: b.w, h: s.y - bh - b.y }];
+      if (mine.y >= s.y && Math.abs(mine.x + mine.w / 2 - s.x) <= mine.w / 4 + 0.5) {
+        under++;
+        column.push({ x: mine.x, y: s.y, w: mine.w, h: mine.y - s.y });
+      }
+      for (const other of names) {
+        if (other.id === id) continue;
+        for (const c of column)
+          assert.ok(!hits(other, c), `${name}: a name is set inside ${id}'s badge-and-name unit`);
+      }
+    }
+    // The sofas that run across the screen and the standing rows: all of them.
+    assert.ok(under >= f.badgeBoxes.length - 3, `${name}: ${under} names under their feet`);
+  }
+});
+
+test('the corner cushion seats nobody, and the standing rows stand in the gaps', () => {
+  adoptSnapshotClock({ now: LARGE_NOW, nowFixed: true });
+  try {
+    const { projects, agents } = ownerShapedFloor();
+    const plan = buildPlan(projects, agents, { stage: { w: 2000, h: 1060 }, now: LARGE_NOW });
+    const office = plan.rooms.find((r) => r.kind === 'office');
+    const runs = office.props.filter((p) => p.kind === 'sofa');
+    assert.equal(runs.length, 3);
+    // Sixteen do not fit on these sofas, so somebody stands — and once
+    // somebody stands, the run that spans between the other two leaves its two
+    // corner cushions empty. With nobody standing it would seat one more.
+    const places = runs.map((run) => ({ run, at: sofaPlacesOn(run, runs, true) }));
+    const seated = plan.officeSeats.filter((s) => !s.standing);
+    assert.equal(
+      seated.length,
+      places.reduce((n, p) => n + p.at.length, 0),
+    );
+    assert.equal(
+      runs.reduce((n, run) => n + sofaPlacesOn(run, runs).length, 0),
+      seated.length + 1,
+    );
+    const along = (run, p) => (run.h > run.w ? p.y - run.y : p.x - run.x);
+    const lengthOf = (run) => Math.max(run.w, run.h);
+    let trimmed = 0;
+    for (const { run, at } of places) {
+      assert.ok(at.length >= 1, `${run.id} seats nobody`);
+      const first = along(run, at[0]);
+      const last = lengthOf(run) - along(run, at[at.length - 1]);
+      // Nobody on any run within a body's width of where it ends.
+      assert.ok(first >= OFFICE_SEAT_PITCH - 1e-6 && last >= OFFICE_SEAT_PITCH - 1e-6, run.id);
+      const pitch = at.length > 1 ? along(run, at[1]) - first : 0;
+      if (Math.min(first, last) >= OFFICE_SEAT_PITCH + pitch / 2 - 1e-6) {
+        trimmed++;
+        // Its corner cushions: a body's width of sofa at each end, and half a
+        // pitch before the first person on it.
+        assert.ok(Math.abs(first - last) < 1e-6, `${run.id}: the two ends differ`);
+      }
+    }
+    assert.equal(trimmed, 1, 'exactly one run stands between two others');
+
+    // THE STANDING ROWS. The first is in front of the top sofa and in its gaps:
+    // every place half-way between two people sitting. The second is half-way
+    // between two places of the first.
+    const standing = plan.officeSeats.filter((s) => s.standing);
+    assert.ok(standing.length >= 4, `${standing.length} standing`);
+    const rows = [...new Set(standing.map((s) => Math.round(s.y * 100) / 100))].sort(
+      (a, b) => a - b,
+    );
+    assert.ok(rows.length >= 2, 'the queue is one row');
+    const rowAt = (y) => standing.filter((s) => Math.abs(s.y - y) < 0.01).map((s) => s.x);
+    const top = places.map((p) => p.at).find((at) => at.every((p) => p.y < rows[0]));
+    assert.ok(top && top.length >= 3);
+    const sitting = top.map((p) => p.x).sort((a, b) => a - b);
+    const gaps = sitting.slice(1).map((x, i) => (x + sitting[i]) / 2);
+    for (const x of rowAt(rows[0])) {
+      assert.ok(
+        gaps.some((g) => Math.abs(g - x) < 0.01),
+        `a standing place at ${x} is not in a gap`,
+      );
+    }
+    const firstRow = rowAt(rows[0]).sort((a, b) => a - b);
+    const pitch = firstRow[1] - firstRow[0];
+    for (const x of rowAt(rows[1])) {
+      const off = (((x - firstRow[0]) % pitch) + pitch) % pitch;
+      assert.ok(Math.abs(off - pitch / 2) < 0.01, `the second row lines up with the first at ${x}`);
+    }
+  } finally {
+    adoptSnapshotClock(null);
+  }
+});
+
+test('a standing queue is laid like bricks: every other row one fewer, half a pitch along', () => {
+  const lay = queueLay(9, 20, 40);
+  assert.equal(lay.beside, false);
+  assert.ok(lay.lanes >= 2);
+  const at = Array.from({ length: 9 }, (_, i) => queuePlace(i, lay));
+  const row = (n) => at.filter((p) => Math.abs(p.back - n * lay.row) < 1e-9);
+  assert.equal(row(0).length, lay.lanes);
+  assert.equal(row(1).length, Math.min(9 - lay.lanes, lay.lanes - 1));
+  assert.ok(Math.abs(row(1)[0].along - lay.pitch / 2) < 1e-9);
+  assert.equal(row(0)[0].along, 0);
+  // Beside a sofa of four the row has its three gaps, at the sofa's own pitch.
+  const beside = queueLay(5, 0, 40, 1, { places: 4, run: 26 });
+  assert.deepEqual([beside.beside, beside.lanes, beside.pitch, beside.files], [true, 3, 6.5, 2]);
+  // A sofa of two has one gap, and one gap is a file down the room, not a row.
+  assert.equal(queueLay(5, 12, 40, 1, { places: 2, run: 12 }).beside, false);
+  // Nobody is left without a place, however long the queue.
+  for (const n of [1, 2, 7, 30]) {
+    const l = queueLay(n, 12, 10);
+    const seen = new Set(Array.from({ length: n }, (_, i) => JSON.stringify(queuePlace(i, l))));
+    assert.equal(seen.size, n);
+  }
 });

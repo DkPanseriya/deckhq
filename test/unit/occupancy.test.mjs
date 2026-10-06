@@ -240,8 +240,10 @@ test('WP-93: when the sofas are full the rest stand beside them, in arrival orde
   // Asked of `buildOffice` directly, the way WP-78's own split test was: the
   // packer hands the reception whatever box the floor has spare, and a rule
   // about what happens when the SOFAS run out has to be asked of a room whose
-  // sofas actually do. A reception at its own natural size seats six; the
-  // seventh is the first person to stand.
+  // sofas actually do. A reception at its own natural size seats six. The
+  // seventh has to stand, and once anybody stands the two corner cushions of
+  // the back run are left empty (`plan-office-seats.js`, rule 1): five sit and
+  // two stand, where the corners would have put two wait badges on each other.
   const { room: office } = buildOffice(7);
   const runs = office.props.filter((p) => p.kind === 'sofa');
   const capacity = runs.reduce(
@@ -254,8 +256,13 @@ test('WP-93: when the sofas are full the rest stand beside them, in arrival orde
   assert.equal(officeSeats.length, 7);
   assert.deepEqual(
     officeSeats.map((s) => !!s.standing),
-    [false, false, false, false, false, false, true],
-    'the sofas fill before anybody stands',
+    [false, false, false, false, false, true, true],
+    'the sofas fill, less their corner cushions, before anybody stands',
+  );
+  assert.equal(
+    seatOffice(buildOffice(6).room, 6).officeSeats.filter((s) => s.standing).length,
+    0,
+    'six fit on the sofas of a reception built for six, corners and all',
   );
   for (const seat of officeSeats.filter((s) => !s.standing)) {
     assert.ok(onASofa(seat, office), 'a seated waiting agent is not on a sofa');
