@@ -24,10 +24,11 @@
  * WHAT IT HOLDS
  *
  *   confirmed   the look the daemon last accepted. It changes in exactly two
- *               ways: the daemon ANSWERS a write, or the daemon PUSHES a state
- *               that says something new. A push that repeats what was already
- *               heard changes nothing — which is what stops a snapshot built a
- *               moment before a write from putting the write back.
+ *               ways: the daemon ANSWERS a write, or the daemon PUSHES a
+ *               state. Re-reading a push that was already heard changes
+ *               nothing — which is what the old arrangement got wrong: it
+ *               redrew every answer from settings nobody had updated, and the
+ *               answer lost to them.
  *   pending     the look somebody just chose, shown at once and not yet
  *               answered. Cleared by the answer to THAT choice and by no
  *               earlier one.
@@ -121,16 +122,24 @@ function styleLeaves(c, look) {
 }
 
 /**
- * How many options differ from the preset this look started from — the number
- * the closed Advanced disclosure reads out. Agent size is not counted: it is
- * not part of a style.
+ * Which options differ from the preset this look started from, as the paths of
+ * the leaves that moved (`floors.office`, `rugs.wool.tone`, `lounge.games`).
+ * Agent size is never one of them: it is not part of a style.
  * @param {any} c @param {any} look
+ * @returns {string[]}
  */
-export function styleChanges(c, look) {
+export function changedPaths(c, look) {
   const mine = styleLeaves(c, look);
   const theirs = styleLeaves(c, c.lookForPreset(c.normalizeLook(look).preset));
-  return Object.keys(mine).filter((path) => mine[path] !== theirs[path]).length;
+  return Object.keys(mine).filter((path) => mine[path] !== theirs[path]);
 }
+
+/**
+ * How many options differ from the preset — the number the closed Advanced
+ * disclosure reads out.
+ * @param {any} c @param {any} look
+ */
+export const styleChanges = (c, look) => changedPaths(c, look).length;
 
 /** Has the style been changed since its preset was chosen? @param {any} c @param {any} look */
 export const styleEdited = (c, look) => styleChanges(c, look) > 0;
@@ -269,8 +278,12 @@ export function createLookStore(opts) {
   let themePending = null;
   /** @type {{from:string|null, problems:any[]}|null} */
   let refusal = null;
-  /** What the daemon last pushed, per key, so a repeat is recognised as one. */
-  const heard = { look: '', theme: '' };
+  /**
+   * What the daemon last pushed — the settings object it arrived in, and each
+   * key's value — so a repeat is recognised as one.
+   * @type {{from:any, look:string, theme:string}}
+   */
+  const heard = { from: null, look: '', theme: '' };
   /** Counts the choices, so an answer knows whether it is still the latest. */
   let chosen = 0;
   let themeChosen = 0;
@@ -293,19 +306,24 @@ export function createLookStore(opts) {
   function pull() {
     const s = read();
     if (!s) return false;
+    // A NEW settings object is a new push, and a push is always heard. The
+    // same object again is heard only where its value moved — which is the
+    // shell stamping an answer onto the snapshot it already had.
+    const fresh = s !== heard.from;
+    heard.from = s;
     let changed = false;
     const look = JSON.stringify(s.look ?? null);
-    if (look !== heard.look) {
-      heard.look = look;
+    if (fresh || look !== heard.look) {
       changed = JSON.stringify(confirmed ?? null) !== look;
       confirmed = s.look ?? null;
     }
+    heard.look = look;
     const theme = String(s.theme ?? '');
-    if (theme !== heard.theme) {
-      heard.theme = theme;
+    if (fresh || theme !== heard.theme) {
       changed = changed || (confirmedTheme ?? '') !== theme;
       confirmedTheme = theme || null;
     }
+    heard.theme = theme;
     return changed;
   }
 
@@ -349,10 +367,6 @@ export function createLookStore(opts) {
         };
       } else {
         confirmed = result?.look ?? next;
-        // What was just answered IS the daemon's last word, so the next push is
-        // compared with it: one that agrees changes nothing, and one that does
-        // not — another tab chose something else — is heard.
-        heard.look = JSON.stringify(confirmed);
       }
       if (mine === chosen) pending = null;
       notify();
@@ -386,7 +400,6 @@ export function createLookStore(opts) {
     const saved = await saveSetting({ theme: name });
     if (saved) {
       confirmedTheme = saved.theme;
-      heard.theme = String(saved.theme ?? '');
       theming?.apply?.(saved.theme);
     } else {
       refusal = { from: 'theme', problems: [{ reason: 'That theme could not be saved' }] };
@@ -433,6 +446,17 @@ export function createLookStore(opts) {
       const c = cat();
       return c ? choose(withDensity(c, look(), id), from) : undefined;
     },
+
+    // What the surfaces say about the look they are drawing. Each is the pure
+    // function above applied to `look()`, so the two surfaces cannot word the
+    // same floor differently.
+    /** The step both densities are on, or `''`. */
+    density: () => (cat() ? densityOf(cat(), look()) : ''),
+    densityLevels: () => (cat() ? densityLevels(cat()) : []),
+    presetLabel: () => (cat() ? presetLabel(cat(), look()) : ''),
+    changedPaths: () => (cat() ? changedPaths(cat(), look()) : []),
+    styleChanges: () => (cat() ? styleChanges(cat(), look()) : 0),
+    styleEdited: () => (cat() ? styleEdited(cat(), look()) : false),
 
     themes() {
       const list = theming?.list?.();

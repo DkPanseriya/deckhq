@@ -391,7 +391,12 @@ export function createSettingsUI(opts) {
     // WP-30. Free, and it gates nothing: every theme this build ships is in
     // this row for everybody. The Supporter pack (docs/plan/03 §5) sells MORE
     // themes later; it does not take one away.
-    if (shippedThemes().length > 1) {
+    //
+    // It is drawn HERE only on a build that has no Look section to draw it in:
+    // the theme is one of the four things on the outside of Look now (agent
+    // size, theme, style, density), and two Theme rows on one sheet would be
+    // two controls for one setting.
+    if (shippedThemes().length > 1 && !lookSection.drawsTheme()) {
       row(
         s,
         'Theme',
@@ -586,7 +591,10 @@ export function createSettingsUI(opts) {
   // catches Escape and the backdrop as well as the close button — `render()`
   // rebuilds the picker's buttons and would drop a listener bound to one.
   dialogEl.addEventListener('close', () => {
-    applyThemeSetting(current.theme);
+    // The stored theme is the look store's to say when the Look section drew
+    // the Theme row: it was chosen there, and `current` never heard about it.
+    if (lookSection.drawsTheme()) lookSection.store.previewTheme(null);
+    else applyThemeSetting(current.theme);
     // A look that was shown and is still waiting out its debounce is sent on
     // the way out rather than dropped: the person saw the control move.
     void lookSection.flush();

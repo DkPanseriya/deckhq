@@ -46,7 +46,8 @@ import {
  * draw the reason in and nothing to do with a stack trace.
  *
  * @param {unknown} look the look document's body — no `kind`, no `version`
- * @returns {Promise<{ok:boolean, problems?:any[], error?:string}>}
+ * @returns {Promise<{ok:boolean, look?:any, problems?:any[], error?:string}>} `look` is
+ *   what the daemon stored, on a success
  */
 export async function postLook(look) {
   try {
@@ -184,6 +185,7 @@ export function createLookPort() {
     apply: postLook,
     exportLook,
     importLook,
+    prefs: lookPrefs,
     /** @type {any} */
     store: null,
   };
@@ -211,6 +213,36 @@ let sharedPort = null;
 
 /** The one look store in this shell. See `createLookPort`. */
 export const lookStore = () => createLookPort().store;
+
+/**
+ * WHAT THIS BROWSER REMEMBERS ABOUT THE LOOK SECTION: which disclosures are
+ * open. Advanced is shut until somebody opens it, and then it stays the way
+ * they left it — per browser, because it is a fact about a person at a screen
+ * and not about the floor, so it has no business in `state.json`.
+ *
+ * `globalThis.localStorage`, reached inside the two functions and inside a
+ * `try`: some browsers expose the object and throw on use, and a sheet that
+ * cannot remember a disclosure must still open.
+ */
+const PREF_PREFIX = 'deckhq.look.';
+const lookPrefs = Object.freeze({
+  /** @param {string} key @returns {string|null} */
+  get(key) {
+    try {
+      return globalThis.localStorage.getItem(PREF_PREFIX + key);
+    } catch {
+      return null;
+    }
+  },
+  /** @param {string} key @param {string} value */
+  set(key, value) {
+    try {
+      globalThis.localStorage.setItem(PREF_PREFIX + key, value);
+    } catch {
+      // not remembered; the section keeps it for this tab
+    }
+  },
+});
 
 /**
  * THE THEMING PORT the settings sheet and the header's Look popover are handed
@@ -260,17 +292,36 @@ export const lookPresets = () =>
  * keyboard.
  */
 export const lookPaletteActions = Object.freeze({
-  setLookPreset: (/** @type {string} */ id) => postLook(lookOptions?.lookForPreset(id)),
-  resetLook: () =>
-    postLook(lookOptions?.lookForPreset((latestSnapshot?.settings?.look || {}).preset)),
-  // WP-88c. One key of the stored look rather than a preset, and that is the
-  // difference between this and every row above it: a size is not a floor, so
-  // choosing one must leave the floor the user chose exactly as it is.
+  // Through the store, like the two surfaces, so the palette's rules are theirs:
+  // a preset is a STYLE and leaves the agent size where the person put it, and
+  // a size is not a floor, so choosing one leaves the floor exactly as it is.
+  // Sent at once — a debounce is for a hand walking a picker, not for a command.
+  setLookPreset: (/** @type {string} */ id) => atOnce((store) => store.choosePreset(id)),
+  resetLook: () => atOnce((store) => store.resetStyle()),
   setAgentSize: (/** @type {string} */ id) =>
-    postLook({ ...(latestSnapshot?.settings?.look || {}), agentSize: id }),
+    atOnce((store) => store.choosePath('agentSize', id, 'agentSize')),
   exportLook,
   importLook,
 });
+
+/**
+ * Run one palette command against the store: hear the daemon first, choose,
+ * and send without waiting out the debounce.
+ *
+ * The palette has no row to draw a refusal under, so a refusal is a toast — the
+ * guard's own sentence, and the one it cannot say for itself. Before this a
+ * refused palette command did nothing and said nothing.
+ * @param {(store:any) => any} choose
+ */
+async function atOnce(choose) {
+  const store = lookStore();
+  store.refresh();
+  await (choose(store) ?? store.flush());
+  const refused = store.refusal();
+  if (!refused?.problems?.length) return;
+  toast(`${refused.problems[0].reason}. Nothing was changed.`, { isError: true });
+  store.clearRefusal();
+}
 
 /**
  * HOW MANY PEOPLE THE FLOOR IS DRAWING RIGHT NOW (WP-88c).

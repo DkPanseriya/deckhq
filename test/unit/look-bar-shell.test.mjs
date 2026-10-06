@@ -288,7 +288,11 @@ test('Agent size POSTs a whole look document to /api/look, with one key changed'
   reset();
   el('look-btn').click();
   assert.equal(el('look-popover').hidden, false);
-  assert.equal(radios().length, 4 + THEMES.length + PRESETS.length);
+  // Four sizes, the themes, the presets, and the three density steps.
+  assert.equal(
+    radios().length,
+    4 + THEMES.length + PRESETS.length + catalogue.PLANT_DENSITY_IDS.length,
+  );
 
   radio('Large').click();
   await tick(5);

@@ -4318,22 +4318,27 @@ textarea.field-input {
    ====================================================================== */
 .settings-look-presets {
   display: grid;
-  /* Three across, two down — the arrangement `11 §5` names for the golden,
-     and the widest a 160 px floor reads at inside a 46rem sheet. */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin: 0.2rem 0 0.9rem;
+  /* Six across, one row: at this sheet's width a card is as wide as the header
+     popover's thumbnail, which is the size these pictures are already read at.
+     Three across and two down was six pictures taking a screen to themselves,
+     with the rest of the section under the fold. */
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.settings-look-preview {
+  margin-top: 0.6rem;
 }
 .settings-look-preset {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  padding: 0.35rem;
+  min-width: 0;
+  padding: 0.25rem 0.25rem 0.3rem;
   text-align: left;
   background: none;
   color: var(--ink-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
     border-color var(--t-fast),
@@ -4354,26 +4359,24 @@ textarea.field-input {
   border-radius: var(--radius-sm);
 }
 .settings-look-preset-name {
-  font-size: 0.78rem;
+  padding: 0 0.1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
   color: inherit;
 }
-.settings-look-preset-blurb {
-  font-size: 0.66rem;
-  line-height: 1.45;
-  color: var(--muted);
-}
 
+/* The first line inside Advanced: what is in here, and the one way back out. */
 .settings-look-state {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.8rem;
-  margin-bottom: 0.7rem;
+  margin-bottom: 0.6rem;
 }
-.settings-look-state-name {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--ink-2);
+.settings-look-state .settings-note {
+  margin: 0;
 }
 .settings-look-state .btn[disabled] {
   color: var(--muted);
@@ -4410,7 +4413,9 @@ textarea.field-input {
   animation: none;
 }
 .settings-look-metrics {
-  margin: 0.35rem 0 0.5rem;
+  margin: 0.6rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
   font-size: 0.6rem;
   line-height: 1.7;
   color: var(--muted);
@@ -4422,21 +4427,107 @@ textarea.field-input {
    and squeezed into the right-hand half they wrapped four-and-one with the
    orphan pushed to the right margin. So the label keeps the top of the row and
    the gallery gets the full width under it. */
-#settings-look .settings-row {
+.settings-row--stack {
   flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
 }
-/* The agent size is the section's first row and the preset cards follow it;
-   a row of words needs air before a grid of pictures. */
-#settings-look .settings-row + .settings-look-presets {
-  margin-top: 0.6rem;
+/* THE OUTSIDE OF THE SECTION is four controls, and three of them are words:
+   agent size, theme, density. They are the header popover's own segmented
+   control (`.lookbar-seg`) beside their label, like every other row on this
+   sheet — the same control in both places, because it is the same choice. */
+.settings-look-seg {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.settings-look-caption {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--muted);
 }
 .settings-look-group {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
   min-width: 0;
+}
+/* A picker of words inside Advanced is the segmented control too, at its own
+   width and from the left — stretched across the sheet it reads as a toolbar. */
+.settings-look-group .lookbar-seg {
+  align-self: flex-start;
+  max-width: 100%;
+}
+/* A rug is a tone AND a pattern; planting is a family AND a density. Each half
+   is named, in a narrow column of its own, so the two rows of chips are not
+   one unexplained block. */
+.settings-look-dim {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.6rem;
+}
+.settings-look-dim .lookbar-seg {
+  justify-self: start;
+}
+.settings-look-dim-name {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+/* ADVANCED. One disclosure, shut until somebody opens it, and three headings
+   inside it. Real <details>, so the marker, the keyboard and the expanded
+   state are the browser's; the stylesheet only gives them this sheet's ink.
+   One frame, around the whole disclosure — the headings inside it are divided
+   by a rule, not boxed again. */
+.settings-look-advanced {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+.settings-look-advanced-summary,
+.settings-look-sub-summary {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.settings-look-advanced-summary {
+  padding: 0.65rem 0.8rem;
+  font-size: 0.84rem;
+  color: var(--ink);
+}
+.settings-look-advanced[open] > .settings-look-advanced-summary {
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+.settings-look-advanced-name,
+.settings-look-sub-name {
+  font-weight: 600;
+}
+.settings-look-advanced-note,
+.settings-look-sub-note {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+.settings-look-advanced-body {
+  padding: 0.75rem 0.8rem 0.6rem;
+}
+.settings-look-sub {
+  border-top: 1px solid var(--line);
+}
+.settings-look-sub-summary {
+  padding: 0.6rem 0;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.settings-look-sub[open] > .settings-look-sub-summary {
+  color: var(--ink);
+}
+.settings-look-sub-body {
+  padding-bottom: 0.4rem;
+}
+.settings-look-advanced-body > .settings-row {
+  border-top: 1px solid var(--line);
 }
 /* A grid, not a wrapped flex row: every chip is the same width, so the columns
    line up down the whole section and a picker of five and a picker of six read
@@ -4489,6 +4580,12 @@ textarea.field-input {
   min-height: 2rem;
   padding: 0.32rem 0.4rem;
 }
+/* A bay is a checkbox, and four boxes that are all on look like four boxes: the
+   tick is what says which. Drawn here because it is decoration — the state
+   itself is `aria-checked`. */
+.settings-look-bay[aria-checked='true'] .settings-look-chip-label::before {
+  content: '✓ ';
+}
 /* The locked bay (`sitting`) is aria-disabled rather than disabled, so it is
    still focusable and still able to explain itself when it is pressed. It
    reads as fixed rather than as broken: checked, and quieter. */
@@ -4528,7 +4625,11 @@ textarea.field-input {
 
 @media (max-width: 620px) {
   .settings-look-presets {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .settings-look-dim {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
   }
 }
 

@@ -422,11 +422,23 @@ test('both keys are listed where keys are looked up: the palette, and the guide�
 
 // ---------------------------------------------- 2 · the three controls
 
-test('the popover holds exactly three controls, read out of the catalogue, and a way to the rest', () => {
+test('the popover holds exactly four controls, read out of the catalogue, and a way to the rest', () => {
   const m = mount();
   m.bar.open();
   const names = byRole(m.popoverEl, 'radiogroup').map((g) => g.getAttribute('aria-label'));
-  assert.deepEqual(names, ['Agent size', 'Theme', 'Preset']);
+  // The four high-level choices, and nothing finer: a floor material per zone,
+  // a rug, a plant family are under Advanced in the sheet, not here.
+  assert.deepEqual(names, ['Agent size', 'Theme', 'Style', 'Density']);
+  const buttons = all(m.popoverEl).filter((n) => n.tagName === 'BUTTON');
+  assert.equal(
+    buttons.length,
+    byRole(m.popoverEl, 'radio').length + 1,
+    'the popover holds a control that is not one of the four, or the link',
+  );
+  assert.deepEqual(
+    byRole(group(m.popoverEl, 'Density'), 'radio').map((b) => b.textContent),
+    ['Calm', 'Normal', 'Lively'],
+  );
 
   const sizes = byRole(group(m.popoverEl, 'Agent size'), 'radio').map((b) => b.textContent);
   assert.deepEqual(
@@ -441,7 +453,7 @@ test('the popover holds exactly three controls, read out of the catalogue, and a
     ['Default', 'Night shift', 'Blueprint'],
   );
 
-  const cards = byRole(group(m.popoverEl, 'Preset'), 'radio');
+  const cards = byRole(group(m.popoverEl, 'Style'), 'radio');
   assert.equal(cards.length, 6);
   assert.deepEqual(
     cards.map((b) => b.textContent),
@@ -465,7 +477,7 @@ test('the popover holds exactly three controls, read out of the catalogue, and a
 test('each group is one Tab stop on the chosen option, and arrows move the choice', async () => {
   const m = mount();
   m.bar.open();
-  for (const label of ['Agent size', 'Theme', 'Preset']) {
+  for (const label of ['Agent size', 'Theme', 'Style', 'Density']) {
     const stops = byRole(group(m.popoverEl, label), 'radio').filter(
       (b) => b.getAttribute('tabindex') === '0',
     );
@@ -496,7 +508,7 @@ test('Agent size posts the look the floor has with one key changed, and nothing 
   assert.deepEqual(m.saves, [], 'a size is a look, and a look does not go through /api/settings');
   assert.deepEqual(checked(group(m.popoverEl, 'Agent size')), ['Large']);
   // The floor the user chose is exactly where it was.
-  assert.deepEqual(checked(group(m.popoverEl, 'Preset')), ['Night lab']);
+  assert.deepEqual(checked(group(m.popoverEl, 'Style')), ['Night lab']);
 });
 
 test('Theme goes through the settings route, and the window is painted in what was STORED', async () => {
@@ -530,16 +542,40 @@ test('a theme the settings route did not store is not painted', async () => {
   assert.deepEqual(checked(group(m.popoverEl, 'Theme')), ['Default']);
 });
 
-test('a Preset posts that preset’s whole look — the six the guards measured, by name', async () => {
+test('a Style posts that preset’s whole style, by name — and leaves the agent size alone', async () => {
   for (const preset of PRESETS) {
     if (preset.id === DEFAULT_LOOK.preset) continue;
-    const m = mount();
+    // `auto`: a size no preset ships at, so one that was reset would show.
+    const stored = { ...DEFAULT_LOOK, agentSize: 'auto' };
+    const m = mount({ settings: { look: stored } });
     m.bar.open();
-    radio(group(m.popoverEl, 'Preset'), preset.label).fire('click');
+    radio(group(m.popoverEl, 'Style'), preset.label).fire('click');
     await tick();
-    assert.deepEqual(m.looks, [lookForPreset(preset.id)], `${preset.label} posted something else`);
-    assert.deepEqual(checked(group(m.popoverEl, 'Preset')), [preset.label]);
+    assert.deepEqual(
+      m.looks,
+      [{ ...lookForPreset(preset.id), agentSize: 'auto' }],
+      `${preset.label} posted something else`,
+    );
+    assert.deepEqual(checked(group(m.popoverEl, 'Style')), [preset.label]);
+    assert.deepEqual(checked(group(m.popoverEl, 'Agent size')), ['Auto']);
   }
+});
+
+test('Density moves the plants and the props together, through /api/look', async () => {
+  const m = mount();
+  m.bar.open();
+  assert.deepEqual(checked(group(m.popoverEl, 'Density')), ['Normal']);
+  radio(group(m.popoverEl, 'Density'), 'Calm').fire('click');
+  await tick();
+  assert.deepEqual(m.looks, [
+    {
+      ...normalizeLook(DEFAULT_LOOK),
+      plants: { ...DEFAULT_LOOK.plants, density: catalogue.PLANT_DENSITY_IDS[0] },
+      props: { density: catalogue.PROP_DENSITY_IDS[0] },
+    },
+  ]);
+  assert.deepEqual(m.saves, []);
+  assert.deepEqual(checked(group(m.popoverEl, 'Density')), ['Calm']);
 });
 
 test('"All look options…" closes the popover and opens the full sheet at Look', () => {
@@ -588,14 +624,14 @@ test('a refusal from the daemon is shown the same way, and the control goes back
   const reason = 'that look does not read on night shift';
   const m = mount({ apply: () => ({ ok: false, problems: [{ picker: '', option: '', reason }] }) });
   m.bar.open();
-  radio(group(m.popoverEl, 'Preset'), 'Night lab').fire('click');
+  radio(group(m.popoverEl, 'Style'), 'Night lab').fire('click');
   await tick();
   assert.equal(m.looks.length, 1, 'the real guard passed it, so it was sent — once');
   assert.equal(
     byClass(m.popoverEl, 'lookbar-refusal')[0].textContent,
     `${reason}. Nothing was changed.`,
   );
-  assert.deepEqual(checked(group(m.popoverEl, 'Preset')), ['Studio oak']);
+  assert.deepEqual(checked(group(m.popoverEl, 'Style')), ['Studio oak']);
 });
 
 test('the real guard is what stands in front of the post', async () => {
