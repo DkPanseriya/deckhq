@@ -282,3 +282,34 @@ for (const [name, floor] of Object.entries(FILLED)) {
     }
   });
 }
+
+/** FNV-1a over a string, as eight hex digits. @param {string} s */
+function hash32(s) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h ^ s.charCodeAt(i)) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/**
+ * THE RECEPTION ON THESE FLOORS IS WHERE IT WAS. Laying the reception at its
+ * contents is for a floor whose strip sets the rooms' width, which is the
+ * `away` floor's shape (`away-rooms.test.mjs`). These four do not have one, and
+ * the reception's rectangle at every real window is the one it was before
+ * that rule, to the last bit.
+ */
+const OFFICE_HASH = 'd01bf1fe';
+
+test('demo, three, reference and large: the reception is the rectangle it was', () => {
+  const lines = [];
+  for (const name of ['demo', 'three', 'reference', 'large']) {
+    for (const [winW, winH] of WINDOWS) {
+      const plan = planOf(FILLED[name], winW, winH - CHROME_H);
+      const o = plan.rooms.find((r) => r.kind === 'office');
+      lines.push(`${name}|${winW}x${winH}|${o.x},${o.y},${o.w},${o.h}`);
+    }
+  }
+  assert.equal(hash32(lines.join('\n')), OFFICE_HASH, 'a reception moved');
+});
