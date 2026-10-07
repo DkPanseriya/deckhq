@@ -467,7 +467,8 @@ export function resolveBadgeCollisions(items, bodies = []) {
   /** Does this badge, drawn from `x` and `w` wide, stand on another figure? */
   const onBody = (it, x, w) =>
     bodies.some(
-      (b) => b.id !== it.id && x < b.x + b.w && x + w > b.x && it.y < b.y + b.h && it.y + it.h > b.y,
+      (b) =>
+        b.id !== it.id && x < b.x + b.w && x + w > b.x && it.y < b.y + b.h && it.y + it.h > b.y,
     );
 
   for (const row of rows) {

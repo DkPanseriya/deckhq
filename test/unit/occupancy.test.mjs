@@ -263,10 +263,7 @@ test('a sofa run seats one person a cushion: sixteen waiting on sixteen cushions
   // counted in label pitches. Asked of both the room it builds for sixteen and
   // the row reception the crowded floor is given.
   assert.equal(SOFA_ARM, SOFA_ARM_U, 'the plan and the painter disagree about a sofa’s arm');
-  const rooms = [
-    buildOffice(16).room,
-    buildOfficeRow(16, { w: 41.6, h: 32 }, { hold: true }).room,
-  ];
+  const rooms = [buildOffice(16).room, buildOfficeRow(16, { w: 41.6, h: 32 }, { hold: true }).room];
   for (const office of rooms) {
     const runs = office.props.filter((p) => p.kind === 'sofa');
     assert.equal(runs.length, 3);
@@ -290,7 +287,11 @@ test('a sofa run seats one person a cushion: sixteen waiting on sixteen cushions
     assert.equal(new Set(taken).size, 16, 'two people share a cushion');
     // Every run is sat on, and nobody sits shoulder to shoulder with somebody
     // while a run still has a cushion with a free one either side of it.
-    for (const run of runs) assert.ok(taken.some((t) => t.startsWith(`${run.id}#`)), run.id);
+    for (const run of runs)
+      assert.ok(
+        taken.some((t) => t.startsWith(`${run.id}#`)),
+        run.id,
+      );
     const [runOf, at] = [(t) => t.split('#')[0], (t) => Number(t.split('#')[1])];
     const tight = taken.findIndex((t, k) =>
       taken.slice(0, k).some((o) => runOf(o) === runOf(t) && Math.abs(at(o) - at(t)) === 1),
