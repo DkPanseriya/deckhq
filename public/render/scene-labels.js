@@ -568,6 +568,25 @@ export const PLATE_KEEP_ORDER = Object.freeze([
   Object.freeze([0, 1]),
 ]);
 
+/**
+ * Where a room's plate must stop: the left edge of the first wait badge (or
+ * pill) drawn inside its band, or `Infinity` when the band is its own.
+ * @param {any} room
+ * @param {{x:number, y:number, w:number, h:number}[]} badgeBoxes on screen
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ */
+export function plateLimit(room, badgeBoxes, camera) {
+  const at = worldToScreen({ x: room.x, y: room.y }, camera);
+  const scale = camera.zoom * camera.U;
+  const bottom = at.y + (Number(room.plateBand) || PLATE_BAND) * scale;
+  const right = at.x + room.w * scale;
+  let limit = Infinity;
+  for (const b of badgeBoxes || []) {
+    if (b.y < bottom && b.y + b.h > at.y && b.x > at.x && b.x < right) limit = Math.min(limit, b.x);
+  }
+  return limit;
+}
+
 /** The state dot's radius, and the gap it leaves before the hero's first glyph. */
 const PLATE_DOT_R = 2.6;
 const PLATE_DOT_GAP = 9;
@@ -583,20 +602,29 @@ const PLATE_DOT_GAP = 9;
  * never dropped. Across, a hero too wide for the plate loses its `· oldest`
  * tail, then collapses to the state dot and its count.
  *
+ * `limitX` is where the plate has to stop short of: the first wait badge drawn
+ * inside its band (`plateLimit`). The reception's first cushion is under its
+ * plate, and `16 waiting · oldest 1d 2h` ran through the badge that says so.
+ *
  * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
  * @param {any} room
  * @param {PlatePlan} plate
  * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ * @param {number} [limitX] a screen x no row of the plate may reach
  */
-export function layoutPlate(ctx, room, plate, camera) {
+export function layoutPlate(ctx, room, plate, camera, limitX = Infinity) {
   const topLeft = worldToScreen({ x: room.x, y: room.y }, camera);
   const worldScale = camera.zoom * camera.U;
   const roomW = room.w * worldScale;
   const k = plateScaleFor(worldScale);
   // The east end of the band belongs to the in-room "+" (`PLUS_CLEAR_U`).
   const plusClear = room.kind === 'project' ? PLUS_CLEAR_U * worldScale : 0;
-  const maxW = Math.max(60 * k, roomW - 6 * k - Math.max(6 * k, plusClear));
   const x = topLeft.x + 6 * k;
+  const reach = Number.isFinite(limitX) ? limitX - x - 4 * k : Infinity;
+  const maxW = Math.max(
+    40 * k,
+    Math.min(reach, Math.max(60 * k, roomW - 6 * k - Math.max(6 * k, plusClear))),
+  );
   const bandPx = (Number(room.plateBand) || PLATE_BAND) * worldScale;
   const present = (i) => i < 2 || !!plate.lines[i];
 

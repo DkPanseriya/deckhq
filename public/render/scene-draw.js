@@ -30,7 +30,7 @@ import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { rigSeatOf, worldToScreen } from './agents.js';
 import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
-import { layoutPlate, resolveBadgeCollisions } from './scene-labels.js';
+import { layoutPlate, plateLimit, resolveBadgeCollisions } from './scene-labels.js';
 import { buildingRect, planFrameLabels } from './scene-frame-labels.js';
 import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
@@ -484,7 +484,8 @@ export class SceneDraw extends SceneHit {
     for (const room of this._plan ? this._plan.rooms : []) {
       // A corridor has no name and no data line.
       if (room.kind === 'corridor') continue;
-      plates.set(room.id, layoutPlate(ctx, room, this._platePlanFor(room), camera));
+      const limit = plateLimit(room, badgeBoxes, camera);
+      plates.set(room.id, layoutPlate(ctx, room, this._platePlanFor(room), camera, limit));
     }
 
     // Name-label collision pass (tech-lead review finding 1), at EVERY level

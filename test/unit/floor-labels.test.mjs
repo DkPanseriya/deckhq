@@ -51,6 +51,7 @@ import {
   layoutPlate,
   platePlanFor,
   PLATE_KEEP_ORDER,
+  plateLimit,
   resolveBadgeCollisions,
 } from '../../public/render/scene-labels.js';
 import { sofaPlacesOn } from '../../public/render/plan-office-seats.js';
@@ -123,12 +124,6 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
     const pop = floorPopulation(agents, { now: LARGE_NOW });
     const snapshot = { projects, agents, counts: { drawn: { waiting: pop.waiting } } };
     const ctx = measuringCtx();
-    const plates = plan.rooms
-      .filter((r) => r.kind !== 'corridor')
-      .map((room) => ({
-        room,
-        ...layoutPlate(ctx, room, platePlanFor(room, snapshot, plan), camera),
-      }));
     const crewCounts = new Map(
       crewsFrom(agents, { now: LARGE_NOW }).map((c) => [c.parentId, c.count]),
     );
@@ -156,6 +151,19 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
         const at = badgePlan.short.has(it.id) && it.short ? it.short : it;
         return { ...it, x: at.x, w: at.w, id: `badge:${it.id}` };
       });
+    // After the badges, as the floor lays them: a plate stops short of one.
+    const plates = plan.rooms
+      .filter((r) => r.kind !== 'corridor')
+      .map((room) => ({
+        room,
+        ...layoutPlate(
+          ctx,
+          room,
+          platePlanFor(room, snapshot, plan),
+          camera,
+          plateLimit(room, badgeBoxes, camera),
+        ),
+      }));
     const labels = planFrameLabels(ctx, {
       records,
       agentsById,
@@ -563,6 +571,8 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
     const found = { badgeOnBadge: 0, badgeOnBody: 0, nameOnBody: 0, nameOnBadge: 0, nameOnName: 0 };
     for (const [i, b] of f.badgeBoxes.entries()) {
       const own = b.id.slice(6);
+      // The office's plate stops short of the badge over its first cushion.
+      for (const p of f.plates) assert.ok(!hits(b, p.rect), `${name}: a badge is under a plate`);
       for (const body of bodies) if (body.id !== own && hits(b, body)) found.badgeOnBody++;
       for (let j = i + 1; j < f.badgeBoxes.length; j++)
         if (hits(b, f.badgeBoxes[j])) found.badgeOnBadge++;
