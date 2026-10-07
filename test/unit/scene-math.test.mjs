@@ -46,6 +46,7 @@ import {
   labelFontSize,
   badgeBox,
   BODY_HEIGHT_U,
+  formatElapsedShort,
   LABEL_DROP_U,
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
@@ -708,7 +709,39 @@ test('resolveBadgeCollisions: two rows are two problems and get two answers', ()
 });
 
 test('resolveBadgeCollisions: nothing waiting is not a pill saying zero', () => {
-  assert.deepEqual(resolveBadgeCollisions([]), { drawn: new Set(), pills: [] });
+  assert.deepEqual(resolveBadgeCollisions([]), { drawn: new Set(), short: new Set(), pills: [] });
+});
+
+test('resolveBadgeCollisions: a badge that touches its neighbour is cut to its leading unit before it is folded away', () => {
+  assert.equal(formatElapsedShort(2 * 86400000 + 23 * 3600000), '2d');
+  assert.equal(formatElapsedShort(7 * 60000), '7m');
+  // Three heads 30 px apart; the whole wait is 44 px wide, its short form 20.
+  const badge = (id, cx, short = true) => ({
+    id,
+    x: cx - 22,
+    y: 0,
+    w: 44,
+    h: 12,
+    ms: 1,
+    ...(short ? { short: { x: cx - 10, w: 20 } } : {}),
+  });
+  const cut = resolveBadgeCollisions([badge('a', 100), badge('b', 130), badge('c', 160)]);
+  assert.deepEqual([...cut.drawn].sort(), ['a', 'b', 'c']);
+  assert.deepEqual([...cut.short].sort(), ['a', 'b', 'c']);
+  assert.equal(cut.pills.length, 0);
+  // Clear air either side: nothing is cut.
+  const clear = resolveBadgeCollisions([badge('a', 100), badge('b', 160)]);
+  assert.deepEqual([clear.drawn.size, clear.short.size, clear.pills.length], [2, 0, 0]);
+  // With no short form to fall back on, the old rule: one pill for the run.
+  const pill = resolveBadgeCollisions([badge('a', 100, false), badge('b', 130, false)]);
+  assert.deepEqual([pill.drawn.size, pill.pills.length, pill.pills[0].count], [0, 1, 2]);
+  // Still touching when cut: those go into the pill, and only those.
+  const tight = resolveBadgeCollisions([badge('a', 100), badge('b', 112), badge('c', 200)]);
+  assert.deepEqual([[...tight.drawn], tight.pills[0].count], [['c'], 2]);
+  // A wide badge standing on somebody else's body is cut, alone in its row.
+  const body = { id: 'z', x: 115, y: 0, w: 28, h: 40 };
+  const over = resolveBadgeCollisions([badge('a', 100)], [body]);
+  assert.deepEqual([[...over.drawn], [...over.short]], [['a'], ['a']]);
 });
 
 test("WP-60: the owner's office wall reads — no two waiting badges are drawn overlapping", () => {

@@ -18,7 +18,14 @@ import {
   ENVELOPE_SHADOW_BLUR_PX,
   ENVELOPE_SHADOW_DIST_PX,
 } from './backdrop.js';
-import { badgeBox, drawBadge, drawCharacter, formatElapsed } from './rig.js';
+import {
+  badgeBox,
+  characterBox,
+  drawBadge,
+  drawCharacter,
+  formatElapsed,
+  formatElapsedShort,
+} from './rig.js';
 import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { rigSeatOf, worldToScreen } from './agents.js';
@@ -445,11 +452,21 @@ export class SceneDraw extends SceneHit {
             ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
             : charU;
         const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
-        items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
+        // And the box of its short form, which it is drawn in where the badge
+        // beside it leaves no room for the whole wait.
+        const cut = badgeBox(ctx, s.x, s.y, u, formatElapsedShort(ms));
+        const short = cut.w < box.w ? { x: cut.x, w: cut.w } : undefined;
+        items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms, short });
       }
-      badgePlan = resolveBadgeCollisions(items);
+      const bodies = records.map((rec) => {
+        const s = worldToScreen(rec, camera);
+        return { id: rec.id, ...characterBox(s.x, s.y, charU) };
+      });
+      badgePlan = resolveBadgeCollisions(items, bodies);
       for (const it of items) {
-        if (badgePlan.drawn.has(it.id)) badgeBoxes.push({ ...it, id: `badge:${it.id}` });
+        if (!badgePlan.drawn.has(it.id)) continue;
+        const at = badgePlan.short.has(it.id) && it.short ? it.short : it;
+        badgeBoxes.push({ ...it, x: at.x, w: at.w, id: `badge:${it.id}` });
       }
       for (const [i, pill] of badgePlan.pills.entries()) {
         const probe = badgeBox(ctx, 0, 0, charU, `${pill.count} waiting · oldest 00h 00m`);
@@ -674,7 +691,9 @@ export class SceneDraw extends SceneHit {
     const waitingMs = this._scale() >= BADGE_MIN_PX_PER_UNIT ? waitingBadgeMs(agent) : null;
     const badge =
       waitingMs !== null && (!badgePlan || badgePlan.drawn.has(rec.id))
-        ? formatElapsed(waitingMs)
+        ? badgePlan && badgePlan.short.has(rec.id)
+          ? formatElapsedShort(waitingMs)
+          : formatElapsed(waitingMs)
         : null;
 
     // Project identity (CONTRACTS-WP15.md §2): hair, a small clothing accent
