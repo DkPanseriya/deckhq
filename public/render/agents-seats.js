@@ -240,9 +240,16 @@ export function juniorSpots(anchor, room, n) {
  *
  * A room's TABLE zones. Zones rather than props because a zone is exactly *"a
  * structural rectangle inside a room — a table's footprint"* (`plan-shapes.js`),
- * expressed from the room's own top-left, and because the wall and corner props
- * carry placeholder positions until `resolveAnchors` has run. A cable through a
- * desk is the one thing §3.2 names.
+ * and because the wall and corner props carry placeholder positions until
+ * `resolveAnchors` has run. A cable through a desk is the one thing §3.2 names.
+ *
+ * A zone is laid out from its room's top-left and is ABSOLUTE by the time a
+ * plan is returned: `plan.js`'s `place()` translates a room's zones and props
+ * together, which is why a table zone and its `desk` prop are the same
+ * rectangle. So the zones are returned as they are. Adding the room's origin
+ * again put every footprint one room-offset away from its table, and a cable
+ * was routed round a rectangle that was not there
+ * (`test/unit/crew.test.mjs` holds the cables to the desk props instead).
  *
  * `desk-group` is left out on purpose: it is the box around the tables AND the
  * chairs and the clearance between them, it contains the parent's own seat by
@@ -257,7 +264,7 @@ export function deskFootprints(room) {
   if (!room || !Array.isArray(room.zones)) return [];
   return room.zones
     .filter((z) => !/^(desk-group|(meeting|seating)-\d+)$/.test(String(z.id ?? '')))
-    .map((z) => ({ x: room.x + z.x, y: room.y + z.y, w: z.w, h: z.h }));
+    .map((z) => ({ x: z.x, y: z.y, w: z.w, h: z.h }));
 }
 
 /**

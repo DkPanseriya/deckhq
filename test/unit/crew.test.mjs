@@ -92,8 +92,15 @@ function agent(over = {}) {
   };
 }
 
-/** A senior at a desk with `n` juniors, plus the project row the plan needs. */
-function crewFloor(n, juniorOver = () => ({})) {
+/**
+ * A senior at a desk with `n` juniors, plus the project row the plan needs.
+ *
+ * `neighbours` is how many other one-desk repos are on the floor, listed ahead
+ * of `p`. Two of them put `p`'s room in the second row, away from both of the
+ * building's own axes — which is where a coordinate that is one room-offset out
+ * shows, and at the origin does not.
+ */
+function crewFloor(n, juniorOver = () => ({}), neighbours = 0) {
   const agents = [agent({ id: 'claude-code:s', projectId: 'p' })];
   for (let i = 0; i < n; i++) {
     agents.push(
@@ -109,7 +116,18 @@ function crewFloor(n, juniorOver = () => ({})) {
     );
   }
   const projects = [{ id: 'p', name: 'p', sessionCount: n + 1, activeCount: n + 1 }];
+  for (let i = neighbours - 1; i >= 0; i--) {
+    agents.push(agent({ id: `claude-code:q${i}`, projectId: `q${i}` }));
+    projects.unshift({ id: `q${i}`, name: `q${i}`, sessionCount: 1, activeCount: 1 });
+  }
   return { agents, projects };
+}
+
+/** The desk tops a room draws, as the plan placed them: its `desk` PROPS. */
+function deskProps(room) {
+  return room.props
+    .filter((p) => p.kind === 'desk')
+    .map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h }));
 }
 
 // ---------------------------------------------------- 1. the workflow id
@@ -358,40 +376,81 @@ test('§3.2: lanes are distinct and the outermost cable runs nearest the desk', 
   assert.ok(lanes[4] < lanes[2]);
 });
 
-test('§3.2: a cable through a real room misses the tables it is planned around', () => {
-  const { agents, projects } = crewFloor(6);
-  const plan = buildPlan(projects, agents, { stage: { w: 1600, h: 1000 }, now: NOW });
-  const seats = assignSeats(plan, agents);
-  const room = plan.rooms.find((r) => r.id === 'p');
-  const rects = deskFootprints(room);
-  assert.ok(rects.length > 0, 'the room has furniture to route around');
-
-  let checked = 0;
-  for (const junior of agents.filter((a) => a.subagent)) {
-    const seat = seats.get(junior.id);
-    assert.equal(seat.crew, true);
-    const port = seat.route[seat.route.length - 1];
-    for (let i = 0; i + 1 < seat.route.length; i++) {
-      for (const rect of rects) {
-        // The desk the port sits ON is where the cable is meant to end — §3.2
-        // puts the port on the desk's front edge. Every OTHER footprint in the
-        // room is one the route had to find its way round.
-        const terminal =
-          port.x >= rect.x &&
-          port.x <= rect.x + rect.w &&
-          port.y >= rect.y &&
-          port.y <= rect.y + rect.h;
-        if (terminal) continue;
-        assert.equal(
-          segmentHitsRect(seat.route[i], seat.route[i + 1], rect),
-          false,
-          `${junior.id}: a cable runs through a table`,
+test('§3.2: the footprints a cable is routed round are the desks, wherever the room is', () => {
+  // A zone is absolute once `buildPlan` has placed its room, and a table zone
+  // is the rectangle its `desk` prop is drawn in. `deskFootprints` added the
+  // room's origin a second time, so in a room at x = 45 the router was handed a
+  // table 45 units east of the one on the floor — and in a room at the
+  // building's origin, where every other fixture here stands, the right one.
+  for (const [w, h] of STAGES) {
+    const { agents, projects } = crewFloor(6, undefined, 2);
+    const plan = buildPlan(projects, agents, { stage: { w, h }, now: NOW });
+    const room = plan.rooms.find((r) => r.id === 'p');
+    assert.ok(room.x > 0 && room.y > 0, `${w}x${h}: the room must stand clear of both axes`);
+    const desks = deskProps(room);
+    const rects = deskFootprints(room);
+    assert.ok(desks.length > 0, 'the room has a desk');
+    assert.equal(rects.length, desks.length, `${w}x${h}: one footprint per desk`);
+    rects.forEach((rect, i) => {
+      for (const key of ['x', 'y', 'w', 'h']) {
+        assert.ok(
+          Math.abs(rect[key] - desks[i][key]) < 1e-6,
+          `${w}x${h}: footprint ${i} has ${key} ${rect[key]} and its desk ${desks[i][key]}`,
         );
-        checked++;
       }
+    });
+  }
+});
+
+test('§3.2: a cable through a real room misses the desks that are drawn in it', () => {
+  // Held to the room's `desk` PROPS — what the floor draws — and not to the
+  // rectangles the router was given, so a router planning round the wrong ones
+  // is not marked by its own answer. Six juniors and twelve: at six the two
+  // outermost ports are past the ends of a one-seat desk, at twelve eight are.
+  for (const n of [6, CREW_DRAW_CAP]) {
+    for (const [w, h] of STAGES) {
+      const { agents, projects } = crewFloor(n, undefined, 2);
+      const plan = buildPlan(projects, agents, { stage: { w, h }, now: NOW });
+      const seats = assignSeats(plan, agents);
+      const room = plan.rooms.find((r) => r.id === 'p');
+      assert.ok(room.x > 0 && room.y > 0, `${w}x${h}: the room must stand clear of both axes`);
+      const desks = deskProps(room);
+      assert.ok(desks.length > 0, 'the room has furniture to route around');
+
+      let checked = 0;
+      let ended = 0;
+      for (const junior of agents.filter((a) => a.subagent)) {
+        const seat = seats.get(junior.id);
+        assert.equal(seat.crew, true);
+        const port = seat.route[seat.route.length - 1];
+        for (const desk of desks) {
+          // The desk the port sits ON is where the cable is meant to end — §3.2
+          // puts the port on the desk's front edge. Every OTHER desk in the
+          // room, and this one for a port past its end, is one the route had to
+          // find its way round.
+          const terminal =
+            port.x >= desk.x &&
+            port.x <= desk.x + desk.w &&
+            port.y >= desk.y &&
+            port.y <= desk.y + desk.h;
+          if (terminal) {
+            ended++;
+            continue;
+          }
+          for (let i = 0; i + 1 < seat.route.length; i++) {
+            assert.equal(
+              segmentHitsRect(seat.route[i], seat.route[i + 1], desk),
+              false,
+              `${n} at ${w}x${h}: ${junior.id}'s cable runs through a desk`,
+            );
+          }
+          checked++;
+        }
+      }
+      assert.ok(checked > 0, `${n} at ${w}x${h}: the property was actually exercised`);
+      assert.ok(ended > 0, `${n} at ${w}x${h}: and some cable does end on the desk`);
     }
   }
-  assert.ok(checked > 0, 'the property was actually exercised');
 });
 
 // ----------------------------------------------------- 6. the cap and +N

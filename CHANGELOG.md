@@ -79,6 +79,23 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **The office's name plate no longer runs through a wait badge.** With somebody on the first
   cushion of the top sofa, `16 waiting · oldest 1d 2h` was written across their badge. The plate
   now stops before the badge and reads `16 waiting`.
+- **Wait badges and names in a full office are readable.** With sixteen sessions waiting, the
+  ones standing stood right in front of the ones sitting: their badges landed on the heads behind
+  them, and the names of the people on the sofa were pushed two rows away or across the wall. A
+  badge is now over its own head and a name under its own feet, or right beside the body where the
+  next person's badge is below it, and nobody else's name is put between the two. The people
+  standing stand a full row in front of the sofa, in the gaps between the people sitting, and a
+  second row stands in the gaps of the first.
+- **The corner of the sofas is left empty once somebody has to stand.** While everyone waiting
+  fits on the sofas they all sit. When one more arrives, the two end cushions of the back sofa are
+  left free, so two people's badges no longer meet in the corner. Sixteen waiting are now eleven
+  sitting and five standing, where they were twelve and four.
+- **A crew's cables are planned round the desks that are in the room.** The router was handed each
+  table one room-offset away from where it stands: in a room 39 units from the building's left
+  edge, a table at 67.4 was given to it at 106.4. Only a room in the building's top-left corner got
+  the right rectangle. It now gets the tables where they are. No cable on a demo floor moves: 984
+  cables on every demo floor and 48 made-up ones, at four window sizes, take the same route as
+  before, and the `crew` and `crew-waiting` goldens match with 0 pixels changed.
 
 ### Changed
 
@@ -165,6 +182,11 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **Floors of one to four projects are checked in ten shapes of window.** Eight small floors, each
   empty, lightly used and with seventy-nine resting and sixteen waiting, on canvases from 4:3 to an
   ultrawide: every rule holds on all 240, and the smallest is drawn at 9.2 pixels per unit.
+- **A crew's cables are checked against the desks that are drawn.** `crew.test.mjs` took its
+  tables from the same function the router did, so it could not see that function being wrong. It
+  now checks every cable against the room's desk props, in a room in the second row, for crews of
+  six and twelve at three window sizes, and checks separately that the router's rectangles are
+  those desks.
 
 ### Known gaps
 
@@ -176,6 +198,11 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.
+- **A big crew in a room with two tables sits across the second one.** With nine or more people at
+  desks in one room and a crew of ten or more, the crew's arc is laid over the room's second table,
+  and two to six of its cables run through that table. A cable can only be moved a tenth of a unit
+  to get round something, which is not enough to clear a table. Rooms with one table, and crews of
+  eight or fewer, are not affected.
 
 ## 1.6.2 — 2026-10-06
 
