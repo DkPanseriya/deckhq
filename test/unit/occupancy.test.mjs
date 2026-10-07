@@ -37,8 +37,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { buildPlan } from '../../public/render/plan.js';
-import { buildOffice, seatOffice, OFFICE_QUEUE_ZONE } from '../../public/render/plan-office.js';
-import { OFFICE_SOFA_PITCH, OFFICE_VISITOR_CHAIRS } from '../../public/render/plan-units.js';
+import {
+  buildOffice,
+  buildOfficeRow,
+  seatOffice,
+  OFFICE_QUEUE_ZONE,
+} from '../../public/render/plan-office.js';
+import {
+  queueAlong,
+  SOFA_ARM,
+  sofaCushionCount,
+  sofaPlacesOn,
+} from '../../public/render/plan-office-seats.js';
+import { SOFA_ARM_U } from '../../public/render/backdrop-paint.js';
+import { OFFICE_VISITOR_CHAIRS } from '../../public/render/plan-units.js';
 import { assignSeats, derivePlacement } from '../../public/render/agents.js';
 import { placement, waitingSince } from '../../public/floor-rule.js';
 import { Registry } from '../../src/core/state-machine.mjs';
@@ -236,55 +248,111 @@ test('WP-93: three waiting sit on the sofas in arrival order, and the chair stay
   assert.deepEqual(inTheChair(seats, plan), []);
 });
 
-test('WP-93: when the sofas are full the rest stand beside them, in arrival order', () => {
-  // Asked of `buildOffice` directly, the way WP-78's own split test was: the
-  // packer hands the reception whatever box the floor has spare, and a rule
-  // about what happens when the SOFAS run out has to be asked of a room whose
-  // sofas actually do. A reception at its own natural size seats six. The
-  // seventh has to stand, and once anybody stands the two corner cushions of
-  // the back run are left empty (`plan-office-seats.js`, rule 1): five sit and
-  // two stand, where the corners would have put two wait badges on each other.
-  const { room: office } = buildOffice(7);
-  const runs = office.props.filter((p) => p.kind === 'sofa');
-  const capacity = runs.reduce(
-    (n, s) => n + Math.floor(Math.max(s.w, s.h) / OFFICE_SOFA_PITCH + 1e-9),
-    0,
-  );
-  assert.equal(capacity, 6, 'the reception at its natural size seats six on its three runs');
+/** The cushion a seat is on: its run and its place along it, or `null`. */
+function cushionOf(seat, office) {
+  for (const run of office.props.filter((p) => p.kind === 'sofa')) {
+    const i = sofaPlacesOn(run).findIndex((p) => Math.hypot(p.x - seat.x, p.y - seat.y) < 1e-9);
+    if (i >= 0) return `${run.id}#${i}`;
+  }
+  return null;
+}
 
-  const { officeSeats } = seatOffice(office, 7);
-  assert.equal(officeSeats.length, 7);
+test('a sofa run seats one person a cushion: sixteen waiting on sixteen cushions or more all sit', () => {
+  // The owner's reception: sixteen waiting, three runs. It stood five of them
+  // on the rug in front of cushions nobody was sitting on, because a run was
+  // counted in label pitches. Asked of both the room it builds for sixteen and
+  // the row reception the crowded floor is given.
+  assert.equal(SOFA_ARM, SOFA_ARM_U, 'the plan and the painter disagree about a sofa’s arm');
+  const rooms = [buildOffice(16).room, buildOfficeRow(16, { w: 41.6, h: 32 }, { hold: true }).room];
+  for (const office of rooms) {
+    const runs = office.props.filter((p) => p.kind === 'sofa');
+    assert.equal(runs.length, 3);
+    for (const run of runs) {
+      // What it seats is what it is drawn with.
+      assert.equal(
+        run.cushions,
+        sofaCushionCount(Math.max(run.w, run.h), Math.min(run.w, run.h)),
+        run.id,
+      );
+      assert.equal(sofaPlacesOn(run).length, run.cushions);
+    }
+    const cushions = runs.reduce((n, run) => n + run.cushions, 0);
+    assert.ok(cushions >= 16, `the three runs have ${cushions} cushions`);
+
+    const { officeSeats } = seatOffice(office, 16);
+    assert.equal(officeSeats.length, 16);
+    assert.equal(officeSeats.filter((s) => s.standing).length, 0, 'somebody is standing');
+    const taken = officeSeats.map((s) => cushionOf(s, office));
+    assert.ok(!taken.includes(null), 'somebody is seated on a seam');
+    assert.equal(new Set(taken).size, 16, 'two people share a cushion');
+    // Every run is sat on, and nobody sits shoulder to shoulder with somebody
+    // while a run still has a cushion with a free one either side of it.
+    for (const run of runs)
+      assert.ok(
+        taken.some((t) => t.startsWith(`${run.id}#`)),
+        run.id,
+      );
+    const [runOf, at] = [(t) => t.split('#')[0], (t) => Number(t.split('#')[1])];
+    const tight = taken.findIndex((t, k) =>
+      taken.slice(0, k).some((o) => runOf(o) === runOf(t) && Math.abs(at(o) - at(t)) === 1),
+    );
+    const apart = runs.reduce((n, run) => n + Math.floor(run.cushions / 2), 0);
+    assert.ok(tight === -1 || tight >= apart, `seat ${tight} closes up; ${apart} sit apart first`);
+    // Oldest wait nearest the desk, on every run.
+    const far = distanceFromDesk(office);
+    assert.equal(far(officeSeats[0]), Math.min(...officeSeats.map(far)));
+  }
+});
+
+test('thirty waiting on twenty cushions: twenty sit, ten stand in a file by the wall, nobody on the rug', () => {
+  // A row reception held at 34 x 26: its runs have 7 + 7 + 6 cushions.
+  const { room: office } = buildOfficeRow(30, { w: 34, h: 26 }, { hold: true });
+  const runs = office.props.filter((p) => p.kind === 'sofa');
+  assert.equal(
+    runs.reduce((n, run) => n + run.cushions, 0),
+    20,
+  );
+  const { officeSeats } = seatOffice(office, 30);
+  assert.equal(officeSeats.length, 30);
   assert.deepEqual(
     officeSeats.map((s) => !!s.standing),
-    [false, false, false, false, false, true, true],
-    'the sofas fill, less their corner cushions, before anybody stands',
+    [...Array(20).fill(false), ...Array(10).fill(true)],
+    'every cushion is taken before anybody stands',
   );
-  assert.equal(
-    seatOffice(buildOffice(6).room, 6).officeSeats.filter((s) => s.standing).length,
-    0,
-    'six fit on the sofas of a reception built for six, corners and all',
-  );
-  for (const seat of officeSeats.filter((s) => !s.standing)) {
-    assert.ok(onASofa(seat, office), 'a seated waiting agent is not on a sofa');
-  }
+  const seated = officeSeats.slice(0, 20);
+  assert.equal(new Set(seated.map((s) => cushionOf(s, office))).size, 20);
+  assert.ok(seated.every((s) => cushionOf(s, office) !== null));
 
-  // The one who stands is BESIDE the seating and never at the desk: the well
-  // is the floor the three runs enclose, and it starts below the visitor chair.
-  const well = office.zones.find((z) => z.id === 'office-well');
-  const standing = officeSeats.filter((s) => s.standing);
-  for (const s of standing) {
-    assert.ok(inside(s, well, 0), 'somebody is queueing outside the well the sofas enclose');
-    assert.equal(onASofa(s, office), false, 'somebody is standing on a sofa');
-  }
+  // THE FILE. Off the rug, outside the floor between the sofas and the desk,
+  // not on a sofa, not at the manager's chair — and against a wall.
+  const standing = officeSeats.slice(20);
+  const rug = office.props.find((p) => p.kind === 'rug');
+  const waiting = office.zones.find((z) => z.id === 'office-waiting');
+  const floor = office.zones.find((z) => z.id === 'office-room');
   const chair = office.props.find((p) => p.kind === 'tub_chair');
+  assert.ok(rug && waiting && floor && chair);
   for (const s of standing) {
+    assert.equal(inside(s, rug, 0), false, 'somebody is standing on the rug');
+    assert.equal(inside(s, waiting, 0), false, 'somebody stands between the sofas and the desk');
+    assert.equal(onASofa(s, office, 0), false, 'somebody is standing on a sofa');
+    assert.ok(inside(s, floor, 0), 'somebody is queueing outside the room');
+    const toWall = Math.min(
+      s.x - floor.x,
+      floor.x + floor.w - s.x,
+      s.y - floor.y,
+      floor.y + floor.h - s.y,
+    );
+    assert.ok(toWall <= 2.6, `somebody stands ${toWall.toFixed(1)} U from the nearest wall`);
     assert.ok(
       Math.hypot(s.x - (chair.x + chair.w / 2), s.y - (chair.y + chair.h / 2)) > 2,
       'the queue has reached the manager’s desk',
     );
   }
+  // One file: everybody in it against the same wall.
+  assert.ok(new Set(standing.map((s) => s.y.toFixed(6))).size === 1, 'the file is not one line');
+  assert.equal(new Set(standing.map((s) => s.x.toFixed(6))).size, 10, 'two stand on one spot');
 
-  // And the queue is in the order the plan laid it out, which is the order
+  // And it is in the order the plan laid it out, which is the order
   // `assignSeats` hands the waiting agents over in.
   const queue = office.zones
     .filter((z) => String(z.id).startsWith(OFFICE_QUEUE_ZONE))
@@ -293,28 +361,57 @@ test('WP-93: when the sofas are full the rest stand beside them, in arrival orde
         Number(String(a.id).slice(OFFICE_QUEUE_ZONE.length)) -
         Number(String(b.id).slice(OFFICE_QUEUE_ZONE.length)),
     );
-  assert.ok(queue.length >= standing.length, 'the room laid out fewer places than it needs');
+  assert.equal(queue.length, standing.length, 'the room laid out a place nobody needs');
   standing.forEach((s, i) => {
     assert.ok(Math.abs(s.x - (queue[i].x + queue[i].w / 2)) < 1e-9);
     assert.ok(Math.abs(s.y - (queue[i].y + queue[i].h / 2)) < 1e-9);
   });
 
-  // The sofas fill before anybody stands at every size the room can be, and the
-  // split is a pure function of the room — the same reception twice over gives
-  // the same answer.
-  for (const n of [1, 3, 6, 8, 12, 20]) {
-    const built = buildOffice(n);
-    const a = seatOffice(built.room, n).officeSeats;
-    const b = seatOffice(buildOffice(n).room, n).officeSeats;
-    assert.deepEqual(a, b, `the reception for ${n} waiting seated them differently twice`);
-    const seated = a.filter((s) => !s.standing).length;
-    assert.equal(a.length, n);
-    assert.ok(seated > 0 && seated <= n, `${n} waiting seated ${seated}`);
-    assert.ok(
-      a.slice(0, seated).every((s) => !s.standing) && a.slice(seated).every((s) => s.standing),
-      `${n} waiting: somebody stood while a cushion was free`,
-    );
+  // The file keeps its pitch while the wall is long enough and closes up when
+  // it is not; it never grows past the wall it was given.
+  assert.deepEqual(queueAlong(3, 10, 4), [0, 4, 8]);
+  assert.deepEqual(queueAlong(5, 8, 4), [0, 2, 4, 6, 8]);
+  assert.deepEqual(queueAlong(1, 0, 4), [0]);
+  assert.deepEqual(queueAlong(0, 10, 4), []);
+
+  // Nobody stands while a cushion is free, at every size and both ways up, and
+  // the split is a pure function of the room.
+  for (const n of [1, 3, 6, 8, 12, 20, 30, 60]) {
+    for (const build of [() => buildOffice(n), () => buildOfficeRow(n, { w: 34, h: 26 })]) {
+      const built = build().room;
+      const a = seatOffice(built, n).officeSeats;
+      assert.deepEqual(a, seatOffice(build().room, n).officeSeats, `${n} waiting, twice`);
+      const cushions = built.props
+        .filter((p) => p.kind === 'sofa')
+        .reduce((sum, run) => sum + run.cushions, 0);
+      assert.equal(a.length, n);
+      assert.equal(a.filter((s) => !s.standing).length, Math.min(n, cushions), `${n} waiting`);
+      assert.ok(
+        a.slice(0, Math.min(n, cushions)).every((s) => !s.standing),
+        `${n} waiting: somebody stood while a cushion was free`,
+      );
+    }
   }
+});
+
+test('sixteen on the sofas: opening one walks that one to the chair and moves nobody else', () => {
+  const agents = Array.from({ length: 16 }, (_, i) => waiter(`w${i}`, 200 - i * 10));
+  const plan = buildPlan([{ id: 'p0', name: 'p0', sessionCount: 16, tokens: 1 }], agents, {
+    targetAspect: 1.78,
+    now: NOW,
+  });
+  const office = room(plan, 'office');
+  const before = assignSeats(plan, agents);
+  assert.equal([...before.values()].filter((s) => s.standing).length, 0, 'somebody is standing');
+  for (const a of agents) assert.ok(onASofa(before.get(a.id), office), `${a.id} is not on a sofa`);
+  const after = assignSeats(plan, agents, { selectedId: 'w5' });
+  assert.deepEqual(inTheChair(after, plan), ['w5']);
+  for (const a of agents) {
+    if (a.id !== 'w5') assert.deepEqual(after.get(a.id), before.get(a.id), `${a.id} moved`);
+  }
+  // Its cushion is held: nobody else is on it while it is at the desk.
+  const held = before.get('w5');
+  assert.ok(![...after.values()].some((s) => s.x === held.x && s.y === held.y));
 });
 
 test('WP-93: the manager’s desk has exactly one visitor chair, at every reception size', () => {

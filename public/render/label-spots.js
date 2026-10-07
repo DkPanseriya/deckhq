@@ -37,6 +37,10 @@
  * between the feet and itself as well, so no other figure's name is ever set
  * between a body and its own.
  *
+ * A DENSE SOFA RUN SETS ITS NAMES AT TWO LEVELS (`lower`). Where two people sit
+ * on neighbouring cushions, one name is under its feet and the next is a line
+ * lower on a leader; if that line is taken, the name is placed as any other.
+ *
  * An item with no `feet` is placed by the old rule exactly, which is what the
  * pure tests of this function in `scene-math.test.mjs` hold.
  */
@@ -54,6 +58,13 @@ export const MAX_LABEL_OFFSET_ATTEMPTS = 2;
 export const NEAR_REACH = 1.2;
 
 /**
+ * How far the centre of a name on the SECOND LEVEL may sit from its feet, in
+ * body heights: a line under where the first level is, and tied to its figure
+ * by a leader, so it reads as that figure's from farther than a bare name does.
+ */
+export const LOWER_REACH = 1.6;
+
+/**
  * Resolve overlapping name labels for one frame. `items` should already be in
  * the caller's priority/paint order — earlier items get first claim on space.
  *
@@ -69,7 +80,7 @@ export const NEAR_REACH = 1.2;
  * label beats an unreadable smear.
  *
  * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
- *   pin?:boolean, unit?:boolean, alts?:number[][], up?:number,
+ *   pin?:boolean, unit?:boolean, lower?:boolean, alts?:number[][], up?:number,
  *   feet?:{x:number, y:number},
  *   bh?:number, side?:number,
  *   variants?:{x:number, y:number, w:number, h:number, text:string, px:number}[]}[]} items
@@ -130,6 +141,20 @@ export function resolveLabelCollisions(items, bounds) {
         if (result.has(it.id)) continue;
         const form = v === 0 ? it : (it.variants || [])[v - 1];
         if (!form) continue;
+        // THE SECOND LEVEL. Shoulder to shoulder on a sofa, two names are wider
+        // than the cushions they are under, so every other one (`lower`) is set
+        // a line down, on a 1 px leader that runs between its neighbours' names.
+        if (it.lower && it.bh > 0) {
+          const rect = { x: form.x, y: form.y + form.h, w: form.w, h: form.h };
+          const line = { x: it.feet.x - 0.5, y: it.feet.y, w: 1, h: rect.y - it.feet.y };
+          const reach = (rect.y + rect.h / 2 - it.feet.y) / it.bh;
+          if (reach <= LOWER_REACH + 1e-6 && free(rect) && (line.h <= 0 || free(line))) {
+            placed.push(rect);
+            if (line.h > 0) placed.push(line);
+            result.set(it.id, spotOf(it, form, 0, form.h, true));
+            continue;
+          }
+        }
         for (const [dx, dy] of nearSpots(it, form)) {
           const rect = { x: form.x + dx, y: form.y + dy, w: form.w, h: form.h };
           // Under its own feet a unit's name claims the floor up to them.

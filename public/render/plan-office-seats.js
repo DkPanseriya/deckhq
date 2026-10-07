@@ -2,34 +2,31 @@
  * WHERE THE WAITING SIT AND STAND in the user's office.
  *
  * Split out of `plan-office.js`, which builds the room: these are the places
- * in it. Three rules about how close two waiting people may be drawn, each one
- * measured on a reception of sixteen where the names and the wait badges of
- * neighbours ran into each other:
+ * in it. The owner's rule, stated twice: _"They all should sit on the sofa.
+ * Only the agent I open walks up to the manager desk."_ A reception of sixteen
+ * once stood five of them in the middle of the rug in front of cushions nobody
+ * was sitting on, because a run was counted in label pitches rather than in
+ * cushions. So:
  *
- *   1. **Once somebody has to stand, the corner cushions seat nobody.** The
- *      run that spans between two others gives up a body's width at each end,
- *      so the last person on one run and the first on the next are not corner
- *      neighbours. While everybody waiting still fits on the sofas they all
- *      sit, corners included: the owner's rule is that the waiting sit.
- *   2. **A standing row in front of a sofa stands in the gaps.** Its places
- *      are the sofa's own pitch apart and half a pitch along from the people
- *      sitting behind them, so a standing badge falls between two sitters and
- *      a sitter's name between two people standing.
- *   3. **The second standing row is half a pitch along from the first**, and
- *      so on back: no two rows of names line up.
+ *   1. **A run seats one person per cushion.** The count is the one the sofa
+ *      is drawn with (`sofaCushionCount`, carried on the prop as `cushions`),
+ *      and a place is the middle of a cushion.
+ *   2. **Nobody stands while a cushion is free.** Corner cushions included.
+ *   3. **The runs fill together, nearest the manager first.** The oldest wait
+ *      takes the cushion nearest the desk, the next takes the nearest on the
+ *      next run, and so round. Every other cushion is taken first and the ones
+ *      between them after, so two people sit shoulder to shoulder only once a
+ *      run has nowhere else to put them — and a run across the screen, where
+ *      two names can be set at two levels, closes up before one down it.
+ *   4. **Whoever is left stands in one file along the wall**, at the head of
+ *      the room beside the seating: never on the rug, never between the sofas
+ *      and the desk.
  *
  * Pure geometry. `seatOffice` reads the office's own resolved furniture, so it
  * must run after `resolveAnchors`.
  */
 
-import {
-  OFFICE_QUEUE_PITCH,
-  OFFICE_QUEUE_ROW,
-  OFFICE_SEAT_PITCH,
-  OFFICE_SOFA_PITCH,
-  SOFA_SEAT_BIAS,
-  angleTo,
-} from './plan-units.js';
+import { SOFA_DEPTH, SOFA_SEAT_BIAS, angleTo } from './plan-units.js';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Room} Room */
@@ -41,94 +38,56 @@ export const OFFICE_QUEUE_ZONE = 'office-queue-';
 export const OFFICE_VISITOR_ZONE = 'office-visitor-';
 
 /**
- * How much of a run's end is the corner cushion, where that run stands between
- * two others: one body's width (`OFFICE_SEAT_PITCH`, the pitch that spaces
- * bodies). Read through a function because the pitch moves with the agent size.
+ * The arm at each end of a sofa run, in plan units: the painter's own
+ * `SOFA_ARM_U`, restated here because a plan does not import a painter.
+ * `test/unit/occupancy.test.mjs` holds the two equal.
  */
-export function cornerCushion() {
-  return OFFICE_SEAT_PITCH;
+export const SOFA_ARM = 0.6;
+
+/** The arm a run of this depth is drawn with: never more than a third of it. */
+function armOf(depth) {
+  return Math.min(depth * 0.34, SOFA_ARM);
 }
 
 /**
- * How many waiting sessions a sofa run of this length seats (WP-93).
+ * How many seat cushions a sofa run has, which is how many it seats.
  *
- * One expression, called from two places that must agree: `buildOffice`, which
- * sizes the standing queue off it before the furniture exists, and
- * `sofaPlacesOn`, which lays the places out once it does. Two copies of this
- * arithmetic is a room whose queue is one longer than its empty cushions.
- *
- * The `1e-9` is not decoration. `SOFA_MIN_RUN` and `OFFICE_SOFA_PITCH` are both
- * 5.2, so the shortest run the room will build divides EXACTLY once — and
- * `5.2 / 5.2` in binary floating point is not reliably 1.
- * @param {number} runLen
- * @param {boolean} [between] the run spans between two others, and both its
- *   ends are corner cushions
+ * A cushion is about as wide as the sofa is deep, between the two arms: the
+ * painter's own rule (`backdrop-props-lounge.js`), in plan units so that it is
+ * the same number at every zoom. `buildOffice` writes it on each run as
+ * `cushions` and the painter draws that many, so a person is never seated on a
+ * seam.
+ * @param {number} runLen @param {number} [depth]
  */
-export function sofaPlaceCount(runLen, between = false) {
-  const n = Number(runLen) - (between ? cornerCushion() * 2 : 0);
-  if (!Number.isFinite(n) || n <= 0) return 0;
-  return Math.max(0, Math.floor(n / OFFICE_SOFA_PITCH + 1e-9));
+export function sofaCushionCount(runLen, depth = SOFA_DEPTH) {
+  const len = Number(runLen);
+  const d = Number(depth);
+  if (!Number.isFinite(len) || !(len > 0) || !(d > 0)) return 0;
+  return Math.max(1, Math.round(Math.max(0, len - armOf(d) * 2) / d + 1e-9));
 }
 
 /**
- * Does another run stand past this end of `sofa`? Each run stops where the
- * next one's depth begins, so the two touch at a corner and nothing overlaps:
- * the test is a half-unit reach past the end.
- * @param {Prop} sofa @param {Prop[]} runs every sofa in the room
- * @param {boolean} far the end at the larger coordinate
- */
-function meetsAt(sofa, runs, far) {
-  const vertical = sofa.h > sofa.w;
-  const reach = 0.5;
-  const depth = vertical ? sofa.w : sofa.h;
-  const at = vertical
-    ? far
-      ? sofa.y + sofa.h
-      : sofa.y - depth
-    : far
-      ? sofa.x + sofa.w
-      : sofa.x - depth;
-  const box = vertical
-    ? { x: sofa.x - reach, y: at, w: sofa.w + reach * 2, h: depth }
-    : { x: at, y: sofa.y - reach, w: depth, h: sofa.h + reach * 2 };
-  return runs.some(
-    (o) =>
-      o !== sofa &&
-      o.x < box.x + box.w &&
-      o.x + o.w > box.x &&
-      o.y < box.y + box.h &&
-      o.y + o.h > box.y,
-  );
-}
-
-/**
- * Where people sit on ONE sofa run, in the room's own resolved frame.
+ * Where people sit on ONE sofa run, in the room's own resolved frame: the
+ * middle of each cushion, in order along the run.
  *
- * Evenly along the run rather than packed from one end, so a half-full sofa
- * reads as a sofa somebody is sitting on rather than as one with a gap at the
- * end; and forward of the centre line by `SOFA_SEAT_BIAS` of the run's depth,
- * because the back cushion occupies the far third of it (`backdrop.js`'s sofa
- * case) and a body drawn on the centre line is sitting on the back.
- *
- * With `clearCorners`, a run between two others (rule 1) is laid over what is
- * left of it inside its two corner cushions.
+ * Forward of the centre line by `SOFA_SEAT_BIAS` of the run's depth, because
+ * the back cushion occupies the far third of it (`backdrop.js`'s sofa case)
+ * and a body drawn on the centre line is sitting on the back.
  *
  * The rect says which way the run lies and the angle says which way it faces,
  * exactly as they do for the painter — so this is correct for the portrait
  * reception and for the transposed row one without being told which it has.
  * @param {Prop} sofa
- * @param {Prop[]} [runs] every sofa run in the room, this one among them
- * @param {boolean} [clearCorners] somebody is standing in this room
  * @returns {{x:number, y:number}[]}
  */
-export function sofaPlacesOn(sofa, runs = [], clearCorners = false) {
+export function sofaPlacesOn(sofa) {
   const vertical = sofa.h > sofa.w;
-  const between = clearCorners && meetsAt(sofa, runs, false) && meetsAt(sofa, runs, true);
-  const trim = between ? cornerCushion() : 0;
-  const runLen = (vertical ? sofa.h : sofa.w) - trim * 2;
-  const n = sofaPlaceCount(vertical ? sofa.h : sofa.w, between);
-  if (n === 0) return [];
+  const len = vertical ? sofa.h : sofa.w;
   const depth = vertical ? sofa.w : sofa.h;
+  const n = sofa.cushions && sofa.cushions > 0 ? sofa.cushions : sofaCushionCount(len, depth);
+  if (n === 0) return [];
+  const arm = armOf(depth);
+  const cushion = (len - arm * 2) / n;
   const forward = depth * SOFA_SEAT_BIAS;
   const bias = {
     x: vertical ? Math.cos(sofa.angle || 0) * forward : 0,
@@ -137,7 +96,7 @@ export function sofaPlacesOn(sofa, runs = [], clearCorners = false) {
   /** @type {{x:number, y:number}[]} */
   const out = [];
   for (let i = 0; i < n; i++) {
-    const along = trim + ((i + 0.5) * runLen) / n;
+    const along = arm + (i + 0.5) * cushion;
     out.push(
       vertical
         ? { x: sofa.x + sofa.w / 2 + bias.x, y: sofa.y + along }
@@ -147,66 +106,70 @@ export function sofaPlacesOn(sofa, runs = [], clearCorners = false) {
   return out;
 }
 
+/**
+ * Every cushion in the room, in the order the queue takes them (rule 3).
+ *
+ * Each run is read nearest the desk first, and split in two: every other
+ * cushion starting from that nearest one, and the cushions between them. The
+ * runs are then dealt round, one cushion each, nearest run first — all the
+ * first halves, then the cushions between on the runs that lie ACROSS the
+ * screen, then those on the runs that lie down it. A cushion of the second
+ * half on a run across the screen carries `nameRow: 1`: both its neighbours
+ * are taken by then, and its name is set a line under theirs.
+ *
+ * @param {Prop[]} runs every sofa run in the room, resolved
+ * @param {{x:number, y:number}} desk what "nearest" is measured from
+ * @returns {{x:number, y:number, nameRow?:number}[]}
+ */
+export function cushionOrder(runs, desk) {
+  const near = (p) => Math.hypot(p.x - desk.x, p.y - desk.y);
+  const byNear = (a, b) => near(a) - near(b) || a.x - b.x || a.y - b.y;
+  const lines = runs
+    .map((run) => {
+      const sorted = sofaPlacesOn(run)
+        .map((p, index) => ({ ...p, index }))
+        .sort(byNear);
+      const parity = sorted.length ? sorted[0].index % 2 : 0;
+      const across = run.w >= run.h;
+      const place = ({ x, y }) => ({ x, y });
+      return {
+        across,
+        first: sorted.filter((p) => p.index % 2 === parity).map(place),
+        between: sorted
+          .filter((p) => p.index % 2 !== parity)
+          .map((p) => (across ? { ...place(p), nameRow: 1 } : place(p))),
+      };
+    })
+    .filter((line) => line.first.length > 0)
+    .sort((a, b) => byNear(a.first[0], b.first[0]));
+  /** @param {{x:number, y:number, nameRow?:number}[][]} hands */
+  const deal = (hands) => {
+    const out = [];
+    for (let k = 0; hands.some((h) => k < h.length); k++) {
+      for (const h of hands) if (k < h.length) out.push(h[k]);
+    }
+    return out;
+  };
+  return [
+    ...deal(lines.map((l) => l.first)),
+    ...deal(lines.filter((l) => l.across).map((l) => l.between)),
+    ...deal(lines.filter((l) => !l.across).map((l) => l.between)),
+  ];
+}
+
 // ------------------------------------------------------- the standing queue
 
 /**
- * How a standing queue of `queued` is laid in a floor `major` long and `minor`
- * deep (rules 2 and 3).
- *
- * `lanes` places stand along the first row, `pitch` apart; the row behind has
- * one fewer and stands half a pitch along, then a full row again. `beside` is
- * the sofa the first row stands in front of: its place count and its length,
- * which give the row the sofa's own pitch and as many places as it has gaps.
- * Without it the pitch is the queue's own, closed up by `tight`.
- *
- * @param {number} queued
- * @param {number} major the floor along the rows
- * @param {number} minor the floor the rows stack into
- * @param {number} [tight] 1 as laid, down to 0.5 in a room held at its cap
- * @param {{places:number, run:number}} [beside]
- * @param {boolean} [grid] every row full and in line: the most a floor holds,
- *   for a room too full to stand in the gaps
- * @returns {{lanes:number, files:number, tight:number, pitch:number, row:number,
- *   fits:boolean, beside:boolean, grid:boolean}}
+ * How far along its wall each of `queued` people stands, from the head of the
+ * file (rule 4): `pitch` apart while the wall has the room, and closed up
+ * evenly once it has not, so the file never leaves the wall for the rug.
+ * @param {number} queued @param {number} run the wall the file has
+ * @param {number} pitch @returns {number[]}
  */
-export function queueLay(queued, major, minor, tight = 1, beside = undefined, grid = false) {
-  const along = beside && beside.places >= 3;
-  const pitch = along ? beside.run / beside.places : OFFICE_QUEUE_PITCH * tight;
-  // `+ 1` because a lane count is places, not gaps: a run of exactly one pitch
-  // holds two people, at either end of it.
-  const lanes = along ? beside.places - 1 : Math.max(1, Math.floor(major / pitch) + 1);
-  let files = 0;
-  for (let left = Math.max(0, queued); left > 0; files++) left -= rowPlaces(lanes, files, grid);
-  const row = OFFICE_QUEUE_ROW * tight;
-  return {
-    lanes,
-    files: Math.max(1, files),
-    tight,
-    pitch,
-    row,
-    fits: (Math.max(1, files) - 1) * row <= minor,
-    beside: !!along,
-    grid,
-  };
-}
-
-/** How many stand in row `file` of a queue `lanes` wide: one fewer in every other row. */
-function rowPlaces(lanes, file, grid = false) {
-  return !grid && lanes > 1 && file % 2 === 1 ? lanes - 1 : lanes;
-}
-
-/**
- * Where the `i`-th person in a laid queue stands: how far along its row, and
- * how many rows back, both from the first place of the first row.
- * @param {number} i @param {ReturnType<typeof queueLay>} lay
- * @returns {{along:number, back:number}}
- */
-export function queuePlace(i, lay) {
-  let file = 0;
-  let k = Math.max(0, Math.floor(i));
-  while (k >= rowPlaces(lay.lanes, file, lay.grid)) k -= rowPlaces(lay.lanes, file++, lay.grid);
-  const half = !lay.grid && lay.lanes > 1 && file % 2 === 1 ? 0.5 : 0;
-  return { along: (k + half) * lay.pitch, back: file * lay.row };
+export function queueAlong(queued, run, pitch) {
+  const n = Math.max(0, Math.floor(queued));
+  const step = n > 1 ? Math.min(pitch, Math.max(0, run) / (n - 1)) : 0;
+  return Array.from({ length: n }, (_, i) => i * step);
 }
 
 // ---------------------------------------------------------------- the seats
@@ -241,10 +204,10 @@ function deskCentreOf(room) {
  *
  * THE ORDER IS THE QUEUE, AND THE QUEUE IS ARRIVAL ORDER. `assignSeats` hands
  * this array the waiting agents sorted oldest first, so seat 0 has to be the
- * place nearest the manager. The sofa places come first, sorted by distance
- * from the desk centre - which fills the two runs from their open ends inward
- * and the back run last, exactly as a real waiting room fills - and then the
- * standing queue, in the order `buildOffice` laid it out.
+ * place nearest the manager. The cushions come first, in `cushionOrder` - the
+ * three runs filling together from the desk outward - and then, only once
+ * every cushion is taken, the file along the wall, in the order `buildOffice`
+ * laid it out.
  *
  * THE VISITOR CHAIR IS NOT IN `officeSeats`. It holds one person, it is chosen
  * by the user rather than by the clock, and putting it at index 0 would give it
@@ -266,26 +229,21 @@ export function seatOffice(room, waitingCount) {
 
   const deskCentre = deskCentreOf(room);
 
-  /** @param {number} x @param {number} y @param {boolean} [standing] */
-  const place = (x, y, standing) => {
+  /** @param {number} x @param {number} y @param {boolean} [standing] @param {number} [nameRow] */
+  const place = (x, y, standing, nameRow) => {
     if (seats.length >= waitingCount) return;
     /** @type {Seat} */
     const seat = { x, y, angle: angleTo({ x, y }, deskCentre) };
     // A queue place has no chair under it, and a character drawn seated over
     // bare carpet is a character sitting on the floor. `agents.js` reads this.
     if (standing) seat.standing = true;
+    if (nameRow) seat.nameRow = nameRow;
     seats.push(seat);
   };
 
-  const near = (p) => Math.hypot(p.x - deskCentre.x, p.y - deskCentre.y);
+  // Rules 1 to 3: every cushion, and nobody on their feet while one is free.
   const runs = room.props.filter((p) => p.kind === 'sofa');
-  // Rule 1: everybody sits while the sofas hold them, and the first person who
-  // has to stand empties the corner cushions.
-  const full = runs.flatMap((p) => sofaPlacesOn(p, runs));
-  const cushions = (
-    waitingCount > full.length ? runs.flatMap((p) => sofaPlacesOn(p, runs, true)) : full
-  ).sort((a, b) => near(a) - near(b) || a.x - b.x || a.y - b.y);
-  for (const c of cushions) place(c.x, c.y);
+  for (const c of cushionOrder(runs, deskCentre)) place(c.x, c.y, false, c.nameRow);
 
   const index = (z) => Number(String(z.id).slice(OFFICE_QUEUE_ZONE.length));
   const queue = (room.zones || [])

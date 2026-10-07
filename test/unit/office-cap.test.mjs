@@ -151,8 +151,10 @@ test('a queue never makes the rooms small: a hundred waiting hold the building a
       .filter((/** @type {any} */ r) => r.kind === 'project')
       .reduce((/** @type {number} */ a, /** @type {any} */ r) => a + r.w * r.h, 0);
   assert.ok(rooms(hundred) >= 0.55 * hundred.width * hundred.height - 1e-6);
-  // And at its contents that floor would have been half as wide again.
-  assert.ok(hundred.working.contentsW > hundred.width * 1.4, `${hundred.working.contentsW}`);
+  // And at its contents that floor would have been a third as wide again. (It
+  // was half as wide again while a queue also grew the room it stood in; the
+  // file along the wall asks for no floor of its own.)
+  assert.ok(hundred.working.contentsW > hundred.width * 1.3, `${hundred.working.contentsW}`);
   // The overflow stands: more standing than sitting, and every one drawn.
   const standing = hundred.officeSeats.filter((s) => s.standing).length;
   assert.ok(standing > 50 && standing < 100, `${standing} of a hundred standing`);
