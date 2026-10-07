@@ -25,8 +25,11 @@ import {
   OFFICE_MAX_W,
   OFFICE_MIN_H,
   OFFICE_MIN_W,
+  OFFICE_QUEUE_PITCH,
+  OFFICE_QUEUE_ROW,
   OFFICE_ROW_ASPECT_MAX,
   OFFICE_ROW_MAX_DEPTH,
+  OFFICE_SEAT_PITCH,
   OFFICE_VISITOR_CHAIRS,
   PLATE_BAND,
   ROOM_ASPECT_MAX,
@@ -56,16 +59,9 @@ import {
 import {
   OFFICE_QUEUE_ZONE,
   OFFICE_VISITOR_ZONE,
-  queueLay,
-  queuePlace,
-  sofaPlaceCount,
+  queueAlong,
+  sofaCushionCount,
 } from './plan-office-seats.js';
-
-/**
- * How far a held reception closes its standing queue up, loosest first: the
- * pitch as laid, down to half of it. See `buildOffice`.
- */
-const QUEUE_TIGHTEN = Object.freeze([0.85, 0.7, 0.6, 0.5]);
 
 export {
   OFFICE_QUEUE_ZONE,
@@ -273,133 +269,40 @@ export function buildOffice(waitingCount, fit, opts = {}) {
 
   // --- seating around the walls, sized to the room it is actually in
   //
-  // The room's HEIGHT is settled here, before anything is anchored to it,
-  // because the reception has to hold its whole queue. A first pass says how
-  // many the wall seating takes; whatever is left needs loose chairs, and the
-  // room grows to hold those rather than laying them out past its own south
-  // wall. Growing only ever increases the wall seating, so one pass converges.
+  // The room's HEIGHT is settled here, before anything is anchored to it: the
+  // runs are as long as the room is deep, and how many they seat is read off
+  // them once it is.
   const bandTop = visitorY + SEAT_TUB + 2.4;
   const backW = Math.max(4, IN_W - (PAD + SOFA_D) * 2);
-  // HOW MANY THE SOFAS HOLD, on a first pass (WP-93).
-  //
-  // The queue's size is `waitingCount` less whatever the three runs seat, and
-  // the runs' final length is not known until the room's height is, which is
-  // settled below from the queue. One pass converges because growing the room
-  // only ever LENGTHENS a run: a capacity read off the pre-growth height is a
-  // lower bound, so the queue laid out here is an upper bound on the queue
-  // actually needed, and `seatOffice` — which reads the resolved furniture —
-  // simply leaves the spare places empty. A shortfall is the failure that would
-  // matter, and it cannot happen in this direction.
-  const sofaRunH0 = Math.max(SOFA_MIN_RUN, IN_H - PAD - SOFA_D - bandTop);
-  // And once anybody stands the back run's corner cushions seat nobody
-  // (`plan-office-seats.js`, rule 1), so the queue is that much longer.
-  const sideSeats = sofaPlaceCount(sofaRunH0) * 2;
-  const seatedOnSofas =
-    Math.max(0, waitingCount) <= sideSeats + sofaPlaceCount(backW)
-      ? Math.max(0, waitingCount)
-      : sideSeats + sofaPlaceCount(backW, true);
-  // THE QUEUE, AND THE ROOM IT NEEDS.
-  //
-  // Everyone the sofas could not seat stands inside the well the three runs
-  // enclose — at the open end of the C, which is the end nearest the desk and
-  // the only end a reception's seating has. A queue place can never land on a
-  // sofa whatever proportions the room turns out to have, and it is never at
-  // the desk: the well starts 2.4 U below the visitor chair, so the standing
-  // line is beside the seating rather than across the manager's table.
-  //
-  // IT RUNS ALONG THE WELL'S LONGER AXIS, and that is the whole of why this is
-  // not four lines. The packer may lay this room on its side (`buildOfficeRow`
-  // reflects it in the diagonal), so the axis that is "across the room" here is
-  // "down the room" on the next floor — and a queue laid across the SHORT axis
-  // of a row reception is six people stacked in the room's depth, each one's
-  // name drawn through the badge of the person behind them. That was measured
-  // on the `demo` floor before this rule existed.
-  const queued = Math.max(0, waitingCount - seatedOnSofas);
-  const QUEUE_PAD = 1.6;
-  // ACROSS THE ROOM THE ROW STOPS SHORT OF EACH SIDE RUN, by enough that the
-  // badge over the first person sitting there is not drawn on whoever stands
-  // at the end of the row.
-  const QUEUE_SIDE = SOFA_D + 0.6;
-  // AND IN FRONT OF A SOFA IT STANDS A WHOLE ROW OFF IT: a body, the badge over
-  // it and the name under it are one stack, and a sitter's name and a
-  // stander's badge share a row of floor unless the two rows are a stack apart.
-  // Nearer, a wait badge is as wide as the gap between two heads, and whether
-  // the two were clear came down to how many digits a wait had. Measured: 2.5
-  // sofa depths is the nearest that is clear at every size the floor draws at.
-  const QUEUE_FRONT = SOFA_D * 2.5;
-  const wellWFor = (pad = QUEUE_SIDE) => Math.max(CHAIR, IN_W - 2 * (PAD + SOFA_D) - pad * 2);
-  const wellHFor = (height) => Math.max(CHAIR, height - PAD - SOFA_D - bandTop - QUEUE_PAD * 2);
-  const wellW0 = wellWFor();
-  const wellH0 = wellHFor(IN_H);
-  // A ROOM HELD AT ITS SHARE OF THE BUILDING CLOSES ITS QUEUE UP BEFORE IT
-  // GROWS (`plan-proportions.js` (f)). A queue's pitch is a comfortable one, a
-  // name and a badge a head; at its cap a reception has more people standing
-  // than that has floor for, so they stand nearer, down to half of it. Past
-  // that the room is too small for its queue and says so by coming out larger.
-  /**
-   * @param {number} major @param {number} minor
-   * @param {{places:number, run:number}} [along] @param {boolean} [grid]
-   */
-  const settle = (major, minor, along, grid = false) => {
-    let laid = queueLay(queued, major, minor, 1, along, grid);
-    if (opts.hold && queued > 0 && !laid.fits) {
-      for (const tight of QUEUE_TIGHTEN) {
-        laid = queueLay(queued, major, minor, tight, along, grid);
-        if (laid.fits) break;
-      }
-    }
-    return laid;
-  };
-  // A ROOM TOO FULL TO STAND IN THE GAPS STANDS IN A GRID, wall to wall: every
-  // row full, in line, a pad off the sofas. It holds the most, and a held
-  // reception with a hundred waiting has nothing else to give.
-  const gridW0 = wellWFor(QUEUE_PAD);
-  // Along whichever axis will be HORIZONTAL on screen. A reception laid on its
-  // side is the same room reflected in the diagonal, so its local `y` is the
-  // screen's `x` — and a queue that ignores that stacks six people down the
-  // room's depth with each name drawn through the badge behind it.
-  //
-  // Laid on its side, the first row stands in front of the west run and in its
-  // gaps (`plan-office-seats.js`, rule 2); where that is too deep for the room
-  // the queue stands at its own closer pitch instead.
-  let alongX = !opts.landscape;
-  let lay = alongX
-    ? settle(wellW0, wellH0)
-    : settle(wellH0, wellW0 - (QUEUE_FRONT - QUEUE_SIDE) * 2, {
-        places: sofaPlaceCount(sofaRunH0),
-        run: sofaRunH0,
-      });
-  if (!alongX && !lay.fits && lay.beside) lay = settle(wellH0, wellW0);
-  if (!lay.fits)
-    lay = alongX
-      ? settle(gridW0, wellH0, undefined, true)
-      : settle(wellH0, gridW0, undefined, true);
-  // Laid down the room and too wide for it: fall back to across the room, which
-  // is the arrangement the room can GROW to hold.
-  if (!alongX && !lay.fits) {
-    alongX = true;
-    lay = queueLay(queued, gridW0, wellH0, lay.tight, undefined, true);
-  }
   // The room is at least as tall as its own contents: the desk band, a sofa
-  // run somebody can actually sit on, the back run and the wall pad. Clamping
-  // the RUN instead (the old rule) let a short room overlap its own back sofa.
-  const queueDepth = queued > 0 && alongX ? (lay.files - 1) * lay.row : 0;
+  // run somebody can actually sit on, the back run and the wall pad — and a
+  // well between the runs a chair deep with clear floor either side of it.
+  // Clamping the RUN instead (the old rule) let a short room overlap its own
+  // back sofa.
+  const WELL_PAD = 1.6;
   const IN_H_FINAL = Math.max(
     IN_H,
     bandTop + SOFA_MIN_RUN + SOFA_D + PAD * 2,
-    bandTop + QUEUE_PAD * 2 + CHAIR + queueDepth + SOFA_D + PAD * 2,
+    bandTop + WELL_PAD * 2 + CHAIR + SOFA_D + PAD * 2,
   );
   // The three runs form a continuous C: the side runs come down to meet the
   // back run, and the back run spans exactly between them. Leaving each run to
   // its own arithmetic left the corners two units short at both ends, so the
   // seating read as three separate benches rather than as one reception.
   const sofaRunH = IN_H_FINAL - PAD - SOFA_D - bandTop;
+  // HOW MANY THE SOFAS SEAT: one a cushion (WP-93, and the owner again on the
+  // reception of sixteen). Each run carries its count, the painter draws that
+  // many cushions, and whoever is left over stands in the file by the wall.
+  const sideCushions = sofaCushionCount(sofaRunH, SOFA_D);
+  const backCushions = sofaCushionCount(backW, SOFA_D);
+  const queued = Math.max(0, waitingCount - sideCushions * 2 - backCushions);
 
   props.push({
     kind: 'sofa',
     id: 'wait-sofa-w',
     w: SOFA_D,
     h: sofaRunH,
+    cushions: sideCushions,
     // Back to the west wall, seat facing east into the room.
     angle: 0,
     x: PAD,
@@ -411,6 +314,7 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     id: 'wait-sofa-e',
     w: SOFA_D,
     h: sofaRunH,
+    cushions: sideCushions,
     angle: Math.PI,
     x: IN_W - PAD - SOFA_D,
     y: bandTop,
@@ -421,6 +325,7 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     id: 'wait-sofa-s',
     w: backW,
     h: SOFA_D,
+    cushions: backCushions,
     angle: -Math.PI / 2,
     x: PAD + SOFA_D,
     y: IN_H_FINAL - PAD - SOFA_D,
@@ -550,7 +455,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   }
   const eastTop = deskY + artH + 1.0;
   const eastRun = clamp(bandTop - eastTop, 0, BOOKCASE_MAX_H);
-  if (eastRun >= BOOKCASE_MIN_RUN) {
+  // And a wall with a file of people standing along it has spent its run too.
+  if (eastRun >= BOOKCASE_MIN_RUN && queued === 0) {
     props.push({
       kind: 'bookshelf',
       id: 'office-bookcase-e',
@@ -590,39 +496,40 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     });
   });
 
-  // --- the standing queue, beside the desk and inside the well
+  // --- the standing file, along the wall at the head of the room
   //
   // Zones and no props: a queue is people standing, and giving each of them a
-  // chair would say they had been seated. One lane fills before the next file
-  // starts, so the line forms in arrival order and only doubles back when the
-  // room runs out of wall — which is what a queue does.
-  const clampX = (v) => Math.min(Math.max(v, wellX + CHAIR / 2), wellX + wellW - CHAIR / 2);
-  const clampY = (v) => Math.min(Math.max(v, wellY + CHAIR / 2), wellY + wellH - CHAIR / 2);
-  // In front of a sofa the row starts at the run's own head and takes the pitch
-  // of the run as built, which may be a little longer than it was sized at.
-  const laid = lay.beside
-    ? { ...lay, pitch: sofaRunH / Math.max(1, sofaPlaceCount(sofaRunH)) }
-    : lay;
-  for (let i = 0; i < queued; i++) {
-    const at = queuePlace(i, laid);
-    const qx = clampX(
-      alongX
-        ? wellX + (lay.grid ? QUEUE_PAD : QUEUE_SIDE) + at.along
-        : wellX + (lay.beside ? QUEUE_FRONT : lay.grid ? QUEUE_PAD : QUEUE_SIDE) + at.back,
-    );
-    const qy = clampY(
-      alongX
-        ? wellY + QUEUE_PAD + at.back
-        : wellY + (lay.beside ? laid.pitch : QUEUE_PAD) + at.along,
-    );
+  // chair would say they had been seated. NOBODY STANDS HERE WHILE A CUSHION IS
+  // FREE (`plan-office-seats.js`): `queued` is what is left once every cushion
+  // on all three runs is taken.
+  //
+  // IT IS A FILE ALONG THE EAST WALL, on the line of the east run and above
+  // the head of it: between that sofa and the corner planting, beside the desk
+  // rather than across it. The rug stops short of this wall, so nobody in the
+  // file is standing on it — the middle of the room used to be the queue, and
+  // five people stood on the rug in front of cushions nobody was sitting on.
+  // Laid on its side, the room has this wall along the corridor, beside its
+  // door.
+  //
+  // The first to stand is the next to sit, so the file starts at the sofa and
+  // runs away from it. Its pitch is the stack a waiting person is — a body, a
+  // badge and a name — read on whichever axis the file runs along ON SCREEN
+  // (`opts.landscape`), and `queueAlong` closes it up when the wall is short.
+  const across = opts.landscape === true;
+  const filePitch = across ? OFFICE_QUEUE_PITCH : OFFICE_QUEUE_ROW;
+  const fileX = IN_W - PAD - SOFA_D / 2;
+  const fileHead = bandTop + SOFA_D * 0.75 - filePitch;
+  const cornerPlant = PLANT_FOOTPRINTS[officeKinds[1]] || 2;
+  const fileEnd = PAD + 0.6 + cornerPlant + (across ? OFFICE_SEAT_PITCH / 2 : OFFICE_SEAT_PITCH);
+  queueAlong(queued, fileHead - fileEnd, filePitch).forEach((back, i) => {
     zones.push({
       id: OFFICE_QUEUE_ZONE + i,
-      x: qx - CHAIR / 2,
-      y: qy - CHAIR / 2,
+      x: fileX - CHAIR / 2,
+      y: fileHead - back - CHAIR / 2,
       w: CHAIR,
       h: CHAIR,
     });
-  }
+  });
 
   zones.push({ id: 'office-room', x: 0, y: 0, w: IN_W, h: IN_H_FINAL });
 

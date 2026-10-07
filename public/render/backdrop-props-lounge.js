@@ -84,7 +84,13 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       // A cushion is about as wide as the sofa is deep, and the seams between
       // them are seams — a 2.4px gap on every one turned a long reception run
       // into a row of separate white tiles.
-      const n = Math.max(1, Math.round(seatW / Math.max(24, depth)));
+      //
+      // A reception run says how many it has (`prop.cushions`): one person
+      // sits on each, so the count is the plan's and the same at every zoom.
+      const n =
+        prop.cushions > 0
+          ? prop.cushions
+          : Math.max(1, Math.round(seatW / Math.max(24, depth)));
       const cw = seatW / n;
       for (let i = 0; i < n; i++) {
         ctx.fillStyle = PALETTE.sofaCushion;
