@@ -82,6 +82,12 @@ export {};
  * @property {number} angle
  * @property {Anchor} anchor
  * @property {string} [id] required on anchor targets
+ * @property {number} [seats] a meeting table only: how many chairs stand at
+ *   it. They are part of the table and nobody is ever seated on one.
+ * @property {boolean} [turned] a meeting table only: its long side runs down
+ *   the room rather than across it. Its rect is its footprint either way.
+ * @property {boolean} [tall] one prop's own answer to whether it casts along
+ *   the light, over its kind's (`PROP_HEIGHT`).
  * @property {'wool'|'task'} [tone] which textile a rug is (WP-85b). A painter
  *   cannot ask what room it is in, and a project room's break-out rug and the
  *   reception's wool are the same two KINDS in two different materials, so the
@@ -160,6 +166,11 @@ export {};
  *   is `away` or `pinned` — so the backdrop draws it with the lights off
  *   (`plan-proportions.js` (e)): floor and furniture under the `lightsOff`
  *   veil, no pool of light on its desk, its plate as readable as any other.
+ * @property {'S'|'M'|'L'} [module] project rooms only: the size the room was
+ *   laid at (`plan-proportions.js` (c)), which is the kit it is furnished with
+ *   (`plan-interior.js`).
+ * @property {{w:number, h:number}} [crew] project rooms only: the floor its
+ *   largest crew sits on, behind the desks. Nothing is stood on it.
  * @property {boolean} [landscape] the reception, laid on its side for a row
  *   (WP-59d): the waiting area runs along its width and the desk is at one
  *   end. `seatOffice` reads it to walk the runs in queue order.

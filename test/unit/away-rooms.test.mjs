@@ -25,14 +25,22 @@ import { layoutPlate, platePlanFor } from '../../public/render/scene-labels.js';
 import { plateHeroLine } from '../../public/render/plan-plate.js';
 import { awayRooms, floorPopulation } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
-import { DIM_PLATE_CONTRAST_MIN, LIGHTS_OFF_DIM } from '../../public/render/plan-proportions.js';
+import {
+  DIM_PLATE_CONTRAST_MIN,
+  LIGHTS_OFF_DIM,
+  LIGHTS_OFF_HUE_MAX,
+  LIGHTS_OFF_STEP_MAX,
+  LIGHTS_OFF_STEP_MIN,
+} from '../../public/render/plan-proportions.js';
 import {
   allThemes,
   contrastRatio,
   dimmed,
+  lightness,
+  lightsOffVeil,
   materialTokensFor,
   plateGroundOverDim,
-  relativeLuminance,
+  rgb,
 } from '../../public/render/themes.js';
 import { DEFAULT_PALETTE } from '../../public/render/palette.js';
 
@@ -191,23 +199,63 @@ test('`awayRooms` flags a copy: the project record it was handed is never writte
   );
 });
 
-test('lights off is a token, about a third towards the theme’s dark, on every theme', () => {
-  assert.equal(DEFAULT_PALETTE.lightsOff, materialTokensFor(allThemes()[0]).lightsOff);
+/** HSL hue in degrees, and the chroma it is the hue of. @param {string} colour */
+function hueOf(colour) {
+  const [r, g, b] = rgb(colour).map((n) => n / 255);
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  if (d === 0) return { hue: 0, chroma: 0 };
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return { hue: (h * 60 + 360) % 360, chroma: d };
+}
+
+test('lights off is two neutral tokens: the same hue, a quarter less light, on every theme', () => {
+  const shipped = materialTokensFor(allThemes()[0]);
+  assert.equal(DEFAULT_PALETTE.lightsOff, shipped.lightsOff);
+  assert.equal(DEFAULT_PALETTE.lightsOffMute, shipped.lightsOffMute);
   for (const theme of allThemes()) {
-    const veil = materialTokensFor(theme).lightsOff;
-    const m = /^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/.exec(veil);
-    assert.ok(m, `${theme.name}: ${veil}`);
-    assert.equal(Number(m[4]), LIGHTS_OFF_DIM);
-    // A dimmed carpet is darker than the lit one, on a light theme and a dark.
+    const tokens = materialTokensFor(theme);
+    // Neither fill has a hue of its own: a veil with one is what made olive.
+    for (const name of ['lightsOff', 'lightsOffMute']) {
+      const m = /^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/.exec(tokens[name]);
+      assert.ok(m, `${theme.name}: ${name} is ${tokens[name]}`);
+      assert.ok(m[1] === m[2] && m[2] === m[3], `${theme.name}: ${name} is not a grey`);
+    }
+    assert.equal(Number(/([\d.]+)\)$/.exec(tokens.lightsOffMute)[1]), LIGHTS_OFF_DIM);
+    assert.equal(Number(/([\d.]+)\)$/.exec(tokens.lightsOff)[1]), lightsOffVeil(theme.floor));
+
     const lit = theme.floor.carpet;
     const off = dimmed(theme.floor, lit);
+    const drop = 1 - lightness(off) / lightness(lit);
     assert.ok(
-      relativeLuminance(off) < relativeLuminance(lit),
-      `${theme.name}: lights off made the carpet lighter`,
+      drop >= LIGHTS_OFF_STEP_MIN && drop <= LIGHTS_OFF_STEP_MAX,
+      `${theme.name}: the carpet is ${(drop * 100).toFixed(1)}% less light with the lights off`,
     );
-    // And it still reads as that room's floor rather than as a hole in it.
+    const a = hueOf(lit);
+    const b = hueOf(off);
+    const turn = Math.abs(a.hue - b.hue);
+    assert.ok(
+      Math.min(turn, 360 - turn) <= LIGHTS_OFF_HUE_MAX,
+      `${theme.name}: the dimmed carpet is ${turn.toFixed(1)}° from the lit one`,
+    );
+    assert.ok(b.chroma < a.chroma * 0.75, `${theme.name}: the dim kept the carpet's colour`);
+    // It still reads as that room's floor rather than as a hole in it.
     assert.ok(contrastRatio(off, lit) < 2.6, `${theme.name}: ${contrastRatio(off, lit)}`);
     assert.ok(contrastRatio(off, lit) > 1.15, `${theme.name}: the dim cannot be seen`);
+    console.log(
+      `    ${theme.name}: L* ${lightness(lit).toFixed(1)} → ${lightness(off).toFixed(1)} ` +
+        `(-${(drop * 100).toFixed(1)}%), hue ${a.hue.toFixed(1)}° → ${b.hue.toFixed(1)}°`,
+    );
+  }
+});
+
+test('the desk still stands out of the carpet with the lights off', () => {
+  for (const theme of allThemes()) {
+    const desk = materialTokensFor(theme).deskTop;
+    const lit = contrastRatio(desk, theme.floor.carpet);
+    const off = contrastRatio(dimmed(theme.floor, desk), dimmed(theme.floor, theme.floor.carpet));
+    assert.ok(off >= 1.3, `${theme.name}: a dimmed desk is ${off.toFixed(2)}:1 on its carpet`);
+    assert.ok(off >= lit * 0.85, `${theme.name}: the dim flattened the desk, ${off.toFixed(2)}`);
   }
 });
 

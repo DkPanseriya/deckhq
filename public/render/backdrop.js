@@ -22,6 +22,9 @@
  *   backdrop-props-desk.js    desks, chairs, whiteboards, screens, plants
  *   backdrop-props-lounge.js  sofas, tables, the lamp, the water cooler
  *   backdrop-props-play.js    the games room and the kitchen
+ *   backdrop-props-room.js    what a project room is furnished with past its
+ *                             desks: the meeting table, the credenza, the
+ *                             standing whiteboard
  *
  * `paintProp`'s 970-line `switch` is now three switches, case for case and
  * line for line including every `break`; each answers false for a kind it
@@ -62,6 +65,7 @@ import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
 import { paintPlantProps } from './backdrop-props-plant.js';
 import { paintPlayProps } from './backdrop-props-play.js';
+import { OWN_CONTACT_SHADOW, paintRoomProps } from './backdrop-props-room.js';
 
 export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
@@ -70,6 +74,7 @@ export * from './backdrop-props-desk.js';
 export * from './backdrop-props-lounge.js';
 export * from './backdrop-props-plant.js';
 export * from './backdrop-props-play.js';
+export * from './backdrop-props-room.js';
 
 /**
  * Paint one furniture prop. All props share a soft contact shadow
@@ -142,7 +147,8 @@ export function paintProp(ctx, prop, u) {
     !paintDeskProps(ctx, prop, u, w, h, local) &&
     !paintLoungeProps(ctx, prop, u, w, h, local) &&
     !paintPlayProps(ctx, prop, u, w, h, local) &&
-    !paintPlantProps(ctx, prop, u, w, h, local)
+    !paintPlantProps(ctx, prop, u, w, h, local) &&
+    !paintRoomProps(ctx, prop, u, w, h, local)
   ) {
     // Unknown prop kinds still get a neutral block rather than being
     // silently dropped — better a plain box than a missing desk.
@@ -160,7 +166,9 @@ export function paintProp(ctx, prop, u) {
   // proportions), not to the padded anchor footprint — stacking this
   // bounding-box blob under it as well would just muddy the one that is
   // already correctly shaped and placed.
-  if (prop.kind !== 'manager') drawContactShadow(ctx, prop.x * u, prop.y * u, w, h, tall);
+  if (prop.kind !== 'manager' && !OWN_CONTACT_SHADOW.includes(prop.kind)) {
+    drawContactShadow(ctx, prop.x * u, prop.y * u, w, h, tall);
+  }
 }
 
 // -------------------------------------------------------------------- bake

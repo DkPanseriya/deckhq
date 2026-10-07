@@ -541,6 +541,42 @@ export const SCALE_CLASSES = Object.freeze({
       'LOUNGE_BAY_ROW_MIN_COUNT',
     ]),
   }),
+  'plan-interior.js': Object.freeze({
+    // What a room is furnished with past its desks, and the clear floor round
+    // it: furniture and the lanes bodies walk, so all of it is a person's.
+    body: Object.freeze([
+      'ROOM_LANE',
+      'WORK_BACK',
+      'MEETING_DEPTH',
+      'MEETING_END',
+      'CREDENZA_DEPTH',
+      'CREDENZA_MIN_RUN',
+      'CREDENZA_MAX_RUN',
+      'SHELVING_MAX_RUN',
+      'BOARD_STAND_RUN',
+      'BOARD_STAND_DEPTH',
+      'BOARD_STAND_GAP',
+      'SEATING_SOFA_RUN',
+      'SEATING_SOFA_DEPTH',
+      'SEATING_TABLE_W',
+      'SEATING_TABLE_D',
+      'SEATING_GAP',
+      'TROUGH_RUN',
+      'WALL_INSET',
+      'ZONE_SIDE',
+      'ZONE_FOOT',
+      'WALL_GAP',
+    ]),
+    // The door is the building's, and the grid the floor is counted on is a
+    // ruler rather than a thing.
+    building: Object.freeze([
+      'DOOR_CLEAR_W',
+      'DOOR_CLEAR_DEPTH',
+      'BARE_FLOOR_CELL',
+      'HALL_FLOOR_U2',
+    ]),
+    pure: Object.freeze(['BARE_FLOOR_MAX', 'FOOT_RUNS_MAX']),
+  }),
   'rig-metrics.js': Object.freeze({
     body: Object.freeze([
       'RIG_UNIT_U',

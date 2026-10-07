@@ -836,6 +836,8 @@ export function buildProjectRoom(
     // (`awayRooms`). The room is the room it would be with somebody at the
     // desk, and its lights are off.
     ...(project.away === true ? { away: true, dim: true } : {}),
+    // The floor its crew sits on, which `plan-interior.js` furnishes round.
+    ...(crewH > 0 ? { crew: { w: crewW, h: crewH } } : {}),
     walls: 'partial',
     floor: 'carpet',
     // WP-81's four slots, and the plan's own copy of them. A live plate is

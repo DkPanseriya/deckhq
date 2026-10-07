@@ -109,11 +109,22 @@ export const ROW_DEPTH_SPREAD_MAX = 0.15;
 // ----------------------------------------------------------- (e) lights off
 
 /**
- * A room with nobody at its desks is drawn with the lights off: its floor and
- * furniture this far towards the theme's dark. A third reads as "dark room" at
- * fit scale and still shows the desk that is waiting for somebody.
+ * A room with nobody at its desks is drawn with the lights off: every colour in
+ * it keeps its hue, loses this much of its lightness and `LIGHTS_OFF_DIM` of its
+ * saturation. A quarter is one clear step under a lit room, and a pale carpet a
+ * quarter darker at full colour is khaki, which is why the colour goes with it.
  */
+export const LIGHTS_OFF_STEP = 0.24;
+
+/** The band that step is held to on every theme: seen, and still that room's floor. */
+export const LIGHTS_OFF_STEP_MIN = 0.18;
+export const LIGHTS_OFF_STEP_MAX = 0.3;
+
+/** How much of its saturation a colour gives up with the lights off. */
 export const LIGHTS_OFF_DIM = 0.35;
+
+/** A dimmed carpet is the lit one's hue: at most this many degrees from it. */
+export const LIGHTS_OFF_HUE_MAX = 8;
 
 /** A dimmed room's plate is still the plate: WCAG AA for its text. */
 export const DIM_PLATE_CONTRAST_MIN = 4.5;

@@ -45,11 +45,16 @@ and benched — available capacity, resting, ready for the next job.
 with your office held to a fifth and the lounge to a quarter. Every room is the shape of a room,
 between 0.7 and 1.8 times as wide as it is deep, and none is more than two and a half times the
 size of the smallest. A room comes in one of three sizes: one desk, a team of two to four, a team of
-five or more. A project whose people are all waiting in your office keeps the room it had, with one
-empty desk and **the lights off**, and the lights come back when one of them goes back to work. The
+five or more. A room is furnished for its size and for the floor it was given: a team's room has a
+small meeting table and a credenza, a big team's a larger table, a shelving wall and planting, and
+a room with a lot of floor left over gets storage, a table or a sofa until less than 45% of it is
+open. Nobody is ever drawn in a meeting chair. A project whose people are all waiting in your
+office keeps the room it had, with one empty desk and **the lights off** — the same room, dimmed —
+and the lights come back when one of them goes back to work. The
 lounge draws its seats and one row of people standing; a bigger crowd is a **`+N resting`** chip at
 the end of that row, and clicking it opens the deck on everybody resting. When more people are
-waiting than your office has sofas for inside its fifth, the rest stand in the queue beside them.
+waiting than your office has sofas for inside its fifth, the rest stand in the queue beside them,
+in the gaps between the people sitting.
 Where your office and the lounge stand depends on the window and on how many rooms there are: one
 over the other down the left, at the left ends of the top and bottom rows, or — for two or three
 rooms in a window that is neither wide nor tall — side by side across the top with the rooms behind

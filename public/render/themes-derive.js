@@ -19,7 +19,7 @@
  */
 
 import { FIGURE_HALO, ON_FLOOR_STATES, STATE_COLORS } from './palette.js';
-import { LIGHTS_OFF_DIM } from './plan-proportions.js';
+import { LIGHTS_OFF_DIM, LIGHTS_OFF_STEP } from './plan-proportions.js';
 import { DEFAULT_FLOOR } from './themes-tables.js';
 
 // ---------------------------------------------------------------- colour maths
@@ -350,24 +350,59 @@ export function plateGroundOver(floor, ground) {
 /** How opaque the halo behind a plate's letterforms is. */
 export const PLATE_HALO_ALPHA = 0.92;
 
-/**
- * WHAT A ROOM WITH THE LIGHTS OFF IS DIMMED TOWARDS (`plan-proportions.js` (e)).
- *
- * The theme's own dark: its ink on a light floor, and the far side of its
- * ground on a dark one — the same direction the plate halo already goes there,
- * so a dark theme's unlit room is darker than its lit ones and not lighter.
- * @param {Record<string,string>} floor a theme's eleven floor keys
- */
-export function lightsOffBase(floor) {
-  return lightInkFor(floor.ink) ? shade(floor.ground, -0.55) : floor.ink;
+/** CIE L*, 0 to 100: the lightness a step between two rooms is seen in. */
+export function lightness(colour) {
+  const y = relativeLuminance(colour);
+  return y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : (24389 / 27) * y;
+}
+
+/** The grey of a colour's own luma — what a canvas `saturation` blend moves it towards. */
+function lumaGrey(colour) {
+  const [r, g, b] = rgb(colour);
+  const y = 0.3 * r + 0.59 * g + 0.11 * b;
+  return hex([y, y, y]);
 }
 
 /**
- * A ground with the lights off: `LIGHTS_OFF_DIM` of the way to that dark.
+ * ONE COLOUR WITH THE LIGHTS OFF (`plan-proportions.js` (e)): a black veil at
+ * `veil`, then `LIGHTS_OFF_DIM` of the way to its own grey.
+ *
+ * Both steps are along the neutral axis, so the hue does not move: black scales
+ * the three channels alike, and the grey is the colour's own. The veil it
+ * replaces was the theme's ink, a warm brown, and a third of brown over a pale
+ * carpet is olive.
+ * @param {string} colour @param {number} veil the black veil's alpha, 0..1
+ */
+export function dimmedBy(colour, veil) {
+  const dark = mix(colour, '#000000', veil);
+  return mix(dark, lumaGrey(dark), LIGHTS_OFF_DIM);
+}
+
+/**
+ * HOW DARK THE VEIL IS ON THIS THEME: the alpha at which its carpet is
+ * `LIGHTS_OFF_STEP` less light. Solved rather than fixed, because the same
+ * alpha is a larger step on a dark carpet than on a pale one.
+ * @param {Record<string,string>} floor a theme's eleven floor keys
+ * @returns {number} 0..1, to three places
+ */
+export function lightsOffVeil(floor) {
+  const want = lightness(floor.carpet) * (1 - LIGHTS_OFF_STEP);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 20; i++) {
+    const mid = (lo + hi) / 2;
+    if (lightness(dimmedBy(floor.carpet, mid)) > want) lo = mid;
+    else hi = mid;
+  }
+  return Math.round(((lo + hi) / 2) * 1000) / 1000;
+}
+
+/**
+ * A ground, or anything standing on it, with the lights off on this theme.
  * @param {Record<string,string>} floor @param {string} ground
  */
 export function dimmed(floor, ground) {
-  return mix(ground, lightsOffBase(floor), LIGHTS_OFF_DIM);
+  return dimmedBy(ground, lightsOffVeil(floor));
 }
 
 /**
@@ -798,8 +833,10 @@ export function materialTokensFor(theme, look = {}) {
     // corridor out to the colour of its own line work.
     lightPool: alpha(LIGHT_POOL_COLOR, lightInk ? LIGHT_POOL_ALPHA_DARK : LIGHT_POOL_ALPHA_LIGHT),
     // ---- a room with the lights off (`plan-proportions.js` (e)) ----
-    // One veil over the floor and the furniture of a room nobody is at a desk
-    // in. A token, so a theme's unlit room is dimmed towards ITS dark.
-    lightsOff: alpha(lightsOffBase({ ink, ground }), LIGHTS_OFF_DIM),
+    // Two fills over the floor and the furniture of a room nobody is at a desk
+    // in (`paintLightsOff`): the veil that takes the light, at this theme's own
+    // strength, and the grey a `saturation` blend takes the colour towards.
+    lightsOff: alpha('#000000', lightsOffVeil({ carpet })),
+    lightsOffMute: alpha(lumaGrey(ground), LIGHTS_OFF_DIM),
   };
 }
