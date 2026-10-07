@@ -298,7 +298,11 @@ export let OFFICE_CHAIR_ROW = 2.8;
 export let OFFICE_QUEUE_PITCH = 3.8;
 export let OFFICE_QUEUE_ROW = 6.4;
 
-/** How far apart two people SIT on the reception sofas — the same stack again. */
+/**
+ * The width of that stack on a sofa: two cushions. A reception run seats one
+ * person a cushion now (`plan-office-seats.js`), so nothing is laid at this
+ * pitch any more; it stays in the scale table with the numbers beside it.
+ */
 export let OFFICE_SOFA_PITCH = 5.2;
 
 /** The pitch of the standing-room band along the lounge's promenade. */
