@@ -82,9 +82,10 @@ export function landscapeHalls(rooms) {
         const lane = hall.x + hall.w / 2;
         if (rect.x < lane + LANE_HALF && rect.x + rect.w > lane - LANE_HALF) continue;
         // Anchored to the wall it stands against, as every prop on the floor is.
-        const anchor = flat
-          ? { type: 'wall', side: far ? 'S' : 'N', along, inset: far ? inset : off }
-          : { type: 'wall', side: far ? 'E' : 'W', along, inset: far ? inset : off };
+        /** @type {'N'|'S'|'E'|'W'} */
+        const side = flat ? (far ? 'S' : 'N') : far ? 'E' : 'W';
+        /** @type {import('./plan-units.js').Anchor} */
+        const anchor = { type: 'wall', side, along, inset: far ? inset : off };
         const blocked = doors.some(
           (d) =>
             d.x > rect.x - DOOR_CLEAR &&
