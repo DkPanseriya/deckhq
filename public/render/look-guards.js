@@ -26,7 +26,13 @@
  * Pure data and pure functions. No DOM, no canvas.
  */
 
-import { assertMaterialDiscipline, PROJECT_IDENTITIES, washedCarpet } from './palette.js';
+import {
+  assertMaterialDiscipline,
+  colourDistance,
+  ON_FLOOR_STATES,
+  PROJECT_IDENTITIES,
+  STATE_COLORS,
+} from './palette.js';
 import {
   BOARD_MAX_INTERNAL_CONTRAST,
   RUG_BAND_MAX,
@@ -36,6 +42,7 @@ import {
   contrastRatio,
   interiorHighlights,
   lightInkFor,
+  over,
   pooled,
   relativeLuminance,
   themeByName,
@@ -49,7 +56,16 @@ import {
   SCHEME_SURFACES,
   ZONE_ADJACENCY,
 } from './look-options.js';
-import { resolveLook, schemeColour } from './look-derive.js';
+import {
+  DAYLIGHT_MAX_CONTRAST,
+  FRAME_ON_FLOOR_MIN,
+  INK_OVER_FRAME_MIN,
+  LOW_PARTITION_READS_MIN,
+  ZONE_TINT_MAX_LUMINANCE_DRIFT,
+  ZONE_TINT_MIN_SEPARATION,
+  ZONE_TINT_MIN_STATE_DISTANCE,
+} from './look-ambience.js';
+import { resolveLook, roomFloorFor, schemeColour } from './look-derive.js';
 
 /**
  * §1 rule 2. *"Adjacent zones separate by pattern and temperature, not by
@@ -247,12 +263,11 @@ export function validateLook(look, theme) {
     }
     // ---- rule 6: ink on the material, on its pooled composite, and — where the
     // zone is a project room — on all fourteen identity washes of it.
+    // Which washes those are is the room tint's to say (G6a): the fourteen at
+    // `subtle`, which is what ships, the six zone tints at `zoned`, none at `off`.
     /** @type {string[]} */
     const grounds = [material.field, pooled(material.field, lightInk)];
-    if (zone === 'rooms') {
-      for (const identity of PROJECT_IDENTITIES)
-        grounds.push(washedCarpet(material.field, identity.accent));
-    }
+    if (zone === 'rooms') grounds.push(...roomFloors(resolved));
     for (const ground of grounds) {
       const ratio = contrastRatio(floor.ink, ground);
       if (ratio + 1e-9 < 4.5) {
@@ -315,6 +330,17 @@ export function validateLook(look, theme) {
     }
   }
 
+  // ---- G6a: the light, the partitions and the room tint. Three groups, each
+  // its own function below, because each is a different question and the
+  // refusals belong in three different rows.
+  for (const problem of [
+    ...daylightProblems(resolved),
+    ...partitionProblems(resolved),
+    ...roomTintProblems(resolved),
+  ]) {
+    fail(problem);
+  }
+
   // ---- §1.g: the lounge keeps somewhere to sit.
   if (!resolved.lounge.on[LOUNGE_KIT_REQUIRED]) {
     fail({
@@ -328,6 +354,270 @@ export function validateLook(look, theme) {
   }
 
   return { ok: problems.length === 0, problems, resolved };
+}
+
+// ------------------------------------------- G6a: light, partitions, room tint
+//
+// `docs/plan/graphics/04-options.md` §2. Each group takes a RESOLVED look, so
+// it measures the colours a painter would be handed rather than re-deriving
+// them, and each returns rows in the shape `validateLook` already speaks.
+//
+// The floor as it ships passes all three on every shipped theme, and so does
+// every material under every scheme and every mood — `look-guards.test.mjs`
+// enumerates it. What these refuse is a pack theme's floor that daylight would
+// outshine, a divider nobody could see, and a room colour a figure wears.
+
+/**
+ * Every floor a PROJECT ROOM may be painted in, under the look's room tint: the
+ * fourteen identity washes at `subtle`, the six zone tints at `zoned`, and none
+ * at `off`, where a room is its bare material and the zone already says so.
+ *
+ * @param {ReturnType<typeof resolveLook>} resolved
+ * @returns {string[]}
+ */
+export function roomFloors(resolved) {
+  const tint = resolved.roomTint;
+  if (tint.zoned) return tint.tints.map((_, i) => roomFloorFor(resolved, i + 1));
+  if (tint.wash <= 0) return [];
+  return PROJECT_IDENTITIES.map((identity) => roomFloorFor(resolved, 1, identity.accent));
+}
+
+/**
+ * DAYLIGHT, ON THE WORST FLOOR IT CAN LAND ON.
+ *
+ * Three numbers over every zone floor and every project-room floor: how bright
+ * a patch is against its own ground, how much contrast a name keeps when it is
+ * drawn across one, and the brightest pixel any patch makes. The guard refuses
+ * on these and a preview may print them, so the two cannot disagree.
+ *
+ * @param {ReturnType<typeof resolveLook>} resolved
+ */
+export function daylightOn(resolved) {
+  const grounds = [
+    ...LOOK_ZONES.map((zone) => ({
+      where: `${resolved.zones[zone].label} in the ${zone}`,
+      ground: resolved.zones[zone].field,
+    })),
+    ...roomFloors(resolved).map((ground) => ({ where: 'a project room', ground })),
+  ];
+  const worst = {
+    ratio: { value: 0, where: '', colour: '' },
+    ink: { value: Infinity, where: '', colour: '' },
+    luminance: { value: 0, where: '', colour: '' },
+  };
+  for (const { where, ground } of grounds) {
+    const colour = over(ground, resolved.light.layer);
+    const ratio = contrastRatio(colour, ground);
+    const ink = contrastRatio(resolved.floor.ink, colour);
+    const luminance = relativeLuminance(colour);
+    if (ratio > worst.ratio.value) worst.ratio = { value: ratio, where, colour };
+    if (ink < worst.ink.value) worst.ink = { value: ink, where, colour };
+    if (luminance > worst.luminance.value) worst.luminance = { value: luminance, where, colour };
+  }
+  return worst;
+}
+
+/**
+ * The light. A patch of daylight is never brighter than the wall, never costs a
+ * name its 4.5:1, and never lifts a floor by more than `DAYLIGHT_MAX_CONTRAST`.
+ *
+ * @param {ReturnType<typeof resolveLook>} resolved
+ * @returns {LookProblem[]}
+ */
+export function daylightProblems(resolved) {
+  /** @type {LookProblem[]} */
+  const out = [];
+  const { light, floor } = resolved;
+  const wall = relativeLuminance(floor.wall);
+  const day = daylightOn(resolved);
+  const base = { picker: 'light', option: light.id };
+  const name = `${light.label} light`;
+  if (day.luminance.value > wall + 1e-9) {
+    out.push({
+      ...base,
+      rule: 'light — nothing is brighter than the wall',
+      measured: Number(day.luminance.value.toFixed(4)),
+      needed: Number(wall.toFixed(4)),
+      reason: `${name} on ${day.luminance.where} (${day.luminance.colour}) is brighter than the wall (${floor.wall}); daylight lands on a floor, it does not outshine the room`,
+    });
+  }
+  if (day.ink.value + 1e-9 < 4.5) {
+    out.push({
+      ...base,
+      rule: 'light — ink >= 4.5:1 in daylight',
+      measured: Number(day.ink.value.toFixed(2)),
+      needed: 4.5,
+      reason: `a name in ${name.toLowerCase()} on ${day.ink.where} (${day.ink.colour}) is ${day.ink.value.toFixed(2)}:1; an agent's name is drawn wherever the agent stands`,
+    });
+  }
+  if (day.ratio.value > DAYLIGHT_MAX_CONTRAST + 1e-9) {
+    out.push({
+      ...base,
+      rule: `light — daylight <= ${DAYLIGHT_MAX_CONTRAST}:1 on its floor`,
+      measured: Number(day.ratio.value.toFixed(3)),
+      needed: DAYLIGHT_MAX_CONTRAST,
+      reason: `${name} is ${day.ratio.value.toFixed(2)}:1 on ${day.ratio.where}; a patch of daylight is a lit floor, not the loudest thing on it`,
+    });
+  }
+  return out;
+}
+
+/** The two floors a wall between rooms stands on. */
+export const PARTITION_ZONES = Object.freeze(['rooms', 'corridor']);
+
+/**
+ * The partitions. A style that draws a frame has to draw a VISIBLE one, on both
+ * floors it divides, and still leave the line work the strongest mark there; a
+ * sheet of glass may not be brighter than the wall; and a new style that draws
+ * no frame has to read by its top alone.
+ *
+ * The shipped style has no frame and is held to none of this: it is the band
+ * the floor has always drawn, and a guard that began refusing it would be
+ * refusing floors people already have.
+ *
+ * @param {Pick<ReturnType<typeof resolveLook>, 'look'|'floor'|'zones'|'partitions'>} resolved
+ * @param {string} [shipped] the style no rule here applies to
+ * @returns {LookProblem[]}
+ */
+export function partitionProblems(resolved, shipped = 'solid') {
+  /** @type {LookProblem[]} */
+  const out = [];
+  const { partitions, floor } = resolved;
+  if (partitions.id === shipped) return out;
+  const base = { picker: 'partitions', option: partitions.id };
+  const name = `a ${partitions.label.toLowerCase()} partition`;
+  for (const zone of PARTITION_ZONES) {
+    const material = resolved.zones[zone];
+    if (partitions.frame) {
+      const ratio = contrastRatio(partitions.glassFrame, material.field);
+      if (ratio + 1e-9 < FRAME_ON_FLOOR_MIN) {
+        out.push({
+          ...base,
+          rule: `partitions — a frame is >= ${FRAME_ON_FLOOR_MIN}:1 on both floors`,
+          measured: Number(ratio.toFixed(2)),
+          needed: FRAME_ON_FLOOR_MIN,
+          reason: `the frame of ${name} (${partitions.glassFrame}) is ${ratio.toFixed(2)}:1 on ${material.label} in the ${zone}; the line that draws the divider would not be there`,
+        });
+      }
+    } else {
+      const ratio = contrastRatio(partitions.top, material.field);
+      if (ratio + 1e-9 < LOW_PARTITION_READS_MIN) {
+        out.push({
+          ...base,
+          rule: `partitions — a divider with no frame is >= ${LOW_PARTITION_READS_MIN}:1 on its floor`,
+          measured: Number(ratio.toFixed(3)),
+          needed: LOW_PARTITION_READS_MIN,
+          reason: `${name} (${partitions.top}) is ${ratio.toFixed(2)}:1 on ${material.label} in the ${zone} and carries no frame line; nothing would say where one room ends`,
+        });
+      }
+    }
+    if (partitions.glazed) {
+      const sheet = over(material.field, partitions.glassFill);
+      if (relativeLuminance(sheet) > relativeLuminance(floor.wall) + 1e-9) {
+        out.push({
+          ...base,
+          rule: 'partitions — nothing is brighter than the wall',
+          measured: Number(relativeLuminance(sheet).toFixed(4)),
+          needed: Number(relativeLuminance(floor.wall).toFixed(4)),
+          reason: `the glass of ${name} over ${material.label} in the ${zone} (${sheet}) is brighter than the wall (${floor.wall})`,
+        });
+      }
+    }
+  }
+  if (partitions.frame) {
+    const ratio = contrastRatio(floor.ink, partitions.glassFrame);
+    if (ratio + 1e-9 < INK_OVER_FRAME_MIN) {
+      out.push({
+        ...base,
+        rule: `partitions — ink is >= ${INK_OVER_FRAME_MIN}:1 over a frame`,
+        measured: Number(ratio.toFixed(2)),
+        needed: INK_OVER_FRAME_MIN,
+        reason: `the frame of ${name} (${partitions.glassFrame}) is ${ratio.toFixed(2)}:1 under the line work; a frame may not compete with a name`,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The room tint, where it is zoned. Each of the six is the room's floor at the
+ * floor's own luminance — re-measured, because the whole safety of a colour
+ * that strong is that it moves no contrast — keeps away from every colour a
+ * figure on the floor wears, crimson first among them, stays under the wall,
+ * and is far enough from the next room's that two rooms are two rooms.
+ *
+ * @param {ReturnType<typeof resolveLook>} resolved
+ * @returns {LookProblem[]}
+ */
+export function roomTintProblems(resolved) {
+  /** @type {LookProblem[]} */
+  const out = [];
+  const tint = resolved.roomTint;
+  if (!tint.zoned) return out;
+  const material = resolved.zones.rooms;
+  const base = { picker: 'roomTint', option: tint.id };
+  const wall = relativeLuminance(resolved.floor.wall);
+  const target = relativeLuminance(material.field);
+  /** One row per rule, for the worst room: six sentences saying one thing is noise. */
+  const worst = {
+    drift: { value: 0, i: 0 },
+    wall: { value: 0, i: 0 },
+    state: { value: Infinity, i: 0, state: '' },
+    next: { value: Infinity, i: 0 },
+  };
+  tint.tints.forEach((colour, i) => {
+    const luminance = relativeLuminance(colour);
+    const drift = Math.abs(luminance - target);
+    if (drift > worst.drift.value) worst.drift = { value: drift, i };
+    if (luminance > worst.wall.value) worst.wall = { value: luminance, i };
+    for (const state of ON_FLOOR_STATES) {
+      const d = colourDistance(colour, /** @type {any} */ (STATE_COLORS)[state]);
+      if (d < worst.state.value) worst.state = { value: d, i, state };
+    }
+    const d = colourDistance(colour, tint.tints[(i + 1) % tint.tints.length]);
+    if (d < worst.next.value) worst.next = { value: d, i };
+  });
+  /** @param {number} i */
+  const room = (i) => `the ${tint.hues[i].id} room (${tint.tints[i]})`;
+  if (worst.drift.value > ZONE_TINT_MAX_LUMINANCE_DRIFT) {
+    out.push({
+      ...base,
+      rule: 'room tint — a tint does not change lightness',
+      measured: Number(worst.drift.value.toFixed(5)),
+      needed: ZONE_TINT_MAX_LUMINANCE_DRIFT,
+      reason: `${room(worst.drift.i)} is ${worst.drift.value.toFixed(4)} off the relative luminance of ${material.label}; a room colour is a hue, not a brighter or a darker floor`,
+    });
+  }
+  if (worst.wall.value > wall + 1e-9) {
+    out.push({
+      ...base,
+      rule: 'room tint — nothing is brighter than the wall',
+      measured: Number(worst.wall.value.toFixed(4)),
+      needed: Number(wall.toFixed(4)),
+      reason: `${room(worst.wall.i)} is brighter than the wall (${resolved.floor.wall})`,
+    });
+  }
+  if (worst.state.value < ZONE_TINT_MIN_STATE_DISTANCE) {
+    const state = worst.state.state;
+    out.push({
+      ...base,
+      rule: `room tint — >= ${ZONE_TINT_MIN_STATE_DISTANCE} from every colour a figure wears`,
+      measured: Number(worst.state.value.toFixed(1)),
+      needed: ZONE_TINT_MIN_STATE_DISTANCE,
+      reason: `on ${material.label}, ${room(worst.state.i)} is only ${worst.state.value.toFixed(0)} from the ${state.replace('_', ' ')} colour (${/** @type {any} */ (STATE_COLORS)[state]}); a room may not wear what a figure standing in it wears`,
+    });
+  }
+  if (worst.next.value < ZONE_TINT_MIN_SEPARATION) {
+    const i = worst.next.i;
+    out.push({
+      ...base,
+      rule: `room tint — neighbouring rooms are >= ${ZONE_TINT_MIN_SEPARATION} apart`,
+      measured: Number(worst.next.value.toFixed(1)),
+      needed: ZONE_TINT_MIN_SEPARATION,
+      reason: `on ${material.label}, ${room(i)} and ${room((i + 1) % tint.tints.length)} are only ${worst.next.value.toFixed(0)} apart; two rooms side by side would be one room`,
+    });
+  }
+  return out;
 }
 
 /**

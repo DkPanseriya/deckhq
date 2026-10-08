@@ -30,11 +30,12 @@
  * nothing else, so a caller decides when to re-bake.
  */
 
-import { PALETTE, overridePalette, resetPalette } from './palette.js';
+import { PALETTE, overridePalette, resetPalette, washedCarpet } from './palette.js';
 import {
   DEFAULT_THEME_NAME,
   THEMES,
   applyChromeTheme,
+  lightInkFor,
   materialTokensFor,
   mix,
   relativeLuminance,
@@ -47,18 +48,34 @@ import {
   DEFAULT_LOOK,
   FLOOR_MATERIALS,
   FURNITURE_SETS,
+  LIGHT_MOODS,
   LOOK_ZONES,
   LOUNGE_KIT_BAYS,
+  PARTITION_STYLES,
   PLANT_DENSITIES,
   PLANT_FAMILIES,
   PROP_DENSITIES,
+  ROOM_TINTS,
   RUG_PATTERNS,
   RUG_ROLES,
   SCHEMES,
   SCHEME_SURFACES,
+  ZONE_HUES,
   normalizeLook,
   sameLook,
 } from './look-options.js';
+import {
+  BASEBOARD_SHADE,
+  GLASS_FILL_ALPHA,
+  GLASS_FRAME_MIX,
+  GLASS_TINT,
+  GLASS_TINT_MIX,
+  ZONE_ACCENT_LIGHTNESS,
+  ZONE_ACCENT_SATURATION,
+  ZONE_TINT_LIGHTNESS,
+  ZONE_TINT_MIX,
+  ZONE_TINT_SATURATION,
+} from './look-ambience.js';
 
 // ------------------------------------------------------------ colour maths
 //
@@ -237,7 +254,142 @@ export function materialColours(id, floor) {
     field,
     tones: material.tones(field).map(cap),
     specks: material.specks(field, floor).map(cap),
+    // G6a. The line where this floor meets a wall: the floor itself, a step
+    // darker, so it reads as a shadow of the same material and never as trim.
+    baseboard: shade(field, BASEBOARD_SHADE),
   };
+}
+
+// ------------------------------------------- the light, the glass, the tints
+//
+// G6a. What the three building-level choices BECOME, as colours and numbers a
+// painter can read. Each is a pure function of the look and the schemed floor,
+// like everything above, and each is measured in `look-guards.js` before a
+// picker may offer it.
+
+/**
+ * `rgba()` of an opaque colour at an alpha — the form `over` composites.
+ * @param {string} colour @param {number} alpha
+ */
+function layerOf(colour, alpha) {
+  const [r, g, b] = rgb(colour);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/**
+ * A light mood, on one floor.
+ *
+ * The table says how much daylight a light theme and a dark theme take; this
+ * picks the one that applies, by the same switch every other halo and pool on
+ * the floor uses. `layer` is the patch as an `rgba()`, so the guard and the
+ * painter composite the same string over the same ground.
+ *
+ * @param {string} id a key of `LIGHT_MOODS`
+ * @param {Record<string,string>} floor the eleven, after the scheme
+ */
+export function lightFor(id, floor) {
+  const mood = LIGHT_MOODS[id] || LIGHT_MOODS[DEFAULT_LOOK.light];
+  const alpha = lightInkFor(floor.ink) ? mood.alphaDark : mood.alphaLight;
+  return {
+    id: mood.id,
+    label: mood.label,
+    angle: mood.angle,
+    dir: mood.dir,
+    cast: mood.cast,
+    patch: mood.patch,
+    alpha,
+    layer: layerOf(mood.patch, alpha),
+  };
+}
+
+/**
+ * A partition style, on one floor.
+ *
+ * Three colours, all arithmetic over the eleven: the FRAME is the line work
+ * moved part of the way to the partition, so it is a line and still quieter
+ * than a name; the GLASS is the tile turned toward a cool grey and laid at a
+ * low alpha over whatever is under it; the TOP is the partition itself.
+ *
+ * @param {string} id a key of `PARTITION_STYLES`
+ * @param {Record<string,string>} floor the eleven, after the scheme
+ */
+export function partitionsFor(id, floor) {
+  const style = PARTITION_STYLES[id] || PARTITION_STYLES[DEFAULT_LOOK.partitions];
+  const glassTint = mix(floor.tile, GLASS_TINT, GLASS_TINT_MIX);
+  return {
+    ...style,
+    top: floor.partition,
+    glassFrame: mix(floor.ink, floor.partition, GLASS_FRAME_MIX),
+    glassTint,
+    glassFill: layerOf(glassTint, GLASS_FILL_ALPHA),
+  };
+}
+
+/**
+ * One zone hue, as a room floor: the floor mixed toward the hue and then put
+ * back on the floor's own relative luminance.
+ *
+ * THE SAME LOCK A SCHEME USES, for the same reason. A WCAG ratio depends only
+ * on relative luminance, so a tinted room measures what the bare room measured
+ * — a name on it, a state colour on it, its edge to the corridor — and the tint
+ * is free to be a colour somebody can name.
+ *
+ * @param {string} field the project rooms' floor
+ * @param {number} hue degrees
+ */
+export function zoneTint(field, hue) {
+  const toward = hslHex(hue, ZONE_TINT_SATURATION, ZONE_TINT_LIGHTNESS);
+  return lockLuminance(mix(field, toward, ZONE_TINT_MIX), relativeLuminance(field));
+}
+
+/**
+ * One zone hue, as an accent for small objects — a cushion, a panel, a ring on
+ * the plate. Held under the wall like everything else a room is furnished in.
+ * @param {number} hue degrees @param {string} wall
+ */
+export function zoneAccent(hue, wall) {
+  return underWall(hslHex(hue, ZONE_ACCENT_SATURATION, ZONE_ACCENT_LIGHTNESS), wall);
+}
+
+/**
+ * A room-tint level, on one floor: the six tints and the six accents where the
+ * level is zoned, and nothing where it is not — `subtle` is the identity wash,
+ * which belongs to the project and is asked for per room (`roomFloorFor`).
+ *
+ * @param {string} id a key of `ROOM_TINTS`
+ * @param {string} field the project rooms' floor
+ * @param {Record<string,string>} floor the eleven, after the scheme
+ */
+export function roomTintFor(id, field, floor) {
+  const level = ROOM_TINTS[id] || ROOM_TINTS[DEFAULT_LOOK.roomTint];
+  return {
+    ...level,
+    hues: ZONE_HUES,
+    tints: level.zoned ? ZONE_HUES.map((h) => zoneTint(field, h.hue)) : [],
+    accents: level.zoned ? ZONE_HUES.map((h) => zoneAccent(h.hue, floor.wall)) : [],
+  };
+}
+
+/**
+ * THE FLOOR ONE PROJECT ROOM IS PAINTED IN, at the look's room tint.
+ *
+ * One function, so the painter and the guards cannot disagree about which
+ * colour a name is drawn on: `subtle` is the identity wash the floor has always
+ * carried, `zoned` is the room's own hue, `off` is the bare material.
+ *
+ * @param {{zones:Record<string,any>, roomTint:ReturnType<typeof roomTintFor>}} resolved
+ * @param {number} n which project room, counted from 1
+ * @param {string|null} [accent] the project's identity accent, for `subtle`
+ * @returns {string}
+ */
+export function roomFloorFor(resolved, n, accent) {
+  const field = resolved.zones.rooms.field;
+  const tint = resolved.roomTint;
+  if (tint.zoned) {
+    const count = tint.tints.length;
+    return tint.tints[(((Math.round(n) - 1) % count) + count) % count];
+  }
+  return tint.wash > 0 ? washedCarpet(field, accent, tint.wash) : field;
 }
 
 // ------------------------------------------------------------- the zones
@@ -309,6 +461,9 @@ export function zoneEdges(materials, adjacency) {
  * @property {{density:any, clearU2:number}} props
  * @property {{bays:string[], on:Record<string,boolean>}} lounge
  * @property {string} agentSize
+ * @property {ReturnType<typeof lightFor>} light           the mood, on this floor
+ * @property {ReturnType<typeof partitionsFor>} partitions the style and its colours
+ * @property {ReturnType<typeof roomTintFor>} roomTint     the level, its tints and accents
  */
 
 /**
@@ -379,6 +534,10 @@ export function resolveLook(look, theme) {
     },
     lounge: { bays: LOUNGE_KIT_BAYS.filter((b) => on[b]), on },
     agentSize: l.agentSize,
+    // G6a. Carried and measured; no painter reads these three yet.
+    light: lightFor(l.light, floor),
+    partitions: partitionsFor(l.partitions, floor),
+    roomTint: roomTintFor(l.roomTint, zones.rooms.field, floor),
   };
 }
 
