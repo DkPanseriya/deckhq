@@ -54,19 +54,15 @@
  * Pure geometry. No DOM, no clock, no randomness.
  */
 
-import { corridorRoom } from './plan-nav.js';
-import { buildOffice, buildOfficeRow } from './plan-office.js';
-import { buildPinnedRoom, buildProjectRoom } from './plan-rooms.js';
+import { buildProjectRoom } from './plan-rooms.js';
+import { DESK_ASPECTS, buildCandidate } from './plan-grid-build.js';
 import { OFFICE_FULL, measureService } from './plan-grid-service.js';
-import { buildLounge } from './plan-service.js';
 import {
   CORRIDOR,
   LOUNGE_MIN_H,
   OFFICE_MIN_W,
   OFFICE_ROW_ASPECT_MAX,
   PLATE_BAND,
-  ROOM_ASPECT_MAX,
-  ROOM_PAD,
 } from './plan-units.js';
 import {
   LOUNGE_AREA_MAX,
@@ -158,9 +154,6 @@ const HALL_MAX = CORRIDOR * 4;
  * this many, no row is ever short of rooms to fill it.
  */
 const MANY_ROOMS = 8;
-
-/** The shapes a room's desks are tried at, widest first. */
-const DESK_ASPECTS = Object.freeze([4, ROOM_ASPECT_MAX, 1, 0.5]);
 
 /**
  * Lay one floor to the rulebook, or say that no building keeps it.
@@ -672,138 +665,21 @@ export function layProportioned(input) {
     return best;
   };
 
-  /**
-   * Build one room into its cell, at the first desk shape that fits it.
-   * @param {typeof needs[number]} need @param {{w:number,h:number}} cell
-   */
-  const roomInto = (need, cell) => {
-    const inner =
-      Math.max(1, cell.w - ROOM_PAD * 2) / Math.max(1, cell.h - ROOM_PAD * 2 - PLATE_BAND);
-    for (const aspect of [inner, ...DESK_ASPECTS]) {
-      const built = buildProjectRoom(need.project, need.desks, aspect, cell, need.crew);
-      if (built.room.w <= cell.w + 0.01 && built.room.h <= cell.h + 0.01) return built;
-    }
-    return null;
-  };
-
   const nominal = nominalWidth(input.stage, targetAspect);
   /** How wide the floor comes out laid at its contents; 0 where it cannot be. */
   let contentsW = 0;
 
-  /** Every room of one candidate, built and placed; null if one did not fit. */
-  const build = (/** @type {Candidate} */ c) => {
-    const held = { hold: c.hold };
-    const office =
-      c.family === 'column'
-        ? buildOffice(waitingCount, c.office, { maxW: c.office.w, ...held })
-        : buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h }, held);
-    if (office.room.w > c.office.w + 0.01 || office.room.h > c.office.h + 0.01) return null;
-    const cell = { w: c.lounge.w, h: c.lounge.h };
-    const lounge = buildLounge(benchedCount, cell, goneHomeCount, 1, { maxGames: c.games });
-    const inLounge = lounge.room.natural || lounge.room;
-    if (inLounge.w > c.lounge.w + 0.01 || inLounge.h > c.lounge.h + 0.01) return null;
-    Object.assign(office.room, c.office);
-    Object.assign(lounge.room, c.lounge);
-
-    /** @type {{room:Room, seats:Seat[]}[]} */
-    const projectRooms = [];
-    /** @type {Room[]} */
-    const stripRooms = [];
-    for (const [i, need] of needs.entries()) {
-      const at = { ...c.grid.cells[i] };
-      const rect = { x: at.x, y: at.y, w: at.w, h: at.h };
-      if (need.pinned) {
-        const { room } = buildPinnedRoom(need.project, rect);
-        Object.assign(room, rect, { areaMax: caps[i] });
-        stripRooms.push(room);
-        continue;
-      }
-      const built = roomInto(need, rect);
-      if (!built) return null;
-      Object.assign(built.room, rect, { module: need.module, areaMax: caps[i] });
-      projectRooms.push({ room: built.room, seats: built.seats });
-    }
-
-    // The corridors. In bands the first is the spine and every one of them is
-    // the building's width; in a column the spine is the building's height.
-    /** @type {Room[]} */
-    const corridors = [];
-    const across = c.family === 'column' ? c.office.w + CORRIDOR : 0;
-    if (c.family === 'column') {
-      corridors.push(corridorRoom({ id: '__spine__', x: c.office.w, y: 0, w: CORRIDOR, h: c.H }));
-    }
-    /** @type {number[]} rows with a corridor under them */
-    const served = [];
-    c.under.forEach((has, k) => {
-      if (!has) return;
-      const spine = c.family !== 'column' && !served.length;
-      corridors.push(
-        corridorRoom({
-          id: spine ? '__spine__' : `__corridor-${served.length}__`,
-          x: across,
-          y: c.tops[k] + c.depths[k],
-          w: c.W - across,
-          h: CORRIDOR,
-        }),
-      );
-      served.push(k);
+  /** Every room of one candidate, built and placed (`plan-grid-build.js`). */
+  const build = (/** @type {Candidate} */ c) =>
+    buildCandidate(c, {
+      needs,
+      caps,
+      waitingCount,
+      benchedCount,
+      goneHomeCount,
+      contentsW,
+      nominal,
     });
-    // And in bands past two rows, the lane that joins one corridor to the next.
-    if (c.lane > 0) {
-      for (let i = 0; i + 1 < served.length; i++) {
-        const top = c.tops[served[i] + 1];
-        const last = served[i + 1];
-        corridors.push(
-          corridorRoom({
-            id: `__lane-${i}__`,
-            x: 0,
-            y: top,
-            w: c.lane,
-            h: c.tops[last] + c.depths[last] - top,
-          }),
-        );
-      }
-    }
-    c.halls.forEach((hall, i) => corridors.push(corridorRoom({ id: `__hall-${i}__`, ...hall })));
-
-    const bare = projectRooms.map(({ room }) => {
-      const n = room.natural || room;
-      return 1 - (n.w * n.h) / Math.max(1e-6, room.w * room.h);
-    });
-    const left = Math.min(...c.grid.cells.map((cell0) => cell0.x));
-    return {
-      W: c.W,
-      H: c.H,
-      rows: /** @type {const} */ (false),
-      arrangement: c.family,
-      office,
-      lounge,
-      projectRooms,
-      stripRooms,
-      corridors,
-      // `layClassic`'s record, for a floor with no open floor in it: every
-      // rectangle on the rooms' side is a room or a corridor.
-      working: {
-        x: left,
-        w: c.W - left,
-        open: 0,
-        bareCarpet: bare.length ? Math.max(...bare) : 0,
-        roomsStretched: false,
-        loungePack: 1,
-        openH: 0,
-        pinnedH: 0,
-        stretched: 0,
-        /** How many rows of rooms, and how far the modules were flattened. */
-        rows: c.rows,
-        flatten: c.grid.flatten,
-        /** The service rooms were held to their caps at the nominal scale. */
-        capped: c.capped,
-        /** The width this floor would be at its contents, and at that scale. */
-        contentsW: contentsW,
-        nominalW: nominal,
-      },
-    };
-  };
 
   // ---- the search: one to three rows, and more only where three cannot hold
   // the rooms at a room's shape without the building growing to do it.
