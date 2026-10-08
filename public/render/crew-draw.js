@@ -43,6 +43,7 @@ import {
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { worldToScreen } from './agents.js';
 import { sansFont } from './rig-metrics.js';
+import { textWidth } from './text-metrics.js';
 
 /** Cable width in plan units, at a junior's own scale. */
 const CABLE_W_U = 0.2;
@@ -260,7 +261,7 @@ function drawAwayName(ctx, view, parentId, anchor) {
 function plate(ctx, view, at, text) {
   const fontPx = Math.max(10, Math.min(14, view.charU * 0.42));
   ctx.font = sansFont(fontPx);
-  const w = ctx.measureText(text).width + fontPx * 0.9;
+  const w = textWidth(ctx, sansFont(fontPx), text) + fontPx * 0.9;
   const h = fontPx * 1.5;
   ctx.globalAlpha = 1;
   ctx.fillStyle = PALETTE.plateHalo;

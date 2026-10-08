@@ -21,6 +21,7 @@ import { PLATE_BAND, PLUS_CLEAR_U } from './plan-units.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { formatElapsed, labelHaloWidth } from './rig.js';
 import { deviceScaleOf, snapPx, snapWidth } from './device-px.js';
+import { textWidth } from './text-metrics.js';
 import { labelFontSize, sansFont } from './rig-metrics.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 import { waitingSince } from '../floor-rule.js';
@@ -70,18 +71,22 @@ export function plateScaleFor(worldScale) {
  * Trim text with an ellipsis until it fits maxW at the context's current
  * font. Binary search rather than character-by-character, so a long room name
  * costs a handful of measureText calls per frame, not dozens.
- * @param {{measureText:(t:string)=>{width:number}}} ctx
+ * @param {{font?:string, measureText:(t:string)=>{width:number}}} ctx
  * @param {string} text
  * @param {number} maxW
+ * @param {string} [font] the font it is set in: given, every width is kept and
+ *   asked once (`text-metrics.js`) and the context's font is left alone
  */
-export function ellipsise(ctx, text, maxW) {
+export function ellipsise(ctx, text, maxW, font) {
   if (maxW <= 0) return '';
-  if (ctx.measureText(text).width <= maxW) return text;
+  const wide = (/** @type {string} */ t) =>
+    font ? textWidth(/** @type {any} */ (ctx), font, t) : ctx.measureText(t).width;
+  if (wide(text) <= maxW) return text;
   let lo = 0;
   let hi = text.length;
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    if (ctx.measureText(text.slice(0, mid) + '…').width <= maxW) lo = mid;
+    if (wide(text.slice(0, mid) + '…') <= maxW) lo = mid;
     else hi = mid - 1;
   }
   return lo > 0 ? text.slice(0, lo) + '…' : '';
@@ -669,20 +674,20 @@ export function layoutPlate(ctx, room, plate, camera, limitX = Infinity) {
     cursor += size(i, 'lead');
     const y = topLeft.y + cursor;
     const font = `${row.weight} ${px.toFixed(2)}px ${row.mono ? FONT_MONO : FONT_UI}`;
-    ctx.font = font;
+    const wide = (/** @type {string} */ s) => textWidth(ctx, font, s);
     const dotted = i === 1 && plate.dot ? PLATE_DOT_GAP * k : 0;
     // The hero shortens rather than truncates: a cut number is a wrong number.
-    if (i === 1 && ctx.measureText(text).width + dotted > maxW) text = plate.heroHead;
-    if (i === 1 && dotted && ctx.measureText(text).width + dotted > maxW) {
+    if (i === 1 && wide(text) + dotted > maxW) text = plate.heroHead;
+    if (i === 1 && dotted && wide(text) + dotted > maxW) {
       const count = /^\d+/.exec(text);
       if (count) text = count[0];
     }
-    if (i === 2 && plate.doing.length > 1 && ctx.measureText(text).width > maxW) {
+    if (i === 2 && plate.doing.length > 1 && wide(text) > maxW) {
       text = plate.doing[0];
     }
-    text = ellipsise(ctx, text, maxW - dotted);
+    text = ellipsise(ctx, text, maxW - dotted, font);
     if (!text) continue;
-    const w = ctx.measureText(text).width + dotted;
+    const w = wide(text) + dotted;
     widest = Math.max(widest, w);
     if (top === null) top = y - px;
     bottom = y + descent;
@@ -794,7 +799,7 @@ export class SceneLabels extends SceneBake {
     ctx.font = sansFont(px);
     // The chip's box and its rule on whole device pixels: a 1 px border at a
     // fractional offset is a 2 px border at half strength.
-    const w = snapPx(ctx, ctx.measureText(text).width + px * 1.1);
+    const w = snapPx(ctx, textWidth(ctx, sansFont(px), text) + px * 1.1);
     const h = snapPx(ctx, px * 1.7);
     const box = { x: snapPx(ctx, at.x - w / 2), y: snapPx(ctx, at.y - h / 2), w, h };
     const rule = snapWidth(ctx, 1);
