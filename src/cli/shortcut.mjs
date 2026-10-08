@@ -153,6 +153,8 @@ export async function buildPlan(surface, deps = {}) {
  *          platform?:string, env?:Record<string,any>, binPath?:string,
  *          node?:string, probeFolders?:Function, applyFn?:typeof apply,
  *          removeFn?:typeof remove, exec?:Function, powershell?:string,
+ *          matchTaskbar?:(opts:any, deps:any) => Promise<string>,
+ *          findBrowser?:() => string|null,
  *          confirm?:(plan:import('../core/launcher.mjs').Plan) => Promise<boolean>|boolean}} [deps]
  * @returns {Promise<number>}
  */
@@ -281,7 +283,37 @@ export async function runInstaller(surface, argv = [], deps = {}) {
         : '') +
       `\n  Recorded in <state dir>/${RECORD_NAME}. \`deckhq ${surface} --remove\` takes them out.\n\n`,
   );
+  if (surface === 'shortcut' && plan.platform === 'win32') write(await taskbarNote(deps, dataDir));
   return 0;
+}
+
+/**
+ * Give the shortcuts just written the id Windows knows the app window by, when
+ * a window is open to read it from, and say in one note when none is.
+ *
+ * A taskbar pin of the window is drawn from the shortcut that carries that id,
+ * and from the browser when none does (`src/core/launcher-taskbar.mjs`). It
+ * touches only the shortcuts this run recorded, and its failure is never the
+ * install's: the shortcuts are written either way.
+ *
+ * @param {any} deps
+ * @param {string} dataDir
+ * @returns {Promise<string>}
+ */
+async function taskbarNote(deps, dataDir) {
+  try {
+    const match =
+      deps.matchTaskbar || (await import('../core/launcher-taskbar.mjs')).matchAppWindow;
+    const browser = deps.findBrowser
+      ? deps.findBrowser()
+      : (await import('./chrome.mjs')).findChrome();
+    // The port is not part of what Windows calls the window — measured — so
+    // any loopback URL names the same one.
+    const opts = { dataDir, platform: 'win32', browser, url: 'http://127.0.0.1/', force: true };
+    return String((await match(opts, deps)) || '');
+  } catch {
+    return '';
+  }
 }
 
 /** @param {string[]} [argv] @param {any} [deps] */
