@@ -11,10 +11,12 @@
  *
  * So the section is two things now:
  *
- *   OUTSIDE   Agent size · Theme · Style (the six presets) · Density, and the
- *             live preview. The same four the header's Look bar offers, from
- *             the same list (`outsideControls`).
- *   ADVANCED  everything else in the catalogue, under three headings, in a
+ *   OUTSIDE   Agent size · Theme · Style (the presets, as pictures) and, in one
+ *             line under the cards, the three ways of turning a style —
+ *             Density · Light · Room colours — then the live preview. The same
+ *             six the header's Look bar offers, from the same list
+ *             (`outsideControls`).
+ *   ADVANCED  everything else in the catalogue, under four headings, in a
  *             disclosure that is shut until somebody opens it
  *             (`look-ui-advanced.js`).
  *
@@ -156,16 +158,25 @@ export function createLookSection(opts) {
   // ------------------------------------------------------------ the outside
 
   /**
-   * One of the four outside controls, as a row of the sheet.
+   * One of the six outside controls, as a row of the sheet.
    *
-   * Three of them are words and sit beside their label like every other row on
-   * this sheet. The fourth is six pictures, and a row of pictures gets the full
-   * width under its label.
+   * Four of them are words and sit beside their label like every other row on
+   * this sheet, and so does the one switch. The sixth is the presets as
+   * pictures, and a row of pictures gets the full width under its label.
    *
    * @param {any} host @param {any} control one of `outsideControls(store)`
    */
   function renderOutside(host, control) {
-    if (control.id === 'preset') {
+    if (control.kind === 'switch') {
+      const toggle = parts.switchControl({
+        name: control.id,
+        label: control.label,
+        checked: control.checked,
+        state: control.state,
+        onChange: control.onToggle,
+      });
+      widgets.row(host, control.label, toggle, control.help);
+    } else if (control.id === 'preset') {
       const strip = parts.radioGroup({
         name: control.id,
         label: control.label,
@@ -211,6 +222,61 @@ export function createLookSection(opts) {
     }
   }
 
+  /**
+   * THE STYLE'S MODIFIERS, side by side under the cards.
+   *
+   * Everything on the outside after Style is a way of turning the style that
+   * was just chosen — calmer, later in the day, a colour per room — and each is
+   * three words or a switch. As three more rows they were a third of a screen
+   * and pushed the live preview, the one picture that shows what they do, off
+   * the bottom of the sheet. So they are one line: a name, a quiet note beside
+   * it, the control under it. A reason is drawn in the cell of the control
+   * that refused, under that control.
+   *
+   * The name keeps the sheet's own `settings-label`, because it is a row's name
+   * in every sense but the layout.
+   *
+   * @param {any} host @param {any[]} controls the controls after Style
+   */
+  function renderModifiers(host, controls) {
+    if (!controls.length) return;
+    const grid = el('div', 'settings-look-mods');
+    for (const control of controls) {
+      const cell = el('div', 'settings-look-mod');
+      if (control.help) cell.title = control.help;
+      const head = el('div', 'settings-look-mod-head');
+      head.appendChild(el('span', 'settings-label', control.label));
+      if (control.note) head.appendChild(el('span', 'settings-look-mod-note', control.note));
+      cell.appendChild(head);
+      cell.appendChild(
+        control.kind === 'switch'
+          ? parts.switchControl({
+              name: control.id,
+              label: control.label,
+              checked: control.checked,
+              state: control.state,
+              onChange: control.onToggle,
+            })
+          : parts.radioGroup({
+              name: control.id,
+              label: control.label,
+              className: 'lookbar-seg settings-look-seg',
+              itemClass: 'lookbar-seg-btn',
+              options: control.options,
+              value: control.value,
+              onChange: control.onChange,
+            }),
+      );
+      // Said only when the control is somewhere its own options do not name.
+      if (control.hint) cell.appendChild(el('p', 'settings-note', control.hint));
+      for (const problem of store.refusalsFor(control.id)) {
+        cell.appendChild(parts.refusalBox(problem, 'settings-look-refusal'));
+      }
+      grid.appendChild(cell);
+    }
+    host.appendChild(grid);
+  }
+
   /** @param {any} host @param {any} current */
   function renderPreview(host, current) {
     const shot = picture({ kind: 'preview', look: current, key: 'preview' });
@@ -249,7 +315,11 @@ export function createLookSection(opts) {
     const s = widgets.section('Look', 'How the office looks. A change applies as you click it.');
     s.id = LOOK_SECTION_ID;
     const outside = outsideControls(store);
-    for (const control of outside) renderOutside(s, control);
+    // Up to and including Style, a row each; what follows Style modifies it.
+    const style = outside.findIndex((control) => control.id === 'preset');
+    const lead = style < 0 ? outside : outside.slice(0, style + 1);
+    for (const control of lead) renderOutside(s, control);
+    renderModifiers(s, outside.slice(lead.length));
     renderPreview(s, current);
     advanced.renderInto(s, c, current);
 

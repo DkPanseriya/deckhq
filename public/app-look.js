@@ -274,7 +274,7 @@ export function createThemingPort() {
   };
 }
 
-/** The six presets the palette offers, or none until the catalogue has loaded. */
+/** The presets the palette offers, or none until the catalogue has loaded. */
 export const lookPresets = () =>
   (lookOptions?.PRESETS || []).map((/** @type {any} */ p) => ({
     id: p.id,

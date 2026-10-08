@@ -266,10 +266,11 @@ const bayName = (bay) => (bay === 'cafe' ? 'café' : bay);
 
 // ------------------------------------------- simple outside, detail inside
 
-test('the outside is exactly four controls — agent size, theme, style, density — and nothing else', () => {
+test('the outside is exactly six controls — agent size, theme, style, density, light, room colours — and nothing else', () => {
   // The owner: "Keep high-level abstract settings like agent size, theme, etc.
-  // on the outside." Four, in this order, and every other control on the
-  // section is inside the disclosure.
+  // on the outside." Six, in this order — the four that were there, then the
+  // light and the room colours — and every other control on the section is
+  // inside the disclosure.
   const { draw } = mount();
   const root = draw();
   const advanced = advancedOf(root);
@@ -278,28 +279,39 @@ test('the outside is exactly four controls — agent size, theme, style, density
   const outside = byRole(root, 'radiogroup').filter((g) => !within(advanced, g));
   assert.deepEqual(
     outside.map((g) => g.getAttribute('aria-label')),
-    ['Agent size', 'Theme', 'Style', 'Density'],
+    ['Agent size', 'Theme', 'Style', 'Density', 'Light'],
+  );
+  const switches = byRole(root, 'switch');
+  assert.deepEqual(
+    switches.map((b) => [b.getAttribute('aria-label'), within(advanced, b)]),
+    [['Room colours', false]],
+    'the one switch is Room colours, and it is on the outside',
   );
   assert.deepEqual(
     byRole(root, 'checkbox').filter((b) => !within(advanced, b)),
     [],
     'a lounge bay is outside the disclosure',
   );
-  // The only buttons outside it are those four groups' own options.
-  const options = new Set(outside.flatMap((g) => byRole(g, 'radio')));
+  // The only buttons outside it are the five groups' own options and the switch.
+  const options = new Set([...outside.flatMap((g) => byRole(g, 'radio')), ...switches]);
   const loose = find(root, (n) => n.tagName === 'BUTTON').filter(
     (b) => !within(advanced, b) && !options.has(b),
   );
-  assert.deepEqual(loose, [], 'something other than the four controls is on the outside');
+  assert.deepEqual(loose, [], 'something other than the six controls is on the outside');
 
-  // Each of the four is the catalogue's, the themes' or the presets' own list.
+  // Each list is the catalogue's, the themes' or the presets' own.
   const count = (label) => byRole(groupNamed(root, label), 'radio').length;
   assert.equal(count('Agent size'), LOOK_PICKERS.find((p) => p.id === 'agentSize').options.length);
   assert.equal(count('Theme'), THEMES.length);
   assert.equal(count('Style'), PRESETS.length);
   assert.equal(count('Density'), densityLevels(catalogue).length);
-  // And the only catalogue picker out here is the one the store names.
-  assert.deepEqual([...OUTSIDE_PICKER_IDS], ['agentSize']);
+  assert.equal(count('Light'), catalogue.LIGHT_MOOD_IDS.length);
+  // And the catalogue pickers out here are the ones the store names. Room
+  // colours is not one of them: its whole row is under Advanced, and the
+  // switch is two of its three options.
+  assert.deepEqual([...OUTSIDE_PICKER_IDS], ['agentSize', 'light']);
+  assert.ok(groupNamed(advanced, 'Room colours'), 'the three-way room colours row left Advanced');
+  assert.equal(groupNamed(advanced, 'Light'), undefined, 'the light is drawn twice');
 });
 
 test('Advanced is shut by default and holds every other picker in the catalogue — derived, not listed', () => {
@@ -337,7 +349,7 @@ test('Advanced is shut by default and holds every other picker in the catalogue 
     }
   }
 
-  // Three headings, each a disclosure of its own, and between them they hold
+  // Four headings, each a disclosure of its own, and between them they hold
   // every inside picker exactly once — the outside and the inside together are
   // the catalogue.
   const subs = byClass(advanced, 'settings-look-sub');
@@ -345,9 +357,16 @@ test('Advanced is shut by default and holds every other picker in the catalogue 
     subs.map((d) => [d.tagName, d.children[0].tagName, d.children[0].textContent]),
     ADVANCED_GROUPS.map((g) => ['DETAILS', 'SUMMARY', g.label]),
   );
+  // From the largest thing a look decides to the smallest.
   assert.deepEqual(
     ADVANCED_GROUPS.map((g) => g.label),
-    ['Floors', 'Furniture and textiles', 'Plants and props'],
+    ['Walls and room colours', 'Floors', 'Furniture and textiles', 'Plants and props'],
+  );
+  // The partitions and the room colours are the first heading's, and nothing
+  // else is: they are not furniture, which is where the rule used to drop them.
+  assert.deepEqual(
+    advancedGroups(catalogue)[0].pickers.map((p) => p.id),
+    ['partitions', 'roomTint'],
   );
   const grouped = advancedGroups(catalogue).flatMap((g) => g.pickers.map((p) => p.id));
   assert.deepEqual([...grouped].sort(), inside.map((p) => p.id).sort());
@@ -375,10 +394,24 @@ test('the closed disclosure says what is in it, and stays the way it was left', 
   // The heading each change is under says so too.
   const subs = byClass(edited.host, 'settings-look-sub').map((d) => d.children[0].textContent);
   assert.deepEqual(subs, [
+    'Walls and room colours',
     'Floors — 1 change',
     'Furniture and textiles',
     'Plants and props — 1 change',
   ]);
+  // A change made on the OUTSIDE is a change from the preset too, and it is
+  // counted under the heading its row would be in.
+  const lit = mount({
+    look: normalizeLook({ ...DEFAULT_LOOK, light: 'evening', roomTint: 'zoned' }),
+  });
+  assert.equal(
+    advancedOf(lit.draw()).children[0].textContent,
+    'Advanced — 2 changes from Studio oak',
+  );
+  assert.equal(
+    byClass(lit.host, 'settings-look-sub')[0].children[0].textContent,
+    'Walls and room colours — 1 change',
+  );
 
   // Remembered per browser: opening it writes, and the next sheet reads.
   const kept = new Map();
@@ -394,13 +427,17 @@ test('the closed disclosure says what is in it, and stays the way it was left', 
   assert.equal(advancedOf(first.draw()).open, true);
   assert.equal(advancedOf(mount({ prefs }).draw()).open, true);
   // The headings inside start open, and shutting one is remembered the same way.
-  const sub = byClass(first.draw(), 'settings-look-sub')[0];
+  const sub = subNamed(first.draw(), 'Floors');
   assert.equal(sub.open, true);
   sub.open = false;
   sub.fire('toggle');
   assert.equal(kept.get('group.floors'), 'closed');
-  assert.equal(byClass(mount({ prefs }).draw(), 'settings-look-sub')[0].open, false);
+  assert.equal(subNamed(mount({ prefs }).draw(), 'Floors').open, false);
 });
+
+/** The heading under Advanced whose name is `label`, as drawn. */
+const subNamed = (root, label) =>
+  byClass(root, 'settings-look-sub').find((d) => d.children[0].children[0].textContent === label);
 
 test('a reason is never drawn inside a shut disclosure', () => {
   const kept = new Map([
@@ -414,7 +451,7 @@ test('a reason is never drawn inside a shut disclosure', () => {
   const root = draw();
   assert.equal(byClass(root, 'settings-look-refusal').length, 1);
   assert.equal(advancedOf(root).open, true, 'the reason is inside a shut Advanced');
-  assert.equal(byClass(root, 'settings-look-sub')[0].open, true, 'and inside a shut Floors');
+  assert.equal(subNamed(root, 'Floors').open, true, 'and inside a shut Floors');
   // Opened for the reason, not for good: nothing was remembered.
   assert.equal(kept.get('advanced'), 'closed');
 });
@@ -817,7 +854,7 @@ test('every swatch and every preview is painted by the floor’s own painters', 
   assert.equal(/Math\.random|Date\.now/.test(code), false);
 });
 
-test('all six preset thumbnails at 160 x 100 stay inside the draw-call budget', () => {
+test('every preset thumbnail at 160 x 100 stays inside the draw-call budget', () => {
   let total = 0;
   const perPreset = [];
   for (const preset of PRESETS) {
@@ -827,9 +864,16 @@ test('all six preset thumbnails at 160 x 100 stay inside the draw-call budget', 
     perPreset.push(`${preset.id} ${ctx.ops.length}`);
     total += ctx.ops.length;
   }
+  // The budget is per card, so the ceiling follows the number of presets and
+  // nobody has to remember to raise it when a twelfth is drawn.
+  const budget = LOOK_THUMB_DRAW_BUDGET * PRESETS.length;
+  console.log(
+    `  [look] ${PRESETS.length} cards cost ${total} operations, ${Math.round(total / PRESETS.length)} each ` +
+      `against ${LOOK_THUMB_DRAW_BUDGET} — ${perPreset.join(', ')}`,
+  );
   assert.ok(
-    total <= LOOK_THUMB_DRAW_BUDGET,
-    `the six cost ${total} operations against a budget of ${LOOK_THUMB_DRAW_BUDGET} — ${perPreset.join(', ')}`,
+    total <= budget,
+    `the ${PRESETS.length} cost ${total} operations against a budget of ${budget} — ${perPreset.join(', ')}`,
   );
 });
 
@@ -841,7 +885,7 @@ test('a swatch is cheaper than a thumbnail, and a repaint of one is byte-identic
   // Deterministic: terrazzo and cork scatter, and a swatch that moved between
   // two paints of the same option could never be a golden.
   assert.deepEqual(once.ops, twice.ops);
-  assert.ok(once.ops.length < LOOK_THUMB_DRAW_BUDGET / 6);
+  assert.ok(once.ops.length < LOOK_THUMB_DRAW_BUDGET);
 });
 
 test('painting a swatch leaves the live look exactly as it found it', async () => {
@@ -858,21 +902,12 @@ test('painting a swatch leaves the live look exactly as it found it', async () =
 });
 
 test('every option the section can offer is a swatch spec the painter understands', () => {
-  // The four groups with no picture — the furniture set, the two densities and
-  // WP-88c's agent size — are deliberate and say so; what this catches is a NEW
-  // picker silently joining them because nobody taught `swatchSpecFor` about it.
-  // The light, the partitions and the room colours joined them when their
-  // painters landed: they are offered as named choices until the Look section
-  // draws them a picture.
-  const without = new Set([
-    'furniture',
-    'plants',
-    'props',
-    'agentSize',
-    'light',
-    'partitions',
-    'roomTint',
-  ]);
+  // The five groups with no picture — the furniture set, the two densities,
+  // WP-88c's agent size and the light — are deliberate and say so; what this
+  // catches is a NEW picker silently joining them because nobody taught
+  // `swatchSpecFor` about it. The partitions and the room colours left that
+  // list when the section learned to draw two rooms and the wall between them.
+  const without = new Set(['furniture', 'plants', 'props', 'agentSize', 'light']);
   for (const picker of LOOK_PICKERS) {
     for (const option of picker.options) {
       const spec = swatchSpecFor(picker, option.id, DEFAULT_LOOK, catalogue);

@@ -288,10 +288,15 @@ test('Agent size POSTs a whole look document to /api/look, with one key changed'
   reset();
   el('look-btn').click();
   assert.equal(el('look-popover').hidden, false);
-  // Four sizes, the themes, the presets, and the three density steps.
+  // Four sizes, the themes, the presets, the three density steps and the three
+  // lights. Room colours is a switch, so it is not among the radios.
   assert.equal(
     radios().length,
-    4 + THEMES.length + PRESETS.length + catalogue.PLANT_DENSITY_IDS.length,
+    4 +
+      THEMES.length +
+      PRESETS.length +
+      catalogue.PLANT_DENSITY_IDS.length +
+      catalogue.LIGHT_MOOD_IDS.length,
   );
 
   radio('Large').click();
