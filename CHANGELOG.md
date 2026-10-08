@@ -136,16 +136,16 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   the floor itself are put together once and kept until you move, zoom or resize the floor,
   instead of being painted under every frame. Names, wait badges and room signs are measured once
   rather than on every frame, and where each one goes is worked out again only when somebody
-  moves or a wait changes. On the 150-agent floor a frame takes about a quarter of the work it
-  did. Where the browser draws without a graphics card — a remote desktop, a virtual machine —
-  the same frame takes 4 ms where it took 62 ms, and 28 ms at a display scaling of 200% where it
-  took 201 ms. The floor looks exactly as it did. One more picture the size of the window is
-  kept in memory for this: 8 MB for a 2000 × 1055 window, 34 MB at 200%.
-- **A very large floor is laid out in a tenth of the time.** Working out the building for 300
-  agents in 80 projects took most of a second each time somebody started, finished or was
-  benched, and the floor stood still while it did. It takes between a tenth and a sixth of a
-  second now, and the floor it lays is the same floor, room for room. A floor of 150 is laid in
-  under 20 ms where it took 53 ms.
+  moves or a wait changes. On the 150-agent floor the script that draws a frame does under half
+  the work it did. Where the browser draws without a graphics card — a remote desktop, a virtual
+  machine — the same frame takes 4 ms where it took 23 ms, and 10 ms at a display scaling of 200%
+  where it took 78 ms. The floor looks exactly as it did. One more picture the size of the window
+  is kept in memory for this: 8 MB for a 2000 × 1055 window, 34 MB at 200%.
+- **A very large floor is laid out in about a sixth of the time.** Working out the building for
+  300 agents in 80 projects took two thirds of a second or more each time somebody started,
+  finished or was benched, and the floor stood still while it did. It takes between a tenth and a
+  quarter of a second now, and the floor it lays is the same floor, room for room. A floor of 150
+  is laid in 16 ms where it took 39 ms.
 - **Changing the theme no longer lays the floor out again.** A theme is paint. The floor is
   repainted in the new colours and the building, and everybody in it, stay where they are.
 
@@ -307,14 +307,19 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   the pixels that differ, which is 0 at all three sizes, and at 200% on the floor of 150. Before
   and after, at 100%:
 
-  |                                   | 20 agents     | 150 agents    | 300 agents      |
-  | --------------------------------- | ------------- | ------------- | --------------- |
-  | Laying the floor out              | 20 → 7 ms     | 53 → 17 ms    | 874 → 97–156 ms |
-  | Drawing one frame (script)        | 2.7 → 0.6 ms  | 4.9 → 1.3 ms  | 8.7 → 2.9 ms    |
-  | The same frame, drawn in software | 53 → 3.4 ms   | 62 → 4.4 ms   | 44 → 13 ms      |
-  | Text measured in a frame          | 228 → 0       | 330 → 0       | 576 → 0         |
-  | Font changes in a frame           | 225 → 86      | 351 → 117     | 567 → 177       |
-  | Frames drawn in 2 s at rest       | every one → 0 | every one → 0 | every one → 0   |
+  |                                   | 20 agents     | 150 agents    | 300 agents    |
+  | --------------------------------- | ------------- | ------------- | ------------- |
+  | Laying the floor out              | 20 → 6 ms     | 39 → 16 ms    | 637 → 97 ms   |
+  | Drawing one frame (script)        | 0.9 → 0.6 ms  | 2.9 → 1.3 ms  | 5.1 → 2.2 ms  |
+  | The same frame, drawn in software | 21 → 3.2 ms   | 23 → 4.3 ms   | 29 → 6.8 ms   |
+  | Text measured in a frame          | 228 → 0       | 330 → 0       | 576 → 0       |
+  | Font changes in a frame           | 225 → 86      | 351 → 117     | 567 → 177     |
+  | Frames drawn in 2 s at rest       | every one → 0 | every one → 0 | every one → 0 |
+
+  Each time is the best of three or more runs, old and new measured turn about. The machine was
+  doing other work as well, and on its busier runs every time in the table was up to three times
+  larger — laying out 300 agents took 1.4 s at its worst before and 0.23 s after — with the old and
+  the new in much the same proportion.
 
   The drawing calls for the figures themselves are unchanged — about 130 a figure on a floor
   drawn small — and are now nearly all of what a frame is.

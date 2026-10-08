@@ -6,9 +6,10 @@
  * floor's baked bitmap. None of them changes between one re-plan, resize or
  * camera move and the next, and all three were painted again on every frame.
  * Where the frame is rastered in software (no GPU, a remote desktop, a virtual
- * machine) those three were nine tenths of what a frame cost: a frame of the
- * 150-agent floor took 62 ms with them painted and 4 ms with them composed
- * (`scripts/render-bench.mjs`, headless, 2000 x 1055).
+ * machine) those three were most of what a frame cost: a frame of the
+ * 150-agent floor took 21 ms with them painted and 4 ms with them composed, in
+ * one run of `scripts/render-bench.mjs` (headless, 2000 x 1055; 76 ms and 10 ms
+ * at a pixel ratio of 2).
  *
  * So they are painted into one canvas the size of the floor's own, and a frame
  * puts that down with a single one-to-one `drawImage` under the identity
