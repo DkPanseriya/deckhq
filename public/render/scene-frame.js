@@ -226,6 +226,18 @@ export class SceneFrame extends SceneStatic {
   }
 
   /**
+   * Write down the settings a plate is written from. The application replaces
+   * `snapshot.settings` in place when one is saved, with no new snapshot, so
+   * the snapshot being the same object does not mean these are.
+   * @param {InputTape} tape
+   */
+  _tapeSettings(tape) {
+    const settings = this._snapshot && this._snapshot.settings;
+    tape.ref(settings);
+    tape.ref(settings ? settings.showCost : undefined);
+  }
+
+  /**
    * Write down which minute every wait on the floor is in.
    * @param {InputTape} tape @param {number} now
    */
@@ -263,6 +275,7 @@ export class SceneFrame extends SceneStatic {
     tape.num(charU);
     tape.ref(this._plan);
     tape.ref(this._selectedId);
+    this._tapeSettings(tape);
     tape.num(records.length);
     for (let i = 0; i < records.length; i++) {
       const rec = records[i];
@@ -402,6 +415,7 @@ export class SceneFrame extends SceneStatic {
     tape.num(this._reduced ? 1 : 0);
     tape.num(this._phase === null ? -1 : this._phase);
     tape.ref(this._snapshot);
+    this._tapeSettings(tape);
     tape.ref(this._plan);
     tape.ref(this._backdrop);
     tape.ref(this._detail);

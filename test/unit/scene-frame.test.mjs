@@ -246,6 +246,12 @@ test('the layout is measured again when one of its inputs moves, and only then',
   });
   moves('somebody was selected', () => (scene._selectedId = records[0].id));
   moves('a snapshot arrived', () => scene._stateGen++);
+  moves('the settings were saved over, with no snapshot', () => {
+    scene._snapshot.settings = { showCost: true };
+  });
+  moves('one setting was changed where it stood', () => {
+    scene._snapshot.settings.showCost = false;
+  });
   moves('the palette was repainted', () => scene._paintGen++);
   moves('the floor was magnified', () => (scene._zoom = 1.5));
   moves('a font finished loading', () => forgetTextMetrics());
@@ -281,6 +287,9 @@ test('with motion on, a clock that moved is a frame and a pinned clock is none',
   assert.equal(scene._frameDue(), true, 'the floor was baked again');
   scene.canvas.width += 1;
   assert.equal(scene._frameDue(), true, 'the canvas was resized, which clears it');
+  assert.equal(scene._frameDue(), false);
+  scene._snapshot.settings = { showCost: true };
+  assert.equal(scene._frameDue(), true, 'a setting a plate prints was saved');
   assert.equal(scene._frameDue(), false);
   at(LARGE_NOW);
 });
