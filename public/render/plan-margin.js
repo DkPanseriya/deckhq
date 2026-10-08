@@ -16,6 +16,7 @@
  * Pure geometry. No DOM, no clock, no randomness.
  */
 
+import { SILHOUETTE_SPACING } from './plan-props.js';
 import { CORRIDOR } from './plan-units.js';
 
 /** @typedef {import('./plan-units.js').Room} Room */
@@ -65,7 +66,7 @@ export function landscapeHalls(rooms) {
     const start = END_INSET + (room - used) / 2;
     /** A piece along the run, mirrored to both long walls. */
     const stand = (
-      /** @type {string} */ kind,
+      /** @type {string} */ piece,
       /** @type {number} */ along,
       /** @type {number} */ size,
       /** @type {number} */ across,
@@ -92,6 +93,17 @@ export function landscapeHalls(rooms) {
             d.y < rect.y + rect.h + DOOR_CLEAR,
         );
         if (blocked) continue;
+        // No two identical silhouettes within sight of each other (§3.5): the
+        // far wall's plants are the other kind, and a piece that would still
+        // stand too near its twin is left out.
+        const kind = piece === 'planter' ? piece : far ? 'plant_broad' : 'plant_tree';
+        const near = hall.props.some((p) => {
+          if (p.kind !== kind) return false;
+          const dx = Math.max(0, p.x - rect.x - rect.w, rect.x - p.x - p.w);
+          const dy = Math.max(0, p.y - rect.y - rect.h, rect.y - p.y - p.h);
+          return Math.hypot(dx, dy) < SILHOUETTE_SPACING;
+        });
+        if (near) continue;
         const id = `${hall.id}-${kind}-${hall.props.length}`;
         hall.props.push({ kind, id, ...rect, angle: 0, anchor });
         stood += 1;
