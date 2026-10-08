@@ -509,8 +509,14 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * is chosen, so the rooms take the width the search could not use and a
  * column's rows end on the lounge's baseline. Every envelope on this ladder is
  * the window's shape now rather than the sum of its parts.
+ *
+ * AND A ROOM'S CEILING IS THE FOURTH, and again moving the rooms is the point:
+ * a room has a maximum size by module (`roomAreaMax`), so on the ladder's
+ * floors of one to five projects the rooms are smaller, the building is as
+ * small as its service rooms allow and what is left is a hall. The floors
+ * whose rooms were already under their ceilings did not move.
  */
-const PLAN_HASH = 'a5ca933f';
+const PLAN_HASH = '8c61ded6';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {
