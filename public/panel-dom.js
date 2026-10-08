@@ -92,6 +92,23 @@ export function buildPanelDom() {
   const metaEl = document.createElement('div');
   metaEl.className = 'panel-meta';
 
+  // WP-100 · "Go to session". One button at the top of the card, and one quiet
+  // line under it saying where that is — `Windows Terminal — tab “fix the
+  // parser”` — or why it cannot be done here. Plain, not primary: `2 Approve`
+  // is the only filled button on the screen. What it does and what it is
+  // called are the daemon's to decide (`panel-goto.js`); the text arrives off
+  // the daemon and is set with `textContent`.
+  const gotoRow = document.createElement('div');
+  gotoRow.className = 'panel-goto';
+  gotoRow.hidden = true;
+  const gotoBtn = document.createElement('button');
+  gotoBtn.type = 'button';
+  gotoBtn.className = 'btn panel-goto-btn';
+  const gotoDetail = document.createElement('span');
+  gotoDetail.className = 'panel-goto-detail';
+  gotoDetail.hidden = true;
+  gotoRow.append(gotoBtn, gotoDetail);
+
   // WP-28 · the agent's traits, as one quiet line under the identity area:
   // "asks often · shell-heavy · terse · opus-5 · since 1 Sep". Read-only,
   // inferred from real behaviour, never trained and never affecting anything
@@ -125,7 +142,17 @@ export function buildPanelDom() {
   recordEl.className = 'panel-record';
   recordEl.hidden = true;
 
-  top.append(identityRow, formerEl, titleEl, metaEl, traitEl, waitingEl, doingEl, recordEl);
+  top.append(
+    identityRow,
+    formerEl,
+    titleEl,
+    metaEl,
+    gotoRow,
+    traitEl,
+    waitingEl,
+    doingEl,
+    recordEl,
+  );
 
   // The scrolling body: WHAT IT SAID, the rest of the thread folded beneath
   // it, then WHAT CHANGED.
@@ -341,6 +368,9 @@ export function buildPanelDom() {
     formerEl,
     titleEl,
     metaEl,
+    gotoRow,
+    gotoBtn,
+    gotoDetail,
     traitEl,
     waitingEl,
     doingEl,

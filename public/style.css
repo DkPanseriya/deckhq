@@ -1381,6 +1381,49 @@ button {
   text-overflow: ellipsis;
 }
 
+/* WP-100 · "Go to session" — one button at the top of the card and one quiet
+   line beside it saying where that is, or why it cannot be done here.
+
+   Plain, not filled: `2 Approve` is the only filled button on the screen, and
+   being taken somewhere is not the decision the card is for. The line wraps
+   rather than truncating — when the button is dead it is the whole
+   explanation, and half an explanation is none — and takes the composer
+   hint's warning treatment for the same reason that one does: the words stay
+   in ink and a rule carries the colour. */
+.panel-goto {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.55rem;
+  min-width: 0;
+}
+.panel-goto[hidden] {
+  display: none;
+}
+.panel-goto-btn {
+  flex: 0 0 auto;
+}
+.panel-goto-btn::after {
+  content: ' ↗';
+  color: var(--muted);
+}
+.panel-goto-btn[data-action='resume']::after {
+  content: ' ↻';
+}
+.panel-goto-detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.panel-goto-detail.is-warn {
+  color: var(--ink-2);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.5rem;
+}
+
 /* WP-28 · the agent's trait line, under the identity area in the panel and
    under the identity tag in the hover card.
 

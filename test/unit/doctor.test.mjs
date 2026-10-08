@@ -181,6 +181,12 @@ const A_TERMINAL = {
   pinned: false,
 };
 
+/**
+ * The go-to-session row, pinned for the same reason: it is a statement about
+ * the platform the suite happens to be on.
+ */
+const A_GO_TO = { supported: true, verified: true, how: 'raises the window (test)' };
+
 /** Collect with every machine-dependent input pinned. */
 async function collect(adapters, extra = {}) {
   const { dataDir, stateFile } = extra.state || (await tmpStateDir());
@@ -191,6 +197,7 @@ async function collect(adapters, extra = {}) {
     stateFile,
     now: NOW,
     terminal: async () => A_TERMINAL,
+    goToSession: async () => A_GO_TO,
     ...machine,
     ...extra.overrides,
   });
@@ -629,6 +636,50 @@ test('the terminal row names the emulator and how it was found', async () => {
     }),
     /Terminal\.app\s+\(always present\)/,
   );
+});
+
+test('WP-100: the go-to-session row says supported, unverified or not — and never more than was run', async () => {
+  /** @param {any} goTo */
+  const rowFor = async (goTo) => {
+    const report = await collect(registry(fakeAdapter()), {
+      overrides: { goToSession: async () => goTo },
+    });
+    return renderReport(report)
+      .split('\n')
+      .find((l) => l.trim().startsWith('go to session'));
+  };
+  assert.match(
+    await rowFor({ supported: true, verified: true, how: 'raises the window' }),
+    /go to session\s+supported — raises the window/,
+  );
+  // Written and never run is said in those words, not folded into "supported".
+  assert.match(
+    await rowFor({
+      supported: true,
+      verified: false,
+      how: 'asks System Events — never run on a Mac',
+    }),
+    /go to session\s+unverified — asks System Events — never run on a Mac/,
+  );
+  assert.match(
+    await rowFor({
+      supported: false,
+      verified: false,
+      how: '',
+      reason: 'Wayland gives no program a way.',
+    }),
+    /go to session\s+not supported here — Wayland gives no program a way\./,
+  );
+  // A probe that throws leaves the row saying it was not checked.
+  const report = await collect(registry(fakeAdapter()), {
+    overrides: {
+      goToSession: async () => {
+        throw new Error('boom');
+      },
+    },
+  });
+  assert.equal(report.goToSession, null);
+  assert.match(renderReport(report), /go to session\s+not checked/);
 });
 
 test('a pinned terminal says so, and says when it is not on this machine', async () => {
@@ -1179,6 +1230,8 @@ test('--json emits one JSON document with a stable shape', async () => {
     'deck',
     'egress',
     'generatedAt',
+    // WP-100: whether "go to session" can find and raise a window here.
+    'goToSession',
     // WP-92o, audit A-14: what the running daemon has swallowed since it
     // started, or null. Always present in the REPORT — the doctor's document
     // has a fixed shape, unlike the snapshot it reads, which omits the block.

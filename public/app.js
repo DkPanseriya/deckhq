@@ -750,6 +750,7 @@ const paletteUI = createPalette({
     // INVARIANT, docs/01-PRODUCT.md §2.
     ack: (action) => panel.performAction(action),
     resume: resumeSelected,
+    goToSession: () => panel.goToSession(), // WP-100
     settleFloor,
     refresh: refreshNow,
     exportLayout,

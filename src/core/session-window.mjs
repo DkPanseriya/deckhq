@@ -410,7 +410,8 @@ export function resolveSessionWindow(input) {
  * @returns {string}
  */
 export function describeTarget(target) {
-  const where = target.label;
+  // A line of its own under the button, so it starts like one.
+  const where = `${target.label.charAt(0).toUpperCase()}${target.label.slice(1)}`;
   if (target.tabbed && target.tabTitle) return `${where} — tab “${target.tabTitle}”`;
   if (target.windowTitle && target.kind !== 'app' && target.kind !== 'console') {
     return `${where} — “${target.windowTitle}”`;
