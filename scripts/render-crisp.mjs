@@ -75,6 +75,7 @@ function startDemo(population) {
     );
     let out = '';
     let settled = false;
+    /** @type {() => Promise<void>} */
     const stop = () =>
       new Promise((done) => {
         if (child.exitCode != null) return done();
@@ -127,7 +128,8 @@ const MEASURE = `(async (zoom) => {
   const dpr = s._dpr;
   const scale = s._scale();
   const want = scale * dpr;
-  const takesScale = typeof bd.bakeScaleOf === 'function';
+  // A bake that takes device pixels per unit says how big it will come out.
+  const takesScale = typeof bd.bakeSize === 'function';
 
   // ---- the shadows the renderer sets during one bake and one frame
   const seen = [];
@@ -180,9 +182,14 @@ const MEASURE = `(async (zoom) => {
     x.fillStyle = '#000';
     x.fillRect(20, 20, 100, 80);
     const row = x.getImageData(120, 60, size - 120, 1).data;
+    // Where the shadow falls to 5 % of its own strength, between two pixels.
+    const edge = 12.75;
     let n = 0;
-    while (n < size - 120 && row[n * 4 + 3] > 12) n++;
-    return n;
+    while (n < size - 120 && row[n * 4 + 3] > edge) n++;
+    if (n === 0 || n >= size - 120) return n;
+    const a = row[(n - 1) * 4 + 3];
+    const b = row[n * 4 + 3];
+    return n - 1 + (a - edge) / (a - b) + 0.5;
   };
   const pick = (test) => {
     const hits = seen.filter(test);
@@ -401,4 +408,5 @@ try {
 } finally {
   await demo.stop();
 }
-if (JSON_OUT) say(JSON.stringify({ population: POPULATION, stage: [WIDTH, HEIGHT], rows }, null, 2));
+if (JSON_OUT)
+  say(JSON.stringify({ population: POPULATION, stage: [WIDTH, HEIGHT], rows }, null, 2));

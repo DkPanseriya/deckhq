@@ -24,7 +24,7 @@ import {
   DEFAULT_VIEW_W,
   DEFAULT_VIEW_H,
 } from './scene-camera.js';
-import { bakeBackdrop } from './backdrop.js';
+import { setDeviceScale } from './device-px.js';
 import { assignSeats } from './agents.js';
 import { SceneDraw } from './scene-draw.js';
 import { animMs } from './scene-agent.js';
@@ -58,6 +58,9 @@ export class SceneInput extends SceneDraw {
     this._camera.panX = ax - worldX * after;
     this._camera.panY = ay - worldY * after;
     this._clampCamera();
+    // The bitmap in hand is stretched while the wheel turns, and baked at the
+    // new scale once it stops (`scene-bake.js`).
+    this._scheduleBake();
     if (!this._running) this._draw();
   }
 
@@ -70,6 +73,7 @@ export class SceneInput extends SceneDraw {
   resetZoom() {
     this._zoom = 1;
     this._centerCamera();
+    this._scheduleBake();
     if (!this._running) this._draw();
   }
 
@@ -84,6 +88,9 @@ export class SceneInput extends SceneDraw {
     this._camera.panX += dx;
     this._camera.panY += dy;
     this._clampCamera();
+    // A magnified floor may be baked as a window onto itself; a pan that
+    // settles outside the window is baked again.
+    if (this._detail) this._scheduleBake();
     if (!this._running) this._draw();
   }
 
@@ -118,8 +125,16 @@ export class SceneInput extends SceneDraw {
     // the previous frame's pixels stay on screen outside the cleared region.
     if (typeof ResizeObserver !== 'undefined') {
       this._resizeObserver = new ResizeObserver(this._onResize);
-      this._resizeObserver.observe(this.canvas);
+      // The box in DEVICE pixels, where the browser reports one: it is the size
+      // the canvas was actually snapped to, which `round(cssSize * ratio)` only
+      // agrees with while one edge of the stage sits on a whole pixel.
+      try {
+        this._resizeObserver.observe(this.canvas, { box: 'device-pixel-content-box' });
+      } catch {
+        this._resizeObserver.observe(this.canvas);
+      }
     }
+    this._watchPixelRatio(true);
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', this._onVisibilityChange);
     }
@@ -228,7 +243,33 @@ export class SceneInput extends SceneDraw {
     if (hit) this._onSelect(hit);
   }
 
-  _onResize() {
+  /**
+   * Listen for the display's pixel ratio changing with no resize: a window
+   * dragged between two monitors of one size, or the browser's own zoom.
+   *
+   * A `resolution` query matches one ratio, so it is armed for the ratio in
+   * force and armed again each time that changes. `on` false takes it down.
+   * @param {boolean} on
+   */
+  _watchPixelRatio(on) {
+    if (this._dprQuery) {
+      this._dprQuery.removeEventListener('change', this._onResize);
+      this._dprQuery = null;
+    }
+    if (!on || typeof matchMedia !== 'function' || typeof window === 'undefined') return;
+    const query = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+    if (!query || typeof query.addEventListener !== 'function') return;
+    query.addEventListener('change', this._onResize);
+    this._dprQuery = query;
+  }
+
+  /** @param {any} [entries] a ResizeObserver's entries, or a resize event */
+  _onResize(entries) {
+    const box =
+      Array.isArray(entries) && entries[0] && entries[0].devicePixelContentBoxSize
+        ? entries[0].devicePixelContentBoxSize[0]
+        : null;
+    if (box) this._deviceBox = { w: box.inlineSize, h: box.blockSize };
     this._resizeCanvasBacking();
     // Cheap on every resize event, however many fire during a window drag:
     // recompute the fit basis for the new box. A user sitting at zoom 1.0
@@ -240,8 +281,12 @@ export class SceneInput extends SceneDraw {
     this.canvas.style.cursor = this._pannable() ? 'grab' : '';
     if (!this._running) this._draw();
     // The expensive part — re-baking the backdrop for a new room layout — is
-    // debounced separately; see `_scheduleAspectRecheck`.
+    // debounced separately; see `_scheduleAspectRecheck`. So is baking it for a
+    // new scale or a new pixel ratio: the bitmap in hand is stretched until the
+    // stage holds still. Asked for second, so a re-plan bakes first and this
+    // finds nothing left to do.
     this._scheduleAspectRecheck();
+    this._scheduleBake();
   }
 
   /**
@@ -294,14 +339,22 @@ export class SceneInput extends SceneDraw {
     const rect = this.canvas.getBoundingClientRect();
     const previousDpr = this._dpr;
     this._dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-    // The backdrop is baked once, at the device pixel ratio it was baked for.
-    // Drag the window to a display with a different one and it stays at the
-    // old resolution — soft on the sharper screen, oversized on the other.
-    if (this._plan && previousDpr && this._dpr !== previousDpr) {
-      this._backdrop = bakeBackdrop(this._plan, this._dpr);
+    // What one CSS pixel of this canvas is on the device, for the two things a
+    // transform does not scale: the building's own shadow, and a label's halo.
+    setDeviceScale(this.ctx, this._dpr);
+    // The floor is baked at the pixel ratio it is drawn at. Drag the window to
+    // a display with a different one and `_onResize` asks for a new bake; until
+    // the stage holds still the old bitmap is stretched to the new ratio.
+    if (previousDpr && this._dpr !== previousDpr) this._watchPixelRatio(true);
+    let w = Math.max(1, Math.round((rect.width || this._viewW || DEFAULT_VIEW_W) * this._dpr));
+    let h = Math.max(1, Math.round((rect.height || this._viewH || DEFAULT_VIEW_H) * this._dpr));
+    // The browser's own count where it has given one and it is this box's: a
+    // resize event can arrive before the observer that would update it.
+    const box = this._deviceBox;
+    if (box && Math.abs(box.w - w) <= 1 && Math.abs(box.h - h) <= 1) {
+      w = Math.max(1, box.w);
+      h = Math.max(1, box.h);
     }
-    const w = Math.max(1, Math.round((rect.width || this._viewW || DEFAULT_VIEW_W) * this._dpr));
-    const h = Math.max(1, Math.round((rect.height || this._viewH || DEFAULT_VIEW_H) * this._dpr));
     if (this.canvas.width !== w) this.canvas.width = w;
     if (this.canvas.height !== h) this.canvas.height = h;
   }

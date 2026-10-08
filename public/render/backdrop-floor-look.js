@@ -30,11 +30,13 @@
 
 import { PALETTE, washedCarpet } from './palette.js';
 import { roundRect, U_DEFAULT } from './backdrop-paint.js';
+import { deviceGrid } from './device-px.js';
 import {
   paintCarpet,
   paintCirculation,
   paintHerringbone,
   paintTile,
+  paintWeave,
   CARPET_WEAVE_PITCH_U,
 } from './backdrop-floor.js';
 import { liveMaterial } from './look-derive.js';
@@ -181,17 +183,21 @@ export function paintConcrete(ctx, x, y, w, h, u, material) {
   ctx.fillStyle = g;
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = seamOf(material.field, material.pattern.joint);
-  ctx.lineWidth = 0.75;
-  for (let gy = Math.ceil(y / cell) * cell; gy <= y + h; gy += cell) {
+  // A saw cut is a hairline on the device grid in a bake (`deviceGrid`).
+  const grid = deviceGrid(ctx, cell, 0.75);
+  const step = grid.pitch;
+  ctx.lineWidth = grid.width;
+  if (grid.alpha !== 1) ctx.globalAlpha = grid.alpha;
+  for (let gy = Math.ceil(y / step) * step; gy <= y + h; gy += step) {
     ctx.beginPath();
-    ctx.moveTo(x, gy + 0.5);
-    ctx.lineTo(x + w, gy + 0.5);
+    ctx.moveTo(x, grid.at(gy));
+    ctx.lineTo(x + w, grid.at(gy));
     ctx.stroke();
   }
-  for (let gx = Math.ceil(x / cell) * cell; gx <= x + w; gx += cell) {
+  for (let gx = Math.ceil(x / step) * step; gx <= x + w; gx += step) {
     ctx.beginPath();
-    ctx.moveTo(gx + 0.5, y);
-    ctx.lineTo(gx + 0.5, y + h);
+    ctx.moveTo(grid.at(gx), y);
+    ctx.lineTo(grid.at(gx), y + h);
     ctx.stroke();
   }
   ctx.restore();
@@ -233,21 +239,7 @@ export function paintLoopPile(ctx, x, y, w, h, rng, tint, u, material) {
       ctx.fillRect(x + i * cell, y + j * cell, cell, cell);
     }
   }
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = PALETTE.carpetWeaveLight;
-  ctx.beginPath();
-  for (let gy = Math.ceil(y / pitch) * pitch; gy <= y + h; gy += pitch) {
-    ctx.moveTo(x, gy + 0.5);
-    ctx.lineTo(x + w, gy + 0.5);
-  }
-  ctx.stroke();
-  ctx.strokeStyle = PALETTE.carpetWeaveDark;
-  ctx.beginPath();
-  for (let gx = Math.ceil(x / pitch) * pitch; gx <= x + w; gx += pitch) {
-    ctx.moveTo(gx + 0.5, y);
-    ctx.lineTo(gx + 0.5, y + h);
-  }
-  ctx.stroke();
+  paintWeave(ctx, x, y, w, h, pitch);
   ctx.restore();
 }
 

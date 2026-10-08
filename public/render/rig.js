@@ -51,6 +51,7 @@
  */
 
 import { PALETTE, STATE_COLORS } from './palette.js';
+import { deviceScaleOf, snapPx } from './device-px.js';
 import {
   TAU,
   BASE_U,
@@ -280,6 +281,21 @@ export function labelBox(ctx, ox, oy, u, rawLabel, px) {
 }
 
 /**
+ * How wide the pale outline round a line of floor text is, in the context's own
+ * pixels: 0.16 of the font, and never under a device pixel and a half.
+ *
+ * One function because two things on the floor are haloed — a figure's name
+ * here and a room's plate in `scene-labels.js` — and they have to be the same
+ * outline.
+ * @param {number} fontPx
+ * @param {number} [deviceScale] device pixels per context pixel
+ * @returns {number}
+ */
+export function labelHaloWidth(fontPx, deviceScale = 1) {
+  return Math.max(1.5 / (deviceScale > 0 ? deviceScale : 1), fontPx * 0.16);
+}
+
+/**
  * Draws the name label: haloed text directly on the floor, no backing plate
  * (CONTRACTS-WP15.md §3: "Agent labels lose their backing plates. Short MK
  * tags need far less room than a session title did, so they no longer need
@@ -323,11 +339,19 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = sansFont(px); // labelBox already set it; re-assert before drawing
-  ctx.lineWidth = Math.max(2, u * 0.16);
+  // THE HALO IS A SHARE OF THE TYPE, NOT OF THE FIGURE. It was `0.16 * u`, which
+  // on an 11 px name is 2.5 to 3.2 px — a quarter of the glyph's own height, and
+  // enough to close the counters of an `a`, an `e` and an `s` on an ordinary
+  // display. 0.16 of the font is 1.8 px there, and it is never under a device
+  // pixel and a half, which is the least that still reads as an outline.
+  ctx.lineWidth = labelHaloWidth(px, deviceScaleOf(ctx));
   ctx.strokeStyle = 'rgba(255,253,249,0.95)';
-  ctx.strokeText(box.text, lx, box.top + dy);
+  // The top of the line on a whole device pixel, so a name is rendered the
+  // same way wherever on the floor its figure is standing.
+  const ty = snapPx(ctx, box.top + dy);
+  ctx.strokeText(box.text, lx, ty);
   ctx.fillStyle = PALETTE.inkWarm;
-  ctx.fillText(box.text, lx, box.top + dy);
+  ctx.fillText(box.text, lx, ty);
   // Text alignment is global context state. Leaking 'center' out of here
   // pushed every room plate's text off its position.
   ctx.restore();

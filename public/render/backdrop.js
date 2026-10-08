@@ -61,6 +61,7 @@ import {
 } from './backdrop-floor.js';
 import { paintFloorMaterial } from './backdrop-floor-look.js';
 import { LOOK, materialForRoom } from './look-derive.js';
+import { setDeviceScale, snapPx } from './device-px.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
 import { paintPlantProps } from './backdrop-props-plant.js';
@@ -174,32 +175,110 @@ export function paintProp(ctx, prop, u) {
 // -------------------------------------------------------------------- bake
 
 /**
- * Bake the whole floor (materials, walls, doors, furniture) to an offscreen
- * bitmap. Called once per plan change — never per frame
+ * THE MOST PIXELS ONE BAKE MAY HOLD: 16 million, which is 64 MB of RGBA.
+ *
+ * A bake is sized by the screen now rather than by the plan, so it needs a
+ * ceiling the screen cannot raise. Sixteen million is a whole 4K display at one
+ * bitmap pixel per device pixel with room to spare, and is under what the
+ * 150-agent floor used to cost at a pixel ratio of 2 when every bake was 28
+ * device pixels to the unit. Past it the bake is taken at the nearest lower
+ * scale that fits and the blit stretches it — soft, and bounded.
+ */
+export const BAKE_MAX_PIXELS = 16_000_000;
+
+/**
+ * How big a bake of a `planW` x `planH` floor comes out, and at what scale.
+ *
+ * Pure, so the scene can ask before it bakes and a test can ask without a
+ * canvas. `region` is a rectangle of the floor in DEVICE pixels at `pxPerUnit`;
+ * it is clipped to the floor and moved onto whole pixels, and a bake of it is a
+ * window onto the same drawing rather than a different one.
+ *
+ * @param {number} planW @param {number} planH plan units
+ * @param {number} pxPerUnit device pixels per plan unit asked for
+ * @param {{x:number,y:number,w:number,h:number}|null} [region]
+ * @returns {{ppu:number, x:number, y:number, w:number, h:number, capped:boolean}}
+ */
+export function bakeSize(planW, planH, pxPerUnit, region = null) {
+  let ppu =
+    Number(pxPerUnit) > 0 && Number.isFinite(Number(pxPerUnit)) ? Number(pxPerUnit) : U_DEFAULT;
+  const whole = (n) => Math.max(1, Math.ceil(n - 1e-6));
+  let fullW = whole(planW * ppu);
+  let fullH = whole(planH * ppu);
+  if (region) {
+    const x = Math.max(0, Math.min(fullW - 1, Math.floor(region.x)));
+    const y = Math.max(0, Math.min(fullH - 1, Math.floor(region.y)));
+    const w = Math.max(1, Math.min(fullW, Math.ceil(region.x + region.w)) - x);
+    const h = Math.max(1, Math.min(fullH, Math.ceil(region.y + region.h)) - y);
+    if (w * h <= BAKE_MAX_PIXELS) return { ppu, x, y, w, h, capped: false };
+  }
+  let capped = false;
+  if (fullW * fullH > BAKE_MAX_PIXELS) {
+    ppu *= Math.sqrt(BAKE_MAX_PIXELS / (fullW * fullH));
+    // Rounding up can step back over the line by a row; one nudge always clears it.
+    while (whole(planW * ppu) * whole(planH * ppu) > BAKE_MAX_PIXELS) ppu *= 0.999;
+    fullW = whole(planW * ppu);
+    fullH = whole(planH * ppu);
+    capped = true;
+  }
+  return { ppu, x: 0, y: 0, w: fullW, h: fullH, capped };
+}
+
+/**
+ * Bake the floor (materials, walls, doors, furniture) to an offscreen bitmap.
+ * Called once per plan change and once per settled scale — never per frame
  * (docs/02-ARCHITECTURE.md §8).
  *
+ * THE BITMAP IS BAKED AT THE SCALE IT IS DRAWN AT. `pxPerUnit` is device pixels
+ * per plan unit: the px-per-unit the floor is on screen at, times the display's
+ * pixel ratio. It used to be fixed at 14 times the ratio, and the blit stretched
+ * the result to whatever the fit scale was — by 13 % on an ordinary floor and by
+ * a factor of two on a quiet or magnified one — which is why crisp vector
+ * figures stood on a soft floor. Every painter still draws on the 14 px design
+ * grid (`U_DEFAULT`); the context is scaled by `pxPerUnit / 14`, so the drawing
+ * is the same drawing and the raster is the device's.
+ *
+ * `opts.region`, in device pixels of the floor at `pxPerUnit`, bakes that window
+ * and nothing else. It is how a magnified floor stays one to one without a
+ * bitmap the size of the magnification.
+ *
  * @param {import('./plan.js').Plan} plan
- * @param {number} [dpr] device pixel ratio; the returned canvas is `wpx*dpr`
- *   by `hpx*dpr` physical pixels, pre-scaled so callers can blit 1:1.
- * @returns {{ canvas: OffscreenCanvas | HTMLCanvasElement, wpx: number, hpx: number }}
+ * @param {number} [pxPerUnit] device pixels per plan unit; the design grid's
+ *   own 14 when not given
+ * @param {{region?: {x:number,y:number,w:number,h:number}|null}} [opts]
+ * @returns {{ canvas: OffscreenCanvas | HTMLCanvasElement, ppu: number,
+ *   x: number, y: number, wpx: number, hpx: number }} `ppu` is the scale it was
+ *   actually baked at (lower than asked only past `BAKE_MAX_PIXELS`); `x`, `y`
+ *   are where the bitmap's corner is on the floor, in its own pixels; `wpx`,
+ *   `hpx` are the floor on the design grid.
  */
-export function bakeBackdrop(plan, dpr = 1) {
+export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
   const u = U_DEFAULT;
   const wpx = Math.ceil(plan.width * u);
   const hpx = Math.ceil(plan.height * u);
-  const scale = Math.max(1, dpr || 1);
+  const size = bakeSize(plan.width, plan.height, pxPerUnit, (opts && opts.region) || null);
+  const scale = size.ppu / u;
 
-  const canvas = makeCanvas(Math.ceil(wpx * scale), Math.ceil(hpx * scale));
+  const canvas = makeCanvas(size.w, size.h);
   const ctx = canvas.getContext('2d');
+  ctx.translate(-size.x, -size.y);
   ctx.scale(scale, scale);
+  // What one design pixel is on the device: shadows are scaled by it and
+  // hairlines are laid on it (`device-px.js`).
+  setDeviceScale(ctx, scale);
+  // A room's four edges, on device pixels. Rooms tile the floor, and an edge
+  // is snapped rather than a size, so two neighbours still meet on one line.
+  const edge = (/** @type {number} */ v) => snapPx(ctx, v * u);
+  const rectOf = (/** @type {{x:number,y:number,w:number,h:number}} */ r) => {
+    const rx = edge(r.x);
+    const ry = edge(r.y);
+    return { rx, ry, rw: edge(r.x + r.w) - rx, rh: edge(r.y + r.h) - ry };
+  };
   // Zone floors. The zones tile the whole envelope, so there is no separate
   // "circulation" surface to paint under them — the plan is one continuous
   // floor whose material changes where the use changes.
   for (const room of plan.rooms) {
-    const rx = room.x * u;
-    const ry = room.y * u;
-    const rw = room.w * u;
-    const rh = room.h * u;
+    const { rx, ry, rw, rh } = rectOf(room);
     const rng = seededRng(room.id);
 
     if (room.kind === 'corridor') {
@@ -239,8 +318,8 @@ export function bakeBackdrop(plan, dpr = 1) {
       // The cafe's own floor, and NOT a picker: §1.a's zones are four uses and a
       // kitchen bay inside the lounge is a fifth. A kitchen has a floor the rest
       // of a lounge does not, on every floor anybody has ever stood on.
-      const kz = room.kitchenZone;
-      paintTile(ctx, kz.x * u, kz.y * u, kz.w * u, kz.h * u, u);
+      const kz = rectOf(room.kitchenZone);
+      paintTile(ctx, kz.rx, kz.ry, kz.rw, kz.rh, u);
     }
 
     paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh);
@@ -260,10 +339,7 @@ export function bakeBackdrop(plan, dpr = 1) {
   // corridor would be the floor casting a shadow onto itself.
   for (const room of plan.rooms) {
     if (room.kind === 'corridor') continue;
-    const rx = room.x * u;
-    const ry = room.y * u;
-    const rw = room.w * u;
-    const rh = room.h * u;
+    const { rx, ry, rw, rh } = rectOf(room);
     castRoomShadow(ctx, rx, ry, rw, rh, wpx, hpx);
     paintRoomSlabEdge(ctx, rx, ry, rw, rh);
   }
@@ -326,8 +402,11 @@ export function bakeBackdrop(plan, dpr = 1) {
       paintProp(ctx, prop, u);
     }
     // LIGHTS OFF, last: the veil dims the furniture with the floor under it.
-    if (room.dim) paintLightsOff(ctx, room.x * u, room.y * u, room.w * u, room.h * u);
+    if (room.dim) {
+      const { rx, ry, rw, rh } = rectOf(room);
+      paintLightsOff(ctx, rx, ry, rw, rh);
+    }
   }
 
-  return { canvas, wpx, hpx };
+  return { canvas, ppu: size.ppu, x: size.x, y: size.y, wpx, hpx };
 }
