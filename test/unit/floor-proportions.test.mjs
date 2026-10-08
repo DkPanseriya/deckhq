@@ -409,8 +409,9 @@ test('a floor is laid at its contents, or held to the window at the nominal scal
       const { contentsW, nominalW, capped, ceilings } = plan.working;
       assert.equal(nominalW, nominalWidth(stage, plan.targetAspect), where);
       // Never wider than its contents: nothing is padded to a scale. (Laid to
-      // its rooms' ceilings it is searched for again, and may land a hair off.)
-      const hair = ceilings ? contentsW * 0.02 : 0;
+      // its rooms' ceilings it is searched for again, and may land a hair off:
+      // the planner's own tie, three per cent.)
+      const hair = ceilings ? contentsW * 0.03 : 0;
       if (contentsW > 0)
         assert.ok(plan.width <= contentsW + hair + 1e-6, `${where}: wider than it need be`);
       // A floor laid to its rooms' ceilings is a smaller building than its
