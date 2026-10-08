@@ -313,8 +313,13 @@ export class SceneDraw extends SceneHit {
     const viewH = rect.height || this.canvas.height / this._dpr;
 
     ctx.save();
+    // Cleared in the backing store's own pixels, all of it: the store is the
+    // box the browser snapped the canvas to, which can be a device pixel more
+    // than the CSS box times the ratio, and a row that is never cleared keeps
+    // every frame ever drawn on it.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
-    ctx.clearRect(0, 0, viewW, viewH);
 
     // Computed once per frame: `camera.zoom` is the U-normalised fit scale,
     // used for both the backdrop transform below and every world<->screen

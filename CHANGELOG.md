@@ -101,8 +101,29 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   rule.
 - **Theme is in the Look section.** It moved from Floor, so it sits beside the other three and
   there is one place to change it in Settings. Pointing at a theme still previews it.
+- **The floor is sharp.** The floor under the figures — walls, carpets, furniture — was drawn once
+  at a fixed size and stretched to fit your window, so it was always a little soft, and softer on
+  a quiet floor or a magnified one. It is now drawn at exactly the size it is shown at, one pixel
+  of the picture to one pixel of your screen, at any display scaling. While you zoom or drag the
+  window the floor is stretched for a moment and is redrawn sharp about a sixth of a second after
+  you stop. Walls, carpet weave and tile grout sit on whole pixels instead of straddling two.
+- **Names and room signs have a thinner outline.** The pale outline round a name was about a
+  quarter of the letter's height, which filled in the openings of `a`, `e` and `s` at small sizes.
+  It is 0.16 of the letter's height now, and never thinner than a pixel and a half of your screen.
+- **A busy floor on a HiDPI display uses less memory.** The floor's picture is the size of what is
+  on screen rather than a fixed size per room: with 150 agents at a display scaling of 200% it is
+  32 MB where it was 73 MB. A floor of forty at the same scaling is 32 MB where it was 25 MB,
+  because it is no longer stretched. Magnified, a second picture of the part you are looking at is
+  kept beside it. No one picture is ever more than 16 million pixels (64 MB); past that the floor
+  is drawn slightly smaller and stretched, as before.
 
 ### Fixed
+
+- **Shadows were half size on a HiDPI display.** At a display scaling of 200% every shadow on the
+  floor — under furniture, round a room, round the building — reached half as far as it does at
+  100%, so the floor looked flatter than it was designed to. A shadow is now the same size on
+  screen at every scaling: a piece of furniture's reaches 10.5 pixels at 100%, 150% and 200%,
+  where at 200% it reached 5.5.
 
 - **A pinned DeckHQ window keeps the DeckHQ icon (Windows).** Pin the app window to the taskbar and
   it turned into a Chrome or Edge icon, which then opened the browser instead of DeckHQ. Windows
@@ -246,6 +267,23 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Testing
 
+- **The floor's sharpness is measured, at real display scalings.** `node scripts/render-crisp.mjs`
+  starts a demo floor and one headless Chrome per scaling, and reports four things from the page
+  itself: how far the floor's picture is stretched on its way to the screen, how sharp its wall
+  edges are against a picture drawn at exactly the shown size, how far each shadow reaches, and
+  what the picture costs. On the 41-agent floor in a 2000 × 1185 window, at 100%, 150% and 200%:
+  the stretch is 1.000 where it was 1.132, and 1.000 at 1.8× magnification where it was 2.039; a
+  perfectly sized picture is 0% sharper at the wall edges where it was 23%, 25% and 27% sharper
+  (73% magnified); furniture, room and building shadows reach 10.5, 13.6 and 27.9 pixels at 200%
+  against 10.6, 13.6 and 28.1 at 100%, where at 200% they reached 5.5, 7.0 and 14.1. At 125% a
+  room's shadow is 7% short of its size at 100%, which is the browser rounding its blur. Drawing
+  the 150-agent floor at 200% took 224 ms where it took 653 ms, in software, with no GPU. The
+  floor's canvas is the size the browser snapped it to at every scaling from 100% to 225%.
+- **Two pictures of the floor at 200% are defined, and not yet taken.** `crowded@2x` and
+  `single@2x` are captures at a real display scaling of 2 — a second browser started at that
+  scaling, because the test tool's emulated scaling resamples a canvas. Every existing picture of
+  the floor changes with this version and has to be taken again: the floor in them is no longer
+  stretched, and names sit on whole pixels.
 - **The floor's proportions are measured on every demo floor.** `floor-proportions.test.mjs` lays
   out nine floors at four window sizes and checks each rule on the result: the three area shares,
   every room's shape, the largest room against the smallest, the row depths, and that the building

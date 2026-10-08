@@ -21,6 +21,9 @@
  *              drew one frame, rasterised here and measured: how far each
  *              shadow reaches past its shape, in CSS px on screen.
  *   bake       the bitmap's size in bytes and the median time of three bakes.
+ *   backing    whether the canvas's backing store is the size the browser
+ *              snapped its box to, in device pixels. Off by one and the whole
+ *              canvas — figures and text included — is stretched by a pixel.
  *
  * The device scale factor is Chrome's own `--force-device-scale-factor`, one
  * browser per value. Emulating it over the DevTools Protocol resamples a canvas
@@ -287,6 +290,20 @@ const MEASURE = `(async (zoom) => {
     : null;
   s._draw();
 
+  // ---- is the backing store the box the browser snapped the canvas to?
+  const deviceBox = await new Promise((resolve) => {
+    const ro = new ResizeObserver((entries) => {
+      ro.disconnect();
+      const b = entries[0].devicePixelContentBoxSize;
+      resolve(b ? [b[0].inlineSize, b[0].blockSize] : null);
+    });
+    try {
+      ro.observe(canvas, { box: 'device-pixel-content-box' });
+    } catch {
+      resolve(null);
+    }
+  });
+
   // ---- what a bake costs
   const times = [];
   for (let i = 0; i < 3; i++) {
@@ -304,6 +321,10 @@ const MEASURE = `(async (zoom) => {
     zoom: s.zoom,
     agents: [...s._runtime.all()].length,
     canvas: [canvas.width, canvas.height],
+    deviceBox,
+    backingIsDeviceBox: deviceBox
+      ? deviceBox[0] === canvas.width && deviceBox[1] === canvas.height
+      : null,
     drawnCssPxPerUnit: +scale.toFixed(4),
     neededDevicePxPerUnit: +want.toFixed(4),
     bakedDevicePxPerUnit: +ppu.toFixed(4),
@@ -364,14 +385,9 @@ try {
         chromePath,
         width: WIDTH,
         height: HEIGHT,
-        // 0 leaves the device scale factor alone, so the flag below is the only
-        // thing that sets it.
-        scale: 0,
-        extraArgs: [
-          `--force-device-scale-factor=${dpr}`,
-          '--force-color-profile=srgb',
-          '--disable-lcd-text',
-        ],
+        // A real ratio, set on the browser itself (`withChrome`).
+        deviceScaleFactor: dpr,
+        extraArgs: ['--force-color-profile=srgb', '--disable-lcd-text'],
       },
       async (client) => {
         await client.send('Emulation.setEmulatedMedia', {
@@ -401,7 +417,7 @@ try {
         `dpr ${String(row.devicePixelRatio).padEnd(4)} zoom ${row.zoom}  ` +
           `drawn ${row.neededDevicePxPerUnit} baked ${row.bakedDevicePxPerUnit} dev px/unit  ` +
           `resample ${row.resample}  wall ideal/shipped ${e.idealOverShipped}  ` +
-          `bitmap ${row.bitmapMB} MB  bake ${row.bakeMs} ms  shadow reach css px: ${sh}`,
+          `bitmap ${row.bitmapMB} MB  bake ${row.bakeMs} ms  backing 1:1 ${row.backingIsDeviceBox}  shadow reach css px: ${sh}`,
       );
     }
   }

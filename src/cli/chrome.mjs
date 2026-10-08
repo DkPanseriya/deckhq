@@ -420,10 +420,18 @@ async function launchChrome(opts) {
  * An explicitly requested `debugPort` is kept across attempts — the caller
  * asked for that port and retrying elsewhere would surprise it.
  *
+ * `scale` is an EMULATED device scale factor: the page is told the ratio and
+ * the screenshot is taken at it. `deviceScaleFactor` is a REAL one — Chrome is
+ * started with `--force-device-scale-factor` and the emulation is told to leave
+ * the ratio alone. They are not interchangeable for a `<canvas>`: under
+ * emulation a backing store that is one to one with the device is resampled on
+ * its way to the screenshot, so a picture of a canvas at a HiDPI ratio is only
+ * evidence when the ratio was real. It is fixed for the life of the browser.
+ *
  * @template T
  * @param {{chromePath:string, width:number, height:number, scale?:number,
- *          debugPort?:number, extraArgs?:string[], attempts?:number,
- *          targetTimeoutMs?:number}} opts
+ *          deviceScaleFactor?:number, debugPort?:number, extraArgs?:string[],
+ *          attempts?:number, targetTimeoutMs?:number}} opts
  * @param {(client: ReturnType<typeof connect>) => Promise<T>} fn
  * @returns {Promise<T>}
  * @throws an error with `code === CHROME_UNAVAILABLE` when no attempt produced
@@ -431,7 +439,11 @@ async function launchChrome(opts) {
  *   retagged.
  */
 export async function withChrome(opts, fn) {
-  const { chromePath, width, height, scale = 1, extraArgs = [] } = opts;
+  const { chromePath, width, height, scale = 1 } = opts;
+  const real = Number(opts.deviceScaleFactor) > 0 ? Number(opts.deviceScaleFactor) : 0;
+  const extraArgs = real
+    ? [...(opts.extraArgs || []), `--force-device-scale-factor=${real}`]
+    : opts.extraArgs || [];
   const attempts = Math.max(1, opts.attempts ?? LAUNCH_ATTEMPTS);
   const targetTimeoutMs =
     opts.targetTimeoutMs ?? (process.env.CI ? TARGET_TIMEOUT_MS_CI : TARGET_TIMEOUT_MS);
@@ -467,7 +479,8 @@ export async function withChrome(opts, fn) {
     await client.send('Emulation.setDeviceMetricsOverride', {
       width,
       height,
-      deviceScaleFactor: scale,
+      // 0 is the protocol's "do not override": the browser's own ratio stands.
+      deviceScaleFactor: real ? 0 : scale,
       mobile: false,
     });
     return await fn(client);
