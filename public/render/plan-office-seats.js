@@ -26,7 +26,7 @@
  * must run after `resolveAnchors`.
  */
 
-import { SOFA_DEPTH, SOFA_SEAT_BIAS, angleTo } from './plan-units.js';
+import { OFFICE_SOFA_PITCH, SOFA_DEPTH, SOFA_SEAT_BIAS, angleTo } from './plan-units.js';
 
 /** @typedef {import('./plan-units.js').Prop} Prop */
 /** @typedef {import('./plan-units.js').Room} Room */
@@ -129,14 +129,22 @@ export function cushionOrder(runs, desk) {
       const sorted = sofaPlacesOn(run)
         .map((p, index) => ({ ...p, index }))
         .sort(byNear);
-      const parity = sorted.length ? sorted[0].index % 2 : 0;
       const across = run.w >= run.h;
+      // ON A RUN DOWN THE SCREEN the next person is ABOVE this one, and the
+      // wait badge over a head needs a body's height and its own clear of
+      // them: a sofa place, whatever the cushions came to. Where two cushions
+      // are shorter than that — a run cut to a shallower room — the first
+      // half is every THIRD cushion, and a badge never lands on a neighbour.
+      const cushion =
+        sorted.length > 1 ? (Math.max(run.w, run.h) - SOFA_ARM * 2) / sorted.length : Infinity;
+      const stride = across || cushion * 2 >= OFFICE_SOFA_PITCH - 1e-6 ? 2 : 3;
+      const parity = sorted.length ? sorted[0].index % stride : 0;
       const place = ({ x, y }) => ({ x, y });
       return {
         across,
-        first: sorted.filter((p) => p.index % 2 === parity).map(place),
+        first: sorted.filter((p) => p.index % stride === parity).map(place),
         between: sorted
-          .filter((p) => p.index % 2 !== parity)
+          .filter((p) => p.index % stride !== parity)
           .map((p) => (across ? { ...place(p), nameRow: 1 } : place(p))),
       };
     })
