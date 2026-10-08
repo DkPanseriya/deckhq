@@ -68,7 +68,7 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   room with empty floor, the room also gets a second place: a standing table with stools, a
   reading corner with an armchair and a floor lamp, a booth for a call, or a whiteboard with two
   stools. Nobody is ever seated at these, and nothing is put within a body's width of a seat, in
-  a doorway or on the way from the door to a desk. On the demo floor that is 33 more things in
+  a doorway or on the way from the door to a desk. On the demo floor that is 35 more things in
   five rooms; on a 150-agent floor, 199 in 22.
 - **Density changes how much of that there is.** Calm keeps only the bin and the coat stand.
   Normal adds the panels, the lamps and up to two second places a room, three in a big team's.
