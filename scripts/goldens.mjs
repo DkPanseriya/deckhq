@@ -298,8 +298,9 @@ const CAPTURES = [
   // against, used here as the way in.
   //
   // What it photographs is the OUTSIDE of the section: agent size, theme, the
-  // six style thumbnails, density, the live preview, and Advanced shut with its
-  // one-line summary. That is the section as everybody first meets it.
+  // eleven style thumbnails, the three ways of turning a style in one line
+  // under them — density, light, room colours — and the live preview. That is
+  // the section as everybody first meets it.
   {
     name: 'look',
     population: 'three',
@@ -312,8 +313,9 @@ const CAPTURES = [
   // and the pickers are under Advanced now, shut by default; `look` alone would
   // no longer photograph a single swatch. So the disclosure is opened by a click
   // on its own summary, the way a person opens it (`board`'s rule), and the
-  // sheet is scrolled to it: the three headings, and the floor and colour-scheme
-  // chips under the first.
+  // sheet is scrolled to it: the first two of the four headings — the partition
+  // and room-colour chips, each two rooms and the wall between them, and the
+  // floor chips under those.
   {
     name: 'look@advanced',
     population: 'three',
@@ -337,12 +339,12 @@ const CAPTURES = [
   // the 16 px floor and every name still clear of a head, which is the `demo`
   // floor's own question. The other twelve are `medium` and must not move at all.
   // THE HEADER'S LOOK POPOVER, open. The header carries two buttons now — Look
-  // and Settings — and the first opens a popover with the four high-level
-  // choices: agent size, theme, style (the six presets, as thumbnails out of the
-  // Look section's own cache) and density. It is the product's only golden of chrome hanging
-  // OVER the floor, and what it holds is the thing no DOM assertion can: that
-  // the popover lands under its button, inside the window, with six legible
-  // pictures in it. `L` is the floor's own key for it, so the way in is the way
+  // and Settings — and the first opens a popover with the six high-level
+  // choices: agent size, theme, style (the eleven presets, as thumbnails out of
+  // the Look section's own cache), density, light and the room-colours switch.
+  // It is the product's only golden of chrome hanging OVER the floor, and what
+  // it holds is the thing no DOM assertion can: that the popover lands under
+  // its button, inside the window, with eleven legible pictures in it. `L` is the floor's own key for it, so the way in is the way
   // a person has — `three@selected`'s rule.
   { name: 'look-bar', population: 'three', theme: 'default', press: 'L' },
   { name: 'three@large', population: 'three', theme: 'default', query: 'scale=large' },
