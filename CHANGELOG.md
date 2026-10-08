@@ -60,6 +60,25 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   keyboard's place after one step. The focus now stays on the option you moved to.
 - **The Look button and Settings always agree.** A theme changed in Settings could show as the old
   one in the Look panel until the floor next refreshed.
+- **Everyone waiting sits on the sofas.** With sixteen sessions waiting, five of them stood in the
+  middle of the rug while most of the cushions behind them were empty. A sofa now seats one person
+  on each cushion, and nobody stands while a cushion is free. The three sofas fill together, the
+  longest wait nearest your desk. People sit on every other cushion first and close up only when
+  a sofa has no other place left. The session you open still walks to the chair at your desk, and
+  its cushion is kept for it.
+- **If the sofas are full, the rest queue along the wall.** Only when every cushion is taken does
+  anyone stand, and then in one line along the wall at the desk end of the room. Nobody stands on
+  the rug or between the sofas and your desk. A long queue closes up along that wall rather than
+  spreading into the room.
+- **Wait badges and names in a full office are readable.** A badge is over its own head and a name
+  under its own feet, or right beside the body where the next person's badge is below it, and
+  nobody else's name is put between the two. Where two people sit next to each other, one name is
+  under the feet and the next is one line lower, joined to its figure by a thin line. A badge
+  that would touch the badge beside it shows only its largest unit — `2d 23h` becomes `2d` — and
+  the panel and the queue strip still show the full time.
+- **The office's name plate no longer runs through a wait badge.** With somebody on the first
+  cushion of the top sofa, `16 waiting · oldest 1d 2h` was written across their badge. The plate
+  now stops before the badge and reads `16 waiting`.
 - **Wait badges and names in a full office are readable.** With sixteen sessions waiting, the
   ones standing stood right in front of the ones sitting: their badges landed on the heads behind
   them, and the names of the people on the sofa were pushed two rows away or across the wall. A
@@ -140,8 +159,8 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   first. The lounge's plate and the header still count all of them.
 - **When more sessions are waiting than your office has sofas for, the rest stand.** Your office
   is as big as its sofas and its desk need, up to a fifth of the building. Past that it stops
-  growing: the sofas fill, and the remaining sessions stand in the queue beside them. Everyone
-  waiting is still drawn and named.
+  growing: every cushion fills, and the remaining sessions stand in a queue along the wall.
+  Everyone waiting is still drawn.
 - **A full lounge or a long queue no longer shrinks everything else.** The floor is first laid out
   with everything it wants. If that is too big to draw at 12 pixels per unit in your window (a
   30-pixel figure, the smallest that keeps its detail), your office and the lounge are held to

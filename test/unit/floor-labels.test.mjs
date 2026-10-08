@@ -32,7 +32,13 @@ import { computeFill } from '../../public/render/scene-camera.js';
 import { characterScaleFor, JUNIOR_SCALE, lodForFigure } from '../../public/render/scene-lod.js';
 import { CREW_SCALE } from '../../public/render/crew.js';
 import { rigHeight } from '../../public/render/rig-pose.js';
-import { badgeBox, characterBox, drawCharacter, formatElapsed } from '../../public/render/rig.js';
+import {
+  badgeBox,
+  characterBox,
+  drawCharacter,
+  formatElapsed,
+  formatElapsedShort,
+} from '../../public/render/rig.js';
 import { sampleClip } from '../../public/render/clips.js';
 import { STATE_COLORS } from '../../public/render/palette.js';
 import {
@@ -45,16 +51,17 @@ import {
   layoutPlate,
   platePlanFor,
   PLATE_KEEP_ORDER,
+  plateLimit,
   resolveBadgeCollisions,
 } from '../../public/render/scene-labels.js';
-import { queueLay, queuePlace, sofaPlacesOn } from '../../public/render/plan-office-seats.js';
-import { OFFICE_SEAT_PITCH } from '../../public/render/plan-units.js';
+import { sofaPlacesOn } from '../../public/render/plan-office-seats.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { floorPopulation, crewsFrom } from '../../public/floor-rule.js';
 import { adoptSnapshotClock } from '../../public/clock.js';
 import { BODY_HEIGHT_U } from '../../public/render/rig-metrics.js';
 import {
   abbreviateName,
+  LOWER_REACH,
   NEAR_REACH,
   resolveLabelCollisions,
 } from '../../public/render/label-spots.js';
@@ -117,12 +124,6 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
     const pop = floorPopulation(agents, { now: LARGE_NOW });
     const snapshot = { projects, agents, counts: { drawn: { waiting: pop.waiting } } };
     const ctx = measuringCtx();
-    const plates = plan.rooms
-      .filter((r) => r.kind !== 'corridor')
-      .map((room) => ({
-        room,
-        ...layoutPlate(ctx, room, platePlanFor(room, snapshot, plan), camera),
-      }));
     const crewCounts = new Map(
       crewsFrom(agents, { now: LARGE_NOW }).map((c) => [c.parentId, c.count]),
     );
@@ -133,12 +134,36 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       const s = worldToScreen(rec, camera);
       const ms = LARGE_NOW - a.reviewSince;
       const box = badgeBox(ctx, s.x, s.y, charU, formatElapsed(ms));
-      waits.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms });
+      const cut = badgeBox(ctx, s.x, s.y, charU, formatElapsedShort(ms));
+      const short = cut.w < box.w ? { x: cut.x, w: cut.w } : undefined;
+      waits.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms, short });
     }
-    const badgePlan = resolveBadgeCollisions(waits);
+    const badgePlan = resolveBadgeCollisions(
+      waits,
+      records.map((rec) => {
+        const s = worldToScreen(rec, camera);
+        return { id: rec.id, ...characterBox(s.x, s.y, charU) };
+      }),
+    );
     const badgeBoxes = waits
       .filter((it) => badgePlan.drawn.has(it.id))
-      .map((it) => ({ ...it, id: `badge:${it.id}` }));
+      .map((it) => {
+        const at = badgePlan.short.has(it.id) && it.short ? it.short : it;
+        return { ...it, x: at.x, w: at.w, id: `badge:${it.id}` };
+      });
+    // After the badges, as the floor lays them: a plate stops short of one.
+    const plates = plan.rooms
+      .filter((r) => r.kind !== 'corridor')
+      .map((room) => ({
+        room,
+        ...layoutPlate(
+          ctx,
+          room,
+          platePlanFor(room, snapshot, plan),
+          camera,
+          plateLimit(room, badgeBoxes, camera),
+        ),
+      }));
     const labels = planFrameLabels(ctx, {
       records,
       agentsById,
@@ -416,17 +441,18 @@ test('F1 · a crew’s cables and its +N chip are drawn at L0', () => {
 // front of the top sofa, each clear of everything and none of them anybody's.
 // ---------------------------------------------------------------------------
 
-test('near ring · sixteen waiting on the office sofas: every name within 1.2 body heights of its feet, no overlaps', () => {
+test('near ring · sixteen waiting on the office sofas: all seated, every name within 1.6 body heights of its feet, no overlaps', () => {
   // The owner's window (2000 x 1185, a 970 px stage) over the crowded office:
-  // sixteen waiting on three sofa runs, the top run with a standing row in
-  // front of it, six full rooms and a full lounge — the shape that put those
-  // names on the rug.
+  // sixteen waiting on three sofa runs, six full rooms and a full lounge — the
+  // shape that once stood five of them on the rug with their names in a row
+  // under nobody.
   const f = frameAt(2000, 970, crowdedOfficeFloor);
   const waiting = f.records.filter(
     (r) =>
       r.agent.subagent !== true && /for_review|needs_input/.test(String(r.agent.activityState)),
   );
   assert.equal(waiting.length, 16);
+  assert.equal(waiting.filter((r) => r.targetSeat.standing).length, 0, 'somebody is standing');
   const rows = new Set(waiting.map((r) => Math.round(worldToScreen(r, f.camera).y)));
   assert.ok(rows.size >= 3, `the sixteen sit in ${rows.size} rows`);
   assert.equal(NEAR_REACH, 1.2);
@@ -439,11 +465,17 @@ test('near ring · sixteen waiting on the office sofas: every name within 1.2 bo
   for (const rec of waiting) {
     const spot = f.labels.plan.get(rec.id);
     assert.ok(spot, `${rec.agent.label} lost its name`);
-    assert.notEqual(spot.leader, true, `${rec.agent.label} left its body`);
+    // The second level is the one name that is meant to be on a leader.
+    const lower = rec.targetSeat.nameRow === 1;
+    if (!lower) assert.notEqual(spot.leader, true, `${rec.agent.label} left its body`);
     const box = placed.find((p) => p.id === rec.id);
     const s = worldToScreen(rec, f.camera);
     const d = Math.hypot(box.x + box.w / 2 - s.x, box.y + box.h / 2 - s.y) / bh;
-    assert.ok(d <= 1.2, `${rec.agent.label}'s name is ${d.toFixed(2)} body heights from its feet`);
+    const reach = lower ? LOWER_REACH : NEAR_REACH;
+    assert.ok(
+      d <= reach + 1e-6,
+      `${rec.agent.label}'s name is ${d.toFixed(2)} body heights from its feet`,
+    );
   }
   // Zero overlaps: no name on a body, on a plate, or on another name.
   const bodies = f.records.map((r) => {
@@ -520,6 +552,7 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
       (r) => r.agent.ackState === 'active' && /for_review|needs_input/.test(r.agent.activityState),
     );
     assert.equal(waiting.length, 16, name);
+    assert.equal(waiting.filter((r) => r.targetSeat.standing).length, 0, `${name}: standing`);
     // Nobody's time was folded into a pill: every badge that exists is drawn.
     assert.equal(f.badgePlan.pills.length, 0, `${name}: badges collided into a pill`);
     assert.ok(f.badgeBoxes.length >= 12, `${name}: ${f.badgeBoxes.length} badges`);
@@ -538,6 +571,8 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
     const found = { badgeOnBadge: 0, badgeOnBody: 0, nameOnBody: 0, nameOnBadge: 0, nameOnName: 0 };
     for (const [i, b] of f.badgeBoxes.entries()) {
       const own = b.id.slice(6);
+      // The office's plate stops short of the badge over its first cushion.
+      for (const p of f.plates) assert.ok(!hits(b, p.rect), `${name}: a badge is under a plate`);
       for (const body of bodies) if (body.id !== own && hits(b, body)) found.badgeOnBody++;
       for (let j = i + 1; j < f.badgeBoxes.length; j++)
         if (hits(b, f.badgeBoxes[j])) found.badgeOnBadge++;
@@ -569,14 +604,25 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
       const spot = f.labels.plan.get(id);
       const mine = names.find((n) => n.id === id);
       assert.ok(spot && mine, `${name}: ${f.agentsById.get(id).label} lost its name`);
-      assert.notEqual(spot.leader, true, `${name}: ${f.agentsById.get(id).label} left its body`);
+      // On a cushion between two taken ones the name is a line lower, on a
+      // leader that runs down between its neighbours' names.
+      const lower = f.seats.get(id).nameRow === 1 && spot.leader === true;
+      if (!lower)
+        assert.notEqual(spot.leader, true, `${name}: ${f.agentsById.get(id).label} left its body`);
       assert.ok(mine.y + mine.h / 2 > s.y - bh, `${name}: a name was set over its own badge`);
       const reach = Math.hypot(mine.x + mine.w / 2 - s.x, mine.y + mine.h / 2 - s.y) / bh;
-      assert.ok(reach <= NEAR_REACH + 1e-6, `${name}: a name is ${reach} bodies from its feet`);
+      assert.ok(
+        reach <= (lower ? LOWER_REACH : NEAR_REACH) + 1e-6,
+        `${name}: a name is ${reach} bodies from its feet`,
+      );
       const column = [{ x: b.x, y: b.y, w: b.w, h: s.y - bh - b.y }];
       if (mine.y >= s.y && Math.abs(mine.x + mine.w / 2 - s.x) <= mine.w / 4 + 0.5) {
         under++;
-        column.push({ x: mine.x, y: s.y, w: mine.w, h: mine.y - s.y });
+        column.push(
+          lower
+            ? { x: s.x - 0.5, y: s.y, w: 1, h: mine.y - s.y }
+            : { x: mine.x, y: s.y, w: mine.w, h: mine.y - s.y },
+        );
       }
       for (const other of names) {
         if (other.id === id) continue;
@@ -589,7 +635,7 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
   }
 });
 
-test('the corner cushion seats nobody, and the standing rows stand in the gaps', () => {
+test('a dense run sets its names at two levels, and the sixteen all sit', () => {
   adoptSnapshotClock({ now: LARGE_NOW, nowFixed: true });
   try {
     const { projects, agents } = ownerShapedFloor();
@@ -597,88 +643,62 @@ test('the corner cushion seats nobody, and the standing rows stand in the gaps',
     const office = plan.rooms.find((r) => r.kind === 'office');
     const runs = office.props.filter((p) => p.kind === 'sofa');
     assert.equal(runs.length, 3);
-    // Sixteen do not fit on these sofas, so somebody stands — and once
-    // somebody stands, the run that spans between the other two leaves its two
-    // corner cushions empty. With nobody standing it would seat one more.
-    const places = runs.map((run) => ({ run, at: sofaPlacesOn(run, runs, true) }));
-    const seated = plan.officeSeats.filter((s) => !s.standing);
-    assert.equal(
-      seated.length,
-      places.reduce((n, p) => n + p.at.length, 0),
-    );
-    assert.equal(
-      runs.reduce((n, run) => n + sofaPlacesOn(run, runs).length, 0),
-      seated.length + 1,
-    );
-    const along = (run, p) => (run.h > run.w ? p.y - run.y : p.x - run.x);
-    const lengthOf = (run) => Math.max(run.w, run.h);
-    let trimmed = 0;
-    for (const { run, at } of places) {
-      assert.ok(at.length >= 1, `${run.id} seats nobody`);
-      const first = along(run, at[0]);
-      const last = lengthOf(run) - along(run, at[at.length - 1]);
-      // Nobody on any run within a body's width of where it ends.
-      assert.ok(first >= OFFICE_SEAT_PITCH - 1e-6 && last >= OFFICE_SEAT_PITCH - 1e-6, run.id);
-      const pitch = at.length > 1 ? along(run, at[1]) - first : 0;
-      if (Math.min(first, last) >= OFFICE_SEAT_PITCH + pitch / 2 - 1e-6) {
-        trimmed++;
-        // Its corner cushions: a body's width of sofa at each end, and half a
-        // pitch before the first person on it.
-        assert.ok(Math.abs(first - last) < 1e-6, `${run.id}: the two ends differ`);
-      }
-    }
-    assert.equal(trimmed, 1, 'exactly one run stands between two others');
-
-    // THE STANDING ROWS. The first is in front of the top sofa and in its gaps:
-    // every place half-way between two people sitting. The second is half-way
-    // between two places of the first.
-    const standing = plan.officeSeats.filter((s) => s.standing);
-    assert.ok(standing.length >= 4, `${standing.length} standing`);
-    const rows = [...new Set(standing.map((s) => Math.round(s.y * 100) / 100))].sort(
-      (a, b) => a - b,
-    );
-    assert.ok(rows.length >= 2, 'the queue is one row');
-    const rowAt = (y) => standing.filter((s) => Math.abs(s.y - y) < 0.01).map((s) => s.x);
-    const top = places.map((p) => p.at).find((at) => at.every((p) => p.y < rows[0]));
-    assert.ok(top && top.length >= 3);
-    const sitting = top.map((p) => p.x).sort((a, b) => a - b);
-    const gaps = sitting.slice(1).map((x, i) => (x + sitting[i]) / 2);
-    for (const x of rowAt(rows[0])) {
-      assert.ok(
-        gaps.some((g) => Math.abs(g - x) < 0.01),
-        `a standing place at ${x} is not in a gap`,
+    const cushions = runs.reduce((n, run) => n + sofaPlacesOn(run).length, 0);
+    assert.ok(cushions >= 16, `${cushions} cushions`);
+    assert.equal(plan.officeSeats.length, 16);
+    assert.equal(plan.officeSeats.filter((s) => s.standing).length, 0, 'somebody is standing');
+    // A cushion is about a body wide: nobody is seated closer than that, and
+    // only on a run across the screen does anybody carry the second level.
+    const across = runs.filter((run) => run.w > run.h);
+    for (const seat of plan.officeSeats.filter((s) => s.nameRow === 1)) {
+      const run = across.find((r) =>
+        sofaPlacesOn(r).some((p) => Math.hypot(p.x - seat.x, p.y - seat.y) < 1e-9),
       );
-    }
-    const firstRow = rowAt(rows[0]).sort((a, b) => a - b);
-    const pitch = firstRow[1] - firstRow[0];
-    for (const x of rowAt(rows[1])) {
-      const off = (((x - firstRow[0]) % pitch) + pitch) % pitch;
-      assert.ok(Math.abs(off - pitch / 2) < 0.01, `the second row lines up with the first at ${x}`);
+      assert.ok(run, 'a second-level name on a run that lies down the screen');
+      const pitch = (Math.max(run.w, run.h) - 1.2) / sofaPlacesOn(run).length;
+      const beside = plan.officeSeats.filter(
+        (s) => s !== seat && Math.abs(s.y - seat.y) < 1e-9 && Math.abs(s.x - seat.x) < pitch + 0.01,
+      );
+      assert.ok(beside.length >= 1, 'a second-level name with nobody sitting beside it');
+      assert.ok(
+        beside.every((s) => s.nameRow !== 1),
+        'two neighbours on the same level',
+      );
     }
   } finally {
     adoptSnapshotClock(null);
   }
-});
-
-test('a standing queue is laid like bricks: every other row one fewer, half a pitch along', () => {
-  const lay = queueLay(9, 20, 40);
-  assert.equal(lay.beside, false);
-  assert.ok(lay.lanes >= 2);
-  const at = Array.from({ length: 9 }, (_, i) => queuePlace(i, lay));
-  const row = (n) => at.filter((p) => Math.abs(p.back - n * lay.row) < 1e-9);
-  assert.equal(row(0).length, lay.lanes);
-  assert.equal(row(1).length, Math.min(9 - lay.lanes, lay.lanes - 1));
-  assert.ok(Math.abs(row(1)[0].along - lay.pitch / 2) < 1e-9);
-  assert.equal(row(0)[0].along, 0);
-  // Beside a sofa of four the row has its three gaps, at the sofa's own pitch.
-  const beside = queueLay(5, 0, 40, 1, { places: 4, run: 26 });
-  assert.deepEqual([beside.beside, beside.lanes, beside.pitch, beside.files], [true, 3, 6.5, 2]);
-  // A sofa of two has one gap, and one gap is a file down the room, not a row.
-  assert.equal(queueLay(5, 12, 40, 1, { places: 2, run: 12 }).beside, false);
-  // Nobody is left without a place, however long the queue.
-  for (const n of [1, 2, 7, 30]) {
-    const l = queueLay(n, 12, 10);
-    const seen = new Set(Array.from({ length: n }, (_, i) => JSON.stringify(queuePlace(i, l))));
-    assert.equal(seen.size, n);
-  }
+  // THE LEVELS, on three people shoulder to shoulder: feet 30 px apart, names
+  // 40 px wide. The middle one is `lower`: a line down, on a leader.
+  const body = (id, x) => ({ id: `body:${id}`, x: x - 14, y: 60, w: 28, h: 40, pin: true });
+  const name = (id, x, lower) => ({
+    id,
+    x: x - 20,
+    y: 120,
+    w: 40,
+    h: 14,
+    keep: true,
+    unit: true,
+    lower,
+    feet: { x, y: 100 },
+    bh: 40,
+    side: 14,
+  });
+  const three = [
+    body('a', 100),
+    body('b', 130),
+    body('c', 160),
+    name('a', 100, false),
+    name('b', 130, true),
+    name('c', 160, false),
+  ];
+  const out = resolveLabelCollisions(three);
+  assert.deepEqual(out.get('a'), { offsetY: 0 });
+  assert.deepEqual(out.get('c'), { offsetY: 0 });
+  assert.deepEqual(out.get('b'), { offsetY: 14, leader: true });
+  assert.ok((120 + 14 + 7 - 100) / 40 <= LOWER_REACH);
+  // With its line already taken, a second-level name is placed like any other.
+  const blocked = [{ id: 'wall', x: 100, y: 134, w: 60, h: 14, pin: true }, ...three];
+  const moved = resolveLabelCollisions(blocked).get('b');
+  assert.ok(moved && !(moved.offsetY === 14 && !moved.offsetX));
 });

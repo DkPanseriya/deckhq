@@ -229,6 +229,8 @@ export function planFrameLabels(ctx, view) {
       pin: rec.id === view.selectedId,
       keep: live,
       unit: badged.has(String(rec.id)),
+      // On a cushion between two taken ones: the second level (`label-spots.js`).
+      lower: !!(rec.targetSeat && rec.targetSeat.nameRow === 1),
       alts,
       // Over the head, clear of the icon-and-badge slot: where a name goes when
       // the floor under its feet is a wall, a plate or somebody else's name.

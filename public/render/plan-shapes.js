@@ -92,6 +92,9 @@ export {};
  *   cannot ask what room it is in, and a project room's break-out rug and the
  *   reception's wool are the same two KINDS in two different materials, so the
  *   plan declares it — the seam `prop.tall` already uses for a prop's height.
+ * @property {number} [cushions] a reception sofa run only: how many seat
+ *   cushions it is drawn with, which is how many it seats
+ *   (`plan-office-seats.js`). The painter draws this many at every zoom.
  */
 
 /**
@@ -190,6 +193,9 @@ export {};
  * @property {boolean} [standing] WP-78: a place in the office queue, which has
  *   no chair under it. The rig draws its occupant on its feet. A sofa cushion
  *   and the visitor chair are both seats and carry neither this nor `false`.
+ * @property {number} [nameRow] a reception cushion only: 1 where the cushions
+ *   either side of it are taken first, so its occupant's name is set one line
+ *   lower than theirs (`plan-office-seats.js`, `label-spots.js`).
  */
 
 /**

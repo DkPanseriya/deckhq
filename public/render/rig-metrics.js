@@ -299,6 +299,17 @@ export function formatElapsed(ms) {
 }
 
 /**
+ * The same wait in its leading unit alone: `2d 4h` → `2d`. What a badge says
+ * when the badge beside it leaves no room for the whole of it
+ * (`resolveBadgeCollisions`); the panel and the queue strip keep the minutes.
+ * @param {number} ms
+ * @returns {string}
+ */
+export function formatElapsedShort(ms) {
+  return formatElapsed(ms).split(' ')[0];
+}
+
+/**
  * Truncates a name label to at most 18 characters total (VISUAL-SPEC §7),
  * preferring a break on a word boundary within the budget over a mid-word
  * cut (tech-lead review finding 1, docs/DEVIATIONS.md "Findings from
