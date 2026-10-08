@@ -41,15 +41,18 @@ const LOUNGE_W_MAX = 240;
  * @param {number} waitingCount agents in the reception's queue
  * @param {number} benchedCount people the lounge is asked to hold
  * @param {number} goneHomeCount benched and not drawn; the lounge plate's
+ * @param {boolean} [quiet] size the two by who is in them: one sofa run, one bay
  */
-export function measureService(waitingCount, benchedCount, goneHomeCount) {
+export function measureService(waitingCount, benchedCount, goneHomeCount, quiet = false) {
+  /** A quiet floor's service rooms are sized by who is in them (`plan-office.js`). */
+  const compact = quiet === true;
   // The reception on its side, at a depth: as wide as its queue's sofa runs.
   /** @type {Map<number, {w:number,h:number}>} */
   const officeRows = new Map();
   const officeRowAt = (/** @type {number} */ d) => {
     let got = officeRows.get(d);
     if (!got) {
-      const r = buildOfficeRow(waitingCount, { w: 0, h: d }).room;
+      const r = buildOfficeRow(waitingCount, { w: 0, h: d }, { compact }).room;
       got = { w: r.w, h: r.h };
       officeRows.set(d, got);
     }
@@ -58,14 +61,14 @@ export function measureService(waitingCount, benchedCount, goneHomeCount) {
   // The reception upright. The width its queue asks for — a sofa place a head
   // round three walls — and, at a width, how deep it comes out: at its
   // contents, or HELD to that width with whoever its sofas cannot seat standing.
-  const officeWide = Math.ceil(buildOffice(waitingCount).room.w - EPS);
+  const officeWide = Math.ceil(buildOffice(waitingCount, undefined, { compact }).room.w - EPS);
   /** @type {Map<string, {w:number,h:number}>} */
   const officeCols = new Map();
   const officeColAt = (/** @type {number} */ w, hold = false) => {
     const key = `${w}|${hold ? 1 : 0}`;
     let got = officeCols.get(key);
     if (!got) {
-      const r = buildOffice(waitingCount, { w, h: 0 }, { maxW: w, hold }).room;
+      const r = buildOffice(waitingCount, { w, h: 0 }, { maxW: w, hold, compact }).room;
       got = { w: r.w, h: r.h };
       officeCols.set(key, got);
     }
@@ -107,7 +110,10 @@ export function measureService(waitingCount, benchedCount, goneHomeCount) {
     let got = lounges.get(key);
     if (!got) {
       const fit = { w, h: oneRow ? LOUNGE_MIN_H : 0 };
-      const built = buildLounge(benchedCount, fit, goneHomeCount, 1, { maxGames: games });
+      const built = buildLounge(benchedCount, fit, goneHomeCount, 1, {
+        maxGames: games,
+        quiet: compact,
+      });
       const n = built.room.natural || { w: built.room.w, h: built.room.h };
       const seats = built.loungeSpots.reduce(
         (a, sp) => a + (sp.kind === 'chat' ? 0 : Math.max(1, sp.capacity ?? 1)),

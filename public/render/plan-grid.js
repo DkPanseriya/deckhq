@@ -257,7 +257,7 @@ export function layProportioned(input) {
 
   // ---- what the service rooms need, measured off their own builders
   // (`plan-grid-service.js`).
-  const service = measureService(waitingCount, benchedCount, goneHomeCount);
+  const service = measureService(waitingCount, benchedCount, goneHomeCount, true);
   const { officeWide, officeColAt, officesInBand, loungeAt, loungesInBand } = service;
   const { whole, seatsWanted, keptOf, wholeKept } = service;
 
@@ -705,6 +705,7 @@ export function layProportioned(input) {
       goneHomeCount,
       contentsW,
       ceilings: !free,
+      quiet: true,
       nominal,
     });
 
@@ -795,16 +796,28 @@ export function layProportioned(input) {
     return chosen;
   };
   /**
-   * A FLOOR OF FEW ROOMS. The building is the one its rooms AT their ceilings
-   * are the majority of — or the widest under that which can be laid — with
-   * the service rooms held to their caps in it: a crowd in the lounge makes
-   * neither the rooms small nor the building large. And where even the
-   * service rooms' least does not fit in that (one room, two), the smallest
-   * building that holds them: its rooms at their ceilings, the reception and
-   * the lounge given what their rows have spare up to their caps, and the
-   * rest a hall (`plan-margin.js`) — never a larger room.
+   * A FLOOR OF FEW ROOMS: `heldToCaps`, or — where it is the smaller building —
+   * the floor at its contents with a hall for what the rooms leave. A quiet
+   * floor's reception is one sofa run and its lounge one bay, so that is the
+   * floor drawn largest with nothing held back.
    */
   const few = () => {
+    const held = heldToCaps();
+    const loose = margin;
+    margin = true;
+    const whole = laid(false, least, held ? held.W : WIDTH_MAX);
+    if (whole && (!held || whole.W < held.W * (1 - WIDTH_TIE))) return whole;
+    margin = loose;
+    return held;
+  };
+  /**
+   * The building its rooms AT their ceilings are the majority of — or the
+   * widest under that which can be laid — with the service rooms held to their
+   * caps in it: a crowd in the lounge makes neither the rooms small nor the
+   * building large. And where even their least does not fit in that, the
+   * smallest building that holds them, the rest a hall (`plan-margin.js`).
+   */
+  const heldToCaps = () => {
     const top = Math.min(nominal, widest, contentsW > 0 ? contentsW : Infinity);
     roomy = true;
     for (let W = top; W >= Math.max(least, top * FEW_REACH) - EPS; W /= FEW_STEP) {

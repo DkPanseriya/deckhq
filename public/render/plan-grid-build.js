@@ -42,19 +42,23 @@ function roomInto(need, cell) {
  * Every room of one candidate, built and placed; null if one did not fit.
  * @param {any} c the candidate `plan-grid.js` chose
  * @param {{needs: Need[], caps: number[], waitingCount: number, benchedCount: number,
- *   goneHomeCount: number, contentsW: number, nominal: number, ceilings: boolean}} floor what
+ *   goneHomeCount: number, contentsW: number, nominal: number, ceilings: boolean,
+ *   quiet?: boolean}} floor what
  *   it is laid for
  */
 export function buildCandidate(c, floor) {
   const { needs, caps, waitingCount, benchedCount, goneHomeCount } = floor;
-  const held = { hold: c.hold };
+  const held = { hold: c.hold, compact: floor.quiet === true };
   const office =
     c.family === 'column'
       ? buildOffice(waitingCount, c.office, { maxW: c.office.w, ...held })
       : buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h }, held);
   if (office.room.w > c.office.w + 0.01 || office.room.h > c.office.h + 0.01) return null;
   const cell = { w: c.lounge.w, h: c.lounge.h };
-  const lounge = buildLounge(benchedCount, cell, goneHomeCount, 1, { maxGames: c.games });
+  const lounge = buildLounge(benchedCount, cell, goneHomeCount, 1, {
+    maxGames: c.games,
+    quiet: floor.quiet === true,
+  });
   const inLounge = lounge.room.natural || lounge.room;
   if (inLounge.w > c.lounge.w + 0.01 || inLounge.h > c.lounge.h + 0.01) return null;
   Object.assign(office.room, c.office);
