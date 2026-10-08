@@ -1,14 +1,13 @@
 /**
- * The props the lounge is furnished with (WP-22 follow-up).
+ * The props the lounge is furnished with: sofas and their corner pieces,
+ * armchairs, the booth, the coffee table and what is on it, the side and
+ * magazine tables, the lamp and the water cooler.
  *
- * Split out of `backdrop.js`'s `paintProp` unchanged. Sofas and their corner pieces, the coffee table and what is on it, the side and magazine tables, the lamp and the water cooler.
- *
- * The switch is the original's, case for case and line for line, including
- * every `break`. What is new is only the wrapper: a `default` that answers
- * `false` so `paintProp` can try the next group, and the `true` after the
- * switch that says this group drew it. `local` is the caller's — the
- * two-pass shadow-then-fill it built around `withShadow` — handed in rather
- * than rebuilt, so no prop's shadow changed.
+ * One switch, a `default` that answers `false` so `paintProp` can try the next
+ * group. `local` is the caller's — the piece's cast and its contact with the
+ * floor (`grounded`) — handed in rather than rebuilt, and nothing here sets a
+ * shadow of its own. How much of a piece is drawn depends on the scale of the
+ * bake: `detailOf` in `backdrop-props-kit.js`.
  *
  * Coordinates arrive pre-converted to px and already rotated by `angle`, and
  * the caller has already clipped to the prop's own footprint plus
@@ -16,9 +15,42 @@
  */
 
 import { PALETTE } from './palette.js';
-import { setRadius } from './look-derive.js';
+import { LOOK, setRadius } from './look-derive.js';
 import { roundRect, unturn, SOFA_ARM_U, SOFA_BACK_U } from './backdrop-paint.js';
 import { LAMP_GLOW } from './backdrop-paint.js';
+import { detailOf, onePx, seeded, tones, topEdges } from './backdrop-props-kit.js';
+
+/** A seat cushion is about this wide, and the gap between two this narrow. */
+export const CUSHION_U = 1.9;
+export const CUSHION_GAP_U = 0.06;
+/** The one pillow a sofa carries: its side, and how far it is turned. */
+export const PILLOW_U = 0.6;
+export const PILLOW_TURN = (12 * Math.PI) / 180;
+/** A booth's high back, and the table between its two benches, in plan units. */
+export const BOOTH_BACK_U = 0.35;
+export const BOOTH_TABLE_U = Object.freeze({ across: 0.9, along: 1.6 });
+
+/**
+ * A low table's top: the pale timber, its outline, and — where a bake can hold
+ * them — its two shaded edges and two lit ones.
+ *
+ * @param {any} ctx @param {number} w @param {number} h @param {number} r
+ * @param {number} u @param {(fn:(k:any)=>void)=>void} local @param {0|1|2} lod
+ */
+function lowTable(ctx, w, h, r, u, local, lod) {
+  local((k) => {
+    k.fillStyle = PALETTE.tableWood;
+    roundRect(k, -w / 2, -h / 2, w, h, r);
+    k.fill();
+    k.strokeStyle = PALETTE.deskEdge;
+    k.lineWidth = 1.2;
+    k.stroke();
+  });
+  if (lod >= 1) {
+    const t = tones();
+    topEdges(ctx, -w / 2, -h / 2, w, h, r, Math.max(1, 0.08 * u), t.tableBand, t.tableLit);
+  }
+}
 
 /**
  * @param {any} ctx @param {any} prop @param {number} u
@@ -33,10 +65,6 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       // cushion loop below divides along the length, so a taller-than-wide
       // sofa is drawn in a quarter-turned frame with its dimensions swapped.
       //
-      // Rotating the prop instead was tried and is wrong: `angle` also has to
-      // mean which way the sofa FACES, and the layout rect used for bounds and
-      // anchors is the unrotated box — so a rotated sofa rendered across its
-      // own footprint. That is what turned the reception's back run upright.
       // A sofa's RECT is its footprint and must NOT turn with `angle`. The
       // switch's wrapper has already applied `prop.angle`, so cancel it here
       // exactly as `manager` does: a 32 x 2.6 back run rotated by its own
@@ -50,54 +78,83 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       if (vertical) ctx.rotate(Math.PI / 2);
       // WHICH SIDE THE BACK IS ON. The rect says how a sofa LIES; `angle` says
       // which way it FACES, in the plan's convention (0 is +x, east). The back
-      // is the far side from that. Without this every sofa in the building had
-      // its back to the room and its seat to the wall.
+      // is the far side from that.
       const backAtStart = vertical ? Math.cos(a) < 0 : Math.sin(a) > 0;
+      const lod = detailOf(ctx, u);
+      const t = tones();
       local((k) => {
         k.fillStyle = PALETTE.sofaFrame;
-        roundRect(k, -len / 2, -depth / 2, len, depth, 6);
+        roundRect(k, -len / 2, -depth / 2, len, depth, setRadius(6));
         k.fill();
         k.strokeStyle = PALETTE.chairEdge;
+        k.lineWidth = 1;
         k.stroke();
       });
-      // Arms at each end and a back along one long side, so a sofa reads as a
-      // sofa from directly above instead of as a white slab with lines on it.
-      //
       // §3.4 states both in PLAN UNITS — *"arms at 0.6 U"* — because 7 baked
       // pixels is a different piece of furniture at every zoom the floor is
       // drawn at, and a sofa whose arms vanish at fit scale is the slab again.
       const arm = Math.min(depth * 0.34, SOFA_ARM_U * u);
       const back = Math.min(depth * 0.3, SOFA_BACK_U * u);
-      const backY = backAtStart ? -depth / 2 : depth / 2 - back;
-      ctx.fillStyle = PALETTE.sofaFrame;
-      roundRect(ctx, -len / 2, backY, len, back, setRadius(4));
-      ctx.fill();
-      roundRect(ctx, -len / 2, -depth / 2, arm, depth, setRadius(4));
-      ctx.fill();
-      roundRect(ctx, len / 2 - arm, -depth / 2, arm, depth, setRadius(4));
-      ctx.fill();
-      // Seat cushions between the arms, each with its own soft seam.
+      const rim = 1;
+      if (lod >= 1) {
+        // THE UPHOLSTERY: a back along one long side and an arm at each end,
+        // a step lighter than the frame they are built on. A soft set rolls
+        // its arms: wider, and round at both ends.
+        const rolled = !!(LOOK.furniture && LOOK.furniture.arms);
+        const backY = backAtStart ? -depth / 2 + rim : depth / 2 - back;
+        ctx.fillStyle = t.sofaArm;
+        roundRect(ctx, -len / 2 + rim, backY, len - rim * 2, back - rim, setRadius(4));
+        ctx.fill();
+        const armR = rolled ? arm / 2 : setRadius(4);
+        for (const x of [-len / 2 + rim, len / 2 - arm]) {
+          roundRect(ctx, x, -depth / 2 + rim, arm - rim, depth - rim * 2, armR);
+          ctx.fill();
+        }
+      }
+      // Seat cushions between the arms. A reception run says how many it has
+      // (`prop.cushions`): one person sits on each, so the count is the plan's
+      // and the same at every zoom. Any other sofa has one for every 1.9 U.
       const seatX = -len / 2 + arm;
       const seatW = Math.max(2, len - arm * 2);
       const seatY = backAtStart ? -depth / 2 + back : -depth / 2 + 1.5;
       const seatH = Math.max(2, depth - back - 1.5);
-      // A cushion is about as wide as the sofa is deep, and the seams between
-      // them are seams — a 2.4px gap on every one turned a long reception run
-      // into a row of separate white tiles.
-      //
-      // A reception run says how many it has (`prop.cushions`): one person
-      // sits on each, so the count is the plan's and the same at every zoom.
       const n =
-        prop.cushions > 0 ? prop.cushions : Math.max(1, Math.round(seatW / Math.max(24, depth)));
+        prop.cushions > 0 ? prop.cushions : Math.max(1, Math.round(seatW / (CUSHION_U * u)));
       const cw = seatW / n;
+      const gap = Math.max(0.8, (CUSHION_GAP_U * u) / 2);
       for (let i = 0; i < n; i++) {
         ctx.fillStyle = PALETTE.sofaCushion;
-        roundRect(ctx, seatX + i * cw + 0.8, seatY + 1, cw - 1.6, seatH - 2, 3);
+        roundRect(ctx, seatX + i * cw + gap, seatY + 1, cw - gap * 2, seatH - 2, 3);
         ctx.fill();
-        ctx.strokeStyle = PALETTE.sofaSeam;
-        ctx.lineWidth = 0.9;
-        roundRect(ctx, seatX + i * cw + 0.8, seatY + 1, cw - 1.6, seatH - 2, 3);
-        ctx.stroke();
+        if (lod >= 2) {
+          ctx.strokeStyle = t.sofaSeam;
+          ctx.lineWidth = onePx(ctx);
+          ctx.stroke();
+        }
+      }
+      if (lod === 0) break;
+      // The back cushions: a second, shallower row, leaning on the back.
+      const padH = back * 0.62;
+      const padY = backAtStart ? -depth / 2 + back - padH * 0.72 : depth / 2 - back - padH * 0.28;
+      ctx.fillStyle = t.sofaBack;
+      for (let i = 0; i < n; i++) {
+        roundRect(ctx, seatX + i * cw + gap * 2, padY, cw - gap * 4, padH, 2);
+        ctx.fill();
+      }
+      if (lod >= 2) {
+        // ONE PILLOW, at whichever end this sofa keeps it, turned a little.
+        const end = seeded(prop, 'pillow') < 0.5 ? -1 : 1;
+        const side = Math.min(PILLOW_U * u, cw * 0.5);
+        ctx.save();
+        ctx.translate(
+          end * (seatW / 2 - side * 0.75),
+          backAtStart ? seatY + side * 0.8 : seatY + seatH - side * 0.8,
+        );
+        ctx.rotate(end * PILLOW_TURN);
+        ctx.fillStyle = t.pillow;
+        roundRect(ctx, -side / 2, -side / 2, side, side, 2);
+        ctx.fill();
+        ctx.restore();
       }
       break;
     }
@@ -115,59 +172,177 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       const s = Math.min(w, h);
       const back = Math.max(2, s * 0.26);
       const arm = Math.max(1.5, s * 0.18);
+      const lod = detailOf(ctx, u);
+      const t = tones();
       local((k) => {
         k.fillStyle = PALETTE.sofaFrame;
-        roundRect(k, -s / 2, -s / 2, s, s, 5);
+        roundRect(k, -s / 2, -s / 2, s, s, setRadius(5));
         k.fill();
         k.strokeStyle = PALETTE.chairEdge;
+        k.lineWidth = 1;
         k.stroke();
       });
+      if (lod >= 1) {
+        // The same construction as a sofa, at one seat: the back, then an arm
+        // down each side of it.
+        const rolled = !!(LOOK.furniture && LOOK.furniture.arms);
+        ctx.fillStyle = t.sofaArm;
+        roundRect(ctx, -s / 2 + 1, -s / 2 + 1, back - 1, s - 2, setRadius(4));
+        ctx.fill();
+        for (const y of [-s / 2 + 1, s / 2 - arm]) {
+          roundRect(ctx, -s / 2 + 1, y, s - 2, arm - 1, rolled ? arm / 2 : setRadius(3));
+          ctx.fill();
+        }
+      }
+      const seatX = -s / 2 + back;
+      const seatW = s - back - arm * 0.6;
       ctx.fillStyle = PALETTE.sofaCushion;
-      roundRect(ctx, -s / 2 + back, -s / 2 + arm, s - back - arm * 0.6, s - arm * 2, setRadius(4));
+      roundRect(ctx, seatX, -s / 2 + arm, seatW, s - arm * 2, setRadius(4));
       ctx.fill();
+      if (lod >= 2) {
+        ctx.strokeStyle = t.sofaSeam;
+        ctx.lineWidth = onePx(ctx);
+        ctx.stroke();
+        // The back cushion, leaning where the occupant's shoulders go.
+        ctx.fillStyle = t.sofaBack;
+        roundRect(ctx, seatX - back * 0.3, -s / 2 + arm + 2, back * 0.7, s - arm * 2 - 4, 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'booth': {
+      // A QUIET BOOTH: a high back on three sides, a bench down each arm and
+      // a table between them, open on the side it faces. Its rect is its
+      // footprint, so the facing turn is undone and the open side is chosen
+      // from the angle instead.
+      const a = prop.angle || 0;
+      unturn(ctx, prop);
+      const lod = detailOf(ctx, u);
+      const t = tones();
+      const sideways = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a));
+      // Drawn open toward +y; turned so that +y is the way it faces.
+      ctx.rotate(
+        sideways ? (Math.cos(a) > 0 ? -Math.PI / 2 : Math.PI / 2) : Math.sin(a) < 0 ? Math.PI : 0,
+      );
+      const bw = sideways ? h : w;
+      const bd = sideways ? w : h;
+      const wall = Math.min(bw * 0.2, BOOTH_BACK_U * u);
+      const iw = bw - wall * 2;
+      const id = bd - wall;
+      // The back is a U: the far wall and both arms, and nothing across the front.
+      local((k) => {
+        k.fillStyle = PALETTE.sofaFrame;
+        k.beginPath();
+        k.moveTo(-bw / 2, -bd / 2);
+        k.lineTo(bw / 2, -bd / 2);
+        k.lineTo(bw / 2, bd / 2);
+        k.lineTo(iw / 2, bd / 2);
+        k.lineTo(iw / 2, -bd / 2 + wall);
+        k.lineTo(-iw / 2, -bd / 2 + wall);
+        k.lineTo(-iw / 2, bd / 2);
+        k.lineTo(-bw / 2, bd / 2);
+        k.closePath();
+        k.fill();
+      });
+      // The floor inside it, four per cent lighter than the room's: it is lit.
+      ctx.fillStyle = PALETTE.deskSheen;
+      ctx.globalAlpha = 0.25;
+      ctx.fillRect(-iw / 2, -bd / 2 + wall, iw, id);
+      ctx.globalAlpha = 1;
+      // A bench down each arm, two cushions long.
+      const bench = iw * 0.27;
+      for (const side of [-1, 1]) {
+        const x = side < 0 ? -iw / 2 : iw / 2 - bench;
+        for (let i = 0; i < 2; i++) {
+          ctx.fillStyle = PALETTE.sofaCushion;
+          roundRect(
+            ctx,
+            x + 0.8,
+            -bd / 2 + wall + (id / 2) * i + 0.8,
+            bench - 1.6,
+            id / 2 - 1.6,
+            3,
+          );
+          ctx.fill();
+          if (lod >= 2) {
+            ctx.strokeStyle = t.sofaSeam;
+            ctx.lineWidth = onePx(ctx);
+            ctx.stroke();
+          }
+        }
+      }
+      // The table between them.
+      const tw = Math.min(iw - bench * 2 - 2, BOOTH_TABLE_U.across * u);
+      const tl = Math.min(id * 0.6, BOOTH_TABLE_U.along * u);
+      ctx.fillStyle = PALETTE.tableWood;
+      roundRect(ctx, -tw / 2, -bd / 2 + wall + (id - tl) / 2, tw, tl, setRadius(2));
+      ctx.fill();
+      if (lod >= 1) {
+        ctx.strokeStyle = t.tableBand;
+        ctx.lineWidth = onePx(ctx);
+        ctx.stroke();
+      }
       break;
     }
     case 'coffee_table': {
       unturn(ctx, prop);
-      // Low table in front of a sofa group. Same wood tone and soft ring
-      // highlight as the dining and board-game tables so the lounge reads as
-      // one furniture set, but rectangular rather than round: a coffee table
-      // is a low rectangle, and the shape is what keeps the two apart from
-      // above now that the tone no longer does.
-      local((k) => {
-        k.fillStyle = PALETTE.tableWood;
-        roundRect(k, -w / 2, -h / 2, w, h, 5);
-        k.fill();
-        k.strokeStyle = PALETTE.deskEdge;
-        k.lineWidth = 1.2;
-        k.stroke();
-      });
+      // Low table in front of a sofa group. Same wood tone as the dining and
+      // board-game tables so the lounge reads as one furniture set, but
+      // rectangular rather than round: a coffee table is a low rectangle, and
+      // the shape is what keeps the two apart from above.
+      const lod = detailOf(ctx, u);
+      const t = tones();
+      lowTable(ctx, w, h, setRadius(5), u, local, lod);
+      // The inset: a glass or a lower shelf, a quarter of the way in.
       const inset = Math.min(w, h) * 0.22;
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.strokeStyle = t.tableLit;
       ctx.lineWidth = Math.max(0.6, u / 22);
       roundRect(ctx, -w / 2 + inset, -h / 2 + inset, w - inset * 2, h - inset * 2, 3);
       ctx.stroke();
+      if (lod >= 2) {
+        // A book left on it and a dish beside the book, at opposite ends.
+        const along = w >= h;
+        const reach = (along ? w : h) * 0.24;
+        const end = seeded(prop, 'book') < 0.5 ? -1 : 1;
+        const s = Math.min(w, h) * 0.2;
+        ctx.save();
+        ctx.translate(along ? end * reach : 0, along ? 0 : end * reach);
+        ctx.rotate(0.2 * end);
+        ctx.fillStyle = t.topBook;
+        ctx.fillRect(-s * 1.1, -s * 0.75, s * 2.2, s * 1.5);
+        ctx.restore();
+        ctx.fillStyle = t.topTray;
+        ctx.beginPath();
+        ctx.arc(along ? -end * reach : 0, along ? 0 : -end * reach, s * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = t.tableBand;
+        ctx.lineWidth = onePx(ctx);
+        ctx.stroke();
+      }
       break;
     }
     case 'fruit_bowl': {
       // A bowl of fruit on a counter: the small domestic cue that makes a
-      // room read as a kitchen rather than as more office furniture.
+      // room read as a kitchen rather than as more office furniture. The fruit
+      // is the counter's and the planting's own colours, never a red.
       const r = Math.min(w, h) / 2;
+      const t = tones();
       local((k) => {
         k.fillStyle = PALETTE.deskTop;
         k.beginPath();
         k.arc(0, 0, r, 0, Math.PI * 2);
         k.fill();
         k.strokeStyle = PALETTE.deskEdge;
+        k.lineWidth = 1;
         k.stroke();
       });
-      const fruit = [
-        [-0.3, -0.2, '#C0563B'],
-        [0.3, -0.15, '#D98F2E'],
-        [0, 0.25, '#7C9A4A'],
-        [-0.15, 0.05, '#C9A227'],
-      ];
-      for (const [fx, fy, tone] of /** @type {Array<[number, number, string]>} */ (fruit)) {
+      const fruit = /** @type {Array<[number, number, string]>} */ ([
+        [-0.3, -0.2, t.fruitA],
+        [0.3, -0.15, t.fruitB],
+        [0, 0.25, t.fruitC],
+        [-0.15, 0.05, t.fruitD],
+      ]);
+      for (const [fx, fy, tone] of fruit) {
         ctx.fillStyle = tone;
         ctx.beginPath();
         ctx.arc(fx * r, fy * r, r * 0.3, 0, Math.PI * 2);
@@ -176,16 +351,16 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'sofa_corner': {
-      // The corner unit of the reception's C-shaped sectional. Same
-      // fill/edge tokens as `sofa` so it reads as one continuous run
-      // where they abut; one large seat cushion instead of a row of small
-      // ones is what marks it as the turning corner rather than another
-      // straight length.
+      // The corner unit of a sectional. Framed like the runs it joins, so the
+      // three read as one piece where they abut; one large seat cushion rather
+      // than a row of small ones is what marks it as the turning corner.
+      const lod = detailOf(ctx, u);
       local((k) => {
-        k.fillStyle = PALETTE.sofaFill;
-        roundRect(k, -w / 2, -h / 2, w, h, 6);
+        k.fillStyle = PALETTE.sofaFrame;
+        roundRect(k, -w / 2, -h / 2, w, h, setRadius(6));
         k.fill();
         k.strokeStyle = PALETTE.chairEdge;
+        k.lineWidth = 1;
         k.stroke();
       });
       const cushionPad = Math.min(w, h) * 0.16;
@@ -199,42 +374,30 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
         5,
       );
       ctx.fill();
+      if (lod >= 2) {
+        ctx.strokeStyle = tones().sofaSeam;
+        ctx.lineWidth = onePx(ctx);
+        ctx.stroke();
+      }
       break;
     }
     case 'side_table': {
       unturn(ctx, prop);
-      // Small square table beside the sofa — same wood tokens as the desk
-      // family, just square and low, with a soft corner sheen instead of
-      // the desk's centre divider.
-      local((k) => {
-        k.fillStyle = PALETTE.tableWood;
-        roundRect(k, -w / 2, -h / 2, w, h, 3);
-        k.fill();
-        k.strokeStyle = PALETTE.deskEdge;
-        k.lineWidth = 1;
-        k.stroke();
-      });
-      ctx.fillStyle = 'rgba(255,255,255,0.22)';
-      roundRect(ctx, -w / 2 + 1, -h / 2 + 1, w * 0.5, h * 0.5, 2);
-      ctx.fill();
+      // Small square table beside the sofa — the pale timber, square and low.
+      lowTable(ctx, w, h, setRadius(3), u, local, detailOf(ctx, u));
       break;
     }
     case 'magazine_table': {
       unturn(ctx, prop);
       // Low rectangular coffee table with a couple of magazines fanned
       // across it — small flat rects at a slight angle read as "in use",
-      // the same trick the whiteboard's marker dashes use.
-      local((k) => {
-        k.fillStyle = PALETTE.tableWood;
-        roundRect(k, -w / 2, -h / 2, w, h, 4);
-        k.fill();
-        k.strokeStyle = PALETTE.deskEdge;
-        k.lineWidth = 1.2;
-        k.stroke();
-      });
+      // the same trick the whiteboard's marker dashes use. Their covers are
+      // muted to the table they lie on: a magazine is not a signal.
+      const t = tones();
+      lowTable(ctx, w, h, setRadius(4), u, local, detailOf(ctx, u));
       const mags = [
-        { dx: -0.16, dy: -0.06, rot: -0.16, tone: PALETTE.whiteboardMarkerBlue },
-        { dx: 0.1, dy: 0.1, rot: 0.22, tone: PALETTE.whiteboardMarkerPlum },
+        { dx: -0.16, dy: -0.06, rot: -0.16, tone: t.magazineA },
+        { dx: 0.1, dy: 0.1, rot: 0.22, tone: t.magazineB },
       ];
       const mw = Math.max(3, w * 0.26);
       const mh = Math.max(2, h * 0.38);
@@ -251,10 +414,8 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
     }
     case 'lamp': {
       // Floor lamp: a small base point, with a wider shade ring above it
-      // and a warm glow escaping under its rim. LAMP_GLOW (top of file)
-      // is a colour palette.js does not carry — its only glows are the
-      // cool monitor/arcade cyan, and a floor lamp needs to read as warm
-      // light.
+      // and a warm glow escaping under its rim. `LAMP_GLOW` is the one warm
+      // light on this floor, named in `backdrop-paint.js`.
       const r = Math.min(w, h) / 2;
       ctx.fillStyle = LAMP_GLOW;
       ctx.beginPath();
@@ -288,10 +449,12 @@ export function paintLoungeProps(ctx, prop, u, w, h, local) {
       ctx.beginPath();
       ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillStyle = PALETTE.whiteboardSurface;
+      ctx.globalAlpha = 0.55;
       ctx.beginPath();
       ctx.arc(-r * 0.18, -r * 0.18, r * 0.22, 0, Math.PI * 2);
       ctx.fill();
+      ctx.globalAlpha = 1;
       break;
     }
     default:

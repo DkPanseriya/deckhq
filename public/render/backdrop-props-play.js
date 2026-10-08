@@ -1,14 +1,14 @@
 /**
- * The props the games room and the kitchen are furnished with (WP-22 follow-up).
+ * The props the games room and the kitchen are furnished with: the dining and
+ * board-game tables, the pool table, table tennis, foosball, the arcade
+ * cabinet, and the counter, fridge, coffee machine, reception desk and bar
+ * beyond them.
  *
- * Split out of `backdrop.js`'s `paintProp` unchanged. The dining and board-game tables, the pool table, table tennis, foosball, the arcade cabinet, and the counter, fridge, coffee machine, reception desk and bar beyond them.
- *
- * The switch is the original's, case for case and line for line, including
- * every `break`. What is new is only the wrapper: a `default` that answers
- * `false` so `paintProp` can try the next group, and the `true` after the
- * switch that says this group drew it. `local` is the caller's — the
- * two-pass shadow-then-fill it built around `withShadow` — handed in rather
- * than rebuilt, so no prop's shadow changed.
+ * One switch, a `default` that answers `false` so `paintProp` can try the next
+ * group. `local` is the caller's — the piece's cast and its contact with the
+ * floor (`grounded`) — handed in rather than rebuilt, and nothing here sets a
+ * shadow of its own. How much of a piece is drawn depends on the scale of the
+ * bake: `detailOf` in `backdrop-props-kit.js`.
  *
  * Coordinates arrive pre-converted to px and already rotated by `angle`, and
  * the caller has already clipped to the prop's own footprint plus
@@ -16,7 +16,13 @@
  */
 
 import { PALETTE } from './palette.js';
-import { roundRect } from './backdrop-paint.js';
+import { roundRect, TABLE_EDGE_U } from './backdrop-paint.js';
+import { setRadius } from './look-derive.js';
+import { detailOf, onePx, tones, topEdges } from './backdrop-props-kit.js';
+
+/** A reception desk is an arc: how far it sweeps, and how thick it is against its radius. */
+export const RECEPTION_SWEEP = (110 * Math.PI) / 180;
+export const RECEPTION_DEPTH = 1.2 / 5;
 
 /**
  * @param {any} ctx @param {any} prop @param {number} u
@@ -27,6 +33,7 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
   switch (prop.kind) {
     case 'dining_table':
     case 'board_game_table': {
+      const t = tones();
       local((k) => {
         k.fillStyle = PALETTE.tableWood;
         k.beginPath();
@@ -36,10 +43,21 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
         k.lineWidth = 1.2;
         k.stroke();
       });
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.strokeStyle = t.tableLit;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(0, 0, w * 0.28, 0, Math.PI * 2);
       ctx.stroke();
+      if (detailOf(ctx, u) >= 1) {
+        // A round top shows its edge as a crescent: the shaded rim on the side
+        // the light leaves by.
+        const r = w / 2 - TABLE_EDGE_U * u * 0.5;
+        ctx.strokeStyle = t.tableBand;
+        ctx.lineWidth = Math.max(1, TABLE_EDGE_U * u);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, -Math.PI * 0.2, Math.PI * 0.7);
+        ctx.stroke();
+      }
       break;
     }
     case 'pool_table': {
@@ -101,15 +119,18 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
 
       // A racked triangle of balls at the far end, cue ball at the other, so
       // the table is legible as mid-game even when nobody is standing at it.
+      // The balls are the cloth's own colour carried toward four others on the
+      // floor: a game in progress, and nothing that looks like a signal.
       const ball = Math.max(1.1, pocket * 0.46);
       const rackAt = alongX ? bw * 0.22 : bh * 0.22;
-      const BALLS = ['#C4622F', '#3B5E8C', '#B03A3A', '#6E4E96', '#D8A73C'];
+      const t = tones();
+      const balls = [t.ballA, t.ballB, t.ballC, t.ballD];
       let n = 0;
       for (let row = 0; row < 3; row++) {
         for (let i = 0; i <= row; i++) {
           const along = rackAt + row * ball * 1.9;
           const across = (i - row / 2) * ball * 2.1;
-          ctx.fillStyle = BALLS[n % BALLS.length];
+          ctx.fillStyle = balls[n % balls.length];
           ctx.beginPath();
           ctx.arc(alongX ? along : across, alongX ? across : along, ball, 0, Math.PI * 2);
           ctx.fill();
@@ -213,58 +234,162 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
       break;
     }
     case 'counter': {
+      // The kitchen's worktop: a hob at one end and a sink at the other, both
+      // let into the top rather than standing on it.
+      const lod = detailOf(ctx, u);
+      const t = tones();
       local((k) => {
         k.fillStyle = PALETTE.counterTop;
         roundRect(k, -w / 2, -h / 2, w, h, 2);
         k.fill();
       });
       ctx.strokeStyle = PALETTE.chairEdge;
+      ctx.lineWidth = 1;
       ctx.strokeRect(-w / 2 + 0.5, -h / 2 + 0.5, w - 1, h - 1);
-      ctx.fillStyle = PALETTE.hob;
-      ctx.fillRect(-w * 0.32, -h * 0.2, w * 0.2, h * 0.4);
-      ctx.fillStyle = PALETTE.sink;
+      if (lod >= 1) {
+        topEdges(ctx, -w / 2, -h / 2, w, h, 2, Math.max(1, 0.08 * u), t.counterBand, t.counterLit);
+      }
+      ctx.fillStyle = t.hob;
+      if (lod === 0) {
+        ctx.fillRect(-w * 0.32, -h * 0.24, w * 0.2, h * 0.48);
+      } else {
+        roundRect(ctx, -w * 0.32, -h * 0.24, w * 0.2, h * 0.48, 1.5);
+        ctx.fill();
+      }
+      ctx.fillStyle = t.sink;
       roundRect(ctx, w * 0.1, -h * 0.22, w * 0.24, h * 0.44, 2);
       ctx.fill();
+      if (lod >= 2) {
+        // Two rings on the hob, and the sink's drain and tap.
+        ctx.strokeStyle = t.hobRing;
+        ctx.lineWidth = onePx(ctx);
+        for (const side of [-1, 1]) {
+          ctx.beginPath();
+          ctx.arc(-w * 0.22 + side * w * 0.05, 0, Math.min(w * 0.035, h * 0.16), 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = t.counterBand;
+        ctx.beginPath();
+        ctx.arc(w * 0.22, 0, Math.max(onePx(ctx), h * 0.05), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(w * 0.215, -h * 0.34, w * 0.01, h * 0.16);
+      }
       break;
     }
     case 'fridge': {
+      const lod = detailOf(ctx, u);
       local((k) => {
         k.fillStyle = PALETTE.fridgeFill;
         roundRect(k, -w / 2, -h / 2, w, h, 2);
         k.fill();
         k.strokeStyle = PALETTE.chairEdge;
+        k.lineWidth = 1;
         k.stroke();
       });
+      if (lod >= 2) {
+        // Two doors, and a handle on each beside the line between them.
+        ctx.strokeStyle = PALETTE.chairEdge;
+        ctx.lineWidth = onePx(ctx);
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2 + 1);
+        ctx.lineTo(0, h / 2 - 1);
+        ctx.stroke();
+        ctx.fillStyle = PALETTE.chairEdge;
+        for (const side of [-1, 1]) {
+          ctx.fillRect(side * w * 0.07 - w * 0.012, h * 0.1, w * 0.024, h * 0.26);
+        }
+      }
       break;
     }
     case 'coffee_machine': {
+      const lod = detailOf(ctx, u);
       local((k) => {
         k.fillStyle = PALETTE.furnitureMetal;
         roundRect(k, -w / 2, -h / 2, w, h, 1);
         k.fill();
       });
+      if (lod >= 2) {
+        // The drip tray along its front, and a cup standing on it.
+        const t = tones();
+        ctx.fillStyle = PALETTE.inkCool;
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(-w * 0.34, h * 0.08, w * 0.68, h * 0.3);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = t.keyboard;
+        ctx.beginPath();
+        ctx.arc(0, h * 0.23, Math.min(w, h) * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+      }
       break;
     }
     case 'reception_desk': {
-      // A low counter, distinct from `user_desk`: no centre divider (that
-      // is what makes user_desk read as "a desk to sit at") — instead a
-      // raised front lip the way a real reception counter presents to the
-      // room, plus a small nameplate/monitor accent so it reads as a
-      // staffed counter rather than a plain plinth.
+      // A STAFFED COUNTER, AND IT IS AN ARC: a shallow curve inside its rect,
+      // open toward the person behind it, with a lower tier along the inside
+      // for a screen and a tray. Nothing else on the floor is curved, which is
+      // what tells a visitor where to walk.
+      const lod = detailOf(ctx, u);
+      const t = tones();
+      const half = RECEPTION_SWEEP / 2;
+      // The largest arc of this sweep that fits the rect: its chord across the
+      // width, its rise within the height.
+      const R = Math.min(
+        w / (2 * Math.sin(half)),
+        h / (1 - Math.cos(half) * (1 - RECEPTION_DEPTH)),
+      );
+      const inner = R * (1 - RECEPTION_DEPTH);
+      // Centred on the rect: the arc bulges up the page, toward -y.
+      const cy = R - (R - inner * Math.cos(half)) / 2;
+      /** @param {any} k @param {number} outer @param {number} inside */
+      const band = (k, outer, inside) => {
+        k.beginPath();
+        k.arc(0, cy, outer, -Math.PI / 2 - half, -Math.PI / 2 + half);
+        k.arc(0, cy, inside, -Math.PI / 2 + half, -Math.PI / 2 - half, true);
+        k.closePath();
+      };
       local((k) => {
         k.fillStyle = PALETTE.counterTop;
-        roundRect(k, -w / 2, -h / 2, w, h, 2.5);
+        band(k, R, inner);
         k.fill();
         k.strokeStyle = PALETTE.deskEdge;
         k.lineWidth = 1.2;
         k.stroke();
       });
-      const lip = Math.max(1.5, h * 0.22);
-      ctx.fillStyle = PALETTE.furnitureMetal;
-      ctx.fillRect(-w / 2, h / 2 - lip, w, lip);
-      ctx.fillStyle = PALETTE.monitorBody;
-      roundRect(ctx, w * 0.28, -h / 2 + h * 0.16, w * 0.16, h * 0.3, 1);
+      // The lower tier, on the inside of the curve.
+      const tier = inner + (R - inner) * 0.42;
+      ctx.fillStyle = t.counterBand;
+      band(ctx, tier, inner);
       ctx.fill();
+      if (lod >= 1) {
+        // A screen on the tier, to one side: a short dark bar along the curve.
+        ctx.strokeStyle = t.monitorBezel;
+        ctx.lineWidth = Math.max(1.5, (R - inner) * 0.14);
+        ctx.beginPath();
+        ctx.arc(
+          0,
+          cy,
+          inner + (R - inner) * 0.22,
+          -Math.PI / 2 + half * 0.2,
+          -Math.PI / 2 + half * 0.5,
+        );
+        ctx.stroke();
+      }
+      if (lod >= 2) {
+        // And a tray of paper on the other.
+        ctx.save();
+        ctx.translate(0, cy);
+        ctx.rotate(-half * 0.45);
+        ctx.fillStyle = t.keyboard;
+        roundRect(
+          ctx,
+          -(R - inner) * 0.3,
+          -inner - (R - inner) * 0.36,
+          (R - inner) * 0.6,
+          (R - inner) * 0.28,
+          1,
+        );
+        ctx.fill();
+        ctx.restore();
+      }
       break;
     }
     case 'bar_counter': {
@@ -272,9 +397,10 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
       // `counter` (kitchen) but without fittings: the darker front band
       // and the thin highlight above it are what say "bar", the overhang
       // lip a drinker would lean on.
+      const t = tones();
       local((k) => {
         k.fillStyle = PALETTE.counterTop;
-        roundRect(k, -w / 2, -h / 2, w, h, 2);
+        roundRect(k, -w / 2, -h / 2, w, h, setRadius(2));
         k.fill();
       });
       ctx.strokeStyle = PALETTE.chairEdge;
@@ -284,7 +410,7 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
       const edge = Math.max(1.2, h * 0.18);
       ctx.fillStyle = PALETTE.furnitureMetal;
       ctx.fillRect(-w / 2, h / 2 - edge, w, edge);
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillStyle = t.counterLit;
       ctx.fillRect(-w / 2, h / 2 - edge - 1, w, 1);
       break;
     }
@@ -308,6 +434,14 @@ export function paintPlayProps(ctx, prop, u, w, h, local) {
         k.lineWidth = 1.4;
         k.stroke();
       });
+      if (detailOf(ctx, u) >= 2) {
+        // The seat pad's seam.
+        ctx.strokeStyle = tones().seatLine;
+        ctx.lineWidth = onePx(ctx);
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       break;
     }
     case 'box': {
