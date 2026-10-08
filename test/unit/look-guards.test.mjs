@@ -37,19 +37,21 @@ import {
   themeByName,
 } from '../../public/render/themes.js';
 import {
+  ALL_PRESETS,
   DEFAULT_LOOK,
   FLOOR_MATERIALS,
   FLOOR_OPTIONS,
-  PRESETS,
   SCHEMES,
   SCHEME_IDS,
   SCHEME_MAX_LUMINANCE_DRIFT,
   SCHEME_SURFACES,
+  lookForPreset,
 } from '../../public/render/look-options.js';
 import { materialColours, schemeColour, schemeFloor } from '../../public/render/look-derive.js';
 import {
   SPECK_MAX_CONTRAST,
   ZONE_EDGE_MAX,
+  lookMetrics,
   materialSchemeThemeGrid,
   validateLook,
 } from '../../public/render/look-guards.js';
@@ -180,7 +182,10 @@ test('§1.b: no scheme moves a token’s relative luminance by more than 0.01', 
 test('§3: every preset passes on every theme, and the zone edges are printed', () => {
   /** @type {Array<[string,string]>} */
   const rows = [];
-  for (const preset of PRESETS) {
+  // ALL eleven, the five pending ones included: a style is measured before it
+  // is offered, not on the day it is.
+  assert.equal(ALL_PRESETS.length * THEMES.length, 33);
+  for (const preset of ALL_PRESETS) {
     /** @type {string[]} */
     const edges = [];
     for (const theme of THEMES) {
@@ -200,7 +205,153 @@ test('§3: every preset passes on every theme, and the zone edges are printed', 
     }
     rows.push([preset.label, `worst zone edge ${edges.join(' / ')} — ceiling ${ZONE_EDGE_MAX}`]);
   }
-  report('§3 the six presets (default / night shift / blueprint)', rows);
+  report('§3 the eleven presets (default / night shift / blueprint)', rows);
+});
+
+/**
+ * THE FIVE NEW PRESETS, AS THEY WERE MEASURED WHEN THEY WERE DRAWN (G6a).
+ *
+ * Per theme, in `lookMetrics`' own order: the three zone edges (office|corridor,
+ * corridor|rooms, corridor|lounge), the wool rug and the task rug on their
+ * floors, and the worst floor ink. Pinned to two decimals, because a preset is
+ * a promise about a floor and these are the numbers the promise was made on —
+ * a derivation that moved one of them has changed five floors, and should have
+ * to come here and say which.
+ * @type {Record<string, Record<string, number[]>>}
+ */
+const DRAWN = {
+  'daylight-studio': {
+    default: [1.05, 1.05, 1.05, 1.16, 1.16, 9.09],
+    'night shift': [1.35, 1.35, 1.35, 1.16, 1.28, 7.32],
+    blueprint: [1.33, 1.33, 1.33, 1.16, 1.43, 8.6],
+  },
+  'graphite-loft': {
+    default: [1.3, 1.02, 1.3, 1.16, 1.42, 8.36],
+    'night shift': [1.25, 1.1, 1.25, 1.42, 1.27, 8.02],
+    blueprint: [1.51, 1.31, 1.51, 1.42, 1.29, 7.73],
+  },
+  'nordic-wool': {
+    default: [1.15, 1.33, 1.09, 1.33, 1.43, 8.39],
+    'night shift': [1.37, 1.12, 1.27, 1.17, 1.27, 7.38],
+    blueprint: [1.35, 1.15, 1.2, 1.16, 1.27, 8.65],
+  },
+  'colour-plan': {
+    default: [1.3, 1.02, 1.2, 1.16, 1.31, 8.36],
+    'night shift': [1.25, 1.1, 1.21, 1.42, 1.42, 8.02],
+    blueprint: [1.51, 1.31, 1.47, 1.42, 1.42, 7.73],
+  },
+  'walnut-executive': {
+    default: [1.21, 1.19, 1.21, 1.17, 1.25, 8.93],
+    'night shift': [1.15, 1.03, 1.15, 1.17, 1.17, 6.98],
+    blueprint: [1.14, 1.21, 1.14, 1.07, 1.22, 7.83],
+  },
+};
+
+test('G6a: the five new presets pass on every theme, 15 of 15, at the ratios they were drawn to', () => {
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  let passed = 0;
+  for (const [id, byTheme] of Object.entries(DRAWN)) {
+    const preset = ALL_PRESETS.find((p) => p.id === id);
+    assert.ok(preset, `${id} is not in the catalogue`);
+    for (const theme of THEMES) {
+      const result = validateLook(preset.look, theme.name);
+      assert.ok(
+        result.ok,
+        `${id} on ${theme.name}: ${result.problems.map((p) => p.reason).join('; ')}`,
+      );
+      passed++;
+      const measured = lookMetrics(preset.look, theme.name).map((m) => m.ratio);
+      assert.deepEqual(measured, byTheme[theme.name], `${id} on ${theme.name} moved`);
+      const [a, b, c, wool, task, ink] = measured.map((n) => n.toFixed(2));
+      rows.push([
+        `${preset.label} / ${theme.name}`,
+        `edges ${a} / ${b} / ${c}   rugs ${wool} / ${task}   ink ${ink}`,
+      ]);
+    }
+  }
+  assert.equal(passed, 15);
+  assert.equal(Object.keys(DRAWN).length, ALL_PRESETS.filter((p) => p.pending).length);
+  report(
+    `G6a the five new presets — edge ceiling ${ZONE_EDGE_MAX}, rug band ${RUG_BAND_MIN}–${RUG_BAND_MAX}, ink bar 4.5`,
+    rows,
+  );
+});
+
+test('G6a: the three first drafts are refused, each with its sentence', () => {
+  // The guards said no to their own author three times while these presets were
+  // being drawn, and each time the PRESET changed. The drafts are kept here as
+  // refusals for the reason the two above are: a guard that never refuses is a
+  // guard nobody tested, and these are refusals it is known to have made.
+  const nordic = lookForPreset('nordic-wool');
+  const plan = lookForPreset('colour-plan');
+  /** @param {unknown} look @param {string} theme @param {string} picker */
+  const refusal = (look, theme, picker) => {
+    const result = validateLook(look, theme);
+    const found = result.problems.find((p) => p.picker === picker);
+    assert.ok(found, `expected a ${picker} refusal on ${theme}; got ${JSON.stringify(result)}`);
+    console.log(`    refused: ${found.reason}`);
+    return found;
+  };
+
+  // 1. Nordic wool with a loop-pile corridor: the corridor and the broadloom
+  //    rooms are both cut from the carpet. The corridor became concrete.
+  const shared = refusal(
+    { ...nordic, floors: { ...nordic.floors, corridor: 'loop-pile' } },
+    'default',
+    'floor.rooms',
+  );
+  assert.match(shared.rule, /rule 3/);
+  assert.match(
+    shared.reason,
+    /1\.00:1 against Loop-pile tile in the corridor; they share a tone source and the boundary would not survive the fit scale/,
+  );
+
+  // 2. Nordic wool with a sand wool rug: on blueprint it lies on the lounge's
+  //    cork at 1.03:1 and is not there…
+  const sand = refusal(
+    { ...nordic, rugs: { ...nordic.rugs, wool: { tone: 'sand', pattern: 'banded' } } },
+    'blueprint',
+    'rug.wool',
+  );
+  assert.equal(sand.measured, 1.033);
+  assert.match(sand.reason, /sand on Cork is 1\.03:1 — the rug would not read/);
+  //    …and with a sage task rug: on night shift a rug's lit border climbs past
+  //    the wall, by four ten-thousandths. Both rugs became the wool tone.
+  const sage = refusal(
+    { ...nordic, rugs: { ...nordic.rugs, task: { tone: 'sage', pattern: 'plain' } } },
+    'night shift',
+    'furniture',
+  );
+  assert.match(sage.rule, /nothing is brighter than the wall/);
+  assert.equal(sage.measured, 0.0885);
+  assert.ok(/** @type {number} */ (sage.needed) < 0.0885);
+
+  // 3. Colour plan with a terrazzo office beside a poured-screed corridor: one
+  //    token, two patterns, no edge. The office became concrete and the
+  //    terrazzo moved to the lounge.
+  const screed = refusal(
+    {
+      ...plan,
+      floors: {
+        ...plan.floors,
+        office: 'terrazzo',
+        corridor: 'poured-screed',
+        lounge: 'polished-concrete',
+      },
+    },
+    'default',
+    'floor.corridor',
+  );
+  assert.match(
+    screed.reason,
+    /Poured screed in the corridor is 1\.00:1 against Terrazzo in the office; they share a tone source/,
+  );
+
+  // And the presets as they ended up are refused by nothing — on any theme.
+  for (const look of [nordic, plan]) {
+    for (const theme of THEMES) assert.ok(validateLook(look, theme.name).ok);
+  }
 });
 
 // ------------------------------------------------------------- the refusals

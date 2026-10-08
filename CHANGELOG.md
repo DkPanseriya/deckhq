@@ -31,6 +31,16 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A one-time pointer to the Look button.** The first time you open a version that has it, one
   line under the button says "Change the floor, the furniture and the agent size here." Press
   **Got it**, or just use the button, and it does not come back.
+- **Five more styles are ready, and three new choices behind them — not in the picker yet.**
+  Daylight studio, Graphite loft, Nordic wool, Colour plan and Walnut executive are designed and
+  measured on all three themes. Each also names a **light** (morning, noon or evening), what
+  stands **between rooms** (solid walls, glass, or low dividers) and how much **room colour** a
+  project's floor carries (subtle, a calm colour of its own per room, or none). Nothing on your
+  floor changes today: the floor is still drawn with noon light, solid walls and the subtle wash it
+  always had, and the Style picker still shows six. The five styles and the three controls arrive
+  in the picker with the next step, once the floor can draw them. Until then a look file can
+  already carry them: `deckhq look export` writes the three new settings, `deckhq look import`
+  reads them, and a look file you exported before today still imports exactly as it was.
 
 ### Changed
 
@@ -290,6 +300,15 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   each shortcut — ours and different is rewritten, the same is left, not ours is refused — and, on
   Windows, runs the real script: it sets the name on a tagged shortcut, reads it back, and is
   refused by an untagged one, which is left byte for byte as it was.
+- **The new styles and the three new look settings are measured before anything draws them.**
+  All eleven styles pass the look guards on all three themes, 33 of 33, and the five new ones are
+  held to the contrast figures they were designed at (`look-guards.test.mjs`).
+  `look-ambience.test.mjs` measures daylight on every floor material under every colour scheme,
+  theme and light (486 combinations: never brighter than the wall, names stay above 4.5:1, a patch
+  of light at most 1.18:1 on its floor), the frame of a glass or low partition on the same 162
+  floors (at least 3:1), and the six room colours on all 90 room floors. Each of the three checks
+  is also made to refuse something, and the sentence it gives is checked. `look-io.test.mjs`
+  imports a look file written before these settings existed and gets the same floor back.
 
 ### Known gaps
 
@@ -342,6 +361,14 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.
+- **The five new styles, the light, the partitions and the room colours cannot be chosen yet.**
+  They are in the catalogue and in look files, and nothing draws them: a look file that sets
+  evening light or glass partitions is accepted and stored, and the floor looks the same. They
+  are not in the Look panel, the Look section, `?look=` or `deckhq look presets` until the floor
+  can draw them.
+- **Room colours cannot be combined with ash boards in the project rooms on the Night shift
+  theme.** One of the six room colours comes too close to the grey a finished session wears there,
+  so that combination is refused, and a look file that asks for it is refused on import.
 
 ## 1.6.2 — 2026-10-06
 

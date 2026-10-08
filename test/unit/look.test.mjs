@@ -23,11 +23,31 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { buildPlan } from '../../public/render/plan.js';
-import { DEFAULT_PALETTE, PALETTE } from '../../public/render/palette.js';
-import { THEMES } from '../../public/render/themes.js';
+import {
+  CARPET_IDENTITY_WASH,
+  DEFAULT_PALETTE,
+  LIGHT_DIR,
+  PALETTE,
+} from '../../public/render/palette.js';
+import {
+  LIGHT_POOL_ALPHA_DARK,
+  LIGHT_POOL_ALPHA_LIGHT,
+  LIGHT_POOL_COLOR,
+  THEMES,
+} from '../../public/render/themes.js';
 import {
   AGENT_SIZES,
+  ALL_LOOK_PICKERS,
+  ALL_PRESETS,
   DEFAULT_LOOK,
+  LIGHT_MOODS,
+  LIGHT_MOOD_IDS,
+  LOOK_OFFERED_OPTION_COUNT,
+  PARTITION_STYLE_IDS,
+  PRESET_IDS,
+  ROOM_TINTS,
+  ROOM_TINT_IDS,
+  pendingPaths,
   FLOOR_MATERIALS,
   FLOOR_MATERIAL_IDS,
   FLOOR_OPTIONS,
@@ -103,20 +123,44 @@ function planHash(plan) {
 
 // ------------------------------------------------------- catalogue integrity
 
-test('§1: eleven pickers, 56 options, and the arithmetic is the tables rather than a promise', () => {
+test('§1: fourteen pickers and 65 options, of which eleven and 56 are offered', () => {
   // Ten and 52 through WP-88b; WP-88c's agent size is the eleventh, and its four
   // settings take the count to 56. Both numbers are computed from the tables, so
   // a package that adds an option has to come here and say so.
+  //
+  // G6a came here: the light, the partitions and the room tint are three
+  // pickers and nine options. They are catalogued and no painter reads them, so
+  // they are PENDING — and what a surface offers has not moved by one.
+  assert.equal(ALL_LOOK_PICKERS.length, 14);
+  assert.equal(LOOK_OPTION_COUNT, 65);
   assert.equal(LOOK_PICKERS.length, 11);
-  assert.equal(LOOK_OPTION_COUNT, 56);
+  assert.equal(LOOK_OFFERED_OPTION_COUNT, 56);
+  const pending = ALL_LOOK_PICKERS.filter((p) => p.pending);
+  assert.deepEqual(
+    pending.map((p) => p.id),
+    ['light', 'partitions', 'roomTint'],
+  );
+  assert.equal(
+    pending.reduce((n, p) => n + p.options.length, 0),
+    LOOK_OPTION_COUNT - LOOK_OFFERED_OPTION_COUNT,
+  );
+  // The offered list is the catalogue minus the pending ones, in catalogue
+  // order — not a second list somebody has to keep in step.
+  assert.deepEqual(
+    LOOK_PICKERS,
+    ALL_LOOK_PICKERS.filter((p) => !p.pending),
+  );
   report(
-    'the eleven pickers',
-    LOOK_PICKERS.map((p) => [p.id, `${p.options.length} options`]),
+    'the fourteen pickers',
+    ALL_LOOK_PICKERS.map((p) => [
+      p.id,
+      `${p.options.length} options${p.pending ? '  (pending: no painter reads it yet)' : ''}`,
+    ]),
   );
 });
 
 test('every id in the catalogue is unique inside its own picker', () => {
-  for (const picker of LOOK_PICKERS) {
+  for (const picker of ALL_LOOK_PICKERS) {
     const ids = picker.options.map((o) => o.id);
     assert.equal(new Set(ids).size, ids.length, `${picker.id} repeats an option id`);
     for (const option of picker.options) {
@@ -150,11 +194,21 @@ test('§1.a: nine materials, and each zone offers exactly the ones the table giv
   );
 });
 
-test('§3: six presets, each referencing only options this build has', () => {
+test('§3: eleven presets, six of them offered, each referencing only options this build has', () => {
+  assert.equal(ALL_PRESETS.length, 11);
   assert.equal(PRESETS.length, 6);
-  for (const preset of PRESETS) {
+  assert.equal(new Set(ALL_PRESETS.map((p) => p.id)).size, 11);
+  assert.deepEqual(
+    PRESET_IDS,
+    ALL_PRESETS.map((p) => p.id),
+  );
+  for (const preset of ALL_PRESETS) {
     assert.ok(preset.blurb && preset.blurb.trim(), `${preset.id} has no blurb`);
     const look = preset.look;
+    assert.equal(look.preset, preset.id);
+    assert.ok(LIGHT_MOOD_IDS.includes(look.light));
+    assert.ok(PARTITION_STYLE_IDS.includes(look.partitions));
+    assert.ok(ROOM_TINT_IDS.includes(look.roomTint));
     for (const zone of LOOK_ZONES) {
       assert.ok(
         FLOOR_OPTIONS[zone].includes(look.floors[zone]),
@@ -213,6 +267,102 @@ test('`?look=` resolves a preset by name, in any case and with any separator', (
   assert.equal(presetById('night lab')?.id, 'night-lab');
   assert.equal(presetById('not-a-preset'), null);
   assert.ok(sameLook(lookForPreset('not-a-preset'), DEFAULT_LOOK));
+});
+
+// ------------------------------------------- G6a: the three keys, and pending
+
+test('G6a: the default look names the light, the partitions and the room tint it always had', () => {
+  assert.equal(DEFAULT_LOOK.light, 'noon');
+  assert.equal(DEFAULT_LOOK.partitions, 'solid');
+  assert.equal(DEFAULT_LOOK.roomTint, 'subtle');
+  // NOON IS THE SHIPPED LIGHT BY REFERENCE, not by a second copy of its numbers:
+  // the direction is `LIGHT_DIR` itself and the patch is the desk pool.
+  assert.equal(LIGHT_MOODS.noon.dir, LIGHT_DIR);
+  assert.equal(LIGHT_MOODS.noon.cast, 1);
+  assert.equal(LIGHT_MOODS.noon.patch, LIGHT_POOL_COLOR);
+  assert.equal(LIGHT_MOODS.noon.alphaLight, LIGHT_POOL_ALPHA_LIGHT);
+  assert.equal(LIGHT_MOODS.noon.alphaDark, LIGHT_POOL_ALPHA_DARK);
+  // …and `subtle` is the identity wash at the ceiling the floor already holds.
+  assert.equal(ROOM_TINTS.subtle.wash, CARPET_IDENTITY_WASH);
+  // Nothing is pending about the floor as it ships.
+  assert.deepEqual(pendingPaths(DEFAULT_LOOK), []);
+});
+
+test('G6a: every mood lights the floor from the same quadrant, and is a unit vector', () => {
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const id of LIGHT_MOOD_IDS) {
+    const mood = LIGHT_MOODS[id];
+    // Down and to the right, all three: the floor has one light, and a mood
+    // moves it along an arc rather than to the other side of the building.
+    assert.ok(mood.dir.x > 0 && mood.dir.y > 0, `${id} does not point down-right`);
+    assert.ok(Math.abs(Math.hypot(mood.dir.x, mood.dir.y) - 1) < 1e-12, `${id} is not a unit`);
+    const angle = (Math.atan2(mood.dir.y, mood.dir.x) * 180) / Math.PI;
+    assert.ok(Math.abs(angle - mood.angle) < 1e-9, `${id}: ${angle}° is not ${mood.angle}°`);
+    assert.ok(mood.cast >= 1, `${id} casts shorter than noon`);
+    assert.match(mood.patch, /^#[0-9a-f]{6}$/i);
+    rows.push([
+      id,
+      `${mood.angle}°  cast ×${mood.cast}  ${mood.patch} at ${mood.alphaLight} / ${mood.alphaDark}`,
+    ]);
+  }
+  report('G6a the three moods (patch alpha: light theme / dark theme)', rows);
+});
+
+test('G6a: a missing key is the default, and an unknown one is dropped', () => {
+  // The whole of backward compatibility, at the level of the model: a look that
+  // was stored before the three keys existed has none of them.
+  const { light: _l, partitions: _p, roomTint: _t, ...before } = DEFAULT_LOOK;
+  assert.deepEqual(normalizeLook(before), { ...DEFAULT_LOOK });
+  const hostile = normalizeLook({ light: 'midnight', partitions: 42, roomTint: { zoned: true } });
+  assert.equal(hostile.light, 'noon');
+  assert.equal(hostile.partitions, 'solid');
+  assert.equal(hostile.roomTint, 'subtle');
+  const chosen = normalizeLook({ light: 'evening', partitions: 'glass', roomTint: 'zoned' });
+  assert.deepEqual(
+    [chosen.light, chosen.partitions, chosen.roomTint],
+    ['evening', 'glass', 'zoned'],
+  );
+  assert.ok(!sameLook(chosen, DEFAULT_LOOK), 'a different light is a different floor');
+});
+
+test('G6a: a preset is pending exactly while it asks for an option no painter reads', () => {
+  /** @type {Array<[string,string]>} */
+  const rows = [];
+  for (const preset of ALL_PRESETS) {
+    const waiting = pendingPaths(preset.look);
+    assert.equal(preset.pending, waiting.length > 0, `${preset.id}: pending is not computed`);
+    assert.equal(PRESETS.includes(preset), !preset.pending);
+    rows.push([preset.label, waiting.length ? `pending: ${waiting.join(', ')}` : 'offered']);
+  }
+  // The six that shipped ask for nothing new, so they are offered exactly as
+  // they were — which is the property that keeps the picker's goldens still.
+  assert.deepEqual(
+    PRESETS.map((p) => p.id),
+    ['studio-oak', 'night-lab', 'paper-office', 'terrazzo-hall', 'garden-floor', 'workshop'],
+  );
+  for (const preset of PRESETS) {
+    assert.deepEqual(
+      [preset.look.light, preset.look.partitions, preset.look.roomTint],
+      ['noon', 'solid', 'subtle'],
+      `${preset.id} moved a pending option`,
+    );
+  }
+  report('G6a the eleven presets', rows);
+});
+
+test('G6a: a chooser cannot reach a pending preset, and a stored look can still name one', () => {
+  // `presetById` is what `?look=` and the cards ask. A pending style is not on
+  // offer, so the answer is the same as for a name nobody has ever heard of.
+  const waiting = ALL_PRESETS.filter((p) => p.pending);
+  assert.equal(waiting.length, 5);
+  for (const preset of waiting) {
+    assert.equal(presetById(preset.id), null, `${preset.id} is choosable before it is painted`);
+    // …but a look that ARRIVED with that name — in a file, from another build —
+    // keeps it, and resolves to the look the name means.
+    assert.equal(normalizeLook({ preset: preset.id }).preset, preset.id);
+    assert.deepEqual(lookForPreset(preset.id), { ...preset.look });
+  }
 });
 
 // -------------------------------------------------- the default is the floor

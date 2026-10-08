@@ -45,6 +45,20 @@
  * `LOOK_OPTION_COUNT` is computed from the tables rather than written down, so
  * the two can never disagree and a package that adds an option has to say so.
  *
+ * G6a said so, and the catalogue is ahead of the floor for the first time:
+ *
+ *   the light           morning / noon / evening                 3
+ *   the partitions      solid / glass / low                      3
+ *   the room tint       subtle / zoned / off                     3
+ *   ------------------------------------------- fourteen pickers, 65 options
+ *
+ * Those nine are named, measured, stored and carried in a look document, and no
+ * painter reads them yet. So their three pickers are marked `pending`, and
+ * `LOOK_PICKERS` — what a surface offers — is still the eleven and the 56. The
+ * same rule decides the presets: one that asks for a pending option is in
+ * `ALL_PRESETS` and not in `PRESETS`. A choice is offered the day moving it
+ * changes the floor, and not before.
+ *
  * Pure data and pure functions. No DOM, no canvas — safe to import under
  * `node --test` and from `src/core/look.mjs`, which is where the schema that
  * validates an imported document lives.
@@ -59,6 +73,24 @@ import {
   LOOK_ZONES,
   ZONE_ADJACENCY,
 } from './look-materials.js';
+import {
+  DEFAULT_LIGHT,
+  DEFAULT_PARTITIONS,
+  DEFAULT_ROOM_TINT,
+  LIGHT_MOODS,
+  LIGHT_MOOD_IDS,
+  PARTITION_STYLES,
+  PARTITION_STYLE_IDS,
+  ROOM_TINTS,
+  ROOM_TINT_IDS,
+  ZONE_HUES,
+} from './look-ambience.js';
+import { PRESET_DEFS } from './look-presets.js';
+
+// G6a's three tables — the light, the partitions, the room tint — are
+// `look-ambience.js`, for the reason below and re-exported for the same one.
+export { LIGHT_MOODS, LIGHT_MOOD_IDS, PARTITION_STYLES, PARTITION_STYLE_IDS };
+export { ROOM_TINTS, ROOM_TINT_IDS, ZONE_HUES };
 
 // §1.a's nine materials and four zones live in `look-materials.js` — the table
 // alone is a third of the catalogue and put this file over WP-22's ceiling.
@@ -460,10 +492,15 @@ export const AGENT_SIZE_LABELS = Object.freeze({
  * section and reads this rather than restating it, so a picker cannot offer an
  * option the guards have never seen.
  *
- * @type {ReadonlyArray<{id:string, label:string, path:string,
+ * `ALL_LOOK_PICKERS` is every picker the catalogue names, and three of the
+ * fourteen carry `pending: true`: the option is real, it validates and it is
+ * stored, and the painter that draws it has not landed. `LOOK_PICKERS` below is
+ * the rest — what a surface may offer today.
+ *
+ * @type {ReadonlyArray<{id:string, label:string, path:string, pending?:boolean,
  *   options:ReadonlyArray<{id:string, label:string}>}>}
  */
-export const LOOK_PICKERS = Object.freeze(
+export const ALL_LOOK_PICKERS = Object.freeze(
   [
     ...LOOK_ZONES.map((zone) => ({
       id: `floor.${zone}`,
@@ -518,16 +555,53 @@ export const LOOK_PICKERS = Object.freeze(
       path: 'agentSize',
       options: AGENT_SIZES.map((id) => ({ id, label: AGENT_SIZE_LABELS[id] })),
     },
+    // G6a. Appended, so no shipped picker changed its place, and pending until
+    // the lighting and the room-colour painters read them.
+    {
+      id: 'light',
+      label: 'Light',
+      path: 'light',
+      pending: true,
+      options: LIGHT_MOOD_IDS.map((id) => ({ id, label: LIGHT_MOODS[id].label })),
+    },
+    {
+      id: 'partitions',
+      label: 'Partitions',
+      path: 'partitions',
+      pending: true,
+      options: PARTITION_STYLE_IDS.map((id) => ({ id, label: PARTITION_STYLES[id].label })),
+    },
+    {
+      id: 'roomTint',
+      label: 'Room colours',
+      path: 'roomTint',
+      pending: true,
+      options: ROOM_TINT_IDS.map((id) => ({ id, label: ROOM_TINTS[id].label })),
+    },
   ].map((p) => Object.freeze({ ...p, options: Object.freeze(p.options) })),
 );
 
 /**
- * §1's 52 plus §2's four, counted from the tables rather than written down. The
- * lounge kit's four checkboxes are not a picker (§1.g) and are added here so the
- * promise and the arithmetic are the same number.
+ * THE PICKERS A SURFACE OFFERS TODAY: every one whose options a painter reads.
+ *
+ * Filtered rather than listed, so the day a painter lands and a `pending` flag
+ * comes off, the picker is offered everywhere at once and nobody has to
+ * remember a second list.
  */
-export const LOOK_OPTION_COUNT =
-  LOOK_PICKERS.reduce((n, p) => n + p.options.length, 0) + LOUNGE_KIT_BAYS.length;
+export const LOOK_PICKERS = Object.freeze(ALL_LOOK_PICKERS.filter((p) => !p.pending));
+
+/** @param {ReadonlyArray<{options:ReadonlyArray<unknown>}>} pickers */
+const optionsIn = (pickers) => pickers.reduce((n, p) => n + p.options.length, 0);
+
+/**
+ * Every option the catalogue names, counted from the tables rather than written
+ * down. The lounge kit's four checkboxes are not a picker (§1.g) and are added
+ * here so the promise and the arithmetic are the same number.
+ */
+export const LOOK_OPTION_COUNT = optionsIn(ALL_LOOK_PICKERS) + LOUNGE_KIT_BAYS.length;
+
+/** …and how many of those a surface offers today. The difference is the pending ones. */
+export const LOOK_OFFERED_OPTION_COUNT = optionsIn(LOOK_PICKERS) + LOUNGE_KIT_BAYS.length;
 
 // ----------------------------------------------------------- the document
 
@@ -542,6 +616,9 @@ export const LOOK_OPTION_COUNT =
  * @property {{density:string}} props
  * @property {Record<string,boolean>} lounge
  * @property {string} agentSize
+ * @property {string} light       a key of `LIGHT_MOODS`
+ * @property {string} partitions  a key of `PARTITION_STYLES`
+ * @property {string} roomTint    a key of `ROOM_TINTS`
  */
 
 /**
@@ -556,6 +633,11 @@ export const LOOK_OPTION_COUNT =
  * the rugs are WP-85a's slate and sage, the densities are §3.5's and §3.6's, and
  * every bay is on, and the agent size is `medium` — §2's `s = 1`, which is what
  * makes the twelve committed goldens a photograph of this look.
+ *
+ * G6a's three keys are the same statement about three things that were never a
+ * choice before: the light is the 45° the floor has always been lit from, the
+ * partitions are the band it has always drawn, and the room tint is the wash
+ * it has always carried. Naming them moves nothing.
  * @type {Readonly<Look>}
  */
 export const DEFAULT_LOOK = Object.freeze({
@@ -576,158 +658,58 @@ export const DEFAULT_LOOK = Object.freeze({
   props: Object.freeze({ density: 'normal' }),
   lounge: Object.freeze({ sitting: true, quiet: true, cafe: true, games: true }),
   agentSize: DEFAULT_AGENT_SIZE,
+  light: DEFAULT_LIGHT,
+  partitions: DEFAULT_PARTITIONS,
+  roomTint: DEFAULT_ROOM_TINT,
 });
 
 /**
- * THE SIX PRESETS (§3): complete looks the user may then edit.
+ * THE PRESETS (§3, and G6a's five): complete looks the user may then edit.
  *
  * Each is a starting point rather than a mode — editing any control marks the
  * preset `· edited` and `Reset to preset` puts one group, or the section, back
  * (WP-88b). `studio-oak` is `DEFAULT_LOOK` itself, which is the property that
  * keeps every existing golden still.
  *
- * Every one of the six is measured against `validateLook` on all three themes by
+ * Every one of them is measured against `validateLook` on all three themes by
  * `look-guards.test.mjs` — including §1 rule 3, which is why no preset gives the
  * corridor the material the office or the lounge beside it already has.
  *
- * The list is split in two — the definitions, then the frozen normalised table
- * — because `normalizeLook` has to be able to ask whether a preset id exists
- * while the table it would ask is still being built. Definitions first, lookup
- * against the definitions, table second: no temporal dead zone, and one list.
+ * The DEFINITIONS are `look-presets.js`, and they are separate from this table
+ * for a reason beyond the line count: `normalizeLook` has to be able to ask
+ * whether a preset id exists while the table it would ask is still being built.
+ * Definitions first, lookup against the definitions, table second: no temporal
+ * dead zone, and one list.
  *
- * @type {ReadonlyArray<{id:string, label:string, blurb:string, look:any}>}
+ * `pending` is COMPUTED, not written: a preset is pending while it asks for an
+ * option no painter reads. Its finishes — floors, scheme, furniture, rugs,
+ * planting — are real today; what is missing is the light, the partitions or
+ * the room colour it was drawn with, and a card that painted two thirds of a
+ * style under the style's name would be a card that lied.
+ *
+ * @type {ReadonlyArray<{id:string, label:string, blurb:string, pending:boolean,
+ *   look:Readonly<Look>}>}
  */
-const PRESET_DEFS = Object.freeze(
-  [
-    {
-      id: 'studio-oak',
-      label: 'Studio oak',
-      blurb: 'Warm oak, wool rugs, everything on. The floor exactly as it ships.',
-      look: DEFAULT_LOOK,
-    },
-    {
-      id: 'night-lab',
-      label: 'Night lab',
-      blurb: 'Polished concrete under an ink wash, industrial frames, no games bay.',
-      look: {
-        floors: {
-          office: 'polished-concrete',
-          corridor: 'ceramic-tile',
-          rooms: 'loop-pile',
-          lounge: 'polished-concrete',
-        },
-        scheme: 'ink',
-        furniture: 'industrial',
-        rugs: {
-          wool: { tone: 'wool', pattern: 'banded' },
-          task: { tone: 'wool', pattern: 'plain' },
-        },
-        plants: { family: 'architectural', density: 'sparse' },
-        props: { density: 'normal' },
-        lounge: { sitting: true, quiet: true, cafe: true, games: false },
-      },
-    },
-    {
-      id: 'paper-office',
-      label: 'Paper office',
-      blurb:
-        'Mono over ash boards; every surface a neutral, so the only colour left is the people.',
-      look: {
-        floors: {
-          office: 'wide-ash',
-          corridor: 'poured-screed',
-          rooms: 'wide-ash',
-          lounge: 'wide-ash',
-        },
-        scheme: 'mono',
-        furniture: 'scandi',
-        rugs: {
-          wool: { tone: 'sand', pattern: 'plain' },
-          task: { tone: 'sand', pattern: 'banded' },
-        },
-        plants: { family: 'dry', density: 'sparse' },
-        props: { density: 'quiet' },
-      },
-    },
-    {
-      id: 'terrazzo-hall',
-      label: 'Terrazzo hall',
-      blurb: 'A civic building — terrazzo, ceramic tile, soft silhouettes, busy shelves.',
-      look: {
-        floors: {
-          office: 'terrazzo',
-          corridor: 'ceramic-tile',
-          rooms: 'polished-concrete',
-          lounge: 'terrazzo',
-        },
-        scheme: 'warm',
-        furniture: 'soft',
-        rugs: {
-          wool: { tone: 'wool', pattern: 'banded' },
-          task: { tone: 'sage', pattern: 'banded' },
-        },
-        plants: { family: 'leafy', density: 'normal' },
-        props: { density: 'busy' },
-      },
-    },
-    {
-      id: 'garden-floor',
-      label: 'Garden floor',
-      blurb: 'Cork and ash under a forest wash, planted as far as the density rules allow.',
-      look: {
-        floors: {
-          office: 'wide-ash',
-          corridor: 'loop-pile',
-          rooms: 'cork',
-          lounge: 'wide-ash',
-        },
-        scheme: 'forest',
-        furniture: 'soft',
-        rugs: {
-          wool: { tone: 'sage', pattern: 'plain' },
-          task: { tone: 'sage', pattern: 'banded' },
-        },
-        plants: { family: 'leafy', density: 'lush' },
-        props: { density: 'normal' },
-        agentSize: 'large',
-      },
-    },
-    {
-      id: 'workshop',
-      label: 'Workshop',
-      blurb: 'Clay over concrete, industrial frames — a hundred sessions in a shed.',
-      look: {
-        floors: {
-          office: 'polished-concrete',
-          corridor: 'ceramic-tile',
-          rooms: 'polished-concrete',
-          lounge: 'polished-concrete',
-        },
-        scheme: 'clay',
-        furniture: 'industrial',
-        rugs: {
-          wool: { tone: 'sand', pattern: 'banded' },
-          task: { tone: 'wool', pattern: 'plain' },
-        },
-        plants: { family: 'dry', density: 'sparse' },
-        props: { density: 'busy' },
-        agentSize: 'small',
-      },
-    },
-  ].map((p) => Object.freeze(p)),
+export const ALL_PRESETS = Object.freeze(
+  PRESET_DEFS.map((p) => {
+    const look = Object.freeze({ ...normalizeLook(p.look), preset: p.id });
+    return Object.freeze({ ...p, look, pending: pendingPaths(look).length > 0 });
+  }),
 );
 
 /**
- * The six, whole: every partial above filled out by `normalizeLook` and frozen.
- * @type {ReadonlyArray<{id:string, label:string, blurb:string, look:Readonly<Look>}>}
+ * The presets a surface offers today — the cards, the palette, `?look=`, the
+ * CLI's list. Six, until the painters G6a's options wait for have landed.
+ * @type {ReadonlyArray<{id:string, label:string, blurb:string, pending:boolean,
+ *   look:Readonly<Look>}>}
  */
-export const PRESETS = Object.freeze(
-  PRESET_DEFS.map((p) =>
-    Object.freeze({ ...p, look: Object.freeze({ ...normalizeLook(p.look), preset: p.id }) }),
-  ),
-);
+export const PRESETS = Object.freeze(ALL_PRESETS.filter((p) => !p.pending));
 
-/** Every preset's id, in card order. @type {ReadonlyArray<string>} */
+/**
+ * Every preset id a look may NAME, offered or not: a look document is carried
+ * between builds and machines, so what it may say is the catalogue and not the
+ * picker. @type {ReadonlyArray<string>}
+ */
 export const PRESET_IDS = Object.freeze(PRESET_DEFS.map((p) => p.id));
 
 /**
@@ -742,10 +724,34 @@ function presetKey(id) {
     .replace(/[\s_]+/g, '-');
 }
 
-/** A preset by id, or `null`. @param {unknown} id */
+/**
+ * A preset somebody may CHOOSE, by id, or `null`. Offered presets only: this is
+ * what `?look=` and the cards ask, and neither may reach a pending one.
+ * @param {unknown} id
+ */
 export function presetById(id) {
   const key = presetKey(id);
   return PRESETS.find((p) => p.id === key) || null;
+}
+
+/**
+ * Which of a look's choices no painter reads yet, as picker paths.
+ *
+ * The default of a pending picker is not one of them — it is the floor as it
+ * ships, which every painter already draws. So `DEFAULT_LOOK` has none, and a
+ * look has one for each pending picker it moved.
+ *
+ * @param {unknown} look
+ * @returns {string[]}
+ */
+export function pendingPaths(look) {
+  const l = normalizeLook(look);
+  /** @param {unknown} from @param {string} path */
+  const at = (from, path) =>
+    path.split('.').reduce((node, key) => /** @type {any} */ (node)?.[key], from);
+  return ALL_LOOK_PICKERS.filter(
+    (p) => p.pending && at(l, p.path) !== at(DEFAULT_LOOK, p.path),
+  ).map((p) => p.path);
 }
 
 /**
@@ -808,19 +814,31 @@ export function normalizeLook(look) {
     props: { density: one(raw.props?.density, PROP_DENSITY_IDS, DEFAULT_LOOK.props.density) },
     lounge,
     agentSize: one(raw.agentSize, AGENT_SIZES, DEFAULT_LOOK.agentSize),
+    // G6a. Absent is the default, which is what lets a look saved or exported
+    // before these three existed stay the floor it always was.
+    light: one(raw.light, LIGHT_MOOD_IDS, DEFAULT_LOOK.light),
+    partitions: one(raw.partitions, PARTITION_STYLE_IDS, DEFAULT_LOOK.partitions),
+    roomTint: one(raw.roomTint, ROOM_TINT_IDS, DEFAULT_LOOK.roomTint),
   };
 }
 
 /**
- * The look a preset names, or the default. `?look=` and the preset cards both
- * go through here, so a preset id is the only thing either of them can set —
- * §4's *"a preset NAME only, never an arbitrary object: a URL that could set any
- * look is a link a stranger could send"*.
+ * The look a preset NAME means, or the default.
+ *
+ * Any catalogued name, pending or not — which is a different question from
+ * `presetById`'s. That one is asked by a chooser, and may only answer with
+ * something on offer; this one is asked about a look that already exists
+ * (`· edited` compares a stored look with the preset it says it started from),
+ * and a look that came in a file may name a style the picker does not show yet.
+ * What a URL or a card can SET is still a preset id and nothing else — §4's
+ * *"a preset NAME only, never an arbitrary object: a URL that could set any look
+ * is a link a stranger could send"*.
  * @param {unknown} id
  * @returns {Look}
  */
 export function lookForPreset(id) {
-  const preset = presetById(id);
+  const key = presetKey(id);
+  const preset = ALL_PRESETS.find((p) => p.id === key);
   return normalizeLook(preset ? preset.look : DEFAULT_LOOK);
 }
 
