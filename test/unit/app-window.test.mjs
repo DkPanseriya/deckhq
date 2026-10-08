@@ -175,28 +175,98 @@ test('SECURITY: only loopback is ever a URL this command will open', () => {
 // Which port is asked, and in what order
 // ---------------------------------------------------------------------------
 
-test('the port the user named is asked first, then daemon.json, then the hooks', () => {
-  const ports = candidateAppPorts({ explicit: 4400, published: 4501, hooks: [4600], span: 3 });
-  assert.deepEqual(ports, [4400, 4501, 4600, 4317, 4318, 4319]);
+test('with no port named: daemon.json first, then the hooks, then 4317 upward', () => {
+  const ports = candidateAppPorts({ published: 4501, hooks: [4600], span: 3 });
+  assert.deepEqual(ports, [4501, 4600, 4317, 4318, 4319]);
 });
 
 test('no duplicates, and nothing outside a legal port', () => {
-  assert.deepEqual(candidateAppPorts({ explicit: 4317, published: 4317, span: 2 }), [4317, 4318]);
-  assert.deepEqual(candidateAppPorts({ explicit: 0, published: 99999, span: 1 }), [4317]);
+  assert.deepEqual(candidateAppPorts({ published: 4317, hooks: [4317], span: 2 }), [4317, 4318]);
+  assert.deepEqual(candidateAppPorts({ published: 99999, hooks: [0], span: 1 }), [4317]);
 });
 
-test('a daemon that answers is reused, and nothing is started', async () => {
+/** An `ask` that answers as a DeckHQ serving whichever state dir `ids` says. */
+function askAs(ids, asked = []) {
+  return async (p) => {
+    asked.push(p);
+    if (!(p in ids)) return null;
+    const snapshot = { agents: [], counts: {} };
+    if (ids[p]) snapshot.stateDirId = ids[p];
+    return { port: p, snapshot };
+  };
+}
+
+test('a daemon that answers for this state directory is reused', async () => {
   const asked = [];
   const found = await findRunningDaemon({
     ports: [4400, 4317],
+    stateId: 'mine',
+    published: null,
     probe: async (p) => p === 4317,
-    ask: async (p) => {
-      asked.push(p);
-      return { port: p, snapshot: { agents: [], counts: {} } };
-    },
+    ask: askAs({ 4317: 'mine' }, asked),
   });
   assert.deepEqual(found, { port: 4317, url: URL_4317 });
   assert.deepEqual(asked, [4317], 'only the listening port is spoken HTTP to');
+});
+
+test('REGRESSION: a DeckHQ serving another state directory is walked past', async () => {
+  // The report: the daemon on 4317 was stopped, a preview with its own
+  // DECKHQ_STATE_DIR was on 4321, and `deckhq app` opened the preview.
+  const opts = { stateId: 'mine', published: 4317, probe: async () => true };
+  assert.equal(
+    await findRunningDaemon({ ...opts, ports: [4321], ask: askAs({ 4321: 'theirs' }) }),
+    null,
+    'a foreign daemon is not ours to open a window on',
+  );
+  assert.deepEqual(
+    await findRunningDaemon({
+      ...opts,
+      ports: [4321, 4322],
+      ask: askAs({ 4321: 'theirs', 4322: 'mine' }),
+    }),
+    { port: 4322, url: 'http://127.0.0.1:4322/' },
+    'and the walk goes on to the one that is',
+  );
+});
+
+test('a daemon too old to name its directory is ours only on the port daemon.json names', async () => {
+  const opts = { stateId: 'mine', ports: [4317, 4318], probe: async () => true };
+  const old = askAs({ 4318: '' });
+  assert.deepEqual(await findRunningDaemon({ ...opts, published: 4318, ask: old }), {
+    port: 4318,
+    url: 'http://127.0.0.1:4318/',
+  });
+  assert.equal(await findRunningDaemon({ ...opts, published: 4317, ask: old }), null);
+  assert.equal(await findRunningDaemon({ ...opts, published: null, ask: old }), null);
+});
+
+test('REGRESSION: a named port is the only port asked', async () => {
+  // `--port 4317` with nothing on 4317 used to fall through to whatever
+  // answered next. Here 4321 would answer, as ours, and is never asked.
+  const probed = [];
+  const asked = [];
+  const found = await findRunningDaemon({
+    port: 4317,
+    stateId: 'mine',
+    probe: async (p) => {
+      probed.push(p);
+      return p === 4321;
+    },
+    ask: askAs({ 4321: 'mine' }, asked),
+  });
+  assert.equal(found, null);
+  assert.deepEqual(probed, [4317]);
+  assert.deepEqual(asked, []);
+});
+
+test('a DeckHQ on a named port is reused whatever state directory it serves', async () => {
+  const found = await findRunningDaemon({
+    port: 4321,
+    stateId: 'mine',
+    probe: async () => true,
+    ask: askAs({ 4321: 'theirs' }),
+  });
+  assert.deepEqual(found, { port: 4321, url: 'http://127.0.0.1:4321/' });
 });
 
 test('a listening stranger that is not a DeckHQ is not a daemon', async () => {
@@ -339,6 +409,103 @@ test('no daemon means one is started, and the command says so', async () => {
   assert.equal(calls[0].command, '/usr/bin/google-chrome');
 });
 
+test('the line says which of the three things happened', async () => {
+  const started = async ({ port }) => ({
+    port: port ?? 4317,
+    url: `http://127.0.0.1:${port ?? 4317}/`,
+    pid: 9,
+    started: true,
+    timedOut: false,
+  });
+  const line = async (argv, deps) => {
+    const io = capture();
+    assert.equal(await runApp(['--no-window', ...argv], { ...io, ...deps }), 0, io.stderr);
+    return io.stdout;
+  };
+  const free = async () => false;
+
+  assert.match(
+    await line([], { find: async () => ({ port: 4317, url: URL_4317 }) }),
+    /127\.0\.0\.1:4317\/ {2}\(already running\)/,
+  );
+  assert.match(
+    await line([], { find: async () => null, start: started }),
+    /127\.0\.0\.1:4317\/ {2}\(started just now\)/,
+  );
+  assert.match(
+    await line(['--port', '4400'], { find: async () => null, probe: free, start: started }),
+    /127\.0\.0\.1:4400\/ {2}\(started on the port you named\)/,
+  );
+  assert.match(
+    await line([], {
+      env: { DECKHQ_PORT: '4401' },
+      find: async () => null,
+      probe: free,
+      start: started,
+    }),
+    /127\.0\.0\.1:4401\/ {2}\(started on the port you named\)/,
+    'DECKHQ_PORT names a port exactly as --port does',
+  );
+});
+
+test('--port wins over DECKHQ_PORT, and both reach the search and the start', async () => {
+  const seen = [];
+  const io = capture();
+  const code = await runApp(['--no-window', '--port', '4400'], {
+    ...io,
+    env: { DECKHQ_PORT: '4401' },
+    probe: async () => false,
+    find: async (o) => {
+      seen.push(['find', o.port]);
+      return null;
+    },
+    start: async (o) => {
+      seen.push(['start', o.port]);
+      return { port: o.port, url: `http://127.0.0.1:${o.port}/`, started: true, timedOut: false };
+    },
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(seen, [
+    ['find', 4400],
+    ['start', 4400],
+  ]);
+});
+
+test('a named port held by something that is not DeckHQ fails, and starts nothing', async () => {
+  for (const argv of [
+    ['--port', '4400'],
+    ['--port', '4400', '--dry-run'],
+  ]) {
+    const io = capture();
+    const code = await runApp(argv, {
+      ...io,
+      find: async () => null,
+      probe: async (p) => p === 4400,
+      start: async () => assert.fail('nothing may be started beside a port that was named'),
+      findBrowser: () => '/usr/bin/google-chrome',
+      spawnFn: () => assert.fail('no window either'),
+    });
+    assert.equal(code, 1);
+    assert.match(io.stderr, /Port 4400 is in use/);
+    assert.match(io.stderr, /did not answer as a DeckHQ/);
+    assert.match(io.stderr, /no other port was tried/);
+    assert.doesNotMatch(io.stdout, /DeckHQ {2}http/);
+  }
+});
+
+test('--port without a usable number is an error, never a silent fall back to the walk', async () => {
+  for (const argv of [['--port', 'abc'], ['--port', '70000'], ['--port']]) {
+    const io = capture();
+    const code = await runApp(argv, {
+      ...io,
+      find: async () => assert.fail('a port that was mistyped must not become no port at all'),
+      start: async () => assert.fail('nothing is started'),
+    });
+    assert.equal(code, 1);
+    assert.match(io.stderr, /--port needs a port number/);
+  }
+});
+
 test('no Chromium anywhere falls back to the default browser and says so', async () => {
   const io = capture();
   const calls = [];
@@ -474,6 +641,23 @@ test('--dry-run against a running daemon says it would be reused', async () => {
   assert.equal(code, 0);
   assert.match(io.stdout, /127\.0\.0\.1:4400\/ {2}\(already running/);
   assert.match(io.stdout, /Window: {2}none — --no-window/);
+});
+
+test('--dry-run with a port named says it would start one there', async () => {
+  const io = capture();
+  const code = await runApp(['--dry-run', '--no-window', '--port', '4400'], {
+    ...io,
+    find: async () => null,
+    probe: async () => false,
+    start: async () => assert.fail('--dry-run must not start a daemon'),
+    findBrowser: () => null,
+    node: '/usr/bin/node',
+    bin: '/pkg/bin/deckhq.mjs',
+  });
+  assert.equal(code, 0);
+  assert.match(io.stdout, /nothing is on port 4400, the port you named/);
+  assert.match(io.stdout, /deckhq\.mjs --no-open --port 4400/);
+  assert.match(io.stdout, /wait for http:\/\/127\.0\.0\.1:4400\/api\/state/);
 });
 
 test('the pin offer is made after the window, with the argv it was given', async () => {

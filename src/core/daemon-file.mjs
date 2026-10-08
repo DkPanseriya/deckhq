@@ -24,12 +24,40 @@
  *      read-only home directory must cost the plugin its discovery shortcut and
  *      nothing else.
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
-import { DAEMON_FILE } from './paths.mjs';
+import { DAEMON_FILE, DATA_DIR } from './paths.mjs';
 import { now as clockNow } from './clock.mjs';
+import { canonicalPath } from './same-path.mjs';
+
+/**
+ * Which state directory a daemon is serving, as something it can say out loud.
+ *
+ * Two DeckHQs can run on one machine with two state directories — the one you
+ * use, and a preview started with `DECKHQ_STATE_DIR` set. They answer
+ * `/api/state` identically, so a command that goes looking for "the running
+ * DeckHQ" could not tell yours from the other and opened whichever port it
+ * asked first. The daemon now names its directory in that answer, and
+ * `deckhq app` only reuses one that names the directory it would itself use.
+ *
+ * A hash, never the path: the answer is readable by anything on loopback, and
+ * a home directory is a user name. Sixteen hex characters of SHA-256 over the
+ * path as the filesystem spells it (`canonicalPath`, so a symlink or an 8.3
+ * short name is one directory, not two), lower-cased on Windows where case is
+ * not part of a name. Stable for as long as the directory is where it is; it
+ * identifies, it does not authenticate.
+ *
+ * @param {string} [dir]
+ * @returns {string}
+ */
+export function stateDirId(dir = DATA_DIR) {
+  const real = canonicalPath(dir);
+  const key = process.platform === 'win32' ? real.toLowerCase() : real;
+  return createHash('sha256').update(key).digest('hex').slice(0, 16);
+}
 
 /**
  * Record this daemon's bound address. Called once, after the listener is up.

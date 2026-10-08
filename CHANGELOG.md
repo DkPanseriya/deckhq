@@ -144,6 +144,17 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   this, the old pin is a copy and keeps the browser's icon:** unpin it, run `deckhq app`, and pin
   the window again, once. You need the shortcut for this (`deckhq shortcut --install`), and
   `deckhq doctor` has a new `taskbar pin` row that says where your machine stands.
+- **`deckhq app` opens the DeckHQ you asked for, not whichever one answers.** With two DeckHQs on
+  one machine — yours, and a second started with `DECKHQ_STATE_DIR` pointing somewhere else —
+  `deckhq app` could open the second one's floor and call it "already running", and
+  `deckhq app --port 4317` did the same when nothing was on 4317. Two rules now. **A port you name
+  is the only port used**, by `--port` or by `DECKHQ_PORT`: a DeckHQ there is reused, an empty port
+  gets one started on it, and a port held by some other program is an error that says so — no other
+  port is tried. **With no port named, only a DeckHQ for your own state directory is reused**; one
+  serving a different directory is left alone and yours is started beside it. The line it prints
+  says which happened: `(already running)`, `(started just now)` or
+  `(started on the port you named)`. To tell them apart, a running DeckHQ now includes a short
+  fingerprint of its state directory in `/api/state` — a hash, never the path.
 - **A wait badge never sits on the person above.** On a sofa that runs down the screen, two people
   a cushion apart put the lower one's badge on the upper one's body. People there now sit a full
   sofa place apart, whatever length the sofa was cut to.

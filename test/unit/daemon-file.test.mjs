@@ -8,7 +8,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { clearDaemonFile, readDaemonFile, writeDaemonFile } from '../../src/core/daemon-file.mjs';
+import {
+  clearDaemonFile,
+  readDaemonFile,
+  stateDirId,
+  writeDaemonFile,
+} from '../../src/core/daemon-file.mjs';
 
 /** A fresh empty directory that cleans itself up. */
 function tmpdir(t) {
@@ -95,4 +100,37 @@ test('a write that cannot happen returns null rather than throwing', (t) => {
   const file = path.join(dir, 'daemon.json');
   fs.mkdirSync(file);
   assert.equal(writeDaemonFile({ file, port: 4317, url: 'x' }), null);
+});
+
+// ---------------------------------------------------------------------------
+// Which state directory a daemon serves
+// ---------------------------------------------------------------------------
+
+test('the state directory id is a short hash, the same every time it is asked', (t) => {
+  const dir = tmpdir(t);
+  const id = stateDirId(dir);
+  assert.match(id, /^[0-9a-f]{16}$/);
+  assert.equal(stateDirId(dir), id);
+  assert.equal(stateDirId(dir + path.sep), id, 'a trailing separator is not another directory');
+});
+
+test('two state directories have two ids', (t) => {
+  const dir = tmpdir(t);
+  assert.notEqual(stateDirId(path.join(dir, 'a')), stateDirId(path.join(dir, 'b')));
+});
+
+test('the id does not change when the directory is created after it was first asked', (t) => {
+  // `deckhq app` asks before the daemon it is about to start has made the
+  // directory, and the daemon answers after. They have to agree.
+  const dir = path.join(tmpdir(t), 'not', 'yet');
+  const before = stateDirId(dir);
+  fs.mkdirSync(dir, { recursive: true });
+  assert.equal(stateDirId(dir), before);
+});
+
+test('SECURITY: the id carries nothing of the path it was made from', (t) => {
+  const dir = path.join(tmpdir(t), 'a-user-name');
+  const id = stateDirId(dir);
+  assert.ok(!id.includes('/') && !id.includes('\\'), 'an id is never a path');
+  assert.ok(!id.includes('a-user-name'));
 });
