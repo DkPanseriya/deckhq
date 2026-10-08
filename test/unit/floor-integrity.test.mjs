@@ -563,7 +563,11 @@ test('every room opens onto the corridor network, and the network is connected',
         }
       }
     }
-    assert.equal(reached.size, lines.length, 'the corridor network is not fully connected');
+    assert.equal(
+      reached.size,
+      lines.length,
+      `the corridor network is not fully connected: ${JSON.stringify(spec)} ${JSON.stringify(lines)}`,
+    );
   }
 });
 

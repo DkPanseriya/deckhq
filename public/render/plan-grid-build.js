@@ -123,9 +123,13 @@ export function buildCandidate(c, floor) {
       );
     }
   }
-  // A hall is walked across, from the corridor its row stands on (`plan-nav.js`).
+  // A hall is walked across, from the corridor its row stands on — or, beside
+  // a column's spine, along from the spine (`plan-nav.js`).
+  const walked = c.family !== 'column';
   c.halls.forEach((hall, i) =>
-    corridors.push(Object.assign(corridorRoom({ id: `__hall-${i}__`, ...hall }), { across: true })),
+    corridors.push(
+      Object.assign(corridorRoom({ id: `__hall-${i}__`, ...hall }), { across: walked }),
+    ),
   );
 
   const bare = projectRooms.map(({ room }) => {

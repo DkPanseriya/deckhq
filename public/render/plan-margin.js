@@ -79,8 +79,11 @@ export function landscapeHalls(rooms) {
           : { x: hall.x + off, y: hall.y + along, w: across, h: size };
         // Never on the line a hall is walked by: across it, down its middle
         // (`plan-nav.js`), whichever way it is longer.
-        const lane = hall.x + hall.w / 2;
-        if (rect.x < lane + LANE_HALF && rect.x + rect.w > lane - LANE_HALF) continue;
+        const down = hall.across !== false;
+        const lane = down ? hall.x + hall.w / 2 : hall.y + hall.h / 2;
+        const lo = down ? rect.x : rect.y;
+        const hi = down ? rect.x + rect.w : rect.y + rect.h;
+        if (lo < lane + LANE_HALF && hi > lane - LANE_HALF) continue;
         // Anchored to the wall it stands against, as every prop on the floor is.
         /** @type {'N'|'S'|'E'|'W'} */
         const side = flat ? (far ? 'S' : 'N') : far ? 'E' : 'W';
