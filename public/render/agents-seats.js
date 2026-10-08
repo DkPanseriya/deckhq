@@ -376,7 +376,7 @@ export function assignSeats(plan, agents, opts = {}) {
 
   for (const agent of agents) {
     if (hidden && hidden.has(agent.id)) continue;
-    const p = derivePlacement(agent);
+    const p = derivePlacement(agent, byId);
     // In the lounge and behind its chip: counted there, drawn nowhere.
     if (p === 'lounge' && behindChip && behindChip.has(String(agent.id))) continue;
     if (agent.subagent === true && p === 'desk') {

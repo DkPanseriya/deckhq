@@ -1759,7 +1759,7 @@ test('no agent is drawn outside the room it stands in, juniors included', () => 
       const seats = assignSeats(plan, agents);
       const where = `${JSON.stringify(spec)} at ${stageW}x${stageH}`;
       const roomFor = (a) => {
-        const p = derivePlacement(a);
+        const p = derivePlacement(a, byId);
         if (p === 'desk') {
           const home = homeProjectOf(a, byId);
           return plan.rooms.find((r) => r.kind === 'project' && r.id === home);

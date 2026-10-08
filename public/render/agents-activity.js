@@ -92,6 +92,10 @@ export function pickNextActivityFromClips(record, availability, makeActivityRota
  */
 export function clipForActivity(activityState) {
   if (activityState === 'needs_input') return 'hand_raise';
+  // WP-99 · a finished turn at a DESK is a lead waiting on its crew
+  // (`placement`): it holds its page as it would on a sofa, hands off the
+  // keys, and must not appear to type.
+  if (activityState === 'for_review') return 'stand_wait';
   if (activityState === 'stalled') return 'slump';
   // An ended session is not producing output; it must not appear to type.
   if (activityState === 'ended') return 'slump';

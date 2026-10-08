@@ -428,7 +428,7 @@ export class AgentRuntime {
     const behindChip = (plan && plan.loungeOverflow && plan.loungeOverflow.ids) || null;
     const seen = new Set();
     for (const agent of agents) {
-      const placement = derivePlacement(agent);
+      const placement = derivePlacement(agent, byId);
       // An archived session is off the floor: it has no room, no seat and
       // nothing drawn, so it gets no record either. Keeping one would fall
       // through to the no-seat fallback and park every one of them on the

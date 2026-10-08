@@ -10,6 +10,8 @@
  * `test/unit/rates.test.mjs` import exactly what they imported before.
  */
 
+import { agentIndex, isSupervising, workingJuniorsOf } from './floor-rule.js';
+
 // ------------------------------------------------------------- utilities
 
 /** The compact name for toasts and placeholders: display name, else MK tag. */
@@ -40,6 +42,23 @@ export function juniorMetaFor(agent, snapshot) {
   const n = Number(agent.juniorCount) || 0;
   if (n <= 0) return null;
   return n === 1 ? '1 junior' : `${n} juniors`;
+}
+
+/**
+ * WHY A WAITING LEAD IS AT ITS DESK (WP-99), in the words its tooltip adds to
+ * its state: `waiting on 3 juniors`. Null for anybody the floor has not kept
+ * at a desk for that reason (`floor-rule.js`'s `isSupervising`), so the phrase
+ * and the seat are one answer to one question. The count is the juniors that
+ * are WORKING, which is the number that has to reach zero before it moves.
+ * @param {any} agent
+ * @param {any[]|null|undefined} agents the snapshot's own list
+ * @returns {string|null}
+ */
+export function supervisingLineFor(agent, agents) {
+  const byId = agentIndex(agents || []);
+  if (!isSupervising(agent, byId)) return null;
+  const n = workingJuniorsOf(agent, byId);
+  return n === 1 ? 'waiting on 1 junior' : `waiting on ${n} juniors`;
 }
 
 /** "claude-opus-5" reads as "opus-5" on a line that already says Claude Code. */

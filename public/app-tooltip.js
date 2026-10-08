@@ -11,7 +11,16 @@
  */
 
 import { recordLineFor } from './records.js';
-import { STATE_LABELS, el, findAgent, formatNumber, palette, panel } from './app-state.js';
+import {
+  STATE_LABELS,
+  el,
+  findAgent,
+  formatNumber,
+  latestSnapshot,
+  palette,
+  panel,
+} from './app-state.js';
+import { supervisingLineFor } from './panel-format.js';
 import { now as clockNow } from './clock.js';
 import { whereOf } from './floor-worktrees.js';
 import { roleWordFor } from './names.js';
@@ -134,9 +143,13 @@ export function showTooltip(agentId) {
   const elapsedMs =
     clockNow() - (agent.reviewSince ?? agent.needsInputSince ?? agent.lastActivityAt ?? clockNow());
   const elapsedMin = Math.max(0, Math.round(elapsedMs / 60000));
+  // WP-99 · a lead whose turn is over while its juniors still work is at its
+  // desk, and its state says why: `For review · waiting on 3 juniors`.
+  const crew = supervisingLineFor(agent, latestSnapshot && latestSnapshot.agents);
   el.tooltip.appendChild(
     tooltipLine(
       `${STATE_LABELS[agent.activityState] || agent.activityState} · ` +
+        `${crew ? `${crew} · ` : ''}` +
         `${formatNumber(agent.tokens)} tokens · ${elapsedMin}m`,
     ),
   );
