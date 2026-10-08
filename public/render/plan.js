@@ -56,6 +56,7 @@
  *   plan-grid-service.js  what that building asks of the reception and lounge
  *   plan-quiet.js    one or two rooms: the two service rooms a strip down the
  *                    left, and the rooms the rest of the building
+ *   plan-seated.js   which chairs somebody is sitting in, for the bake
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, imported by both sides (WP-22).
@@ -80,6 +81,7 @@ import {
   proportionFaults,
 } from './plan-proportions.js';
 import { crewFloorFor } from './plan-rooms.js';
+import { markOccupiedChairs } from './plan-seated.js';
 import { benchFloorFor, layWorktreeBenches } from './plan-worktrees.js';
 import { AGENT_SCALE, DEFAULT_AGENT_SIZE, SIZE_IDS, sizeForPopulation } from './plan-scale.js';
 import { seatOffice } from './plan-office.js';
@@ -363,7 +365,8 @@ export function buildPlan(projects, agents, opts = {}) {
   }
   const measure = measureProportions({ width: W, height: H, rooms });
 
-  return {
+  /** @type {Plan} */
+  const plan = {
     width: W,
     height: H,
     targetAspect,
@@ -398,6 +401,9 @@ export function buildPlan(projects, agents, opts = {}) {
     // on every floor whose lounge has a place for everybody in it.
     loungeOverflow,
   };
+  // Last, on the finished plan: the chairs somebody sits in face their desks.
+  markOccupiedChairs(plan, list);
+  return plan;
 }
 
 // ---------------------------------------------------------------- re-exports

@@ -58,8 +58,10 @@ export {};
  */
 
 /**
- * How a prop's position was derived. Every prop carries one.
- * @typedef {{type:'zone', of:string, dx:number, dy:number}
+ * How a prop's position was derived. Every prop carries one. A prop placed in
+ * a zone may also name the `edge` of it that it faces — a screen on a
+ * worktree's bench, which is laid by offset rather than attached.
+ * @typedef {{type:'zone', of:string, dx:number, dy:number, edge?:'N'|'S'|'E'|'W'}
  *   | {type:'wall', side:'N'|'S'|'E'|'W', along:number, inset?:number}
  *   | {type:'corner', corner:'NE'|'NW'|'SE'|'SW', inset?:number}
  *   | {type:'attached', to:string, edge:'N'|'S'|'E'|'W', along:number, gap?:number}
@@ -92,6 +94,9 @@ export {};
  *   cannot ask what room it is in, and a project room's break-out rug and the
  *   reception's wool are the same two KINDS in two different materials, so the
  *   plan declares it — the seam `prop.tall` already uses for a prop's height.
+ * @property {boolean} [occupied] a task chair only: somebody is seated in it
+ *   (`plan-seated.js`), so it is drawn square to its desk. An empty one is
+ *   drawn left a few degrees askew.
  * @property {number} [cushions] a reception sofa run only: how many seat
  *   cushions it is drawn with, which is how many it seats
  *   (`plan-office-seats.js`). The painter draws this many at every zoom.

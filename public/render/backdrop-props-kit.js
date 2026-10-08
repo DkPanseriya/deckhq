@@ -109,11 +109,13 @@ export function topEdges(ctx, x, y, w, h, r, band, dark, lit) {
 
 /**
  * How far an empty chair has been left turned: 8 to 15 degrees, either way.
- * The bake does not know who is sitting where, so every task chair is turned;
- * a seated figure covers the seat and the turn reads as a chair somebody is in.
+ * A chair somebody is sitting in is not turned at all — the plan marks it
+ * `occupied` (`plan-seated.js`) — because a person at a desk faces their
+ * screen, and a chair askew under them reads as a person sitting sideways.
  * @param {any} prop @returns {number} radians
  */
 export function chairSwivel(prop) {
+  if (prop && prop.occupied === true) return 0;
   const deg = 8 + 7 * seeded(prop, 'swivel');
   return ((seeded(prop, 'side') < 0.5 ? -deg : deg) * Math.PI) / 180;
 }

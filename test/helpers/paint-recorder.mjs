@@ -32,8 +32,8 @@ const PATHS = new Set([
 
 /**
  * @returns {any} a context; `paints` is every fill and stroke in order,
- *   `counts` how many times each method was called, `pathOps()` how many path
- *   and paint operations were issued in all
+ *   `counts` how many times each method was called, `turns` every angle it was
+ *   rotated by, `pathOps()` how many path and paint operations were issued
  */
 export function paintRecorder() {
   /** @type {any[]} */
@@ -59,10 +59,13 @@ export function paintRecorder() {
     textBaseline: 'alphabetic',
   };
   const gradient = { addColorStop() {} };
+  /** @type {number[]} */
+  const turns = [];
   /** @type {Record<string, any>} */
   const own = {
     paints,
     counts,
+    turns,
     pathOps: () => Object.entries(counts).reduce((a, [k, n]) => a + (PATHS.has(k) ? n : 0), 0),
     save: () => stack.push({ ...state }),
     restore: () => Object.assign(state, stack.pop() || {}),
@@ -85,6 +88,7 @@ export function paintRecorder() {
       if (k in target) return target[k];
       return (/** @type {any[]} */ ...args) => {
         counts[k] = (counts[k] || 0) + 1;
+        if (k === 'rotate') turns.push(Number(args[0]));
         if (PAINTS.has(k)) {
           paints.push({
             op: k,

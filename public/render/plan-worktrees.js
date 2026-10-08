@@ -61,6 +61,13 @@ export const BENCH_MIN_SEATS = 3;
  */
 export const BENCH_LABEL_INSET = 0.24;
 
+/**
+ * The edge of a bench its people sit at. A bench stands against the room's
+ * foot wall, so its chairs are on the room's side of it — north — and a screen
+ * on it faces that way.
+ */
+export const BENCH_SEAT_EDGE = 'N';
+
 /** Props a bench may be laid over when no wall is clear, and take away. */
 const DECOR = /^(plant_|planter$|rug_round$|side_table$|tub_chair$)/;
 
@@ -252,7 +259,18 @@ export function layWorktreeBenches(room, benches) {
         angle,
         x: px,
         y: py,
-        anchor: { type: 'zone', of: id, dx: px - x, dy: py - chairY },
+        // A screen names the edge of the bench its occupant sits at, as a desk's
+        // does: the chairs stand north of a bench against the foot wall, so the
+        // keyboard is on that side and the screen faces it. Without the edge the
+        // painter fell back on the rect's shape, which is right only while a
+        // monitor is wider than it is deep.
+        anchor: {
+          type: 'zone',
+          of: id,
+          dx: px - x,
+          dy: py - chairY,
+          ...(kind === 'monitor' ? { edge: BENCH_SEAT_EDGE } : {}),
+        },
       });
     put('desk', x, topY, run, depth);
     // A chair at every place along it — it is a bench, and the next session
