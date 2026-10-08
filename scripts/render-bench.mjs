@@ -332,7 +332,10 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     let on = true;
     const tick = () => { if (!on) return; ticks++; requestAnimationFrame(tick); };
     scene.start();
-    await sleep(300);
+    // A floor is baked again once its scale has held still, which is a new
+    // picture and rightly a frame: wait for that to be over before counting.
+    for (let i = 0; i < 100 && scene._bakeTimer != null; i++) await sleep(50);
+    await sleep(400);
     draws = 0;
     requestAnimationFrame(tick);
     await sleep(2000);
