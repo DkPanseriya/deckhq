@@ -28,8 +28,9 @@
 
 import { CHAIR, CHAIR_GAP, CORNER_PLANT_INSET, SEAT_PITCH, TABLE_DEPTH } from './plan-units.js';
 import { MONITOR_H, MONITOR_W } from './plan-furniture.js';
-import { CHAR_CLEAR_U, PLANT_TREE } from './plan-props.js';
+import { BOOKCASE_W, CHAR_CLEAR_U, PLANT_TREE } from './plan-props.js';
 import {
+  CREDENZA_DEPTH,
   DOOR_CLEAR_DEPTH,
   DOOR_CLEAR_W,
   ROOM_LANE,
@@ -73,6 +74,15 @@ export function benchReach() {
   return WALL_INSET + benchDepth() + CHAIR_GAP + CHAIR;
 }
 
+/**
+ * How far a bench stops short of a side wall: the depth of the storage that
+ * may be stood against that wall afterwards, and the gap it is used from. A
+ * bench in the very corner would have a bookcase's end in its chair row.
+ */
+export function benchSide() {
+  return WALL_INSET + Math.max(BOOKCASE_W, CREDENZA_DEPTH) + WALL_GAP;
+}
+
 /** One bench's run along the wall: a seat pitch a person, and never a short one. */
 export function benchRun(/** @type {number} */ seats) {
   return Math.max(BENCH_MIN_SEATS, seats) * SEAT_PITCH;
@@ -97,7 +107,7 @@ export function benchFloorFor(benches) {
   const plant = CORNER_PLANT_INSET + PLANT_TREE + CHAR_CLEAR_U;
   const door = DOOR_CLEAR_W + CHAR_CLEAR_U * 2;
   return {
-    w: runs + gaps + plant + door + WALL_GAP * 2 + ROOM_LANE,
+    w: runs + gaps + plant + door + benchSide() * 2 + ROOM_LANE,
     h: benchReach() + CHAR_CLEAR_U,
   };
 }
@@ -153,8 +163,8 @@ export function layWorktreeBenches(room, benches) {
     return { seatOf, benches: laid };
   }
   const band = room.plateBand ?? 0;
-  const left = room.x + WALL_GAP;
-  const right = room.x + room.w - WALL_GAP;
+  const left = room.x + benchSide();
+  const right = room.x + room.w - benchSide();
   const bottom = room.y + room.h;
   const depth = benchDepth();
   const topY = bottom - WALL_INSET - depth;
@@ -245,17 +255,21 @@ export function layWorktreeBenches(room, benches) {
         anchor: { type: 'zone', of: id, dx: px - x, dy: py - chairY },
       });
     put('desk', x, topY, run, depth);
-    // The people at it sit together in the middle of the run.
-    const lead = (run - b.ids.length * SEAT_PITCH) / 2;
-    b.ids.forEach((agentId, k) => {
-      const cx = x + lead + (k + 0.5) * SEAT_PITCH;
-      const cy = chairY + CHAIR / 2;
-      // Square on to the bench: the occupant faces the wall their screen is on.
-      const angle = Math.PI / 2;
+    // A chair at every place along it — it is a bench, and the next session
+    // in this worktree sits down beside the first — and a screen only where
+    // somebody is. The people at it sit together in the middle of the run.
+    const places = Math.round(run / SEAT_PITCH);
+    const first = Math.floor((places - b.ids.length) / 2);
+    // Square on to the bench: the occupant faces the wall their screen is on.
+    const angle = Math.PI / 2;
+    for (let k = 0; k < places; k++) {
+      const cx = x + (k + 0.5) * SEAT_PITCH;
       put('chair', cx - CHAIR / 2, chairY, CHAIR, CHAIR, angle);
+      const agentId = b.ids[k - first];
+      if (agentId === undefined) continue;
       put('monitor', cx - MONITOR_W / 2, topY, MONITOR_W, MONITOR_H);
-      seatOf.set(agentId, { x: cx, y: cy, angle });
-    });
+      seatOf.set(agentId, { x: cx, y: chairY + CHAIR / 2, angle });
+    }
     laid.push({
       key: b.key,
       name: b.name,
