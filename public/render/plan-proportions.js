@@ -21,8 +21,11 @@
  * `plan-grid.js`'s, because they need the room builders and this file needs
  * nothing.
  *
- * Pure arithmetic. No DOM, no clock, no randomness, no imports.
+ * Pure arithmetic. No DOM, no clock, no randomness; the one import is the
+ * row-splitting arithmetic, which is pure too (`plan-split.js`).
  */
+
+import { splitSpan } from './plan-split.js';
 
 // ---------------------------------------------------------------- (a) area
 
@@ -364,6 +367,9 @@ export function loneModules(module, crewed = false) {
 /** Comparisons on laid geometry, in plan units. */
 const EPS = 1e-6;
 
+/** What `plan-split.js` splits a row by: the widest shape, and the narrowest hall. */
+const RULES = Object.freeze({ ratioMax: ROOM_RATIO_MAX, hallMin: HALL_WIDTH_MIN });
+
 // ------------------------------------------------------------------ modules
 
 /**
@@ -472,69 +478,25 @@ export function splitRow(
   loose = false,
 ) {
   const n = weights.length;
-  if (!n || !(width > 0) || !(depth > 0)) return null;
-  const hi = weights.map((_, i) => widestIn(depth, caps[i]));
-  const lo = weights.map((_, i) => narrowest(footprints[i], depth));
-  // A row too deep for a room's ceiling has no shape to lay it at.
-  if (lo.some((v, i) => v > hi[i] + EPS)) return null;
-  let least = 0;
-  for (const v of lo) least += v;
-  if (least > width + EPS) return null;
-  let most = 0;
-  for (const v of hi) most += v;
-  if (most < width - EPS) {
-    const left = width - most;
-    // The room beside them takes it.
-    if (left <= give + EPS) return hi;
-    const shape = ROOM_RATIO_MAX * depth;
-    const held = loose || hi.every((v) => v < shape - EPS);
-    if (!held || left > spare + EPS) return null;
-    // A hall, then, and never a sliver of one.
-    if (left >= HALL_WIDTH_MIN - EPS) return hi;
-    return splitRow(weights, width - HALL_WIDTH_MIN, depth, footprints, 0, caps, 0);
-  }
-  // Water-filling. Share what is left by weight; hold whichever side is the
-  // further out of bounds at its bound; share again. Each pass holds at least
-  // one room, so it ends in at most `n` of them and the sum is the row.
-  /** @type {number[]} */
-  const out = Array(n).fill(-1);
-  let rest = width;
-  let open = 0;
-  for (const m of weights) open += m;
-  for (let pass = 0; pass <= n; pass++) {
-    const k = rest / Math.max(1e-12, open);
-    let under = 0;
-    let over = 0;
-    for (let i = 0; i < n; i++) {
-      if (out[i] >= 0) continue;
-      const v = k * weights[i];
-      if (v < lo[i]) under += lo[i] - v;
-      else if (v > hi[i]) over += v - hi[i];
-    }
-    const low = under >= over;
-    let held = false;
-    for (let i = 0; i < n; i++) {
-      if (out[i] >= 0) continue;
-      const v = k * weights[i];
-      if (under + over <= EPS) out[i] = v;
-      else if (low ? v < lo[i] : v > hi[i]) {
-        out[i] = low ? lo[i] : hi[i];
-        rest -= out[i];
-        open -= weights[i];
-        held = true;
-      }
-    }
-    if (!held) break;
-  }
-  // The last float of error goes to the widest room, where it is smallest.
-  let widest = 0;
-  let total = 0;
+  const { lo, hi } = boundsAt(n, depth, footprints, caps);
+  return splitSpan(weights, 0, n, width, depth, lo, hi, give, spare, loose, RULES);
+}
+
+/**
+ * How narrow and how wide each room may be laid at one depth (`narrowest`,
+ * `widestIn`). A matter of the room and the depth and nothing else, so a deal
+ * asks it once per depth rather than once per run of rooms it tries.
+ * @param {number} n @param {number} depth
+ * @param {({w:number,h:number}[]|undefined)[]} footprints @param {number[]} caps
+ */
+function boundsAt(n, depth, footprints, caps) {
+  const lo = new Array(n);
+  const hi = new Array(n);
   for (let i = 0; i < n; i++) {
-    total += out[i];
-    if (out[i] > out[widest]) widest = i;
+    lo[i] = narrowest(footprints[i], depth);
+    hi[i] = widestIn(depth, caps[i]);
   }
-  out[widest] += width - total;
-  return out;
+  return { lo, hi };
 }
 
 /** The most of its width a band's rooms may leave untaken, either way. */
@@ -577,34 +539,64 @@ export function dealRows(weights, bands, footprints = [], caps = []) {
   const sumOf = (/** @type {number[]} */ list) => list.reduce((a, v) => a + v, 0);
   if (n > sumOf(most) || n < sumOf(fewest)) return null;
   // One answer per (row, first room, last room), kept in a flat table: this is
-  // asked a few hundred times a floor and a few hundred floors a search.
+  // asked a few hundred times a floor and a few hundred floors a search. Rows
+  // of one width, depth and allowance are one question and share an answer —
+  // a column's rows are all the same row — so the table is one plane per KIND
+  // of row.
   const span = n + 1;
+  /** @type {number[]} */
+  const kind = [];
+  let kinds = 0;
+  for (let k = 0; k < rows; k++) {
+    const b = bands[k];
+    let same = -1;
+    for (let o = 0; o < k && same < 0; o++) {
+      const p = bands[o];
+      if (
+        p.w === b.w &&
+        p.d === b.d &&
+        (p.give ?? 0) === (b.give ?? 0) &&
+        (p.spare ?? 0) === (b.spare ?? 0) &&
+        (p.loose === true) === (b.loose === true)
+      ) {
+        same = kind[o];
+      }
+    }
+    kind.push(same < 0 ? kinds++ : same);
+  }
+  /** @type {Map<number, {lo:number[], hi:number[]}>} */
+  const bounds = new Map();
   /** @type {({cost:number, widths:number[]}|null|undefined)[]} */
-  const memo = new Array(rows * span * span);
+  const memo = new Array(kinds * span * span);
   const row = (/** @type {number} */ k, /** @type {number} */ i, /** @type {number} */ j) => {
     if (j - i > most[k] || j - i < fewest[k]) return null;
-    const key = (k * span + i) * span + j;
+    const key = (kind[k] * span + i) * span + j;
     const known = memo[key];
     if (known !== undefined) return known;
     const band = bands[k];
-    const widths = splitRow(
-      weights.slice(i, j),
+    let at = bounds.get(band.d);
+    if (!at) bounds.set(band.d, (at = boundsAt(n, band.d, footprints, caps)));
+    const widths = splitSpan(
+      weights,
+      i,
+      j,
       band.w,
       band.d,
-      footprints.slice(i, j),
+      at.lo,
+      at.hi,
       band.give ?? 0,
-      caps.slice(i, j),
       band.spare ?? 0,
       band.loose === true,
+      RULES,
     );
     let got = null;
     if (widths) {
       let cost = 0;
-      widths.forEach((w, at) => {
-        const size = Math.log((w * band.d) / (unit * weights[i + at]));
-        const shape = Math.log(w / band.d / ROOM_RATIO_IDEAL);
+      for (let r = 0; r < widths.length; r++) {
+        const size = Math.log((widths[r] * band.d) / (unit * weights[i + r]));
+        const shape = Math.log(widths[r] / band.d / ROOM_RATIO_IDEAL);
         cost += size * size + 0.25 * shape * shape;
-      });
+      }
       got = { cost, widths };
     }
     memo[key] = got;
