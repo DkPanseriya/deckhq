@@ -525,3 +525,43 @@ export async function readDesktopSessions() {
 
   return out;
 }
+
+// --- The app's own id for a session (WP-100) --------------------------------
+
+/**
+ * The shape of the app's OWN session id, as its deep-link handler accepts it.
+ * Read out of the app's bundle (2.26454) rather than guessed: the handler for
+ * `claude://code/continue?session=` tests the value against exactly this and
+ * logs `code entry link invalid ?session` for anything else — which is what it
+ * logged on this machine when it was sent a transcript's uuid.
+ */
+export const APP_SESSION_ID = /^local_[A-Za-z0-9-]{1,64}$/;
+
+/**
+ * The app's id for the session DeckHQ knows by `cliSessionId`, or null when
+ * the app has no record of it — a session started in a terminal is not one of
+ * the app's, and its link cannot open it.
+ *
+ * The id is the store file's NAME. Measured on this machine: 122 of 122
+ * session files are `<sessionId>.json`, so the name is read instead of adding
+ * a fourth field to the head scan above — a field the scan would then have to
+ * find before it could stop early.
+ *
+ * A session the app has ARCHIVED answers null too. The same handler looks the
+ * id up among the sessions that are not archived and, finding nothing, opens
+ * its default view — so a link to an archived session would arrive somewhere
+ * else and say nothing about it.
+ *
+ * @param {string} cliSessionId
+ * @returns {Promise<string|null>}
+ */
+export async function appSessionIdFor(cliSessionId) {
+  if (typeof cliSessionId !== 'string' || !cliSessionId) return null;
+  await readDesktopSessions(); // served from the cache; a stat per file
+  for (const [file, entry] of cache) {
+    if (entry.cli !== cliSessionId || !entry.session || entry.session.archived) continue;
+    const name = path.basename(file, '.json');
+    if (APP_SESSION_ID.test(name)) return name;
+  }
+  return null;
+}

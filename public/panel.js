@@ -58,10 +58,12 @@
  *   panel-header.js      the header, its live lines, and the close-up
  *   panel-permission.js  WP-19's card and its own funnel
  *   panel-studio.js      WP-67's three Studio artefacts, when there are any
- *   panel-said.js        WHAT IT SAID and the thread under it
+ *   panel-said.js        WHAT IT SAID and the thread folded above it
+ *   panel-transcript.js  WP-100: a tool call, a hand-back, reasoning — drawn
  *   panel-changes.js     WHAT CHANGED, the diffs, and the editor link
  *   panel-actions.js     the weighted buttons, ⋯ more, and 1/2/3
  *   panel-resume.js      resume in app / in terminal
+ *   panel-goto.js        WP-100's one button: go to the session, or resume it
  *   panel-records.js     WP-46's records line
  *   panel-traits.js      WP-28's trait line
  *   panel-composer.js    the composer and the one send path
@@ -89,6 +91,7 @@ import {
 } from './panel-changes.js';
 import { createActionsPart } from './panel-actions.js';
 import { createResumePart, setResumeAppAvailable } from './panel-resume.js';
+import { createGotoPart } from './panel-goto.js';
 import { createRecordsPart } from './panel-records.js';
 import { createTraitsPart } from './panel-traits.js';
 import { createComposerPart } from './panel-composer.js';
@@ -189,7 +192,10 @@ export function createPanel(opts) {
     toast,
     onStudio: (body, id) => (body ? handover.render(body, id) : handover.hide()),
   });
-  const said = createSaidPart({ ...dom, getSnapshot });
+  // WP-100. "open in the session" inside a rendered reply is the card's own
+  // go-to-session button by another name; the part that owns it is built
+  // below, so it is reached through a closure rather than handed in.
+  const said = createSaidPart({ ...dom, getSnapshot, toast, goToSession: () => goToSession() });
   const changes = createChangesPart({ ...dom, getSnapshot, toast });
   const actions = createActionsPart({
     ...dom,
@@ -201,6 +207,7 @@ export function createPanel(opts) {
     onRename,
   });
   const resume = createResumePart({ ...dom, getSnapshot, toast });
+  const goto = createGotoPart({ ...dom, getSnapshot, toast, announce });
   const records = createRecordsPart({ ...dom });
   const traits = createTraitsPart({ ...dom, onTendencies });
   const composer = createComposerPart({
@@ -227,6 +234,7 @@ export function createPanel(opts) {
   const { loadChanges } = changes;
   const { performAction, pressNumberKey, agentFor, setMoreOpen } = actions;
   const { loadResumeTargets } = resume;
+  const { loadGoto, refreshGoto, goToSession } = goto;
   const { loadTeamRecords, teamRecords } = records;
   const { loadTraits, agentTraits } = traits;
   const { sendText, restoreComposer } = composer;
@@ -337,6 +345,8 @@ export function createPanel(opts) {
     loadConversation(id);
     loadChanges(id, snapshot?.scannedAt ?? null);
     loadResumeTargets(id);
+    // WP-100. A GET: it asks where the session is and moves no window.
+    loadGoto(id);
     loadTeamRecords();
     loadTraits();
     if (waitingTimer) clearInterval(waitingTimer);
@@ -386,6 +396,7 @@ export function createPanel(opts) {
     }
     setDisplayedAgent(fresh);
     renderChrome();
+    refreshGoto();
     // A new scan may mean a new diff; the daemon answers from cache otherwise.
     loadChanges(currentId, snapshot?.scannedAt ?? null);
   }
@@ -411,6 +422,8 @@ export function createPanel(opts) {
     refresh,
     performAction,
     pressNumberKey,
+    // WP-100. The `O` key and the palette row; the button calls it itself.
+    goToSession,
     // WP-67. The Plan command re-reads the three files once the planner has
     // had a chance to write them; a panel showing another session ignores it.
     refreshStudio,

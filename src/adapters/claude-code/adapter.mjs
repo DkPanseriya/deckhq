@@ -20,11 +20,17 @@
 import { CLAUDE_DIR, subagentEvent } from './parse.mjs';
 import { countCatchphrase } from './catchphrase.mjs';
 import * as hooksImpl from './hooks.mjs';
-import { RUNTIME_ID, available, liveSessions } from './adapter-live.mjs';
+import { RUNTIME_ID, available, liveSessions, sessionPid } from './adapter-live.mjs';
 import { scanSessions } from './adapter-scan.mjs';
 import { conversation, send } from './adapter-send.mjs';
 import { watchConversation } from './adapter-watch.mjs';
-import { appAvailable, openInApp, openInTerminal, openNewSession } from './adapter-open.mjs';
+import {
+  appAvailable,
+  appAvailableFor,
+  openInApp,
+  openInTerminal,
+  openNewSession,
+} from './adapter-open.mjs';
 import { describeMcpServers } from './adapter-mcp.mjs';
 
 export * from './adapter-live.mjs';
@@ -49,6 +55,12 @@ export const adapter = {
   openInTerminal,
   appAvailable,
   openInApp,
+  // WP-100. Both optional in the contract. `sessionPid` is what lets "go to
+  // session" find the window a running session is in; `appAvailableFor` is
+  // `appAvailable` asked about ONE session, because the desktop app's link
+  // opens only the sessions the app itself has a record of.
+  sessionPid,
+  appAvailableFor,
   openNewSession,
   // WP-27, and the debt docs/DEVIATIONS.md §119.2 recorded: Wrapped's phrase
   // count is a read of this runtime's transcripts, so it is adapter work by

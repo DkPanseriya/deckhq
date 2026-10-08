@@ -146,7 +146,7 @@ test('fenced code keeps its text verbatim, its language, and tolerates an unterm
   assert.equal(byTag(root, 'code')[0].attributes['data-lang'], 'sh');
 });
 
-test('inline code, bold, italic and links; links become text with the URL visible', () => {
+test('inline code, bold, italic and links; a web link is an anchor that hands the page it opens nothing', () => {
   const inline = parseInline(
     'use `a**b**` and **bold _in_ it** or *em* and [docs](https://x.test/p)',
   );
@@ -158,8 +158,15 @@ test('inline code, bold, italic and links; links become text with the URL visibl
   assert.equal(inline[3].children[1].type, 'em');
   assert.equal(inline[7].href, 'https://x.test/p');
   const root = renderMarkdown('see [the docs](https://x.test/p) now', doc);
-  assert.equal(byTag(root, 'a').length, 0, 'never an anchor');
-  assert.equal(root.textContent, 'see the docs (https://x.test/p) now');
+  // WP-100. Until this package a link was its text with the URL beside it and
+  // never an anchor. The owner asked for links that open, so an http(s) link
+  // is one now — and ONLY an http(s) link: test/unit/markdown-rich.test.mjs
+  // holds every other scheme to the old rule.
+  const [a] = byTag(root, 'a');
+  assert.equal(a.attributes.href, 'https://x.test/p');
+  assert.equal(a.attributes.target, '_blank');
+  assert.equal(a.attributes.rel, 'noopener noreferrer');
+  assert.equal(root.textContent, 'see the docs now');
   assert.equal(byTag(root, 'strong').length, 0);
 });
 

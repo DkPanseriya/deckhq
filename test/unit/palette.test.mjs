@@ -327,7 +327,10 @@ test('a benched agent is offered recall and let go, and nothing that would be il
   const ids = buildEntries(ctx({ selectedId: 'claude-code:a3' }))
     .filter((e) => e.id.startsWith('sel:') && !e.id.startsWith('sel:resume'))
     .map((e) => e.id);
-  assert.deepEqual(ids, ['sel:recall', 'sel:let_go', 'sel:rename', 'sel:new-agent-here']);
+  // WP-100 added `sel:go` — go to the session where it runs — which is not an
+  // ack action and is offered whatever the ack state, like the resume rows the
+  // filter above already sets aside.
+  assert.deepEqual(ids, ['sel:recall', 'sel:let_go', 'sel:go', 'sel:rename', 'sel:new-agent-here']);
 });
 
 test('legalAckActions matches docs/02-ARCHITECTURE.md §5.1, the same table panel.js uses', () => {

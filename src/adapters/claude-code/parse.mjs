@@ -126,7 +126,7 @@ export function readTail(file, maxBytes = TAIL_BYTES) {
  * @param {string} text
  * @returns {Generator<any>}
  */
-function* jsonLines(text) {
+export function* jsonLines(text) {
   if (!text) return;
   const lines = text.split('\n');
   for (const raw of lines) {
@@ -179,7 +179,7 @@ const WRAPPER_RE =
   /<system-reminder>[\s\S]*?<\/system-reminder>|<command-message>[\s\S]*?<\/command-message>|<command-name>[\s\S]*?<\/command-name>|<command-args>[\s\S]*?<\/command-args>|<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g;
 
 /** @param {string} text */
-function stripWrappers(text) {
+export function stripWrappers(text) {
   return text.replace(WRAPPER_RE, '').trim();
 }
 

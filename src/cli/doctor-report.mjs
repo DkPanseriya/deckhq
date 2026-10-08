@@ -116,6 +116,7 @@ export function renderReport(report, opts = {}) {
   }
 
   lines.push(row('terminal', describeTerminalRow(report.terminal)));
+  lines.push(row('go to session', describeGoToRow(report.goToSession)));
 
   // Windows only: what a taskbar pin of the DeckHQ window will be drawn with.
   if (report.taskbar?.text) lines.push(row('taskbar pin', report.taskbar.text));
@@ -231,6 +232,23 @@ export function describeHooks(h, now) {
     else parts.push('none yet this run');
   }
   return parts.join(', ');
+}
+
+/**
+ * Whether the panel's "Go to session" can do what it says on this machine
+ * (WP-100): find the window a running session is in and bring it forward.
+ *
+ * Three answers and no fourth. `supported` and run on a machine like this one;
+ * `supported` and NEVER run on one — which is said in those words, because a
+ * row that read "supported" for a path nobody has executed would be the
+ * unearned claim `docs/ADAPTERS.md` §6 exists to keep out; or not supported,
+ * with the reason the panel's dead button gives.
+ * @param {any} g
+ */
+export function describeGoToRow(g) {
+  if (!g) return 'not checked';
+  if (!g.supported) return `not supported here — ${g.reason || 'no reason was given'}`;
+  return g.verified ? `supported — ${g.how}` : `unverified — ${g.how}`;
 }
 
 /**

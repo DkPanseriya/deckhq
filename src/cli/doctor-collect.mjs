@@ -22,6 +22,7 @@ import { TERMINAL_AUTO } from '../core/store.mjs';
 import { isSuffixedName } from '../core/identity.mjs';
 import { SHORT_NAMES } from '../../public/names.js';
 import { describeTerminal } from '../adapters/claude-code/terminals.mjs';
+import { createFocusRunner } from '../core/session-focus.mjs';
 
 /**
  * The same scan bounds the daemon uses (src/core/state-machine.mjs), so
@@ -619,6 +620,7 @@ export async function readTaskbar(dataDir, platform = process.platform) {
  *   scan?: {maxAgeDays:number, limit:number},
  *   terminal?: (opts:any) => Promise<any>,
  *   terminalPin?: string,
+ *   goToSession?: () => Promise<any>,
  *   settings?: Record<string, any>,
  *   names?: {poolSize:number, assigned:number, suffixed:number},
  *   taskbar?: {state:string, aumid:string|null, at:number|null, text:string}|null,
@@ -711,6 +713,17 @@ export async function collectReport(opts = {}) {
   }
 
   const taskbar = opts.taskbar !== undefined ? opts.taskbar : await readTaskbar(dataDir);
+
+  // WP-100. Whether "go to session" can find and raise a window on THIS
+  // machine, and whether that has ever been run on such a machine. Nothing is
+  // raised to find out: it is a statement about the platform, not a trial.
+  /** @type {{supported:boolean, verified:boolean, how:string, reason?:string}|null} */
+  let goToSession = null;
+  try {
+    goToSession = await (opts.goToSession || (() => createFocusRunner().support()))();
+  } catch {
+    // leave the row as "not checked"
+  }
 
   /** @type {string[]} */
   const problems = [];
@@ -817,6 +830,7 @@ export async function collectReport(opts = {}) {
     health: daemon ? daemon.health : null,
     state,
     terminal,
+    goToSession,
     taskbar,
     names,
     // Static and deliberate. The core opens no outbound socket at all

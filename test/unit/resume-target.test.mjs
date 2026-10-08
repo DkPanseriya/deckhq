@@ -269,28 +269,82 @@ test('the settings route rejects a terminal id no platform has, rather than stor
 
 // ---------------------------------------------------------------- the URI
 
-test('buildAppResumeUri builds the claude://code/continue deep link', () => {
-  const uri = buildAppResumeUri('abc-123');
-  assert.equal(uri, 'claude://code/continue?session=abc-123&source=deckhq');
+// WP-100. These two used to assert a link carrying the TRANSCRIPT's id and a
+// `&source=deckhq` tag. Measured against Claude desktop 2.26454: the app
+// refuses that id (`code entry link invalid ?session`, in its own log) and
+// opens a session only by its own `local_…` id; and the `&` ended the command
+// `cmd /c start` was given, so the tag never arrived. What is asserted now is
+// the link the app was seen to honour.
+
+test('buildAppResumeUri builds the claude://code/continue deep link from the app’s own id', () => {
+  const uri = buildAppResumeUri('local_ab88288e-2d30-4c72-b919-6d9b6fd71002');
+  assert.equal(uri, 'claude://code/continue?session=local_ab88288e-2d30-4c72-b919-6d9b6fd71002');
 });
 
-test('buildAppResumeUri URL-encodes the session id', () => {
-  // A session id is normally a UUID, but the function must not assume
-  // that — anything with URL-meaningful characters must still survive an
-  // unambiguous round trip through the query string.
-  const raw = 'weird id/with?special&chars=1';
-  const uri = buildAppResumeUri(raw);
+test('SECURITY: buildAppResumeUri refuses anything that is not an id the app minted', () => {
+  // The link is handed to `cmd /c start` on Windows. An id that passes the
+  // app's own pattern has nothing in it `cmd` reads as syntax; anything else
+  // is refused here rather than quoted.
+  for (const bad of [
+    '733ff312-32b1-426c-a677-4847240dd7b2', // a transcript's id: the app refuses it too
+    'local_x & calc',
+    'local_x&source=deckhq',
+    'local_',
+    `local_${'a'.repeat(65)}`,
+    'weird id/with?special&chars=1',
+    '',
+  ]) {
+    assert.throws(() => buildAppResumeUri(bad), /not an id/i, bad);
+  }
+  assert.doesNotMatch(buildAppResumeUri('local_abc-123'), /[&|^<>%" ]/);
+});
 
-  assert.ok(
-    uri.includes(encodeURIComponent(raw)),
-    'the encoded session id should appear verbatim in the URI',
+test('openInApp hands the OS the app’s id for the session, and nothing when the app has no record of it', async () => {
+  const sent = [];
+  const dispatch = async (uri) => {
+    sent.push(uri);
+  };
+  await adapter.openInApp('733ff312-32b1-426c-a677-4847240dd7b2', process.cwd(), {
+    checkAvailable: async () => true,
+    appIdFor: async (id) => (id === '733ff312-32b1-426c-a677-4847240dd7b2' ? 'local_abc' : null),
+    dispatch,
+  });
+  assert.deepEqual(sent, ['claude://code/continue?session=local_abc']);
+
+  // A session started in a terminal is not the app's: say so, send nothing.
+  await assert.rejects(
+    () =>
+      adapter.openInApp('a-terminal-session', process.cwd(), {
+        checkAvailable: async () => true,
+        appIdFor: async () => null,
+        dispatch,
+      }),
+    /no record of this session/,
   );
-  assert.ok(!uri.includes('id/with?special'), 'the raw, unencoded id must not appear');
+  assert.equal(sent.length, 1, 'nothing was dispatched for a session the app cannot open');
 
-  // And it decodes back to exactly the original value.
-  const parsed = new URL(uri.replace(/^claude:\/\//, 'https://'));
-  assert.equal(parsed.searchParams.get('session'), raw);
-  assert.equal(parsed.searchParams.get('source'), 'deckhq');
+  assert.equal(
+    await adapter.appAvailableFor('a-terminal-session', {
+      checkAvailable: async () => true,
+      appIdFor: async () => null,
+    }),
+    false,
+    '"resume in app" is not offered where the app would arrive nowhere',
+  );
+  assert.equal(
+    await adapter.appAvailableFor('x', {
+      checkAvailable: async () => true,
+      appIdFor: async () => 'local_abc',
+    }),
+    true,
+  );
+  assert.equal(
+    await adapter.appAvailableFor('x', {
+      checkAvailable: async () => false,
+      appIdFor: async () => 'local_abc',
+    }),
+    false,
+  );
 });
 
 // ----------------------------------------------------------- openInApp gate

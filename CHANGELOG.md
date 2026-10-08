@@ -63,6 +63,26 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   lid is shut once it has stopped. This was drawn for a crew of three or more and is now drawn for
   one or two beside their lead as well, who used to stand. A sub-agent at a real desk or on a sofa
   sits in the furniture as before.
+- **Go to session.** The panel has one button under the agent's name that takes you to where that
+  session is already running: the terminal, the editor or the Claude desktop app it is in comes to
+  the front, and the line beside the button says which — `Windows Terminal — tab "fix the parser"`.
+  It never starts a second copy of a running session. `O` does the same from the keyboard, and
+  `Ctrl K` has **Go to …'s session**. In Windows Terminal the session's tab is selected when its
+  title is the only one of its name; in the desktop app the app is opened on that session. When
+  the session has ended, the same button reads **Resume in …** and resumes it where you chose in
+  Settings. When a running session cannot be reached, the button is dead and says why. Measured on
+  Windows 11; written and not yet run on macOS and Linux, and `deckhq doctor` has a
+  `go to session` row that says which your machine is.
+- **A reply reads like a document.** Tables are tables, task lists have their boxes, headings step
+  down in size, and prose stops at a readable line length. A code block shows its language and has
+  a **copy** button. A web link opens in a new tab. A file reference such as `src/panel.js:42`
+  opens that file at that line in your editor.
+- **What the agent ran is in the panel.** Earlier in the conversation is folded above the answer,
+  and it now includes each tool call as one line — `Bash npm test`, `Edit src/panel.js` — that
+  opens to its input and its result. A sub-agent's hand-back opens to its report. **latest ↓**
+  takes you back to the answer. Claude Code sessions only.
+- **Open in the session.** An artifact, a picture you attached, and a result too long to show in
+  full each have a button that takes you to the session itself, where they can be seen.
 
 ### Changed
 
@@ -230,6 +250,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Fixed
 
+- **"Resume in app" opened the app and not your session.** The link DeckHQ sent carried the wrong
+  kind of id, which the Claude desktop app refuses. It sends the app's own id for the session now,
+  and the app opens on it. **Resume in app** is offered only for a session the app can open: one
+  started in a terminal is not in the app, and the option is no longer shown for it.
+- **A numbered list with blank lines between its items was several lists.** `1.`, `2.`, a blank
+  line and `3.` rendered as two lists. It is one.
 - **A chair's back was on the wrong side.** Every task chair had its backrest between the person
   and the desk, and the visitor's tub chair had its high back in front of the sitter. Both backs
   are behind whoever sits there.

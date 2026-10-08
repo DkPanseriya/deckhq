@@ -195,6 +195,15 @@ export function handleKeydown(e) {
     case 'G':
       selectNextGoneHome();
       break;
+    // WP-100 · `O` — open the session where it already runs: the terminal, the
+    // editor or the desktop app it is in is brought forward, or it is resumed
+    // if its process has ended. An explicit key, like a click on the panel's
+    // button, and the only kind of thing that may raise a window. In the deck
+    // it names the cursor row.
+    case 'o':
+    case 'O':
+      panel.goToSession(keyTarget());
+      break;
     // The office snapshot (WP-14). `Shift+S` decides what the next `S`
     // contains; the shift key is read explicitly rather than inferred from
     // the case of `e.key`, so caps lock does not silently swap them.

@@ -242,6 +242,18 @@ function buildSelectionEntries(ctx) {
   }
   out.push(
     {
+      // WP-100. First among the session's own rows: it is the one that takes
+      // you to where the work is. What it does — raise the window, or resume
+      // an ended session — is the daemon's to decide, so the label does not
+      // promise either.
+      id: 'sel:go',
+      group: 'selection',
+      label: `Go to ${who}’s session`,
+      hint: 'the window it is running in — or resume it, if it has ended',
+      keywords: ['open', 'focus', 'window', 'terminal', 'jump', 'switch', 'session', 'app'],
+      run: () => actions.goToSession(),
+    },
+    {
       id: 'sel:resume-terminal',
       group: 'selection',
       label: `Resume ${who} in a terminal`,

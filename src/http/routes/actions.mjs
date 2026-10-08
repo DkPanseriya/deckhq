@@ -185,10 +185,17 @@ export function register(router, ctx) {
     const id = url.searchParams.get('id');
     if (!id) return sendError(res, 400, 'id is required');
     const maxMessages = Math.min(Number(url.searchParams.get('limit')) || 200, 1000);
+    // WP-100. `?detail=1` asks for what the model DID as well as what it said:
+    // tool calls, their results and its reasoning, as entries of their own. An
+    // adapter that has no such reader ignores the option and answers as before,
+    // so the panel reads the richer shape where there is one and the plain one
+    // everywhere else.
+    const detail = url.searchParams.get('detail') === '1';
     try {
       // Reading a conversation is a passive act. It must never touch ack state.
       const messages = await adapterFor(id).conversation(splitAgentId(id).sessionId, {
         maxMessages,
+        detail,
       });
       return sendJson(res, 200, { id, messages });
     } catch (err) {
@@ -626,8 +633,15 @@ export function register(router, ctx) {
     const adapter = ctx.adapters.getAdapter(runtime);
     let appAvailable = false;
     try {
+      // WP-100. Asked about ONE session where there is one to ask about: the
+      // desktop app's link opens only sessions the app has a record of, so
+      // "is the app installed" was the wrong question for a session started
+      // in a terminal — it offered a link that arrived nowhere.
       appAvailable = Boolean(
-        adapter && typeof adapter.appAvailable === 'function' && (await adapter.appAvailable()),
+        adapter &&
+        (id && typeof adapter.appAvailableFor === 'function'
+          ? await adapter.appAvailableFor(splitAgentId(id).sessionId)
+          : typeof adapter.appAvailable === 'function' && (await adapter.appAvailable())),
       );
     } catch (err) {
       log.warn('appAvailable check failed', runtime, err.message);
