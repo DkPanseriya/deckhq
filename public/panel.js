@@ -58,7 +58,8 @@
  *   panel-header.js      the header, its live lines, and the close-up
  *   panel-permission.js  WP-19's card and its own funnel
  *   panel-studio.js      WP-67's three Studio artefacts, when there are any
- *   panel-said.js        WHAT IT SAID and the thread under it
+ *   panel-said.js        WHAT IT SAID and the thread folded above it
+ *   panel-transcript.js  WP-100: a tool call, a hand-back, reasoning — drawn
  *   panel-changes.js     WHAT CHANGED, the diffs, and the editor link
  *   panel-actions.js     the weighted buttons, ⋯ more, and 1/2/3
  *   panel-resume.js      resume in app / in terminal
@@ -191,7 +192,10 @@ export function createPanel(opts) {
     toast,
     onStudio: (body, id) => (body ? handover.render(body, id) : handover.hide()),
   });
-  const said = createSaidPart({ ...dom, getSnapshot });
+  // WP-100. "open in the session" inside a rendered reply is the card's own
+  // go-to-session button by another name; the part that owns it is built
+  // below, so it is reached through a closure rather than handed in.
+  const said = createSaidPart({ ...dom, getSnapshot, toast, goToSession: () => goToSession() });
   const changes = createChangesPart({ ...dom, getSnapshot, toast });
   const actions = createActionsPart({
     ...dom,

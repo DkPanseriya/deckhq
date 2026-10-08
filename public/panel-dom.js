@@ -154,8 +154,8 @@ export function buildPanelDom() {
     recordEl,
   );
 
-  // The scrolling body: WHAT IT SAID, the rest of the thread folded beneath
-  // it, then WHAT CHANGED.
+  // The scrolling body: the rest of the thread folded away, WHAT IT SAID
+  // under it, then WHAT CHANGED.
   const body = document.createElement('div');
   body.className = 'panel-body';
   body.tabIndex = 0;
@@ -270,8 +270,19 @@ export function buildPanelDom() {
   liveRow.append(liveWho, liveBody, liveTools);
   liveSection.appendChild(liveRow);
 
-  saidSection.append(saidHeading, saidEl, liveSection);
+  // WP-100 · what the agent has DONE since the last thing it said — tools on a
+  // turn that has not answered yet. Under the answer, above the live region.
+  const sinceEl = document.createElement('div');
+  sinceEl.className = 'review-since';
+  sinceEl.hidden = true;
 
+  // WP-100 · the rest of the thread, folded ABOVE the answer: it happened
+  // first, so it reads first, and the latest thing the agent said stays the
+  // card's first-class content underneath it. It was below until this
+  // package, which put the oldest message at the bottom of a card that reads
+  // downward. A long thread, opened, pushes the answer off the screen, so the
+  // fold carries its own way back: "latest ↓" stays at the foot of the
+  // visible thread for as long as the thread is what is on screen.
   const threadDetails = document.createElement('details');
   threadDetails.className = 'review-thread';
   const threadSummary = document.createElement('summary');
@@ -279,7 +290,14 @@ export function buildPanelDom() {
   const threadEl = document.createElement('div');
   threadEl.className = 'panel-thread';
   threadEl.setAttribute('aria-label', 'Earlier in this conversation');
-  threadDetails.append(threadSummary, threadEl);
+  const jumpBtn = document.createElement('button');
+  jumpBtn.type = 'button';
+  jumpBtn.className = 'review-jump';
+  jumpBtn.textContent = 'latest ↓';
+  jumpBtn.title = 'Jump to the latest thing it said';
+  threadDetails.append(threadSummary, threadEl, jumpBtn);
+
+  saidSection.append(threadDetails, saidHeading, saidEl, sinceEl, liveSection);
 
   const changedSection = document.createElement('section');
   changedSection.className = 'review-section';
@@ -303,14 +321,7 @@ export function buildPanelDom() {
   changedFoot.appendChild(expandAllBtn);
   changedSection.append(changedHeadRow, changedEl);
 
-  body.append(
-    permissionSection,
-    studioSection,
-    handoverSection,
-    saidSection,
-    threadDetails,
-    changedSection,
-  );
+  body.append(permissionSection, studioSection, handoverSection, saidSection, changedSection);
 
   // Actions: three weighted buttons on 1/2/3, everything else behind ⋯ more.
   const actionsWrap = document.createElement('div');
@@ -399,9 +410,11 @@ export function buildPanelDom() {
     liveWho,
     liveBody,
     liveTools,
+    sinceEl,
     threadDetails,
     threadSummary,
     threadEl,
+    jumpBtn,
     changedSection,
     changedHeadRow,
     changedHeading,

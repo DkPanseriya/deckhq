@@ -185,10 +185,17 @@ export function register(router, ctx) {
     const id = url.searchParams.get('id');
     if (!id) return sendError(res, 400, 'id is required');
     const maxMessages = Math.min(Number(url.searchParams.get('limit')) || 200, 1000);
+    // WP-100. `?detail=1` asks for what the model DID as well as what it said:
+    // tool calls, their results and its reasoning, as entries of their own. An
+    // adapter that has no such reader ignores the option and answers as before,
+    // so the panel reads the richer shape where there is one and the plain one
+    // everywhere else.
+    const detail = url.searchParams.get('detail') === '1';
     try {
       // Reading a conversation is a passive act. It must never touch ack state.
       const messages = await adapterFor(id).conversation(splitAgentId(id).sessionId, {
         maxMessages,
+        detail,
       });
       return sendJson(res, 200, { id, messages });
     } catch (err) {

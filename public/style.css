@@ -1521,10 +1521,25 @@ button {
 }
 
 /* WHAT IT SAID — rendered markdown. Every node here is built with
-   textContent from a token tree (public/markdown.js); no HTML is parsed. */
+   textContent from a token tree (public/markdown.js); no HTML is parsed.
+
+   WP-100 · A READING SURFACE. The owner, 8 October: "proper text formatting,
+   the hierarchies, links." Four things carry that, and all four are here:
+
+   - A MEASURE. The card can be 900 px wide and a line of prose that long is
+     not read, it is tracked. Prose, lists and quotes stop at 72 characters;
+     a table and a code block may use the card's whole width, because their
+     width is their content's.
+   - A SCALE with real steps. The four heading levels were 0.95 / 0.9 / 0.84 /
+     0.84 rem — one size, in practice. They are now distinguishable at a
+     glance, and a first-level heading draws a rule under itself.
+   - RHYTHM: more air above a heading than below it, so it belongs to what
+     follows.
+   - INK for what is structure (headings, strong, a table's head) and the
+     softer ink for running text. No state colour sets any text in here. */
 .review-said {
-  font-size: 0.82rem;
-  line-height: 1.6;
+  font-size: 0.84rem;
+  line-height: 1.62;
   color: var(--ink-2);
 }
 .md > :first-child {
@@ -1533,50 +1548,140 @@ button {
 .md > :last-child {
   margin-bottom: 0;
 }
+.md > .md-p,
+.md > .md-list,
+.md > .md-quote,
+.md > .md-h {
+  max-width: 72ch;
+}
 .md-p {
-  margin: 0 0 0.6rem;
+  margin: 0 0 0.7rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 .md-h {
-  margin: 0.9rem 0 0.35rem;
+  margin: 1.25rem 0 0.4rem;
   color: var(--ink);
   font-weight: 600;
   line-height: 1.3;
+  letter-spacing: -0.005em;
 }
 .md-h1 {
-  font-size: 0.95rem;
+  font-size: 1.14rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.6rem;
 }
 .md-h2 {
+  font-size: 1rem;
+}
+.md-h3 {
   font-size: 0.9rem;
 }
-.md-h3,
 .md-h4,
 .md-h5,
 .md-h6 {
-  font-size: 0.84rem;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-2);
 }
 .md-list {
-  margin: 0 0 0.6rem;
-  padding-left: 1.3rem;
+  margin: 0 0 0.7rem;
+  padding-left: 1.35rem;
 }
 .md-list li {
-  margin: 0.15rem 0;
+  margin: 0.22rem 0;
+}
+.md-list li::marker {
+  color: var(--muted);
+}
+.md-list .md-list {
+  margin: 0.2rem 0 0.3rem;
 }
 .md-list .md-p {
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.25rem;
 }
-.md-pre {
-  margin: 0.5rem 0 0.7rem;
-  padding: 0.55rem 0.7rem;
-  background: var(--surface-2);
+/* a task list: the box is drawn where the bullet was */
+.md-list--tasks {
+  list-style: none;
+  padding-left: 0.2rem;
+}
+.md-task {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.md-task > .md-p {
+  margin: 0;
+}
+.md-check {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+.md-task--done > .md-check {
+  color: var(--ink);
+}
+.md-task--done > .md-p {
+  color: var(--muted);
+}
+
+/* a code block: its language and a copy control over it, and it scrolls
+   sideways — wrapped code is not the code that was written */
+.md-codeblock {
+  margin: 0.6rem 0 0.8rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.md-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.18rem 0.3rem 0.18rem 0.7rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.md-code-lang {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.md-copy,
+.md-in-session {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0.12rem 0.4rem;
+  cursor: pointer;
+}
+.md-copy:hover,
+.md-in-session:hover {
+  color: var(--ink);
+  border-color: var(--line-2);
+}
+.md-in-session {
+  border-color: var(--line);
+  white-space: nowrap;
+}
+.md-pre {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 0.72rem;
   line-height: 1.55;
-  color: var(--ink-2);
+  color: var(--ink);
+  tab-size: 2;
 }
 .md-pre code {
   font: inherit;
@@ -1584,28 +1689,94 @@ button {
 }
 .md-code {
   font-family: var(--font-mono);
-  font-size: 0.92em;
+  font-size: 0.9em;
   background: var(--surface-2);
   border-radius: 3px;
   padding: 0.05em 0.3em;
   color: var(--ink);
 }
+
+/* a table scrolls inside its own box; it never widens the card */
+.md-table-wrap {
+  margin: 0.6rem 0 0.8rem;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.md-table {
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.md-table th,
+.md-table td {
+  padding: 0.34rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+.md-table th {
+  color: var(--ink);
+  font-weight: 600;
+  background: var(--surface);
+  white-space: nowrap;
+}
+.md-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.md-table .md-al-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.md-table .md-al-center {
+  text-align: center;
+}
+
 .md-quote {
-  margin: 0 0 0.6rem;
-  padding: 0.1rem 0 0.1rem 0.65rem;
+  margin: 0 0 0.7rem;
+  padding: 0.15rem 0 0.15rem 0.75rem;
   border-left: 2px solid var(--line-2);
   color: var(--ink-2);
 }
 .md hr {
   border: 0;
   border-top: 1px solid var(--line);
-  margin: 0.7rem 0;
+  margin: 0.9rem 0;
 }
 .md strong {
   color: var(--ink);
   font-weight: 600;
 }
-/* links are text with the URL visible beside them, never navigation */
+.md del {
+  color: var(--muted);
+}
+
+/* A web link opens a new tab and hands the page nothing (rel=noopener
+   noreferrer). Ink and an underline — never a state colour, and never the
+   accent, which belongs to for_review. One on this machine carries a small
+   mark, so "this goes to localhost" is seen before it is clicked. */
+.md-a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+.md-a:hover {
+  text-decoration-color: var(--ink);
+}
+.md-a::after {
+  content: '↗';
+  font-size: 0.8em;
+  color: var(--muted);
+  margin-left: 0.15em;
+}
+.md-a--local::after {
+  content: '⌂';
+}
+/* any other address is its words with the address visible, and no navigation */
 .md-link {
   text-decoration: underline;
   text-decoration-style: dotted;
@@ -1617,10 +1788,44 @@ button {
   color: var(--muted);
   overflow-wrap: anywhere;
 }
+/* `src/x.js:42` — somewhere you can go: it opens in your editor */
+.md-fileref {
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px dashed var(--line-2);
+  padding: 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.md-fileref--code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--surface-2);
+  border-radius: 3px 3px 0 0;
+  padding: 0.05em 0.3em;
+}
+.md-fileref:hover {
+  border-bottom-color: var(--ink);
+}
+/* an image is named, never fetched */
+.md-image {
+  color: var(--ink-2);
+}
+.md-image-mark {
+  color: var(--muted);
+}
 
-/* the rest of the thread, folded */
+/* the rest of the thread, folded ABOVE the answer (WP-100): it happened first,
+   so it reads first, and the latest thing the agent said stays first-class
+   underneath. */
 .review-thread {
-  margin-top: 0.7rem;
+  margin-bottom: 0.9rem;
+}
+.review-thread[hidden] {
+  display: none;
 }
 .review-thread-summary {
   font-family: var(--font-mono);
@@ -1643,13 +1848,179 @@ button {
   color: var(--ink);
 }
 .review-thread .panel-thread {
-  padding-top: 0.6rem;
+  padding: 0.7rem 0 0.2rem;
+}
+.review-thread[open] {
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+/* "latest ↓" — the way back to the answer from anywhere in a long thread. It
+   rides the foot of the scrolling card for as long as the thread is what is
+   on screen, and is gone with it. */
+.review-jump {
+  position: sticky;
+  bottom: 0.5rem;
+  display: block;
+  margin: 0.6rem 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  background: var(--surface-3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.55rem;
+  cursor: pointer;
+}
+.review-thread:not([open]) .review-jump {
+  display: none;
+}
+.review-jump:hover {
+  border-color: var(--ink-2);
 }
 .msg-body--plain {
   white-space: pre-wrap;
 }
+.msg--assistant .msg-body {
+  white-space: normal;
+}
 .msg--assistant .msg-body .md {
   color: var(--ink-2);
+}
+.msg-attached {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* WP-100 · what the agent DID. One line per tool call — `Bash npm test` — in a
+   tight column between the messages that frame it, each opening to its input
+   and its result. Quiet on purpose: a turn is forty of these and one answer,
+   and the answer is what the card is for. A call that failed says `failed` in
+   ink beside a rule in the accent; the words are never set in the colour. */
+.tool-run {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  margin-left: 0.15rem;
+  padding-left: 0.6rem;
+}
+.tool-call {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  color: var(--ink-2);
+  min-width: 0;
+}
+.tool-call-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.12rem 0;
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.tool-call-line::-webkit-details-marker {
+  display: none;
+}
+.tool-call-line::before {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.9em;
+}
+.tool-call[open] > .tool-call-line::before {
+  content: '▾';
+}
+.tool-call-line:hover .tool-call-what {
+  color: var(--ink);
+}
+.tool-call-name {
+  flex: 0 0 auto;
+  color: var(--ink);
+}
+.tool-call-what {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tool-call-state {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.tool-call--error .tool-call-state {
+  color: var(--ink);
+  border-left: 2px solid var(--accent);
+  padding-left: 0.4rem;
+}
+.tool-call--thinking .tool-call-name {
+  color: var(--muted);
+  font-style: italic;
+}
+.tool-call-body {
+  margin: 0.2rem 0 0.6rem 1rem;
+}
+.tool-call-label {
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0.4rem 0 0.2rem;
+}
+.tool-call-pre {
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  color: var(--ink-2);
+  white-space: pre;
+  overflow: auto;
+  max-height: 18rem;
+}
+.tool-call-cut {
+  margin-top: 0.3rem;
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+.tool-call-thought {
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 72ch;
+  font-style: italic;
+}
+/* a sub-agent's report is markdown, and is read as prose */
+.tool-call-handback {
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.review-since {
+  margin-top: 0.9rem;
+}
+.review-since[hidden] {
+  display: none;
+}
+.review-since-label {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.3rem;
 }
 
 /* WHAT CHANGED IN <project> — per-file numstat. WP-47 turned each row into a

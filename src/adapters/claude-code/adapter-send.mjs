@@ -17,6 +17,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { splitAgentId } from '../../core/model.mjs';
 import { PROJECTS_DIR, TAIL_BYTES, readTail, parseConversation } from './parse.mjs';
+import { parseConversationDetail } from './transcript-detail.mjs';
 import { createStreamParser } from './stream.mjs';
 import { subagentFiles } from './adapter-scan.mjs';
 
@@ -54,11 +55,15 @@ export async function findSessionFile(sessionId) {
 /**
  * Full message list for one session, most recent last.
  * @param {string} id
- * @param {{maxMessages?:number}} [opts] optional at runtime: the `= {}`
- *   default means a bare call is legal (WP-22).
+ * @param {{maxMessages?:number, detail?:boolean}} [opts] optional at runtime:
+ *   the `= {}` default means a bare call is legal (WP-22). `detail` (WP-100)
+ *   keeps what the model did as well as what it said — each tool call and its
+ *   result, and its reasoning, as entries of their own. See
+ *   `transcript-detail.mjs`. Off unless asked for, so every existing caller
+ *   reads exactly what it read.
  * @returns {Promise<import('../../core/model.mjs').Message[]>}
  */
-export async function conversation(id, { maxMessages } = {}) {
+export async function conversation(id, { maxMessages, detail } = {}) {
   const { sessionId } = splitAgentId(id);
   const file = await findSessionFile(sessionId);
   if (!file) return [];
@@ -68,6 +73,9 @@ export async function conversation(id, { maxMessages } = {}) {
     // `isSidechain: true`; keeping the usual filter would hand the panel an
     // empty conversation for a session that plainly said things.
     const sidechain = subagentFiles.has(sessionId);
+    if (detail) {
+      return /** @type {any} */ (parseConversationDetail(tail, { maxMessages, sidechain }));
+    }
     return parseConversation(tail, { maxMessages, sidechain });
   } catch {
     return [];
