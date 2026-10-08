@@ -91,6 +91,62 @@ export const MODULE_ORDER_SLACK = 1.25;
 export const PINNED_WEIGHT = 0.6;
 export const PINNED_SPREAD = 2.25;
 
+// ------------------------------------------------------- (c) a room's ceiling
+
+/**
+ * THE SMALLEST A MODULE IS FURNISHED AT, in square units at the medium body.
+ *
+ * A one-desk room is its desk bay (15 x 16 with its pad and plate), the
+ * break-out pair beside it and a lane between the two and to the door: 25 wide
+ * by 21 deep. A team's room adds the credenza and the four-seat table, a large
+ * one the eight-seat table and the shelving wall, and each comes to the
+ * module's own step over the one before — 30 x 26 and 40 x 30 as laid — so the
+ * three are stated as one number and `MODULE_WEIGHTS`.
+ */
+export const ROOM_FURNISHED_MIN = 525;
+
+/**
+ * How far past that a room may be laid. At 1.6 there is a second lane's worth
+ * of floor round every piece and room for one more group; past it the room is
+ * being furnished to hide its floor, which is what a showroom is.
+ */
+export const ROOM_CEILING_OVER_FURNISHED = 1.6;
+
+/**
+ * A ROOM HAS A MAXIMUM SIZE: 840, 1260 and 1890 square units for one desk, a
+ * team and a large team. A floor with few rooms is DRAWN LARGER; its rooms are
+ * not laid larger to fill the window.
+ */
+export const MODULE_AREA_MAX = Object.freeze({
+  S: ROOM_FURNISHED_MIN * ROOM_CEILING_OVER_FURNISHED * MODULE_WEIGHTS.S,
+  M: ROOM_FURNISHED_MIN * ROOM_CEILING_OVER_FURNISHED * MODULE_WEIGHTS.M,
+  L: ROOM_FURNISHED_MIN * ROOM_CEILING_OVER_FURNISHED * MODULE_WEIGHTS.L,
+});
+
+/**
+ * The ceiling of one room, in square units.
+ *
+ * Furniture is sized by a body, so the ceiling moves with the body's area
+ * (`s` squared). And a room is never held under its own desks: twelve people
+ * at desks are past any module's number, and their room's ceiling is that much
+ * over the floor the desks themselves stand on.
+ *
+ * @param {'S'|'M'|'L'|undefined} module none for a pinned room, held as a one-desk room
+ * @param {number} [s] the body scale the floor is laid at
+ * @param {number} [desks] the floor its desks need, in square units
+ */
+export function roomAreaMax(module, s = 1, desks = 0) {
+  const scale = Number(s) > 0 ? Number(s) : 1;
+  const own = MODULE_AREA_MAX[module ?? 'S'] ?? MODULE_AREA_MAX.S;
+  return Math.max(own * scale * scale, ROOM_CEILING_OVER_FURNISHED * (Number(desks) || 0));
+}
+
+/** The deepest a room of that ceiling can be and still be a room's shape. */
+export const roomDepthMax = (/** @type {number} */ areaMax) => Math.sqrt(areaMax / ROOM_RATIO_MIN);
+
+/** And the widest. */
+export const roomWidthMax = (/** @type {number} */ areaMax) => Math.sqrt(areaMax * ROOM_RATIO_MAX);
+
 // ---------------------------------------------------------------- (d) rows
 
 /** One to three rows of rooms is a floor the eye counts; more is a spreadsheet. */
@@ -170,6 +226,29 @@ export const REFERENCE_STAGE = Object.freeze({ w: 1600, h: 870 });
 export const SCALE_MIN_PX_PER_UNIT = 7.5;
 
 /**
+ * THE LARGEST SCALE A FLOOR IS DRAWN AT, at the medium body: a figure
+ * seventy-two pixels tall (`BODY_MAX_PX` over `BODY_HEIGHT_U` in `scene-lod.js`;
+ * a test holds the two equal). It is a bound on the BODY, so it is this number
+ * over `s` at another size and nobody is drawn taller at `large`. Names and
+ * plates are held to their own pixel sizes and do not grow with it.
+ *
+ * A window too large for its floor at this scale is not left as ground round
+ * a small building: the building is laid that much larger, its service rooms
+ * to their caps and the rest a hall (`plan-grid.js`).
+ */
+export const SCALE_MAX_PX_PER_UNIT = 72 / 2.52;
+
+/**
+ * The narrowest building that still covers a stage at the largest scale.
+ * @param {{w?:number, h?:number}|undefined|null} stage the canvas, in pixels
+ * @param {number} [s] the body scale the floor is laid at
+ */
+export function widthAtLargestScale(stage, s = 1) {
+  const px = Number(stage?.w) > 0 && Number(stage?.h) > 0 ? Number(stage?.w) : 0;
+  return (px * (Number(s) > 0 ? Number(s) : 1)) / SCALE_MAX_PX_PER_UNIT;
+}
+
+/**
  * The widest building the nominal scale gives a stage, in units.
  * @param {{w?:number, h?:number}|undefined|null} stage the canvas, in pixels
  * @param {number} aspect the shape the building is laid to
@@ -245,6 +324,16 @@ function narrowest(footprints, depth) {
 }
 
 /**
+ * The widest a room may be laid in a row of this depth: the shape bound, or
+ * its ceiling, whichever is narrower.
+ * @param {number} depth @param {number} [areaMax] none means no ceiling
+ */
+export function widestIn(depth, areaMax) {
+  const shape = ROOM_RATIO_MAX * depth;
+  return Number(areaMax) > 0 ? Math.min(shape, Number(areaMax) / depth) : shape;
+}
+
+/**
  * ONE ROW: share a width between rooms of one depth.
  *
  * Each room's width is in proportion to its weight, held inside the shape
@@ -262,18 +351,23 @@ function narrowest(footprints, depth) {
  * @param {number} depth the row's depth
  * @param {({w:number,h:number}[]|undefined)[]} [footprints] per room
  * @param {number} [give] the most of `width` the rooms may leave untaken
+ * @param {number[]} [caps] each room's ceiling in square units (`roomAreaMax`):
+ *   no room is laid wider than its ceiling is at this depth
  * @returns {number[]|null} one width per room, or null where no legal split exists
  */
-export function splitRow(weights, width, depth, footprints = [], give = 0) {
+export function splitRow(weights, width, depth, footprints = [], give = 0, caps = []) {
   const n = weights.length;
   if (!n || !(width > 0) || !(depth > 0)) return null;
-  const hi = ROOM_RATIO_MAX * depth;
+  const hi = weights.map((_, i) => widestIn(depth, caps[i]));
   const lo = weights.map((_, i) => narrowest(footprints[i], depth));
-  if (lo.some((v) => v > hi + EPS)) return null;
+  // A row too deep for a room's ceiling has no shape to lay it at.
+  if (lo.some((v, i) => v > hi[i] + EPS)) return null;
   let least = 0;
   for (const v of lo) least += v;
   if (least > width + EPS) return null;
-  if (n * hi < width - EPS) return width - n * hi <= give + EPS ? weights.map(() => hi) : null;
+  let most = 0;
+  for (const v of hi) most += v;
+  if (most < width - EPS) return width - most <= give + EPS ? hi : null;
   // Water-filling. Share what is left by weight; hold whichever side is the
   // further out of bounds at its bound; share again. Each pass holds at least
   // one room, so it ends in at most `n` of them and the sum is the row.
@@ -290,7 +384,7 @@ export function splitRow(weights, width, depth, footprints = [], give = 0) {
       if (out[i] >= 0) continue;
       const v = k * weights[i];
       if (v < lo[i]) under += lo[i] - v;
-      else if (v > hi) over += v - hi;
+      else if (v > hi[i]) over += v - hi[i];
     }
     const low = under >= over;
     let held = false;
@@ -298,8 +392,8 @@ export function splitRow(weights, width, depth, footprints = [], give = 0) {
       if (out[i] >= 0) continue;
       const v = k * weights[i];
       if (under + over <= EPS) out[i] = v;
-      else if (low ? v < lo[i] : v > hi) {
-        out[i] = low ? lo[i] : hi;
+      else if (low ? v < lo[i] : v > hi[i]) {
+        out[i] = low ? lo[i] : hi[i];
         rest -= out[i];
         open -= weights[i];
         held = true;
@@ -331,15 +425,20 @@ export function splitRow(weights, width, depth, footprints = [], give = 0) {
  * @param {{w:number,d:number,give?:number}[]} bands each row's width and depth,
  *   top to bottom, and what it may hand back to a service room (`splitRow`)
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
+ * @param {number[]} [caps] each room's ceiling, as `splitRow` takes it
  * @returns {{starts:number[], widths:number[][]}|null} `starts[k]` is the first
  *   room of row k
  */
-export function dealRows(weights, bands, footprints = []) {
+export function dealRows(weights, bands, footprints = [], caps = []) {
   const n = weights.length;
   const rows = bands.length;
   if (!rows || n < rows) return null;
   const total = weights.reduce((a, v) => a + v, 0);
-  const unit = bands.reduce((a, b) => a + b.w * b.d, 0) / Math.max(1e-9, total);
+  // The area a weight of one is laid towards: the rows' own, or — where the
+  // rooms' ceilings come to less than the rows — what those allow.
+  const ceiling = caps.length === n ? caps.reduce((a, v) => a + v, 0) : Infinity;
+  const floor = bands.reduce((a, b) => a + b.w * b.d, 0);
+  const unit = Math.min(ceiling, floor) / Math.max(1e-9, total);
   // How many rooms a row can hold at all is a matter of the shape bounds, and
   // most runs are outside it: asked first, it is what keeps forty rooms cheap.
   const most = bands.map((b) => Math.floor(b.w / (ROOM_RATIO_MIN * b.d) + EPS));
@@ -365,6 +464,7 @@ export function dealRows(weights, bands, footprints = []) {
       band.d,
       footprints.slice(i, j),
       band.give ?? 0,
+      caps.slice(i, j),
     );
     let got = null;
     if (widths) {
@@ -430,11 +530,12 @@ const FLATTEN = Object.freeze([1, 0.7, 0.4, 0]);
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @param {boolean[]} [empty] rooms nobody is in (a pinned one): never larger
  *   than a room of a bigger module, with no slack at all
+ * @param {number[]} [caps] each room's ceiling, as `splitRow` takes it
  * @returns {{cells:{x:number,y:number,w:number,h:number,row:number}[],
- *   taken:number[], spread:number, flatten:number}|null} null where no deal
- *   keeps every rule
+ *   taken:number[], spread:number, flatten:number, full:boolean}|null} null
+ *   where no deal keeps every rule; `full` where no room could be laid larger
  */
-export function layGrid(weights, bands, footprints = [], empty = []) {
+export function layGrid(weights, bands, footprints = [], empty = [], caps = []) {
   // How many rooms the rows can hold between them, counted before anything is
   // built: most of what a search asks is a grid with too many rooms for it, or
   // too few, and that is two sums.
@@ -447,7 +548,7 @@ export function layGrid(weights, bands, footprints = [], empty = []) {
   if (weights.length > most || weights.length < fewest) return null;
   for (const power of FLATTEN) {
     const flat = power === 1 ? weights : weights.map((m) => Math.pow(Math.max(1e-6, m), power));
-    const deal = dealRows(flat, bands, footprints);
+    const deal = dealRows(flat, bands, footprints, caps);
     // Whether a legal deal exists is a matter of shapes, not of weights.
     if (!deal) return null;
     /** @type {{x:number,y:number,w:number,h:number,row:number}[]} */
@@ -474,7 +575,9 @@ export function layGrid(weights, bands, footprints = [], empty = []) {
     const ordered = range.every((r, a) =>
       range.slice(a + 1).every((bigger) => r.most <= bigger.least * r.slack + EPS),
     );
-    if (ordered) return { cells, taken, spread, flatten: power };
+    if (!ordered) continue;
+    const full = cells.every((c, i) => c.w >= widestIn(c.h, caps[i]) - 1e-4);
+    return { cells, taken, spread, flatten: power, full };
   }
   return null;
 }
@@ -526,9 +629,18 @@ export function measureProportions(plan) {
     rows.set(y, Math.max(rows.get(y) ?? 0, r.h));
   }
   const depths = [...rows.values()];
+  // Against its ceiling, where the planner gave a room one (`room.areaMax`): how
+  // far the largest is over, and whether any of them could have been larger.
+  const held = projects.filter((r) => Number(r.areaMax) > 0);
+  const over = held.map((r) => (r.w * r.h) / r.areaMax);
+  const atCeiling =
+    held.length === projects.length &&
+    held.every((r) => r.w >= widestIn(r.h, r.areaMax) - 1e-3 || r.w * r.h >= r.areaMax - 1e-3);
   return {
     area,
     rooms: projects.length,
+    overCeiling: over.length ? Math.max(...over) : 0,
+    atCeiling,
     shares: {
       rooms: sum(projects) / area,
       office: sum(of('office')) / area,
@@ -559,10 +671,16 @@ export function proportionFaults(m) {
   if (!m.rooms) return [];
   const pct = (/** @type {number} */ v) => `${(v * 100).toFixed(1)}%`;
   const out = [];
-  if (m.shares.rooms < ROOMS_AREA_MIN - EPS) {
+  // The majority, or all a room may be: a floor whose every room is at its
+  // ceiling is drawn larger, and what its rooms leave is the service rooms' to
+  // their caps and then a hall — never a larger room.
+  if (m.shares.rooms < ROOMS_AREA_MIN - EPS && !m.atCeiling) {
     out.push(
       `project rooms have ${pct(m.shares.rooms)} of the building, under ${pct(ROOMS_AREA_MIN)}`,
     );
+  }
+  if (m.overCeiling > 1 + 1e-4) {
+    out.push(`a room is ${m.overCeiling.toFixed(2)}x its module's ceiling`);
   }
   if (m.shares.office > OFFICE_AREA_MAX + EPS) {
     out.push(`the office has ${pct(m.shares.office)}, over ${pct(OFFICE_AREA_MAX)}`);
