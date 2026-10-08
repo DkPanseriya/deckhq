@@ -20,7 +20,8 @@ import {
   placement,
   waitingSince,
 } from '../floor-rule.js';
-import { crewArc, crewSplit } from './crew.js';
+import { crewArc, crewSplit, nearAnyRect } from './crew.js';
+import { CHAIR } from './plan-scale.js';
 import {
   hashString,
   JUNIOR_BACK,
@@ -164,19 +165,56 @@ function reachInside(p, u, rect, pad) {
  * dropped, because a junior is a session and a session nobody draws is one
  * somebody has to go looking for.
  *
+ * AND ROUND THE FURNITURE. A room with two tables has the second one behind
+ * the first one's far chairs, which is exactly where the ranks go. A place
+ * closer than `JUNIOR_PAD` — the half-body a junior keeps from a wall — to a
+ * table or to somebody else's chair is passed over, and the junior it was for
+ * takes the next one: further along the row, then a rank behind. The ladder is
+ * walked with the furniture first, so a tighter row on clear floor is preferred
+ * to a looser one on a desk; a room that cannot seat them clear at any pitch
+ * gets the rows it always got, because nobody is dropped for a table either.
+ *
  * @param {{x:number,y:number,angle?:number}} anchor the parent's own seat
  * @param {{x:number,y:number,w:number,h:number}|null} room the room it is in
  * @param {number} n how many juniors
+ * @param {{x:number,y:number,w:number,h:number}[]} [furniture] world-space
+ *   footprints nobody stands on: the room's tables and its other chairs
  * @returns {{x:number,y:number}[]} one position per junior, in order
  */
-export function juniorSpots(anchor, room, n) {
+export function juniorSpots(anchor, room, n, furniture) {
   const angle = typeof anchor.angle === 'number' ? anchor.angle : 0;
   // The seat's `angle` is the way its occupant FACES, so "along the desk" is
   // that direction turned a quarter, and "behind" is the reverse of it.
   const along = { x: Math.cos(angle + Math.PI / 2), y: Math.sin(angle + Math.PI / 2) };
   const back = { x: -Math.cos(angle), y: -Math.sin(angle) };
   const left = { x: -along.x, y: -along.y };
-  const lay = (pitch, row, gap) => {
+  const solid = Array.isArray(furniture) ? furniture : [];
+  /**
+   * The `k`-th place of a layout: alternating sides along the row, then a rank
+   * behind, held inside the walls.
+   * @param {{offsets:number[], pitch:number, row:number, gap:number}} plan
+   * @param {number} k
+   */
+  const place = (plan, k) => {
+    const per = Math.max(1, plan.offsets.length);
+    const offset = plan.offsets[k % per] ?? (k % 2 === 0 ? -1 : 1);
+    const depth = plan.gap + Math.floor(k / per) * plan.row;
+    const x = anchor.x + along.x * offset * plan.pitch + back.x * depth;
+    const y = anchor.y + along.y * offset * plan.pitch + back.y * depth;
+    return room
+      ? {
+          x: Math.min(Math.max(x, room.x + JUNIOR_PAD), room.x + room.w - JUNIOR_PAD),
+          y: Math.min(Math.max(y, room.y + JUNIOR_PAD), room.y + room.h - JUNIOR_PAD),
+        }
+      : { x, y };
+  };
+  /**
+   * The first `n` places of one rung that are clear of `rects`, or null when
+   * the rung does not have that many.
+   * @param {number} pitch @param {number} row @param {number} gap
+   * @param {{x:number,y:number,w:number,h:number}[]} rects
+   */
+  const lay = (pitch, row, gap, rects) => {
     const perSide = room
       ? [
           Math.floor(reachInside(anchor, left, room, JUNIOR_PAD) / pitch),
@@ -194,49 +232,40 @@ export function juniorSpots(anchor, room, n) {
       if (step <= perSide[1]) offsets.push(step);
       if (step > perSide[0] && step > perSide[1]) break;
     }
-    return offsets.length * ranks >= n ? { offsets, ranks, pitch, row, gap } : null;
+    const places = offsets.length * ranks;
+    if (places < n) return null;
+    const plan = { offsets, pitch, row, gap };
+    /** @type {{x:number,y:number}[]} */
+    const out = [];
+    for (let k = 0; k < places && out.length < n; k++) {
+      const p = place(plan, k);
+      if (!nearAnyRect(p, rects, JUNIOR_PAD)) out.push(p);
+    }
+    return out.length >= n ? out : null;
   };
-  let plan = null;
-  for (const shrink of JUNIOR_PACKS) {
-    plan = lay(JUNIOR_OFFSET * shrink, JUNIOR_ROW * shrink, JUNIOR_BACK * shrink);
-    if (plan) break;
+  // Clear of the furniture at any pitch, before on it at the loosest.
+  for (const rects of solid.length ? [solid, []] : [[]]) {
+    for (const shrink of JUNIOR_PACKS) {
+      const spots = lay(JUNIOR_OFFSET * shrink, JUNIOR_ROW * shrink, JUNIOR_BACK * shrink, rects);
+      if (spots) return spots;
+    }
   }
   // Nowhere at all: a room too small to hold them at the tightest pitch. The
-  // last rung is still the best answer there is, and the clamp below keeps
-  // every one of them inside the walls.
-  if (!plan) {
-    const last = JUNIOR_PACKS[JUNIOR_PACKS.length - 1];
-    plan = {
-      offsets: [-1, 1],
-      ranks: 1,
-      pitch: JUNIOR_OFFSET * last,
-      row: JUNIOR_ROW * last,
-      gap: JUNIOR_BACK * last,
-    };
-  }
-  const per = Math.max(1, plan.offsets.length);
-  /** @type {{x:number,y:number}[]} */
-  const out = [];
-  for (let i = 0; i < n; i++) {
-    const offset = plan.offsets[i % per] ?? (i % 2 === 0 ? -1 : 1);
-    const depth = plan.gap + Math.floor(i / per) * plan.row;
-    const x = anchor.x + along.x * offset * plan.pitch + back.x * depth;
-    const y = anchor.y + along.y * offset * plan.pitch + back.y * depth;
-    out.push(
-      room
-        ? {
-            x: Math.min(Math.max(x, room.x + JUNIOR_PAD), room.x + room.w - JUNIOR_PAD),
-            y: Math.min(Math.max(y, room.y + JUNIOR_PAD), room.y + room.h - JUNIOR_PAD),
-          }
-        : { x, y },
-    );
-  }
-  return out;
+  // last rung is still the best answer there is, and the clamp in `place`
+  // keeps every one of them inside the walls.
+  const last = JUNIOR_PACKS[JUNIOR_PACKS.length - 1];
+  const plan = {
+    offsets: [-1, 1],
+    pitch: JUNIOR_OFFSET * last,
+    row: JUNIOR_ROW * last,
+    gap: JUNIOR_BACK * last,
+  };
+  return Array.from({ length: n }, (_, i) => place(plan, i));
 }
 
 /**
- * The furniture a crew's cables may not be routed through, in world coordinates
- * (WP-89).
+ * The furniture a crew's cables may not be routed through and nobody may be
+ * seated on, in world coordinates (WP-89).
  *
  * A room's TABLE zones. Zones rather than props because a zone is exactly *"a
  * structural rectangle inside a room — a table's footprint"* (`plan-shapes.js`),
@@ -265,6 +294,23 @@ export function deskFootprints(room) {
   return room.zones
     .filter((z) => !/^(desk-group|(meeting|seating)-\d+)$/.test(String(z.id ?? '')))
     .map((z) => ({ x: z.x, y: z.y, w: z.w, h: z.h }));
+}
+
+/**
+ * The chairs nobody but their own occupant sits on, in world coordinates: one
+ * `CHAIR` square on every desk seat of the room except `own`.
+ *
+ * Off the plan's SEATS rather than its chair props, because a seat is the
+ * chair's centre by construction (`buildProjectRoom`) and is what the crew is
+ * anchored to — the parent's own chair is left out by being that seat.
+ * @param {{x:number,y:number}[]} seats every desk seat in the room
+ * @param {{x:number,y:number}} own the seat the juniors are gathered round
+ * @returns {{x:number,y:number,w:number,h:number}[]}
+ */
+export function chairFootprints(seats, own) {
+  return (Array.isArray(seats) ? seats : [])
+    .filter((s) => Math.abs(s.x - own.x) > 1e-6 || Math.abs(s.y - own.y) > 1e-6)
+    .map((s) => ({ x: s.x - CHAIR / 2, y: s.y - CHAIR / 2, w: CHAIR, h: CHAIR }));
 }
 
 /**
@@ -469,7 +515,9 @@ function seatJuniors(plan, juniorsByParent, placementById, byId, result) {
     const ordered = [...(juniorsByParent.get(parentId) || [])].sort(byIdOrder);
     const desk = placementById.get(parentId) === 'desk' ? result.get(parentId) : null;
     if (desk) {
-      seatAround(desk, roomAt(desk), parentId, ordered, false, result);
+      const room = roomAt(desk);
+      const roomSeats = room && room.kind === 'project' ? deskSeats(String(room.id)) : [];
+      seatAround(desk, room, roomSeats, parentId, ordered, false, result);
       continue;
     }
     // Keyed as `floorPopulation` keys a crew — room and parent — so the arc
@@ -495,7 +543,7 @@ function seatJuniors(plan, juniorsByParent, placementById, byId, result) {
     if (!desk) continue;
     taken.add(desk);
     const room = rooms.find((r) => r.kind === 'project' && String(r.id) === pid) || roomAt(desk);
-    seatAround(desk, room, parentId, ordered, true, result);
+    seatAround(desk, room, seats, parentId, ordered, true, result);
   }
   for (const [pid, list] of ownDesks) {
     assignHashed(
@@ -508,7 +556,8 @@ function seatJuniors(plan, juniorsByParent, placementById, byId, result) {
 
 /**
  * One parent's working juniors around one desk: the arc for three or more
- * where the room has floor for it, WP-59d's wrapping rows otherwise.
+ * where the room has floor for it clear of its other tables and chairs,
+ * WP-59d's wrapping rows otherwise.
  *
  * WP-89 · §3.2's threshold and its fallback ladder. At or below two the seats
  * are exactly what they were beside a parent, which keeps the `demo` floor's
@@ -518,16 +567,20 @@ function seatJuniors(plan, juniorsByParent, placementById, byId, result) {
  *
  * @param {PlacedSeat} desk the parent's seat, or the room's primary desk
  * @param {any} room the room that desk is in
+ * @param {{x:number,y:number}[]} roomSeats every desk seat in that room
  * @param {string} parentId
  * @param {AgentLike[]} ordered sorted by id
  * @param {boolean} away the parent is not at this desk (bug 201)
  * @param {Map<string, PlacedSeat>} result
  */
-function seatAround(desk, room, parentId, ordered, away, result) {
+function seatAround(desk, room, roomSeats, parentId, ordered, away, result) {
   const angle = typeof desk.angle === 'number' ? desk.angle : 0;
+  // What nobody is seated on: the room's tables, and every chair but this one.
+  const tables = deskFootprints(room);
+  const chairs = chairFootprints(roomSeats, desk);
   if (isCrewFormation(ordered.length)) {
     const { drawn } = crewSplit(ordered.length);
-    const arc = crewArc(desk, room, drawn, deskFootprints(room));
+    const arc = crewArc(desk, room, drawn, tables, chairs);
     if (arc.fits) {
       // Every member's id, drawn or not, so the chip can count the whole crew
       // (audit F10). One array, shared by every seat of this crew.
@@ -549,7 +602,7 @@ function seatAround(desk, room, parentId, ordered, away, result) {
       return;
     }
   }
-  const spots = juniorSpots(desk, room, ordered.length);
+  const spots = juniorSpots(desk, room, ordered.length, [...tables, ...chairs]);
   ordered.forEach((junior, i) => {
     result.set(junior.id, { ...spots[i], angle, kind: desk.kind, junior: true });
   });
