@@ -203,12 +203,13 @@ test('an explicit --port is honoured as given, and the header keeps its banner',
   }
 });
 
-test('the hooks port held by a DeckHQ daemon: refuse to start beside it, naming it', async () => {
-  const first = await startDaemon({ port: 0, ...(await daemonOpts()) });
+test('the hooks port held by a DeckHQ daemon of this state folder: refuse to start beside it, naming it', async () => {
+  // The same state folder is what makes it THIS DeckHQ, already running.
+  const opts = await daemonOpts();
+  const first = await startDaemon({ port: 0, ...opts });
   try {
     await hooksAt(first.port);
     const requested = await takePort();
-    const opts = await daemonOpts();
 
     await assert.rejects(
       () => startDaemon({ port: requested, adoptHooksPort: true, ...opts }),
@@ -228,8 +229,41 @@ test('the hooks port held by a DeckHQ daemon: refuse to start beside it, naming 
   }
 });
 
-test('the CLI turns that refusal into one line and a clean exit', async () => {
+test('the hooks port held by a DeckHQ of another state folder: start on the port asked for, and say whose port that is', async () => {
+  // A preview started with its own state directory is a DeckHQ, and it is not
+  // this one. Refusing to start beside it left the real daemon with no way up.
   const first = await startDaemon({ port: 0, ...(await daemonOpts()) });
+  let second;
+  try {
+    await hooksAt(first.port);
+    const requested = await takePort();
+    const opts = await daemonOpts();
+
+    const { result, lines } = await capturingLog(() =>
+      startDaemon({ port: requested, adoptHooksPort: true, ...opts }),
+    );
+    second = result;
+    assert.equal(second.port, requested);
+    assert.ok(
+      lines.some((l) => l.includes(String(first.port)) && l.includes('another folder')),
+      'the log names the port and why it was not taken',
+    );
+    // The hooks still post to the other one, and this one says so.
+    assert.equal(second.registry.snapshot().degraded['claude-code'], true);
+  } finally {
+    if (second) await second.close();
+    await first.close();
+  }
+});
+
+test('the CLI turns that refusal into one line and a clean exit', async () => {
+  // The daemon already up keeps its state where the CLI below will look for
+  // its own (`DECKHQ_STATE_DIR`): the same folder is the same DeckHQ.
+  const first = await startDaemon({
+    port: 0,
+    ...(await daemonOpts()),
+    stateFile: path.join(STATE_DIR, 'state.json'),
+  });
   try {
     await hooksAt(first.port);
 

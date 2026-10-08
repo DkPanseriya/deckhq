@@ -192,6 +192,11 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   says which happened: `(already running)`, `(started just now)` or
   `(started on the port you named)`. To tell them apart, a running DeckHQ now includes a short
   fingerprint of its state directory in `/api/state` — a hash, never the path.
+- **DeckHQ starts when another DeckHQ holds the port your hooks post to.** If the hooks pointed at
+  a port where a second DeckHQ was running from a different state directory, `deckhq` printed
+  "already running" and started nothing — yours had no way up. It now starts on the port it would
+  otherwise use, says in the log whose port that is, and shows the reinstall banner. A DeckHQ for
+  your own state directory on that port is still "already running", as before.
 - **A wait badge never sits on the person above.** On a sofa that runs down the screen, two people
   a cushion apart put the lower one's badge on the upper one's body. People there now sit a full
   sofa place apart, whatever length the sofa was cut to.

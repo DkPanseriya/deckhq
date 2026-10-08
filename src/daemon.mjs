@@ -42,7 +42,7 @@ import {
   migrateLegacyState,
 } from './core/paths.mjs';
 import { currentPacks } from './core/packs.mjs';
-import { clearDaemonFile, writeDaemonFile } from './core/daemon-file.mjs';
+import { clearDaemonFile, stateDirId, writeDaemonFile } from './core/daemon-file.mjs';
 import { Registry } from './core/state-machine.mjs';
 import { Identity } from './core/identity.mjs';
 import { Permissions } from './core/permissions.mjs';
@@ -123,20 +123,25 @@ function portInUse(port, timeoutMs = 500) {
  * `deckhq doctor` identifies one: a well-formed `/api/state` snapshot. Anything
  * else on the port — another tool, a dev server, a stale process — is not ours
  * to reason about. Loopback only; never throws.
+ *
+ * The answer carries the state directory that daemon names for itself, or null
+ * from a build that predates the id — which is read as "the same DeckHQ", the
+ * answer every build gave before there was one.
  * @param {number} port
- * @returns {Promise<boolean>}
+ * @returns {Promise<{stateDirId: string|null}|null>} null when it is not DeckHQ
  */
-async function isDeckhqDaemon(port) {
+async function deckhqDaemonAt(port) {
   try {
     const res = await fetch(`http://${HOST}:${port}/api/state`, {
       signal: AbortSignal.timeout(1500),
       headers: { connection: 'close' },
     });
-    if (!res.ok) return false;
+    if (!res.ok) return null;
     const snapshot = await res.json();
-    return Boolean(snapshot && Array.isArray(snapshot.agents) && snapshot.counts);
+    if (!(snapshot && Array.isArray(snapshot.agents) && snapshot.counts)) return null;
+    return { stateDirId: typeof snapshot.stateDirId === 'string' ? snapshot.stateDirId : null };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -152,9 +157,14 @@ async function isDeckhqDaemon(port) {
  * create it by accident. docs/plan/08-PLAN-V2-100X.md WP-36.
  *
  *   - hooks point at X and X is free: listen on X, say so in the log.
- *   - X is held by a DeckHQ daemon: throw `DeckhqAlreadyRunningError` — the
- *     hooks are already being delivered to it, and a second daemon beside it
- *     would be exactly the degraded case this exists to prevent.
+ *   - X is held by a DeckHQ daemon of THIS state directory: throw
+ *     `DeckhqAlreadyRunningError` — the hooks are already being delivered to
+ *     it, and a second daemon beside it would be exactly the degraded case
+ *     this exists to prevent.
+ *   - X is held by a DeckHQ daemon of ANOTHER state directory (a preview, a
+ *     second profile): that is not this DeckHQ already running, and saying so
+ *     would leave this one with no way to start. Fall back to the requested
+ *     port, as for a stranger, and say whose port it is.
  *   - X is held by something else: fall back to the requested port and let
  *     the header's banner offer the reinstall, as before.
  *   - no hooks, or hooks with no readable port: the requested port.
@@ -165,9 +175,10 @@ async function isDeckhqDaemon(port) {
  *
  * @param {number} requested
  * @param {ReturnType<typeof createLog>} log
+ * @param {string} dataDir the state directory this daemon would serve
  * @returns {Promise<number>}
  */
-async function adoptHooksPort(requested, log) {
+async function adoptHooksPort(requested, log, dataDir) {
   let hookPort = null;
   let label = 'runtime';
   for (const adapter of adapters.getAdapters()) {
@@ -195,7 +206,17 @@ async function adoptHooksPort(requested, log) {
     }
     return hookPort;
   }
-  if (await isDeckhqDaemon(hookPort)) throw new DeckhqAlreadyRunningError(hookPort, label);
+  const other = await deckhqDaemonAt(hookPort);
+  if (other) {
+    const foreign = other.stateDirId != null && other.stateDirId !== stateDirId(dataDir);
+    if (!foreign) throw new DeckhqAlreadyRunningError(hookPort, label);
+    log.warn(
+      `port ${hookPort}, where the installed ${label} hooks post, is held by a DeckHQ that keeps ` +
+        `its state in another folder; starting from ${requested} instead. Reinstall the hooks ` +
+        'from the settings sheet once up to have them post here.',
+    );
+    return requested;
+  }
   log.warn(
     `port ${hookPort}, where the installed ${label} hooks post, is held by something that is ` +
       `not DeckHQ; starting from ${requested} instead. Reinstall the hooks from the settings sheet once up.`,
@@ -245,7 +266,10 @@ export async function startDaemon(opts = {}) {
   // Decided first, before the store is touched: the already-running case
   // must leave no trace behind it.
   let preferredPort = opts.port ?? DEFAULT_PORT;
-  if (opts.adoptHooksPort) preferredPort = await adoptHooksPort(preferredPort, log);
+  if (opts.adoptHooksPort) {
+    const dataDir = opts.stateFile ? path.dirname(opts.stateFile) : DATA_DIR;
+    preferredPort = await adoptHooksPort(preferredPort, log, dataDir);
+  }
 
   // Carry over state written by a build that kept it inside the package.
   if (!opts.stateFile) migrateLegacyState(REPO_ROOT, log);
