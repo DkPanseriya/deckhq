@@ -512,7 +512,8 @@ test("a bench never stands in the door, under the plate, in the work zone or on 
           new Set(taken.map((s) => `${s.x.toFixed(3)},${s.y.toFixed(3)}`)).size,
           taken.length,
         );
-        assert.deepEqual(plan.proportions.faults, []);
+        const laid = `${stage.w}x${stage.h} others=${others} benches=${benches}x${perBench} desks=${desks} crew=${crew} (${plan.arrangement})`;
+        assert.deepEqual(plan.proportions.faults, [], laid);
       }
     }
   }

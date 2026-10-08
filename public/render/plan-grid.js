@@ -207,9 +207,31 @@ export function layProportioned(input) {
   // let past it. `margin` is the floor whose rooms are all at theirs and still
   // not the majority: what a row's rooms leave is then its service room's to
   // its cap and, past that, a hall as wide as it comes.
+  // The floor a room's desks need is the smallest ROOM they stand in — a row
+  // of worktree benches is wider than a room that deep may be, and a ceiling
+  // under that would be a room nothing could lay.
   const desksOf = (/** @type {{w:number,h:number}[]|undefined} */ list) =>
-    list && list.length ? Math.min(...list.map((f) => f.w * f.h)) : 0;
-  const caps = needs.map((n) => roomAreaMax(n.module, desksOf(n.footprints)));
+    list && list.length
+      ? Math.min(
+          ...list.map((f) => {
+            const w = Math.max(f.w, ROOM_RATIO_MIN * f.h);
+            return w * Math.max(f.h, w / ROOM_RATIO_MAX);
+          }),
+        )
+      : 0;
+  // And rows are near-equal in depth, so no room's ceiling is under the room
+  // it would be in a row as deep as the deepest of its neighbours needs.
+  const depthOf = (/** @type {{w:number,h:number}[]|undefined} */ list) =>
+    list && list.length
+      ? Math.min(
+          ...list.map((f) => Math.max(f.h, Math.max(f.w, ROOM_RATIO_MIN * f.h) / ROOM_RATIO_MAX)),
+        )
+      : 0;
+  const deepest =
+    Math.max(...needs.map((n) => depthOf(n.footprints))) * (1 + ROW_DEPTH_SPREAD_MAX / 2);
+  const caps = needs.map((n) =>
+    Math.max(roomAreaMax(n.module, desksOf(n.footprints)), ROOM_RATIO_MIN * deepest * deepest),
+  );
   const capsTotal = caps.reduce((a, v) => a + v, 0);
   let margin = false;
   /** Set while a probe asks whether a floor could be laid with no ceilings. */
@@ -676,7 +698,8 @@ export function layProportioned(input) {
   const build = (/** @type {Candidate} */ c) =>
     buildCandidate(c, {
       needs,
-      caps,
+      // Laid free, a room is its own ceiling where it came out past its module's.
+      caps: free ? caps.map((v, i) => Math.max(v, c.grid.cells[i].w * c.grid.cells[i].h)) : caps,
       waitingCount,
       benchedCount,
       goneHomeCount,
@@ -816,6 +839,7 @@ export function layProportioned(input) {
   if (!chosen || chosen.grid.cells.some((c, i) => c.w * c.h > caps[i] + 1e-6)) {
     // A ceiling never makes the building larger: a floor laid to them that is
     // wider than the one laid without is not the floor, and `few` is asked.
+    const unheld = chosen;
     const loose = chosen ? chosen.W * (1 + WIDTH_TIE) : Infinity;
     free = false;
     chosen = majority();
@@ -832,6 +856,15 @@ export function layProportioned(input) {
       mode = { roomy: true, margin };
     }
     ({ roomy, margin } = mode);
+    // AND WHERE NO FLOOR CAN BE LAID TO THEM — a row of worktree benches
+    // beside a one-desk room is one — the floor is the one laid without, and
+    // each room that came out past its ceiling is recorded as its own.
+    if (!chosen && unheld) {
+      chosen = unheld;
+      free = true;
+      roomy = false;
+      margin = false;
+    }
   }
   if (!chosen) return null;
 
