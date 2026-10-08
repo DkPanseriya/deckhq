@@ -369,10 +369,14 @@ export function describeMatch(result) {
     );
   }
   if (result.state !== 'matched' || result.stamped.length === 0) return '';
+  // Every path written is named, as every other write outside the state
+  // directory is.
   return (
     '  Taskbar: the DeckHQ shortcut now carries the name Windows gives this window, so a pin\n' +
-    '  of the window keeps the DeckHQ icon. A pin made before now is a copy with the\n' +
-    "  browser's icon: unpin it, and pin the window again, once.\n\n"
+    '  of the window keeps the DeckHQ icon. That one property was written to:\n' +
+    result.stamped.map((p) => `    ${p}\n`).join('') +
+    "  A pin made before now is a copy with the browser's icon:\n" +
+    '  unpin it, and pin the window again, once.\n\n'
   );
 }
 

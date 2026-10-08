@@ -301,7 +301,10 @@ test('a shortcut with no id gets the id the window has, and that is recorded', a
   assert.equal(flag.at, 42);
   assert.deepEqual(flag.paths, [desktop, menu]);
   assert.equal(taskbarState(opts).state, 'matched');
-  assert.match(describeMatch(result), /unpin it, and pin the window again, once/);
+  // The note names every path that was written, and what to do about an old pin.
+  const note = describeMatch(result);
+  assert.ok(note.includes(`    ${desktop}\n`) && note.includes(`    ${menu}\n`));
+  assert.match(note, /unpin it, and pin the window again, once/);
 });
 
 test('SECURITY: a shortcut that has lost the tag is never handed to the script', async () => {
