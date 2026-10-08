@@ -118,7 +118,7 @@ export {
  *
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the interior this room has been given
- * @param {{maxW?:number, landscape?:boolean, hold?:boolean}} [opts] `maxW` overrides
+ * @param {{maxW?:number, landscape?:boolean, hold?:boolean, compact?:boolean}} [opts] `maxW` overrides
  *   `OFFICE_MAX_W` — in a row that cap is read on the other axis and is the
  *   room's DEPTH (WP-59d). `landscape` says this room is about to be reflected
  *   in the diagonal by `buildOfficeRow`, which is the only thing the QUEUE
@@ -650,7 +650,7 @@ const TRANSPOSED_ID = new Map([
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the ROW cell this reception has been
  *   given — `w` along the row, `h` its depth.
- * @param {{hold?:boolean}} [opts] `hold`: lay it at the width it is given,
+ * @param {{hold?:boolean, compact?:boolean}} [opts] `hold`: lay it at the width it is given,
  *   not at the width its queue would like (see `buildOffice`)
  */
 export function buildOfficeRow(waitingCount, fit, opts = {}) {

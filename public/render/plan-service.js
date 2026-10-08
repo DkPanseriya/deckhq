@@ -111,7 +111,7 @@ export function loungeOneRowBelow(pack = 1) {
  *   benched stand closer together, which is the whole of it. The service
  *   column sets the building's height, so this is what stops a lounge
  *   dictating an empty lot on the working side.
- * @param {{maxGames?: number}} [opts] `maxGames`: the most games tables this
+ * @param {{maxGames?: number, quiet?: boolean}} [opts] `maxGames`: the most games tables this
  *   lounge is laid with — fewer than its people would earn, where the room it
  *   has been given is at its share of the building and cannot hold them all
  *   (`plan-proportions.js` (g)). The people a table would have seated stand,
