@@ -52,7 +52,7 @@ import { AgentRuntime, assignSeats } from './agents.js';
 import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
 import { SceneInput } from './scene-input.js';
-import { planSignature } from './scene-draw.js';
+import { joinPlanSignature, planSignatureParts } from './scene-draw.js';
 import { pickSessionPhase } from '../url-options.js';
 import { crewsFrom } from '../floor-rule.js';
 import { animMs } from './scene-agent.js';
@@ -108,6 +108,7 @@ export class Scene extends SceneInput {
     this._resizeDebounceTimer = null;
     this._plan = null;
     this._planSignature = null;
+    this._planGeometry = null;
     this._backdrop = null;
     /**
      * The floor the last re-plan replaced, kept only long enough to fade it
@@ -198,10 +199,23 @@ export class Scene extends SceneInput {
     // genuine new snapshot is not a per-pixel window-drag event. `_rebuildPlan`
     // itself keeps the floor centred at its one fit scale, so there is no
     // separate first-fit step to do here.
-    const signature = planSignature(this._snapshot);
-    if (signature !== this._planSignature) {
+    const parts = planSignatureParts(this._snapshot);
+    const signature = joinPlanSignature(parts);
+    const geometry = parts.geometry.join('~');
+    if (signature !== this._planSignature && this._plan && geometry === this._planGeometry) {
+      // THE SAME BUILDING IN DIFFERENT PAINT. Only the theme moved, and a theme
+      // is paint: the plan in hand is still the plan, everybody is still in
+      // their seat, and the floor is baked again in the new colours — which is
+      // what `repaint()` does for the picker's own preview. Planning it again
+      // gave the same building back, a third of a second later on a big floor.
+      this._planSignature = signature;
+      this._paintGen++;
+      this._bakeFloor();
+      this._fadeFrom = null;
+    } else if (signature !== this._planSignature) {
       this._rebuildPlan(computeTargetAspect(this._viewW, this._viewH));
       this._planSignature = signature;
+      this._planGeometry = geometry;
       // The signature counts who is waiting, benched and let go, so the very
       // change that should be seen as a walk — a turn ends and the agent
       // heads for your office — is also a rebuild, and the runtime snaps the
@@ -453,6 +467,7 @@ export class Scene extends SceneInput {
     this.canvas.removeEventListener('pointermove', this._onPointerMove);
     this.canvas.removeEventListener('pointerleave', this._onPointerLeave);
     this.canvas.removeEventListener('pointerup', this._onPointerUp);
+    this.canvas.removeEventListener('contextrestored', this._onContextRestored);
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', this._onResize);
     }

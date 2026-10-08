@@ -46,6 +46,26 @@ export const GROUND_FALLOFF_INNER = 0.7;
  * room plates from the snapshot directly, not baked.
  */
 export function planSignature(snapshot) {
+  return joinPlanSignature(planSignatureParts(snapshot));
+}
+
+/** The two halves as the one string `planSignature` has always been. */
+export function joinPlanSignature({ geometry, theme }) {
+  return [...geometry.slice(0, 5), theme, ...geometry.slice(5)].join('~');
+}
+
+/**
+ * `planSignature`, in the two halves it is made of: what the BUILDING is a
+ * function of, and the theme, which is paint.
+ *
+ * A theme repaints materials and moves no wall (WP-30), and nothing the plan
+ * reads comes from it: the planting, the prop density, the lounge kit and the
+ * body size are all the look document's (`resolveLook`), which is in the
+ * geometry. So a snapshot whose only news is its theme needs a bake and not a
+ * plan — and on a floor of three hundred people the plan is the expensive one.
+ * @returns {{geometry:string[], theme:string}}
+ */
+export function planSignatureParts(snapshot) {
   const projects = (snapshot && snapshot.projects) || [];
   const agents = (snapshot && snapshot.agents) || [];
   // WP-50: the plan is a function of active projects and active agents, so the
@@ -74,7 +94,7 @@ export function planSignature(snapshot) {
   for (const a of agents) {
     if (a && a.ackState === 'let_go') letGo++;
   }
-  return [
+  const geometry = [
     projects
       .map(
         (p) =>
@@ -88,13 +108,6 @@ export function planSignature(snapshot) {
     `b${pop.benchedDrawn}`,
     `h${pop.goneHome.size}`,
     `g${letGo}`,
-    // WP-30. The theme changes no geometry at all — it repaints materials —
-    // but the backdrop is BAKED, so the only way a new floor colour reaches
-    // the screen is a re-bake, and `_rebuildPlan` is the only thing that
-    // bakes. Putting the theme in the signature is therefore not a hack: the
-    // signature's job is "does the baked bitmap still describe this
-    // snapshot", and after a theme change it does not.
-    `t${(snapshot && snapshot.settings && snapshot.settings.theme) || 'default'}`,
     // WP-88b, and the theme's reason with one clause more. A look repaints
     // materials the way a theme does — so the baked bitmap stops describing the
     // snapshot the moment it changes — but a look ALSO moves geometry: the
@@ -110,7 +123,17 @@ export function planSignature(snapshot) {
     // `applyLook` may land after the first snapshot, and a signature that could
     // not see the difference would keep the medium bake.
     `a${LOOK.agentSize || ''}`,
-  ].join('~');
+  ];
+  return {
+    geometry,
+    // WP-30. The theme changes no geometry at all — it repaints materials —
+    // but the backdrop is BAKED, so the only way a new floor colour reaches
+    // the screen is a re-bake. It is in the signature because the signature's
+    // job is "does the baked bitmap still describe this snapshot", and after a
+    // theme change it does not; `setState` reads the two halves apart and
+    // bakes without planning where this is the only one that moved.
+    theme: `t${(snapshot && snapshot.settings && snapshot.settings.theme) || 'default'}`,
+  };
 }
 
 export class SceneDraw extends SceneFrame {
@@ -229,6 +252,9 @@ export class SceneDraw extends SceneFrame {
   _startLoop() {
     if (this._running) return;
     this._running = true;
+    // A loop that starts draws its first frame whatever it finds: a tab that
+    // was hidden may have had its canvas dropped while nobody was looking.
+    this._drawnDirect = true;
     this._lastT = frameMs();
     this._raf = requestAnimationFrame(this._frame);
   }

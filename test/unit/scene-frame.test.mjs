@@ -29,6 +29,15 @@ import { fileURLToPath } from 'node:url';
 
 import { InputTape, SceneFrame, waitMinute } from '../../public/render/scene-frame.js';
 import { groundKey } from '../../public/render/scene-static.js';
+import {
+  Scene,
+  joinPlanSignature,
+  planSignature,
+  planSignatureParts,
+} from '../../public/render/scene.js';
+import { AgentRuntime } from '../../public/render/agents.js';
+import { rigTints, shade } from '../../public/render/rig-metrics.js';
+import { drawHaloPool } from '../../public/render/rig-body.js';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
@@ -350,4 +359,138 @@ test('the loop asks before it draws, and the frame paints the ground through its
   assert.match(draw[0], /this\._layoutFrame\(ctx, records, camera\)/);
   // Nothing in a frame fills the canvas with a gradient or measures a string.
   assert.doesNotMatch(draw[0], /fillRect\(0, 0, viewW, viewH\)|measureText\(/);
+});
+
+// ------------------------------------------- a theme is paint, and not a plan
+
+test('a snapshot whose only news is its theme is baked, not planned again', () => {
+  adoptSnapshotClock({ now: LARGE_NOW, nowFixed: true });
+  const { projects, agents } = largeFloor();
+  const base = { projects, agents, counts: {}, settings: { theme: 'default' } };
+  // The signature is the string it always was, in two halves.
+  const parts = planSignatureParts(base);
+  assert.equal(joinPlanSignature(parts), planSignature(base));
+  assert.equal(parts.theme, 'tdefault');
+  assert.equal(planSignature(base).split('~').indexOf('tdefault'), 5, 'the theme is where it was');
+  const themed = { ...base, settings: { theme: 'night-shift' } };
+  assert.notEqual(planSignature(themed), planSignature(base));
+  assert.deepEqual(planSignatureParts(themed).geometry, parts.geometry);
+  // A look moves planting and the lounge's kit, which is geometry.
+  const looked = { ...base, settings: { theme: 'default', look: { lounge: { arcade: false } } } };
+  assert.notDeepEqual(planSignatureParts(looked).geometry, parts.geometry);
+  // And so is somebody being benched.
+  const benched = {
+    ...base,
+    agents: agents.map((a, i) => (i === 0 ? { ...a, ackState: 'benched' } : a)),
+  };
+  assert.notDeepEqual(planSignatureParts(benched).geometry, parts.geometry);
+
+  // The scene, with the two expensive things counted.
+  const scene = Object.create(Scene.prototype);
+  let plans = 0;
+  let bakes = 0;
+  Object.assign(scene, {
+    canvas: { setAttribute() {} },
+    _snapshot: { agents: [], projects: [], counts: {} },
+    _viewW: 2000,
+    _viewH: 1055,
+    _plan: null,
+    _planSignature: null,
+    _planGeometry: null,
+    _runtime: new AgentRuntime(),
+    _selectedId: null,
+    _running: true,
+    _stateGen: 0,
+    _paintGen: 0,
+    _fadeFrom: null,
+    _rebuildPlan() {
+      plans++;
+      this._plan = buildPlan(this._snapshot.projects, this._snapshot.agents, {
+        stage: { w: 2000, h: 1055 },
+        now: LARGE_NOW,
+      });
+    },
+    _bakeFloor() {
+      bakes++;
+    },
+    _draw() {},
+  });
+  scene.setState(base);
+  assert.deepEqual([plans, bakes], [1, 0]);
+  const plan = scene._plan;
+  const seated = [...scene._runtime.all()].map((r) => [r.id, r.x, r.y]);
+  scene._fadeFrom = { backdrop: {} };
+  scene.setState(themed);
+  assert.deepEqual([plans, bakes], [1, 1], 'a theme: one bake, no plan');
+  assert.equal(scene._plan, plan, 'the same building');
+  assert.equal(scene._fadeFrom, null, 'and no cross-fade between a floor and itself');
+  assert.equal(scene._paintGen, 1, 'the frame is laid out in the new palette');
+  assert.deepEqual(
+    [...scene._runtime.all()].map((r) => [r.id, r.x, r.y]),
+    seated,
+    'nobody moved',
+  );
+  scene.setState(themed);
+  assert.deepEqual([plans, bakes], [1, 1], 'the same snapshot again is neither');
+  scene.setState(looked);
+  assert.deepEqual([plans, bakes], [2, 1], 'a look is a new building');
+  scene.setState(base);
+  assert.equal(plans, 3);
+});
+
+// ------------------------------------------------------- what the rig keeps
+
+test('a figure’s five tints are worked out once per colour, and are the same five', () => {
+  const live = rigTints('#3A7D5B', false);
+  assert.equal(rigTints('#3A7D5B', false), live, 'asked again: the same answer, not a new one');
+  assert.deepEqual(
+    { ...live },
+    {
+      col: '#3A7D5B',
+      shell: shade('#3A7D5B', 0.58),
+      lite: shade('#3A7D5B', 0.24),
+      dark: shade('#3A7D5B', -0.2),
+      deep: shade('#3A7D5B', -0.34),
+      glass: shade('#3A7D5B', -0.6),
+      dead: false,
+    },
+  );
+  const dead = rigTints('#3A7D5B', true);
+  assert.notEqual(dead, live);
+  assert.equal(dead.dead, true);
+  assert.equal(dead.shell, live.shell);
+  assert.ok(Object.isFrozen(live), 'shared, so nobody may write to it');
+  assert.notEqual(rigTints('#B5452F', false).dark, live.dark);
+});
+
+test('the pool under a figure standing still is one gradient, not one a frame', () => {
+  const made = [];
+  const ctx = {
+    fillStyle: '',
+    createRadialGradient(...at) {
+      const g = { at, stops: [], addColorStop: (o, c) => g.stops.push([o, c]) };
+      made.push(g);
+      return g;
+    },
+    beginPath() {},
+    arc() {},
+    fill() {},
+  };
+  drawHaloPool(ctx, 120.5, 300.25, 20);
+  const first = ctx.fillStyle;
+  assert.equal(made.length, 1);
+  assert.deepEqual(first.at.slice(0, 2), [120.5, 300.25], 'at the figure’s own point');
+  assert.equal(first.stops.length, 2);
+  for (let i = 0; i < 60; i++) drawHaloPool(ctx, 120.5, 300.25, 20);
+  assert.equal(made.length, 1, 'sixty frames, one gradient');
+  assert.equal(ctx.fillStyle, first);
+  drawHaloPool(ctx, 121, 300.25, 20);
+  assert.equal(made.length, 2, 'a step sideways is another paint');
+  drawHaloPool(ctx, 120.5, 300.25, 24);
+  assert.equal(made.length, 3, 'and so is another size');
+  assert.deepEqual(made[2].at, [120.5, 300.25, 0, 120.5, 300.25, made[2].at[5]]);
+  // Another canvas is another set of paints.
+  const other = { ...ctx };
+  drawHaloPool(other, 120.5, 300.25, 20);
+  assert.equal(made.length, 4);
 });

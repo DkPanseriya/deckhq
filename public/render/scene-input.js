@@ -105,6 +105,7 @@ export class SceneInput extends SceneDraw {
     this._onResize = this._onResize.bind(this);
     this._onVisibilityChange = this._onVisibilityChange.bind(this);
     this._onReducedMotionChange = this._onReducedMotionChange.bind(this);
+    this._onContextRestored = this._onContextRestored.bind(this);
     this._frame = this._frame.bind(this);
 
     // Hover and click-to-select only — there is no drag gesture to
@@ -116,6 +117,7 @@ export class SceneInput extends SceneDraw {
     this.canvas.addEventListener('pointermove', this._onPointerMove);
     this.canvas.addEventListener('pointerleave', this._onPointerLeave);
     this.canvas.addEventListener('pointerup', this._onPointerUp);
+    this.canvas.addEventListener('contextrestored', this._onContextRestored);
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', this._onResize);
     }
@@ -370,6 +372,18 @@ export class SceneInput extends SceneDraw {
 
   _onReducedMotionChange(e) {
     this._reduced = !!e.matches;
+    if (!this._running) this._draw();
+  }
+
+  /**
+   * The browser took the canvas's pixels away and has given back an empty one.
+   * Nothing the loop compares has changed, so it is told: the ground is
+   * composed again and the next tick draws.
+   */
+  _onContextRestored() {
+    this._dropGroundLayer();
+    setDeviceScale(this.ctx, this._dpr);
+    this._drawnDirect = true;
     if (!this._running) this._draw();
   }
 }

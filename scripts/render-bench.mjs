@@ -26,6 +26,8 @@
  *             again: how many pixels of the canvas differ at all. 0 is the
  *             claim that a kept layer is the picture it replaced. `n/a` on a
  *             revision that has neither.
+ *   tick      what the loop spends deciding that a frame is not due: the
+ *             mean of 2000 such questions under reduced motion.
  *   idle      how many frames the loop draws in two seconds when nothing on the
  *             floor is moving: under `prefers-reduced-motion`, and with motion on
  *             and the clock pinned. `ticks` is how many animation frames the
@@ -307,6 +309,18 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     }
   }
 
+  // ---- what a tick that draws nothing costs: the question, asked 2000 times
+  let dueMs = null;
+  if (typeof scene._frameDue === 'function') {
+    clock.adoptSnapshotClock({ now: pinnedAt, nowFixed: true });
+    scene._reduced = !!reducedRun;
+    scene._frameDue();
+    // Timed as one span: a single question is under the page clock's resolution.
+    const t = performance.now();
+    for (let i = 0; i < 2000; i++) scene._frameDue();
+    dueMs = +((performance.now() - t) / 2000).toFixed(4);
+  }
+
   // ---- idle: how many frames the loop draws when nothing moves
   clock.adoptSnapshotClock({ now: pinnedAt, nowFixed: true });
   scene._reduced = reducedRun ? true : false;
@@ -366,6 +380,7 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     gradients: (calls.createRadialGradient || 0) + (calls.createLinearGradient || 0),
     fullCanvasGradientFill: calls.fullCanvasGradientFill || 0,
     differing,
+    dueMs,
     idleStale: idleResult.stale,
     idleDraws: idleResult.draws,
     idleTicks: idleResult.ticks,
@@ -486,6 +501,7 @@ if (JSON_OUT) {
       (r) => (r.differing == null ? 'n/a' : r.differing < 0 ? 'no layer' : r.differing),
     ],
     ['px differing, canvas left idle vs drawn now', (r) => r.idleStale],
+    ['a tick that draws nothing, ms', (r) => (r.dueMs == null ? 'n/a' : r.dueMs)],
     ['idle, reduced: draws/ticks in 2 s', (r) => `${r.idleDraws}/${r.idleTicks}`],
     ['idle, clock pinned: draws/ticks', (r) => `${r.idlePinnedDraws}/${r.idlePinnedTicks}`],
   ];

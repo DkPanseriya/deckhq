@@ -41,6 +41,8 @@ export class SceneBase {
   _plan;
   /** @type {string|null} */ // what decides whether the plan must be rebuilt
   _planSignature;
+  /** @type {string|null} */ // the half of it that is geometry: a theme is not in it
+  _planGeometry;
   /** @type {any} */ // the baked floor, whole, at the fit scale
   _backdrop;
   /** @type {any} */ // the same floor at the magnified scale, while there is one
