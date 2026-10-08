@@ -17,7 +17,7 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 - **A Look button in the header.** Click it, or press `L`, and a small panel opens under it with
   the four things people change most: **agent size** (small, medium, large, auto), **theme**,
-  **style** (the six presets, as thumbnails) and **density**. A click changes the floor straight
+  **style** (the presets, as thumbnails) and **density**. A click changes the floor straight
   away. `Esc`, `L` again or a click anywhere else closes it. **All look options…** at the bottom
   opens the full Look section. If a choice would leave the floor unreadable, the panel says why
   under the control and changes nothing.
@@ -41,18 +41,38 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   that stops short of each corner. The building's outside wall does not change.
 - **Two more styles: Daylight studio and Nordic wool.** Daylight studio is pale ash under noon
   light with glass between the rooms. Nordic wool is cool ash, cork and broadloom with low
-  dividers under morning light. The Style picker shows eight. `?look=daylight-studio` and
-  `?look=nordic-wool` open the floor in them.
+  dividers under morning light. `?look=daylight-studio` and `?look=nordic-wool` open the floor in
+  them.
 - **Three more floors: oak plank, fine herringbone and felt carpet.** In the floor pickers under
   Advanced — oak plank for the office, the rooms and the lounge, fine herringbone for the office
   and the lounge, felt for the office and the rooms. They are laid at the size of a real floor: a
   board about 18 cm wide, a parquet block about 11 cm, and a felt with a fine grain and no weave.
   Their seams are exactly one pixel of your screen wide.
-- **Three more styles and one more choice are designed and not in the picker yet.** Graphite loft,
-  Colour plan and Walnut executive each ask for a **room colour** setting (subtle, a calm colour of
-  its own per room, or none), and the floor does not draw that yet. A look file can already carry
-  it: `deckhq look export` writes it, `deckhq look import` reads it, and a look file you exported
-  before today still imports exactly as it was.
+- **Room colours: subtle, zoned or off.** Under Look → Advanced. Subtle is the floor as it was: each
+  project room's carpet leans a little toward its project's colour, and on a floor of five rooms
+  the five are nearly the same beige. **Zoned** gives each project's room one of six calm colours —
+  sage, powder blue, lilac, mint, straw, rose — so two rooms side by side are told apart before
+  you read a plate. The colour is the floor's own brightness, so names and state colours read
+  exactly as they did: on the Colour plan style a name is 11.2:1 on the default theme, 10.3:1 on
+  night shift and 11.7:1 on blueprint, and two neighbouring rooms are at least 14.7, 23.0 and 21.6
+  RGB apart (subtle: 1 to 3). It works on every floor a room can have, wood included. Off is the
+  bare floor. Your agents keep their own colours.
+- **Three more styles: Graphite loft, Colour plan and Walnut executive.** They needed room colours
+  and are in the Style picker now, which shows eleven. Colour plan is the one that gives every
+  repository its own colour on a neutral building. `?look=graphite-loft`, `?look=colour-plan` and
+  `?look=walnut-executive` open the floor in them, and a look file exported before today still
+  imports exactly as it was.
+- **Rooms look lived in.** A room used to have the right furniture and bare walls. Each project
+  room now has a waste bin by its desks (and one at each worktree bench), a coat stand beside its
+  door, felt panels on its clear walls, and a lamp over a meeting table. Where one desk sits in a
+  room with empty floor, the room also gets a second place: a standing table with stools, a
+  reading corner with an armchair and a floor lamp, a booth for a call, or a whiteboard with two
+  stools. Nobody is ever seated at these, and nothing is put within a body's width of a seat, in
+  a doorway or on the way from the door to a desk. On the demo floor that is 33 more things in
+  five rooms; on a 150-agent floor, 199 in 22.
+- **Density changes how much of that there is.** Calm keeps only the bin and the coat stand.
+  Normal adds the panels, the lamps and up to two second places a room, three in a big team's.
+  Lively allows three in any room, and a planter run beside a reading corner.
 - **A sub-agent's name tag has two rows.** The first is a small chip that says **Junior**, on a
   dark background of its own; the second is its name, without the `·jr` that used to follow it. A
   session of your own keeps one row. The same word is in the tooltip, in the deck's rows and in a
@@ -230,6 +250,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Fixed
 
+- **A chair somebody is sitting in is square to its desk.** Every task chair was drawn turned a
+  few degrees, as if pushed back, including the ones with somebody in them, so a person at a desk
+  sat askew to their own screen. A taken chair now faces its desk; only empty chairs are left
+  turned.
+- **A screen on a worktree bench faces the person at it by rule.** It did not say which side of
+  the bench its user sits on, and the keyboard side was guessed from the screen's shape.
 - **A chair's back was on the wrong side.** Every task chair had its backrest between the person
   and the desk, and the visitor's tub chair had its high back in front of the sitter. Both backs
   are behind whoever sits there.
@@ -592,11 +618,10 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.
-- **The five new styles, the light, the partitions and the room colours cannot be chosen yet.**
-  They are in the catalogue and in look files, and nothing draws them: a look file that sets
-  evening light or glass partitions is accepted and stored, and the floor looks the same. They
-  are not in the Look panel, the Look section, `?look=` or `deckhq look presets` until the floor
-  can draw them.
+- **Room colours and the second places are in project rooms only.** The reception and the lounge
+  keep the floor and the furniture they had.
+- **Room colours are a row of three words under Advanced, not yet a switch beside Density.** The
+  Look panel in the header still has its four choices.
 - **Room colours cannot be combined with ash boards in the project rooms on the Night shift
   theme.** One of the six room colours comes too close to the grey a finished session wears there,
   so that combination is refused, and a look file that asks for it is refused on import.
