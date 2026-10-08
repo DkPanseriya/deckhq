@@ -296,6 +296,9 @@ export function crewFloorFor(pop, projectId) {
  *   clearance — or nothing. A crew is CONTENTS, so it is priced into the bid the
  *   way WP-55 prices everything else and the packer does the rest. `{0,0}` for a
  *   room with no formation in it, which is every room in every committed golden.
+ *   `crew.bench` is the floor its WORKTREE BENCHES need at the foot wall
+ *   (`plan-worktrees.js`, `benchFloorFor`): depth added, and a floor under the
+ *   room's width. Absent in a room nobody is working in a worktree of.
  * @returns {{ room: Room, seats: Seat[], size: {w:number,h:number} }}
  */
 export function buildProjectRoom(
@@ -303,7 +306,7 @@ export function buildProjectRoom(
   deskCount,
   targetAspect = 1,
   fit = undefined,
-  crew = undefined,
+  /** @type {{w:number,h:number,bench?:{w:number,h:number}}|undefined} */ crew = undefined,
 ) {
   const id = String(project.id ?? project.projectId ?? 'unknown');
   const name = String(project.name ?? project.projectName ?? id);
@@ -579,8 +582,12 @@ export function buildProjectRoom(
   const crewW = crew && crew.w > 0 ? crew.w : 0;
   const crewH = crew && crew.h > 0 ? crew.h : 0;
   const interiorW = Math.max(cluster.w, crewW) + ROOM_PAD * 2;
-  const interiorH = cluster.h + crewH + ROOM_PAD * 2;
-  const naturalW = Math.max(interiorW, MIN_PROJECT_ROOM_W);
+  // THE BENCHES ARE CONTENTS TOO: a strip at the foot wall, which the desks,
+  // the crew and the break-out pair are all held above.
+  const benchW = crew && crew.bench ? crew.bench.w : 0;
+  const benchH = crew && crew.bench ? crew.bench.h : 0;
+  const interiorH = cluster.h + crewH + benchH + ROOM_PAD * 2;
+  const naturalW = Math.max(interiorW, MIN_PROJECT_ROOM_W, benchW);
   const naturalH = Math.max(interiorH, MIN_PROJECT_ROOM_H) + PLATE_BAND;
 
   const w = Math.max(naturalW, fit && fit.w > 0 ? fit.w : 0);
@@ -661,7 +668,7 @@ export function buildProjectRoom(
   const groupOffset = group ? group.y - cluster.y : 0;
   const breakTop =
     group && rugProp ? ROOM_PAD + groupOffset + group.h / 2 + rugProp.h / 2 + 1.2 : 0;
-  const breakBottom = finalH - CORNER_PLANT_INSET - 0.4;
+  const breakBottom = finalH - CORNER_PLANT_INSET - 0.4 - benchH;
   // WP-89. A ROOM WITH A CREW IN IT HAS NO BREAK-OUT CORNER. The spare floor is
   // spoken for: the arc is the second destination in this room, and §3.5's own
   // rule is *"a break-out corner, a planter run, or nothing"* — one of them, not
@@ -702,8 +709,8 @@ export function buildProjectRoom(
     (breakout
       ? ROOM_PAD - slackY
       : crewH > 0
-        ? finalH - cluster.h - ROOM_PAD - slackY
-        : (naturalH - PLATE_BAND - cluster.h) / 2);
+        ? finalH - cluster.h - ROOM_PAD - benchH - slackY
+        : (naturalH - PLATE_BAND - benchH - cluster.h) / 2);
   translateContents({ props, zones }, dx, dy);
   for (const s of seats) {
     s.x += dx;

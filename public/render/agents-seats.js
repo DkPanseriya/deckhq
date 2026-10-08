@@ -344,6 +344,13 @@ export function assignSeats(plan, agents, opts = {}) {
     if (p === 'let_go') {
       letGoAgents.push(agent);
     } else if (p === 'desk') {
+      // A worktree is not a project: a session working in a linked worktree
+      // sits at that worktree's bench, which the plan laid a seat on for it.
+      const bench = plan.worktreeSeats && plan.worktreeSeats.get(String(agent.id));
+      if (bench) {
+        result.set(agent.id, bench);
+        continue;
+      }
       const list = deskByProject.get(agent.projectId) || [];
       list.push(agent);
       deskByProject.set(agent.projectId, list);

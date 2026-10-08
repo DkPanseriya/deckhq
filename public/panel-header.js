@@ -26,6 +26,7 @@ import { textNode, separator } from './panel-dom.js';
 import { now as clockNow } from './clock.js';
 import { humaniseToolSummary } from './mcp-tool-name.js';
 import { FALLBACK_STATE_COLORS } from './state-palette.js';
+import { whereOf } from './floor-worktrees.js';
 
 /**
  * Set once `render/palette.js` loads. It was declared as carrying only
@@ -173,7 +174,10 @@ export function createHeaderPart(ctx) {
     label.textContent = STATE_LABELS[a.activityState] || a.activityState;
     chip.append(icon, label);
     metaEl.appendChild(chip);
-    for (const part of [a.projectName, a.gitBranch, shortModel(a.model)]) {
+    // `repo · worktree-name` in a linked worktree: the room is the repository's.
+    const where = whereOf(a);
+    const branch = a.gitBranch && a.gitBranch !== where[1] ? a.gitBranch : '';
+    for (const part of [...where, branch, shortModel(a.model)]) {
       if (!part) continue;
       metaEl.appendChild(separator());
       metaEl.appendChild(textNode(part));

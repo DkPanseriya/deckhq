@@ -64,6 +64,7 @@
 
 import { behindTheChip } from '../floor-resting.js';
 import { awayRooms, floorPopulation, offTheFloor } from '../floor-rule.js';
+import { benchSeatsIn, worktreeBenches } from '../floor-worktrees.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { layClassic } from './plan-classic.js';
 import { layProportioned } from './plan-grid.js';
@@ -71,6 +72,7 @@ import { furnishRoom } from './plan-interior.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
 import { SCALE_MIN_PX_PER_UNIT, measureProportions, proportionFaults } from './plan-proportions.js';
 import { crewFloorFor } from './plan-rooms.js';
+import { benchFloorFor, layWorktreeBenches } from './plan-worktrees.js';
 import { DEFAULT_AGENT_SIZE, SIZE_IDS, sizeForPopulation } from './plan-scale.js';
 import { seatOffice } from './plan-office.js';
 import { LOUNGE_CHIP_ZONE } from './plan-service.js';
@@ -117,11 +119,16 @@ export function buildPlan(projects, agents, opts = {}) {
   const sized = sizeForPopulation(opts.agentSize ?? DEFAULT_AGENT_SIZE, pop);
 
   const idOf = (p) => String(p.id ?? p.projectId ?? 'unknown');
+  // A WORKTREE IS NOT A PROJECT: the sessions working in a linked worktree sit
+  // at that worktree's bench in the repository's room, and the desks are the
+  // main checkout's (`floor-worktrees.js`). One desk at least, as ever.
+  const benches = worktreeBenches(list, pop);
+  const benched = { benches };
   const desksIn = (p) =>
     Math.max(
       1,
       pop.known.has(idOf(p))
-        ? (pop.desks.get(idOf(p)) ?? 0)
+        ? (pop.desks.get(idOf(p)) ?? 0) - benchSeatsIn(benched, idOf(p))
         : (p.activeCount ?? p.sessionCount ?? 0),
     );
 
@@ -174,7 +181,11 @@ export function buildPlan(projects, agents, opts = {}) {
   // A floor with none has nothing for those rules to be about, and its office
   // and lounge share the building as they always have (`plan-classic.js`),
   // which is also what a floor no legal grid was found for falls back to.
-  const crewIn = (p) => crewFloorFor(pop, idOf(p));
+  const crewIn = (p) => {
+    const crew = crewFloorFor(pop, idOf(p));
+    const bench = benchFloorFor(benches.get(idOf(p)));
+    return bench ? { w: crew ? crew.w : 0, h: crew ? crew.h : 0, bench } : crew;
+  };
   const live = new Map(activeProjects.map((p) => [idOf(p), p]));
   const kept = new Set(pinnedProjects.map(idOf));
   const gridRooms = (Array.isArray(projects) ? projects : [])
@@ -187,6 +198,7 @@ export function buildPlan(projects, agents, opts = {}) {
       stage,
       rooms: gridRooms,
       crewSizeIn: (p) => pop.crews.get(idOf(p))?.[0] ?? 0,
+      benchSeatsIn: (p) => benchSeatsIn(benched, idOf(p)),
     }) || layClassic({ ...shared, activeProjects, pinnedProjects });
   const { W, H, office, lounge, projectRooms, working } = layout;
 
@@ -284,6 +296,17 @@ export function buildPlan(projects, agents, opts = {}) {
   // The walkable network. Agents are confined to it — see buildNavLines.
   const nav = buildNavLines(rooms, W, H);
   assignDoors(rooms, nav.lines);
+  // The worktree benches, against each room's foot wall and clear of the door
+  // it has just been given — before the furnishing, which then works round them.
+  /** @type {Map<string, Seat>} */
+  const worktreeSeats = new Map();
+  /** @type {any[]} */
+  const worktreeBenchList = [];
+  for (const pr of projectRooms) {
+    const laid = layWorktreeBenches(pr.room, benches.get(String(pr.room.id)) || []);
+    for (const [id, seat] of laid.seatOf) worktreeSeats.set(id, seat);
+    worktreeBenchList.push(...laid.benches);
+  }
   // Every room is furnished into the rectangle it ended up with, round the
   // desks it was built for and clear of the door it has just been given.
   if (opts.furnish !== false) for (const pr of projectRooms) furnishRoom(pr.room, pr.seats);
@@ -331,6 +354,10 @@ export function buildPlan(projects, agents, opts = {}) {
     walls,
     nav: nav.lines,
     seats,
+    // Who sits at a worktree's bench rather than at a desk, by agent id, and
+    // the benches themselves, for the name written on each.
+    worktreeSeats,
+    worktreeBenches: worktreeBenchList,
     ...seating,
     loungeSpots: lounge.loungeSpots,
     letGoSpots: [], // an archived session has no place on the floor at all

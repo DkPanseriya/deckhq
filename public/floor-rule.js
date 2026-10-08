@@ -186,6 +186,12 @@ export function agentIndex(agents) {
 /**
  * THE PROJECT ROOM A SESSION WORKS IN (bug 201).
  *
+ * A ROOM IS A REPOSITORY. `projectId` is the repository's id whichever of its
+ * worktrees the session is in — the daemon resolves that (`repoId` is the same
+ * value under the name that says so) — so a worktree never has a room of its
+ * own, and the rule below is what is left for a directory the daemon could not
+ * place.
+ *
  * Its own repo — with one exception. A junior whose parent is on the snapshot
  * works in its PARENT's room, because a subagent run with worktree isolation
  * reports the worktree as its cwd: a repo with no session of its own, which
@@ -445,6 +451,11 @@ export function floorPopulation(agents, opts = {}) {
     desks.set(pid, Math.max(0, (desks.get(pid) || 0) - n + (parentAtDesk ? 0 : 1)));
   }
   for (const sizes of crews.values()) sizes.sort((a, b) => b - a);
+  // Who has juniors at work, by id: a session leading helpers keeps a desk,
+  // where they have floor, rather than a worktree's bench (`floor-worktrees.js`).
+  const leading = new Set(
+    [...juniorsPerParent.keys()].map((key) => key.slice(key.indexOf('\u0000') + 1)),
+  );
 
   return {
     now,
@@ -456,6 +467,7 @@ export function floorPopulation(agents, opts = {}) {
     desks,
     resting,
     crews,
+    leading,
     known,
     lastActivity,
   };

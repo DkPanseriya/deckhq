@@ -253,6 +253,11 @@ export {};
  * @property {Wall[]} walls
  * @property {NavLine[]} nav corridor centrelines; the only walkable routes
  * @property {Map<string, Seat[]>} seats keyed by projectId
+ * @property {Map<string, Seat>} [worktreeSeats] keyed by AGENT id: the bench
+ *   seat of a session working in a linked worktree (`plan-worktrees.js`)
+ * @property {{key:string, name:string, label:string, projectId:string,
+ *   seats:number, x:number, y:number, w:number, h:number,
+ *   labelAt:{x:number, y:number}}[]} [worktreeBenches] every bench laid
  * @property {Seat[]} officeSeats one place per waiting session: the reception's
  *   sofa cushions nearest the desk first, then the standing queue beside them
  *   (WP-93). Ordered, and `assignSeats` fills it oldest wait first.

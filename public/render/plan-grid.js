@@ -165,6 +165,7 @@ const DESK_ASPECTS = Object.freeze([4, ROOM_ASPECT_MAX, 1, 0.5]);
  * @param {(p: ProjectLike) => ({w:number,h:number}|undefined)} input.crewIn
  *   the floor a repo's largest crew formation asks for (WP-89)
  * @param {(p: ProjectLike) => number} input.crewSizeIn how many are in it
+ * @param {(p: ProjectLike) => number} [input.benchSeatsIn] people at its worktree benches
  * @returns {null | {W:number, H:number, rows:false, arrangement:'bands'|'column'|'front',
  *   office:{room:Room, officeSeats:any[]},
  *   lounge:{room:Room, loungeSpots:any[], behindChip:number},
@@ -182,7 +183,9 @@ export function layProportioned(input) {
     if (pinned) return { project, pinned: true, desks: 0, crew: undefined, weight: 0 };
     const desks = desksIn(project);
     const crew = crewIn(project);
-    const module = moduleFor({ desks, crew: input.crewSizeIn(project) });
+    // A worktree's bench seats are people at desks: they count toward the module.
+    const seated = desks + (input.benchSeatsIn ? input.benchSeatsIn(project) : 0);
+    const module = moduleFor({ desks: seated, crew: input.crewSizeIn(project) });
     /** @type {{w:number,h:number}[]} */
     const footprints = [];
     for (const aspect of DESK_ASPECTS) {
