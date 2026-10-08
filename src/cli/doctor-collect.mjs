@@ -571,6 +571,39 @@ export function candidatePorts(hookPorts, explicit, published = null) {
 }
 
 /**
+ * Whether a taskbar pin of the DeckHQ window keeps the DeckHQ icon — Windows
+ * only, and null everywhere else, so the row does not exist there.
+ *
+ * Read from `installed.json` and the disk. Nothing is started to answer it:
+ * the id the shortcut carries was read off a real window by `deckhq app`, and
+ * what is checked here is that nothing it depends on has changed since.
+ * `src/core/launcher-taskbar.mjs` has the measurement and the four states.
+ *
+ * @param {string} dataDir
+ * @param {string} [platform]
+ * @returns {Promise<{state:string, aumid:string|null, at:number|null, text:string}|null>}
+ */
+export async function readTaskbar(dataDir, platform = process.platform) {
+  if (platform !== 'win32') return null;
+  try {
+    const { describeTaskbar, taskbarState } = await import('../core/launcher-taskbar.mjs');
+    const { appProfileDir } = await import('../core/app-window.mjs');
+    const { findChrome } = await import('./chrome.mjs');
+    const found = taskbarState({
+      dataDir,
+      platform,
+      browser: findChrome(),
+      profileDir: appProfileDir(dataDir),
+    });
+    if (!found) return null;
+    const { state, aumid, at } = found;
+    return { state, aumid, at, text: describeTaskbar(found) || '' };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The whole report, as data. Every external dependency is injectable so the
  * tests can drive a fake registry and a fake machine.
  *
@@ -588,6 +621,7 @@ export function candidatePorts(hookPorts, explicit, published = null) {
  *   terminalPin?: string,
  *   settings?: Record<string, any>,
  *   names?: {poolSize:number, assigned:number, suffixed:number},
+ *   taskbar?: {state:string, aumid:string|null, at:number|null, text:string}|null,
  * }} [opts]
  */
 export async function collectReport(opts = {}) {
@@ -675,6 +709,8 @@ export async function collectReport(opts = {}) {
   } catch {
     // leave the row as "none found"
   }
+
+  const taskbar = opts.taskbar !== undefined ? opts.taskbar : await readTaskbar(dataDir);
 
   /** @type {string[]} */
   const problems = [];
@@ -781,6 +817,7 @@ export async function collectReport(opts = {}) {
     health: daemon ? daemon.health : null,
     state,
     terminal,
+    taskbar,
     names,
     // Static and deliberate. The core opens no outbound socket at all
     // (docs/02-ARCHITECTURE.md §9), including from this command: the only

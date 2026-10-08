@@ -117,6 +117,9 @@ export function renderReport(report, opts = {}) {
 
   lines.push(row('terminal', describeTerminalRow(report.terminal)));
 
+  // Windows only: what a taskbar pin of the DeckHQ window will be drawn with.
+  if (report.taskbar?.text) lines.push(row('taskbar pin', report.taskbar.text));
+
   if (report.names) lines.push(row('names', describeNames(report.names)));
 
   lines.push(

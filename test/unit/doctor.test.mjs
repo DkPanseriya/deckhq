@@ -1193,6 +1193,9 @@ test('--json emits one JSON document with a stable shape', async () => {
     'runtimes',
     'share',
     'state',
+    // What a taskbar pin of the DeckHQ window is drawn with. Windows only, and
+    // null — not absent — everywhere else, for the reason `health` is.
+    'taskbar',
     'terminal',
   ]);
   // Null rather than absent when the flag was not given: the shape is stable

@@ -67,6 +67,13 @@ export const START_POLL_MS = 200;
 export const FIND_TIMEOUT_MS = 600;
 
 /**
+ * How long the window this command just opened has to exist before its
+ * taskbar id is read. Only ever spent on the run after a shortcut was written
+ * or the browser changed; see `src/core/launcher-taskbar.mjs`.
+ */
+export const WINDOW_WAIT_MS = 8000;
+
+/**
  * Ports worth asking about, most likely first.
  *
  * Pure, and separate from `source.mjs`'s `candidatePorts` because the order is
@@ -287,6 +294,7 @@ function option(argv, name) {
  *          findBrowser?:() => string|null, spawnFn?:typeof spawn,
  *          dataDir?:string, platform?:NodeJS.Platform|string,
  *          offerPin?:(argv:string[], deps:any) => Promise<any>, tty?:boolean,
+ *          matchTaskbar?:((opts:any) => Promise<string>)|null,
  *          node?:string, bin?:string}} [deps]
  * @returns {Promise<number>}
  */
@@ -409,6 +417,25 @@ export async function runApp(argv = [], deps = {}) {
         '  as an ordinary tab. Install one of those, or set CHROME_PATH, for a window\n' +
         '  of its own.\n\n',
     );
+  }
+
+  // The taskbar pin. Windows draws a pin of this window from the shortcut that
+  // carries the window's own id, and from the browser when none does;
+  // `src/core/launcher-taskbar.mjs` has the measurement. Only for a window this
+  // run really opened — an injected spawn opened nothing, so there is nothing
+  // to read — and it runs nothing at all once the record says it is done.
+  if (plan.mode === 'app') {
+    try {
+      const match =
+        deps.matchTaskbar ??
+        (deps.spawnFn ? null : (await import('../core/launcher-taskbar.mjs')).matchAppWindow);
+      if (match) {
+        const { dataDir, platform } = deps;
+        write(await match({ dataDir, platform, browser, url: daemon.url, waitMs: WINDOW_WAIT_MS }));
+      }
+    } catch {
+      /* a pin with the browser's icon is not a window that failed to open */
+    }
   }
 
   // WP-75. After the window, never before it: the offer is for a thing the
