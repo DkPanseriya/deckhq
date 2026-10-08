@@ -203,6 +203,8 @@ export const PROP_HEIGHT = Object.freeze({
   bar_counter: 'tall',
   board_game_table: 'tall',
   board_stand: 'tall',
+  // A booth is a high back on three sides: it is the tallest seat on the floor.
+  booth: 'tall',
   bookshelf: 'tall',
   counter: 'tall',
   desk: 'tall',

@@ -56,6 +56,27 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Changed
 
+- **Furniture looks like furniture.** Every piece on the floor is redrawn in the same footprint.
+  A desk has a screen and a keyboard on the side its person sits at, and a bench has a groove down
+  its middle. A task chair has a five-star base with castors, arm pads and a curved back, and an
+  empty one is left turned a few degrees, the way a chair is when somebody got up. Sofas and
+  armchairs have arms, a back, seat and back cushions, and a pillow. A meeting table's chairs are
+  pushed a third of the way under it. A credenza has drawer fronts with pulls and a few things on
+  top; a bookcase has rows of books; the kitchen counter has a hob and a sink. Every table top
+  shows a lit edge and a shaded one, and the shaded side follows the light you chose. Nothing
+  moved: every seat, desk and room is where it was.
+- **How much is drawn depends on how big the floor is on your screen.** On a very large floor,
+  drawn small, a piece is its outline. On an ordinary one it also has the thing that names it —
+  the screen and keyboard, a chair's back and arms, a sofa's cushions. On a HiDPI display or a
+  small floor drawn large it has everything, down to key rows and seams.
+- **Furniture is quieter than the people at it.** No detail on a piece is more than 1.6 to 1
+  against the surface it sits on, except a screen. The magazines on the reception table, the fruit
+  in the kitchen and the balls on the pool table lost their bright colours for that reason, and
+  nothing a room is furnished with is close to the red of "for review" or the amber of "needs
+  input".
+- **A rug's corners follow the furniture set** — rounder in Soft, squarer in Industrial — and it
+  has a fine line inside its border.
+
 - **A room has a maximum size.** With one, two or three projects open, each room used to be a
   hall — most of the window round a single desk, filled with meeting tables and sofas nobody sat
   at. A room for one desk, for a team and for a large team now each have a ceiling, and a room is
@@ -187,6 +208,13 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   repainted in the new colours and the building, and everybody in it, stay where they are.
 
 ### Fixed
+
+- **A chair's back was on the wrong side.** Every task chair had its backrest between the person
+  and the desk, and the visitor's tub chair had its high back in front of the sitter. Both backs
+  are behind whoever sits there.
+- **A bookcase in a reception laid on its side was drawn across its own footprint.** On a wide
+  window Your Office is laid along the front of the building, and its bookcase came out as a short
+  stub. It is drawn along the wall it stands against.
 
 - **Shadows were half size on a HiDPI display.** At a display scaling of 200% every shadow on the
   floor — under furniture, round a room, round the building — reached half as far as it does at
@@ -376,6 +404,14 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
   The drawing calls for the figures themselves are unchanged — about 130 a figure on a floor
   drawn small — and are now nearly all of what a frame is.
+- **Every piece of furniture is photographed on a sheet of its own.** `furniture@2x` is a new
+  capture: 23 small scenes holding all 50 kinds of prop, drawn twice — at the size of an ordinary
+  display and at the size of a HiDPI one — by the same code that draws the floor. The quiet rules
+  are measured over every theme, colour scheme and furniture set (54 combinations): the loudest
+  detail is 1.55 to 1 against its surface, and the nearest furniture colour is 63 steps of RGB
+  from the amber of "needs input" and 105 from the red of "for review", against a floor of 60.
+  Three existing game-room colours — the pool table's two rail browns and a packing carton's flap
+  — are 51 to 59 from that amber and are listed as exceptions rather than changed.
 
 - **The floor's sharpness is measured, at real display scalings.** `node scripts/render-crisp.mjs`
   starts a demo floor and one headless Chrome per scaling, and reports four things from the page

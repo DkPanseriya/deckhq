@@ -22,6 +22,7 @@ import { PALETTE } from './palette.js';
 import { shade } from './themes.js';
 import { roundRect, unturn } from './backdrop-paint.js';
 import { LOOK } from './look-derive.js';
+import { detailOf } from './backdrop-props-kit.js';
 
 /**
  * How much of a plant's own footprint the pot takes, and how far the foliage
@@ -180,6 +181,20 @@ export function paintPlantProps(ctx, prop, u, w, h, local) {
       for (let i = 0; i <= n; i++) {
         const along = (i / n - 0.5) * span;
         lobe(ctx, vertical ? 0 : along, vertical ? along : 0, r, tones[(i * 2 + 1) % tones.length]);
+      }
+      if (detailOf(ctx, u) >= 2) {
+        // Where the light reaches each mass: a small lighter one, up and to
+        // the left of its centre.
+        for (let i = 0; i <= n; i++) {
+          const along = (i / n - 0.5) * span;
+          lobe(
+            ctx,
+            (vertical ? 0 : along) - r * 0.28,
+            (vertical ? along : 0) - r * 0.28,
+            r * 0.3,
+            tones[1],
+          );
+        }
       }
       break;
     }

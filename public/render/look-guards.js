@@ -29,6 +29,7 @@
 import {
   assertMaterialDiscipline,
   colourDistance,
+  DEFAULT_PALETTE,
   ON_FLOOR_STATES,
   PROJECT_IDENTITIES,
   STATE_COLORS,
@@ -49,6 +50,7 @@ import {
 } from './themes.js';
 import {
   FLOOR_MATERIALS,
+  FURNITURE_SET_IDS,
   LOOK_ZONES,
   LOUNGE_KIT_REQUIRED,
   SCHEMES,
@@ -67,6 +69,16 @@ import {
   ZONE_TINT_MIN_STATE_DISTANCE,
 } from './look-ambience.js';
 import { resolveLook, roomFloorFor, schemeColour } from './look-derive.js';
+import {
+  FURNITURE_ALERT_STATES,
+  FURNITURE_BEZEL,
+  FURNITURE_DETAIL_MAX,
+  FURNITURE_DETAILS,
+  FURNITURE_FILL_EXEMPT,
+  FURNITURE_FILL_TOKENS,
+  FURNITURE_STATE_MIN_DISTANCE,
+  furnitureTonesFor,
+} from './furniture-tones.js';
 
 /**
  * §1 rule 2. *"Adjacent zones separate by pattern and temperature, not by
@@ -713,6 +725,137 @@ export function materialSchemeThemeGrid() {
     for (const scheme of Object.keys(SCHEMES)) {
       for (const material of Object.keys(FLOOR_MATERIALS)) {
         out.push({ material, scheme, theme: theme.name });
+      }
+    }
+  }
+  return out;
+}
+
+// ------------------------------------------------- furniture is quieter than people
+
+/** A flat `#rrggbb`, which is the only kind of colour a distance can be taken from. */
+const FLAT = /^#[0-9a-f]{6}$/i;
+
+/**
+ * EVERY FILL A PIECE OF FURNITURE IS LAID IN, for a set of material tokens: the
+ * shipped tokens (`FURNITURE_FILL_TOKENS`, and the three exempt ones), every
+ * derived tone, and — where the furniture set carries one — the dark frame line.
+ *
+ * @param {Record<string, string>} tokens
+ * @param {string} [set] a furniture set id
+ * @returns {Record<string, string>}
+ */
+export function furnitureFills(tokens, set = 'scandi') {
+  /** @type {Record<string, string>} */
+  const out = {};
+  for (const name of [...FURNITURE_FILL_TOKENS, ...Object.keys(FURNITURE_FILL_EXEMPT)]) {
+    if (FLAT.test(tokens[name])) out[name] = tokens[name];
+  }
+  for (const [name, value] of Object.entries(furnitureTonesFor(tokens))) {
+    if (FLAT.test(value)) out[`tone.${name}`] = value;
+  }
+  // An industrial piece is framed in the cool ink, on every edge. It is an
+  // EDGE, so the detail ceiling is not its rule; it is still a fill.
+  if (set === 'industrial') out['frame.industrial'] = tokens.inkCool;
+  return out;
+}
+
+/**
+ * MEASURE THE FURNITURE: no detail more than `FURNITURE_DETAIL_MAX`:1 against
+ * the surface it sits on, the monitor excepted, and no fill within
+ * `FURNITURE_STATE_MIN_DISTANCE` of a colour that asks for the user.
+ *
+ * @param {Record<string, string>} tokens material tokens, as the palette holds them
+ * @param {string} [set] a furniture set id
+ * @returns {Array<{rule:string, name:string, measured:number, needed:number, reason:string}>}
+ */
+export function furnitureQuietProblems(tokens, set = 'scandi') {
+  /** @type {Array<{rule:string, name:string, measured:number, needed:number, reason:string}>} */
+  const out = [];
+  const tones = furnitureTonesFor(tokens);
+  for (const [detail, surface] of FURNITURE_DETAILS) {
+    if (FURNITURE_BEZEL.includes(detail)) continue;
+    const ratio = contrastRatio(tones[detail], tones[surface]);
+    if (ratio > FURNITURE_DETAIL_MAX + 1e-9) {
+      out.push({
+        rule: 'a detail is quieter than its surface',
+        name: detail,
+        measured: Number(ratio.toFixed(3)),
+        needed: FURNITURE_DETAIL_MAX,
+        reason: `${detail} (${tones[detail]}) is ${ratio.toFixed(2)}:1 on ${surface} (${tones[surface]}); a detail may be ${FURNITURE_DETAIL_MAX}:1 at most`,
+      });
+    }
+  }
+  for (const [name, value] of Object.entries(furnitureFills(tokens, set))) {
+    for (const state of FURNITURE_ALERT_STATES) {
+      const d = colourDistance(value, /** @type {any} */ (STATE_COLORS)[state]);
+      const exempt = FURNITURE_FILL_EXEMPT[name];
+      const needed = exempt && exempt.state === state ? exempt.floor : FURNITURE_STATE_MIN_DISTANCE;
+      if (d < needed) {
+        out.push({
+          rule: 'no fill approaches a colour that asks for the user',
+          name,
+          measured: Number(d.toFixed(1)),
+          needed,
+          reason: `${name} (${value}) is ${d.toFixed(0)} from the ${state.replace('_', ' ')} colour (${/** @type {any} */ (STATE_COLORS)[state]}); furniture keeps ${needed} away`,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The same measurement as a refusal, beside `assertMaterialDiscipline`.
+ * @param {Record<string, string>} tokens @param {string} [set] @param {string} [where]
+ */
+export function assertFurnitureQuiet(tokens, set = 'scandi', where = 'PALETTE') {
+  const problems = furnitureQuietProblems(tokens, set);
+  if (problems.length) {
+    throw new Error(`furniture: ${where}: ${problems.map((p) => p.reason).join('; ')}`);
+  }
+}
+
+/**
+ * FOR THE RECORD: how close the furniture comes to EVERY colour a figure wears,
+ * the four that are not alerts included. Not a rule — see
+ * `FURNITURE_ALERT_STATES` for why it cannot be one.
+ *
+ * @param {Record<string, string>} tokens @param {string} [set]
+ * @returns {Record<string, {distance:number, fill:string}>} per state, the nearest fill
+ */
+export function furnitureStateDistances(tokens, set = 'scandi') {
+  /** @type {Record<string, {distance:number, fill:string}>} */
+  const out = {};
+  for (const state of ON_FLOOR_STATES) {
+    out[state] = { distance: Infinity, fill: '' };
+    for (const [name, value] of Object.entries(furnitureFills(tokens, set))) {
+      const d = colourDistance(value, /** @type {any} */ (STATE_COLORS)[state]);
+      if (d < out[state].distance) out[state] = { distance: Number(d.toFixed(1)), fill: name };
+    }
+  }
+  return out;
+}
+
+/**
+ * Every theme × scheme × furniture set the furniture is measured over, with the
+ * tokens each one paints in: three themes, six schemes, three sets.
+ *
+ * @returns {Array<{theme:string, scheme:string, set:string, tokens:Record<string,string>}>}
+ */
+export function furnitureQuietGrid() {
+  /** @type {Array<{theme:string, scheme:string, set:string, tokens:Record<string,string>}>} */
+  const out = [];
+  for (const theme of THEMES) {
+    for (const scheme of Object.keys(SCHEMES)) {
+      for (const set of FURNITURE_SET_IDS) {
+        const resolved = resolveLook({ scheme, furniture: set }, theme);
+        out.push({
+          theme: theme.name,
+          scheme,
+          set,
+          tokens: { ...DEFAULT_PALETTE, ...resolved.tokens },
+        });
       }
     }
   }

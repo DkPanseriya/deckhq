@@ -1,25 +1,27 @@
 /**
  * The props a working floor is furnished with (WP-22 follow-up).
  *
- * Split out of `backdrop.js`'s `paintProp` unchanged. Desks, monitors, chairs, whiteboards, art, shelves, screens, the manager, the plants and the rugs.
+ * Desks and what stands on them, task and tub chairs, whiteboards, art,
+ * screens, the manager and the rugs. Shelving is storage and lives with the
+ * credenza in `backdrop-props-room.js`.
  *
- * The switch is the original's, case for case and line for line, including
- * every `break`. What is new is only the wrapper: a `default` that answers
- * `false` so `paintProp` can try the next group, and the `true` after the
- * switch that says this group drew it. `local` is the caller's — the
- * two-pass shadow-then-fill it built around `withShadow` — handed in rather
- * than rebuilt, so no prop's shadow changed.
+ * One switch, a `default` that answers `false` so `paintProp` can try the next
+ * group. `local` is the caller's — the piece's cast and its contact with the
+ * floor (`grounded`) — handed in rather than rebuilt, and nothing here sets a
+ * shadow of its own. How much of a piece is drawn depends on the scale of the
+ * bake: `detailOf` in `backdrop-props-kit.js`.
  *
  * Coordinates arrive pre-converted to px and already rotated by `angle`, and
  * the caller has already clipped to the prop's own footprint plus
  * `PROP_BLEED`: a prop may not paint outside its own rect.
  */
 
-import { PALETTE } from './palette.js';
+import { PALETTE, fadedOut } from './palette.js';
 import { shade } from './themes.js';
 import { drawManagerFigure } from './rig.js';
-import { roundRect, contactUnder, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
+import { roundRect, contactUnder, unturn, alphaScaled, TABLE_EDGE_U } from './backdrop-paint.js';
 import { LOOK, setFrame, setRadius } from './look-derive.js';
+import { chairSwivel, detailOf, onePx, taskChair, tones, topEdges } from './backdrop-props-kit.js';
 
 /**
  * A RUG'S BANDS (WP-88a, §1.d).
@@ -30,16 +32,16 @@ import { LOOK, setFrame, setRadius } from './look-derive.js';
  * the default look, and the goldens cannot see it.
  *
  * @param {any} ctx @param {number} w @param {number} h @param {number} u
- * @param {'wool'|'task'} role
+ * @param {'wool'|'task'} role @param {number} r the rug's corner radius
  */
-function paintRugBands(ctx, w, h, u, role) {
+function paintRugBands(ctx, w, h, u, role, r) {
   const pattern = LOOK.rugs[role]?.pattern;
   if (!pattern?.bands?.length) return;
   const across = h <= w;
   const span = across ? h : w;
   const band = Math.max(1, pattern.bandU * u);
   ctx.save();
-  roundRect(ctx, -w / 2, -h / 2, w, h, 5);
+  roundRect(ctx, -w / 2, -h / 2, w, h, r);
   ctx.clip();
   ctx.fillStyle = shade(LOOK.rugs[role].colour, -pattern.bandShade);
   for (const at of pattern.bands) {
@@ -108,11 +110,37 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // it. A desk that shows its edge is a desk you can see is a desk; a white
       // line down the middle is a desk with a line down the middle.
       const band = Math.max(1, TABLE_EDGE_U * u);
-      ctx.fillStyle = PALETTE.deskEdge;
-      ctx.fillRect(-w / 2, h / 2 - band, w, band);
-      ctx.fillRect(w / 2 - band, -h / 2, band, h - band);
-      ctx.fillStyle = PALETTE.deskSheen;
-      ctx.fillRect(-w / 2, -h / 2, w, Math.max(0.8, band * 0.7));
+      const t = tones();
+      const lod = detailOf(ctx, u);
+      if (lod === 0) {
+        // The silhouette's own three strokes of edge, and nothing a small bake
+        // would have to draw a clip for.
+        ctx.fillStyle = t.deskBand;
+        ctx.fillRect(-w / 2, h / 2 - band, w, band);
+        ctx.fillRect(w / 2 - band, -h / 2, band, h - band);
+        ctx.fillStyle = PALETTE.deskSheen;
+        ctx.fillRect(-w / 2, -h / 2, w, Math.max(0.8, band * 0.7));
+        break;
+      }
+      // Both shaded edges and both lit ones, inside the top's own corners.
+      topEdges(ctx, -w / 2, -h / 2, w, h, setRadius(3), band, t.deskBand, PALETTE.deskSheen);
+      if (lod >= 2 && prop.kind === 'desk') {
+        // THE SPINE OF A BENCH. Two rows of people face each other across it,
+        // and the groove between them is where the cables go: it is what makes
+        // a bench a bench and not a long table.
+        const inset = Math.min(w, h) * 0.18;
+        ctx.strokeStyle = t.deskSpine;
+        ctx.lineWidth = Math.max(onePx(ctx), 0.05 * u);
+        ctx.beginPath();
+        if (w >= h) {
+          ctx.moveTo(-w / 2 + inset, 0);
+          ctx.lineTo(w / 2 - inset, 0);
+        } else {
+          ctx.moveTo(0, -h / 2 + inset);
+          ctx.lineTo(0, h / 2 - inset);
+        }
+        ctx.stroke();
+      }
       break;
     }
     case 'desk_tray': {
@@ -144,8 +172,13 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // the two cannot be confused at 34 px even though they are upholstered in
       // the same cloth. The back is on the far side from `angle`, exactly as a
       // sofa's is, so a row of three facing a desk shows three open seats.
-      ctx.rotate(Math.PI / 2);
+      //
+      // Drawn with the back at -y and the seat toward +y, and turned so that +y
+      // is the way it faces — the task chair's turn, and for its reason.
+      ctx.rotate(-Math.PI / 2);
       const R = Math.min(w, h) / 2;
+      const lod = detailOf(ctx, u);
+      const t = tones();
       // THE TUB IS THE FRAME, and the cushion is the small bright part inside
       // it. Drawn the other way round — a pale disc with a thin darker arc —
       // the chair is the brightest object in its room and the person in it is
@@ -156,12 +189,30 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
         k.arc(0, 0, R, 0, Math.PI * 2);
         k.fill();
       });
+      if (lod >= 1) {
+        // THE BACK WRAPS 200 DEGREES: one upholstered band from one arm round
+        // behind the occupant to the other, open at the front.
+        const half = (100 * Math.PI) / 180;
+        ctx.strokeStyle = t.sofaArm;
+        ctx.lineWidth = R * 0.3;
+        ctx.beginPath();
+        ctx.arc(0, 0, R * 0.78, -Math.PI / 2 - half, -Math.PI / 2 + half);
+        ctx.stroke();
+      }
       // The seat pan: forward of centre, so the wrap reads thicker behind the
       // occupant than in front of them — a back, in a shape with no corners.
-      ctx.fillStyle = PALETTE.chairFill;
+      ctx.fillStyle = lod >= 1 ? t.sofaCushion : PALETTE.chairFill;
       ctx.beginPath();
-      ctx.arc(0, R * 0.2, R * 0.62, 0, Math.PI * 2);
+      ctx.arc(0, R * 0.2, R * 0.6, 0, Math.PI * 2);
       ctx.fill();
+      if (lod >= 2) {
+        // The cushion's own seam, just inside its edge.
+        ctx.strokeStyle = t.sofaSeam;
+        ctx.lineWidth = onePx(ctx);
+        ctx.beginPath();
+        ctx.arc(0, R * 0.2, R * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       break;
     }
     case 'pinboard': {
@@ -197,11 +248,65 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
     }
     case 'monitor': {
       unturn(ctx, prop);
-      ctx.fillStyle = PALETTE.monitorBody;
-      roundRect(ctx, -w / 2, -h / 2, w, h, 1.5);
+      const lod = detailOf(ctx, u);
+      if (lod === 0) {
+        ctx.fillStyle = PALETTE.monitorBody;
+        roundRect(ctx, -w / 2, -h / 2, w, h, 1.5);
+        ctx.fill();
+        ctx.fillStyle = PALETTE.monitorScreenGlow;
+        ctx.fillRect(-w / 2 + 1, -h / 2 + 1, w - 2, Math.max(1, h - 2));
+        break;
+      }
+      // A WORKSTATION, IN THE STRIP OF DESK THE PLAN GIVES IT. The rect lies
+      // along the edge its occupant sits at, so from that edge inward: the
+      // keyboard, then the screen — a thin dark bar seen from above, lit on the
+      // side that faces the person — standing on its foot.
+      //
+      // WHICH EDGE. A bench monitor is attached to the edge it stands on; the
+      // one on the user's desk is not, and the manager sits to the north of it
+      // (to the west, where the reception is laid on its side).
+      const edge = (prop.anchor && prop.anchor.edge) || (h > w ? 'W' : 'N');
+      const turn = { N: 0, S: Math.PI, W: -Math.PI / 2, E: Math.PI / 2 }[edge] || 0;
+      ctx.rotate(turn);
+      const run = Math.max(w, h);
+      const deep = Math.min(w, h);
+      const t = tones();
+      const barW = run * 0.8;
+      const barD = deep * 0.3;
+      const far = deep / 2;
+      if (lod >= 2) {
+        ctx.fillStyle = t.monitorFoot;
+        ctx.beginPath();
+        ctx.ellipse(0, far - barD * 0.3, run * 0.16, deep * 0.24, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = t.monitorBezel;
+      roundRect(ctx, -barW / 2, far - barD, barW, barD, 1);
       ctx.fill();
       ctx.fillStyle = PALETTE.monitorScreenGlow;
-      ctx.fillRect(-w / 2 + 1, -h / 2 + 1, w - 2, Math.max(1, h - 2));
+      ctx.fillRect(-barW / 2 + 1, far - barD, barW - 2, Math.max(onePx(ctx), barD * 0.34));
+      // The keyboard, a fifth of a unit clear of the screen.
+      const keyW = run * 0.62;
+      const keyD = deep * 0.54;
+      const keyY = -deep / 2 + deep * 0.04;
+      ctx.fillStyle = t.keyboard;
+      roundRect(ctx, -keyW / 2, keyY, keyW, keyD, 0.06 * u);
+      ctx.fill();
+      if (lod >= 2) {
+        // Three rows of keys, and the mouse beside them.
+        ctx.strokeStyle = t.keyRow;
+        ctx.lineWidth = onePx(ctx);
+        ctx.beginPath();
+        for (let i = 1; i <= 3; i++) {
+          const y = keyY + (keyD * i) / 4;
+          ctx.moveTo(-keyW / 2 + 1, y);
+          ctx.lineTo(keyW / 2 - 1, y);
+        }
+        ctx.stroke();
+        ctx.fillStyle = t.keyboard;
+        roundRect(ctx, -keyW / 2 - run * 0.14, keyY + keyD * 0.1, run * 0.09, keyD * 0.72, 1);
+        ctx.fill();
+      }
       break;
     }
     // THE TASK CHAIR, and it is now the only thing drawn this way.
@@ -214,39 +319,16 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
     // reception's is a `tub_chair` above, at 2.4 U and round.
     case 'chair': {
       // FACING. `prop.angle` is in the plan's convention — 0 is +x, east — and
-      // the outer wrapper has already rotated by it. This sprite is drawn
-      // "looking up the page", so it needs the same quarter turn `rig.js`
-      // applies to the character that sits in it (`facingRot = bodyAngle +
-      // PI/2`). Without it every backrest on the floor was ninety degrees out
-      // from the person leaning on it: chairs on the north side of a desk had
-      // their backs to the east.
-      ctx.rotate(Math.PI / 2);
-      const R = w / 2;
-      const seat = R * 0.86;
-      local((k) => {
-        k.fillStyle = PALETTE.chairFill;
-        roundRect(k, -seat, -seat + 2.5, seat * 2, seat * 2 - 2.5, 4);
-        k.fill();
-        k.strokeStyle = PALETTE.chairEdge;
-        k.lineWidth = 1.4;
-        k.stroke();
-      });
-      // Arms, down each side and clear of the backrest (VISUAL-SPEC §6: "task
-      // chairs with backrest and arms").
-      ctx.fillStyle = PALETTE.chairEdge;
-      roundRect(ctx, -R, -R + 4, R * 0.34, R * 1.5, 2);
-      ctx.fill();
-      roundRect(ctx, R - R * 0.34, -R + 4, R * 0.34, R * 1.5, 2);
-      ctx.fill();
-      // A soft cushion highlight, so the seat reads as upholstered rather than
-      // as a flat tile at L1.
-      ctx.fillStyle = PALETTE.chairCushion;
-      roundRect(ctx, -seat + 2.5, -seat + 5.5, seat * 2 - 5, seat * 1.5 - 5, setRadius(3));
-      ctx.fill();
-      // The back, across the top: the side the occupant leans against.
-      ctx.fillStyle = PALETTE.chairBackrest;
-      roundRect(ctx, -R + 1, -R - 2.5, R * 2 - 2, 6, 2.5);
-      ctx.fill();
+      // the outer wrapper has already rotated by it, so +x here is the way the
+      // seat faces. `taskChair` draws a chair facing +y with its back at -y, so
+      // a quarter turn back puts the back BEHIND whoever sits in it. (It used
+      // to go the other way, and every backrest on the floor stood between its
+      // occupant and the desk.)
+      //
+      // And then a few degrees more, either way: a swivel chair is never left
+      // square to its desk, and one that is reads as a tile.
+      ctx.rotate(-Math.PI / 2 + chairSwivel(prop));
+      taskChair(ctx, w, local, detailOf(ctx, u));
       break;
     }
     case 'whiteboard': {
@@ -294,7 +376,7 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // Gloss down the face, brightest at the top where the light is.
       const sheen = ctx.createLinearGradient(0, y0, 0, y1);
       sheen.addColorStop(0, PALETTE.whiteboardSheen);
-      sheen.addColorStop(0.55, 'rgba(255,255,255,0)');
+      sheen.addColorStop(0.55, fadedOut(PALETTE.whiteboardSheen));
       ctx.fillStyle = sheen;
       ctx.beginPath();
       ctx.moveTo(-far, y0);
@@ -362,84 +444,6 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       ctx.fillRect(w * 0.08, -accentH / 2, accentW, accentH);
       break;
     }
-    case 'shelf':
-    case 'bookshelf': {
-      // A bookshelf viewed from directly above reads as its top-of-carcass
-      // frame plus rows of book-tops packed side by side — spines aren't
-      // visible from top-down, but a row of differently-toned strips reads
-      // as "books" the same way herringbone reads as "wood floor": texture
-      // standing in for the thing itself at this scale. `shelf` (a project
-      // room's repo-folder launcher) and `bookshelf` (lounge furniture) are
-      // the same piece of furniture wearing two different placement rules,
-      // so they share one painter.
-      //
-      // Drawn ~14% larger than its own footprint, the same deliberate
-      // overdraw the contact pass already does for every prop below:
-      // the note back was that this read "too small to be real furniture"
-      // at the w/h it is actually given (as little as 3.2 x 1.1 U for the
-      // office's launcher shelf). Placement/anchoring use prop.w/h
-      // untouched — only the paint is bigger.
-      const bw = w * 1.14;
-      const bh = h * 1.14;
-      local((k) => {
-        k.fillStyle = PALETTE.tableWood;
-        roundRect(k, -bw / 2, -bh / 2, bw, bh, 1.5);
-        k.fill();
-        k.strokeStyle = PALETTE.deskEdge;
-        k.lineWidth = 1.4;
-        k.stroke();
-      });
-      // Vertical carcass dividers: the "visible shelf lines" that turn a
-      // plain wood rect into a shelving unit with cubbies, independent of
-      // the book-top texture inside them.
-      const sections = bw > 60 ? 3 : 2;
-      ctx.strokeStyle = PALETTE.deskEdge;
-      ctx.lineWidth = 1;
-      for (let s = 1; s < sections; s++) {
-        const dx = -bw / 2 + (bw / sections) * s;
-        ctx.beginPath();
-        ctx.moveTo(dx, -bh / 2 + 1);
-        ctx.lineTo(dx, bh / 2 - 1);
-        ctx.stroke();
-      }
-      // Book-tops: one row, or two on a shelf deep enough to draw both
-      // without the strips turning to noise. Book count scales with width
-      // so books stay roughly book-sized instead of stretching to fill a
-      // wide case.
-      // §3.5: *"book spines lose their saturation — `bookA/B/C` derive from
-      // the desk timber mixed halfway to three muted neutrals, so a shelf
-      // never competes with an identity ring"*. These were the marker blue,
-      // the marker plum, the cabinet body and the board-game felt: four of the
-      // most saturated tokens on the floor, tiled twenty to a shelf, on the
-      // one piece of furniture that is meant to read as TEXTURE. Three tones
-      // now, a step of value apart, and the variation between spines is their
-      // height rather than their hue.
-      const tones = [PALETTE.bookA, PALETTE.bookB, PALETTE.bookC];
-      const pad = Math.min(bw, bh) * 0.12;
-      const rows = bh > 32 ? 2 : 1;
-      const rowH = (bh - pad * 2) / rows;
-      const count = Math.max(5, Math.round(bw / 9));
-      const bookW = (bw - pad * 2) / count;
-      for (let r = 0; r < rows; r++) {
-        for (let i = 0; i < count; i++) {
-          const idx = i + r * count;
-          // Deterministic per-book height variation — no Math.random
-          // anywhere in this file, since the same plan must re-bake
-          // pixel-identical — so the row reads as loose books rather than
-          // a printed stripe.
-          const bucket = (idx * 37) % 5;
-          const varH = rowH * (0.72 + (0.28 * bucket) / 4);
-          ctx.fillStyle = tones[idx % tones.length];
-          ctx.fillRect(
-            -bw / 2 + pad + i * bookW,
-            -bh / 2 + pad + r * rowH + (rowH - varH),
-            Math.max(1, bookW - 0.6),
-            varH,
-          );
-        }
-      }
-      break;
-    }
     case 'screen': {
       // "The terminal box": a wall-mounted dashboard display — the same
       // "thin dark body + lit face" language as the desk `monitor` case,
@@ -458,15 +462,17 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
         roundRect(k, -bw / 2, -bh / 2, bw, bh, 1.5);
         k.fill();
       });
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.strokeStyle = PALETTE.inkCool;
+      ctx.globalAlpha = 0.3;
       ctx.lineWidth = 1;
       roundRect(ctx, -bw / 2, -bh / 2, bw, bh, 1.5);
       ctx.stroke();
+      ctx.globalAlpha = 1;
       const inset = Math.max(1.2, Math.min(bw, bh) * 0.16);
       ctx.fillStyle = PALETTE.monitorScreenGlow;
       roundRect(ctx, -bw / 2 + inset, -bh / 2 + inset, bw - inset * 2, bh - inset * 2, 1);
       ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.fillStyle = PALETTE.whiteboardSurface;
       ctx.beginPath();
       ctx.arc(
         bw / 2 - inset * 0.7,
@@ -509,53 +515,69 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
     case 'rug': {
       unturn(ctx, prop);
       // A rug sits ON the floor: it needs a contact shadow and a pile, or it
-      // reads as a painted rectangle. At reception size (the office rug is the
-      // largest single surface in the building) a flat fill dominated the room
-      // more than the furniture on it did.
-      contactUnder(ctx, -w / 2, -h / 2, w, h, 5, false, u);
+      // reads as a painted rectangle. Its corners are the furniture set's.
+      const lod = detailOf(ctx, u);
+      const r = setRadius(5);
+      contactUnder(ctx, -w / 2, -h / 2, w, h, r, false, u);
       // THE WOOL AND THE TASK RUG ARE TWO TEXTILES (§3.1, owner decision 2), and
       // the prop says which. The reception's is `rugCream` — a slate wool, *"the
       // one textile on this floor with a hue of its own, and the thing that
       // tells you the waiting area is not the corridor"* — and a project room's
-      // is `rugSage`, carried by that room's own carpet. Both were painted sage
-      // before, so WP-85a's slate existed in the derivation, in the guards and in
-      // the document, and on no floor.
+      // is `rugSage`, carried by that room's own carpet.
       ctx.fillStyle = prop.tone === 'wool' ? PALETTE.rugCream : PALETTE.rugSage;
-      roundRect(ctx, -w / 2, -h / 2, w, h, 5);
+      roundRect(ctx, -w / 2, -h / 2, w, h, r);
       ctx.fill();
-      // WP-88a, §1.d: the PATTERN. `plain` is the field and its border, which is
-      // the rug this floor has always laid; `banded` adds three 0.5 U bands at a
-      // sixth, a half and five sixths of the short axis, each 0.02 off the field
-      // — a step small enough to stay inside the rug's own value plateau, which
-      // is what a name drawn on it is measured against.
-      paintRugBands(ctx, w, h, u, prop.tone === 'wool' ? 'wool' : 'task');
+      // WP-88a, §1.d: the PATTERN. `plain` is the field and its border;
+      // `banded` adds three 0.5 U bands at a sixth, a half and five sixths of
+      // the short axis, each 0.02 off the field — a step small enough to stay
+      // inside the rug's own value plateau, which is what a name drawn on it is
+      // measured against.
+      paintRugBands(ctx, w, h, u, prop.tone === 'wool' ? 'wool' : 'task', r);
       // Pile direction: a soft cross-wise sheen, the way a woven rug catches
-      // light along the weave.
+      // light along the weave. The border's own highlight at the lit end, the
+      // edge's own dark at the other.
       const pile = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
-      pile.addColorStop(0, 'rgba(255,255,255,0.30)');
-      pile.addColorStop(0.5, 'rgba(255,255,255,0.02)');
-      pile.addColorStop(1, 'rgba(0,0,0,0.05)');
+      pile.addColorStop(0, alphaScaled(PALETTE.rugBorder, 0.8));
+      pile.addColorStop(0.5, fadedOut(PALETTE.rugBorder));
+      pile.addColorStop(1, alphaScaled(PALETTE.rugEdge, 0.18));
       ctx.fillStyle = pile;
-      roundRect(ctx, -w / 2, -h / 2, w, h, 5);
+      roundRect(ctx, -w / 2, -h / 2, w, h, r);
       ctx.fill();
       // The border inset is what makes a rectangle read as a RUG, so it scales
       // with the rug: a fixed 6 px inset is right on a desk cluster's mat and
       // invisible on the room-sized rug a large project room now gets.
       const inset = Math.min(Math.max(6, Math.min(w, h) * 0.05), 26);
+      const borderW = Math.min(6, Math.max(2.5, inset * 0.22));
       ctx.strokeStyle = PALETTE.rugBorder;
-      ctx.lineWidth = Math.min(6, Math.max(2.5, inset * 0.22));
+      ctx.lineWidth = borderW;
       roundRect(
         ctx,
         -w / 2 + inset,
         -h / 2 + inset,
         Math.max(0, w - inset * 2),
         Math.max(0, h - inset * 2),
-        3,
+        Math.max(3, r - inset * 0.5),
       );
       ctx.stroke();
+      if (lod >= 1) {
+        // One device pixel of the rug's own edge, just inside the border: the
+        // line a woven border is bound with.
+        const inner = inset + borderW / 2 + 1.5;
+        ctx.strokeStyle = PALETTE.rugEdge;
+        ctx.lineWidth = onePx(ctx);
+        roundRect(
+          ctx,
+          -w / 2 + inner,
+          -h / 2 + inner,
+          Math.max(0, w - inner * 2),
+          Math.max(0, h - inner * 2),
+          2,
+        );
+        ctx.stroke();
+      }
       ctx.strokeStyle = PALETTE.rugEdge;
       ctx.lineWidth = 1.2;
-      roundRect(ctx, -w / 2, -h / 2, w, h, 5);
+      roundRect(ctx, -w / 2, -h / 2, w, h, r);
       ctx.stroke();
       break;
     }
@@ -588,6 +610,13 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       ctx.arc(0, 0, Math.max(0, r - 5), 0, Math.PI * 2);
       ctx.stroke();
       paintRugRings(ctx, r, u, prop.tone === 'task' ? 'task' : 'wool');
+      if (detailOf(ctx, u) >= 1) {
+        ctx.strokeStyle = PALETTE.rugEdge;
+        ctx.lineWidth = onePx(ctx);
+        ctx.beginPath();
+        ctx.arc(0, 0, Math.max(0, r - 8), 0, Math.PI * 2);
+        ctx.stroke();
+      }
       break;
     }
     default:

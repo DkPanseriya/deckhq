@@ -110,6 +110,7 @@ import { fileURLToPath } from 'node:url';
 import { CHROME_UNAVAILABLE, findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
 import { THEME_NAMES } from '../src/core/themes.mjs';
 import { DEMO_EPOCH } from './demo-args.mjs';
+import { sheetExpression } from './lib/furniture-sheet.mjs';
 import { decide } from './lib/goldens-gate.mjs';
 import { decodePng, diffImages, encodePng } from './lib/png.mjs';
 
@@ -268,9 +269,18 @@ export const MOTION_PHASE = 0.25;
  * with the device is resampled on its way to the screenshot, which would make a
  * golden of the floor at 2 a golden of the emulator.
  *
+ * A capture may also be the FURNITURE SHEET rather than a floor (`sheet`). Once
+ * the floor has settled, the page is handed `lib/furniture-sheet.mjs`'s scenes
+ * and paints them over the window with its own `paintProp`, at 16 and at 32
+ * device pixels to the unit — which is why it is taken at a ratio of 2: a real
+ * 32 is what a HiDPI display bakes at. A floor only shows the furniture a plan
+ * happened to lay, at one scale and half of it under somebody; the sheet is the
+ * one picture in which a chair can be checked as a chair.
+ *
  * @type {ReadonlyArray<{name:string, population:string, theme:string,
  *   stage?:{w:number, h:number}, press?:string, motion?:boolean, query?:string,
- *   command?:string, click?:string, scrollTo?:string, dpr?:number}>}
+ *   command?:string, click?:string, scrollTo?:string, dpr?:number,
+ *   sheet?:boolean}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
@@ -398,6 +408,11 @@ const CAPTURES = [
     dpr: 2,
   },
   { name: 'single@2x', population: 'single', theme: 'default', dpr: 2 },
+  // THE FURNITURE, ALL OF IT, AT BOTH SCALES. A floor shows a chair where a plan
+  // happens to put one and usually with somebody in it; this is every kind of
+  // prop, in small scenes, painted at 16 and at 32 device pixels to the unit by
+  // the painters the floor uses. See `sheet` above and `lib/furniture-sheet.mjs`.
+  { name: 'furniture@2x', population: 'empty', theme: 'default', dpr: 2, sheet: true },
   // A WORKTREE IS NOT A PROJECT. One repository with somebody in its main
   // checkout and two linked worktrees in use, and one other repository: two
   // rooms, the first with a desk and two named benches against its foot wall —
@@ -1119,6 +1134,23 @@ const session = (list, dpr) => [
               // A capture that could not find the thing it is a photograph of
               // must fail here rather than quietly become a golden of the floor.
               if (!result.value) throw new Error(`#${capture.scrollTo} is not on the page`);
+              await sleep(SETTLE_MS);
+            }
+
+            if (capture.sheet) {
+              enter(`painting the furniture sheet ("${name}")`);
+              const { result, exceptionDetails } = await client.send('Runtime.evaluate', {
+                expression: sheetExpression(),
+                awaitPromise: true,
+                returnByValue: true,
+              });
+              // A sheet that painted nothing is a photograph of a blank canvas,
+              // and must not become a golden of one.
+              if (exceptionDetails || !(result.value && result.value.painted > 0)) {
+                throw new Error(
+                  `the furniture sheet did not paint: ${exceptionDetails?.exception?.description || exceptionDetails?.text || JSON.stringify(result.value)}`,
+                );
+              }
               await sleep(SETTLE_MS);
             }
 
