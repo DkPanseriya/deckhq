@@ -154,7 +154,11 @@ export function buildNavLines(rooms, W, H) {
     // aisle beside every column of rooms; both are routes, and a room deep in
     // a stack reaches the floor through the aisle next to it rather than by
     // cutting through its neighbour.
-    if (r.h > r.w) {
+    // A HALL is the exception: it is walked ACROSS, from the corridor its row
+    // stands on, however wide it is — a line down the length of one would run
+    // beside that corridor and never meet it.
+    // (And beside a column's spine it is walked from the spine: `across` false.)
+    if (r.across === true || (r.across !== false && r.h > r.w)) {
       const c = r.x + r.w / 2;
       // Extended half a corridor past each end so it actually meets the
       // corridor centreline it opens onto — a line that stops exactly at the

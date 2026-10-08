@@ -69,11 +69,17 @@ import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { layClassic } from './plan-classic.js';
 import { layProportioned } from './plan-grid.js';
 import { furnishRoom } from './plan-interior.js';
+import { landscapeHalls } from './plan-margin.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
-import { SCALE_MIN_PX_PER_UNIT, measureProportions, proportionFaults } from './plan-proportions.js';
+import {
+  NOMINAL_PX_PER_UNIT,
+  SCALE_MIN_PX_PER_UNIT,
+  measureProportions,
+  proportionFaults,
+} from './plan-proportions.js';
 import { crewFloorFor } from './plan-rooms.js';
 import { benchFloorFor, layWorktreeBenches } from './plan-worktrees.js';
-import { DEFAULT_AGENT_SIZE, SIZE_IDS, sizeForPopulation } from './plan-scale.js';
+import { AGENT_SCALE, DEFAULT_AGENT_SIZE, SIZE_IDS, sizeForPopulation } from './plan-scale.js';
 import { seatOffice } from './plan-office.js';
 import { LOUNGE_CHIP_ZONE } from './plan-service.js';
 import { ASPECT_MAX, ASPECT_MIN, DEFAULT_ASPECT, DOOR_WIDTH, clamp } from './plan-units.js';
@@ -212,6 +218,25 @@ export function buildPlan(projects, agents, opts = {}) {
   if (fits < SCALE_MIN_PX_PER_UNIT - 1e-6 && smaller && gridRooms.length) {
     return buildPlan(projects, agents, { ...opts, agentSize: smaller });
   }
+  // AND UP, WHERE THE SIZE IS LEFT TO THE FLOOR. `auto` reads a count, and a
+  // count does not know how large the floor it buys is drawn: a dozen people
+  // in two rooms are a small building in a large window. So a floor that is
+  // still at the nominal scale or better one body size up is laid at that
+  // size. A size somebody chose is never overruled.
+  const larger = SIZE_IDS[SIZE_IDS.indexOf(sized.size) + 1];
+  if (opts.agentSize === 'auto' && larger && gridRooms.length && fits !== Infinity) {
+    const roomy = fits >= NOMINAL_PX_PER_UNIT - 1e-6;
+    const up = roomy ? buildPlan(projects, agents, { ...opts, agentSize: larger }) : null;
+    const held = up && Math.min(Number(stage.w) / up.width, Number(stage.h) / up.height);
+    if (up) AGENT_SCALE.setting = 'auto';
+    if (up && held >= NOMINAL_PX_PER_UNIT - 1e-6) return up;
+    // The trial left every body length at the larger size: lay this one again.
+    if (up) {
+      const back = buildPlan(projects, agents, { ...opts, agentSize: sized.size });
+      AGENT_SCALE.setting = 'auto';
+      return back;
+    }
+  }
   const strip = { rooms: layout.stripRooms };
 
   const rooms = [
@@ -310,6 +335,8 @@ export function buildPlan(projects, agents, opts = {}) {
   // Every room is furnished into the rectangle it ended up with, round the
   // desks it was built for and clear of the door it has just been given.
   if (opts.furnish !== false) for (const pr of projectRooms) furnishRoom(pr.room, pr.seats);
+  // And the hall a floor of few rooms is left with is planted, clear of them.
+  if (opts.furnish !== false) landscapeHalls(rooms);
 
   /** @type {Door[]} */
   const doors = [];

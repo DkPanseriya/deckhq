@@ -178,6 +178,10 @@ export {};
  *   (WP-59d): the waiting area runs along its width and the desk is at one
  *   end. `seatOffice` reads it to walk the runs in queue order.
  * @property {boolean} [thoroughfare] a corridor nobody routes down when false.
+ * @property {boolean} [across] a hall: walked across from the corridor it opens on,
+ *   whatever its shape (`plan-nav.js`).
+ * @property {number} [areaMax] a project room's ceiling in square units
+ *   (`roomAreaMax` in `plan-proportions.js`).
  * @property {{x:number,y:number}} [door] where an occupant leaves the room, set
  *   by `assignDoors` once the nav graph exists.
  * @property {{x:number,y:number}} [navEntry] the point on the corridor that door

@@ -125,14 +125,17 @@ test('the office is never past a fifth of the building, with nobody waiting or a
 });
 
 test('where the queue fits its sofas inside the cap, everybody sits and the office is its contents', () => {
-  // Sixteen waiting on a 2000 px window: the floor is laid at its contents.
+  // Sixteen waiting on a 2000 px window: the reception is its contents or
+  // more, never held. (The floor itself is laid to its rooms' ceilings now, so
+  // the reception takes what its row has spare, up to its cap.)
   const plan = planAt(ownerShapedFloor(), [2000, 1055]);
-  assert.equal(plan.working.capped, false);
+  assert.ok(!plan.working.capped || plan.working.ceilings);
   const office = plan.rooms.find((r) => r.kind === 'office');
   const contents = buildOfficeRow(16, { w: 0, h: office.h }).room.w;
+  assert.ok(office.w >= contents - 1e-6, `a ${office.w} U office for ${contents} U of sofas`);
   assert.ok(
-    Math.abs(office.w - contents) < 1e-6,
-    `a ${office.w} U office for ${contents} U of sofas`,
+    plan.officeSeats.every((s) => !s.standing),
+    'somebody stands',
   );
 });
 
@@ -164,7 +167,9 @@ test('the demo floors, whose queues are short, are laid exactly at their content
   for (const name of ['demo', 'three', 'crew', 'reference']) {
     const floor = populationFloor(name);
     const plan = planAt(floor, [1600, 870]);
-    assert.equal(plan.working.capped, false, `${name} was held to its caps`);
+    // (A floor laid to its rooms' ceilings is looked for under its caps, and
+    // its queue is short enough to sit inside them: what is held is nobody.)
+    assert.ok(!plan.working.capped || plan.working.ceilings, `${name} was held to its caps`);
     assert.ok(
       plan.officeSeats.every((s) => !s.standing) || plan.officeSeats.length > 8,
       `${name}: somebody stands in an office laid at its contents`,

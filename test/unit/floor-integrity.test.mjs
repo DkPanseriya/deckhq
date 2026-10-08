@@ -316,7 +316,14 @@ test("the reception's free-standing furniture stays with its wall furniture", ()
     const office = plan.rooms.find((r) => r.kind === 'office');
     const rug = office.props.find((p) => p.kind === 'rug');
     const sofas = office.props.filter((p) => p.kind === 'sofa');
-    assert.ok(rug && sofas.length >= 3, 'the reception needs a rug and three sofa runs');
+    // Three runs once more than four are waiting; one, sized for them, while
+    // the reception is quiet (`OFFICE_COMPACT_MAX`).
+    // (A floor with no project room is the classic one, and keeps all three.)
+    const quiet = (spec.waiting ?? 0) <= 4;
+    assert.ok(
+      rug && (sofas.length === 3 || (quiet && sofas.length === 1)),
+      `the reception has ${sofas.length} sofa runs for ${spec.waiting ?? 0} waiting`,
+    );
     for (const sofa of sofas) {
       const gapX = Math.max(sofa.x - (rug.x + rug.w), rug.x - (sofa.x + sofa.w), 0);
       const gapY = Math.max(sofa.y - (rug.y + rug.h), rug.y - (sofa.y + sofa.h), 0);
@@ -556,7 +563,11 @@ test('every room opens onto the corridor network, and the network is connected',
         }
       }
     }
-    assert.equal(reached.size, lines.length, 'the corridor network is not fully connected');
+    assert.equal(
+      reached.size,
+      lines.length,
+      `the corridor network is not fully connected: ${JSON.stringify(spec)} ${JSON.stringify(lines)}`,
+    );
   }
 });
 
@@ -659,7 +670,8 @@ test('the reception sofas form one continuous C, corner to corner', () => {
   // walls they name. The relationship asserted here is the one that matters
   // and it is the same either way, so it is stated on the axis the runs
   // actually lie on rather than twice.
-  for (const waiting of [1, 9, 25]) {
+  // (More than four waiting: a quiet reception is one run, `OFFICE_COMPACT_MAX`.)
+  for (const waiting of [5, 9, 25]) {
     const { projects, agents } = floor({ projects: [3], waiting });
     const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
@@ -824,6 +836,17 @@ test('the service rooms have no empty strip beside either of them', () => {
     const office = plan.rooms.find((r) => r.kind === 'office');
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
     const spine = plan.rooms.find((r) => r.id === '__spine__');
+    if (plan.arrangement === 'front') {
+      // A floor of one room: the two stand side by side across the top, the
+      // reception from the building line and the lounge to it, over the spine.
+      assert.ok(office.x === 0 && office.y === 0 && lounge.y === 0, 'the front is the top band');
+      assert.ok(Math.abs(lounge.x + lounge.w - plan.width) < 0.01, 'the lounge stops short');
+      assert.ok(
+        Math.abs(spine.y - office.h) < 0.01 && Math.abs(spine.w - plan.width) < 0.01,
+        'the corridor under the front does not span the building',
+      );
+      continue;
+    }
     if (plan.arrangement !== 'column') {
       assert.ok(office.x === 0 && lounge.x === 0, 'both rows start at the building line');
       // The spine runs under the reception's row, wall to wall, and a corridor
@@ -1109,17 +1132,18 @@ test("the window sets the building's shape, and the rooms are the larger part of
     `six project rooms' furniture (${natural(many).toFixed(0)} U²) should need far more ` +
       `floor than one's (${natural(one).toFixed(0)} U²)`,
   );
-  for (const plan of [one, many]) {
-    const share = roomArea(plan) / (plan.width * plan.height);
-    assert.ok(share >= 0.55 - 1e-6, `the rooms are ${(share * 100).toFixed(0)}% of the building`);
-  }
-  // Six rooms of one module are one size, and each is far smaller than the one.
+  // Six rooms are the majority of their building. ONE IS NOT, and is not laid
+  // larger to be: a room has a ceiling (`roomAreaMax`), the one room is at
+  // four fifths of its own or better, and what it leaves is a hall.
+  const share = (plan) => roomArea(plan) / (plan.width * plan.height);
+  assert.ok(share(many) >= 0.55 - 1e-6, `six rooms are ${(share(many) * 100).toFixed(0)}%`);
+  const [only] = rooms(one);
+  assert.ok(only.w * only.h <= only.areaMax + 1e-3, 'the one room is over its ceiling');
+  assert.ok(only.w * only.h >= only.areaMax * 0.8 - 1e-3, 'the one room is far under its ceiling');
+  assert.ok(share(one) < 0.55, 'one room for two is the majority of a building again');
+  // Six rooms of one module are one size, and none is larger than the one may be.
   const sizes = rooms(many).map((r) => r.w * r.h);
   assert.ok(Math.max(...sizes) / Math.min(...sizes) <= 1.6, `six equal projects: ${sizes}`);
-  assert.ok(
-    Math.max(...sizes) < roomArea(one) * 0.6,
-    'a sixth of the rooms is as big as all of them',
-  );
 
   // And the rooms' side is what is left of the building: it starts where the
   // rooms start and reaches the building line exactly.
@@ -1961,7 +1985,16 @@ test('activity brings an agent back, and its ackState never moved', () => {
 });
 
 test('the lounge is sized by who is drawn, and its plate carries the rest', () => {
-  const projects = [{ id: 'p0', name: 'p0', sessionCount: 1, tokens: 0, needsYou: 0 }];
+  // Four team rooms: a floor whose rooms can carry a lounge of either size. (On
+  // a floor of one desk the building is its service rooms', and the lounge is
+  // held to its quarter of that whoever is in it — `roomAreaMax`.)
+  const projects = ['p0', 'p1', 'p2', 'p3'].map((id) => ({
+    id,
+    name: id,
+    sessionCount: 5,
+    tokens: 0,
+    needsYou: 0,
+  }));
   const working = agent('worker');
   const benched = (n, ageDays) =>
     Array.from({ length: n }, (_, i) => ({

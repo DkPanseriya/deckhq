@@ -60,9 +60,11 @@ import { registerBodyScale, scaleAll } from './plan-scale.js';
 export const BARE_FLOOR_MAX = 0.45;
 
 /**
- * A HALL: more floor than this, which is a building one or two projects share
- * between them. It is given everything on the list and the list runs out before
- * the floor does, so the rule above is not promised of it.
+ * A HALL: more floor than this, which was a building one or two projects
+ * shared between them — given everything on the list, and the list ran out
+ * before the floor did. No room is laid that large now (`roomAreaMax` in
+ * `plan-proportions.js`), so the rule above is promised of every room, and
+ * this is the size a test holds each of them under.
  */
 export const HALL_FLOOR_U2 = 2400;
 

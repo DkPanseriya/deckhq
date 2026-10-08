@@ -111,7 +111,7 @@ export function loungeOneRowBelow(pack = 1) {
  *   benched stand closer together, which is the whole of it. The service
  *   column sets the building's height, so this is what stops a lounge
  *   dictating an empty lot on the working side.
- * @param {{maxGames?: number}} [opts] `maxGames`: the most games tables this
+ * @param {{maxGames?: number, quiet?: boolean}} [opts] `maxGames`: the most games tables this
  *   lounge is laid with — fewer than its people would earn, where the room it
  *   has been given is at its share of the building and cannot hold them all
  *   (`plan-proportions.js` (g)). The people a table would have seated stand,
@@ -120,6 +120,9 @@ export function loungeOneRowBelow(pack = 1) {
  *   `behindChip`: how many of `benchedCount` have no place drawn for them;
  *   `games`: how many games tables it was laid with
  */
+/** The most people a quiet lounge is laid for: its one sitting bay seats five. */
+export const LOUNGE_QUIET_MAX = 5;
+
 export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1, opts = {}) {
   const maxGames = Math.min(
     LOUNGE_MAX_GAMES,
@@ -532,9 +535,13 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1, opts
   // again. §3.7's width rule is unchanged and still runs after this, so a narrow
   // lounge drops bays from the right whatever the kit says.
   const kit = LOOK.lounge?.on || {};
+  // AND A QUIET LOUNGE IS ONE BAY (`opts.quiet`): with five resting or fewer,
+  // the sitting bay holds them all, and a café and a reading corner laid for
+  // nobody are what made the lounge the largest room on a floor of two desks.
+  const sittingOnly = opts.quiet === true && benchedCount <= LOUNGE_QUIET_MAX;
   const bayNames = loungeBayNames(budget, {
     oneRow,
-    has: (n) => present.has(n) && kit[n] !== false,
+    has: (n) => present.has(n) && kit[n] !== false && (!sittingOnly || n === 'sitting'),
   });
   const kept = new Set(bayNames);
   const live = blocks.filter((b) => kept.has(BAY_OF[b.id]));

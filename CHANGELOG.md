@@ -34,6 +34,24 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Changed
 
+- **A room has a maximum size.** With one, two or three projects open, each room used to be a
+  hall — most of the window round a single desk, filled with meeting tables and sofas nobody sat
+  at. A room for one desk, for a team and for a large team now each have a ceiling, and a room is
+  never laid past it to fill the window. The building is made as small as your office and the
+  lounge allow, so it is drawn a little larger; those two take what is spare, up to their usual
+  share; and what is left after that is an entry hall with planting in it rather than a bigger
+  room. No room is more than 45% bare floor any more. A floor of many projects, whose rooms were
+  already under their ceilings, is laid exactly as before.
+- **A quiet office is a small office.** With four or fewer waiting on you, Your Office is your
+  desk, the visitor chair and one sofa for them, instead of three sofas round an empty rug. With
+  five or fewer resting, the lounge is its one sofa group; the café, the reading corner and the
+  games come back as people do. Those two rooms were the largest things on a floor of two
+  projects. With them small the whole building is smaller, so it is drawn larger: on a 1600 × 1000
+  window somebody at a desk is 42 to 47 pixels tall where they were 38, and the project rooms are
+  about half the floor again. A busy office and lounge are exactly as they were.
+- **Agent size "auto" follows how large the floor is drawn**, not only how many agents there are.
+  A dozen agents in two rooms are a small building in a big window, so they are drawn at the
+  larger size. A size you picked yourself is never overruled.
 - **A worktree is not a project.** Starting work in another git worktree used to put a new room on
   the floor, named after the worktree's folder — `awesome-franklin-2d1495`,
   `agent-a0fedbce8c57e1bf9`. A room is a repository now. Every session in any worktree of a
@@ -76,6 +94,9 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   this, the old pin is a copy and keeps the browser's icon:** unpin it, run `deckhq app`, and pin
   the window again, once. You need the shortcut for this (`deckhq shortcut --install`), and
   `deckhq doctor` has a new `taskbar pin` row that says where your machine stands.
+- **A wait badge never sits on the person above.** On a sofa that runs down the screen, two people
+  a cushion apart put the lower one's badge on the upper one's body. People there now sit a full
+  sofa place apart, whatever length the sofa was cut to.
 - **A choice in the Look section stays highlighted.** You would click Large, or a floor, or a rug;
   the floor changed, and a moment later the highlight jumped back to what it was before. The floor
   was right and the control was wrong. It now shows what you chose, and goes back only if the
@@ -247,6 +268,17 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Known gaps
 
+- **Two projects on a 1600 × 1000 window are drawn a little smaller than one or three**: about 42
+  pixels at a desk, and the two rooms are just under half the floor. Two rooms of a room's shape
+  cannot be both half of a building that shape and that small. On a wider window they are 46.
+  Agent size **auto** (or large) in the Look panel draws everybody about a quarter larger still.
+- **A floor of one project is a third entry hall.** One room cannot be more than a fifth of a
+  building the window's shape; your office and the lounge take their shares, and the rest is
+  planted hall.
+- **The fifth person waiting brings back all three sofas at once**, and the sixth resting the
+  whole lounge: the office and lounge step from small to full, not gradually.
+- **With many agents resting and few projects, the lounge shows more of them as `+N resting`.**
+  The building no longer grows for the lounge once the rooms are at their ceilings.
 - **A worktree session with helpers at work sits at a desk, not at its bench.** Sub-agents stand
   beside the session that started them, and a bench against the wall has no floor for that. The
   session moves back to its bench when its helpers finish. Sub-agents themselves never sit at a

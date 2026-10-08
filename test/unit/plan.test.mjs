@@ -207,12 +207,15 @@ test('the lounge furnishes itself to the benched population, and never dominates
   // a sofa group and a counter, and games appear only as people arrive to
   // use them.
   //
-  // Asked of a floor with four small projects on it. On one with sixteen, three
+  // Asked of a floor with four team rooms on it. On one with sixteen, three
   // of them large, the ROOMS are what take the building past the scale it is
   // designed at, and the lounge gives up games tables before it makes them
   // smaller still (`plan-proportions.js` (g), (i)) — which is a different
-  // rule, and `floor-proportions.test.mjs` holds it.
-  const four = () => [1, 2, 1, 3].map((c, i) => makeProject(`proj-${i}`, c));
+  // rule, and `floor-proportions.test.mjs` holds it. And on one with four
+  // one-desk rooms the rooms' CEILINGS hold the building: a lounge is a
+  // quarter of a floor that size at most, and its games are what it gives up
+  // before a room is laid past what it may be (`roomAreaMax`).
+  const four = () => [5, 5, 5, 6].map((c, i) => makeProject(`proj-${i}`, c));
   const measure = (benchedCount) => {
     const plan = buildPlan(four(), benchedAgents(benchedCount));
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
@@ -248,10 +251,11 @@ test('the lounge furnishes itself to the benched population, and never dominates
     `a lounge of twelve must be less furnished than one of thirty (${few.props} vs ${busy.props})`,
   );
   assert.ok(!few.kinds.has('arcade_cabinet'), 'twelve benched do not fill an arcade');
-  // The sofa group and the kitchen are always there.
-  for (const always of ['sofa', 'counter']) {
-    assert.ok(empty.kinds.has(always), `the lounge always has a ${always}`);
-  }
+  // The sofa group is always there. The kitchen comes with the sixth person:
+  // a quiet lounge is its one sitting bay (`LOUNGE_QUIET_MAX`).
+  assert.ok(empty.kinds.has('sofa'), 'the lounge always has a sofa');
+  assert.ok(!empty.kinds.has('counter'), 'an empty lounge was laid a kitchen');
+  assert.ok(few.kinds.has('counter'), 'a lounge of twelve has no kitchen');
   assert.ok(busy.spots > empty.spots, 'more benched agents means more places to be');
   assert.ok(
     empty.share <= 0.25 + 1e-6 && busy.share <= 0.25 + 1e-6,
