@@ -101,8 +101,16 @@ export {
  * @property {RuntimeId} runtime
  * @property {string} title              user's chat title; falls back to runtime name, then id[0..8]
  * @property {boolean} hasCustomTitle
- * @property {string} projectId          slug of cwd
+ * @property {string} projectId          slug of the REPOSITORY the cwd is in:
+ *                                      a worktree is not a project
  * @property {string} projectName
+ * @property {string} [repoId]           `projectId`, under the name that says
+ *                                      what it is. The room key.
+ * @property {string} [repoName]
+ * @property {string} [repoRoot]         the repository's working directory
+ * @property {{name: string, path: string, branch: string|null}|null} [worktree]
+ *                                      the LINKED worktree the session is in,
+ *                                      or null in the main checkout
  * @property {string} cwd
  * @property {string|null} gitBranch
  * @property {string|null} model
@@ -507,7 +515,9 @@ export function projects(agents) {
       p = {
         id: a.projectId,
         name: a.projectName,
-        cwd: a.cwd,
+        // The repository's directory, not a worktree's: it is where the room's
+        // actions run and what its ledger key is a hash of.
+        cwd: a.repoRoot || a.cwd,
         agentIds: [],
         sessionCount: 0,
         tokens: 0,

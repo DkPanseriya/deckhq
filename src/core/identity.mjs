@@ -251,6 +251,19 @@ export class Identity {
   }
 
   /**
+   * The project an agent's number was handed out in, or null when it has no
+   * number yet. A worktree stopped being a project of its own, and a session
+   * that was numbered in one keeps the tag it has (`_realSnapshot`).
+   * @param {string} agentId
+   * @returns {string|null}
+   */
+  numberedIn(agentId) {
+    const s = this._state();
+    if (typeof s.agents[agentId] !== 'number') return null;
+    return typeof s.projectOf[agentId] === 'string' ? s.projectOf[agentId] : null;
+  }
+
+  /**
    * Every name currently spoken for, lower-cased: names the user chose, and
    * names the daemon gave. Both count — offering a picker a name another
    * agent is already wearing is the collision this exists to prevent.

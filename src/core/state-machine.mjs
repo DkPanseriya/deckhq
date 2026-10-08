@@ -305,7 +305,7 @@ export class Registry extends RegistryHooks {
     // the ledger never claims an action that did not happen.
     this._ledger('action', {
       sessionId: id,
-      projectKey: projectKeyFor(agent.cwd),
+      projectKey: projectKeyFor(agent.repoRoot || agent.cwd),
       action,
       t: now,
     });

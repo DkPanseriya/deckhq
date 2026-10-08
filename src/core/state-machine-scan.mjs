@@ -13,7 +13,6 @@
 
 import { seedIfNeeded } from './seed.mjs';
 import { discoverActions } from './actions.mjs';
-import { projectKeyFor } from './ledger.mjs';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -33,6 +32,7 @@ import {
   toAgentId,
 } from './state-machine-rules.mjs';
 import { now as clockNow } from './clock.mjs';
+import { legacyIdsOf, resolveProjects } from './project-of.mjs';
 
 export class RegistryScan extends RegistryCompute {
   /**
@@ -156,6 +156,12 @@ export class RegistryScan extends RegistryCompute {
     // made a second agent for it: a second MK number, a second first name, and a second body on
     // the floor in a different zone. `resume-chain.mjs` holds the rule and the inference it rests
     // on; nothing here writes.
+    // A WORKTREE IS NOT A PROJECT. Every directory this scan saw is resolved to
+    // its repository once, here, before the collapse and the merge read it.
+    this._projectsByCwd = resolveProjects(
+      [...summaries, ...live].map((s) => String(s.cwd || '')),
+      { stateDir: this._stateDir() },
+    );
     const collapsed = collapseResumed(summaries);
     this._lastSummaries = collapsed.summaries;
     this._identityOf = collapsed.identityOf;
@@ -213,6 +219,13 @@ export class RegistryScan extends RegistryCompute {
    */
   setProjectPinned(projectId, pinned) {
     const now = this.store.setProjectPinned(projectId, pinned);
+    // Taking a repository's pin back takes back the pins made on its worktrees'
+    // old rooms too: they are what was holding it, and nothing else can reach them.
+    if (!pinned) {
+      for (const old of legacyIdsOf(this.projectAliases().ids, String(projectId || ''))) {
+        if (this.store.isProjectPinned?.(old)) this.store.setProjectPinned(old, false);
+      }
+    }
     this._changed = true;
     this._rebuild();
     this._emitIfChanged();
@@ -272,7 +285,7 @@ export class RegistryScan extends RegistryCompute {
         this._changed = true;
         this._ledger('session', {
           sessionId: id,
-          projectKey: projectKeyFor(summary.cwd),
+          projectKey: this._projectKeyOf(summary.cwd),
           event: 'archived',
         });
       } else if (!summary.archived && state === 'let_go') {
@@ -280,7 +293,7 @@ export class RegistryScan extends RegistryCompute {
         this._changed = true;
         this._ledger('session', {
           sessionId: id,
-          projectKey: projectKeyFor(summary.cwd),
+          projectKey: this._projectKeyOf(summary.cwd),
           event: 'unarchived',
         });
       }
@@ -298,7 +311,7 @@ export class RegistryScan extends RegistryCompute {
     const seen = new Set();
     const byProject = new Map();
     for (const a of this._agents) {
-      if (!byProject.has(a.projectId)) byProject.set(a.projectId, a.cwd);
+      if (!byProject.has(a.projectId)) byProject.set(a.projectId, a.repoRoot || a.cwd);
     }
     await Promise.all(
       [...byProject.entries()].map(async ([projectId, cwd]) => {

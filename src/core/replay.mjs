@@ -50,6 +50,7 @@
  * exactly where it was. Watching what happened cannot change what happened.
  */
 import { dayKey, dayStart, listDays, readAll, reconstructQueue } from './ledger.mjs';
+import { rekeyRecords } from './project-of.mjs';
 import { now as clockNow } from './clock.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -192,9 +193,10 @@ export async function replayDays(dir, opts = {}) {
  * One day's replay, read from a ledger directory. The route's whole body.
  *
  * @param {string} dir
- * @param {{day:string, now?:number}} opts
+ * @param {{day:string, now?:number, keys?:Record<string, string>}} opts `keys`
+ *   is `aliasesOf(...).keys`: a worktree's old project key, read as its repository's
  */
 export async function readReplay(dir, opts) {
-  const records = await readAll(dir);
+  const records = rekeyRecords(await readAll(dir), opts.keys || {});
   return buildReplay(records, opts);
 }

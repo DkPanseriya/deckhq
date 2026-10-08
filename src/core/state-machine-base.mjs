@@ -56,6 +56,14 @@ export class RegistryBase {
   _identityOf;
   /** @type {Map<string,string[]>} */ // survivor agent id -> the ids it absorbed, oldest first
   _absorbed;
+  /** @type {Map<string, import('./project-of.mjs').ProjectOf>} */
+  // directory -> its repository and worktree, as the last scan resolved them
+  _projectsByCwd = new Map();
+  /** @type {{ids: Record<string, string>, keys: Record<string, string>}|null} */
+  // old project id / ledger key -> the repository's, for the agent list below
+  _aliases = null;
+  /** @type {any} */ // the agent list `_aliases` was derived from
+  _aliasesFor = null;
   /** @type {string|null} */ // the snapshot signature last emitted
   _lastKey;
   /** @type {number|null} */ // when the last scan finished

@@ -29,6 +29,7 @@ import process from 'node:process';
 
 import { LEDGER_DIR } from '../core/paths.mjs';
 import { computeStats, projectKeyFor, readAll, records as teamRecords } from '../core/ledger.mjs';
+import { aliasesOf, rekeyRecords, resolveProjects } from '../core/project-of.mjs';
 import { rateCardVersion } from '../core/rates.mjs';
 import { COUNTERS, NO_DATA, usageReport } from '../core/usage.mjs';
 import { readCache, readState } from './source.mjs';
@@ -91,7 +92,23 @@ export function projectNames(summaries) {
     const name = parts.length ? parts[parts.length - 1] : cwd;
     out[projectKeyFor(cwd)] = name;
   }
+  // A worktree is not a project: its repository is, and is named for itself.
+  for (const p of resolveProjects((summaries || []).map((s) => String(s?.cwd || ''))).values()) {
+    out[projectKeyFor(p.repoRoot)] = p.projectName;
+  }
   return out;
+}
+
+/**
+ * A worktree's old ledger key, mapped to its repository's — from the same
+ * cache, for records written before a worktree stopped being a project.
+ * @param {Array<{cwd:string}>} summaries
+ * @returns {Record<string, string>}
+ */
+export function repoKeys(summaries) {
+  const cwds = (summaries || []).map((s) => String(s?.cwd || '')).filter(Boolean);
+  const placed = resolveProjects(cwds);
+  return aliasesOf(cwds.map((cwd) => ({ cwd, ...placed.get(cwd) }))).keys;
 }
 
 /**
@@ -359,9 +376,10 @@ export async function runStats(argv = [], deps = {}) {
     return 2;
   }
 
+  const cached = readCache(deps.cacheDir);
   let records;
   try {
-    records = await readAll(dir);
+    records = rekeyRecords(await readAll(dir), repoKeys(cached));
   } catch (err) {
     error(`  could not read the ledger at ${dir}: ${err.message}\n`);
     return 1;
@@ -371,7 +389,7 @@ export async function runStats(argv = [], deps = {}) {
   // Records are never windowed by --days: "ever" means ever, and the rolling
   // week is a week whatever the report above it covers.
   const teamRec = teamRecords(records, { now });
-  const names = projectNames(readCache(deps.cacheDir));
+  const names = projectNames(cached);
 
   // WP-83. Whether this command prints a currency at all, read from the same
   // `state.json` the floor reads so the terminal and the window agree. A
