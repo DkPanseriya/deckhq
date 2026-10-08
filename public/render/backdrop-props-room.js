@@ -14,16 +14,10 @@
  */
 
 import { PALETTE } from './palette.js';
-import { drawContactShadow, roundRect, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
+import { roundRect, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
 import { setRadius } from './look-derive.js';
 import { CHAIR, CHAIR_GAP, SEAT_PITCH } from './plan-units.js';
 import { MEETING_END } from './plan-interior.js';
-
-/**
- * The kinds that lay their own contact shadow, so `paintProp` lays none: a
- * meeting table's footprint ends in a row of chairs, not in the table.
- */
-export const OWN_CONTACT_SHADOW = Object.freeze(['meeting_table']);
 
 /**
  * @param {any} ctx @param {any} prop @param {number} u
@@ -94,11 +88,6 @@ export function paintRoomProps(ctx, prop, u, w, h, local) {
       ctx.fillStyle = PALETTE.deskEdge;
       ctx.fillRect(top[0], top[1] + top[3] - band, top[2], band);
       ctx.fillRect(top[0] + top[2] - band, top[1], band, top[3] - band);
-      // Its own contact shadow, under the TABLE. `paintProp` lays one along the
-      // foot of a prop's whole footprint, and this footprint's foot is a row of
-      // chairs: the table would stand on a smudge two units away from it. The
-      // thin one, straight down: the deep one lies across the near chairs.
-      drawContactShadow(ctx, top[0], top[1], top[2], top[3], false);
       return true;
     }
     case 'credenza': {

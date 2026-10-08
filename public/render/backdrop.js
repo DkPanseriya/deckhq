@@ -12,11 +12,11 @@
  *
  * ============================================================================
  * WP-22 follow-up · this file is the bake itself, plus `paintProp`'s frame:
- * the clip to a prop's own footprint, the facing, the two-pass shadow, and
- * the contact shadow underneath. What each KIND looks like is three modules:
+ * the clip to a prop's own footprint, the facing, and the cast and contact
+ * every piece makes with the floor. What each KIND looks like is its modules:
  *
  *   backdrop-paint.js         the primitives — seeded RNG, rounded rect, the
- *                             two-pass shadow, the contact shadow
+ *                             light, the cast and the contact
  *   backdrop-floor.js         floors, circulation, ambient occlusion, walls,
  *                             door swings
  *   backdrop-props-desk.js    desks, chairs, whiteboards, screens, plants
@@ -37,12 +37,10 @@ import { identityFor, PALETTE } from './palette.js';
 import {
   U_DEFAULT,
   roundRect,
-  withShadow,
-  drawContactShadow,
+  grounded,
   isTallProp,
   makeCanvas,
   PROP_BLEED,
-  PROP_SHADOW_DIST_PX,
   seededRng,
 } from './backdrop-paint.js';
 import {
@@ -66,7 +64,7 @@ import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
 import { paintPlantProps } from './backdrop-props-plant.js';
 import { paintPlayProps } from './backdrop-props-play.js';
-import { OWN_CONTACT_SHADOW, paintRoomProps } from './backdrop-props-room.js';
+import { paintRoomProps } from './backdrop-props-room.js';
 
 export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
@@ -78,8 +76,9 @@ export * from './backdrop-props-play.js';
 export * from './backdrop-props-room.js';
 
 /**
- * Paint one furniture prop. All props share a soft contact shadow
- * (VISUAL-SPEC §6: "every furniture item carries a soft contact shadow").
+ * Paint one furniture prop. Every piece meets the floor in its own outline
+ * (VISUAL-SPEC §6: "every furniture item carries a soft contact shadow"), and
+ * a tall one throws a cast along the light as well.
  * Coordinates arrive pre-converted to px, already rotated by `angle`.
  *
  * Exported since WP-78 so `test/unit/lighting.test.mjs` can ask one prop what
@@ -134,15 +133,13 @@ export function paintProp(ctx, prop, u) {
   // is how a thirty-two unit sofa run came out as a single cushion.
   ctx.rotate(prop.angle || 0);
 
-  // WP-78: how far the prop's own drop shadow travels is a question about its
+  // WP-78: how far the prop's own shadow travels is a question about its
   // HEIGHT, and height is declared per kind in `PROP_HEIGHT` rather than
-  // guessed from `w * h`. A tall prop keeps WP-72's 3 px along the ray; a short
-  // one casts straight down onto the floor it is lying on, blur and no slide.
+  // guessed from `w * h`. A tall prop casts along the light and presses its
+  // own outline into the floor; a short one only presses (`grounded`). There
+  // is no oval under either: contact is the shape of the thing itself.
   const tall = isTallProp(prop);
-  const local = (fn) => {
-    withShadow(ctx, () => fn(ctx), { blur: 8, dist: tall ? PROP_SHADOW_DIST_PX : 0 });
-    fn(ctx);
-  };
+  const local = (fn) => grounded(ctx, fn, tall, u);
 
   if (
     !paintDeskProps(ctx, prop, u, w, h, local) &&
@@ -159,17 +156,6 @@ export function paintProp(ctx, prop, u) {
   }
 
   ctx.restore();
-
-  // Contact shadow beneath the whole footprint, in un-rotated plan space —
-  // simpler and close enough at this scale for a soft ambient blob. Skipped
-  // for 'manager': `drawManagerFigure` already draws a character-shaped
-  // contact shadow sized to the figure's actual stance (rig.js's SHADOW_*
-  // proportions), not to the padded anchor footprint — stacking this
-  // bounding-box blob under it as well would just muddy the one that is
-  // already correctly shaped and placed.
-  if (prop.kind !== 'manager' && !OWN_CONTACT_SHADOW.includes(prop.kind)) {
-    drawContactShadow(ctx, prop.x * u, prop.y * u, w, h, tall);
-  }
 }
 
 // -------------------------------------------------------------------- bake

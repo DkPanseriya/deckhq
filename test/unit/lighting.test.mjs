@@ -29,21 +29,31 @@ import {
   washedCarpet,
 } from '../../public/render/palette.js';
 import {
-  CONTACT_SHADOW_DIST_PX,
+  CAST_BLUR_RATIO,
+  CONTACT_BLUR_U,
+  CONTACT_GROW_U,
+  ENVELOPE_SHADOW_BLUR_PX,
   ENVELOPE_SHADOW_DIST_PX,
   PROP_SHADOW_DIST_PX,
   ROOM_SLAB_EDGE_PX,
   ROOM_SLAB_SHADOW_BLUR_PX,
   ROOM_SLAB_SHADOW_DIST_PX,
   PROP_HEIGHT,
+  SHADOW_U,
+  SHORT_CONTACT_ALPHA,
   U_DEFAULT,
   WALL_SHADOW_DIST_PX,
-  drawContactShadow,
+  alphaScaled,
+  contactUnder,
   isTallProp,
+  lightCast,
+  lightDir,
   setLightShadow,
   shadowOffsetFor,
   withShadow,
 } from '../../public/render/backdrop-paint.js';
+import { applyLook, resetLook } from '../../public/render/look-derive.js';
+import { DEFAULT_LOOK, LIGHT_MOOD_IDS, LIGHT_MOODS } from '../../public/render/look-options.js';
 import { BAKE_MAX_PIXELS, bakeSize, paintProp } from '../../public/render/backdrop.js';
 import { deviceGrid, setDeviceScale } from '../../public/render/device-px.js';
 import { buildPlan } from '../../public/render/plan.js';
@@ -65,7 +75,6 @@ const PUBLIC = path.join(HERE, '..', '..', 'public');
 /** Every distance along the ray the product actually casts at. */
 const EVERY_DISTANCE = {
   PROP_SHADOW_DIST_PX,
-  CONTACT_SHADOW_DIST_PX,
   WALL_SHADOW_DIST_PX,
   ROOM_SLAB_SHADOW_DIST_PX,
   ENVELOPE_SHADOW_DIST_PX,
@@ -239,51 +248,120 @@ test('WP-72: setLightShadow writes BOTH offsets, and withShadow gives them back'
   assert.ok(ctx.shadowOffsetX > 0 && ctx.shadowOffsetY > 0);
 });
 
-test('WP-72: the floor keeps every vertical drop it already had', () => {
-  // The three offsets that shipped before this package were (2, 2), (2, 2) and
-  // (3, 3) once a horizontal component existed at all; the building's was 8.
-  // Stating the distance along the ray must REPRODUCE them, or "we added a
-  // light" would also mean "we quietly flattened every shadow on the floor".
-  const expected = [
-    [CONTACT_SHADOW_DIST_PX, 2],
-    [WALL_SHADOW_DIST_PX, 2],
-    [PROP_SHADOW_DIST_PX, 3],
-    [ENVELOPE_SHADOW_DIST_PX, 8],
-  ];
-  for (const [dist, drop] of expected) {
-    const off = shadowOffsetFor(dist);
-    assert.ok(Math.abs(off.y - drop) < 1e-9, `expected a ${drop} px drop, got ${off.y}`);
-    assert.ok(Math.abs(off.x - drop) < 1e-9, `expected a ${drop} px slide, got ${off.x}`);
+test('every shadow length on the floor is stated in plan units', () => {
+  // A unit is about 0.30 m, so a length in units is a claim about a real
+  // shadow; a length in pixels is a claim about one zoom. The pixel names the
+  // painters still use are these, on the 14 px design grid, and nothing else.
+  for (const [name, value] of Object.entries(SHADOW_U)) {
+    assert.ok(
+      value > 0 && value < 4,
+      `SHADOW_U.${name} is ${value}; that is not a length in units`,
+    );
   }
+  const grid = [
+    [PROP_SHADOW_DIST_PX, SHADOW_U.propCast],
+    [WALL_SHADOW_DIST_PX, SHADOW_U.wallCast],
+    [ROOM_SLAB_SHADOW_DIST_PX, SHADOW_U.slab],
+    [ROOM_SLAB_SHADOW_BLUR_PX, SHADOW_U.slabBlur],
+    [ROOM_SLAB_EDGE_PX, SHADOW_U.slabEdge],
+    [ENVELOPE_SHADOW_DIST_PX, SHADOW_U.envelope],
+    [ENVELOPE_SHADOW_BLUR_PX, SHADOW_U.envelopeBlur],
+  ];
+  for (const [px, units] of grid) assert.ok(Math.abs(px - units * U_DEFAULT) < 1e-9);
+  // The building's own drop is the one the floor has always shipped with.
+  const off = shadowOffsetFor(ENVELOPE_SHADOW_DIST_PX);
+  assert.ok(Math.abs(off.x - 8) < 1e-9 && Math.abs(off.y - 8) < 1e-9);
+  // Contact is a fraction of a unit: a line where a thing meets the floor.
+  assert.ok(CONTACT_GROW_U > 0 && CONTACT_GROW_U < CONTACT_BLUR_U && CONTACT_BLUR_U < 0.3);
+  assert.ok(
+    CAST_BLUR_RATIO > 0 && CAST_BLUR_RATIO < 1,
+    'a cast softer than it is long is a smudge',
+  );
 });
 
-test("WP-72: a TALL prop's contact shadow sits down-right of it, never up-left", () => {
-  const ctx = makeRecorder();
-  drawContactShadow(ctx, 100, 200, 40, 20, true);
-  const blob = ctx.ops.find((o) => o.op === 'ellipse');
-  assert.ok(blob, 'no contact shadow was drawn at all');
-  // Bottom-centre of the footprint is (120, 220); the shadow is offset from it
-  // along the light and nowhere else.
-  const off = shadowOffsetFor(CONTACT_SHADOW_DIST_PX);
-  assert.ok(Math.abs(blob.x - (120 + off.x)) < 1e-9, `blob.x is ${blob.x}`);
-  assert.ok(Math.abs(blob.y - (220 + off.y)) < 1e-9, `blob.y is ${blob.y}`);
-  assert.ok(blob.x > 120 && blob.y > 220, 'the contact shadow is up-left of its prop');
+test('the light has three moods, and every one of them travels down and to the right', () => {
+  const rows = [];
+  try {
+    for (const id of LIGHT_MOOD_IDS) {
+      applyLook({ ...DEFAULT_LOOK, light: id }, 'default');
+      const dir = lightDir();
+      assert.equal(dir, LIGHT_MOODS[id].dir, `${id}: the painters read a different light`);
+      assert.ok(dir.x > 0 && dir.y > 0, `${id}: the light leaves the down-right quadrant`);
+      assert.ok(Math.abs(Math.hypot(dir.x, dir.y) - 1) < 1e-9, `${id}: not a direction`);
+      assert.equal(lightCast(), LIGHT_MOODS[id].cast);
+      // What a tall prop casts, in units, and where the context is told to put it.
+      const ctx = makeRecorder();
+      paintProp(ctx, { kind: 'desk', x: 4, y: 6, w: 3, h: 2, angle: 0 }, U_DEFAULT);
+      const cast = ctx.ops.find((o) => o.op === 'fill' && o.shadowOffsetX > 0);
+      assert.ok(cast, `${id}: a desk cast nothing along the light`);
+      assert.ok(cast.shadowOffsetX > 0 && cast.shadowOffsetY > 0);
+      const length = Math.hypot(cast.shadowOffsetX, cast.shadowOffsetY) / U_DEFAULT;
+      assert.ok(Math.abs(length - SHADOW_U.propCast * LIGHT_MOODS[id].cast) < 1e-9);
+      assert.ok(Math.abs(cast.shadowBlur - CAST_BLUR_RATIO * length * U_DEFAULT) < 1e-9);
+      rows.push(
+        `${id}: (${dir.x.toFixed(3)}, ${dir.y.toFixed(3)}), desk cast ${length.toFixed(2)} U`,
+      );
+    }
+  } finally {
+    resetLook();
+  }
+  assert.equal(lightDir(), LIGHT_DIR, 'the floor as it ships is lit from somewhere else');
+  console.log(`  light moods — ${rows.join(' · ')}`);
 });
 
 // ------------------------------------------------- WP-78: honest shadows
 //
 // The owner, 14 September: "the oval shadows sometimes are offset and make no
 // sense." WP-72 gave everything on the floor the same 45-degree ray, which is
-// right for a thing with height and wrong for a thing lying on the floor. What
-// follows is that correction, stated as numbers.
+// right for a thing with height and wrong for a thing lying on the floor. WP-78
+// stopped the short ones sliding; this is the rest of it — there is no oval.
+// Contact is the object's own outline, straight underneath.
 
-test("WP-78: a SHORT prop's contact shadow sits directly beneath it", () => {
+test('contact under a footprint is the footprint itself, grown and blurred, with no offset', () => {
   const ctx = makeRecorder();
-  drawContactShadow(ctx, 100, 200, 40, 20, false);
-  const blob = ctx.ops.find((o) => o.op === 'ellipse');
-  assert.ok(blob, 'no contact shadow was drawn at all');
-  assert.equal(blob.x, 120, 'a mug does not throw its shadow to one side');
-  assert.equal(blob.y, 220, 'nor down the page');
+  contactUnder(ctx, 100, 200, 40, 20, 5, false, U_DEFAULT);
+  assert.equal(ctx.ops.filter((o) => o.op === 'ellipse').length, 0, 'an oval came back');
+  const fill = ctx.ops.find((o) => o.op === 'fill');
+  assert.ok(fill, 'no contact was drawn at all');
+  assert.equal(fill.shadowOffsetX, 0, 'a rug does not throw its contact to one side');
+  assert.equal(fill.shadowOffsetY, 0, 'nor down the page');
+  assert.ok(Math.abs(fill.shadowBlur - CONTACT_BLUR_U * U_DEFAULT) < 1e-9);
+  assert.equal(fill.shadowColor, alphaScaled(PALETTE.shadowContact, SHORT_CONTACT_ALPHA));
+  assert.notEqual(
+    fill.shadowColor,
+    PALETTE.shadowContact,
+    'a short thing presses as hard as a tall one',
+  );
+  // A degenerate footprint draws nothing rather than throwing.
+  const none = makeRecorder();
+  contactUnder(none, 0, 0, 0, 10);
+  assert.equal(none.ops.filter((o) => o.op === 'fill').length, 0);
+});
+
+test('no painter lays an oval for a contact shadow', () => {
+  // By source: the function that drew it is gone from every backdrop module,
+  // and the primitives file draws no ellipse at all.
+  const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+  const dir = path.join(PUBLIC, 'render');
+  for (const file of fs.readdirSync(dir).filter((n) => /^backdrop.*\.js$/.test(n))) {
+    const src = code(fs.readFileSync(path.join(dir, file), 'utf8'));
+    assert.doesNotMatch(src, /drawContactShadow\s*\(/, `${file} still lays the contact oval`);
+  }
+  const paint = code(fs.readFileSync(path.join(dir, 'backdrop-paint.js'), 'utf8'));
+  assert.doesNotMatch(paint, /\.ellipse\(/, 'backdrop-paint.js draws an ellipse');
+  // And by behaviour: paint every kind there is and look for an ellipse filled
+  // in the contact colour. The manager is a person and keeps the one under
+  // its feet (`rig-body.js`), which is right for a footprint that small.
+  for (const kind of Object.keys(PROP_HEIGHT)) {
+    if (kind === 'manager') continue;
+    const ctx = makeRecorder();
+    paintProp(ctx, { kind, x: 4, y: 6, w: 3, h: 2, angle: 0, id: kind }, U_DEFAULT);
+    const ovals = ctx.ops.filter(
+      (o) =>
+        o.op === 'ellipse' && String(o.fillStyle).startsWith(PALETTE.shadowContact.slice(0, 14)),
+    );
+    assert.equal(ovals.length, 0, `${kind} lays an oval in the contact colour`);
+  }
 });
 
 test('WP-78: how tall a prop is, is DECLARED, and every prop the plan emits declares it', () => {
@@ -360,7 +438,7 @@ test('WP-78: how tall a prop is, is DECLARED, and every prop the plan emits decl
   assert.equal(isTallProp({ kind: 'rug', tall: true }), true);
 });
 
-test('WP-78: a tall prop casts along the ray and a short one casts straight down', () => {
+test('WP-78: a tall prop casts along the ray and a short one only meets the floor', () => {
   const box = (kind) => ({ kind, x: 4, y: 6, w: 3, h: 2, angle: 0 });
   const castsOf = (kind) => {
     const ctx = makeRecorder();
@@ -368,30 +446,29 @@ test('WP-78: a tall prop casts along the ray and a short one casts straight down
     return ctx.ops.filter((o) => (o.op === 'fill' || o.op === 'fillRect') && o.shadowBlur > 0);
   };
 
+  // A desk: one fill thrown along the light, one pressed straight down.
   const tall = castsOf('user_desk');
-  assert.ok(tall.length > 0, 'a desk cast nothing at all');
-  for (const op of tall) {
-    assert.ok(op.shadowOffsetX > 0 && op.shadowOffsetY > 0, 'a desk stopped casting along the ray');
-  }
+  const along = tall.filter((o) => o.shadowOffsetX > 0 && o.shadowOffsetY > 0);
+  const under = tall.filter((o) => o.shadowOffsetX === 0 && o.shadowOffsetY === 0);
+  assert.ok(along.length > 0, 'a desk stopped casting along the ray');
+  assert.ok(under.length > 0, 'a desk does not meet the floor it stands on');
+  assert.equal(along.length + under.length, tall.length, 'a desk cast somewhere else');
+  for (const op of under) assert.equal(op.shadowColor, PALETTE.shadowContact);
+  // The contact is tighter than the cast is long: a line, not a second shadow.
+  assert.ok(under[0].shadowBlur < Math.hypot(along[0].shadowOffsetX, along[0].shadowOffsetY));
 
   const short = castsOf('plant_broad');
-  assert.ok(short.length > 0, 'a plant cast nothing at all');
+  assert.ok(short.length > 0, 'a plant does not meet the floor');
   for (const op of short) {
     assert.equal(op.shadowOffsetX, 0, 'a potted plant slid its shadow sideways');
     assert.equal(op.shadowOffsetY, 0, 'a potted plant dropped its shadow down the page');
+    assert.equal(op.shadowColor, alphaScaled(PALETTE.shadowContact, SHORT_CONTACT_ALPHA));
   }
 
-  // And the contact ellipse under each follows the same rule.
-  const ellipseOf = (kind) => {
-    const ctx = makeRecorder();
-    paintProp(ctx, box(kind), U_DEFAULT);
-    return ctx.ops.filter((o) => o.op === 'ellipse').at(-1);
-  };
-  const bottom = { x: (4 + 3 / 2) * U_DEFAULT, y: (6 + 2) * U_DEFAULT };
-  const flat = ellipseOf('rug');
-  assert.ok(Math.abs(flat.x - bottom.x) < 1e-9 && Math.abs(flat.y - bottom.y) < 1e-9);
-  const lifted = ellipseOf('user_desk');
-  assert.ok(lifted.x > bottom.x && lifted.y > bottom.y);
+  // A rug is laid, not stood: its contact is its own outline, under it.
+  const rug = castsOf('rug');
+  assert.ok(rug.length > 0, 'a rug does not meet the floor');
+  for (const op of rug) assert.equal(op.shadowOffsetX + op.shadowOffsetY, 0);
 });
 
 test("WP-78: a character's shadow is within 1 px of its feet, at every scale it is drawn", () => {
