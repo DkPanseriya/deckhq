@@ -55,10 +55,11 @@ lounge draws its seats and one row of people standing; a bigger crowd is a **`+N
 the end of that row, and clicking it opens the deck on everybody resting. Everyone waiting sits on
 the sofas in your office, one to a cushion; only when every cushion is taken do the rest stand, in
 a queue along the wall at the desk end of the room, never on the rug.
-Where your office and the lounge stand depends on the window and on how many rooms there are: one
-over the other down the left, at the left ends of the top and bottom rows, or — for two or three
-rooms in a window that is neither wide nor tall — side by side across the top with the rooms behind
-them.
+Where your office and the lounge stand depends on the window and on how many rooms there are. With
+one or two projects on a window wider than it is tall they are a strip down the left, one over the
+other, and the project rooms are the rest of the building. Otherwise they are one over the other
+down the left, at the left ends of the top and bottom rows, or — for a few rooms in a window that
+is neither wide nor tall — side by side across the top with the rooms behind them.
 
 ## The one rule
 

@@ -54,6 +54,8 @@
  *   plan-proportions.js  the designer's rulebook: shares, shapes, modules, rows
  *   plan-grid.js     the building laid to it, wherever there is a room to lay
  *   plan-grid-service.js  what that building asks of the reception and lounge
+ *   plan-quiet.js    one or two rooms: the two service rooms a strip down the
+ *                    left, and the rooms the rest of the building
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, imported by both sides (WP-22).

@@ -44,6 +44,7 @@ import {
   proportionFaults,
   roomAreaMax,
   ROOMS_CEILING_REACH,
+  roomsHold,
 } from '../../public/render/plan-proportions.js';
 
 const EPS = 1e-6;
@@ -101,9 +102,13 @@ for (const [name, make] of Object.entries(FLOORS)) {
           `${where}: ${r.id} is ${(r.w * r.h).toFixed(0)} U², over its ${r.areaMax.toFixed(0)}`,
         );
       }
+      // (Or, on a quiet floor, a building whose service rooms and halls are
+      // strips: `roomsHold`.)
       const reach = areaOf(of('project')) / of('project').reduce((a, r) => a + r.areaMax, 0);
       assert.ok(
-        rooms >= ROOMS_AREA_MIN - EPS || reach >= ROOMS_CEILING_REACH - EPS,
+        rooms >= ROOMS_AREA_MIN - EPS ||
+          reach >= ROOMS_CEILING_REACH - EPS ||
+          roomsHold(measureProportions(plan)),
         `${where}: project rooms have ${pct(rooms)}, and ${pct(reach)} of what they may be`,
       );
       assert.ok(office <= OFFICE_AREA_MAX + EPS, `${where}: the office has ${pct(office)}`);
@@ -374,10 +379,18 @@ test('two rooms in a window neither wide nor tall: two rooms of a team’s size,
   assert.deepEqual(plan.proportions.faults, []);
   const spine = plan.rooms.find((r) => r.id === '__spine__');
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
-  // The corridor wall to wall, and both rooms on it.
-  assert.ok(Math.abs(spine.w - plan.width) < EPS);
+  // The corridor from one side of the building to the other — across it, or
+  // down it beside the two service rooms — and both rooms on it.
+  const across = Math.abs(spine.w - plan.width) < EPS;
+  assert.ok(across || Math.abs(spine.h - plan.height) < EPS);
   assert.equal(rooms.length, 2);
   for (const room of rooms) {
+    assert.ok(
+      across
+        ? Math.abs(room.y - (spine.y + spine.h)) < EPS || Math.abs(room.y + room.h - spine.y) < EPS
+        : Math.abs(room.x - (spine.x + spine.w)) < EPS,
+      `${room.id} is not on the corridor`,
+    );
     const ratio = room.w / room.h;
     assert.ok(ratio >= ROOM_RATIO_MIN - EPS && ratio <= ROOM_RATIO_MAX + EPS, `${ratio}`);
     // A room for two is a team's room, not half of whatever the window is:

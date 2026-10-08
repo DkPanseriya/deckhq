@@ -40,8 +40,9 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   never laid past it to fill the window. The building is made as small as your office and the
   lounge allow, so it is drawn a little larger; those two take what is spare, up to their usual
   share; and what is left after that is an entry hall with planting in it rather than a bigger
-  room. No room is more than 45% bare floor any more. A floor of many projects, whose rooms were
-  already under their ceilings, is laid exactly as before.
+  room — except where one project has the floor to itself (below). No room is more than 45% bare
+  floor any more. A floor of many projects, whose rooms were already under their ceilings, is laid
+  exactly as before.
 - **A quiet office is a small office.** With four or fewer waiting on you, Your Office is your
   desk, the visitor chair and one sofa for them, instead of three sofas round an empty rug. With
   five or fewer resting, the lounge is its one sofa group; the café, the reading corner and the
@@ -49,6 +50,24 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   projects. With them small the whole building is smaller, so it is drawn larger: on a 1600 × 1000
   window somebody at a desk is 42 to 47 pixels tall where they were 38, and the project rooms are
   about half the floor again. A busy office and lounge are exactly as they were.
+- **One or two projects are the building.** With one or two projects open, Your Office and the
+  Lounge used to stand across the top of the floor, with the project in a corner below them and an
+  empty hall beside it. They are now a strip down the left side, one above the other, each the
+  size of who is in it and together no more than 35% of the floor; the corridor runs down beside
+  them; and the project rooms are everything to the right of it. A project that has the floor to
+  itself is given a larger room, up to a large team's, and furnished as one: on a 1600 × 1000
+  window it is 60% of the floor where it was 20%, the hall is gone, and whoever is at the desk is
+  51 pixels tall where they were 47. Two projects stand one above the other: on the same window
+  they are 49% of the floor where they were 48%, and people at desks are 48 pixels tall where they
+  were 42. What neither the rooms nor the strip may take is a planted strip along the corridor
+  (see Known gaps). A floor of three projects, and any floor of four or more, is laid exactly as
+  before.
+- **Sofas and lounge corners come back one at a time** on a floor of one to three projects. Your
+  Office has one sofa for up to four waiting, a second across the foot of the room for up to nine,
+  and all three after that. The lounge is its sofa group for up to five resting, adds the café for
+  up to twelve, the reading corner for up to twenty, and the games after that. A fifth person
+  waiting used to bring all three sofas back at once, and a sixth resting the whole lounge. On a
+  floor of four or more projects they still do.
 - **Agent size "auto" follows how large the floor is drawn**, not only how many agents there are.
   A dozen agents in two rooms are a small building in a big window, so they are drawn at the
   larger size. A size you picked yourself is never overruled.
@@ -244,6 +263,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A full office is checked with its badges.** Sixteen waiting at two window sizes: no badge, name
   or body overlaps another, every badge is over its own head, and no name is put between another
   session's badge and name.
+- **Floors of one or two projects are measured at the windows the pictures are taken on.**
+  `quiet-floor.test.mjs` checks where the strip, the corridor and the rooms are, the rooms' share,
+  the hall's share and the height of a person at a desk at 1600 × 1000 and 1920 × 1080; every
+  step of the sofas (0 to 14 waiting) and of the lounge (5, 6, 12, 13, 20, 21 resting); and that
+  three floors of five to twenty-two projects have every room, the office and the lounge exactly
+  where they were, at four window sizes.
 - **Floors of one to four projects are checked in ten shapes of window.** Eight small floors, each
   empty, lightly used and with seventy-nine resting and sixteen waiting, on canvases from 4:3 to an
   ultrawide: every rule holds on all 240, and the smallest is drawn at 9.2 pixels per unit.
@@ -268,15 +293,26 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Known gaps
 
-- **Two projects on a 1600 × 1000 window are drawn a little smaller than one or three**: about 42
-  pixels at a desk, and the two rooms are just under half the floor. Two rooms of a room's shape
-  cannot be both half of a building that shape and that small. On a wider window they are 46.
-  Agent size **auto** (or large) in the Look panel draws everybody about a quarter larger still.
-- **A floor of one project is a third entry hall.** One room cannot be more than a fifth of a
-  building the window's shape; your office and the lounge take their shares, and the rest is
-  planted hall.
-- **The fifth person waiting brings back all three sofas at once**, and the sixth resting the
-  whole lounge: the office and lounge step from small to full, not gradually.
+- **Two projects are just under half the floor on a wide window, with a planted strip beside the
+  corridor.** The two rooms are 54% of the floor on a 1440 × 1000 window, 49% at 1600 × 1000 and
+  44% at 1920 × 1080, and the strip is 6%, 11% and 16%. Two rooms one above the other can each be
+  no wider than a room's shape allows, and Your Office and the Lounge are held to 35% of the
+  floor; the wider the window, the more is left over.
+- **Three projects are laid as they were**: Your Office and the Lounge at the left ends of two
+  rows. On a 1600 × 1000 window the rooms are 55% of the floor and somebody at a desk is 44
+  pixels tall, two short of what one or two projects get.
+- **One project with a crew at work keeps a hall.** A room with a crew in it is not made larger,
+  because a crew's room has no meeting table and the extra floor could only be filled with sofas.
+  On a 1600 × 1000 window it is 45% of the floor with a planted strip of 14% beside the corridor.
+- **One project beside a busy lounge is laid as it was**: a fifth of the floor, with a planted
+  hall of a third. A lounge for thirteen is deep, a strip down the side with Your Office above it
+  needs a larger building, and everybody would be drawn smaller; the floor is never made larger
+  for the sake of its plan.
+- **On a window nearer square than about 4:3, one project still has Your Office and the Lounge
+  across the top** and is a quarter to a third of the floor. A strip down the side would be over a
+  third of a building that narrow.
+- **On a floor of four or more projects the fifth person waiting still brings back all three
+  sofas at once**, and the sixth resting the whole lounge.
 - **With many agents resting and few projects, the lounge shows more of them as `+N resting`.**
   The building no longer grows for the lounge once the rooms are at their ceilings.
 - **A worktree session with helpers at work sits at a desk, not at its bench.** Sub-agents stand

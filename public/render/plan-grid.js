@@ -58,6 +58,7 @@ import { buildProjectRoom } from './plan-rooms.js';
 import { DESK_ASPECTS, buildCandidate } from './plan-grid-build.js';
 import { OFFICE_FULL, measureService } from './plan-grid-service.js';
 import { OFFICE_COMPACT_MAX } from './plan-office.js';
+import { layQuiet } from './plan-quiet.js';
 import {
   CORRIDOR,
   LOUNGE_MIN_H,
@@ -69,6 +70,7 @@ import {
   LOUNGE_AREA_MAX,
   MODULE_WEIGHTS,
   OFFICE_AREA_MAX,
+  QUIET_ROOMS_MAX,
   ROOMS_AREA_MIN,
   ROOMS_CEILING_REACH,
   ROOM_RATIO_MAX,
@@ -239,7 +241,9 @@ export function layProportioned(input) {
 
   // ---- what the service rooms need, measured off their own builders
   // (`plan-grid-service.js`).
-  const service = measureService(waitingCount, benchedCount, goneHomeCount, true);
+  // (On a quiet floor a sofa run and a bay at a time: `QUIET_ROOMS_MAX`.)
+  const graded = asked.length <= QUIET_ROOMS_MAX;
+  const service = measureService(waitingCount, benchedCount, goneHomeCount, true, graded);
   const { officeWide, officeColAt, officesInBand, loungeAt, loungesInBand } = service;
   const { whole, seatsWanted, keptOf, wholeKept } = service;
 
@@ -689,6 +693,7 @@ export function layProportioned(input) {
       contentsW,
       ceilings: !free,
       quiet: true,
+      graded,
       nominal,
     });
 
@@ -831,6 +836,10 @@ export function layProportioned(input) {
   //
   // AND A FLOOR OF FEW ROOMS (`few`), where their ceilings come to less than
   // the majority of any building its service rooms stand in at their contents.
+  // AND A QUIET FLOOR — one to three rooms — is laid round its rooms first
+  // (`plan-quiet.js`), and is the floor wherever it keeps the rules as well.
+  const quiet = layQuiet({ ...input, needs, least, nominal, service });
+  if (quiet?.sure) return quiet.built;
   let chosen = majority();
   if (!chosen || chosen.grid.cells.some((c, i) => c.w * c.h > caps[i] + 1e-6)) {
     // A ceiling never makes the building larger: past this width, `few` is asked.
@@ -860,6 +869,7 @@ export function layProportioned(input) {
       margin = false;
     }
   }
+  if (quiet?.beats(chosen)) return quiet.built;
   if (!chosen) return null;
 
   // A room built into its cell can come out a hair past what it bid with. The

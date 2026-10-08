@@ -19,6 +19,7 @@ import {
   HALL_WIDTH_MIN,
   MODULE_AREA_MAX,
   MODULE_WEIGHTS,
+  QUIET_ROOMS_MAX,
   ROOMS_AREA_MIN,
   ROOMS_CEILING_REACH,
   ROOM_AREA_SPREAD_MAX,
@@ -26,10 +27,12 @@ import {
   ROOM_RATIO_MIN,
   SCALE_MAX_PX_PER_UNIT,
   SCALE_MIN_PX_PER_UNIT,
+  SERVICE_STRIP_MAX,
   WINDOW_FILL_MIN,
   roomAreaMax,
   roomDepthMax,
   roomWidthMax,
+  roomsHold,
   splitRow,
 } from '../../public/render/plan-proportions.js';
 import { resetAgentScale } from '../../public/render/plan-scale.js';
@@ -129,12 +132,17 @@ for (const name of NAMES) {
       const areas = rooms.map((/** @type {any} */ r) => r.w * r.h);
       assert.ok(Math.max(...areas) / Math.min(...areas) <= ROOM_AREA_SPREAD_MAX + EPS, where);
       assert.deepEqual(plan.proportions.faults, [], where);
-      // The majority, or four fifths of all they may be.
+      // The majority, or four fifths of all they may be — or, on a quiet
+      // floor, a building whose service rooms and halls are strips (`roomsHold`).
       const share = plan.proportions.shares.rooms;
-      assert.ok(
-        share >= ROOMS_AREA_MIN - EPS || plan.proportions.ceilingReach >= ROOMS_CEILING_REACH - EPS,
-        `${where}: rooms ${(share * 100).toFixed(0)}%`,
-      );
+      assert.ok(roomsHold(plan.proportions), `${where}: rooms ${(share * 100).toFixed(0)}%`);
+      if (rooms.length > QUIET_ROOMS_MAX) {
+        assert.ok(
+          share >= ROOMS_AREA_MIN - EPS ||
+            plan.proportions.ceilingReach >= ROOMS_CEILING_REACH - EPS,
+          `${where}: rooms ${(share * 100).toFixed(0)}%`,
+        );
+      }
       // Drawn between the two scales the renderer has, over the whole window.
       // (`large` on the laptop window scrolls at the smallest, as it did.)
       assert.ok(fill.scale >= SCALE_MIN_PX_PER_UNIT - EPS, `${where}: ${fill.scale}`);
@@ -203,14 +211,15 @@ test('one to three projects: the building is drawn larger, and with the size lef
 test('a quiet floor: the reception is one sofa run, the lounge one bay, and the people are drawn larger', () => {
   // Seated at the DEFAULT size, crown to floor, and the rooms' share of the
   // building, at the two windows the pictures are taken on. Before the service
-  // rooms were sized by who is in them these were 39 to 40 px and 16 to 61%.
+  // rooms were sized by who is in them these were 39 to 40 px and 16 to 61%;
+  // before a quiet floor was laid round its rooms, 42 to 47 px and 17 to 65%.
   const seated = (/** @type {number} */ scale) => (BODY_HEIGHT_U - 0.1 * RIG_UNIT_U) * scale;
   /** The least each floor is held to: [seated px at 1600, at 1920, rooms' share]. */
   const held = {
-    single: [46, 46, 0.17],
-    pair: [41.5, 46, 0.43],
-    three: [44, 46, 0.5],
-    worktrees: [46, 46, 0.5],
+    single: [46, 46, 0.55],
+    pair: [46, 46, 0.44],
+    three: [44, 46, 0.53],
+    worktrees: [46, 46, 0.55],
   };
   for (const name of FEW) {
     const [px1600, px1920, share] = held[/** @type {keyof typeof held} */ (name)];
@@ -232,9 +241,12 @@ test('a quiet floor: the reception is one sofa run, the lounge one bay, and the 
         plan.proportions.shares.rooms >= share - EPS,
         `${where}: rooms ${(plan.proportions.shares.rooms * 100).toFixed(0)}%`,
       );
-      // The two service rooms together are never the larger part of it.
+      // The two service rooms together are a strip, not the larger part of it.
       const service = plan.proportions.shares.office + plan.proportions.shares.lounge;
-      assert.ok(service <= 0.42, `${where}: reception and lounge ${(service * 100).toFixed(0)}%`);
+      assert.ok(
+        service <= SERVICE_STRIP_MAX + EPS,
+        `${where}: reception and lounge ${(service * 100).toFixed(0)}%`,
+      );
     }
   }
   resetAgentScale();

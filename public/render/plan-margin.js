@@ -49,7 +49,11 @@ export function landscapeHalls(rooms) {
   const doors = rooms.filter((r) => r.kind !== 'corridor' && r.door).map((r) => r.door);
   let stood = 0;
   for (const hall of rooms) {
-    if (hall.kind !== 'corridor' || !String(hall.id).startsWith('__hall-')) continue;
+    if (hall.kind !== 'corridor') continue;
+    // A hall — or a spine with one along it, which is as wide as both.
+    const along =
+      hall.id === '__spine__' && Math.min(hall.w, hall.h) >= CORRIDOR + HALL_PLANTED_MIN / 2;
+    if (!along && !String(hall.id).startsWith('__hall-')) continue;
     const flat = hall.w >= hall.h;
     const long = flat ? hall.w : hall.h;
     const short = flat ? hall.h : hall.w;

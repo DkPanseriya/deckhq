@@ -392,7 +392,9 @@ export function furnishRoom(room, seats = []) {
   if (!room || room.kind !== 'project' || room.pinned === true) return none;
   const desks = (room.zones || []).find((z) => z.id === 'desk-group');
   if (!desks) return none;
-  const module = room.module || moduleFor({ desks: seats.length, crew: 0 });
+  // The module it was LAID at, where that is not the one its people make it: a
+  // lone room is laid a size or two up (`plan-quiet.js`), and furnished as that.
+  const module = room.kit || room.module || moduleFor({ desks: seats.length, crew: 0 });
   const kit = ROOM_KITS[module] || ROOM_KITS.S;
   const at = interiorOf(room);
   const right = at.x + at.w;
@@ -689,9 +691,12 @@ export function furnishRoom(room, seats = []) {
     const [piece, upTo] = step.split(':');
     if (upTo && count(piece) >= Number(upTo)) return false;
     if (piece === 'credenza') {
+      // Against the west wall — or, where that is the wall the door is in, the east.
       return (
         !walls.some((p) => p.kind === 'credenza' && p.h > p.w) &&
-        run('W', 'credenza', CREDENZA_DEPTH, CREDENZA_MIN_RUN, CREDENZA_MAX_RUN)
+        (run('W', 'credenza', CREDENZA_DEPTH, CREDENZA_MIN_RUN, CREDENZA_MAX_RUN) ||
+          (doorSide === 'W' &&
+            run('E', 'credenza', CREDENZA_DEPTH, CREDENZA_MIN_RUN, CREDENZA_MAX_RUN)))
       );
     }
     if (piece === 'shelving') {
