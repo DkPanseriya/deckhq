@@ -287,6 +287,29 @@ export async function liveSessions(opts = {}) {
 }
 
 /**
+ * The process one live session is running in, or null when the roster does
+ * not list it (WP-100). This is what "go to session" starts from: the window
+ * a session is in is found by walking up from its process, and a transcript
+ * does not say which process that is.
+ *
+ * Read from the same cached roster the floor is drawn from, so asking costs
+ * what a poll costs — a pid check, not a CLI spawn — and a session that has
+ * exited answers null within one poll.
+ *
+ * @param {string} sessionId  a raw session id, or an agent id
+ * @param {{sessions?: () => Promise<import('../../core/model.mjs').LiveSession[]>}} [opts]
+ *   test seam, in place of the roster
+ * @returns {Promise<number|null>}
+ */
+export async function sessionPid(sessionId, opts = {}) {
+  const raw = String(sessionId || '');
+  const id = raw.startsWith(`${RUNTIME_ID}:`) ? raw : agentId(RUNTIME_ID, raw);
+  const roster = await (opts.sessions || liveSessions)();
+  const hit = roster.find((s) => s.id === id);
+  return hit && Number.isInteger(hit.pid) && /** @type {number} */ (hit.pid) > 0 ? hit.pid : null;
+}
+
+/**
  * Does this scan's evidence contradict the cached roster? A session whose
  * transcript has moved since the last probe, and which that probe did not
  * list, is either newly alive or newly resumed — either way the roster is

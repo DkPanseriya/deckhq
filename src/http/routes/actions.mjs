@@ -626,8 +626,15 @@ export function register(router, ctx) {
     const adapter = ctx.adapters.getAdapter(runtime);
     let appAvailable = false;
     try {
+      // WP-100. Asked about ONE session where there is one to ask about: the
+      // desktop app's link opens only sessions the app has a record of, so
+      // "is the app installed" was the wrong question for a session started
+      // in a terminal — it offered a link that arrived nowhere.
       appAvailable = Boolean(
-        adapter && typeof adapter.appAvailable === 'function' && (await adapter.appAvailable()),
+        adapter &&
+        (id && typeof adapter.appAvailableFor === 'function'
+          ? await adapter.appAvailableFor(splitAgentId(id).sessionId)
+          : typeof adapter.appAvailable === 'function' && (await adapter.appAvailable())),
       );
     } catch (err) {
       log.warn('appAvailable check failed', runtime, err.message);

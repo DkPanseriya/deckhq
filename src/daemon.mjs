@@ -30,6 +30,7 @@ import { register as registerPacks } from './http/routes/packs.mjs';
 import { register as registerReplay } from './http/routes/replay.mjs';
 import { register as registerRates } from './http/routes/rates.mjs';
 import { register as registerStudio } from './http/routes/studio.mjs';
+import { register as registerGoto } from './http/routes/goto.mjs';
 import { createLog } from './core/log.mjs';
 import { Store } from './core/store.mjs';
 import { Ledger } from './core/ledger.mjs';
@@ -240,7 +241,10 @@ function envHoldMs() {
  *           notify?: boolean, daemonFile?: string, snapshotDir?: string,
  *           packsDir?: string, ratesFile?: string,
  *           launchTerminal?: (opts:any) => Promise<any>,
- *           studioWatchOptions?: {pollMs?:number, debounceMs?:number} }} [opts]
+ *           studioWatchOptions?: {pollMs?:number, debounceMs?:number},
+ *           sessionFocus?: import('./core/session-focus.mjs').FocusRunner,
+ *           sessionPid?: (agent:any) => Promise<number|null>,
+ *           describeTerminal?: (opts:any) => Promise<{label:string|null}> }} [opts]
  *   `daemonFile` overrides where the bound port is published; it defaults to
  *   `daemon.json` beside `stateFile`, or `~/.deckhq/daemon.json` when the
  *   caller named no state file.
@@ -397,6 +401,14 @@ export async function startDaemon(opts = {}) {
     // Undefined in production, where `src/core/watch-path.mjs`'s own numbers
     // are the answer.
     studioWatchOptions: opts.studioWatchOptions,
+    // WP-100. Stand-ins for the two things `POST /api/go` asks the machine:
+    // which process a session is in, and where that process's window is.
+    // Undefined in production, and overridable for the reason
+    // `launchTerminal` is, with the same sharp edge — the real thing raises a
+    // window on the developer's desktop, in the middle of a test run.
+    sessionFocus: opts.sessionFocus,
+    sessionPid: opts.sessionPid,
+    describeTerminal: opts.describeTerminal,
     port: null,
   };
   registerState(router, ctx);
@@ -416,6 +428,7 @@ export async function startDaemon(opts = {}) {
   registerReplay(router, ctx);
   registerRates(router, ctx);
   registerStudio(router, ctx);
+  registerGoto(router, ctx);
 
   const server = http.createServer((req, res) => {
     // A missing Host header, or one pointing anywhere but loopback, is not a
