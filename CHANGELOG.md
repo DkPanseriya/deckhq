@@ -53,8 +53,30 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   its own per room, or none), and the floor does not draw that yet. A look file can already carry
   it: `deckhq look export` writes it, `deckhq look import` reads it, and a look file you exported
   before today still imports exactly as it was.
+- **A sub-agent's name tag has two rows.** The first is a small chip that says **Junior**, on a
+  dark background of its own; the second is its name, without the `·jr` that used to follow it. A
+  session of your own keeps one row. The same word is in the tooltip, in the deck's rows and in a
+  crew's list. On the chip the word is 8.7:1 against its background on the default theme, 12.1:1
+  on night shift and 13.2:1 on blueprint.
+- **A sub-agent working on the floor has a laptop.** It sits cross-legged with a small open laptop
+  on the carpet in front of it: the screen is lit green while its transcript is moving, and the
+  lid is shut once it has stopped. This was drawn for a crew of three or more and is now drawn for
+  one or two beside their lead as well, who used to stand. A sub-agent at a real desk or on a sofa
+  sits in the furniture as before.
 
 ### Changed
+
+- **A sub-agent is drawn one agent size smaller than its lead, everywhere.** Agent size has three
+  steps — small, medium, large — and a sub-agent is now one step under the session that started
+  it: beside a large lead it is medium-sized, beside a medium one small. It was 80% beside its
+  lead and 65% in a crew, and on a crowded floor it was not smaller at all, because nobody was
+  drawn under 16 pixels tall. It is 80% in every case now, at small, medium, large and auto. The
+  cost: on the most crowded floors a sub-agent's body is 12.8 pixels tall where its lead's is 16.
+  Its name is still set at 11 pixels. In a crew with room to spare it is larger than it was, 80%
+  where it was 65%.
+- **A crew's type label is never shortened.** `code-reviewer` and `general-purpose` used to be cut
+  to `code.` and `gene.` where the floor was tight. They are written in full and, where there is
+  no room beside the figure, stand off on a thin line to it.
 
 - **A room has a maximum size.** With one, two or three projects open, each room used to be a
   hall — most of the window round a single desk, filled with meeting tables and sofas nobody sat
@@ -188,6 +210,15 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Fixed
 
+- **Sub-agents were working round an empty chair.** When a session finished its turn while its
+  sub-agents were still working, it walked to your office like any session waiting on you, and
+  its sub-agents stayed in its room round a desk with nobody at it. A session with at least one
+  sub-agent still working now stays at its own desk, holding its page rather than typing, and its
+  tooltip says `waiting on 3 juniors`. Nothing else about it changes: it still wears its waiting
+  badge, it is still in the queue and the deck, and the number that needs you still counts it.
+  Benching it still sends it to the lounge, and firing it still takes it off the floor. When its
+  last working sub-agent stops it goes to your office, as it would have. The header's **at desk**
+  counts it while it is there.
 - **Shadows were half size on a HiDPI display.** At a display scaling of 200% every shadow on the
   floor — under furniture, round a room, round the building — reached half as far as it does at
   100%, so the floor looked flatter than it was designed to. A shadow is now the same size on
@@ -447,8 +478,29 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   floors (at least 3:1), and the six room colours on all 90 room floors. Each of the three checks
   is also made to refuse something, and the sentence it gives is checked. `look-io.test.mjs`
   imports a look file written before these settings existed and gets the same floor back.
+- **A sub-agent's size, tag and laptop, and the lead that stays with its crew, are measured.**
+  `subagents.test.mjs` asks the size at small, medium, large and the three auto bands, at nine
+  fits each: a sub-agent is 0.8 of its lead in all of them, and at the smallest a lead is 16.0 px
+  and a sub-agent 12.8 px. `juniors-read.test.mjs` (14 tests) holds that its two rows are one box
+  to the name pass, that no tag lands on a body or another label on three demo floors, that no
+  width is measured twice, and the chip's contrast on every theme. `supervising-lead.test.mjs` (9
+  tests) holds where a waiting lead sits with a working sub-agent, with only finished ones,
+  benched and fired, and compares the needs-you counts for the same lead in both places. Four
+  tests in `junior-occupancy.test.mjs` that took a lead away from its crew by making it wait now
+  take it away by benching it; what they hold about the sub-agents is unchanged.
 
 ### Known gaps
+
+- **Nothing says "Intern".** A sub-agent started as a background task was meant to wear a
+  different word from one started in the foreground. Nothing DeckHQ reads says which is which:
+  the file Claude Code writes beside a sub-agent's transcript has no such field, and the
+  spawning call that does is not reliably linked to it. Every sub-agent says Junior.
+- **In a tight corner a sub-agent's tag stands further off than its name used to.** The tag is a
+  row deeper, so where the floor beside a figure is taken it is placed further away, on a thin
+  line back to its figure, and its name may be cut to four letters.
+- **The Linux goldens have not been rebaked.** Nine pictures changed — `demo` and its four
+  variants, `crew`, `crew@reduced`, `crew-waiting` and `away` — and only the Windows set was baked
+  again. `npm run goldens:check` on Linux will disagree on those nine until it is.
 
 - **With motion on, a busy floor is still drawn in full on every frame.** What was taken out of a
   frame is everything that does not move. The figures do, and each is still drawn stroke by

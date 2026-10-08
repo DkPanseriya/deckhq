@@ -99,9 +99,37 @@ need different responses from you, so they look different and are counted separa
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
 yours. `for_review` is entered automatically and can only be _left_ by you.
 
-A subagent is drawn under a first name with the junior mark after it, `Marta·jr`: the name comes
-from the same pool as everyone else's, is kept in `~/.deckhq/state.json` so it survives a restart,
-and may match a session's name, since the mark says which is which; the panel shows its parent.
+**One exception to "walks to your office".** A session whose turn is over, or whose hand is up,
+stays at its own desk while at least one of its sub-agents is still working. It is not finished:
+it is waiting on them, and they will wake it. It holds its page instead of typing, its tooltip
+says `waiting on 3 juniors`, and everything else about it is as it would be in your office — the
+waiting badge, its place in the queue and the deck, and the number that needs you. Benching it
+still sends it to the lounge and firing it still takes it off the floor. When its last working
+sub-agent stops, it walks to your office.
+
+### Sub-agents
+
+A sub-agent — a helper a session started — is on the floor as a **junior**, and three things say
+so:
+
+- **Its size.** It is drawn one agent size smaller than the session that started it: beside a
+  large lead it is the size of a medium one, beside a medium one the size of a small one. That
+  holds at every agent size, auto included, and on a crowded floor: where a lead's body is at its
+  smallest, 16 pixels, a junior's is 12.8.
+- **Its name tag.** Two rows: a small chip that says `Junior`, then its name. A session of your
+  own has one row. A crew of three or more that share a type carries the type once instead of
+  three names, `Explore ×3`, under the same chip. The tooltip, the deck and a crew's list say
+  `Junior` too.
+- **Where it works.** A junior working beside its lead, or in a crew's arc round its lead's desk,
+  sits on the floor with a small laptop in front of it. The screen is lit green while its
+  transcript is moving and the lid is shut once it has stopped, which is the same thing its cable
+  says by turning grey. A junior at a desk of its own, or on a sofa, sits in the furniture.
+
+Its name comes from the same pool as everyone else's and is kept in `~/.deckhq/state.json`, so it
+survives a restart. It may match a session's name — they are different people, and the chip says
+which is which. Its tag is its parent's with a mark after it, `MK1.2·jr`, and the panel shows its
+parent. Every sub-agent says `Junior`: DeckHQ cannot tell one started as a background task from
+one started in the foreground, so it does not say `Intern` for either.
 
 ## Run the floor, don't just watch it
 
