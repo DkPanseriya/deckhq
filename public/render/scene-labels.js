@@ -718,7 +718,8 @@ export class SceneLabels extends SceneBake {
    */
   _drawRoomPlate(room, camera, layout) {
     const ctx = this.ctx;
-    const plate = this._platePlanFor(room);
+    // The frame's layout carries the lines it was measured from (`scene-frame.js`).
+    const plate = (layout && layout.plate) || this._platePlanFor(room);
     const laid = layout || layoutPlate(ctx, room, plate, camera);
     const k = laid.k;
     const dev = deviceScaleOf(ctx);

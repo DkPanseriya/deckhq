@@ -15,21 +15,23 @@
  * ============================================================================
  * WP-22 follow-up · this file is the Scene's shell: the constructor, the
  * lifecycle (`setState`, `start`/`stop`, `destroy`) and the public API app.js
- * calls. Everything else is eight modules:
+ * calls. Everything else is these modules:
  *
  *   scene-base.js    the instance shape, declared once
  *   scene-lod.js     px-per-unit, and how big a character is drawn at it
  *   scene-camera.js  the fit-to-viewport camera and its pure arithmetic
  *   scene-labels.js  the room plates and the label collision pass
  *   scene-hit.js     anchors, the fixtures, and what is under the pointer
+ *   scene-static.js  the ground under the people, composed once per camera
+ *   scene-frame.js   the frame's layout, and whether a frame is due at all
  *   scene-draw.js    the rebuild, the frame loop and painter order
  *   scene-input.js   every listener the canvas owns, and the zoom API
  *   scene-agent.js   colour, label and glyph — the mini-floor's target
  *
- * The seven that carry methods are one chain of base classes:
+ * The ones that carry methods are one chain of base classes:
  *
- *   SceneBase → SceneLod → SceneCamera → SceneLabels → SceneHit → SceneDraw
- *     → SceneInput → Scene
+ *   SceneBase → SceneLod → SceneCamera → SceneBake → SceneLabels → SceneHit
+ *     → SceneStatic → SceneFrame → SceneDraw → SceneInput → Scene
  *
  * A chain rather than a mixin because the type checker follows a chain: with
  * `Object.assign` onto the prototype, `this._draw()` inside `setState()` is
@@ -60,6 +62,8 @@ export * from './scene-lod.js';
 export * from './scene-camera.js';
 export * from './scene-labels.js';
 export * from './scene-hit.js';
+export * from './scene-static.js';
+export * from './scene-frame.js';
 export * from './scene-draw.js';
 export * from './scene-input.js';
 export * from './scene-agent.js';
@@ -165,6 +169,8 @@ export class Scene extends SceneInput {
   setState(snapshot) {
     const previousAgents = (this._snapshot && this._snapshot.agents) || [];
     this._snapshot = snapshot || { agents: [], projects: [], counts: {} };
+    // A new snapshot is a new layout and a new picture, whatever it says.
+    this._stateGen++;
     const agents = this._snapshot.agents || [];
     this._agentsById = new Map(agents.map((a) => [a.id, a]));
     // WP-89. HOW MANY JUNIORS EACH PARENT HAS, whether or not they are all
@@ -256,6 +262,7 @@ export class Scene extends SceneInput {
    */
   repaint() {
     if (!this._plan) return;
+    this._paintGen++;
     this._bakeFloor();
     // No cross-fade: the old bitmap is the same building in different paint,
     // so fading between them reads as a flicker rather than as a change.
@@ -431,6 +438,7 @@ export class Scene extends SceneInput {
 
   destroy() {
     this._stopLoop();
+    this._dropGroundLayer();
     if (this._resizeDebounceTimer != null) {
       clearTimeout(this._resizeDebounceTimer);
       this._resizeDebounceTimer = null;

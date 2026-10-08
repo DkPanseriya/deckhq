@@ -20,10 +20,17 @@
  *   raster    the same frame forced through with a one-pixel read-back. Headless
  *             Chrome has no GPU here, so this is SOFTWARE raster: an upper bound,
  *             comparable only with itself.
+ *   same      the frame drawn the way it is shipped — the ground from its
+ *             composed layer, the layout from the one kept — against the same
+ *             frame with the ground painted directly and everything measured
+ *             again: how many pixels of the canvas differ at all. 0 is the
+ *             claim that a kept layer is the picture it replaced. `n/a` on a
+ *             revision that has neither.
  *   idle      how many frames the loop draws in two seconds when nothing on the
  *             floor is moving: under `prefers-reduced-motion`, and with motion on
  *             and the clock pinned. `ticks` is how many animation frames the
- *             browser offered in that time.
+ *             browser offered in that time. And how many pixels of the canvas
+ *             left standing differ from the frame drawn straight afterwards.
  *
  * The three floors are the `large` demo population (150 agents, 40 repos), the
  * first 20 of its senior sessions, and the same population twice over (300
@@ -278,6 +285,28 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     if (x > -60 && x < scene._viewW + 60 && y > -60 && y < scene._viewH + 60) visible++;
   }
 
+  // ---- same: the shipped frame against one with nothing kept
+  let differing = null;
+  if ('_useGroundLayer' in scene) {
+    const pixels = () => scene.ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    clock.adoptSnapshotClock({ now: pinnedAt + 12345, nowFixed: true });
+    scene._useGroundLayer = true;
+    for (let i = 0; i < 3; i++) scene._draw();
+    const kept = pixels();
+    const layered = !!(scene._groundLayer && scene._groundLayer.fresh);
+    scene._useGroundLayer = false;
+    scene._dropGroundLayer();
+    if (scene._layoutTape) scene._layoutTape.forget();
+    scene._draw();
+    const plain = pixels();
+    scene._useGroundLayer = true;
+    differing = layered ? 0 : -1;
+    for (let i = 0; layered && i < kept.length; i += 4) {
+      if (kept[i] !== plain[i] || kept[i + 1] !== plain[i + 1] ||
+          kept[i + 2] !== plain[i + 2] || kept[i + 3] !== plain[i + 3]) differing++;
+    }
+  }
+
   // ---- idle: how many frames the loop draws when nothing moves
   clock.adoptSnapshotClock({ now: pinnedAt, nowFixed: true });
   scene._reduced = reducedRun ? true : false;
@@ -296,7 +325,17 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     on = false;
     scene.stop();
     scene._draw = real;
-    return { draws, ticks };
+    // What two seconds of frames not drawn left on the canvas, against the
+    // frame drawn now: a skipped frame has to have been the same picture.
+    const left = scene.ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    scene._draw();
+    const fresh = scene.ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let stale = 0;
+    for (let i = 0; i < left.length; i += 4) {
+      if (left[i] !== fresh[i] || left[i + 1] !== fresh[i + 1] ||
+          left[i + 2] !== fresh[i + 2] || left[i + 3] !== fresh[i + 3]) stale++;
+    }
+    return { draws, ticks, stale };
   };
   const idleResult = await idle();
   scene._reduced = wasReduced;
@@ -326,6 +365,8 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     drawImageLarge: calls.drawImageLarge || 0,
     gradients: (calls.createRadialGradient || 0) + (calls.createLinearGradient || 0),
     fullCanvasGradientFill: calls.fullCanvasGradientFill || 0,
+    differing,
+    idleStale: idleResult.stale,
     idleDraws: idleResult.draws,
     idleTicks: idleResult.ticks,
   };
@@ -420,6 +461,7 @@ try {
 if (JSON_OUT) {
   say(JSON.stringify({ stage: [WIDTH, HEIGHT], dpr: DPR, frames: FRAMES, rows }, null, 2));
 } else {
+  /** @type {Array<[string, (r: any) => any]>} */
   const cols = [
     ['agents', (r) => r.agents],
     ['figures', (r) => r.figures],
@@ -439,6 +481,11 @@ if (JSON_OUT) {
     ['  canvas-sized', (r) => r.drawImageLarge],
     ['gradients built', (r) => r.gradients],
     ['full-canvas gradient fills', (r) => r.fullCanvasGradientFill],
+    [
+      'px differing, kept vs measured again',
+      (r) => (r.differing == null ? 'n/a' : r.differing < 0 ? 'no layer' : r.differing),
+    ],
+    ['px differing, canvas left idle vs drawn now', (r) => r.idleStale],
     ['idle, reduced: draws/ticks in 2 s', (r) => `${r.idleDraws}/${r.idleTicks}`],
     ['idle, clock pinned: draws/ticks', (r) => `${r.idlePinnedDraws}/${r.idlePinnedTicks}`],
   ];
