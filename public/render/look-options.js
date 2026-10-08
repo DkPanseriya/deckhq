@@ -555,20 +555,18 @@ export const ALL_LOOK_PICKERS = Object.freeze(
       path: 'agentSize',
       options: AGENT_SIZES.map((id) => ({ id, label: AGENT_SIZE_LABELS[id] })),
     },
-    // G6a. Appended, so no shipped picker changed its place, and pending until
-    // the lighting and the room-colour painters read them.
+    // G6a. Appended, so no shipped picker changed its place. The light and the
+    // partitions are painted; the room tint is pending until its painter reads it.
     {
       id: 'light',
       label: 'Light',
       path: 'light',
-      pending: true,
       options: LIGHT_MOOD_IDS.map((id) => ({ id, label: LIGHT_MOODS[id].label })),
     },
     {
       id: 'partitions',
       label: 'Partitions',
       path: 'partitions',
-      pending: true,
       options: PARTITION_STYLE_IDS.map((id) => ({ id, label: PARTITION_STYLES[id].label })),
     },
     {

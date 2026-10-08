@@ -527,13 +527,17 @@ test('every picker’s dimensions partition its own options exactly', () => {
   }
 });
 
-test('the six preset cards are there, the current one is checked, and it says so', () => {
+test('the preset cards are there, the current one is checked, and it says so', () => {
   const { draw } = mount();
   const strip = byRole(draw(), 'radiogroup').find((g) => g.getAttribute('aria-label') === 'Style');
   assert.ok(strip, 'the preset strip is gone');
   const cards = byRole(strip, 'radio');
   assert.equal(cards.length, PRESETS.length);
-  assert.equal(cards.length, 6, '§3 promises six starting points');
+  assert.equal(
+    cards.length,
+    8,
+    'the six that shipped, and the two whose light and partitions are painted',
+  );
   const checked = cards.filter((c) => c.getAttribute('aria-checked') === 'true');
   assert.equal(checked.length, 1);
   assert.equal(checked[0].textContent, 'Studio oak');
@@ -857,7 +861,9 @@ test('every option the section can offer is a swatch spec the painter understand
   // The four groups with no picture — the furniture set, the two densities and
   // WP-88c's agent size — are deliberate and say so; what this catches is a NEW
   // picker silently joining them because nobody taught `swatchSpecFor` about it.
-  const without = new Set(['furniture', 'plants', 'props', 'agentSize']);
+  // The light and the partitions joined them when their painters landed: they
+  // are offered as named choices until the Look section draws them a picture.
+  const without = new Set(['furniture', 'plants', 'props', 'agentSize', 'light', 'partitions']);
   for (const picker of LOOK_PICKERS) {
     for (const option of picker.options) {
       const spec = swatchSpecFor(picker, option.id, DEFAULT_LOOK, catalogue);

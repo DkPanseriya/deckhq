@@ -454,7 +454,7 @@ test('the popover holds exactly four controls, read out of the catalogue, and a 
   );
 
   const cards = byRole(group(m.popoverEl, 'Style'), 'radio');
-  assert.equal(cards.length, 6);
+  assert.equal(cards.length, PRESETS.length);
   assert.deepEqual(
     cards.map((b) => b.textContent),
     PRESETS.map((p) => p.label),

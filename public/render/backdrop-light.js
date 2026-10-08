@@ -213,8 +213,8 @@ function noiseTile(amp) {
   if (TILES.has(amp)) return TILES.get(amp);
   let tile = null;
   if (typeof OffscreenCanvas !== 'undefined' || typeof document !== 'undefined') {
-    const canvas = makeCanvas(64, 64);
-    const c = /** @type {any} */ (canvas.getContext('2d'));
+    const canvas = /** @type {any} */ (makeCanvas(64, 64));
+    const c = canvas && typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
     if (c && typeof c.createImageData === 'function') {
       const img = c.createImageData(64, 64);
       const rng = seededRng(`grain:${amp}`);

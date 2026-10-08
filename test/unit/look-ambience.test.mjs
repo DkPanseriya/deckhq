@@ -236,7 +236,7 @@ test('daylight: every material × scheme × theme under every mood and every tin
       }
     }
   }
-  assert.equal(grid.length * LIGHT_MOOD_IDS.length, 486, '162 combinations × three moods');
+  assert.equal(grid.length * LIGHT_MOOD_IDS.length, 648, '216 combinations × three moods');
   report(
     `daylight on the floor — ${measured} measurements; ceiling ${DAYLIGHT_MAX_CONTRAST}:1, ink bar 4.5`,
     LIGHT_MOOD_IDS.map((mood) => [
@@ -336,8 +336,8 @@ test('partitions: the frame is a visible line on every material × scheme × the
       dimmest = resolved;
     }
   }
-  assert.equal(grid.length, 162);
-  report('partitions — 162 combinations, glass and low', [
+  assert.equal(grid.length, 216);
+  report('partitions — 216 combinations, glass and low', [
     ['frame on its floor', `${frame.toFixed(3)}:1  (${frameAt}) — bar ${FRAME_ON_FLOOR_MIN}`],
     ['ink over the frame', `${ink.toFixed(3)}:1  (${inkAt}) — bar ${INK_OVER_FRAME_MIN}`],
     ['glass, against the wall', `${sheet.toFixed(4)}  — never above 0`],
@@ -444,8 +444,8 @@ test('zoned: the six tints, pinned on Colour plan and measured on every room flo
       }
     }
   }
-  assert.equal(combinations, 90, 'five room floors × six schemes × three themes');
-  report('zoned room colours — 90 combinations', [
+  assert.equal(combinations, 126, 'seven room floors × six schemes × three themes');
+  report('zoned room colours — 126 combinations', [
     ['luminance drift', `${drift.toFixed(4)} — ceiling ${ZONE_TINT_MAX_LUMINANCE_DRIFT}`],
     ['closest to crimson', `${crimson.toFixed(0)} — bar ${CRIMSON_MIN_DISTANCE}`],
     ['two neighbouring rooms', `${next.toFixed(1)} apart — bar ${ZONE_TINT_MIN_SEPARATION}`],
@@ -461,10 +461,10 @@ test('zoned: the six tints, pinned on Colour plan and measured on every room flo
   assert.ok(next >= ZONE_TINT_MIN_SEPARATION);
   assert.ok(ink >= 4.5);
   assert.ok(wall <= 1e-9);
-  // WHAT IS REFUSED, AND ONLY THAT: ash boards in the rooms on night shift,
+  // WHAT IS REFUSED, AND ONLY THAT: ash boards and oak plank in the rooms on night shift,
   // under every scheme, where one tint lands too near a colour a figure wears.
-  assert.deepEqual([...new Set(refused)], ['night shift / wide-ash']);
-  assert.equal(refused.length, SCHEME_IDS.length);
+  assert.deepEqual([...new Set(refused)], ['night shift / wide-ash', 'night shift / oak-plank']);
+  assert.equal(refused.length, 2 * SCHEME_IDS.length);
   assert.equal(rules.size, 1);
   assert.match([...rules][0], /from every colour a figure wears/);
 });

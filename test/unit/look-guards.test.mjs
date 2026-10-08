@@ -1,5 +1,5 @@
 /**
- * THE 162, ENUMERATED (WP-88a). `docs/plan/11-LOOK-CONTROL-CENTRE.md` §5.
+ * THE 216, ENUMERATED (WP-88a; 162 until three materials joined the nine). `docs/plan/11-LOOK-CONTROL-CENTRE.md` §5.
  *
  * *"All 162 material × scheme × theme combinations pass `assertThemeContrast`
  * and `assertMaterialDiscipline` unmodified, enumerated by a test rather than
@@ -63,9 +63,9 @@ function report(title, rows) {
   for (const [k, v] of rows) console.log(`    ${k.padEnd(w)}  ${v}`);
 }
 
-test('§5: all 162 material × scheme × theme combinations pass, and the worst of each is printed', () => {
+test('§5: all 216 material × scheme × theme combinations pass, and the worst of each is printed', () => {
   const grid = materialSchemeThemeGrid();
-  assert.equal(grid.length, 162, 'nine materials × six schemes × three themes');
+  assert.equal(grid.length, 216, 'twelve materials × six schemes × three themes');
 
   let worstField = 0;
   let worstFieldAt = '';
@@ -139,7 +139,7 @@ test('§5: all 162 material × scheme × theme combinations pass, and the worst 
     }
   }
 
-  report('§5 the 162, measured', [
+  report('§5 the 216, measured', [
     ['combinations', String(grid.length)],
     [
       'worst field contrast',
@@ -271,7 +271,9 @@ test('G6a: the five new presets pass on every theme, 15 of 15, at the ratios the
     }
   }
   assert.equal(passed, 15);
-  assert.equal(Object.keys(DRAWN).length, ALL_PRESETS.filter((p) => p.pending).length);
+  // Two of the five are offered now that the light and the partitions are painted.
+  assert.equal(ALL_PRESETS.filter((p) => p.pending).length, 3);
+  assert.equal(Object.keys(DRAWN).length, 5);
   report(
     `G6a the five new presets — edge ceiling ${ZONE_EDGE_MAX}, rug band ${RUG_BAND_MIN}–${RUG_BAND_MAX}, ink bar 4.5`,
     rows,

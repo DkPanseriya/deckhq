@@ -1,12 +1,13 @@
 /**
- * THE FIVE FLOORS THE LOOK CENTRE ADDS — WP-88a, §1.a.
+ * THE FLOORS THE LOOK CENTRE ADDS — WP-88a, §1.a.
  *
  * `backdrop-floor.js` already paints four of §1.a's nine materials: the
  * herringbone, the broadloom weave, the ceramic tile and the poured screed. This
- * file is the other five — wide ash boards, terrazzo, polished concrete,
- * loop-pile tile and cork — plus `paintFloorMaterial`, the one dispatcher every
- * caller goes through, so a zone's floor is chosen in one place rather than by a
- * chain of `if`s in the bake.
+ * file is the rest — wide ash boards and oak plank, terrazzo, polished
+ * concrete, loop-pile tile, cork, the fine herringbone and the felt — plus
+ * `paintFloorMaterial`, the one dispatcher every caller goes through, so a
+ * zone's floor is chosen in one place rather than by a chain of `if`s in the
+ * bake.
  *
  * Its own module rather than more of `backdrop-floor.js` for the reason
  * `plan-shapes.js` is its own: that file is near WP-22's 900-line ceiling, and
@@ -30,7 +31,8 @@
 
 import { PALETTE, washedCarpet } from './palette.js';
 import { roundRect, U_DEFAULT } from './backdrop-paint.js';
-import { deviceGrid } from './device-px.js';
+import { deviceGrid, snapPx, snapScaleOf } from './device-px.js';
+import { paintGrain } from './backdrop-light.js';
 import {
   paintCarpet,
   paintCirculation,
@@ -59,12 +61,18 @@ function between(rng, lo, hi) {
 }
 
 /**
- * WIDE ASH BOARDS (§1.a). Planks 9 × 1.6 U on the long axis, ends staggered a
- * third, four tones ±0.025, seam at 0.16.
+ * BOARDS, LAID STRAIGHT (§1.a): wide ash at 9 × 1.6 U and oak plank at
+ * 6 × 0.6 U, ends staggered a third, four tones.
  *
  * The straight-laid companion to the herringbone, and the one floor a project
  * room may have that is not a textile. Laid along the room's LONGER axis,
  * because a plank run across a room's short side reads as decking.
+ *
+ * THE SEAMS ARE ON THE DEVICE GRID in a bake. A row is a whole number of
+ * device pixels deep and its seam is whole pixels wide, so every seam is the
+ * same seam and the rows cannot drift in and out of step with the screen. A
+ * material that asks for a `hairline` gets exactly one device pixel; the wide
+ * ash keeps its designed weight, thinned by what the rounding thickened.
  *
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {number} x @param {number} y @param {number} w @param {number} h
@@ -73,18 +81,23 @@ function between(rng, lo, hi) {
  * @param {{tones:string[], field:string, pattern:any}} material
  */
 export function paintBoards(ctx, x, y, w, h, rng, u, material) {
-  const { plankL, plankW, stagger, seam } = material.pattern;
+  const { plankL, plankW, stagger, seam, hairline } = material.pattern;
   const along = w >= h;
   const L = plankL * u;
-  const W = plankW * u;
+  const k = snapScaleOf(ctx);
+  const grid = deviceGrid(ctx, plankW * u, hairline ? (k ? 1 / k : 0.06 * u) : 0.8);
+  const W = grid.pitch;
   const tones = material.tones;
+  // A seam between two boards used to be stroked by both of them. It is laid
+  // once now, at the strength the two strokes made together.
+  const strength = (hairline ? seam : 1 - (1 - seam) ** 2) * grid.alpha;
+  /** @type {number[][]} */
+  const seams = [];
   ctx.save();
   roundRect(ctx, x, y, w, h, 2);
   ctx.clip();
   ctx.fillStyle = material.field;
   ctx.fillRect(x, y, w, h);
-  ctx.lineWidth = 0.8;
-  ctx.strokeStyle = seamOf(material.tones[0], seam);
   const rows = Math.ceil((along ? h : w) / W) + 1;
   for (let r = 0; r < rows; r++) {
     // A third of a plank per row, wrapping: real board ends never line up, and
@@ -93,17 +106,119 @@ export function paintBoards(ctx, x, y, w, h, rng, u, material) {
     const shift = ((r * stagger) % 1) * L;
     const start = (along ? x : y) - shift - L;
     const end = (along ? x + w : y + h) + L;
+    const row = (along ? y : x) + r * W;
+    seams.push(along ? [x, row, w, grid.width] : [row, y, grid.width, h]);
     for (let p = start; p < end; p += L) {
+      const at = snapPx(ctx, p);
       ctx.fillStyle = tones[Math.floor(rng() * tones.length)];
-      if (along) {
-        ctx.fillRect(p, y + r * W, L, W);
-        ctx.strokeRect(p, y + r * W, L, W);
-      } else {
-        ctx.fillRect(x + r * W, p, W, L);
-        ctx.strokeRect(x + r * W, p, W, L);
+      if (along) ctx.fillRect(at, row, L + 1, W);
+      else ctx.fillRect(row, at, W, L + 1);
+      seams.push(along ? [at, row, grid.width, W] : [row, at, W, grid.width]);
+    }
+  }
+  // One path, one fill: where an end seam crosses a row seam it is still one seam.
+  ctx.fillStyle = seamOf(material.tones[0], Math.round(strength * 1000) / 1000);
+  ctx.beginPath();
+  for (const [sx, sy, sw, sh] of seams) ctx.rect(sx, sy, sw, sh);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * FINE HERRINGBONE: blocks 1.5 × 0.375 U at 45°, four tones, a hairline seam.
+ *
+ * A true herringbone, laid in a frame turned 45°: every row holds a block
+ * lying along it and, in the gap that leaves, the ends of the blocks standing
+ * across it — so each block butts the side of the next and the floor closes
+ * with no filler. The seam is the ground showing between two blocks: one
+ * device pixel in a bake.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {() => number} rng
+ * @param {number} u
+ * @param {{tones:string[], field:string, pattern:any}} material
+ */
+export function paintFineHerringbone(ctx, x, y, w, h, rng, u, material) {
+  const { blockL, blockW, seam } = material.pattern;
+  const W = blockW * u;
+  const n = Math.max(2, Math.round(blockL / blockW));
+  const L = n * W;
+  const k = snapScaleOf(ctx);
+  const gap = k ? 1 / k : 0.06 * u;
+  const tones = material.tones;
+  const R = Math.SQRT1_2;
+  ctx.save();
+  roundRect(ctx, x, y, w, h, 2);
+  ctx.clip();
+  ctx.fillStyle = material.field;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = seamOf(material.field, seam);
+  ctx.fillRect(x, y, w, h);
+  ctx.translate(x, y);
+  ctx.rotate(Math.PI / 4);
+  // The room, in the turned frame: X runs down its diagonal, Y across it.
+  const rows0 = Math.floor((-w * R) / W) - n;
+  const rows1 = Math.ceil((h * R) / W);
+  const cols1 = (w + h) * R;
+  /** Is a block centred here anywhere near the room? */
+  const near = (/** @type {number} */ cx, /** @type {number} */ cy) => {
+    const px = (cx - cy) * R;
+    const py = (cx + cy) * R;
+    return px > -L && px < w + L && py > -L && py < h + L;
+  };
+  for (let j = rows0; j <= rows1; j++) {
+    const first = Math.floor((-L - j * W) / (2 * L)) * 2 * L + j * W;
+    for (let bx = first; bx < cols1; bx += 2 * L) {
+      // Lying along the row…
+      if (near(bx + L / 2, j * W + W / 2)) {
+        ctx.fillStyle = tones[Math.floor(rng() * tones.length)];
+        ctx.fillRect(bx + gap / 2, j * W + gap / 2, L - gap, W - gap);
+      }
+      // …and standing across it, one block-width back.
+      if (near(bx - W / 2, j * W + L / 2)) {
+        ctx.fillStyle = tones[Math.floor(rng() * tones.length)];
+        ctx.fillRect(bx - W + gap / 2, j * W + gap / 2, W - gap, L - gap);
       }
     }
   }
+  ctx.restore();
+}
+
+/**
+ * FELT CARPET: one tone, a seeded grain, and tile joints every 2 U.
+ *
+ * No weave. A weave is lines at a pitch, and lines at a pitch are what beat
+ * against a pixel grid; a grain has no pitch to beat with. The joints are a
+ * hairline grid on the device grid, as faint as a carpet tile's edge is.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {string|null} tint
+ * @param {number} u
+ * @param {{field:string, pattern:any}} material
+ */
+export function paintFelt(ctx, x, y, w, h, tint, u, material) {
+  const { grain, jointU, joint } = material.pattern;
+  const ground = washedCarpet(material.field, tint);
+  ctx.save();
+  roundRect(ctx, x, y, w, h, 2);
+  ctx.clip();
+  ctx.fillStyle = ground;
+  ctx.fillRect(x, y, w, h);
+  paintGrain(ctx, x, y, w, h, Math.max(1, Math.round(grain * 255)));
+  const grid = deviceGrid(ctx, jointU * u, 0.75);
+  const step = grid.pitch;
+  ctx.fillStyle = seamOf(material.field, joint);
+  if (grid.alpha !== 1) ctx.globalAlpha = grid.alpha;
+  ctx.beginPath();
+  for (let gy = Math.ceil(y / step) * step; gy <= y + h; gy += step) {
+    ctx.rect(x, grid.at(gy) - grid.width / 2, w, grid.width);
+  }
+  for (let gx = Math.ceil(x / step) * step; gx <= x + w; gx += step) {
+    ctx.rect(grid.at(gx) - grid.width / 2, y, grid.width, h);
+  }
+  ctx.fill();
   ctx.restore();
 }
 
@@ -324,6 +439,10 @@ export function paintFloorMaterial(ctx, id, x, y, w, h, rng, tint = null, u = U_
       return paintCirculation(ctx, x, y, w, h);
     case 'boards':
       return paintBoards(ctx, x, y, w, h, rng, u, material);
+    case 'fine-herringbone':
+      return paintFineHerringbone(ctx, x, y, w, h, rng, u, material);
+    case 'felt':
+      return paintFelt(ctx, x, y, w, h, tint, u, material);
     case 'terrazzo':
       return paintTerrazzo(ctx, x, y, w, h, rng, u, material);
     case 'concrete':
