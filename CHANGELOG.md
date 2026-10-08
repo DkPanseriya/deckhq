@@ -404,6 +404,7 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
   The drawing calls for the figures themselves are unchanged — about 130 a figure on a floor
   drawn small — and are now nearly all of what a frame is.
+
 - **Every piece of furniture is photographed on a sheet of its own.** `furniture@2x` is a new
   capture: 23 small scenes holding all 50 kinds of prop, drawn twice — at the size of an ordinary
   display and at the size of a HiDPI one — by the same code that draws the floor. The quiet rules
