@@ -137,7 +137,8 @@ export function planFrameLabels(ctx, view) {
   const obstacles = [];
   for (const rec of records) {
     const s = worldToScreen(rec, camera);
-    const box = characterBox(s.x, s.y, charU);
+    // The body as it is DRAWN: a junior's is a ladder step smaller (WP-99).
+    const box = characterBox(s.x, s.y, view.uOf ? view.uOf(rec) : charU);
     obstacles.push({ id: `body:${rec.id}`, ...box, pin: true });
     // WP-89 · a crew parent's raised hand and its chip are pinned too: §4, a
     // junior's name is never drawn over either. Measured generously — an

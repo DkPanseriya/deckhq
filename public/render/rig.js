@@ -89,7 +89,6 @@ import {
   drawRigCrown,
   drawRigDome,
   drawRigFarArm,
-  drawRigLaptop,
   drawRigNearArm,
   drawRigVisor,
   haloRimWidth,
@@ -98,6 +97,7 @@ import {
 import { drawGlow, managerIdentity, rigIdentity } from './rig-traits.js';
 import { drawCueBehind, drawPropFront, drawIcon, drawDots, drawStallDots } from './rig-props.js';
 import { toolIconKind, drawToolBubble, drawToolIcon, toolBubbleText } from './rig-bubble.js';
+import { drawFloorLaptop } from './rig-laptop.js';
 
 export * from './rig-metrics.js';
 export * from './rig-pose.js';
@@ -451,7 +451,8 @@ export const REST_LIFE = Object.freeze({
  *   the barrel's fill or the visor's tint: the state owns both.
  *   `seat` (WP-97): `'desk'`, `'sofa'` or `'floor'` — the figure is drawn
  *   sitting there, its feet point still `(x, y)`. Omitted, or while walking,
- *   it stands. `laptop` is how open a `'floor'` sitter's laptop lid is, 0..1.
+ *   it stands. `laptop` is how open a `'floor'` sitter's laptop lid is, 0..1
+ *   (`rig-laptop.js`); omitted, it is open.
  */
 export function drawCharacter(ctx, pose, opts) {
   // WP-87 · what this figure is doing beyond its pose, from `life.js`. A caller
@@ -521,13 +522,12 @@ export function drawCharacter(ctx, pose, opts) {
   // BASE_U, so it is scaled into this zoom exactly as it always was.
   const by = oy + (still ? 0 : pose.bob * (u / BASE_U));
   rigFrame(ox, by, h);
-  rigSetup(k, id, tints, h, phase, lod === 0, life, pose, opts.laptop ?? null);
+  rigSetup(k, id, tints, h, phase, lod === 0, life, pose);
 
   drawFigureRim(ctx, haloRimWidth(u));
   drawRigBase(ctx);
   drawRigFarArm(ctx);
   drawRigBarrel(ctx);
-  drawRigLaptop(ctx);
 
   if (pose.prop === 'cue') drawCueBehind(ctx, u);
 
@@ -544,6 +544,9 @@ export function drawCharacter(ctx, pose, opts) {
   drawRigNearArm(ctx);
   drawRigCard(ctx);
   drawRigCrown(ctx);
+  // WP-99 · a figure on the floor has its laptop on the carpet in front of it:
+  // nearer the reader than its crossed legs, so it is laid over them.
+  if (k.seat === 'floor') drawFloorLaptop(ctx, ox, oy, u, opts.laptop, lod);
 
   if (pose.prop) drawPropFront(ctx, pose.prop, u);
 

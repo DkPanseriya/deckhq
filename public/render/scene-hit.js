@@ -120,12 +120,16 @@ export class SceneHit extends SceneLabels {
    */
   anchorFor(target, id) {
     if (!this._plan) return null;
+    const record = target === 'agent' && id ? this._runtime.get(String(id)) : null;
     return computeAnchor(target, id, {
       plan: this._plan,
       camera: this._cameraParams(),
       scale: this._scale(),
-      charScale: this._characterScale(),
-      record: target === 'agent' && id ? this._runtime.get(String(id)) : null,
+      // The box a figure is DRAWN in: a junior's is a ladder step smaller.
+      charScale: this._figureScale(
+        record ? this._agentsById.get(String(id)) || record.agent : null,
+      ),
+      record,
     });
   }
 

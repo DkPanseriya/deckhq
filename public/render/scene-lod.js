@@ -12,7 +12,7 @@
  * and `scene-math.test.mjs` import exactly what they imported before.
  */
 
-import { registerBodyScale } from './plan-scale.js';
+import { AGENT_SCALES, registerBodyScale } from './plan-scale.js';
 import { BODY_HEIGHT_U, LEGIBILITY_MIN_PX } from './rig.js';
 import { RIG_DETAIL_MIN_PX } from './rig-metrics.js';
 import { rigHeight } from './rig-pose.js';
@@ -93,20 +93,39 @@ export function characterScaleFor(worldScale) {
 }
 
 /**
- * How much smaller a junior is drawn than the senior it stands beside (WP-41).
+ * A JUNIOR IS ONE STEP DOWN THE AGENT-SIZE LADDER FROM ITS LEAD (WP-99).
  *
- * `08` B7 and `docs/plan/04` §4 both ask for "smaller figures beside the
- * parent", and this is that number. Smaller than this and the junior stops
- * reading as a person at a tight fit scale; larger and it reads as a second
- * senior standing oddly close.
+ * The ladder is `AGENT_SCALES` — small 0.8, medium 1, large 1.25 — and its
+ * steps are one ratio: small over medium is medium over large. That ratio is
+ * this number, so a junior beside a `large` lead is the size of a `medium`
+ * one, beside a `medium` lead the size of a `small` one, and beside a `small`
+ * lead one step under the ladder's foot. It is derived, not typed, so the
+ * ladder cannot move without it.
  *
- * It goes through `characterScaleFor` like every other body, so §96's
- * legibility floor still holds: a junior is 80% of its parent right up to the
- * point where 80% would put it under 16 px, and from there down they are the
- * same size, which is honest — below that there is no room to say "smaller"
- * and still say "person".
+ * ONE NUMBER, AND IT IS APPLIED TO WHAT THE LEAD IS ACTUALLY DRAWN AT. There
+ * used to be two — 0.80 beside a parent (WP-41) and 0.65 in a formation
+ * (WP-89) — and both went through `characterScaleFor`, which holds a body at
+ * 16 px: on a floor at the legibility floor, which is where a crowded floor
+ * sits, a junior and its lead came out the same size and nothing but the name
+ * said which was which. {@link juniorScaleFor} takes the step AFTER the lead's
+ * own floor, so the difference is the same step at every fit and at every
+ * agent-size setting, `auto` included.
+ *
+ * WHAT THAT COSTS, MEASURED: at the legibility floor a lead's body is 16 px
+ * and a junior's is 12.8 px. §6.2's 16 px is a floor on a SESSION's body; a
+ * junior's is one step under it and no lower, and its name is still set at
+ * 11 px like everybody's (`labelFontSize`).
  */
-export const JUNIOR_SCALE = 0.8;
+export const JUNIOR_SCALE = AGENT_SCALES.small / AGENT_SCALES.medium;
+
+/**
+ * The scale a junior is drawn at, given the scale the FLOOR is drawn at: its
+ * lead's own drawn scale, one ladder step down.
+ * @param {number} worldScale px per plan unit
+ */
+export function juniorScaleFor(worldScale) {
+  return characterScaleFor(worldScale) * JUNIOR_SCALE;
+}
 
 /**
  * THE LEVEL OF DETAIL IS A FACT ABOUT THE FIGURE, NOT THE FLOOR (audit F1).
@@ -154,6 +173,19 @@ export class SceneLod extends SceneBase {
    */
   _characterScale() {
     return characterScaleFor(this._scale());
+  }
+
+  /**
+   * The px-per-unit THIS figure is drawn at: a junior's is one ladder step
+   * under everybody else's ({@link juniorScaleFor}). One method, because the
+   * body, its name, its badge, its halo, its cable's end and the box a coach
+   * mark points at all have to be asked the same question.
+   * @param {{subagent?:boolean}|null|undefined} agent
+   */
+  _figureScale(agent) {
+    return agent && agent.subagent === true
+      ? juniorScaleFor(this._scale())
+      : this._characterScale();
   }
 
   /** This frame's level of detail: `lodForFigure` of a senior's drawn height. */

@@ -223,8 +223,8 @@ let _frame = 0; // which walk frame
 let _flicker = 0; // visor flash on a real tool call, 0..1
 let _power = 0; // power-down, 0 lit .. 1 dark
 let _card = 1; // how open the held page is, 0 edge-on .. 1 flat
-// WP-97 · sitting. The mitts in local units (the pose's, plus the typing tap),
-// one leg's slab, and the laptop lid a crew member holds on its knees.
+// WP-97 · sitting. The mitts in local units (the pose's, plus the typing tap)
+// and one leg's slab. A floor sitter's laptop is `rig-laptop.js`'s (WP-99).
 let _aRx = 0,
   _aRy = 0,
   _aLx = 0,
@@ -236,9 +236,6 @@ let _fx = 0,
   _fa = 0,
   _tx = 0,
   _ty = 0;
-let _lid = 1;
-/** A laptop's shell, seen from behind the lid. */
-const LAPTOP_SHELL = '#D6DAE0';
 
 /**
  * Resolve one character's geometry into the scratch above.
@@ -252,10 +249,8 @@ const LAPTOP_SHELL = '#D6DAE0';
  *   — the manager's avatar, a caller that predates it — every term rests.
  * @param {import('./clips.js').Pose|null} [pose] WP-97: the clip's pose, read
  *   for the typing tap on a seated figure and for nothing else.
- * @param {number|null} [lid] WP-97: how open the laptop on a crew member's
- *   knees is, 0 shut .. 1 open. Omitted, it is open.
  */
-export function rigSetup(k, id, tints, h, phase, dim, life, pose, lid) {
+export function rigSetup(k, id, tints, h, phase, dim, life, pose) {
   _flicker = life ? life.flicker : 0;
   _power = life ? life.power : 0;
   _card = life ? life.card : 1;
@@ -279,7 +274,6 @@ export function rigSetup(k, id, tints, h, phase, dim, life, pose, lid) {
   _droop = tints.dead ? (_power > 0 ? _power : 1) : k.lean > 0.18 ? 0.7 : 0;
   _phase = phase || 0;
   _frame = k.walk ? walkFrame(phase * 2) : 0;
-  _lid = typeof lid === 'number' && Number.isFinite(lid) ? Math.max(0, Math.min(1, lid)) : 1;
   // THE TYPING TAP AND THE WAVE (WP-97). The rig never read the clip's arms: a
   // standing B holds its state pose, and `type` and `hand_raise` reached it
   // only as a bob and a floor ring. A seated figure's hands are the only thing
@@ -533,32 +527,6 @@ export function drawRigBase(ctx) {
     lRoundRect(ctx, _bw * 0.24, _k.by * 0.22, _bw * 0.34, _k.by * 0.4, _bw * 0.08, 0);
     ctx.fill();
   }
-}
-
-/**
- * WP-97 · the laptop on a crew member's knees: the base across the lap and,
- * while the junior's transcript is moving, the back of the lid standing up
- * from it. It folds exactly as WP-89's floor laptop did — `_lid` is the same
- * number — and it is drawn over the barrel and under the near arm, so the
- * mitt lands on the keys.
- * @param {CanvasRenderingContext2D} ctx
- */
-export function drawRigLaptop(ctx) {
-  if (_k.seat !== 'floor') return;
-  const top = _k.by + 0.06;
-  const lid = 0.19 * _lid;
-  if (lid > 0.01) {
-    // The back of the lid, in a laptop's own silver rather than the monitor's
-    // dark: at a crew member's 20 px, dark on a dark-green lap is one lump.
-    lRoundRect(ctx, 0, top + lid / 2, 0.42, lid, 0.03, 0);
-    paint(ctx, LAPTOP_SHELL);
-    // The screen's own light, spilling over the top edge toward the reader.
-    lRoundRect(ctx, 0, top + lid - 0.014, 0.32, 0.024, 0.012, 0);
-    ctx.fillStyle = PALETTE.monitorScreenGlow;
-    ctx.fill();
-  }
-  lRoundRect(ctx, 0, top - 0.02, 0.48, 0.055, 0.025, 0);
-  paint(ctx, LAPTOP_SHELL);
 }
 
 /** The far arm: the first thing to go below `RIG_DETAIL_MIN_PX`. */
