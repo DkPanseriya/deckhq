@@ -18,7 +18,7 @@
 import { PALETTE } from './palette.js';
 import { shade } from './themes.js';
 import { drawManagerFigure } from './rig.js';
-import { roundRect, drawContactShadow, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
+import { roundRect, contactUnder, unturn, TABLE_EDGE_U } from './backdrop-paint.js';
 import { LOOK, setFrame, setRadius } from './look-derive.js';
 
 /**
@@ -374,7 +374,7 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // so they share one painter.
       //
       // Drawn ~14% larger than its own footprint, the same deliberate
-      // overdraw `drawContactShadow` already does for every prop below:
+      // overdraw the contact pass already does for every prop below:
       // the note back was that this read "too small to be real furniture"
       // at the w/h it is actually given (as little as 3.2 x 1.1 U for the
       // office's launcher shelf). Placement/anchoring use prop.w/h
@@ -512,7 +512,7 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // reads as a painted rectangle. At reception size (the office rug is the
       // largest single surface in the building) a flat fill dominated the room
       // more than the furniture on it did.
-      drawContactShadow(ctx, -w / 2, -h / 2, w, h);
+      contactUnder(ctx, -w / 2, -h / 2, w, h, 5, false, u);
       // THE WOOL AND THE TASK RUG ARE TWO TEXTILES (§3.1, owner decision 2), and
       // the prop says which. The reception's is `rugCream` — a slate wool, *"the
       // one textile on this floor with a hue of its own, and the thing that
@@ -562,6 +562,10 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
     case 'rug_round': {
       // The round rug takes the same tone and the same pattern as its
       // rectangular companion in the same role; its bands are rings.
+      {
+        const d = Math.min(w, h);
+        contactUnder(ctx, -d / 2, -d / 2, d, d, d / 2, false, u);
+      }
 
       // Same border-inset language as `rug`, circular — the round
       // companion VISUAL-SPEC §6 already lists ("rugs (rectangular and

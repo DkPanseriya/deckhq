@@ -1,5 +1,5 @@
 /**
- * THE NINE FLOOR MATERIALS, AND THE FOUR ZONES THEY ARE CHOSEN FOR — WP-88a.
+ * THE TWELVE FLOOR MATERIALS, AND THE FOUR ZONES THEY ARE CHOSEN FOR — WP-88a.
  * `docs/plan/11-LOOK-CONTROL-CENTRE.md` §1.a.
  *
  * Split out of `look-options.js` unchanged, for the reason `plan-shapes.js` was
@@ -48,7 +48,12 @@ export const ZONE_ADJACENCY = Object.freeze([
 // ---------------------------------------------------------- floor materials
 
 /**
- * NINE PAINTERS, EACH A PATTERN RULE IN PLAN UNITS (§1.a).
+ * TWELVE MATERIALS, EACH A PATTERN RULE IN PLAN UNITS (§1.a).
+ *
+ * Nine shipped first. The last three are laid at the scale of a real floor —
+ * a 180 mm board, a 110 mm parquet block, a felt with no weave to it — and
+ * their seams are one device pixel, which a bake can promise now that it knows
+ * the scale it is drawn at.
  *
  * A unit is about 0.30 m, so every number in `pattern` is a claim about a real
  * floor anybody can check against a real building — and stating them in units
@@ -198,6 +203,46 @@ export const FLOOR_MATERIALS = Object.freeze(
           tones: (c) => [c],
           specks: (c) => [shade(c, -0.16)],
         },
+        {
+          id: 'oak-plank',
+          label: 'Oak plank',
+          zones: ['office', 'rooms', 'lounge'],
+          painter: 'boards',
+          source: 'wood',
+          // Boards 6 x 0.6 U on the long axis, ends staggered a third, four
+          // tones +/-0.025, a hairline seam at the board seam's own alpha.
+          pattern: { plankL: 6, plankW: 0.6, stagger: 1 / 3, seam: 0.2, hairline: 1 },
+          from: (f) => mix(f.wood, f.tile, 0.2),
+          tones: (c) => [c, shade(c, -0.025), shade(c, 0.025), shade(c, 0.008)],
+          specks: () => [],
+        },
+        {
+          id: 'fine-herringbone',
+          label: 'Fine herringbone',
+          zones: ['office', 'lounge'],
+          painter: 'fine-herringbone',
+          source: 'wood',
+          // Blocks 1.5 x 0.375 U at 45 degrees, four tones +/-0.03, a hairline
+          // seam. A true herringbone: every block butts the side of the next.
+          pattern: { blockL: 1.5, blockW: 0.375, seam: 0.2 },
+          from: (f) => f.wood,
+          tones: (c) => [c, shade(c, -0.03), shade(c, 0.03), shade(c, -0.01)],
+          specks: () => [],
+        },
+        {
+          id: 'felt-carpet',
+          label: 'Felt carpet',
+          zones: ['office', 'rooms'],
+          painter: 'felt',
+          source: 'carpet',
+          // No lines at all: a seeded grain at +/-0.012, and tile joints every
+          // 2 U at 0.05. Nothing periodic finer than a tile, so nothing to beat
+          // against the pixel grid.
+          pattern: { grain: 0.012, jointU: 2, joint: 0.05 },
+          from: (f) => f.carpet,
+          tones: (c) => [c],
+          specks: () => [],
+        },
       ].map((m) => [m.id, Object.freeze({ ...m, zones: Object.freeze(m.zones) })]),
     )
   ),
@@ -207,8 +252,8 @@ export const FLOOR_MATERIALS = Object.freeze(
 export const FLOOR_MATERIAL_IDS = Object.freeze(Object.keys(FLOOR_MATERIALS));
 
 /**
- * §1.a's zone column, inverted: what each picker may offer. Office 5, corridor
- * 4, rooms 5, lounge 6 — **no broadloom in the lounge**, because a lounge is a
+ * §1.a's zone column, inverted: what each picker may offer. Office 8, corridor
+ * 4, rooms 7, lounge 8 — **no carpet in the lounge**, because a lounge is a
  * hard floor with rugs on it.
  * @type {Readonly<Record<string, ReadonlyArray<string>>>}
  */

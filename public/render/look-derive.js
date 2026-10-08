@@ -68,10 +68,13 @@ import {
 } from './look-options.js';
 import {
   BASEBOARD_SHADE,
+  DAYLIGHT_FALLOFF,
+  DAYLIGHT_FALLOFF_ALPHA,
   GLASS_FILL_ALPHA,
   GLASS_FRAME_MIX,
   GLASS_TINT,
   GLASS_TINT_MIX,
+  WINDOW_PANE_MIX,
   ZONE_ACCENT_LIGHTNESS,
   ZONE_ACCENT_SATURATION,
   ZONE_TINT_LIGHTNESS,
@@ -301,6 +304,8 @@ export function lightFor(id, floor) {
     patch: mood.patch,
     alpha,
     layer: layerOf(mood.patch, alpha),
+    // Where the room falls away from its windows: the same on every mood.
+    falloff: layerOf(DAYLIGHT_FALLOFF, DAYLIGHT_FALLOFF_ALPHA),
   };
 }
 
@@ -324,6 +329,8 @@ export function partitionsFor(id, floor) {
     glassFrame: mix(floor.ink, floor.partition, GLASS_FRAME_MIX),
     glassTint,
     glassFill: layerOf(glassTint, GLASS_FILL_ALPHA),
+    // A pane in the outside wall: opaque, and held under the wall it is set in.
+    glassPane: underWall(mix(floor.wall, glassTint, WINDOW_PANE_MIX), floor.wall),
   };
 }
 
@@ -536,7 +543,7 @@ export function resolveLook(look, theme) {
     },
     lounge: { bays: LOUNGE_KIT_BAYS.filter((b) => on[b]), on },
     agentSize: l.agentSize,
-    // G6a. Carried and measured; no painter reads these three yet.
+    // The light and the partitions are painted; the room tint is carried.
     light: lightFor(l.light, floor),
     partitions: partitionsFor(l.partitions, floor),
     roomTint: roomTintFor(l.roomTint, zones.rooms.field, floor),

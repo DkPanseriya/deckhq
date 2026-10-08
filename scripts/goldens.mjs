@@ -337,6 +337,12 @@ const CAPTURES = [
   { name: 'look-bar', population: 'three', theme: 'default', press: 'L' },
   { name: 'three@large', population: 'three', theme: 'default', query: 'scale=large' },
   { name: 'demo@small', population: 'demo', theme: 'default', query: 'scale=small' },
+  // THE TWO OTHER WAYS OF DIVIDING A FLOOR, each through the style that asks
+  // for it: glass under noon light, and low dividers under morning light, whose
+  // longer shadows fall at a different angle. A partition style is paint and so
+  // is a light, and the only thing that can check a painter is a picture.
+  { name: 'three@glass', population: 'three', theme: 'default', query: 'look=daylight-studio' },
+  { name: 'three@low', population: 'three', theme: 'default', query: 'look=nordic-wool' },
   // WP-89 · THE CREW, TWICE, AND THE PAIR IS THE POINT.
   //
   // `crew` is the formation with motion ON and `?phase=` pinned at `CREW_PHASE`:

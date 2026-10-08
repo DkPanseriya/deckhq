@@ -31,16 +31,28 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A one-time pointer to the Look button.** The first time you open a version that has it, one
   line under the button says "Change the floor, the furniture and the agent size here." Press
   **Got it**, or just use the button, and it does not come back.
-- **Five more styles are ready, and three new choices behind them — not in the picker yet.**
-  Daylight studio, Graphite loft, Nordic wool, Colour plan and Walnut executive are designed and
-  measured on all three themes. Each also names a **light** (morning, noon or evening), what
-  stands **between rooms** (solid walls, glass, or low dividers) and how much **room colour** a
-  project's floor carries (subtle, a calm colour of its own per room, or none). Nothing on your
-  floor changes today: the floor is still drawn with noon light, solid walls and the subtle wash it
-  always had, and the Style picker still shows six. The five styles and the three controls arrive
-  in the picker with the next step, once the floor can draw them. Until then a look file can
-  already carry them: `deckhq look export` writes the three new settings, `deckhq look import`
-  reads them, and a look file you exported before today still imports exactly as it was.
+- **Light: morning, noon or evening.** Under Look → Advanced. It turns the one light on the floor
+  — 30°, 45° or 60°, always falling down and to the right — makes every shadow longer in the
+  morning and longer still in the evening, and colours the daylight on the floor cool, warm or
+  amber. Noon is the default.
+- **Partitions: solid, glass or low.** Under Look → Advanced. It changes what stands between two
+  rooms. Solid is a band that casts like a wall. Glass is a sheet between two thin dark frame lines
+  with a post every few units, and casts nothing. Low is a waist-high divider with rounded ends
+  that stops short of each corner. The building's outside wall does not change.
+- **Two more styles: Daylight studio and Nordic wool.** Daylight studio is pale ash under noon
+  light with glass between the rooms. Nordic wool is cool ash, cork and broadloom with low
+  dividers under morning light. The Style picker shows eight. `?look=daylight-studio` and
+  `?look=nordic-wool` open the floor in them.
+- **Three more floors: oak plank, fine herringbone and felt carpet.** In the floor pickers under
+  Advanced — oak plank for the office, the rooms and the lounge, fine herringbone for the office
+  and the lounge, felt for the office and the rooms. They are laid at the size of a real floor: a
+  board about 18 cm wide, a parquet block about 11 cm, and a felt with a fine grain and no weave.
+  Their seams are exactly one pixel of your screen wide.
+- **Three more styles and one more choice are designed and not in the picker yet.** Graphite loft,
+  Colour plan and Walnut executive each ask for a **room colour** setting (subtle, a calm colour of
+  its own per room, or none), and the floor does not draw that yet. A look file can already carry
+  it: `deckhq look export` writes it, `deckhq look import` reads it, and a look file you exported
+  before today still imports exactly as it was.
 
 ### Changed
 
@@ -117,6 +129,31 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   of the picture to one pixel of your screen, at any display scaling. While you zoom or drag the
   window the floor is stretched for a moment and is redrawn sharp about a sixth of a second after
   you stop. Walls, carpet weave and tile grout sit on whole pixels instead of straddling two.
+- **The floor is lit.** Every floor looks different after this update, in every style and theme.
+  - **Windows.** The top and left outside walls are glazed, pane by pane, because that is where
+    the light comes from. Each pane lays a faint patch of daylight on the floor of the room behind
+    it, at most three to a room and never over the corner where the room's name is. A room with no
+    outside wall gets one skylight patch instead. A room with the lights off keeps its daylight at
+    half strength.
+  - **Rooms fall away from their windows.** The far side of a room is slightly darker than the
+    side by the glass: at most 1.10:1 against the bare floor, and a name on it measures 7.08:1 or
+    better on the default theme.
+  - **Shade at the foot of the walls.** A soft ramp along all four walls of a room, deeper under
+    the two the light comes over, in place of the two wide bands there were.
+  - **No more ovals under furniture.** The oval shadow along the bottom of every desk, rug and
+    plant is gone. A piece of furniture now darkens the floor in its own outline, straight
+    underneath it, and a tall one — a desk, a sofa, a bookcase — also throws a short, crisp shadow
+    in the direction of the light.
+  - **Doors stand open.** The wall stops at a doorway, and the door is drawn as a leaf standing
+    30° open with a faint arc for its swing, where there was a dashed quarter-circle over an
+    unbroken wall.
+  - **Baseboards and frame lines.** A one-pixel line of the floor's own colour, a step darker,
+    runs along the foot of the full-height walls, and the outside wall carries a thin dark line on
+    both faces.
+  - **The partition between two rooms is wider and casts a shadow.** It is about 9 cm on the plan
+    where it was about 5, and a wall shared by two rooms is drawn once instead of twice.
+- **Wide ash boards have seams on whole pixels.** Each seam is drawn once, on the pixel grid, where
+  it was drawn twice and could fall between two rows.
 - **Names and room signs have a thinner outline.** The pale outline round a name was about a
   quarter of the letter's height, which filled in the openings of `a`, `e` and `s` at small sizes.
   It is 0.16 of the letter's height now, and never thinner than a pixel and a half of your screen.

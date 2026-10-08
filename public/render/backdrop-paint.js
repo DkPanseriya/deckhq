@@ -4,7 +4,7 @@
  *
  * Split out of `backdrop.js` unchanged: the seeded RNG that makes a plank
  * pattern deterministic, the offscreen canvas factory, the rounded rect, the
- * two-pass shadow, and the contact shadow every furniture item carries
+ * two-pass shadow, and the contact every furniture item makes with the floor
  * (docs/03-VISUAL-SPEC.md §6).
  *
  * Canvas APIs are used only inside these functions, never at module scope, so
@@ -13,6 +13,7 @@
 
 import { LIGHT_DIR, PALETTE } from './palette.js';
 import { deviceScaleOf } from './device-px.js';
+import { LOOK } from './look-derive.js';
 
 // ---- local colour tokens ------------------------------------------------
 // palette.js is owned by another engineer on this build. A colour this file
@@ -41,13 +42,6 @@ export const LAMP_GLOW = 'rgba(255, 214, 140, 0.4)';
  * does not scale.
  */
 export const U_DEFAULT = 14;
-
-/**
- * Deepest a prop's contact shadow may fall, in baked pixels. Depth says how
- * thick a thing is; without a ceiling, a very large flat prop cast a shadow
- * the size of a room. Roughly a rug's thickness at `U_DEFAULT`.
- */
-export const CONTACT_SHADOW_MAX_PX = 10;
 
 /**
  * How far past its own rect a prop's paint may reach, in plan units — foliage,
@@ -103,47 +97,78 @@ export function unturn(ctx, prop) {
 
 // ---- how far each thing on the floor is lifted off it ---------------------
 //
-// Every one of these is a distance ALONG `LIGHT_DIR` in baked pixels, never a
-// drop down the page, and that is the whole of WP-72's first acceptance
-// criterion: an offset stated as a length on the ray cannot pick its own
-// direction, so no shadow on this floor can point anywhere but down-right.
-//
-// The three that existed before this package are stated as `n * √2` so their
-// components come out at exactly the `(n, n)` the floor already shipped with —
-// a contact shadow at (2, 2), a wall at (2, 2), a prop at (3, 3). The floor
-// gains a horizontal component and loses none of its vertical one.
+// EVERY LENGTH HERE IS IN PLAN UNITS, and is a distance ALONG THE LIGHT, never
+// a drop down the page. A unit is about 0.30 m, so each row is a claim about a
+// real object's shadow; and a length on the ray cannot pick its own direction,
+// so no shadow on this floor can point anywhere but where the light travels.
+// The `*_PX` names below are the same lengths on the 14 px design grid, kept
+// for the callers that work in it.
 
-/** A prop's two-pass drop shadow: 3 px down, 3 px right. */
-export const PROP_SHADOW_DIST_PX = 3 * Math.SQRT2;
-/** The dark line where a prop meets the floor. */
-export const CONTACT_SHADOW_DIST_PX = 2 * Math.SQRT2;
-/** A full-height wall's shadow onto the floor beside it. */
-export const WALL_SHADOW_DIST_PX = 2 * Math.SQRT2;
+/**
+ * @type {Readonly<{propCast:number, wallCast:number, slab:number,
+ *   slabBlur:number, slabEdge:number, envelope:number, envelopeBlur:number}>}
+ */
+export const SHADOW_U = Object.freeze({
+  /** A tall prop's cast: about nine centimetres of shadow at noon. */
+  propCast: 0.3,
+  /** A full-height wall's cast onto the floor beside it. */
+  wallCast: 0.22,
+  /** A room slab's shadow onto the screed round it, and how soft it is. */
+  slab: 5 / 14,
+  slabBlur: 10 / 14,
+  /** The slab's own rim, seen from above. */
+  slabEdge: 6 / 14,
+  /** The building's shadow onto the studio ground: 8 px down, 8 px right at noon. */
+  envelope: (8 * Math.SQRT2) / 14,
+  envelopeBlur: 26 / 14,
+});
+
+/** A cast is this soft: its blur, as a share of its own length. */
+export const CAST_BLUR_RATIO = 0.55;
+
+/**
+ * WHERE A THING MEETS THE FLOOR.
+ *
+ * Contact is the object's own outline, a little larger and a little blurred,
+ * straight underneath — never an oval laid along its foot. `CONTACT_GROW_U` is
+ * how far past the outline it reaches and `CONTACT_BLUR_U` how soft its edge
+ * is. A painter's path cannot be grown, so where the outline is the painter's
+ * own (`grounded`) the reach is spent as blur; where it is a plain footprint
+ * (`contactUnder`) it is grown for real.
+ */
+export const CONTACT_GROW_U = 0.06;
+export const CONTACT_BLUR_U = 0.12;
+/** A short thing presses on the floor less: its contact, as a share of a tall one's. */
+export const SHORT_CONTACT_ALPHA = 0.8;
+
+/** A tall prop's cast at noon, on the design grid. */
+export const PROP_SHADOW_DIST_PX = SHADOW_U.propCast * U_DEFAULT;
+/** A full-height wall's cast at noon, on the design grid. */
+export const WALL_SHADOW_DIST_PX = SHADOW_U.wallCast * U_DEFAULT;
 
 /**
  * A ROOM IS A SLAB, AND THESE ARE ITS TWO NUMBERS (WP-72).
  *
- * `ROOM_SLAB_EDGE_PX` is the rim's width, in baked pixels at `U_DEFAULT`. It
- * has to survive the fit: the floor is drawn at between `MIN_SCALE` (7.5) and
- * `CHAR_MAX_PX_PER_UNIT` px per unit, so a rim of `n` baked pixels is
+ * `ROOM_SLAB_EDGE_PX` is the rim's width on the design grid. It has to survive
+ * the fit: the floor is drawn at between `MIN_SCALE` (7.5) and
+ * `CHAR_MAX_PX_PER_UNIT` px per unit, so a rim of `n` design pixels is
  * `n / U_DEFAULT * scale` px on screen, and 6 gives 3.2 px at the very
- * smallest a floor is ever drawn — the ">= 3 px at fit scale" the package asks
- * for, measured at the worst case rather than at the usual one.
- * `test/unit/lighting.test.mjs` re-derives that rather than trusting it.
+ * smallest a floor is ever drawn. `test/unit/lighting.test.mjs` re-derives that
+ * rather than trusting it.
  *
  * `ROOM_SLAB_SHADOW_*` is what the rim casts OUTWARD. Its reach — the blur
  * plus the offset — must stay well inside the circulation between two rooms,
  * or a floor of rooms becomes a floor of one dark band: `CORRIDOR` is 4 units,
- * which is 56 baked pixels, and 15 is under a third of it. The same test
- * asserts that against `CORRIDOR` itself rather than against 56.
+ * and the reach is under a third of it. The same test asserts that against
+ * `CORRIDOR` itself.
  */
-export const ROOM_SLAB_EDGE_PX = 6;
-export const ROOM_SLAB_SHADOW_BLUR_PX = 10;
-export const ROOM_SLAB_SHADOW_DIST_PX = 5;
+export const ROOM_SLAB_EDGE_PX = SHADOW_U.slabEdge * U_DEFAULT;
+export const ROOM_SLAB_SHADOW_BLUR_PX = SHADOW_U.slabBlur * U_DEFAULT;
+export const ROOM_SLAB_SHADOW_DIST_PX = SHADOW_U.slab * U_DEFAULT;
 
-/** The building's own shadow onto the studio ground: 8 px down, 8 px right. */
-export const ENVELOPE_SHADOW_DIST_PX = 8 * Math.SQRT2;
-export const ENVELOPE_SHADOW_BLUR_PX = 26;
+/** The building's own shadow onto the studio ground. */
+export const ENVELOPE_SHADOW_DIST_PX = SHADOW_U.envelope * U_DEFAULT;
+export const ENVELOPE_SHADOW_BLUR_PX = SHADOW_U.envelopeBlur * U_DEFAULT;
 
 /**
  * HOW TALL EVERY PROP ON THIS FLOOR IS (WP-78).
@@ -343,10 +368,29 @@ export function setLightShadow(
   { blur = 8, dist = PROP_SHADOW_DIST_PX, color = PALETTE.shadowContact } = {},
 ) {
   const k = deviceScaleOf(ctx);
+  const dir = lightDir();
   ctx.shadowColor = color;
   ctx.shadowBlur = blur * k;
-  ctx.shadowOffsetX = LIGHT_DIR.x * dist * k;
-  ctx.shadowOffsetY = LIGHT_DIR.y * dist * k;
+  ctx.shadowOffsetX = dir.x * dist * k;
+  ctx.shadowOffsetY = dir.y * dist * k;
+}
+
+/**
+ * WHERE THE LIGHT IS TRAVELLING, in the look the floor is painted in.
+ *
+ * A look names its light — morning, noon or evening — and all three travel
+ * down and to the right, so the floor's one-direction rule survives the choice.
+ * Noon is `LIGHT_DIR` itself.
+ * @returns {Readonly<{x:number, y:number}>}
+ */
+export function lightDir() {
+  return (LOOK.light && LOOK.light.dir) || LIGHT_DIR;
+}
+
+/** How much longer than noon's a tall thing's shadow is, in this look's light. */
+export function lightCast() {
+  const cast = LOOK.light && LOOK.light.cast;
+  return cast > 0 ? cast : 1;
 }
 
 /**
@@ -357,7 +401,8 @@ export function setLightShadow(
  * @returns {{x:number, y:number}}
  */
 export function shadowOffsetFor(dist) {
-  return { x: LIGHT_DIR.x * dist, y: LIGHT_DIR.y * dist };
+  const dir = lightDir();
+  return { x: dir.x * dist, y: dir.y * dist };
 }
 
 /**
@@ -372,50 +417,75 @@ export function withShadow(ctx, fn, opts = {}) {
   ctx.restore();
 }
 
-// ------------------------------------------------------------------ props
+// ---------------------------------------------------------------- contact
 
 /**
- * The dark line where a prop meets the floor.
+ * A colour's alpha, scaled. Any `rgba()` the palette carries.
+ * @param {string} colour @param {number} k
+ */
+export function alphaScaled(colour, k) {
+  const m = /^rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)$/i.exec(
+    String(colour).trim(),
+  );
+  if (!m) return colour;
+  return `rgba(${m[1]},${m[2]},${m[3]},${Math.round(Number(m[4]) * k * 1000) / 1000})`;
+}
+
+/** The contact colour for a tall thing or a short one. @param {boolean} tall */
+function contactColour(tall) {
+  return tall ? PALETTE.shadowContact : alphaScaled(PALETTE.shadowContact, SHORT_CONTACT_ALPHA);
+}
+
+/**
+ * PAINT A SHAPE STANDING ON THE FLOOR: its cast, its contact, and itself.
  *
- * `tall` decides whether it is offset at all (WP-78). A tall prop's contact
- * shadow travels the 2 px along `LIGHT_DIR` WP-72 gave it, because the thing
- * above it really is lifted off the floor. A short one gets no offset: it sits
- * directly beneath, which is the whole of the owner's complaint about ovals
- * that "make no sense" beside the thing they belong to.
+ * `fn` draws the shape. A tall thing is drawn once throwing its cast along the
+ * light — `SHADOW_U.propCast` long, times the mood — and once pressing its own
+ * outline into the floor straight underneath. A short thing has no cast: it is
+ * drawn once with its contact and once plain. Two fills either way, which is
+ * what a prop has always cost.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {(ctx: any) => void} fn
+ * @param {boolean} tall
+ * @param {number} [u] px per plan unit on the design grid
+ */
+export function grounded(ctx, fn, tall, u = U_DEFAULT) {
+  const contact = {
+    blur: (CONTACT_BLUR_U + 2 * CONTACT_GROW_U) * u,
+    dist: 0,
+    color: contactColour(tall),
+  };
+  if (tall) {
+    const length = SHADOW_U.propCast * u * lightCast();
+    withShadow(ctx, fn, { blur: CAST_BLUR_RATIO * length, dist: length });
+    withShadow(ctx, fn, contact);
+    return;
+  }
+  withShadow(ctx, fn, contact);
+  fn(ctx);
+}
+
+/**
+ * CONTACT UNDER A PLAIN FOOTPRINT, for a thing that is laid rather than stood:
+ * a rug, a mat. The footprint's own outline grown `CONTACT_GROW_U`, blurred
+ * `CONTACT_BLUR_U`, straight underneath. Painted BEFORE the thing, which then
+ * covers all of it but the rim.
+ *
+ * `r` is the corner radius; a radius of half the smaller side is a circle.
  *
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {number} x @param {number} y @param {number} w @param {number} h
- * @param {boolean} [tall]
+ * @param {number} [r] @param {boolean} [tall] @param {number} [u]
  */
-export function drawContactShadow(ctx, x, y, w, h, tall = true) {
-  // Placed by hand rather than blurred by the context, so it takes its
-  // direction from `LIGHT_DIR` the same way every other shadow does (WP-72).
-  // At 45° this is the (2, 2) the floor already shipped with, to the pixel.
-  const off = tall ? shadowOffsetFor(CONTACT_SHADOW_DIST_PX) : { x: 0, y: 0 };
+export function contactUnder(ctx, x, y, w, h, r = 0, tall = false, u = U_DEFAULT) {
+  if (!(w > 0) || !(h > 0)) return;
+  const g = CONTACT_GROW_U * u;
+  const colour = contactColour(tall);
   ctx.save();
-  ctx.fillStyle = PALETTE.shadowContact;
-  ctx.beginPath();
-  ctx.ellipse(
-    x + w / 2 + off.x,
-    y + h + off.y,
-    Math.max(w / 2, 4),
-    // A contact shadow is the dark line where a thing meets the floor, and its
-    // depth is a property of how THICK the thing is, not of how big it is.
-    // Unbounded, a room-sized rug (WP-50 gives one to a room much larger than
-    // its desk cluster) cast a 380 px ellipse across half the room.
-    //
-    // WP-78: and a SHORT thing is by definition not thick. This ellipse is
-    // painted over the bottom of the prop rather than under it, so on a rug or
-    // a coffee table the old depth read as a detached smudge below the
-    // furniture rather than as the line where it meets the floor — the second
-    // half of the owner's "the oval shadows make no sense".
-    tall
-      ? Math.min(CONTACT_SHADOW_MAX_PX, Math.max(h * 0.22, 3))
-      : Math.min(CONTACT_SHADOW_MAX_PX / 2, Math.max(h * 0.1, 2)),
-    0,
-    0,
-    Math.PI * 2,
-  );
+  setLightShadow(ctx, { blur: CONTACT_BLUR_U * u, dist: 0, color: colour });
+  ctx.fillStyle = colour;
+  roundRect(ctx, x - g, y - g, w + 2 * g, h + 2 * g, r + g);
   ctx.fill();
   ctx.restore();
 }
