@@ -45,15 +45,27 @@ import {
 /** @typedef {import('../floor-worktrees.js').WorktreeBench} WorktreeBench */
 /** @typedef {{x:number, y:number, w:number, h:number}} Rect */
 
-/** A bench is a desk for one side only: this much of a two-sided table's depth. */
-export const BENCH_DEPTH_SHARE = 0.6;
+/**
+ * A bench is never shorter than this many seat pitches, whoever is at it. It
+ * is a SHARED bench — the next session in that worktree sits down beside the
+ * first — and its name has to fit on it: a one-seat top is narrower than any
+ * branch name worth writing.
+ */
+export const BENCH_MIN_SEATS = 3;
+
+/**
+ * How far in from the wall edge of the top the name is written, as a share of
+ * the top's depth. The near half is under the occupants' own names; the name of
+ * the worktree is on the far half, against the wall.
+ */
+export const BENCH_LABEL_INSET = 0.24;
 
 /** Props a bench may be laid over when no wall is clear, and take away. */
 const DECOR = /^(plant_|planter$|rug_round$|side_table$|tub_chair$)/;
 
-/** A bench top's depth, wall to chair. */
+/** A bench top's depth, wall to chair: a desk's, so two names fit down it. */
 export function benchDepth() {
-  return TABLE_DEPTH * BENCH_DEPTH_SHARE;
+  return TABLE_DEPTH;
 }
 
 /** How far a bench and its chairs reach into the room from the foot wall. */
@@ -61,9 +73,9 @@ export function benchReach() {
   return WALL_INSET + benchDepth() + CHAIR_GAP + CHAIR;
 }
 
-/** One bench's run along the wall: a seat pitch a person. */
+/** One bench's run along the wall: a seat pitch a person, and never a short one. */
 export function benchRun(/** @type {number} */ seats) {
-  return Math.max(1, seats) * SEAT_PITCH;
+  return Math.max(BENCH_MIN_SEATS, seats) * SEAT_PITCH;
 }
 
 /**
@@ -233,8 +245,10 @@ export function layWorktreeBenches(room, benches) {
         anchor: { type: 'zone', of: id, dx: px - x, dy: py - chairY },
       });
     put('desk', x, topY, run, depth);
+    // The people at it sit together in the middle of the run.
+    const lead = (run - b.ids.length * SEAT_PITCH) / 2;
     b.ids.forEach((agentId, k) => {
-      const cx = x + (k + 0.5) * SEAT_PITCH;
+      const cx = x + lead + (k + 0.5) * SEAT_PITCH;
       const cy = chairY + CHAIR / 2;
       // Square on to the bench: the occupant faces the wall their screen is on.
       const angle = Math.PI / 2;
@@ -252,8 +266,9 @@ export function layWorktreeBenches(room, benches) {
       y: topY,
       w: run,
       h: depth,
-      // On the bench top, behind the screens: between the occupants and the wall.
-      labelAt: { x: x + run / 2, y: topY + MONITOR_H + (depth - MONITOR_H) / 2 },
+      // On the far half of the top, against the wall and clear of the names
+      // the floor writes under the people sitting at it.
+      labelAt: { x: x + run / 2, y: topY + depth * (1 - BENCH_LABEL_INSET) },
     });
   });
   return { seatOf, benches: laid };

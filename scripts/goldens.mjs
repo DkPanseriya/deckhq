@@ -370,6 +370,12 @@ const CAPTURES = [
   // side behind them — the third way of laying a floor, and the only one in
   // which two rooms are both a room's shape at this window's.
   { name: 'pair', population: 'pair', theme: 'default', stage: { w: 1440, h: 1000 } },
+  // A WORKTREE IS NOT A PROJECT. One repository with somebody in its main
+  // checkout and two linked worktrees in use, and one other repository: two
+  // rooms, the first with a desk and two named benches against its foot wall —
+  // one for a branch, one for a detached checkout's directory — and nobody at a
+  // bench who is not working.
+  { name: 'worktrees', population: 'worktrees', theme: 'default' },
   // WP-69 · THE STUDIO BOARD, and it is the product's only golden of a surface
   // with rows in it rather than a floor or a form.
   //

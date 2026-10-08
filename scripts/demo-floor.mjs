@@ -80,6 +80,8 @@ import {
   JUNIOR_PARENT,
   WAITING_CREW_JUNIORS,
   WAITING_CREW_PARENT,
+  WORKTREES_AT,
+  WORKTREE_BRANCHES,
 } from './demo-populations.mjs';
 import { projectIdFromCwd } from '../src/core/model.mjs';
 import {
@@ -184,12 +186,16 @@ writeProjectDirs(root);
 const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
   const id = fakeId(i + 1);
   const cwd = path.join(root, project);
+  // A session in a linked worktree reports that worktree's branch, or `HEAD`
+  // where its checkout is detached.
+  const worktree = project.includes(`/${WORKTREES_AT}/`) ? path.basename(project) : null;
   writeTranscript({
     id,
     cwd,
     title,
     ageHours,
     tokensM,
+    gitBranch: worktree ? WORKTREE_BRANCHES[worktree] || 'HEAD' : undefined,
     // Only the ones we want standing in the office end on a finished turn.
     finished: state === 'for_review',
   });

@@ -20,6 +20,17 @@ const LABEL_MIN_PX = 9;
 const LABEL_MAX_PX = 12;
 
 /**
+ * The text cut to a width, with an ellipsis where it was cut.
+ * @param {CanvasRenderingContext2D} ctx @param {string} text @param {number} maxPx
+ */
+function fitText(ctx, text, maxPx) {
+  if (ctx.measureText(text).width <= maxPx) return text;
+  let cut = text.replace(/\u2026$/, '');
+  while (cut.length > 1 && ctx.measureText(`${cut}\u2026`).width > maxPx) cut = cut.slice(0, -1);
+  return `${cut}\u2026`;
+}
+
+/**
  * @param {CanvasRenderingContext2D} ctx
  * @param {{benches?: ReadonlyArray<{label:string, w:number, labelAt:{x:number, y:number}}>|null,
  *   camera: any, charU: number}} view `charU` is a body's pixel height unit,
@@ -35,9 +46,18 @@ export function drawWorktreeLabels(ctx, view) {
   ctx.textBaseline = 'middle';
   ctx.globalAlpha = 1;
   for (const bench of benches) {
-    const text = String(bench.label || '');
-    if (!text) continue;
+    if (!bench.label) continue;
     const at = worldToScreen(bench.labelAt, view.camera);
+    // Never wider than the bench it is written on.
+    const edge = worldToScreen(
+      { x: bench.labelAt.x + bench.w / 2, y: bench.labelAt.y },
+      view.camera,
+    );
+    const text = fitText(
+      ctx,
+      String(bench.label),
+      Math.max(fontPx * 3, (edge.x - at.x) * 2 - fontPx),
+    );
     const w = ctx.measureText(text).width + fontPx * 0.8;
     const h = fontPx * 1.4;
     ctx.fillStyle = PALETTE.plateHalo;
