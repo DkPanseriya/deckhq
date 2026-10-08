@@ -41,23 +41,29 @@
 
 import {
   AGENT_SIZES,
+  ALL_LOOK_PICKERS,
+  ALL_PRESETS,
   DEFAULT_LOOK,
   FLOOR_OPTIONS,
+  LIGHT_MOOD_IDS,
   LOOK_OPTION_COUNT,
   LOOK_PICKERS,
   LOOK_ZONES,
   LOUNGE_KIT_BAYS,
   LOUNGE_KIT_REQUIRED,
+  PARTITION_STYLE_IDS,
   PRESETS,
   PRESET_IDS,
   PLANT_DENSITY_IDS,
   PLANT_FAMILY_IDS,
   PROP_DENSITY_IDS,
+  ROOM_TINT_IDS,
   RUG_PATTERN_IDS,
   RUG_ROLES,
   SCHEME_IDS,
   FURNITURE_SET_IDS,
   normalizeLook,
+  pendingPaths,
   presetById,
   sameLook,
 } from '../../public/render/look-options.js';
@@ -67,6 +73,9 @@ import { validateLook } from '../../public/render/look-guards.js';
 
 export {
   AGENT_SIZES,
+  ALL_LOOK_PICKERS,
+  ALL_PRESETS,
+  pendingPaths,
   DEFAULT_LOOK,
   FLOOR_OPTIONS,
   LOOK_OPTION_COUNT,
@@ -90,6 +99,27 @@ export const LOOK_VERSION = 1;
 /** Longest document we will even look at, in bytes. A look is well under 2 kB. */
 export const MAX_LOOK_BYTES = 16 * 1024;
 
+/**
+ * THE KEYS A VERSION-1 DOCUMENT GAINED AFTER IT WAS FIRST WRITTEN, and what each
+ * may say.
+ *
+ * The light, the partitions and the room tint (G6a). A document written before
+ * them carries none, and **absent means the default** — which is the floor that
+ * document was exported from, because the default of each is what every build
+ * before this one painted. So an old file imports as the floor it always was,
+ * and the version does not move: nothing an old document says has changed its
+ * meaning.
+ *
+ * Present, a key is held to its table exactly like every other: an id this
+ * build does not have is refused, never dropped.
+ * @type {Readonly<Record<string, ReadonlyArray<string>>>}
+ */
+const LATER_KEYS = Object.freeze({
+  light: LIGHT_MOOD_IDS,
+  partitions: PARTITION_STYLE_IDS,
+  roomTint: ROOM_TINT_IDS,
+});
+
 /** The keys a look document may carry, and nothing else. */
 const DOCUMENT_KEYS = Object.freeze([
   'kind',
@@ -103,6 +133,7 @@ const DOCUMENT_KEYS = Object.freeze([
   'props',
   'lounge',
   'agentSize',
+  ...Object.keys(LATER_KEYS),
 ]);
 
 /**
@@ -127,6 +158,9 @@ function isPlainObject(v) {
  * @property {{density:string}} props
  * @property {Record<string,boolean>} lounge
  * @property {string} agentSize
+ * @property {string} light
+ * @property {string} partitions
+ * @property {string} roomTint
  */
 
 /**
@@ -172,8 +206,9 @@ export function validateLookDocument(doc) {
     return {
       error:
         `a look carries ${extra.join(', ')}, which a look may not. A look is what the ` +
-        'building is made of: floors, a scheme, a set, rugs, planting, props, the lounge kit ' +
-        'and an agent size. It names no project, no path and no session.',
+        'building is made of: floors, a scheme, a set, rugs, planting, props, the lounge kit, ' +
+        'an agent size, the light, the partitions and the room tint. It names no project, no ' +
+        'path and no session.',
     };
   }
 
@@ -204,6 +239,10 @@ export function validateLookDocument(doc) {
     ['preset', doc.preset, PRESET_IDS],
   ])) {
     const bad = one(where, value, allowed);
+    if (bad) return { error: bad };
+  }
+  for (const [where, allowed] of Object.entries(LATER_KEYS)) {
+    const bad = doc[where] === undefined ? null : one(where, doc[where], allowed);
     if (bad) return { error: bad };
   }
 
@@ -327,6 +366,9 @@ function droppedOptions(raw, out) {
   check('plants.density', raw.plants?.density, out.plants.density);
   check('props.density', raw.props?.density, out.props.density);
   check('agentSize', raw.agentSize, out.agentSize);
+  check('light', raw.light, out.light);
+  check('partitions', raw.partitions, out.partitions);
+  check('roomTint', raw.roomTint, out.roomTint);
   return lost;
 }
 
