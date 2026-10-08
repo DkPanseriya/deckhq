@@ -19,9 +19,11 @@
  *      runs junior → parent and never the other way, *"because that is the only
  *      direction data goes"*. A junior whose file has stopped gets a grey cable
  *      and no pulses.
- *   3. **No body is drawn outside its room.** The arc is offered and can be
- *      REFUSED: `crewArc` reports `fits: false` when any seat would land outside
- *      the walls, and `assignSeats` falls back to WP-59d's wrapping rows.
+ *   3. **No body is drawn outside its room, or on its furniture.** The arc is
+ *      offered and can be REFUSED: `crewArc` reports `fits: false` when any seat
+ *      would land outside the walls, on another table or on somebody's chair, or
+ *      when a cable has no way round a table, and `assignSeats` falls back to
+ *      WP-59d's wrapping rows.
  *   4. **No allocation per frame.** The arc and the cable routes are a function
  *      of seat geometry, which only moves when the plan does, so they are
  *      computed in the seating pass and stored. Per frame a cable costs one
@@ -223,16 +225,35 @@ export function crewFootprint(n) {
  *   which is every table in it. Baked into the route here rather than checked
  *   per frame, because a route is a function of seat geometry and furniture and
  *   both move only when the plan does (§1.3).
+ * @param {{x:number,y:number,w:number,h:number}[]} [chairs] the room's OTHER
+ *   chairs. Nobody sits on one, but a cable may pass one: the lanes run along
+ *   the parent's own row of chairs by construction.
+ *
+ * WHEN THE ARC IS REFUSED FOR ITS FURNITURE. A room's second table stands
+ * behind the first one's far chairs, so an arc opened behind one of those
+ * chairs is an arc over a table: juniors seated on the desk top and on its
+ * chairs, and cables through it that `reroute` cannot save — it moves a lane
+ * by a tenth of a unit and a table is 2.6 U deep. So a member within half its
+ * own width (`CREW_PITCH / 2`) of a table or of somebody else's chair, a laptop
+ * on either, or a cable still through a table after `reroute`, is `fits:
+ * false`. The seats and routes are returned all the same, as they are for an
+ * arc through a wall; it is `assignSeats` that does not use them.
+ *
+ * The arc is NOT turned to the other side of the desk instead. Across the table
+ * it would stand behind whoever sits opposite the parent, and a crew drawn
+ * behind a chair says it is that chair's.
  * @returns {{fits:boolean, radius:number, seats:{x:number,y:number,angle:number,
  *   laptop:{x:number,y:number,angle:number}, port:{x:number,y:number},
  *   route:{x:number,y:number}[], lane:number, u:number}[]}}
  */
-export function crewArc(anchor, room, n, obstacles) {
+export function crewArc(anchor, room, n, obstacles, chairs) {
   const count = Math.max(0, Math.floor(n) || 0);
   const world = crewFrame(anchor);
   const radius = crewRadius(count);
   const step = pitchAngle(count);
   const start = count > 1 ? -CREW_ARC_SPAN / 2 : 0;
+  const rects = Array.isArray(obstacles) ? obstacles : [];
+  const solid = Array.isArray(chairs) && chairs.length ? [...rects, ...chairs] : rects;
   /** @type {any[]} */
   const seats = [];
   let fits = true;
@@ -244,6 +265,7 @@ export function crewArc(anchor, room, n, obstacles) {
     if (room && !insideRoom(at, room)) fits = false;
     const lapR = Math.max(0.1, radius - CREW_LAPTOP_GAP);
     const lap = world(lapR * Math.sin(theta), lapR * Math.cos(theta));
+    if (nearAnyRect(at, solid, CREW_PITCH / 2) || nearAnyRect(lap, solid, 0)) fits = false;
     // A member faces its parent, and its laptop faces the same way it does.
     const toParent = Math.atan2(anchor.y - at.y, anchor.x - at.x);
     const port = world((i - (count - 1) / 2) * CREW_PORT_PITCH, -CREW_PORT_OFFSET);
@@ -257,11 +279,14 @@ export function crewArc(anchor, room, n, obstacles) {
     });
   }
   const lanes = cableLanes(seats);
-  const rects = Array.isArray(obstacles) ? obstacles : [];
   seats.forEach((s, i) => {
     s.lane = lanes[i];
     s.route = routeFor(s, world);
-    if (rects.length) s.route = reroute(rects, s, world);
+    if (!rects.length) return;
+    s.route = reroute(rects, s, world);
+    // The desk a port is ON is where its cable ends, exactly as in `reroute`.
+    const others = rects.filter((r) => !pointInRect(s.port, r));
+    if (!routeIsClear(s.route, others)) fits = false;
   });
   return { fits, radius, seats };
 }
@@ -396,6 +421,26 @@ export function routeIsClear(pts, rects) {
 /** @param {{x:number,y:number}} p @param {{x:number,y:number,w:number,h:number}} r */
 export function pointInRect(p, r) {
   return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+}
+
+/**
+ * Is this point on one of these rects, or closer than `pad` to one? A position
+ * is a body's CENTRE, so "not on the table" has to be asked with half a body
+ * round it. A hair under `pad` counts as clear: a row laid exactly one
+ * clearance from a chair is where it was meant to be, not a rounding error
+ * inside it.
+ * @param {{x:number,y:number}} p
+ * @param {{x:number,y:number,w:number,h:number}[]} rects
+ * @param {number} pad plan units
+ */
+export function nearAnyRect(p, rects, pad) {
+  const d = Math.max(0, pad - 1e-6);
+  for (const r of rects) {
+    if (p.x >= r.x - d && p.x <= r.x + r.w + d && p.y >= r.y - d && p.y <= r.y + r.h + d) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**

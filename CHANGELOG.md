@@ -77,6 +77,23 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   the right rectangle. It now gets the tables where they are. No cable on a demo floor moves: 984
   cables on every demo floor and 48 made-up ones, at four window sizes, take the same route as
   before, and the `crew` and `crew-waiting` goldens match with 0 pixels changed.
+- **A crew no longer sits on the room's other table.** A room with nine or more people at desks
+  has a second table, behind the far chairs of the first. A crew whose parent sat in a chair
+  between the two was laid over the other table: juniors on its desk top and on its chairs, and
+  with ten or more of them two to six cables through it. A crew now sits in its arc only where
+  every junior and laptop is clear of the tables and of other people's chairs, and every cable is
+  clear of the tables. Where it is not, the juniors stand in a row behind their parent, in the
+  aisle between the tables, which is what they already do behind a chair that backs onto a wall.
+  That row keeps off the furniture too: with twenty or more juniors its second rank used to stand
+  on the next table. Measured on one room with 1 to 24 people at desks and 1 to 24 juniors, with
+  each chair as the parent's and with the parent away, at four window sizes: 1,278 of 6,040 floors
+  had a junior on a desk or a chair, or a cable through a desk, and none do now; at the small,
+  large and auto agent sizes it was 1,268, 969 and 1,231 of them, and is none. Fewer crews sit in
+  an arc as a result: 2,552 of those floors draw one, where 3,856 did. In a room with two full
+  tables, only the four chairs on the far side of the first table have open floor behind them, so
+  a crew is an arc behind one chair in four. Nobody on a demo floor moves: 1,156 seats on thirteen
+  demo floors at four window sizes are where they were, and all 24 goldens match with 0 pixels
+  changed.
 
 ### Changed
 
@@ -168,6 +185,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   now checks every cable against the room's desk props, in a room in the second row, for crews of
   six and twelve at three window sizes, and checks separately that the router's rectangles are
   those desks.
+- **Rooms with two tables are checked for people on the furniture.** `crew.test.mjs` puts crews of
+  3, 8, 10, 12 and 20 behind every chair of a room with 9, 10, 12 and 16 people at desks, at four
+  window sizes (940 floors), and checks that no junior is on a desk top or on a chair, that nobody
+  is outside the room, and that no cable crosses a desk it does not end on. A second test gives
+  the arc a table under a seat, a chair under a seat and a cable with no way round, one at a time,
+  and checks that each is refused. Both fail on the code before this change.
 
 ### Known gaps
 
@@ -179,11 +202,6 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.
-- **A big crew in a room with two tables sits across the second one.** With nine or more people at
-  desks in one room and a crew of ten or more, the crew's arc is laid over the room's second table,
-  and two to six of its cables run through that table. A cable can only be moved a tenth of a unit
-  to get round something, which is not enough to clear a table. Rooms with one table, and crews of
-  eight or fewer, are not affected.
 
 ## 1.6.2 — 2026-10-06
 
