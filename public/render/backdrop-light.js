@@ -28,6 +28,7 @@ import {
   AO_DEPTH_U,
   AO_LIT_SIDE,
   DAYLIGHT_DIM,
+  FALLOFF_BANDS,
   MULLION_U,
   PANE_U,
   PATCH_FEATHER,
@@ -311,8 +312,67 @@ export function paintRoomAmbientOcclusion(ctx, x, y, w, h, u) {
 }
 
 /**
+ * A ROOM FALLING AWAY FROM ITS WINDOWS, in `FALLOFF_BANDS` flat steps.
+ *
+ * Steps and not a gradient, and that is a measurement: one gradient across
+ * every room is a second pass over the whole bitmap through a shader, and it
+ * cost half as much again as the rest of the bake. A flat fill is a fraction
+ * of that. Each step differs from the next by under one count of an eight-bit
+ * channel, which is all a gradient of this depth could show anyway.
+ *
+ * Lit from one wall, the steps are strips across the room. Lit from two, they
+ * lie across its diagonal. Lit from neither, they are rings round the
+ * skylight. The caller has clipped to the room.
+ *
+ * @param {any} ctx
+ * @param {{rx:number,ry:number,rw:number,rh:number}} rect
+ * @param {string} shade the colour at the far side, as an `rgba()`
+ * @param {boolean} fromTop @param {boolean} fromLeft
+ * @param {number[]|null} sky the skylight's rect in px, or nothing
+ */
+export function paintFalloff(ctx, rect, shade, fromTop, fromLeft, sky) {
+  const { rx, ry, rw, rh } = rect;
+  const n = FALLOFF_BANDS;
+  for (let i = 1; i < n; i++) {
+    ctx.fillStyle = alphaScaled(shade, (i + 0.5) / n);
+    if (fromTop !== fromLeft) {
+      const a = snapPx(ctx, (fromTop ? ry : rx) + ((fromTop ? rh : rw) * i) / n);
+      const b = snapPx(ctx, (fromTop ? ry : rx) + ((fromTop ? rh : rw) * (i + 1)) / n);
+      if (fromTop) ctx.fillRect(rx, a, rw, b - a);
+      else ctx.fillRect(a, ry, b - a, rh);
+    } else if (fromTop) {
+      // A strip across the diagonal, drawn far wider than the room.
+      const p0 = [rx + (rw * 2 * i) / n, ry];
+      const p1 = [rx + (rw * 2 * (i + 1)) / n, ry];
+      const q0 = [rx, ry + (rh * 2 * i) / n];
+      const q1 = [rx, ry + (rh * 2 * (i + 1)) / n];
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.lineTo(p1[0], p1[1]);
+      ctx.lineTo(q1[0], q1[1]);
+      ctx.lineTo(q0[0], q0[1]);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      const cx = sky ? sky[0] + sky[2] / 2 : rx + rw / 2;
+      const cy = sky ? sky[1] + sky[3] / 2 : ry + rh / 2;
+      const far = Math.max(
+        Math.hypot(cx - rx, cy - ry),
+        Math.hypot(rx + rw - cx, cy - ry),
+        Math.hypot(cx - rx, ry + rh - cy),
+        Math.hypot(rx + rw - cx, ry + rh - cy),
+      );
+      ctx.beginPath();
+      ctx.arc(cx, cy, (far * (i + 1)) / n, 0, Math.PI * 2);
+      ctx.arc(cx, cy, (far * i) / n, 0, Math.PI * 2);
+      ctx.fill('evenodd');
+    }
+  }
+}
+
+/**
  * ONE ROOM'S DAYLIGHT: the falloff, then the patches or the skylight, then the
- * shade at the walls, then a dither over the lot.
+ * shade at the walls.
  *
  * A room with the lights off keeps its daylight at `DAYLIGHT_DIM` — the sun
  * does not switch off.
@@ -342,24 +402,14 @@ export function paintRoomLight(ctx, room, rect, walls, u) {
 
   // The falloff: nothing at the windows, `light.falloff` at the far side.
   const shade = k === 1 ? light.falloff : alphaScaled(light.falloff, k);
-  let g;
-  if (fromTop || fromLeft) {
-    g = ctx.createLinearGradient(rx, ry, fromLeft ? rx + rw : rx, fromTop ? ry + rh : ry);
-  } else {
-    const cx = sky ? (sky.x + sky.w / 2) * u : rx + rw / 2;
-    const cy = sky ? (sky.y + sky.h / 2) * u : ry + rh / 2;
-    const far = Math.max(
-      Math.hypot(cx - rx, cy - ry),
-      Math.hypot(rx + rw - cx, cy - ry),
-      Math.hypot(cx - rx, ry + rh - cy),
-      Math.hypot(rx + rw - cx, ry + rh - cy),
-    );
-    g = ctx.createRadialGradient(cx, cy, 0, cx, cy, far);
-  }
-  g.addColorStop(0, fadedOut(shade));
-  g.addColorStop(1, shade);
-  ctx.fillStyle = g;
-  ctx.fillRect(rx, ry, rw, rh);
+  paintFalloff(
+    ctx,
+    rect,
+    shade,
+    fromTop,
+    fromLeft,
+    sky && [sky.x * u, sky.y * u, sky.w * u, sky.h * u],
+  );
 
   // The patches. Full for the near part, feathered to nothing over the rest.
   const day = k === 1 ? light.layer : alphaScaled(light.layer, k);
@@ -399,7 +449,6 @@ export function paintRoomLight(ctx, room, rect, walls, u) {
   ctx.restore();
 
   paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh, u);
-  paintGrain(ctx, rx, ry, rw, rh, 1);
 }
 
 /**

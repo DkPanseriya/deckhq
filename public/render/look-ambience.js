@@ -113,6 +113,8 @@ export const DAYLIGHT_MAX_CONTRAST = 1.18;
  */
 export const DAYLIGHT_FALLOFF = '#20160A';
 export const DAYLIGHT_FALLOFF_ALPHA = 0.05;
+/** The falloff is laid in this many flat steps, each under one count of a channel. */
+export const FALLOFF_BANDS = 12;
 /** The far side of a room against its own bare floor, at most: 1.10:1 to two places. */
 export const DAYLIGHT_FALLOFF_MAX_CONTRAST = 1.105;
 
@@ -218,7 +220,7 @@ export const GLASS_TINT_MIX = 0.5;
 export const GLASS_FILL_ALPHA = 0.22;
 
 /** A window pane: the wall, moved this far toward the glass tint. */
-export const WINDOW_PANE_MIX = 0.6;
+export const WINDOW_PANE_MIX = 0.85;
 
 /** A doorway: how much wall stops for it, and how long the leaf is. Plan units. */
 export const DOOR_OPENING_U = 2.4;

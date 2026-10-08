@@ -29,7 +29,7 @@
  * This is how the two numbers are reached, stated here because the arithmetic is
  * not obvious and a later reader should not have to rediscover it:
  *
- *   four floor pickers, one per zone          5 + 4 + 5 + 6 = 20
+ *   four floor pickers, one per zone          5 + 4 + 5 + 6 = 20   (27 since three materials joined)
  *   the colour scheme                                          6
  *   the furniture set                                          3
  *   the wool rug        3 tones + 2 patterns                   5
@@ -51,13 +51,16 @@
  *   the partitions      solid / glass / low                      3
  *   the room tint       subtle / zoned / off                     3
  *   ------------------------------------------- fourteen pickers, 65 options
+ *   three more floor materials, over the zones that offer them   7
+ *   ------------------------------------------- fourteen pickers, 72 options
  *
- * Those nine are named, measured, stored and carried in a look document, and no
- * painter reads them yet. So their three pickers are marked `pending`, and
- * `LOOK_PICKERS` — what a surface offers — is still the eleven and the 56. The
- * same rule decides the presets: one that asks for a pending option is in
- * `ALL_PRESETS` and not in `PRESETS`. A choice is offered the day moving it
- * changes the floor, and not before.
+ * The light and the partitions are painted, so their pickers are offered. The
+ * room tint is named, measured, stored and carried in a look document, and no
+ * painter reads it yet: its picker is marked `pending`, and `LOOK_PICKERS` —
+ * what a surface offers — is the other thirteen and 69. The same rule decides
+ * the presets: one that asks for a pending option is in `ALL_PRESETS` and not
+ * in `PRESETS`. A choice is offered the day moving it changes the floor, and
+ * not before.
  *
  * Pure data and pure functions. No DOM, no canvas — safe to import under
  * `node --test` and from `src/core/look.mjs`, which is where the schema that
@@ -492,8 +495,8 @@ export const AGENT_SIZE_LABELS = Object.freeze({
  * section and reads this rather than restating it, so a picker cannot offer an
  * option the guards have never seen.
  *
- * `ALL_LOOK_PICKERS` is every picker the catalogue names, and three of the
- * fourteen carry `pending: true`: the option is real, it validates and it is
+ * `ALL_LOOK_PICKERS` is every picker the catalogue names, and one of the
+ * fourteen carries `pending: true`: the option is real, it validates and it is
  * stored, and the painter that draws it has not landed. `LOOK_PICKERS` below is
  * the rest — what a surface may offer today.
  *

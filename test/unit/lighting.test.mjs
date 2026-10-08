@@ -1051,3 +1051,33 @@ test('a bake is the drawn scale, a window onto it, or the nearest scale under th
     assert.ok(s.w >= 1 && s.h >= 1);
   }
 });
+
+test('a room falls away from its windows in flat steps, each a shade of the same colour', async () => {
+  const { paintFalloff } = await import('../../public/render/backdrop-light.js');
+  const { FALLOFF_BANDS } = await import('../../public/render/look-ambience.js');
+  const rect = { rx: 100, ry: 200, rw: 400, rh: 300 };
+  const shade = 'rgba(32,22,10,0.05)';
+  for (const [name, top, left] of [
+    ['one lit wall', true, false],
+    ['two lit walls', true, true],
+    ['no lit wall', false, false],
+  ]) {
+    const ctx = makeRecorder();
+    const styles = [];
+    const mark = () => styles.push(ctx.fillStyle);
+    ctx.fillRect = mark;
+    ctx.fill = mark;
+    paintFalloff(ctx, rect, shade, top, left, null);
+    // One step fewer than the bands: the step by the window is the bare floor.
+    assert.equal(styles.length, FALLOFF_BANDS - 1, name);
+    // Flat colour, never a gradient, darkening away from the light and never past the cap.
+    const alphas = styles.map((s) => Number(/,([\d.]+)\)$/.exec(String(s))[1]));
+    for (let i = 1; i < alphas.length; i++) assert.ok(alphas[i] >= alphas[i - 1], name);
+    assert.ok(
+      alphas.at(-1) <= 0.05 + 1e-9,
+      `${name}: the far side is darker than the guard measured`,
+    );
+    // …and no step is more than one count of an eight-bit channel.
+    assert.ok((0.05 / FALLOFF_BANDS) * 255 < 1.1);
+  }
+});

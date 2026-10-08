@@ -122,10 +122,10 @@ Details, and the `?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](do
 ## Change the look
 
 **Look** in the header, or `L`, opens the four you reach for most: **agent size**, **theme**, **style**
-— six presets, Studio oak to Workshop — and **density**. Settings → Look (the gear, or `,`) has the
+— eight presets, Studio oak to Nordic wool — and **density**. Settings → Look (the gear, or `,`) has the
 same four over a live preview, and everything finer under **Advanced**: a floor material per zone, a
-colour scheme, a furniture set, two rugs, the planting, the prop density and the lounge kit. **56
-options over eleven pickers**, every chip a real swatch painted by the floor painter itself.
+colour scheme, a furniture set, two rugs, plants, props, the lounge kit, the light and the
+partitions. **69 options over thirteen pickers**, each material chip a swatch by the floor painter.
 `⌘K` → `Look: Night lab` puts a style on in two keystrokes, and a style never touches your **agent
 size** — small, medium, large or auto — which moves the table, chair, sofa and rug with the people
 while the corridors, the room padding and every label stay put, so a
