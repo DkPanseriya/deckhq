@@ -34,6 +34,17 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Changed
 
+- **A room has a maximum size.** With one, two or three projects open, each room used to be a
+  hall — most of the window round a single desk, filled with meeting tables and sofas nobody sat
+  at. A room for one desk, for a team and for a large team now each have a ceiling, and a room is
+  never laid past it to fill the window. The building is made as small as your office and the
+  lounge allow, so it is drawn a little larger; those two take what is spare, up to their usual
+  share; and what is left after that is an entry hall with planting in it rather than a bigger
+  room. No room is more than 45% bare floor any more. A floor of many projects, whose rooms were
+  already under their ceilings, is laid exactly as before.
+- **Agent size "auto" follows how large the floor is drawn**, not only how many agents there are.
+  A dozen agents in two rooms are a small building in a big window, so they are drawn at the
+  larger size. A size you picked yourself is never overruled.
 - **A worktree is not a project.** Starting work in another git worktree used to put a new room on
   the floor, named after the worktree's folder — `awesome-franklin-2d1495`,
   `agent-a0fedbce8c57e1bf9`. A room is a repository now. Every session in any worktree of a
@@ -231,6 +242,15 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Known gaps
 
+- **At the default agent size, people on a floor of one to three projects are only a little
+  larger than they were** — about 40 pixels tall at a desk on a 1600 × 1000 window, where they
+  were 38. The building cannot be made smaller than your office and the lounge, which are each
+  larger than a one-desk room. Set agent size to **auto** (or large) in the Look panel and they
+  are about 49. The new floor pictures are not baked yet.
+- **A floor of one project is a third entry hall.** One room at its ceiling, your office and the
+  lounge at their shares, and the rest is planted hall.
+- **With many agents resting and few projects, the lounge shows more of them as `+N resting`.**
+  The building no longer grows for the lounge once the rooms are at their ceilings.
 - **A worktree session with helpers at work sits at a desk, not at its bench.** Sub-agents stand
   beside the session that started them, and a bench against the wall has no floor for that. The
   session moves back to its bench when its helpers finish. Sub-agents themselves never sit at a
