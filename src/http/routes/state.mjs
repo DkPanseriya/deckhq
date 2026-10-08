@@ -6,12 +6,14 @@
  */
 import { sendJson } from '../server.mjs';
 import { splitAgentId } from '../../core/model.mjs';
+import { stateDirId } from '../../core/daemon-file.mjs';
 
 const HEARTBEAT_MS = 15000;
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{registry:any, log:any, sends:any, endEventStreams?:() => number}} ctx
+ * @param {{registry:any, log:any, sends:any, dataDir?:string,
+ *          endEventStreams?:() => number}} ctx
  *   `sends` was read here and not declared (WP-22). `endEventStreams` is
  *   written here and read by `startDaemon`'s `close()` — see below.
  */
@@ -50,8 +52,14 @@ export function register(router, ctx) {
     return ended;
   };
 
+  // Which state directory this daemon serves, as a hash and never as a path.
+  // It is on this answer and not in the snapshot itself because only somebody
+  // deciding which daemon to talk to needs it, and this is the request they
+  // all make: `deckhq app` reuses a daemon only when this matches its own.
+  const dirId = stateDirId(ctx.dataDir);
+
   router.get('/api/state', (_req, res) => {
-    sendJson(res, 200, registry.snapshot());
+    sendJson(res, 200, { ...registry.snapshot(), stateDirId: dirId });
   });
 
   /**
