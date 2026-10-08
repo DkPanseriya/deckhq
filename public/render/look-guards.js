@@ -57,6 +57,7 @@ import {
   ZONE_ADJACENCY,
 } from './look-options.js';
 import {
+  DAYLIGHT_FALLOFF_MAX_CONTRAST,
   DAYLIGHT_MAX_CONTRAST,
   FRAME_ON_FLOOR_MIN,
   INK_OVER_FRAME_MIN,
@@ -387,8 +388,10 @@ export function roomFloors(resolved) {
  *
  * Three numbers over every zone floor and every project-room floor: how bright
  * a patch is against its own ground, how much contrast a name keeps when it is
- * drawn across one, and the brightest pixel any patch makes. The guard refuses
- * on these and a preview may print them, so the two cannot disagree.
+ * drawn across one, and the brightest pixel any patch makes. And two for the
+ * far side of a room, where the floor falls away from its windows: how dark
+ * that is against the bare floor, and what a name keeps on it. The guard
+ * refuses on these and a preview may print them, so the two cannot disagree.
  *
  * @param {ReturnType<typeof resolveLook>} resolved
  */
@@ -404,8 +407,15 @@ export function daylightOn(resolved) {
     ratio: { value: 0, where: '', colour: '' },
     ink: { value: Infinity, where: '', colour: '' },
     luminance: { value: 0, where: '', colour: '' },
+    falloff: { value: 0, where: '', colour: '' },
+    shadeInk: { value: Infinity, where: '', colour: '' },
   };
   for (const { where, ground } of grounds) {
+    const far = over(ground, resolved.light.falloff);
+    const drop = contrastRatio(far, ground);
+    const farInk = contrastRatio(resolved.floor.ink, far);
+    if (drop > worst.falloff.value) worst.falloff = { value: drop, where, colour: far };
+    if (farInk < worst.shadeInk.value) worst.shadeInk = { value: farInk, where, colour: far };
     const colour = over(ground, resolved.light.layer);
     const ratio = contrastRatio(colour, ground);
     const ink = contrastRatio(resolved.floor.ink, colour);
@@ -448,6 +458,24 @@ export function daylightProblems(resolved) {
       measured: Number(day.ink.value.toFixed(2)),
       needed: 4.5,
       reason: `a name in ${name.toLowerCase()} on ${day.ink.where} (${day.ink.colour}) is ${day.ink.value.toFixed(2)}:1; an agent's name is drawn wherever the agent stands`,
+    });
+  }
+  if (day.falloff.value > DAYLIGHT_FALLOFF_MAX_CONTRAST + 1e-9) {
+    out.push({
+      ...base,
+      rule: `light — the far side of a room <= ${DAYLIGHT_FALLOFF_MAX_CONTRAST}:1 on its floor`,
+      measured: Number(day.falloff.value.toFixed(3)),
+      needed: DAYLIGHT_FALLOFF_MAX_CONTRAST,
+      reason: `away from its windows ${day.falloff.where} is ${day.falloff.value.toFixed(2)}:1 against itself; a room falls away from its light, it does not become a second floor`,
+    });
+  }
+  if (day.shadeInk.value + 1e-9 < 4.5) {
+    out.push({
+      ...base,
+      rule: 'light — ink >= 4.5:1 away from the windows',
+      measured: Number(day.shadeInk.value.toFixed(2)),
+      needed: 4.5,
+      reason: `a name on the far side of ${day.shadeInk.where} (${day.shadeInk.colour}) is ${day.shadeInk.value.toFixed(2)}:1; an agent's name is drawn wherever the agent stands`,
     });
   }
   if (day.ratio.value > DAYLIGHT_MAX_CONTRAST + 1e-9) {

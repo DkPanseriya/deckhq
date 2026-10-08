@@ -49,6 +49,7 @@ import {
   lookForPreset,
 } from '../../public/render/look-options.js';
 import {
+  DAYLIGHT_FALLOFF_MAX_CONTRAST,
   DAYLIGHT_MAX_CONTRAST,
   FRAME_ON_FLOOR_MIN,
   INK_OVER_FRAME_MIN,
@@ -228,6 +229,9 @@ test('daylight: every material × scheme × theme under every mood and every tin
           w.at = where;
         }
         w.wall = Math.max(w.wall, day.luminance.value - relativeLuminance(floor.wall));
+        if (dark) w.farDark = Math.max(w.farDark || 0, day.falloff.value);
+        else w.farLight = Math.max(w.farLight || 0, day.falloff.value);
+        w.farInk = Math.min(w.farInk ?? Infinity, day.shadeInk.value);
         measured++;
       }
     }
@@ -242,7 +246,25 @@ test('daylight: every material × scheme × theme under every mood and every tin
         ` · nearest the wall ${worst[mood].wall.toFixed(4)}`,
     ]),
   );
+  report(
+    `away from the windows — ceiling ${DAYLIGHT_FALLOFF_MAX_CONTRAST}:1, ink bar 4.5`,
+    LIGHT_MOOD_IDS.map((mood) => [
+      mood,
+      `far side ${worst[mood].farLight.toFixed(3)}:1 light theme, ${worst[mood].farDark.toFixed(3)}:1 dark` +
+        ` · worst ink ${worst[mood].farInk.toFixed(2)}:1`,
+    ]),
+  );
   assert.deepEqual(failures, []);
+  for (const mood of LIGHT_MOOD_IDS) {
+    // The far side of a room is a shade of its own floor on every theme, and a
+    // name on it keeps far more than the bar.
+    assert.ok(worst[mood].farLight <= DAYLIGHT_FALLOFF_MAX_CONTRAST + 1e-9);
+    assert.ok(worst[mood].farDark <= worst[mood].farLight, 'a dark floor falls away further');
+    assert.ok(
+      worst[mood].farInk >= 7,
+      `${mood}: a name in shade is ${worst[mood].farInk.toFixed(2)}:1`,
+    );
+  }
   // A patch on a pale floor is nearly invisible and a patch on a dark one is
   // the desk pool's own strength: no mood is brighter on a light theme.
   for (const mood of LIGHT_MOOD_IDS) assert.ok(worst[mood].light < worst[mood].dark);
@@ -488,4 +510,25 @@ test('a zone accent is a small-object colour: under the wall and nowhere near cr
     }
   }
   report(`the six accents (${ZONE_HUES.map((h) => h.id).join(' · ')})`, rows);
+});
+
+test('away from the windows: every style on every theme stays one floor, and a name stays a name', async () => {
+  const { ALL_PRESETS } = await import('../../public/render/look-options.js');
+  const rows = [];
+  let pairs = 0;
+  for (const theme of THEMES) {
+    let far = 0;
+    let ink = Infinity;
+    for (const preset of ALL_PRESETS) {
+      const day = daylightOn(resolveLook(preset.look, theme));
+      far = Math.max(far, day.falloff.value);
+      ink = Math.min(ink, day.shadeInk.value);
+      pairs++;
+    }
+    assert.ok(far <= DAYLIGHT_FALLOFF_MAX_CONTRAST + 1e-9, `${theme.name}: ${far.toFixed(3)}:1`);
+    assert.ok(ink >= 6.9, `${theme.name}: a name in shade is ${ink.toFixed(2)}:1`);
+    rows.push([theme.name, `far side ${far.toFixed(3)}:1 · worst ink ${ink.toFixed(2)}:1`]);
+  }
+  assert.equal(pairs, ALL_PRESETS.length * THEMES.length);
+  report(`away from the windows — ${pairs} style × theme pairs`, rows);
 });

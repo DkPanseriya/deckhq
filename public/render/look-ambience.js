@@ -7,18 +7,17 @@
  * comes from, what stands between two rooms, and how much of a project's own
  * colour its floor carries.
  *
- * ## Nothing paints from this file yet, and it says so
+ * ## What paints from this file
  *
- * The tables are here so the options can be named, measured, stored and carried
- * in a look document before the painters that draw them exist. Until then every
- * picker built on one is marked `pending` in `look-options.js`, and a surface
- * that offers choices reads the offered list rather than this one. **One option
- * of each table is the floor as it ships** — the `DEFAULT_*` beside it — which
- * is what lets `DEFAULT_LOOK` name all three and move no pixel.
+ * The light and the partitions are drawn: `backdrop-paint.js` casts along the
+ * mood's direction, `backdrop-light.js` lays its daylight, and
+ * `backdrop-floor.js` builds the wall between two rooms in the chosen style.
+ * The room tint is named, measured and carried, and its picker stays `pending`
+ * in `look-options.js` until a painter reads it. **One option of each table is
+ * the default** — the `DEFAULT_*` beside it.
  *
- * The other rows are the numbers a painter will be held to. They are plan units
- * and plain ratios, so a test can read them and a painter cannot grow a second
- * opinion.
+ * Every row is a number a painter is held to. They are plan units and plain
+ * ratios, so a test can read them and a painter cannot grow a second opinion.
  *
  * Pure data. No DOM, no canvas.
  */
@@ -103,14 +102,58 @@ export const DEFAULT_LIGHT = 'noon';
  */
 export const DAYLIGHT_MAX_CONTRAST = 1.18;
 
+/**
+ * WHERE THE FLOOR IS DARKER, AWAY FROM ITS WINDOWS.
+ *
+ * A patch on a pale floor can only be a few per cent brighter than the floor —
+ * the wall is the ceiling on brightness — so a room is also allowed to fall
+ * away from its light: nothing at the lit wall, this colour at this alpha on
+ * the far side. Five per cent is the cap, measured: at seven the far side of a
+ * pale floor steps over the value plateau a floor material is held to.
+ */
+export const DAYLIGHT_FALLOFF = '#20160A';
+export const DAYLIGHT_FALLOFF_ALPHA = 0.05;
+/** The far side of a room against its own bare floor, at most: 1.10:1 to two places. */
+export const DAYLIGHT_FALLOFF_MAX_CONTRAST = 1.105;
+
+/** A window pane and the mullion between two, along the wall. Plan units. */
+export const PANE_U = 3.2;
+export const MULLION_U = 0.4;
+/** Glazing stops this far short of a corner or a partition. */
+export const WINDOW_INSET_U = 1.2;
+
+/** A patch of daylight is this long at noon, before the mood's cast. */
+export const PATCH_LENGTH_U = 5;
+/** …and its far end fades to nothing over this share of its length. */
+export const PATCH_FEATHER = 0.4;
+/** A room takes at most this many. */
+export const PATCHES_PER_ROOM = 3;
+/** The corner a room's plate is read in. No patch lies over it. */
+export const PLATE_BOX_U = Object.freeze({ w: 14, h: 3 });
+
+/** A windowless room's skylight: its size, its set-off toward the light, its share of a patch. */
+export const SKYLIGHT_U = Object.freeze({ w: 6, h: 3.5 });
+export const SKYLIGHT_OFFSET_U = 1.5;
+export const SKYLIGHT_ALPHA = 0.8;
+
+/** A room with the lights off keeps this much of its daylight. */
+export const DAYLIGHT_DIM = 0.5;
+
+/**
+ * SHADE AT THE FOOT OF A WALL: a ramp this deep, this dark at the wall, and
+ * this much deeper under the two walls the light comes over.
+ */
+export const AO_DEPTH_U = 0.45;
+export const AO_ALPHA = 0.1;
+export const AO_LIT_SIDE = 1.6;
+
 // ------------------------------------------------------------- partitions
 
 /**
  * WHAT STANDS BETWEEN TWO ROOMS. The building's outer wall is not a choice.
  *
- * `solid` is the style the floor draws today; its row is what the lighting
- * package will paint it to, not a measurement of today's painter, which still
- * holds its own thickness. `glass` is two hairlines with a sheet between them
+ * `solid` is a band of the partition colour that casts like a wall.
+ * `glass` is two hairlines with a sheet between them
  * and a post at intervals; it throws no shadow. `low` is a
  * waist-high band that stops short of each corner, and it keeps the hairline on
  * both edges — see `LOW_PARTITION_READS_MIN` for why that is not decoration.
@@ -173,6 +216,16 @@ export const GLASS_FRAME_MIX = 0.38;
 export const GLASS_TINT = '#9DB6C6';
 export const GLASS_TINT_MIX = 0.5;
 export const GLASS_FILL_ALPHA = 0.22;
+
+/** A window pane: the wall, moved this far toward the glass tint. */
+export const WINDOW_PANE_MIX = 0.6;
+
+/** A doorway: how much wall stops for it, and how long the leaf is. Plan units. */
+export const DOOR_OPENING_U = 2.4;
+export const DOOR_LEAF_U = 2.2;
+/** How far open a leaf is drawn, in degrees, and how faint its swing is. */
+export const DOOR_OPEN_DEG = 30;
+export const DOOR_SWING_ALPHA = 0.25;
 
 /** A baseboard is its own floor, this much darker. */
 export const BASEBOARD_SHADE = -0.1;

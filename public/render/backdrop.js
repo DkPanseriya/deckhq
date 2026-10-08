@@ -17,8 +17,10 @@
  *
  *   backdrop-paint.js         the primitives — seeded RNG, rounded rect, the
  *                             light, the cast and the contact
- *   backdrop-floor.js         floors, circulation, ambient occlusion, walls,
- *                             door swings
+ *   backdrop-floor.js         floors, circulation, the room slab, walls,
+ *                             partitions, baseboards, doors
+ *   backdrop-light.js         daylight: the window band, the patches on the
+ *                             floor, the falloff, the shade at a wall's foot
  *   backdrop-props-desk.js    desks, chairs, whiteboards, screens, plants
  *   backdrop-props-lounge.js  sofas, tables, the lamp, the water cooler
  *   backdrop-props-play.js    the games room and the kitchen
@@ -46,11 +48,13 @@ import {
 import {
   paintTile,
   paintLightPool,
-  paintRoomAmbientOcclusion,
   paintRoomSlabEdge,
   castRoomShadow,
+  paintBaseboard,
   paintWallSegment,
   paintDoorSwing,
+  wallPieces,
+  WALL_PX,
   paintThresholdBand,
   paintLightsOff,
   DESK_POOL_MARGIN_U,
@@ -58,7 +62,8 @@ import {
   LIT_PROP_KINDS,
 } from './backdrop-floor.js';
 import { paintFloorMaterial } from './backdrop-floor-look.js';
-import { LOOK, materialForRoom } from './look-derive.js';
+import { paintRoomLight, paintWindowBand } from './backdrop-light.js';
+import { LOOK, liveMaterial, materialForRoom } from './look-derive.js';
 import { setDeviceScale, snapPx } from './device-px.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
@@ -69,6 +74,7 @@ import { paintRoomProps } from './backdrop-props-room.js';
 export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
 export * from './backdrop-floor-look.js';
+export * from './backdrop-light.js';
 export * from './backdrop-props-desk.js';
 export * from './backdrop-props-lounge.js';
 export * from './backdrop-props-plant.js';
@@ -308,7 +314,10 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
       paintTile(ctx, kz.rx, kz.ry, kz.rw, kz.rh, u);
     }
 
-    paintRoomAmbientOcclusion(ctx, rx, ry, rw, rh);
+    // DAYLIGHT, on the finished floor and under everything that stands on it:
+    // the room falls away from its windows, each pane lays a patch, and the
+    // foot of every wall is in shade.
+    paintRoomLight(ctx, room, { rx, ry, rw, rh }, plan.walls || [], u);
   }
 
   // EVERY ROOM IS A SLAB ON THE SCREED (WP-72).
@@ -372,10 +381,22 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
   // Walls, from the floor's own wall list. Two zones either side of a
   // partition share one segment, which is what makes this read as a single
   // building that has been divided rather than a row of separate huts.
-  for (const wall of plan.walls || []) {
+  //
+  // In this order: the baseboard at the foot of each room's walls, the walls
+  // themselves (weakest first, and stopping at a doorway), the glazing in the
+  // outside wall, and each door standing open in its opening.
+  const pieces = wallPieces(plan.walls || [], plan.doors || []);
+  for (const room of plan.rooms) {
+    const floor = liveMaterial(materialForRoom(room, LOOK.look.floors));
+    paintBaseboard(ctx, room, rectOf(room), pieces, u, floor.baseboard);
+  }
+  for (const wall of pieces) {
     paintWallSegment(ctx, wall, u);
   }
-  for (const door of plan.doors) {
+  for (const room of plan.rooms) {
+    paintWindowBand(ctx, room, plan.walls || [], u, WALL_PX.exterior);
+  }
+  for (const door of plan.doors || []) {
     paintDoorSwing(ctx, door, u);
   }
 

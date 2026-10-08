@@ -52,7 +52,7 @@ import {
   shadowOffsetFor,
   withShadow,
 } from '../../public/render/backdrop-paint.js';
-import { applyLook, resetLook } from '../../public/render/look-derive.js';
+import { LOOK, applyLook, resetLook } from '../../public/render/look-derive.js';
 import { DEFAULT_LOOK, LIGHT_MOOD_IDS, LIGHT_MOODS } from '../../public/render/look-options.js';
 import { BAKE_MAX_PIXELS, bakeSize, paintProp } from '../../public/render/backdrop.js';
 import { deviceGrid, setDeviceScale } from '../../public/render/device-px.js';
@@ -63,9 +63,35 @@ import { CHAR_MAX_PX_PER_UNIT } from '../../public/render/scene-lod.js';
 import {
   castRoomShadow,
   paintCarpet,
+  paintDoorSwing,
   paintRoomSlabEdge,
   paintWallSegment,
+  wallBand,
+  wallPieces,
 } from '../../public/render/backdrop-floor.js';
+import {
+  daylightPatches,
+  litRuns,
+  paintRoomAmbientOcclusion,
+  paintRoomLight,
+  panesAlong,
+  skylightOf,
+  windowsOf,
+} from '../../public/render/backdrop-light.js';
+import {
+  AO_ALPHA,
+  AO_DEPTH_U,
+  AO_LIT_SIDE,
+  DOOR_OPENING_U,
+  MULLION_U,
+  PANE_U,
+  PARTITION_STYLE_IDS,
+  PARTITION_STYLES,
+  PATCH_LENGTH_U,
+  PATCHES_PER_ROOM,
+  PLATE_BOX_U,
+  WINDOW_INSET_U,
+} from '../../public/render/look-ambience.js';
 import { CORRIDOR } from '../../public/render/plan-units.js';
 import { MIN_SCALE } from '../../public/render/scene-lod.js';
 
@@ -495,25 +521,183 @@ test("WP-78: a character's shadow is within 1 px of its feet, at every scale it 
   assert.equal(SHADOW_OY, 0);
 });
 
-test('WP-72: a real wall casts along the light; a waist-high partition still casts nothing', () => {
+test('a full-height wall casts along the light, and a partition casts what its style says', () => {
+  const along = (ctx) =>
+    ctx.ops.filter((o) => (o.op === 'fillRect' || o.op === 'fill') && o.shadowOffsetX > 0);
+  const seg = (kind) => ({ x1: 0, y1: 4, x2: 20, y2: 4, kind });
   for (const kind of ['exterior', 'solid']) {
     const ctx = makeRecorder();
-    paintWallSegment(ctx, { x1: 0, y1: 4, x2: 20, y2: 4, kind }, U_DEFAULT);
-    const cast = ctx.ops.find((o) => o.op === 'fillRect' && o.shadowBlur > 0);
+    paintWallSegment(ctx, seg(kind), U_DEFAULT);
+    const cast = along(ctx)[0];
     assert.ok(cast, `a ${kind} wall cast no shadow`);
-    assert.ok(cast.shadowOffsetX > 0, `a ${kind} wall's shadow offsets left`);
     assert.ok(cast.shadowOffsetY > 0, `a ${kind} wall's shadow offsets up`);
+    const length = Math.hypot(cast.shadowOffsetX, cast.shadowOffsetY) / U_DEFAULT;
+    assert.ok(Math.abs(length - SHADOW_U.wallCast) < 1e-9, `a ${kind} wall casts ${length} U`);
   }
+  const rows = [];
+  try {
+    for (const id of PARTITION_STYLE_IDS) {
+      applyLook({ ...DEFAULT_LOOK, partitions: id, light: 'evening' }, 'default');
+      const style = PARTITION_STYLES[id];
+      const ctx = makeRecorder();
+      paintWallSegment(ctx, seg('partition'), U_DEFAULT);
+      const casts = along(ctx);
+      if (style.cast > 0) {
+        assert.ok(casts.length > 0, `a ${id} partition cast nothing`);
+        const length = Math.hypot(casts[0].shadowOffsetX, casts[0].shadowOffsetY) / U_DEFAULT;
+        // In units, and stretched by the mood like every other cast.
+        assert.ok(Math.abs(length - style.cast * LIGHT_MOODS.evening.cast) < 1e-9);
+        rows.push(`${id} ${length.toFixed(2)} U`);
+      } else {
+        assert.equal(casts.length, 0, `${id} throws a shadow along the light`);
+        // …and still stands on the floor: a contact, straight underneath.
+        const under = ctx.ops.filter((o) => o.op === 'fillRect' && o.shadowBlur > 0);
+        assert.ok(under.length > 0, `${id} does not meet the floor`);
+        rows.push(`${id} none`);
+      }
+      // The band is as thick as the style says, or the three pixels glass needs.
+      const band = wallBand(ctx, seg('partition'), U_DEFAULT);
+      assert.ok(band.thickness >= Math.min(3, style.bandU * U_DEFAULT) - 1e-9);
+      // A low one stops short of both corners.
+      const [from, to] = band.spans[0];
+      assert.ok(Math.abs(from - style.insetU * U_DEFAULT) < 1e-9, `${id} starts at ${from}`);
+      assert.ok(Math.abs(to - (20 - style.insetU) * U_DEFAULT) < 1e-9);
+      // A style with a frame draws it in the frame colour, on both faces.
+      if (style.frame) {
+        const frame = ctx.ops.filter(
+          (o) => o.op === 'fillRect' && o.fillStyle === LOOK.partitions.glassFrame,
+        );
+        assert.ok(frame.length >= 2, `a ${id} partition has no frame line`);
+      }
+    }
+  } finally {
+    resetLook();
+  }
+  console.log(`  partition casts in evening light — ${rows.join(' · ')}`);
+});
+
+test('a stretch of wall is built once, by the strongest wall on it, and stops at a doorway', () => {
+  const walls = [
+    { x1: 0, y1: 10, x2: 60, y2: 10, kind: 'partition' },
+    { x1: 0, y1: 10, x2: 20, y2: 10, kind: 'solid' },
+    { x1: 20, y1: 10, x2: 60, y2: 10, kind: 'partition' },
+    { x1: 0, y1: 0, x2: 60, y2: 0, kind: 'exterior' },
+    { x1: 20, y1: 0, x2: 20, y2: 10, kind: 'solid' },
+  ];
+  const doors = [{ x: 10, y: 10, angle: -Math.PI / 2, width: 3.5 }];
+  const pieces = wallPieces(walls, doors);
+  const on = (kind) => pieces.filter((p) => p.kind === kind && p.y1 === 10 && p.y2 === 10);
+  const length = (list) => list.reduce((n, p) => n + (p.x2 - p.x1), 0);
+  // The solid wall owns its 20 units, less the doorway; the partition has the rest, once.
+  assert.ok(Math.abs(length(on('solid')) - (20 - DOOR_OPENING_U)) < 1e-9);
+  assert.ok(Math.abs(length(on('partition')) - 40) < 1e-9, 'a shared stretch was built twice');
+  assert.equal(on('solid').length, 2, 'the wall does not stop for its door');
+  for (const p of on('solid')) {
+    assert.ok(p.x2 <= 10 - DOOR_OPENING_U / 2 + 1e-9 || p.x1 >= 10 + DOOR_OPENING_U / 2 - 1e-9);
+  }
+  // Weakest first, so a full-height wall is painted over a partition's end.
+  const ranks = pieces.map((p) => ['partition', 'solid', 'exterior'].indexOf(p.kind));
+  assert.deepEqual(
+    ranks,
+    [...ranks].sort((p, q) => p - q),
+  );
+  // The plan's own wall list is left as it was handed in.
+  assert.equal(walls.length, 5);
+  assert.equal(walls[0].x2, 60);
+  // A door is a leaf and its swing, and nothing dashed.
   const ctx = makeRecorder();
-  paintWallSegment(ctx, { x1: 0, y1: 4, x2: 20, y2: 4, kind: 'partition' }, U_DEFAULT);
-  for (const op of ctx.ops) {
-    if (op.op !== 'fillRect') continue;
-    assert.equal(
-      op.shadowBlur,
-      0,
-      'a partition is waist height and casts nothing — VISUAL-SPEC §6',
+  let stroked = 0;
+  ctx.stroke = () => (stroked += 1);
+  paintDoorSwing(ctx, doors[0], U_DEFAULT);
+  assert.equal(stroked, 2, 'a door is one leaf and one swing');
+});
+
+// ---------------------------------------------------------------- daylight
+
+const ROOM = Object.freeze({ x: 10, y: 0, w: 40, h: 20 });
+const ENVELOPE = Object.freeze([
+  { x1: 0, y1: 0, x2: 80, y2: 0, kind: 'exterior' },
+  { x1: 0, y1: 0, x2: 0, y2: 40, kind: 'exterior' },
+  { x1: 0, y1: 40, x2: 80, y2: 40, kind: 'exterior' },
+  { x1: 10, y1: 0, x2: 10, y2: 20, kind: 'partition' },
+]);
+
+test('daylight comes in through the top and left walls, pane by pane', () => {
+  // The room touches the top wall along its own width and nothing on the left
+  // but a partition; a room on the bottom wall is lit by neither.
+  assert.deepEqual(litRuns(ROOM, ENVELOPE), { top: [[10, 50]], left: [] });
+  assert.deepEqual(litRuns({ x: 0, y: 20, w: 10, h: 20 }, ENVELOPE).top, []);
+  assert.deepEqual(litRuns({ x: 0, y: 20, w: 10, h: 20 }, ENVELOPE).left, [[20, 40]]);
+  const panes = panesAlong(10, 50);
+  assert.ok(panes.length >= 8, `${panes.length} panes in forty units of wall`);
+  for (const [a, b] of panes) assert.ok(Math.abs(b - a - PANE_U) < 1e-9);
+  for (let i = 1; i < panes.length; i++) {
+    assert.ok(
+      Math.abs(panes[i][0] - panes[i - 1][1] - MULLION_U) < 1e-9,
+      'a mullion is the wrong width',
     );
   }
+  // Short of both corners, by the same margin: the band is centred.
+  assert.ok(panes[0][0] >= 10 + WINDOW_INSET_U - 1e-9);
+  assert.ok(panes.at(-1)[1] <= 50 - WINDOW_INSET_U + 1e-9);
+  assert.ok(Math.abs(panes[0][0] - 10 - (50 - panes.at(-1)[1])) < 1e-9);
+  // A run too short for one pane has none.
+  assert.deepEqual(panesAlong(0, PANE_U + 2 * WINDOW_INSET_U - 0.1), []);
+});
+
+test('a room takes at most three patches, sheared along the light, and none over its plate', () => {
+  for (const id of LIGHT_MOOD_IDS) {
+    const light = LIGHT_MOODS[id];
+    const patches = daylightPatches(ROOM, windowsOf(ROOM, ENVELOPE), light);
+    assert.ok(patches.length > 0 && patches.length <= PATCHES_PER_ROOM, `${id}: ${patches.length}`);
+    for (const { poly } of patches) {
+      // As wide as its pane at the wall, and the far edge is the near edge
+      // moved along the light by the mood's own length.
+      assert.ok(Math.abs(poly[1][0] - poly[0][0] - PANE_U) < 1e-9);
+      const dx = poly[3][0] - poly[0][0];
+      const dy = poly[3][1] - poly[0][1];
+      assert.ok(dx > 0 && dy > 0, `${id}: a patch travels up or left`);
+      assert.ok(Math.abs(Math.hypot(dx, dy) - PATCH_LENGTH_U * light.cast) < 1e-9);
+      assert.ok(Math.abs(dx / dy - light.dir.x / light.dir.y) < 1e-9, `${id}: lit from elsewhere`);
+      // Clear of the corner the plate is read in.
+      const left = Math.min(...poly.map((p) => p[0]));
+      assert.ok(left >= ROOM.x + PLATE_BOX_U.w - 1e-9, `${id}: a patch lies under the plate`);
+    }
+  }
+  // A room no window reaches has a skylight instead, inside it and off the plate.
+  const inner = { x: 30, y: 12, w: 20, h: 16 };
+  assert.deepEqual(windowsOf(inner, ENVELOPE), { top: [], left: [] });
+  const sky = skylightOf(inner);
+  assert.ok(sky, 'a windowless room is unlit');
+  assert.ok(sky.x >= inner.x && sky.x + sky.w <= inner.x + inner.w);
+  assert.ok(sky.y >= inner.y + PLATE_BOX_U.h && sky.y + sky.h <= inner.y + inner.h);
+  assert.ok(sky.x + sky.w / 2 < inner.x + inner.w / 2, 'the skylight is set away from the light');
+  assert.equal(skylightOf({ x: 0, y: 0, w: 4, h: 4 }), null, 'a cupboard has a skylight');
+});
+
+test('the foot of every wall is in shade, deepest under the two the light comes over', () => {
+  const ctx = makeRecorder();
+  const fills = [];
+  ctx.fillRect = (x, y, w, h) => fills.push({ x, y, w, h, style: ctx.fillStyle });
+  paintRoomAmbientOcclusion(ctx, 100, 200, 400, 300, U_DEFAULT);
+  assert.equal(fills.length, 4, 'a room has four walls');
+  const [top, left, bottom, right] = fills;
+  const deep = AO_DEPTH_U * AO_LIT_SIDE * U_DEFAULT;
+  const shallow = AO_DEPTH_U * U_DEFAULT;
+  assert.ok(Math.abs(top.h - deep) < 1e-9 && Math.abs(left.w - deep) < 1e-9);
+  assert.ok(Math.abs(bottom.h - shallow) < 1e-9 && Math.abs(right.w - shallow) < 1e-9);
+  for (const f of fills) {
+    // Inside the room, a linear ramp, darkest at the wall and gone at its depth.
+    assert.ok(f.x >= 100 && f.y >= 200 && f.x + f.w <= 500 + 1e-9 && f.y + f.h <= 500 + 1e-9);
+    assert.equal(f.style.kind, 'linear');
+    assert.match(f.style.stops[0][1], new RegExp(`,${AO_ALPHA}\\)$`));
+    assert.match(f.style.stops[1][1], /,0\)$/);
+  }
+  // The whole of a room's light is clipped to the room, and never throws.
+  const whole = makeRecorder();
+  paintRoomLight(whole, ROOM, { rx: 140, ry: 0, rw: 560, rh: 280 }, ENVELOPE, U_DEFAULT);
+  assert.ok(whole.ops.some((o) => o.op === 'clip'));
+  paintRoomLight(makeRecorder(), ROOM, { rx: 0, ry: 0, rw: 0, rh: 0 }, ENVELOPE, U_DEFAULT);
 });
 
 test('WP-72: backdrop-paint.js is the only place a shadow offset is written', () => {
