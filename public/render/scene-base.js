@@ -41,8 +41,16 @@ export class SceneBase {
   _plan;
   /** @type {string|null} */ // what decides whether the plan must be rebuilt
   _planSignature;
-  /** @type {any} */ // the baked backdrop bitmap
+  /** @type {any} */ // the baked floor, whole, at the fit scale
   _backdrop;
+  /** @type {any} */ // the same floor at the magnified scale, while there is one
+  _detail = null;
+  /** @type {any} */ // waits for the scale to hold still before baking again
+  _bakeTimer = null;
+  /** @type {{w:number, h:number}|null} */ // the canvas box in device pixels, as the browser snapped it
+  _deviceBox = null;
+  /** @type {any} */ // the media query that fires when the pixel ratio changes
+  _dprQuery = null;
   /** @type {any} */ // agents.js's AgentRuntime, which owns every character
   _runtime;
   /** @type {any} */ // the snapshot rows, by id
@@ -89,4 +97,11 @@ export class SceneBase {
   _dragFrom;
   /** @type {number} */ // how far it has travelled, for the click/drag threshold
   _dragMoved;
+
+  /**
+   * One frame, drawn now. The body is `scene-draw.js`'s; it is named here so a
+   * link below that one — the bake, which redraws once a new bitmap is ready —
+   * can ask for a frame it cannot itself draw.
+   */
+  _draw() {}
 }

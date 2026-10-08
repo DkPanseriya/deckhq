@@ -190,6 +190,29 @@ export function computeFill(planW, planH, viewW, viewH) {
   };
 }
 
+/**
+ * `scale`, moved down so a floor `planW` units wide is a whole number of device
+ * pixels. Down, never up: a fitted floor must not grow past the stage it was
+ * fitted to. The move is under one device pixel across the whole floor.
+ * @param {number} scale px per unit @param {number} planW units
+ * @param {number} dpr @returns {number}
+ */
+export function snapScaleToDevice(scale, planW, dpr) {
+  const span = Number(planW) * (Number(dpr) || 1);
+  const px = Number(scale) * span;
+  if (!(span > 0) || !(px >= 1)) return scale;
+  return Math.floor(px + 1e-6) / span;
+}
+
+/**
+ * A CSS-pixel offset on the nearest device pixel.
+ * @param {number} v @param {number} dpr @returns {number}
+ */
+export function snapToDevice(v, dpr) {
+  const k = Number(dpr) || 1;
+  return Math.round(v * k) / k;
+}
+
 export class SceneCamera extends SceneLod {
   // ---------------------------------------------------------------- camera
 
@@ -225,8 +248,16 @@ export class SceneCamera extends SceneLod {
     // viewport is the studio ground the building stands on (WP-55) — a ceiling
     // WP-59 raised from a 44 px body to 72, because at 44 the building stopped
     // at two thirds of a 1440 px stage and the rest was ground.
+    //
+    // And then moved by a fraction of a per cent, so the floor is a whole number
+    // of device pixels wide: the bitmap is baked at this scale and has to end on
+    // a pixel as well as start on one (`scene-bake.js`).
     this._fitScale = this._plan
-      ? computeFill(this._plan.width, this._plan.height, viewW, viewH).scale
+      ? snapScaleToDevice(
+          computeFill(this._plan.width, this._plan.height, viewW, viewH).scale,
+          this._plan.width,
+          this._dpr,
+        )
       : U;
     this._clampCamera();
   }
@@ -283,12 +314,18 @@ export class SceneCamera extends SceneLod {
    * to the left edge and scrolled the working floor under them, which meant
    * two cameras, two clipped backdrop passes, and a seam down the middle of a
    * building that is supposed to read as one.
+   *
+   * THE PAN IS ON THE DEVICE GRID. `_camera` keeps the exact offset, so a drag
+   * loses nothing between two pointer events; what is drawn, and what is
+   * hit-tested, is that offset on the nearest device pixel. The floor's bitmap
+   * is put down at an integer offset, and everything drawn over it has to agree
+   * with where it landed.
    */
   _cameraParams() {
     return {
       zoom: this._scale() / U,
-      panX: this._camera.panX,
-      panY: this._camera.panY,
+      panX: snapToDevice(this._camera.panX, this._dpr),
+      panY: snapToDevice(this._camera.panY, this._dpr),
       U,
     };
   }

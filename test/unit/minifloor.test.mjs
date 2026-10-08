@@ -389,6 +389,44 @@ test('drawMiniFrame paints the rooms, then one character per person', () => {
   assert.ok(ctx.calls.length > both, 'the third person left no mark on the canvas');
 });
 
+test('drawMiniFrame crops a bitmap baked at the drawn scale by the scale it says it is', () => {
+  // The main floor bakes at its own px-per-unit times the pixel ratio — 31.7
+  // device pixels to the unit on a crowded floor at a ratio of 2 — and the
+  // bitmap carries the number. Recovering it from the bitmap's width against
+  // the design grid would be out by the rounding of both.
+  const frame = floor(POPULATION);
+  const composed = composeMiniFrame(frame, VIEW);
+  const ctx = stubCtx();
+  const ppu = 31.6914;
+  const backdrop = {
+    canvas: {
+      width: Math.ceil(frame.plan.width * ppu),
+      height: Math.ceil(frame.plan.height * ppu),
+    },
+    ppu,
+    x: 0,
+    y: 0,
+    wpx: Math.ceil(frame.plan.width * U),
+    hpx: Math.ceil(frame.plan.height * U),
+  };
+  drawMiniFrame(ctx, composed, { width: VIEW.width, height: VIEW.height, backdrop });
+  const blit = ctx.calls.find((c) => c.name === 'drawImage');
+  assert.ok(blit, 'the baked floor was not blitted');
+  const [, sx, sy, sw, sh] = blit.args;
+  const x = Math.max(0, composed.shot.x);
+  const y = Math.max(0, composed.shot.y);
+  assert.ok(Math.abs(sx - x * ppu) < 1e-6);
+  assert.ok(Math.abs(sy - y * ppu) < 1e-6);
+  assert.ok(
+    Math.abs(sw - (Math.min(frame.plan.width, composed.shot.x + composed.shot.w) - x) * ppu) < 1e-6,
+  );
+  assert.ok(
+    Math.abs(sh - (Math.min(frame.plan.height, composed.shot.y + composed.shot.h) - y) * ppu) <
+      1e-6,
+  );
+  assert.ok(sx + sw <= backdrop.canvas.width + 1e-6, 'the crop runs off the bitmap');
+});
+
 test('drawMiniFrame blits the main floor’s baked bitmap when there is one', () => {
   const frame = floor(POPULATION);
   const composed = composeMiniFrame(frame, VIEW);

@@ -12,12 +12,7 @@
 
 import { buildPlan, floorPopulation, U } from './plan.js';
 import { LOOK } from './look-derive.js';
-import {
-  bakeBackdrop,
-  setLightShadow,
-  ENVELOPE_SHADOW_BLUR_PX,
-  ENVELOPE_SHADOW_DIST_PX,
-} from './backdrop.js';
+import { setLightShadow, ENVELOPE_SHADOW_BLUR_PX, ENVELOPE_SHADOW_DIST_PX } from './backdrop.js';
 import {
   badgeBox,
   characterBox,
@@ -176,7 +171,7 @@ export class SceneDraw extends SceneHit {
             backdrop: this._backdrop,
             plan: this._plan,
             scale: this._scale(),
-            camera: { ...this._camera },
+            camera: this._cameraParams(),
           }
         : null;
     this._plan = buildPlan(this._snapshot.projects || [], agents, {
@@ -197,10 +192,12 @@ export class SceneDraw extends SceneHit {
       // reason `planSignature` reads it from there too.
       agentSize: LOOK.agentSize,
     });
-    this._backdrop = bakeBackdrop(this._plan, this._dpr);
+    // The fit scale first: the floor is baked at the scale it is drawn at, so
+    // the bake has to know it (`scene-bake.js`).
+    this._recomputeFitScale();
+    this._bakeFloor();
     this._fadeFrom = previous;
     this._fadeStartedAt = previous ? frameMs() : 0;
-    this._recomputeFitScale();
     // The pan referred to a floor that no longer exists, so it is discarded;
     // the magnification is the user's and is kept.
     this._centerCamera();
@@ -316,8 +313,13 @@ export class SceneDraw extends SceneHit {
     const viewH = rect.height || this.canvas.height / this._dpr;
 
     ctx.save();
+    // Cleared in the backing store's own pixels, all of it: the store is the
+    // box the browser snapped the canvas to, which can be a device pixel more
+    // than the CSS box times the ratio, and a row that is never cleared keeps
+    // every frame ever drawn on it.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
-    ctx.clearRect(0, 0, viewW, viewH);
 
     // Computed once per frame: `camera.zoom` is the U-normalised fit scale,
     // used for both the backdrop transform below and every world<->screen
@@ -325,20 +327,6 @@ export class SceneDraw extends SceneHit {
     const camera = this._cameraParams();
 
     if (this._plan && this._backdrop) {
-      // Two clipped passes over ONE baked bitmap: the pinned half and the
-      // scrolling half. Re-baking on scroll would cost ~190 ms a frame, so
-      // the bitmap never changes — only where it is drawn from.
-      const paint = (cam, clipX, clipW) => {
-        if (clipW <= 0) return;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(clipX, 0, clipW, viewH);
-        ctx.clip();
-        ctx.translate(cam.panX, cam.panY);
-        ctx.scale(cam.zoom, cam.zoom);
-        ctx.drawImage(this._backdrop.canvas, 0, 0, this._plan.width * U, this._plan.height * U);
-        ctx.restore();
-      };
       // The building sits ON a ground rather than being cut out of the
       // background. The floor takes the shape its contents want (see plan.js's
       // ASPECT_PAD_MAX), so on most windows there is slack on one axis; a soft
@@ -379,7 +367,8 @@ export class SceneDraw extends SceneHit {
       ctx.fillRect(shadowX, shadowY, shadowW, shadowH);
       ctx.restore();
 
-      paint(camera, 0, viewW);
+      // The floor's bitmap, one pixel to one device pixel (`_blitFloor`).
+      this._blitFloor(ctx);
 
       // A RE-PLAN IS ANIMATED, NOT POPPED (`08` B6).
       //
@@ -398,9 +387,12 @@ export class SceneDraw extends SceneHit {
         } else {
           ctx.save();
           ctx.globalAlpha = 1 - t;
+          // The outgoing bitmap, at the size it was on screen: its own pixels
+          // over the scale it was baked at, times the scale it was drawn at.
+          const old = fade.backdrop;
+          const k = fade.scale / old.ppu;
           ctx.translate(fade.camera.panX, fade.camera.panY);
-          ctx.scale(fade.scale / U, fade.scale / U);
-          ctx.drawImage(fade.backdrop.canvas, 0, 0, fade.plan.width * U, fade.plan.height * U);
+          ctx.drawImage(old.canvas, 0, 0, old.canvas.width * k, old.canvas.height * k);
           ctx.restore();
         }
       }

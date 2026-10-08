@@ -11,6 +11,7 @@
 
 import { fadedOut, PALETTE, washedCarpet } from './palette.js';
 import { registerBodyScale } from './plan-scale.js';
+import { deviceGrid, snapPx, snapScaleOf, snapWidth } from './device-px.js';
 import {
   roundRect,
   setLightShadow,
@@ -196,23 +197,50 @@ export function paintCarpet(ctx, x, y, w, h, _rng, tint = null, u = U_DEFAULT) {
   ctx.clip();
   ctx.fillStyle = washedCarpet(PALETTE.carpetBase, tint);
   ctx.fillRect(x, y, w, h);
-  ctx.lineWidth = 1;
+  paintWeave(ctx, x, y, w, h, pitch);
+  ctx.restore();
+}
+
+/**
+ * THE WEAVE ITSELF: two hairline passes, the light one first.
+ *
+ * One function because two carpets lay it — the broadloom above and the loop
+ * pile in `backdrop-floor-look.js` — and because it is the pattern on this
+ * floor that a pixel grid is hardest on. Three pixels of pitch at a fit scale of
+ * 15.85 px per unit is 3.4 device pixels: every line straddles two rows, and
+ * the spacing drifts in and out of step with them across the room. In a bake
+ * the pitch and the line are whole device pixels (`deviceGrid`), and the pass is
+ * thinned by exactly what the rounding thickened it, so the carpet keeps its
+ * tone. The grid is anchored to the floor, not the room, so two rooms side by
+ * side are one weave.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {number} x @param {number} y @param {number} w @param {number} h
+ * @param {number} pitch the designed pitch, in the context's own pixels
+ */
+function paintWeave(ctx, x, y, w, h, pitch) {
+  const grid = deviceGrid(ctx, pitch, 1);
+  const step = grid.pitch;
+  if (grid.alpha !== 1) ctx.globalAlpha = grid.alpha;
+  ctx.lineWidth = grid.width;
   ctx.strokeStyle = PALETTE.carpetWeaveLight;
   ctx.beginPath();
-  for (let gy = Math.ceil(y / pitch) * pitch; gy <= y + h; gy += pitch) {
-    ctx.moveTo(x, gy + 0.5);
-    ctx.lineTo(x + w, gy + 0.5);
+  for (let gy = Math.ceil(y / step) * step; gy <= y + h; gy += step) {
+    ctx.moveTo(x, grid.at(gy));
+    ctx.lineTo(x + w, grid.at(gy));
   }
   ctx.stroke();
   ctx.strokeStyle = PALETTE.carpetWeaveDark;
   ctx.beginPath();
-  for (let gx = Math.ceil(x / pitch) * pitch; gx <= x + w; gx += pitch) {
-    ctx.moveTo(gx + 0.5, y);
-    ctx.lineTo(gx + 0.5, y + h);
+  for (let gx = Math.ceil(x / step) * step; gx <= x + w; gx += step) {
+    ctx.moveTo(grid.at(gx), y);
+    ctx.lineTo(grid.at(gx), y + h);
   }
   ctx.stroke();
-  ctx.restore();
 }
+// Exported by name, below the function rather than on it: the carpet and its
+// weave are one material, and `test/unit/interior.test.mjs` reads them as one.
+export { paintWeave };
 
 /**
  * Square tile with grout lines — the café bay only (§3.2).
@@ -224,24 +252,28 @@ export function paintCarpet(ctx, x, y, w, h, _rng, tint = null, u = U_DEFAULT) {
 export function paintTile(ctx, x, y, w, h, u = U_DEFAULT) {
   // Grout is a hairline, not a rule. At full contrast on a 24px pitch the grid
   // outweighed everything standing on it and the room read as graph paper.
-  const CELL = TILE_CELL_U * u;
+  // In a bake the cell and the grout are whole device pixels, and the grout is
+  // thinned by what the rounding thickened it (`deviceGrid`).
+  const grid = deviceGrid(ctx, TILE_CELL_U * u, 0.75);
+  const CELL = grid.pitch;
   ctx.save();
   roundRect(ctx, x, y, w, h, 2);
   ctx.clip();
   ctx.fillStyle = PALETTE.tileBase;
   ctx.fillRect(x, y, w, h);
   ctx.strokeStyle = PALETTE.tileGrout;
-  ctx.lineWidth = 0.75;
+  ctx.lineWidth = grid.width;
+  if (grid.alpha !== 1) ctx.globalAlpha = grid.alpha;
   for (let gy = y; gy <= y + h + CELL; gy += CELL) {
     ctx.beginPath();
-    ctx.moveTo(x, gy + 0.5);
-    ctx.lineTo(x + w, gy + 0.5);
+    ctx.moveTo(x, grid.at(gy));
+    ctx.lineTo(x + w, grid.at(gy));
     ctx.stroke();
   }
   for (let gx = x; gx <= x + w + CELL; gx += CELL) {
     ctx.beginPath();
-    ctx.moveTo(gx + 0.5, y);
-    ctx.lineTo(gx + 0.5, y + h);
+    ctx.moveTo(grid.at(gx), y);
+    ctx.lineTo(grid.at(gx), y + h);
     ctx.stroke();
   }
   ctx.restore();
@@ -483,8 +515,14 @@ export function paintWallSegment(ctx, wall, u) {
   const y2 = wall.y2 * u;
   const horizontal = Math.abs(y2 - y1) < 0.5;
 
-  const thickness = wall.kind === 'exterior' ? 6 : wall.kind === 'solid' ? 5 : 2.5;
+  // ON THE DEVICE GRID, in a bake. A wall is the hardest edge on the floor and
+  // the one the eye judges sharpness by, so its two faces, its two ends and its
+  // thickness are whole device pixels there. `near` is the face nearer the
+  // origin; outside a bake nothing is snapped and it is `centre - half` as ever.
+  const snapped = snapScaleOf(ctx) > 0;
+  const thickness = snapWidth(ctx, wall.kind === 'exterior' ? 6 : wall.kind === 'solid' ? 5 : 2.5);
   const half = thickness / 2;
+  const near = snapPx(ctx, (horizontal ? y1 : x1) - half);
 
   ctx.save();
   if (wall.kind === 'partition') {
@@ -507,8 +545,10 @@ export function paintWallSegment(ctx, wall, u) {
 
   /** @param {number} a @param {number} b */
   const span = (a, b) => {
-    if (horizontal) ctx.fillRect(a, y1 - half, b - a, thickness);
-    else ctx.fillRect(x1 - half, a, thickness, b - a);
+    const from = snapPx(ctx, a);
+    const to = snapPx(ctx, b);
+    if (horizontal) ctx.fillRect(from, near, to - from, thickness);
+    else ctx.fillRect(near, from, thickness, to - from);
   };
 
   const start = horizontal ? x1 : y1;
@@ -525,20 +565,29 @@ export function paintWallSegment(ctx, wall, u) {
 
   // A hairline on the wall face reads as the plaster edge and keeps the line
   // crisp once the whole floor is scaled down to fit the window.
+  //
+  // In a bake it is a whole device pixel wide and lies just INSIDE each face,
+  // where a line centred on the face would be half on the wall and half on the
+  // floor at half strength; it is thinned by what the rounding thickened it.
   ctx.save();
   ctx.strokeStyle = wall.kind === 'partition' ? PALETTE.partitionEdge : PALETTE.wallEdge;
-  ctx.lineWidth = 0.75;
+  const line = snapWidth(ctx, 0.75);
+  ctx.lineWidth = line;
+  if (snapped) ctx.globalAlpha = Math.min(1, 0.75 / line);
+  const inset = snapped ? line / 2 : 0;
+  const a = near + inset;
+  const b = near + thickness - inset;
   ctx.beginPath();
   if (horizontal) {
-    ctx.moveTo(x1, y1 - half);
-    ctx.lineTo(x2, y1 - half);
-    ctx.moveTo(x1, y1 + half);
-    ctx.lineTo(x2, y1 + half);
+    ctx.moveTo(x1, a);
+    ctx.lineTo(x2, a);
+    ctx.moveTo(x1, b);
+    ctx.lineTo(x2, b);
   } else {
-    ctx.moveTo(x1 - half, y1);
-    ctx.lineTo(x1 - half, y2);
-    ctx.moveTo(x1 + half, y1);
-    ctx.lineTo(x1 + half, y2);
+    ctx.moveTo(a, y1);
+    ctx.lineTo(a, y2);
+    ctx.moveTo(b, y1);
+    ctx.lineTo(b, y2);
   }
   ctx.stroke();
   ctx.restore();

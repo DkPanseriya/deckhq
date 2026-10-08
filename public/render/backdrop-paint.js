@@ -12,6 +12,7 @@
  */
 
 import { LIGHT_DIR, PALETTE } from './palette.js';
+import { deviceScaleOf } from './device-px.js';
 
 // ---- local colour tokens ------------------------------------------------
 // palette.js is owned by another engineer on this build. A colour this file
@@ -27,6 +28,18 @@ import { LIGHT_DIR, PALETTE } from './palette.js';
 // STATE_COLORS.for_review (#C0392B).
 export const LAMP_GLOW = 'rgba(255, 214, 140, 0.4)';
 
+/**
+ * THE DESIGN GRID: 14 pixels to a plan unit.
+ *
+ * Every `*_PX` constant in the painters, every corner radius and every line
+ * width is a number on this grid. It was also the resolution the floor was
+ * BAKED at, and is not any more: `bakeBackdrop` takes the device pixels per unit
+ * the floor is about to be drawn at and scales the whole drawing to it, so the
+ * bitmap reaches the screen one pixel to one pixel. What a painter writes is
+ * unchanged — it still draws on this grid — and `device-px.js` is how it learns
+ * what one of these pixels is on the device, for the three things a transform
+ * does not scale.
+ */
 export const U_DEFAULT = 14;
 
 /**
@@ -314,6 +327,14 @@ export function roundRect(ctx, x, y, w, h, r) {
  * `dist` is a distance along `LIGHT_DIR`, in baked pixels. See the constants
  * above for the four the floor actually uses.
  *
+ * BOTH ARE SCALED TO THE DEVICE HERE. A canvas applies its transform to
+ * geometry and not to shadows: `shadowBlur` and the two offsets are device
+ * pixels whatever `scale()` says. Written unscaled, a display reporting a pixel
+ * ratio of 2 drew every shadow on this floor at half the size the design was
+ * tuned at — 10 px of reach became 5 — and the lighting a HiDPI owner saw was
+ * not the lighting in any golden. `deviceScaleOf` is 1 for a context nobody
+ * has spoken for, so a recorder and a thumbnail are told what they always were.
+ *
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {{blur?:number, dist?:number, color?:string}} [opts]
  */
@@ -321,10 +342,11 @@ export function setLightShadow(
   ctx,
   { blur = 8, dist = PROP_SHADOW_DIST_PX, color = PALETTE.shadowContact } = {},
 ) {
+  const k = deviceScaleOf(ctx);
   ctx.shadowColor = color;
-  ctx.shadowBlur = blur;
-  ctx.shadowOffsetX = LIGHT_DIR.x * dist;
-  ctx.shadowOffsetY = LIGHT_DIR.y * dist;
+  ctx.shadowBlur = blur * k;
+  ctx.shadowOffsetX = LIGHT_DIR.x * dist * k;
+  ctx.shadowOffsetY = LIGHT_DIR.y * dist * k;
 }
 
 /**

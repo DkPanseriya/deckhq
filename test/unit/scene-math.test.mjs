@@ -27,7 +27,17 @@ import {
   computeAnchor,
   plateLinesFor,
   CHAR_MIN_PX_PER_UNIT,
+  snapScaleToDevice,
+  snapToDevice,
 } from '../../public/render/scene.js';
+import {
+  BAKE_SETTLE_MS,
+  DETAIL_MARGIN,
+  DETAIL_MAX_CANVASES,
+  SceneBake,
+  coversView,
+  detailRegion,
+} from '../../public/render/scene-bake.js';
 import {
   doingEntriesFor,
   PLATE_DOING_CHARS,
@@ -47,6 +57,7 @@ import {
   badgeBox,
   BODY_HEIGHT_U,
   formatElapsedShort,
+  labelHaloWidth,
   LABEL_DROP_U,
   LEGIBILITY_MIN_PX,
   SELECTION_RING_R,
@@ -1782,4 +1793,172 @@ test('WP-81: the plate’s type scale is stated once, and nothing is set under 1
   assert.ok(PLATE_ROWS[1].px > PLATE_ROWS[0].px, 'the hero must outrank the name');
   // Every row's leading is positive, so the rows can only ever run downward.
   assert.ok(PLATE_ROWS.every((r) => r.lead > 0));
+});
+
+// ------------------------------------------- the bitmap, one pixel to one
+
+test('the fit scale is moved so the floor is a whole number of device pixels wide', () => {
+  for (const dpr of [1, 1.25, 1.5, 1.75, 2, 2.25, 3]) {
+    for (const [planW, scale] of [
+      [126.2, 15.8464],
+      [214.6, 9.3168],
+      [61.4, 28.5714],
+      [300, 7.5],
+    ]) {
+      const snapped = snapScaleToDevice(scale, planW, dpr);
+      const px = planW * snapped * dpr;
+      assert.ok(Math.abs(px - Math.round(px)) < 1e-6, `${px} device px wide at ratio ${dpr}`);
+      assert.ok(snapped <= scale + 1e-12, 'a fitted floor grew past the stage it was fitted to');
+      // Under one device pixel across the whole floor: a twentieth of a per cent.
+      assert.ok(planW * (scale - snapped) * dpr < 1, 'the floor lost more than a pixel');
+      assert.ok(
+        1 - snapped / scale < 0.0015,
+        `moved by ${((1 - snapped / scale) * 100).toFixed(3)} %`,
+      );
+      assert.equal(
+        snapScaleToDevice(snapped, planW, dpr),
+        snapped,
+        'snapping twice moved it again',
+      );
+    }
+  }
+  // Nothing to snap to is nothing changed.
+  assert.equal(snapScaleToDevice(14, 0, 2), 14);
+  assert.equal(snapToDevice(10.3, 2), 10.5);
+  assert.equal(snapToDevice(10.3, 1), 10);
+  assert.equal(snapToDevice(-0.5, 1.5), -1 / 1.5);
+});
+
+test('a magnified floor is baked whole while it fits, and as a window once it does not', () => {
+  const canvas = { canvasW: 3000, canvasH: 1584 };
+  // 1.9 canvases: whole.
+  const fits = { planW: 126, planH: 60, ppu: 34.5, originX: -600, originY: -200, ...canvas };
+  assert.ok(fits.planW * fits.ppu * fits.planH * fits.ppu <= DETAIL_MAX_CANVASES * 3000 * 1584);
+  assert.equal(detailRegion(fits), null);
+
+  // 2.9 canvases: the window and its margin, clipped to the floor.
+  const over = { planW: 126, planH: 60, ppu: 42.8, originX: -1200, originY: -300, ...canvas };
+  const region = detailRegion(over);
+  assert.ok(region, 'a floor nearly three canvases large was baked whole');
+  assert.equal(region.x, 1200 - 3000 * DETAIL_MARGIN);
+  assert.equal(region.y, 300 - 1584 * DETAIL_MARGIN);
+  assert.equal(region.w, 3000 * (1 + 2 * DETAIL_MARGIN));
+  assert.ok(region.y + region.h <= Math.ceil(60 * 42.8), 'the window runs off the floor');
+  assert.ok(region.w * region.h <= DETAIL_MAX_CANVASES * 3000 * 1584, 'a window over the cap');
+
+  // At the floor's own corner the margin is the floor's edge, not past it.
+  const corner = detailRegion({ ...over, originX: 0, originY: 0 });
+  assert.equal(corner.x, 0);
+  assert.equal(corner.y, 0);
+
+  // A window covers the view until a pan leaves its margin.
+  const full = { fullW: 126 * 42.8, fullH: 60 * 42.8, ...canvas };
+  const at = (originX, originY) =>
+    coversView(
+      { x: region.x, y: region.y, w: region.w, h: region.h },
+      { ...full, originX, originY },
+    );
+  assert.equal(at(-1200, -300), true);
+  assert.equal(at(-1200 - 3000 * DETAIL_MARGIN, -300), true, 'the margin is not a margin');
+  assert.equal(at(-1200 - 3000 * DETAIL_MARGIN - 2, -300), false);
+  assert.equal(at(-1200, -300 + 1584 * DETAIL_MARGIN + 2), false);
+  assert.ok(BAKE_SETTLE_MS >= 100, 'a bake is tens of milliseconds; a wheel notch is not a settle');
+});
+
+/**
+ * A scene with a floor on it and no canvas: enough of one for the blit, which
+ * is arithmetic and two calls.
+ */
+function bakedScene({ fitScale = 15.5, zoom = 1, dpr = 2, pan = { panX: 40.25, panY: 17.75 } }) {
+  const calls = [];
+  const ctx = {
+    save: () => calls.push(['save']),
+    restore: () => calls.push(['restore']),
+    setTransform: (...a) => calls.push(['setTransform', ...a]),
+    drawImage: (image, ...a) => calls.push(['drawImage', image.name, ...a]),
+  };
+  const scene = Object.assign(Object.create(SceneBake.prototype), {
+    canvas: { width: 3000, height: 1600 },
+    _plan: { width: 100, height: 50 },
+    _fitScale: fitScale,
+    _zoom: zoom,
+    _dpr: dpr,
+    _camera: { ...pan },
+    _backdrop: {
+      canvas: { name: 'base', width: 3100, height: 1550 },
+      ppu: 31,
+      asked: 31,
+      x: 0,
+      y: 0,
+    },
+    _detail: null,
+  });
+  return { scene, ctx, calls, draws: () => calls.filter((c) => c[0] === 'drawImage') };
+}
+
+test('the floor is blitted one bitmap pixel to one device pixel, at a whole offset', () => {
+  const { scene, ctx, calls, draws } = bakedScene({});
+  scene._blitFloor(ctx);
+  // Under the identity transform, and with no size: nothing is scaled.
+  assert.deepEqual(calls[1], ['setTransform', 1, 0, 0, 1, 0, 0]);
+  assert.deepEqual(draws(), [['drawImage', 'base', 81, 36]]);
+  assert.equal(calls.at(-1)[0], 'restore', 'the identity transform leaked into the frame');
+
+  // And the camera everything else is drawn with agrees with where it landed.
+  const cam = scene._cameraParams();
+  assert.equal(cam.panX * 2, 81);
+  assert.equal(cam.panY * 2, 36);
+  assert.equal(scene._camera.panX, 40.25, 'the exact pan was thrown away; a drag would stall');
+});
+
+test('while a zoom is in flight the bitmap in hand is stretched; once baked it is one to one', () => {
+  // The wheel has turned and nothing has been baked for the new scale yet.
+  const flying = bakedScene({ zoom: 1.5, pan: { panX: -100, panY: -50 } });
+  flying.scene._blitFloor(flying.ctx);
+  assert.deepEqual(flying.draws(), [['drawImage', 'base', -200, -100, 4650, 2325]]);
+
+  // Settled: the detail is at the drawn scale and covers the window, so it is
+  // the only thing drawn and it is not scaled.
+  const settled = bakedScene({ zoom: 1.5, pan: { panX: -100, panY: -50 } });
+  settled.scene._detail = {
+    canvas: { name: 'detail', width: 3750, height: 2100 },
+    ppu: 46.5,
+    asked: 46.5,
+    x: 0,
+    y: 0,
+    windowed: true,
+  };
+  settled.scene._blitFloor(settled.ctx);
+  assert.deepEqual(settled.draws(), [['drawImage', 'detail', -200, -100]]);
+
+  // Panned past the window's edge: the whole floor, soft, underneath it.
+  settled.calls.length = 0;
+  settled.scene._camera.panX = -500;
+  settled.scene._blitFloor(settled.ctx);
+  assert.deepEqual(settled.draws(), [
+    ['drawImage', 'base', -1000, -100, 4650, 2325],
+    ['drawImage', 'detail', -1000, -100],
+  ]);
+
+  // Magnification reset: the floor is already one to one, and a detail left
+  // over from the zoom is not stretched over it.
+  settled.calls.length = 0;
+  settled.scene._zoom = 1;
+  settled.scene._camera = { panX: 0, panY: 0 };
+  settled.scene._blitFloor(settled.ctx);
+  assert.deepEqual(settled.draws(), [['drawImage', 'base', 0, 0]]);
+});
+
+test('a name is haloed by a share of its type, never under a device pixel and a half', () => {
+  assert.ok(Math.abs(labelHaloWidth(11, 1) - 1.76) < 1e-9);
+  assert.ok(Math.abs(labelHaloWidth(14, 2) - 2.24) < 1e-9);
+  // A 6 px label would get under a pixel of outline; it gets a pixel and a half.
+  assert.equal(labelHaloWidth(6, 1), 1.5);
+  assert.equal(labelHaloWidth(6, 2), 0.96);
+  assert.equal(labelHaloWidth(4, 2) * 2, 1.5, 'in DEVICE pixels, whatever the ratio');
+  // Under a quarter of the glyph at every size the floor sets: the counters stay open.
+  for (const row of PLATE_ROWS) {
+    assert.ok(Math.abs(row.halo - row.px * 0.16) < 1e-9, `${row.px} px is haloed ${row.halo}`);
+    assert.ok(labelHaloWidth(row.px, 1) / row.px < 0.2);
+  }
 });

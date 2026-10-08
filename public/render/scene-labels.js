@@ -19,12 +19,13 @@ import { formatTokens, plateHeroLine, plateTertiaryLine, restingChipLine } from 
 // leaf of pure numbers, and `plan.js` is already at the 900-line ceiling.
 import { PLATE_BAND, PLUS_CLEAR_U } from './plan-units.js';
 import { PALETTE, STATE_COLORS } from './palette.js';
-import { formatElapsed } from './rig.js';
+import { formatElapsed, labelHaloWidth } from './rig.js';
+import { deviceScaleOf, snapPx, snapWidth } from './device-px.js';
 import { labelFontSize, sansFont } from './rig-metrics.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 import { waitingSince } from '../floor-rule.js';
 import { worldToScreen } from './agents.js';
-import { SceneCamera } from './scene-camera.js';
+import { SceneBake } from './scene-bake.js';
 import { now as clockNow } from '../clock.js';
 
 export { MAX_LABEL_OFFSET_ATTEMPTS, resolveLabelCollisions } from './label-spots.js';
@@ -530,12 +531,15 @@ export function resolveBadgeCollisions(items, bodies = []) {
  * which is the floor §3.8 set. That the hero outranks the room's own name is
  * the whole point of the package — the name says which room, the hero says
  * whether to get up.
+ *
+ * `halo` is 0.16 of the size, a figure's name's own share (`labelHaloWidth`).
+ * It was 0.23, which closed the counters of the 11 px rows.
  */
 export const PLATE_ROWS = Object.freeze([
-  { px: 12.5, weight: 700, mono: false, lead: 12, halo: 3 }, // 0 title
-  { px: 14, weight: 700, mono: true, lead: 16, halo: 3.2 }, // 1 hero
-  { px: 11, weight: 600, mono: false, lead: 12, halo: 2.6 }, // 2 doing
-  { px: 11, weight: 600, mono: true, lead: 11, halo: 2.6 }, // 3 tertiary
+  { px: 12.5, weight: 700, mono: false, lead: 12, halo: 2 }, // 0 title
+  { px: 14, weight: 700, mono: true, lead: 16, halo: 2.24 }, // 1 hero
+  { px: 11, weight: 600, mono: false, lead: 12, halo: 1.76 }, // 2 doing
+  { px: 11, weight: 600, mono: true, lead: 11, halo: 1.76 }, // 3 tertiary
 ]);
 
 /** How far a row's descenders reach below its baseline, for the band fit. */
@@ -688,7 +692,7 @@ export function layoutPlate(ctx, room, plate, camera, limitX = Infinity) {
   return { rows, k, rect: { x, y: y0, w: widest, h: Math.max(0, bottom - y0) } };
 }
 
-export class SceneLabels extends SceneCamera {
+export class SceneLabels extends SceneBake {
   /**
    * The room's name and the three ranked lines under it, as plain text
    * directly on the floor — no card, no fill, no border, no rounded rect
@@ -712,6 +716,7 @@ export class SceneLabels extends SceneCamera {
     const plate = this._platePlanFor(room);
     const laid = layout || layoutPlate(ctx, room, plate, camera);
     const k = laid.k;
+    const dev = deviceScaleOf(ctx);
 
     ctx.save();
     // Text state is global and the rig can leave textAlign at 'center'.
@@ -744,10 +749,15 @@ export class SceneLabels extends SceneCamera {
         ctx.fill();
       }
       ctx.strokeStyle = PALETTE.plateHalo;
-      ctx.lineWidth = row.halo;
-      ctx.strokeText(row.text, row.x + row.dotted, row.y);
+      // 0.16 of the type and never under a device pixel and a half, which is a
+      // figure's name's own rule (`labelHaloWidth`); the baseline and the left
+      // edge on whole device pixels, so a row is the same row in every room.
+      ctx.lineWidth = Math.max(row.halo, labelHaloWidth(row.px, dev));
+      const tx = snapPx(ctx, row.x + row.dotted);
+      const ty = snapPx(ctx, row.y);
+      ctx.strokeText(row.text, tx, ty);
       ctx.fillStyle = ink[row.i];
-      ctx.fillText(row.text, row.x + row.dotted, row.y);
+      ctx.fillText(row.text, tx, ty);
     }
     ctx.restore();
 
@@ -782,15 +792,18 @@ export class SceneLabels extends SceneCamera {
     const px = labelFontSize(this._characterScale());
     ctx.save();
     ctx.font = sansFont(px);
-    const w = ctx.measureText(text).width + px * 1.1;
-    const h = px * 1.7;
-    const box = { x: at.x - w / 2, y: at.y - h / 2, w, h };
+    // The chip's box and its rule on whole device pixels: a 1 px border at a
+    // fractional offset is a 2 px border at half strength.
+    const w = snapPx(ctx, ctx.measureText(text).width + px * 1.1);
+    const h = snapPx(ctx, px * 1.7);
+    const box = { x: snapPx(ctx, at.x - w / 2), y: snapPx(ctx, at.y - h / 2), w, h };
+    const rule = snapWidth(ctx, 1);
     ctx.globalAlpha = 1;
     ctx.fillStyle = PALETTE.plateHalo;
     ctx.fillRect(box.x, box.y, box.w, box.h);
     ctx.strokeStyle = PALETTE.plateInkTertiary;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
+    ctx.lineWidth = rule;
+    ctx.strokeRect(box.x + rule / 2, box.y + rule / 2, box.w - rule, box.h - rule);
     ctx.fillStyle = PALETTE.plateInk;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';

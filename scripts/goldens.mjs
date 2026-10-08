@@ -255,9 +255,22 @@ export const MOTION_PHASE = 0.25;
  * the board the whole window wide. A selector that matches nothing fails the
  * capture, `scrollTo`'s rule.
  *
+ * A capture may also name a device PIXEL RATIO. Every capture above is taken at
+ * 1, which is not what a HiDPI owner looks at: the floor's bitmap is baked at
+ * the drawn scale times the ratio and its shadows are scaled by it, and a set
+ * taken entirely at 1 cannot see either go wrong at 2. `crowded@2x` and
+ * `single@2x` are the busiest floor and the quietest one at a ratio of 2, and
+ * the picture is twice the stage each way.
+ *
+ * The ratio is REAL — a second browser started with
+ * `--force-device-scale-factor` — and never the DevTools emulation every other
+ * capture's stage is set through. Under emulation a canvas that is one to one
+ * with the device is resampled on its way to the screenshot, which would make a
+ * golden of the floor at 2 a golden of the emulator.
+ *
  * @type {ReadonlyArray<{name:string, population:string, theme:string,
  *   stage?:{w:number, h:number}, press?:string, motion?:boolean, query?:string,
- *   command?:string, click?:string, scrollTo?:string}>}
+ *   command?:string, click?:string, scrollTo?:string, dpr?:number}>}
  */
 const CAPTURES = [
   ...POPULATIONS.map((population) => ({ name: population, population, theme: 'default' })),
@@ -370,6 +383,15 @@ const CAPTURES = [
   // side behind them — the third way of laying a floor, and the only one in
   // which two rooms are both a room's shape at this window's.
   { name: 'pair', population: 'pair', theme: 'default', stage: { w: 1440, h: 1000 } },
+  // THE FLOOR A HiDPI DISPLAY SHOWS, busiest and quietest. See `dpr` above.
+  {
+    name: 'crowded@2x',
+    population: 'crowded',
+    theme: 'default',
+    stage: { w: 2000, h: 1185 },
+    dpr: 2,
+  },
+  { name: 'single@2x', population: 'single', theme: 'default', dpr: 2 },
   // A WORKTREE IS NOT A PROJECT. One repository with somebody in its main
   // checkout and two linked worktrees in use, and one other repository: two
   // rooms, the first with a desk and two named benches against its foot wall —
@@ -942,12 +964,24 @@ const verdicts = [];
  * they are reported and the run exits SKIPPED. §87, §114 and §126.3.
  */
 const unproven = [];
-const run = withChrome(
+/**
+ * One browser's worth of captures: what `withChrome` is started with, and what
+ * it is handed. A real pixel ratio is fixed when a browser starts, so there is
+ * one browser per ratio; all but two captures are at 1 and share the first.
+ *
+ * Returned as a pair rather than run here so the captures themselves stay where
+ * they have always been in this file.
+ *
+ * @param {typeof captures} list @param {number} dpr
+ * @returns {[Parameters<typeof withChrome>[0], (client: any) => Promise<void>]}
+ */
+const session = (list, dpr) => [
   {
     chromePath,
     width: WIDTH,
     height: HEIGHT,
     scale: 1,
+    deviceScaleFactor: dpr === 1 ? undefined : dpr,
     // Take the machine out of the picture as far as Chrome allows: one colour
     // profile, greyscale text anti-aliasing, no hinting. The sandbox and
     // shared-memory flags a CI runner needs are not here — `withChrome` adds
@@ -973,7 +1007,7 @@ const run = withChrome(
     };
     await emulateMotion(true);
 
-    for (const capture of captures) {
+    for (const capture of list) {
       const { name, population, theme } = capture;
       const t0 = Date.now();
       // THE STAGE THIS CAPTURE IS TAKEN ON. `--stage` overrides every capture,
@@ -1015,7 +1049,9 @@ const run = withChrome(
             await client.send('Emulation.setDeviceMetricsOverride', {
               width: shotW,
               height: shotH,
-              deviceScaleFactor: 1,
+              // 0 leaves a real ratio alone; 1 is the emulated one every
+              // capture at 1 has always been taken at.
+              deviceScaleFactor: dpr === 1 ? 1 : 0,
               mobile: false,
             });
 
@@ -1142,7 +1178,18 @@ const run = withChrome(
       }
     }
   },
-);
+];
+
+const ratios = [...new Set(captures.map((c) => c.dpr || 1))].sort((a, b) => a - b);
+const run = (async () => {
+  for (const dpr of ratios) {
+    const [opts, shoot] = session(
+      captures.filter((c) => (c.dpr || 1) === dpr),
+      dpr,
+    );
+    await withChrome(opts, shoot);
+  }
+})();
 
 // A browser that will not start is the third tooling gap, beside "no
 // WebSocket" and "no Chrome on this machine", and it is treated the same way:

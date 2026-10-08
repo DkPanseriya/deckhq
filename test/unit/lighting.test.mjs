@@ -44,7 +44,8 @@ import {
   shadowOffsetFor,
   withShadow,
 } from '../../public/render/backdrop-paint.js';
-import { paintProp } from '../../public/render/backdrop.js';
+import { BAKE_MAX_PIXELS, bakeSize, paintProp } from '../../public/render/backdrop.js';
+import { deviceGrid, setDeviceScale } from '../../public/render/device-px.js';
 import { buildPlan } from '../../public/render/plan.js';
 import { SHADOW_OX, SHADOW_OY } from '../../public/render/rig-metrics.js';
 import { drawContactShadow as drawCharacterShadow } from '../../public/render/rig-body.js';
@@ -667,4 +668,125 @@ test('WP-72: the ground falloff is built once per camera, not once per frame', (
   assert.match(src, /_groundFalloff\(/);
   assert.match(src, /this\._groundWash\s*&&\s*this\._groundWash\.key === key/);
   assert.match(src, /createRadialGradient\(/);
+});
+
+// ------------------------------------------------- the device, and the bake
+
+test('a shadow is the designed size on the device: blur and offset scale with it', () => {
+  // `shadowBlur` and the two offsets are device pixels whatever the transform
+  // says. Unscaled, a display at a pixel ratio of 2 drew every shadow at half
+  // the size it was tuned at.
+  const plain = makeRecorder();
+  setLightShadow(plain, { blur: 8, dist: PROP_SHADOW_DIST_PX });
+  assert.equal(plain.shadowBlur, 8, 'a context nobody has spoken for is told what it always was');
+
+  for (const k of [1, 1.132, 1.5, 2, 2.264]) {
+    const ctx = makeRecorder();
+    setDeviceScale(ctx, k);
+    setLightShadow(ctx, { blur: 8, dist: PROP_SHADOW_DIST_PX });
+    assert.ok(Math.abs(ctx.shadowBlur - 8 * k) < 1e-9, `blur at ${k}`);
+    assert.ok(Math.abs(ctx.shadowOffsetX - plain.shadowOffsetX * k) < 1e-9, `offset x at ${k}`);
+    assert.ok(Math.abs(ctx.shadowOffsetY - plain.shadowOffsetY * k) < 1e-9, `offset y at ${k}`);
+    // On screen — device pixels over the scale — it is the same shadow.
+    assert.ok(Math.abs(ctx.shadowBlur / k - plain.shadowBlur) < 1e-9);
+  }
+});
+
+test('in a bake a wall is on the device grid: both faces, both ends, whole pixels thick', () => {
+  for (const k of [0.536, 1.132, 1.5, 1.699, 2.264, 3.06]) {
+    for (const wall of [
+      { x1: 3.3, y1: 4.7, x2: 21.9, y2: 4.7, kind: 'exterior' },
+      { x1: 7.1, y1: 2.2, x2: 7.1, y2: 30.4, kind: 'solid' },
+      { x1: 0, y1: 9.35, x2: 18, y2: 9.35, kind: 'partition', door: { at: 9, width: 3 } },
+    ]) {
+      const ctx = makeRecorder();
+      setDeviceScale(ctx, k);
+      paintWallSegment(ctx, wall, U_DEFAULT);
+      const rects = ctx.ops.filter((o) => o.op === 'fillRect');
+      assert.ok(rects.length >= 1, 'the wall drew nothing');
+      for (const r of rects) {
+        for (const [name, v] of [
+          ['left', r.x * k],
+          ['top', r.y * k],
+          ['right', (r.x + r.w) * k],
+          ['bottom', (r.y + r.h) * k],
+        ]) {
+          assert.ok(
+            Math.abs(v - Math.round(v)) < 1e-6,
+            `a ${wall.kind} wall's ${name} edge is at ${v.toFixed(3)} device px at scale ${k}`,
+          );
+        }
+        const thick = Math.min(r.w, r.h) * k;
+        assert.ok(thick >= 1 - 1e-6, `a ${wall.kind} wall is ${thick.toFixed(2)} device px thick`);
+      }
+    }
+  }
+});
+
+test('a hairline grid in a bake is whole device pixels, and keeps the ink it was designed with', () => {
+  // Outside a bake nothing moves: the weave, the grout and the joint are the
+  // lines they always were.
+  const free = deviceGrid(makeRecorder(), 3, 1);
+  assert.deepEqual([free.pitch, free.width, free.alpha, free.at(6)], [3, 1, 1, 6.5]);
+
+  for (const k of [0.536, 0.665, 1, 1.132, 1.5, 1.699, 2, 2.264]) {
+    for (const [pitch, width] of [
+      [3, 1],
+      [22, 0.75],
+      [168, 0.75],
+    ]) {
+      const ctx = makeRecorder();
+      setDeviceScale(ctx, k);
+      const grid = deviceGrid(ctx, pitch, width);
+      const pd = grid.pitch * k;
+      const wd = grid.width * k;
+      assert.ok(Math.abs(pd - Math.round(pd)) < 1e-9, `pitch ${pitch} at ${k} is ${pd} device px`);
+      assert.ok(Math.abs(wd - Math.round(wd)) < 1e-9 && wd >= 1 - 1e-9, `width at ${k} is ${wd}`);
+      assert.ok(pd > wd, 'a line as wide as its pitch is a fill');
+      // Every line starts and ends on a device pixel.
+      for (const v of [0, grid.pitch, grid.pitch * 7]) {
+        const top = (grid.at(v) - grid.width / 2) * k;
+        assert.ok(Math.abs(top - Math.round(top)) < 1e-6, `a line's edge is at ${top} device px`);
+      }
+      // Coverage times alpha is the designed coverage, wherever it can be.
+      const designed = width / pitch;
+      const laid = (wd / pd) * grid.alpha;
+      assert.ok(grid.alpha <= 1 && grid.alpha > 0);
+      if (grid.alpha < 1) {
+        assert.ok(Math.abs(laid - designed) < 1e-9, `the surface changed tone at scale ${k}`);
+      } else {
+        assert.ok(laid <= designed + 1e-9, 'rounding thickened a line and nothing thinned it');
+      }
+    }
+  }
+});
+
+test('a bake is the drawn scale, a window onto it, or the nearest scale under the ceiling', () => {
+  // The whole floor, one bitmap pixel to one device pixel.
+  const whole = bakeSize(120, 60, 15.85);
+  assert.deepEqual(
+    [whole.ppu, whole.x, whole.y, whole.w, whole.h, whole.capped],
+    [15.85, 0, 0, 1902, 951, false],
+  );
+  // A floor that is a whole number of pixels wide is not rounded up a column.
+  assert.equal(bakeSize(118.4, 60, 2000 / 118.4).w, 2000);
+
+  // A window: clipped to the floor, on whole pixels, at the scale asked for.
+  const win = bakeSize(120, 60, 40, { x: -30.5, y: 100.2, w: 2000.9, h: 5000 });
+  assert.deepEqual([win.ppu, win.x, win.y, win.w, win.h], [40, 0, 100, 1971, 2300]);
+
+  // Past the ceiling the floor comes back whole, smaller, and under it.
+  const big = bakeSize(400, 300, 28);
+  assert.equal(big.capped, true);
+  assert.ok(big.ppu < 28 && big.ppu > 11, `baked at ${big.ppu}`);
+  assert.ok(big.w * big.h <= BAKE_MAX_PIXELS, `${big.w} x ${big.h} is over the ceiling`);
+  assert.ok(big.w * big.h > BAKE_MAX_PIXELS * 0.98, 'the fallback gave away more than it had to');
+  assert.equal(BAKE_MAX_PIXELS, 16_000_000, '64 MB of RGBA; say so in the changelog if it moves');
+
+  // Nonsense in, the design grid out — never a zero-sized or infinite canvas.
+  for (const bad of [0, -3, NaN, Infinity]) {
+    const s = bakeSize(10, 10, bad);
+    assert.equal(s.ppu, U_DEFAULT);
+    assert.ok(s.w >= 1 && s.h >= 1);
+  }
 });

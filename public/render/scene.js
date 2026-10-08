@@ -46,7 +46,6 @@
  * ============================================================================
  */
 
-import { bakeBackdrop } from './backdrop.js';
 import { AgentRuntime, assignSeats } from './agents.js';
 import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
@@ -257,7 +256,7 @@ export class Scene extends SceneInput {
    */
   repaint() {
     if (!this._plan) return;
-    this._backdrop = bakeBackdrop(this._plan, this._dpr);
+    this._bakeFloor();
     // No cross-fade: the old bitmap is the same building in different paint,
     // so fading between them reads as a flicker rather than as a change.
     this._fadeFrom = null;
@@ -436,6 +435,11 @@ export class Scene extends SceneInput {
       clearTimeout(this._resizeDebounceTimer);
       this._resizeDebounceTimer = null;
     }
+    if (this._bakeTimer != null) {
+      clearTimeout(this._bakeTimer);
+      this._bakeTimer = null;
+    }
+    this._watchPixelRatio(false);
     this.canvas.removeEventListener('wheel', this._onWheel);
     this.canvas.removeEventListener('pointerdown', this._onPointerDown);
     this.canvas.removeEventListener('pointermove', this._onPointerMove);

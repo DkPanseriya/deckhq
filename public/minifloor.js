@@ -35,6 +35,7 @@
 import { U } from './render/plan.js';
 import { PALETTE, identityFor, appearanceOf } from './render/palette.js';
 import { setLightShadow } from './render/backdrop.js';
+import { setDeviceScale } from './render/device-px.js';
 import { drawCharacter } from './render/rig.js';
 import { sampleClip } from './render/clips.js';
 import { lodForZoom } from './render/agents.js';
@@ -386,11 +387,15 @@ export function drawMiniFrame(ctx, composed, opts) {
   const backdrop = opts.backdrop || null;
   let blitted = false;
   if (backdrop && backdrop.canvas && backdrop.wpx > 0) {
-    // The bitmap is baked at `U` px per unit times whatever device pixel ratio
-    // the main floor baked it at; both are recovered from the bitmap itself
-    // rather than assumed, so a change to either cannot silently mis-crop.
-    const bakeScale = (backdrop.canvas.width || backdrop.wpx) / backdrop.wpx;
-    const spu = U * bakeScale;
+    // The bitmap is baked at whatever scale the main floor is drawn at, in
+    // device pixels, and says so (`ppu`). One that does not is at `U` px per
+    // unit times a ratio recovered from its own width. Either way the number
+    // comes from the bitmap rather than being assumed, so a change to the bake
+    // cannot silently mis-crop.
+    const spu =
+      backdrop.ppu > 0
+        ? backdrop.ppu
+        : (U * (backdrop.canvas.width || backdrop.wpx)) / backdrop.wpx;
     // Clamped to the bitmap. The shot carries a margin of floor around the
     // rooms so nobody is cut off at a wall, and on a plan whose office sits in
     // the building's own corner that margin is off the edge of the bake.
@@ -696,6 +701,9 @@ export function createMiniFloor(deps) {
 
       ctx.save();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // So the building's shadow is the size it was designed at on this window's
+      // display, whatever its pixel ratio (`render/device-px.js`).
+      setDeviceScale(ctx, dpr);
       drawMiniFrame(ctx, composed, {
         width: w,
         height: h,
