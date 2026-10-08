@@ -465,6 +465,8 @@ export class SceneDraw extends SceneFrame {
     const spot = text ? labels.plan.get(rec.id) : null;
     // A name the pass shrank or abbreviated carries its own text and size.
     const label = spot ? spot.text || text : null;
+    // WP-99 · a sub-agent's first row: its role, on a chip over the name.
+    const labelRole = label && labels.roles ? labels.roles.get(rec.id) || null : null;
     const labelOffsetY = spot ? spot.offsetY : 0;
     const labelOffsetX = spot ? spot.offsetX || 0 : 0;
     const labelPx = spot ? spot.px : undefined;
@@ -581,6 +583,7 @@ export class SceneDraw extends SceneFrame {
       laptop: rec.targetSeat?.junior ? crewCableLive(agent, now, { reduced: this._reduced }) : null,
       // Resolved once per frame by `_draw`'s collision pass; the rig gates it.
       label,
+      labelRole,
       labelOffsetY,
       labelOffsetX,
       labelPx,

@@ -3179,6 +3179,23 @@ button {
   font-size: 0.7rem;
   color: var(--muted);
 }
+/* WP-99. A sub-agent's role, as the floor's name tag says it: one small chip
+   ahead of the name, in the shell's own inks so it is the same pair on every
+   theme. It is a word, never a colour of its own. */
+.deck-role,
+.tooltip-role {
+  display: inline-block;
+  margin-right: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 0.25rem;
+  background: var(--ink-2);
+  color: var(--bg);
+  font-family: var(--font-sans);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 0.08em;
+}
 .deck-project {
   color: var(--ink-2);
 }
