@@ -119,7 +119,10 @@ export function buildCandidate(c, floor) {
       );
     }
   }
-  c.halls.forEach((hall, i) => corridors.push(corridorRoom({ id: `__hall-${i}__`, ...hall })));
+  // A hall is walked across, from the corridor its row stands on (`plan-nav.js`).
+  c.halls.forEach((hall, i) =>
+    corridors.push(Object.assign(corridorRoom({ id: `__hall-${i}__`, ...hall }), { across: true })),
+  );
 
   const bare = projectRooms.map(({ room }) => {
     const n = room.natural || room;

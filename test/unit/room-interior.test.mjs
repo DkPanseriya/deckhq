@@ -104,7 +104,7 @@ const FLOORS = /** @type {const} */ ([
   ['teams 5×6', () => teams([5, 5, 5, 5, 5, 5]), [1600, 870]],
 ]);
 
-/** One or two projects on a whole building: every room a hall. */
+/** One or two projects on a whole building: every room of these was a hall. */
 const HALLS = /** @type {const} */ ([
   ['single', () => populationFloor('single'), [1600, 870]],
   ['reference', () => populationFloor('reference'), [1600, 870]],
@@ -209,22 +209,29 @@ test('a room laid at the size of its desks is given nothing', () => {
   }
 });
 
-test('a hall is given everything on the list, and is far less bare than it was', () => {
+test('one or two projects on a building are rooms too: none is a hall, none past 45% bare', () => {
+  // These four floors were halls — 2,400 to 4,800 U² round one desk, given the
+  // whole list and still half bare. A room has a ceiling now (`roomAreaMax`),
+  // so the rule of the first test is promised of every room there is.
   const rows = [];
+  assert.ok(HALL_ROOMS.length >= 5, `${HALL_ROOMS.length} rooms`);
   for (const r of HALL_ROOMS) {
-    assert.ok(r.floorU2 > HALL_FLOOR_U2, `${r.where} is not a hall: ${r.floorU2.toFixed(0)} U²`);
+    assert.ok(r.floorU2 <= HALL_FLOOR_U2, `${r.where} is a hall: ${r.floorU2.toFixed(0)} U²`);
+    assert.ok(
+      r.room.w * r.room.h <= r.room.areaMax + 1e-3,
+      `${r.where} is ${(r.room.w * r.room.h).toFixed(0)} U², over its ceiling`,
+    );
     const before = bareFloorShare(r.before);
     const after = bareFloorShare(r.room);
     rows.push([`${r.where} ${r.floorU2.toFixed(0)} U²`, `${pct(before)} → ${pct(after)}`]);
-    assert.ok(before - after >= 0.2, `${r.where}: ${pct(before)} → ${pct(after)}`);
-    assert.ok(after <= 0.66, `${r.where} is still ${pct(after)} bare`);
-    const kinds = new Set(addedTo(r).map((p) => p.kind));
-    for (const kind of ['credenza', 'bookshelf', 'sofa', 'armchair', 'coffee_table', 'planter']) {
-      assert.ok(kinds.has(kind), `${r.where} is a hall with no ${kind}`);
-    }
-    assert.equal(kinds.has('meeting_table'), !r.room.crew, `${r.where}: the meeting table`);
+    assert.ok(after <= BARE_FLOOR_MAX + 1e-9, `${r.where} is ${pct(after)} bare`);
+    // And it is not a showroom: at most one meeting table and one sofa group.
+    const added = addedTo(r).map((p) => p.kind);
+    const count = (/** @type {string} */ kind) => added.filter((k) => k === kind).length;
+    assert.ok(count('meeting_table') <= 1, `${r.where}: ${count('meeting_table')} meeting tables`);
+    assert.ok(count('sofa') <= 1, `${r.where}: ${count('sofa')} sofa groups`);
   }
-  report('halls: one or two projects on a whole building', rows);
+  report('one or two projects on a whole building', rows);
 });
 
 test('a module is owed its kit: a team’s room a table and a credenza, a big team’s more', () => {
@@ -379,7 +386,7 @@ test('nothing is stood in the plate band, inside the door, behind the desks or o
     if (crew)
       assert.ok(!added.some((p) => p.kind === 'meeting_table'), `${r.where}: a crew and a table`);
   }
-  assert.ok(checked > 150, `only ${checked} added props were checked`);
+  assert.ok(checked > 100, `only ${checked} added props were checked`);
   assert.ok(crews >= 2, `only ${crews} crew rooms were checked`);
 });
 
@@ -410,7 +417,7 @@ test('the zones keep a lane between them, and storage hugs a wall', () => {
       assert.ok(off <= 0.3 + 1e-6, `${r.where}/${p.kind} stands ${off.toFixed(2)} U off its wall`);
     }
   }
-  assert.ok(zones >= 30 && runs >= 30, `${zones} zones and ${runs} runs`);
+  assert.ok(zones >= 15 && runs >= 30, `${zones} zones and ${runs} runs`);
 });
 
 test('nobody is ever seated on a meeting chair, and the desks are the desks they were', () => {

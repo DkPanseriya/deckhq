@@ -73,11 +73,17 @@ export function landscapeHalls(rooms) {
     ) => {
       for (const far of [false, true]) {
         const off = far ? short - inset - across : inset;
-        // Never on the line people walk down the hall by.
-        if (off + across > short / 2 - LANE_HALF && off < short / 2 + LANE_HALF) continue;
         const rect = flat
           ? { x: hall.x + along, y: hall.y + off, w: size, h: across }
           : { x: hall.x + off, y: hall.y + along, w: across, h: size };
+        // Never on the line a hall is walked by: across it, down its middle
+        // (`plan-nav.js`), whichever way it is longer.
+        const lane = hall.x + hall.w / 2;
+        if (rect.x < lane + LANE_HALF && rect.x + rect.w > lane - LANE_HALF) continue;
+        // Anchored to the wall it stands against, as every prop on the floor is.
+        const anchor = flat
+          ? { type: 'wall', side: far ? 'S' : 'N', along, inset: far ? inset : off }
+          : { type: 'wall', side: far ? 'E' : 'W', along, inset: far ? inset : off };
         const blocked = doors.some(
           (d) =>
             d.x > rect.x - DOOR_CLEAR &&
@@ -86,7 +92,8 @@ export function landscapeHalls(rooms) {
             d.y < rect.y + rect.h + DOOR_CLEAR,
         );
         if (blocked) continue;
-        hall.props.push({ kind, id: `${hall.id}-${kind}-${hall.props.length}`, ...rect, angle: 0 });
+        const id = `${hall.id}-${kind}-${hall.props.length}`;
+        hall.props.push({ kind, id, ...rect, angle: 0, anchor });
         stood += 1;
       }
     };
