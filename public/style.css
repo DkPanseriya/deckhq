@@ -1022,6 +1022,13 @@ button {
     display: none;
   }
 }
+/* On a phone-width window four cards across are each too narrow for a name;
+   three across is four rows, and the popover scrolls as it already may. */
+@media (max-width: 440px) {
+  .lookbar-presets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
 
 /* ----------------------------------------------------------------- app */
 .app {
