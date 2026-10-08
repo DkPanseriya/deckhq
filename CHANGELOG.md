@@ -331,6 +331,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A wait badge never sits on the person above.** On a sofa that runs down the screen, two people
   a cushion apart put the lower one's badge on the upper one's body. People there now sit a full
   sofa place apart, whatever length the sofa was cut to.
+- **Changing a look no longer puts the floor back on the default theme.** On Night shift or
+  Blueprint, choosing a floor, a rug or a style repainted the building in the default theme's
+  colours while the rest of the window stayed dark. And switching theme a second time in one
+  session changed the window and left the floor on the first one until something else redrew it.
+  Both came from one mistake: the floor remembered a theme by the wrong thing. A look is now
+  painted on the theme you are on, and every theme change repaints the floor.
 - **A choice in the Look section stays highlighted.** You would click Large, or a floor, or a rug;
   the floor changed, and a moment later the highlight jumped back to what it was before. The floor
   was right and the control was wrong. It now shows what you chose, and goes back only if the

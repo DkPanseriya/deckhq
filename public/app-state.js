@@ -425,7 +425,18 @@ export function applyThemeSetting(name) {
       // applying either on its own would paint half of it. `applyLook` with the
       // default look and the default theme is `applyTheme`'s own reset, so an
       // install that never opens the Look section is unchanged.
-      if (look?.applyLook) return look.applyLook(sessionLook(), name, document.documentElement);
+      //
+      // `applyLook` answers with the resolved look, not with a name, and it is
+      // the SAME object every time (the painters hold on to it). The name it
+      // was resolved against is the thing this function promises to return:
+      // kept as the object, `appliedTheme` never compared unequal again, so a
+      // second theme did not repaint the floor, and `applyLookSetting` handed
+      // an object to a function that looks a theme up by name and fell back to
+      // the default theme.
+      if (look?.applyLook) {
+        const resolved = look.applyLook(sessionLook(), name, document.documentElement);
+        return typeof resolved?.theme === 'string' ? resolved.theme : 'default';
+      }
       return themes.applyTheme(name, document.documentElement);
     } catch (err) {
       console.error('[deckhq] that theme was refused; staying on the default', err);
