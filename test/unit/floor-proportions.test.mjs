@@ -43,7 +43,7 @@ import {
   nominalWidth,
   proportionFaults,
   roomAreaMax,
-  widestIn,
+  ROOMS_CEILING_REACH,
 } from '../../public/render/plan-proportions.js';
 
 const EPS = 1e-6;
@@ -101,12 +101,10 @@ for (const [name, make] of Object.entries(FLOORS)) {
           `${where}: ${r.id} is ${(r.w * r.h).toFixed(0)} U², over its ${r.areaMax.toFixed(0)}`,
         );
       }
-      const full = of('project').every(
-        (r) => r.w >= widestIn(r.h, r.areaMax) - 1e-3 || r.w * r.h >= r.areaMax - 1e-3,
-      );
+      const reach = areaOf(of('project')) / of('project').reduce((a, r) => a + r.areaMax, 0);
       assert.ok(
-        rooms >= ROOMS_AREA_MIN - EPS || full,
-        `${where}: project rooms have ${pct(rooms)}, and one of them could be larger`,
+        rooms >= ROOMS_AREA_MIN - EPS || reach >= ROOMS_CEILING_REACH - EPS,
+        `${where}: project rooms have ${pct(rooms)}, and ${pct(reach)} of what they may be`,
       );
       assert.ok(office <= OFFICE_AREA_MAX + EPS, `${where}: the office has ${pct(office)}`);
       assert.ok(lounge <= LOUNGE_AREA_MAX + EPS, `${where}: the lounge has ${pct(lounge)}`);

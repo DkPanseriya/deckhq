@@ -69,6 +69,7 @@ import {
   MODULE_WEIGHTS,
   OFFICE_AREA_MAX,
   ROOMS_AREA_MIN,
+  ROOMS_CEILING_REACH,
   ROOM_RATIO_MAX,
   ROOM_RATIO_MIN,
   ROWS_LIMIT,
@@ -100,12 +101,6 @@ const FEW_STEP = 1.03;
 const FEW_REACH = 0.75;
 /** Halvings between the last width that failed and the first that held. */
 const WIDTH_REFINE = 7;
-/**
- * And on a floor whose rooms are not the majority, how near their ceilings
- * they are laid: a row too shallow for its rooms to be the size they may be
- * is a row of strips beside a hall, and the next building up is the floor.
- */
-const CEILING_REACH = 0.8;
 /**
  * A later candidate replaces an earlier one only by being this much smaller.
  * The order they are tried in is the order they are preferred in, so two
@@ -233,10 +228,10 @@ export function layProportioned(input) {
    * @param {number} own its contents @param {number} d its depth @param {number} cap
    */
   const grown = (own, d, cap) => (free ? cap : Math.min(cap, Math.max(own, ROOM_RATIO_MAX * d)));
-  /** Rooms that are the majority, or — on a `margin` floor — all they may be. */
+  /** Rooms that are the majority, or — on a `margin` floor — near all they may be. */
   const enough = (/** @type {{cells:{w:number,h:number}[], full:boolean}} */ grid, area = 0) =>
     areaOf(grid.cells) >= ROOMS_AREA_MIN * area - EPS ||
-    (margin && grid.full && areaOf(grid.cells) >= CEILING_REACH * capsTotal);
+    (margin && areaOf(grid.cells) >= ROOMS_CEILING_REACH * capsTotal - EPS);
 
   // ---- what the service rooms need, measured off their own builders
   // (`plan-grid-service.js`).
@@ -819,13 +814,24 @@ export function layProportioned(input) {
   // the majority of any building its service rooms stand in at their contents.
   let chosen = majority();
   if (!chosen || chosen.grid.cells.some((c, i) => c.w * c.h > caps[i] + 1e-6)) {
+    // A ceiling never makes the building larger: a floor laid to them that is
+    // wider than the one laid without is not the floor, and `few` is asked.
+    const loose = chosen ? chosen.W * (1 + WIDTH_TIE) : Infinity;
     free = false;
     chosen = majority();
+    let mode = { roomy: false, margin: false };
     roomy = true;
     const halled = majority();
-    if (halled && (!chosen || halled.W < chosen.W * (1 - WIDTH_TIE))) chosen = halled;
-    else roomy = false;
-    if (!chosen) chosen = few();
+    if (halled && (!chosen || halled.W < chosen.W * (1 - WIDTH_TIE))) {
+      chosen = halled;
+      mode = { roomy: true, margin: false };
+    }
+    const small = !chosen || chosen.W > loose ? few() : null;
+    if (small && (!chosen || small.W < chosen.W * (1 - WIDTH_TIE))) {
+      chosen = small;
+      mode = { roomy: true, margin };
+    }
+    ({ roomy, margin } = mode);
   }
   if (!chosen) return null;
 

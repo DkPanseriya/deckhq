@@ -142,6 +142,14 @@ export function roomAreaMax(module, desks = 0) {
 }
 
 /**
+ * WHERE THE ROOMS ARE NOT THE MAJORITY — a floor of one or two projects, whose
+ * reception and lounge are each larger than any room may be — they come to at
+ * least this much of their ceilings. Under it a row is too shallow for its
+ * rooms to be the size they may be, and the next building up is the floor.
+ */
+export const ROOMS_CEILING_REACH = 0.8;
+
+/**
  * The narrowest a hall is laid beside a row of rooms: a corridor's width
  * (`CORRIDOR` in `plan-units.js`; a test holds the two equal). Under it the
  * floor a row left is a gap and not a way in.
@@ -670,19 +678,15 @@ export function measureProportions(plan) {
   }
   const depths = [...rows.values()];
   // Against its ceiling, where the planner gave a room one (`room.areaMax`): how
-  // far the largest is over, and whether any of them could have been larger.
+  // far the largest is over, and how much of all they may be the rooms come to.
   const held = projects.filter((r) => Number(r.areaMax) > 0);
   const over = held.map((r) => (r.w * r.h) / r.areaMax);
-  const atCeiling =
-    held.length === projects.length &&
-    held.every(
-      (r) => r.w >= widestIn(r.h, r.areaMax) - HALL_WIDTH_MIN || r.w * r.h >= r.areaMax - 1e-3,
-    );
+  const allowed = held.reduce((a, r) => a + r.areaMax, 0);
   return {
     area,
     rooms: projects.length,
     overCeiling: over.length ? Math.max(...over) : 0,
-    atCeiling,
+    ceilingReach: held.length === projects.length && allowed > 0 ? sum(held) / allowed : 0,
     shares: {
       rooms: sum(projects) / area,
       office: sum(of('office')) / area,
@@ -713,10 +717,10 @@ export function proportionFaults(m) {
   if (!m.rooms) return [];
   const pct = (/** @type {number} */ v) => `${(v * 100).toFixed(1)}%`;
   const out = [];
-  // The majority, or all a room may be: a floor whose every room is at its
-  // ceiling is drawn larger, and what its rooms leave is the service rooms' to
-  // their caps and then a hall — never a larger room.
-  if (m.shares.rooms < ROOMS_AREA_MIN - EPS && !m.atCeiling) {
+  // The majority, or near all that rooms may be: a floor of few rooms is drawn
+  // larger, and what its rooms leave is the service rooms' to their caps and
+  // then a hall — never a larger room.
+  if (m.shares.rooms < ROOMS_AREA_MIN - EPS && m.ceilingReach < ROOMS_CEILING_REACH - EPS) {
     out.push(
       `project rooms have ${pct(m.shares.rooms)} of the building, under ${pct(ROOMS_AREA_MIN)}`,
     );

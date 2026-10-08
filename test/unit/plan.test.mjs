@@ -207,12 +207,15 @@ test('the lounge furnishes itself to the benched population, and never dominates
   // a sofa group and a counter, and games appear only as people arrive to
   // use them.
   //
-  // Asked of a floor with four small projects on it. On one with sixteen, three
+  // Asked of a floor with four team rooms on it. On one with sixteen, three
   // of them large, the ROOMS are what take the building past the scale it is
   // designed at, and the lounge gives up games tables before it makes them
   // smaller still (`plan-proportions.js` (g), (i)) — which is a different
-  // rule, and `floor-proportions.test.mjs` holds it.
-  const four = () => [1, 2, 1, 3].map((c, i) => makeProject(`proj-${i}`, c));
+  // rule, and `floor-proportions.test.mjs` holds it. And on one with four
+  // one-desk rooms the rooms' CEILINGS hold the building: a lounge is a
+  // quarter of a floor that size at most, and its games are what it gives up
+  // before a room is laid past what it may be (`roomAreaMax`).
+  const four = () => [5, 5, 5, 6].map((c, i) => makeProject(`proj-${i}`, c));
   const measure = (benchedCount) => {
     const plan = buildPlan(four(), benchedAgents(benchedCount));
     const lounge = plan.rooms.find((r) => r.kind === 'lounge');
