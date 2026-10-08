@@ -8,19 +8,20 @@
 
 ### Highlights
 
-The floor's settings are in the header now, and there are four of them: a **Look** button opens
-agent size, theme, style and density right under it, and a gear opens Settings. Everything finer —
-which floor is in the corridor, which rug, which plants — is still there, one click further, under
-**Advanced**. And a choice you make now stays chosen.
+The floor's settings are in the header now, and there are six of them: a **Look** button opens
+agent size, theme, style, density, light and room colours right under it, and a gear opens
+Settings. Everything finer — which floor is in the corridor, which rug, which plants — is still
+there, one click further, under **Advanced**. And a choice you make now stays chosen.
 
 ### Added
 
 - **A Look button in the header.** Click it, or press `L`, and a small panel opens under it with
-  the four things people change most: **agent size** (small, medium, large, auto), **theme**,
-  **style** (the presets, as thumbnails) and **density**. A click changes the floor straight
-  away. `Esc`, `L` again or a click anywhere else closes it. **All look options…** at the bottom
-  opens the full Look section. If a choice would leave the floor unreadable, the panel says why
-  under the control and changes nothing.
+  the six things people change most: **agent size** (small, medium, large, auto), **theme**,
+  **style** (eleven presets, as pictures, four to a row so all of them are in view at once),
+  **density**, **light** and **room colours**. A click changes the floor straight away. `Esc`, `L`
+  again or a click anywhere else closes it. **All look options…** at the bottom opens the full
+  Look section. If a choice would leave the floor unreadable, the panel says why under the
+  control and changes nothing.
 - **Density.** One control, Calm / Normal / Lively, for how many plants and props are on the floor.
   It moves the two together. If you want them different, set each one under Advanced.
 - **A Settings button in the header.** The gear beside Look opens the settings sheet. `,` does the
@@ -31,11 +32,13 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **A one-time pointer to the Look button.** The first time you open a version that has it, one
   line under the button says "Change the floor, the furniture and the agent size here." Press
   **Got it**, or just use the button, and it does not come back.
-- **Light: morning, noon or evening.** Under Look → Advanced. It turns the one light on the floor
+- **Light: morning, noon or evening.** Three words in the Look panel and at the top of Settings →
+  Look, beside Density, moved with a click or the arrow keys. It turns the one light on the floor
   — 30°, 45° or 60°, always falling down and to the right — makes every shadow longer in the
   morning and longer still in the evening, and colours the daylight on the floor cool, warm or
   amber. Noon is the default.
-- **Partitions: solid, glass or low.** Under Look → Advanced. It changes what stands between two
+- **Partitions: solid, glass or low.** Under Look → Advanced, in **Walls and room colours**, each
+  choice a small picture of two rooms and the wall between them. It changes what stands between two
   rooms. Solid is a band that casts like a wall. Glass is a sheet between two thin dark frame lines
   with a post every few units, and casts nothing. Low is a waist-high divider with rounded ends
   that stops short of each corner. The building's outside wall does not change.
@@ -48,7 +51,10 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   and the lounge, felt for the office and the rooms. They are laid at the size of a real floor: a
   board about 18 cm wide, a parquet block about 11 cm, and a felt with a fine grain and no weave.
   Their seams are exactly one pixel of your screen wide.
-- **Room colours: subtle, zoned or off.** Under Look → Advanced. Subtle is the floor as it was: each
+- **Room colours: subtle, zoned or off.** A switch in the Look panel and at the top of Settings →
+  Look: off is Subtle, on is Zoned. Space or Enter throws it. All three levels are under Advanced,
+  in **Walls and room colours**, and while Off is chosen there the switch reads off and says _Off_.
+  Subtle is the floor as it was: each
   project room's carpet leans a little toward its project's colour, and on a floor of five rooms
   the five are nearly the same beige. **Zoned** gives each project's room one of six calm colours —
   sage, powder blue, lilac, mint, straw, rose — so two rooms side by side are told apart before
@@ -61,7 +67,18 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   and are in the Style picker now, which shows eleven. Colour plan is the one that gives every
   repository its own colour on a neutral building. `?look=graphite-loft`, `?look=colour-plan` and
   `?look=walnut-executive` open the floor in them, and a look file exported before today still
-  imports exactly as it was.
+  imports exactly as it was. Graphite loft is grey terrazzo and loop pile with dark frames behind
+  glass, under evening light; Walnut executive is fine herringbone and cork in a clay wash.
+- **A style's card shows its rooms, its walls and its light.** Each of the eleven cards is painted
+  by the floor's own painter, and now shows two project rooms side by side in the colours that
+  style gives them, the partition between them, and shadows as long as its light throws. Colour
+  plan's card has a green room beside a blue one; before, it was a picture of a grey office, much
+  the same as two others. The cards' shadows are also the length they are on the floor — they
+  were drawn at half of it or less.
+- **Daylight is one of the figures under Advanced.** The line of measured contrast at the foot of
+  the Look section ends with _daylight on the floor_: how bright the strongest patch of daylight
+  is against the floor it lands on, in the light and the theme you are looking at. It is the
+  number the light is refused on, and it is never above 1.18:1.
 - **Rooms look lived in.** A room used to have the right furniture and bare walls. Each project
   room now has a waste bin by its desks (and one at each worktree bench), a coat stand beside its
   door, felt panels on its clear walls, and a lamp over a meeting table. Where one desk sits in a
@@ -193,17 +210,19 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 - **Nothing you set is lost.** A room you pinned while it was a worktree's room keeps its
   repository's room pinned, and unpinning that room takes the old pin away. Tokens already
   recorded under a worktree are counted under its repository. Nothing on disk is rewritten.
-- **The Look section is four choices, and an Advanced section you open if you want it.** Agent
-  size, theme, style and density are at the top, with the live preview. The floor material for each
+- **The Look section is six choices, and an Advanced section you open if you want it.** Agent
+  size, theme and style are at the top; density, light and room colours are in one line under the
+  style cards, and the live preview is under those. The partitions, the floor material for each
   zone, the colour scheme, the furniture set, the rugs, the plants, the props and the lounge kit
-  are under **Advanced**, grouped as Floors, Furniture and textiles, and Plants and props. Advanced
+  are under **Advanced**, grouped as Walls and room colours, Floors, Furniture and textiles, and
+  Plants and props. Advanced
   starts shut, remembers whether you left it open, and tells you what you changed while it is shut:
   "Advanced — 2 changes from Studio oak". **Reset to preset**, Export and Import are inside it.
 - **Choosing a style no longer changes your agent size.** Picking Workshop used to make everyone
   small, and picking Garden floor made everyone large. A style is the floor; the size is yours.
   "Edited" now means the style was edited, and the palette's `Look: …` commands follow the same
   rule.
-- **Theme is in the Look section.** It moved from Floor, so it sits beside the other three and
+- **Theme is in the Look section.** It moved from Floor, so it sits beside the others and
   there is one place to change it in Settings. Pointing at a theme still previews it.
 - **The floor is sharp.** The floor under the figures — walls, carpets, furniture — was drawn once
   at a fixed size and stretched to fit your window, so it was always a little soft, and softer on
@@ -565,6 +584,22 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   floors (at least 3:1), and the six room colours on all 90 room floors. Each of the three checks
   is also made to refuse something, and the sentence it gives is checked. `look-io.test.mjs`
   imports a look file written before these settings existed and gets the same floor back.
+- **The light, the room colours and the partitions are driven through both Look surfaces.**
+  `look-options-ui.test.mjs` (10 tests) builds the settings section and the header panel over one
+  store and uses each control by click and by key: one key of the look moves, the choice stays
+  lit, and the other surface opens on it. A refusal is checked in its own row three ways — the
+  light with the guard's own sentence, room colours on ash boards on Night shift and glass on the
+  sample pack's garden theme with nothing stubbed — and in all three nothing is sent and nothing
+  moves. `look-options-pictures.test.mjs` (7 tests) paints all eleven cards on all three themes
+  and finds no two alike on any of them, checks that each light, each partition and each room
+  colour changes a card, that `?look=` takes the eleven names in five spellings each and refuses
+  thirteen other things, and reads the README's and the manual's Look sections against the
+  model: eleven presets, 72 options, fourteen pickers, six outside controls, four headings.
+- **Four more floor pictures are defined.** `demo@daylight-studio`, `demo@graphite-loft`,
+  `demo@nordic-wool` and `demo@walnut-executive` are the demo floor in each of the newest styles.
+  Each was photographed and looked at before the styles were left as they are: two of the five
+  were changed because of what the pictures showed. Graphite loft on polished concrete could not
+  be told from Night lab, and is on terrazzo; Walnut executive took the fine herringbone.
 - **A sub-agent's size, tag and laptop, and the lead that stays with its crew, are measured.**
   `subagents.test.mjs` asks the size at small, medium, large and the three auto bands, at nine
   fits each: a sub-agent is 0.8 of its lead in all of them, and at the smallest a lead is 16.0 px
@@ -646,8 +681,16 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   becoming much larger.
 - **Room colours and the second places are in project rooms only.** The reception and the lounge
   keep the floor and the furniture they had.
-- **Room colours are a row of three words under Advanced, not yet a switch beside Density.** The
-  Look panel in the header still has its four choices.
+- **The Room colours switch has two answers.** It moves between Subtle and Zoned. Off is chosen
+  under Advanced; thrown from Off the switch goes to Zoned, and thrown again it goes to Subtle.
+- **On a short window the Look panel scrolls.** With six controls and eleven pictures it is about
+  700 pixels tall, and it is given the window's height less the header. On a window under about
+  800 pixels tall the last rows are reached by scrolling inside the panel.
+- **On the default theme the light shows in the shadows, not on the floor.** A patch of daylight
+  there is 1.02 to 1.06:1 against a floor that is already pale — nothing may be brighter than a
+  wall — so morning, noon and evening differ mostly in how long and which way shadows fall. On
+  Night shift and Blueprint the patches are 1.15 to 1.17:1 and can be seen. (The eleven styles
+  under each of the three lights, on each theme.)
 - **Room colours cannot be combined with ash boards in the project rooms on the Night shift
   theme.** One of the six room colours comes too close to the grey a finished session wears there,
   so that combination is refused, and a look file that asks for it is refused on import.
