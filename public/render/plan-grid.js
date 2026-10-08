@@ -69,6 +69,7 @@ import {
   MODULE_WEIGHTS,
   OFFICE_AREA_MAX,
   ROOMS_AREA_MIN,
+  ROOM_RATIO_MAX,
   ROOM_RATIO_MIN,
   ROWS_LIMIT,
   ROWS_MAX,
@@ -94,12 +95,11 @@ const WIDTH_MIN = 40;
 const WIDTH_MAX = 480;
 /** How far the search steps before it closes in: 4% is under one room's slack. */
 const WIDTH_STEP = 1.04;
+/** How far `few` steps down from the building the rooms' ceilings allow, and how far. */
+const FEW_STEP = 1.03;
+const FEW_REACH = 0.75;
 /** Halvings between the last width that failed and the first that held. */
 const WIDTH_REFINE = 7;
-/** How far `within` steps down from the building the rooms' ceilings allow. */
-const WITHIN_STEP = 1.03;
-/** And how far down it looks before the floor is laid the other way. */
-const WITHIN_REACH = 0.75;
 /**
  * And on a floor whose rooms are not the majority, how near their ceilings
  * they are laid: a row too shallow for its rooms to be the size they may be
@@ -227,6 +227,12 @@ export function layProportioned(input) {
   const hallBeside = () => (roomy ? Infinity : 0);
   /** No building whose rooms are the majority is wider than their ceilings allow. */
   const widest = Math.min(WIDTH_MAX, Math.sqrt((targetAspect * capsTotal) / ROOMS_AREA_MIN));
+  /**
+   * How wide a lounge is GROWN into what its row has spare: to its cap, and —
+   * on a floor laid to its rooms' ceilings — never into a strip either.
+   * @param {number} own its contents @param {number} d its depth @param {number} cap
+   */
+  const grown = (own, d, cap) => (free ? cap : Math.min(cap, Math.max(own, ROOM_RATIO_MAX * d)));
   /** Rooms that are the majority, or — on a `margin` floor — all they may be. */
   const enough = (/** @type {{cells:{w:number,h:number}[], full:boolean}} */ grid, area = 0) =>
     areaOf(grid.cells) >= ROOMS_AREA_MIN * area - EPS ||
@@ -318,10 +324,10 @@ export function layProportioned(input) {
             return { x: desk.w, y, w: W - desk.w, d, give, spare: hallBeside() };
           }
           if (k === rows - 1) {
-            const give = Math.max(0, loungeMax - option.w) + hall;
+            const give = Math.max(0, grown(option.w, d, loungeMax) - option.w) + hall;
             return { x: option.w, y, w: W - option.w, d, give, spare: hallBeside() };
           }
-          return { x: lane, y, w: W - lane, d, give: margin ? Infinity : 0, spare: hallBeside() };
+          return { x: lane, y, w: W - lane, d, give: 0, spare: hallBeside(), loose: margin };
         });
         const got = layGrid(weights, bands, footprints, empty, free || lifted ? [] : caps);
         if (!got || !enough(got, area)) continue;
@@ -353,7 +359,7 @@ export function layProportioned(input) {
       return room >= own - EPS ? { room, hall: hall > EPS ? hall : 0 } : null;
     };
     const top = beside(0, office.w, Math.max(office.w, officeMax));
-    const bottom = beside(rows - 1, lounge.w, loungeMax);
+    const bottom = beside(rows - 1, lounge.w, grown(lounge.w, dBottom, loungeMax));
     // The rows between them have no service room: what they leave is a hall.
     const between = leftOf(grid, tops, depths, (k) => (k % (rows - 1) ? lane : W - taken(k)), W);
     if (!top || !bottom || !between) return null;
@@ -439,7 +445,7 @@ export function layProportioned(input) {
       const toOffice = Math.min(spare, officeMax - office.h);
       spare -= toOffice;
       if (spare > EPS) break;
-      const give = margin ? Infinity : 0;
+      const give = 0;
       const bands = tops.map((y, k) => ({
         x: sw + CORRIDOR,
         y,
@@ -447,6 +453,7 @@ export function layProportioned(input) {
         d: depths[k],
         give,
         spare: hallBeside(),
+        loose: margin,
       }));
       const grid = layGrid(weights, bands, footprints, empty, free || lifted ? [] : caps);
       const halls =
@@ -530,8 +537,8 @@ export function layProportioned(input) {
       const tops = rowTops(under, depths);
       const bands = depths.slice(1).map((depth, k) => {
         const x = k === 0 ? lane : 0;
-        const give = margin ? Infinity : 0;
-        return { x, y: tops[k + 1], w: W - x, d: depth, give, spare: hallBeside() };
+        const give = 0;
+        return { x, y: tops[k + 1], w: W - x, d: depth, give, spare: hallBeside(), loose: margin };
       });
       const grid = layGrid(weights, bands, footprints, empty, free || lifted ? [] : caps);
       const behind = grid && leftOf(grid, tops.slice(1), depths.slice(1), (k) => (k ? 0 : lane), W);
@@ -544,7 +551,8 @@ export function layProportioned(input) {
         (d - PLATE_BAND) * OFFICE_ROW_ASPECT_MAX,
       );
       let hall = W - desk.w - option.w;
-      let loungeW = option.w + Math.min(hall, Math.max(0, (LOUNGE_AREA_MAX * area) / d - option.w));
+      const loungeCap = grown(option.w, d, (LOUNGE_AREA_MAX * area) / d);
+      let loungeW = option.w + Math.min(hall, Math.max(0, loungeCap - option.w));
       hall = W - desk.w - loungeW;
       const officeW = desk.w + Math.min(hall, Math.max(0, officeMax - desk.w));
       hall = W - officeW - loungeW;
@@ -678,6 +686,7 @@ export function layProportioned(input) {
       benchedCount,
       goneHomeCount,
       contentsW,
+      ceilings: !free,
       nominal,
     });
 
@@ -717,51 +726,17 @@ export function layProportioned(input) {
   );
 
   /**
-   * A FLOOR OF FEW ROOMS. Their ceilings come to less than the majority of any
-   * building its service rooms stand in at their contents, so there is none to
-   * find above. The building is then the one the rooms AT their ceilings are
-   * the majority of — or the widest under it that can be laid — with the
-   * service rooms held to their caps in it: that is the floor drawn largest
-   * with nothing given up but a games table. And where even the service
-   * rooms' least does not fit in that (one room, two), the smallest building
-   * that holds them, its rooms at their ceilings and the rest a hall.
-   * @param {number} from the narrowest building worth looking at
+   * The floor at its contents, or held to the window at the nominal scale: as
+   * it has always been looked for, under whichever of the flags above are set.
    */
-  const within = (from) => {
-    const top = Math.min(nominal, widest);
-    roomy = true;
-    for (let W = top; W >= Math.max(from, top * WITHIN_REACH) - EPS; W /= WITHIN_STEP) {
-      for (const loose of [false, true]) {
-        margin = loose;
-        /** @type {Candidate|null} */
-        let best = null;
-        for (const rows of order) {
-          for (const way of [bandsAt, columnAt, frontAt]) {
-            for (let deep = -1; deep < (rows > 1 ? rows : 0); deep++) {
-              const got = way(W, rows, deep, true);
-              if (got && (!best || got.kept > best.kept)) best = got;
-            }
-          }
-        }
-        if (best) return best;
-      }
-    }
-    margin = true;
-    return laid(true, Math.max(from, top));
-  };
-
-  /** The floor with its rooms the majority, as it has always been looked for. */
   const majority = () => {
-    let chosen = laid(false, least, free ? WIDTH_MAX : widest);
+    const top = free || margin ? WIDTH_MAX : widest;
+    let chosen = laid(false, least, top);
     if (free) contentsW = chosen ? chosen.W : 0;
     if (!chosen || chosen.W > nominal + EPS) {
       // THEN AT THE NOMINAL WIDTH, the service rooms held to their caps. Wider
       // than that only as far as the rooms themselves need.
-      let held = laid(
-        true,
-        Math.max(nominal, least),
-        chosen ? chosen.W : free ? WIDTH_MAX : widest,
-      );
+      let held = laid(true, Math.max(nominal, least), chosen ? chosen.W : top);
       // AND WHERE THE ROOMS TOOK IT PAST THE NOMINAL WIDTH, THE LOUNGE IS NOT
       // WHAT PAYS FOR THEIR LAST FEW PER CENT. The smallest building the rooms
       // fit in is the one where every service room has given up everything it
@@ -801,12 +776,47 @@ export function layProportioned(input) {
     }
     return chosen;
   };
+  /**
+   * A FLOOR OF FEW ROOMS. The building is the one its rooms AT their ceilings
+   * are the majority of — or the widest under that which can be laid — with
+   * the service rooms held to their caps in it: a crowd in the lounge makes
+   * neither the rooms small nor the building large. And where even the
+   * service rooms' least does not fit in that (one room, two), the smallest
+   * building that holds them: its rooms at their ceilings, the reception and
+   * the lounge given what their rows have spare up to their caps, and the
+   * rest a hall (`plan-margin.js`) — never a larger room.
+   */
+  const few = () => {
+    const top = Math.min(nominal, widest, contentsW > 0 ? contentsW : Infinity);
+    roomy = true;
+    for (let W = top; W >= Math.max(least, top * FEW_REACH) - EPS; W /= FEW_STEP) {
+      for (const loose of [false, true]) {
+        margin = loose;
+        /** @type {Candidate|null} */
+        let best = null;
+        for (const rows of order) {
+          for (const way of [bandsAt, columnAt, frontAt]) {
+            for (let deep = -1; deep < (rows > 1 ? rows : 0); deep++) {
+              const got = way(W, rows, deep, true);
+              if (got && (!best || got.kept > best.kept)) best = got;
+            }
+          }
+        }
+        if (best) return best;
+      }
+    }
+    margin = true;
+    return laid(true, Math.max(least, top));
+  };
+
   // FIRST AS IF NO ROOM HAD A CEILING, and that is the floor wherever none of
   // its rooms came out over one: a floor of many rooms is laid as it always
   // was. Otherwise with the ceilings: every row filled to the unit; then with
   // a hall beside any row whose rooms are all at theirs, which is the floor
-  // only where it is plainly the smaller building; and where the ceilings
-  // leave no building the rooms are the majority of, `within`.
+  // only where it is plainly the smaller building.
+  //
+  // AND A FLOOR OF FEW ROOMS (`few`), where their ceilings come to less than
+  // the majority of any building its service rooms stand in at their contents.
   let chosen = majority();
   if (!chosen || chosen.grid.cells.some((c, i) => c.w * c.h > caps[i] + 1e-6)) {
     free = false;
@@ -815,7 +825,7 @@ export function layProportioned(input) {
     const halled = majority();
     if (halled && (!chosen || halled.W < chosen.W * (1 - WIDTH_TIE))) chosen = halled;
     else roomy = false;
-    if (!chosen) chosen = within(least);
+    if (!chosen) chosen = few();
   }
   if (!chosen) return null;
 

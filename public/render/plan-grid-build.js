@@ -42,7 +42,8 @@ function roomInto(need, cell) {
  * Every room of one candidate, built and placed; null if one did not fit.
  * @param {any} c the candidate `plan-grid.js` chose
  * @param {{needs: Need[], caps: number[], waitingCount: number, benchedCount: number,
- *   goneHomeCount: number, contentsW: number, nominal: number}} floor what it is laid for
+ *   goneHomeCount: number, contentsW: number, nominal: number, ceilings: boolean}} floor what
+ *   it is laid for
  */
 export function buildCandidate(c, floor) {
   const { needs, caps, waitingCount, benchedCount, goneHomeCount } = floor;
@@ -155,6 +156,8 @@ export function buildCandidate(c, floor) {
       /** The width this floor would be at its contents, and at that scale. */
       contentsW: floor.contentsW,
       nominalW: floor.nominal,
+      /** A room came out over its ceiling laid freely, so the floor was laid to them. */
+      ceilings: floor.ceilings,
     },
   };
 }

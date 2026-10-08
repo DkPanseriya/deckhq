@@ -141,6 +141,13 @@ export function roomAreaMax(module, desks = 0) {
   return Math.max(own, ROOM_CEILING_OVER_FURNISHED * (Number(desks) || 0));
 }
 
+/**
+ * The narrowest a hall is laid beside a row of rooms: a corridor's width
+ * (`CORRIDOR` in `plan-units.js`; a test holds the two equal). Under it the
+ * floor a row left is a gap and not a way in.
+ */
+export const HALL_WIDTH_MIN = 4;
+
 /** The deepest a room of that ceiling can be and still be a room's shape. */
 export const roomDepthMax = (/** @type {number} */ areaMax) => Math.sqrt(areaMax / ROOM_RATIO_MIN);
 
@@ -353,11 +360,23 @@ export function widestIn(depth, areaMax) {
  * @param {number} [give] the most of `width` the rooms may leave untaken
  * @param {number[]} [caps] each room's ceiling in square units (`roomAreaMax`):
  *   no room is laid wider than its ceiling is at this depth
- * @param {number} [spare] and the most they may leave where every one of them
- *   is at its CEILING: a row of rooms that may not be larger leaves a hall
+ * @param {number} [spare] and the most they may leave as a HALL beside them,
+ *   where every one of them is at its ceiling — or, with `loose`, as wide as a
+ *   room may be: a row of rooms that may not be larger. A hall is never laid
+ *   narrower than `HALL_WIDTH_MIN`; the rooms give it the difference
+ * @param {boolean} [loose]
  * @returns {number[]|null} one width per room, or null where no legal split exists
  */
-export function splitRow(weights, width, depth, footprints = [], give = 0, caps = [], spare = 0) {
+export function splitRow(
+  weights,
+  width,
+  depth,
+  footprints = [],
+  give = 0,
+  caps = [],
+  spare = 0,
+  loose = false,
+) {
   const n = weights.length;
   if (!n || !(width > 0) || !(depth > 0)) return null;
   const hi = weights.map((_, i) => widestIn(depth, caps[i]));
@@ -370,9 +389,15 @@ export function splitRow(weights, width, depth, footprints = [], give = 0, caps 
   let most = 0;
   for (const v of hi) most += v;
   if (most < width - EPS) {
+    const left = width - most;
+    // The room beside them takes it.
+    if (left <= give + EPS) return hi;
     const shape = ROOM_RATIO_MAX * depth;
-    const held = hi.every((v) => v < shape - EPS);
-    return width - most <= Math.max(give, held ? spare : 0) + EPS ? hi : null;
+    const held = loose || hi.every((v) => v < shape - EPS);
+    if (!held || left > spare + EPS) return null;
+    // A hall, then, and never a sliver of one.
+    if (left >= HALL_WIDTH_MIN - EPS) return hi;
+    return splitRow(weights, width - HALL_WIDTH_MIN, depth, footprints, 0, caps, 0);
   }
   // Water-filling. Share what is left by weight; hold whichever side is the
   // further out of bounds at its bound; share again. Each pass holds at least
@@ -432,7 +457,7 @@ const leaves = (/** @type {{give?:number, spare?:number}} */ b) =>
  * dealt the same way on every machine.
  *
  * @param {number[]} weights
- * @param {{w:number,d:number,give?:number,spare?:number}[]} bands each row's width and depth,
+ * @param {{w:number,d:number,give?:number,spare?:number,loose?:boolean}[]} bands each row's width and depth,
  *   top to bottom, and what it may hand back to a service room (`splitRow`)
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @param {number[]} [caps] each room's ceiling, as `splitRow` takes it
@@ -476,6 +501,7 @@ export function dealRows(weights, bands, footprints = [], caps = []) {
       band.give ?? 0,
       caps.slice(i, j),
       band.spare ?? 0,
+      band.loose === true,
     );
     let got = null;
     if (widths) {
@@ -536,7 +562,7 @@ const FLATTEN = Object.freeze([1, 0.7, 0.4, 0]);
  * `taken[k]` says how much of the band they used.
  *
  * @param {number[]} weights one per room, in floor order
- * @param {{x:number,y:number,w:number,d:number,give?:number,spare?:number}[]} bands the
+ * @param {{x:number,y:number,w:number,d:number,give?:number,spare?:number,loose?:boolean}[]} bands the
  *   rectangle each row of rooms has, top to bottom
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @param {boolean[]} [empty] rooms nobody is in (a pinned one): never larger
@@ -587,7 +613,10 @@ export function layGrid(weights, bands, footprints = [], empty = [], caps = []) 
       range.slice(a + 1).every((bigger) => r.most <= bigger.least * r.slack + EPS),
     );
     if (!ordered) continue;
-    const full = cells.every((c, i) => c.w >= widestIn(c.h, caps[i]) - 1e-4);
+    // A row that left a hall could not have had larger rooms in it either.
+    const full = cells.every(
+      (c, i) => taken[c.row] < bands[c.row].w - EPS || c.w >= widestIn(c.h, caps[i]) - 1e-4,
+    );
     return { cells, taken, spread, flatten: power, full };
   }
   return null;
@@ -646,7 +675,9 @@ export function measureProportions(plan) {
   const over = held.map((r) => (r.w * r.h) / r.areaMax);
   const atCeiling =
     held.length === projects.length &&
-    held.every((r) => r.w >= widestIn(r.h, r.areaMax) - 1e-3 || r.w * r.h >= r.areaMax - 1e-3);
+    held.every(
+      (r) => r.w >= widestIn(r.h, r.areaMax) - HALL_WIDTH_MIN || r.w * r.h >= r.areaMax - 1e-3,
+    );
   return {
     area,
     rooms: projects.length,

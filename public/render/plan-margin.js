@@ -6,7 +6,8 @@
  * their caps, do not come to the whole of a building the window's shape; what
  * is left is a HALL — circulation, inside the walls, the way in from the
  * corridor — rather than a larger room with a showroom's furniture in it.
- * `plan-grid.js` cuts the rectangle. This file plants it: troughs of low
+ * `plan-grid.js` cuts the rectangle. This file plants it, and lays it in the
+ * reception's floor rather than a corridor's: troughs of low
  * planting along its long walls with a tree between each pair, and nothing on
  * the line people walk down or in front of a door.
  *
@@ -26,7 +27,7 @@ export const HALL_PLANTED_MIN = CORRIDOR * 2;
 const TROUGH = Object.freeze({ long: 5.2, across: 0.9 });
 /** The tree between two troughs, and the floor either side of it. */
 const TREE = 2.2;
-const GAP = 1.6;
+const GAP = 3;
 /** How far a run stands off the wall behind it, and off the hall's ends. */
 const WALL_INSET = 1.1;
 const END_INSET = 2.4;
@@ -89,21 +90,17 @@ export function landscapeHalls(rooms) {
         stood += 1;
       }
     };
+    // A planted hall is an entry hall: the reception's own floor, not screed.
+    hall.floor = 'wood';
     insets.forEach((inset, row) => {
-      // The second run is half a period along, so the two never line up.
-      const shift = row % 2 ? period / 2 : 0;
+      const tree = inset - (TREE - TROUGH.across) / 2;
       for (let i = 0; i < count - (row % 2); i++) {
-        const at = start + shift + i * period;
-        stand('planter', at, TROUGH.long, TROUGH.across, inset);
-        if (i < count - 1 - (row % 2)) {
-          stand(
-            'plant_tree',
-            at + TROUGH.long + GAP,
-            TREE,
-            TREE,
-            inset - (TREE - TROUGH.across) / 2,
-          );
-        }
+        const at = start + i * period;
+        // Against the wall, a trough and then a tree. A quarter of the way in,
+        // trees alone and half a period along: a grove, not a second hedge.
+        if (row === 0) stand('planter', at, TROUGH.long, TROUGH.across, inset);
+        const along = row === 0 ? at + TROUGH.long + GAP : at + period / 2 + TROUGH.long / 2;
+        if (row || i < count - 1) stand('plant_tree', along, TREE, TREE, tree);
       }
     });
   }

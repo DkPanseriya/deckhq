@@ -42,6 +42,8 @@ import {
   measureProportions,
   nominalWidth,
   proportionFaults,
+  roomAreaMax,
+  widestIn,
 } from '../../public/render/plan-proportions.js';
 
 const EPS = 1e-6;
@@ -90,7 +92,22 @@ for (const [name, make] of Object.entries(FLOORS)) {
       const office = areaOf(of('office')) / building;
       const lounge = areaOf(of('lounge')) / building;
       const corridors = areaOf(of('corridor')) / building;
-      assert.ok(rooms >= ROOMS_AREA_MIN - EPS, `${where}: project rooms have ${pct(rooms)}`);
+      // The majority — or, on a floor of few rooms, all that rooms may be: no
+      // room is laid past its ceiling to make the share up (`roomAreaMax`).
+      for (const r of of('project')) {
+        assert.ok(r.areaMax > 0, `${where}: ${r.id} was laid with no ceiling`);
+        assert.ok(
+          r.w * r.h <= r.areaMax + 1e-3,
+          `${where}: ${r.id} is ${(r.w * r.h).toFixed(0)} U², over its ${r.areaMax.toFixed(0)}`,
+        );
+      }
+      const full = of('project').every(
+        (r) => r.w >= widestIn(r.h, r.areaMax) - 1e-3 || r.w * r.h >= r.areaMax - 1e-3,
+      );
+      assert.ok(
+        rooms >= ROOMS_AREA_MIN - EPS || full,
+        `${where}: project rooms have ${pct(rooms)}, and one of them could be larger`,
+      );
       assert.ok(office <= OFFICE_AREA_MAX + EPS, `${where}: the office has ${pct(office)}`);
       assert.ok(lounge <= LOUNGE_AREA_MAX + EPS, `${where}: the lounge has ${pct(lounge)}`);
       // And the four add up: the building is tiled, so "the rest" is corridor.
@@ -350,34 +367,28 @@ test('a floor of one to four rooms keeps every rule in every shape of window, at
   );
 });
 
-test('two rooms in a window neither wide nor tall: the front, and the rooms side by side behind it', () => {
+test('two rooms in a window neither wide nor tall: two rooms of a team’s size, and drawn large', () => {
   const floor = fewRooms([2, 2], 0, 0);
   const plan = buildPlan(floor.projects, floor.agents, {
     stage: { w: 1600, h: 1000 },
     now: LARGE_NOW,
   });
-  assert.equal(plan.arrangement, 'front');
   assert.deepEqual(plan.proportions.faults, []);
-  const office = plan.rooms.find((r) => r.kind === 'office');
-  const lounge = plan.rooms.find((r) => r.kind === 'lounge');
   const spine = plan.rooms.find((r) => r.id === '__spine__');
   const rooms = plan.rooms.filter((r) => r.kind === 'project');
-  // One band across the top, the corridor under it wall to wall.
-  assert.equal(office.y, 0);
-  assert.equal(lounge.y, 0);
-  assert.ok(Math.abs(office.h - lounge.h) < EPS);
-  assert.ok(Math.abs(lounge.x + lounge.w - plan.width) < EPS);
-  assert.ok(Math.abs(spine.w - plan.width) < EPS && Math.abs(spine.y - office.h) < EPS);
-  // And the two rooms behind it, side by side, one depth, the whole width.
+  // The corridor wall to wall, and both rooms on it.
+  assert.ok(Math.abs(spine.w - plan.width) < EPS);
   assert.equal(rooms.length, 2);
-  assert.ok(Math.abs(rooms[0].h - rooms[1].h) < EPS && Math.abs(rooms[0].y - rooms[1].y) < EPS);
-  assert.ok(Math.abs(rooms[0].w + rooms[1].w - plan.width) < EPS);
   for (const room of rooms) {
     const ratio = room.w / room.h;
     assert.ok(ratio >= ROOM_RATIO_MIN - EPS && ratio <= ROOM_RATIO_MAX + EPS, `${ratio}`);
+    // A room for two is a team's room, not half of whatever the window is:
+    // this pair was 53 x 37 U each, and before that a building 208 U wide.
+    assert.ok(room.w * room.h <= roomAreaMax('M') + 1e-3, `${room.w} x ${room.h}`);
+    assert.ok(Math.abs(room.x + room.w - plan.width) < EPS, 'a row stops short of the building');
   }
-  // Drawn at a size worth drawing: this floor was 208 U wide, 7.7 px a unit.
-  assert.ok(1600 / plan.width >= 14, `${plan.width} U on 1600 px`);
+  // Drawn at a size worth drawing: 7.7 px a unit then, 15 with the front.
+  assert.ok(1600 / plan.width >= 15, `${plan.width} U on 1600 px`);
 });
 
 test('the two scales the rulebook names are the renderer’s own', () => {
@@ -396,11 +407,16 @@ test('a floor is laid at its contents, or held to the window at the nominal scal
     for (const [winW, winH] of WINDOWS) {
       const { plan, stage } = planAt(floor, winW, winH);
       const where = `${name} at ${winW}x${winH}`;
-      const { contentsW, nominalW, capped } = plan.working;
+      const { contentsW, nominalW, capped, ceilings } = plan.working;
       assert.equal(nominalW, nominalWidth(stage, plan.targetAspect), where);
-      // Never wider than its contents: nothing is padded to a scale.
+      // Never wider than its contents: nothing is padded to a scale. (Laid to
+      // its rooms' ceilings it is searched for again, and may land a hair off.)
+      const hair = ceilings ? contentsW * 0.02 : 0;
       if (contentsW > 0)
-        assert.ok(plan.width <= contentsW + 1e-6, `${where}: wider than it need be`);
+        assert.ok(plan.width <= contentsW + hair + 1e-6, `${where}: wider than it need be`);
+      // A floor laid to its rooms' ceilings is a smaller building than its
+      // contents made, and which of its service rooms gave way is its own.
+      if (ceilings) continue;
       if (contentsW > 0 && contentsW <= nominalW + 1e-6) {
         // It fits at the nominal scale, so it is its contents and nothing gave way.
         assert.ok(Math.abs(plan.width - contentsW) < 1e-6, `${where}: not laid at its contents`);
