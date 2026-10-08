@@ -199,3 +199,71 @@ test('one to three projects: the building is drawn larger, and with the size lef
     resetAgentScale();
   }
 });
+
+test('a quiet floor: the reception is one sofa run, the lounge one bay, and the people are drawn larger', () => {
+  // Seated at the DEFAULT size, crown to floor, and the rooms' share of the
+  // building, at the two windows the pictures are taken on. Before the service
+  // rooms were sized by who is in them these were 39 to 40 px and 16 to 61%.
+  const seated = (/** @type {number} */ scale) => (BODY_HEIGHT_U - 0.1 * RIG_UNIT_U) * scale;
+  /** The least each floor is held to: [seated px at 1600, at 1920, rooms' share]. */
+  const held = {
+    single: [46, 46, 0.17],
+    pair: [41.5, 46, 0.43],
+    three: [44, 46, 0.5],
+    worktrees: [46, 46, 0.5],
+  };
+  for (const name of FEW) {
+    const [px1600, px1920, share] = held[/** @type {keyof typeof held} */ (name)];
+    for (const [winW, winH, px] of [
+      [1600, 1000, px1600],
+      [1920, 1080, px1920],
+    ]) {
+      const { plan, fill } = planAt(name, [winW, winH]);
+      const where = `${name} at ${winW}x${winH}`;
+      const office = plan.rooms.find((/** @type {any} */ r) => r.kind === 'office');
+      const lounge = plan.rooms.find((/** @type {any} */ r) => r.kind === 'lounge');
+      const runs = office.props.filter((/** @type {any} */ p) => p.kind === 'sofa');
+      assert.equal(runs.length, 1, `${where}: ${runs.length} sofa runs in a quiet reception`);
+      assert.ok(runs[0].cushions >= 4, `${where}: a run of ${runs[0].cushions}`);
+      const cafe = lounge.props.some((/** @type {any} */ p) => p.kind === 'counter');
+      assert.equal(cafe, false, `${where}: a café laid for nobody`);
+      assert.ok(seated(fill.scale) >= px, `${where}: seated ${seated(fill.scale).toFixed(1)} px`);
+      assert.ok(
+        plan.proportions.shares.rooms >= share - EPS,
+        `${where}: rooms ${(plan.proportions.shares.rooms * 100).toFixed(0)}%`,
+      );
+      // The two service rooms together are never the larger part of it.
+      const service = plan.proportions.shares.office + plan.proportions.shares.lounge;
+      assert.ok(service <= 0.42, `${where}: reception and lounge ${(service * 100).toFixed(0)}%`);
+    }
+  }
+  resetAgentScale();
+});
+
+test('a busy floor keeps the reception and the lounge it had', () => {
+  // More than four waiting, more than five resting: all three runs, every bay.
+  // The two rectangles, hashed before the quiet ones existed.
+  const svcHash = (/** @type {any} */ plan) =>
+    createHash('sha1')
+      .update(
+        ['office', 'lounge']
+          .map((kind) => plan.rooms.find((/** @type {any} */ r) => r.kind === kind))
+          .map((r) => [r.x, r.y, r.w, r.h].map((v) => v.toFixed(3)).join(','))
+          .join(';'),
+      )
+      .digest('hex')
+      .slice(0, 8);
+  const before = {
+    demo: ['e75997df', '8df4a398', 'aa7aef48', 'ec4e9c52'],
+    crowded: ['0845869d', '077bab89', '4f362f84', '68971cfb'],
+    large: ['8f8969a2', '7364ca32', '37489c85', 'f42cd97b'],
+  };
+  for (const [name, hashes] of Object.entries(before)) {
+    assert.deepEqual(
+      WINDOWS.map((win) => svcHash(planAt(name, win).plan)),
+      hashes,
+      name,
+    );
+  }
+  resetAgentScale();
+});

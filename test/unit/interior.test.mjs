@@ -517,7 +517,7 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * and one lounge bay — and what is left is a hall. The floors
  * whose rooms were already under their ceilings did not move.
  */
-const PLAN_HASH = '471a35f9';
+const PLAN_HASH = '3e9b22cd';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {
