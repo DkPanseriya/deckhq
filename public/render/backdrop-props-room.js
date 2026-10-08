@@ -271,11 +271,14 @@ export function paintRoomProps(ctx, prop, u, w, h, local) {
       const t = tones();
       const upright = h > w;
       if (upright) ctx.rotate(Math.PI / 2);
-      // Drawn 14 % larger than its own footprint: at the size it is given (as
-      // little as 3.2 x 1.1 U) a case sized exactly to the rect read as too
-      // small to be furniture. Placement and anchoring use `prop.w/h`
+      // Drawn 14 % deeper than its own footprint: at the depth it is given (as
+      // little as 1.1 U) a case sized exactly to the rect read as too small to
+      // be furniture. Along its run it grows by the same share, but never by
+      // more than a fifth of a unit at each end — a long case that grew 14 %
+      // ran into the sofa beside it. Placement and anchoring use `prop.w/h`
       // untouched — only the paint is bigger.
-      const bw = (upright ? h : w) * 1.14;
+      const run = upright ? h : w;
+      const bw = run + Math.min(run * 0.14, 0.4 * u);
       const bh = (upright ? w : h) * 1.14;
       local((k) => {
         k.fillStyle = PALETTE.tableWood;

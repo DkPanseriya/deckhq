@@ -124,7 +124,9 @@ export function furnitureTonesFor(t) {
     sink: quietOn(counter, shade(counter, -0.14)),
 
     // ---- a task chair
-    chairBase: mix(t.inkWarm, t.partitionFill, 0.5),
+    // The base is the seat's own cloth carried toward the line work, so on a
+    // dark floor it is a mid grey rather than five bright points.
+    chairBase: mix(seat, t.inkWarm, 0.45),
     chairSeat: seat,
     chairBack: quietOn(seat, shade(seat, -0.2)),
     chairArm: quietOn(seat, shade(seat, -0.13)),
