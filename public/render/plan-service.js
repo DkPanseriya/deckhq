@@ -111,7 +111,7 @@ export function loungeOneRowBelow(pack = 1) {
  *   benched stand closer together, which is the whole of it. The service
  *   column sets the building's height, so this is what stops a lounge
  *   dictating an empty lot on the working side.
- * @param {{maxGames?: number, quiet?: boolean}} [opts] `maxGames`: the most games tables this
+ * @param {{maxGames?: number, quiet?: boolean, graded?: boolean}} [opts] `maxGames`: the most games tables this
  *   lounge is laid with — fewer than its people would earn, where the room it
  *   has been given is at its share of the building and cannot hold them all
  *   (`plan-proportions.js` (g)). The people a table would have seated stand,
@@ -122,6 +122,16 @@ export function loungeOneRowBelow(pack = 1) {
  */
 /** The most people a quiet lounge is laid for: its one sitting bay seats five. */
 export const LOUNGE_QUIET_MAX = 5;
+/**
+ * ON A QUIET FLOOR THE BAYS COME BACK ONE AT A TIME (`opts.graded`): the café
+ * past five resting, the reading corner past twelve, the games past twenty.
+ * Without it they all arrive together at six, as they did.
+ */
+export const LOUNGE_BAY_STEPS = Object.freeze([LOUNGE_QUIET_MAX, 12, 20]);
+const BAYS_BY_CROWD = ['sitting', 'cafe', 'quiet', 'games'];
+/** How many bays so many people resting are laid. @param {number} resting */
+export const loungeBaysFor = (resting) =>
+  1 + LOUNGE_BAY_STEPS.filter((most) => resting > most).length;
 
 export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1, opts = {}) {
   const maxGames = Math.min(
@@ -539,9 +549,10 @@ export function buildLounge(benchedCount, fit, goneHomeCount = 0, pack = 1, opts
   // the sitting bay holds them all, and a café and a reading corner laid for
   // nobody are what made the lounge the largest room on a floor of two desks.
   const sittingOnly = opts.quiet === true && benchedCount <= LOUNGE_QUIET_MAX;
+  const most = opts.graded === true ? loungeBaysFor(benchedCount) : sittingOnly ? 1 : 4;
   const bayNames = loungeBayNames(budget, {
     oneRow,
-    has: (n) => present.has(n) && kit[n] !== false && (!sittingOnly || n === 'sitting'),
+    has: (n) => present.has(n) && kit[n] !== false && BAYS_BY_CROWD.indexOf(n) < most,
   });
   const kept = new Set(bayNames);
   const live = blocks.filter((b) => kept.has(BAY_OF[b.id]));

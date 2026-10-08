@@ -312,6 +312,55 @@ export function nominalWidth(stage, aspect) {
   return Math.sqrt(REFERENCE_STAGE.w * REFERENCE_STAGE.h * aspect) / NOMINAL_PX_PER_UNIT;
 }
 
+// ---------------------------------------------------------- (j) quiet floors
+
+/**
+ * A QUIET FLOOR is one, two or three project rooms. The rooms are the building
+ * and stand first in it — the top row, or the larger column — and the
+ * reception and the lounge are a strip on one side (`plan-quiet.js`).
+ */
+export const QUIET_ROOMS_MAX = 3;
+
+/** The two service rooms together, on a quiet floor: at most this much of it. */
+export const SERVICE_STRIP_MAX = 0.35;
+
+/**
+ * And a hall — the floor neither the rooms nor the strip may take — at most
+ * this much: a strip beside the corridor, not a quarter of the building.
+ */
+export const HALL_AREA_MAX = 0.1;
+
+/**
+ * The scale a quiet floor is laid for: a person at a desk, at the medium
+ * size, forty-six pixels from crown to floor (2.32 units; a test holds the
+ * product). A quiet floor is the smallest building that keeps the rules, and
+ * one wider than the window is at this scale is counted against it.
+ */
+export const QUIET_PX_PER_UNIT = 19.85;
+
+/**
+ * The modules a LONE room may be laid at, nearest its own first: its own, the
+ * next one up, and the largest. One project on a floor is the floor, and a
+ * room held to a one-desk ceiling there is a room in a corner of a hall. Each
+ * step is taken only where the one before leaves the rooms short of the
+ * majority, and the room is furnished as the module it is laid at.
+ *
+ * NOT A ROOM WITH A CREW IN IT. A crew is that room's second place and it has
+ * no meeting table (`plan-interior.js`), so the floor a larger module gives it
+ * can only be furnished with sofa groups — three of them at the largest, which
+ * is a showroom. It is laid at its own module, and what it leaves is a hall.
+ *
+ * @param {'S'|'M'|'L'|undefined} module
+ * @param {boolean} [crewed] a crew stands in it
+ * @returns {('S'|'M'|'L')[]}
+ */
+export function loneModules(module, crewed = false) {
+  /** @type {('S'|'M'|'L')[]} */
+  const order = ['S', 'M', 'L'];
+  const from = Math.max(0, order.indexOf(module ?? 'S'));
+  return crewed ? [order[from]] : order.slice(from);
+}
+
 /** Comparisons on laid geometry, in plan units. */
 const EPS = 1e-6;
 
@@ -729,6 +778,14 @@ export function measureProportions(plan) {
       office: sum(of('office')) / area,
       lounge: sum(of('lounge')) / area,
       corridors: sum(of('corridor')) / area,
+      // The halls are corridors too, and are counted in them; this is their
+      // part — and so is what any other corridor is wider than a corridor.
+      halls:
+        of('corridor').reduce((a, r) => {
+          if (String(r.id).startsWith('__hall-')) return a + r.w * r.h;
+          const over = Math.min(r.w, r.h) - HALL_WIDTH_MIN;
+          return a + (over > EPS ? over * Math.max(r.w, r.h) : 0);
+        }, 0) / area,
     },
     ratioMin: ratios.length ? Math.min(...ratios) : 0,
     ratioMax: ratios.length ? Math.max(...ratios) : 0,
@@ -736,6 +793,27 @@ export function measureProportions(plan) {
     rows: depths.length,
     rowDepthSpread: depths.length ? Math.max(...depths) / Math.min(...depths) - 1 : 0,
   };
+}
+
+/**
+ * WHETHER THE ROOMS HAVE WHAT IS THEIRS. The majority of the building; or,
+ * short of it, four fifths of all their ceilings allow; or — on a quiet floor,
+ * where two rooms one over the other are as wide as a room's shape lets them
+ * be and still under both — a building whose service rooms are a strip
+ * (`SERVICE_STRIP_MAX`) and whose halls are no more than half as much again as
+ * a hall should be (`HALL_AREA_MAX`): a window far wider than two rooms are
+ * leaves more than a tenth, and a larger room is not the answer to it.
+ * @param {{rooms:number, ceilingReach:number,
+ *   shares:{rooms:number, office:number, lounge:number, halls:number}}} m
+ */
+export function roomsHold(m) {
+  if (m.shares.rooms >= ROOMS_AREA_MIN - EPS) return true;
+  if (m.ceilingReach >= ROOMS_CEILING_REACH - EPS) return true;
+  return (
+    m.rooms <= QUIET_ROOMS_MAX &&
+    m.shares.office + m.shares.lounge <= SERVICE_STRIP_MAX + EPS &&
+    m.shares.halls <= HALL_AREA_MAX * 1.5 + EPS
+  );
 }
 
 /**
@@ -757,7 +835,7 @@ export function proportionFaults(m) {
   // The majority, or near all that rooms may be: a floor of few rooms is drawn
   // larger, and what its rooms leave is the service rooms' to their caps and
   // then a hall — never a larger room.
-  if (m.shares.rooms < ROOMS_AREA_MIN - EPS && m.ceilingReach < ROOMS_CEILING_REACH - EPS) {
+  if (!roomsHold(m)) {
     out.push(
       `project rooms have ${pct(m.shares.rooms)} of the building, under ${pct(ROOMS_AREA_MIN)}`,
     );

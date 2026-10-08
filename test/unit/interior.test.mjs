@@ -516,8 +516,14 @@ test('§3.9: the halo is drawn under every character, and never at L0', () => {
  * small as its service rooms allow — which on a quiet floor are one sofa run
  * and one lounge bay — and what is left is a hall. The floors
  * whose rooms were already under their ceilings did not move.
+ *
+ * AND A QUIET FLOOR IS THE FIFTH: with one or two projects the reception and
+ * the lounge are a strip down the left and the rooms are the rest of the
+ * building (`plan-quiet.js`), a lone room a module up; and on a floor of one to
+ * three rooms the sofa runs and the lounge's bays come back one at a time. The
+ * ladder's floors of four projects or more did not move.
  */
-const PLAN_HASH = '3e9b22cd';
+const PLAN_HASH = '27e72c36';
 
 /** FNV-1a over a string, as eight hex digits. @param {string} s */
 function hash32(s) {

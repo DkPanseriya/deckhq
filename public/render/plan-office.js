@@ -72,6 +72,23 @@ import {
  * a floor of two desks.
  */
 export const OFFICE_COMPACT_MAX = 4;
+/**
+ * ON A QUIET FLOOR THE RUNS COME BACK ONE AT A TIME (`opts.graded`): up to this
+ * many waiting it is two — the one down the wall and one across the foot of
+ * the room — and all three past it. Without it the second and the third arrive
+ * together, as they did.
+ */
+export const OFFICE_TWO_RUNS_MAX = 9;
+/**
+ * How many sofa runs a reception is laid with.
+ * @param {number} waiting @param {{hold?:boolean, compact?:boolean, graded?:boolean}} [opts]
+ * @returns {1|2|3}
+ */
+export function officeRunsFor(waiting, opts = {}) {
+  if (opts.compact !== true || opts.hold) return 3;
+  if (waiting <= OFFICE_COMPACT_MAX) return 1;
+  return opts.graded === true && waiting <= OFFICE_TWO_RUNS_MAX ? 2 : 3;
+}
 /** How wide the quiet reception is, less its plate: a desk, the rug and one run. */
 export const OFFICE_COMPACT_W = 16;
 
@@ -118,7 +135,7 @@ export {
  *
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the interior this room has been given
- * @param {{maxW?:number, landscape?:boolean, hold?:boolean, compact?:boolean}} [opts] `maxW` overrides
+ * @param {{maxW?:number, landscape?:boolean, hold?:boolean, compact?:boolean, graded?:boolean}} [opts] `maxW` overrides
  *   `OFFICE_MAX_W` — in a row that cap is read on the other axis and is the
  *   room's DEPTH (WP-59d). `landscape` says this room is about to be reflected
  *   in the diagonal by `buildOfficeRow`, which is the only thing the QUEUE
@@ -146,7 +163,9 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // working rooms. It still never shrinks below a room somebody could stand a
   // desk and a sofa in.
   const want = Math.max(0, waitingCount);
-  const compact = opts.compact === true && !opts.hold && want <= OFFICE_COMPACT_MAX;
+  // One run, two or three; `compact` is the room with no west run, at one or two.
+  const runs = officeRunsFor(want, opts);
+  const compact = runs < 3;
   const grows = opts.hold || compact ? 0 : want;
   const minW = compact ? OFFICE_COMPACT_W : OFFICE_MIN_W;
   const wantW = clamp(minW + grows * OFFICE_GROWTH_W, minW, maxW);
@@ -288,7 +307,9 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // runs are as long as the room is deep, and how many they seat is read off
   // them once it is.
   const bandTop = visitorY + SEAT_TUB + 2.4;
-  const backW = Math.max(4, IN_W - (PAD + SOFA_D) * 2);
+  // (With no west run, the back one starts at the west wall.)
+  const backW = Math.max(4, IN_W - (compact ? PAD * 2 + SOFA_D : (PAD + SOFA_D) * 2));
+  const backCushions = runs === 1 ? 0 : sofaCushionCount(backW, SOFA_D);
   // The room is at least as tall as its own contents: the desk band, a sofa
   // run somebody can actually sit on, the back run and the wall pad — and a
   // well between the runs a chair deep with clear floor either side of it.
@@ -297,9 +318,11 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   const WELL_PAD = 1.6;
   // (A quiet reception has no back run: its one run is the east one, and the
   // room is as deep as that run's cushions.)
-  const compactRun = Math.max(OFFICE_COMPACT_MAX, want) * SOFA_D + SOFA_ARM * 2;
+  // (And with a second run across its foot, the room is that run deeper and
+  // the first is as long as whoever the second does not seat.)
+  const compactRun = Math.max(OFFICE_COMPACT_MAX, want - backCushions) * SOFA_D + SOFA_ARM * 2;
   const IN_H_FINAL = compact
-    ? Math.max(IN_H, bandTop + compactRun + PAD)
+    ? Math.max(IN_H, bandTop + compactRun + PAD + (runs === 2 ? SOFA_D : 0))
     : Math.max(
         IN_H,
         bandTop + SOFA_MIN_RUN + SOFA_D + PAD * 2,
@@ -310,12 +333,11 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // its own arithmetic left the corners two units short at both ends, so the
   // seating read as three separate benches rather than as one reception.
   // (The one run is as long as the people waiting, however long its room is.)
-  const sofaRunH = compact ? compactRun : IN_H_FINAL - PAD - SOFA_D - bandTop;
+  const sofaRunH = runs === 1 ? compactRun : IN_H_FINAL - PAD - SOFA_D - bandTop;
   // HOW MANY THE SOFAS SEAT: one a cushion (WP-93, and the owner again on the
   // reception of sixteen). Each run carries its count, the painter draws that
   // many cushions, and whoever is left over stands in the file by the wall.
   const sideCushions = sofaCushionCount(sofaRunH, SOFA_D);
-  const backCushions = compact ? 0 : sofaCushionCount(backW, SOFA_D);
   const queued = Math.max(0, waitingCount - sideCushions * (compact ? 1 : 2) - backCushions);
 
   if (!compact) {
@@ -343,7 +365,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
     y: bandTop,
     anchor: { type: 'wall', side: 'E', along: bandTop, inset: PAD },
   });
-  if (!compact) {
+  if (runs > 1) {
+    const backX = compact ? PAD : PAD + SOFA_D;
     props.push({
       kind: 'sofa',
       id: 'wait-sofa-s',
@@ -351,9 +374,9 @@ export function buildOffice(waitingCount, fit, opts = {}) {
       h: SOFA_D,
       cushions: backCushions,
       angle: -Math.PI / 2,
-      x: PAD + SOFA_D,
+      x: backX,
       y: IN_H_FINAL - PAD - SOFA_D,
-      anchor: { type: 'wall', side: 'S', along: PAD + SOFA_D, inset: PAD },
+      anchor: { type: 'wall', side: 'S', along: backX, inset: PAD },
     });
   }
 
@@ -410,7 +433,7 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // whatever depth the room turns out to have.
   const lowW = clamp(wellW * 0.4, 3, 7);
   props.push(
-    compact
+    runs === 1
       ? {
           // In front of the one run there is, lying along it.
           kind: 'magazine_table',
@@ -650,7 +673,7 @@ const TRANSPOSED_ID = new Map([
  * @param {number} waitingCount
  * @param {{w:number,h:number}} [fit] the ROW cell this reception has been
  *   given — `w` along the row, `h` its depth.
- * @param {{hold?:boolean, compact?:boolean}} [opts] `hold`: lay it at the width it is given,
+ * @param {{hold?:boolean, compact?:boolean, graded?:boolean}} [opts] `hold`: lay it at the width it is given,
  *   not at the width its queue would like (see `buildOffice`)
  */
 export function buildOfficeRow(waitingCount, fit, opts = {}) {
@@ -671,7 +694,7 @@ export function buildOfficeRow(waitingCount, fit, opts = {}) {
   // units DEEPER — which is eight units the rooms beside it could not use and
   // drew as open floor under themselves.
   const want = Math.max(0, waitingCount);
-  const compact = opts.compact === true && !opts.hold && want <= OFFICE_COMPACT_MAX;
+  const compact = officeRunsFor(want, opts) < 3;
   const depth = Math.min(
     OFFICE_ROW_MAX_DEPTH,
     Math.max(
@@ -689,7 +712,8 @@ export function buildOfficeRow(waitingCount, fit, opts = {}) {
     maxW: depth,
     landscape: true,
     hold: opts.hold === true,
-    compact,
+    compact: opts.compact === true,
+    graded: opts.graded === true,
   });
   const room = built.room;
   const rename = (id) => (id == null ? id : (TRANSPOSED_ID.get(id) ?? id));

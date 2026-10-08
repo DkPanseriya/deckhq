@@ -19,7 +19,7 @@ import { CORRIDOR, PLATE_BAND, ROOM_ASPECT_MAX, ROOM_PAD } from './plan-units.js
 
 /** @typedef {import('./plan-units.js').Room} Room */
 /** @typedef {import('./plan-units.js').Seat} Seat */
-/** @typedef {{project: any, pinned: boolean, desks: number, crew: any, module?: 'S'|'M'|'L'}} Need */
+/** @typedef {{project: any, pinned: boolean, desks: number, crew: any, module?: 'S'|'M'|'L', kit?: 'S'|'M'|'L'}} Need */
 
 /** The shapes a room's desks are tried at, widest first. */
 export const DESK_ASPECTS = Object.freeze([4, ROOM_ASPECT_MAX, 1, 0.5]);
@@ -43,14 +43,17 @@ function roomInto(need, cell) {
  * @param {any} c the candidate `plan-grid.js` chose
  * @param {{needs: Need[], caps: number[], waitingCount: number, benchedCount: number,
  *   goneHomeCount: number, contentsW: number, nominal: number, ceilings: boolean,
- *   quiet?: boolean}} floor what
+ *   quiet?: boolean, graded?: boolean}} floor what
  *   it is laid for
  */
 export function buildCandidate(c, floor) {
   const { needs, caps, waitingCount, benchedCount, goneHomeCount } = floor;
-  const held = { hold: c.hold, compact: floor.quiet === true };
+  const graded = floor.graded === true;
+  const held = { hold: c.hold, compact: floor.quiet === true, graded };
+  // Upright in a column — unless the column is a quiet floor's strip, where it
+  // is on its side as it is in a row (`plan-quiet.js`).
   const office =
-    c.family === 'column'
+    c.family === 'column' && !c.officeRow
       ? buildOffice(waitingCount, c.office, { maxW: c.office.w, ...held })
       : buildOfficeRow(waitingCount, { w: c.office.w, h: c.office.h }, held);
   if (office.room.w > c.office.w + 0.01 || office.room.h > c.office.h + 0.01) return null;
@@ -58,6 +61,7 @@ export function buildCandidate(c, floor) {
   const lounge = buildLounge(benchedCount, cell, goneHomeCount, 1, {
     maxGames: c.games,
     quiet: floor.quiet === true,
+    graded,
   });
   const inLounge = lounge.room.natural || lounge.room;
   if (inLounge.w > c.lounge.w + 0.01 || inLounge.h > c.lounge.h + 0.01) return null;
@@ -80,6 +84,8 @@ export function buildCandidate(c, floor) {
     const built = roomInto(need, rect);
     if (!built) return null;
     Object.assign(built.room, rect, { module: need.module, areaMax: caps[i] });
+    // Laid a module up, and furnished as it (`loneModules`).
+    if (need.kit && need.kit !== need.module) built.room.kit = need.kit;
     projectRooms.push({ room: built.room, seats: built.seats });
   }
 
@@ -87,9 +93,11 @@ export function buildCandidate(c, floor) {
   // the building's width; in a column the spine is the building's height.
   /** @type {Room[]} */
   const corridors = [];
-  const across = c.family === 'column' ? c.office.w + CORRIDOR : 0;
+  // (A quiet floor's spine is as wide as the hall along it: `plan-quiet.js`.)
+  const spineW = c.spine ?? CORRIDOR;
+  const across = c.family === 'column' ? c.office.w + spineW : 0;
   if (c.family === 'column') {
-    corridors.push(corridorRoom({ id: '__spine__', x: c.office.w, y: 0, w: CORRIDOR, h: c.H }));
+    corridors.push(corridorRoom({ id: '__spine__', x: c.office.w, y: 0, w: spineW, h: c.H }));
   }
   /** @type {number[]} rows with a corridor under them */
   const served = [];

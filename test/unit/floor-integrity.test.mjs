@@ -670,8 +670,9 @@ test('the reception sofas form one continuous C, corner to corner', () => {
   // walls they name. The relationship asserted here is the one that matters
   // and it is the same either way, so it is stated on the axis the runs
   // actually lie on rather than twice.
-  // (More than four waiting: a quiet reception is one run, `OFFICE_COMPACT_MAX`.)
-  for (const waiting of [5, 9, 25]) {
+  // (More than nine waiting: on a floor of one room a reception is one run to
+  // four, two to nine — `OFFICE_COMPACT_MAX`, `OFFICE_TWO_RUNS_MAX`.)
+  for (const waiting of [10, 14, 25]) {
     const { projects, agents } = floor({ projects: [3], waiting });
     const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');
@@ -1132,15 +1133,18 @@ test("the window sets the building's shape, and the rooms are the larger part of
     `six project rooms' furniture (${natural(many).toFixed(0)} U²) should need far more ` +
       `floor than one's (${natural(one).toFixed(0)} U²)`,
   );
-  // Six rooms are the majority of their building. ONE IS NOT, and is not laid
-  // larger to be: a room has a ceiling (`roomAreaMax`), the one room is at
-  // four fifths of its own or better, and what it leaves is a hall.
+  // Six rooms are the majority of their building. AND SO IS ONE: a lone room
+  // is laid a module up (`loneModules`), still under that module's ceiling,
+  // beside a reception and a lounge that are a strip down one side of it.
   const share = (plan) => roomArea(plan) / (plan.width * plan.height);
   assert.ok(share(many) >= 0.55 - 1e-6, `six rooms are ${(share(many) * 100).toFixed(0)}%`);
   const [only] = rooms(one);
   assert.ok(only.w * only.h <= only.areaMax + 1e-3, 'the one room is over its ceiling');
-  assert.ok(only.w * only.h >= only.areaMax * 0.8 - 1e-3, 'the one room is far under its ceiling');
-  assert.ok(share(one) < 0.55, 'one room for two is the majority of a building again');
+  assert.ok(share(one) >= 0.55 - 1e-6, `one room is ${(share(one) * 100).toFixed(0)}%`);
+  assert.ok(
+    one.proportions.shares.halls <= 0.1 + 1e-6,
+    `one room for two leaves ${(one.proportions.shares.halls * 100).toFixed(0)}% hall`,
+  );
   // Six rooms of one module are one size, and none is larger than the one may be.
   const sizes = rooms(many).map((r) => r.w * r.h);
   assert.ok(Math.max(...sizes) / Math.min(...sizes) <= 1.6, `six equal projects: ${sizes}`);

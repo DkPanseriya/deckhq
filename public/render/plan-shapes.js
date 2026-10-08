@@ -182,6 +182,8 @@ export {};
  *   whatever its shape (`plan-nav.js`).
  * @property {number} [areaMax] a project room's ceiling in square units
  *   (`roomAreaMax` in `plan-proportions.js`).
+ * @property {'S'|'M'|'L'} [kit] the module a lone room was laid and is furnished
+ *   at, where that is larger than the one its people make it (`loneModules`).
  * @property {{x:number,y:number}} [door] where an occupant leaves the room, set
  *   by `assignDoors` once the nav graph exists.
  * @property {{x:number,y:number}} [navEntry] the point on the corridor that door
