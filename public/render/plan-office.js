@@ -73,7 +73,7 @@ import {
  */
 export const OFFICE_COMPACT_MAX = 4;
 /** How wide the quiet reception is, less its plate: a desk, the rug and one run. */
-export const OFFICE_COMPACT_W = 17;
+export const OFFICE_COMPACT_W = 16;
 
 export {
   OFFICE_QUEUE_ZONE,
@@ -165,7 +165,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
 
   // --- the desk, at the head of the room
   const deskW = clamp(IN_W * 0.4, 8, 14);
-  const deskX = (IN_W - deskW) / 2;
+  // (Off-centre in a quiet reception, so that the tree beside it has its floor.)
+  const deskX = compact ? PAD + 1.6 : (IN_W - deskW) / 2;
   const deskY = 3.6;
   zones.push({ id: 'office-desk', x: deskX, y: deskY, w: deskW, h: 3 });
   props.push({

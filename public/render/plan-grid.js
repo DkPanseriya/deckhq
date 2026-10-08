@@ -226,9 +226,10 @@ export function layProportioned(input) {
    * and — on a floor laid to its rooms' ceilings, or a quiet one — never into
    * a strip either.
    * @param {number} own its contents @param {number} d its depth @param {number} cap
+   * @param {boolean} [office] the reception: bound only while it is the quiet one
    */
-  const grown = (own, d, cap) =>
-    free && waitingCount > OFFICE_COMPACT_MAX
+  const grown = (own, d, cap, office = false) =>
+    waitingCount > OFFICE_COMPACT_MAX && (office || free)
       ? cap
       : Math.min(cap, Math.max(own, ROOM_RATIO_MAX * d));
   /** Rooms that are the majority, or — on a `margin` floor — near all they may be. */
@@ -318,7 +319,7 @@ export function layProportioned(input) {
         const bands = tops.map((y, k) => {
           const d = depths[k];
           if (k === 0) {
-            const give = Math.max(0, grown(desk.w, d, officeMax) - desk.w) + hall;
+            const give = Math.max(0, grown(desk.w, d, officeMax, true) - desk.w) + hall;
             return { x: desk.w, y, w: W - desk.w, d, give, spare: hallBeside() };
           }
           if (k === rows - 1) {
@@ -356,7 +357,7 @@ export function layProportioned(input) {
       }
       return room >= own - EPS ? { room, hall: hall > EPS ? hall : 0 } : null;
     };
-    const top = beside(0, office.w, Math.max(office.w, grown(office.w, dTop, officeMax)));
+    const top = beside(0, office.w, Math.max(office.w, grown(office.w, dTop, officeMax, true)));
     const bottom = beside(rows - 1, lounge.w, grown(lounge.w, dBottom, loungeMax));
     // The rows between them have no service room: what they leave is a hall.
     const between = leftOf(grid, tops, depths, (k) => (k % (rows - 1) ? lane : W - taken(k)), W);
@@ -552,7 +553,8 @@ export function layProportioned(input) {
       const loungeCap = grown(option.w, d, (LOUNGE_AREA_MAX * area) / d);
       let loungeW = option.w + Math.min(hall, Math.max(0, loungeCap - option.w));
       hall = W - desk.w - loungeW;
-      const officeW = desk.w + Math.min(hall, Math.max(0, grown(desk.w, d, officeMax) - desk.w));
+      const officeW =
+        desk.w + Math.min(hall, Math.max(0, grown(desk.w, d, officeMax, true) - desk.w));
       hall = W - officeW - loungeW;
       if (hall > EPS && hall < CORRIDOR) {
         loungeW -= CORRIDOR - hall;
