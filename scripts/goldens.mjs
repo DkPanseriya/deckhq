@@ -353,6 +353,20 @@ const CAPTURES = [
   // is a light, and the only thing that can check a painter is a picture.
   { name: 'three@glass', population: 'three', theme: 'default', query: 'look=daylight-studio' },
   { name: 'three@low', population: 'three', theme: 'default', query: 'look=nordic-wool' },
+  // THE FOUR NEWEST STYLES, WHOLE, on the floor every theme is photographed on.
+  // A style is eleven choices made together, and whether the eleven make a room
+  // somebody would want to work in — and a different room from the style beside
+  // it — is a question a guard cannot answer: every one of these passes every
+  // measurement and could still be ugly. Twenty-seven people on each, so the
+  // other half of the question is answered in the same picture: the state
+  // colours are still the loudest thing on the floor. The fifth new style is
+  // `crowded@colour-plan`, below.
+  ...['daylight-studio', 'graphite-loft', 'nordic-wool', 'walnut-executive'].map((preset) => ({
+    name: `demo@${preset}`,
+    population: 'demo',
+    theme: 'default',
+    query: `look=${preset}`,
+  })),
   // WP-89 · THE CREW, TWICE, AND THE PAIR IS THE POINT.
   //
   // `crew` is the formation with motion ON and `?phase=` pinned at `CREW_PHASE`:
