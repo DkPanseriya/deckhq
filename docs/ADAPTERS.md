@@ -47,7 +47,10 @@ interface RuntimeAdapter {
   available(): Promise<boolean>;
   liveSessions(): Promise<LiveSession[]>;
   scanSessions(opts?: { maxAgeDays?: number; limit?: number }): Promise<SessionSummary[]>;
-  conversation(id: string, opts?: { maxMessages?: number }): Promise<Message[]>;
+  // `detail` asks for tool calls and reasoning as entries of their own (role
+  // 'tool' | 'thinking'). Ignore it and return what you always did: the panel
+  // draws either.
+  conversation(id: string, opts?: { maxMessages?: number; detail?: boolean }): Promise<Message[]>;
   send(id: string, text: string, opts?: { cwd?: string; timeoutMs?: number }): Promise<SendResult>;
   openInTerminal(id: string, cwd: string, opts?: { terminal?: string }): Promise<void>;
   openNewSession(cwd: string, opts?: { instructions?: string; terminal?: string }): Promise<void>;
@@ -65,6 +68,14 @@ interface RuntimeAdapter {
   version?(): Promise<string | null>;
   countCatchphrase?(opts: { since: number; until?: number }): Promise<CatchphraseCount>;
   watchConversation?(...): ...;
+  // "Go to session". The pid of the process a live session runs in, or null.
+  // Omit it and the panel offers Resume for your runtime and says why — do NOT
+  // scan the process table to guess one. A pid that is wrong raises somebody
+  // else's window.
+  sessionPid?(sessionId: string): Promise<number | null>;
+  // Whether a desktop app can open THIS session, where `appAvailable()` only
+  // says the app is installed.
+  appAvailableFor?(sessionId: string): Promise<boolean>;
   // What `doctor`'s "mcp servers" row prints. Omit it and there is no
   // row at all for your runtime — which is right, and is not the same thing as
   // a row that says zero. Never throw, never spawn without a timeout, and

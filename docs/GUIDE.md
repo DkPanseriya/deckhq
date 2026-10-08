@@ -135,8 +135,32 @@ one started in the foreground, so it does not say `Intern` for either.
 
 Click anyone and the panel opens beside the floor with the review material already in front of
 you: how long they have been waiting, **what they said** — rendered as the markdown they actually
-wrote, headings and lists and fenced code included — and then **what changed in that project's
-working tree**, read straight from git as `+142  −18  3 files` over a row per file.
+wrote — and then **what changed in that project's working tree**, read straight from git as
+`+142  −18  3 files` over a row per file.
+
+**One button takes you back to the session.** Under the agent's name is `Go to session`, with a
+line beside it saying where that is — `Windows Terminal — tab "fix the parser"`, `the Claude desktop
+app`. Click it, or press `O`, and the window the session is already running in comes to the front:
+the terminal, the editor, or the desktop app, opened on that session. It never starts a second
+copy of something that is running. When the session's process has ended there is nothing to go to,
+so the same button reads `Resume in Windows Terminal` (or wherever you chose in Settings → Resume)
+and does that instead. And when a running session cannot be reached — a headless run, a desktop
+that has no way to raise another program's window — the button is dead and the line beside it says
+why; it does not quietly become Resume. DeckHQ only ever raises a window because you clicked.
+
+**The reply reads like a document.** Headings step down in size, prose stops at a comfortable line
+length, lists nest, task lists show their boxes, and a table is a table. A code block names its
+language, has a `copy` button, and scrolls sideways rather than wrapping. A web link opens in a new
+tab; a file reference such as `src/core/editor.mjs:42` opens that file at that line in your editor.
+Pictures are named, not loaded — DeckHQ makes no request a transcript asked for — and anything
+that only exists in the app the session runs in, such as an artifact, has an **open in the
+session** button that is the same `Go to session`.
+
+**Earlier in the conversation is folded above the answer**, one click away, and it includes what
+the agent _did_: each tool call is one line — `Bash npm test`, `Edit src/panel.js` — that opens to
+its input and its result, a sub-agent's hand-back opens to its report, and the agent's reasoning
+is one quiet line. A long result is cut to its end, which is where the verdict is, and says how
+much there was. `latest ↓` brings you back to the answer from anywhere in a long thread.
 
 Then three actions, weighted rather than equal. `1 Reply` focuses the composer. `2 Approve` sends
 an affirmative — `"Yes, go ahead."` by default, configurable — and is the only filled button on
@@ -341,6 +365,11 @@ reporting.
 belongs to you taken out — no paths, no project names, no machine name, no hook port — so you can
 drop it in a thread without reading it line by line first. `--json` gives the same data for
 scripting, and `--capture-proof` writes a PNG of the comparison.
+
+The `go to session` row says whether the panel's button can do what it says on this machine. It
+reads `supported` only where that path has been run on a machine like yours, `unverified` where it
+is written and has never been run — macOS and Linux today — and `not supported here` with the
+reason where it cannot work, which is what a Wayland desktop gets.
 
 Hooks are reported by _delivery_, not just installation — a hook aimed at a port nothing is
 listening on leaves a settings file that looks perfect while every event goes nowhere.
@@ -856,6 +885,24 @@ These are real, and listed here rather than discovered later.
   that emulator's documented interface and unit-tested down to the exact argument list — and
   none of them has been run on a real Mac or a real Linux desktop. Treat them as untested until
   this line says otherwise. The rest of the product is CI-tested on all three.
+- **"Go to session" is measured on Windows only, and not for every window.** On Windows 11 it was
+  run against windows DeckHQ opened itself: a Windows Terminal tab the terminal started, a tab
+  Windows handed to it (PowerShell or cmd opened from Start), a classic console window, and the
+  Claude desktop app — where the app was also seen to open the one session it was sent. **A session
+  inside VS Code, Cursor or a JetBrains terminal has not been run**: the editor's window is found by
+  the same walk up the process tree and raised, but which of its terminals holds the session is not
+  something DeckHQ can select, and the line under the button says so. WezTerm and Alacritty are
+  recognised by name and were not installed on the machine this was measured on. macOS (System
+  Events) and Linux (`wmctrl`, X11 only) are written and have **never been run**; on Wayland it
+  cannot work at all, and the button says that instead of failing. `deckhq doctor` prints which of
+  these your machine is. Only Claude Code reports which process a session runs in, so for Codex,
+  Gemini CLI and OpenCode the button is Resume, with the reason beside it.
+- **In Windows Terminal the right tab is selected only when it can be told apart.** A tab is picked
+  by its title, which is the session's own console title, and only when exactly one tab carries it.
+  Two tabs with the same name, or a tab you renamed, are left alone and the message tells you the
+  title to look for.
+- **Tool calls and reasoning in the panel are Claude Code only.** Codex, Gemini CLI and OpenCode
+  sessions show what was said, rendered the same way, and not what was run.
 - **You get tokens, not dollars — and the dollars are one setting away.** Most people run these
   tools on a subscription, where a figure at public list prices is neither your bill nor your
   budget. So DeckHQ shows you what you actually spent: **`Tab` → `Usage`** gives you a window
@@ -918,6 +965,7 @@ These are real, and listed here rather than discovered later.
 | `B`                 | Bench the selected agent                                                 |
 | `P`                 | Float the office — a small always-on-top window over your terminal       |
 | `G`                 | Step through the agents who went home, newest activity first             |
+| `O`                 | Go to the session — the window it is running in, or resume it            |
 | `I`                 | The repos nobody is working in — `P` on a row pins one a room of its own |
 | `L`                 | Look — agent size, theme, style and density, from the header button      |
 | `,`                 | Settings — the whole sheet, its sections named across the top            |
