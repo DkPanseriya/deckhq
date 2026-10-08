@@ -634,8 +634,8 @@ button {
   z-index: 50;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  width: 23rem;
+  gap: 0.85rem;
+  width: 27rem;
   max-width: calc(100vw - 1.5rem);
   max-height: calc(100vh - 6rem);
   overflow-y: auto;
@@ -737,25 +737,32 @@ button {
   border: 1px solid var(--line);
 }
 
-/* Six presets, three across: a thumbnail is a picture of four floors, and at
-   six across it is a row of colour chips nobody could tell apart. */
+/* Eleven presets, four across, ALL of them on screen at once: three short rows
+   in a popover that does not have to scroll. A grid and not a sideways
+   scroller, because a scroller of eleven shows three and hides eight, and a
+   choice nobody can see is a choice nobody makes; and not grouped under
+   headings, because one radio group in reading order is what the arrow keys
+   walk. A thumbnail is a picture of four floors, and at six across it is a row
+   of colour chips nobody could tell apart — four is as far as it goes. */
 .lookbar-presets {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
 }
 .lookbar-preset {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.28rem;
   min-width: 0;
-  padding: 0.25rem 0.25rem 0.3rem;
+  padding: 0.22rem 0.22rem 0.28rem;
   background: none;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 0.66rem;
+  /* The sheet's own card face, and narrower than the mono: the longest name
+     here is sixteen characters and has to be read whole on a 96 px card. */
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
   text-align: left;
   cursor: pointer;
   transition:
@@ -779,10 +786,105 @@ button {
   border-radius: 2px;
 }
 .lookbar-preset .lookbar-item-label {
-  padding: 0 0.15rem;
+  padding: 0 0.1rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A SWITCH: one decision with two answers. A track and a thumb for the eye,
+   and the word for which answer it is on — the same on both look surfaces.
+   Chosen is lit, as everywhere in this window: the track rises out of the well
+   and the thumb goes to the ink. */
+.look-switch {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.15rem 0.15rem 0.15rem 0.35rem;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+.look-switch-state {
+  min-width: 3.1rem;
+  text-align: left;
+}
+.look-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.1rem;
+  height: 1.2rem;
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  transition:
+    background var(--t-fast),
+    border-color var(--t-fast);
+}
+.look-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: calc(1.2rem - 6px);
+  height: calc(1.2rem - 6px);
+  background: var(--muted);
+  border-radius: 50%;
+  transition:
+    transform var(--t-fast),
+    background var(--t-fast);
+}
+.look-switch:hover .look-switch-track {
+  border-color: var(--ink-2);
+}
+.look-switch[aria-checked='true'] {
+  color: var(--ink);
+}
+.look-switch[aria-checked='true'] .look-switch-track {
+  background: var(--surface-3);
+  border-color: var(--ink-2);
+}
+.look-switch[aria-checked='true'] .look-switch-thumb {
+  background: var(--ink);
+  transform: translateX(0.9rem);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion='no-preference']) .look-switch-track,
+  :root:not([data-motion='no-preference']) .look-switch-thumb {
+    transition: none;
+  }
+}
+[data-motion='reduce'] .look-switch-track,
+[data-motion='reduce'] .look-switch-thumb {
+  transition: none;
+}
+/* In the popover a switch shares a line with its own name: it is one decision,
+   and a row of its own under a heading would give it a list's weight. A reason
+   still gets the whole width under both. */
+.lookbar-row--switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.2rem 0.6rem;
+}
+.lookbar-row--switch .lookbar-row-head {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  margin-bottom: 0;
+}
+.lookbar-row--switch .lookbar-refusal {
+  flex: 1 0 100%;
+}
+/* …and against the right edge the word comes first, so the track is the last
+   thing on the line, under the segments above it. */
+.lookbar-row--switch .look-switch-state {
+  order: -1;
+  text-align: right;
 }
 
 /* The guard's sentence. `.settings-look-refusal`'s construction: the crimson
@@ -918,6 +1020,13 @@ button {
   }
   .look-hint::before {
     display: none;
+  }
+}
+/* On a phone-width window four cards across are each too narrow for a name;
+   three across is four rows, and the popover scrolls as it already may. */
+@media (max-width: 440px) {
+  .lookbar-presets {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -4735,7 +4844,7 @@ textarea.field-input {
 /* ======================================================================
    WP-88b · THE LOOK SECTION (docs/plan/11-LOOK-CONTROL-CENTRE.md §4)
 
-   Six preset cards, a live preview, one row per picker in the catalogue.
+   The preset cards, a live preview, one row per picker in the catalogue.
    Every picture on this surface is a <canvas> painted by the real floor
    painter (public/look-ui-thumbs.js), which is the same discipline WP-30's
    theme swatch follows and for the same reason: a colour on this sheet is
@@ -4749,10 +4858,10 @@ textarea.field-input {
    ====================================================================== */
 .settings-look-presets {
   display: grid;
-  /* Six across, one row: at this sheet's width a card is as wide as the header
+  /* Six across: at this sheet's width a card is a little wider than the header
      popover's thumbnail, which is the size these pictures are already read at.
-     Three across and two down was six pictures taking a screen to themselves,
-     with the rest of the section under the fold. */
+     Eleven presets are two rows of it — the six that shipped first, and the
+     five that name a light, a partition and a room colour under them. */
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.4rem;
 }
@@ -4863,13 +4972,59 @@ textarea.field-input {
   align-items: stretch;
   gap: 0.5rem;
 }
-/* THE OUTSIDE OF THE SECTION is four controls, and three of them are words:
-   agent size, theme, density. They are the header popover's own segmented
-   control (`.lookbar-seg`) beside their label, like every other row on this
-   sheet — the same control in both places, because it is the same choice. */
+/* THE OUTSIDE OF THE SECTION is six controls, and four of them are words:
+   agent size, theme, density, light. They are the header popover's own
+   segmented control (`.lookbar-seg`) — the same control in both places,
+   because it is the same choice. */
 .settings-look-seg {
   flex: 0 1 auto;
   min-width: 0;
+}
+/* THE STYLE'S MODIFIERS — density, light, room colours — in one line under the
+   cards: a name with a quiet note beside it, and the control under it. Three
+   rows of them were a third of a screen and pushed the live preview, the one
+   picture of what they do, off the bottom of the sheet. Columns that wrap, so
+   a narrow sheet stacks them rather than squeezing a segment out of its well. */
+.settings-look-mods {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+  align-items: start;
+  gap: 0.9rem 1.2rem;
+  padding: 0.8rem 0 0.2rem;
+}
+.settings-look-mod {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.settings-look-mod-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.settings-look-mod-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--muted);
+}
+.settings-look-mod .settings-note {
+  margin: 0;
+}
+.settings-look-mod .settings-look-refusal {
+  align-self: stretch;
+  margin: 0;
+}
+/* Under its name the switch reads left to right, track first; and it gives up
+   the padding that centres it on a row, so the track starts on the label's
+   own left edge. */
+.settings-look-mod .look-switch {
+  padding-left: 0;
 }
 .settings-look-caption {
   margin: 0.35rem 0 0;

@@ -25,13 +25,18 @@
  * 4800 x 2880 physical pixels before it is scaled, six times over, inside a
  * settings sheet.
  *
- * So a thumbnail is a **four-zone fragment** — office, corridor, project room,
- * lounge, with the two rugs, a desk and a plant on it — laid out in plan units
- * and painted by the floor's own painters at the thumbnail's own `u`. It shows
- * what a preset actually changes: the four floors, the scheme's temperature, the
- * rug tones and patterns, the furniture set's radius and frame, the plant
- * family. `LOOK_THUMB_DRAW_BUDGET` below is what holds it to that, and
- * `test/unit/look-ui.test.mjs` measures all six against it.
+ * So a thumbnail is a **four-zone fragment** — office, corridor, two project
+ * rooms, lounge, with the two rugs, a desk and a plant on it — laid out in plan
+ * units and painted by the floor's own painters at the thumbnail's own `u`, in
+ * the bake's own order: floors, daylight, the walls between rooms, furniture.
+ * It shows what a preset actually changes: the four floors, the scheme's
+ * temperature, the rug tones and patterns, the furniture set's radius and
+ * frame, the plant family — and, since the light, the partitions and the room
+ * colours became choices, those three as well: two rooms side by side, each in
+ * the colour the look gives it, the look's own partition between them, and
+ * every shadow as long as the look's light makes it.
+ * `LOOK_THUMB_DRAW_BUDGET` below is what holds it to that, and
+ * `test/unit/look-ui.test.mjs` measures every preset against it.
  * ============================================================================
  *
  * Pure: every function here takes a 2D context and numbers. No DOM at module
@@ -39,10 +44,11 @@
  * it did (the technique `lighting.test.mjs` already uses on `paintProp`).
  */
 
-import { LOOK, applyLook } from './render/look-derive.js';
+import { LOOK, applyLook, roomGroundFor } from './render/look-derive.js';
 import { paintFloorMaterial } from './render/backdrop-floor-look.js';
-import { paintProp } from './render/backdrop.js';
+import { paintProp, paintRoomLight, paintWallSegment } from './render/backdrop.js';
 import { seededRng } from './render/backdrop-paint.js';
+import { identityFor } from './render/palette.js';
 
 /** The preset card's picture, in CSS pixels. §4's "~7 px/U" at this size. */
 export const THUMB_W = 160;
@@ -57,16 +63,16 @@ export const PREVIEW_U = 9;
 export const SWATCH_U = 7;
 
 /**
- * How many context operations all six preset thumbnails together may cost.
+ * How many context operations ONE preset thumbnail may cost, on average.
  *
- * A ceiling, not a measurement: the six measured 6,076 operations at 160 x 100
- * when this was written, and the budget is a shade over twice that, so a painter
- * that gains a pass does not fail this on the first line. What it catches is the
- * thing it exists to catch — somebody reaching for `bakeBackdrop` and putting
- * six whole floor bakes behind a settings sheet, which is two orders of
- * magnitude over this number rather than a few per cent.
+ * A ceiling, not a measurement, and per card so it does not have to be
+ * rewritten the day a twelfth preset is drawn. What it catches is the thing it
+ * exists to catch — somebody reaching for `bakeBackdrop` and putting a whole
+ * floor bake per card behind a settings sheet, which is two orders of magnitude
+ * over this number rather than a few per cent. The measured cost is in
+ * `test/unit/look-ui.test.mjs`, which prints it.
  */
-export const LOOK_THUMB_DRAW_BUDGET = 13000;
+export const LOOK_THUMB_DRAW_BUDGET = 2200;
 
 /**
  * RUN `fn` WITH THE FLOOR TEMPORARILY PAINTED IN SOME OTHER LOOK.
@@ -104,18 +110,59 @@ export function withLook(look, theme, fn) {
  * A spine down the middle with the office on one side, a project room over a
  * lounge bay on the other: the smallest arrangement in which all four of §1.a's
  * zones touch, so all three of `ZONE_ADJACENCY`'s edges are visible in it. The
- * numbers are fractions rather than units so the same fragment serves a 46 px
- * swatch, a 160 px card and a 380 px preview.
+ * numbers are fractions rather than units so the same fragment serves a 160 px
+ * card and a 640 px preview. The rooms' side is the wider one since it became
+ * two rooms: at a card's size each has to be wide enough to read as a room.
  */
 const ZONE_BOXES = Object.freeze({
-  office: Object.freeze({ x: 0, y: 0, w: 0.42, h: 1 }),
-  corridor: Object.freeze({ x: 0.42, y: 0, w: 0.16, h: 1 }),
-  rooms: Object.freeze({ x: 0.58, y: 0, w: 0.42, h: 0.56 }),
-  lounge: Object.freeze({ x: 0.58, y: 0.56, w: 0.42, h: 0.44 }),
+  office: Object.freeze({ x: 0, y: 0, w: 0.38, h: 1 }),
+  corridor: Object.freeze({ x: 0.38, y: 0, w: 0.14, h: 1 }),
+  rooms: Object.freeze({ x: 0.52, y: 0, w: 0.48, h: 0.56 }),
+  lounge: Object.freeze({ x: 0.52, y: 0.56, w: 0.48, h: 0.44 }),
 });
 
 /** Every zone this fragment paints, in paint order. @type {ReadonlyArray<string>} */
 export const THUMB_ZONES = Object.freeze(Object.keys(ZONE_BOXES));
+
+/**
+ * THE ROOMS ZONE IS TWO PROJECT ROOMS, side by side.
+ *
+ * One room cannot show what a room COLOUR is — a colour of its own is only a
+ * colour beside the next room's — and it cannot show a partition, which is
+ * what stands between two. So the zone is the first project's room and the
+ * second's, each floor in the colour the look gives that project, and the
+ * look's own partition on the line they share.
+ */
+const ROOM_BOXES = Object.freeze({
+  'room.1': Object.freeze({ x: 0.52, y: 0, w: 0.24, h: 0.56 }),
+  'room.2': Object.freeze({ x: 0.76, y: 0, w: 0.24, h: 0.56 }),
+});
+
+/** Every rectangle a prop may be stood in: the four zones and the two rooms. */
+const BOXES = Object.freeze({ ...ZONE_BOXES, ...ROOM_BOXES });
+
+/**
+ * A box of the picture, on whole pixels. Edges are rounded rather than sizes,
+ * so two boxes that share a line in fractions share it in pixels as well.
+ * @param {{x:number, y:number, w:number, h:number}} box
+ * @param {number} w @param {number} h the picture, in px
+ */
+function pxOf(box, w, h) {
+  const x = Math.round(box.x * w);
+  const y = Math.round(box.y * h);
+  return { x, y, w: Math.round((box.x + box.w) * w) - x, h: Math.round((box.y + box.h) * h) - y };
+}
+
+/**
+ * The two walls of the building this fragment is the top-left corner of. They
+ * are just outside the picture and are never painted: they are here so the
+ * daylight knows which way a room faces, exactly as a plan's walls tell it.
+ * @param {number} wU @param {number} hU the picture, in plan units
+ */
+const envelopeOf = (wU, hU) => [
+  { x1: 0, y1: 0, x2: wU, y2: 0, kind: 'exterior' },
+  { x1: 0, y1: 0, x2: 0, y2: hU, kind: 'exterior' },
+];
 
 /**
  * Lay one zone's floor, in the material the LIVE look gives that zone.
@@ -129,21 +176,42 @@ export const THUMB_ZONES = Object.freeze(Object.keys(ZONE_BOXES));
  * @param {string} zone
  * @param {number} w @param {number} h  the picture, in px
  * @param {number} u  px per plan unit
- * @param {string|null} [tint]
  */
-function paintZone(ctx, zone, w, h, u, tint = null) {
-  const box = ZONE_BOXES[/** @type {keyof typeof ZONE_BOXES} */ (zone)];
-  paintFloorMaterial(
-    ctx,
-    LOOK.look.floors[zone],
-    Math.round(box.x * w),
-    Math.round(box.y * h),
-    Math.round(box.w * w),
-    Math.round(box.h * h),
-    seededRng(zone),
-    tint,
-    u,
-  );
+function paintZone(ctx, zone, w, h, u) {
+  const r = pxOf(ZONE_BOXES[/** @type {keyof typeof ZONE_BOXES} */ (zone)], w, h);
+  paintFloorMaterial(ctx, LOOK.look.floors[zone], r.x, r.y, r.w, r.h, seededRng(zone), null, u);
+}
+
+/**
+ * Lay the n-th project's room: the rooms' material, in the colour the LIVE
+ * look gives that project. `roomGroundFor` is what the bake hands the same
+ * painter — the project's identity wash, the room's own hue, or nothing — so a
+ * card cannot show a room colour the floor would not.
+ *
+ * @param {any} ctx
+ * @param {number} n which project, counted from 1
+ * @param {{x:number, y:number, w:number, h:number}} r the room, in px
+ * @param {number} u
+ */
+function paintProjectRoom(ctx, n, r, u) {
+  const tint = roomGroundFor(LOOK, n, identityFor(n).accent);
+  const rng = seededRng(`room.${n}`);
+  paintFloorMaterial(ctx, LOOK.look.floors.rooms, r.x, r.y, r.w, r.h, rng, tint, u);
+}
+
+/**
+ * One box's daylight, by the bake's own painter: the room falling away from
+ * its windows, a patch under each pane or a skylight where no pane reaches,
+ * and the shade at the foot of its walls.
+ *
+ * @param {any} ctx
+ * @param {{x:number, y:number, w:number, h:number}} r the box, in px
+ * @param {ReadonlyArray<any>} walls the building's outside walls, in plan units
+ * @param {number} u
+ */
+function paintBoxLight(ctx, r, walls, u) {
+  const room = { x: r.x / u, y: r.y / u, w: r.w / u, h: r.h / u };
+  paintRoomLight(ctx, room, { rx: r.x, ry: r.y, rw: r.w, rh: r.h }, walls, u);
 }
 
 /**
@@ -161,7 +229,7 @@ function paintZone(ctx, zone, w, h, u, tint = null) {
  * @param {number} w @param {number} h @param {number} u
  */
 function paintFragmentProp(ctx, spec, w, h, u) {
-  const box = ZONE_BOXES[/** @type {keyof typeof ZONE_BOXES} */ (spec.zone)];
+  const box = BOXES[/** @type {keyof typeof BOXES} */ (spec.zone)];
   const zoneW = (box.w * w) / u;
   const zoneH = (box.h * h) / u;
   if (spec.wU > zoneW || spec.hU > zoneH) return false;
@@ -188,8 +256,10 @@ const FRAGMENT_PROPS = Object.freeze(
     // reception rug laid in it covers the floor the card is about. Measured on
     // the card itself — the first cut used the room-sized ones and every preset
     // read as two pale slabs.
-    { kind: 'rug', tone: 'wool', zone: 'office', wU: 5.2, hU: 3.4, fx: 0.46, fy: 0.2 },
-    { kind: 'rug', tone: 'task', zone: 'rooms', wU: 5.2, hU: 3.2, fx: 0.5, fy: 0.62 },
+    { kind: 'rug', tone: 'wool', zone: 'office', wU: 5.2, hU: 3.4, fx: 0.5, fy: 0.2 },
+    // The task rug lies in the SECOND room and the first is left bare: a room's
+    // colour is its floor, and one of the two has to show a floor.
+    { kind: 'rug', tone: 'task', zone: 'room.2', wU: 3.8, hU: 3, fx: 0.5, fy: 0.6 },
     { kind: 'rug_round', tone: 'wool', zone: 'lounge', wU: 3.8, hU: 3.8, fx: 0.34, fy: 0.55 },
     { kind: 'desk', zone: 'office', wU: 4.4, hU: 2.2, fx: 0.46, fy: 0.84 },
     { kind: 'plant_broad', tone: 'broad', zone: 'lounge', wU: 2, hU: 2, fx: 0.95, fy: 0.12 },
@@ -216,7 +286,33 @@ export function paintLookFragment(ctx, opts) {
   // to say the resolved look's, so nothing here invents one.
   ctx.fillStyle = LOOK.zones.corridor.field;
   ctx.fillRect(0, 0, w, h);
-  for (const zone of THUMB_ZONES) paintZone(ctx, zone, w, h, u);
+
+  // FLOORS. The rooms zone is laid as two project rooms rather than as a zone.
+  for (const zone of THUMB_ZONES) if (zone !== 'rooms') paintZone(ctx, zone, w, h, u);
+  const rooms = Object.values(ROOM_BOXES).map((box) => pxOf(box, w, h));
+  rooms.forEach((r, i) => paintProjectRoom(ctx, i + 1, r, u));
+
+  // DAYLIGHT, on the finished floors and under everything that stands on them.
+  // The corridor is circulation and takes none, as on the floor.
+  const walls = envelopeOf(w / u, h / u);
+  paintBoxLight(ctx, pxOf(ZONE_BOXES.office, w, h), walls, u);
+  for (const r of rooms) paintBoxLight(ctx, r, walls, u);
+  paintBoxLight(ctx, pxOf(ZONE_BOXES.lounge, w, h), walls, u);
+
+  // THE WALLS BETWEEN ROOMS, in the look's partition style: where a room meets
+  // the corridor, where it meets the next room, and along the rooms' foot.
+  const foot = (rooms[0].y + rooms[0].h) / u;
+  const top = rooms[0].y / u;
+  const right = (rooms[rooms.length - 1].x + rooms[rooms.length - 1].w) / u;
+  for (const r of rooms) {
+    paintWallSegment(ctx, { x1: r.x / u, y1: top, x2: r.x / u, y2: foot, kind: 'partition' }, u);
+  }
+  paintWallSegment(
+    ctx,
+    { x1: rooms[0].x / u, y1: foot, x2: right, y2: foot, kind: 'partition' },
+    u,
+  );
+
   if (opts.props === false) return;
   for (const spec of FRAGMENT_PROPS) paintFragmentProp(ctx, spec, w, h, u);
 }
@@ -243,17 +339,30 @@ export function paintLookThumbnail(ctx, opts) {
  *   - a FLOOR or a SCHEME chip is that material, filling the chip;
  *   - a RUG chip is the rug's own floor with the rug lying on it, because a rug
  *     tone means nothing except against the floor it has to read on — which is
- *     exactly §1.d's whole finding.
+ *     exactly §1.d's whole finding;
+ *   - a ROOMS chip (`rooms`) is two project rooms, one above the other, and the
+ *     partition between them: the first project's floor, the second's, and the
+ *     wall the look puts on the line they share. It is what a partition style
+ *     and a room colour each are — a statement about two rooms. The wall runs
+ *     the long way so a low partition is long enough to stop short of both
+ *     ends, which is the thing that makes it low.
  *
  * @param {any} ctx
  * @param {{look:unknown, theme:unknown, zone:string, rug?:string|null,
- *          w?:number, h?:number, u?:number}} opts
+ *          rooms?:boolean, w?:number, h?:number, u?:number}} opts
  */
 export function paintLookSwatch(ctx, opts) {
   const w = opts.w ?? SWATCH_W;
   const h = opts.h ?? SWATCH_H;
   const u = opts.u ?? SWATCH_U;
   withLook(opts.look, opts.theme, () => {
+    if (opts.rooms) {
+      const mid = Math.round(h / 2);
+      paintProjectRoom(ctx, 1, { x: 0, y: 0, w, h: mid }, u);
+      paintProjectRoom(ctx, 2, { x: 0, y: mid, w, h: h - mid }, u);
+      paintWallSegment(ctx, { x1: 0, y1: mid / u, x2: w / u, y2: mid / u, kind: 'partition' }, u);
+      return;
+    }
     paintFloorMaterial(ctx, LOOK.look.floors[opts.zone], 0, 0, w, h, seededRng(opts.zone), null, u);
     if (!opts.rug) return;
     // Inset by a fifth of the chip on each side, so the floor still reads

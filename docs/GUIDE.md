@@ -977,7 +977,7 @@ These are real, and listed here rather than discovered later.
 | `Ctrl`/`⌘` + scroll | Zoom about the cursor                                                    |
 | Drag / scroll       | Pan, whenever the floor is bigger than the window                        |
 
-`L` opens what the **Look** button in the header opens: a small panel with the four high-level
+`L` opens what the **Look** button in the header opens: a small panel with the six high-level
 choices — see [Change the look](#change-the-look). `Esc`, `L` again or a click anywhere else closes
 it, and **All look options…** opens the full Look section in Settings. `,` and the gear beside the
 Look button open Settings at the top, where a row of section names — State, Notifications, Resume,
@@ -1037,33 +1037,61 @@ first, including the ones the floor shows only as a number on the lounge's `+N r
 
 ## Change the look
 
-The **Look** button in the header (`L`) and the top of Settings → Look offer the same four choices,
+The **Look** button in the header (`L`) and the top of Settings → Look offer the same six choices,
 and they are the only ones you see until you ask for more:
 
-| Choice         | What it does                                                                          |
-| -------------- | ------------------------------------------------------------------------------------- |
-| **Agent size** | Small, Medium, Large, or Auto — Auto picks a size that fits everyone on the floor     |
-| **Theme**      | Default, Night shift or Blueprint. In Settings, pointing at one previews it           |
-| **Style**      | Eleven presets as thumbnails: a whole floor — materials, colours, furniture, rugs     |
-| **Density**    | Calm, Normal or Lively — how many plants and props, moved together                    |
+| Choice           | What it does                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| **Agent size**   | Small, Medium, Large, or Auto — Auto picks a size that fits everyone on the floor   |
+| **Theme**        | Default, Night shift or Blueprint. In Settings, pointing at one previews it         |
+| **Style**        | Eleven presets as pictures: a whole floor — materials, colours, furniture, light    |
+| **Density**      | Calm, Normal or Lively — how many plants and props, moved together                  |
+| **Light**        | Morning, Noon or Evening — where daylight falls from, its colour, how long shadows are |
+| **Room colours** | A switch. Off is Subtle; on is Zoned, a calm colour of its own for every project room |
 
 A click changes the floor straight away and the choice stays lit. If a choice would leave the floor
 unreadable it is refused: the control stays where it was and the reason is written under it.
-Choosing a style changes the floor and **leaves your agent size alone**.
+Choosing a style changes the floor and **leaves your agent size alone**. Every control is on the
+keyboard: Tab moves from one to the next, the arrow keys move inside a row of choices, and Space or
+Enter throws the switch.
 
-Under those four, in Settings, is the live preview and then **Advanced**, which is shut until you
+The eleven styles, in the order the cards are in. Each card is painted by the floor's own painter,
+so it shows two project rooms in the colours that style gives them, the partition between them and
+the length of shadow its light throws:
+
+| Style                | What it is                                                                     |
+| -------------------- | ------------------------------------------------------------------------------ |
+| **Studio oak**       | Warm oak and wool rugs, everything on. The floor as it ships                   |
+| **Night lab**        | Polished concrete under an ink wash, industrial frames, no games bay           |
+| **Paper office**     | Ash boards with every surface a neutral, so the only colour left is the people |
+| **Terrazzo hall**    | Terrazzo and ceramic tile, soft seating, busy shelves                          |
+| **Garden floor**     | Cork and ash under a forest wash, as planted as the room allows                |
+| **Workshop**         | Concrete in a clay wash, industrial frames, shelves kept busy                  |
+| **Daylight studio**  | Pale ash at noon, with glass between the rooms                                 |
+| **Graphite loft**    | Grey terrazzo and loop pile, dark frames behind glass, long evening shadows    |
+| **Nordic wool**      | Cool ash, cork and broadloom, soft seating behind low dividers, morning light  |
+| **Colour plan**      | A neutral building where every project room has a calm colour of its own       |
+| **Walnut executive** | Fine herringbone and cork in a clay wash, soft seating, evening light          |
+
+A style is a starting point. Change anything after choosing one and the Style row says
+_Daylight studio · edited_; the light, the room colours and the density count as changes too.
+
+Under those six, in Settings, is the live preview and then **Advanced**, which is shut until you
 open it and stays the way you left it in that browser. It holds everything fine-grained, under
-three headings you can fold away:
+four headings you can fold away:
 
+- **Walls and room colours** — the **partitions** between rooms: Solid, Glass or Low. The outside
+  wall of the building does not change. And room colours with its third answer, below.
 - **Floors** — a material for the office, the corridor, the project rooms and the lounge, and the
   colour scheme washed over them.
-- **Furniture and textiles** — the furniture set, the two rugs (a tone and a pattern each), which
-  corners the lounge has (sitting is always on), the **light** (morning, noon or evening), the
-  **partitions** between rooms (solid, glass or low) and **room colours**.
+- **Furniture and textiles** — the furniture set, the two rugs (a tone and a pattern each) and
+  which corners the lounge has (sitting is always on).
 - **Plants and props** — the plant family, and the plant and prop densities one at a time, for when
   Calm, Normal and Lively are not the mix you want.
 
-**Room colours** decides how much of a colour each project room's floor carries:
+**Room colours** decides how much of a colour each project room's floor carries. The switch moves
+between the first two; the third is a chip under Advanced, and while it is chosen the switch reads
+off and says _Off_:
 
 | Room colours | What a project room's floor is                                                        |
 | ------------ | ------------------------------------------------------------------------------------- |
@@ -1075,6 +1103,14 @@ Zoned is for telling rooms apart at a glance. The colour is as bright as the flo
 names and state colours read as they did, and a room with its lights off keeps its colour under
 the dimming. The seventh project takes the first colour again. Your agents keep their own colours:
 the tint is the room's. The **Colour plan** style turns it on over a neutral building.
+
+**Light** is one light in three positions. It always travels down and to the right; Morning and
+Evening lower it, so everything tall throws a longer shadow, and each has its own colour of
+daylight where a window lets it onto the floor — cool in the morning, amber in the evening. On the
+default theme a patch of daylight is deliberately faint, because nothing on a floor may be
+brighter than its walls (1.02 to 1.06:1 across the eleven styles); on Night shift and Blueprint it
+shows (1.15 to 1.17:1). The figures under Advanced include
+_daylight on the floor_: how bright the strongest patch is against the floor it lands on.
 
 **Props** is also what dresses a room. Every project room has a bin by its desks and a coat stand
 by its door. At **Normal** it also has felt panels on its clear walls, a lamp over a meeting table,

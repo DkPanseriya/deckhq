@@ -422,18 +422,29 @@ test('both keys are listed where keys are looked up: the palette, and the guide�
 
 // ---------------------------------------------- 2 · the three controls
 
-test('the popover holds exactly four controls, read out of the catalogue, and a way to the rest', () => {
+test('the popover holds exactly six controls, read out of the catalogue, and a way to the rest', () => {
   const m = mount();
   m.bar.open();
   const names = byRole(m.popoverEl, 'radiogroup').map((g) => g.getAttribute('aria-label'));
-  // The four high-level choices, and nothing finer: a floor material per zone,
-  // a rug, a plant family are under Advanced in the sheet, not here.
-  assert.deepEqual(names, ['Agent size', 'Theme', 'Style', 'Density']);
+  // The six high-level choices, and nothing finer: a floor material per zone,
+  // a rug, a plant family are under Advanced in the sheet, not here. Five are
+  // lists and the sixth is a switch.
+  assert.deepEqual(names, ['Agent size', 'Theme', 'Style', 'Density', 'Light']);
+  const switches = byRole(m.popoverEl, 'switch');
+  assert.deepEqual(
+    switches.map((b) => [b.getAttribute('aria-label'), b.getAttribute('aria-checked')]),
+    [['Room colours', 'false']],
+  );
+  assert.deepEqual(
+    byRole(group(m.popoverEl, 'Light'), 'radio').map((b) => b.textContent),
+    catalogue.LIGHT_MOOD_IDS.map((id) => catalogue.LIGHT_MOODS[id].label),
+    'the lights are the catalogue’s, in the order of a day',
+  );
   const buttons = all(m.popoverEl).filter((n) => n.tagName === 'BUTTON');
   assert.equal(
     buttons.length,
-    byRole(m.popoverEl, 'radio').length + 1,
-    'the popover holds a control that is not one of the four, or the link',
+    byRole(m.popoverEl, 'radio').length + switches.length + 1,
+    'the popover holds a control that is not one of the six, or the link',
   );
   assert.deepEqual(
     byRole(group(m.popoverEl, 'Density'), 'radio').map((b) => b.textContent),
@@ -477,7 +488,7 @@ test('the popover holds exactly four controls, read out of the catalogue, and a 
 test('each group is one Tab stop on the chosen option, and arrows move the choice', async () => {
   const m = mount();
   m.bar.open();
-  for (const label of ['Agent size', 'Theme', 'Style', 'Density']) {
+  for (const label of ['Agent size', 'Theme', 'Style', 'Density', 'Light']) {
     const stops = byRole(group(m.popoverEl, label), 'radio').filter(
       (b) => b.getAttribute('tabindex') === '0',
     );

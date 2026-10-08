@@ -26,12 +26,14 @@ import {
 } from '../../public/render/look-options.js';
 import { validateLook } from '../../public/render/look-guards.js';
 import {
+  ADVANCED_GROUPS,
   LOOK_DEBOUNCE_MS,
   advancedGroupOf,
   changedPaths,
   createLookStore,
   densityLevels,
   densityOf,
+  roomColours,
   styleChanges,
   styleEdited,
   withDensity,
@@ -377,15 +379,90 @@ test('Density is the pair at one position in the catalogue’s two tables', asyn
 });
 
 test('every picker has a heading under Advanced, by a rule rather than a list', () => {
+  const headings = ADVANCED_GROUPS.map((g) => g.id);
+  assert.deepEqual(headings, ['rooms', 'floors', 'furniture', 'plants']);
   for (const picker of LOOK_PICKERS) {
-    assert.match(advancedGroupOf(picker.id), /^(floors|furniture|plants)$/);
+    assert.ok(
+      headings.includes(advancedGroupOf(picker.id)),
+      `${picker.id} lands under "${advancedGroupOf(picker.id)}", which is not a heading`,
+    );
   }
   assert.equal(advancedGroupOf('floor.corridor'), 'floors');
   assert.equal(advancedGroupOf('scheme'), 'floors');
   assert.equal(advancedGroupOf('rug.wool'), 'furniture');
   assert.equal(advancedGroupOf('plants'), 'plants');
   assert.equal(advancedGroupOf('props'), 'plants');
+  // What stands between two rooms, and what colour a room is, are neither a
+  // floor material nor furniture — which is where the rule used to drop them.
+  assert.equal(advancedGroupOf('partitions'), 'rooms');
+  assert.equal(advancedGroupOf('roomTint'), 'rooms');
   assert.equal(advancedGroupOf('something-new'), 'furniture');
+});
+
+// ------------------------------------------------------------- room colours
+
+test('Room colours is a switch over two of the catalogue’s three levels, and neither id is the store’s', async () => {
+  // `on` is the level the catalogue marks zoned and `off` is the one a look
+  // ships with: read out of the tables, so renaming a level cannot leave the
+  // switch pointing at nothing.
+  const shipped = roomColours(catalogue, DEFAULT_LOOK);
+  assert.deepEqual(shipped, {
+    on: catalogue.ROOM_TINT_IDS.find((id) => catalogue.ROOM_TINTS[id].zoned),
+    off: DEFAULT_LOOK.roomTint,
+    value: DEFAULT_LOOK.roomTint,
+    checked: false,
+    state: catalogue.ROOM_TINTS[DEFAULT_LOOK.roomTint].label,
+  });
+  assert.deepEqual([shipped.on, shipped.off], ['zoned', 'subtle']);
+
+  const d = daemon();
+  await d.store.chooseRoomColours(true);
+  assert.equal(d.stored().roomTint, 'zoned');
+  assert.deepEqual([d.store.roomColours().checked, d.store.roomColours().state], [true, 'Zoned']);
+  // One key moved, and it is an edit of the style like any other.
+  assert.ok(sameLook({ ...d.stored(), roomTint: DEFAULT_LOOK.roomTint }, DEFAULT_LOOK));
+  assert.deepEqual(d.store.changedPaths(), ['roomTint']);
+  await d.store.chooseRoomColours(false);
+  assert.equal(d.stored().roomTint, 'subtle');
+  assert.equal(d.store.styleChanges(), 0);
+
+  // The third level is neither answer: the switch reads off and says where it is.
+  const bare = daemon({ look: { ...DEFAULT_LOOK, roomTint: 'off' } });
+  assert.deepEqual(
+    [bare.store.roomColours().checked, bare.store.roomColours().state],
+    [false, 'Off'],
+  );
+  await bare.store.chooseRoomColours(true);
+  assert.equal(bare.stored().roomTint, 'zoned');
+
+  // A catalogue with no zoned level has nothing to switch to, and says so by
+  // offering no switch rather than one that does nothing.
+  const flat = { ...catalogue, ROOM_TINT_IDS: ['subtle', 'off'] };
+  assert.equal(roomColours(flat, DEFAULT_LOOK), null);
+  const none = createLookStore({ port: { catalogue: () => null } });
+  assert.equal(none.roomColours(), null);
+  assert.equal(none.chooseRoomColours(true), undefined);
+});
+
+test('a refused room colour moves nothing and is filed under the switch, not under the row in Advanced', async () => {
+  const d = daemon();
+  d.port.validate = (next) =>
+    normalizeLook(next).roomTint === 'zoned'
+      ? { ok: false, problems: [{ picker: 'roomTint', reason: 'two rooms would be one room' }] }
+      : { ok: true, problems: [] };
+  await d.store.chooseRoomColours(true);
+  assert.deepEqual(d.posted, []);
+  assert.equal(d.store.look().roomTint, 'subtle');
+  assert.equal(d.store.roomColours().checked, false);
+  assert.deepEqual(
+    d.store.refusalsFor('roomColours').map((p) => p.reason),
+    ['two rooms would be one room'],
+  );
+  // The same option refused from its chip under Advanced is that row's.
+  assert.deepEqual(d.store.refusalsFor('roomTint'), []);
+  await d.store.choosePath('roomTint', 'zoned', 'roomTint');
+  assert.deepEqual(d.store.refusalsFor('roomColours'), []);
+  assert.equal(d.store.refusalsFor('roomTint').length, 1);
 });
 
 // ----------------------------------------------------------------- the theme

@@ -661,8 +661,9 @@ export function roomTintProblems(resolved) {
 }
 
 /**
- * THE FIVE NUMBERS UNDER THE LIVE PREVIEW (§4), and they are the numbers the
- * guards above refuse on rather than a second measurement of the same floor.
+ * THE SEVEN NUMBERS UNDER THE LIVE PREVIEW (§4) — three zone edges, two rugs,
+ * the worst ink and the worst daylight — and they are the numbers the guards
+ * above refuse on rather than a second measurement of the same floor.
  *
  * Added by WP-88b, which needed them, and put HERE rather than in the section
  * for the reason every other number in this file is here: a measurement the
@@ -705,6 +706,14 @@ export function lookMetrics(look, theme) {
     }
   }
   out.push({ id: 'ink', label: 'worst floor ink', ratio: worstInk });
+  // And the daylight: the brightest a patch is against the floor it lands on,
+  // over every zone and every project room's colour — `daylightOn`'s own
+  // number, the one the light is refused on.
+  out.push({
+    id: 'daylight',
+    label: 'daylight on the floor',
+    ratio: daylightOn(resolved).ratio.value,
+  });
   return out.map((m) => ({ ...m, ratio: Number(m.ratio.toFixed(2)) }));
 }
 

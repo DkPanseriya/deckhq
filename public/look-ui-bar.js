@@ -12,11 +12,12 @@
  *
  * So the header carries two buttons, and this is what they do:
  *
- *   - **Look** opens a small popover with the four high-level choices — agent
- *     size, theme, style and density — and a link to the whole section.
+ *   - **Look** opens a small popover with the six high-level choices — agent
+ *     size, theme, style, density, light and room colours — and a link to the
+ *     whole section.
  *   - **Settings** opens the sheet at the top.
  *
- * The four are the same four the top of the sheet's Look section draws, out of
+ * The six are the same six the top of the sheet's Look section draws, out of
  * the same list (`outsideControls`) and the same store. Nothing finer is here:
  * a floor material per zone belongs under Advanced, in the sheet.
  *
@@ -128,12 +129,13 @@ export function createLookBar(opts) {
   // ---------------------------------------------------------------- pieces
 
   /**
-   * One of the four controls: its name, a quiet note beside it, the control,
+   * One of the six controls: its name, a quiet note beside it, the control,
    * and under it the reason if it just refused.
    *
-   * Three are words in a segmented control. The fourth is the six presets as
-   * thumbnails — the settings sheet's own, out of the same cache and under the
-   * same key, so opening the sheet after this paints nothing twice.
+   * Four are words in a segmented control and one is a switch. The sixth is
+   * the presets as thumbnails — the settings sheet's own, out of the same cache
+   * and under the same key, so opening the sheet after this paints nothing
+   * twice.
    *
    * @param {any} host @param {any} control one of `outsideControls(store)`
    */
@@ -143,6 +145,25 @@ export function createLookBar(opts) {
     const head = el('div', 'lookbar-row-head');
     head.appendChild(el('span', 'lookbar-label', control.label));
     if (control.note) head.appendChild(el('span', 'lookbar-note', control.note));
+    if (control.kind === 'switch') {
+      // A decision, not a list: its name, and the switch on the same line.
+      wrap.className += ' lookbar-row--switch';
+      wrap.append(
+        head,
+        parts.switchControl({
+          name: control.id,
+          label: control.label,
+          checked: control.checked,
+          state: control.state,
+          onChange: control.onToggle,
+        }),
+      );
+      for (const problem of store.refusalsFor(control.id)) {
+        wrap.appendChild(parts.refusalBox(problem, 'lookbar-refusal'));
+      }
+      host.appendChild(wrap);
+      return;
+    }
     const group = parts.radioGroup({
       name: control.id,
       label: control.label,

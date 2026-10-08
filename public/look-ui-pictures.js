@@ -34,6 +34,7 @@ import {
   paintLookThumbnail,
   withLook,
 } from './look-ui-thumbs.js';
+import { setDeviceScale } from './render/device-px.js';
 
 /**
  * The live preview, in logical pixels. §4's *"~9 px/U"*, which makes this a
@@ -45,9 +46,9 @@ export const PREVIEW_W = 640;
 export const PREVIEW_H = 104;
 
 /**
- * How many painted canvases are kept. Six thumbnails, thirty-six swatches and a
- * preview is forty-three on one theme; this is room for three themes and a walk
- * through every scheme, and a ceiling on a sheet nobody closes.
+ * How many painted canvases are kept. Eleven thumbnails and some fifty swatches
+ * is sixty-odd on one theme; this is room for three themes and a walk through
+ * every scheme, and a ceiling on a sheet nobody closes.
  */
 export const MAX_PICTURES = 240;
 
@@ -98,6 +99,13 @@ export function createLookPictures(deps) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
       ctx.scale(scale, scale);
+      // Say what one of this context's pixels is on the device, as a bake does.
+      // A painter's shadows are in device pixels whatever `scale()` says, so
+      // unsaid a card's shadows were half the length the floor's are — and how
+      // long a shadow is is most of what a light mood looks like. It also lays
+      // every hairline on a whole device pixel: a 0.75 px frame line on a
+      // 160 px card is otherwise a grey smear two pixels wide.
+      setDeviceScale(ctx, scale);
       paint(ctx);
       return canvas;
     } catch (err) {
@@ -119,7 +127,8 @@ export function createLookPictures(deps) {
   /**
    * One picture for the section. `spec.kind` says which.
    *
-   * @param {{kind:string, look:any, key:string, zone?:string, rug?:string|null}} spec
+   * @param {{kind:string, look:any, key:string, zone?:string, rug?:string|null,
+   *   rooms?:boolean}} spec
    * @returns {any|null}
    */
   function picture(spec) {
@@ -140,6 +149,7 @@ export function createLookPictures(deps) {
             theme: name,
             zone: spec.zone || 'office',
             rug: spec.rug || null,
+            rooms: Boolean(spec.rooms),
             w: SWATCH_W,
             h: SWATCH_H,
             u: SWATCH_U,

@@ -45,6 +45,8 @@ import { ADVANCED_GROUPS, advancedGroups, at, withPath } from './look-ui-store.j
  * with no entry here simply has none.
  */
 const PICKER_NOTES = Object.freeze({
+  partitions: 'What stands between two rooms. The outside wall stays as it is.',
+  roomTint: 'Zoned gives each project a colour of its own. Off is the bare floor in every room.',
   'floor.office': 'The open floor and reception.',
   'floor.rooms': 'Inside each project room.',
   scheme: 'A colour wash over the floors. Your theme still applies on top.',
@@ -122,13 +124,18 @@ export const groupLabel = (picker, dimension, count) =>
  * painter can draw.
  *
  * Some groups have no picture and that is deliberate rather than unfinished: a
- * furniture set, a planting density, a prop density and an agent size are things
- * a 46 x 28 chip cannot show honestly, and a chip that showed *something* for
- * them would be decoration standing where a measurement belongs. They are words,
- * and the preview shows what they do to a floor.
+ * furniture set, a planting density, a prop density, an agent size and a light
+ * are things a 46 x 28 chip cannot show honestly, and a chip that showed
+ * *something* for them would be decoration standing where a measurement belongs.
+ * They are words, and the preview shows what they do to a floor.
+ *
+ * `rooms` asks for the two-room chip: two project rooms side by side and the
+ * partition between them, which is what a partition style and a room colour are
+ * each a statement about.
  *
  * @param {any} picker @param {string} optionId @param {any} look @param {any} cat
- * @returns {{kind:'swatch', look:any, zone:string, rug:string|null, key:string}|null}
+ * @returns {{kind:'swatch', look:any, zone:string, rug:string|null, key:string,
+ *   rooms?:boolean}|null}
  */
 export function swatchSpecFor(picker, optionId, look, cat) {
   /** @param {any} next @param {string} zone @param {string|null} rug */
@@ -156,6 +163,20 @@ export function swatchSpecFor(picker, optionId, look, cat) {
     // A rug is shown on the floor it actually lies on: a tone means nothing
     // until it has a floor under it.
     return { ...spec(next, zone, role), key: `rug:${role}:${optionId}:${zone}:${next.scheme}` };
+  }
+  if (picker.id === 'partitions' || picker.id === 'roomTint') {
+    // Two project rooms and the wall between them, which is the one picture
+    // both options are about: a partition is what stands between two rooms, and
+    // a room colour is only a colour beside the next room's. Everything the
+    // picture depends on is in the key — the rooms' floor, the scheme, and both
+    // of the options it shows, whichever one this chip is moving — and so is
+    // the picker, because a canvas is one node and can hang in one chip.
+    const next = withPath(look, picker.path, optionId);
+    return {
+      ...spec(next, 'rooms', null),
+      rooms: true,
+      key: `${picker.id}:rooms:${next.floors.rooms}:${next.scheme}:${next.partitions}:${next.roomTint}`,
+    };
   }
   return null;
 }
@@ -409,7 +430,7 @@ export function createAdvanced(ctx) {
     // What is in here, and the one way back out of it.
     const head = el('div', 'settings-look-state');
     head.appendChild(
-      el('span', 'settings-note', 'Every floor, fabric and plant, one choice at a time.'),
+      el('span', 'settings-note', 'Every wall, floor, fabric and plant, one choice at a time.'),
     );
     const reset = el('button', 'btn', 'Reset to preset');
     reset.type = 'button';

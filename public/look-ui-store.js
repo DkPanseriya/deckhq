@@ -36,7 +36,7 @@
  *               hand was on.
  *
  * The theme rides along, for the same reason and with the same three states: it
- * is one of the four things on the outside of both surfaces, and it had the same
+ * is one of the six things on the outside of both surfaces, and it had the same
  * disease — the sheet stored it in one place and the bar read it from another.
  *
  * Nothing here touches a global, a document or the renderer: the catalogue, the
@@ -203,16 +203,49 @@ export function withDensity(c, look, id) {
   return withPath(withPath(look, 'plants.density', level.plants), 'props.density', level.props);
 }
 
+// ----------------------------------------------------------- room colours
+
+/**
+ * ROOM COLOURS, AS ONE DECISION.
+ *
+ * The catalogue's room tint has three levels, and on the outside of both
+ * surfaces it is a switch: does every project room have a colour of its own,
+ * or not. `on` is the level the catalogue marks `zoned`, `off` is the level a
+ * look ships with, and neither id is written here. The third level — no tint
+ * at all — is a detail, and is a chip under Advanced; a look that is on it
+ * shows the switch off and says which level it is on.
+ *
+ * @param {any} c @param {any} look
+ * @returns {{on:string, off:string, value:string, checked:boolean, state:string}|null}
+ *   `null` where this catalogue has no zoned level to switch to
+ */
+export function roomColours(c, look) {
+  const levels = c.ROOM_TINTS || {};
+  const on = (c.ROOM_TINT_IDS || []).find((/** @type {string} */ id) => levels[id]?.zoned);
+  const off = c.DEFAULT_LOOK?.roomTint;
+  if (!on || !off || on === off || !levels[off]) return null;
+  const value = String(c.normalizeLook(look).roomTint);
+  return { on, off, value, checked: value === on, state: levels[value]?.label || value };
+}
+
 // ------------------------------------------------- outside, and under Advanced
 
 /**
- * The catalogue pickers drawn on the OUTSIDE of both surfaces. One: the others
- * out there — theme, style, density — are not catalogue pickers.
+ * The catalogue pickers drawn on the OUTSIDE of both surfaces, and nowhere
+ * else. Two: the agent size and the light. The others out there are not
+ * catalogue pickers — theme, style and density are not in the catalogue's
+ * picker list at all, and room colours is two of a picker's three options,
+ * whose whole row is under Advanced.
  */
-export const OUTSIDE_PICKER_IDS = Object.freeze(['agentSize']);
+export const OUTSIDE_PICKER_IDS = Object.freeze(['agentSize', 'light']);
 
-/** The three headings under Advanced, in the order they are drawn. */
+/**
+ * The four headings under Advanced, in the order they are drawn: from the
+ * largest thing a look decides to the smallest — how the rooms are divided and
+ * coloured, what the floors are, what stands on them, what grows on them.
+ */
 export const ADVANCED_GROUPS = Object.freeze([
+  { id: 'rooms', label: 'Walls and room colours' },
   { id: 'floors', label: 'Floors' },
   { id: 'furniture', label: 'Furniture and textiles' },
   { id: 'plants', label: 'Plants and props' },
@@ -230,6 +263,8 @@ export const ADVANCED_GROUPS = Object.freeze([
 export function advancedGroupOf(pickerId) {
   if (pickerId.startsWith('floor.') || pickerId === 'scheme') return 'floors';
   if (pickerId === 'plants' || pickerId === 'props') return 'plants';
+  // The light is drawn outside; on a build that moved it in, it is the rooms'.
+  if (pickerId === 'partitions' || pickerId === 'roomTint' || pickerId === 'light') return 'rooms';
   return 'furniture';
 }
 
@@ -446,6 +481,13 @@ export function createLookStore(opts) {
       const c = cat();
       return c ? choose(withDensity(c, look(), id), from) : undefined;
     },
+    /** Room colours, on or off. @param {boolean} on @param {string} [from] */
+    chooseRoomColours(on, from = 'roomColours') {
+      const c = cat();
+      const levels = c ? roomColours(c, look()) : null;
+      if (!levels) return undefined;
+      return choose(withPath(look(), 'roomTint', on ? levels.on : levels.off), from);
+    },
 
     // What the surfaces say about the look they are drawing. Each is the pure
     // function above applied to `look()`, so the two surfaces cannot word the
@@ -453,6 +495,8 @@ export function createLookStore(opts) {
     /** The step both densities are on, or `''`. */
     density: () => (cat() ? densityOf(cat(), look()) : ''),
     densityLevels: () => (cat() ? densityLevels(cat()) : []),
+    /** The room-colours switch, or `null` where there is nothing to switch. */
+    roomColours: () => (cat() ? roomColours(cat(), look()) : null),
     presetLabel: () => (cat() ? presetLabel(cat(), look()) : ''),
     changedPaths: () => (cat() ? changedPaths(cat(), look()) : []),
     styleChanges: () => (cat() ? styleChanges(cat(), look()) : 0),

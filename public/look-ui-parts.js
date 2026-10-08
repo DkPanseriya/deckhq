@@ -2,7 +2,8 @@
  * THE PARTS BOTH LOOK SURFACES ARE BUILT FROM.
  *
  * The settings sheet's Look section and the header's Look bar draw the same
- * four controls — agent size, theme, style, density — and until this file each
+ * six controls — agent size, theme, style, density, light, room colours — and
+ * until this file each
  * had its own radio group, its own refusal row and its own idea of where the
  * keyboard was after a redraw. Two copies of a control is how the two surfaces
  * came to behave differently; this is the one copy.
@@ -113,6 +114,41 @@ export function createLookParts(ctx) {
   }
 
   /**
+   * ONE SWITCH: a decision with two answers, and a word saying which.
+   *
+   * A real `<button role="switch">`, so Tab reaches it and Space or Enter
+   * throws it with no key handler of this file's. Its name is the control's and
+   * never the state's — `aria-checked` says the state — and the word beside the
+   * track is for the eye: a track alone says on or off, and this control has a
+   * third answer under Advanced that is neither.
+   *
+   * @param {object} spec
+   * @param {string} spec.name     its key, for focus across a redraw
+   * @param {string} spec.label    its accessible name
+   * @param {boolean} spec.checked
+   * @param {string} spec.state    the word for what it is on now
+   * @param {string} [spec.title]
+   * @param {(next:boolean) => void} spec.onChange
+   */
+  function switchControl(spec) {
+    const btn = el('button', 'look-switch');
+    btn.type = 'button';
+    btn.setAttribute('role', 'switch');
+    btn.setAttribute('aria-checked', String(Boolean(spec.checked)));
+    btn.setAttribute('aria-label', spec.label);
+    if (spec.title) btn.title = spec.title;
+    const track = el('span', 'look-switch-track');
+    track.setAttribute('aria-hidden', 'true');
+    track.appendChild(el('span', 'look-switch-thumb'));
+    btn.append(track, el('span', 'look-switch-state', spec.state));
+    btn.addEventListener('click', () => {
+      onPick(spec.name);
+      spec.onChange(!spec.checked);
+    });
+    return stop(spec.name, btn);
+  }
+
+  /**
    * The guard's sentence, in a box under the control that caused it.
    *
    * The guard's own words, plus the one sentence it cannot say because it does
@@ -144,27 +180,37 @@ export function createLookParts(ctx) {
     return dots;
   }
 
-  return { el, stop, picked: onPick, radioGroup, refusalBox, swatchDots };
+  return { el, stop, picked: onPick, radioGroup, switchControl, refusalBox, swatchDots };
 }
 
 /** `night shift` → `Night shift`: a theme's name, as a label beside "Small". */
 export const sentence = (/** @type {string} */ s) => (s ? `${s[0].toUpperCase()}${s.slice(1)}` : s);
 
 /**
- * THE FOUR CONTROLS ON THE OUTSIDE, as data — what each surface then draws in
+ * THE SIX CONTROLS ON THE OUTSIDE, as data — what each surface then draws in
  * its own classes. One list, so the sheet and the bar cannot offer different
  * things or word them differently.
  *
- * Agent size, theme, style, density: the choices somebody arrives already
- * knowing they want. Everything finer is under Advanced, in the sheet.
+ * Agent size, theme, style, density, light, room colours: the choices somebody
+ * arrives already knowing they want — "bigger", "darker", "that one", "calmer",
+ * "evening", "tell my rooms apart". Everything finer is under Advanced, in the
+ * sheet.
+ *
+ * Five are one choice out of a list (`kind: 'choice'`); room colours is a
+ * decision with two answers (`kind: 'switch'`), and carries `checked`, the word
+ * for its `state`, and an `onToggle` in place of the list.
  *
  * @param {any} store the look store
  * `note` is a few words for beside the label; `help` is the sentence the sheet
- * has room for, and is empty wherever the choice explains itself.
+ * has room for, and is empty wherever the choice explains itself; `hint` is
+ * said only while the control is somewhere its own options do not name — two
+ * densities set apart, a room tint that is neither answer of the switch.
  *
- * @returns {Array<{id:string, label:string, note:string, help:string, value:string,
+ * @returns {Array<{id:string, kind:'choice'|'switch', label:string, note:string,
+ *   help:string, hint:string, value:string,
  *   options:Array<{id:string, label:string, title?:string, theme?:any, preset?:any}>,
- *   onChange:(next:string) => void}>}
+ *   onChange:(next:string) => void, checked?:boolean, state?:string,
+ *   onToggle?:(next:boolean) => void}>}
  */
 export function outsideControls(store) {
   const c = store.catalogue();
@@ -234,10 +280,45 @@ export function outsideControls(store) {
       help: value
         ? 'How many plants and props.'
         : 'Plants and props are set separately, under Advanced.',
+      hint: value ? '' : 'Plants and props are set separately, under Advanced.',
       value,
       options: levels.map((/** @type {any} */ l) => ({ id: l.id, label: l.label })),
       onChange: (/** @type {string} */ next) => void store.chooseDensity(next),
     });
   }
-  return out;
+  const light = c ? (c.LOOK_PICKERS || []).find((/** @type {any} */ p) => p.id === 'light') : null;
+  if (light) {
+    out.push({
+      id: 'light',
+      label: light.label,
+      note: 'daylight and shadows',
+      help: 'Where the daylight falls from, its colour, and how long the shadows are.',
+      value: String(look.light),
+      options: light.options.map((/** @type {any} */ o) => ({ id: o.id, label: o.label })),
+      onChange: (/** @type {string} */ next) => void store.choosePath('light', next, 'light'),
+    });
+  }
+  const rooms = c ? store.roomColours() : null;
+  if (rooms) {
+    // Neither on nor off: the third level, chosen under Advanced. The switch
+    // reads off, and the words say where the look actually is.
+    const apart = rooms.value !== rooms.on && rooms.value !== rooms.off;
+    out.push({
+      id: 'roomColours',
+      kind: 'switch',
+      label: 'Room colours',
+      note: apart ? 'set under Advanced' : 'one per project',
+      help: 'Give every project room a calm colour of its own, to tell them apart at a glance.',
+      hint: apart
+        ? `${rooms.state} is set under Advanced. Switch on for a colour per project.`
+        : '',
+      value: rooms.value,
+      options: [],
+      onChange: () => {},
+      checked: rooms.checked,
+      state: rooms.state,
+      onToggle: (/** @type {boolean} */ next) => void store.chooseRoomColours(next),
+    });
+  }
+  return out.map((control) => ({ kind: 'choice', hint: '', ...control }));
 }

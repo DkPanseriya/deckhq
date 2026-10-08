@@ -213,37 +213,52 @@ test('§3: every preset passes on every theme, and the zone edges are printed', 
  *
  * Per theme, in `lookMetrics`' own order: the three zone edges (office|corridor,
  * corridor|rooms, corridor|lounge), the wool rug and the task rug on their
- * floors, and the worst floor ink. Pinned to two decimals, because a preset is
- * a promise about a floor and these are the numbers the promise was made on —
- * a derivation that moved one of them has changed five floors, and should have
- * to come here and say which.
+ * floors, the worst floor ink, and — since G6b, when the live preview began to
+ * print it — the worst daylight on a floor. Pinned to two decimals, because a
+ * preset is a promise about a floor and these are the numbers the promise was
+ * made on — a derivation that moved one of them has changed five floors, and
+ * should have to come here and say which.
+ *
+ * G6B CAME HERE AND SAYS WHICH. Two of the five were changed on purpose, after
+ * each was photographed on the demo floor and looked at:
+ *
+ *   - **Graphite loft** lost its polished concrete for terrazzo in the office
+ *     and the lounge. On concrete it had Night lab's four floors, frames and
+ *     rugs, and the two pictures could not be told apart. Its first row was
+ *     1.30 / 1.02 / 1.30, rugs 1.16 / 1.42, ink 8.36 — the office edge moved to
+ *     1.20, the wool rug to 1.25 on terrazzo, and the ink went UP to 9.08.
+ *   - **Walnut executive** took the fine herringbone it was drawn for. That
+ *     material is cut from the same tone as the herringbone oak it replaces, so
+ *     not one of its figures moved.
+ *
+ * The other three are the numbers G6a wrote, with the seventh added.
  * @type {Record<string, Record<string, number[]>>}
  */
 const DRAWN = {
   'daylight-studio': {
-    default: [1.05, 1.05, 1.05, 1.16, 1.16, 9.09],
-    'night shift': [1.35, 1.35, 1.35, 1.16, 1.28, 7.32],
-    blueprint: [1.33, 1.33, 1.33, 1.16, 1.43, 8.6],
+    default: [1.05, 1.05, 1.05, 1.16, 1.16, 9.09, 1.03],
+    'night shift': [1.35, 1.35, 1.35, 1.16, 1.28, 7.32, 1.16],
+    blueprint: [1.33, 1.33, 1.33, 1.16, 1.43, 8.6, 1.15],
   },
   'graphite-loft': {
-    default: [1.3, 1.02, 1.3, 1.16, 1.42, 8.36],
-    'night shift': [1.25, 1.1, 1.25, 1.42, 1.27, 8.02],
-    blueprint: [1.51, 1.31, 1.51, 1.42, 1.29, 7.73],
+    default: [1.2, 1.02, 1.2, 1.25, 1.42, 9.08, 1.02],
+    'night shift': [1.21, 1.1, 1.21, 1.4, 1.27, 8.02, 1.17],
+    blueprint: [1.47, 1.31, 1.47, 1.43, 1.29, 7.73, 1.16],
   },
   'nordic-wool': {
-    default: [1.15, 1.33, 1.09, 1.33, 1.43, 8.39],
-    'night shift': [1.37, 1.12, 1.27, 1.17, 1.27, 7.38],
-    blueprint: [1.35, 1.15, 1.2, 1.16, 1.27, 8.65],
+    default: [1.15, 1.33, 1.09, 1.33, 1.43, 8.39, 1.05],
+    'night shift': [1.37, 1.12, 1.27, 1.17, 1.27, 7.38, 1.16],
+    blueprint: [1.35, 1.15, 1.2, 1.16, 1.27, 8.65, 1.15],
   },
   'colour-plan': {
-    default: [1.3, 1.02, 1.2, 1.16, 1.31, 8.36],
-    'night shift': [1.25, 1.1, 1.21, 1.42, 1.42, 8.02],
-    blueprint: [1.51, 1.31, 1.47, 1.42, 1.42, 7.73],
+    default: [1.3, 1.02, 1.2, 1.16, 1.31, 8.36, 1.04],
+    'night shift': [1.25, 1.1, 1.21, 1.42, 1.42, 8.02, 1.17],
+    blueprint: [1.51, 1.31, 1.47, 1.42, 1.42, 7.73, 1.17],
   },
   'walnut-executive': {
-    default: [1.21, 1.19, 1.21, 1.17, 1.25, 8.93],
-    'night shift': [1.15, 1.03, 1.15, 1.17, 1.17, 6.98],
-    blueprint: [1.14, 1.21, 1.14, 1.07, 1.22, 7.83],
+    default: [1.21, 1.19, 1.21, 1.17, 1.25, 8.93, 1.02],
+    'night shift': [1.15, 1.03, 1.15, 1.17, 1.17, 6.98, 1.16],
+    blueprint: [1.14, 1.21, 1.14, 1.07, 1.22, 7.83, 1.17],
   },
 };
 
@@ -263,10 +278,10 @@ test('G6a: the five new presets pass on every theme, 15 of 15, at the ratios the
       passed++;
       const measured = lookMetrics(preset.look, theme.name).map((m) => m.ratio);
       assert.deepEqual(measured, byTheme[theme.name], `${id} on ${theme.name} moved`);
-      const [a, b, c, wool, task, ink] = measured.map((n) => n.toFixed(2));
+      const [a, b, c, wool, task, ink, day] = measured.map((n) => n.toFixed(2));
       rows.push([
         `${preset.label} / ${theme.name}`,
-        `edges ${a} / ${b} / ${c}   rugs ${wool} / ${task}   ink ${ink}`,
+        `edges ${a} / ${b} / ${c}   rugs ${wool} / ${task}   ink ${ink}   daylight ${day}`,
       ]);
     }
   }

@@ -171,13 +171,19 @@ export const PRESET_DEFS = Object.freeze(
     {
       id: 'graphite-loft',
       label: 'Graphite loft',
-      blurb: 'Concrete and loop pile in a neutral wash, dark frames, long evening shadows.',
+      // G6b, judged as a picture: drawn on polished concrete it was Night lab
+      // with the tint taken out — the same four floors, the same frames, the
+      // same rugs — and nobody shown the two could have named either. The
+      // office and the lounge became terrazzo, which in a neutral wash is a
+      // grey speckled stone and the nearest thing this catalogue has to
+      // graphite. Measured like the rest: `look-guards.test.mjs`.
+      blurb: 'Grey terrazzo and loop pile, dark frames behind glass, long evening shadows.',
       look: {
         floors: {
-          office: 'polished-concrete',
+          office: 'terrazzo',
           corridor: 'ceramic-tile',
           rooms: 'loop-pile',
-          lounge: 'polished-concrete',
+          lounge: 'terrazzo',
         },
         scheme: 'mono',
         furniture: 'industrial',
@@ -243,13 +249,16 @@ export const PRESET_DEFS = Object.freeze(
     {
       id: 'walnut-executive',
       label: 'Walnut executive',
-      blurb: 'Herringbone and cork in a clay wash, soft seating, evening light.',
+      // G6b: the fine herringbone, which is what this style was drawn for and
+      // took the day the material existed. The same wood as Studio oak's in a
+      // tighter lay, so the two floors differ in pattern as well as in wash.
+      blurb: 'Fine herringbone and cork in a clay wash, soft seating, evening light.',
       look: {
         floors: {
-          office: 'herringbone-oak',
+          office: 'fine-herringbone',
           corridor: 'ceramic-tile',
           rooms: 'cork',
-          lounge: 'herringbone-oak',
+          lounge: 'fine-herringbone',
         },
         scheme: 'clay',
         furniture: 'soft',

@@ -121,18 +121,18 @@ Details, and the `?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](do
 
 ## Change the look
 
-**Look** in the header, or `L`, opens the four you reach for most: **agent size**, **theme**, **style**
-— eight presets, Studio oak to Nordic wool — and **density**. Settings → Look (the gear, or `,`) has the
-same four over a live preview, and everything finer under **Advanced**: a floor material per zone, a
-colour scheme, a furniture set, two rugs, plants, props, the lounge kit, the light and the
-partitions. **69 options over thirteen pickers**, each material chip a swatch by the floor painter.
+**Look** in the header, or `L`, opens the six you reach for most: **agent size**, **theme**, **style**
+— eleven presets, Studio oak to Walnut executive — **density**, **light** and **room colours**, a
+switch for a colour per project room. Settings → Look (the gear, or `,`) has the same six over a live
+preview, and the rest under **Advanced**: partitions, a floor per zone, a colour scheme, furniture,
+rugs, plants, props, lounge kit. **72 options over fourteen pickers**, each chip by the floor painter.
 `⌘K` → `Look: Night lab` puts a style on in two keystrokes, and a style never touches your **agent
 size** — small, medium, large or auto — which moves the table, chair, sofa and rug with the people
-while the corridors, the room padding and every label stay put, so a
-floor of five fills the window and a floor of a hundred still fits. Nothing you can choose produces
-an illegible floor: a combination that would leave a rug unreadable on the floor under it is
-**refused with the reason and changes nothing**, and all three themes still apply on top. A look is
-a file you own, and unlike a layout it names no project, no path and no session — so you can post it:
+while the corridors, the room padding and every label stay put, so a floor of five fills the window
+and a floor of a hundred still fits. Nothing you can choose produces an illegible floor: a
+combination that would leave a rug unreadable on its floor is **refused with the reason and changes
+nothing**, and all three themes still apply on top. A look is a file you own, and unlike a layout it
+names no project, no path and no session — so you can post it:
 
 ```bash
 deckhq look export > my-floor.json   # or the section's Export button
