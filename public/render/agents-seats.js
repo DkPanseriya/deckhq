@@ -285,14 +285,16 @@ export function juniorSpots(anchor, room, n, furniture) {
  * construction, and treating it as solid would mean no cable could reach a port
  * at all. So are the zones a room is furnished with past its desks
  * (`plan-interior.js`): a meeting table or a sofa group is never on a crew's
- * floor, so there is nothing of theirs for a cable to be routed round.
+ * floor, so there is nothing of theirs for a cable to be routed round. And so
+ * are the second places a room is dressed with (`plan-deco.js`, `deco-…`),
+ * which keep clear of the desks and of a crew's floor by rule.
  * @param {{x:number,y:number,zones?:{id?:string,x:number,y:number,w:number,h:number}[]}|null} room
  * @returns {{x:number,y:number,w:number,h:number}[]}
  */
 export function deskFootprints(room) {
   if (!room || !Array.isArray(room.zones)) return [];
   return room.zones
-    .filter((z) => !/^(desk-group|(meeting|seating)-\d+)$/.test(String(z.id ?? '')))
+    .filter((z) => !/^(desk-group|(meeting|seating)-\d+|deco-[a-z]+-\d+)$/.test(String(z.id ?? '')))
     .map((z) => ({ x: z.x, y: z.y, w: z.w, h: z.h }));
 }
 

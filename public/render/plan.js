@@ -57,6 +57,8 @@
  *   plan-quiet.js    one or two rooms: the two service rooms a strip down the
  *                    left, and the rooms the rest of the building
  *   plan-seated.js   which chairs somebody is sitting in, for the bake
+ *   plan-deco.js     what a furnished room is dressed in, by rule: bins, coat
+ *                    stands, wall panels, lamps, and a second place in a void
  *
  * Who is on the floor at all is not here either, and never was two answers
  * again: `public/floor-rule.js` is the one copy, imported by both sides (WP-22).
@@ -71,6 +73,7 @@ import { benchSeatsIn, worktreeBenches } from '../floor-worktrees.js';
 import { resolveAnchors, translateContents } from './plan-anchors.js';
 import { layClassic } from './plan-classic.js';
 import { layProportioned } from './plan-grid.js';
+import { decorateRoom } from './plan-deco.js';
 import { furnishRoom } from './plan-interior.js';
 import { landscapeHalls } from './plan-margin.js';
 import { assignDoors, buildNavLines, deriveWalls } from './plan-nav.js';
@@ -102,13 +105,16 @@ import { ASPECT_MAX, ASPECT_MIN, DEFAULT_ASPECT, DOOR_WIDTH, clamp } from './pla
  * @param {ProjectLike[]} projects
  * @param {AgentLike[]} agents
  * @param {{ targetAspect?: number, stage?: {w:number, h:number},
- *   goneHomeDays?: number, now?: number, agentSize?: string, furnish?: boolean }} [opts]
+ *   goneHomeDays?: number, now?: number, agentSize?: string, furnish?: boolean,
+ *   dress?: boolean }} [opts]
  *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test and
  *   a golden are both pure functions of their fixture. `stage` is the canvas the
  *   floor will be drawn on (WP-59), read only for its SHAPE, and `targetAspect`
  *   is that number stated directly — pass either. `agentSize` is WP-88c's.
  *   `furnish: false` leaves every room as its desks left it, which is how the
  *   furnishing is measured against the floor it was given (`plan-interior.js`).
+ *   `dress: false` furnishes every room and dresses none, which is how the
+ *   dressing is measured against the room it was given (`plan-deco.js`).
  * @returns {Plan}
  */
 export function buildPlan(projects, agents, opts = {}) {
@@ -341,6 +347,21 @@ export function buildPlan(projects, agents, opts = {}) {
   if (opts.furnish !== false) for (const pr of projectRooms) furnishRoom(pr.room, pr.seats);
   // And the hall a floor of few rooms is left with is planted, clear of them.
   if (opts.furnish !== false) landscapeHalls(rooms);
+  // Last, each room is dressed: a bin at its desks, a coat stand at its door,
+  // panels on its walls and a second place where one was left a void — round
+  // everything above, and clear of everybody's feet and of the way to them.
+  if (opts.furnish !== false && opts.dress !== false) {
+    for (const pr of projectRooms) {
+      const benched = [...worktreeSeats.values()].filter(
+        (s) =>
+          s.x >= pr.room.x &&
+          s.x <= pr.room.x + pr.room.w &&
+          s.y >= pr.room.y &&
+          s.y <= pr.room.y + pr.room.h,
+      );
+      decorateRoom(pr.room, [...pr.seats, ...benched], { walls });
+    }
+  }
 
   /** @type {Door[]} */
   const doors = [];

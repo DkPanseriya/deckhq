@@ -87,6 +87,9 @@ export function furnitureTonesFor(t) {
   const keyboard = quietOn(desk, mix(seat, t.wallFill, 0.4));
   const well = quietOn(wood, shade(wood, -0.1));
   const bezel = t.monitorBody;
+  const bin = t.furnitureMetal;
+  const binWell = quietOn(bin, shade(bin, -0.22));
+  const panel = mix(seat, t.circulationBase, 0.5);
   return Object.freeze({
     // ---- the desk: a top, its two shaded edges, its lit ones, what is on it
     deskTop: desk,
@@ -141,6 +144,23 @@ export function furnitureTonesFor(t) {
     sofaSeam: quietOn(cushion, over(cushion, t.sofaSeam)),
     pillow: quietOn(cushion, mix(cushion, t.plantLeafA, 0.42)),
 
+    // ---- what a room is dressed in: a bin, a coat stand, a panel, a pendant
+    // The stand is the chair base's own grey; its coats are an upholstery tone
+    // and a dark one, so a coat is never the brightest thing by a door.
+    binBody: bin,
+    binWell,
+    binPaper: quietOn(binWell, t.clutterPaper),
+    standPole: mix(seat, t.inkWarm, 0.45),
+    coatA: mix(t.sofaFrame, t.inkWarm, 0.22),
+    coatB: mix(cushion, t.plantLeafA, 0.3),
+    // A panel is felt tiles: the seat's cloth toward the screed, an upholstery
+    // green and a timber tone, all three as quiet as a cushion.
+    panelFill: panel,
+    panelSage: mix(cushion, t.plantLeafA, 0.3),
+    panelTimber: mix(desk, t.partitionFill, 0.5),
+    panelGroove: quietOn(panel, shade(panel, -0.14)),
+    pendantRing: quietOn(wood, mix(t.furnitureMetal, t.inkWarm, 0.35)),
+
     // ---- fruit, magazines, balls: the small coloured things, muted
     fruitA: mix(t.plantLeafA, counter, 0.25),
     fruitB: mix(t.clutterNote, t.plantLeafB, 0.35),
@@ -191,6 +211,10 @@ export const FURNITURE_DETAILS = Object.freeze(
     ['sofaBack', 'sofaCushion'],
     ['sofaSeam', 'sofaCushion'],
     ['pillow', 'sofaCushion'],
+    ['binWell', 'binBody'],
+    ['binPaper', 'binWell'],
+    ['panelGroove', 'panelFill'],
+    ['pendantRing', 'tableTop'],
   ]),
 );
 

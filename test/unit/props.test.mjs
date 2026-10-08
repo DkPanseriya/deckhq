@@ -157,6 +157,10 @@ const NOT_ON_THE_FLOOR = new Set([
   'monitor',
   'fruit_bowl',
   'coffee_machine',
+  // What a room is dressed in off the floor (`plan-deco.js`): a panel hangs on
+  // a wall and a pendant lamp from a ceiling.
+  'wall_panel',
+  'pendant',
 ]);
 
 /** @param {{kind:string}} p */

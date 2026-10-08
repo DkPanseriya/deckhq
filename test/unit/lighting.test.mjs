@@ -441,6 +441,7 @@ test('WP-78: how tall a prop is, is DECLARED, and every prop the plan emits decl
   // population happens to place. A prop that is drawn is a prop that casts.
   const painted = new Set();
   for (const file of [
+    'backdrop-props-deco.js',
     'backdrop-props-desk.js',
     'backdrop-props-lounge.js',
     'backdrop-props-play.js',

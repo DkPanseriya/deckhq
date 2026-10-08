@@ -228,6 +228,40 @@ export let LOUNGE_TT_H = 6;
 export let LOUNGE_ARCADE_W = 2.6;
 export let LOUNGE_ARCADE_H = 2;
 
+// ------------------------------------------------- what a room is dressed in
+
+/**
+ * THE SMALL THINGS A ROOM IS LIVED IN WITH, and the second place a large one
+ * is given (`plan-deco.js`). Five kinds the floor did not have:
+ *
+ *   - a **waste bin**, a disc and the well inside its rim, `BIN_OFF` off the light-away
+ *     end of the desks it belongs to;
+ *   - a **coat stand**, a pole, three arms and a base ring, `COAT_STAND_OFF`
+ *     off the wall beside the door;
+ *   - a **wall panel** — art, or an acoustic panel — `WALL_PANEL_DEPTH` deep
+ *     and flush to its wall, in one of two runs;
+ *   - a **pendant lamp**, which hangs over a table and stands on nothing;
+ *   - a **standing table**, with three stools down one side of it.
+ *
+ * And two the painters already knew and no plan laid: the booth, at the size
+ * it is drawn to, and a floor lamp beside an armchair.
+ */
+export let BIN = 0.7;
+export let BIN_OFF = 0.5;
+export let COAT_STAND = 1.3;
+export let COAT_STAND_OFF = 1.0;
+export let WALL_PANEL_DEPTH = 0.7;
+export let WALL_PANEL_RUN = 3.2;
+export let WALL_PANEL_RUN_SHORT = 2.4;
+export let PENDANT = 1.2;
+export let STANDING_TABLE_W = 4.8;
+export let STANDING_TABLE_D = 1.3;
+/** Clear floor between a standing table and the stools along it. */
+export let STANDING_STOOL_GAP = 0.3;
+export let BOOTH_W = 4.2;
+export let BOOTH_D = 3.2;
+export let FLOOR_LAMP = 1.6;
+
 // ----------------------------------------------------- the scaling law (§2)
 //
 // Every length above, times `s`. The two lists are names and no numbers at all,
@@ -274,6 +308,20 @@ const BASE = {
   LOUNGE_TT_H,
   LOUNGE_ARCADE_W,
   LOUNGE_ARCADE_H,
+  BIN,
+  BIN_OFF,
+  COAT_STAND,
+  COAT_STAND_OFF,
+  WALL_PANEL_DEPTH,
+  WALL_PANEL_RUN,
+  WALL_PANEL_RUN_SHORT,
+  PENDANT,
+  STANDING_TABLE_W,
+  STANDING_TABLE_D,
+  STANDING_STOOL_GAP,
+  BOOTH_W,
+  BOOTH_D,
+  FLOOR_LAMP,
 };
 
 registerBodyScale((s) => {
@@ -312,6 +360,20 @@ registerBodyScale((s) => {
     LOUNGE_TT_H,
     LOUNGE_ARCADE_W,
     LOUNGE_ARCADE_H,
+    BIN,
+    BIN_OFF,
+    COAT_STAND,
+    COAT_STAND_OFF,
+    WALL_PANEL_DEPTH,
+    WALL_PANEL_RUN,
+    WALL_PANEL_RUN_SHORT,
+    PENDANT,
+    STANDING_TABLE_W,
+    STANDING_TABLE_D,
+    STANDING_STOOL_GAP,
+    BOOTH_W,
+    BOOTH_D,
+    FLOOR_LAMP,
   } = scaleAll(BASE, s));
   SEAT_FOOTPRINTS = Object.freeze({
     tub_chair: SEAT_TUB,

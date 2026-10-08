@@ -206,6 +206,8 @@ export const PROP_HEIGHT = Object.freeze({
   // A booth is a high back on three sides: it is the tallest seat on the floor.
   booth: 'tall',
   bookshelf: 'tall',
+  // A coat stand is a pole taller than the people who use it.
+  coat_stand: 'tall',
   counter: 'tall',
   desk: 'tall',
   dining_table: 'tall',
@@ -221,9 +223,14 @@ export const PROP_HEIGHT = Object.freeze({
   shelf: 'tall',
   sofa: 'tall',
   sofa_corner: 'tall',
+  // A high table: you stand at it, and it casts like the desks.
+  standing_table: 'tall',
   table_tennis: 'tall',
   tv: 'tall',
   user_desk: 'tall',
+  // A panel hangs on a wall at eye height: it throws along the light as the
+  // whiteboard beside it does.
+  wall_panel: 'tall',
   water_cooler: 'tall',
   whiteboard: 'tall',
   // WP-85c's plants. A TREE IS TALL and the other three are not, which is the
@@ -234,6 +241,8 @@ export const PROP_HEIGHT = Object.freeze({
   plant_tree: 'tall',
   // --- short: on the floor, or standing on something that already is.
   bar_stool: 'short',
+  // A waste bin is knee high.
+  bin: 'short',
   box: 'short',
   // WP-85c's desk clutter. Everything here stands ON a desk that has already
   // cast its own shadow along the ray; a mug that cast a second one would be a
@@ -260,6 +269,9 @@ export const PROP_HEIGHT = Object.freeze({
   lamp: 'short',
   magazine_table: 'short',
   monitor: 'short',
+  // A pendant lamp hangs from the ceiling and touches nothing: its painter
+  // gives it neither a cast nor a contact. Named, so the guard has an answer.
+  pendant: 'short',
   rug: 'short',
   rug_round: 'short',
   side_table: 'short',

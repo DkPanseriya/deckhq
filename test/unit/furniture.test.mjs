@@ -65,8 +65,9 @@ import { FURNITURE_SHEET, SHEET_CELL, SHEET_SCALES } from '../../scripts/lib/fur
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RENDER = path.join(HERE, '..', '..', 'public', 'render');
 
-/** The five painters, and the kit they share. */
+/** The six painters, and the kit they share. */
 const PAINTERS = [
+  'backdrop-props-deco.js',
   'backdrop-props-desk.js',
   'backdrop-props-lounge.js',
   'backdrop-props-room.js',
@@ -457,6 +458,13 @@ test('every tone a painter asks for exists, and every detail is on the measured 
     'ballB',
     'ballC',
     'ballD',
+    // What a room is dressed in: a stand and the coats on it, and a panel's
+    // two other cloths, are each a thing of their own colour on a wall or a floor.
+    'standPole',
+    'coatA',
+    'coatB',
+    'panelSage',
+    'panelTimber',
   ]);
   /** @type {Set<string>} */
   const used = new Set();
