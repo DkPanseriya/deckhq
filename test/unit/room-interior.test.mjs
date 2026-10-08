@@ -58,9 +58,10 @@ function report(title, rows) {
 
 /**
  * A floor of teams: one project per entry, that many people at its desks.
- * @param {number[]} sizes @returns {{projects:any[], agents:any[]}}
+ * @param {number[]} sizes @param {number} [resting] @param {number} [waiting]
+ * @returns {{projects:any[], agents:any[]}}
  */
-function teams(sizes) {
+function teams(sizes, resting = 5, waiting = 2) {
   const projects = sizes.map((n, i) => ({
     id: `p${i}`,
     name: `p${i}`,
@@ -79,9 +80,9 @@ function teams(sizes) {
   sizes.forEach((n, i) => {
     for (let k = 0; k < n; k++) agents.push(at(`p${i}-${k}`, { projectId: `p${i}` }));
   });
-  for (let k = 0; k < 5; k++)
+  for (let k = 0; k < resting; k++)
     agents.push(at(`b${k}`, { projectId: 'p0', ackState: 'benched', activityState: 'ended' }));
-  for (let k = 0; k < 2; k++)
+  for (let k = 0; k < waiting; k++)
     agents.push(
       at(`w${k}`, { projectId: 'p0', activityState: 'for_review', reviewSince: 1_000_000 + k }),
     );
@@ -254,8 +255,11 @@ test('a module is owed its kit: a team’s room a table and a credenza, a big te
       `${r.where}: its first table seats four`,
     );
   }
-  // A big team's room: six at desks, on a floor of three projects.
-  const big = ROOMS.find((r) => r.where === 'teams 6·2·1/p0');
+  // A big team's room: six at desks, on a floor of three projects whose
+  // reception and lounge are in use. (On a quiet floor those two are small,
+  // the building is drawn larger, and a room is laid at the size of its desks.)
+  const busy = roomsOf([['teams 6·2·1, busy', () => teams([6, 2, 1], 14, 7), [1600, 870]]]);
+  const big = busy.find((r) => r.room.id === 'p0');
   assert.equal(big.room.module, 'L');
   const kinds = kindsIn(big);
   const table = addedTo(big).find((p) => p.kind === 'meeting_table');

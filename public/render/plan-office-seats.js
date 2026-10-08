@@ -158,6 +158,15 @@ export function cushionOrder(runs, desk) {
     }
     return out;
   };
+  // ONE RUN — the quiet reception — is simply taken from the desk outward: with
+  // no second run to deal against, every other cushion first would seat the
+  // third to arrive nearer the manager than the second. A run across the
+  // screen sets every second name a line lower, as between two taken cushions.
+  if (lines.length === 1 && lines[0].across) {
+    return [...lines[0].first, ...lines[0].between]
+      .sort(byNear)
+      .map(({ x, y }, i) => (i % 2 ? { x, y, nameRow: 1 } : { x, y }));
+  }
   return [
     ...deal(lines.map((l) => l.first)),
     ...deal(lines.filter((l) => l.across).map((l) => l.between)),
