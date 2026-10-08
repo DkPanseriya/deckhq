@@ -316,7 +316,14 @@ test("the reception's free-standing furniture stays with its wall furniture", ()
     const office = plan.rooms.find((r) => r.kind === 'office');
     const rug = office.props.find((p) => p.kind === 'rug');
     const sofas = office.props.filter((p) => p.kind === 'sofa');
-    assert.ok(rug && sofas.length >= 3, 'the reception needs a rug and three sofa runs');
+    // Three runs once more than four are waiting; one, sized for them, while
+    // the reception is quiet (`OFFICE_COMPACT_MAX`).
+    // (A floor with no project room is the classic one, and keeps all three.)
+    const quiet = (spec.waiting ?? 0) <= 4;
+    assert.ok(
+      rug && (sofas.length === 3 || (quiet && sofas.length === 1)),
+      `the reception has ${sofas.length} sofa runs for ${spec.waiting ?? 0} waiting`,
+    );
     for (const sofa of sofas) {
       const gapX = Math.max(sofa.x - (rug.x + rug.w), rug.x - (sofa.x + sofa.w), 0);
       const gapY = Math.max(sofa.y - (rug.y + rug.h), rug.y - (sofa.y + sofa.h), 0);
@@ -659,7 +666,8 @@ test('the reception sofas form one continuous C, corner to corner', () => {
   // walls they name. The relationship asserted here is the one that matters
   // and it is the same either way, so it is stated on the axis the runs
   // actually lie on rather than twice.
-  for (const waiting of [1, 9, 25]) {
+  // (More than four waiting: a quiet reception is one run, `OFFICE_COMPACT_MAX`.)
+  for (const waiting of [5, 9, 25]) {
     const { projects, agents } = floor({ projects: [3], waiting });
     const plan = buildPlan(projects, agents, { targetAspect: 2.06, now: NOW });
     const office = plan.rooms.find((r) => r.kind === 'office');

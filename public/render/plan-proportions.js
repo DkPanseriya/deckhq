@@ -142,6 +142,43 @@ export function roomAreaMax(module, desks = 0) {
 }
 
 /**
+ * The ceilings of a floor's rooms, one each.
+ *
+ * The floor a room's desks need is the smallest ROOM they stand in — a row of
+ * worktree benches is wider than a room that deep may be, and a ceiling under
+ * that would be a room nothing could lay. And rows are near-equal in depth, so
+ * no room's ceiling is under the room it would be in a row as deep as the
+ * deepest of its neighbours needs.
+ *
+ * @param {{module?: 'S'|'M'|'L', footprints?: {w:number,h:number}[]}[]} rooms
+ *   each room's module and the ways its desks can stand
+ * @returns {number[]}
+ */
+export function roomCeilings(rooms) {
+  /** The smallest room of a legal shape round one footprint: its width, its depth. */
+  const legal = (/** @type {{w:number,h:number}} */ f) => {
+    const w = Math.max(f.w, ROOM_RATIO_MIN * f.h);
+    return { w, h: Math.max(f.h, w / ROOM_RATIO_MAX) };
+  };
+  const least = (
+    /** @type {{w:number,h:number}[]|undefined} */ list,
+    /** @type {(r:{w:number,h:number}) => number} */ of,
+  ) => (list && list.length ? Math.min(...list.map((f) => of(legal(f)))) : 0);
+  const deepest =
+    Math.max(0, ...rooms.map((n) => least(n.footprints, (r) => r.h))) *
+    (1 + ROW_DEPTH_SPREAD_MAX / 2);
+  return rooms.map((n) =>
+    Math.max(
+      roomAreaMax(
+        n.module,
+        least(n.footprints, (r) => r.w * r.h),
+      ),
+      ROOM_RATIO_MIN * deepest * deepest,
+    ),
+  );
+}
+
+/**
  * WHERE THE ROOMS ARE NOT THE MAJORITY — a floor of one or two projects, whose
  * reception and lounge are each larger than any room may be — they come to at
  * least this much of their ceilings. Under it a row is too shallow for its

@@ -251,10 +251,11 @@ test('the lounge furnishes itself to the benched population, and never dominates
     `a lounge of twelve must be less furnished than one of thirty (${few.props} vs ${busy.props})`,
   );
   assert.ok(!few.kinds.has('arcade_cabinet'), 'twelve benched do not fill an arcade');
-  // The sofa group and the kitchen are always there.
-  for (const always of ['sofa', 'counter']) {
-    assert.ok(empty.kinds.has(always), `the lounge always has a ${always}`);
-  }
+  // The sofa group is always there. The kitchen comes with the sixth person:
+  // a quiet lounge is its one sitting bay (`LOUNGE_QUIET_MAX`).
+  assert.ok(empty.kinds.has('sofa'), 'the lounge always has a sofa');
+  assert.ok(!empty.kinds.has('counter'), 'an empty lounge was laid a kitchen');
+  assert.ok(few.kinds.has('counter'), 'a lounge of twelve has no kitchen');
   assert.ok(busy.spots > empty.spots, 'more benched agents means more places to be');
   assert.ok(
     empty.share <= 0.25 + 1e-6 && busy.share <= 0.25 + 1e-6,

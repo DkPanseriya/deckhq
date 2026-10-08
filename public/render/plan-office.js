@@ -73,7 +73,7 @@ import {
  */
 export const OFFICE_COMPACT_MAX = 4;
 /** How wide the quiet reception is, less its plate: a desk, the rug and one run. */
-export const OFFICE_COMPACT_W = 16;
+export const OFFICE_COMPACT_W = 17;
 
 export {
   OFFICE_QUEUE_ZONE,
@@ -308,7 +308,8 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   // back run, and the back run spans exactly between them. Leaving each run to
   // its own arithmetic left the corners two units short at both ends, so the
   // seating read as three separate benches rather than as one reception.
-  const sofaRunH = IN_H_FINAL - PAD - (compact ? 0 : SOFA_D) - bandTop;
+  // (The one run is as long as the people waiting, however long its room is.)
+  const sofaRunH = compact ? compactRun : IN_H_FINAL - PAD - SOFA_D - bandTop;
   // HOW MANY THE SOFAS SEAT: one a cushion (WP-93, and the owner again on the
   // reception of sixteen). Each run carries its count, the painter draws that
   // many cushions, and whoever is left over stands in the file by the wall.
@@ -362,7 +363,7 @@ export function buildOffice(waitingCount, fit, opts = {}) {
   const wellX = compact ? PAD : PAD + SOFA_D;
   const wellY = bandTop;
   const wellW = Math.max(4, IN_W - (compact ? PAD * 2 + SOFA_D : 2 * (PAD + SOFA_D)));
-  const wellH = Math.max(4, IN_H_FINAL - PAD - (compact ? 0 : SOFA_D) - wellY);
+  const wellH = Math.max(4, compact ? sofaRunH : IN_H_FINAL - PAD - SOFA_D - wellY);
   zones.push({ id: 'office-well', x: wellX, y: wellY, w: wellW, h: wellH });
 
   // THE WAITING AREA, AND THE WOOL RUG THAT IS THE WHOLE OF IT (§3.4, §3.7).

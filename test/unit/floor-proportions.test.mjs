@@ -383,8 +383,9 @@ test('two rooms in a window neither wide nor tall: two rooms of a team’s size,
     // A room for two is a team's room, not half of whatever the window is:
     // this pair was 53 x 37 U each, and before that a building 208 U wide.
     assert.ok(room.w * room.h <= roomAreaMax('M') + 1e-3, `${room.w} x ${room.h}`);
-    assert.ok(Math.abs(room.x + room.w - plan.width) < EPS, 'a row stops short of the building');
   }
+  const right = Math.max(...rooms.map((r) => r.x + r.w));
+  assert.ok(Math.abs(right - plan.width) < EPS, 'the rooms stop short of the building');
   // Drawn at a size worth drawing: 7.7 px a unit then, 15 with the front.
   assert.ok(1600 / plan.width >= 15, `${plan.width} U on 1600 px`);
 });

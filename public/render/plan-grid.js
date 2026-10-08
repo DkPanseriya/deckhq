@@ -57,6 +57,7 @@
 import { buildProjectRoom } from './plan-rooms.js';
 import { DESK_ASPECTS, buildCandidate } from './plan-grid-build.js';
 import { OFFICE_FULL, measureService } from './plan-grid-service.js';
+import { OFFICE_COMPACT_MAX } from './plan-office.js';
 import {
   CORRIDOR,
   LOUNGE_MIN_H,
@@ -80,7 +81,7 @@ import {
   moduleFor,
   nominalWidth,
   pinnedWeight,
-  roomAreaMax,
+  roomCeilings,
   widthAtLargestScale,
 } from './plan-proportions.js';
 import { AGENT_SCALE } from './plan-scale.js';
@@ -207,31 +208,7 @@ export function layProportioned(input) {
   // let past it. `margin` is the floor whose rooms are all at theirs and still
   // not the majority: what a row's rooms leave is then its service room's to
   // its cap and, past that, a hall as wide as it comes.
-  // The floor a room's desks need is the smallest ROOM they stand in — a row
-  // of worktree benches is wider than a room that deep may be, and a ceiling
-  // under that would be a room nothing could lay.
-  const desksOf = (/** @type {{w:number,h:number}[]|undefined} */ list) =>
-    list && list.length
-      ? Math.min(
-          ...list.map((f) => {
-            const w = Math.max(f.w, ROOM_RATIO_MIN * f.h);
-            return w * Math.max(f.h, w / ROOM_RATIO_MAX);
-          }),
-        )
-      : 0;
-  // And rows are near-equal in depth, so no room's ceiling is under the room
-  // it would be in a row as deep as the deepest of its neighbours needs.
-  const depthOf = (/** @type {{w:number,h:number}[]|undefined} */ list) =>
-    list && list.length
-      ? Math.min(
-          ...list.map((f) => Math.max(f.h, Math.max(f.w, ROOM_RATIO_MIN * f.h) / ROOM_RATIO_MAX)),
-        )
-      : 0;
-  const deepest =
-    Math.max(...needs.map((n) => depthOf(n.footprints))) * (1 + ROW_DEPTH_SPREAD_MAX / 2);
-  const caps = needs.map((n) =>
-    Math.max(roomAreaMax(n.module, desksOf(n.footprints)), ROOM_RATIO_MIN * deepest * deepest),
-  );
+  const caps = roomCeilings(needs);
   const capsTotal = caps.reduce((a, v) => a + v, 0);
   let margin = false;
   /** Set while a probe asks whether a floor could be laid with no ceilings. */
@@ -245,11 +222,15 @@ export function layProportioned(input) {
   /** No building whose rooms are the majority is wider than their ceilings allow. */
   const widest = Math.min(WIDTH_MAX, Math.sqrt((targetAspect * capsTotal) / ROOMS_AREA_MIN));
   /**
-   * How wide a lounge is GROWN into what its row has spare: to its cap, and —
-   * on a floor laid to its rooms' ceilings — never into a strip either.
+   * How wide a service room is GROWN into what its row has spare: to its cap,
+   * and — on a floor laid to its rooms' ceilings, or a quiet one — never into
+   * a strip either.
    * @param {number} own its contents @param {number} d its depth @param {number} cap
    */
-  const grown = (own, d, cap) => (free ? cap : Math.min(cap, Math.max(own, ROOM_RATIO_MAX * d)));
+  const grown = (own, d, cap) =>
+    free && waitingCount > OFFICE_COMPACT_MAX
+      ? cap
+      : Math.min(cap, Math.max(own, ROOM_RATIO_MAX * d));
   /** Rooms that are the majority, or — on a `margin` floor — near all they may be. */
   const enough = (/** @type {{cells:{w:number,h:number}[], full:boolean}} */ grid, area = 0) =>
     areaOf(grid.cells) >= ROOMS_AREA_MIN * area - EPS ||
@@ -337,7 +318,7 @@ export function layProportioned(input) {
         const bands = tops.map((y, k) => {
           const d = depths[k];
           if (k === 0) {
-            const give = Math.max(0, officeMax - desk.w) + hall;
+            const give = Math.max(0, grown(desk.w, d, officeMax) - desk.w) + hall;
             return { x: desk.w, y, w: W - desk.w, d, give, spare: hallBeside() };
           }
           if (k === rows - 1) {
@@ -375,7 +356,7 @@ export function layProportioned(input) {
       }
       return room >= own - EPS ? { room, hall: hall > EPS ? hall : 0 } : null;
     };
-    const top = beside(0, office.w, Math.max(office.w, officeMax));
+    const top = beside(0, office.w, Math.max(office.w, grown(office.w, dTop, officeMax)));
     const bottom = beside(rows - 1, lounge.w, grown(lounge.w, dBottom, loungeMax));
     // The rows between them have no service room: what they leave is a hall.
     const between = leftOf(grid, tops, depths, (k) => (k % (rows - 1) ? lane : W - taken(k)), W);
@@ -571,7 +552,7 @@ export function layProportioned(input) {
       const loungeCap = grown(option.w, d, (LOUNGE_AREA_MAX * area) / d);
       let loungeW = option.w + Math.min(hall, Math.max(0, loungeCap - option.w));
       hall = W - desk.w - loungeW;
-      const officeW = desk.w + Math.min(hall, Math.max(0, officeMax - desk.w));
+      const officeW = desk.w + Math.min(hall, Math.max(0, grown(desk.w, d, officeMax) - desk.w));
       hall = W - officeW - loungeW;
       if (hall > EPS && hall < CORRIDOR) {
         loungeW -= CORRIDOR - hall;
@@ -850,8 +831,7 @@ export function layProportioned(input) {
   // the majority of any building its service rooms stand in at their contents.
   let chosen = majority();
   if (!chosen || chosen.grid.cells.some((c, i) => c.w * c.h > caps[i] + 1e-6)) {
-    // A ceiling never makes the building larger: a floor laid to them that is
-    // wider than the one laid without is not the floor, and `few` is asked.
+    // A ceiling never makes the building larger: past this width, `few` is asked.
     const unheld = chosen;
     const loose = chosen ? chosen.W * (1 + WIDTH_TIE) : Infinity;
     free = false;
@@ -869,9 +849,8 @@ export function layProportioned(input) {
       mode = { roomy: true, margin };
     }
     ({ roomy, margin } = mode);
-    // AND WHERE NO FLOOR CAN BE LAID TO THEM — a row of worktree benches
-    // beside a one-desk room is one — the floor is the one laid without, and
-    // each room that came out past its ceiling is recorded as its own.
+    // Where no floor can be laid to them (worktree benches beside a one-desk
+    // room), the one laid without: an over-size room is its own ceiling.
     if (!chosen && unheld) {
       chosen = unheld;
       free = true;
