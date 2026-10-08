@@ -94,7 +94,7 @@ export const PINNED_SPREAD = 2.25;
 // ------------------------------------------------------- (c) a room's ceiling
 
 /**
- * THE SMALLEST A MODULE IS FURNISHED AT, in square units at the medium body.
+ * THE SMALLEST A MODULE IS FURNISHED AT, in square units.
  *
  * A one-desk room is its desk bay (15 x 16 with its pad and plate), the
  * break-out pair beside it and a lane between the two and to the door: 25 wide
@@ -126,19 +126,19 @@ export const MODULE_AREA_MAX = Object.freeze({
 /**
  * The ceiling of one room, in square units.
  *
- * Furniture is sized by a body, so the ceiling moves with the body's area
- * (`s` squared). And a room is never held under its own desks: twelve people
- * at desks are past any module's number, and their room's ceiling is that much
- * over the floor the desks themselves stand on.
+ * IT IS THE BUILDING'S, AND DOES NOT MOVE WITH THE BODY SIZE. That is what the
+ * larger size is for: the same room with larger people and larger furniture in
+ * it is a room they are not lost in, and a ceiling that grew with them would
+ * hand the floor straight back. A room is never held under its own desks,
+ * though: twelve people at desks are past any module's number, and their
+ * room's ceiling is that much over the floor the desks themselves stand on.
  *
  * @param {'S'|'M'|'L'|undefined} module none for a pinned room, held as a one-desk room
- * @param {number} [s] the body scale the floor is laid at
  * @param {number} [desks] the floor its desks need, in square units
  */
-export function roomAreaMax(module, s = 1, desks = 0) {
-  const scale = Number(s) > 0 ? Number(s) : 1;
+export function roomAreaMax(module, desks = 0) {
   const own = MODULE_AREA_MAX[module ?? 'S'] ?? MODULE_AREA_MAX.S;
-  return Math.max(own * scale * scale, ROOM_CEILING_OVER_FURNISHED * (Number(desks) || 0));
+  return Math.max(own, ROOM_CEILING_OVER_FURNISHED * (Number(desks) || 0));
 }
 
 /** The deepest a room of that ceiling can be and still be a room's shape. */
@@ -353,9 +353,11 @@ export function widestIn(depth, areaMax) {
  * @param {number} [give] the most of `width` the rooms may leave untaken
  * @param {number[]} [caps] each room's ceiling in square units (`roomAreaMax`):
  *   no room is laid wider than its ceiling is at this depth
+ * @param {number} [spare] and the most they may leave where every one of them
+ *   is at its CEILING: a row of rooms that may not be larger leaves a hall
  * @returns {number[]|null} one width per room, or null where no legal split exists
  */
-export function splitRow(weights, width, depth, footprints = [], give = 0, caps = []) {
+export function splitRow(weights, width, depth, footprints = [], give = 0, caps = [], spare = 0) {
   const n = weights.length;
   if (!n || !(width > 0) || !(depth > 0)) return null;
   const hi = weights.map((_, i) => widestIn(depth, caps[i]));
@@ -367,7 +369,11 @@ export function splitRow(weights, width, depth, footprints = [], give = 0, caps 
   if (least > width + EPS) return null;
   let most = 0;
   for (const v of hi) most += v;
-  if (most < width - EPS) return width - most <= give + EPS ? hi : null;
+  if (most < width - EPS) {
+    const shape = ROOM_RATIO_MAX * depth;
+    const held = hi.every((v) => v < shape - EPS);
+    return width - most <= Math.max(give, held ? spare : 0) + EPS ? hi : null;
+  }
   // Water-filling. Share what is left by weight; hold whichever side is the
   // further out of bounds at its bound; share again. Each pass holds at least
   // one room, so it ends in at most `n` of them and the sum is the row.
@@ -412,6 +418,10 @@ export function splitRow(weights, width, depth, footprints = [], give = 0, caps 
   return out;
 }
 
+/** The most of its width a band's rooms may leave untaken, either way. */
+const leaves = (/** @type {{give?:number, spare?:number}} */ b) =>
+  Math.max(b.give ?? 0, b.spare ?? 0);
+
 /**
  * DEAL the rooms, in floor order, into rows.
  *
@@ -422,7 +432,7 @@ export function splitRow(weights, width, depth, footprints = [], give = 0, caps 
  * dealt the same way on every machine.
  *
  * @param {number[]} weights
- * @param {{w:number,d:number,give?:number}[]} bands each row's width and depth,
+ * @param {{w:number,d:number,give?:number,spare?:number}[]} bands each row's width and depth,
  *   top to bottom, and what it may hand back to a service room (`splitRow`)
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @param {number[]} [caps] each room's ceiling, as `splitRow` takes it
@@ -443,7 +453,7 @@ export function dealRows(weights, bands, footprints = [], caps = []) {
   // most runs are outside it: asked first, it is what keeps forty rooms cheap.
   const most = bands.map((b) => Math.floor(b.w / (ROOM_RATIO_MIN * b.d) + EPS));
   const fewest = bands.map((b) =>
-    Math.max(1, Math.ceil((b.w - (b.give ?? 0)) / (ROOM_RATIO_MAX * b.d) - EPS)),
+    Math.max(1, Math.ceil((b.w - leaves(b)) / (ROOM_RATIO_MAX * b.d) - EPS)),
   );
   const sumOf = (/** @type {number[]} */ list) => list.reduce((a, v) => a + v, 0);
   if (n > sumOf(most) || n < sumOf(fewest)) return null;
@@ -465,6 +475,7 @@ export function dealRows(weights, bands, footprints = [], caps = []) {
       footprints.slice(i, j),
       band.give ?? 0,
       caps.slice(i, j),
+      band.spare ?? 0,
     );
     let got = null;
     if (widths) {
@@ -525,7 +536,7 @@ const FLATTEN = Object.freeze([1, 0.7, 0.4, 0]);
  * `taken[k]` says how much of the band they used.
  *
  * @param {number[]} weights one per room, in floor order
- * @param {{x:number,y:number,w:number,d:number,give?:number}[]} bands the
+ * @param {{x:number,y:number,w:number,d:number,give?:number,spare?:number}[]} bands the
  *   rectangle each row of rooms has, top to bottom
  * @param {({w:number,h:number}[]|undefined)[]} [footprints]
  * @param {boolean[]} [empty] rooms nobody is in (a pinned one): never larger
@@ -543,7 +554,7 @@ export function layGrid(weights, bands, footprints = [], empty = [], caps = []) 
   let fewest = 0;
   for (const b of bands) {
     most += Math.floor(b.w / (ROOM_RATIO_MIN * b.d) + EPS);
-    fewest += Math.max(1, Math.ceil((b.w - (b.give ?? 0)) / (ROOM_RATIO_MAX * b.d) - EPS));
+    fewest += Math.max(1, Math.ceil((b.w - leaves(b)) / (ROOM_RATIO_MAX * b.d) - EPS));
   }
   if (weights.length > most || weights.length < fewest) return null;
   for (const power of FLATTEN) {
