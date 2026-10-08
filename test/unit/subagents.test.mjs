@@ -53,7 +53,14 @@ import {
   platePlanFor,
   CHAR_MIN_PX_PER_UNIT,
   JUNIOR_SCALE,
+  juniorScaleFor,
 } from '../../public/render/scene.js';
+import {
+  AGENT_SCALE,
+  AGENT_SCALES,
+  resetAgentScale,
+  setAgentSize,
+} from '../../public/render/plan-scale.js';
 import { BODY_HEIGHT_U } from '../../public/render/rig.js';
 import { juniorMetaFor } from '../../public/panel.js';
 
@@ -1176,18 +1183,50 @@ test('the room plate counts the juniors, apart from the sessions', () => {
   );
 });
 
-test('a junior is drawn smaller than its parent, but never below the legibility floor', () => {
-  assert.ok(JUNIOR_SCALE > 0 && JUNIOR_SCALE < 1);
-  // On a comfortable floor the junior is exactly `JUNIOR_SCALE` of the senior.
-  const roomy = 40;
-  assert.equal(characterScaleFor(roomy), roomy);
-  assert.equal(characterScaleFor(roomy * JUNIOR_SCALE), roomy * JUNIOR_SCALE);
-  assert.ok(characterScaleFor(roomy * JUNIOR_SCALE) < characterScaleFor(roomy));
-  // On a floor tight enough that 80% would fall under 16 px of body, the
-  // junior stops shrinking with everybody else rather than becoming a smudge.
-  const tight = CHAR_MIN_PX_PER_UNIT;
-  assert.equal(characterScaleFor(tight * JUNIOR_SCALE), CHAR_MIN_PX_PER_UNIT);
-  assert.equal(characterScaleFor(tight * JUNIOR_SCALE) * BODY_HEIGHT_U >= 16, true);
+test('WP-99: a junior is one step of the agent-size ladder under its lead, at every size and every fit', () => {
+  // The step is the ladder's own: small over medium, which is medium over large.
+  const { small, medium, large } = AGENT_SCALES;
+  assert.equal(JUNIOR_SCALE, small / medium);
+  assert.ok(Math.abs(medium / large - JUNIOR_SCALE) < 1e-12, 'the ladder is not one ratio');
+
+  /** @type {Array<[string, string]>} */
+  const rows = [];
+  // `auto` resolves to one of the three by head count; each band is asked.
+  const settings = [
+    ['small', 0],
+    ['medium', 0],
+    ['large', 0],
+    ['auto', 4],
+    ['auto', 25],
+    ['auto', 90],
+  ];
+  try {
+    for (const [setting, live] of settings) {
+      setAgentSize(setting, live);
+      // From far under the legibility floor to past the fit ceiling.
+      for (const fit of [2, 5, 7.5, CHAR_MIN_PX_PER_UNIT, 9, 12, 17.5, 28, 40]) {
+        const lead = characterScaleFor(fit);
+        const junior = juniorScaleFor(fit);
+        assert.ok(
+          Math.abs(junior / lead - JUNIOR_SCALE) < 1e-12,
+          `${setting}/${live} at ${fit} px per unit: ${junior / lead}, not one step`,
+        );
+        // A lead is never under 16 px of body; a junior is one step under
+        // that and no lower, which is the cost of the step being a step.
+        assert.ok(lead * BODY_HEIGHT_U >= 16 - 1e-9);
+        assert.ok(junior * BODY_HEIGHT_U >= 16 * JUNIOR_SCALE - 1e-9);
+      }
+      const floor = characterScaleFor(0) * BODY_HEIGHT_U;
+      rows.push([
+        `${setting}${setting === 'auto' ? ` (${live} live → ${AGENT_SCALE.size})` : ''}`,
+        `lead ${floor.toFixed(1)} px, junior ${(juniorScaleFor(0) * BODY_HEIGHT_U).toFixed(1)} px at the floor`,
+      ]);
+    }
+  } finally {
+    resetAgentScale();
+  }
+  console.log('\n  WP-99, the smallest body each is drawn at');
+  for (const [k, v] of rows) console.log(`    ${k.padEnd(28)}${v}`);
 });
 
 test('the panel offers a junior no action, no composer and no resume link', () => {

@@ -82,11 +82,12 @@ export const LOWER_REACH = 1.6;
  * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
  *   pin?:boolean, unit?:boolean, lower?:boolean, alts?:number[][], up?:number,
  *   feet?:{x:number, y:number},
- *   bh?:number, side?:number,
+ *   bh?:number, side?:number, lift?:number,
  *   variants?:{x:number, y:number, w:number, h:number, text:string, px:number}[]}[]} items
  *   `x,y,w,h`: the label's un-offset screen box; `up`: the offsetY that puts it
  *   over its figure's head; `feet`, `bh`, `side`: the feet point, the body's
- *   height and half-width, all in screen px; `variants`: the same label smaller,
+ *   height and half-width, all in screen px; `lift`: half the depth of a
+ *   two-row tag's second row (`rowCentre`); `variants`: the same label smaller,
  *   in the order it may shrink (each box at its own un-offset position)
  * @param {{x:number, y:number, w:number, h:number}} [bounds] the building's
  *   screen rect, which no name may leave sideways or upwards
@@ -147,7 +148,7 @@ export function resolveLabelCollisions(items, bounds) {
         if (it.lower && it.bh > 0) {
           const rect = { x: form.x, y: form.y + form.h, w: form.w, h: form.h };
           const line = { x: it.feet.x - 0.5, y: it.feet.y, w: 1, h: rect.y - it.feet.y };
-          const reach = (rect.y + rect.h / 2 - it.feet.y) / it.bh;
+          const reach = (rowCentre(it, rect) - it.feet.y) / it.bh;
           if (reach <= LOWER_REACH + 1e-6 && free(rect) && (line.h <= 0 || free(line))) {
             placed.push(rect);
             if (line.h > 0) placed.push(line);
@@ -212,8 +213,28 @@ function upFor(it, form) {
 function isNear(it, rect) {
   if (!it.feet || !(it.bh > 0)) return false;
   const cx = rect.x + rect.w / 2 - it.feet.x;
-  const cy = rect.y + rect.h / 2 - it.feet.y;
+  const cy = rowCentre(it, rect) - it.feet.y;
   return Math.hypot(cx, cy) <= NEAR_REACH * it.bh + 1e-6;
+}
+
+/**
+ * The y a box is MEASURED from, for how far it is from its feet.
+ *
+ * A one-row name is measured from its centre. A two-row tag (`lift`, WP-99 —
+ * a sub-agent's role chip over its name) is measured from the centre of the
+ * one-row label it would be without its second row: the row nearer the body.
+ * The whole box is still what has to be free; only "how far away is it" asks
+ * about the near row, because a tag whose first row is under its figure's feet
+ * reads as that figure's, however many rows hang below it.
+ * @param {{feet?:{y:number}, lift?:number}} it
+ * @param {{y:number, h:number}} rect
+ */
+function rowCentre(it, rect) {
+  const mid = rect.y + rect.h / 2;
+  const lift = it.lift || 0;
+  if (!(lift > 0) || !it.feet) return mid;
+  const d = mid - it.feet.y;
+  return mid - Math.sign(d) * Math.min(Math.abs(d), lift);
 }
 
 /**

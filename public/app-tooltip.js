@@ -11,9 +11,19 @@
  */
 
 import { recordLineFor } from './records.js';
-import { STATE_LABELS, el, findAgent, formatNumber, palette, panel } from './app-state.js';
+import {
+  STATE_LABELS,
+  el,
+  findAgent,
+  formatNumber,
+  latestSnapshot,
+  palette,
+  panel,
+} from './app-state.js';
+import { supervisingLineFor } from './panel-format.js';
 import { now as clockNow } from './clock.js';
 import { whereOf } from './floor-worktrees.js';
+import { roleWordFor } from './names.js';
 
 let lastMouse = { x: 0, y: 0 };
 
@@ -92,6 +102,16 @@ export function showTooltip(agentId) {
   const name = agent.displayName || agent.givenName || agent.juniorName || null;
   const tag = document.createElement('div');
   tag.className = 'tooltip-tag';
+  // WP-99 · a sub-agent's role, in the word its tag on the floor wears, ahead
+  // of its name: the chip and the tooltip are one fact said twice.
+  const role = roleWordFor(agent);
+  if (role) {
+    const chip = document.createElement('span');
+    chip.className = 'tooltip-role';
+    chip.textContent = role;
+    // A real space after it, for the same reason the rarity word has one.
+    tag.append(chip, ' ');
+  }
   if (name) {
     const b = document.createElement('b');
     b.textContent = name;
@@ -123,9 +143,13 @@ export function showTooltip(agentId) {
   const elapsedMs =
     clockNow() - (agent.reviewSince ?? agent.needsInputSince ?? agent.lastActivityAt ?? clockNow());
   const elapsedMin = Math.max(0, Math.round(elapsedMs / 60000));
+  // WP-99 · a lead whose turn is over while its juniors still work is at its
+  // desk, and its state says why: `For review · waiting on 3 juniors`.
+  const crew = supervisingLineFor(agent, latestSnapshot && latestSnapshot.agents);
   el.tooltip.appendChild(
     tooltipLine(
       `${STATE_LABELS[agent.activityState] || agent.activityState} · ` +
+        `${crew ? `${crew} · ` : ''}` +
         `${formatNumber(agent.tokens)} tokens · ${elapsedMin}m`,
     ),
   );

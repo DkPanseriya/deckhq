@@ -814,6 +814,8 @@ test('§3.2: a crew is contents — the room bids for the arc and not for five c
 
   // The bid grows with the crew, and the arc's own scale is the brief's band.
   assert.ok(crewFootprint(12).h > crewFootprint(5).h);
-  assert.ok(CREW_SCALE >= 0.6 && CREW_SCALE <= 0.7, 'the brief asks for 0.60-0.70');
+  // The arc's PACKING, which the plan is laid from. It is no longer the size a
+  // member is drawn at: that is one ladder step under its lead (WP-99).
+  assert.ok(CREW_SCALE >= 0.6 && CREW_SCALE <= 0.7, 'the arc is packed at 0.60-0.70');
   assert.ok(CREW_ARC_SPAN > 0 && CREW_ARC_SPAN < Math.PI);
 });

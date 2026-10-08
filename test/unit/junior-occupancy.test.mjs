@@ -29,7 +29,7 @@ import assert from 'node:assert/strict';
 
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats } from '../../public/render/agents.js';
-import { CREW_DRAW_CAP, floorPopulation, placement } from '../../public/floor-rule.js';
+import { CREW_DRAW_CAP, agentIndex, floorPopulation, placement } from '../../public/floor-rule.js';
 import { crewChipAt, crewNameAt } from '../../public/render/crew.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
 import { counts } from '../../src/core/model.mjs';
@@ -77,11 +77,16 @@ const same = (a, b) => !!a && !!b && Math.hypot(a.x - b.x, a.y - b.y) < 1e-6;
  * senior in `for_review` with thirteen working juniors, two top-level working
  * sessions elsewhere (one running `Bash`), and a benched `working` and a benched
  * `needs_input` in the same repo.
+ *
+ * `parentOver` is how a test takes the senior AWAY from its crew. Since WP-99 a
+ * waiting lead with a junior still working stays at its own desk, so "waiting"
+ * no longer takes it anywhere; the user's bench still does (`AWAY`).
  */
-function ownersFloor() {
+function ownersFloor(parentOver = {}) {
   const parent = agent('claude-code:boss', {
     activityState: 'for_review',
     reviewSince: NOW - 3 * MIN,
+    ...parentOver,
   });
   const agents = [parent];
   for (let i = 0; i < 13; i++) {
@@ -108,19 +113,44 @@ function ownersFloor() {
   return { agents, projects, parent };
 }
 
+/** The senior taken away from its crew by the one thing that still does it. */
+const AWAY = { ackState: 'benched' };
+
 test('bug 201: a waiting senior’s thirteen working juniors are in the project room, not the office', () => {
-  const { agents, projects, parent } = ownersFloor();
-  const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
-  const seats = assignSeats(plan, agents);
-  const office = room(plan, 'office');
-  const lounge = room(plan, 'lounge');
-  const career = room(plan, 'project', 'career-ops');
-  assert.ok(career, 'career-ops has working sessions in it and must have a room');
+  // NARROWED BY WP-99. This asked for the senior on the reception sofa and its
+  // crew cabled to an empty desk with its name on it — which the owner then
+  // reported as a bug of its own. The senior is at its desk now; everything
+  // this test says about the JUNIORS is as it was, and the crew that really is
+  // without its senior (`AWAY`) is asked the old questions below it.
+  for (const away of [false, true]) {
+    const { agents, projects, parent } = ownersFloor(away ? AWAY : {});
+    const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
+    const seats = assignSeats(plan, agents);
+    const office = room(plan, 'office');
+    const lounge = room(plan, 'lounge');
+    const career = room(plan, 'project', 'career-ops');
+    assert.ok(career, 'career-ops has working sessions in it and must have a room');
 
-  // The senior is where its own state puts it: on the reception sofa.
-  assert.equal(placement(parent), 'office');
-  assert.ok(inside(seats.get(parent.id), office), 'the waiting senior is in the office');
+    // The senior: at its own desk while its crew works, in the lounge if benched.
+    assert.equal(placement(parent, agentIndex(agents)), away ? 'lounge' : 'desk');
+    assert.ok(inside(seats.get(parent.id), away ? lounge : career), 'the senior is elsewhere');
+    assert.ok(!inside(seats.get(parent.id), office, -0.5), 'the senior is in the office');
 
+    ownersJuniorsAreInTheirRoom({ agents, parent, plan, seats, office, lounge, career, away });
+  }
+});
+
+/** What bug 201 holds about the juniors, whatever their senior is doing. */
+function ownersJuniorsAreInTheirRoom({
+  agents,
+  parent,
+  plan,
+  seats,
+  office,
+  lounge,
+  career,
+  away,
+}) {
   // Its juniors are where THEIR state puts them: working, so at the room.
   const juniors = agents.filter((a) => a.subagent === true);
   const drawn = juniors.filter((j) => seats.has(j.id));
@@ -135,7 +165,9 @@ test('bug 201: a waiting senior’s thirteen working juniors are in the project 
   const first = seats.get(drawn[0].id);
   assert.equal(first.crew, true, 'thirteen juniors are a crew');
   assert.equal(first.crewOf, parent.id);
-  assert.equal(first.crewAway, true, 'the parent is not at the desk the crew is cabled to');
+  // Away, the desk the crew is cabled to is not the parent's; at its desk, it is.
+  assert.equal(first.crewAway === true, away, 'whether the parent is at the crew’s desk');
+  if (!away) assert.ok(same(first.crewAnchor, seats.get(parent.id)), 'the arc is round its lead');
   assert.ok(
     deskSeats.some((s) => same(s, first.crewAnchor)),
     'the arc is anchored to one of the room’s own desks',
@@ -154,16 +186,21 @@ test('bug 201: a waiting senior’s thirteen working juniors are in the project 
     assert.equal(placement(agents.find((x) => x.id === id)), 'lounge');
     assert.ok(inside(seats.get(id), lounge), `${id} is benched and not in the lounge`);
   }
-});
+}
 
 test('bug 201: one or two juniors of a parent that is away take desks of their own', () => {
-  const parent = agent('claude-code:p', { activityState: 'for_review', reviewSince: NOW - MIN });
+  // Away by the user's bench (WP-99): a waiting parent is no longer away.
+  const parent = agent('claude-code:p', {
+    activityState: 'for_review',
+    reviewSince: NOW - MIN,
+    ...AWAY,
+  });
   const agents = [parent, junior('claude-code:j1', parent.id), junior('claude-code:j2', parent.id)];
   const projects = [{ id: 'career-ops', name: 'career-ops', sessionCount: 1, activeCount: 1 }];
   const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
   const seats = assignSeats(plan, agents);
   const deskSeats = plan.seats.get('career-ops') || [];
-  assert.equal(deskSeats.length, 2, 'a desk each, and none for the parent on the sofa');
+  assert.equal(deskSeats.length, 2, 'a desk each, and none for the parent in the lounge');
   for (const id of ['claude-code:j1', 'claude-code:j2']) {
     const seat = seats.get(id);
     assert.ok(
@@ -248,7 +285,7 @@ test('bug 201: a junior spawned into a worktree works in its parent’s room', (
 });
 
 test('bug 201: the away crew’s desk carries the parent’s name, and the chip counts the desk', () => {
-  const { agents, projects, parent } = ownersFloor();
+  const { agents, projects, parent } = ownersFloor(AWAY);
   parent.label = 'MK4.1';
   const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
   const seats = assignSeats(plan, agents);
@@ -296,13 +333,19 @@ test('bug 201: the away crew’s desk carries the parent’s name, and the chip 
 });
 
 test('bug 201: the room counts a desk for the crew anchor when the parent is away', () => {
-  const { agents } = ownersFloor();
+  const { agents } = ownersFloor(AWAY);
   const pop = floorPopulation(agents, { now: NOW });
   // Thirteen juniors are one formation; the formation's members are not desks,
-  // and the desk the formation is cabled to is — the parent is on the sofa.
+  // and the desk the formation is cabled to is — the parent is in the lounge.
   assert.deepEqual(pop.crews.get('career-ops'), [13]);
   assert.equal(pop.desks.get('career-ops'), 1);
-  assert.equal(pop.waiting, 1, 'the senior, and none of its juniors');
+  assert.equal(pop.waiting, 0, 'nobody is in the office: the senior is benched');
+  // WP-99 · and with the senior waiting on its crew AT that desk, the room is
+  // the same size: one desk, the senior's own, and nobody on a sofa.
+  const here = floorPopulation(ownersFloor().agents, { now: NOW });
+  assert.deepEqual(here.crews.get('career-ops'), [13]);
+  assert.equal(here.desks.get('career-ops'), 1);
+  assert.equal(here.waiting, 0, 'the senior is at its desk, and none of its juniors waits');
 });
 
 /**
@@ -321,11 +364,15 @@ test('audit F5: "at desk" counts exactly who the floor seats at a desk', () => {
   }
   agents.push(agent('claude-code:stuck', { projectId: 'deckhq', activityState: 'stalled' }));
   const c = counts(agents, { now: NOW });
-  // 13 working juniors + 2 working seniors + 1 stalled senior. Not the waiting
-  // parent, not the 4 ended juniors, not the benched pair.
-  assert.equal(c.drawn.atDesk, 16);
-  assert.equal(c.drawn.waiting, 1, 'the parent on the sofa, and none of its crew');
+  // 13 working juniors + 2 working seniors + 1 stalled senior + the parent,
+  // which waits on its crew at its own desk (WP-99; it was on the sofa, and
+  // this read 16 and 1). Not the 4 ended juniors, not the benched pair.
+  assert.equal(c.drawn.atDesk, 17);
+  assert.equal(c.drawn.waiting, 0, 'nobody is on a sofa: the parent is at its desk');
   assert.equal(c.drawn.benched, 2);
+  // And it still needs the owner, exactly as it did from the sofa.
+  assert.equal(c.forReview, 1);
+  assert.equal(c.needsYou, 2, 'the parent, and the stalled senior');
 
   const plan = buildPlan(projects, agents, { stage: STAGE, now: NOW });
   const seats = assignSeats(plan, agents);

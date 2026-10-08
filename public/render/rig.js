@@ -89,7 +89,6 @@ import {
   drawRigCrown,
   drawRigDome,
   drawRigFarArm,
-  drawRigLaptop,
   drawRigNearArm,
   drawRigVisor,
   haloRimWidth,
@@ -98,6 +97,8 @@ import {
 import { drawGlow, managerIdentity, rigIdentity } from './rig-traits.js';
 import { drawCueBehind, drawPropFront, drawIcon, drawDots, drawStallDots } from './rig-props.js';
 import { toolIconKind, drawToolBubble, drawToolIcon, toolBubbleText } from './rig-bubble.js';
+import { drawFloorLaptop } from './rig-laptop.js';
+import { drawRoleChip, stackRole } from './name-tag.js';
 
 export * from './rig-metrics.js';
 export * from './rig-pose.js';
@@ -262,12 +263,16 @@ export const LABEL_DROP_U = 1.62;
  * @param {string} rawLabel
  * @param {number} [px] the size to set it in, when the collision pass shrank
  *   it (`label-spots.js`); `labelFontSize(u)` otherwise
- * @returns {{text:string, x:number, y:number, w:number, h:number, top:number}}
- *   `x,y,w,h`: the text's bounding box (screen space, before any collision
- *   offset). `top`: the text's un-offset draw y (baseline `'top'`), reused
+ * @param {string|null} [role] WP-99: a sub-agent's role word. Given, the box is
+ *   the whole two-row tag — the chip over the name, as one box — and carries
+ *   `chip` (`name-tag.js`'s `stackRole`)
+ * @returns {{text:string, x:number, y:number, w:number, h:number, top:number,
+ *   role?:string, chip?:{x:number, y:number, w:number, h:number, px:number}}}
+ *   `x,y,w,h`: the label's bounding box (screen space, before any collision
+ *   offset). `top`: the NAME's un-offset draw y (baseline `'top'`), reused
  *   by `drawLabel` so measurement and paint never drift apart.
  */
-export function labelBox(ctx, ox, oy, u, rawLabel, px) {
+export function labelBox(ctx, ox, oy, u, rawLabel, px, role) {
   const text = truncateLabel(rawLabel);
   const fontPx = px || labelFontSize(u);
   const textW = textWidth(ctx, sansFont(fontPx), text);
@@ -276,7 +281,8 @@ export function labelBox(ctx, ox, oy, u, rawLabel, px) {
   const w = textW + padX * 2;
   const h = fontPx * 1.18 + padY * 2;
   const top = oy + u * LABEL_DROP_U;
-  return { text, x: ox - w / 2, y: top - padY, w, h, top };
+  const name = { text, x: ox - w / 2, y: top - padY, w, h, top };
+  return role ? stackRole(ctx, name, role, fontPx) : name;
 }
 
 /**
@@ -312,13 +318,15 @@ export function labelHaloWidth(fontPx, deviceScale = 1) {
  * @param {string} rawLabel
  * @param {number} [offsetY]
  * @param {number} [offsetX] the collision pass's sideways step, 0 for none
- * @param {{px?:number, leader?:boolean}} [form] the collision pass's smaller
- *   size, and whether the label left its figure's near ring: a name that moved
- *   further draws a 1 px leader from its own edge to the feet it names
+ * @param {{px?:number, leader?:boolean, role?:string|null}} [form] the
+ *   collision pass's smaller size, and whether the label left its figure's
+ *   near ring: a name that moved further draws a 1 px leader from its own edge
+ *   to the feet it names. `role` (WP-99): a sub-agent's role word, drawn as a
+ *   chip over the name — the two rows of one tag
  */
 export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
   const px = (form && form.px) || labelFontSize(u);
-  const box = labelBox(ctx, ox, oy, u, rawLabel, px);
+  const box = labelBox(ctx, ox, oy, u, rawLabel, px, form && form.role);
   const dy = offsetY || 0;
   const lx = ox + (offsetX || 0);
   ctx.save();
@@ -335,6 +343,8 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
+  // The first row of a sub-agent's tag, over the name and moving with it.
+  if (box.chip && box.role) drawRoleChip(ctx, box.chip, box.role, offsetX || 0, dy);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
   ctx.font = sansFont(px); // `labelBox` measures from kept widths and sets none
@@ -416,6 +426,7 @@ export const REST_LIFE = Object.freeze({
  * @param {import('./clips.js').Pose} pose
  * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string, state?:string,
  *   label?:string, labelOffsetY?:number, labelOffsetX?:number, labelPx?:number, labelLeader?:boolean,
+ *   labelRole?:string|null,
  *   icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
@@ -442,6 +453,7 @@ export const REST_LIFE = Object.freeze({
  *   already occupies the space above the head.
  *   `labelOffsetY`, `labelOffsetX`: screen-px nudges applied to the label only.
  *   `labelPx`, `labelLeader`: the collision pass's smaller size, and its leader line.
+ *   `labelRole` (WP-99): a sub-agent's role word, the first row of its tag.
  *   `identity` (CONTRACTS-WP15.md §2): project appearance from
  *   `palette.js`'s `identityFor` — the chest badge, its glyph, and the boots.
  *   `appearance` (WP-20): who this particular session is, from
@@ -451,7 +463,8 @@ export const REST_LIFE = Object.freeze({
  *   the barrel's fill or the visor's tint: the state owns both.
  *   `seat` (WP-97): `'desk'`, `'sofa'` or `'floor'` — the figure is drawn
  *   sitting there, its feet point still `(x, y)`. Omitted, or while walking,
- *   it stands. `laptop` is how open a `'floor'` sitter's laptop lid is, 0..1.
+ *   it stands. `laptop` is how open a `'floor'` sitter's laptop lid is, 0..1
+ *   (`rig-laptop.js`); omitted, it is open.
  */
 export function drawCharacter(ctx, pose, opts) {
   // WP-87 · what this figure is doing beyond its pose, from `life.js`. A caller
@@ -521,13 +534,12 @@ export function drawCharacter(ctx, pose, opts) {
   // BASE_U, so it is scaled into this zoom exactly as it always was.
   const by = oy + (still ? 0 : pose.bob * (u / BASE_U));
   rigFrame(ox, by, h);
-  rigSetup(k, id, tints, h, phase, lod === 0, life, pose, opts.laptop ?? null);
+  rigSetup(k, id, tints, h, phase, lod === 0, life, pose);
 
   drawFigureRim(ctx, haloRimWidth(u));
   drawRigBase(ctx);
   drawRigFarArm(ctx);
   drawRigBarrel(ctx);
-  drawRigLaptop(ctx);
 
   if (pose.prop === 'cue') drawCueBehind(ctx, u);
 
@@ -544,6 +556,9 @@ export function drawCharacter(ctx, pose, opts) {
   drawRigNearArm(ctx);
   drawRigCard(ctx);
   drawRigCrown(ctx);
+  // WP-99 · a figure on the floor has its laptop on the carpet in front of it:
+  // nearer the reader than its crossed legs, so it is laid over them.
+  if (k.seat === 'floor') drawFloorLaptop(ctx, ox, oy, u, opts.laptop, lod);
 
   if (pose.prop) drawPropFront(ctx, pose.prop, u);
 
@@ -588,7 +603,7 @@ export function drawCharacter(ctx, pose, opts) {
   // A name at EVERY level of detail (audit F1): it is held to 11 px whatever
   // the scale, so L0 has no size reason to drop it.
   if (opts.label) {
-    const form = { px: opts.labelPx, leader: opts.labelLeader };
+    const form = { px: opts.labelPx, leader: opts.labelLeader, role: opts.labelRole };
     drawLabel(ctx, ox, oy, u, opts.label, opts.labelOffsetY, opts.labelOffsetX, form);
   }
 

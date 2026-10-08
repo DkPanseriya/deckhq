@@ -155,13 +155,16 @@ export function seatedAt(placement, seat) {
  * WHERE THE FIGURE IS SITTING, for the rig (WP-97): `'desk'`, `'sofa'`,
  * `'floor'`, or null for standing.
  *
- * A crew member sits on the floor with its laptop (WP-89). A benched agent in
- * the lounge sits when the activity its clip plays is a sitting one — a sofa, a
- * board game, a book — and stands at the pool table and the arcade. Anybody
- * else sits wherever {@link seatedAt} says there is a chair: a desk sits at a
- * task chair, and the reception's sofa runs and its one visitor chair (WP-93)
- * both sit back. A queue place, an overflow ring and a junior beside its
- * parent are all bare carpet, and nobody walking is sitting.
+ * A junior working on the floor sits on it with its laptop — in a crew's arc
+ * (WP-89) and, since WP-99, beside its lead as well: a junior place is bare
+ * carpet, and a junior stood on it read as somebody passing by. A benched
+ * agent in the lounge sits when the activity its clip plays is a sitting one —
+ * a sofa, a board game, a book — and stands at the pool table and the arcade.
+ * Anybody else sits wherever {@link seatedAt} says there is a chair: a desk
+ * sits at a task chair, and the reception's sofa runs and its one visitor
+ * chair (WP-93) both sit back — a junior given a real desk or a sofa place
+ * included. A queue place and an overflow ring are bare carpet, and nobody
+ * walking is sitting.
  * @param {{path?:unknown[], targetSeat?:any, placement?:string, seated?:boolean}|null} rec
  * @param {{seated?:boolean}|null} [pose] the clip's pose, for the lounge
  * @returns {'desk'|'sofa'|'floor'|null}
@@ -169,9 +172,9 @@ export function seatedAt(placement, seat) {
 export function rigSeatOf(rec, pose) {
   if (!rec || (Array.isArray(rec.path) && rec.path.length > 0)) return null;
   const seat = rec.targetSeat || null;
-  if (seat && seat.crew === true) return 'floor';
+  if (seat && (seat.crew === true || seat.junior === true)) return 'floor';
   if (rec.placement === 'lounge') return pose && pose.seated === true ? 'sofa' : null;
-  if (!rec.seated || (seat && (seat.junior === true || seat.overflow === true))) return null;
+  if (!rec.seated || (seat && seat.overflow === true)) return null;
   return rec.placement === 'office' ? 'sofa' : rec.placement === 'desk' ? 'desk' : null;
 }
 
@@ -425,7 +428,7 @@ export class AgentRuntime {
     const behindChip = (plan && plan.loungeOverflow && plan.loungeOverflow.ids) || null;
     const seen = new Set();
     for (const agent of agents) {
-      const placement = derivePlacement(agent);
+      const placement = derivePlacement(agent, byId);
       // An archived session is off the floor: it has no room, no seat and
       // nothing drawn, so it gets no record either. Keeping one would fall
       // through to the no-seat fallback and park every one of them on the

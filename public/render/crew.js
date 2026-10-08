@@ -40,17 +40,21 @@ export { CREW_DRAW_CAP, CREW_THRESHOLD, CREW_ACTIVE_MS, juniorActive } from '../
 // ---------------------------------------------------------------- constants
 
 /**
- * HOW BIG A CREW MEMBER IS DRAWN, as a fraction of its parent.
+ * HOW TIGHTLY THE ARC IS PACKED, as a fraction of a full-size body's clearance.
  *
- * The brief asks for 0.60–0.70 and §3.2 chose 0.66; this ships **0.65**, the
- * middle of the band, and the difference between the two is under a pixel at
- * every scale this floor draws at. It goes through `characterScaleFor` like
- * every other body, so §96's 16 px legibility floor still binds and a crew at a
- * tight fit stops shrinking rather than becoming texture.
+ * It was also the size a crew member was DRAWN at — the brief asked for
+ * 0.60–0.70, §3.2 chose 0.66 and this shipped 0.65. Since WP-99 it is not: a
+ * junior is drawn one step of the agent-size ladder under its lead wherever it
+ * is (`scene-lod.js`'s `JUNIOR_SCALE`, 0.8), so a member of a formation and a
+ * junior beside its lead are the same size, and so are a junior and its lead's
+ * difference on a floor at the legibility floor.
  *
- * It applies to a member OF A FORMATION only. A parent with one or two juniors
- * keeps `JUNIOR_SCALE`, which is what keeps every committed golden at 0 px: the
- * `demo` floor's senior has two.
+ * What is left here is the geometry that number built: `CREW_PITCH` is one
+ * body's clearance (2.8 U) taken at it, 1.82 U between neighbours on the arc.
+ * It is kept, and the plan with it, because a seated junior at 0.8 still sits
+ * clear of the next one: on the `crew-waiting` golden, thirteen on one arc,
+ * the bodies are about 21 px wide at 28 px centres. Widening the pitch to the
+ * drawn size would grow every crew's room for air it does not need.
  */
 export const CREW_SCALE = 0.65;
 

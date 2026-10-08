@@ -431,7 +431,7 @@ export function counts(agents, opts = {}) {
     // no longer "a desk in a repo nobody is in" — an `ended` session is in the
     // lounge now — but it still counts exactly the people the floor has
     // nowhere to draw: an active session whose project earned no room.
-    const where = placement(a);
+    const where = placement(a, byId);
     const hasRoom = activeProjects.has(homeProjectOf(a, byId));
     if (where === 'desk') {
       atDesk++;

@@ -28,7 +28,7 @@
  * DOM, no clock, and the same answer in the daemon's tests as in the browser.
  */
 
-import { isDeskAgent, isSubagent } from './floor-rule.js';
+import { agentIndex, isDeskAgent, isSubagent } from './floor-rule.js';
 
 /**
  * @typedef {object} WorktreeBench
@@ -151,8 +151,12 @@ export function benchesFor(sitters, leading) {
  * @returns {Map<string, WorktreeBench[]>}
  */
 export function worktreeBenches(agents, pop) {
-  const sitters = (Array.isArray(agents) ? agents : []).filter(
-    (a) => a && !isSubagent(a) && isDeskAgent(a) && worktreeKey(a) !== '',
+  const all = Array.isArray(agents) ? agents : [];
+  // With the snapshot's index, so a lead waiting on its crew is a desk agent
+  // here exactly as it is to the plan and the seats (`placement`, WP-99).
+  const byId = agentIndex(all);
+  const sitters = all.filter(
+    (a) => a && !isSubagent(a) && isDeskAgent(a, byId) && worktreeKey(a) !== '',
   );
   return benchesFor(sitters, (pop && pop.leading) || new Set());
 }

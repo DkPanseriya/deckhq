@@ -29,8 +29,7 @@ import {
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
-import { characterScaleFor, JUNIOR_SCALE, lodForFigure } from '../../public/render/scene-lod.js';
-import { CREW_SCALE } from '../../public/render/crew.js';
+import { characterScaleFor, juniorScaleFor, lodForFigure } from '../../public/render/scene-lod.js';
 import { rigHeight } from '../../public/render/rig-pose.js';
 import {
   badgeBox,
@@ -116,6 +115,9 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
     const { scale } = computeFill(plan.width, plan.height, viewW, viewH);
     const camera = { zoom: scale / 14, panX: 0, panY: 0, U: 14 };
     const charU = characterScaleFor(scale);
+    // The scale each figure is DRAWN at: a junior's is one ladder step under
+    // everybody else's, in an arc or out of one (WP-99, `_figureScale`).
+    const uOf = (rec) => (rec.agent.subagent === true ? juniorScaleFor(scale) : charU);
     const agentsById = new Map(agents.map((a) => [a.id, a]));
     const records = agents
       .filter((a) => seats.has(a.id))
@@ -142,7 +144,7 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       waits,
       records.map((rec) => {
         const s = worldToScreen(rec, camera);
-        return { id: rec.id, ...characterBox(s.x, s.y, charU) };
+        return { id: rec.id, ...characterBox(s.x, s.y, uOf(rec)) };
       }),
     );
     const badgeBoxes = waits
@@ -174,10 +176,7 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       plateBoxes: plates.map((p) => p.rect),
       selectedId: null,
       bounds: buildingRect(plan, camera),
-      uOf: (rec) =>
-        rec.agent.subagent === true
-          ? characterScaleFor(scale * (rec.targetSeat.crew ? CREW_SCALE : JUNIOR_SCALE))
-          : charU,
+      uOf,
     });
     return {
       plan,
@@ -185,6 +184,7 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       scale,
       camera,
       charU,
+      uOf,
       agents,
       agentsById,
       records,
@@ -249,7 +249,7 @@ test('F7 · no name lands on a body, a plate or another name', () => {
     const f = frameAt(w, h);
     const bodies = f.records.map((r) => {
       const s = worldToScreen(r, f.camera);
-      return characterBox(s.x, s.y, f.charU);
+      return characterBox(s.x, s.y, f.uOf(r));
     });
     const plates = f.plates.map((p) => p.rect).filter((r) => r.w > 0);
     const placed = [];
@@ -480,7 +480,7 @@ test('near ring · sixteen waiting on the office sofas: all seated, every name w
   // Zero overlaps: no name on a body, on a plate, or on another name.
   const bodies = f.records.map((r) => {
     const s = worldToScreen(r, f.camera);
-    return characterBox(s.x, s.y, f.charU);
+    return characterBox(s.x, s.y, f.uOf(r));
   });
   const plates = f.plates.map((p) => p.rect).filter((r) => r.w > 0);
   let overlaps = 0;
@@ -561,7 +561,8 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
     const at = new Map(f.records.map((r) => [r.id, worldToScreen(r, f.camera)]));
     const bodies = f.records.map((r) => ({
       id: r.id,
-      ...characterBox(at.get(r.id).x, at.get(r.id).y, f.charU),
+      // The box each is DRAWN in: a junior's is a ladder step smaller (WP-99).
+      ...characterBox(at.get(r.id).x, at.get(r.id).y, f.uOf(r)),
     }));
     const names = [];
     for (const item of f.labels.labels) {

@@ -40,14 +40,14 @@
  */
 
 import { badgeBox, characterBox, formatElapsed, formatElapsedShort } from './rig.js';
-import { BADGE_MIN_PX_PER_UNIT, JUNIOR_SCALE, characterScaleFor } from './scene-lod.js';
+import { BADGE_MIN_PX_PER_UNIT } from './scene-lod.js';
 import { layoutPlate, plateLimit, resolveBadgeCollisions } from './scene-labels.js';
 import { buildingRect, planFrameLabels } from './scene-frame-labels.js';
 import { worldToScreen } from './agents.js';
 import { animMs, stateForAgent } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
-import { CREW_SCALE, crewCableExtent, crewCableLive } from './crew.js';
+import { crewCableExtent, crewCableLive } from './crew.js';
 import { textMetricsEpoch } from './text-metrics.js';
 import { SceneStatic } from './scene-static.js';
 
@@ -186,20 +186,12 @@ const STILL_LIFE = {
 
 export class SceneFrame extends SceneStatic {
   /**
-   * HOW BIG THIS JUNIOR IS DRAWN, as a fraction of its parent (WP-89).
-   *
-   * A member of a FORMATION is `CREW_SCALE`; a junior standing beside its parent
-   * in WP-41's old way keeps `JUNIOR_SCALE`. Read off the SEAT rather than off
-   * the agent, because the seat is what `assignSeats` decided and a junior whose
-   * room could not hold an arc is drawn at the old size in the old rows.
-   *
-   * That split is also what keeps every committed golden at 0 px: the `demo`
-   * floor's senior has two juniors, which is not a crew.
+   * The scale this record's figure is drawn at (`_figureScale`): a junior's is
+   * one ladder step under its lead's, in a formation or out of one (WP-99).
    * @param {any} rec
    */
-  _juniorScaleOf(rec) {
-    const seat = rec && rec.targetSeat;
-    return seat && seat.crew === true ? CREW_SCALE : JUNIOR_SCALE;
+  _scaleOf(rec) {
+    return this._figureScale(this._agentsById.get(rec.id) || rec.agent);
   }
 
   /**
@@ -321,10 +313,7 @@ export class SceneFrame extends SceneStatic {
         const s = worldToScreen(rec, camera);
         // A junior is drawn smaller, so its badge is a smaller box. Measured
         // at the scale it will be drawn at, exactly as the label pass does.
-        const u =
-          agent.subagent === true
-            ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
-            : charU;
+        const u = this._figureScale(agent);
         const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
         // And the box of its short form, which it is drawn in where the badge
         // beside it leaves no room for the whole wait.
@@ -334,7 +323,7 @@ export class SceneFrame extends SceneStatic {
       }
       const bodies = records.map((rec) => {
         const s = worldToScreen(rec, camera);
-        return { id: rec.id, ...characterBox(s.x, s.y, charU) };
+        return { id: rec.id, ...characterBox(s.x, s.y, this._scaleOf(rec)) };
       });
       badgePlan = resolveBadgeCollisions(items, bodies);
       for (const it of items) {
@@ -378,12 +367,7 @@ export class SceneFrame extends SceneStatic {
       plateBoxes: [...plates.values()].map((p) => p.rect),
       selectedId: this._selectedId,
       bounds: this._plan ? buildingRect(this._plan, camera) : undefined,
-      uOf: (rec) => {
-        const a = this._agentsById.get(rec.id) || rec.agent;
-        return a && a.subagent === true
-          ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
-          : charU;
-      },
+      uOf: (rec) => this._scaleOf(rec),
     });
     return { charU, badgePlan, plates, labels };
   }

@@ -12,12 +12,12 @@
  * polyline it finds on each seat, and puts at most four dots on it. No route is
  * searched, no object is allocated per cable and no `Path2D` per frame (§1.3).
  *
- * THE LAPTOP IS ON THE KNEES NOW (WP-97). It used to be drawn here, on the
- * floor one `CREW_LAPTOP_GAP` in front of its junior, because the rig had no
- * way to sit. B sits cross-legged with the laptop on its lap and the rig draws
- * it — with this file's own `crewCableLive` as the lid — so the cable's last
- * run goes from that point up to the member's feet, under the body, and into
- * the laptop it feeds.
+ * THE LAPTOP IS THE RIG'S (WP-97, WP-99). It used to be drawn here, on the
+ * floor one `CREW_LAPTOP_GAP` toward the desk from its junior, because the rig
+ * had no way to sit. B sits cross-legged and the rig lays the laptop on the
+ * carpet in front of it (`rig-laptop.js`) — with this file's own
+ * `crewCableLive` as the lid — so the cable's last run goes from the route's
+ * end into that laptop's deck.
  *
  * TWO GATES, BOTH OF THEM §1.4's:
  *
@@ -44,6 +44,7 @@ import { PALETTE, STATE_COLORS } from './palette.js';
 import { worldToScreen } from './agents.js';
 import { sansFont } from './rig-metrics.js';
 import { textWidth } from './text-metrics.js';
+import { laptopBox } from './rig-laptop.js';
 
 /** Cable width in plan units, at a junior's own scale. */
 const CABLE_W_U = 0.2;
@@ -61,6 +62,8 @@ export const PULSE_MIN_PX_PER_UNIT = 14;
 
 /** Module-scope scratch — see the header on why there is one and not one per pulse. */
 const _pt = { x: 0, y: 0 };
+/** The same, for the laptop a cable ends in. */
+const _deck = { x: 0, y: 0, w: 0, h: 0 };
 
 /**
  * Every crew on the floor this frame, as `parentId -> members`, from the records
@@ -90,7 +93,7 @@ export function crewRecords(records) {
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {{records:Iterable<any>, agentsById:Map<string,any>, camera:any,
- *   scale:number, charU:number, lod:0|1|2, reduced:boolean,
+ *   scale:number, charU:number, juniorU?:number, lod:0|1|2, reduced:boolean,
  *   pinned:number|null, nowMs:number, seatOf:(id:string)=>any,
  *   crewCounts:Map<string,number>}} view
  */
@@ -171,8 +174,8 @@ function drawOne(ctx, view, rec, pulses, px) {
  * From the port rather than from the laptop because that is which way a cable
  * arrives and leaves: §3.2 has it *"draw on from the desk outward"* when a
  * junior appears and retract the same way when one goes. Fully drawn, it runs
- * on from the laptop's floor point to the member's own feet (WP-97): the
- * laptop is on its knees.
+ * on from the route's last point into the laptop the rig draws in front of
+ * the member (WP-99, `rig-laptop.js`).
  */
 function strokeFromPort(ctx, view, route, extent, rec) {
   const pts = route;
@@ -199,8 +202,11 @@ function strokeFromPort(ctx, view, route, extent, rec) {
     ctx.lineTo(s.x, s.y);
   }
   if (extent >= 1 && rec && Number.isFinite(rec.x) && Number.isFinite(rec.y)) {
+    // Into the laptop itself: the middle of its deck, at the junior's own
+    // scale, so the plug moves with the size the junior is drawn at.
     const feet = worldToScreen(rec, view.camera);
-    ctx.lineTo(feet.x, feet.y);
+    const deck = laptopBox(feet.x, feet.y, view.juniorU ?? view.charU, _deck);
+    ctx.lineTo(deck.x + deck.w / 2, deck.y + deck.h / 2);
   }
   ctx.stroke();
 }
@@ -238,8 +244,15 @@ function drawChip(ctx, view, parentId, members) {
   const text = crewChipText(total, members.length, working);
   if (!text) return;
   if (!anchor) return;
-  plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text);
+  // With the lead AT this desk the chip keeps off its body: the reduced form,
+  // `+1 · 6/13 working`, is wider than the gap the chip stands in, and since
+  // WP-99 a lead waiting on its crew sits here rather than on a sofa.
+  const lead = seat && seat.crewAway === true ? null : worldToScreen(anchor, view.camera);
+  plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text, lead);
 }
+
+/** Half the width of a seated lead's body, in plan units, for the chip's clearance. */
+const CHIP_CLEAR_U = 0.85;
 
 /**
  * THE PARENT'S NAME ON THE DESK ITS CREW IS CABLED TO, when the parent is not
@@ -257,12 +270,22 @@ function drawAwayName(ctx, view, parentId, anchor) {
   plate(ctx, view, worldToScreen(crewNameAt(anchor), view.camera), String(name));
 }
 
-/** One small plate — the chip's halo and ink — centred on a screen point. */
-function plate(ctx, view, at, text) {
+/**
+ * One small plate — the chip's halo and ink — centred on a screen point, or as
+ * near it as leaves `clear` (a body's feet point) its own width.
+ */
+function plate(ctx, view, at, text, clear) {
   const fontPx = Math.max(10, Math.min(14, view.charU * 0.42));
   ctx.font = sansFont(fontPx);
   const w = textWidth(ctx, sansFont(fontPx), text) + fontPx * 0.9;
   const h = fontPx * 1.5;
+  if (clear) {
+    const need = w / 2 + view.charU * CHIP_CLEAR_U;
+    const dx = at.x - clear.x;
+    if (dx !== 0 && Math.abs(dx) < need && Math.abs(at.y - clear.y) < view.charU * 2) {
+      at = { x: clear.x + Math.sign(dx) * need, y: at.y };
+    }
+  }
   ctx.globalAlpha = 1;
   ctx.fillStyle = PALETTE.plateHalo;
   ctx.fillRect(at.x - w / 2, at.y - h / 2, w, h);

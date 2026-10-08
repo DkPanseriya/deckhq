@@ -16,7 +16,7 @@ import { badgeBox, drawBadge, drawCharacter, formatElapsed, formatElapsedShort }
 import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { rigSeatOf, worldToScreen } from './agents.js';
-import { BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
+import { BADGE_MIN_PX_PER_UNIT, juniorScaleFor } from './scene-lod.js';
 import { PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
 import { SceneFrame, waitingBadgeMs } from './scene-frame.js';
 import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
@@ -382,6 +382,7 @@ export class SceneDraw extends SceneFrame {
       camera,
       scale: this._scale(),
       charU,
+      juniorU: juniorScaleFor(this._scale()),
       lod,
       reduced: this._reduced,
       pinned: this._phase,
@@ -453,13 +454,9 @@ export class SceneDraw extends SceneFrame {
     if (!agent) return;
     // People are drawn at their own scale (`_characterScale`), which is the
     // world scale except on a floor small enough that a body would drop below
-    // 16 px — 05-GUI-UX-SPEC.md §6.2. A junior is drawn at `JUNIOR_SCALE` of
-    // the floor's scale and then through the same floor, so it is smaller
-    // than its senior everywhere there is room for it to be (WP-41).
-    const u =
-      agent.subagent === true
-        ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
-        : this._characterScale();
+    // 16 px — 05-GUI-UX-SPEC.md §6.2. A junior is drawn one step of the
+    // agent-size ladder under that, at every fit (`juniorScaleFor`, WP-99).
+    const u = this._figureScale(agent);
     // This frame's name and where it goes, resolved once before any character
     // is drawn (`planFrameLabels` in `_draw`). No text is a crew member whose
     // type another member of its formation carries; a `null` placement is a
@@ -468,6 +465,8 @@ export class SceneDraw extends SceneFrame {
     const spot = text ? labels.plan.get(rec.id) : null;
     // A name the pass shrank or abbreviated carries its own text and size.
     const label = spot ? spot.text || text : null;
+    // WP-99 · a sub-agent's first row: its role, on a chip over the name.
+    const labelRole = label && labels.roles ? labels.roles.get(rec.id) || null : null;
     const labelOffsetY = spot ? spot.offsetY : 0;
     const labelOffsetX = spot ? spot.offsetX || 0 : 0;
     const labelPx = spot ? spot.px : undefined;
@@ -577,12 +576,14 @@ export class SceneDraw extends SceneFrame {
       seconds: now / 1000,
       phase: pinned,
       life,
-      // WP-97 · sitting where the seat says: a desk, a sofa, or a crew's floor
-      // with the laptop's lid open exactly as far as its cable is live.
+      // WP-97 · sitting where the seat says: a desk, a sofa, or — a junior at
+      // work on the floor, in an arc or beside its lead — the carpet, with its
+      // laptop's lid open exactly as far as its transcript is moving (WP-99).
       seat: rigSeatOf(rec, pose),
-      laptop: rec.targetSeat?.crew ? crewCableLive(agent, now, { reduced: this._reduced }) : null,
+      laptop: rec.targetSeat?.junior ? crewCableLive(agent, now, { reduced: this._reduced }) : null,
       // Resolved once per frame by `_draw`'s collision pass; the rig gates it.
       label,
+      labelRole,
       labelOffsetY,
       labelOffsetX,
       labelPx,

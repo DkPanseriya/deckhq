@@ -148,10 +148,21 @@ export function isSubagent(agent) {
  * it"). Benching is the user saying "not at a desk", and a scan does not
  * overrule it. `junior-occupancy.test.mjs` holds both cases.
  *
+ * A LEAD WITH A JUNIOR STILL WORKING STAYS AT ITS OWN DESK (WP-99). Its turn
+ * has ended or its hand is up, so its state is a waiting one — but its session
+ * is not finished: it is waiting on its crew and will be woken by it. Sent to
+ * the reception it left three juniors working round an empty chair. This moves
+ * WHERE IT SITS and nothing else: its state, its badge, the needs-you counts
+ * and the queue are what they were. `let_go` and the user's bench still win,
+ * and when its last working junior ends it goes where its own state sends it.
+ * It is the one question here that needs a second agent, so it is asked only
+ * when the caller hands over the snapshot's index (`byId`).
+ *
  * @param {FloorAgent} agent
+ * @param {Map<string, FloorAgent>} [byId] `agentIndex` of the same snapshot
  * @returns {'desk'|'office'|'lounge'|'let_go'}
  */
-export function placement(agent) {
+export function placement(agent, byId) {
   if (agent.ackState === 'let_go') return 'let_go';
   // A JUNIOR IS PLACED BY ITS OWN STATE, NEVER BY ITS PARENT'S (bug 201). This
   // used to return `desk` for every junior, and `assignSeats` then stood each
@@ -164,9 +175,48 @@ export function placement(agent) {
   // takes is `assignSeats`'s question, and the parent only answers that one.
   if (agent.ackState === 'benched') return 'lounge';
   const state = agent.activityState;
-  if (/** @type {readonly string[]} */ (WAITING_STATES).includes(state)) return 'office';
+  if (/** @type {readonly string[]} */ (WAITING_STATES).includes(state)) {
+    return workingJuniorsOf(agent, byId) > 0 ? 'desk' : 'office';
+  }
   if (/** @type {readonly string[]} */ (AT_DESK_STATES).includes(state)) return 'desk';
   return 'lounge';
+}
+
+/** @type {WeakMap<object, Map<string, number>>|null} one walk an index, made on first use */
+let WORKING_JUNIORS = null;
+
+/**
+ * HOW MANY OF THIS LEAD'S JUNIORS ARE WORKING RIGHT NOW (WP-99) — observed,
+ * as everything about a junior is: a sub-agent on the snapshot whose parent
+ * this is and whose own state is `working`. A junior has no juniors of its
+ * own here, and without the index the answer is none.
+ * @param {FloorAgent} agent
+ * @param {Map<string, FloorAgent>} [byId] `agentIndex` of the same snapshot
+ * @returns {number}
+ */
+export function workingJuniorsOf(agent, byId) {
+  if (!agent || !byId || agent.id == null || isSubagent(agent)) return 0;
+  if (!WORKING_JUNIORS) WORKING_JUNIORS = new WeakMap();
+  let counts = WORKING_JUNIORS.get(byId);
+  if (!counts) {
+    counts = new Map();
+    for (const a of byId.values()) {
+      if (!isSubagent(a) || a.parentId == null) continue;
+      if (a.ackState !== 'active' || a.activityState !== 'working') continue;
+      counts.set(String(a.parentId), (counts.get(String(a.parentId)) || 0) + 1);
+    }
+    WORKING_JUNIORS.set(byId, counts);
+  }
+  return counts.get(String(agent.id)) || 0;
+}
+
+/**
+ * Is this lead at its desk only because its crew is still working — a waiting
+ * state, kept out of the reception by `placement`'s rule above?
+ * @param {FloorAgent} agent @param {Map<string, FloorAgent>} [byId]
+ */
+export function isSupervising(agent, byId) {
+  return !!agent && placement(agent) === 'office' && placement(agent, byId) === 'desk';
 }
 
 /**
@@ -263,9 +313,10 @@ export function isActiveAgent(agent) {
  * an `ended` session, which is in the lounge. It is what "desks equal agents at
  * desks" counts and what sizes a project room's tables.
  * @param {FloorAgent} agent
+ * @param {Map<string, FloorAgent>} [byId] `agentIndex`, for `placement`
  */
-export function isDeskAgent(agent) {
-  return !!agent && agent.ackState === 'active' && placement(agent) === 'desk';
+export function isDeskAgent(agent, byId) {
+  return !!agent && agent.ackState === 'active' && placement(agent, byId) === 'desk';
 }
 
 /**
@@ -278,9 +329,10 @@ export function isDeskAgent(agent) {
  * cannot each derive it. A junior is here only when it has raised its own
  * hand (`needs_input`), which is the one junior state `needsYou()` counts.
  * @param {FloorAgent} agent
+ * @param {Map<string, FloorAgent>} [byId] `agentIndex`, for `placement`
  */
-export function isWaitingAgent(agent) {
-  return !!agent && agent.ackState === 'active' && placement(agent) === 'office';
+export function isWaitingAgent(agent, byId) {
+  return !!agent && agent.ackState === 'active' && placement(agent, byId) === 'office';
 }
 
 /**
@@ -392,10 +444,10 @@ export function floorPopulation(agents, opts = {}) {
     // the lounge and a raised hand waits in the office, like anyone else, and
     // neither is in the formation the desk draws.
     if (isSubagent(a)) {
-      if (a.parentId != null && pid && isDeskAgent(a))
+      if (a.parentId != null && pid && isDeskAgent(a, byId))
         bump(juniorsPerParent, `${pid}\u0000${String(a.parentId)}`);
     } else if (a.id != null) {
-      seniorPlacement.set(String(a.id), placement(a));
+      seniorPlacement.set(String(a.id), placement(a, byId));
     }
     if (own) {
       known.add(own);
@@ -409,14 +461,14 @@ export function floorPopulation(agents, opts = {}) {
       continue;
     }
     if (a.ackState !== 'active') continue;
-    if (isWaitingAgent(a)) waiting++;
+    if (isWaitingAgent(a, byId)) waiting++;
     if (pid && isActiveAgent(a)) bump(active, pid);
-    if (pid && isDeskAgent(a)) bump(desks, pid);
+    if (pid && isDeskAgent(a, byId)) bump(desks, pid);
     // WP-78. An active session that is neither at a desk nor at the manager's
     // desk is resting in the lounge — `ended`, almost always. Counted PER
     // PROJECT because whether it is drawn at all still depends on whether its
     // project earned a room (`buildPlan`), which is not knowable here.
-    if (placement(a) === 'lounge') bump(resting, pid);
+    if (placement(a, byId) === 'lounge') bump(resting, pid);
   }
 
   // WP-89. The FORMATIONS, per project: the sizes of every crew big enough to
@@ -440,8 +492,9 @@ export function floorPopulation(agents, opts = {}) {
     // A formation happens at a DESK, and since bug 201 it happens whether or
     // not the parent is sitting at it: juniors that are working are in the
     // room, so their arc is too. With the parent at its desk the arc is in
-    // front of that desk, which is already counted. With the parent away —
-    // waiting on a sofa, benched, ended, gone — the arc is cabled to the
+    // front of that desk, which is already counted — and a lead waiting on its
+    // crew IS at its desk (`placement`, WP-99). With the parent away —
+    // benched, ended, gone — the arc is cabled to the
     // room's primary desk instead (`assignSeats`), and that desk is counted
     // here, empty, with the parent's name on it.
     const parentAtDesk = seniorPlacement.get(key.slice(cut + 1)) === 'desk';

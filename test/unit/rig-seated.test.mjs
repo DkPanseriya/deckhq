@@ -13,7 +13,13 @@ import {
   rigPoseFor,
   rigSeatedPose,
 } from '../../public/render/rig.js';
-import { STATE_COLORS, identityFor, appearanceFor } from '../../public/render/palette.js';
+import { PALETTE, STATE_COLORS, identityFor, appearanceFor } from '../../public/render/palette.js';
+import { LAPTOP_W, drawFloorLaptop, laptopBox } from '../../public/render/rig-laptop.js';
+import {
+  CONTACT_GROW_U,
+  SHORT_CONTACT_ALPHA,
+  alphaScaled,
+} from '../../public/render/backdrop-paint.js';
 import { clipDuration, sampleClip } from '../../public/render/clips.js';
 import { characterLife } from '../../public/render/life.js';
 import { rigSeatOf } from '../../public/render/agents.js';
@@ -184,8 +190,20 @@ test('FEET POINT: shadow, label and the soles stay put whatever the seat', () =>
           const widest = ellipses.reduce((a, b) => (b.args[2] > a.args[2] ? b : a));
           assert.equal(widest.args[0], ORIGIN.x, `${where}: the shadow moved in x`);
           assert.equal(widest.args[1], ORIGIN.y, `${where}: the shadow moved in y`);
-          // Nothing hangs below the feet…
-          const pts = outline(calls);
+          // Nothing of the BODY hangs below the feet. A floor sitter's laptop
+          // lies on the carpet in front of them (WP-99), which is below the
+          // feet point by construction; it is held to its own box further down.
+          const deck = seat === 'floor' ? laptopBox(ORIGIN.x, ORIGIN.y, u) : null;
+          // Its contact shadow is the box grown by `CONTACT_GROW_U`.
+          const pad = CONTACT_GROW_U * u + 1e-6;
+          const pts = outline(calls).filter(
+            (p) =>
+              !deck ||
+              p.y < deck.y - pad ||
+              p.x < deck.x - pad ||
+              p.x > deck.x + deck.w + pad ||
+              p.y > deck.y + deck.h + pad,
+          );
           const bottom = Math.max(...pts.map((p) => p.y));
           assert.ok(
             bottom <= ORIGIN.y + h * 0.02,
@@ -345,7 +363,7 @@ test('LIFE: typing, the wave, the page flip and the slump are still that many pi
   }
 });
 
-test('LIFE: the laptop on a crew member’s knees folds with its cable', () => {
+test('LIFE: the laptop in front of a junior on the floor folds with its cable', () => {
   const open = frame('floor', 'working', 'type', 0, 1);
   const half = frame('floor', 'working', 'type', 0, 0.5);
   const shut = frame('floor', 'working', 'type', 0, 0);
@@ -355,6 +373,60 @@ test('LIFE: the laptop on a crew member’s knees folds with its cable', () => {
   assert.equal(frame('floor', 'working', 'type', 0, undefined), open);
   // And only the floor has one.
   assert.equal(frame('desk', 'working', 'type', 0, 1), frame('desk', 'working', 'type', 0, 0));
+});
+
+test('WP-99: the laptop lies in front of the feet, inside its own box, in token colours', () => {
+  for (const u of [6.4, 10, 20, 34]) {
+    for (const lod of [0, 1, 2]) {
+      const box = laptopBox(ORIGIN.x, ORIGIN.y, u);
+      const where = `u ${u}, lod ${lod}`;
+      // In front of the sitter and centred on it, clear of the name under it.
+      assert.ok(box.y >= ORIGIN.y, `${where}: the laptop is behind the feet`);
+      assert.equal(box.x + box.w / 2, ORIGIN.x);
+      const name = labelBox(recorder().ctx, ORIGIN.x, ORIGIN.y, u, 'Vera');
+      assert.ok(box.y + box.h <= name.y, `${where}: the laptop is under the name`);
+      // A share of the figure, so it is one size against its junior at any fit.
+      assert.equal(box.w, LAPTOP_W * rigHeight(u));
+
+      const { calls, ctx } = recorder();
+      drawFloorLaptop(ctx, ORIGIN.x, ORIGIN.y, u, 1, /** @type {0|1|2} */ (lod));
+      const fills = new Set();
+      for (const c of calls) {
+        if (c.name === 'fill' || c.name === 'fillRect') fills.add(c.fill);
+        if (c.name !== 'fillRect') continue;
+        const [x, y, w, h] = c.args;
+        assert.ok(
+          x >= box.x - 1e-6 && x + w <= box.x + box.w + 1e-6,
+          `${where}: light off the deck`,
+        );
+        assert.ok(
+          y >= box.y - 1e-6 && y + h <= box.y + box.h + 1e-6,
+          `${where}: light off the deck`,
+        );
+      }
+      // The screen is the working tone itself; the shell and the lid are the
+      // floor's own furniture tokens. Nothing else is a colour of the laptop's.
+      assert.ok(fills.has(STATE_COLORS.working), `${where}: no screen in the working tone`);
+      const known = new Set([
+        STATE_COLORS.working,
+        PALETTE.furnitureMetal,
+        PALETTE.monitorBody,
+        // The contact shadow, as `contactUnder` paints one under a laid thing.
+        alphaScaled(PALETTE.shadowContact, SHORT_CONTACT_ALPHA),
+      ]);
+      for (const f of fills) assert.ok(known.has(f), `${where}: a colour that is no token, ${f}`);
+      // The shadow is the floor's own helper's, and only where it can be seen.
+      assert.equal(fills.has(alphaScaled(PALETTE.shadowContact, SHORT_CONTACT_ALPHA)), lod >= 1);
+      // Shut, there is no light on it at all.
+      const shut = recorder();
+      drawFloorLaptop(shut.ctx, ORIGIN.x, ORIGIN.y, u, 0, /** @type {0|1|2} */ (lod));
+      assert.equal(
+        shut.calls.some((c) => c.fill === STATE_COLORS.working),
+        false,
+        `${where}: a folded laptop is lit`,
+      );
+    }
+  }
 });
 
 // ------------------------------------------------------------ who sits where
@@ -369,13 +441,19 @@ test('SEATING: the floor tells the rig where each figure sits', () => {
   // Lounge: the clip says whether its activity sits.
   assert.equal(rigSeatOf(rec({ placement: 'lounge', seated: false }), sitting), 'sofa');
   assert.equal(rigSeatOf(rec({ placement: 'lounge', seated: false }), standing), null);
-  // Bare carpet: a queue place, an overflow ring, a junior beside its parent.
+  // Bare carpet, standing: a queue place and an overflow ring.
   assert.equal(
     rigSeatOf(rec({ placement: 'office', seated: false, targetSeat: { standing: true } })),
     null,
   );
   assert.equal(rigSeatOf(rec({ targetSeat: { overflow: true } })), null);
-  assert.equal(rigSeatOf(rec({ targetSeat: { junior: true } })), null);
+  // WP-99 · a junior beside its lead is on bare carpet too, and SITS on it
+  // with its laptop, exactly as one in an arc does. A junior given a real desk
+  // or a sofa place has an ordinary seat and sits in the furniture.
+  assert.equal(rigSeatOf(rec({ targetSeat: { junior: true } })), 'floor');
+  assert.equal(rigSeatOf(rec({ targetSeat: { junior: true }, seated: false })), 'floor');
+  assert.equal(rigSeatOf(rec({ targetSeat: { x: 1, y: 2 } })), 'desk');
+  assert.equal(rigSeatOf(rec({ targetSeat: { junior: true }, path: [{ x: 1, y: 2 }] })), null);
   // Walking, nobody sits; and a record that is not there sits nowhere.
   assert.equal(rigSeatOf(rec({ path: [{ x: 1, y: 2 }] })), null);
   assert.equal(rigSeatOf(null), null);

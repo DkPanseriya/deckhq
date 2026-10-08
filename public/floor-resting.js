@@ -19,7 +19,7 @@
  * the caller hands over.
  */
 
-import { awayRooms, floorPopulation, offTheFloor, placement } from './floor-rule.js';
+import { agentIndex, awayRooms, floorPopulation, offTheFloor, placement } from './floor-rule.js';
 
 /** @typedef {import('./floor-rule.js').FloorAgent} FloorAgent */
 
@@ -32,8 +32,11 @@ import { awayRooms, floorPopulation, offTheFloor, placement } from './floor-rule
  * @returns {FloorAgent[]}
  */
 export function restingOrder(agents, hidden) {
-  const list = (Array.isArray(agents) ? agents : []).filter(
-    (a) => a && placement(a) === 'lounge' && !(hidden && hidden.has(String(a.id))),
+  const all = Array.isArray(agents) ? agents : [];
+  // The same question the floor asks, with the same index (`placement`).
+  const byId = agentIndex(all);
+  const list = all.filter(
+    (a) => a && placement(a, byId) === 'lounge' && !(hidden && hidden.has(String(a.id))),
   );
   const at = (/** @type {any} */ a) => Number(a.lastActivityAt) || 0;
   return list.sort((a, b) => at(b) - at(a) || String(a.id).localeCompare(String(b.id)));

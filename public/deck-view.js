@@ -21,6 +21,7 @@
  */
 
 import { now as clockNow } from './clock.js';
+import { bareName, roleWordFor } from './names.js';
 
 // ---------------------------------------------------------------- ordering
 
@@ -440,9 +441,13 @@ function buildRow(agent, opts, doc) {
   const whoCell = doc.createElement('th');
   whoCell.setAttribute('scope', 'row');
   whoCell.className = 'deck-who';
+  // WP-99 · a sub-agent wears its role here in the word its tag on the floor
+  // wears, and its name under that word is the name without the mark.
+  const role = roleWordFor(agent);
+  if (role) whoCell.appendChild(roleChip(role, doc));
   const whoName = doc.createElement('span');
   whoName.className = 'deck-name';
-  whoName.textContent = cut(who(agent), 20);
+  whoName.textContent = cut(role ? bareName(who(agent)) : who(agent), 20);
   whoCell.appendChild(whoName);
   if (agent.mk) {
     const mk = doc.createElement('span');
@@ -572,6 +577,19 @@ export function renderRestingTable(agents, opts, doc) {
 }
 
 /**
+ * The role word as the deck sets it: the floor's chip, in a row (WP-99).
+ * @param {string} role @param {{createElement:(tag:string)=>any}} doc
+ */
+function roleChip(role, doc) {
+  const chip = doc.createElement('span');
+  chip.className = 'deck-role';
+  // A real space after the word: a screen reader reads the text, and
+  // `JuniorMarta` is one word to it. The chip's own box drops it on screen.
+  chip.textContent = `${role} `;
+  return chip;
+}
+
+/**
  * ONE CREW, AS ONE ROW UNDER ITS PARENT (WP-89 §3.2).
  *
  * A `<details>` whose summary is the count and whose body is one line per
@@ -600,7 +618,11 @@ function buildCrewRow(parent, crew, doc) {
     const li = doc.createElement('li');
     li.setAttribute('data-id', String(junior.id));
     const type = junior.subagentType ? `${junior.subagentType} · ` : '';
-    li.textContent = `${type}${cut(who(junior), 28)}`;
+    const role = roleWordFor(junior);
+    if (role) li.appendChild(roleChip(role, doc));
+    const said = doc.createElement('span');
+    said.textContent = `${type}${cut(role ? bareName(who(junior)) : who(junior), 28)}`;
+    li.appendChild(said);
     list.appendChild(li);
   }
   details.appendChild(list);

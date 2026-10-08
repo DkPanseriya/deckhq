@@ -79,6 +79,46 @@ export const FROZEN_POOL = 243;
  */
 export const JUNIOR_MARK = '·jr';
 
+/**
+ * THE ROLE WORD A SUB-AGENT WEARS (WP-99): the first row of its name tag on
+ * the floor, and the same word in the tooltip, the deck's rows and a crew's
+ * list, so the floor and the panels cannot say two things about one figure.
+ *
+ * ONE WORD, AND IT IS `Junior`. The owner asked for a second, `Intern`, for a
+ * sub-agent started as a background task. Nothing the daemon reads says which
+ * those are: a sub-agent is found as a transcript under its parent's
+ * `subagents/` folder with an optional sidecar (`parse.mjs`'s
+ * `parseSubagentMeta`), and no sidecar key says background — the shapes are
+ * counted there. The flag exists only on the PARENT's spawning tool call, and
+ * joining a junior to that call needs the sidecar's `toolUseId`, which most
+ * sidecars do not carry, and the call's own record, which lies outside the
+ * head-and-tail windows the scan reads of a parent. So every sub-agent is a
+ * `Junior`, and nothing is guessed from a name or a type.
+ */
+export const JUNIOR_ROLE = 'Junior';
+
+/**
+ * The role word for an agent, or null for a session of its own (a lead).
+ * @param {{subagent?: boolean}|null|undefined} agent
+ * @returns {string|null}
+ */
+export function roleWordFor(agent) {
+  return agent && agent.subagent === true ? JUNIOR_ROLE : null;
+}
+
+/**
+ * A name without the junior mark: `Marta·jr` → `Marta`. What is written beside
+ * or under the role word, which already says what the mark said.
+ * @param {unknown} label
+ * @returns {string}
+ */
+export function bareName(label) {
+  const s = String(label ?? '');
+  return s.endsWith(JUNIOR_MARK) && s.length > JUNIOR_MARK.length
+    ? s.slice(0, -JUNIOR_MARK.length)
+    : s;
+}
+
 export const SHORT_NAMES = Object.freeze([
   'Marco',
   'Tai',
