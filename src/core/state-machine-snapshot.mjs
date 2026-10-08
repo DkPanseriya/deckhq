@@ -13,7 +13,8 @@
  * registries and diffs both.
  */
 
-import { counts, projects as projectsOf } from './model.mjs';
+import { counts, projectIdFromCwd, projects as projectsOf } from './model.mjs';
+import { aliasesOf, foldByRepo, legacyIdsOf } from './project-of.mjs';
 import { fixedNow, now as clockNow } from './clock.mjs';
 import { LEDGER_TOKENS_VERSION, projectKeyFor } from './ledger.mjs';
 import { buildDemoSnapshot } from './demo-fixture.mjs';
@@ -94,7 +95,7 @@ export class RegistrySnapshot extends RegistryBase {
       // §155. `identityId`, not `id`. They are the same for every agent that has never been
       // resumed; where they differ the agent is the live end of a resume chain and wears the
       // chain's earliest identity, so the name the user learned survives the new session id.
-      const id = this.identity.describe(a.identityId || a.id, a.projectId);
+      const id = this.identity.describe(a.identityId || a.id, this._numberedProjectOf(a));
       described.set(a.id, id);
       return { ...a, ...id };
     });
@@ -111,7 +112,11 @@ export class RegistrySnapshot extends RegistryBase {
         agents[i] = { ...a, ...id };
       });
     }
-    const todayTokens = this.ledger ? this.ledger.todayTokens() : {};
+    // A WORKTREE IS NOT A PROJECT, and neither rewrite below touches the disk:
+    // what a worktree's sessions spent today is added to their repository's, and
+    // a pin made on a worktree's old room holds its repository's.
+    const aliases = this.projectAliases();
+    const todayTokens = foldByRepo(this.ledger ? this.ledger.todayTokens() : {}, aliases.keys);
     // WP-30. `roomOrder?.()` because a Registry is routinely constructed over
     // a hand-rolled store stub in the test suite, and a snapshot must not
     // depend on a method whose absence means "no imported layout" anyway.
@@ -127,7 +132,9 @@ export class RegistrySnapshot extends RegistryBase {
       // nothing running in it, at a third of a live room's footprint. Read
       // here rather than derived anywhere else, exactly as `archived` is — the
       // floor and the idle list both ask the snapshot.
-      const pinned = this.store.isProjectPinned?.(p.id) === true;
+      const pinned =
+        this.store.isProjectPinned?.(p.id) === true ||
+        legacyIdsOf(aliases.ids, p.id).some((old) => this.store.isProjectPinned?.(old) === true);
       const today = todaySpendFor(p, todayTokens);
       // WP-83. The same day tally, in tokens rather than in dollars — the room
       // plate's third line when `settings.showCost` is off, which is how it
@@ -180,6 +187,41 @@ export class RegistrySnapshot extends RegistryBase {
       // sent as three zeros.
       ...this._healthBlock(),
     };
+  }
+
+  /**
+   * What the sessions' projects used to be called, mapped to their repository
+   * (`project-of.mjs`): the map pins and ledger records are read through.
+   * Derived from the agent list and kept until that list is replaced.
+   * @returns {{ids: Record<string, string>, keys: Record<string, string>}}
+   */
+  projectAliases() {
+    if (this._aliasesFor !== this._agents || !this._aliases) {
+      this._aliases = aliasesOf(this._agents || []);
+      this._aliasesFor = this._agents;
+    }
+    return this._aliases;
+  }
+
+  /**
+   * The ledger's key for the project a directory is in: its repository's.
+   * @param {string} cwd
+   */
+  _projectKeyOf(cwd) {
+    const p = this._projectsByCwd.get(String(cwd || ''));
+    return projectKeyFor(p ? p.repoRoot : cwd);
+  }
+
+  /**
+   * The project an agent's MK number counts in. The repository's — except for a
+   * session that was already numbered while its worktree was a project of its
+   * own: it keeps the tag the user learned, because moving it would hand it a
+   * number somebody in the repository's room may already wear.
+   * @param {Agent} a
+   */
+  _numberedProjectOf(a) {
+    const was = this.identity.numberedIn?.(a.identityId || a.id);
+    return was && was !== a.projectId && was === projectIdFromCwd(a.cwd) ? was : a.projectId;
   }
 
   /**
@@ -362,7 +404,7 @@ export class RegistrySnapshot extends RegistryBase {
       for (const a of prev) before.set(a.id, a);
 
       for (const a of next) {
-        const projectKey = projectKeyFor(a.cwd);
+        const projectKey = projectKeyFor(a.repoRoot || a.cwd);
         const base = { sessionId: a.id, projectKey };
         const was = before.get(a.id);
 
@@ -459,7 +501,7 @@ export class RegistrySnapshot extends RegistryBase {
     const agent = this._agents.find((a) => a.id === id);
     this._ledger('send', {
       sessionId: id,
-      projectKey: projectKeyFor(agent ? agent.cwd : ''),
+      projectKey: projectKeyFor(agent ? agent.repoRoot || agent.cwd : ''),
       chars: Number(info.chars) || 0,
     });
   }

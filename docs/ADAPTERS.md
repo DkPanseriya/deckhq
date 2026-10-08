@@ -110,6 +110,24 @@ no argument is legal and the type gate enforces the `= {}` default.
 - **A parse failure on one session never fails the scan.** Log it, skip it, continue.
 - **`cwd` is what puts a session in a room.** Get it right or return `'unknown'`; never guess.
   Guessing puts an agent in somebody else's project.
+- **Report the directory the session is really in, worktree or not.** An adapter does not resolve
+  repositories and must not run git to try. The registry does it for every runtime, from files
+  alone (`src/core/repo-root.mjs`): it walks up from `cwd` to the nearest `.git`, and where that is
+  a linked worktree's `.git` file it follows `gitdir` and `commondir` to the main checkout. Every
+  agent on the snapshot then carries, beside the `cwd` you reported:
+
+  | field | what it is |
+  | --- | --- |
+  | `projectId`, `projectName` | the **repository's** id and name — the room key |
+  | `repoId`, `repoName` | the same two values, under the name that says what they are |
+  | `repoRoot` | the repository's working directory |
+  | `worktree` | `{ name, path, branch }` in a linked worktree, `null` in the main checkout |
+
+  `worktree.branch` is the `gitBranch` your adapter reported for that session, or `null`; nothing
+  else supplies it. A session whose directory has no readable `.git` above it is its own project,
+  with `repoRoot` equal to its `cwd`. Measured on Windows against the maintainer's own floor (41
+  projects became 20); on macOS and Linux only the hand-built layouts in
+  `test/unit/repo-root.test.mjs` have been run.
 - **Never fabricate a number.** If the runtime does not report tokens, report `0` and say so in the
   changelog as a known gap. `costEstimate` comes from `estimateCost()`, which returns `null` — not
   `$0.00` — when the rate card has no row for the model.

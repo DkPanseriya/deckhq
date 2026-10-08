@@ -38,6 +38,7 @@ import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
 import { CREW_SCALE, crewCableLive } from './crew.js';
 import { drawCrews } from './crew-draw.js';
+import { drawWorktreeLabels } from './worktree-draw.js';
 
 /** How long a re-plan cross-fades for. Skipped under reduced motion. */
 export const REPLAN_FADE_MS = 260;
@@ -530,6 +531,9 @@ export class SceneDraw extends SceneHit {
         return parent ? parent.targetSeat : null;
       },
     });
+
+    // The name on each worktree's bench, under the bodies like the cables.
+    drawWorktreeLabels(ctx, { benches: this._plan && this._plan.worktreeBenches, camera, charU });
 
     for (const rec of records) {
       this._drawCharacterAt(rec, camera, lod, labels, badgePlan);

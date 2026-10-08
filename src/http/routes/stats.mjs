@@ -51,6 +51,7 @@ import {
   records as teamRecords,
   windowDigest,
 } from '../../core/ledger.mjs';
+import { rekeyRecords } from '../../core/project-of.mjs';
 import { WINDOWS, usageReport } from '../../core/usage.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
 
@@ -84,7 +85,9 @@ export function register(router, ctx) {
       // Everything, not the window: an episode that began before `since` is
       // still measured from where it began, and "ever" means ever. Bounded by
       // retention — see ledger.mjs `readAll`.
-      const records = await readAll(ledger.dir);
+      // A record written while a worktree was a project of its own is counted
+      // under its repository, on read; the ledger itself is never rewritten.
+      const records = rekeyRecords(await readAll(ledger.dir), registry?.projectAliases?.().keys);
       const stats = computeStats(records, { now, since });
 
       // WP-83. The same fold the deck's Usage tab and `deckhq stats` read, so

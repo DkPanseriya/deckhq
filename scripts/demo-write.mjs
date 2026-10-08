@@ -46,13 +46,13 @@ export function rmrf(dir) {
  * turn finished and the session is up for review. Anything mid-turn ends on a
  * `tool_use` instead.
  */
-export function writeTranscript({ id, cwd, title, ageHours, tokensM, finished }) {
+export function writeTranscript({ id, cwd, title, ageHours, tokensM, finished, gitBranch }) {
   const dir = path.join(PROJECTS_DIR, slugForCwd(cwd));
   fs.mkdirSync(dir, { recursive: true });
 
   const end = NOW - ageHours * HOUR;
   const at = (offsetMs) => new Date(end + offsetMs).toISOString();
-  const base = { cwd, gitBranch: 'main', sessionId: id, version: '2.0.0' };
+  const base = { cwd, gitBranch: gitBranch || 'main', sessionId: id, version: '2.0.0' };
 
   const inputTokens = Math.round(tokensM * 1_000_000 * 0.08);
   const outputTokens = Math.round(tokensM * 1_000_000 * 0.02);

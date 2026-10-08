@@ -61,6 +61,7 @@ import { now as clockNow } from '../../core/clock.mjs';
 import { DATA_DIR } from '../../core/paths.mjs';
 import { samePath } from '../../core/same-path.mjs';
 import { projectKeyFor } from '../../core/ledger-record.mjs';
+import { projectOf } from '../../core/project-of.mjs';
 import { StudioPathError } from '../../studio/paths.mjs';
 import { StudioStore } from '../../studio/store.mjs';
 import { COLUMNS, MAX_CARDS, appendMove, validateBoard } from '../../studio/schema.mjs';
@@ -142,6 +143,16 @@ export function plannerAmong(agents, root, taken) {
  * @returns {{root:string, projectKey:string}|{error:string}}
  */
 export function resolveProject(raw) {
+  /** The repository's own directory, when the directory is in one that exists. */
+  const repositoryOf = (/** @type {string} */ dir) => {
+    const home = projectOf(dir).repoRoot;
+    if (!home || samePath(home, dir)) return dir;
+    try {
+      return fs.statSync(home).isDirectory() ? path.resolve(home) : dir;
+    } catch {
+      return dir;
+    }
+  };
   const value = typeof raw === 'string' ? raw.trim() : '';
   if (!value) return { error: 'a project directory is required' };
   if (value.includes('\0')) return { error: 'that is not a path' };
@@ -156,7 +167,11 @@ export function resolveProject(raw) {
     return { error: `${root} does not exist` };
   }
   if (!stat.isDirectory()) return { error: `${root} is not a directory` };
-  return { root, projectKey: projectKeyFor(root) };
+  // A WORKTREE IS NOT A PROJECT. Studio is enabled on a repository, so a request
+  // that names one of its worktrees, or a directory inside it, means the
+  // repository: one consent, one board and one roster for all of its checkouts.
+  const home = repositoryOf(root);
+  return { root: home, projectKey: projectKeyFor(home) };
 }
 
 /**

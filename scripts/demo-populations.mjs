@@ -30,6 +30,16 @@ import { PACK_FILE, POPULATION, THEME } from './demo-args.mjs';
  *
  * Rows are `[project, title, state, ageHours, tokensM]`.
  */
+/** Where Claude Code keeps the worktrees it makes, under a repository. */
+export const WORKTREES_AT = '.claude/worktrees';
+
+/**
+ * The branch each of the `worktrees` population's worktrees is on. One that is
+ * not listed is a detached checkout, and its bench is named for its directory.
+ * @type {Record<string, string>}
+ */
+export const WORKTREE_BRANCHES = { 'eager-hopper-3f2a1c': 'fix/refund-rows' };
+
 /** @type {Array<[string, string, string, number, number]>} */
 export const DEMO_SESSIONS = [
   // orbital-api — the busy room: someone working, someone with a hand up.
@@ -337,6 +347,51 @@ export const POPULATIONS = {
         0.3,
       ]);
     }),
+  ],
+  /**
+   * A WORKTREE IS NOT A PROJECT. One repository with somebody in its main
+   * checkout and four sessions in two linked worktrees of it, and one other
+   * repository. Two rooms, not four: `orbital-api` has a desk for the main
+   * checkout and a bench against its foot wall for each worktree — two people
+   * at one, named for its branch, and one at the other, named for its
+   * directory because its checkout is detached. The fourth worktree session has
+   * finished its turn, so it is on a sofa in the office and not at its bench.
+   *
+   * The worktree directories are never created: Claude Code removes one when
+   * its session ends, and the floor recognises it by its path
+   * (`src/core/repo-root.mjs`).
+   */
+  worktrees: () => [
+    ['orbital-api', 'Rate limiter for the public API', 'working', 0.4, 0.4],
+    [
+      `orbital-api/${WORKTREES_AT}/eager-hopper-3f2a1c`,
+      'Backfill the events table',
+      'working',
+      0.6,
+      1.6,
+    ],
+    [
+      `orbital-api/${WORKTREES_AT}/eager-hopper-3f2a1c`,
+      'Fixtures for the re-run',
+      'working',
+      0.3,
+      0.9,
+    ],
+    [
+      `orbital-api/${WORKTREES_AT}/brave-turing-91d0e4`,
+      'Flaky websocket reconnect',
+      'working',
+      0.8,
+      0.9,
+    ],
+    [
+      `orbital-api/${WORKTREES_AT}/brave-turing-91d0e4`,
+      'Paginate the audit log',
+      'for_review',
+      2.5,
+      0.7,
+    ],
+    ['checkout-flow', 'Apple Pay in the express lane', 'working', 1.2, 2.2],
   ],
   /** A heavy machine: 137 sessions in 40 repos, plus a 13-member crew. */
   large: largeSessions,

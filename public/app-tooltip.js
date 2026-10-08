@@ -13,6 +13,7 @@
 import { recordLineFor } from './records.js';
 import { STATE_LABELS, el, findAgent, formatNumber, palette, panel } from './app-state.js';
 import { now as clockNow } from './clock.js';
+import { whereOf } from './floor-worktrees.js';
 
 let lastMouse = { x: 0, y: 0 };
 
@@ -113,7 +114,7 @@ export function showTooltip(agentId) {
 
   el.tooltip.appendChild(
     tooltipLine(
-      [agent.projectName, agent.model || 'unknown model', agent.gitBranch]
+      [...whereOf(agent), agent.model || 'unknown model', agent.gitBranch]
         .filter(Boolean)
         .join(' · '),
     ),

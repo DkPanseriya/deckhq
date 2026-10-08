@@ -12,7 +12,7 @@
  * timestamp that was absent; nothing in this file clears one.
  */
 
-import { splitAgentId, projectIdFromCwd, projectNameFromCwd, clampText } from './model.mjs';
+import { splitAgentId, clampText } from './model.mjs';
 
 /** @typedef {import('./model.mjs').Agent} Agent */
 /** @typedef {import('./model.mjs').ActivityState} ActivityState */
@@ -33,6 +33,8 @@ import {
 } from './state-machine-rules.mjs';
 import { copyBreakdown } from './usage.mjs';
 import { now as clockNow } from './clock.mjs';
+import { projectOf } from './project-of.mjs';
+import path from 'node:path';
 
 export class RegistryCompute extends RegistrySnapshot {
   /**
@@ -77,14 +79,38 @@ export class RegistryCompute extends RegistrySnapshot {
       } else if (ackRec && ackRec.needsInputSince != null) {
         obs.activityState = 'needs_input';
       }
-      if (cwd) {
-        obs.cwd = cwd;
-        obs.projectId = projectIdFromCwd(cwd);
-        obs.projectName = projectNameFromCwd(cwd);
-      }
+      if (cwd) this._placeIn(obs, cwd);
       this._observed.set(id, obs);
     }
     return obs;
+  }
+
+  /**
+   * Put an observation in its project: the REPOSITORY its directory belongs
+   * to, and the worktree of it when the directory is a linked one. Read from
+   * the scan's own map, which resolved every directory once (`project-of.mjs`);
+   * a directory first heard of between scans is resolved here and kept.
+   * @param {any} obs
+   * @param {string} cwd
+   */
+  _placeIn(obs, cwd) {
+    const dir = String(cwd || '');
+    let p = this._projectsByCwd.get(dir);
+    if (!p) {
+      p = projectOf(dir, { stateDir: this._stateDir() });
+      this._projectsByCwd.set(dir, p);
+    }
+    obs.cwd = cwd;
+    obs.projectId = p.projectId;
+    obs.projectName = p.projectName;
+    obs.repoRoot = p.repoRoot;
+    obs.worktree = p.worktree;
+  }
+
+  /** DeckHQ's own data directory, where Studio keeps its hires' worktrees. */
+  _stateDir() {
+    const file = this.store && typeof this.store.file === 'string' ? this.store.file : '';
+    return file ? path.dirname(file) : '';
   }
 
   /** @param {string} runtime */
@@ -156,9 +182,7 @@ export class RegistryCompute extends RegistrySnapshot {
       if (summary) {
         obs.title = summary.title;
         obs.hasCustomTitle = !!summary.hasCustomTitle;
-        obs.cwd = summary.cwd;
-        obs.projectId = projectIdFromCwd(summary.cwd);
-        obs.projectName = projectNameFromCwd(summary.cwd);
+        this._placeIn(obs, summary.cwd);
         obs.gitBranch = summary.gitBranch ?? null;
         obs.model = summary.model ?? null;
         obs.tokens = summary.tokens || 0;
@@ -313,6 +337,15 @@ export class RegistryCompute extends RegistrySnapshot {
         projectId: obs.projectId || 'unknown',
         projectName: obs.projectName || 'unknown',
         cwd: obs.cwd || '',
+        // A WORKTREE IS NOT A PROJECT. `projectId` is the repository's, and
+        // `repoId`/`repoName` say so by name; `worktree` is set only in a
+        // LINKED worktree, with the branch the session itself reported.
+        repoId: obs.projectId || 'unknown',
+        repoName: obs.projectName || 'unknown',
+        repoRoot: obs.repoRoot || obs.cwd || '',
+        worktree: obs.worktree
+          ? { name: obs.worktree.name, path: obs.worktree.path, branch: obs.gitBranch ?? null }
+          : null,
         gitBranch: obs.gitBranch,
         model: obs.model,
         live,

@@ -34,14 +34,8 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { CACHE_DIR, STATE_FILE } from '../core/paths.mjs';
-import {
-  ACK_STATES,
-  counts as countsOf,
-  needsYou,
-  projectIdFromCwd,
-  projectNameFromCwd,
-  splitAgentId,
-} from '../core/model.mjs';
+import { ACK_STATES, counts as countsOf, needsYou, splitAgentId } from '../core/model.mjs';
+import { projectOf, resolveProjects } from '../core/project-of.mjs';
 import { withoutDemoAgents } from '../core/demo-fixture.mjs';
 
 /** The port the daemon prefers, and how far it walks when that one is taken. */
@@ -352,6 +346,11 @@ export function readOffline(opts = {}) {
   /** @type {Map<string, any>} */
   const byId = new Map();
   for (const s of summaries) byId.set(s.id, s);
+  const stateDir = path.dirname(opts.stateFile || STATE_FILE);
+  const placedByCwd = resolveProjects(
+    summaries.map((s) => String(s.cwd || '')),
+    { stateDir },
+  );
 
   const ids = new Set(byId.keys());
   for (const [id, rec] of Object.entries(state.ack)) {
@@ -375,8 +374,10 @@ export function readOffline(opts = {}) {
       reviewSince != null ? 'for_review' : needsInputSince != null ? 'needs_input' : 'ended';
 
     const cwd = summary ? summary.cwd : '';
-    const projectId = cwd
-      ? projectIdFromCwd(cwd)
+    // The repository the directory is in, as the daemon places it.
+    const placed = cwd ? placedByCwd.get(cwd) || projectOf(cwd) : null;
+    const projectId = placed
+      ? placed.projectId
       : typeof state.identity.projectOf[id] === 'string'
         ? state.identity.projectOf[id]
         : 'unknown';
@@ -388,7 +389,11 @@ export function readOffline(opts = {}) {
       title: summary ? summary.title : '',
       cwd,
       projectId,
-      projectName: cwd ? projectNameFromCwd(cwd) : projectId,
+      projectName: placed ? placed.projectName : projectId,
+      repoId: projectId,
+      repoName: placed ? placed.projectName : projectId,
+      repoRoot: placed ? placed.repoRoot : cwd,
+      worktree: placed && placed.worktree ? { ...placed.worktree, branch: null } : null,
       live: false,
       activityState,
       ackState,

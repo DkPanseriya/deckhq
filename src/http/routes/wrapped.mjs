@@ -35,6 +35,7 @@
  */
 import { sendError, sendJson } from '../server.mjs';
 import { projectKeyFor, readAll, windowDigest } from '../../core/ledger.mjs';
+import { rekeyRecords } from '../../core/project-of.mjs';
 import { catchphraseCount } from '../../adapters/index.mjs';
 import { rateCardVersion } from '../../core/rates.mjs';
 import { now as clockNow } from '../../core/clock.mjs';
@@ -170,7 +171,9 @@ export function register(router, ctx) {
 
     try {
       const bounds = wrappedWindow(/** @type {'week'|'annual'} */ (kind), at);
-      const records = await readAll(ledger.dir);
+      // A record written while a worktree was a project of its own is counted
+      // under its repository, on read; the ledger itself is never rewritten.
+      const records = rekeyRecords(await readAll(ledger.dir), registry?.projectAliases?.().keys);
       const window = windowDigest(records, { since: bounds.since, until: bounds.until });
       const previous = windowDigest(records, {
         since: bounds.previousSince,

@@ -61,7 +61,8 @@ export function register(router, ctx) {
       return sendError(res, 400, 'day must be a YYYY-MM-DD date');
     }
     try {
-      const replay = await readReplay(ledger.dir, { day });
+      const keys = ctx.registry?.projectAliases?.().keys;
+      const replay = await readReplay(ledger.dir, { day, keys });
       sendJson(res, 200, { ...replay, projects: projectNames() });
     } catch (err) {
       ctx.log.warn('replay failed', err.message);

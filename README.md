@@ -47,7 +47,7 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
 
 - **Every session, not only the live ones.** `claude agents` lists what is _running_. DeckHQ reads
   every transcript on disk, so a session that finished an hour ago is still on the floor with what
-  it last said.
+  it last said. One room per repository: a git worktree is a bench in it, not a room of its own.
 - **A queue only you can clear.** What a session is doing changes on its own. What you owe it
   changes when you press a button. Opening a conversation does not clear it; scrolling past it does
   not clear it; reading it does not clear it.

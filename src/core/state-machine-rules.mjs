@@ -128,6 +128,10 @@ export function freshObserved(runtime) {
     cwd: '',
     projectId: 'unknown',
     projectName: 'unknown',
+    /** The repository's working directory (`project-of.mjs`). */
+    repoRoot: '',
+    /** @type {{name: string, path: string}|null} the linked worktree it is in */
+    worktree: null,
     gitBranch: /** @type {string|null} */ (null),
     model: /** @type {string|null} */ (null),
     tokens: 0,
@@ -354,6 +358,7 @@ export function changeKey(agents) {
     const tool = a.currentTool;
     const split = a.tokenBreakdown;
     const pending = a.pendingPermission;
+    const wt = a.worktree;
     key +=
       K +
       a.id +
@@ -440,7 +445,17 @@ export function changeKey(agents) {
       K +
       a.identityId +
       K +
-      (a.supersedes ? a.supersedes.length + K + a.supersedes.join(',') : '');
+      (a.supersedes ? a.supersedes.length + K + a.supersedes.join(',') : '') +
+      // A worktree is not a project. The room key is the repository's, and
+      // which bench in that room a session sits at is the worktree's.
+      K +
+      a.repoId +
+      K +
+      text(a.repoName) +
+      K +
+      text(a.repoRoot) +
+      K +
+      (wt ? text(wt.name) + K + text(wt.path) + K + wt.branch : '');
   }
   return key;
 }

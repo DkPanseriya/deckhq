@@ -34,6 +34,24 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Changed
 
+- **A worktree is not a project.** Starting work in another git worktree used to put a new room on
+  the floor, named after the worktree's folder — `awesome-franklin-2d1495`,
+  `agent-a0fedbce8c57e1bf9`. A room is a repository now. Every session in any worktree of a
+  repository is in that repository's one room, on its plate's counts, and in its line of the idle
+  list, the deck, the usage tables and Studio. Inside the room, the sessions **working** in a
+  worktree share a bench against the foot wall, one bench per worktree, with the worktree's branch
+  written on it (its folder name where the checkout is detached). The main checkout keeps the
+  desks in the middle. A session in a worktree that is waiting on you or resting is in your office
+  or the lounge like anyone else, and a bench nobody is working at is not drawn. The panel and the
+  tooltip say `repo · worktree-name`.
+- **A session started in a subfolder of a repository is in that repository's room too.** The room
+  is where the nearest `.git` is, so two sessions in two packages of one repository share a room.
+  A submodule is still its own project.
+- **A room with benches is a bigger room.** Bench seats count toward the room's size the same way
+  desks do, and the room is made deep and wide enough for its benches rather than fitting them in.
+- **Nothing you set is lost.** A room you pinned while it was a worktree's room keeps its
+  repository's room pinned, and unpinning that room takes the old pin away. Tokens already
+  recorded under a worktree are counted under its repository. Nothing on disk is rewritten.
 - **The Look section is four choices, and an Advanced section you open if you want it.** Agent
   size, theme, style and density are at the top, with the live preview. The floor material for each
   zone, the colour scheme, the furniture set, the rugs, the plants, the props and the lounge kit
@@ -190,6 +208,21 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Known gaps
 
+- **A worktree session with helpers at work sits at a desk, not at its bench.** Sub-agents stand
+  beside the session that started them, and a bench against the wall has no floor for that. The
+  session moves back to its bench when its helpers finish. Sub-agents themselves never sit at a
+  bench, whichever folder they run in.
+- **A worktree whose folder is gone is recognised by where it was.** Claude Code's own layout
+  (`<repo>/.claude/worktrees/<name>`) always is. A removed Studio hire's worktree is only while
+  another session of the same repository is on the floor; otherwise it is a room of its own, as
+  before. A removed worktree anywhere else on disk is a room of its own too.
+- **Sessions that already had a tag keep it.** A session numbered while its worktree was its own
+  project keeps that tag (say `MK57.1`) in its repository's room; new sessions there count in the
+  repository's own numbering.
+- **A room you had collapsed as a worktree is not collapsed as a repository.** Only pins carry
+  over.
+- **Not checked on macOS or Linux against a real `git worktree`.** The tests lay the `.git` files
+  out by hand on every platform; the live check was on Windows.
 - **A floor with one or two projects has large rooms.** The rooms get at least 55% of the building
   however few they are, and your office and the lounge need a minimum of floor for their
   furniture, so a single one-desk project gets a room far bigger than its desk needs. Such a room
