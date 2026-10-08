@@ -131,6 +131,6 @@ test('the id does not change when the directory is created after it was first as
 test('SECURITY: the id carries nothing of the path it was made from', (t) => {
   const dir = path.join(tmpdir(t), 'a-user-name');
   const id = stateDirId(dir);
-  assert.ok(!id.includes('/') && !id.includes('\\'),'an id is never a path');
+  assert.ok(!id.includes('/') && !id.includes('\\'), 'an id is never a path');
   assert.ok(!id.includes('a-user-name'));
 });

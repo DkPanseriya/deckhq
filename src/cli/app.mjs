@@ -15,11 +15,16 @@
  *
  * What this command does, in order:
  *
- *   1. **Find a daemon** on loopback: the port the user named, then the one a
+ *   1. **Find a daemon** on loopback. A port the user named — `--port`, or
+ *      `DECKHQ_PORT` — is the only port asked: a DeckHQ there is reused, an
+ *      empty port gets a daemon started on it, and anything else on it is a
+ *      failure that says so. With no port named, the search is the one a
  *      running daemon published in `~/.deckhq/daemon.json` (WP-37,
  *      `docs/DEVIATIONS.md` §102), then the port the installed hooks post to
- *      (§83), then the 4317.. walk. A daemon that answers is reused — this
- *      command never starts a second one beside a healthy one.
+ *      (§83), then the 4317.. walk — and a daemon found that way is reused
+ *      only if it serves THIS state directory (`stateDirId`). A daemon that
+ *      answers and is ours is reused — this command never starts a second one
+ *      beside a healthy one, and never opens a window on somebody else's.
  *   2. **Otherwise spawn `deckhq --no-open`, detached**, with its stdio
  *      ignored and `unref()`'d, so the window outlives this process and this
  *      process does not outlive the command. Then wait up to ten seconds for
@@ -36,10 +41,11 @@
  * browser is asserted loopback before it is spawned.
  */
 import { spawn } from 'node:child_process';
+import path from 'node:path';
 import process from 'node:process';
 
 import { DATA_DIR } from '../core/paths.mjs';
-import { readDaemonFile } from '../core/daemon-file.mjs';
+import { readDaemonFile, stateDirId } from '../core/daemon-file.mjs';
 import {
   appProfileDir,
   appWindowCommand,
@@ -82,8 +88,10 @@ export const WINDOW_WAIT_MS = 8000;
  * command deliberately does, because starting a second daemon beside the one
  * the hooks are feeding is precisely the degraded state §83 exists to prevent.
  *
- * @param {{explicit?:number|null, published?:number|null, hooks?:number[],
- *          span?:number}} [opts]
+ * A port the user named is not in this list, and that is the point of it: a
+ * named port is asked alone (`findRunningDaemon`), never as the first of many.
+ *
+ * @param {{published?:number|null, hooks?:number[], span?:number}} [opts]
  * @returns {number[]}
  */
 export function candidateAppPorts(opts = {}) {
@@ -93,7 +101,6 @@ export function candidateAppPorts(opts = {}) {
     const n = Number(p);
     if (Number.isInteger(n) && n > 0 && n < 65536 && !ordered.includes(n)) ordered.push(n);
   };
-  add(opts.explicit);
   add(opts.published);
   for (const p of opts.hooks || []) add(p);
   const span = opts.span ?? PORT_SCAN_SPAN;
@@ -125,31 +132,80 @@ async function hookPorts() {
 }
 
 /**
- * The first port on this machine that answers `/api/state` like a DeckHQ, or
- * null.
+ * The DeckHQ this command should use, or null when it has to start one.
  *
- * @param {{port?:number|null, timeoutMs?:number, ask?:typeof askDaemon,
- *          probe?:typeof probeLoopbackPort, ports?:number[]}} [opts]
+ * Two different questions, and running them together was the bug this shape
+ * exists to prevent (a named port used to be the first of a dozen asked, so
+ * `--port 4317` with nothing on 4317 opened whatever answered next):
+ *
+ *   - **A port was named.** That port is asked and no other. A DeckHQ there is
+ *     the answer whatever state directory it serves — naming a port is naming
+ *     a daemon.
+ *   - **No port was named.** The published port, the hooks' port, then 4317
+ *     upward — and only a daemon that says it serves this state directory
+ *     counts. One from a build too old to say is believed only on the port
+ *     this directory's own `daemon.json` names, because that file is the one
+ *     other piece of evidence that it is ours.
+ *
+ * @param {{port?:number|null, dataDir?:string, timeoutMs?:number,
+ *          ask?:typeof askDaemon, probe?:typeof probeLoopbackPort,
+ *          ports?:number[], stateId?:string, published?:number|null}} [opts]
  * @returns {Promise<{port:number, url:string}|null>}
  */
 export async function findRunningDaemon(opts = {}) {
   const ask = opts.ask || askDaemon;
   const probe = opts.probe || probeLoopbackPort;
   const timeoutMs = opts.timeoutMs ?? FIND_TIMEOUT_MS;
-  const ports =
-    opts.ports ||
-    candidateAppPorts({
-      explicit: opts.port ?? null,
-      published: readDaemonFile()?.port ?? null,
-      hooks: await hookPorts(),
-    });
+  const at = (port) => ({ port, url: `http://127.0.0.1:${port}/` });
+
+  if (opts.port != null) {
+    const named = Number(opts.port);
+    if (!(await probe(named, timeoutMs))) return null;
+    return (await ask(named, timeoutMs)) ? at(named) : null;
+  }
+
+  const dataDir = opts.dataDir || DATA_DIR;
+  const published =
+    opts.published !== undefined
+      ? opts.published
+      : (readDaemonFile(path.join(dataDir, 'daemon.json'))?.port ?? null);
+  const mine = opts.stateId || stateDirId(dataDir);
+  const ports = opts.ports || candidateAppPorts({ published, hooks: await hookPorts() });
 
   const open = await Promise.all(ports.map((p) => probe(p, timeoutMs)));
   for (const port of ports.filter((_p, i) => open[i])) {
     const found = await ask(port, timeoutMs);
-    if (found) return { port, url: `http://127.0.0.1:${port}/` };
+    if (!found) continue;
+    const theirs = found.snapshot?.stateDirId;
+    const ours = typeof theirs === 'string' && theirs ? theirs === mine : port === published;
+    if (ours) return at(port);
   }
   return null;
+}
+
+/**
+ * What a named port that no DeckHQ answered on is doing: `true` when something
+ * else is listening there. Asked only after `findRunningDaemon` said null, so
+ * a listener here is one that did not answer `/api/state` like a DeckHQ.
+ *
+ * @param {number} port
+ * @param {{probe?:typeof probeLoopbackPort, timeoutMs?:number}} [opts]
+ * @returns {Promise<boolean>}
+ */
+export function namedPortIsTaken(port, opts = {}) {
+  return (opts.probe || probeLoopbackPort)(port, opts.timeoutMs ?? FIND_TIMEOUT_MS);
+}
+
+/**
+ * What this command says when the port it was told to use is somebody else's.
+ * @param {number} port
+ */
+export function portTakenMessage(port) {
+  return (
+    `\n  Port ${port} is in use, and what is using it did not answer as a DeckHQ.\n` +
+    '  You named that port, so nothing was started and no other port was tried.\n' +
+    '  Stop what is on it, or name another: `deckhq app --port <n>`.\n\n'
+  );
 }
 
 /**
@@ -163,7 +219,11 @@ export async function findRunningDaemon(opts = {}) {
  * black console window beside their app window, which is exactly the "extra
  * step" this package exists to delete.
  *
- * @param {{port?:number|null, timeoutMs?:number, pollMs?:number,
+ * A named port goes to the daemon as `--port`, and the wait asks that port
+ * and no other, so a daemon already running somewhere else can never be
+ * mistaken for the one this just started.
+ *
+ * @param {{port?:number|null, dataDir?:string, timeoutMs?:number, pollMs?:number,
  *          find?:typeof findRunningDaemon, spawnFn?:typeof spawn,
  *          bin?:string, node?:string, now?:() => number,
  *          sleep?:(ms:number) => Promise<void>}} [opts]
@@ -188,7 +248,7 @@ export async function startDetachedDaemon(opts = {}) {
 
   const deadline = now() + (opts.timeoutMs ?? START_TIMEOUT_MS);
   for (;;) {
-    const found = await find({ port: opts.port ?? null });
+    const found = await find({ port: opts.port ?? null, dataDir: opts.dataDir });
     if (found) return { ...found, pid, started: true, timedOut: false };
     if (now() >= deadline) break;
     await sleep(opts.pollMs ?? START_POLL_MS);
@@ -241,7 +301,8 @@ const HELP = [
   '',
   'Usage: deckhq app [--port <n>] [--width <n>] [--height <n>]',
   '',
-  '  --port <n>     look for, or start, a daemon on this port',
+  '  --port <n>     use this port and no other: reuse the DeckHQ on it, or start',
+  '                 one there. DECKHQ_PORT does the same; --port wins over it',
   '  --width <n>    the window, on its very first run. Default 1600',
   '  --height <n>   the same. Default 1000',
   '  --no-window    reuse or start the daemon and print the URL; open nothing',
@@ -252,10 +313,15 @@ const HELP = [
   '  --no-pin       never ask',
   '  --help         this message',
   '',
-  'Reuses a DeckHQ that is already running — the port you named, the one a',
-  'running daemon published in ~/.deckhq/daemon.json, the one your installed',
-  'hooks post to, then 4317 upward. If none answers, it starts one in the',
-  'background and waits up to ten seconds for it.',
+  'With a port named, that port is the whole search: a DeckHQ on it is reused,',
+  'an empty port gets one started on it, and a port held by something else is',
+  'an error — no other port is tried.',
+  '',
+  'With none named, it reuses a DeckHQ that is already running for this state',
+  'directory — the port a running daemon published in ~/.deckhq/daemon.json,',
+  'the one your installed hooks post to, then 4317 upward. A DeckHQ serving',
+  'another state directory (DECKHQ_STATE_DIR) is left alone. If none answers,',
+  'it starts one in the background and waits up to ten seconds for it.',
   '',
   'The window is Chrome or Edge in application mode: no tab strip, no address',
   'bar, its own taskbar button, and its own browser profile under',
@@ -270,6 +336,17 @@ const HELP = [
   'Makes no outbound network calls.',
   '',
 ].join('\n');
+
+/**
+ * `DECKHQ_PORT` as a port, or null. An unusable value names nothing, which is
+ * how the daemon itself reads it (`bin/deckhq.mjs`).
+ * @param {string|undefined} raw
+ * @returns {number|null}
+ */
+function namedPort(raw) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : null;
+}
 
 /**
  * @param {string[]} argv
@@ -291,6 +368,7 @@ function option(argv, name) {
  * @param {string[]} [argv]
  * @param {{write?:(s:string)=>void, error?:(s:string)=>void,
  *          find?:typeof findRunningDaemon, start?:typeof startDetachedDaemon,
+ *          probe?:typeof probeLoopbackPort, env?:Record<string,string|undefined>,
  *          findBrowser?:() => string|null, spawnFn?:typeof spawn,
  *          dataDir?:string, platform?:NodeJS.Platform|string,
  *          offerPin?:(argv:string[], deps:any) => Promise<any>, tty?:boolean,
@@ -313,11 +391,19 @@ export async function runApp(argv = [], deps = {}) {
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
   };
-  const port = num('--port');
+  // A port named on the command line, or failing that in the environment, is
+  // the port. Not a hint, not the first of several: see `findRunningDaemon`.
+  const flagPort = num('--port');
+  if (argv.includes('--port') && !(flagPort != null && flagPort < 65536)) {
+    error('\n  --port needs a port number, 1 to 65535. Nothing was started.\n\n');
+    return 1;
+  }
+  const port = flagPort ?? namedPort((deps.env || process.env).DECKHQ_PORT);
 
   const find = deps.find || findRunningDaemon;
   const start = deps.start || startDetachedDaemon;
   const dryRun = argv.includes('--dry-run');
+  const { dataDir, probe } = deps;
 
   // `--dry-run` is what a stranger runs first, and what the tarball test runs
   // on a machine with no browser and no intention of starting anything. It
@@ -328,11 +414,14 @@ export async function runApp(argv = [], deps = {}) {
 
   let daemon;
   try {
-    const running = await find({ port });
+    const running = await find({ port, dataDir });
     if (running) {
       daemon = { ...running, started: false, timedOut: false, pid: null };
+    } else if (port != null && (await namedPortIsTaken(port, { probe }))) {
+      error(portTakenMessage(port));
+      return 1;
     } else {
-      daemon = await start({ port });
+      daemon = await start({ port, dataDir });
     }
   } catch (err) {
     error(`\n  ${err?.message || err}\n\n`);
@@ -355,11 +444,14 @@ export async function runApp(argv = [], deps = {}) {
     return 1;
   }
 
-  write(
-    `\n  DeckHQ  ${daemon.url}` +
-      (daemon.started ? '  (started just now)' : '  (already running)') +
-      '\n',
-  );
+  // Which of the three things happened, because they are three different
+  // answers to "is this the floor I meant".
+  const how = !daemon.started
+    ? 'already running'
+    : port != null
+      ? 'started on the port you named'
+      : 'started just now';
+  write(`\n  DeckHQ  ${daemon.url}  (${how})\n`);
 
   if (argv.includes('--no-window')) {
     write('\n');
@@ -430,7 +522,7 @@ export async function runApp(argv = [], deps = {}) {
         deps.matchTaskbar ??
         (deps.spawnFn ? null : (await import('../core/launcher-taskbar.mjs')).matchAppWindow);
       if (match) {
-        const { dataDir, platform } = deps;
+        const { platform } = deps;
         write(await match({ dataDir, platform, browser, url: daemon.url, waitMs: WINDOW_WAIT_MS }));
       }
     } catch {
@@ -457,7 +549,8 @@ export async function runApp(argv = [], deps = {}) {
  *
  * @param {string[]} argv
  * @param {{write:(s:string)=>void, error:(s:string)=>void, port?:number|null,
- *          find:typeof findRunningDaemon, findBrowser?:() => string|null,
+ *          find:typeof findRunningDaemon, probe?:typeof probeLoopbackPort,
+ *          findBrowser?:() => string|null,
  *          dataDir?:string, platform?:NodeJS.Platform|string,
  *          node?:string, bin?:string}} deps
  * @returns {Promise<number>}
@@ -469,9 +562,14 @@ async function dryRunApp(argv, deps) {
 
   let running = null;
   try {
-    running = await deps.find({ port: deps.port ?? null });
+    running = await deps.find({ port: deps.port ?? null, dataDir: deps.dataDir });
   } catch {
     running = null;
+  }
+  // The one thing the real run refuses to do, it refuses here too.
+  if (!running && deps.port != null && (await namedPortIsTaken(deps.port, deps))) {
+    deps.error(portTakenMessage(deps.port));
+    return 1;
   }
 
   const port = running?.port ?? (Number(deps.port) || DEFAULT_PORT);
@@ -481,7 +579,10 @@ async function dryRunApp(argv, deps) {
   write(
     running
       ? `  Daemon:  ${url}  (already running — it would be reused)\n`
-      : `  Daemon:  none answered, so it would start one, detached:\n` +
+      : (deps.port
+          ? `  Daemon:  nothing is on port ${deps.port}, the port you named, so it would start\n` +
+            '           one there, detached:\n'
+          : '  Daemon:  none answered, so it would start one, detached:\n') +
           `             ${node} ${bin} --no-open` +
           (deps.port ? ` --port ${deps.port}` : '') +
           '\n' +
