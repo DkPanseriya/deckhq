@@ -212,6 +212,42 @@ was already there is not.
 From inside the floor, `⌘K` → **Install as app** takes Chrome's own install offer when Chrome is
 making one, and otherwise names the `deckhq shortcut --install` above.
 
+### Pinning the window to the taskbar (Windows)
+
+A pin of the DeckHQ window keeps the DeckHQ icon, as long as the shortcut above is installed.
+
+Windows draws a pinned window from the Start Menu shortcut that carries the window's own name —
+its AppUserModelID — and from the program that owns the window when no shortcut carries it. The
+program that owns this window is the browser, which is why a pin used to turn into a Chrome icon
+that opened Chrome. So `deckhq app` reads the name off the window it has just opened and writes it
+into the `DeckHQ.lnk` files it installed: one property, on the shortcuts recorded in
+`~/.deckhq/installed.json` that still carry the tag, and on nothing else. `deckhq shortcut
+--install` does the same when a window is already open, and says in one line that it could not
+when none is. After the first time nothing is run again until the browser or the shortcut changes,
+so an ordinary launch pays nothing for it.
+
+**A pin you made earlier is a copy** Windows took at the time, browser icon included, and it does
+not update. Replace it once:
+
+1. Right-click the old pin → **Unpin from taskbar**.
+2. Run `deckhq app`, or open DeckHQ from its Desktop or Start Menu icon.
+3. Right-click the DeckHQ window's taskbar button → **Pin to taskbar**.
+
+`deckhq doctor` has a `taskbar pin` row that says which state the machine is in: no shortcut, not
+matched yet, matched, or changed since.
+
+What was measured, on Windows 11 with Chrome 154 and Edge 154: the window is called
+`Chrome.127.0.0.1_/.appprofile.Default`, or `MSEdge.127.0.0.1_/.appprofile.Default` in Edge. That
+is the browser, the address without its port, and the name of the profile folder, so it is the
+same on every port and changes if you switch browsers — after which `deckhq app` matches it again
+and the pin wants replacing once more. The window carries no icon or command of its own, and no
+browser switch tried changes its name. What is checked on your machine is that the window and the
+shortcut carry the same name and that the shortcut's icon is DeckHQ's. That the taskbar then draws
+the pin from that shortcut is the one step that can only be checked by pinning.
+
+**Install as app** is the other route: the browser then makes its own entry for the window, and
+the pin is the browser's business rather than DeckHQ's. DeckHQ has not measured that route.
+
 ### One theme for one tab: `?theme=`
 
 The floor's URL takes `?theme=<id>` — `http://127.0.0.1:4317/?theme=night%20shift` — and it is

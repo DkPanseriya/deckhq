@@ -49,6 +49,15 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Fixed
 
+- **A pinned DeckHQ window keeps the DeckHQ icon (Windows).** Pin the app window to the taskbar and
+  it turned into a Chrome or Edge icon, which then opened the browser instead of DeckHQ. Windows
+  draws a pin from the Start Menu shortcut that carries the window's own name, and DeckHQ's
+  shortcut did not carry one. `deckhq app` now reads that name off the window it opens and writes
+  it into the DeckHQ shortcuts it installed — those and no others. `deckhq shortcut --install`
+  does the same if a window is open, and says so in one line if none is. **If you pinned before
+  this, the old pin is a copy and keeps the browser's icon:** unpin it, run `deckhq app`, and pin
+  the window again, once. You need the shortcut for this (`deckhq shortcut --install`), and
+  `deckhq doctor` has a new `taskbar pin` row that says where your machine stands.
 - **A choice in the Look section stays highlighted.** You would click Large, or a floor, or a rug;
   the floor changed, and a moment later the highlight jumped back to what it was before. The floor
   was right and the control was wrong. It now shows what you chose, and goes back only if the
@@ -210,8 +219,20 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   is outside the room, and that no cable crosses a desk it does not end on. A second test gives
   the arc a table under a seat, a chair under a seat and a cable with no way round, one at a time,
   and checks that each is refused. Both fail on the code before this change.
+- **The taskbar name is read from a real window, and the write is tested against a real
+  shortcut.** On Windows 11 with Chrome 154 and Edge 154 the app window is called
+  `Chrome.127.0.0.1_/.appprofile.Default` (`MSEdge.…` in Edge): the browser, the address without
+  its port, and the name of the profile folder. `launcher-taskbar.test.mjs` checks the decision for
+  each shortcut — ours and different is rewritten, the same is left, not ours is refused — and, on
+  Windows, runs the real script: it sets the name on a tagged shortcut, reads it back, and is
+  refused by an untagged one, which is left byte for byte as it was.
 
 ### Known gaps
+
+- **The pinned icon is checked up to the point where Windows takes over.** The window and the
+  shortcut carry the same name, and the shortcut's icon is DeckHQ's; both are read back from
+  Windows. That the taskbar then draws a pin from that shortcut has not been run by this project,
+  because the only way to run it is to pin something to a real taskbar.
 
 - **A floor with one or two projects has large rooms.** The rooms get at least 55% of the building
   however few they are, and your office and the lounge need a minimum of floor for their
