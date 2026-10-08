@@ -561,7 +561,8 @@ test('the office of sixteen · badges, names and bodies never overlap, and a bad
     const at = new Map(f.records.map((r) => [r.id, worldToScreen(r, f.camera)]));
     const bodies = f.records.map((r) => ({
       id: r.id,
-      ...characterBox(at.get(r.id).x, at.get(r.id).y, f.charU),
+      // The box each is DRAWN in: a junior's is a ladder step smaller (WP-99).
+      ...characterBox(at.get(r.id).x, at.get(r.id).y, f.uOf(r)),
     }));
     const names = [];
     for (const item of f.labels.labels) {

@@ -267,7 +267,12 @@ export function planFrameLabels(ctx, view) {
       // The near ring is measured from here: the feet, the body's height and
       // its half-width, at the scale this figure is drawn at.
       feet: { x: s.x, y: s.y },
-      bh: u * BODY_HEIGHT_U,
+      // NEAR IS ONE DISTANCE FOR THE WHOLE FLOOR (WP-99): a lead's body height,
+      // whoever the name belongs to. A junior is drawn a ladder step smaller,
+      // and measured in its own height the ring round a 12.8 px junior was
+      // 15 px — nothing fitted in it, and its name was cut and sent away on a
+      // leader. How far a name may stand off is about the reader's eye.
+      bh: charU * BODY_HEIGHT_U,
       side: u * SELECTION_RING_R,
       // A two-row tag is as far from its feet as its near row is.
       lift: box.chip ? (box.chip.h + ROLE_CHIP_GAP) / 2 : 0,

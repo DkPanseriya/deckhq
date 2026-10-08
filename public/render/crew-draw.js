@@ -244,8 +244,15 @@ function drawChip(ctx, view, parentId, members) {
   const text = crewChipText(total, members.length, working);
   if (!text) return;
   if (!anchor) return;
-  plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text);
+  // With the lead AT this desk the chip keeps off its body: the reduced form,
+  // `+1 · 6/13 working`, is wider than the gap the chip stands in, and since
+  // WP-99 a lead waiting on its crew sits here rather than on a sofa.
+  const lead = seat && seat.crewAway === true ? null : worldToScreen(anchor, view.camera);
+  plate(ctx, view, worldToScreen(crewChipAt(anchor), view.camera), text, lead);
 }
+
+/** Half the width of a seated lead's body, in plan units, for the chip's clearance. */
+const CHIP_CLEAR_U = 0.85;
 
 /**
  * THE PARENT'S NAME ON THE DESK ITS CREW IS CABLED TO, when the parent is not
@@ -263,12 +270,22 @@ function drawAwayName(ctx, view, parentId, anchor) {
   plate(ctx, view, worldToScreen(crewNameAt(anchor), view.camera), String(name));
 }
 
-/** One small plate — the chip's halo and ink — centred on a screen point. */
-function plate(ctx, view, at, text) {
+/**
+ * One small plate — the chip's halo and ink — centred on a screen point, or as
+ * near it as leaves `clear` (a body's feet point) its own width.
+ */
+function plate(ctx, view, at, text, clear) {
   const fontPx = Math.max(10, Math.min(14, view.charU * 0.42));
   ctx.font = sansFont(fontPx);
   const w = textWidth(ctx, sansFont(fontPx), text) + fontPx * 0.9;
   const h = fontPx * 1.5;
+  if (clear) {
+    const need = w / 2 + view.charU * CHIP_CLEAR_U;
+    const dx = at.x - clear.x;
+    if (dx !== 0 && Math.abs(dx) < need && Math.abs(at.y - clear.y) < view.charU * 2) {
+      at = { x: clear.x + Math.sign(dx) * need, y: at.y };
+    }
+  }
   ctx.globalAlpha = 1;
   ctx.fillStyle = PALETTE.plateHalo;
   ctx.fillRect(at.x - w / 2, at.y - h / 2, w, h);
