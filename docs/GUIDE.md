@@ -147,6 +147,26 @@ The furniture works too. A room's shelf opens that project's folder; its screen 
 project's dashboard script. The object is the verb, and it lives in the room the project lives in,
 so there is nothing to hunt for in a menu.
 
+### Worktrees
+
+A room is a repository, not a folder. If you start a session in another git worktree of a
+repository — one you made with `git worktree add`, one Claude Code made for an isolated agent, or
+one Studio made for a hire — it is in that repository's room, not in a new one. DeckHQ works this
+out by reading the worktree's `.git` file; it never runs git to do it. A session started in a
+subfolder is in its repository's room as well, and a submodule is its own project.
+
+Inside the room, the main checkout has the desks in the middle. Each worktree somebody is
+**working** in has a bench against the foot wall, with the worktree's branch written on it, or its
+folder name when the checkout is detached. Two sessions in one worktree sit side by side at the
+same bench. A worktree session that is waiting on you is in your office and one that has finished
+is in the lounge, so a bench with nobody working at it is not drawn; the panel still says
+`repo · worktree-name`. One exception: a worktree session whose sub-agents are at work takes a desk
+until they finish, because that is where they have room to stand.
+
+The room's plate counts everybody, whichever worktree they are in. So do the idle list, the deck,
+the usage tables and Studio, which is enabled once per repository. A room pinned back when it was
+a worktree's keeps its repository's room pinned.
+
 ## Run it like an app
 
 Three commands, and on a new machine you type only the first — it offers the second itself.
