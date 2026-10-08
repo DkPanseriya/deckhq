@@ -15,7 +15,8 @@
  *      seats, three or more form an arc.
  *   4. **The arc is deterministic and inside the room**, at every size and on
  *      every stage `floor-integrity.test.mjs` uses.
- *   5. **The cables are axis-aligned, miss every desk, and never cross.**
+ *   5. **The cables are axis-aligned, miss every desk, and never cross**, and
+ *      nobody is seated on a table or on somebody else's chair.
  *   6. **The cap and the `+N` chip.** Twelve are seated; the rest have no seat
  *      and therefore no body, and the chip says how many.
  *   7. **Pulses only where the file moved**, junior → parent, capped at four.
@@ -62,6 +63,7 @@ import {
   crewPulseCount,
   crewRadius,
   crewSplit,
+  nearAnyRect,
   pointAlong,
   segmentHitsRect,
 } from '../../public/render/crew.js';
@@ -125,9 +127,42 @@ function crewFloor(n, juniorOver = () => ({}), neighbours = 0) {
 
 /** The desk tops a room draws, as the plan placed them: its `desk` PROPS. */
 function deskProps(room) {
-  return room.props
-    .filter((p) => p.kind === 'desk')
-    .map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h }));
+  return propRects(room, 'desk');
+}
+
+/** Every prop of one kind in a room, as the rectangle it is drawn in. */
+function propRects(room, kind) {
+  return room.props.filter((p) => p.kind === kind).map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h }));
+}
+
+/**
+ * `seniors` people at desks in one room, and `juniors` working for the
+ * `parent`-th of them. Nine or more seniors is a room with a second table, and
+ * which chair the parent has decides what is behind it: open floor, a wall, or
+ * the other table.
+ */
+function teamFloor(seniors, juniors, parent) {
+  const agents = [];
+  for (let i = 0; i < seniors; i++) {
+    agents.push(agent({ id: `claude-code:s${String(i).padStart(2, '0')}`, projectId: 'p' }));
+  }
+  const parentId = agents[parent].id;
+  for (let i = 0; i < juniors; i++) {
+    agents.push(
+      agent({
+        id: `claude-code:j${String(i).padStart(2, '0')}`,
+        projectId: 'p',
+        subagent: true,
+        parentId,
+        subagentType: 'Explore',
+        lastGrowthAt: NOW,
+      }),
+    );
+  }
+  const projects = [
+    { id: 'p', name: 'p', sessionCount: agents.length, activeCount: agents.length },
+  ];
+  return { agents, projects };
 }
 
 // ---------------------------------------------------- 1. the workflow id
@@ -451,6 +486,111 @@ test('§3.2: a cable through a real room misses the desks that are drawn in it',
       assert.ok(ended > 0, `${n} at ${w}x${h}: and some cable does end on the desk`);
     }
   }
+});
+
+test('§3.2: an arc that lands on a table or on a chair is refused', () => {
+  const anchor = { x: 30, y: 30, angle: -Math.PI / 2 };
+  const room = { x: 0, y: 0, w: 80, h: 80, plateBand: 3.4 };
+  const open = crewArc(anchor, room, 5);
+  assert.equal(open.fits, true, 'open floor behind the chair is an arc');
+  // The parent faces up the page, so the arc opens down it. A second table
+  // under the middle seat, and then the chair of somebody sitting at it.
+  const mid = open.seats[2];
+  const table = { x: mid.x - 2.6, y: mid.y - 1.3, w: 5.2, h: 2.6 };
+  assert.equal(crewArc(anchor, room, 5, [table]).fits, false, 'a junior on the desk top');
+  const chair = { x: mid.x - 1, y: mid.y - 1, w: 2, h: 2 };
+  assert.equal(crewArc(anchor, room, 5, [], [chair]).fits, false, 'a junior on a chair');
+  // Half a body counts: the seat is a centre, and the body round it is drawn.
+  const beside = { x: mid.x - 1, y: mid.y + CREW_PITCH / 4, w: 2, h: 2 };
+  assert.equal(nearAnyRect(mid, [beside], 0), false, 'the fixture must stand clear of the seat');
+  assert.equal(crewArc(anchor, room, 5, [], [beside]).fits, false, 'a junior half on a chair');
+  // Something solid between the middle laptop and its lane, under no seat at
+  // all: that cable has to cross it, and all a lane can do to get round things
+  // is move a tenth of a unit.
+  const between = { x: anchor.x - 0.5, y: anchor.y + 1.6, w: 1, h: 0.6 };
+  const blocked = crewArc(anchor, room, 5, [between]);
+  assert.equal(
+    blocked.seats.some(
+      (seat) =>
+        nearAnyRect(seat, [between], CREW_PITCH / 2) || nearAnyRect(seat.laptop, [between], 0),
+    ),
+    false,
+    'the fixture must block the cables and not the seats',
+  );
+  assert.equal(blocked.fits, false, 'a cable with no way round a table');
+  // A chair is not in a cable's way: the lanes run along the parent's own row.
+  const passed = { x: anchor.x + 2.6 - 1, y: anchor.y - 1, w: 2, h: 2 };
+  assert.equal(crewArc(anchor, room, 5, [], [passed]).fits, true, 'a neighbour is passed');
+  // And the furniture far from the arc changes nothing.
+  const far = { x: 60, y: 6, w: 5, h: 2.6 };
+  assert.equal(crewArc(anchor, room, 5, [far], [far]).fits, true);
+});
+
+test('§3.2: in a room of two tables nobody sits on the furniture and no cable crosses a desk', () => {
+  // A second table stands behind the first one's far chairs. An arc opened
+  // behind one of those chairs was laid over it: with nine at desks and a crew
+  // of ten, junior j03 sat at (55.81, 47.65) inside the second desk top and two
+  // cables ran through it. Every chair in the room is the parent's in turn,
+  // because which chair it is decides what is behind it. Twenty juniors are
+  // here for the rows an arc falls back to: at that many the second rank used
+  // to stand on the next table.
+  const stages = [[1600, 870], ...STAGES];
+  let arcs = 0;
+  let rows = 0;
+  let cables = 0;
+  for (const seniors of [9, 10, 12, 16]) {
+    for (const juniors of [3, 8, 10, 12, 20]) {
+      for (const [w, h] of stages) {
+        for (let parent = 0; parent < seniors; parent++) {
+          const { agents, projects } = teamFloor(seniors, juniors, parent);
+          const plan = buildPlan(projects, agents, { stage: { w, h }, now: NOW });
+          const seats = assignSeats(plan, agents);
+          const room = plan.rooms.find((r) => r.id === 'p');
+          const desks = deskProps(room);
+          const chairs = propRects(room, 'chair');
+          assert.equal(desks.length, 2, `${seniors} at desks is a room of two tables`);
+          assert.equal(chairs.length, seniors, 'and a chair for each of them');
+          const where = `${seniors} at desks, ${juniors} juniors of s${parent} at ${w}x${h}`;
+          const placed = agents.filter((a) => a.subagent && seats.get(a.id));
+          const arc = placed.some((j) => seats.get(j.id).crew === true);
+          if (arc) arcs++;
+          else rows++;
+          // An arc draws the cap; the rows it falls back to draw everybody.
+          assert.equal(placed.length, arc ? Math.min(juniors, CREW_DRAW_CAP) : juniors, where);
+          for (const junior of placed) {
+            const seat = seats.get(junior.id);
+            const at = `${where}: ${junior.id} at (${seat.x.toFixed(2)}, ${seat.y.toFixed(2)})`;
+            assert.ok(
+              seat.x >= room.x &&
+                seat.x <= room.x + room.w &&
+                seat.y >= room.y &&
+                seat.y <= room.y + room.h,
+              `${at} is outside the room`,
+            );
+            assert.equal(nearAnyRect(seat, desks, 0), false, `${at} is on a desk top`);
+            assert.equal(nearAnyRect(seat, chairs, 0), false, `${at} is on a chair`);
+            if (!seat.route) continue;
+            const port = seat.route[seat.route.length - 1];
+            for (const desk of desks) {
+              if (nearAnyRect(port, [desk], 0)) continue; // the desk it ends on
+              for (let i = 0; i + 1 < seat.route.length; i++) {
+                assert.equal(
+                  segmentHitsRect(seat.route[i], seat.route[i + 1], desk),
+                  false,
+                  `${where}: ${junior.id}'s cable runs through a desk`,
+                );
+              }
+              cables++;
+            }
+          }
+        }
+      }
+    }
+  }
+  // Both answers were given, so neither half of the property passed unasked.
+  assert.ok(arcs > 0, 'some chair has open floor behind it, and its crew is an arc');
+  assert.ok(rows > 0, 'and some chair faces the other table, and its crew is in rows');
+  assert.ok(cables > 0, 'and cables were held to a desk they do not end on');
 });
 
 // ----------------------------------------------------- 6. the cap and +N
