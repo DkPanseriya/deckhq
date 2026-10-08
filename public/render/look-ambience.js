@@ -9,12 +9,11 @@
  *
  * ## What paints from this file
  *
- * The light and the partitions are drawn: `backdrop-paint.js` casts along the
- * mood's direction, `backdrop-light.js` lays its daylight, and
- * `backdrop-floor.js` builds the wall between two rooms in the chosen style.
- * The room tint is named, measured and carried, and its picker stays `pending`
- * in `look-options.js` until a painter reads it. **One option of each table is
- * the default** — the `DEFAULT_*` beside it.
+ * All three are drawn: `backdrop-paint.js` casts along the mood's direction,
+ * `backdrop-light.js` lays its daylight, `backdrop-floor.js` builds the wall
+ * between two rooms in the chosen style, and `backdrop.js` lays each project
+ * room's floor in the tint `roomGroundFor` hands it. **One option of each table
+ * is the default** — the `DEFAULT_*` beside it.
  *
  * Every row is a number a painter is held to. They are plan units and plain
  * ratios, so a test can read them and a painter cannot grow a second opinion.

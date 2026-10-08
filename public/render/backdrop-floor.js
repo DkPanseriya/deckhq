@@ -195,7 +195,8 @@ export function paintHerringbone(ctx, x, y, w, h, rng, u = U_DEFAULT) {
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {number} x @param {number} y @param {number} w @param {number} h
  * @param {() => number} _rng kept for the call signature; a weave is not random
- * @param {string|null} [tint]
+ * @param {string|((colour:string)=>string)|null} [tint] an identity accent to
+ *   wash toward, or the room's own tint as a function (`washedCarpet`)
  * @param {number} [u] px per plan unit; the bake's own `u`.
  */
 export function paintCarpet(ctx, x, y, w, h, _rng, tint = null, u = U_DEFAULT) {

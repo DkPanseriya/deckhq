@@ -325,8 +325,9 @@ export function paintDeskProps(ctx, prop, u, w, h, local) {
       // to go the other way, and every backrest on the floor stood between its
       // occupant and the desk.)
       //
-      // And then a few degrees more, either way: a swivel chair is never left
-      // square to its desk, and one that is reads as a tile.
+      // And then a few degrees more, either way, where nobody is in it: an
+      // empty swivel chair is never left square to its desk, and one that is
+      // reads as a tile. An occupied one is square (`chairSwivel`).
       ctx.rotate(-Math.PI / 2 + chairSwivel(prop));
       taskChair(ctx, w, local, detailOf(ctx, u));
       break;

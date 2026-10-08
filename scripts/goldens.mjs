@@ -399,6 +399,18 @@ const CAPTURES = [
   // side behind them — the third way of laying a floor, and the only one in
   // which two rooms are both a room's shape at this window's.
   { name: 'pair', population: 'pair', theme: 'default', stage: { w: 1440, h: 1000 } },
+  // EVERY REPOSITORY ITS OWN CALM COLOUR. The same crowded floor in the Colour
+  // plan style, whose room colours are `zoned`: five rooms side by side, each
+  // floor one of six hues at the carpet's own luminance, on a neutral building.
+  // A room tint is paint, and whether five tints are five rooms without one of
+  // them shouting is a question only a picture answers.
+  {
+    name: 'crowded@colour-plan',
+    population: 'crowded',
+    theme: 'default',
+    stage: { w: 2000, h: 1185 },
+    query: 'look=colour-plan',
+  },
   // THE FLOOR A HiDPI DISPLAY SHOWS, busiest and quietest. See `dpr` above.
   {
     name: 'crowded@2x',

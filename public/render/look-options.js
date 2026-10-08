@@ -54,13 +54,14 @@
  *   three more floor materials, over the zones that offer them   7
  *   ------------------------------------------- fourteen pickers, 72 options
  *
- * The light and the partitions are painted, so their pickers are offered. The
- * room tint is named, measured, stored and carried in a look document, and no
- * painter reads it yet: its picker is marked `pending`, and `LOOK_PICKERS` —
- * what a surface offers — is the other thirteen and 69. The same rule decides
- * the presets: one that asks for a pending option is in `ALL_PRESETS` and not
- * in `PRESETS`. A choice is offered the day moving it changes the floor, and
- * not before.
+ * All three are painted, so all three pickers are offered: the light and the
+ * partitions first, and the room tint once a project room's floor was laid in
+ * it. Nothing is `pending` today, and the device stays: a picker marked
+ * `pending` is named, measured, stored and carried in a look document, and is
+ * left out of `LOOK_PICKERS` — what a surface offers. The same rule decides the
+ * presets: one that asks for a pending option is in `ALL_PRESETS` and not in
+ * `PRESETS`. A choice is offered the day moving it changes the floor, and not
+ * before.
  *
  * Pure data and pure functions. No DOM, no canvas — safe to import under
  * `node --test` and from `src/core/look.mjs`, which is where the schema that
@@ -495,10 +496,10 @@ export const AGENT_SIZE_LABELS = Object.freeze({
  * section and reads this rather than restating it, so a picker cannot offer an
  * option the guards have never seen.
  *
- * `ALL_LOOK_PICKERS` is every picker the catalogue names, and one of the
- * fourteen carries `pending: true`: the option is real, it validates and it is
- * stored, and the painter that draws it has not landed. `LOOK_PICKERS` below is
- * the rest — what a surface may offer today.
+ * `ALL_LOOK_PICKERS` is every picker the catalogue names. One that carries
+ * `pending: true` is real, validates and is stored, and the painter that draws
+ * it has not landed; none of the fourteen does today. `LOOK_PICKERS` below is
+ * the rest — what a surface may offer.
  *
  * @type {ReadonlyArray<{id:string, label:string, path:string, pending?:boolean,
  *   options:ReadonlyArray<{id:string, label:string}>}>}
@@ -558,8 +559,8 @@ export const ALL_LOOK_PICKERS = Object.freeze(
       path: 'agentSize',
       options: AGENT_SIZES.map((id) => ({ id, label: AGENT_SIZE_LABELS[id] })),
     },
-    // G6a. Appended, so no shipped picker changed its place. The light and the
-    // partitions are painted; the room tint is pending until its painter reads it.
+    // G6a. Appended, so no shipped picker changed its place. All three are
+    // painted: the light, the partitions, and each project room's own colour.
     {
       id: 'light',
       label: 'Light',
@@ -576,7 +577,6 @@ export const ALL_LOOK_PICKERS = Object.freeze(
       id: 'roomTint',
       label: 'Room colours',
       path: 'roomTint',
-      pending: true,
       options: ROOM_TINT_IDS.map((id) => ({ id, label: ROOM_TINTS[id].label })),
     },
   ].map((p) => Object.freeze({ ...p, options: Object.freeze(p.options) })),
@@ -700,7 +700,7 @@ export const ALL_PRESETS = Object.freeze(
 
 /**
  * The presets a surface offers today — the cards, the palette, `?look=`, the
- * CLI's list. Six, until the painters G6a's options wait for have landed.
+ * CLI's list. All eleven, now that every option one of them asks for is painted.
  * @type {ReadonlyArray<{id:string, label:string, blurb:string, pending:boolean,
  *   look:Readonly<Look>}>}
  */

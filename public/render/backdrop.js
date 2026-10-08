@@ -27,6 +27,8 @@
  *   backdrop-props-room.js    what a project room is furnished with past its
  *                             desks: the meeting table, the credenza, the
  *                             standing whiteboard
+ *   backdrop-props-deco.js    what a room is dressed in: the bin, the coat
+ *                             stand, the wall panel, the pendant, the high table
  *
  * `paintProp`'s 970-line `switch` is now three switches, case for case and
  * line for line including every `break`; each answers false for a kind it
@@ -63,8 +65,9 @@ import {
 } from './backdrop-floor.js';
 import { paintFloorMaterial } from './backdrop-floor-look.js';
 import { paintRoomLight, paintWindowBand } from './backdrop-light.js';
-import { LOOK, liveMaterial, materialForRoom } from './look-derive.js';
+import { LOOK, baseboardOf, liveMaterial, materialForRoom, roomGroundFor } from './look-derive.js';
 import { setDeviceScale, snapPx } from './device-px.js';
+import { LAMP_POOL_U, paintDecoProps } from './backdrop-props-deco.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
 import { paintPlantProps } from './backdrop-props-plant.js';
@@ -75,6 +78,7 @@ export * from './backdrop-paint.js';
 export * from './backdrop-floor.js';
 export * from './backdrop-floor-look.js';
 export * from './backdrop-light.js';
+export * from './backdrop-props-deco.js';
 export * from './backdrop-props-desk.js';
 export * from './backdrop-props-lounge.js';
 export * from './backdrop-props-plant.js';
@@ -152,7 +156,8 @@ export function paintProp(ctx, prop, u) {
     !paintLoungeProps(ctx, prop, u, w, h, local) &&
     !paintPlayProps(ctx, prop, u, w, h, local) &&
     !paintPlantProps(ctx, prop, u, w, h, local) &&
-    !paintRoomProps(ctx, prop, u, w, h, local)
+    !paintRoomProps(ctx, prop, u, w, h, local) &&
+    !paintDecoProps(ctx, prop, u, w, h, local)
   ) {
     // Unknown prop kinds still get a neutral block rather than being
     // silently dropped — better a plain box than a missing desk.
@@ -303,7 +308,13 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
     // that is assigned once and persisted (CONTRACTS-WP15.md §1) — so it is
     // the same wash under the same room on every machine and every rebake,
     // and it is the same colour the agents in it are already wearing.
-    const tint = room.kind === 'project' ? identityFor(room.projectMk).accent : null;
+    //
+    // HOW MUCH of it is the look's (`roomGroundFor`): that wash, the room's own
+    // colour out of six, or nothing.
+    const tint =
+      room.kind === 'project'
+        ? roomGroundFor(LOOK, room.projectMk, identityFor(room.projectMk).accent)
+        : null;
     paintFloorMaterial(ctx, materialForRoom(room, LOOK.look.floors), rx, ry, rw, rh, rng, tint, u);
 
     if (room.kitchenZone) {
@@ -359,14 +370,16 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
     // A room with the lights off has no pool over its desk: that is the light.
     if (room.dim) continue;
     for (const prop of room.props || []) {
-      if (!LIT_PROP_KINDS.includes(prop.kind)) continue;
       const pw = prop.w * u;
       const ph = prop.h * u;
+      // A lamp lays the pool its own kind is given; a desk, one its own size.
+      const lamp = /** @type {Record<string, number>} */ (LAMP_POOL_U)[prop.kind];
+      if (!lamp && !LIT_PROP_KINDS.includes(prop.kind)) continue;
       paintLightPool(
         ctx,
         prop.x * u + pw / 2,
         prop.y * u + ph / 2,
-        Math.hypot(pw, ph) / 2 + DESK_POOL_MARGIN_U * u,
+        lamp ? lamp * u : Math.hypot(pw, ph) / 2 + DESK_POOL_MARGIN_U * u,
       );
     }
   }
@@ -388,7 +401,10 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
   const pieces = wallPieces(plan.walls || [], plan.doors || []);
   for (const room of plan.rooms) {
     const floor = liveMaterial(materialForRoom(room, LOOK.look.floors));
-    paintBaseboard(ctx, room, rectOf(room), pieces, u, floor.baseboard);
+    // A room in a colour of its own has a baseboard of that colour's floor.
+    const zone = room.kind === 'project' ? roomGroundFor(LOOK, room.projectMk) : null;
+    const board = typeof zone === 'function' ? baseboardOf(zone(floor.field)) : floor.baseboard;
+    paintBaseboard(ctx, room, rectOf(room), pieces, u, board);
   }
   for (const wall of pieces) {
     paintWallSegment(ctx, wall, u);

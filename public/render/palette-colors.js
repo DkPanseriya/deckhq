@@ -712,13 +712,21 @@ export function mixHex(a, b, t) {
  * that measures it, so the surface the suite proves readable is the surface the
  * bake puts on the floor.
  *
+ * A ROOM WITH A COLOUR OF ITS OWN hands over a function instead of an accent:
+ * the look's own zone tint (`roomGroundFor` in `look-derive.js`), which mixes
+ * the carpet toward the room's hue and puts it back on the carpet's luminance.
+ * The wash is not applied on top of it — a zoned room is its hue, not its hue
+ * and six per cent of somebody's jacket.
+ *
  * @param {string} carpet the theme's carpet, `#rrggbb`
- * @param {string|null|undefined} tint the project's identity accent
+ * @param {string|((colour:string)=>string)|null|undefined} tint the project's
+ *   identity accent, or the room's own tint as a function of the colour under it
  * @param {number} [amount]
  * @returns {string}
  */
 export function washedCarpet(carpet, tint, amount = CARPET_IDENTITY_WASH) {
   if (!tint) return carpet;
+  if (typeof tint === 'function') return tint(carpet);
   return mixHex(carpet, tint, Math.min(CARPET_IDENTITY_WASH, amount));
 }
 

@@ -1044,7 +1044,7 @@ and they are the only ones you see until you ask for more:
 | -------------- | ------------------------------------------------------------------------------------- |
 | **Agent size** | Small, Medium, Large, or Auto — Auto picks a size that fits everyone on the floor     |
 | **Theme**      | Default, Night shift or Blueprint. In Settings, pointing at one previews it           |
-| **Style**      | Six presets as thumbnails: a whole floor — materials, colours, furniture, rugs        |
+| **Style**      | Eleven presets as thumbnails: a whole floor — materials, colours, furniture, rugs     |
 | **Density**    | Calm, Normal or Lively — how many plants and props, moved together                    |
 
 A click changes the floor straight away and the choice stays lit. If a choice would leave the floor
@@ -1057,10 +1057,32 @@ three headings you can fold away:
 
 - **Floors** — a material for the office, the corridor, the project rooms and the lounge, and the
   colour scheme washed over them.
-- **Furniture and textiles** — the furniture set, the two rugs (a tone and a pattern each), and
-  which corners the lounge has. Sitting is always on.
+- **Furniture and textiles** — the furniture set, the two rugs (a tone and a pattern each), which
+  corners the lounge has (sitting is always on), the **light** (morning, noon or evening), the
+  **partitions** between rooms (solid, glass or low) and **room colours**.
 - **Plants and props** — the plant family, and the plant and prop densities one at a time, for when
   Calm, Normal and Lively are not the mix you want.
+
+**Room colours** decides how much of a colour each project room's floor carries:
+
+| Room colours | What a project room's floor is                                                        |
+| ------------ | ------------------------------------------------------------------------------------- |
+| **Subtle**   | The room's material, leaning a little toward its project's colour. The default        |
+| **Zoned**    | One of six calm colours per project — sage, powder blue, lilac, mint, straw, rose     |
+| **Off**      | The bare material, the same in every room                                             |
+
+Zoned is for telling rooms apart at a glance. The colour is as bright as the floor it replaces, so
+names and state colours read as they did, and a room with its lights off keeps its colour under
+the dimming. The seventh project takes the first colour again. Your agents keep their own colours:
+the tint is the room's. The **Colour plan** style turns it on over a neutral building.
+
+**Props** is also what dresses a room. Every project room has a bin by its desks and a coat stand
+by its door. At **Normal** it also has felt panels on its clear walls, a lamp over a meeting table,
+and — where there is empty floor — up to two second places, three in a big team's room: a standing
+table, a reading corner, a booth or a whiteboard to gather at. **Calm** leaves only the bin and
+the coat stand; **Lively** allows three in any room and a planter beside a reading corner. Nothing
+is ever placed within a body's width of a seat, in a doorway, or on the way from a door to a desk,
+and nobody is seated at them.
 
 While it is shut, its heading counts what you have changed — _Advanced — 2 changes from Studio
 oak_ — and **Reset to preset** inside it puts the style back without touching your agent size.

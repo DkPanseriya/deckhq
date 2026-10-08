@@ -261,8 +261,13 @@ export function materialColours(id, floor) {
     specks: material.specks(field, floor).map(cap),
     // G6a. The line where this floor meets a wall: the floor itself, a step
     // darker, so it reads as a shadow of the same material and never as trim.
-    baseboard: shade(field, BASEBOARD_SHADE),
+    baseboard: baseboardOf(field),
   };
+}
+
+/** The line where a floor meets a wall, for a floor of this colour. @param {string} field */
+export function baseboardOf(field) {
+  return shade(field, BASEBOARD_SHADE);
 }
 
 // ------------------------------------------- the light, the glass, the tints
@@ -399,6 +404,64 @@ export function roomFloorFor(resolved, n, accent) {
     return tint.tints[(((Math.round(n) - 1) % count) + count) % count];
   }
   return tint.wash > 0 ? washedCarpet(field, accent, tint.wash) : field;
+}
+
+/** Which of the six hues the n-th project room takes. @param {number} n @param {number} count */
+function zoneIndex(n, count) {
+  const at = Number.isFinite(Number(n)) ? Math.round(Number(n)) : 1;
+  return (((at - 1) % count) + count) % count;
+}
+
+/** One room's tint, memoised: a floor of boards asks for the same four tones per room. */
+const zoned = new Map();
+
+/**
+ * WHAT A PROJECT ROOM'S FLOOR IS TINTED BY, as the thing a floor painter is
+ * handed (`paintFloorMaterial`, `washedCarpet`).
+ *
+ * `subtle` hands over the project's identity accent, and the textile painters
+ * wash their ground toward it exactly as they always have. `zoned` hands over a
+ * FUNCTION — the room's hue, applied to whatever colour it is given — so a
+ * carpet, a board and a chip all take the same tint and each stays on its own
+ * luminance. `off` hands over nothing.
+ *
+ * It is `roomFloorFor` said the way a painter needs it: for the room's field
+ * the two agree to the byte, which `look-ambience.test.mjs` holds.
+ *
+ * @param {{roomTint: ReturnType<typeof roomTintFor>}} resolved
+ * @param {number} n which project room, counted from 1
+ * @param {string|null} [accent] the project's identity accent, for `subtle`
+ * @returns {string|((colour:string)=>string)|null}
+ */
+export function roomGroundFor(resolved, n, accent = null) {
+  const tint = resolved && resolved.roomTint;
+  if (!tint) return accent;
+  if (tint.zoned) {
+    const { hue } = tint.hues[zoneIndex(n, tint.hues.length)];
+    return (colour) => {
+      if (!/^#[0-9a-f]{6}$/i.test(String(colour))) return colour;
+      const key = `${hue}|${colour}`;
+      let out = zoned.get(key);
+      if (!out) {
+        if (zoned.size > 512) zoned.clear();
+        out = zoneTint(colour, hue);
+        zoned.set(key, out);
+      }
+      return out;
+    };
+  }
+  return tint.wash > 0 ? accent : null;
+}
+
+/**
+ * The room's accent for small objects — a panel on its wall — or `null` where
+ * rooms carry no colour of their own. @param {{roomTint:any}} resolved @param {number} n
+ * @returns {string|null}
+ */
+export function roomAccentFor(resolved, n) {
+  const tint = resolved && resolved.roomTint;
+  if (!tint || !tint.zoned || !tint.accents.length) return null;
+  return tint.accents[zoneIndex(n, tint.accents.length)];
 }
 
 // ------------------------------------------------------------- the zones
@@ -543,7 +606,7 @@ export function resolveLook(look, theme) {
     },
     lounge: { bays: LOUNGE_KIT_BAYS.filter((b) => on[b]), on },
     agentSize: l.agentSize,
-    // The light and the partitions are painted; the room tint is carried.
+    // All three are painted: `roomGroundFor` is what a floor painter is handed.
     light: lightFor(l.light, floor),
     partitions: partitionsFor(l.partitions, floor),
     roomTint: roomTintFor(l.roomTint, zones.rooms.field, floor),

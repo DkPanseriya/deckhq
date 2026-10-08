@@ -308,6 +308,92 @@ export let PROP_ATTACH_MAX = 2.0;
  */
 export let CHAR_CLEAR_U = 1.2;
 
+// ------------------------------------------------------------ the dressing
+
+/**
+ * WHAT A ROOM IS DRESSED IN, BY RULE (`plan-deco.js`).
+ *
+ * Eight kinds, placed after a room has been furnished and never instead of
+ * it: five this floor did not have and three it drew and never laid. `wall` is
+ * what hangs on a wall and takes no floor, `overhead` what hangs from a
+ * ceiling; everything else stands on the floor and is counted against
+ * `propClearU2()` like any other free-standing prop.
+ */
+export const DECO_KINDS = Object.freeze([
+  'bin',
+  'coat_stand',
+  'wall_panel',
+  'pendant',
+  'standing_table',
+  'booth',
+  'lamp',
+  'planter',
+]);
+/** Hung on a wall, or from a ceiling: on nobody's floor. */
+export const DECO_OFF_THE_FLOOR = Object.freeze(['wall_panel', 'pendant']);
+
+/**
+ * HOW MUCH OF IT, AT EACH DENSITY THE LOOK OFFERS (Calm · Normal · Lively).
+ *
+ * A bin at the desks and a coat stand at the door are furniture a room is
+ * owed, so they stand at every density, and at `quiet` they are all there is.
+ * `panels` is the most wall panels one room carries; `zones` the most second
+ * places a room of each module is given past what it was furnished with — a
+ * standing table, a reading corner, a booth; `pendants` whether a lamp hangs
+ * over a table; `screens` whether a planter run stands beside a reading corner.
+ *
+ * A CEILING, like every density on this floor: each piece is laid only where
+ * the rules below leave room for it, so a room at the size of its desks gets
+ * its bin and nothing else at any setting.
+ */
+export const DECO_LEVELS = Object.freeze({
+  quiet: Object.freeze({
+    panels: 0,
+    zones: Object.freeze({ S: 0, M: 0, L: 0 }),
+    pendants: false,
+    screens: false,
+  }),
+  normal: Object.freeze({
+    panels: 3,
+    zones: Object.freeze({ S: 2, M: 2, L: 3 }),
+    pendants: true,
+    screens: false,
+  }),
+  busy: Object.freeze({
+    panels: 5,
+    zones: Object.freeze({ S: 3, M: 3, L: 3 }),
+    pendants: true,
+    screens: true,
+  }),
+});
+
+/** The row of `DECO_LEVELS` the look is set to; `normal` is what ships. */
+export function decoLevel() {
+  const id = LOOK.props?.density?.id;
+  return DECO_LEVELS[/** @type {keyof typeof DECO_LEVELS} */ (id)] || DECO_LEVELS.normal;
+}
+
+/**
+ * One wall panel per this much uninterrupted wall, centred in its share; and
+ * none within `PANEL_PLATE_CLEAR` of the corner a room's plate is written in.
+ * Reading distances, like `SILHOUETTE_SPACING`: they do not scale with a body.
+ */
+export const PANEL_SHARE = 8;
+export const PANEL_PLATE_CLEAR = 6;
+/** A panel stops this far short of a corner. */
+export const PANEL_CORNER_CLEAR = 1.2;
+/** A coat stand is for a room somebody would hang a coat up in: this wide. */
+export const COAT_ROOM_MIN_W = 16;
+
+/**
+ * THE FLOOR SOMEBODY WALKS: a straight line from a room's door to each seat in
+ * it (`planWalk`). Nothing a room is dressed in stands within this of one — a
+ * coat stand on the way to a desk is a coat stand somebody walks through.
+ */
+export let WALK_CLEAR_U = 0.8;
+/** Clear floor a second place keeps on every side of itself. */
+export let DECO_ZONE_CLEAR = 1.6;
+
 // ------------------------------------------------------------- the lounge
 
 /**
@@ -447,6 +533,8 @@ const BASE = {
   BOOKCASE_MIN_RUN,
   PROP_ATTACH_MAX,
   CHAR_CLEAR_U,
+  WALK_CLEAR_U,
+  DECO_ZONE_CLEAR,
 };
 
 registerBodyScale((s) => {
@@ -461,6 +549,8 @@ registerBodyScale((s) => {
     BOOKCASE_MIN_RUN,
     PROP_ATTACH_MAX,
     CHAR_CLEAR_U,
+    WALK_CLEAR_U,
+    DECO_ZONE_CLEAR,
   } = scaleAll(BASE, s));
   PLANT_FOOTPRINTS = Object.freeze({
     plant_broad: PLANT_BROAD,

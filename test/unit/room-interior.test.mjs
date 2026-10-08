@@ -195,19 +195,45 @@ test('at most 45% of a room’s floor is bare, on every module', () => {
   );
 });
 
-test('a room laid at the size of its desks is given nothing', () => {
+test('a room the furnishing has no call on is left to the dressing, and nothing in it is moved', () => {
+  // DELIBERATELY MOVED, with the dressing (`plan-deco.js`). This held that a
+  // small room under the bare-floor line gains no prop at all. It still gains
+  // nothing from the FURNISHING — no meeting table, no sofa group, no storage —
+  // and nothing that was in it is moved. What it gains now is what a room is
+  // dressed in by rule: a bin at its desks, a coat stand, a panel on a clear
+  // wall, and — where one desk was laid in a room with a void in it, which is
+  // what several of these are — a second place to stand or sit.
+  const FURNISHING = new Set(['meeting_table', 'sofa', 'coffee_table', 'credenza', 'bookshelf']);
   const small = ROOMS.filter(
     (r) => bareFloorShare(r.before) <= BARE_FLOOR_MAX && r.room.module === 'S',
   );
   assert.ok(small.length >= 6, `${small.length} small rooms`);
+  let places = 0;
   for (const r of small) {
-    assert.equal(r.room.props.length, r.before.props.length, `${r.where} was furnished`);
+    const was = r.room.props.slice(0, r.before.props.length);
+    const dressed = addedTo(r);
     assert.deepEqual(
-      r.room.props.map((p) => [p.kind, p.x, p.y]),
+      dressed.filter((p) => FURNISHING.has(p.kind)).map((p) => p.kind),
+      [],
+      `${r.where} was furnished`,
+    );
+    assert.equal(
+      r.room.zones.some((z) => /^(meeting|seating)-\d+$/.test(z.id)),
+      false,
+      `${r.where} was given a furniture group`,
+    );
+    assert.deepEqual(
+      was.map((p) => [p.kind, p.x, p.y]),
       r.before.props.map((p) => [p.kind, p.x, p.y]),
       `${r.where}: something in a room that needed nothing was moved`,
     );
+    assert.equal(dressed.filter((p) => p.kind === 'bin').length, 1, `${r.where}: one bin`);
+    places += dressed.filter((p) =>
+      /^(standing_table|booth|lamp|board_stand)$/.test(p.kind),
+    ).length;
   }
+  console.log(`
+    ${small.length} such rooms, ${places} second places among them`);
 });
 
 test('one or two projects on a building are rooms too: none is a hall, none past 45% bare', () => {

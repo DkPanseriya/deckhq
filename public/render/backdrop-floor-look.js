@@ -411,6 +411,20 @@ function seamOf(field, a) {
 }
 
 /**
+ * A material in one room's colour: every colour it is laid in, through the
+ * room's tint. The pattern, the painter and the sizes are the material's own.
+ * @param {any} material @param {(colour:string)=>string} zone
+ */
+function zonedMaterial(material, zone) {
+  return {
+    ...material,
+    field: zone(material.field),
+    tones: (material.tones || []).map(zone),
+    specks: (material.specks || []).map(zone),
+  };
+}
+
+/**
  * PAINT ONE ZONE'S FLOOR, whatever it is made of.
  *
  * The one place a material id becomes paint. The four materials that shipped
@@ -422,12 +436,26 @@ function seamOf(field, a) {
  * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
  * @param {string} id a key of `FLOOR_MATERIALS`
  * @param {number} x @param {number} y @param {number} w @param {number} h
+ * A ROOM'S TINT is one of two things (`roomGroundFor`). An identity accent is a
+ * WASH, and only a textile takes it — the broadloom, the felt, the loop pile —
+ * which is the floor as it has always been. A function is the room's own
+ * COLOUR, and every material takes it: the field, each board tone and each
+ * fleck go through it before the painter sees them, so a room of oak and a room
+ * of carpet are both that room's colour. The broadloom reads its ground off the
+ * palette rather than off the material, so it is handed the function itself.
+ *
+ * @param {CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D} ctx
+ * @param {string} id a key of `FLOOR_MATERIALS`
+ * @param {number} x @param {number} y @param {number} w @param {number} h
  * @param {() => number} rng
- * @param {string|null} tint the project's identity colour, or null
+ * @param {string|((colour:string)=>string)|null} tint the project's identity
+ *   colour, the room's own tint, or null
  * @param {number} [u]
  */
 export function paintFloorMaterial(ctx, id, x, y, w, h, rng, tint = null, u = U_DEFAULT) {
-  const material = liveMaterial(id);
+  const zone = typeof tint === 'function' ? tint : null;
+  const material = zone ? zonedMaterial(liveMaterial(id), zone) : liveMaterial(id);
+  const wash = typeof tint === 'string' ? tint : null;
   switch (material.painter) {
     case 'herringbone':
       return paintHerringbone(ctx, x, y, w, h, rng, u);
@@ -442,13 +470,13 @@ export function paintFloorMaterial(ctx, id, x, y, w, h, rng, tint = null, u = U_
     case 'fine-herringbone':
       return paintFineHerringbone(ctx, x, y, w, h, rng, u, material);
     case 'felt':
-      return paintFelt(ctx, x, y, w, h, tint, u, material);
+      return paintFelt(ctx, x, y, w, h, wash, u, material);
     case 'terrazzo':
       return paintTerrazzo(ctx, x, y, w, h, rng, u, material);
     case 'concrete':
       return paintConcrete(ctx, x, y, w, h, u, material);
     case 'loop-pile':
-      return paintLoopPile(ctx, x, y, w, h, rng, tint, u, material);
+      return paintLoopPile(ctx, x, y, w, h, rng, wash, u, material);
     case 'cork':
       return paintCork(ctx, x, y, w, h, rng, u, material);
     default:

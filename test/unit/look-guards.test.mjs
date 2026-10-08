@@ -271,8 +271,8 @@ test('G6a: the five new presets pass on every theme, 15 of 15, at the ratios the
     }
   }
   assert.equal(passed, 15);
-  // Two of the five are offered now that the light and the partitions are painted.
-  assert.equal(ALL_PRESETS.filter((p) => p.pending).length, 3);
+  // All five are offered: the light, the partitions and the room tint are painted.
+  assert.equal(ALL_PRESETS.filter((p) => p.pending).length, 0);
   assert.equal(Object.keys(DRAWN).length, 5);
   report(
     `G6a the five new presets — edge ceiling ${ZONE_EDGE_MAX}, rug band ${RUG_BAND_MIN}–${RUG_BAND_MAX}, ink bar 4.5`,

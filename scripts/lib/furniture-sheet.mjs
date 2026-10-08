@@ -246,6 +246,31 @@ export const FURNITURE_SHEET = Object.freeze([
     floor: 'wood',
     props: [{ kind: 'reception_desk', x: 1.75, y: 2.6, w: 9, h: 4 }],
   },
+  {
+    // What a room is dressed in: a panel on a west wall, a pair on a south
+    // one, a high table with its stools and the lamp over it, a coat stand, a bin.
+    label: 'Dressing',
+    floor: 'carpet',
+    props: [
+      { kind: 'wall_panel', x: 0.5, y: 2, w: 0.7, h: 3.2, anchor: { type: 'wall', side: 'W' } },
+      {
+        kind: 'wall_panel',
+        x: 2.2,
+        y: 7.8,
+        w: 3.2,
+        h: 0.7,
+        split: 2,
+        anchor: { type: 'wall', side: 'S' },
+      },
+      { kind: 'standing_table', x: 3.6, y: 2.2, w: 4.8, h: 1.3 },
+      { kind: 'bar_stool', x: 3.6, y: 3.8, w: 1.4, h: 1.4 },
+      { kind: 'bar_stool', x: 5.3, y: 3.8, w: 1.4, h: 1.4 },
+      { kind: 'bar_stool', x: 7, y: 3.8, w: 1.4, h: 1.4 },
+      { kind: 'pendant', x: 5.4, y: 2.25, w: 1.2, h: 1.2 },
+      { kind: 'coat_stand', x: 9.8, y: 2.4, w: 1.3, h: 1.3 },
+      { kind: 'bin', x: 10.1, y: 5.6, w: 0.7, h: 0.7 },
+    ],
+  },
 ]);
 
 /**
