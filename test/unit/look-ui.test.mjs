@@ -535,8 +535,8 @@ test('the preset cards are there, the current one is checked, and it says so', (
   assert.equal(cards.length, PRESETS.length);
   assert.equal(
     cards.length,
-    8,
-    'the six that shipped, and the two whose light and partitions are painted',
+    11,
+    'the six that shipped, and the five whose light, partitions and room colours are painted',
   );
   const checked = cards.filter((c) => c.getAttribute('aria-checked') === 'true');
   assert.equal(checked.length, 1);
@@ -861,9 +861,18 @@ test('every option the section can offer is a swatch spec the painter understand
   // The four groups with no picture — the furniture set, the two densities and
   // WP-88c's agent size — are deliberate and say so; what this catches is a NEW
   // picker silently joining them because nobody taught `swatchSpecFor` about it.
-  // The light and the partitions joined them when their painters landed: they
-  // are offered as named choices until the Look section draws them a picture.
-  const without = new Set(['furniture', 'plants', 'props', 'agentSize', 'light', 'partitions']);
+  // The light, the partitions and the room colours joined them when their
+  // painters landed: they are offered as named choices until the Look section
+  // draws them a picture.
+  const without = new Set([
+    'furniture',
+    'plants',
+    'props',
+    'agentSize',
+    'light',
+    'partitions',
+    'roomTint',
+  ]);
   for (const picker of LOOK_PICKERS) {
     for (const option of picker.options) {
       const spec = swatchSpecFor(picker, option.id, DEFAULT_LOOK, catalogue);

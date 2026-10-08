@@ -63,7 +63,7 @@ import {
 } from './backdrop-floor.js';
 import { paintFloorMaterial } from './backdrop-floor-look.js';
 import { paintRoomLight, paintWindowBand } from './backdrop-light.js';
-import { LOOK, liveMaterial, materialForRoom } from './look-derive.js';
+import { LOOK, baseboardOf, liveMaterial, materialForRoom, roomGroundFor } from './look-derive.js';
 import { setDeviceScale, snapPx } from './device-px.js';
 import { paintDeskProps } from './backdrop-props-desk.js';
 import { paintLoungeProps } from './backdrop-props-lounge.js';
@@ -303,7 +303,13 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
     // that is assigned once and persisted (CONTRACTS-WP15.md §1) — so it is
     // the same wash under the same room on every machine and every rebake,
     // and it is the same colour the agents in it are already wearing.
-    const tint = room.kind === 'project' ? identityFor(room.projectMk).accent : null;
+    //
+    // HOW MUCH of it is the look's (`roomGroundFor`): that wash, the room's own
+    // colour out of six, or nothing.
+    const tint =
+      room.kind === 'project'
+        ? roomGroundFor(LOOK, room.projectMk, identityFor(room.projectMk).accent)
+        : null;
     paintFloorMaterial(ctx, materialForRoom(room, LOOK.look.floors), rx, ry, rw, rh, rng, tint, u);
 
     if (room.kitchenZone) {
@@ -388,7 +394,10 @@ export function bakeBackdrop(plan, pxPerUnit = U_DEFAULT, opts = {}) {
   const pieces = wallPieces(plan.walls || [], plan.doors || []);
   for (const room of plan.rooms) {
     const floor = liveMaterial(materialForRoom(room, LOOK.look.floors));
-    paintBaseboard(ctx, room, rectOf(room), pieces, u, floor.baseboard);
+    // A room in a colour of its own has a baseboard of that colour's floor.
+    const zone = room.kind === 'project' ? roomGroundFor(LOOK, room.projectMk) : null;
+    const board = typeof zone === 'function' ? baseboardOf(zone(floor.field)) : floor.baseboard;
+    paintBaseboard(ctx, room, rectOf(room), pieces, u, board);
   }
   for (const wall of pieces) {
     paintWallSegment(ctx, wall, u);
