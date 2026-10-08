@@ -6,7 +6,8 @@
  *
  * A look is what the building is made of, separated from what is on it and from
  * where anything is: nine floor materials over four zones, a colour scheme, a
- * furniture set, two rugs, the planting, the prop density and the lounge kit.
+ * furniture set, two rugs, the planting, the prop density and the lounge kit —
+ * and, since G6a, the light, the partitions and the room tint.
  *
  * ## Why the schema is here and the tables are not
  *

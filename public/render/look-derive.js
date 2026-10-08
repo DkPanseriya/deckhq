@@ -6,7 +6,9 @@
  * whole of what a painter needs: the eleven floor tokens after the scheme, the
  * material tokens WP-85a fans those out into, one material per zone with its
  * colours and its pattern rule, both rugs, the furniture set, the planting, the
- * prop density and the lounge kit.
+ * prop density and the lounge kit — and, since G6a, the light, the partitions
+ * and the room tint, resolved and measured ahead of the painters that will
+ * read them.
  *
  * ## Why the painters read a resolved look rather than a constant
  *
