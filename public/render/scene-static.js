@@ -6,15 +6,15 @@
  * floor's baked bitmap. None of them changes between one re-plan, resize or
  * camera move and the next, and all three were painted again on every frame.
  * Where the frame is rastered in software (no GPU, a remote desktop, a virtual
- * machine) those three were nine tenths of what a frame cost, and the gradient
- * alone was more than half.
+ * machine) those three were nine tenths of what a frame cost: a frame of the
+ * 150-agent floor took 62 ms with them painted and 4 ms with them composed
+ * (`scripts/render-bench.mjs`, headless, 2000 x 1055).
  *
  * So they are painted into one canvas the size of the floor's own, and a frame
  * puts that down with a single one-to-one `drawImage` under the identity
  * transform. It is the same three calls on a transparent surface, and copying a
  * surface onto a cleared one is exact: the layer and the direct paint are the
- * same pixels, which `scripts/render-bench.mjs --verify` draws both ways and
- * compares.
+ * same pixels, which `scripts/render-bench.mjs` draws both ways and compares.
  *
  * WHEN IT IS COMPOSED. The layer is keyed on everything those three calls read
  * — the canvas and its pixel ratio, the camera, the two bitmaps in hand, the

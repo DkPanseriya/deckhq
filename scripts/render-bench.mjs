@@ -19,7 +19,9 @@
  *             text, `drawImage`, gradients built, fills that cover the canvas).
  *   raster    the same frame forced through with a one-pixel read-back. Headless
  *             Chrome has no GPU here, so this is SOFTWARE raster: an upper bound,
- *             comparable only with itself.
+ *             comparable only with itself. And the same again with the ground
+ *             painted under every frame rather than composed once, which is
+ *             what the composed layer is worth on its own.
  *   same      the frame drawn the way it is shipped — the ground from its
  *             composed layer, the layout from the one kept — against the same
  *             frame with the ground painted directly and everything measured
@@ -279,6 +281,23 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     rasterTimes.push(performance.now() - t);
   }
 
+  // The same frames with the ground painted under each one, as it used to be.
+  let rasterDirectMs = null;
+  if ('_useGroundLayer' in scene) {
+    scene._useGroundLayer = false;
+    scene._dropGroundLayer();
+    const direct = [];
+    for (let i = 0; i < Math.min(frames, 20); i++) {
+      step(30 + frames + i);
+      const t = performance.now();
+      scene._draw();
+      scene.ctx.getImageData(0, 0, 1, 1);
+      direct.push(performance.now() - t);
+    }
+    rasterDirectMs = +median(direct).toFixed(1);
+    scene._useGroundLayer = true;
+  }
+
   let visible = 0;
   const cam = scene._cameraParams();
   for (const rec of scene._runtime.all()) {
@@ -373,6 +392,7 @@ const MEASURE = `(async (size, stageW, stageH, frames, reducedRun) => {
     setStateMs: +setStateMs.toFixed(1),
     drawMs: +median(drawTimes).toFixed(2),
     rasterMs: +median(rasterTimes).toFixed(1),
+    rasterDirectMs,
     calls: calls.calls || 0,
     measureText: calls.measureText || 0,
     fontSets: calls['font='] || 0,
@@ -489,6 +509,7 @@ if (JSON_OUT) {
     ['  again ms', (r) => r.planAgainMs],
     ['_draw JS ms', (r) => r.drawMs],
     ['raster ms (sw)', (r) => r.rasterMs],
+    ['  ground painted each frame', (r) => (r.rasterDirectMs == null ? 'n/a' : r.rasterDirectMs)],
     ['canvas calls', (r) => r.calls],
     ['  per figure', (r) => (r.figures ? Math.round(r.calls / r.figures) : 0)],
     ['measureText', (r) => r.measureText],
