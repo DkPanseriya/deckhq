@@ -17,9 +17,18 @@ import '../helpers/isolate.mjs';
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Readable } from 'node:stream';
 
 import { pickSessionLook } from '../../public/url-options.js';
-import { DEFAULT_LOOK, presetById, sameLook } from '../../public/render/look-options.js';
+import {
+  ALL_PRESETS,
+  DEFAULT_LOOK,
+  lookForPreset,
+  pendingPaths,
+  presetById,
+  sameLook,
+} from '../../public/render/look-options.js';
+import { register as registerLookRoute } from '../../src/http/routes/look.mjs';
 import {
   LOOK_KIND,
   LOOK_VERSION,
@@ -163,6 +172,178 @@ test('a file is size-bounded before it is parsed, and a non-JSON file says so', 
   assert.match(/** @type {any} */ (parseLookDocument('{')).error, /not JSON/);
   const good = parseLookDocument(JSON.stringify(docFor('paper-office')));
   assert.ok('ok' in good);
+});
+
+// ------------------------------- G6a: the light, the partitions, the room tint
+
+/**
+ * A `deckhq.look` EXACTLY AS A BUILD BEFORE G6a WROTE IT: version 1, eleven
+ * keys, and no light, no partitions, no room tint. Written out rather than
+ * derived from today's exporter, because what is being promised is that a file
+ * already on somebody's disk still means what it meant.
+ */
+const BEFORE_G6A = Object.freeze({
+  kind: 'deckhq.look',
+  version: 1,
+  preset: 'night-lab',
+  floors: {
+    office: 'polished-concrete',
+    corridor: 'ceramic-tile',
+    rooms: 'loop-pile',
+    lounge: 'polished-concrete',
+  },
+  scheme: 'ink',
+  furniture: 'industrial',
+  rugs: { wool: { tone: 'wool', pattern: 'banded' }, task: { tone: 'wool', pattern: 'plain' } },
+  plants: { family: 'architectural', density: 'sparse' },
+  props: { density: 'normal' },
+  lounge: { sitting: true, quiet: true, cafe: true, games: false },
+  agentSize: 'medium',
+});
+
+test('G6a: a version-1 look written before the three keys imports as the floor it always was', () => {
+  const parsed = parseLookDocument(JSON.stringify(BEFORE_G6A));
+  assert.ok('ok' in parsed, /** @type {any} */ (parsed).error);
+  // Every key the old file carried is unchanged, the version has not moved, and
+  // the three it never had are the floor every build before this one painted.
+  assert.deepEqual(parsed.look, {
+    ...BEFORE_G6A,
+    light: 'noon',
+    partitions: 'solid',
+    roomTint: 'subtle',
+  });
+  assert.equal(LOOK_VERSION, 1);
+  assert.ok(sameLook(parsed.look, lookForPreset('night-lab')));
+  assert.deepEqual(pendingPaths(parsed.look), []);
+});
+
+test('G6a: the three keys round-trip, and all eleven presets are fixed points', () => {
+  for (const preset of ALL_PRESETS) {
+    const first = buildLookDocument({ look: preset.look });
+    assert.equal(first.preset, preset.id);
+    const parsed = parseLookDocument(JSON.stringify(first));
+    assert.ok('ok' in parsed, `${preset.id}: ${/** @type {any} */ (parsed).error}`);
+    assert.deepEqual(parsed.look, first);
+    assert.equal(
+      JSON.stringify(buildLookDocument({ look: parsed.look })),
+      JSON.stringify(first),
+      `${preset.id} is not a fixed point`,
+    );
+  }
+  // A style the picker does not offer yet still travels whole: the document is
+  // the catalogue's, not the picker's.
+  const loft = buildLookDocument({ look: lookForPreset('graphite-loft') });
+  assert.deepEqual([loft.light, loft.partitions, loft.roomTint], ['evening', 'glass', 'off']);
+  // And an edited look carries what was chosen, not what its preset says.
+  const edited = buildLookDocument({ look: { ...DEFAULT_LOOK, light: 'morning' } });
+  const back = validateLookDocument(edited);
+  assert.ok('ok' in back);
+  assert.equal(back.look.light, 'morning');
+  assert.equal(back.look.preset, 'studio-oak');
+});
+
+test('G6a: a bad light, partition or tint is refused with its reason, never dropped', () => {
+  const good = docFor('studio-oak');
+  for (const [key, value] of /** @type {Array<[string, unknown]>} */ ([
+    ['light', 'midnight'],
+    ['partitions', 'brick'],
+    ['roomTint', 'loud'],
+    ['light', null],
+    ['roomTint', 42],
+  ])) {
+    const result = validateLookDocument({ ...good, [key]: value });
+    assert.ok('error' in result, `${key}: ${JSON.stringify(value)} was accepted`);
+    assert.match(result.error, new RegExp(`^${key} is `));
+    assert.match(result.error, /this build has /);
+  }
+  // Ids that are all real, and a floor a guard will not paint: ash rooms take
+  // the six room colours on the default theme and not on night shift, and a
+  // document is measured on every theme this build ships.
+  const refused = /** @type {any} */ (
+    validateLookDocument({
+      ...buildLookDocument({ look: lookForPreset('daylight-studio') }),
+      roomTint: 'zoned',
+    })
+  );
+  assert.match(refused.error, /^on the "night shift" theme, .*a room may not wear/);
+  assert.equal(refused.problems[0].picker, 'roomTint');
+});
+
+test('G6a: /api/look accepts the three keys, stores them and hands them back', async () => {
+  /** @type {Map<string, Function>} */
+  const routes = new Map();
+  const router = {
+    get: (/** @type {string} */ url, /** @type {Function} */ fn) => routes.set(`GET ${url}`, fn),
+    post: (/** @type {string} */ url, /** @type {Function} */ fn) => routes.set(`POST ${url}`, fn),
+  };
+  let saves = 0;
+  let pushes = 0;
+  /** @type {any} */
+  const store = {
+    settings: { look: sanitizeLook(DEFAULT_LOOK) },
+    setSettings(/** @type {any} */ patch) {
+      // What the real store does to this key: sanitise, never trust.
+      this.settings = { ...this.settings, look: sanitizeLook(patch.look) };
+    },
+    save: async () => void saves++,
+  };
+  registerLookRoute(/** @type {any} */ (router), {
+    store,
+    registry: { onSettingsChanged: () => void pushes++ },
+    log: {},
+  });
+  /** @param {string} route @param {unknown} [body] */
+  const call = async (route, body) => {
+    /** @type {{status:number|null, body:any}} */
+    const out = { status: null, body: null };
+    const res = {
+      writeHead: (/** @type {number} */ status) => void (out.status = status),
+      end: (/** @type {string} */ payload) => void (out.body = JSON.parse(payload)),
+    };
+    const req = Readable.from(body === undefined ? [] : [Buffer.from(JSON.stringify(body))]);
+    await /** @type {Function} */ (routes.get(route))(req, res);
+    return out;
+  };
+
+  const before = await call('GET /api/look');
+  assert.deepEqual(
+    [before.body.light, before.body.partitions, before.body.roomTint],
+    ['noon', 'solid', 'subtle'],
+  );
+
+  const wanted = buildLookDocument({ look: lookForPreset('nordic-wool') });
+  const posted = await call('POST /api/look', wanted);
+  assert.equal(posted.status, 200, JSON.stringify(posted.body));
+  assert.deepEqual(posted.body.look, wanted);
+  assert.deepEqual((await call('GET /api/look')).body, wanted);
+  assert.deepEqual([saves, pushes], [1, 1]);
+
+  // A file from before the three keys existed is accepted whole, too.
+  const old = await call('POST /api/look', BEFORE_G6A);
+  assert.equal(old.status, 200, JSON.stringify(old.body));
+  assert.equal(old.body.look.light, 'noon');
+
+  // A REFUSAL CHANGES NOTHING: the look in the store is still the last one
+  // that validated, and nothing was saved or pushed for the one that did not.
+  const stored = JSON.stringify(store.settings.look);
+  const bad = await call('POST /api/look', { ...wanted, light: 'midnight' });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /^light is "midnight"/);
+  assert.equal(JSON.stringify(store.settings.look), stored);
+  assert.deepEqual([saves, pushes], [2, 2]);
+});
+
+test('G6a: a hand-edited light is coerced, and doctor names what was lost', () => {
+  const edited = { ...DEFAULT_LOOK, light: 'midnight', partitions: 'glass' };
+  const clean = sanitizeLook(edited);
+  // What was real survives; what was not is the default.
+  assert.equal(clean.light, 'noon');
+  assert.equal(clean.partitions, 'glass');
+  assert.match(/** @type {any} */ (lookWarning(edited)), /light "midnight"/);
+  assert.equal(lookWarning({ ...DEFAULT_LOOK, light: 'evening', roomTint: 'off' }), null);
+  // A stored look from before the keys existed says nothing: absent is not lost.
+  const { light: _l, partitions: _p, roomTint: _t, ...before } = DEFAULT_LOOK;
+  assert.equal(lookWarning(before), null);
 });
 
 // ------------------------------------------------------------ the settings
