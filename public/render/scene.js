@@ -15,21 +15,23 @@
  * ============================================================================
  * WP-22 follow-up · this file is the Scene's shell: the constructor, the
  * lifecycle (`setState`, `start`/`stop`, `destroy`) and the public API app.js
- * calls. Everything else is eight modules:
+ * calls. Everything else is these modules:
  *
  *   scene-base.js    the instance shape, declared once
  *   scene-lod.js     px-per-unit, and how big a character is drawn at it
  *   scene-camera.js  the fit-to-viewport camera and its pure arithmetic
  *   scene-labels.js  the room plates and the label collision pass
  *   scene-hit.js     anchors, the fixtures, and what is under the pointer
+ *   scene-static.js  the ground under the people, composed once per camera
+ *   scene-frame.js   the frame's layout, and whether a frame is due at all
  *   scene-draw.js    the rebuild, the frame loop and painter order
  *   scene-input.js   every listener the canvas owns, and the zoom API
  *   scene-agent.js   colour, label and glyph — the mini-floor's target
  *
- * The seven that carry methods are one chain of base classes:
+ * The ones that carry methods are one chain of base classes:
  *
- *   SceneBase → SceneLod → SceneCamera → SceneLabels → SceneHit → SceneDraw
- *     → SceneInput → Scene
+ *   SceneBase → SceneLod → SceneCamera → SceneBake → SceneLabels → SceneHit
+ *     → SceneStatic → SceneFrame → SceneDraw → SceneInput → Scene
  *
  * A chain rather than a mixin because the type checker follows a chain: with
  * `Object.assign` onto the prototype, `this._draw()` inside `setState()` is
@@ -50,7 +52,7 @@ import { AgentRuntime, assignSeats } from './agents.js';
 import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
 import { SceneInput } from './scene-input.js';
-import { planSignature } from './scene-draw.js';
+import { joinPlanSignature, planSignatureParts } from './scene-draw.js';
 import { pickSessionPhase } from '../url-options.js';
 import { crewsFrom } from '../floor-rule.js';
 import { animMs } from './scene-agent.js';
@@ -60,6 +62,8 @@ export * from './scene-lod.js';
 export * from './scene-camera.js';
 export * from './scene-labels.js';
 export * from './scene-hit.js';
+export * from './scene-static.js';
+export * from './scene-frame.js';
 export * from './scene-draw.js';
 export * from './scene-input.js';
 export * from './scene-agent.js';
@@ -104,6 +108,7 @@ export class Scene extends SceneInput {
     this._resizeDebounceTimer = null;
     this._plan = null;
     this._planSignature = null;
+    this._planGeometry = null;
     this._backdrop = null;
     /**
      * The floor the last re-plan replaced, kept only long enough to fade it
@@ -165,6 +170,8 @@ export class Scene extends SceneInput {
   setState(snapshot) {
     const previousAgents = (this._snapshot && this._snapshot.agents) || [];
     this._snapshot = snapshot || { agents: [], projects: [], counts: {} };
+    // A new snapshot is a new layout and a new picture, whatever it says.
+    this._stateGen++;
     const agents = this._snapshot.agents || [];
     this._agentsById = new Map(agents.map((a) => [a.id, a]));
     // WP-89. HOW MANY JUNIORS EACH PARENT HAS, whether or not they are all
@@ -192,10 +199,23 @@ export class Scene extends SceneInput {
     // genuine new snapshot is not a per-pixel window-drag event. `_rebuildPlan`
     // itself keeps the floor centred at its one fit scale, so there is no
     // separate first-fit step to do here.
-    const signature = planSignature(this._snapshot);
-    if (signature !== this._planSignature) {
+    const parts = planSignatureParts(this._snapshot);
+    const signature = joinPlanSignature(parts);
+    const geometry = parts.geometry.join('~');
+    if (signature !== this._planSignature && this._plan && geometry === this._planGeometry) {
+      // THE SAME BUILDING IN DIFFERENT PAINT. Only the theme moved, and a theme
+      // is paint: the plan in hand is still the plan, everybody is still in
+      // their seat, and the floor is baked again in the new colours — which is
+      // what `repaint()` does for the picker's own preview. Planning it again
+      // gave the same building back, a third of a second later on a big floor.
+      this._planSignature = signature;
+      this._paintGen++;
+      this._bakeFloor();
+      this._fadeFrom = null;
+    } else if (signature !== this._planSignature) {
       this._rebuildPlan(computeTargetAspect(this._viewW, this._viewH));
       this._planSignature = signature;
+      this._planGeometry = geometry;
       // The signature counts who is waiting, benched and let go, so the very
       // change that should be seen as a walk — a turn ends and the agent
       // heads for your office — is also a rebuild, and the runtime snaps the
@@ -256,6 +276,7 @@ export class Scene extends SceneInput {
    */
   repaint() {
     if (!this._plan) return;
+    this._paintGen++;
     this._bakeFloor();
     // No cross-fade: the old bitmap is the same building in different paint,
     // so fading between them reads as a flicker rather than as a change.
@@ -431,6 +452,7 @@ export class Scene extends SceneInput {
 
   destroy() {
     this._stopLoop();
+    this._dropGroundLayer();
     if (this._resizeDebounceTimer != null) {
       clearTimeout(this._resizeDebounceTimer);
       this._resizeDebounceTimer = null;
@@ -445,6 +467,7 @@ export class Scene extends SceneInput {
     this.canvas.removeEventListener('pointermove', this._onPointerMove);
     this.canvas.removeEventListener('pointerleave', this._onPointerLeave);
     this.canvas.removeEventListener('pointerup', this._onPointerUp);
+    this.canvas.removeEventListener('contextrestored', this._onContextRestored);
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', this._onResize);
     }

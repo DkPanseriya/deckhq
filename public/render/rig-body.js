@@ -117,15 +117,46 @@ import {
 export function drawHaloPool(ctx, ox, oy, u) {
   const r = FIGURE_HALO_POOL_SPAN * BODY_HEIGHT_U * u;
   if (!(r > 0)) return;
-  const ch = channelsOf(FIGURE_HALO) || [255, 255, 255];
-  const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
-  g.addColorStop(0, `rgba(${ch[0]},${ch[1]},${ch[2]},${FIGURE_HALO_POOL_ALPHA})`);
-  g.addColorStop(1, `rgba(${ch[0]},${ch[1]},${ch[2]},0)`);
-  ctx.fillStyle = g;
+  ctx.fillStyle = haloPoolPaint(ctx, ox, oy, r);
   ctx.beginPath();
   ctx.arc(ox, oy, r, 0, TAU);
   ctx.fill();
 }
+
+/**
+ * The pool's gradient for a figure standing HERE, built the first time it is
+ * asked for and kept: a seated figure is at the same point on every frame, and
+ * was building the same gradient sixty times a second. Kept per context, by
+ * the exact point, radius and colour — so the paint is the one that would have
+ * been built — and dropped whole once a context holds `HALO_POOLS_MAX`, which
+ * is what a floor of people walking about would otherwise grow without end.
+ * @param {any} ctx @param {number} ox @param {number} oy @param {number} r
+ */
+function haloPoolPaint(ctx, ox, oy, r) {
+  let kept = HALO_POOLS.get(ctx);
+  if (!kept || kept.size >= HALO_POOLS_MAX) {
+    kept = { rows: new Map(), size: 0 };
+    HALO_POOLS.set(ctx, kept);
+  }
+  let row = kept.rows.get(oy);
+  if (!row) kept.rows.set(oy, (row = new Map()));
+  let pool = row.get(ox);
+  if (!pool || pool.r !== r || pool.halo !== FIGURE_HALO || pool.alpha !== FIGURE_HALO_POOL_ALPHA) {
+    const ch = channelsOf(FIGURE_HALO) || [255, 255, 255];
+    const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, r);
+    g.addColorStop(0, `rgba(${ch[0]},${ch[1]},${ch[2]},${FIGURE_HALO_POOL_ALPHA})`);
+    g.addColorStop(1, `rgba(${ch[0]},${ch[1]},${ch[2]},0)`);
+    if (!pool) kept.size++;
+    pool = { r, halo: FIGURE_HALO, alpha: FIGURE_HALO_POOL_ALPHA, g };
+    row.set(ox, pool);
+  }
+  return pool.g;
+}
+
+/** @type {WeakMap<object, {rows:Map<number, Map<number, any>>, size:number}>} */
+const HALO_POOLS = new WeakMap();
+/** The most gradients one context keeps before it starts over. */
+const HALO_POOLS_MAX = 600;
 
 /**
  * How wide the rim is at this zoom, in px. Proportional to `u` so a character

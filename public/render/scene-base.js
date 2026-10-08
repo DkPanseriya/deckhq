@@ -41,6 +41,8 @@ export class SceneBase {
   _plan;
   /** @type {string|null} */ // what decides whether the plan must be rebuilt
   _planSignature;
+  /** @type {string|null} */ // the half of it that is geometry: a theme is not in it
+  _planGeometry;
   /** @type {any} */ // the baked floor, whole, at the fit scale
   _backdrop;
   /** @type {any} */ // the same floor at the magnified scale, while there is one
@@ -97,6 +99,36 @@ export class SceneBase {
   _dragFrom;
   /** @type {number} */ // how far it has travelled, for the click/drag threshold
   _dragMoved;
+
+  /** @type {number} */ // bumped by every `setState`: the snapshot the frame is laid out from
+  _stateGen = 0;
+  /** @type {number} */ // bumped by every `repaint`: the palette the frame is painted in
+  _paintGen = 0;
+  /** @type {boolean} */ // a frame was drawn outside the loop, so the loop's next tick draws
+  _drawnDirect = true;
+  /** @type {any} */ // the frame's layout, and the inputs it was measured from (`scene-frame.js`)
+  _layout = null;
+  /** @type {any} */
+  _layoutTape = null;
+  /** @type {any} */ // everything the last drawn frame read (`_frameDue`)
+  _frameTape = null;
+  /** @type {{canvas:HTMLCanvasElement, ctx:CanvasRenderingContext2D, fresh:boolean}|null} */ // the ground, composed once (`scene-static.js`)
+  _groundLayer = null;
+  /** @type {{key:string, backdrop:any, detail:any}|null} */ // the ground the last frame asked for
+  _groundSeen = null;
+  /** @type {boolean} */ // false paints the ground directly on every frame: the bench's comparison
+  _useGroundLayer = true;
+
+  /**
+   * The ground's radial falloff, as a paint. The body is `scene-draw.js`'s; it
+   * is named here for the link below it that composes the ground.
+   * @param {number} _viewW @param {number} _viewH
+   * @param {number} _x @param {number} _y @param {number} _w @param {number} _h
+   * @returns {CanvasGradient|null}
+   */
+  _groundFalloff(_viewW, _viewH, _x, _y, _w, _h) {
+    return null;
+  }
 
   /**
    * One frame, drawn now. The body is `scene-draw.js`'s; it is named here so a

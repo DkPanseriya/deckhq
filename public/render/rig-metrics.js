@@ -248,16 +248,30 @@ export function fade(hex, a) {
  * @param {boolean} [dead] `ended`: the visor is off and the lamp is out
  */
 export function rigTints(color, dead) {
-  return {
-    col: color,
-    shell: shade(color, 0.58), // mitts, dome highlight: light, still the state hue
-    lite: shade(color, 0.24), // the lit top planes that sell the 45° tilt
-    dark: shade(color, -0.2), // the chest plate
-    deep: shade(color, -0.34), // the base, the ear cups, the far arm
-    glass: shade(color, -0.6), // the mark on the lit visor
-    dead: !!dead,
-  };
+  // Five colour mixes a figure, for a handful of colours a floor: every figure
+  // in a state shares one answer, so it is worked out once per colour and
+  // handed out frozen (nothing that draws a figure writes to it).
+  const key = dead ? `${color}|dead` : color;
+  let tints = TINTS.get(key);
+  if (!tints) {
+    if (TINTS.size >= TINTS_MAX) TINTS.clear();
+    tints = Object.freeze({
+      col: color,
+      shell: shade(color, 0.58), // mitts, dome highlight: light, still the state hue
+      lite: shade(color, 0.24), // the lit top planes that sell the 45° tilt
+      dark: shade(color, -0.2), // the chest plate
+      deep: shade(color, -0.34), // the base, the ear cups, the far arm
+      glass: shade(color, -0.6), // the mark on the lit visor
+      dead: !!dead,
+    });
+    TINTS.set(key, tints);
+  }
+  return tints;
 }
+
+/** `rigTints`' answers, by colour. A theme has six state colours; a preview adds a few. */
+const TINTS = new Map();
+const TINTS_MAX = 256;
 
 /**
  * The largest a name label is ever set (WP-59).

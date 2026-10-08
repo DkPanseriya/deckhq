@@ -163,6 +163,28 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   because it is no longer stretched. Magnified, a second picture of the part you are looking at is
   kept beside it. No one picture is ever more than 16 million pixels (64 MB); past that the floor
   is drawn slightly smaller and stretched, as before.
+- **A floor where nothing is happening is not redrawn.** The floor used to be drawn again sixty
+  times a second whether or not anything on it had changed. A frame is now drawn only when it
+  would be a different picture from the one on screen. With **reduce motion** on, that means when
+  somebody moves, when a wait ticks over to its next minute or when something new arrives, and
+  not in between: two seconds of a floor at rest used to be 120 frames and is now none. With
+  motion on, every figure is moving, so the floor is drawn on every frame as before.
+- **A busy floor is cheaper to draw.** The ground round the building, the building's shadow and
+  the floor itself are put together once and kept until you move, zoom or resize the floor,
+  instead of being painted under every frame. Names, wait badges and room signs are measured once
+  rather than on every frame, and where each one goes is worked out again only when somebody
+  moves or a wait changes. On the 150-agent floor the script that draws a frame does under half
+  the work it did. Where the browser draws without a graphics card — a remote desktop, a virtual
+  machine — the same frame takes 4 ms where it took 23 ms, and 10 ms at a display scaling of 200%
+  where it took 78 ms. The floor looks exactly as it did. One more picture the size of the window
+  is kept in memory for this: 8 MB for a 2000 × 1055 window, 34 MB at 200%.
+- **A very large floor is laid out in about a sixth of the time.** Working out the building for
+  300 agents in 80 projects took two thirds of a second or more each time somebody started,
+  finished or was benched, and the floor stood still while it did. It takes between a tenth and a
+  quarter of a second now, and the floor it lays is the same floor, room for room. A floor of 150
+  is laid in 16 ms where it took 39 ms.
+- **Changing the theme no longer lays the floor out again.** A theme is paint. The floor is
+  repainted in the new colours and the building, and everybody in it, stay where they are.
 
 ### Fixed
 
@@ -330,6 +352,31 @@ which floor is in the corridor, which rug, which plants — is still there, one 
 
 ### Testing
 
+- **What a frame costs is measured.** `node scripts/render-bench.mjs` starts a demo floor and a
+  headless Chrome and reports, for floors of 20, 150 and 300 agents in a 2000 × 1055 window: how
+  long the floor takes to lay out, how long one frame takes to draw, how many drawing calls are in
+  it, and how many frames are drawn in two seconds when nothing is moving. It also draws the same
+  frame twice — once from what the floor keeps between frames and once from nothing — and counts
+  the pixels that differ, which is 0 at all three sizes, and at 200% on the floor of 150. Before
+  and after, at 100%:
+
+  |                                   | 20 agents     | 150 agents    | 300 agents    |
+  | --------------------------------- | ------------- | ------------- | ------------- |
+  | Laying the floor out              | 20 → 6 ms     | 39 → 16 ms    | 637 → 97 ms   |
+  | Drawing one frame (script)        | 0.9 → 0.6 ms  | 2.9 → 1.3 ms  | 5.1 → 2.2 ms  |
+  | The same frame, drawn in software | 21 → 3.2 ms   | 23 → 4.3 ms   | 29 → 6.8 ms   |
+  | Text measured in a frame          | 228 → 0       | 330 → 0       | 576 → 0       |
+  | Font changes in a frame           | 225 → 86      | 351 → 117     | 567 → 177     |
+  | Frames drawn in 2 s at rest       | every one → 0 | every one → 0 | every one → 0 |
+
+  Each time is the best of three or more runs, old and new measured turn about. The machine was
+  doing other work as well, and on its busier runs every time in the table was up to three times
+  larger — laying out 300 agents took 1.4 s at its worst before and 0.23 s after — with the old and
+  the new in much the same proportion.
+
+  The drawing calls for the figures themselves are unchanged — about 130 a figure on a floor
+  drawn small — and are now nearly all of what a frame is.
+
 - **The floor's sharpness is measured, at real display scalings.** `node scripts/render-crisp.mjs`
   starts a demo floor and one headless Chrome per scaling, and reports four things from the page
   itself: how far the floor's picture is stretched on its way to the screen, how sharp its wall
@@ -402,6 +449,12 @@ which floor is in the corridor, which rug, which plants — is still there, one 
   imports a look file written before these settings existed and gets the same floor back.
 
 ### Known gaps
+
+- **With motion on, a busy floor is still drawn in full on every frame.** What was taken out of a
+  frame is everything that does not move. The figures do, and each is still drawn stroke by
+  stroke — about 130 drawing calls a figure, 11,500 a frame on the 150-agent floor — whichever of
+  them actually changed since the last frame. Turning on **reduce motion** in your system
+  settings is what stops the floor being drawn between changes.
 
 - **Two projects are just under half the floor on a wide window, with a planted strip beside the
   corridor.** The two rooms are 54% of the floor on a 1440 × 1000 window, 49% at 1600 × 1000 and

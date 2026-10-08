@@ -12,26 +12,17 @@
 
 import { buildPlan, floorPopulation, U } from './plan.js';
 import { LOOK } from './look-derive.js';
-import { setLightShadow, ENVELOPE_SHADOW_BLUR_PX, ENVELOPE_SHADOW_DIST_PX } from './backdrop.js';
-import {
-  badgeBox,
-  characterBox,
-  drawBadge,
-  drawCharacter,
-  formatElapsed,
-  formatElapsedShort,
-} from './rig.js';
+import { badgeBox, drawBadge, drawCharacter, formatElapsed, formatElapsedShort } from './rig.js';
 import { sampleClip, clipDuration, makeActivityRotation, makeIdleRotation } from './clips.js';
 import { PALETTE, STATE_COLORS, fadedOut, identityFor, appearanceOf } from './palette.js';
 import { rigSeatOf, worldToScreen } from './agents.js';
-import { JUNIOR_SCALE, BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
-import { layoutPlate, plateLimit, resolveBadgeCollisions } from './scene-labels.js';
-import { buildingRect, planFrameLabels } from './scene-frame-labels.js';
-import { SceneHit, PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
+import { BADGE_MIN_PX_PER_UNIT, characterScaleFor } from './scene-lod.js';
+import { PLUS_SIZE_U, PLUS_MARGIN_U, PLUS_HIT_RADIUS_PX } from './scene-hit.js';
+import { SceneFrame, waitingBadgeMs } from './scene-frame.js';
 import { colorForAgent, stateForAgent, iconForAgent, frameMs, animMs } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
 import { characterLife } from './life.js';
-import { CREW_SCALE, crewCableLive } from './crew.js';
+import { crewCableLive } from './crew.js';
 import { drawCrews } from './crew-draw.js';
 import { drawWorktreeLabels } from './worktree-draw.js';
 
@@ -48,30 +39,6 @@ export const REPLAN_FADE_MS = 260;
 export const GROUND_FALLOFF_INNER = 0.7;
 
 /**
- * How long this agent has been waiting on the user, or `null` where it is not
- * waiting at all — which is the same thing as "has no waiting badge".
- *
- * One copy since WP-60, because two passes now ask it: the collision pass that
- * measures every badge in the frame, and the character draw that paints one.
- * Two copies of this condition is how a badge comes to be measured and not
- * drawn, or drawn and not measured.
- *
- * The badge is crimson, and crimson means "standing in your office"
- * (VISUAL-SPEC section 5). A benched agent keeps its `for_review`
- * activityState — bench only moves `ackState` — so without the `ackState`
- * guard the badge would follow it into the lounge and put red on the floor
- * where nothing is waiting on the user.
- *
- * @param {{ackState?:string, activityState?:string, reviewSince?:number|null}} agent
- * @returns {number|null} milliseconds waited
- */
-function waitingBadgeMs(agent) {
-  if (agent.ackState !== 'active' || agent.activityState !== 'for_review') return null;
-  if (!agent.reviewSince) return null;
-  return clockNow() - agent.reviewSince;
-}
-
-/**
  * A structural signature of the plan: the project set plus each project's
  * session count. Project rooms are sized from `sessionCount` (docs/03-VISUAL-SPEC.md
  * §2.2), so this is exactly "did the geometry change" — everything else that
@@ -79,6 +46,26 @@ function waitingBadgeMs(agent) {
  * room plates from the snapshot directly, not baked.
  */
 export function planSignature(snapshot) {
+  return joinPlanSignature(planSignatureParts(snapshot));
+}
+
+/** The two halves as the one string `planSignature` has always been. */
+export function joinPlanSignature({ geometry, theme }) {
+  return [...geometry.slice(0, 5), theme, ...geometry.slice(5)].join('~');
+}
+
+/**
+ * `planSignature`, in the two halves it is made of: what the BUILDING is a
+ * function of, and the theme, which is paint.
+ *
+ * A theme repaints materials and moves no wall (WP-30), and nothing the plan
+ * reads comes from it: the planting, the prop density, the lounge kit and the
+ * body size are all the look document's (`resolveLook`), which is in the
+ * geometry. So a snapshot whose only news is its theme needs a bake and not a
+ * plan — and on a floor of three hundred people the plan is the expensive one.
+ * @returns {{geometry:string[], theme:string}}
+ */
+export function planSignatureParts(snapshot) {
   const projects = (snapshot && snapshot.projects) || [];
   const agents = (snapshot && snapshot.agents) || [];
   // WP-50: the plan is a function of active projects and active agents, so the
@@ -107,7 +94,7 @@ export function planSignature(snapshot) {
   for (const a of agents) {
     if (a && a.ackState === 'let_go') letGo++;
   }
-  return [
+  const geometry = [
     projects
       .map(
         (p) =>
@@ -121,13 +108,6 @@ export function planSignature(snapshot) {
     `b${pop.benchedDrawn}`,
     `h${pop.goneHome.size}`,
     `g${letGo}`,
-    // WP-30. The theme changes no geometry at all — it repaints materials —
-    // but the backdrop is BAKED, so the only way a new floor colour reaches
-    // the screen is a re-bake, and `_rebuildPlan` is the only thing that
-    // bakes. Putting the theme in the signature is therefore not a hack: the
-    // signature's job is "does the baked bitmap still describe this
-    // snapshot", and after a theme change it does not.
-    `t${(snapshot && snapshot.settings && snapshot.settings.theme) || 'default'}`,
     // WP-88b, and the theme's reason with one clause more. A look repaints
     // materials the way a theme does — so the baked bitmap stops describing the
     // snapshot the moment it changes — but a look ALSO moves geometry: the
@@ -143,10 +123,20 @@ export function planSignature(snapshot) {
     // `applyLook` may land after the first snapshot, and a signature that could
     // not see the difference would keep the medium bake.
     `a${LOOK.agentSize || ''}`,
-  ].join('~');
+  ];
+  return {
+    geometry,
+    // WP-30. The theme changes no geometry at all — it repaints materials —
+    // but the backdrop is BAKED, so the only way a new floor colour reaches
+    // the screen is a re-bake. It is in the signature because the signature's
+    // job is "does the baked bitmap still describe this snapshot", and after a
+    // theme change it does not; `setState` reads the two halves apart and
+    // bakes without planning where this is the only one that moved.
+    theme: `t${(snapshot && snapshot.settings && snapshot.settings.theme) || 'default'}`,
+  };
 }
 
-export class SceneDraw extends SceneHit {
+export class SceneDraw extends SceneFrame {
   /**
    * Rebuild the plan and its baked backdrop for a given target aspect, then
    * bring the camera's fit basis back into a valid state for the new plan
@@ -262,6 +252,9 @@ export class SceneDraw extends SceneHit {
   _startLoop() {
     if (this._running) return;
     this._running = true;
+    // A loop that starts draws its first frame whatever it finds: a tab that
+    // was hidden may have had its canvas dropped while nobody was looking.
+    this._drawnDirect = true;
     this._lastT = frameMs();
     this._raf = requestAnimationFrame(this._frame);
   }
@@ -293,8 +286,16 @@ export class SceneDraw extends SceneHit {
         makeActivityRotation,
         makeIdleRotation,
       });
-      this._draw();
+      // Drawn only where it would be a different picture from the one on the
+      // canvas (`scene-frame.js`): a floor where nobody moved and no minute
+      // turned over is left exactly as it is.
+      if (this._frameDue()) {
+        this._draw();
+        this._drawnDirect = false;
+      }
     } catch (err) {
+      // A frame that failed is not the frame on the canvas: the next one is drawn.
+      this._drawnDirect = true;
       if (!this._frameErrorLogged) {
         this._frameErrorLogged = true;
         console.error('[deckhq] render frame failed; the floor keeps running', err);
@@ -308,6 +309,8 @@ export class SceneDraw extends SceneHit {
   _draw() {
     const ctx = this.ctx;
     if (!ctx) return;
+    // Whoever called, the loop's next tick draws what it finds (`_frameDue`).
+    this._drawnDirect = true;
     const rect = this.canvas.getBoundingClientRect();
     const viewW = rect.width || this.canvas.width / this._dpr;
     const viewH = rect.height || this.canvas.height / this._dpr;
@@ -327,48 +330,9 @@ export class SceneDraw extends SceneHit {
     const camera = this._cameraParams();
 
     if (this._plan && this._backdrop) {
-      // The building sits ON a ground rather than being cut out of the
-      // background. The floor takes the shape its contents want (see plan.js's
-      // ASPECT_PAD_MAX), so on most windows there is slack on one axis; a soft
-      // drop shadow under the envelope makes that slack read as "the floor
-      // ends here" instead of as a gap in an unfinished plan.
-      const shadowX = camera.panX;
-      const shadowY = camera.panY;
-      const shadowW = this._plan.width * U * camera.zoom;
-      const shadowH = this._plan.height * U * camera.zoom;
-
-      // THE GROUND FALLS AWAY FROM THE BUILDING (WP-72). One radial gradient,
-      // transparent where the floor ends and `groundFalloff` at the furthest
-      // corner of the window, painted BEFORE the envelope so the building and
-      // its shadow land on top of it. It is what makes the ground a surface
-      // the building is standing on rather than a backing colour it happens to
-      // be cut out of.
-      //
-      // The gradient object is built once per camera and reused (see
-      // `_groundFalloff`), so what this costs per frame is one composite of a
-      // cached paint — the same class of cost as the envelope fill below,
-      // which has always been here. It cannot be baked: the bake IS the
-      // envelope, and this is by definition the part outside it.
-      const wash = this._groundFalloff(viewW, viewH, shadowX, shadowY, shadowW, shadowH);
-      if (wash) {
-        ctx.save();
-        ctx.fillStyle = wash;
-        ctx.fillRect(0, 0, viewW, viewH);
-        ctx.restore();
-      }
-
-      ctx.save();
-      setLightShadow(ctx, {
-        blur: ENVELOPE_SHADOW_BLUR_PX,
-        dist: ENVELOPE_SHADOW_DIST_PX,
-        color: PALETTE.floorDropShadow,
-      });
-      ctx.fillStyle = PALETTE.floorGround;
-      ctx.fillRect(shadowX, shadowY, shadowW, shadowH);
-      ctx.restore();
-
-      // The floor's bitmap, one pixel to one device pixel (`_blitFloor`).
-      this._blitFloor(ctx);
+      // The ground's falloff, the building's shadow and the floor's bitmap:
+      // one layer, composed once per camera (`scene-static.js`).
+      this._drawGround(ctx, viewW, viewH, camera);
 
       // A RE-PLAN IS ANIMATED, NOT POPPED (`08` B6).
       //
@@ -401,107 +365,12 @@ export class SceneDraw extends SceneHit {
     // LOD is the drawn figure's height (`scene-lod.js`), and it only ever
     // takes detail off a body: names, plate lines and crews draw at every tier.
     const lod = this._lod();
-    const records = [...this._runtime.all()].filter((rec) => {
-      const s = worldToScreen(rec, camera);
-      return s.x > -60 && s.x < viewW + 60 && s.y > -60 && s.y < viewH + 60;
-    });
+    const records = this._frameRecords(camera, viewW, viewH);
 
-    // Floor rings (hand-raise pulse, selection ring) are drawn by `drawCharacter` itself,
-    // right before that character's body (rig.js's documented draw order: "floor ring ->
-    // selection ring -> contact shadow -> ..."), driven by `pose.ring`/`pose.ringPhase`
-    // (set by `sampleClip('hand_raise', ...)`) and `opts.selected`. Sorting by y first and
-    // calling `drawCharacter` once per character, in that order, is what makes the overall
-    // painter order (docs/03-VISUAL-SPEC.md §8 scene section) come out right without scene.js
-    // needing a separate global ring pass.
-    records.sort((a, b) => a.y - b.y);
-
-    // WAITING-BADGE COLLISION PASS (WP-60), the same shape as the label pass
-    // below and for the same reason: seven crimson pills along one office wall
-    // overlapped into a band of digits, and a pill can only stay out of its
-    // neighbour's way if something measured both before either was drawn.
-    //
-    // IT RUNS FIRST SINCE WP-79, and the order is the point: a waiting badge
-    // is the loudest thing this floor draws and it never moves, so everything
-    // else has to know where it landed. It used to run second because nothing
-    // else needed the answer.
-    //
-    // The gate is the one `_drawCharacterAt` uses, asked once here so the two
-    // cannot disagree about which badges exist this frame.
-    const charU = this._characterScale();
-    let badgePlan = null;
-    /** @type {{id:string,x:number,y:number,w:number,h:number}[]} */
-    const badgeBoxes = [];
-    if (this._scale() >= BADGE_MIN_PX_PER_UNIT) {
-      const items = [];
-      for (const rec of records) {
-        const agent = this._agentsById.get(rec.id);
-        const ms = agent ? waitingBadgeMs(agent) : null;
-        if (ms === null) continue;
-        const s = worldToScreen(rec, camera);
-        // A junior is drawn smaller, so its badge is a smaller box. Measured
-        // at the scale it will be drawn at, exactly as the label pass does.
-        const u =
-          agent.subagent === true
-            ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
-            : charU;
-        const box = badgeBox(ctx, s.x, s.y, u, formatElapsed(ms));
-        // And the box of its short form, which it is drawn in where the badge
-        // beside it leaves no room for the whole wait.
-        const cut = badgeBox(ctx, s.x, s.y, u, formatElapsedShort(ms));
-        const short = cut.w < box.w ? { x: cut.x, w: cut.w } : undefined;
-        items.push({ id: rec.id, x: box.x, y: box.y, w: box.w, h: box.h, ms, short });
-      }
-      const bodies = records.map((rec) => {
-        const s = worldToScreen(rec, camera);
-        return { id: rec.id, ...characterBox(s.x, s.y, charU) };
-      });
-      badgePlan = resolveBadgeCollisions(items, bodies);
-      for (const it of items) {
-        if (!badgePlan.drawn.has(it.id)) continue;
-        const at = badgePlan.short.has(it.id) && it.short ? it.short : it;
-        badgeBoxes.push({ ...it, x: at.x, w: at.w, id: `badge:${it.id}` });
-      }
-      for (const [i, pill] of badgePlan.pills.entries()) {
-        const probe = badgeBox(ctx, 0, 0, charU, `${pill.count} waiting · oldest 00h 00m`);
-        badgeBoxes.push({ id: `pill:${i}`, x: pill.x, y: pill.y, w: probe.w, h: probe.h });
-      }
-    }
-
-    // THE PLATES ARE LAID OUT BEFORE ANY NAME IS SET (audit F7). They are still
-    // painted last, over the characters, but a name that hangs below an
-    // office row into the lounge's band has to know the plate is there, so
-    // each plate's rows and rect are measured here, once, and the same layout
-    // is handed to `_drawRoomPlate` below.
-    /** @type {Map<string, any>} */
-    const plates = new Map();
-    for (const room of this._plan ? this._plan.rooms : []) {
-      // A corridor has no name and no data line.
-      if (room.kind === 'corridor') continue;
-      const limit = plateLimit(room, badgeBoxes, camera);
-      plates.set(room.id, layoutPlate(ctx, room, this._platePlanFor(room), camera, limit));
-    }
-
-    // Name-label collision pass (tech-lead review finding 1), at EVERY level
-    // of detail since the 24 September audit: every body, badge, crew hand and
-    // chip and every room plate is a pinned obstacle, and every name is placed
-    // around them — `scene-frame-labels.js` has the rule and its test.
-    const labels = planFrameLabels(ctx, {
-      records,
-      agentsById: this._agentsById,
-      camera,
-      charU,
-      crewCounts: this._crewCounts,
-      badgeBoxes,
-      plateBoxes: [...plates.values()].map((p) => p.rect),
-      selectedId: this._selectedId,
-      bounds: this._plan ? buildingRect(this._plan, camera) : undefined,
-      uOf: (rec) => {
-        const a = this._agentsById.get(rec.id) || rec.agent;
-        return a && a.subagent === true
-          ? characterScaleFor(this._scale() * this._juniorScaleOf(rec))
-          : charU;
-      },
-    });
+    // The wait badges, the room plates and where every name goes round them:
+    // measured only when somebody moved or a minute turned over, and handed
+    // back as they were otherwise (`scene-frame.js`).
+    const { charU, badgePlan, plates, labels } = this._layoutFrame(ctx, records, camera);
 
     // WP-89 · THE CREWS, UNDER THE BODIES. §1.5: everything this design draws
     // sits under the chrome band, and a cable that ran over a face would be the
@@ -573,23 +442,6 @@ export class SceneDraw extends SceneHit {
     }
 
     ctx.restore();
-  }
-
-  /**
-   * HOW BIG THIS JUNIOR IS DRAWN, as a fraction of its parent (WP-89).
-   *
-   * A member of a FORMATION is `CREW_SCALE`; a junior standing beside its parent
-   * in WP-41's old way keeps `JUNIOR_SCALE`. Read off the SEAT rather than off
-   * the agent, because the seat is what `assignSeats` decided and a junior whose
-   * room could not hold an arc is drawn at the old size in the old rows.
-   *
-   * That split is also what keeps every committed golden at 0 px: the `demo`
-   * floor's senior has two juniors, which is not a crew.
-   * @param {any} rec
-   */
-  _juniorScaleOf(rec) {
-    const seat = rec && rec.targetSeat;
-    return seat && seat.crew === true ? CREW_SCALE : JUNIOR_SCALE;
   }
 
   _drawCharacterAt(rec, camera, lod, labels, badgePlan) {

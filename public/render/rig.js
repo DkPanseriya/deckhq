@@ -52,6 +52,7 @@
 
 import { PALETTE, STATE_COLORS } from './palette.js';
 import { deviceScaleOf, snapPx } from './device-px.js';
+import { textWidth } from './text-metrics.js';
 import {
   TAU,
   BASE_U,
@@ -166,8 +167,9 @@ export function stateForColor(color) {
  * that pass runs once for the whole frame rather than per character.
  *
  * @param {{font:string, measureText:(text:string)=>{width:number}}} ctx
- *   only `.font` (assigned) and `.measureText` are read, so a plain stub with
- *   those two members is enough — which is what the unit test uses.
+ *   only `.font` (assigned when the text has to be measured) and `.measureText`
+ *   are read, so a plain stub with those two members is enough — which is what
+ *   the unit test uses. The width is kept (`text-metrics.js`).
  * @param {number} ox character origin x (screen px); the pill is centred on it
  * @param {number} oy character origin y (screen px)
  * @param {number} u px per plan unit at the CHARACTER scale
@@ -176,9 +178,8 @@ export function stateForColor(color) {
  */
 export function badgeBox(ctx, ox, oy, u, text) {
   const fontPx = Math.max(BADGE_MIN_PX, u * 0.7);
-  ctx.font = monoFont(fontPx);
   const padX = u * 0.35;
-  const w = ctx.measureText(text).width + padX * 2;
+  const w = textWidth(ctx, monoFont(fontPx), text) + padX * 2;
   // The pill grows with its text, so a floored font must not be drawn into an
   // unfloored box: at a tight fit scale the glyphs stood proud of the badge.
   const h = Math.max(u * 1.05, fontPx * 1.5);
@@ -187,9 +188,8 @@ export function badgeBox(ctx, ox, oy, u, text) {
 
 export function drawBadge(ctx, ox, oy, u, text, color) {
   const box = badgeBox(ctx, ox, oy, u, text);
-  // `badgeBox` already set it; re-assert before drawing, exactly as `drawLabel`
-  // does, so a caller that measured several badges between the two cannot have
-  // left another size in place.
+  // The box is measured from kept widths (`text-metrics.js`), which leaves the
+  // context's font wherever it was: the font is set here, for the drawing.
   ctx.font = monoFont(box.fontPx);
   ctx.fillStyle = color;
   roundRectFill(ctx, box.x, box.y, box.w, box.h, box.h * 0.32);
@@ -270,8 +270,7 @@ export const LABEL_DROP_U = 1.62;
 export function labelBox(ctx, ox, oy, u, rawLabel, px) {
   const text = truncateLabel(rawLabel);
   const fontPx = px || labelFontSize(u);
-  ctx.font = sansFont(fontPx);
-  const textW = ctx.measureText(text).width;
+  const textW = textWidth(ctx, sansFont(fontPx), text);
   const padX = Math.max(3, u * 0.18);
   const padY = Math.max(1.5, u * 0.09);
   const w = textW + padX * 2;
@@ -338,7 +337,7 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
   }
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.font = sansFont(px); // labelBox already set it; re-assert before drawing
+  ctx.font = sansFont(px); // `labelBox` measures from kept widths and sets none
   // THE HALO IS A SHARE OF THE TYPE, NOT OF THE FIGURE. It was `0.16 * u`, which
   // on an 11 px name is 2.5 to 3.2 px — a quarter of the glyph's own height, and
   // enough to close the counters of an `a`, an `e` and an `s` on an ordinary

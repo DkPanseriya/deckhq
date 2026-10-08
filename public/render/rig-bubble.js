@@ -19,6 +19,7 @@ import {
 } from './rig-metrics.js';
 import { roundRectFill, roundRectStroke } from './rig-pose.js';
 import { PALETTE } from './palette.js';
+import { textWidth } from './text-metrics.js';
 import { humaniseToolSummary } from '../mcp-tool-name.js';
 
 // -------------------------------------------------------- the tool bubble
@@ -91,17 +92,22 @@ export function toolBubbleText(tool) {
  * Shorten `text` with `ctx` until it fits `maxW`. Binary search would be
  * quicker; a summary is at most 120 characters and this runs once per visible
  * agent per frame, so the straightforward walk is fine and easier to trust.
- * @param {{measureText:(t:string)=>{width:number}}} ctx
+ * @param {{font?:string, measureText:(t:string)=>{width:number}}} ctx
  * @param {string} text
  * @param {number} maxW
+ * @param {string} [font] the font it is set in: given, every width asked here
+ *   is kept and asked once (`text-metrics.js`); omitted, the context's own
+ *   font is measured as it stands
  */
-export function fitOneLine(ctx, text, maxW) {
-  if (ctx.measureText(text).width <= maxW) return text;
+export function fitOneLine(ctx, text, maxW, font) {
+  const wide = (/** @type {string} */ t) =>
+    font ? textWidth(/** @type {any} */ (ctx), font, t) : ctx.measureText(t).width;
+  if (wide(text) <= maxW) return text;
   let cut = text.length;
   while (cut > 1) {
     cut--;
     const candidate = text.slice(0, cut).trimEnd() + '…';
-    if (ctx.measureText(candidate).width <= maxW) return candidate;
+    if (wide(candidate) <= maxW) return candidate;
   }
   return '…';
 }
@@ -117,15 +123,15 @@ export function fitOneLine(ctx, text, maxW) {
  */
 export function toolBubbleBox(ctx, ox, oy, u, summary) {
   const fontPx = Math.max(9, u * 0.5);
-  ctx.font = sansFont(fontPx);
+  const font = sansFont(fontPx);
   const padX = Math.max(4, u * 0.28);
   const padY = Math.max(2, u * 0.14);
   const maxTextW = Math.max(
     BUBBLE_MIN_W_PX,
     Math.min(BUBBLE_MAX_W_U * u, BUBBLE_MAX_W_PX) - padX * 2,
   );
-  const text = fitOneLine(ctx, String(summary || '').trim(), maxTextW);
-  const w = ctx.measureText(text).width + padX * 2;
+  const text = fitOneLine(ctx, String(summary || '').trim(), maxTextW, font);
+  const w = textWidth(ctx, font, text) + padX * 2;
   const h = fontPx * 1.25 + padY * 2;
   // Sits clear of the crown (`BODY_HEIGHT_U` above the feet since WP-79), with
   // the trail below filling the gap.
