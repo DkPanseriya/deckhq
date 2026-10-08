@@ -190,9 +190,13 @@ script. `deckhq app --pin` asks again whenever you want it; `--no-pin` never ask
 
 _Capture — September 2026, before the figure took its current form._
 
-`deckhq app` reuses the DeckHQ you already have running — the port you named, the one a running
-daemon published in `~/.deckhq/daemon.json`, the one your installed hooks post to, then 4317
-upward — and starts one in the background if none answers. Then it opens the floor in **Chrome or
+`deckhq app` reuses the DeckHQ you already have running for this state directory — the one a
+running daemon published in `~/.deckhq/daemon.json`, the one your installed hooks post to, then
+4317 upward — and starts one in the background if none answers. **A port you name, with `--port` or
+`DECKHQ_PORT`, is the only port it uses:** a DeckHQ on it is reused, an empty port gets one started
+there, and a port held by another program is an error rather than a reason to try the next one. The
+line it prints says which happened — `(already running)`, `(started just now)` or
+`(started on the port you named)`. Then it opens the floor in **Chrome or
 Edge in application mode**: no tab strip, no address bar, its own taskbar button, and its own
 browser profile under `~/.deckhq/app-profile`, so the window keeps its size and position and never
 shares your tabs or your extensions. A machine with no Chromium-family browser falls back to your
