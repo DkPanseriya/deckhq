@@ -92,6 +92,9 @@ export function imageSize(file) {
   return null;
 }
 
+/** The width under which a page shows a picture's closer crop, where it has one. */
+export const NARROW = '(max-width: 39.99rem)';
+
 /** @param {string} tag @param {string} name */
 const attr = (tag, name) => (tag.match(new RegExp(`\\s${name}="([^"]*)"`)) ?? [null, null])[1];
 
@@ -188,7 +191,19 @@ export function dressImages(body, outDir) {
     if (pair && !attr(tag, 'srcset')) extra += ` srcset="${src} 1x, ${dense(src)} 2x"`;
     if (!/\sfetchpriority="high"/.test(tag) && !attr(tag, 'loading')) extra += ' loading="lazy"';
     if (!attr(tag, 'decoding')) extra += ' decoding="async"';
-    const img = tag.replace(/\s*\/?>$/, `${extra} />`);
+    const img = tag.replace(/\s+data-narrow="[^"]*"/, '').replace(/\s*\/?>$/, `${extra} />`);
+    // `data-narrow` names a closer crop of the same thing for a phone, where a
+    // whole window would be a thumbnail. It becomes a `<source>` with its own
+    // size, so the page holds the right room for whichever one is shown.
+    const narrow = attr(tag, 'data-narrow');
+    if (narrow) {
+      const small = imageSize(path.join(outDir, narrow));
+      if (!small) throw new Error(`${narrow} is not a picture this build can measure`);
+      return (
+        `<picture><source media="${NARROW}" srcset="${narrow} 1x, ${dense(narrow)} 2x" ` +
+        `width="${small.width}" height="${small.height}" />${img}</picture>`
+      );
+    }
     if (!src.endsWith('.gif')) return img;
     const still = src.replace(/\.gif$/, '.png');
     return (

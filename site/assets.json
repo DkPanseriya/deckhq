@@ -24,6 +24,14 @@
       "note": "the whole window: three repositories, two sessions waiting"
     },
     {
+      "name": "hero-phone",
+      "kind": "still",
+      "population": "three",
+      "crop": { "x": 0, "y": 0, "w": 704, "h": 560 },
+      "width": 1408,
+      "note": "the hero for a narrow screen: the header, and Your Office under it"
+    },
+    {
       "name": "header-count",
       "kind": "still",
       "population": "demo",
@@ -67,8 +75,8 @@
       "name": "juniors",
       "kind": "still",
       "population": "demo",
-      "crop": { "x": 720, "y": 680, "w": 240, "h": 210 },
-      "width": 960,
+      "crop": { "x": 732, "y": 752, "w": 224, "h": 150 },
+      "width": 896,
       "note": "two juniors beside their lead, each under a Junior chip"
     },
     {
@@ -77,7 +85,7 @@
       "population": "crew",
       "phase": 0.3,
       "crop": { "x": 1050, "y": 620, "w": 380, "h": 320 },
-      "width": 1200,
+      "width": 1400,
       "note": "a crew: juniors in an arc, a cable from each to the lead's desk"
     },
     {
@@ -85,7 +93,7 @@
       "kind": "still",
       "population": "worktrees",
       "crop": { "x": 1150, "y": 390, "w": 440, "h": 190 },
-      "width": 1400,
+      "width": 1600,
       "note": "two worktrees as benches, each with its branch written on it"
     },
     {
@@ -111,7 +119,7 @@
       "population": "demo",
       "permission": true,
       "press": "j",
-      "crop": { "x": 1168, "y": 130, "w": 432, "h": 400 },
+      "crop": { "x": 1168, "y": 130, "w": 432, "h": 432 },
       "width": 1080,
       "note": "a real permission request, held open by its caller"
     },

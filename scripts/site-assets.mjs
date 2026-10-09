@@ -774,7 +774,18 @@ await withChrome(
           // motion is shown in the loop's place.
           const poster = encodeIndexedPng(images[0]);
           fs.writeFileSync(file.replace(/\.gif$/, '.png'), poster);
-          if (SHEET) writeSheet(images, path.join(SHEET, `${asset.name}.frames.png`));
+          if (SHEET) {
+            writeSheet(images, path.join(SHEET, `${asset.name}.frames.png`));
+            // The alternative to a GIF, measured rather than argued: the same
+            // frames as one strip a page would step through. Written nowhere.
+            const strip = {
+              width: r.width,
+              height: r.height * images.length,
+              data: Buffer.concat(images.map((image) => image.data)),
+            };
+            const kb = (encodeIndexedPng(strip).length / 1024).toFixed(0);
+            say(`       as a strip of PNG frames: ${kb} KB, against ${(r.bytes / 1024).toFixed(0)} KB`);
+          }
           say(
             `  ok   ${asset.name.padEnd(22)} ${r.width}x${r.height}  ${r.frames} frames @ ` +
               `${asset.fps ?? 25} fps  ${r.colours} colours  ${(r.bytes / 1024).toFixed(0)} KB  ` +

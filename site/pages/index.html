@@ -16,6 +16,7 @@
   <figure class="shot shot--window hero-shot">
     <img
       src="media/hero.png"
+      data-narrow="media/hero-phone.png"
       fetchpriority="high"
       alt="The DeckHQ window. The header reads 2 needs you: 1 hand up, 1 for review. Below it, an office seen from above: Your Office with two robots waiting on a sofa, one under a red badge reading 1d 2h; a lounge with five resting; and three project rooms, orbital-api, checkout-flow and design-system, each with a robot at a desk."
     />
@@ -31,7 +32,7 @@
         that finished an hour ago is still here, with what it last said.
       </p>
     </div>
-    <figure class="shot">
+    <figure class="shot shot--crop">
       <img
         src="media/loop-floor.gif"
         alt="The demo floor, moving: five project rooms with robots typing at desks, six robots waiting in Your Office with their waiting times over their heads, and fifteen resting in the lounge."
@@ -74,7 +75,7 @@
         down. How long it has waited is over its head, and the longest wait sits nearest your desk.
       </p>
     </div>
-    <figure class="shot">
+    <figure class="shot shot--crop">
       <img
         src="media/loop-walk.gif"
         alt="A robot named Elif finishes its turn in the orbital-api room, stands up from its desk, walks along the corridor into Your Office and sits on the sofa beside the two already waiting."
@@ -217,28 +218,28 @@
     </div>
     <div class="switcher" data-label="Style">
       <div class="switch-stage">
-        <figure class="shot" data-name="Studio oak">
+        <figure class="shot shot--crop" data-name="Studio oak">
           <img
             src="media/style-studio-oak.png"
             alt="The floor in Studio oak, the default: warm herringbone wood in Your Office and the lounge, pale carpet in the project rooms."
           />
           <figcaption>Studio oak</figcaption>
         </figure>
-        <figure class="shot" data-name="Night lab">
+        <figure class="shot shot--crop" data-name="Night lab">
           <img
             src="media/style-night-lab.png"
             alt="The same floor in Night lab: dark floors and dark furniture, with the robots and their state colours standing out."
           />
           <figcaption>Night lab</figcaption>
         </figure>
-        <figure class="shot" data-name="Colour plan">
+        <figure class="shot shot--crop" data-name="Colour plan">
           <img
             src="media/style-colour-plan.png"
             alt="The same floor in Colour plan: a neutral building where each project's room has a calm colour of its own."
           />
           <figcaption>Colour plan</figcaption>
         </figure>
-        <figure class="shot" data-name="Graphite loft">
+        <figure class="shot shot--crop" data-name="Graphite loft">
           <img
             src="media/style-graphite-loft.png"
             alt="The same floor in Graphite loft: grey terrazzo and loop pile, dark frames behind glass partitions, under evening light."
@@ -330,7 +331,7 @@
         <p class="cmd cmd--hero"><code>npx deckhq app</code></p>
         <p>Needs Node 18 or newer. Nothing else: the package has no dependencies.</p>
       </div>
-      <div class="way">
+      <div class="way way--wide">
         <h3>No Node on the machine</h3>
         <p>
           One line checks for Node, offers to install it, installs DeckHQ and opens the window. Both

@@ -453,7 +453,7 @@ kbd {
 }
 
 .cmd--hero {
-  width: min(100%, 23rem);
+  width: 22rem;
 }
 
 .cmd--hero code {
@@ -473,23 +473,53 @@ kbd {
 }
 
 .hero h1 {
-  max-width: 15ch;
+  max-width: 21ch;
   font-size: var(--t-display);
   line-height: 1.02;
   letter-spacing: -0.035em;
 }
 
 .hero .lede {
-  max-width: 40ch;
+  max-width: 36ch;
 }
 
 .hero-note {
   color: var(--muted);
   font-size: var(--t-small);
+  max-width: 34ch;
 }
 
 .hero-shot {
-  margin-top: clamp(2.5rem, 1.5rem + 4vw, 5rem);
+  margin-top: clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
+}
+
+/* On a wide window the headline runs the width of the page, with the sentence
+   under its left edge and the command under its right. */
+@media (min-width: 56rem) {
+  .hero-copy {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--s-5);
+    row-gap: var(--s-2);
+  }
+
+  .hero h1 {
+    grid-column: 1 / -1;
+    margin-bottom: var(--s-3);
+  }
+
+  .hero .lede {
+    grid-row: 2 / span 2;
+  }
+
+  .hero .actions,
+  .hero-note {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .hero-note {
+    text-align: right;
+  }
 }
 
 /* The window rises into place once, on load. It is never hidden: the picture
@@ -527,6 +557,17 @@ kbd {
   width: auto;
   margin-inline: auto;
   box-shadow: var(--shadow);
+}
+
+/* A whole floor on a phone is a thumbnail. Under 40rem a picture marked this
+   way shows its top left corner at a size a robot can be read at: Your Office
+   and the first room beside it. */
+@media (max-width: 39.99rem) {
+  .shot--crop img {
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    object-position: 0 0;
+  }
 }
 
 .shot figcaption {
@@ -609,6 +650,14 @@ kbd {
   align-content: center;
 }
 
+/* Beside a picture, a third-level heading carries a whole idea and is set
+   between the two steps of the scale. */
+.split-copy > h3 {
+  font-size: clamp(1.4375rem, 1.2rem + 1vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
 .split > .split-media {
   grid-column: 7 / span 6;
 }
@@ -687,7 +736,7 @@ kbd {
    used on this site, and it is a dot beside a neutral word. */
 .states {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
   gap: var(--s-3) var(--s-4);
   padding: 0;
   list-style: none;
@@ -698,6 +747,7 @@ kbd {
   grid-template-columns: auto 1fr;
   column-gap: 0.75rem;
   align-items: baseline;
+  align-content: start;
 }
 
 .states b {

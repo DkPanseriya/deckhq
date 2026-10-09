@@ -35,6 +35,7 @@ import {
   dressImages,
   imageSize,
   MEDIA_DIR,
+  NARROW,
   pageWeight,
   publishMedia,
   referencedMedia,
@@ -211,8 +212,13 @@ const pageUrl = (slug) => (slug === 'index' ? `${SITE_ORIGIN}/` : `${SITE_ORIGIN
 function head(page) {
   const full = page.slug === 'index' ? page.title : `${page.title} · DeckHQ`;
   const card = `${SITE_ORIGIN}/media/${PREVIEW}`;
+  // The first picture is asked for before the stylesheet has been read: the
+  // whole window on a wide screen, its closer crop on a narrow one, and of
+  // each the file for the density the screen has. One of the four is fetched.
+  const hint = (name, media) =>
+    `\n    <link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, media/${name}@2x.png 2x" media="${media}" fetchpriority="high" />`;
   const preload = page.preload
-    ? `\n    <link rel="preload" as="image" href="media/${page.preload}.png" imagesrcset="media/${page.preload}.png 1x, media/${page.preload}@2x.png 2x" fetchpriority="high" />`
+    ? hint(page.preload, '(min-width: 40rem)') + hint(`${page.preload}-phone`, NARROW)
     : '';
   const base = page.base ? `\n    <base href="${esc(page.base)}" />` : '';
   // No `<link rel="canonical">`: a page's own address is in `og:url`, and the

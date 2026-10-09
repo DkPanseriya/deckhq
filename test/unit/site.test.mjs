@@ -1158,11 +1158,26 @@ test('the home page leads with the floor, and every band picture is lazy', async
 
   // The hero is preloaded, at the density the screen has, and is the one
   // picture that is not lazy; everything under it waits for the scroll.
+  // A narrow screen gets a closer crop of the same window, and its own hint,
+  // so a phone is not sent the whole floor to show at the size of a stamp.
+  for (const [name, media] of [
+    ['hero', '(min-width: 40rem)'],
+    ['hero-phone', '(max-width: 39.99rem)'],
+  ]) {
+    assert.ok(
+      home.includes(
+        `<link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, ` +
+          `media/${name}@2x.png 2x" media="${media}" fetchpriority="high" />`,
+      ),
+      `${name} is not preloaded`,
+    );
+  }
   assert.match(
     home,
-    /<link rel="preload" as="image" href="media\/hero\.png" imagesrcset="media\/hero\.png 1x, media\/hero@2x\.png 2x" fetchpriority="high" \/>/,
-    'the hero is not preloaded',
+    /<picture><source media="\(max-width: 39\.99rem\)" srcset="media\/hero-phone\.png 1x, media\/hero-phone@2x\.png 2x" width="\d+" height="\d+" \/><img\b/,
+    'the hero has no closer crop for a narrow screen',
   );
+  assert.ok(!/data-narrow/.test(home), 'an authoring attribute reached the page');
   const images = [...home.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
   const fromMedia = images.filter((tag) => /\ssrc="media\//.test(tag));
   assert.ok(
