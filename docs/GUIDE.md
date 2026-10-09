@@ -35,14 +35,15 @@ is done.
 _Capture — September 2026, before the figure took its current form._
 
 **Read it in one glance.** The header counts what needs you. Your office, top left, holds the
-sessions that finished and are waiting on your reply — oldest first, with how long they have been
-waiting. Each project is a room with its own session count and token spend on the plate, and the
-people in it are that project's sessions: typing if they are working, **hand up** if they are
-blocked on a question, slumped if they have gone quiet. The lounge holds agents you have reviewed
-and benched — available capacity, resting, ready for the next job.
+sessions that are waiting on you — finished and waiting on your reply, or **hand up** and blocked
+on a question — oldest first, with how long they have been waiting. Each project is a room with
+its own session count and token spend on the plate, and the people in it are that project's
+sessions: typing if they are working, slumped if they have gone quiet. The lounge holds agents you
+have reviewed and benched — available capacity, resting, ready for the next job.
 
-**How the floor is shared out.** The project rooms get most of the building: at least 55% of it,
-with your office held to a fifth and the lounge to a quarter. Every room is the shape of a room,
+**How the floor is shared out.** The project rooms get most of the building: at least 55% of it
+where the rooms are not already as large as a room may be (two projects are 54% of a 1440 × 1000
+window and 44% of a 1920 × 1080 one), with your office held to a fifth and the lounge to a quarter. Every room is the shape of a room,
 between 0.7 and 1.8 times as wide as it is deep, and none is more than two and a half times the
 size of the smallest. A room comes in one of three sizes: one desk, a team of two to four, a team of
 five or more. A room is furnished for its size and for the floor it was given: a team's room has a
