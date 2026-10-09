@@ -593,13 +593,12 @@ quietly.
 ## Studio
 
 Studio is the opt-in "idea to office" mode, per project: a plan, a roster and a six-column board
-that live in your own repository, and — eventually — one real coding session per role, found by
-the same scan as everything else. It is **off everywhere** and does nothing until you enable it
-for a directory.
+that live in your own repository, and one real coding session per role, found by the same scan as
+everything else. It is **off everywhere** and does nothing until you enable it for a directory.
 
-**What exists today is the store, the consent and the planner. What does not exist is Hire.** No
-worktree, no role session, no board tab. Enabling a project creates a directory and a record; that
-is all enabling does.
+**The whole loop exists: the plan, Hire, the board, the handover, tracking, the drift pass and the
+budget stop**, each in a section below. Enabling a project starts none of it: it creates a
+directory and a record, and that is all enabling does.
 
 ```bash
 deckhq studio enable  ./my-project          # print every path it would write, change nothing
