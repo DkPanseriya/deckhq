@@ -335,14 +335,25 @@ test('ACCEPTANCE: three roles give three worktrees, three briefs and three named
     assert.equal(body.hired.filter((h) => h.rulesWritten).length, 1);
 
     // The sessions the fixture wrote, found by the ORDINARY scan.
-    await settle();
-    await d.registry.refresh();
-    const state = await (await fetch(`${d.url}api/state`)).json();
     // A session's `cwd` is the OS's spelling and `worktrees` is ours.
     const under = canonicalPath(worktrees) + path.sep;
-    const mine = (state.agents || []).filter((a) =>
-      a.cwd ? canonicalPath(a.cwd).startsWith(under) : false,
-    );
+    // Looked for until all three are there, with a ceiling: the fixture's
+    // transcripts are written by three child processes, and under load one of
+    // them was still writing when a single look was taken (2 of 3 found, once,
+    // on 9 Oct 2026). A ceiling, never a delay — the loop ends on the look that
+    // finds them.
+    let state = null;
+    let mine = [];
+    for (const stop = Date.now() + 30_000; ;) {
+      await settle();
+      await d.registry.refresh();
+      state = await (await fetch(`${d.url}api/state`)).json();
+      mine = (state.agents || []).filter((a) =>
+        a.cwd ? canonicalPath(a.cwd).startsWith(under) : false,
+      );
+      if (mine.length >= 3 || Date.now() >= stop) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
     assert.equal(mine.length, 3, `found ${mine.length} sessions in the worktrees`);
     assert.deepEqual(
       // §156 applies a queued name as `displayName` in `snapshot()`, which is

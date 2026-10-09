@@ -178,7 +178,12 @@ const decide = (d, body) =>
  * @param {string} boardFile
  * @param {(board:any) => boolean} ready
  */
-async function untilBoard(boardFile, ready, ms = 8000) {
+// The bound is a ceiling, never a delay: both waits return the moment the thing
+// they wait for is there. Eight seconds was enough on an idle machine and not
+// under load — seen three times on 9 Oct 2026 with other suites and a browser
+// running beside this one — so the ceiling is generous and the test is as fast
+// as before whenever it passes.
+async function untilBoard(boardFile, ready, ms = 30_000) {
   const stop = Date.now() + ms;
   for (;;) {
     let board = null;
@@ -194,7 +199,7 @@ async function untilBoard(boardFile, ready, ms = 8000) {
 }
 
 /** The same wait, for a handover that attaches to no card and writes nothing. */
-async function untilFile(file, ms = 8000) {
+async function untilFile(file, ms = 30_000) {
   const stop = Date.now() + ms;
   while (!fs.existsSync(file) && Date.now() < stop) {
     await new Promise((r) => setTimeout(r, 50));
