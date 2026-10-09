@@ -23,7 +23,16 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { DEMO_EPOCH } from './demo-args.mjs';
-import { cropImage, layout, startDemo, withStage, writePng } from './lib/capture-kit.mjs';
+import {
+  cropImage,
+  layout,
+  postHook,
+  record,
+  startDemo,
+  withStage,
+  writeGif,
+  writePng,
+} from './lib/capture-kit.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, fallback) => {
@@ -37,6 +46,13 @@ const WORK = path.resolve(opt('--work', `${OUT}-work`));
 const ONLY = String(opt('--only', ''))
   .split(',')
   .filter(Boolean);
+
+/** How long a recording waits for the floor to come to rest before it starts. */
+const SETTLE_MS = Number(opt('--settle', 9000));
+/** Override a recording's frame rate, for a quick look before the real take. */
+const FPS = Number(opt('--fps', 0));
+/** Override a recording's length, for finding out how long something takes. */
+const SECONDS = Number(opt('--seconds', 0));
 
 const say = (line) => process.stdout.write(`${line}\n`);
 
@@ -63,6 +79,9 @@ const inset = (r, by) => ({ x: r.x + by, y: r.y + by, w: r.w - 2 * by, h: r.h - 
 /** Trim an image to even sides, so half of it is a whole number of pixels. */
 const even = (img) =>
   cropImage(img, { x: 0, y: 0, w: img.width - (img.width % 2), h: img.height - (img.height % 2) });
+
+/** The rooms of a floor as one string: a recording compares it to see a floor laid out again. */
+const planOf = (g) => g.rooms.map((r) => [r.name, r.x, r.y, r.w, r.h].map((v) => (typeof v === 'number' ? Math.round(v) : v)).join(':')).join('|');
 
 /** A capture that shows the "Install hooks" chip is not a picture of the demo floor. */
 function refuseBanner(g) {
@@ -163,7 +182,61 @@ const RECIPES = {
       const img = writePng(path.join(OUT, 'need.two-signals.png'), page, 1600);
       say(`need.two-signals.png  ${img.width}x${img.height}`);
     }),
+
+  /**
+   * C-001. One working session's turn ends: a real `Stop` hook, six tenths of
+   * a second in. The frame is the office, the corridor and the room it leaves.
+   */
+  'need.office': () =>
+    onFloor({ population: 'pair', stepped: true }, (demo) =>
+      // 1031 high so the stage under the header is 1600 x 900.
+      withStage({ width: 1600, height: 1031, dpr: 2, reduced: false, virtual: true }, async (stage) => {
+        // Everybody walks in from the door on first paint; the recording wants
+        // exactly one person moving.
+        const g = await stage.open(demo.url, SETTLE_MS);
+        refuseBanner(g);
+        const laid = planOf(g);
+        const who = g.agents.find((a) => a.title === 'Rate limiter for the public API');
+        const clip = { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 };
+        const frames = await record(stage, demo, {
+          fps: FPS || 25,
+          seconds: SECONDS || 6,
+          clip,
+          width: 1600,
+          dir: path.join(WORK, 'need.office.frames'),
+          events: [
+            {
+              at: 0.6,
+              run: () =>
+                postHook(demo.url, {
+                  session_id: who.id.replace(/^claude-code:/, ''),
+                  cwd: path.join(demo.root, 'code', 'orbital-api'),
+                  hook_event_name: 'Stop',
+                }),
+            },
+          ],
+          watch: async (i, t) => {
+            if (i % 5) return;
+            const now = await stage.geometry();
+            if (planOf(now) !== laid) say(`  ${t.toFixed(2)}s THE FLOOR WAS LAID OUT AGAIN`);
+            const a = now.agents.find((x) => x.id === who.id);
+            say(`  ${t.toFixed(2)}s ${a.name} ${a.state} ${a.placement} ${a.clip}${a.moving ? ' moving' : ''} ${Math.round(a.x)},${Math.round(a.y)}`);
+          },
+        });
+        reportGif('need.office', frames, FPS || 25);
+      }),
+    ),
 };
+
+/** Write a recording, and its smaller copy when it is too heavy for a post. */
+function reportGif(name, frames, fps, opts = {}) {
+  const gif = writeGif(path.join(OUT, `${name}.gif`), frames, fps, opts);
+  say(`${name}.gif  ${gif.width}x${gif.height}  ${gif.frames} frames  ${(gif.bytes / 1048576).toFixed(2)} MB`);
+  if (gif.bytes > 8 * 1048576) {
+    const small = writeGif(path.join(OUT, `${name}.1280.gif`), frames, fps, { ...opts, width: 1280 });
+    say(`${name}.1280.gif  ${small.width}x${small.height}  ${(small.bytes / 1048576).toFixed(2)} MB`);
+  }
+}
 
 if (argv.includes('--list')) {
   say(Object.keys(RECIPES).join('\n'));

@@ -15,13 +15,13 @@
  *      a room rather than carrying pixel numbers that die with the next layout.
  *   3. MOTION THAT CAN BE PHOTOGRAPHED FRAME BY FRAME. A screenshot at twice
  *      the size costs a third of a second, so a real-time recording at that
- *      size is three frames a second. `VIRTUAL_CLOCK` replaces the page's three
- *      time sources (`Date.now`, `performance.now`, `requestAnimationFrame`)
- *      before the document loads; until it is frozen it is the real clock, and
- *      once frozen the floor's own frame loop runs exactly one frame per
- *      `tick`, on a clock that advanced by exactly the frame's length. Nothing
- *      in the product is changed and no pixel is drawn by anything but the
- *      product: the floor is told what time it is, which is what a clock does.
+ *      size is three frames a second. `record` runs the floor on a clock that
+ *      moves one frame at a time instead: the daemon's own pinned clock
+ *      (`DECKHQ_NOW`, stepped by `demo-floor-stepped.mjs`), the page's copy of
+ *      it (`public/clock.js`), and the page's frame pacing (`VIRTUAL_CLOCK`).
+ *      Nothing in the product is changed and no pixel is drawn by anything but
+ *      the product: the floor is told what time it is, which is what a clock
+ *      does, and what happens on it is a real hook posted to the real endpoint.
  *
  * Demo floors only. No dependencies: Chrome is `src/cli/chrome.mjs`, PNG is
  * `lib/png.mjs`, GIF is `gif-encoder.mjs`.
@@ -39,6 +39,7 @@ import { boxDownscale, cropImage, decodePng, encodePng } from './png.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEMO_SCRIPT = path.join(ROOT, 'scripts', 'demo-floor.mjs');
+const STEPPED_SCRIPT = path.join(ROOT, 'scripts', 'demo-floor-stepped.mjs');
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -55,11 +56,16 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * temp directory, and a capture run that must leave nothing outside its own
  * folder points that somewhere it owns.
  *
- * @param {{population?:string, theme?:string, pinned?:string|null, tmp?:string}} opts
- * @returns {Promise<{url:string, root:string, stop:() => Promise<void>}>}
+ * `stepped` starts `demo-floor-stepped.mjs` instead, whose pinned clock moves
+ * when `setNow` says so: the daemon half of a recording's clock.
+ *
+ * @param {{population?:string, theme?:string, pinned?:string|null, tmp?:string,
+ *          stepped?:boolean}} opts
+ * @returns {Promise<{url:string, root:string, stop:() => Promise<void>,
+ *   setNow:(ms:number) => Promise<void>}>}
  */
 export function startDemo(opts = {}) {
-  const { population = 'demo', theme = 'default', pinned = null, tmp = '' } = opts;
+  const { population = 'demo', theme = 'default', pinned = null, tmp = '', stepped = false } = opts;
   const env = { ...process.env };
   delete env.DECKHQ_NOW;
   if (pinned) env.DECKHQ_NOW = pinned;
@@ -72,11 +78,18 @@ export function startDemo(opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [DEMO_SCRIPT, '--population', population, '--theme', theme, '--port', '0'],
-      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'], env },
+      [stepped ? STEPPED_SCRIPT : DEMO_SCRIPT, '--population', population, '--theme', theme, '--port', '0'],
+      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe', ...(stepped ? ['ipc'] : [])], env },
     );
     let out = '';
     let settled = false;
+    /** Tell the stepped daemon what time it is, and wait until it has heard. */
+    const setNow = (ms) =>
+      new Promise((heard, failed) => {
+        if (!stepped) return failed(new Error('this demo floor was not started stepped'));
+        child.once('message', () => heard());
+        child.send({ now: new Date(ms).toISOString() });
+      });
     const stop = () =>
       new Promise((done) => {
         if (child.exitCode != null) return done();
@@ -104,7 +117,7 @@ export function startDemo(opts = {}) {
       if (url && fixture && /Ctrl-C to stop/.test(out) && !settled) {
         settled = true;
         clearTimeout(timer);
-        resolve({ url: url[1], root: fixture[1].trim(), stop });
+        resolve({ url: url[1], root: fixture[1].trim(), stop, setNow });
       }
     };
     child.stdout.on('data', onData);
@@ -147,14 +160,20 @@ export function postHook(url, body) {
  * Installed before the document's own scripts run. Real time until `freeze()`.
  * After it, time moves only in `tick(ms)`, and each tick runs the animation
  * frames that were waiting, once, with the new time.
+ *
+ * TWO CLOCKS, because the floor has two (`public/render/scene-agent.js`). The
+ * FRAME clock is `performance.now()` and `requestAnimationFrame`: it paces a
+ * walk, and it is replaced here. The ANIMATION clock is `public/clock.js`, the
+ * daemon's pinned instant, and it is not replaced: `tick` hands that module the
+ * next instant through its own `adoptSnapshotClock`, exactly as a snapshot from
+ * a daemon whose `DECKHQ_NOW` had moved would. `freeze` answers with the
+ * instant it started from, so the caller can keep the daemon on the same one.
  */
 export const VIRTUAL_CLOCK = `(() => {
-  const realDate = Date.now.bind(Date);
   const realPerf = performance.now.bind(performance);
   const realRaf = window.requestAnimationFrame.bind(window);
   const realCaf = window.cancelAnimationFrame.bind(window);
-  const clock = { frozen: false, epoch: 0, perf: 0, waiting: new Map(), next: 1 };
-  Date.now = () => (clock.frozen ? clock.epoch : realDate());
+  const clock = { frozen: false, base: 0, elapsed: 0, perf: 0, waiting: new Map(), next: 1 };
   performance.now = () => (clock.frozen ? clock.perf : realPerf());
   window.requestAnimationFrame = (cb) => {
     if (!clock.frozen) return realRaf(cb);
@@ -165,14 +184,18 @@ export const VIRTUAL_CLOCK = `(() => {
   window.cancelAnimationFrame = (id) => {
     if (!clock.waiting.delete(id)) realCaf(id);
   };
-  clock.freeze = () => {
-    clock.epoch = realDate();
+  clock.freeze = async () => {
+    clock.product = await import('/clock.js');
+    if (!clock.product.isPinned()) throw new Error('the daemon clock is not pinned');
+    clock.base = clock.product.now();
     clock.perf = realPerf();
     clock.frozen = true;
+    return clock.base;
   };
   clock.tick = (ms) => {
-    clock.epoch += ms;
+    clock.elapsed += ms;
     clock.perf += ms;
+    clock.product.adoptSnapshotClock({ now: Math.round(clock.base + clock.elapsed), nowFixed: true });
     const due = [...clock.waiting.values()];
     clock.waiting.clear();
     for (const cb of due) cb(clock.perf);
@@ -429,14 +452,59 @@ export async function layout(opts) {
   });
 }
 
-/** A grid of `count` evenly spaced frames, so a recording can be reviewed as one still. */
-export function contactSheet(frames, count = 12, cols = 4, cellW = 640) {
-  const picks = Array.from({ length: count }, (_, i) =>
-    Math.round((i * (frames.length - 1)) / (count - 1)),
-  );
-  const cells = picks.map((i) => boxDownscale(frames[i], cellW));
+// --------------------------------------------------------------- recordings
+
+/**
+ * Record the floor one frame at a time, on a clock that moves only here.
+ *
+ * Each frame: say what happens now (`events`, each a real hook or a real key),
+ * move the daemon's clock and the page's by one frame, let the floor draw, and
+ * photograph `clip`. Frames are written to `dir` as PNGs at `width` — a
+ * hundred and fifty frames at 1600 x 900 are most of a gigabyte in memory and
+ * nothing on disk.
+ *
+ * @param {any} stage a stage opened with `virtual: true`, on a `stepped` demo
+ * @param {{setNow:(ms:number) => Promise<void>}} demo
+ * @param {{fps:number, seconds:number, clip:{x:number,y:number,w:number,h:number},
+ *   width:number, dir:string, events?:{at:number, run:() => Promise<any>}[],
+ *   watch?:(frame:number, seconds:number) => Promise<any>}} opts
+ *   `watch` is called after every frame, for a recipe that reports what it saw.
+ * @returns {Promise<string[]>} the frame files, in order
+ */
+export async function record(stage, demo, opts) {
+  const { fps, seconds, clip, width, dir, events = [] } = opts;
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const base = await stage.freeze();
+  const step = 1000 / fps;
+  const pending = [...events].sort((a, b) => a.at - b.at);
+  const files = [];
+  const total = Math.round(fps * seconds);
+  for (let i = 0; i < total; i++) {
+    while (pending.length && pending[0].at <= i / fps + 1e-9) {
+      await pending.shift().run();
+      // The floor hears of it over its event stream, in real time.
+      await sleep(400);
+    }
+    await demo.setNow(base + Math.round((i + 1) * step));
+    await stage.tick(step);
+    const img = await stage.shot(clip);
+    const file = path.join(dir, `${String(i).padStart(4, '0')}.png`);
+    writePng(file, img, width);
+    files.push(file);
+    if (opts.watch) await opts.watch(i, (i + 1) / fps);
+  }
+  return files;
+}
+
+/** A frame given as an image or as the PNG it was written to. */
+const frameOf = (f) => (typeof f === 'string' ? readPng(f) : f);
+
+/** A grid of frames, so a recording can be reviewed as one still. */
+export function contactSheet(frames, cols = 4, cellW = 640) {
+  const cells = frames.map((f) => boxDownscale(frameOf(f), cellW));
   const cellH = cells[0].height;
-  const rows = Math.ceil(count / cols);
+  const rows = Math.ceil(cells.length / cols);
   const gap = 8;
   const width = cols * cellW + (cols + 1) * gap;
   const height = rows * cellH + (rows + 1) * gap;
@@ -454,34 +522,66 @@ export function contactSheet(frames, count = 12, cols = 4, cellW = 640) {
 
 /**
  * Encode frames as a looping GIF with one palette, and write the two files
- * that travel with it: `<name>.frames.png` and `<name>.txt`.
- * @returns {{bytes:number, width:number, height:number, frames:number, fps:number}}
+ * that travel with it: `<name>.frames.png`, twelve frames evenly spaced in
+ * TIME, and `<name>.txt`, one line.
+ *
+ * `frames` are images or PNG files; `delays` gives each frame its own length
+ * in hundredths of a second, for a recording that holds each picture (the
+ * styles). Without it every frame lasts `1 / fps`. `width` halves the frames on
+ * the way in, for the smaller copy of a recording that came out too heavy.
+ *
+ * The palette is cut from sixteen frames spread across the recording rather
+ * than from all of them: the floor's colours do not change while somebody
+ * walks across it, and all of them at once do not fit in memory.
+ *
+ * @param {string} file
+ * @param {(string|{width:number,height:number,data:Uint8Array})[]} frames
+ * @param {number} fps
+ * @param {{delays?:number[], width?:number}} [opts]
  */
-export function writeGif(file, frames, fps) {
-  const { width, height } = frames[0];
+export function writeGif(file, frames, fps, opts = {}) {
+  const load = (f) => {
+    const img = frameOf(f);
+    return opts.width && opts.width !== img.width ? boxDownscale(img, opts.width) : img;
+  };
+  const spread = (n) =>
+    Array.from({ length: Math.min(n, frames.length) }, (_, i) =>
+      Math.round((i * (frames.length - 1)) / Math.max(1, Math.min(n, frames.length) - 1)),
+    );
+  const { width, height } = load(frames[0]);
   const palette = buildPalette(
-    frames.map((f) => f.data),
+    spread(16).map((i) => load(frames[i]).data),
     255,
   );
   const cache = new Int16Array(1 << (3 * Q)).fill(-1);
-  const delayCs = Math.round(100 / fps);
+  const delays = opts.delays || frames.map(() => Math.round(100 / fps));
   const gif = encodeGif({
     width,
     height,
     palette,
-    frames: frames.map((f) => ({ indices: indexPixels(f.data, palette, cache), delayCs })),
+    frames: frames.map((f, i) => ({
+      indices: indexPixels(load(f).data, palette, cache),
+      delayCs: delays[i],
+    })),
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, gif);
+
+  // Twelve moments evenly spaced in time, each the frame on screen at it.
+  const total = delays.reduce((a, b) => a + b, 0);
+  const ends = [];
+  delays.reduce((sum, d) => (ends.push(sum + d), sum + d), 0);
+  const at = (cs) => Math.max(0, ends.findIndex((end) => cs < end));
+  const picks = Array.from({ length: 12 }, (_, i) => at((i * (total - delays.at(-1))) / 11));
   const base = file.replace(/\.gif$/, '');
-  writePng(`${base}.frames.png`, contactSheet(frames));
-  const seconds = (frames.length * delayCs) / 100;
+  writePng(`${base}.frames.png`, contactSheet(picks.map((i) => load(frames[i]))));
+  const rate = opts.delays ? (frames.length / (total / 100)).toFixed(2) : String(fps);
   fs.writeFileSync(
     `${base}.txt`,
     `${path.basename(file)}: ${(gif.length / 1048576).toFixed(2)} MB (${gif.length} bytes), ` +
-      `${width}x${height}, ${frames.length} frames, ${(100 / delayCs).toFixed(0)} fps, ${seconds.toFixed(1)} s\n`,
+      `${width}x${height}, ${frames.length} frames, ${rate} fps, ${(total / 100).toFixed(1)} s\n`,
   );
-  return { bytes: gif.length, width, height, frames: frames.length, fps: 100 / delayCs };
+  return { bytes: gif.length, width, height, frames: frames.length, seconds: total / 100 };
 }
 
 export { boxDownscale, cropImage };
