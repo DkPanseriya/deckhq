@@ -276,8 +276,10 @@
   gap: var(--s-5) var(--s-4);
 }
 
+/* Two to a row: a command is shown whole, and a third of a page is not wide
+   enough for most of them. */
 .way {
-  grid-column: span 3;
+  grid-column: span 6;
   display: grid;
   gap: var(--s-2);
   align-content: start;
@@ -285,13 +287,13 @@
   border-top: 1px solid var(--line-2);
 }
 
-/* The way with the two long lines in it gets the room to show them whole. */
-.way--wide {
-  grid-column: span 6;
-}
-
 .way .cmd code {
   font-size: var(--t-small);
+}
+
+/* The way with the two longest lines sets them a step smaller, to fit. */
+.way--wide .cmd code {
+  font-size: var(--t-micro);
 }
 
 .way--first {
@@ -458,6 +460,11 @@ td:first-child {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
   gap: var(--s-5) var(--s-4);
+}
+
+/* Six things, three to a row, rather than four and two. */
+.cols--three {
+  grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr));
 }
 
 .cols > * {
