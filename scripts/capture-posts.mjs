@@ -19,6 +19,7 @@
  *
  * Dev script only: `scripts/` is not in the published package.
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
@@ -227,6 +228,112 @@ const RECIPES = {
       }),
     ),
 };
+
+/**
+ * The band of the demo floor inside the link preview: the whole width of the
+ * building and a third of that in height, from the wait badges over the
+ * office's side sofas down to the names under the juniors two rooms below.
+ * Those two are 36.7 units apart and the band is 39.7, so it is placed with
+ * the same few pixels to spare at either end.
+ * @returns {Promise<{width:number, height:number, data:Uint8Array}>} 3000 x 1000
+ */
+function officeBand() {
+  return onFloor({ population: 'demo' }, (demo) =>
+    // The window `see.every-session` uses, where the building is 119 units wide.
+    withStage({ width: 1760, height: 990, dpr: 3000 / 1760 }, async (stage) => {
+      const g = await stage.open(demo.url);
+      refuseBanner(g);
+      const waiting = g.agents.filter((a) => a.placement === 'office');
+      const top = Math.min(...waiting.map((a) => a.y)) - 6.2 * g.unit;
+      return even(await stage.still({ x: 0, y: top, w: 1760, h: 1760 / 3 }));
+    }),
+  );
+}
+
+/**
+ * A profile header is three to one and the building is never wider than 2.2 to
+ * one, so no band of it holds the office and a room below it with room to
+ * spare at the top and the foot. This is the other answer: a window that is
+ * itself three to one under its header, where the product stands the whole
+ * building in the middle of the studio ground. Nothing is cut, and what a
+ * profile picture covers bottom left is ground and the corner of the lounge.
+ * @returns {Promise<{width:number, height:number, data:Uint8Array}>} 3000 x 1000
+ */
+function wholeFloorBand() {
+  return onFloor({ population: 'demo' }, (demo) =>
+    withStage({ width: 2610, height: 1000, dpr: 3000 / 2610 }, async (stage) => {
+      const g = await stage.open(demo.url);
+      refuseBanner(g);
+      if (g.unit < 14) throw new Error(`the floor fits at ${g.unit} px a unit: no wait badges`);
+      return even(await stage.still({ x: 0, y: g.canvas.y, w: 2610, h: 870 }));
+    }),
+  );
+}
+
+/** The mark's own file, on its dark ground, for a page that sets it inline. */
+const MARK = fs
+  .readFileSync(new URL('../public/brand/deckhq-mark.svg', import.meta.url), 'utf8')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace('<svg ', '<svg class="dark" ');
+
+Object.assign(RECIPES, {
+  /**
+   * BRAND-GUIDE §3's avatar: the mark's robot with no plate and no rim, on the
+   * plate's own colour edge to edge, its ink 64% of the width. The shapes are
+   * the SVG's, untouched; only the two plate rectangles are left out and the
+   * view box is widened about the centre of the ink (44..468 by 48..470).
+   */
+  'avatar-product-1024': async () => {
+    const view = 424 / 0.64;
+    const robot = MARK.replace(/<rect width="512"[^>]*\/>/, '')
+      .replace(/<rect x="6" y="6"[^>]*\/>/, '')
+      .replace(/viewBox="[^"]*" width="512" height="512"/, `viewBox="${256 - view / 2} ${259 - view / 2} ${view} ${view}" width="1024" height="1024"`);
+    const page = await layout({
+      dir: WORK,
+      name: 'avatar-product-1024',
+      width: 1024,
+      height: 1024,
+      html: `<!doctype html><meta charset="utf-8"><body style="margin:0;width:1024px;height:1024px;
+        background:#14161B;overflow:hidden">${robot}`,
+    });
+    const img = writePng(path.join(OUT, 'avatar-product-1024.png'), page, 1024);
+    say(`avatar-product-1024.png  ${img.width}x${img.height}`);
+  },
+
+  /** A profile header: the whole building on the studio ground, 1500 x 500. */
+  'header-1500x500': async () => {
+    const img = writePng(path.join(OUT, 'header-1500x500.png'), await wholeFloorBand(), 1500);
+    say(`header-1500x500.png  ${img.width}x${img.height}`);
+  },
+
+  /**
+   * The link preview, laid out as BRAND-GUIDE §9.4 scaled to a 630 px short
+   * edge: studio ground, the mark and the name as live text in the app's own
+   * font stack (no font is loaded), the line, and the band in a 12 px frame.
+   */
+  'link-preview-1200x630': async () => {
+    const page = await layout({
+      dir: WORK,
+      name: 'link-preview-1200x630',
+      width: 1200,
+      height: 630,
+      parts: { band: await officeBand() },
+      html: `<!doctype html><meta charset="utf-8"><style>
+        body{margin:0;width:1200px;height:630px;background:${STUDIO};color:#e9ecf2;
+          font-family:'IBM Plex Sans',system-ui,sans-serif;position:relative;overflow:hidden}
+        .lock{position:absolute;left:56px;top:48px;display:flex;align-items:center;gap:14px;
+          font-weight:600;font-size:30px;letter-spacing:-0.01em}
+        .lock svg{width:40px;height:40px}
+        .line{position:absolute;left:56px;top:112px;font-weight:600;font-size:46px;letter-spacing:-0.03em}
+        img{position:absolute;left:56px;top:212px;width:1088px;height:362px;border-radius:12px;
+          box-shadow:0 0 0 1px ${LINE}}
+      </style><div class="lock">${MARK}<span>DeckHQ</span></div>
+      <div class="line">An office for your AI coding agents.</div><img src="{{band}}">`,
+    });
+    const img = writePng(path.join(OUT, 'link-preview-1200x630.png'), page, 1200);
+    say(`link-preview-1200x630.png  ${img.width}x${img.height}`);
+  },
+});
 
 /** Write a recording, and its smaller copy when it is too heavy for a post. */
 function reportGif(name, frames, fps, opts = {}) {

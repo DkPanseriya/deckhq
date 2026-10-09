@@ -362,22 +362,21 @@ export async function withStage(opts, fn) {
          * pixels and is snapped outward to whole ones.
          */
         async shot(clip) {
-          const params = { format: 'png', captureBeyondViewport: false };
-          if (clip) {
-            // Held inside the window: Chrome answers a clip that starts off the
-            // page with a picture of somewhere else.
-            const x = Math.max(0, Math.floor(clip.x));
-            const y = Math.max(0, Math.floor(clip.y));
-            params.clip = {
-              x,
-              y,
-              width: Math.min(width, Math.ceil(clip.x + clip.w)) - x,
-              height: Math.min(height, Math.ceil(clip.y + clip.h)) - y,
-              scale: 1,
-            };
-          }
-          const { data } = await client.send('Page.captureScreenshot', params);
-          return decodePng(Buffer.from(data, 'base64'));
+          // The whole window is photographed and the crop is cut out of it
+          // here, in device pixels. Chrome's own `clip` is in CSS pixels, and
+          // at a ratio such as 1.875 a CSS pixel is not a whole number of
+          // device ones: the picture comes back resampled, and one that starts
+          // off the page comes back as a picture of somewhere else.
+          const { data } = await client.send('Page.captureScreenshot', {
+            format: 'png',
+            captureBeyondViewport: false,
+          });
+          const img = decodePng(Buffer.from(data, 'base64'));
+          if (!clip) return img;
+          const k = img.width / width;
+          const x = Math.max(0, Math.round(clip.x * k));
+          const y = Math.max(0, Math.round(clip.y * k));
+          return cropImage(img, { x, y, w: Math.round(clip.w * k), h: Math.round(clip.h * k) });
         },
         /** `shot`, repeated until two in a row are the same picture. */
         async still(clip) {
