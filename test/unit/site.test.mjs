@@ -31,14 +31,14 @@ const LINKABLE = ['github.com', 'www.npmjs.com'];
  * This site's own origin — WP-75.
  *
  * It appears in the sources because the one-line installers are printed on the
- * page as text to copy: `curl -fsSL https://dkpanseriya.github.io/deckhq/
+ * page as text to copy: `curl -fsSL https://deckhq.dev/
  * install.sh | sh`. A URL a reader copies into their own shell is not a
  * request this page makes, so it is allowed in the source scan and in nothing
  * else: it is deliberately NOT in `LINKABLE`, so an `<a href>` to it would
  * still fail the outbound-link test below, and the fetch test above refuses
  * every absolute URL in a `src` or a `<link href>` whatever the host.
  */
-const SELF = 'dkpanseriya.github.io';
+const SELF = 'deckhq.dev';
 
 /** The stylesheet's two source files; `site/build.mjs` serves them as one. */
 const STYLE_SOURCES = ['style.css', 'components.css'];
@@ -122,8 +122,8 @@ test('the one-line installers are published, byte for byte, at the URL the pages
   }
 
   const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
-  assert.match(home, /https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.ps1/);
-  assert.match(home, /https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.sh/);
+  assert.match(home, /https:\/\/deckhq\.dev\/install\.ps1/);
+  assert.match(home, /https:\/\/deckhq\.dev\/install\.sh/);
   assert.match(home, /npx deckhq app/);
 });
 
@@ -138,7 +138,7 @@ test('every internal link resolves to a file that exists', () => {
     // have to resolve from the site's own root. It is checked on its own, and
     // no other page may carry one.
     const base = html.match(/<base href="([^"]+)" \/>/);
-    assert.equal(base ? base[1] : null, where === '404.html' ? '/deckhq/' : null, `${where}: base`);
+    assert.equal(base ? base[1] : null, where === '404.html' ? '/' : null, `${where}: base`);
     const links = html.replace(/<base [^>]*>/, '');
     for (const m of links.matchAll(/(?:href|src)="([^"]+)"/g)) {
       const href = m[1];
@@ -1076,7 +1076,7 @@ test('every page has a title, a description and a card of its own', async () => 
   }
   assert.match(
     fs.readFileSync(path.join(out, 'robots.txt'), 'utf8'),
-    /^Sitemap: https:\/\/dkpanseriya\.github\.io\/deckhq\/sitemap\.txt$/m,
+    /^Sitemap: https:\/\/deckhq\.dev\/sitemap\.txt$/m,
   );
 });
 

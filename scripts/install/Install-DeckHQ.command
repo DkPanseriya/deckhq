@@ -4,7 +4,7 @@
 # All it does is run the one line the README and the site print, which is the
 # shell installer published beside this release:
 #
-#     curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+#     curl -fsSL https://deckhq.dev/install.sh | sh
 #
 # That script looks for Node 18 or newer and OFFERS to install it with brew,
 # then installs DeckHQ, then asks whether to put DeckHQ on your desktop and
@@ -17,4 +17,4 @@
 echo "DeckHQ: this installs DeckHQ on this machine and then opens it."
 echo "It checks for Node first, and it asks before it installs anything."
 echo
-curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+curl -fsSL https://deckhq.dev/install.sh | sh

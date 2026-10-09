@@ -9,8 +9,8 @@ them is from September 2026, before the figure took its current form.
 
 | Looking for | Go to |
 |---|---|
-| Install, in every route | [`README.md`](../README.md), and the [site](https://dkpanseriya.github.io/deckhq/install.html) |
-| What it does, with a picture each | The [site](https://dkpanseriya.github.io/deckhq/features.html) |
+| Install, in every route | [`README.md`](../README.md), and the [site](https://deckhq.dev/install.html) |
+| What it does, with a picture each | The [site](https://deckhq.dev/features.html) |
 | What changed, and when | [`CHANGELOG.md`](../CHANGELOG.md) |
 | Which runtimes, how verified | [`ADAPTERS.md`](ADAPTERS.md) |
 | A security problem | [`SECURITY.md`](../SECURITY.md) |
@@ -1261,4 +1261,4 @@ shapes itself rather than driving a browser, so the bytes are the same on every 
 does the same on every run, so the source and its outputs cannot drift apart.
 
 What changed and when is in [`CHANGELOG.md`](../CHANGELOG.md). What DeckHQ does, with a picture for
-each of it, is on [the site](https://dkpanseriya.github.io/deckhq/).
+each of it, is on [the site](https://deckhq.dev/).

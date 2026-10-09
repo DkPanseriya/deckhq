@@ -1,7 +1,7 @@
 #!/bin/sh
 # DeckHQ — the one line, for macOS and Linux. WP-75.
 #
-#   curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+#   curl -fsSL https://deckhq.dev/install.sh | sh
 #
 # What it does, in order, and nothing else:
 #

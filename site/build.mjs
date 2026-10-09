@@ -61,7 +61,7 @@ const REPO = 'https://github.com/DkPanseriya/deckhq';
  * are. A GitHub project page, so the repository name is part of the path;
  * there is no custom domain and this file must not invent one.
  */
-const SITE_ORIGIN = 'https://dkpanseriya.github.io/deckhq';
+const SITE_ORIGIN = 'https://deckhq.dev';
 
 /** The card a link to any page unfurls into: 1200 x 630. */
 const PREVIEW = 'link-preview.png';
@@ -139,7 +139,7 @@ const PAGES = [
     // GitHub Pages serves this file for any missing path at any depth, so its
     // links are resolved from the site's own root rather than from the path
     // that was asked for.
-    base: '/deckhq/',
+    base: '/',
     unlisted: true,
   },
 ];
@@ -183,8 +183,8 @@ function assertNothingInternal(name, html) {
  */
 const INSTALL_COMMANDS = [
   'npx deckhq app',
-  'irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex',
-  'curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh',
+  'irm https://deckhq.dev/install.ps1 | iex',
+  'curl -fsSL https://deckhq.dev/install.sh | sh',
 ];
 
 /**
@@ -499,9 +499,9 @@ async function serve() {
   };
   createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
-    // Served under the path the site is published at, so the 404 page's
-    // `<base>` resolves here exactly as it does on GitHub Pages.
-    let rel = decodeURIComponent(url.pathname).replace(/^\/(deckhq\/)?/, '');
+    // Served at the root, where the site is published (its own domain), so
+    // the 404 page's `<base>` resolves here exactly as it does there.
+    let rel = decodeURIComponent(url.pathname).replace(/^\//, '');
     if (rel === '' || rel.endsWith('/')) rel += 'index.html';
     let file = path.resolve(OUT, rel);
     let status = 200;
@@ -514,7 +514,7 @@ async function serve() {
     });
     res.end(fs.readFileSync(file));
   }).listen(PORT, '127.0.0.1', () => {
-    process.stdout.write(`site: http://127.0.0.1:${PORT}/deckhq/\n`);
+    process.stdout.write(`site: http://127.0.0.1:${PORT}/\n`);
   });
 }
 

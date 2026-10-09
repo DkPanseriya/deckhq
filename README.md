@@ -23,11 +23,11 @@ npx deckhq app
 **No Node on the machine?** Download and run [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd) on Windows or [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command) on macOS, or paste the matching line, which is all either file carries:
 
 ```powershell
-irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
+irm https://deckhq.dev/install.ps1 | iex
 ```
 
 ```bash
-curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
+curl -fsSL https://deckhq.dev/install.sh | sh
 ```
 
 Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
@@ -67,7 +67,7 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
 - **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` discharges one,
   and `deckhq statusline` gives a status bar `▣ 3 waiting · 1 hand up`.
 
-All of it, with a picture each, is on the site: [the features](https://dkpanseriya.github.io/deckhq/features.html).
+All of it, with a picture each, is on the site: [the features](https://deckhq.dev/features.html).
 [The manual](docs/GUIDE.md) has every command, key and file.
 
 ## What it never does
@@ -144,7 +144,7 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 Studio is the opt-in "idea to office" mode, per project, off until `deckhq studio enable <project>`
 writes one marked file; a real `claude` session then interviews you and writes the blueprint, the
 roster and the board. The loop is complete — plan, hire, board, handover, tracking, drift, budget —
-and is on [the site](https://dkpanseriya.github.io/deckhq/features.html#studio). **Not yet watched:** a real
+and is on [the site](https://deckhq.dev/features.html#studio). **Not yet watched:** a real
 planner interview, or a hired session's real reply — the maintainer's `claude` login has expired.
 
 **Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** gives a role a git worktree of its own,
@@ -177,7 +177,7 @@ minutes the planner flags drift, and a flag moves nothing. A card past its budge
 | [`LICENSE`](LICENSE)                   | MIT                                                                     |
 | [`docs/ADAPTERS.md`](docs/ADAPTERS.md) | For anyone adding support for another coding tool                       |
 
-[dkpanseriya.github.io/deckhq](https://dkpanseriya.github.io/deckhq/) is the product site: what it
+[deckhq.dev](https://deckhq.dev/) is the product site: what it
 does, how it looks, how to install it, and the answers to the questions it gets asked.
 
 ## Honest limits
