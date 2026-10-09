@@ -367,12 +367,21 @@ export async function withStage(opts, fn) {
           // at a ratio such as 1.875 a CSS pixel is not a whole number of
           // device ones: the picture comes back resampled, and one that starts
           // off the page comes back as a picture of somewhere else.
+          //
+          // At a whole ratio and a clip on whole CSS pixels neither can happen,
+          // and Chrome's clip is then used: a recording at four times the size
+          // would otherwise encode thirty megapixels to keep six.
+          const whole = (n) => Number.isInteger(n);
+          const native =
+            clip && whole(dpr) && [clip.x, clip.y, clip.w, clip.h].every(whole) && clip.x >= 0 &&
+            clip.y >= 0 && clip.x + clip.w <= width && clip.y + clip.h <= height;
           const { data } = await client.send('Page.captureScreenshot', {
             format: 'png',
             captureBeyondViewport: false,
+            ...(native ? { clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 1 } } : {}),
           });
           const img = decodePng(Buffer.from(data, 'base64'));
-          if (!clip) return img;
+          if (!clip || native) return img;
           const k = img.width / width;
           const x = Math.max(0, Math.round(clip.x * k));
           const y = Math.max(0, Math.round(clip.y * k));
@@ -536,7 +545,8 @@ export function contactSheet(frames, cols = 4, cellW = 640) {
  * @param {string} file
  * @param {(string|{width:number,height:number,data:Uint8Array})[]} frames
  * @param {number} fps
- * @param {{delays?:number[], width?:number}} [opts]
+ * @param {{delays?:number[], width?:number, ownPalettes?:boolean}} [opts]
+ *   `ownPalettes` gives every frame a colour table of its own (see `encodeGif`).
  */
 export function writeGif(file, frames, fps, opts = {}) {
   const load = (f) => {
@@ -558,10 +568,14 @@ export function writeGif(file, frames, fps, opts = {}) {
     width,
     height,
     palette,
-    frames: frames.map((f, i) => ({
-      indices: indexPixels(load(f).data, palette, cache),
-      delayCs: delays[i],
-    })),
+    frames: frames.map((f, i) => {
+      if (!opts.ownPalettes) return { indices: indexPixels(load(f).data, palette, cache), delayCs: delays[i] };
+      // Each picture cut to its own 255 colours, for pictures that share none.
+      const { data } = load(f);
+      const own = buildPalette([data], 255);
+      const indices = indexPixels(data, own, new Int16Array(1 << (3 * Q)).fill(-1));
+      return { indices, delayCs: delays[i], palette: own };
+    }),
   });
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, gif);

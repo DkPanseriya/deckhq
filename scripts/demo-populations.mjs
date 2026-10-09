@@ -445,12 +445,25 @@ export const POPULATIONS = {
     ['orbital-api', 'Backfill the events table', 'working', 0.6, 1.6],
   ],
   /**
-   * A LEAD WITH THREE JUNIORS, and nobody else in the building: the floor for
+   * ONE SENIOR AND ITS TWO JUNIORS, alone in the building: the `demo` floor's
+   * `JUNIOR_PARENT` and `JUNIORS` with nobody sharing their desk, for a close
+   * picture of two juniors on the floor beside a lead. The title is written
+   * out for the reason `away`'s is.
+   */
+  juniors: () => [['design-system', 'Dark mode audit across 40 components', 'working', 0.05, 3.1]],
+  /**
+   * A LEAD WITH THREE JUNIORS, and one session of the same repo waiting in the
+   * office: the floor for
    * the recording of a lead whose turn ends while its crew is still working.
    * The juniors are `LEAD_JUNIORS` below, and the title is `LEAD_PARENT`,
    * written out because that constant is declared below this table.
    */
-  lead: () => [['orbital-api', 'Split the deploy pipeline', 'working', 0.05, 2.4]],
+  lead: () => [
+    ['orbital-api', 'Split the deploy pipeline', 'working', 0.05, 2.4],
+    // Somebody already waiting, so the queue strip is up before the recording
+    // starts and the stage does not change height when the lead joins it.
+    ['orbital-api', 'Backfill the events table', 'for_review', 5.2, 1.6],
+  ],
   /**
    * EVERY ROOM BUT ONE WITH SOMEBODY AT A DESK, for a picture of room colours:
    * `crowded` under the Colour plan style is four dark rooms and one lit one,

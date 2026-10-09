@@ -23,12 +23,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 
+import { PRESET_DEFS } from '../public/render/look-presets.js';
 import { DEMO_EPOCH } from './demo-args.mjs';
+import { fakeId } from './demo-write.mjs';
 import {
   cropImage,
   layout,
   postHook,
   record,
+  sleep,
   startDemo,
   withStage,
   writeGif,
@@ -333,6 +336,270 @@ Object.assign(RECIPES, {
     const img = writePng(path.join(OUT, 'link-preview-1200x630.png'), page, 1200);
     say(`link-preview-1200x630.png  ${img.width}x${img.height}`);
   },
+});
+
+/** The box a set of robots stands in, by their feet, in CSS pixels of the page. */
+const boxOf = (agents) => ({
+  x0: Math.min(...agents.map((a) => a.x)),
+  x1: Math.max(...agents.map((a) => a.x)),
+  y0: Math.min(...agents.map((a) => a.y)),
+  y1: Math.max(...agents.map((a) => a.y)),
+});
+const centreOf = (box) => ({ x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 });
+
+/**
+ * How many CSS pixels a unit of this floor is, fitted to a window. Asked in a
+ * browser of its own first, because a real pixel ratio is fixed when a browser
+ * starts and a close crop needs to know the fit to choose one.
+ */
+const fitUnit = (demo, width, height, query = '') =>
+  withStage({ width, height, dpr: 1 }, async (stage) => (await stage.open(demo.url + query, 300)).unit);
+
+/**
+ * Magnify the floor about a group of robots and bring them to the middle of
+ * the stage, as far as the building's edges allow. `who` picks the group out of
+ * a geometry; the answer is the geometry afterwards.
+ */
+async function closeIn(stage, zoom, who) {
+  let g = await stage.geometry();
+  g = await stage.zoomTo(Math.max(1, Math.min(2.5, zoom)), centreOf(boxOf(who(g))));
+  for (let i = 0; i < 2; i++) {
+    const c = centreOf(boxOf(who(g)));
+    g = await stage.panBy(g.canvas.x + g.canvas.w / 2 - c.x, g.canvas.y + g.canvas.h / 2 - c.y);
+  }
+  return g;
+}
+
+/** A clip of `w` by `h` CSS pixels about a point, on whole pixels, refused if it leaves the stage. */
+function clipAbout(g, c, w, h) {
+  const clip = { x: Math.round(c.x - w / 2), y: Math.round(c.y - h / 2), w, h };
+  const s = g.canvas;
+  if (clip.x < s.x || clip.y < s.y || clip.x + w > s.x + s.w || clip.y + h > s.y + s.h) {
+    throw new Error(`the crop ${JSON.stringify(clip)} leaves the stage ${JSON.stringify(s)}`);
+  }
+  return clip;
+}
+
+/** A capture on the studio ground, in a 12 px frame: for a room that is not sixteen to nine. */
+async function framed(name, shot) {
+  const page = await layout({
+    dir: WORK,
+    name,
+    width: 1600,
+    height: 900,
+    parts: { shot },
+    html: `<!doctype html><meta charset="utf-8"><body style="margin:0;width:1600px;height:900px;
+      background:${STUDIO};display:grid;place-items:center"><img src="{{shot}}"
+      style="width:{{shot.w}}px;height:{{shot.h}}px;border-radius:12px;box-shadow:0 0 0 1px ${LINE}">`,
+  });
+  const img = writePng(path.join(OUT, `${name}.png`), page, 1600);
+  say(`${name}.png  ${img.width}x${img.height}  capture ${shot.width}x${shot.height} at 2x`);
+}
+
+/** The eleven styles, in the order the Look panel lists them. */
+const STYLES = PRESET_DEFS.map((preset) => preset.id);
+
+Object.assign(RECIPES, {
+  /**
+   * C-014. The `crew` floor's one room, close: a lead at its desk and five
+   * juniors on the floor in an arc, two of them still writing, so two cables
+   * carry pulses for the whole six seconds.
+   */
+  'crew.formation': () =>
+    onFloor({ population: 'crew', stepped: true }, (demo) =>
+      withStage({ width: 1280, height: 851, dpr: 4, reduced: false, virtual: true }, async (stage) => {
+        refuseBanner(await stage.open(demo.url, SETTLE_MS));
+        const crew = (g) => g.agents.filter((a) => a.project === 'orbital-api');
+        // Twenty-two units across the 800 CSS pixels that are 3200 at this ratio.
+        const g = await closeIn(stage, 800 / 22 / (await stage.geometry()).unit, crew);
+        const c = centreOf(boxOf(crew(g)));
+        const frames = await record(stage, demo, {
+          fps: FPS || 25,
+          seconds: SECONDS || 6,
+          clip: clipAbout(g, { x: c.x, y: c.y + 0.3 * g.unit }, 800, 450),
+          width: 1600,
+          dir: path.join(WORK, 'crew.formation.frames'),
+        });
+        reportGif('crew.formation', frames, FPS || 25);
+      }),
+    ),
+
+  /**
+   * C-002. One lead and its two juniors, close. Twenty units across 1600
+   * pixels, from a capture at twice that.
+   */
+  'crew.juniors-laptops': () =>
+    onFloor({ population: 'juniors' }, async (demo) => {
+      const dpr = 3200 / (20 * 2.5 * (await fitUnit(demo, 1600, 1000)));
+      return withStage({ width: 1600, height: 1000, dpr }, async (stage) => {
+        refuseBanner(await stage.open(demo.url));
+        const crew = (g) => g.agents.filter((a) => a.project === 'design-system');
+        const g = await closeIn(stage, 2.5, crew);
+        const c = centreOf(boxOf(crew(g)));
+        const shot = await stage.still(clipAbout(g, { x: c.x, y: c.y - 1.3 * g.unit }, 3200 / dpr, 1800 / dpr));
+        const img = writePng(path.join(OUT, 'crew.juniors-laptops.png'), even(shot), 1600);
+        say(`crew.juniors-laptops.png  ${img.width}x${img.height}  from ${shot.width}x${shot.height}`);
+      });
+    }),
+
+  /**
+   * C-015. The `rare` floor: cast number 183, which the product's own
+   * `appearanceFor` gives a crown, at the desk beside cast number 1, which it
+   * gives nothing. The pointer rests on the crowned one, so its card is open.
+   */
+  'see.rare': () =>
+    onFloor({ population: 'rare' }, (demo) =>
+      withStage({ width: 1600, height: 1000, dpr: 4 }, async (stage) => {
+        refuseBanner(await stage.open(demo.url));
+        const two = (g) => g.agents.filter((a) => a.placement === 'desk');
+        let g = await closeIn(stage, 2, two);
+        const crowned = two(g).find((a) => a.id.endsWith(fakeId(183)));
+        // The pointer comes to rest on the body. Its right-hand side is tried
+        // first, because the card opens below and to the right of the pointer
+        // and from there it stands beside the robot and not over it.
+        let card = { hidden: true, text: '' };
+        for (const [right, up] of [[0.7, 0.5], [0.4, 0.5], [0, 0.3], [0, 0.1]]) {
+          const at = { x: crowned.x + right * g.unit, y: crowned.y - up * g.unit };
+          await stage.pointer(at.x + 4, at.y - 4);
+          await stage.pointer(at.x, at.y);
+          await sleep(1500);
+          card = await stage.evaluate(`(() => {
+            const el = document.getElementById('tooltip');
+            const r = el.getBoundingClientRect();
+            return { hidden: el.hidden, text: el.innerText, x: r.x, y: r.y, w: r.width, h: r.height };
+          })()`);
+          if (!card.hidden) break;
+        }
+        if (card.hidden || !/legendary/.test(card.text)) throw new Error(`no legendary card: ${JSON.stringify(card)}`);
+        say(`  hover card: ${card.text.replace(/\s*\n\s*/g, ' | ')}`);
+        g = await stage.geometry();
+        // 600 CSS pixels square, twenty units: the crowned robot a little below
+        // the middle, the plain one above it, the card to its right.
+        const c = { x: crowned.x + 2.2 * g.unit, y: crowned.y - 3.2 * g.unit };
+        const shot = await stage.still(clipAbout(g, c, 600, 600));
+        const img = writePng(path.join(OUT, 'see.rare.png'), shot, 1200);
+        say(`see.rare.png  ${img.width}x${img.height}  ${two(g).map((a) => a.name).join(' and ')}`);
+      }),
+    ),
+
+  /**
+   * C-003. The `lead` floor. The lead's turn ends (`Stop`) and it stays at its
+   * desk; its three juniors end one by one (`SubagentStop`, naming each); when
+   * the last has, the lead goes where its own state sends it. Eight seconds.
+   */
+  'crew.lead-supervises': () =>
+    onFloor({ population: 'lead', stepped: true }, (demo) =>
+      withStage({ width: 1600, height: 1031, dpr: 2, reduced: false, virtual: true }, async (stage) => {
+        const g = await stage.open(demo.url, SETTLE_MS);
+        refuseBanner(g);
+        const laid = planOf(g);
+        const lead = g.agents.find((a) => a.title === 'Split the deploy pipeline');
+        const juniors = g.agents.filter((a) => a.junior);
+        const hook = (body) =>
+          postHook(demo.url, {
+            session_id: lead.id.replace(/^claude-code:/, ''),
+            cwd: path.join(demo.root, 'code', 'orbital-api'),
+            ...body,
+          });
+        const frames = await record(stage, demo, {
+          fps: FPS || 25,
+          seconds: SECONDS || 8,
+          clip: { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 },
+          width: 1600,
+          dir: path.join(WORK, 'crew.lead-supervises.frames'),
+          events: [
+            { at: 0.6, run: () => hook({ hook_event_name: 'Stop' }) },
+            ...juniors.map((junior, i) => ({
+              // All three in one frame. A crew that falls from three to two is no
+              // longer a formation, and the room is laid out again around a desk
+              // somewhere else: one by one, the lead is seen to change desks.
+              at: 3.2,
+              run: () =>
+                hook({ hook_event_name: 'SubagentStop', agent_id: junior.id.replace(/^claude-code:/, '') }),
+            })),
+          ],
+          watch: async (i, t) => {
+            if (i % 5) return;
+            const now = await stage.geometry();
+            if (planOf(now) !== laid) say(`  ${t.toFixed(2)}s THE FLOOR WAS LAID OUT AGAIN`);
+            const a = now.agents.find((x) => x.id === lead.id);
+            const crew = now.agents.filter((x) => x.junior).map((x) => x.state).join(',');
+            say(`  ${t.toFixed(2)}s ${a.name} ${a.state} ${a.placement} ${a.clip}${a.moving ? ' moving' : ''} ${Math.round(a.x)},${Math.round(a.y)}  juniors: ${crew}`);
+          },
+        });
+        reportGif('crew.lead-supervises', frames, FPS || 25);
+      }),
+    ),
+
+  /**
+   * C-019. The `worktrees` floor's repository room: a desk for the main
+   * checkout and a bench for each worktree, named for its branch or directory.
+   */
+  'wt.benches': () =>
+    onFloor({ population: 'worktrees' }, async (demo) => {
+      // Asked first: how large the room can be magnified and still stand whole
+      // on the stage, and the ratio at which that is 1640 px high or 2880 wide.
+      const { room: probe, canvas } = await withStage({ width: 1600, height: 1000, dpr: 1 }, async (stage) => {
+        const g = await stage.open(demo.url, 300);
+        return { room: g.rooms.find((r) => r.name === 'orbital-api'), canvas: g.canvas };
+      });
+      const zoom = Math.max(1, Math.min(2.5, (0.96 * canvas.w) / probe.w, (0.96 * canvas.h) / probe.h));
+      const dpr = Math.min(1640 / (probe.h * zoom), 2880 / (probe.w * zoom));
+      return withStage({ width: 1600, height: 1000, dpr }, async (stage) => {
+        let g = await stage.open(demo.url);
+        refuseBanner(g);
+        const room = () => g.rooms.find((r) => r.name === 'orbital-api');
+        g = await stage.zoomTo(zoom, { x: room().x + room().w / 2, y: room().y + room().h / 2 });
+        for (let i = 0; i < 2; i++) {
+          g = await stage.panBy(
+            g.canvas.x + g.canvas.w / 2 - (room().x + room().w / 2),
+            g.canvas.y + g.canvas.h / 2 - (room().y + room().h / 2),
+          );
+        }
+        await framed('wt.benches', even(await stage.still(room())));
+      });
+    }),
+
+  /**
+   * C-020. The `colours` floor in the Colour plan style, whose room colours
+   * are zoned: five rooms with people at desks and their lights on, one away.
+   * The floor alone, in a window whose stage is sixteen to nine.
+   */
+  'look.room-colours': () =>
+    onFloor({ population: 'colours' }, (demo) =>
+      withStage({ width: 1760, height: 1120, dpr: 3200 / 1760 }, async (stage) => {
+        const g = await stage.open(`${demo.url}?look=colour-plan`);
+        refuseBanner(g);
+        const shot = await stage.still({ x: 0, y: g.canvas.y, w: 1760, h: 990 });
+        const img = writePng(path.join(OUT, 'look.room-colours.png'), even(shot), 1600);
+        const lit = g.rooms.filter((r) => r.kind === 'project').length;
+        say(`look.room-colours.png  ${img.width}x${img.height}  ${lit} rooms, unit ${g.unit.toFixed(2)}`);
+      }),
+    ),
+
+  /**
+   * C-005. The demo floor in each of the eleven styles, through `?look=`, held
+   * for eight tenths of a second each. Reduced motion, so the eleven pictures
+   * differ in the style and in nothing else.
+   */
+  'look.styles': () =>
+    onFloor({ population: 'demo' }, (demo) =>
+      withStage({ width: 1760, height: 1120, dpr: 3200 / 1760 }, async (stage) => {
+        const dir = path.join(WORK, 'look.styles.frames');
+        fs.rmSync(dir, { recursive: true, force: true });
+        const frames = [];
+        for (const [i, style] of STYLES.entries()) {
+          const g = await stage.open(`${demo.url}?look=${style}`, 1200);
+          refuseBanner(g);
+          const shot = await stage.still({ x: 0, y: g.canvas.y, w: 1760, h: 990 });
+          const file = path.join(dir, `${String(i).padStart(2, '0')}-${style}.png`);
+          writePng(file, even(shot), 1600);
+          frames.push(file);
+          say(`  ${style}`);
+        }
+        reportGif('look.styles', frames, 0, { delays: frames.map(() => 80), ownPalettes: true });
+      }),
+    ),
 });
 
 /** Write a recording, and its smaller copy when it is too heavy for a post. */
