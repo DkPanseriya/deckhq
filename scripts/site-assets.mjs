@@ -4,6 +4,7 @@
  *   node scripts/site-assets.mjs                 # every asset in the manifest
  *   node scripts/site-assets.mjs --only queue    # the ones whose name matches
  *   node scripts/site-assets.mjs --survey        # whole frames, uncropped
+ *   node scripts/site-assets.mjs --sheet DIR     # + twelve frames of each loop
  *   node scripts/site-assets.mjs --list          # what the manifest declares
  *
  * The owner's review of the site was that its pictures are out of date, that
@@ -44,12 +45,13 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { findChrome, hasWebSocket, withChrome } from '../src/cli/chrome.mjs';
-import { boxDownscale, cropImage, decodePng, encodePng } from './lib/png.mjs';
+import { boxDownscale, decodePng } from './lib/png.mjs';
+import { encodeIndexedPng } from './lib/png-indexed.mjs';
 import { buildPalette, encodeGif, indexPixels, Q } from './gif-encoder.mjs';
 import { DEMO_EPOCH } from './demo-args.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MANIFEST = path.join(ROOT, 'site', 'assets.json');
+const MANIFEST_DEFAULT = path.join(ROOT, 'site', 'assets.json');
 const DEMO_SCRIPT = path.join(ROOT, 'scripts', 'demo-floor.mjs');
 
 const argv = process.argv.slice(2);
@@ -58,7 +60,9 @@ const opt = (name, fallback) => {
   return i !== -1 && argv[i + 1] !== undefined ? argv[i + 1] : fallback;
 };
 const ONLY = opt('--only', '');
+const MANIFEST = path.resolve(ROOT, opt('--manifest', MANIFEST_DEFAULT));
 const SURVEY = argv.includes('--survey');
+const SHEET = opt('--sheet', '') ? path.resolve(ROOT, opt('--sheet', '')) : '';
 const LIST = argv.includes('--list');
 const OUT_DIR = path.resolve(ROOT, opt('--out', SURVEY ? 'site/.survey' : 'docs/media/site'));
 
@@ -80,7 +84,10 @@ const say = (line) => process.stdout.write(`${line}\n`);
  * @property {string} population  a `scripts/demo-floor.mjs --population`
  * @property {string} [theme]     a theme name; default is the warm office
  * @property {string} [press]     keys to send once the floor has settled
- * @property {string} [click]     a CSS selector to click after those keys
+ * @property {string} [command]   words to run from the command palette after them
+ * @property {string} [click]     a CSS selector to click next, or `text=<label>`
+ *   for the button that carries those words
+ * @property {string} [after]     keys to send after the click
  * @property {number} [phase]     `?phase=`, for a still of a moving floor
  * @property {boolean} [permission] raise a real permission request first
  * @property {{x:number,y:number,w:number,h:number}} [crop] CSS pixels from the
@@ -89,8 +96,12 @@ const say = (line) => process.stdout.write(`${line}\n`);
  *   the grabber offsets by the canvas's own position on the page. A GIF can
  *   therefore only show what is on the canvas; a rectangle over the chrome
  *   comes back empty.
+ * @property {string} [query]     appended to the floor's address: `look=night-lab`,
+ *   `scale=large`. That tab only; nothing is saved
+ * @property {boolean} [single]   write one file at `width`, with no `@2x` beside it
  * @property {number} [scale]     device pixel ratio for this capture
- * @property {number} width       the width the file is written at
+ * @property {number} width       the width the `@2x` file is written at. The plain
+ *   file is half of it. A GIF is one file, at exactly this width
  * @property {'phase'|'live'} [mode]  how a GIF's frames are taken
  * @property {string} [endTurn]   a project: tell its agent its turn has ended
  * @property {number} [fps]
@@ -277,22 +288,24 @@ async function waitForFloor(client) {
 /**
  * Press keys the way a person would: the app listens for real `keydown`.
  *
- * Two characters are escapes rather than keys, as in `scripts/capture-floor.mjs`,
- * because the two routes a picture needs most are not printable:
+ * Three characters are escapes rather than keys, as in `scripts/capture-floor.mjs`,
+ * because the routes a picture needs most are not printable:
  *   `>`  Tab — the floor / deck toggle
  *   `~`  Enter
+ *   `^`  Escape — shut the panel a click was made in
  */
 async function pressKeys(client, keys) {
   for (const key of String(keys)) {
     const isTab = key === '>';
     const isEnter = key === '~';
-    const named = isTab ? 'Tab' : isEnter ? 'Enter' : key;
-    if (isTab || isEnter) {
+    const isEscape = key === '^';
+    const named = isTab ? 'Tab' : isEnter ? 'Enter' : isEscape ? 'Escape' : key;
+    if (isTab || isEnter || isEscape) {
       for (const type of ['rawKeyDown', 'keyUp']) {
         await client.send('Input.dispatchKeyEvent', {
           type,
           key: named,
-          windowsVirtualKeyCode: isTab ? 9 : 13,
+          windowsVirtualKeyCode: isTab ? 9 : isEnter ? 13 : 27,
         });
       }
     } else {
@@ -304,12 +317,39 @@ async function pressKeys(client, keys) {
   }
 }
 
-/** Screenshot until two in a row agree byte for byte. */
-async function captureStill(client) {
+/**
+ * Run one command from the palette, the way a person does: the palette's own
+ * chord, the words, Enter. `scripts/goldens.mjs` opens the Studio board this
+ * way, and no test seam is added for it here either.
+ */
+async function runCommand(client, words) {
+  for (const type of ['rawKeyDown', 'keyUp']) {
+    await client.send('Input.dispatchKeyEvent', {
+      type,
+      key: 'k',
+      modifiers: 2,
+      windowsVirtualKeyCode: 0,
+    });
+  }
+  await sleep(600);
+  await pressKeys(client, `${words}~`);
+}
+
+/**
+ * Screenshot until two in a row agree byte for byte.
+ *
+ * `clip` is the crop in CSS pixels. Chrome cuts it out before the picture
+ * crosses the protocol, which is what lets a small crop be taken at four
+ * device pixels to one without a 6400 px screenshot behind it.
+ *
+ * @param {{x:number,y:number,w:number,h:number}} [clip]
+ */
+async function captureStill(client, clip) {
   const shot = async () => {
     const { data } = await client.send('Page.captureScreenshot', {
       format: 'png',
       captureBeyondViewport: false,
+      ...(clip ? { clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 1 } } : {}),
     });
     return Buffer.from(data, 'base64');
   };
@@ -338,14 +378,22 @@ async function captureStill(client) {
 function writePng(img, asset, file) {
   let out = img;
   if (out.width > asset.width) out = boxDownscale(out, asset.width);
-  let best = null;
-  for (const filter of /** @type {const} */ ([0, 1, 2, 3, 4])) {
-    const candidate = encodePng(out, { filter });
-    if (!best || candidate.length < best.length) best = candidate;
-  }
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, best);
-  return { width: out.width, height: out.height, bytes: best.length };
+  if (asset.single) {
+    const bytes = encodeIndexedPng(out);
+    fs.writeFileSync(file, bytes);
+    return { width: out.width, height: out.height, bytes: bytes.length, half: 0 };
+  }
+  // The pair a page's `srcset` names: `name@2x.png` for a dense screen and
+  // `name.png`, half its width, for everything else. Both are cut from the
+  // same capture, and the small one is resampled from the pixels rather than
+  // from the large one's palette.
+  const even = out.width % 2 === 0 ? out : boxDownscale(out, out.width - 1);
+  const big = encodeIndexedPng(even);
+  const small = encodeIndexedPng(boxDownscale(even, even.width / 2));
+  fs.writeFileSync(file.replace(/\.png$/, '@2x.png'), big);
+  fs.writeFileSync(file, small);
+  return { width: even.width, height: even.height, bytes: big.length, half: small.length };
 }
 
 /**
@@ -372,6 +420,34 @@ function writeGif(images, fps, file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, gif);
   return { width, height, bytes: gif.length, colours: palette.length, frames: frames.length };
+}
+
+/**
+ * Twelve frames of a loop on one sheet, four across, for a person to look at.
+ *
+ * A GIF is the one picture here that cannot be checked by opening it: a walk
+ * that never left its desk and a walk that crossed the floor are the same
+ * first frame. `--sheet DIR` writes this beside nothing the site serves.
+ *
+ * @param {{width:number,height:number,data:Uint8Array}[]} images
+ * @param {string} file
+ */
+function writeSheet(images, file) {
+  const picks = Array.from({ length: 12 }, (_, i) =>
+    boxDownscale(images[Math.floor((i * (images.length - 1)) / 11)], 400),
+  );
+  const { width, height } = picks[0];
+  const sheet = { width: width * 4, height: height * 3, data: new Uint8Array(width * height * 48) };
+  picks.forEach((frame, i) => {
+    const ox = (i % 4) * width;
+    const oy = Math.floor(i / 4) * height;
+    for (let y = 0; y < height; y++) {
+      const row = frame.data.subarray(y * width * 4, (y + 1) * width * 4);
+      sheet.data.set(row, ((oy + y) * sheet.width + ox) * 4);
+    }
+  });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, encodeIndexedPng(sheet));
 }
 
 /* -------------------------------------------------------------------- frames */
@@ -445,8 +521,10 @@ async function grab(client, rect, outWidth) {
  * standing up, walking out of its room and into your office.
  *
  * @param {Asset} asset
+ * @param {number} scale
+ * @param {() => Promise<string>} [during] run once a live recording has begun
  */
-async function frames(client, asset, scale) {
+async function frames(client, asset, scale, during) {
   const fps = asset.fps ?? 25;
   const count = Math.round(fps * (asset.seconds ?? 4));
   const rect = asset.crop ?? { x: 0, y: 0, w: 1600, h: 1000 };
@@ -486,6 +564,12 @@ async function frames(client, asset, scale) {
       return true;
     })()`,
   );
+  // What the recording is OF happens once it is already running, so the loop
+  // opens on the agent at its desk rather than on one already at the door.
+  if (during) {
+    await sleep(600);
+    say(`       ${await during()}`);
+  }
   await sleep((count / fps) * 1000 + 200);
   const taken = await evaluate(
     client,
@@ -536,9 +620,11 @@ async function frames(client, asset, scale) {
 async function endTurn(port, project) {
   const state = await (await fetch(`http://127.0.0.1:${port}/api/state`)).json();
   const agents = (state.agents ?? []).filter(
-    (a) => !project || String(a.project ?? a.cwd ?? '').includes(project),
+    (a) => !project || String(a.projectId ?? a.project ?? a.cwd ?? '').includes(project),
   );
-  const agent = agents.find((a) => a.state === 'working') ?? agents[0];
+  // Somebody still at a desk: an agent already in your office has no walk left
+  // to make, and a recording of it is two hundred identical frames.
+  const agent = agents.find((a) => (a.activityState ?? a.state) === 'working') ?? agents[0];
   if (!agent) return `no agent in ${project || 'the fixture'}`;
   const id = String(agent.id);
   const response = await fetch(`http://127.0.0.1:${port}/api/hook`, {
@@ -551,7 +637,7 @@ async function endTurn(port, project) {
       runtime: 'claude-code',
     }),
   });
-  return `${agent.name ?? agent.id} finished (HTTP ${response.status})`;
+  return `${agent.displayName ?? agent.name ?? agent.id} finished (HTTP ${response.status})`;
 }
 
 /* --------------------------------------------------------------------- main */
@@ -604,7 +690,11 @@ await withChrome(
         // instead: its frames are buffered as raw pixels inside the page, and
         // four times the pixels for four times the memory buys nothing once
         // the result is downscaled to the width the page shows.
-        const scale = asset.scale ?? (asset.kind === 'gif' ? 1 : 2);
+        // A still whose crop is small is taken denser still — three or four
+        // device pixels to one — so a 400 px detail fills a 560 px column on
+        // a dense screen without being enlarged.
+        const dense = asset.crop ? Math.min(4, Math.ceil(asset.width / asset.crop.w)) : 2;
+        const scale = asset.scale ?? (asset.kind === 'gif' ? 1 : Math.max(2, dense));
         await client.send('Emulation.setDeviceMetricsOverride', {
           width: viewport.width,
           height: viewport.height,
@@ -620,7 +710,11 @@ await withChrome(
           ],
         });
 
-        const query = asset.phase === undefined ? '' : `?phase=${asset.phase}`;
+        const params = [
+          asset.phase === undefined ? '' : `phase=${asset.phase}`,
+          asset.query ?? '',
+        ].filter(Boolean);
+        const query = params.length ? `?${params.join('&')}` : '';
         await client.send('Page.navigate', { url: `${demo.url}${query}` });
         await waitForFloor(client);
 
@@ -632,11 +726,22 @@ await withChrome(
           await pressKeys(client, asset.press);
           await sleep(SETTLE_MS);
         }
+        if (asset.command) {
+          await runCommand(client, asset.command);
+          await sleep(SETTLE_MS);
+        }
         if (asset.click) {
+          // `text=Evening` is the button that says so: the Look panel's
+          // segments have words on them and no ids.
           const hit = await evaluate(
             client,
             `(() => {
-              const el = document.querySelector(${JSON.stringify(asset.click)});
+              const sel = ${JSON.stringify(asset.click)};
+              const el = sel.startsWith('text=')
+                ? [...document.querySelectorAll('button')].find(
+                    (b) => b.textContent.trim() === sel.slice(5),
+                  )
+                : document.querySelector(sel);
               if (!el) return 'no match';
               el.click();
               return 'clicked';
@@ -652,20 +757,24 @@ await withChrome(
           }
           await sleep(2000);
         }
+        if (asset.after) {
+          await pressKeys(client, asset.after);
+          await sleep(SETTLE_MS);
+        }
 
         if (asset.kind === 'gif') {
           await installGrabber(client);
-          if (asset.endTurn !== undefined) {
-            say(`       ${await endTurn(demo.port, asset.endTurn)}`);
-            // The lead-in: enough for the agent to push its chair back and be
-            // on its feet, so the recording opens on a walk rather than on a
-            // desk. Shorter than capture-hero.mjs's, because this records the
-            // room it leaves and not the whole floor.
-            await sleep(700);
-          }
-          const images = await frames(client, asset, scale);
+          const port = demo.port;
+          const during =
+            asset.endTurn === undefined ? undefined : () => endTurn(port, asset.endTurn);
+          const images = await frames(client, asset, scale, during);
           const file = path.join(OUT_DIR, `${asset.name}.gif`);
           const r = writeGif(images, asset.fps ?? 25, file);
+          // Its first frame, as a still: what a reader who asked for reduced
+          // motion is shown in the loop's place.
+          const poster = encodeIndexedPng(images[0]);
+          fs.writeFileSync(file.replace(/\.gif$/, '.png'), poster);
+          if (SHEET) writeSheet(images, path.join(SHEET, `${asset.name}.frames.png`));
           say(
             `  ok   ${asset.name.padEnd(22)} ${r.width}x${r.height}  ${r.frames} frames @ ` +
               `${asset.fps ?? 25} fps  ${r.colours} colours  ${(r.bytes / 1024).toFixed(0)} KB  ` +
@@ -674,21 +783,19 @@ await withChrome(
           continue;
         }
 
-        const png = await captureStill(client);
-        let img = decodePng(png);
-        if (asset.crop && !SURVEY) {
-          img = cropImage(img, {
-            x: asset.crop.x * scale,
-            y: asset.crop.y * scale,
-            w: asset.crop.w * scale,
-            h: asset.crop.h * scale,
-          });
-        }
+        const png = await captureStill(client, SURVEY ? undefined : asset.crop);
+        const img = decodePng(png);
         const file = path.join(OUT_DIR, `${asset.name}.png`);
-        const r = writePng(img, SURVEY ? { ...asset, width: img.width } : asset, file);
+        const r = writePng(
+          img,
+          SURVEY ? { ...asset, width: img.width, single: true } : asset,
+          file,
+        );
         say(
           `  ok   ${asset.name.padEnd(22)} ${r.width}x${r.height}  ` +
-            `${(r.bytes / 1024).toFixed(0)} KB  ${((Date.now() - t0) / 1000).toFixed(1)}s`,
+            `${(r.bytes / 1024).toFixed(0)} KB` +
+            (r.half ? ` + ${(r.half / 1024).toFixed(0)} KB at half` : '') +
+            `  ${((Date.now() - t0) / 1000).toFixed(1)}s`,
         );
       } catch (error) {
         missed.push(`${asset.name}: ${error.message.split('\n')[0]}`);

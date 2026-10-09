@@ -1,69 +1,146 @@
-<article class="prose">
-  <h1>Privacy and security</h1>
+<div class="page-head wrap">
+  <h1>What it never does.</h1>
   <p class="lede">
-    DeckHQ runs on your machine and stays there. Everything it knows, it read off your own disk.
-    Everything it keeps, it wrote to your own disk. Nothing goes anywhere else.
+    DeckHQ runs on your machine and talks to your machine. Each line below is true of the package on
+    npm today, and the section after them says how to check.
   </p>
+</div>
 
-  <h2>What we never do</h2>
-  <ul>
-    <li>
-      <strong>Send your work anywhere.</strong> No analytics, no telemetry, no update check, no
-      crash reports. There is no setting to turn off, because there is nothing to turn off.
-    </li>
-    <li>
-      <strong>Ask who you are.</strong> No account, no sign-in, no licence key. Every feature is
-      there on the first run.
-    </li>
-    <li>
-      <strong>Change your Claude Code settings behind your back.</strong> DeckHQ reads your
-      transcripts. It writes to your settings file only after you have seen the exact lines and
-      clicked, and it removes only what it put there.
-    </li>
-    <li>
-      <strong>Open a door on your network.</strong> DeckHQ listens on your own machine and nowhere
-      else. A phone on the same wifi cannot reach it, and neither can a page in another browser tab.
-    </li>
-  </ul>
+<section class="band band--tight">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <h2>Binds anything but 127.0.0.1.</h2>
+        <p>
+          There is no <code>--host</code> flag and there never will be one. It is not reachable from
+          your network, and it refuses cross-site requests, so a page in another tab cannot drive
+          it.
+        </p>
+      </div>
+      <div>
+        <h2>Leaves the machine.</h2>
+        <p>
+          No analytics, no telemetry, no update checks, no crash reporting, no fonts or scripts from
+          a CDN. The only sockets are the loopback listener and the runtime processes DeckHQ starts
+          on your behalf.
+        </p>
+      </div>
+      <div>
+        <h2>Asks who you are.</h2>
+        <p>
+          No sign-up, no sign-in, no email, no billing, no licence check. Install it and it works.
+        </p>
+      </div>
+      <div>
+        <h2>Simulates work.</h2>
+        <p>
+          Every figure on the floor is a session that exists on your disk. A number DeckHQ has
+          nothing behind is printed as <code>no data</code>, never as a confident zero.
+        </p>
+      </div>
+      <div>
+        <h2>Writes to your settings without asking.</h2>
+        <p>
+          It reads your transcripts. It writes a hook block into
+          <code>~/.claude/settings.json</code> only after showing you the literal JSON and the exact
+          file, backs the file up first, tags what it wrote, and removes only what it tagged.
+        </p>
+      </div>
+      <div>
+        <h2>Renders what an agent said as HTML.</h2>
+        <p>
+          Conversation content stays on the machine and is shown as text and markdown. A script tag
+          in a reply is the characters it is.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
 
-  <h2>Where your data lives</h2>
-  <p>
-    In one folder: <code>~/.deckhq/</code> on macOS and Linux, <code>C:\Users\you\.deckhq\</code> on
-    Windows. Your queue, the names on the floor, your settings, a cache so a restart is quick, and
-    the local token ledger. Delete that folder and there is nothing left of DeckHQ on the machine.
-    Set <code>DECKHQ_STATE_DIR</code> to keep it somewhere else.
-  </p>
-  <p>
-    Your conversations are never copied into it. DeckHQ reads the transcript files your coding tool
-    already writes, shows you the last thing each session said, and leaves them where they are.
-  </p>
+<section class="band band--deep">
+  <div class="wrap split">
+    <div class="split-copy">
+      <h2>Check it.</h2>
+      <p>
+        <code>deckhq doctor</code> ends with a line named <code>egress</code>: the sockets DeckHQ
+        has open to anywhere but your own machine.
+      </p>
+      <ul class="facts">
+        <li>
+          <strong>The source is public, under MIT.</strong> The package has zero dependencies, so
+          there is nothing underneath it to read.
+        </li>
+        <li>
+          <strong>The installers are two short files.</strong>
+          <a href="install.ps1">install.ps1</a> and <a href="install.sh">install.sh</a>, served here
+          byte for byte.
+        </li>
+        <li>
+          <strong>This site keeps the same rule.</strong> No web font, no CDN, no analytics. Your
+          browser's network panel will show one origin.
+        </li>
+      </ul>
+    </div>
+    <div class="split-media">
+      <pre class="term" aria-label="The last lines of deckhq doctor"><i>$ deckhq doctor</i>
+  ...
+  state           ~/.deckhq/state.json, writable
+  egress          <b>none. no outbound sockets.</b></pre>
+    </div>
+  </div>
+</section>
 
-  <h2>What you can share</h2>
-  <p>
-    If you report a problem, <code>deckhq doctor --share</code> prints a report you can paste into
-    an issue with everything personal taken out first: no file paths, no project names, no machine
-    name, and the date to the day rather than the hour.
-  </p>
-
-  <h2>Reporting a vulnerability</h2>
-  <p>
-    Please do not open a public issue for a security problem. The reporting route, and what to
-    expect after you use it, is in
-    <a href="https://github.com/DkPanseriya/deckhq/blob/main/SECURITY.md">SECURITY.md</a>. Private
-    reports can also go through the
-    <a href="https://github.com/DkPanseriya/deckhq/security">security tab</a> on the repository.
-  </p>
-  <p>
-    Anything else &#8212; a bug, a wrong number, a runtime DeckHQ reads badly &#8212; belongs in
-    <a href="https://github.com/DkPanseriya/deckhq/issues">issues</a>.
-  </p>
-
-  <h2>This site</h2>
-  <p>
-    The page you are reading keeps the same promise as the product. No web fonts, no CDN, no
-    analytics, no cookies, no third-party anything. It loads a stylesheet, two small scripts and its
-    pictures, all from this address, and it stores one thing in your browser: whether you asked for
-    the light or the dark version.
-  </p>
-  <p><a href="install.html">Install</a> &#183; <a href="faq.html">FAQ</a></p>
-</article>
+<section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>What it reads, and what it writes.</h2>
+    </div>
+    <div class="cols">
+      <div>
+        <h3>Reads</h3>
+        <ul class="plain">
+          <li>
+            Claude Code transcripts under <code>~/.claude/projects/</code>, in bounded chunks: the
+            head for the title, the tail for state. Never a whole one.
+          </li>
+          <li><code>claude agents --json</code>, for which sessions are alive.</li>
+          <li>
+            Codex session files under <code>~/.codex/sessions/</code>, when Codex is installed.
+          </li>
+          <li>
+            Gemini CLI and OpenCode sessions, when those are installed. Both adapters are unverified
+            and say so.
+          </li>
+        </ul>
+      </div>
+      <div>
+        <h3>Writes, always</h3>
+        <ul class="plain">
+          <li>
+            <code>~/.deckhq/</code>: your queue, names, settings, a disposable cache, and a local
+            ledger with no paths and no project names in it.
+          </li>
+        </ul>
+      </div>
+      <div>
+        <h3>Writes, only after you say yes</h3>
+        <ul class="plain">
+          <li>A tagged hook block in <code>~/.claude/settings.json</code>, after a backup.</li>
+          <li>
+            The Desktop, Start Menu and login entries that <code>deckhq shortcut</code> and
+            <code>deckhq autostart</code> name before they write them.
+          </li>
+          <li>
+            <code>.deckhq/studio/</code> inside one project, after
+            <code>deckhq studio enable</code>.
+          </li>
+        </ul>
+      </div>
+    </div>
+    <p class="quiet after-block">
+      Found a vulnerability? The
+      <a href="https://github.com/DkPanseriya/deckhq/blob/main/SECURITY.md">security policy</a>
+      says how to report it and what happens after you do.
+    </p>
+  </div>
+</section>

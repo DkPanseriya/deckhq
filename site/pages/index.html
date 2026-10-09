@@ -1,352 +1,362 @@
-<section class="hero">
-  <div class="hero-inner">
-    <img class="hero-mark" src="deckhq-mark.png" alt="" width="48" height="48" />
-    <h1>Every AI coding session on your machine, on one floor.</h1>
-    <p class="hero-sub">
-      Your terminal forgets the ones that finished. This does not, and it remembers what is waiting
-      on you even after you have read it.
+<section class="hero wrap">
+  <div class="hero-copy">
+    <h1>Every AI coding session on your machine, on one office floor.</h1>
+    <p class="lede">
+      DeckHQ draws each session as a robot at a desk. You see who is working, who is waiting on you,
+      and for how long.
     </p>
     <div class="actions">
-      <a class="btn btn--primary" href="install.html">Install DeckHQ</a>
-      <a class="btn btn--ghost" href="#floor">See the floor</a>
+      <p class="cmd cmd--hero"><code>npx deckhq app</code></p>
+      <a class="btn btn--ghost" href="features.html">See what it does</a>
     </div>
-    <p class="hero-meta">Local · private · MIT · no network calls of any kind</p>
-  </div>
-</section>
-
-<div class="bleed" id="floor">
-  <div class="hero-shot">
-    <img
-      src="media/floor/three.png"
-      alt="The DeckHQ floor: three project rooms of agents at desks, a lounge along the service column, and the reception where sessions that finished their turn stand waiting for a reply"
-    />
-  </div>
-  <p class="shot-note">
-    Three repositories, nine sessions, two of them waiting on you.
-    <span class="tag tag--render">Screenshot</span>
-  </p>
-</div>
-
-<section class="section" data-reveal>
-  <div class="section-head">
-    <h2>Three places, and you always know which one you are in.</h2>
-    <p>
-      The building is generated from the sessions on disk, not from a saved layout. The same
-      population draws the same floor every time.
+    <p class="hero-note">
+      Node 18 or newer. Free, MIT, zero dependencies, and it stays on your machine.
     </p>
   </div>
-  <ul class="feel">
-    <li>
-      <span class="feel-crop">
-        <img
-          src="media/site/reception.png"
-          alt="Your office: four sessions waiting on sofas with badges over their heads reading 4h, 7m, 1d 2h and 40m, and two more standing in the queue beside them"
-          loading="lazy"
-        />
-      </span>
-      <div class="feel-body">
-        <h3>Your office</h3>
-        <p>
-          Sessions that finished their turn stand here, oldest first, with how long they have been
-          waiting over their heads.
-        </p>
-      </div>
-    </li>
-    <li>
-      <span class="feel-crop">
-        <img
-          src="media/site/room-plate.png"
-          alt="One project room: the plate reading design-system with its session count and token spend, agents at two desks, and two juniors below them"
-          loading="lazy"
-        />
-      </span>
-      <div class="feel-body">
-        <h3>A room per project</h3>
-        <p>
-          Every repository somebody is working in is a room, with its session count and its token
-          spend on the plate.
-        </p>
-      </div>
-    </li>
-    <li>
-      <span class="feel-crop">
-        <img
-          src="media/site/lounge-bay.png"
-          alt="A lounge bay: three benched agents at a counter, named Greta, Milos and Viggo"
-          loading="lazy"
-        />
-      </span>
-      <div class="feel-body">
-        <h3>The lounge</h3>
-        <p>
-          Everyone you have reviewed and benched waits here instead, out of the queue and still on
-          the floor.
-        </p>
-      </div>
-    </li>
-  </ul>
+  <figure class="shot shot--window hero-shot">
+    <img
+      src="media/hero.png"
+      fetchpriority="high"
+      alt="The DeckHQ window. The header reads 2 needs you: 1 hand up, 1 for review. Below it, an office seen from above: Your Office with two robots waiting on a sofa, one under a red badge reading 1d 2h; a lounge with five resting; and three project rooms, orbital-api, checkout-flow and design-system, each with a robot at a desk."
+    />
+  </figure>
 </section>
 
-<div class="bleed" data-reveal>
-  <section class="section">
-    <figure class="device">
-      <div class="device-frame">
-        <div class="device-bar"><i></i><i></i><i></i><span>(2) DeckHQ</span></div>
-        <img
-          src="media/site/hand-up.gif"
-          alt="An agent&#8217;s turn ends: it leaves its project desk, walks the corridor into your office, and joins the queue of sessions waiting on you with a crimson waiting-time badge over its head"
-          loading="lazy"
-        />
-      </div>
+<section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>A session that finished is still on the floor.</h2>
+      <p class="lede">
+        An agent list shows what is running. DeckHQ reads every transcript on disk, so the session
+        that finished an hour ago is still here, with what it last said.
+      </p>
+    </div>
+    <figure class="shot">
+      <img
+        src="media/loop-floor.gif"
+        alt="The demo floor, moving: five project rooms with robots typing at desks, six robots waiting in Your Office with their waiting times over their heads, and fifteen resting in the lounge."
+      />
       <figcaption>
-        A turn ends. The agent stands up, walks to your office, and waits there with how long it has
-        been waiting over its head. It is still there tomorrow if you do not deal with it.
-        <span class="tag">Capture</span> &#8212; one real walk, recorded at 25 frames a second.
+        The demo floor: five repositories, twenty-one sessions. Every picture on this site is the
+        running product, on invented projects.
       </figcaption>
     </figure>
-  </section>
-</div>
 
-<section class="section" data-reveal>
-  <div class="bands">
-    <div class="band-row">
-      <div class="band-copy">
-        <h2>The same queue, as a table.</h2>
+    <div class="split split--flip after-figure">
+      <div class="split-copy">
+        <h3>One room per repository. One robot per session.</h3>
         <p>
-          <code>Tab</code> swaps the floor for the deck: waiting time, who, the project, the last
-          word, the tokens.
-        </p>
-        <p>It is a real semantic table, so the floor is never the only way to reach anything.</p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/site/deck-queue.png"
-          alt="The deck's Queue tab: six rows of waiting time, who, project and last word, oldest first, with Emeka at one day two hours at the top"
-          loading="lazy"
-        />
-        <figcaption>The deck, on the queue. <span class="tag">Capture</span></figcaption>
-      </figure>
-    </div>
-
-    <div class="band-row">
-      <div class="band-copy">
-        <h2>Everything you need to answer, already open.</h2>
-        <p>
-          What it said as the markdown it wrote, and what changed in that project&#8217;s working
-          tree, read straight from git.
+          Start your agents anywhere: a terminal, your editor, the desktop app. Each one turns up in
+          its project's room with a first name it keeps for good.
         </p>
         <p>
-          Then three weighted actions. <strong>Approve is a send</strong>, never an acknowledgement.
+          The plate on the room says what you might act on in the biggest type:
+          <strong>2 need you · oldest 1d 2h</strong>. Under it, what somebody is running right now,
+          and today's tokens.
         </p>
       </div>
-      <figure class="band-shot">
+      <figure class="split-media shot">
         <img
-          src="media/site/review-card.png"
-          alt="The panel on the oldest session in the queue: the title Backfill the events table, what the agent said rendered as markdown, and the diff summary of plus 142 minus 18 across three files"
-          loading="lazy"
+          src="media/room.png"
+          alt="One project room, orbital-api. Its plate reads: 2 need you, oldest 1d 2h; Elif, Bash npm test; today 5.8M tok. A green robot named Elif sits at the desk with a terminal bubble over its head."
         />
-        <figcaption>
-          One session, its words and its diff. <span class="tag">Capture</span>
-        </figcaption>
-      </figure>
-    </div>
-
-    <div class="band-row">
-      <div class="band-copy">
-        <h2>Every token, counted on your own machine.</h2>
-        <p>Today, seven days, thirty days, by project, by session, by model, by day and by tool.</p>
-        <p>
-          A counter your runtime never reported reads <code>no data</code> rather than a confident
-          zero.
-        </p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/site/deck-usage.png"
-          alt="The deck's Usage tab: 24,247,800 tokens over the last seven days, split into input, cache write, cache read and output, and a table of where they went by project"
-          loading="lazy"
-        />
-        <figcaption>Seven days of the local ledger. <span class="tag">Capture</span></figcaption>
-      </figure>
-    </div>
-
-    <div class="band-row">
-      <div class="band-copy">
-        <h2>Three finishes, and none of them gated.</h2>
-        <p>
-          The warm office, night shift, and blueprint, which is the floor as a drawing on a drafting
-          table.
-        </p>
-        <p>
-          A theme repaints materials and neutrals.
-          <strong>The six state colours never move.</strong>
-        </p>
-      </div>
-      <figure class="band-shot">
-        <img
-          src="media/floor/demo-blueprint.png"
-          alt="The demo floor in the blueprint theme: white line work on drafting-table blue, with the six state colours unchanged"
-          loading="lazy"
-        />
-        <figcaption>
-          The blueprint finish. <span class="tag tag--render">Screenshot</span>
-        </figcaption>
       </figure>
     </div>
   </div>
 </section>
 
-<section class="section" data-reveal>
-  <div class="section-head">
-    <h2>Start with the number.</h2>
-    <p>
-      Before you install anything, run the report. Ten seconds, a few hundred kilobytes, and it
-      sends nothing and writes nothing.
-    </p>
-    <p class="command" data-command="npx deckhq doctor">npx deckhq doctor</p>
+<section class="band band--deep">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Everyone waiting on you is in your office.</h2>
+      <p class="lede">
+        A session that finishes its turn stands up, walks the corridor into Your Office and sits
+        down. How long it has waited is over its head, and the longest wait sits nearest your desk.
+      </p>
+    </div>
+    <figure class="shot">
+      <img
+        src="media/loop-walk.gif"
+        alt="A robot named Elif finishes its turn in the orbital-api room, stands up from its desk, walks along the corridor into Your Office and sits on the sofa beside the two already waiting."
+      />
+      <figcaption>One real walk, recorded at 25 frames a second.</figcaption>
+    </figure>
+
+    <div class="split after-figure">
+      <div class="split-copy">
+        <h3>Two signals, because they need different answers.</h3>
+        <ul class="facts">
+          <li>
+            <strong>A raised hand</strong> means <em>I am mid-task and blocked</em>. It needs a
+            decision.
+          </li>
+          <li>
+            <strong>A red badge with a time</strong> means <em>I finished; review this</em>. It
+            needs a read.
+          </li>
+          <li>
+            They are counted separately. The header reads
+            <strong>2 hands up · 4 for review</strong>.
+          </li>
+        </ul>
+      </div>
+      <figure class="split-media shot">
+        <img
+          src="media/office.png"
+          alt="Your Office with six robots waiting. Four sit under red badges reading 4h, 40m, 7m and 1d 2h, each with a tick. Two more, Zola and Kobe, hold a hand up. The room's plate reads: 6 waiting, oldest 1d 2h."
+        />
+      </figure>
+    </div>
+
+    <div class="split split--flip">
+      <div class="split-copy">
+        <h2>Reading it does not clear it. Only you do.</h2>
+        <p>
+          What a session is doing changes on its own. What you owe it changes when you press a
+          button. Opening a conversation does not clear it; scrolling past it does not clear it;
+          reading it does not clear it.
+        </p>
+        <p>
+          Click anyone and the panel has how long they have waited, what they said as the markdown
+          they wrote, and what changed in that project's working tree. Then
+          <kbd>1</kbd> reply, <kbd>2</kbd> approve, <kbd>3</kbd> bench.
+        </p>
+        <p>
+          <strong>Go to session</strong> brings the terminal, the editor or the Claude desktop app
+          that session is running in to the front. It is measured on Windows 11, and written and not
+          yet run on macOS and Linux.
+        </p>
+        <p><a href="features.html#panel">The panel, in full</a></p>
+      </div>
+      <figure class="split-media shot shot--ui">
+        <img
+          src="media/panel.png"
+          alt="The session panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a code block reading npm test, 214 passing, the two files that changed with plus 142 and minus 18, and three buttons: 1 Reply, 2 Approve, 3 Bench."
+        />
+      </figure>
+    </div>
   </div>
-  <pre class="report"><code>  claude code     available
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>The details people notice.</h2>
+      <p class="lede">
+        Everything on the floor is a session that exists on your disk. Nothing is animated to look
+        busy.
+      </p>
+    </div>
+    <div class="mosaic">
+      <article class="c7">
+        <figure class="shot">
+          <img
+            src="media/crew.png"
+            alt="A crew: a lead robot named Elif at its desk, and five juniors sitting cross-legged in an arc behind it, each with a laptop and a cable running to the desk. A chip at the desk reads 2/5 working."
+          />
+        </figure>
+        <h3>A lead with a crew.</h3>
+        <p>
+          A session that starts three or more sub-agents turns its desk into a formation: juniors
+          cross-legged in an arc, a laptop each, and a cable to the desk that pulses while that
+          junior is still writing. Twelve are drawn; beyond that a
+          <code>+N</code> chip.
+        </p>
+      </article>
+      <article class="c5">
+        <figure class="shot">
+          <img
+            src="media/juniors.png"
+            alt="Two small robots, Yogesh and Hooman, standing beside their lead's desk. Each name tag has two rows: a dark chip reading Junior, and the name under it."
+          />
+        </figure>
+        <h3>Juniors say so.</h3>
+        <p>
+          A sub-agent is drawn one size smaller than the session that started it, under a two-row
+          tag: a <strong>Junior</strong> chip over its name.
+        </p>
+      </article>
+      <article class="c8">
+        <figure class="shot">
+          <img
+            src="media/benches.png"
+            alt="Two benches against the wall of one project room. Kobe and Emeka sit side by side at a bench labelled fix/refund-rows; Ravi sits at a second bench labelled with another branch name."
+          />
+        </figure>
+        <h3>A worktree is a bench, and the branch is written on it.</h3>
+        <p>
+          Five checkouts of one repository are one room. The main checkout has the desks in the
+          middle; each git worktree somebody is working in is a bench against the wall.
+        </p>
+      </article>
+      <article class="c4">
+        <figure class="shot">
+          <img
+            src="media/lights-off.png"
+            alt="The checkout-flow room with its lights off: a grey room with one empty desk. Its plate reads: 2 need you, oldest 4h."
+          />
+        </figure>
+        <h3>The lights go off.</h3>
+        <p>
+          When every session of a project is waiting in your office, its room keeps one empty desk
+          and goes dark until one of them goes back to work.
+        </p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="band band--deep">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Eleven styles, one click apart.</h2>
+      <p class="lede">
+        <strong>Look</strong> in the header repaints the whole floor: materials, furniture,
+        partitions and light. Your agents keep their colours, because colour is state.
+      </p>
+    </div>
+    <div class="switcher" data-label="Style">
+      <div class="switch-stage">
+        <figure class="shot" data-name="Studio oak">
+          <img
+            src="media/style-studio-oak.png"
+            alt="The floor in Studio oak, the default: warm herringbone wood in Your Office and the lounge, pale carpet in the project rooms."
+          />
+          <figcaption>Studio oak</figcaption>
+        </figure>
+        <figure class="shot" data-name="Night lab">
+          <img
+            src="media/style-night-lab.png"
+            alt="The same floor in Night lab: dark floors and dark furniture, with the robots and their state colours standing out."
+          />
+          <figcaption>Night lab</figcaption>
+        </figure>
+        <figure class="shot" data-name="Colour plan">
+          <img
+            src="media/style-colour-plan.png"
+            alt="The same floor in Colour plan: a neutral building where each project's room has a calm colour of its own."
+          />
+          <figcaption>Colour plan</figcaption>
+        </figure>
+        <figure class="shot" data-name="Graphite loft">
+          <img
+            src="media/style-graphite-loft.png"
+            alt="The same floor in Graphite loft: grey terrazzo and loop pile, dark frames behind glass partitions, under evening light."
+          />
+          <figcaption>Graphite loft</figcaption>
+        </figure>
+      </div>
+    </div>
+    <p class="actions after-block">
+      <a class="btn btn--ghost" href="look.html">All eleven, and the light</a>
+    </p>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap split">
+    <div class="split-copy">
+      <h2>It listens on 127.0.0.1 and nothing else.</h2>
+      <p>
+        There is no <code>--host</code> flag and there never will be one. No account, no analytics,
+        no telemetry, no update check, no crash report, no font or script from a CDN.
+      </p>
+      <p>
+        Before you install anything, <code>npx deckhq doctor</code> prints what is on your disk. Its
+        last line is the one to read.
+      </p>
+      <p><a href="privacy.html">What it never does, and how to check</a></p>
+    </div>
+    <div class="split-media">
+      <pre class="term" aria-label="Output of npx deckhq doctor"><i>$ npx deckhq doctor</i>
+  claude code     available
   transcripts     77 sessions across 20 projects
   running now     6   (claude code's own agent view reports 6)
-  on the floor    77  &#8592; 71 sessions have already finished; the agent view no longer lists them
+  on the floor    <b>77  &#8592; 71 sessions have already finished; the agent view no longer lists them</b>
   codex           not installed
   waiting on you  0   (3 waiting, all still running)
   hooks           installed, port 4400, 285 events, last 1m ago
   state           ~/.deckhq/state.json, writable
-  egress          none. no outbound sockets.</code></pre>
-  <div class="section-foot">
-    <p>
-      The fourth line is the number nobody else counts: sessions that finished their turn, left the
-      agent view when their process exited, and are still on the floor, because a session finishing
-      is not the same as you having dealt with it.
-    </p>
-    <p class="muted">
-      A real run on the development machine, 3 September 2026. Your numbers will differ, and that is
-      the point: nobody knows this number about their own machine until they run the command.
-    </p>
+  egress          <b>none. no outbound sockets.</b></pre>
+      <p class="quiet after-small">
+        A real run on the development machine, 3 September 2026. Your numbers will differ.
+      </p>
+    </div>
   </div>
 </section>
 
-<section class="band" data-reveal>
-  <h2>The one rule</h2>
-  <blockquote>
-    <p><strong>What you owe is decided by you, never by the runtime.</strong></p>
-  </blockquote>
-  <p>
-    What a session is doing changes on its own: it starts, it types, it blocks, it goes quiet, it
-    exits. What you owe it changes only when you press a button. Reading a message does not clear
-    it, and neither does the session finishing.
-  </p>
+<!-- if media/coming-office.png -->
+<section class="band band--deep">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>The same office, stood up.</h2>
+      <p class="lede">Same rooms, same robots, same seats, in 3D; not out yet.</p>
+    </div>
+    <div class="mosaic">
+      <figure class="shot c7">
+        <img
+          src="media/coming-office.png"
+          alt="Two pictures side by side. On the left, the DeckHQ floor as it is today, seen from above. On the right, the same building in three dimensions, seen at an angle, with the same rooms and name plates. A label in the corner reads Coming."
+        />
+        <figcaption>
+          <span class="tag tag--coming">Coming</span>The floor today, and the same building in 3D.
+        </figcaption>
+      </figure>
+      <figure class="shot c5">
+        <img
+          src="media/coming-robot.png"
+          alt="A close view of the 3D office: two round robots at a desk with terminals on their monitors, and two smaller ones sitting on the floor with laptops under tags that read Junior. A label in the corner reads Coming."
+        />
+        <figcaption>
+          <span class="tag tag--coming">Coming</span>A lead, a colleague and two juniors.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
 </section>
+<!-- endif -->
 
-<div class="bleed never" data-reveal>
-  <div class="never-inner">
-    <h2>What it never does</h2>
-    <ul class="never-list never-list--owed">
-      <li>
-        <h3>Send your code anywhere</h3>
+<section class="band" id="install">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>One command.</h2>
+      <p class="lede">
+        It starts DeckHQ, opens the floor in a window of its own, and asks once whether you want a
+        desktop icon.
+      </p>
+    </div>
+    <div class="ways">
+      <div class="way way--first">
+        <p class="cmd cmd--hero"><code>npx deckhq app</code></p>
+        <p>Needs Node 18 or newer. Nothing else: the package has no dependencies.</p>
+      </div>
+      <div class="way">
+        <h3>No Node on the machine</h3>
         <p>
-          Your conversations, your file names and your diffs stay on the machine. No analytics, no
-          telemetry, no update check, no cloud.
+          One line checks for Node, offers to install it, installs DeckHQ and opens the window. Both
+          scripts are short files you can read first.
         </p>
-      </li>
-      <li>
-        <h3>Ask who you are</h3>
+        <p class="cmd cmd--ps">
+          <code>irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex</code>
+        </p>
+        <p class="cmd">
+          <code>curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh</code>
+        </p>
+      </div>
+      <div class="way">
+        <h3>A step at a time</h3>
+        <p>Install it, open it, then add the icon when you want one.</p>
+        <p class="cmd"><code>npm install -g deckhq</code></p>
+        <p class="cmd"><code>deckhq app</code></p>
+      </div>
+      <div class="way">
+        <h3>Look before you install</h3>
         <p>
-          No account, no sign-in, no licence key. Every theme and every feature is there on the
-          first run.
+          The report installs nothing, writes nothing and sends nothing. It prints your own number.
         </p>
-      </li>
-      <li>
-        <h3>Touch your Claude settings</h3>
-        <p>
-          Not until you have read the exact lines it would add and said yes. It backs the file up
-          first, and it removes only what it put there.
-        </p>
-      </li>
-      <li>
-        <h3>Decide what you owe</h3>
-        <p>
-          Reading a message does not clear it. No session ending and no test passing clears your
-          queue; an action of yours does.
-        </p>
-      </li>
-      <li>
-        <h3>Get in your way</h3>
-        <p>
-          Your shell prompt stays live the whole time. DeckHQ runs beside your work and never
-          between you and it.
-        </p>
-      </li>
-    </ul>
+        <p class="cmd"><code>npx deckhq doctor</code></p>
+        <p><a href="install.html">Every way to install, and how to remove it</a></p>
+      </div>
+    </div>
   </div>
-</div>
-
-<section class="section" data-reveal>
-  <div class="section-head">
-    <h2>Download it, or paste a line.</h2>
-    <p>Node 18 or newer, and nothing else. No build step, no runtime dependency, no account.</p>
-  </div>
-  <div class="actions actions--start">
-    <a
-      class="btn btn--primary"
-      href="https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd"
-      >Download for Windows</a
-    >
-    <a
-      class="btn btn--primary"
-      href="https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command"
-      >Download for macOS</a
-    >
-  </div>
-  <p class="muted">
-    Each file runs the matching line below and carries nothing else. Windows SmartScreen may warn
-    about the Windows one because it is unsigned; the one line does the same thing and raises no
-    warning. On macOS a downloaded file arrives without its run bit, so the first run needs
-    <code>chmod +x ~/Downloads/Install-DeckHQ.command</code> in Terminal.
-  </p>
-  <ul class="ways">
-    <li>
-      <h3>You already have Node</h3>
-      <p>
-        Downloads the package, runs it, leaves no binary behind. It opens the floor in a window of
-        its own.
-      </p>
-      <p class="command" data-command="npx deckhq app">npx deckhq app</p>
-    </li>
-    <li>
-      <h3>Windows, no Node</h3>
-      <p>
-        Checks for Node, offers to install it with <code>winget</code>, never without asking, then
-        installs DeckHQ and opens it.
-      </p>
-      <p class="command" data-command="irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex">
-        irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
-      </p>
-    </li>
-    <li>
-      <h3>macOS and Linux, no Node</h3>
-      <p>
-        The same script for a POSIX shell: <code>brew</code> on macOS, your distribution&#8217;s own
-        command printed for you on Linux.
-      </p>
-      <p
-        class="command"
-        data-command="curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh"
-      >
-        curl -fsSL https://dkpanseriya.github.io/deckhq/install.sh | sh
-      </p>
-    </li>
-  </ul>
-  <p class="muted">
-    Read a script before you pipe it into a shell, these two included. They are served from this
-    site byte for byte as they are in the repository:
-    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.ps1"
-      >install.ps1</a
-    >,
-    <a href="https://github.com/DkPanseriya/deckhq/blob/main/scripts/install/install.sh"
-      >install.sh</a
-    >. There is also a global install, a Claude Code plugin and a VS Code extension.
-    <a href="install.html">All four routes are here</a>.
-  </p>
 </section>

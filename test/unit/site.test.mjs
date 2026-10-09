@@ -40,6 +40,9 @@ const LINKABLE = ['github.com', 'www.npmjs.com'];
  */
 const SELF = 'dkpanseriya.github.io';
 
+/** The stylesheet's two source files; `site/build.mjs` serves them as one. */
+const STYLE_SOURCES = ['style.css', 'components.css'];
+
 /** @param {string} dir @param {string[]} exts */
 function walk(dir, exts) {
   /** @type {string[]} */
@@ -74,22 +77,24 @@ after(() => {
 test('the site builds every page it navigates to', () => {
   for (const rel of [
     'index.html',
-    // WP-95a · the pages that show the product. The reference pages — Docs,
-    // The model, Hooks and privacy, Adapters and the 171-entry engineering log
-    // — are off the site: this is marketing, and the blueprint is private.
+    // The pages that show the product. Characters and Studio were pages of
+    // their own until 1.7.0; both are sections of Features now, where the six
+    // states and the board sit beside the things they belong to.
     'features.html',
     'look.html',
-    'characters.html',
-    'studio.html',
     'install.html',
-    'faq.html',
     'privacy.html',
+    'faq.html',
     'changelog.html',
+    // What GitHub Pages serves for an address that is not there.
+    '404.html',
     'style.css',
-    // WP-94c · the two scripts. Everything they do, the page does without
-    // them; `site/site.js`'s header says which four things they are.
-    'theme.js',
+    // The one script. Everything it does, the page does without it;
+    // `site/site.js`'s header says which four things they are. The second
+    // script, which stored a colour scheme, went with the light scheme.
     'site.js',
+    'sitemap.txt',
+    'robots.txt',
     // WP-82 · the mark, both the SVG the tab strip gets and the dark raster
     // the pages show. `site/favicon.svg` — a crimson square that was nothing
     // the product used — is gone.
@@ -124,16 +129,39 @@ test('the one-line installers are published, byte for byte, at the URL the pages
 
 test('every internal link resolves to a file that exists', () => {
   const pages = walk(out, ['.html']);
-  assert.equal(pages.length, 9, 'the site is nine pages');
+  assert.equal(pages.length, 8, 'the site is eight pages');
   for (const page of pages) {
     const html = fs.readFileSync(page, 'utf8');
-    for (const m of html.matchAll(/(?:href|src)="([^"]+)"/g)) {
+    const where = path.relative(out, page);
+    // The one absolute path on the site is the 404 page's `<base>`: GitHub
+    // Pages serves that file for a missing address at any depth, so its links
+    // have to resolve from the site's own root. It is checked on its own, and
+    // no other page may carry one.
+    const base = html.match(/<base href="([^"]+)" \/>/);
+    assert.equal(base ? base[1] : null, where === '404.html' ? '/deckhq/' : null, `${where}: base`);
+    const links = html.replace(/<base [^>]*>/, '');
+    for (const m of links.matchAll(/(?:href|src)="([^"]+)"/g)) {
       const href = m[1];
       if (/^(https?:|mailto:|#)/.test(href)) continue;
       const target = path.resolve(path.dirname(page), href.split('#')[0]);
+      assert.ok(fs.existsSync(target), `${where} points at ${href}, which was not built`);
+    }
+    // A `srcset` names files too, and a dense screen fetches the second one.
+    for (const m of links.matchAll(/\ssrcset="([^"]+)"/g)) {
+      for (const candidate of m[1].split(',')) {
+        const file = candidate.trim().split(/\s+/)[0];
+        assert.ok(
+          fs.existsSync(path.resolve(path.dirname(page), file)),
+          `${where} offers ${file} in a srcset, which was not built`,
+        );
+      }
+    }
+    // And an anchor inside the site lands on something.
+    for (const m of links.matchAll(/href="([\w-]+\.html)#([\w-]+)"/g)) {
+      const target = fs.readFileSync(path.join(out, m[1]), 'utf8');
       assert.ok(
-        fs.existsSync(target),
-        `${path.relative(out, page)} points at ${href}, which was not built`,
+        target.includes(`id="${m[2]}"`),
+        `${where} links ${m[1]}#${m[2]}, which is not there`,
       );
     }
   }
@@ -173,11 +201,18 @@ test('SECURITY: no page fetches anything from a third-party host', () => {
   }
 });
 
-test('SECURITY: the scripts fetch nothing, store nothing but the scheme', () => {
-  // The same promise, applied to the two files WP-94c added. They are the only
-  // JavaScript on this site; if either one ever reached the network, the
-  // sentence in every page footer would be false.
-  for (const name of ['theme.js', 'site.js']) {
+test('SECURITY: the script fetches nothing and stores nothing', () => {
+  // The same promise, applied to the only JavaScript on this site; if it ever
+  // reached the network, the sentence in every page footer would be false. It
+  // used to be allowed one stored key, for the colour scheme. There is one
+  // scheme now, so it is allowed none.
+  assert.ok(!fs.existsSync(path.join(siteDir, 'theme.js')), 'the scheme script is back');
+  assert.deepEqual(
+    walk(out, ['.js']).map((f) => path.relative(out, f)),
+    ['site.js'],
+    'the site serves a script other than site.js',
+  );
+  for (const name of ['site.js']) {
     for (const file of [path.join(siteDir, name), path.join(out, name)]) {
       const text = fs.readFileSync(file, 'utf8');
       assert.ok(
@@ -187,9 +222,10 @@ test('SECURITY: the scripts fetch nothing, store nothing but the scheme', () => 
         `${name} makes a request`,
       );
       assert.ok(!/https?:\/\//.test(text), `${name} names an absolute URL`);
-      for (const m of text.matchAll(/localStorage\.\w+\(\s*'([^']+)'/g)) {
-        assert.equal(m[1], 'deckhq-theme', `${name} stores ${m[1]}`);
-      }
+      assert.ok(
+        !/\b(localStorage|sessionStorage|indexedDB|document\.cookie)\b/.test(text),
+        `${name} stores something in the browser`,
+      );
     }
     assert.deepEqual(
       fs.readFileSync(path.join(siteDir, name)),
@@ -200,7 +236,10 @@ test('SECURITY: the scripts fetch nothing, store nothing but the scheme', () => 
 });
 
 test('SECURITY: the stylesheet loads no font, image or sheet from anywhere', () => {
-  for (const css of [path.join(siteDir, 'style.css'), path.join(out, 'style.css')]) {
+  for (const css of [
+    ...STYLE_SOURCES.map((name) => path.join(siteDir, name)),
+    path.join(out, 'style.css'),
+  ]) {
     // Comments are stripped first: the file's own header says in words that it
     // has no `@font-face` and no `@import`, and a rule that reads prose would
     // fail on the sentence promising the thing it is checking for.
@@ -373,6 +412,11 @@ test('the site publishes no page the blueprint used to put here', () => {
     'hooks-and-privacy.html',
     'log/index.html',
     'log/1.html',
+    // 1.7.0 · merged into Features, and the scheme script that went with the
+    // light scheme.
+    'characters.html',
+    'studio.html',
+    'theme.js',
   ]) {
     assert.ok(!fs.existsSync(path.join(out, gone)), `${gone} is still published`);
   }
@@ -448,78 +492,114 @@ test('the only hosts anywhere on the site are GitHub, npm and this site', () => 
   }
 });
 
-test('HONESTY: a mockup is never shown as a screenshot', async () => {
-  // WP-94a, and `docs/ADAPTERS.md` §6 applied to pictures. Every image the site
-  // copies has a class in `docs/MEDIA.md`: a capture is DeckHQ photographed, a
-  // golden is a real render of a fixture, an illustration is a drawing of a
-  // specification that no build has produced. The last one has to say so.
-  const { imageClass, assertMediaIsLabelled, IMAGES, ILLUSTRATION_DIRS, ILLUSTRATION_LABEL } =
+test('HONESTY: every picture is a declared capture, and the unreleased say so', async () => {
+  // Every picture the site serves is the running product, photographed against
+  // a fixture floor by `scripts/site-assets.mjs` from `site/assets.json`. So a
+  // file in the built site's `media/` has to be one that manifest declares.
+  // Two kinds are let in by name and nothing else is: the composed card a link
+  // unfurls into, and pictures of something not released, which must sit in a
+  // figure whose caption carries the "Coming" tag.
+  const { declaredMedia, assertComingIsLabelled, COMING, PREVIEW, MEDIA_DIR } =
     await import('../../site/build.mjs');
-
-  // Every illustration source really is under one of the mockup directories,
-  // and every image under one of them really is declared an illustration.
-  for (const image of IMAGES) {
-    const dir = image.from.startsWith('docs/media/') ? image.from.split('/')[2] : null;
-    const isMockupDir = dir !== null && ILLUSTRATION_DIRS.includes(dir);
-    assert.equal(
-      image.class === 'illustration',
-      isMockupDir,
-      `${image.from} is declared ${image.class}`,
+  const { COMPOSED } = await import('../../site/media.mjs');
+  const declared = declaredMedia();
+  const served = walk(path.join(out, 'media'), ['.png', '.gif']).map((f) => path.basename(f));
+  assert.ok(served.length > 30, `expected the site to carry pictures; found ${served.length}`);
+  for (const file of served) {
+    assert.ok(
+      declared.has(file) || COMING.includes(file) || COMPOSED.includes(file),
+      `media/${file} is served and is not declared in site/assets.json`,
     );
-    assert.equal(imageClass(image.to), image.class, `${image.to} resolves to the wrong class`);
+    assert.deepEqual(
+      fs.readFileSync(path.join(out, 'media', file)),
+      fs.readFileSync(path.join(MEDIA_DIR, file)),
+      `media/${file} is not the capture in the repository`,
+    );
+  }
+  assert.deepEqual(COMPOSED, [PREVIEW], 'a second composed picture is published');
+
+  // No capture was taken on a real floor: the manifest names fixture
+  // populations only, and every one of them exists.
+  // (Read as text: importing the fixtures module would parse this process's
+  // own arguments as a demo's.)
+  const fixtures = fs.readFileSync(path.join(root, 'scripts', 'demo-populations.mjs'), 'utf8');
+  const manifest = JSON.parse(fs.readFileSync(path.join(siteDir, 'assets.json'), 'utf8'));
+  for (const asset of manifest.assets) {
+    assert.match(
+      fixtures,
+      new RegExp(`^  '?${asset.population}'?: `, 'm'),
+      `${asset.name} names no fixture: ${asset.population}`,
+    );
   }
 
-  // WP-95a · the site publishes no mockup at all. It used to publish four, for
-  // the interior picker, agent size and the crew; all three shipped in 1.4.0,
-  // so a drawing of them would now be a drawing of something the reader could
-  // have gone and used, which is worse than no picture.
-  assert.equal(
-    IMAGES.filter((i) => i.class === 'illustration').length,
-    0,
-    'the site registry carries a mockup again; give it a "Coming" caption or take it off',
-  );
+  // The unreleased are only on the home page, in one band, and each is tagged.
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
-    assert.ok(
-      !html.toLowerCase().includes(ILLUSTRATION_LABEL),
-      `${path.relative(out, page)} labels something a mockup, and the registry has none`,
-    );
+    const where = path.relative(out, page);
+    const shown = COMING.filter((file) => html.includes(`media/${file}`));
+    if (where !== 'index.html') {
+      assert.deepEqual(shown, [], `${where} shows something unreleased`);
+      assert.ok(!/tag--coming/.test(html), `${where} carries a "Coming" tag`);
+      // The changelog is the release notes' own words and is not held to this.
+      if (where !== 'changelog.html') assert.ok(!/\b3D\b/.test(html), `${where} talks about 3D`);
+      continue;
+    }
+    if (shown.length === 0) continue;
+    assert.doesNotThrow(() => assertComingIsLabelled(where, html));
+    for (const figure of html.matchAll(/<figure[\s>][\s\S]*?<\/figure>/g)) {
+      if (!COMING.some((file) => figure[0].includes(`media/${file}`))) continue;
+      assert.match(figure[0], /<span class="tag tag--coming">Coming<\/span>/);
+    }
+    // What is never said beside it: a date, a price, a tier, or a first.
+    const band = html.slice(html.indexOf('The same office, stood up.'));
+    const words = band.slice(0, band.indexOf('</section>')).replace(/<[^>]*>/g, ' ');
+    for (const never of [
+      /\bPro\b/,
+      /\bfirst\b/i,
+      /\bonly\b/i,
+      /\bsoon\b/i,
+      /\b20\d\d\b/,
+      /[$€£]/,
+    ]) {
+      assert.ok(!never.test(words), `the Coming band says ${never}`);
+    }
   }
 
-  // The gate that would catch the next one still works. Both branches it can
-  // still reach are asserted: an image nobody registered, and an image shown
-  // loose. The mockup-caption branch needs a mockup in the registry, and the
-  // first assertion above is what keeps the two in step.
-  const unknown = '<img src="media/not-in-the-registry.png" alt="x" />';
-  assert.throws(() => assertMediaIsLabelled('unknown.html', unknown), /not in the media registry/);
-  const known = IMAGES[0].to;
-  assert.doesNotThrow(() => assertMediaIsLabelled('good.html', `<img src="media/${known}" />`));
-  assert.equal(imageClass(`media/${known}`), IMAGES[0].class);
-  assert.equal(imageClass('media/nothing.png'), null);
+  // The gate refuses a loose one, so this is not passing on a clean site and a
+  // build step that checks nothing.
+  const loose = `<img src="media/${COMING[0]}" alt="x" />`;
+  assert.throws(() => assertComingIsLabelled('bad.html', loose), /without a "Coming" tag/);
+  const tagged = `<figure>${loose}<figcaption><span class="tag tag--coming">Coming</span></figcaption></figure>`;
+  assert.doesNotThrow(() => assertComingIsLabelled('good.html', tagged));
 });
 
-test('no image the site serves is wider than the capture stage', async () => {
-  const { ROLES } = await import('../../site/build.mjs');
-  const MAX_IMAGE_WIDTH = Math.max(...Object.values(ROLES).map((r) => r.width));
-  const { decodePng } = await import('../../scripts/lib/png.mjs');
-  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+test('a band whose picture is absent is left out of the build', async () => {
+  const { resolveOptional } = await import('../../site/build.mjs');
+  const page = 'a\n<!-- if media/not-captured.png -->\n<p>gone</p>\n<!-- endif -->\nb\n';
+  assert.equal(resolveOptional(page), 'a\nb\n');
+  const kept = 'a\n<!-- if media/hero.png -->\n<p>kept</p>\n<!-- endif -->\nb\n';
+  assert.equal(resolveOptional(kept), 'a\n<p>kept</p>\nb\n');
+});
+
+test('no picture the site serves is wider than the hero at twice its size', async () => {
+  // 2400 px: the widest column on the site is 1200 CSS pixels, doubled for a
+  // dense screen, and never more. The size is read from the file's own header.
+  const { imageSize } = await import('../../site/build.mjs');
   let checked = 0;
-  for (const image of walk(path.join(out, 'media'), ['.png'])) {
-    const bytes = fs.readFileSync(image);
-    if (!bytes.subarray(0, 8).equals(signature)) continue;
-    let width;
-    try {
-      width = decodePng(bytes).width;
-    } catch {
-      continue; // a shape this decoder does not read is copied whole on purpose
-    }
+  for (const image of walk(path.join(out, 'media'), ['.png', '.gif'])) {
+    const size = imageSize(image);
+    const where = `media/${path.basename(image)}`;
+    assert.ok(size, `${where} is not a picture this build can measure`);
     checked++;
-    assert.ok(
-      width <= MAX_IMAGE_WIDTH,
-      `media/${path.relative(path.join(out, 'media'), image)} is ${width} px wide`,
-    );
+    assert.ok(size.width <= 2400, `${where} is ${size.width} px wide`);
+    // A plain file beside a dense one is exactly half of it.
+    if (image.endsWith('@2x.png')) {
+      const plain = imageSize(image.replace('@2x.png', '.png'));
+      assert.ok(plain, `${where} has no plain file beside it`);
+      assert.equal(plain.width * 2, size.width, `${where} is not twice its plain file`);
+    }
   }
-  assert.ok(checked > 10, 'expected the site to carry images');
+  assert.ok(checked > 30, 'expected the site to carry pictures');
 });
 
 /* ------------------------------------------------------------------ WP-94b */
@@ -626,57 +706,84 @@ test('COPY: a picture that is not built says so where it is shown', () => {
 });
 
 test('WEIGHT: every picture is inside the budget for what it is', async () => {
-  const { IMAGES, ROLES } = await import('../../site/build.mjs');
+  // 400 KB for a still, at either density; 3 MB for a loop. The owner's report
+  // was that the pictures loaded slowly and that some never arrived, so the
+  // ceiling is on every file the site serves and not on a list of them.
+  const { BUDGET } = await import('../../site/build.mjs');
+  assert.ok(BUDGET.still <= 400 * 1024, 'the budget for a still was raised');
+  assert.ok(BUDGET.loop <= 3 * 1024 * 1024, 'the budget for a loop was raised');
   let checked = 0;
-  for (const image of IMAGES) {
-    const file = path.join(out, 'media', image.to);
-    if (!fs.existsSync(file)) continue;
-    const role = ROLES[image.role ?? (image.to.endsWith('.gif') ? 'gif' : 'crop')];
+  for (const file of walk(path.join(out, 'media'), ['.png', '.gif'])) {
     const size = fs.statSync(file).size;
+    const budget = file.endsWith('.gif') ? BUDGET.loop : BUDGET.still;
     checked++;
     assert.ok(
-      size <= role.budget,
-      `media/${image.to} is ${Math.round(size / 1024)} KB, over the ` +
-        `${Math.round(role.budget / 1024)} KB budget for a ${image.role}`,
+      size <= budget,
+      `media/${path.basename(file)} is ${Math.round(size / 1024)} KB, over ` +
+        `${Math.round(budget / 1024)} KB`,
     );
   }
-  assert.ok(checked > 10, 'expected the site to carry images');
+  assert.ok(checked > 30, 'expected the site to carry pictures');
 });
 
 test('WEIGHT: no page costs more than its budget, read to the bottom', async () => {
-  const { PAGES, PAGE_BUDGET, pageWeight } = await import('../../site/build.mjs');
+  // Measured the expensive way: a dense screen, so the `@2x` file of every
+  // pair, with every lazy picture and every loop on the page.
+  const { PAGES, BUDGET, pageWeight } = await import('../../site/build.mjs');
+  assert.ok(BUDGET.page.default <= 3 * 1024 * 1024, 'the page budget was raised');
+  assert.ok(BUDGET.page['index.html'] <= 2.5 * 1024 * 1024, 'the home budget was raised');
   for (const page of PAGES) {
-    if (page.slug === 'log/index') continue;
     const rel = `${page.slug}.html`;
-    const bytes = pageWeight(out, rel);
-    const budget = PAGE_BUDGET[rel] ?? PAGE_BUDGET.default;
+    const bytes = pageWeight(out, rel, { dpr: 2, all: true });
+    const budget = BUDGET.page[rel] ?? BUDGET.page.default;
     assert.ok(
       bytes <= budget,
       `${rel} weighs ${Math.round(bytes / 1024)} KB, over its ${Math.round(budget / 1024)} KB budget`,
     );
+    // And an ordinary screen never pays more than a dense one.
+    assert.ok(pageWeight(out, rel, { dpr: 1, all: true }) <= bytes, `${rel}: 1x outweighs 2x`);
   }
 });
 
-test('MOTION: every GIF the site serves actually moves', () => {
+test('MOTION: every loop moves, at twenty frames a second or more', () => {
   // A GIF with one frame is a PNG that costs more, and it is what a capture
-  // pipeline produces when the floor was not animating — which is the failure
-  // mode worth a gate, because it looks right in a screenshot. Counting frames
-  // means counting graphic control extensions: `21 F9 04`, the four-byte block
-  // that carries each frame's delay.
+  // pipeline produces when the floor was not animating. Counting frames means
+  // counting graphic control extensions: `21 F9 04`, then a flags byte and the
+  // frame's delay in hundredths of a second. Five hundredths is 20 fps.
   let checked = 0;
   for (const file of walk(path.join(out, 'media'), ['.gif'])) {
     const bytes = fs.readFileSync(file);
+    const where = `media/${path.basename(file)}`;
     let frames = 0;
-    for (let i = 0; i + 3 < bytes.length; i++) {
-      if (bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04) frames++;
+    let slowest = 0;
+    for (let i = 0; i + 8 < bytes.length; i++) {
+      // The whole block, to its terminator and the image descriptor after it,
+      // so three matching bytes inside a frame's own data are not a frame.
+      const block = bytes[i] === 0x21 && bytes[i + 1] === 0xf9 && bytes[i + 2] === 0x04;
+      if (block && bytes[i + 7] === 0x00 && bytes[i + 8] === 0x2c) {
+        frames++;
+        slowest = Math.max(slowest, bytes.readUInt16LE(i + 4));
+      }
     }
     checked++;
-    assert.ok(
-      frames > 1,
-      `media/${path.relative(path.join(out, 'media'), file)} has ${frames} frame(s)`,
-    );
+    assert.ok(frames > 20, `${where} has ${frames} frame(s)`);
+    assert.ok(slowest <= 5, `${where} holds a frame for ${slowest} hundredths of a second`);
+    // Its first frame is beside it, for a reader who asked for less motion.
+    assert.ok(fs.existsSync(file.replace(/\.gif$/, '.png')), `${where} has no still beside it`);
   }
-  assert.ok(checked > 0, 'expected the site to carry an animation');
+  assert.ok(checked > 0, 'expected the site to carry a loop');
+
+  // And a page that shows a loop offers that still under reduced motion.
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    for (const m of html.matchAll(/<img\b[^>]*\ssrc="(media\/[\w-]+)\.gif"[^>]*>/g)) {
+      const still = `<picture><source media="(prefers-reduced-motion: reduce)" srcset="${m[1]}.png" />`;
+      assert.ok(
+        html.includes(still + m[0]),
+        `${path.relative(out, page)} plays ${m[1]}.gif whatever the reader asked for`,
+      );
+    }
+  }
 });
 
 test('WEIGHT: every picture below the fold is lazy, on every page', () => {
@@ -735,14 +842,13 @@ function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** The blocks that carry a complete palette, and what each one is. */
-const SCHEME_BLOCKS = [
-  { name: 'dark (the default, and the OS preference)', selector: '\n:root {' },
-  { name: 'light (the OS preference)', selector: ":root:not([data-theme='dark']) {" },
-  { name: 'light (the toggle)', selector: ":root[data-theme='light'] {" },
-];
+/**
+ * The one block that carries the palette. The site has one look, the
+ * product's own dark chrome, and is deliberately not offered in a second.
+ */
+const SCHEME_BLOCKS = [{ name: 'the one scheme', selector: '\n:root {' }];
 
-/** Every token a scheme has to define, or it is not a complete scheme. */
+/** Every token the scheme has to define, or it is not a complete scheme. */
 const REQUIRED_TOKENS = [
   '--bg',
   '--bg-2',
@@ -762,54 +868,82 @@ const REQUIRED_TOKENS = [
 
 /**
  * The grounds this site sets text on, and the inks it sets on them.
- * `--head-solid` is in here because the sticky bar is a ground for the nav
- * links whenever `backdrop-filter` is not available.
+ * `--head-solid` is in here because the sticky bar is a ground for the nav.
  */
 const GROUNDS = ['--bg', '--bg-2', '--surface', '--surface-2', '--head-solid'];
 const INKS = ['--ink', '--ink-2', '--muted', '--accent'];
 
-test('the token set is one set, and every scheme defines all of it', () => {
-  const css = fs.readFileSync(path.join(siteDir, 'style.css'), 'utf8');
-  for (const block of SCHEME_BLOCKS) {
-    const t = tokensOf(css, block.selector);
-    for (const name of REQUIRED_TOKENS) {
-      assert.ok(t[name], `${block.name} does not define ${name}`);
-      assert.match(t[name], /^#[0-9a-f]{6}$/i, `${block.name}'s ${name} is ${t[name]}`);
-    }
-  }
-
-  // The two light blocks are the same palette written twice — once for the OS
-  // preference, once for the toggle. If they ever drift, one of them is a
-  // scheme nobody designed.
-  const byOs = tokensOf(css, SCHEME_BLOCKS[1].selector);
-  const byToggle = tokensOf(css, SCHEME_BLOCKS[2].selector);
+test('the token set is one set, in one scheme, and it is the app’s', () => {
+  const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8');
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const t = tokensOf(css, SCHEME_BLOCKS[0].selector);
   for (const name of REQUIRED_TOKENS) {
-    assert.equal(byToggle[name], byOs[name], `${name} differs between the two light blocks`);
+    assert.ok(t[name], `the scheme does not define ${name}`);
+    assert.match(t[name], /^#[0-9a-f]{6}$/i, `${name} is ${t[name]}`);
   }
 
-  // And the whole scale and grid are on one root, so a page cannot invent a
+  // One scheme, on purpose. A second set of colours for the same pictures was
+  // the thing being done badly; a stylesheet that grows one back fails here.
+  assert.ok(!/prefers-color-scheme/.test(code), 'the stylesheet answers to a colour scheme');
+  assert.ok(!/\[data-theme/.test(code), 'the stylesheet carries a second theme');
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    assert.match(html, /<meta name="color-scheme" content="dark" \/>/);
+    assert.ok(!/theme-toggle/.test(html), `${path.relative(out, page)} carries a scheme toggle`);
+  }
+
+  // The neutrals and the two accents are the app's own values, so the page
+  // around a screenshot is the colour of the chrome inside it.
+  const app = fs.readFileSync(path.join(root, 'public', 'style.css'), 'utf8');
+  const product = tokensOf(app, ':root {');
+  for (const name of [
+    '--bg',
+    '--surface',
+    '--surface-2',
+    '--line',
+    '--line-2',
+    '--ink',
+    '--ink-2',
+    '--muted',
+  ]) {
+    assert.equal(t[name], product[name], `${name} is not the app's`);
+  }
+  assert.equal(t['--crimson'], product['--accent'], 'crimson is not the app’s "for review" red');
+
+  // No colour is written out where a token exists: outside the token block
+  // the only raw colours are the shadows.
+  const after = code.slice(code.indexOf('}', code.indexOf('\n:root {')));
+  assert.deepEqual(
+    after.match(/#[0-9a-f]{3,8}\b/gi) ?? [],
+    [],
+    'a raw hex colour outside the tokens',
+  );
+
+  // The whole scale and grid are on one root, so a page cannot invent a
   // seventh type step or a spacing value off the eight-pixel grid.
-  const root = tokensOf(css, SCHEME_BLOCKS[0].selector);
   for (const step of ['--t-display', '--t-title', '--t-head', '--t-sub', '--t-lede', '--t-body']) {
-    assert.ok(root[step], `the scale has no ${step}`);
+    assert.ok(t[step], `the scale has no ${step}`);
   }
   for (const [i, space] of ['--s-1', '--s-2', '--s-3', '--s-4', '--s-5'].entries()) {
-    assert.ok(root[space], `the grid has no ${space}`);
-    // 8, 16, 24, 32, 48 — every one a multiple of half a rem, which is 8 px.
-    const rem = Number(root[space].replace('rem', ''));
-    assert.equal(rem * 16, [8, 16, 24, 32, 48][i], `${space} is ${root[space]}`);
+    assert.ok(t[space], `the grid has no ${space}`);
+    const rem = Number(t[space].replace('rem', ''));
+    assert.equal(rem * 16, [8, 16, 24, 32, 48][i], `${space} is ${t[space]}`);
   }
 
   // The display step never shouts. `clamp(min, fluid, max)`; the max is what a
   // 1440 px window gets.
-  const max = root['--t-display'].match(/,\s*([\d.]+)rem\s*\)/);
-  assert.ok(max, `--t-display is not a clamp with a rem maximum: ${root['--t-display']}`);
+  const max = t['--t-display'].match(/,\s*([\d.]+)rem\s*\)/);
+  assert.ok(max, `--t-display is not a clamp with a rem maximum: ${t['--t-display']}`);
   assert.ok(Number(max[1]) * 16 <= 96, `the display step tops out at ${Number(max[1]) * 16} px`);
   assert.ok(Number(max[1]) * 16 >= 64, `the display step tops out at ${Number(max[1]) * 16} px`);
+
+  // No web font: the two families are named and never loaded.
+  assert.match(t['--sans'], /system-ui/);
+  assert.match(t['--mono'], /ui-monospace/);
 });
 
-test('ACCESSIBILITY: every ink clears 4.5:1 on every ground, in both schemes', () => {
-  const css = fs.readFileSync(path.join(siteDir, 'style.css'), 'utf8');
+test('ACCESSIBILITY: every ink clears 4.5:1 on every ground', () => {
+  const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8');
   let checked = 0;
   for (const block of SCHEME_BLOCKS) {
     const t = tokensOf(css, block.selector);
@@ -838,32 +972,40 @@ test('ACCESSIBILITY: every ink clears 4.5:1 on every ground, in both schemes', (
     }
 
     // The focus ring is `--accent`, and `outline-offset` puts it on the ground
-    // AROUND the element rather than on the element, so the grounds above are
-    // the ones it has to hold. 3:1 is the floor for a non-text indicator.
-    // Crimson is deliberately not in this list: nothing focusable on this site
-    // sits on it, because crimson is a 2 px dash and a dot and never a
-    // control.
+    // around the element, so the grounds above are the ones it has to hold.
+    // 3:1 is the floor for a non-text indicator.
     for (const ground of GROUNDS) {
       const ratio = contrast(t['--accent'], t[ground]);
       checked++;
       assert.ok(ratio >= 3, `${block.name}: the focus ring on ${ground} is ${ratio.toFixed(2)}:1`);
     }
   }
-  assert.ok(checked >= 60, `expected every pair to be measured; measured ${checked}`);
+  assert.equal(checked, 27, `expected every pair to be measured; measured ${checked}`);
 
-  // `public/style.css`'s rule, applied here: crimson is `for_review`, it clears
-  // 4.5:1 on nothing in the dark scheme, and it therefore sets no words. It is
-  // a fill, a dot and a rule, with neutral ink on top.
+  // Crimson is "for review". It clears 4.5:1 on nothing here, so it sets no
+  // words: it is a fill and a dot, with neutral ink on top. Nor does any state
+  // colour, which appears once, as a dot in the key that explains it.
   assert.ok(!/\bcolor:\s*var\(--crimson\)/.test(css), 'the stylesheet sets text in the crimson');
+  assert.ok(!/\bcolor:\s*var\(--state-/.test(css), 'the stylesheet sets text in a state colour');
+  assert.match(css, /:focus-visible \{[^}]*outline: 2px solid var\(--accent\)/, 'no focus ring');
+  assert.match(css, /prefers-reduced-motion: reduce/, 'reduced motion is not answered');
 });
 
-test('the stylesheet and the scripts stay inside their budgets', () => {
-  const css = fs.statSync(path.join(siteDir, 'style.css')).size;
-  const js =
-    fs.statSync(path.join(siteDir, 'theme.js')).size +
-    fs.statSync(path.join(siteDir, 'site.js')).size;
-  assert.ok(css <= 40 * 1024, `style.css is ${(css / 1024).toFixed(1)} KB, over 40 KB`);
-  assert.ok(js <= 10 * 1024, `the scripts are ${(js / 1024).toFixed(1)} KB, over 10 KB`);
+test('the stylesheet and the script stay inside their budgets', () => {
+  // The stylesheet as it is served: two source files, joined by the build.
+  const css = fs.statSync(path.join(out, 'style.css')).size;
+  const sources = STYLE_SOURCES.map((name) => fs.readFileSync(path.join(siteDir, name), 'utf8'));
+  assert.equal(fs.readFileSync(path.join(out, 'style.css'), 'utf8'), sources.join('\n'));
+  for (const [i, text] of sources.entries()) {
+    const lines = text.split('\n').length;
+    assert.ok(
+      lines <= 900,
+      `site/${STYLE_SOURCES[i]} is ${lines} lines, over the 900-line ceiling`,
+    );
+  }
+  const js = fs.statSync(path.join(siteDir, 'site.js')).size;
+  assert.ok(css <= 32 * 1024, `style.css is ${(css / 1024).toFixed(1)} KB, over 32 KB`);
+  assert.ok(js <= 6 * 1024, `site.js is ${(js / 1024).toFixed(1)} KB, over 6 KB`);
 });
 
 test('every page carries the skip link, the nav and the menu', () => {
@@ -873,73 +1015,135 @@ test('every page carries the skip link, the nav and the menu', () => {
     assert.match(html, /<a class="skip-link" href="#main">/, `${where} has no skip link`);
     assert.match(html, /<main id="main">/, `${where} has nothing for the skip link to reach`);
     assert.match(html, /<nav class="site-nav" aria-label="Sections">/, `${where} has no nav`);
-    // WP-95a · six links fit on the bar, so the "More" disclosure that hid half
-    // of them is gone and the narrow-screen menu is the only one left. It is a
-    // `<details>`, which is the reason the site navigates with scripting off.
+    // Five links fit on the bar. Under 48rem the row collapses into a
+    // `<details>` menu, which is why the site navigates with scripting off.
     assert.ok(!/nav-more/.test(html), `${where} still carries the More group`);
     assert.match(html, /<details class="nav-toggle">/, `${where} has no narrow-screen menu`);
-    for (const nav of ['Features', 'Look', 'Characters', 'Studio', 'Install', 'FAQ']) {
+    for (const nav of ['Features', 'Look', 'Install', 'Privacy', 'FAQ']) {
       assert.match(html, new RegExp(`>${nav}</a>`), `${where} does not navigate to ${nav}`);
     }
     assert.match(html, /<footer class="site-foot">/, `${where} has no footer`);
+    assert.match(html, /changelog\.html">Changelog<\/a>/, `${where} does not link the changelog`);
   }
 });
 
-test('the page works with its scripts removed', () => {
-  // The JavaScript-off reading of every page: strip the script elements, and
-  // what is left has to be the whole page. Two things could break that — an
-  // element hidden in the markup and un-hidden by a script, and a reveal whose
-  // hidden state is in the stylesheet rather than behind the root class the
-  // script sets — so both are asserted rather than assumed.
-  const css = fs.readFileSync(path.join(siteDir, 'style.css'), 'utf8');
+test('every page has a title, a description and a card of its own', async () => {
+  const { PAGES, PREVIEW, SITE_ORIGIN, imageSize } = await import('../../site/build.mjs');
+  const titles = new Set();
+  const descriptions = new Set();
+  for (const page of PAGES) {
+    const html = fs.readFileSync(path.join(out, `${page.slug}.html`), 'utf8');
+    const where = `${page.slug}.html`;
+    const title = (html.match(/<title>([^<]+)<\/title>/) ?? [])[1];
+    const description = (html.match(/<meta name="description" content="([^"]+)"/) ?? [])[1];
+    assert.ok(title && title.length >= 10 && title.length <= 80, `${where}: title "${title}"`);
+    assert.ok(description, `${where} has no description`);
+    assert.ok(
+      description.length >= 60 && description.length <= 170,
+      `${where}: a description of ${description.length} characters`,
+    );
+    assert.ok(!titles.has(title), `${where} shares its title`);
+    assert.ok(!descriptions.has(description), `${where} shares its description`);
+    titles.add(title);
+    descriptions.add(description);
 
-  // The reveal's zero-opacity rule exists ONLY under `:root.js-reveal`.
-  for (const m of css.matchAll(/([^{}]*\[data-reveal\][^{}]*)\{([^}]*)\}/g)) {
+    for (const tag of ['og:title', 'og:description', 'og:url', 'og:image', 'og:image:alt']) {
+      assert.match(html, new RegExp(`<meta property="${tag}" content="[^"]+"`), `${where}: ${tag}`);
+    }
+    assert.match(html, /<meta name="twitter:card" content="summary_large_image" \/>/);
+    assert.ok(
+      html.includes(`<meta name="twitter:image" content="${SITE_ORIGIN}/media/${PREVIEW}"`),
+      `${where}: no card picture`,
+    );
+    assert.match(html, /<link rel="icon" href="deckhq-mark\.svg" type="image\/svg\+xml" \/>/);
+    // A page that can be found says where it lives; the 404 page says not to.
+    // (In `og:url`, not a `<link rel="canonical">`: no `<link>` here is absolute.)
+    if (page.unlisted) assert.match(html, /<meta name="robots" content="noindex" \/>/);
+    const address = page.slug === 'index' ? `${SITE_ORIGIN}/` : `${SITE_ORIGIN}/${page.slug}.html`;
+    assert.ok(html.includes(`<meta property="og:url" content="${address}" />`), `${where}: og:url`);
+  }
+
+  // The card is 1200 x 630, and it is on the site at the address the tags name.
+  assert.deepEqual(imageSize(path.join(out, 'media', PREVIEW)), { width: 1200, height: 630 });
+
+  // The sitemap lists every page a reader should find, and nothing else.
+  const listed = fs.readFileSync(path.join(out, 'sitemap.txt'), 'utf8').trim().split('\n');
+  assert.equal(listed.length, PAGES.filter((p) => !p.unlisted).length);
+  for (const url of listed) {
+    assert.ok(url.startsWith(`${SITE_ORIGIN}/`), `the sitemap lists ${url}`);
+    const rel = url.slice(SITE_ORIGIN.length + 1) || 'index.html';
+    assert.ok(fs.existsSync(path.join(out, rel)), `the sitemap lists ${rel}, which was not built`);
+  }
+  assert.match(
+    fs.readFileSync(path.join(out, 'robots.txt'), 'utf8'),
+    /^Sitemap: https:\/\/dkpanseriya\.github\.io\/deckhq\/sitemap\.txt$/m,
+  );
+});
+
+test('SECURITY: no file in the built site names another host', () => {
+  // The pages are held to this above. This is everything else a browser or a
+  // crawler can open: the stylesheet, the script, the sitemap and robots.txt.
+  // (The two installers are the repository's own files and say where Node
+  // comes from; they are checked byte for byte, and are not this site's words.)
+  for (const file of walk(out, ['.css', '.js', '.txt', '.svg'])) {
+    const text = fs.readFileSync(file, 'utf8');
+    for (const m of text.matchAll(/(?:https?:)?\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)) {
+      const host = m[1].toLowerCase();
+      if (host === SELF || host === 'www.w3.org') continue;
+      assert.fail(`${path.relative(out, file)} names ${host}`);
+    }
+  }
+  // And nothing in the stylesheet or the script is fetched at all.
+  const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8');
+  assert.ok(!/url\(/i.test(css.replace(/\/\*[\s\S]*?\*\//g, '')), 'the stylesheet fetches a file');
+});
+
+test('the page works with its script removed', () => {
+  // The JavaScript-off reading of every page: strip the script element, and
+  // what is left has to be the whole page. Two things could break that: an
+  // element hidden in the markup and un-hidden by the script, and a rule that
+  // hides content until the script arrives. Both are asserted.
+  const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+  // Nothing waits for a scroll to appear: there is no reveal on this site.
+  assert.ok(!/data-reveal|js-reveal/.test(css), 'the stylesheet carries a scroll reveal');
+  // A rule may hide something only in the state the script itself sets
+  // (`.is-live`), or to swap the bar for the menu at a narrow width.
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
     const [, selector, body] = m;
-    if (!/opacity\s*:\s*0\b/.test(body)) continue;
+    if (!/display:\s*none|visibility:\s*hidden|opacity:\s*0(\.0+)?\s*;/.test(body)) continue;
     assert.match(
       selector,
-      /:root\.js-reveal/,
-      `a reveal is hidden by "${selector.trim()}", which does not wait for the script`,
+      /\.is-live|\.site-nav|\.nav-toggle|details-marker/,
+      `"${selector.trim()}" hides content without waiting for the script`,
     );
   }
-  assert.match(css, /:root\.js-reveal \[data-reveal\]/, 'the reveal is not gated on the script');
+  // An entrance may move a picture. It may not start it transparent, because
+  // an animation that never runs would leave it that way.
+  for (const m of css.matchAll(/@keyframes\s+[\w-]+\s*\{([\s\S]*?\})\s*\}/g)) {
+    assert.ok(!/opacity/.test(m[1]), 'a keyframe animates opacity');
+  }
 
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
     const where = path.relative(out, page);
     const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
-
-    // Every word of the body survives the removal: nothing on these pages is
-    // written by a script.
     const body = withoutScripts.slice(
       withoutScripts.indexOf('<main id="main">'),
       withoutScripts.indexOf('</main>'),
     );
     assert.ok(body.length > 200, `${where} has almost nothing between its main tags`);
 
-    // The only `hidden` attribute on the site is the scheme toggle, which is a
-    // control that does nothing without a script and is therefore absent
-    // without one. Anything else hidden in the markup would be content a
-    // reader with scripting off never sees.
-    for (const tag of withoutScripts.matchAll(/<(\w+)[^>]*\shidden(?:[=\s>])[^>]*>/g)) {
-      assert.match(
-        tag[0],
-        /class="theme-toggle"/,
-        `${where} hides ${tag[1]} in the markup: ${tag[0]}`,
-      );
-    }
-    assert.match(
-      html,
-      /<button class="theme-toggle" type="button" hidden/,
-      `${where} ships a scheme toggle that does nothing without a script`,
-    );
-
-    // And nothing on a page depends on an inline style to be visible.
+    // Nothing is hidden in the markup, and the script is not what writes the
+    // words: every button it adds is one the page reads complete without.
+    assert.ok(!/<\w+[^>]*\shidden(?:[=\s>])/.test(withoutScripts), `${where} hides an element`);
     assert.ok(
       !/style="[^"]*(display\s*:\s*none|opacity\s*:\s*0|visibility\s*:\s*hidden)/i.test(html),
       `${where} hides something with an inline style`,
     );
+    assert.ok(!/\sstyle="/.test(body), `${where} carries an inline style`);
+    assert.equal((html.match(/<script\b/g) ?? []).length, 1, `${where}: one script, deferred`);
+    assert.match(html, /<script src="site\.js" defer><\/script>/);
   }
 });
 
@@ -947,21 +1151,26 @@ test('the home page leads with the floor, and every band picture is lazy', async
   const { imageSize } = await import('../../site/build.mjs');
   const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
 
-  // The first picture a stranger sees is a crowded floor, and it is one the
-  // build re-renders from the product on every run.
+  // The first picture a stranger sees is the whole window on a fixture floor.
   const first = home.match(/<img[^>]*\ssrc="(media\/[^"]+)"/);
   assert.ok(first, 'the home page shows no picture from the media directory');
-  assert.equal(first[1], 'media/floor/three.png', `the hero is ${first[1]}`);
+  assert.equal(first[1], 'media/hero.png', `the hero is ${first[1]}`);
 
-  // The hero is eager and everything under it is lazy, so what a reader pays
-  // for above the fold is one picture.
+  // The hero is preloaded, at the density the screen has, and is the one
+  // picture that is not lazy; everything under it waits for the scroll.
+  assert.match(
+    home,
+    /<link rel="preload" as="image" href="media\/hero\.png" imagesrcset="media\/hero\.png 1x, media\/hero@2x\.png 2x" fetchpriority="high" \/>/,
+    'the hero is not preloaded',
+  );
   const images = [...home.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
   const fromMedia = images.filter((tag) => /\ssrc="media\//.test(tag));
   assert.ok(
-    fromMedia.length >= 6,
+    fromMedia.length >= 10,
     `expected the home page to carry pictures; found ${fromMedia.length}`,
   );
   assert.ok(!/loading="lazy"/.test(fromMedia[0]), 'the hero picture is lazy');
+  assert.match(fromMedia[0], /fetchpriority="high"/, 'the hero picture is not asked for first');
   for (const tag of fromMedia.slice(1)) {
     assert.match(
       tag,
@@ -970,9 +1179,9 @@ test('the home page leads with the floor, and every band picture is lazy', async
     );
   }
 
-  // Every picture carries its own dimensions, so nothing on the page moves
-  // while it loads. WP-94c's `addImageDimensions()` puts them there from the
-  // file itself, which is why this holds on every page and not only this one.
+  // Every picture carries its own dimensions, so nothing moves while it loads;
+  // decodes off the main thread; and offers its dense file when it has one.
+  let pairs = 0;
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
     for (const tag of html.matchAll(/<img\b[^>]*>/g)) {
@@ -981,37 +1190,40 @@ test('the home page leads with the floor, and every band picture is lazy', async
       const where = path.relative(out, page);
       assert.match(tag[0], /\swidth="\d+"/, `${where} shows ${src} with no width`);
       assert.match(tag[0], /\sheight="\d+"/, `${where} shows ${src} with no height`);
-      // And the number is the file's own, not a guess.
+      assert.match(tag[0], /\sdecoding="async"/, `${where} decodes ${src} on the main thread`);
       const size = imageSize(path.resolve(path.dirname(page), src));
-      if (!size) continue;
+      assert.ok(size, `${where}: ${src} cannot be measured`);
       assert.equal(
         `${(tag[0].match(/\swidth="(\d+)"/) ?? [])[1]}x${(tag[0].match(/\sheight="(\d+)"/) ?? [])[1]}`,
         `${size.width}x${size.height}`,
         `${where} declares the wrong size for ${src}`,
       );
+      const dense = src.replace(/\.png$/, '@2x.png');
+      if (src.endsWith('.png') && fs.existsSync(path.resolve(path.dirname(page), dense))) {
+        pairs++;
+        assert.ok(
+          tag[0].includes(` srcset="${src} 1x, ${dense} 2x"`),
+          `${where} does not offer ${dense} to a dense screen`,
+        );
+      }
     }
   }
+  assert.ok(pairs > 30, `expected most pictures to come as a pair; found ${pairs}`);
 });
 
-test('what a reader downloads above the fold on the home page', () => {
-  // The budget is 1.5 MB: the document, the stylesheet, the two scripts, the
-  // mark, and the one picture that is not lazy. Everything else on the page is
-  // below the fold and is fetched only if the reader goes there.
-  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
-  let bytes = Buffer.byteLength(home);
-  for (const name of ['style.css', 'theme.js', 'site.js', 'deckhq-mark.png']) {
-    bytes += fs.statSync(path.join(out, name)).size;
-  }
-  for (const tag of home.matchAll(/<img\b[^>]*>/g)) {
-    if (/loading="lazy"/.test(tag[0])) continue;
-    const src = (tag[0].match(/\ssrc="([^"]+)"/) ?? ['', ''])[1];
-    if (!src.startsWith('media/')) continue;
-    bytes += fs.statSync(path.join(out, src)).size;
-  }
+test('what a reader downloads before scrolling the home page', async () => {
+  // The document, the stylesheet, the script, the mark, and the one picture
+  // that is not lazy, on a dense screen. 600 KB; it was 1.5 MB.
+  const { BUDGET, pageWeight } = await import('../../site/build.mjs');
+  assert.ok(BUDGET.firstView <= 600 * 1024, 'the first-view budget was raised');
+  const bytes = pageWeight(out, 'index.html', { dpr: 2, all: false });
   assert.ok(
-    bytes <= 1.5 * 1024 * 1024,
-    `the home page's first screen is ${(bytes / 1024).toFixed(0)} KB, over 1.5 MB`,
+    bytes <= BUDGET.firstView,
+    `the home page's first view is ${(bytes / 1024).toFixed(0)} KB, over 600 KB`,
   );
+  // And read to the bottom with every loop playing, it is under 3 MB.
+  const whole = pageWeight(out, 'index.html', { dpr: 2, all: true });
+  assert.ok(whole <= 3 * 1024 * 1024, `the home page is ${(whole / 1024).toFixed(0)} KB`);
 });
 
 test('the deployment workflow builds the site it deploys', () => {

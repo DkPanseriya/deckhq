@@ -1,241 +1,379 @@
 {
-  "$schema": "see scripts/site-assets.mjs — every field is documented there",
+  "$schema": "see scripts/site-assets.mjs: every field is documented there",
   "$comment": [
-    "The site's pictures, declared — WP-94b. `node scripts/site-assets.mjs` takes",
-    "every one of them from the running product against a fixture population, on",
-    "the pinned demo clock, and writes them to docs/media/site/.",
+    "The site's pictures, declared. `node scripts/site-assets.mjs` takes every one",
+    "of them from the running product against a fixture population, on the pinned",
+    "demo clock, and writes them to docs/media/site/.",
     "",
     "A crop rectangle is in CSS pixels of the 1600x1000 stage, measured from the",
-    "top left of the page. A still is captured at device scale 2, so the file is",
-    "twice the rectangle; `width` is what it is finally written at, which is the",
-    "widest the page ever shows the picture, doubled, and never more.",
+    "top left of the page. `width` is the width of the `@2x` file; the plain file",
+    "beside it is half that, and the two are what a page's `srcset` names. A GIF",
+    "is one file at `width`, with its first frame beside it as a still.",
     "",
     "Nothing here is a mockup. An asset a fixture cannot reach is reported by the",
     "run and left out of the site; it is never staged by hand."
   ],
-  "viewport": {
-    "width": 1600,
-    "height": 1000
-  },
+  "viewport": { "width": 1600, "height": 1000 },
   "assets": [
     {
-      "name": "queue-strip",
+      "name": "hero",
       "kind": "still",
-      "population": "demo",
-      "crop": {
-        "x": 4,
-        "y": 82,
-        "w": 1220,
-        "h": 54
-      },
-      "width": 1100,
-      "note": "the waiting strip: who is waiting, for how long, in what"
+      "population": "three",
+      "crop": { "x": 0, "y": 0, "w": 1600, "h": 1000 },
+      "width": 2400,
+      "note": "the whole window: three repositories, two sessions waiting"
     },
     {
-      "name": "room-plate",
+      "name": "header-count",
       "kind": "still",
       "population": "demo",
-      "crop": {
-        "x": 400,
-        "y": 200,
-        "w": 240,
-        "h": 380
-      },
-      "width": 480,
-      "note": "one project room: its plate, its desks, its sessions"
+      "crop": { "x": 0, "y": 0, "w": 800, "h": 132 },
+      "width": 2400,
+      "note": "the header: how many need you, and the queue strip under it"
     },
     {
-      "name": "reception",
+      "name": "office",
       "kind": "still",
       "population": "demo",
-      "crop": {
-        "x": 0,
-        "y": 198,
-        "w": 400,
-        "h": 382
-      },
-      "width": 640,
-      "note": "Your Office: four waiting on the sofas, one at the chair"
+      "crop": { "x": 0, "y": 130, "w": 468, "h": 404 },
+      "width": 1400,
+      "note": "Your Office: six waiting, each with how long over its head"
     },
     {
-      "name": "lounge-bay",
+      "name": "room",
       "kind": "still",
       "population": "demo",
-      "crop": {
-        "x": 820,
-        "y": 700,
-        "w": 230,
-        "h": 180
-      },
-      "width": 460,
-      "note": "a lounge bay: benched agents, off the clock"
+      "crop": { "x": 522, "y": 130, "w": 366, "h": 408 },
+      "width": 1200,
+      "note": "one project room: its plate, its desk, its session"
     },
     {
-      "name": "idle-popover",
+      "name": "lights-off",
       "kind": "still",
       "population": "demo",
-      "press": "i",
-      "crop": {
-        "x": 1250,
-        "y": 850,
-        "w": 348,
-        "h": 150
-      },
-      "width": 680,
-      "note": "the idle chip, opened: repos nobody is working in"
+      "crop": { "x": 884, "y": 130, "w": 366, "h": 408 },
+      "width": 1200,
+      "note": "a room whose sessions are all in your office: lights off"
     },
     {
-      "name": "deck-queue",
+      "name": "lounge",
       "kind": "still",
       "population": "demo",
-      "press": ">",
-      "crop": {
-        "x": 8,
-        "y": 170,
-        "w": 1584,
-        "h": 296
-      },
-      "width": 1100,
-      "note": "the deck's Queue tab: the same queue as a table"
+      "crop": { "x": 0, "y": 530, "w": 468, "h": 470 },
+      "width": 1200,
+      "note": "the Lounge: fifteen benched sessions, off the queue"
     },
     {
-      "name": "deck-usage",
+      "name": "juniors",
       "kind": "still",
       "population": "demo",
-      "press": ">",
-      "click": "#deck-tab-usage",
-      "crop": {
-        "x": 8,
-        "y": 170,
-        "w": 1584,
-        "h": 350
-      },
-      "width": 1100,
-      "note": "the deck's Usage tab: tokens, by project"
+      "crop": { "x": 720, "y": 680, "w": 240, "h": 210 },
+      "width": 960,
+      "note": "two juniors beside their lead, each under a Junior chip"
     },
     {
-      "name": "review-card",
+      "name": "crew",
+      "kind": "still",
+      "population": "crew",
+      "phase": 0.3,
+      "crop": { "x": 1050, "y": 620, "w": 380, "h": 320 },
+      "width": 1200,
+      "note": "a crew: juniors in an arc, a cable from each to the lead's desk"
+    },
+    {
+      "name": "benches",
+      "kind": "still",
+      "population": "worktrees",
+      "crop": { "x": 1150, "y": 390, "w": 440, "h": 190 },
+      "width": 1400,
+      "note": "two worktrees as benches, each with its branch written on it"
+    },
+    {
+      "name": "worktree-room",
+      "kind": "still",
+      "population": "worktrees",
+      "crop": { "x": 846, "y": 130, "w": 754, "h": 440 },
+      "width": 1508,
+      "note": "one repository, one room: the main checkout and two benches"
+    },
+    {
+      "name": "panel",
       "kind": "still",
       "population": "demo",
       "press": "j",
-      "crop": {
-        "x": 1160,
-        "y": 136,
-        "w": 440,
-        "h": 620
-      },
-      "width": 880,
-      "note": "the panel on a session that is for review"
+      "crop": { "x": 1168, "y": 130, "w": 432, "h": 870 },
+      "width": 1080,
+      "note": "the session panel on a session that is for review"
     },
     {
-      "name": "permission-card",
+      "name": "permission",
       "kind": "still",
       "population": "demo",
       "permission": true,
       "press": "j",
-      "crop": {
-        "x": 1160,
-        "y": 140,
-        "w": 440,
-        "h": 370
-      },
-      "width": 880,
-      "note": "a real PermissionRequest, held open by its caller"
+      "crop": { "x": 1168, "y": 130, "w": 432, "h": 400 },
+      "width": 1080,
+      "note": "a real permission request, held open by its caller"
     },
     {
-      "name": "floor-crowded",
+      "name": "deck",
+      "kind": "still",
+      "population": "demo",
+      "press": ">",
+      "crop": { "x": 0, "y": 130, "w": 1100, "h": 330 },
+      "width": 2200,
+      "note": "the deck: the same queue as a table"
+    },
+    {
+      "name": "board",
+      "kind": "still",
+      "population": "board",
+      "press": "j",
+      "command": "studio board",
+      "click": "#panel button[aria-label=\"Close panel\"]",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 400 },
+      "width": 2400,
+      "note": "the Studio board: six columns, one card per piece of work"
+    },
+    {
+      "name": "look-panel",
+      "kind": "still",
+      "population": "demo",
+      "press": "l",
+      "crop": { "x": 1000, "y": 60, "w": 444, "h": 712 },
+      "width": 1110,
+      "note": "the Look panel: six controls and eleven styles as pictures"
+    },
+    {
+      "name": "light-morning",
+      "kind": "still",
+      "population": "three",
+      "press": "l",
+      "click": "text=Morning",
+      "after": "^",
+      "crop": { "x": 0, "y": 130, "w": 704, "h": 400 },
+      "width": 1200,
+      "note": "morning light: long shadows, cool daylight"
+    },
+    {
+      "name": "light-noon",
+      "kind": "still",
+      "population": "three",
+      "crop": { "x": 0, "y": 130, "w": 704, "h": 400 },
+      "width": 1200,
+      "note": "noon light, the default"
+    },
+    {
+      "name": "light-evening",
+      "kind": "still",
+      "population": "three",
+      "press": "l",
+      "click": "text=Evening",
+      "after": "^",
+      "crop": { "x": 0, "y": 130, "w": 704, "h": 400 },
+      "width": 1200,
+      "note": "evening light: the longest shadows, amber daylight"
+    },
+    {
+      "name": "rooms-subtle",
+      "kind": "still",
+      "population": "demo",
+      "crop": { "x": 522, "y": 130, "w": 1078, "h": 606 },
+      "width": 1800,
+      "note": "room colours, subtle: five rooms close to one beige"
+    },
+    {
+      "name": "rooms-zoned",
+      "kind": "still",
+      "population": "demo",
+      "press": "l",
+      "click": "button[role=\"switch\"]",
+      "after": "^",
+      "crop": { "x": 522, "y": 130, "w": 1078, "h": 606 },
+      "width": 1800,
+      "note": "room colours, zoned: a calm colour for each project"
+    },
+    {
+      "name": "theme-night-shift",
+      "kind": "still",
+      "population": "three",
+      "theme": "night shift",
+      "crop": { "x": 0, "y": 0, "w": 1600, "h": 1000 },
+      "width": 1920,
+      "note": "the night shift theme"
+    },
+    {
+      "name": "theme-blueprint",
+      "kind": "still",
+      "population": "three",
+      "theme": "blueprint",
+      "crop": { "x": 0, "y": 0, "w": 1600, "h": 1000 },
+      "width": 1920,
+      "note": "the blueprint theme"
+    },
+    {
+      "name": "size-small",
+      "kind": "still",
+      "population": "three",
+      "query": "scale=small",
+      "crop": { "x": 890, "y": 130, "w": 710, "h": 400 },
+      "width": 1200,
+      "note": "agent size small"
+    },
+    {
+      "name": "size-large",
+      "kind": "still",
+      "population": "three",
+      "query": "scale=large",
+      "crop": { "x": 890, "y": 130, "w": 710, "h": 400 },
+      "width": 1200,
+      "note": "agent size large"
+    },
+    {
+      "name": "style-studio-oak",
+      "kind": "still",
+      "population": "three",
+      "query": "look=studio-oak",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Studio oak"
+    },
+    {
+      "name": "style-night-lab",
+      "kind": "still",
+      "population": "three",
+      "query": "look=night-lab",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Night lab"
+    },
+    {
+      "name": "style-paper-office",
+      "kind": "still",
+      "population": "three",
+      "query": "look=paper-office",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Paper office"
+    },
+    {
+      "name": "style-terrazzo-hall",
+      "kind": "still",
+      "population": "three",
+      "query": "look=terrazzo-hall",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Terrazzo hall"
+    },
+    {
+      "name": "style-garden-floor",
+      "kind": "still",
+      "population": "three",
+      "query": "look=garden-floor",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Garden floor"
+    },
+    {
+      "name": "style-workshop",
+      "kind": "still",
+      "population": "three",
+      "query": "look=workshop",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Workshop"
+    },
+    {
+      "name": "style-daylight-studio",
+      "kind": "still",
+      "population": "three",
+      "query": "look=daylight-studio",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Daylight studio"
+    },
+    {
+      "name": "style-graphite-loft",
+      "kind": "still",
+      "population": "three",
+      "query": "look=graphite-loft",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Graphite loft"
+    },
+    {
+      "name": "style-nordic-wool",
+      "kind": "still",
+      "population": "three",
+      "query": "look=nordic-wool",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Nordic wool"
+    },
+    {
+      "name": "style-colour-plan",
+      "kind": "still",
+      "population": "three",
+      "query": "look=colour-plan",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Colour plan"
+    },
+    {
+      "name": "style-walnut-executive",
+      "kind": "still",
+      "population": "three",
+      "query": "look=walnut-executive",
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1920,
+      "note": "style: Walnut executive"
+    },
+    {
+      "name": "loop-floor",
       "kind": "gif",
       "population": "demo",
       "mode": "phase",
       "fps": 25,
       "seconds": 4,
-      "crop": {
-        "x": 4,
-        "y": 196,
-        "w": 1592,
-        "h": 750
-      },
-      "width": 1100,
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 870 },
+      "width": 1200,
       "note": "the whole floor with every animation running"
     },
     {
-      "name": "typing",
+      "name": "loop-walk",
       "kind": "gif",
-      "population": "demo",
-      "mode": "phase",
-      "scale": 2,
-      "fps": 25,
-      "seconds": 4,
-      "crop": {
-        "x": 460,
-        "y": 250,
-        "w": 260,
-        "h": 200
-      },
-      "width": 520,
-      "note": "typing and thinking, at two desks"
-    },
-    {
-      "name": "lounge",
-      "kind": "gif",
-      "population": "demo",
-      "mode": "phase",
-      "scale": 2,
-      "fps": 25,
-      "seconds": 4,
-      "crop": {
-        "x": 400,
-        "y": 690,
-        "w": 400,
-        "h": 260
-      },
-      "width": 800,
-      "note": "the lounge: what a benched agent does with its time"
-    },
-    {
-      "name": "hand-up",
-      "kind": "gif",
-      "population": "demo",
+      "population": "three",
       "mode": "live",
       "endTurn": "orbital-api",
       "fps": 25,
-      "seconds": 5,
-      "crop": {
-        "x": 4,
-        "y": 196,
-        "w": 800,
-        "h": 420
-      },
-      "width": 800,
-      "note": "an agent finishes, walks to Your Office and puts its hand up"
+      "seconds": 7,
+      "crop": { "x": 0, "y": 130, "w": 1600, "h": 440 },
+      "width": 1200,
+      "note": "a session finishes, walks the corridor into Your Office and sits"
     },
     {
-      "name": "room-plate-night-shift",
-      "kind": "still",
-      "population": "demo",
-      "crop": {
-        "x": 400,
-        "y": 200,
-        "w": 240,
-        "h": 380
-      },
-      "width": 480,
-      "note": "the same room in night shift",
-      "theme": "night shift"
+      "name": "loop-crew",
+      "kind": "gif",
+      "population": "crew",
+      "mode": "phase",
+      "scale": 2,
+      "fps": 20,
+      "seconds": 4,
+      "crop": { "x": 1050, "y": 620, "w": 380, "h": 320 },
+      "width": 760,
+      "note": "a crew at work: a pulse on each cable while a junior is writing"
     },
     {
-      "name": "room-plate-blueprint",
-      "kind": "still",
+      "name": "loop-office",
+      "kind": "gif",
       "population": "demo",
-      "crop": {
-        "x": 400,
-        "y": 200,
-        "w": 240,
-        "h": 380
-      },
-      "width": 480,
-      "note": "the same room in blueprint",
-      "theme": "blueprint"
+      "mode": "phase",
+      "scale": 2,
+      "fps": 25,
+      "seconds": 4,
+      "crop": { "x": 0, "y": 130, "w": 468, "h": 404 },
+      "width": 936,
+      "note": "Your Office while six wait: a page turns, a hand stays up"
     }
   ]
 }

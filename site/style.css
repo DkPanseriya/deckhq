@@ -1,96 +1,55 @@
 /*
- * The public site.
+ * DeckHQ, the site.
  *
- * ONE TOKEN SET, TWO SCHEMES. The neutrals are the product's own, copied from
- * `public/style.css` so the site and the floor cannot drift, and the light
- * scheme is the other half of the mark: `public/brand/deckhq-mark.svg` carries
- * both grounds in one file, and its light plate is the paper here. The dark
- * studio and the lit drawing table are one idea from two sides, which is what
- * the product is.
+ * One look: the product's own. The page is the dark studio the app's chrome is
+ * drawn in, and the pictures are the lit floor on the table in the middle of
+ * it. There is no light scheme here, because a second one would be the same
+ * pictures on a ground they were never drawn for.
  *
- * TWO ACCENTS, AND ONLY ONE OF THEM IS LOUD. The restrained accent is the
- * mark's antenna tip — amber — and it carries rules, current state, the focus
- * ring and the one filled button. Crimson is the product's `for_review` colour
- * and the product reserves it for that, so here it appears
- * only where the page is about something waiting on you. Neither colour sets
- * small text on a ground it does not clear 4.5:1 on; crimson clears none of
- * them in the dark scheme (3.38 on --bg) and therefore sets no text at all.
- * Every pair below is measured by `test/unit/site.test.mjs`, which recomputes
- * WCAG relative luminance from these literals.
+ * NO WEB FONT. The two families below are named and never fetched: a machine
+ * that has them shows them, every other machine shows its own system face,
+ * and the fallback is the design. Nothing in this file loads anything.
  *
- * NO WEB FONT, no `@font-face`, no `@import`, no CDN. The stacks name what a
- * machine may already have and fall back to what it certainly has, because
- * the site keeps the product's promise: it fetches nothing from anywhere else.
+ * Colour: the neutrals, amber and crimson are the app's and the mark's. Amber
+ * is the accent. Crimson means a session is waiting on you and is used for
+ * nothing else; it is a fill and a dot and never sets a word. The state
+ * colours appear once, in the key that explains them.
  */
 
-/* ------------------------------------------------------------------ tokens */
-
 :root {
-  color-scheme: dark light;
-
-  /* The dark studio — hue ~230deg, cold so the warm floor in every render
-     reads as illuminated rather than as one more brown rectangle. */
   --bg: #131419;
   --bg-2: #0e0f13;
   --surface: #1a1c23;
   --surface-2: #23262f;
   --line: #333846;
   --line-2: #464c5e;
-
-  --ink: #eceef3; /* 15.84 on --bg */
-  --ink-2: #b8bdc9; /*  9.77 */
-  --muted: #8a92a3; /*  5.89, and 4.84 on --surface-2, the worst ground it sets text on */
-
-  /* The mark's antenna tip. 8.51 on --bg: it may set text, and it is the
-     focus ring on every ground here. */
+  --ink: #eceef3;
+  --ink-2: #b8bdc9;
+  --muted: #8a92a3;
   --accent: #e4a44e;
-  --on-accent: #131419; /* 8.51 the other way round */
-  --accent-wash: rgba(228, 164, 78, 0.12);
-  --accent-line: rgba(228, 164, 78, 0.42);
-
-  /* `for_review`. A fill and a rule, never a word. --ink on it is 4.68. */
+  --on-accent: #131419;
   --crimson: #c0392b;
   --on-crimson: #eceef3;
-  --crimson-wash: rgba(192, 57, 43, 0.14);
-  --crimson-line: rgba(192, 57, 43, 0.5);
+  --head-solid: #131419;
 
-  /* The six states, as `public/render/palette.js` has them. A theme repaints
-     materials; these never move. */
   --state-working: #2e7d63;
-  --state-needs_input: #b87333;
+  --state-needs-input: #b87333;
   --state-stalled: #9a7b4f;
-  --state-for_review: #c0392b;
   --state-benched: #7b8794;
-  --state-let_go: #bdb7aa;
+  --state-let-go: #bdb7aa;
 
-  /* The sticky bar. `--head-solid` is the opaque fallback for a browser
-     without `backdrop-filter`. */
-  --head-bg: rgba(19, 20, 25, 0.72);
-  --head-solid: #15161c;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.36);
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 14px;
-  --radius-pill: 999px;
+  --t-display: clamp(2.5rem, 1.1rem + 5.4vw, 4.75rem);
+  --t-title: clamp(2.125rem, 1.4rem + 3vw, 3.5rem);
+  --t-head: clamp(1.75rem, 1.3rem + 1.9vw, 2.75rem);
+  --t-sub: clamp(1.1875rem, 1.1rem + 0.4vw, 1.4375rem);
+  --t-lede: clamp(1.125rem, 1.05rem + 0.4vw, 1.375rem);
+  --t-body: clamp(1rem, 0.97rem + 0.15vw, 1.0625rem);
+  --t-small: 0.9375rem;
+  --t-micro: 0.8125rem;
 
-  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
-
-  /* THE SCALE. A perfect fourth (1.333) between steps, fluid from a 360 px
-     phone to a 1440 px desktop. The display tops out at 80 px; above 96 a page
-     is shouting rather than designing. */
-  --t-display: clamp(2.625rem, 1.66rem + 4.3vw, 5rem); /* 42 -> 80 */
-  --t-title: clamp(2.125rem, 1.52rem + 2.7vw, 3.5rem); /* 34 -> 56 */
-  --t-head: clamp(1.625rem, 1.34rem + 1.26vw, 2.25rem); /* 26 -> 36 */
-  --t-sub: clamp(1.25rem, 1.14rem + 0.49vw, 1.5rem); /* 20 -> 24 */
-  --t-lede: clamp(1.1875rem, 1.1rem + 0.36vw, 1.375rem); /* 19 -> 22 */
-  --t-body: clamp(1.0625rem, 1.03rem + 0.16vw, 1.125rem); /* 17 -> 18 */
-  --t-small: 0.9375rem; /* 15 */
-  --t-micro: 0.8125rem; /* 13 */
-
-  /* THE GRID. Eight pixels, and every margin and pad here is one of them. */
-  --s-0: 0;
   --s-1: 0.5rem;
   --s-2: 1rem;
   --s-3: 1.5rem;
@@ -98,91 +57,15 @@
   --s-5: 3rem;
   --s-6: 4rem;
   --s-7: 6rem;
-  --s-8: 8rem;
+  --band: clamp(4.5rem, 3rem + 7vw, 9rem);
 
-  /* Content 1200; prose a reading measure; a band the whole window. */
-  --content: 75rem; /* 1200 */
-  --wide: 62rem; /* 992 */
-  --measure: 38rem; /* ~68ch at 18px */
-  --gutter: clamp(1.25rem, 4.5vw, 3rem);
-  --head-h: 3.75rem;
-
-  /* Reveals, and the one curve this site eases on. */
+  --wrap: 76rem;
+  --gutter: clamp(1rem, 0.4rem + 2.6vw, 2.5rem);
+  --radius: 12px;
+  --radius-sm: 6px;
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --reveal-ms: 340ms;
-
-  /* A semantic z scale. Nothing on this site is 9999. */
-  --z-sticky: 20;
-  --z-menu: 30;
-  --z-skip: 40;
 }
-
-/* The light half of the same set, written twice on purpose: once for the OS
-   preference and once for the toggle. `:not([data-theme='dark'])` is what lets
-   the toggle win against the OS in both directions. */
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) {
-    color-scheme: light;
-
-    --bg: #f4f2ed; /* the mark's own light plate */
-    --bg-2: #eae6dd;
-    --surface: #fbfaf7;
-    --surface-2: #e8e4da;
-    --line: #d8d3c8; /* the mark's own rim */
-    --line-2: #bdb6a7;
-
-    --ink: #1b1e25; /* the mark's own form. 14.91 on --bg */
-    --ink-2: #3d4450; /*  8.77 */
-    --muted: #5f6673; /*  5.16, and 4.55 on --surface-2 */
-
-    /* A step darker than the mark's light accent (#b5731a, 4.06 on the plate —
-       under the text floor). #8a5510 measures 5.54 and may set words. */
-    --accent: #8a5510;
-    --on-accent: #fbfaf7;
-    --accent-wash: rgba(138, 85, 16, 0.1);
-    --accent-line: rgba(138, 85, 16, 0.42);
-
-    --crimson: #a32a1e; /* 6.46 on --bg; white on it is 7.22 */
-    --on-crimson: #ffffff;
-    --crimson-wash: rgba(163, 42, 30, 0.09);
-    --crimson-line: rgba(163, 42, 30, 0.45);
-
-    --head-bg: rgba(244, 242, 237, 0.78);
-    --head-solid: #f6f4ef;
-    --shadow: 0 1px 2px rgba(27, 30, 37, 0.06), 0 12px 32px rgba(27, 30, 37, 0.1);
-  }
-}
-
-:root[data-theme='light'] {
-  color-scheme: light;
-
-  --bg: #f4f2ed;
-  --bg-2: #eae6dd;
-  --surface: #fbfaf7;
-  --surface-2: #e8e4da;
-  --line: #d8d3c8;
-  --line-2: #bdb6a7;
-
-  --ink: #1b1e25;
-  --ink-2: #3d4450;
-  --muted: #5f6673;
-
-  --accent: #8a5510;
-  --on-accent: #fbfaf7;
-  --accent-wash: rgba(138, 85, 16, 0.1);
-  --accent-line: rgba(138, 85, 16, 0.42);
-
-  --crimson: #a32a1e;
-  --on-crimson: #ffffff;
-  --crimson-wash: rgba(163, 42, 30, 0.09);
-  --crimson-line: rgba(163, 42, 30, 0.45);
-
-  --head-bg: rgba(244, 242, 237, 0.78);
-  --head-solid: #f6f4ef;
-  --shadow: 0 1px 2px rgba(27, 30, 37, 0.06), 0 12px 32px rgba(27, 30, 37, 0.1);
-}
-
-/* ------------------------------------------------------------------- base */
 
 *,
 *::before,
@@ -191,334 +74,70 @@
 }
 
 html {
-  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
+  color-scheme: dark;
   scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink-2);
-  font-family: var(--font-sans);
-  font-size: var(--t-body);
-  line-height: 1.65;
-  font-variant-numeric: tabular-nums;
+  font: 400 var(--t-body) / 1.65 var(--sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+
+img,
+picture {
+  display: block;
+  max-width: 100%;
+}
+
+img {
+  height: auto;
+}
+
+a {
+  color: var(--ink);
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 0.2em;
+  text-decoration-thickness: 1px;
+  transition: text-decoration-color 160ms var(--ease);
+}
+
+a:hover {
+  text-decoration-color: var(--accent);
 }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
-  border-radius: 2px;
+  border-radius: 3px;
 }
-
-/* ------------------------------------------------------------- the header */
-
-.skip-link {
-  position: fixed;
-  left: var(--s-2);
-  top: var(--s-2);
-  z-index: var(--z-skip);
-  padding: var(--s-1) var(--s-2);
-  background: var(--accent);
-  color: var(--on-accent);
-  border-radius: var(--radius-md);
-  font-size: var(--t-small);
-  font-weight: 600;
-  text-decoration: none;
-  transform: translateY(-300%);
-  transition: transform 160ms var(--ease);
-}
-
-.skip-link:focus {
-  transform: none;
-}
-
-.site-head {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-sticky);
-  display: flex;
-  align-items: center;
-  gap: var(--s-3);
-  min-height: var(--head-h);
-  padding: var(--s-1) var(--gutter);
-  background: var(--head-solid);
-  border-bottom: 1px solid var(--line);
-}
-
-@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
-  .site-head {
-    background: var(--head-bg);
-    -webkit-backdrop-filter: blur(14px) saturate(150%);
-    backdrop-filter: blur(14px) saturate(150%);
-  }
-}
-
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s-1);
-  margin-right: auto;
-  color: var(--ink);
-  font-weight: 600;
-  font-size: var(--t-small);
-  letter-spacing: 0.01em;
-  text-decoration: none;
-}
-
-/* The product mark, as the raster rendered from the SVG. */
-.brand-mark {
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  display: block;
-  border: 0;
-  border-radius: 6px;
-  background: none;
-}
-
-.site-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--s-1) var(--s-3);
-  font-size: var(--t-small);
-}
-
-.site-nav a {
-  position: relative;
-  color: var(--muted);
-  text-decoration: none;
-  padding: 2px 0;
-  white-space: nowrap;
-  transition: color 140ms var(--ease);
-}
-
-.site-nav a:hover {
-  color: var(--ink);
-}
-
-.site-nav a[aria-current='page'] {
-  color: var(--ink);
-}
-
-.site-nav a[aria-current='page']::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -2px;
-  height: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
-.theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  flex: 0 0 auto;
-  padding: 0;
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  color: var(--muted);
-  cursor: pointer;
-  transition:
-    color 140ms var(--ease),
-    border-color 140ms var(--ease);
-}
-
-.theme-toggle:hover {
-  color: var(--ink);
-  border-color: var(--line-2);
-}
-
-.theme-toggle svg {
-  width: 15px;
-  height: 15px;
-  display: block;
-}
-
-/* Only one of the two glyphs is ever drawn, and which one says what pressing
-   it would do. */
-.theme-toggle .i-sun {
-  display: none;
-}
-
-:root[data-theme='light'] .theme-toggle .i-sun,
-.theme-toggle .i-moon {
-  display: block;
-}
-
-:root[data-theme='light'] .theme-toggle .i-moon {
-  display: none;
-}
-
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme='dark']) .theme-toggle .i-sun {
-    display: block;
-  }
-
-  :root:not([data-theme='dark']) .theme-toggle .i-moon {
-    display: none;
-  }
-}
-
-/* Under 720 px: the brand, the toggle, everything else behind one disclosure.
-   `<details>` is the whole mechanism, so it opens with scripting off. */
-.nav-toggle {
-  display: none;
-}
-
-@media (max-width: 45rem) {
-  .site-nav {
-    display: none;
-  }
-
-  .nav-toggle {
-    display: block;
-    position: relative;
-  }
-
-  .nav-toggle > summary {
-    list-style: none;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45em;
-    padding: 0.3rem 0.7rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-pill);
-    color: var(--ink);
-    font-size: var(--t-micro);
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-
-  .nav-toggle > summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .nav-toggle[open] > summary {
-    border-color: var(--line-2);
-  }
-
-  .nav-drawer {
-    position: absolute;
-    right: 0;
-    top: calc(100% + var(--s-1));
-    z-index: var(--z-menu);
-    display: grid;
-    gap: var(--s-1);
-    min-width: 14rem;
-    padding: var(--s-2);
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow);
-    font-size: var(--t-small);
-  }
-
-  .nav-drawer a {
-    color: var(--ink-2);
-    text-decoration: none;
-    padding: 2px 0;
-  }
-
-  .nav-drawer a[aria-current='page'] {
-    color: var(--accent);
-    font-weight: 600;
-  }
-
-  .nav-drawer hr {
-    margin: var(--s-1) 0;
-    border: 0;
-    border-top: 1px solid var(--line);
-  }
-}
-
-/* ---------------------------------------------------------------- layout */
-
-/* `main` owns no padding: every direct child supplies its own gutter. That is
-   what lets a band be the whole window without the `100vw` trick and the
-   horizontal scrollbar that comes with it. */
-main > * {
-  padding-inline: var(--gutter);
-}
-
-main > .bleed {
-  padding-inline: 0;
-}
-
-.prose {
-  max-width: var(--measure);
-  margin-inline: auto;
-}
-
-/* A column of prose inside a band page. The BLOCK is the shell, so it lines up
-   with the section heads above and below it; the WORDS are a reading measure,
-   so they do not run to 1200 px. Centring the block instead would put one
-   left-aligned page and one centred page on the same scroll. */
-.band {
-  max-width: var(--content);
-  margin-inline: auto;
-}
-
-.band > * {
-  max-width: var(--measure);
-}
-
-.wide {
-  max-width: var(--wide);
-  margin-inline: auto;
-}
-
-.shell {
-  max-width: var(--content);
-  margin-inline: auto;
-}
-
-.prose,
-.band,
-.section {
-  padding-block: var(--s-5);
-}
-
-/* The reference pages are one long article and want their top air back. */
-main > .prose:first-child {
-  padding-top: var(--s-6);
-}
-
-main > :last-child {
-  padding-bottom: var(--s-7);
-}
-
-/* ------------------------------------------------------------ typography */
 
 h1,
 h2,
-h3,
-h4 {
+h3 {
+  margin: 0;
   color: var(--ink);
   font-weight: 600;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
   text-wrap: balance;
-  margin: var(--s-5) 0 var(--s-2);
-  scroll-margin-top: calc(var(--head-h) + var(--s-2));
 }
 
 h1 {
   font-size: var(--t-title);
+  line-height: 1.05;
   letter-spacing: -0.03em;
-  margin-top: 0;
 }
 
 h2 {
   font-size: var(--t-head);
+  line-height: 1.1;
+  letter-spacing: -0.025em;
 }
 
 h3 {
@@ -527,39 +146,18 @@ h3 {
   letter-spacing: -0.015em;
 }
 
-h4 {
-  font-size: var(--t-body);
-  letter-spacing: -0.005em;
-  color: var(--ink-2);
-}
-
 p,
 ul,
-ol {
-  margin: 0 0 var(--s-2);
+ol,
+dl,
+figure,
+pre {
+  margin: 0;
+}
+
+p {
+  max-width: 62ch;
   text-wrap: pretty;
-}
-
-li {
-  margin-bottom: var(--s-1);
-}
-
-li > ul,
-li > ol {
-  margin-top: var(--s-1);
-}
-
-a {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: var(--accent-line);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-  transition: text-decoration-color 140ms var(--ease);
-}
-
-a:hover {
-  text-decoration-color: var(--accent);
 }
 
 strong {
@@ -567,1168 +165,579 @@ strong {
   font-weight: 600;
 }
 
-em {
-  font-style: italic;
+code,
+kbd,
+pre {
+  font-family: var(--mono);
+  font-size: 0.9em;
 }
-
-hr {
-  border: 0;
-  border-top: 1px solid var(--line);
-  margin: var(--s-4) 0;
-}
-
-blockquote {
-  margin: var(--s-4) 0;
-  padding: var(--s-1) 0 var(--s-1) var(--s-3);
-  border-left: 1px solid var(--accent);
-  color: var(--ink);
-  font-size: var(--t-lede);
-  line-height: 1.45;
-  letter-spacing: -0.01em;
-}
-
-blockquote p:last-child {
-  margin-bottom: 0;
-}
-
-.lede {
-  font-size: var(--t-lede);
-  line-height: 1.5;
-  color: var(--ink);
-}
-
-.muted {
-  color: var(--muted);
-  font-size: var(--t-small);
-}
-
-/* The one kicker this site has, and it is not above every section: it names
-   what a band is FOR when the band is a list of many things. */
-.kicker {
-  display: block;
-  margin: 0 0 var(--s-1);
-  color: var(--accent);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-/* ------------------------------------------------------------------ code */
 
 code {
-  font-family: var(--font-mono);
-  font-size: 0.86em;
+  color: var(--ink);
   background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  padding: 0.1em 0.34em;
-  color: var(--ink);
-  word-break: break-word;
-}
-
-pre {
-  margin: var(--s-3) 0;
-  padding: var(--s-2) var(--s-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  overflow-x: auto;
-}
-
-pre code {
-  font-size: var(--t-small);
-  line-height: 1.6;
-  background: none;
-  border: 0;
-  padding: 0;
-  color: var(--ink-2);
-  word-break: normal;
-}
-
-/* A line to run, with the button `site.js` adds. With scripting off it is
-   still a line to select and copy, which is what it always was. */
-.command {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  margin: var(--s-2) 0;
-  padding: var(--s-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  font-family: var(--font-mono);
-  font-size: var(--t-small);
-  line-height: 1.5;
-  color: var(--ink);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
   overflow-wrap: anywhere;
 }
 
-.command::before {
-  content: '$';
-  flex: 0 0 auto;
-  align-self: flex-start;
-  color: var(--accent);
-}
-
-.copy {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  margin-left: auto;
-  padding: 0.28rem 0.6rem;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-  font-family: var(--font-sans);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    color 140ms var(--ease),
-    border-color 140ms var(--ease);
-}
-
-.copy:hover {
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0.05em 0.4em;
   color: var(--ink);
-  border-color: var(--line-2);
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
 }
 
-.copy[data-copied='yes'] {
-  color: var(--accent);
-  border-color: var(--accent-line);
-}
-
-/* The doctor report: numbers, mono, tabular, wider than a reading measure
-   because it is the point of the band it sits in. */
-.report {
-  background: var(--bg-2);
-  max-width: var(--wide);
-  margin-inline: 0;
-}
-
-.report code {
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---------------------------------------------------------------- tables */
-
-.table-scroll {
-  overflow-x: auto;
-  margin: var(--s-4) auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  max-width: var(--wide);
+.wrap {
   width: 100%;
+  max-width: calc(var(--wrap) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
 }
 
-table {
-  border-collapse: collapse;
-  width: 100%;
+/* A grid or flex child is as narrow as its column, never as wide as the
+   longest command inside it. */
+:where(.split, .split-copy, .split-media, .wide, .ways, .way, .cols, .cols > *) > *,
+:where(.mosaic, .mosaic > *, .hero-copy, .page-head, .section-head, .switcher) > *,
+:where(.switch-stage, .compare, .actions, .faq details > div) > * {
+  min-width: 0;
+}
+
+.lede {
+  color: var(--ink-2);
+  font-size: var(--t-lede);
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  max-width: 44ch;
+}
+
+.quiet {
+  color: var(--muted);
   font-size: var(--t-small);
 }
 
-th,
-td {
-  text-align: left;
-  vertical-align: top;
+.skip-link {
+  position: absolute;
+  left: var(--s-2);
+  top: -4rem;
+  z-index: 30;
   padding: var(--s-1) var(--s-2);
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: var(--s-2);
+}
+
+/* ------------------------------------------------------------- the bar */
+
+.site-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--head-solid);
   border-bottom: 1px solid var(--line);
 }
 
-th {
-  color: var(--muted);
+.head-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  min-height: 3.75rem;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--ink);
   font-weight: 600;
-  font-size: var(--t-micro);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  background: var(--surface);
-  white-space: nowrap;
+  font-size: 1.0625rem;
+  letter-spacing: -0.01em;
+  text-decoration: none;
 }
 
-tbody tr:last-child td {
-  border-bottom: 0;
+.site-nav {
+  display: flex;
+  gap: var(--s-3);
+  margin-left: auto;
 }
 
-td code {
-  white-space: nowrap;
-}
-
-.state-cell {
-  white-space: nowrap;
-}
-
-/* --------------------------------------------------------------- figures */
-
-figure {
-  margin: var(--s-4) auto;
-  max-width: var(--wide);
-}
-
-img {
-  display: block;
-  max-width: 100%;
-  height: auto;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
-figcaption {
-  margin-top: var(--s-1);
-  color: var(--muted);
+.site-nav a,
+.head-out,
+.nav-drawer a {
+  color: var(--ink-2);
   font-size: var(--t-small);
-  line-height: 1.5;
+  text-decoration: none;
+  transition: color 160ms var(--ease);
 }
 
-/* What an image IS, in its own caption. The build refuses a mockup
-   whose caption does not say `design illustration` — `docs/MEDIA.md`. */
-.tag {
-  display: inline-block;
-  margin-left: 0.4rem;
-  padding: 0.1em 0.55em;
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  letter-spacing: 0.02em;
-  color: var(--ink-2);
-  white-space: nowrap;
-  vertical-align: 0.08em;
+.site-nav a {
+  padding-block: 1.15rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
 }
 
-.tag--render {
-  border-color: color-mix(in srgb, var(--state-working) 55%, transparent);
-  color: var(--ink-2);
-}
-
-.tag--illustration {
-  border-color: color-mix(in srgb, var(--state-needs_input) 60%, transparent);
-  color: var(--ink-2);
-}
-
-/* What is designed and not built. It sits on the picture's own caption
-   rather than in a paragraph under it, because the reader who needs it most is
-   the one skimming the pictures and reading none of the words. */
-.tag--coming {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+.site-nav a:hover,
+.head-out:hover,
+.nav-drawer a:hover {
   color: var(--ink);
 }
 
-/* ------------------------------------------------------------------ hero */
-
-.hero {
-  padding-top: clamp(var(--s-4), 4.5vw, var(--s-6));
-  padding-bottom: var(--s-3);
-  text-align: center;
+.site-nav a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
 }
 
-.hero-inner {
-  max-width: 58rem;
-  margin-inline: auto;
+.head-out {
+  padding: 0.4rem 0.85rem;
+  color: var(--ink);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
 }
 
-.hero h1 {
-  font-size: var(--t-display);
-  letter-spacing: -0.035em;
-  line-height: 1.02;
-  margin: 0 0 var(--s-3);
+.head-out:hover {
+  border-color: var(--ink-2);
 }
 
-.hero-sub {
-  max-width: 38rem;
-  margin: 0 auto var(--s-3);
-  font-size: var(--t-lede);
-  line-height: 1.5;
-  color: var(--ink-2);
+.nav-toggle {
+  display: none;
+  margin-left: auto;
 }
 
-.hero-mark {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto var(--s-2);
-  border: 0;
-  border-radius: 14px;
-  background: none;
+.nav-toggle summary {
+  padding: 0.4rem 0.85rem;
+  color: var(--ink);
+  font-size: var(--t-small);
+  list-style: none;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  cursor: pointer;
 }
 
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--s-2);
-  margin: 0 0 var(--s-2);
+.nav-toggle summary::-webkit-details-marker {
+  display: none;
 }
 
-/* The install band's download buttons sit at the reading edge rather than in
-   the middle of the page, because the section head above them is left-aligned. */
-.actions--start {
-  justify-content: flex-start;
-  margin-top: var(--s-3);
+.nav-drawer {
+  position: absolute;
+  inset: 100% 0 auto 0;
+  display: grid;
+  padding: var(--s-1) var(--gutter) var(--s-3);
+  background: var(--head-solid);
+  border-bottom: 1px solid var(--line);
 }
+
+.nav-drawer a {
+  padding-block: 0.8rem;
+  font-size: var(--t-body);
+  border-bottom: 1px solid var(--line);
+}
+
+.nav-drawer a[aria-current='page'] {
+  color: var(--ink);
+}
+
+@media (max-width: 47.99rem) {
+  .site-nav,
+  .head-out {
+    display: none;
+  }
+
+  .nav-toggle {
+    display: block;
+  }
+}
+
+/* ---------------------------------------------------- buttons, commands */
 
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5em;
-  padding: 0.7rem 1.4rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  font-size: var(--t-small);
+  gap: 0.5rem;
+  padding: 0.7rem 1.15rem;
+  color: var(--on-accent);
   font-weight: 600;
-  letter-spacing: 0.005em;
+  font-size: var(--t-small);
   text-decoration: none;
-  cursor: pointer;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
   transition:
-    transform 180ms var(--ease),
-    background-color 140ms var(--ease),
-    border-color 140ms var(--ease);
+    transform 160ms var(--ease),
+    background 160ms var(--ease);
 }
 
 .btn:hover {
   transform: translateY(-1px);
 }
 
-.btn--primary {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-.btn--primary:hover {
-  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
-}
-
 .btn--ghost {
+  color: var(--ink);
   background: transparent;
   border-color: var(--line-2);
-  color: var(--ink);
 }
 
 .btn--ghost:hover {
+  border-color: var(--ink-2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+/* A command on a line of its own. The text is selectable with or without the
+   button, which the script adds only where it can copy. */
+.cmd {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  max-width: 100%;
+  padding: 0.35rem 0.4rem 0.35rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.cmd code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.5rem 0;
+  color: var(--ink);
+  font-size: var(--t-body);
+  white-space: nowrap;
+  overflow-x: auto;
+  background: none;
+  scrollbar-width: none;
+}
+
+.cmd code::before {
+  content: '$ ';
+  color: var(--muted);
+}
+
+.cmd--ps code::before {
+  content: '> ';
+}
+
+.cmd button {
+  flex: none;
+  padding: 0.45rem 0.8rem;
+  color: var(--ink);
+  font: 500 var(--t-micro) / 1.2 var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 160ms var(--ease);
+}
+
+.cmd button:hover {
+  border-color: var(--ink-2);
+}
+
+.cmd button[data-done] {
+  color: var(--on-accent);
+  background: var(--accent);
   border-color: var(--accent);
 }
 
-.hero-meta {
+.cmd--hero {
+  width: min(100%, 23rem);
+}
+
+.cmd--hero code {
+  font-size: var(--t-lede);
+}
+
+/* ------------------------------------------------------------ the hero */
+
+.hero {
+  padding-top: clamp(3rem, 2rem + 5vw, 6.5rem);
+}
+
+.hero-copy {
+  display: grid;
+  gap: var(--s-3);
+  justify-items: start;
+}
+
+.hero h1 {
+  max-width: 15ch;
+  font-size: var(--t-display);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+}
+
+.hero .lede {
+  max-width: 40ch;
+}
+
+.hero-note {
   color: var(--muted);
   font-size: var(--t-small);
 }
 
-/* THE HERO IMAGE. A band the width of the window with a fixed aspect, so the
-   picture can never move the copy under it while it loads. On a phone the same
-   file is drawn at 2x and the box crops a detail out of it: a 1600 px floor
-   letterboxed into 360 px is a smudge, and a room out of it is a room. */
 .hero-shot {
-  margin-top: var(--s-3);
-  aspect-ratio: 16 / 7;
-  overflow: hidden;
-  background: var(--bg-2);
-  border-block: 1px solid var(--line);
+  margin-top: clamp(2.5rem, 1.5rem + 4vw, 5rem);
 }
 
-.hero-shot img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 46%;
-  border: 0;
-  border-radius: 0;
-  background: none;
-}
-
-/* A 1600 px floor letterboxed into a 375 px phone is a smudge; one room out
-   of it is a room. The box changes shape and the picture is drawn at 2.6x
-   inside it. A percentage margin resolves against the container's WIDTH in
-   both axes, which keeps this the same crop at every phone width. */
-@media (max-width: 45rem) {
+/* The window rises into place once, on load. It is never hidden: the picture
+   is there from the first frame, and only its position moves. */
+@media (prefers-reduced-motion: no-preference) {
   .hero-shot {
-    aspect-ratio: 4 / 3;
-  }
-
-  .hero-shot img {
-    width: 260%;
-    max-width: none;
-    height: auto;
-    margin: -32% 0 0 -6%;
-    object-fit: fill;
+    animation: rise 900ms var(--ease) both;
   }
 }
 
-.shot-note {
-  max-width: var(--content);
-  margin: var(--s-1) auto 0;
-  padding-inline: var(--gutter);
-  color: var(--muted);
-  font-size: var(--t-micro);
+@keyframes rise {
+  from {
+    transform: translateY(28px);
+  }
 }
 
-/* ----------------------------------------------------------------- bands */
+/* ------------------------------------------------------------ pictures */
 
-/* THE BAND GRAMMAR. One picture, one headline, two lines; odd bands put the
-   picture right, even bands left, and under 60rem all of them are one
-   column. */
-.section {
-  max-width: var(--content);
-  margin-inline: auto;
+.shot {
+  position: relative;
 }
 
-.section-head {
-  max-width: var(--measure);
-  margin: 0 0 var(--s-4);
+.shot img {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
-/* Prose that is a direct child of a band section keeps the reading measure the
-   section head has. Without this a single paragraph under a gallery runs the
-   whole 1200 px and reads as a different page from the one above it. */
-.section > h2,
-.section > h3,
-.section > p {
-  max-width: var(--measure);
-}
-
-.section-head h2 {
-  margin-top: 0;
-}
-
-.section-head > p {
-  color: var(--ink-2);
-}
-
-.section-head > :last-child {
-  margin-bottom: 0;
-}
-
-/* The words under a picture or a report, on the same left edge as the head
-   above it. */
-.section-foot {
-  max-width: var(--measure);
-  margin-top: var(--s-3);
-}
-
-.section-foot :last-child {
-  margin-bottom: 0;
-}
-
-.bands {
-  display: grid;
-  gap: var(--s-6);
-}
-
-.band-row {
-  display: grid;
-  gap: var(--s-3) var(--s-6);
-  align-items: center;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-}
-
-.band-row:nth-child(even) > .band-shot {
-  order: -1;
-}
-
-.band-copy h2,
-.band-copy h3 {
-  margin-top: 0;
-  margin-bottom: var(--s-2);
-}
-
-.band-copy p {
-  color: var(--ink-2);
-  margin-bottom: var(--s-2);
-}
-
-.band-copy p:last-child {
-  margin-bottom: 0;
-}
-
-.band-shot {
-  margin: 0;
-  max-width: none;
-}
-
-/* Never enlarged. The pictures are crops now, and they are not all the
-   same shape — a queue strip is 1100 x 49 and a room plate is 480 x 760. A
-   narrow one is drawn at the size it was taken and centred; only a picture
-   wider than the column is scaled, and only down. */
-.band-shot img {
-  display: block;
-  width: auto;
-  max-width: 100%;
-  height: auto;
-  margin-inline: auto;
-  border-radius: var(--radius-lg);
+.shot--window img {
   box-shadow: var(--shadow);
 }
 
-.band-shot figcaption {
-  font-size: var(--t-micro);
+.shot--ui img {
+  width: auto;
+  margin-inline: auto;
+  box-shadow: var(--shadow);
 }
 
-@media (max-width: 60rem) {
-  .band-row {
+.shot figcaption {
+  margin-top: var(--s-2);
+  color: var(--muted);
+  font-size: var(--t-small);
+  line-height: 1.5;
+  max-width: 60ch;
+}
+
+.tag {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.1rem 0.55rem;
+  color: var(--ink);
+  font: 500 var(--t-micro) / 1.5 var(--mono);
+  letter-spacing: 0.02em;
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+}
+
+.tag--coming {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* --------------------------------------------------- bands and sections */
+
+.band {
+  padding-block: var(--band);
+}
+
+.band--deep {
+  background: var(--bg-2);
+  border-block: 1px solid var(--line);
+}
+
+.band--tight {
+  padding-block: calc(var(--band) * 0.6);
+}
+
+.section-head {
+  display: grid;
+  gap: var(--s-3);
+  margin-bottom: clamp(2.5rem, 1.5rem + 3vw, 4.5rem);
+}
+
+.section-head h2 {
+  max-width: 20ch;
+}
+
+.section-head .lede {
+  max-width: 52ch;
+}
+
+.page-head {
+  display: grid;
+  gap: var(--s-3);
+  padding-block: clamp(3rem, 2rem + 5vw, 6rem) clamp(2rem, 1rem + 3vw, 3.5rem);
+}
+
+.page-head h1 {
+  max-width: 18ch;
+}
+
+/* Words beside a picture. Twelve columns; the picture takes seven. */
+.split {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--s-4);
+  row-gap: var(--s-4);
+  align-items: center;
+}
+
+.split > .split-copy {
+  grid-column: 1 / span 5;
+  display: grid;
+  gap: var(--s-3);
+  align-content: center;
+}
+
+.split > .split-media {
+  grid-column: 7 / span 6;
+}
+
+.split--wide > .split-media {
+  grid-column: 6 / span 7;
+}
+
+.split--flip > .split-copy {
+  grid-column: 8 / span 5;
+  grid-row: 1;
+}
+
+.split--flip > .split-media {
+  grid-column: 1 / span 6;
+  grid-row: 1;
+}
+
+.split--flip.split--wide > .split-media {
+  grid-column: 1 / span 7;
+}
+
+.split + .split,
+.split + .wide,
+.wide + .split {
+  margin-top: var(--band);
+}
+
+.wide {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.wide > .split-copy {
+  display: grid;
+  gap: var(--s-3);
+  max-width: 44rem;
+}
+
+@media (max-width: 55.99rem) {
+  /* Eleven gaps are wider than a phone. One column, and nothing to span. */
+  .split {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .band-row:nth-child(even) > .band-shot {
-    order: 0;
+  .split > .split-copy,
+  .split > .split-media,
+  .split--wide > .split-media,
+  .split--flip > .split-copy,
+  .split--flip > .split-media,
+  .split--flip.split--wide > .split-media {
+    grid-column: 1 / -1;
+    grid-row: auto;
   }
 }
 
-/* A rule that is a section break rather than a decoration. */
-.hairline {
-  max-width: var(--content);
-  margin: var(--s-6) auto 0;
-  border: 0;
-  border-top: 1px solid var(--line);
-}
-
-/* --------------------------------------------------------------- feeling */
-
-/* Three cards, each a crop of the floor, done by the box rather than by a
-   second copy of the file. */
-.feel {
+/* Short facts under a paragraph: a rule above each, no boxes. */
+.facts {
   display: grid;
-  gap: var(--s-3);
-  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-  margin: 0;
+  gap: 0;
   padding: 0;
   list-style: none;
 }
 
-.feel > li {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+.facts > li {
+  padding-block: 0.9rem;
+  border-top: 1px solid var(--line);
+  max-width: 62ch;
 }
 
-/* The crop is the FILE, not a margin trick over a whole floor.
-   `site/assets.json` declares the rectangle and the capture pipeline cuts it,
-   so the reader downloads a detail rather than a 1600 px floor to see one
-   corner of. The box keeps a fixed aspect so three cards line up whatever
-   shape the three pictures are. */
-.feel-crop {
-  display: block;
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-  background: var(--bg-2);
+.facts > li:last-child {
   border-bottom: 1px solid var(--line);
 }
 
-.feel-crop img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: 50% 42%;
-  border: 0;
-  border-radius: 0;
-  background: none;
-}
-
-.feel-body {
-  padding: var(--s-2) var(--s-3) var(--s-3);
-}
-
-.feel-body h3 {
-  margin: 0 0 var(--s-1);
-  font-size: var(--t-body);
-  letter-spacing: -0.005em;
-}
-
-.feel-body p {
-  margin: 0;
-  font-size: var(--t-small);
-}
-
-.feel-body .tag {
-  margin: var(--s-2) 0 0;
-}
-
-/* ------------------------------------------------------------ never-does */
-
-/* Five short cards on a deeper ground. The marker is the accent by default;
-   `--marker` goes crimson on exactly one band — the one about what you are
-   owed — because spending crimson on decoration is a bug. */
-.never {
-  background: var(--bg-2);
-  border-block: 1px solid var(--line);
-  padding-block: var(--s-6);
-}
-
-.never-inner {
-  max-width: var(--content);
-  margin-inline: auto;
-  padding-inline: var(--gutter);
-}
-
-/* Five, and 12rem is the figure that makes them five across at 1200: six
-   tracks do not fit, five do, and `auto-fit` collapses what is left. */
-.never-list {
-  display: grid;
-  gap: var(--s-2) var(--s-3);
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  margin: var(--s-4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.never-list > li {
-  margin: 0;
-  padding: var(--s-3) 0 0;
-  border-top: 1px solid var(--line);
-}
-
-.never-list h3 {
-  margin: 0 0 var(--s-1);
-  font-size: var(--t-body);
-  letter-spacing: -0.005em;
-}
-
-.never-list p {
-  margin: 0;
-  font-size: var(--t-small);
-  color: var(--muted);
-}
-
-.never-list > li::before {
-  content: '';
-  display: block;
-  width: 1.4rem;
-  height: 2px;
-  margin: 0 0 var(--s-2);
-  border-radius: 2px;
-  background: var(--marker, var(--accent));
-}
-
-.never-list--owed {
-  --marker: var(--crimson);
-}
-
-/* ------------------------------------------------------------ install band */
-
-.ways {
-  display: grid;
-  gap: var(--s-3);
-  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
-  margin: var(--s-4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.ways > li {
-  margin: 0;
-  padding: var(--s-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-}
-
-.ways h3 {
-  margin: 0 0 var(--s-1);
-  font-size: var(--t-body);
-  letter-spacing: -0.005em;
-}
-
-.ways > li > p {
-  font-size: var(--t-small);
-  color: var(--muted);
-}
-
-.ways .command {
-  background: var(--bg-2);
-  margin-bottom: 0;
-}
-
-/* -------------------------------------------------------------- the state strip */
-
-/* The six states, as the floor paints them. A dot, a name, and a line of what
-   it means — the colour is never the only carrier. */
+/* The states, as the floor colours them. The one place a state colour is
+   used on this site, and it is a dot beside a neutral word. */
 .states {
   display: grid;
-  gap: var(--s-2);
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  margin: var(--s-4) 0;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--s-3) var(--s-4);
   padding: 0;
   list-style: none;
 }
 
-.states > li {
-  margin: 0;
-  padding: var(--s-2);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+.states li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.75rem;
+  align-items: baseline;
 }
 
 .states b {
-  display: block;
   color: var(--ink);
-  font-size: var(--t-small);
   font-weight: 600;
 }
 
 .states span {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: var(--t-micro);
-  line-height: 1.45;
+  grid-column: 2;
+  color: var(--ink-2);
+  font-size: var(--t-small);
 }
 
-.state-dot {
-  display: inline-block;
-  width: 0.6em;
-  height: 0.6em;
+.dot {
+  width: 0.7rem;
+  height: 0.7rem;
   border-radius: 50%;
-  margin-right: 0.5em;
-  vertical-align: 0.06em;
+  background: var(--muted);
 }
 
 .dot--working {
   background: var(--state-working);
 }
 
-.dot--needs_input {
-  background: var(--state-needs_input);
+.dot--needs-input {
+  background: var(--state-needs-input);
+}
+
+.dot--for-review {
+  background: var(--crimson);
 }
 
 .dot--stalled {
   background: var(--state-stalled);
 }
 
-.dot--for_review {
-  background: var(--state-for_review);
-}
-
 .dot--benched {
   background: var(--state-benched);
 }
 
-.dot--let_go {
-  background: var(--state-let_go);
-}
-
-/* ---------------------------------------------------------------- gallery */
-
-/* The Look page. The caption is ALWAYS in the document: a label that exists
-   only on hover is one a touch screen and a screen reader never get, and here
-   one of those labels is the words `design illustration`. Hover and focus
-   raise the tile; they never reveal something that was hidden. */
-.gallery {
-  display: grid;
-  gap: var(--s-3);
-  grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
-  margin: var(--s-4) 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.gallery > li {
-  margin: 0;
-}
-
-.tile {
-  margin: 0;
-  max-width: none;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  transition:
-    transform 240ms var(--ease),
-    border-color 240ms var(--ease);
-}
-
-.tile:hover,
-.tile:focus-within {
-  transform: translateY(-3px);
-  border-color: var(--line-2);
-}
-
-.tile img {
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  border: 0;
-  border-radius: 0;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg-2);
-}
-
-.tile figcaption {
-  margin: 0;
-  padding: var(--s-2) var(--s-3) var(--s-3);
-  font-size: var(--t-small);
-}
-
-.tile figcaption b {
-  display: block;
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.tile-more {
-  display: block;
-  margin-top: 0.3rem;
-  color: var(--muted);
-  font-size: var(--t-micro);
-  line-height: 1.5;
-}
-
-/* --------------------------------------------------------------- stepper */
-
-/* The Studio loop: eleven steps scrolled rather than wrapped, because the
-   order is the information and a grid that reflows destroys it. */
-.stepper {
-  display: flex;
-  gap: var(--s-2);
-  margin: var(--s-4) 0 0;
-  padding: 0 var(--gutter) var(--s-2);
-  list-style: none;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-}
-
-.stepper > li {
-  flex: 0 0 15rem;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  padding: var(--s-2) var(--s-3) var(--s-3);
-  scroll-snap-align: start;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-
-.stepper b {
-  display: block;
-  color: var(--ink);
-  font-size: var(--t-small);
-  font-weight: 600;
-}
-
-/* The bottom margin is the minimum gap `margin-top: auto` on the chip cannot
-   guarantee: on the tallest card the auto resolves to zero. */
-.stepper p {
-  margin: var(--s-1) 0 var(--s-2);
-  color: var(--muted);
-  font-size: var(--t-micro);
-  line-height: 1.5;
-}
-
-.step-n {
-  display: block;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-  margin-bottom: 0.2rem;
-}
-
-/* `margin-top: auto` puts every chip on the same line whatever the step above
-   it says, so the built/planned split is readable as a row rather than as
-   eleven separate cards. */
-.step-state {
-  align-self: flex-start;
-  margin-top: auto;
-  padding: 0.1em 0.6em;
-  border-radius: var(--radius-pill);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.step-state--built {
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-line);
-  color: var(--ink);
-}
-
-.step-state--coming {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  color: var(--ink-2);
-}
-
-/* ------------------------------------------------------------ the device */
-
-/* A window frame for an animation. The frame is CSS; nothing is added to the
-   file it holds. */
-.device {
-  max-width: var(--wide);
-  margin: var(--s-4) auto;
-}
-
-.device-frame {
-  overflow: hidden;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-}
-
-.device-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem var(--s-2);
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
-}
-
-.device-bar i {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--line-2);
-}
-
-.device-bar span {
-  margin-left: var(--s-1);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--t-micro);
-}
-
-.device-frame img {
-  width: 100%;
-  border: 0;
-  border-radius: 0;
-  background: none;
-}
-
-/* ------------------------------------------------------- notes and cards */
-
-.cards {
-  display: grid;
-  gap: var(--s-2);
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  max-width: var(--wide);
-  margin: var(--s-4) auto;
-  padding: 0;
-  list-style: none;
-}
-
-.cards li {
-  margin: 0;
-  padding: var(--s-2) var(--s-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-}
-
-.cards h3 {
-  margin: 0 0 var(--s-1);
-  font-size: var(--t-body);
-  letter-spacing: -0.005em;
-}
-
-.cards p {
-  margin: 0;
-  font-size: var(--t-small);
-}
-
-.callout {
-  margin: var(--s-4) 0;
-  padding: var(--s-2) var(--s-3);
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--radius-md);
-  color: var(--ink);
-}
-
-.callout p:last-child {
-  margin-bottom: 0;
-}
-
-.note {
-  margin: var(--s-4) 0;
-  padding: var(--s-2) var(--s-3);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  font-size: var(--t-small);
-}
-
-.note p:last-child {
-  margin-bottom: 0;
-}
-
-/* ------------------------------------------------------------- questions */
-
-.qa {
-  margin: 0 0 var(--s-4);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
-}
-
-.qa h2 {
-  margin-top: 0;
-  font-size: var(--t-sub);
-}
-
-/* ------------------------------------------------- the feature page bands */
-
-.feature {
-  max-width: var(--content);
-  margin-inline: auto;
-  padding-block: var(--s-5);
-}
-
-.feature h2 {
-  max-width: var(--measure);
-  margin-inline: auto;
-}
-
-.feature > p {
-  max-width: var(--measure);
-  margin-inline: auto;
-}
-
-.feature figure {
-  margin-top: var(--s-3);
-}
-
-.feature figure img {
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-}
-
-/* ------------------------------------------------------------- changelog */
-
-.release {
-  margin-top: var(--s-5);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
-}
-
-.release h2 {
-  font-family: var(--font-mono);
-  font-size: var(--t-sub);
-  margin-top: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s-2);
-}
-
-.release-date {
-  font-size: var(--t-small);
-  font-weight: 400;
-  color: var(--muted);
-}
-
-/* ---------------------------------------------------------------- footer */
-
-.site-foot {
-  border-top: 1px solid var(--line);
-  background: var(--bg-2);
-  padding: var(--s-6) var(--gutter) var(--s-6);
-  color: var(--muted);
-  font-size: var(--t-small);
-}
-
-.foot-inner {
-  max-width: var(--content);
-  margin-inline: auto;
-  display: grid;
-  gap: var(--s-4);
-  grid-template-columns: minmax(0, 1fr);
-}
-
-@media (min-width: 52rem) {
-  .foot-inner {
-    grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr));
-    gap: var(--s-5);
-  }
-}
-
-.foot-pitch {
-  color: var(--ink-2);
-  margin-bottom: var(--s-1);
-}
-
-.foot-col h2 {
-  margin: 0 0 var(--s-2);
-  color: var(--muted);
-  font-size: var(--t-micro);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.foot-col ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--s-1);
-}
-
-.foot-col li {
-  margin: 0;
-}
-
-.foot-col a {
-  color: var(--ink-2);
-  text-decoration: none;
-}
-
-.foot-col a:hover {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: var(--accent);
-  text-underline-offset: 3px;
-}
-
-.foot-note {
-  max-width: var(--content);
-  margin: var(--s-5) auto 0;
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
-  font-size: var(--t-micro);
-}
-
-/* --------------------------------------------------------------- motion */
-
-/* THE REVEAL. The default is VISIBLE: `site.js` marks the document first and
-   only then does any of this apply, so scripting off, a headless render and a
-   tab that was never focused all show every word. */
-:root.js-reveal [data-reveal] {
-  opacity: 0;
-  transform: translateY(10px);
-  transition:
-    opacity var(--reveal-ms) var(--ease),
-    transform var(--reveal-ms) var(--ease);
-}
-
-:root.js-reveal [data-reveal].is-in {
-  opacity: 1;
-  transform: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
-
-  :root.js-reveal [data-reveal] {
-    opacity: 1;
-    transform: none;
-  }
+.dot--let-go {
+  background: var(--state-let-go);
 }
