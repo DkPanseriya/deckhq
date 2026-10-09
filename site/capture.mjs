@@ -104,12 +104,26 @@ const WATCH = `(() => {
 const WALK = `(async () => {
   document.documentElement.style.scrollBehavior = 'auto';
   const step = Math.round(innerHeight * 0.7);
+  // Two painted frames at every stop, not a fixed wait: on a loaded machine a
+  // timer can fire before the browser has looked at what scrolled into view,
+  // and a lazy picture that was never looked at is never asked for.
+  const painted = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   for (let y = 0; y < document.body.scrollHeight; y += step) {
     window.scrollTo(0, y);
+    await painted();
     await new Promise((r) => setTimeout(r, 110));
   }
   window.scrollTo(0, document.body.scrollHeight);
-  await new Promise((r) => setTimeout(r, 500));
+  await painted();
+  // Then every picture that was asked for gets the time to arrive.
+  const pending = [...document.images].filter((i) => i.getClientRects().length && !i.complete);
+  await Promise.race([
+    Promise.all(pending.map((i) => new Promise((r) => {
+      i.addEventListener('load', r);
+      i.addEventListener('error', r);
+    }))),
+    new Promise((r) => setTimeout(r, 8000)),
+  ]);
   window.scrollTo(0, 0);
   await new Promise((r) => setTimeout(r, 300));
   return document.documentElement.scrollHeight;
