@@ -51,9 +51,9 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
 - **A queue only you can clear.** What a session is doing changes on its own. What you owe it
   changes when you press a button. Opening a conversation does not clear it; scrolling past it does
   not clear it; reading it does not clear it.
-- **Six states, and two different "needs you" signals.** A raised hand at a desk means _I am
-  mid-task and blocked_. A person waiting in your office means _I finished; review this_. Those
-  need different responses, so they look different and are counted separately.
+- **Six states, and two different "needs you" signals.** Both wait in your office. A raised hand
+  means _I am mid-task and blocked_. A red badge with a waiting time means _I finished; review
+  this_. They need different responses, so they look different and are counted separately.
 - **A review card, not a notification.** Click anyone and the panel has how long they have been
   waiting, what they said as the markdown they actually wrote, and what changed in that project's
   working tree — then `1` reply, `2` approve, `3` bench.

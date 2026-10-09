@@ -86,15 +86,16 @@ goes idle the item is "complete" and disappears. That is the bug this product ex
 | State         | What it means                                      | Where the agent is       | What you see                                                                       |
 | ------------- | -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------- |
 | `working`     | Live and producing output                          | Its project desk         | Typing, occasional coffee                                                          |
-| `needs_input` | Live, blocked on a question or a permission prompt | **Stays at its desk**    | **Raises a hand**, pulsing ring                                                    |
+| `needs_input` | Live, blocked on a question or a permission prompt | **Walks to your office** | Sitting on a sofa with **a hand raised** and a pulsing ring                        |
 | `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                                                     |
 | `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Sitting on a sofa in the waiting area with a waiting-time badge                    |
 | `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                                                 |
 | `let_go`      | Off the floor                                      | Hidden                   | **Fired** — off the floor; the chat is kept and reachable from `⌘K` → "Show fired" |
 
-**The two "needs you" signals are deliberately different.** A raised hand at a desk means _I am
-mid-task and blocked_. A person waiting in your office means _I finished; review this_. Those
-need different responses from you, so they look different and are counted separately.
+**The two "needs you" signals are deliberately different.** Both sit in your office, one to a
+cushion. A raised hand means _I am mid-task and blocked_. A red badge with a waiting time means _I
+finished; review this_. Those need different responses from you, so they look different and are
+counted separately.
 
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
 yours. `for_review` is entered automatically and can only be _left_ by you.
