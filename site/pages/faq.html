@@ -1,120 +1,138 @@
-<article class="prose">
-  <h1>FAQ</h1>
-  <p class="lede">
-    Ten questions, answered with what has actually been run on a machine. Where something has not
-    been, the answer says so.
-  </p>
+<div class="page-head wrap">
+  <h1>Questions.</h1>
+  <p class="lede">The ones DeckHQ gets asked, answered once each.</p>
+</div>
 
-  <section class="qa">
-    <h2>Does DeckHQ send my code anywhere?</h2>
-    <p>
-      No. Nothing leaves your machine: no analytics, no telemetry, no update check, no crash
-      reports, no cloud. Your conversations, file names and diffs are read off your own disk and
-      stay there. The last line of <code>npx deckhq doctor</code> reports what it found going out,
-      and the answer is nothing. <a href="privacy.html">Privacy and security</a> has the rest.
-    </p>
-  </section>
+<section class="wrap">
+  <div class="faq">
+    <details open>
+      <summary>Which coding tools does it read?</summary>
+      <div>
+        <p>
+          Claude Code is verified: reading, replying, streamed sends, hooks, and a permission prompt
+          answered from the panel. Codex is verified for reading and replying.
+        </p>
+        <p>
+          Gemini CLI and OpenCode adapters exist and are unverified: they are written against each
+          tool's documented format and have never been run against real data. Each says so on its
+          own label in the app.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>Do I have to start my agents from DeckHQ?</summary>
+      <div>
+        <p>
+          No. Start them anywhere: a terminal, your editor, the desktop app. DeckHQ reads the
+          sessions already on your disk, and they turn up on the floor.
+        </p>
+        <p>
+          You can start one from it too: <strong>+ New agent</strong> in the header, or the
+          <kbd>+</kbd> in a room.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>What does it cost?</summary>
+      <div>
+        <p>Nothing. DeckHQ is free and MIT licensed, with no account and no licence check.</p>
+      </div>
+    </details>
+    <details>
+      <summary>Does anything leave my machine?</summary>
+      <div>
+        <p>
+          No. It binds 127.0.0.1 and nothing else, and makes no outbound connection: no analytics,
+          no telemetry, no update check. The last line of
+          <code>deckhq doctor</code> reads <code>egress none. no outbound sockets.</code>
+        </p>
+        <p><a href="privacy.html">What it never does</a></p>
+      </div>
+    </details>
+    <details>
+      <summary>What happens when I close the window?</summary>
+      <div>
+        <p>
+          DeckHQ keeps counting. The window is a view; the queue is kept on disk in
+          <code>~/.deckhq/</code>, and it is still there tomorrow if you do not deal with it.
+          <code>deckhq waiting</code> prints the same queue in a terminal.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>How is a raised hand different from a red badge?</summary>
+      <div>
+        <p>
+          A raised hand means the session is mid-task and blocked on a question only you can answer.
+          A red badge with a time means it finished its turn and wants a review. Both wait in Your
+          Office, and the header counts them separately.
+        </p>
+        <p>
+          Without the hooks, a transcript alone does not tell a blocked session from a stopped one,
+          and the header says so.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>Does it write to my Claude Code settings?</summary>
+      <div>
+        <p>
+          Only if you ask it to install hooks, and then it shows you the exact JSON and the exact
+          file and asks first. It backs the file up, tags what it wrote, and removes only what it
+          tagged. The plugin route writes nothing there at all.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>Can it stop or kill a session?</summary>
+      <div>
+        <p>
+          No. Benching takes a session out of your queue. Firing takes it off the floor and keeps
+          its chat. Neither touches the process, and a closed DeckHQ blocks nobody.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>Does it work on macOS and Linux?</summary>
+      <div>
+        <p>
+          The floor, the queue and the terminal commands run on all three, and every change is
+          tested on each. Four things have been run on Windows only so far: the app window's
+          installers, opening a session in a terminal, Go to session, and OS notifications.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>Why tokens and not dollars?</summary>
+      <div>
+        <p>
+          Most people run these tools on a subscription, so dollars are one setting away and off by
+          default. Turn <strong>Show cost</strong> on and you get a list-price estimate with the
+          date of its rate card. A model with no price reads <code>no rate</code>.
+        </p>
+      </div>
+    </details>
+    <details>
+      <summary>Something is wrong. Where do I say so?</summary>
+      <div>
+        <p>
+          <a href="https://github.com/DkPanseriya/deckhq/issues">Open an issue</a> with the output
+          of <code>deckhq doctor --share</code>, which takes paths, project names and the machine
+          name out first.
+        </p>
+      </div>
+    </details>
+  </div>
+</section>
 
-  <section class="qa">
-    <h2>Which coding tools does it work with?</h2>
-    <p>
-      <strong>Claude Code</strong> and <strong>Codex</strong> are the two that have been run against
-      real sessions. Claude Code gets everything: reading, replying, live state and answering a
-      permission prompt from the panel. Codex is read and replied to, without the live state.
+<section class="band band--tight">
+  <div class="wrap">
+    <p class="lede">Every command, key and file is in the manual.</p>
+    <p class="actions after-small">
+      <a class="btn btn--ghost" href="https://github.com/DkPanseriya/deckhq/blob/main/docs/GUIDE.md"
+        >Read the manual</a
+      >
+      <a class="btn btn--ghost" href="install.html">Install</a>
     </p>
-    <p>
-      <strong>Gemini CLI</strong> and <strong>OpenCode</strong> are written against each
-      tool&#8217;s published format and have never been run against real data, because neither is
-      installed on the machine DeckHQ is built on. They say so in the app rather than pretending
-      otherwise.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Do I need an account?</h2>
-    <p>
-      No. There is no sign-up, no sign-in, no licence key and no email address to hand over. Install
-      it and it works, with every theme and every feature on from the first run.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Is it free? Will it stay free?</h2>
-    <p>
-      MIT, and the thing on your machine stays that way. Paid services are planned above it &#8212;
-      the kind that need a server, like one floor across several machines &#8212; and they are
-      things you would opt into. The floor, the queue and every action on it stay free, and the free
-      product keeps making no outbound connection at all.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Windows, macOS or Linux?</h2>
-    <p>
-      All three, on Node 18 or newer, tested on each of them on every change. Two things are honest
-      exceptions: <strong>&#8220;open in terminal&#8221;</strong> has only ever been run for real on
-      Windows, and the same goes for system notifications. The macOS and Linux versions of both are
-      written against each system&#8217;s own documentation and have not been executed on one.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Does it run my agents, or cost me tokens?</h2>
-    <p>
-      Neither. You start your sessions where you always start them, and they turn up on the floor
-      because their transcripts are on the disk. DeckHQ starts nothing of its own, and nothing on
-      the floor costs a token to be there.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Is the cost number my bill?</h2>
-    <p>
-      No. DeckHQ counts the tokens it can see and multiplies them by public list prices, so you can
-      compare one project against another. It has no idea what your plan charges you, and it is
-      labelled an estimate everywhere it appears. Dollars are off until you turn them on.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>How do I update it?</h2>
-    <p>
-      <code>npx deckhq app</code> fetches the current version every time, so there is nothing to do.
-      If you installed it globally, <code>npm install -g deckhq@latest</code>. DeckHQ never checks
-      for updates on its own and never nags you about one.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>How do I uninstall it?</h2>
-    <p>
-      If you used <code>npx</code>, there is nothing to undo. Otherwise
-      <code>npm uninstall -g deckhq</code>. If you turned on the status line or let DeckHQ add hooks
-      to Claude Code, take those out from the app or with
-      <code>deckhq statusline --remove --yes</code>; each removes only the lines it added. Then
-      delete <code>~/.deckhq/</code>, and nothing of DeckHQ is left on the machine.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Do I have to keep a window open?</h2>
-    <p>
-      No, and you should not have to. DeckHQ keeps counting while you are not looking, because that
-      is when work piles up. <code>deckhq waiting</code> answers from the terminal,
-      <code>deckhq statusline</code> puts <code>&#9635; 3 waiting &#183; 1 hand up</code> in your
-      status bar, and an installed DeckHQ badges its dock icon with the count while every window is
-      shut.
-    </p>
-  </section>
-
-  <section class="qa">
-    <h2>Something is wrong. Where do I say so?</h2>
-    <p>
-      <a href="https://github.com/DkPanseriya/deckhq/issues">Issues</a>, with the output of
-      <code>deckhq doctor --share</code> if it is about your machine &#8212; that block has your
-      paths, project names and machine name taken out of it already. A security problem has its own
-      route: <a href="privacy.html">Privacy and security</a>. What shipped and when is on the
-      <a href="changelog.html">changelog</a>.
-    </p>
-  </section>
-</article>
+  </div>
+</section>

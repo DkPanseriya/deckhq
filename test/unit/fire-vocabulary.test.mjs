@@ -169,8 +169,9 @@ test('WP-61: the docs and the site say Fired, and the six-state table keeps the 
   assert.ok(!/let[ -]go/i.test(guide.replace(/`let_go`/g, '')), 'no "let go" is left in the guide');
   // WP-95a took the reference pages off the site, so the state id is no longer
   // printed to a stranger — the marketing page names the state in words. The
-  // vocabulary rule still holds over what is left.
-  const site = fs.readFileSync(path.join(ROOT, 'site/pages/characters.html'), 'utf8');
+  // vocabulary rule still holds over what is left. (The six states were on a
+  // Characters page until 1.7.0; they are a section of Features now.)
+  const site = fs.readFileSync(path.join(ROOT, 'site/pages/features.html'), 'utf8');
   assert.match(site, />Let go</, 'the site names the state in words');
   assert.ok(!/let-go agents/i.test(site), 'and no longer says "let-go agents"');
 });

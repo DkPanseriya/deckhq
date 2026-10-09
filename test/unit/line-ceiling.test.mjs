@@ -94,14 +94,6 @@ const EXEMPT = {
       'ships in no package, and its testable half (the verdict) is already out in ' +
       'scripts/lib/goldens-gate.mjs and scripts/lib/png.mjs.',
   },
-  'site/build.mjs': {
-    at: 1324,
-    dated: '2026-09-16',
-    splitBy: 'permanent',
-    reason:
-      'One coherent thing: the whole site generator, written instead of a dependency (P-05). It ' +
-      'ships in no package and runs once per release.',
-  },
 };
 
 /**
