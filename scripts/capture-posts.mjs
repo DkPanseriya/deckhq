@@ -47,9 +47,7 @@ const OUT = path.resolve(opt('--out', 'posts-out'));
 const TMP = opt('--tmp', '');
 /** Where the parts of a laid-out picture are kept: beside the output, never in it. */
 const WORK = path.resolve(opt('--work', `${OUT}-work`));
-const ONLY = String(opt('--only', ''))
-  .split(',')
-  .filter(Boolean);
+const ONLY = String(opt('--only', '')).split(',').filter(Boolean);
 
 /** How long a recording waits for the floor to come to rest before it starts. */
 const SETTLE_MS = Number(opt('--settle', 9000));
@@ -85,7 +83,14 @@ const even = (img) =>
   cropImage(img, { x: 0, y: 0, w: img.width - (img.width % 2), h: img.height - (img.height % 2) });
 
 /** The rooms of a floor as one string: a recording compares it to see a floor laid out again. */
-const planOf = (g) => g.rooms.map((r) => [r.name, r.x, r.y, r.w, r.h].map((v) => (typeof v === 'number' ? Math.round(v) : v)).join(':')).join('|');
+const planOf = (g) =>
+  g.rooms
+    .map((r) =>
+      [r.name, r.x, r.y, r.w, r.h]
+        .map((v) => (typeof v === 'number' ? Math.round(v) : v))
+        .join(':'),
+    )
+    .join('|');
 
 /** A capture that shows the "Install hooks" chip is not a picture of the demo floor. */
 function refuseBanner(g) {
@@ -138,7 +143,9 @@ const RECIPES = {
             box-shadow:0 0 0 1px ${LINE}">`,
         });
         const img = writePng(path.join(OUT, 'need.one-rule.png'), page, 1600);
-        say(`need.one-rule.png  ${img.width}x${img.height}  office ${shot.width}x${shot.height} at 2x`);
+        say(
+          `need.one-rule.png  ${img.width}x${img.height}  office ${shot.width}x${shot.height} at 2x`,
+        );
       }),
     ),
 
@@ -165,7 +172,12 @@ const RECIPES = {
         const feet = Math.max(...waiting.map((a) => a.y));
         const sofa = waiting.filter((a) => Math.abs(a.y - feet) < 1);
         const mid = (Math.min(...sofa.map((a) => a.x)) + Math.max(...sofa.map((a) => a.x))) / 2;
-        const clip = { x: Math.round(mid - 384), y: Math.round(feet - 4.88 * g.unit), w: 768, h: 256 };
+        const clip = {
+          x: Math.round(mid - 384),
+          y: Math.round(feet - 4.88 * g.unit),
+          w: 768,
+          h: 256,
+        };
         say(`  sofa row: ${sofa.map((a) => `${a.name} ${a.state}`).join(', ')}`);
         return even(await stage.still(clip));
       });
@@ -194,41 +206,46 @@ const RECIPES = {
   'need.office': () =>
     onFloor({ population: 'pair', stepped: true }, (demo) =>
       // 1031 high so the stage under the header is 1600 x 900.
-      withStage({ width: 1600, height: 1031, dpr: 2, reduced: false, virtual: true }, async (stage) => {
-        // Everybody walks in from the door on first paint; the recording wants
-        // exactly one person moving.
-        const g = await stage.open(demo.url, SETTLE_MS);
-        refuseBanner(g);
-        const laid = planOf(g);
-        const who = g.agents.find((a) => a.title === 'Rate limiter for the public API');
-        const clip = { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 };
-        const frames = await record(stage, demo, {
-          fps: FPS || 25,
-          seconds: SECONDS || 6,
-          clip,
-          width: 1600,
-          dir: path.join(WORK, 'need.office.frames'),
-          events: [
-            {
-              at: 0.6,
-              run: () =>
-                postHook(demo.url, {
-                  session_id: who.id.replace(/^claude-code:/, ''),
-                  cwd: path.join(demo.root, 'code', 'orbital-api'),
-                  hook_event_name: 'Stop',
-                }),
+      withStage(
+        { width: 1600, height: 1031, dpr: 2, reduced: false, virtual: true },
+        async (stage) => {
+          // Everybody walks in from the door on first paint; the recording wants
+          // exactly one person moving.
+          const g = await stage.open(demo.url, SETTLE_MS);
+          refuseBanner(g);
+          const laid = planOf(g);
+          const who = g.agents.find((a) => a.title === 'Rate limiter for the public API');
+          const clip = { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 };
+          const frames = await record(stage, demo, {
+            fps: FPS || 25,
+            seconds: SECONDS || 6,
+            clip,
+            width: 1600,
+            dir: path.join(WORK, 'need.office.frames'),
+            events: [
+              {
+                at: 0.6,
+                run: () =>
+                  postHook(demo.url, {
+                    session_id: who.id.replace(/^claude-code:/, ''),
+                    cwd: path.join(demo.root, 'code', 'orbital-api'),
+                    hook_event_name: 'Stop',
+                  }),
+              },
+            ],
+            watch: async (i, t) => {
+              if (i % 5) return;
+              const now = await stage.geometry();
+              if (planOf(now) !== laid) say(`  ${t.toFixed(2)}s THE FLOOR WAS LAID OUT AGAIN`);
+              const a = now.agents.find((x) => x.id === who.id);
+              say(
+                `  ${t.toFixed(2)}s ${a.name} ${a.state} ${a.placement} ${a.clip}${a.moving ? ' moving' : ''} ${Math.round(a.x)},${Math.round(a.y)}`,
+              );
             },
-          ],
-          watch: async (i, t) => {
-            if (i % 5) return;
-            const now = await stage.geometry();
-            if (planOf(now) !== laid) say(`  ${t.toFixed(2)}s THE FLOOR WAS LAID OUT AGAIN`);
-            const a = now.agents.find((x) => x.id === who.id);
-            say(`  ${t.toFixed(2)}s ${a.name} ${a.state} ${a.placement} ${a.clip}${a.moving ? ' moving' : ''} ${Math.round(a.x)},${Math.round(a.y)}`);
-          },
-        });
-        reportGif('need.office', frames, FPS || 25);
-      }),
+          });
+          reportGif('need.office', frames, FPS || 25);
+        },
+      ),
     ),
 };
 
@@ -290,7 +307,10 @@ Object.assign(RECIPES, {
     const view = 424 / 0.64;
     const robot = MARK.replace(/<rect width="512"[^>]*\/>/, '')
       .replace(/<rect x="6" y="6"[^>]*\/>/, '')
-      .replace(/viewBox="[^"]*" width="512" height="512"/, `viewBox="${256 - view / 2} ${259 - view / 2} ${view} ${view}" width="1024" height="1024"`);
+      .replace(
+        /viewBox="[^"]*" width="512" height="512"/,
+        `viewBox="${256 - view / 2} ${259 - view / 2} ${view} ${view}" width="1024" height="1024"`,
+      );
     const page = await layout({
       dir: WORK,
       name: 'avatar-product-1024',
@@ -353,7 +373,10 @@ const centreOf = (box) => ({ x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 
  * starts and a close crop needs to know the fit to choose one.
  */
 const fitUnit = (demo, width, height, query = '') =>
-  withStage({ width, height, dpr: 1 }, async (stage) => (await stage.open(demo.url + query, 300)).unit);
+  withStage(
+    { width, height, dpr: 1 },
+    async (stage) => (await stage.open(demo.url + query, 300)).unit,
+  );
 
 /**
  * Magnify the floor about a group of robots and bring them to the middle of
@@ -407,21 +430,24 @@ Object.assign(RECIPES, {
    */
   'crew.formation': () =>
     onFloor({ population: 'crew', stepped: true }, (demo) =>
-      withStage({ width: 1280, height: 851, dpr: 4, reduced: false, virtual: true }, async (stage) => {
-        refuseBanner(await stage.open(demo.url, SETTLE_MS));
-        const crew = (g) => g.agents.filter((a) => a.project === 'orbital-api');
-        // Twenty-two units across the 800 CSS pixels that are 3200 at this ratio.
-        const g = await closeIn(stage, 800 / 22 / (await stage.geometry()).unit, crew);
-        const c = centreOf(boxOf(crew(g)));
-        const frames = await record(stage, demo, {
-          fps: FPS || 25,
-          seconds: SECONDS || 6,
-          clip: clipAbout(g, { x: c.x, y: c.y + 0.3 * g.unit }, 800, 450),
-          width: 1600,
-          dir: path.join(WORK, 'crew.formation.frames'),
-        });
-        reportGif('crew.formation', frames, FPS || 25);
-      }),
+      withStage(
+        { width: 1280, height: 851, dpr: 4, reduced: false, virtual: true },
+        async (stage) => {
+          refuseBanner(await stage.open(demo.url, SETTLE_MS));
+          const crew = (g) => g.agents.filter((a) => a.project === 'orbital-api');
+          // Twenty-two units across the 800 CSS pixels that are 3200 at this ratio.
+          const g = await closeIn(stage, 800 / 22 / (await stage.geometry()).unit, crew);
+          const c = centreOf(boxOf(crew(g)));
+          const frames = await record(stage, demo, {
+            fps: FPS || 25,
+            seconds: SECONDS || 6,
+            clip: clipAbout(g, { x: c.x, y: c.y + 0.3 * g.unit }, 800, 450),
+            width: 1600,
+            dir: path.join(WORK, 'crew.formation.frames'),
+          });
+          reportGif('crew.formation', frames, FPS || 25);
+        },
+      ),
     ),
 
   /**
@@ -436,9 +462,13 @@ Object.assign(RECIPES, {
         const crew = (g) => g.agents.filter((a) => a.project === 'design-system');
         const g = await closeIn(stage, 2.5, crew);
         const c = centreOf(boxOf(crew(g)));
-        const shot = await stage.still(clipAbout(g, { x: c.x, y: c.y - 1.3 * g.unit }, 3200 / dpr, 1800 / dpr));
+        const shot = await stage.still(
+          clipAbout(g, { x: c.x, y: c.y - 1.3 * g.unit }, 3200 / dpr, 1800 / dpr),
+        );
         const img = writePng(path.join(OUT, 'crew.juniors-laptops.png'), even(shot), 1600);
-        say(`crew.juniors-laptops.png  ${img.width}x${img.height}  from ${shot.width}x${shot.height}`);
+        say(
+          `crew.juniors-laptops.png  ${img.width}x${img.height}  from ${shot.width}x${shot.height}`,
+        );
       });
     }),
 
@@ -458,7 +488,12 @@ Object.assign(RECIPES, {
         // first, because the card opens below and to the right of the pointer
         // and from there it stands beside the robot and not over it.
         let card = { hidden: true, text: '' };
-        for (const [right, up] of [[0.7, 0.5], [0.4, 0.5], [0, 0.3], [0, 0.1]]) {
+        for (const [right, up] of [
+          [0.7, 0.5],
+          [0.4, 0.5],
+          [0, 0.3],
+          [0, 0.1],
+        ]) {
           const at = { x: crowned.x + right * g.unit, y: crowned.y - up * g.unit };
           await stage.pointer(at.x + 4, at.y - 4);
           await stage.pointer(at.x, at.y);
@@ -470,7 +505,8 @@ Object.assign(RECIPES, {
           })()`);
           if (!card.hidden) break;
         }
-        if (card.hidden || !/legendary/.test(card.text)) throw new Error(`no legendary card: ${JSON.stringify(card)}`);
+        if (card.hidden || !/legendary/.test(card.text))
+          throw new Error(`no legendary card: ${JSON.stringify(card)}`);
         say(`  hover card: ${card.text.replace(/\s*\n\s*/g, ' | ')}`);
         g = await stage.geometry();
         // 600 CSS pixels square, twenty units: the crowned robot a little below
@@ -478,7 +514,11 @@ Object.assign(RECIPES, {
         const c = { x: crowned.x + 2.2 * g.unit, y: crowned.y - 3.2 * g.unit };
         const shot = await stage.still(clipAbout(g, c, 600, 600));
         const img = writePng(path.join(OUT, 'see.rare.png'), shot, 1200);
-        say(`see.rare.png  ${img.width}x${img.height}  ${two(g).map((a) => a.name).join(' and ')}`);
+        say(
+          `see.rare.png  ${img.width}x${img.height}  ${two(g)
+            .map((a) => a.name)
+            .join(' and ')}`,
+        );
       }),
     ),
 
@@ -489,46 +529,57 @@ Object.assign(RECIPES, {
    */
   'crew.lead-supervises': () =>
     onFloor({ population: 'lead', stepped: true }, (demo) =>
-      withStage({ width: 1600, height: 1031, dpr: 2, reduced: false, virtual: true }, async (stage) => {
-        const g = await stage.open(demo.url, SETTLE_MS);
-        refuseBanner(g);
-        const laid = planOf(g);
-        const lead = g.agents.find((a) => a.title === 'Split the deploy pipeline');
-        const juniors = g.agents.filter((a) => a.junior);
-        const hook = (body) =>
-          postHook(demo.url, {
-            session_id: lead.id.replace(/^claude-code:/, ''),
-            cwd: path.join(demo.root, 'code', 'orbital-api'),
-            ...body,
+      withStage(
+        { width: 1600, height: 1031, dpr: 2, reduced: false, virtual: true },
+        async (stage) => {
+          const g = await stage.open(demo.url, SETTLE_MS);
+          refuseBanner(g);
+          const laid = planOf(g);
+          const lead = g.agents.find((a) => a.title === 'Split the deploy pipeline');
+          const juniors = g.agents.filter((a) => a.junior);
+          const hook = (body) =>
+            postHook(demo.url, {
+              session_id: lead.id.replace(/^claude-code:/, ''),
+              cwd: path.join(demo.root, 'code', 'orbital-api'),
+              ...body,
+            });
+          const frames = await record(stage, demo, {
+            fps: FPS || 25,
+            seconds: SECONDS || 8,
+            clip: { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 },
+            width: 1600,
+            dir: path.join(WORK, 'crew.lead-supervises.frames'),
+            events: [
+              { at: 0.6, run: () => hook({ hook_event_name: 'Stop' }) },
+              ...juniors.map((junior) => ({
+                // All three in one frame. A crew that falls from three to two is no
+                // longer a formation, and the room is laid out again around a desk
+                // somewhere else: one by one, the lead is seen to change desks.
+                at: 3.2,
+                run: () =>
+                  hook({
+                    hook_event_name: 'SubagentStop',
+                    agent_id: junior.id.replace(/^claude-code:/, ''),
+                  }),
+              })),
+            ],
+            watch: async (i, t) => {
+              if (i % 5) return;
+              const now = await stage.geometry();
+              if (planOf(now) !== laid) say(`  ${t.toFixed(2)}s THE FLOOR WAS LAID OUT AGAIN`);
+              const a = now.agents.find((x) => x.id === lead.id);
+              const crew = now.agents
+                .filter((x) => x.junior)
+                .map((x) => x.state)
+                .join(',');
+              say(
+                `  ${t.toFixed(2)}s ${a.name} ${a.state} ${a.placement} ${a.clip}${a.moving ? ' moving' : ''} ${Math.round(a.x)},${Math.round(a.y)}  juniors: ${crew}`,
+              );
+            },
           });
-        const frames = await record(stage, demo, {
-          fps: FPS || 25,
-          seconds: SECONDS || 8,
-          clip: { x: 0, y: Math.ceil(g.canvas.y), w: 1600, h: 900 },
-          width: 1600,
-          dir: path.join(WORK, 'crew.lead-supervises.frames'),
-          events: [
-            { at: 0.6, run: () => hook({ hook_event_name: 'Stop' }) },
-            ...juniors.map((junior, i) => ({
-              // All three in one frame. A crew that falls from three to two is no
-              // longer a formation, and the room is laid out again around a desk
-              // somewhere else: one by one, the lead is seen to change desks.
-              at: 3.2,
-              run: () =>
-                hook({ hook_event_name: 'SubagentStop', agent_id: junior.id.replace(/^claude-code:/, '') }),
-            })),
-          ],
-          watch: async (i, t) => {
-            if (i % 5) return;
-            const now = await stage.geometry();
-            if (planOf(now) !== laid) say(`  ${t.toFixed(2)}s THE FLOOR WAS LAID OUT AGAIN`);
-            const a = now.agents.find((x) => x.id === lead.id);
-            const crew = now.agents.filter((x) => x.junior).map((x) => x.state).join(',');
-            say(`  ${t.toFixed(2)}s ${a.name} ${a.state} ${a.placement} ${a.clip}${a.moving ? ' moving' : ''} ${Math.round(a.x)},${Math.round(a.y)}  juniors: ${crew}`);
-          },
-        });
-        reportGif('crew.lead-supervises', frames, FPS || 25);
-      }),
+          reportGif('crew.lead-supervises', frames, FPS || 25);
+        },
+      ),
     ),
 
   /**
@@ -539,11 +590,17 @@ Object.assign(RECIPES, {
     onFloor({ population: 'worktrees' }, async (demo) => {
       // Asked first: how large the room can be magnified and still stand whole
       // on the stage, and the ratio at which that is 1640 px high or 2880 wide.
-      const { room: probe, canvas } = await withStage({ width: 1600, height: 1000, dpr: 1 }, async (stage) => {
-        const g = await stage.open(demo.url, 300);
-        return { room: g.rooms.find((r) => r.name === 'orbital-api'), canvas: g.canvas };
-      });
-      const zoom = Math.max(1, Math.min(2.5, (0.96 * canvas.w) / probe.w, (0.96 * canvas.h) / probe.h));
+      const { room: probe, canvas } = await withStage(
+        { width: 1600, height: 1000, dpr: 1 },
+        async (stage) => {
+          const g = await stage.open(demo.url, 300);
+          return { room: g.rooms.find((r) => r.name === 'orbital-api'), canvas: g.canvas };
+        },
+      );
+      const zoom = Math.max(
+        1,
+        Math.min(2.5, (0.96 * canvas.w) / probe.w, (0.96 * canvas.h) / probe.h),
+      );
       const dpr = Math.min(1640 / (probe.h * zoom), 2880 / (probe.w * zoom));
       return withStage({ width: 1600, height: 1000, dpr }, async (stage) => {
         let g = await stage.open(demo.url);
@@ -573,7 +630,9 @@ Object.assign(RECIPES, {
         const shot = await stage.still({ x: 0, y: g.canvas.y, w: 1760, h: 990 });
         const img = writePng(path.join(OUT, 'look.room-colours.png'), even(shot), 1600);
         const lit = g.rooms.filter((r) => r.kind === 'project').length;
-        say(`look.room-colours.png  ${img.width}x${img.height}  ${lit} rooms, unit ${g.unit.toFixed(2)}`);
+        say(
+          `look.room-colours.png  ${img.width}x${img.height}  ${lit} rooms, unit ${g.unit.toFixed(2)}`,
+        );
       }),
     ),
 
@@ -605,10 +664,17 @@ Object.assign(RECIPES, {
 /** Write a recording, and its smaller copy when it is too heavy for a post. */
 function reportGif(name, frames, fps, opts = {}) {
   const gif = writeGif(path.join(OUT, `${name}.gif`), frames, fps, opts);
-  say(`${name}.gif  ${gif.width}x${gif.height}  ${gif.frames} frames  ${(gif.bytes / 1048576).toFixed(2)} MB`);
+  say(
+    `${name}.gif  ${gif.width}x${gif.height}  ${gif.frames} frames  ${(gif.bytes / 1048576).toFixed(2)} MB`,
+  );
   if (gif.bytes > 8 * 1048576) {
-    const small = writeGif(path.join(OUT, `${name}.1280.gif`), frames, fps, { ...opts, width: 1280 });
-    say(`${name}.1280.gif  ${small.width}x${small.height}  ${(small.bytes / 1048576).toFixed(2)} MB`);
+    const small = writeGif(path.join(OUT, `${name}.1280.gif`), frames, fps, {
+      ...opts,
+      width: 1280,
+    });
+    say(
+      `${name}.1280.gif  ${small.width}x${small.height}  ${(small.bytes / 1048576).toFixed(2)} MB`,
+    );
   }
 }
 
@@ -617,7 +683,8 @@ if (argv.includes('--list')) {
 } else {
   const names = ONLY.length ? ONLY : Object.keys(RECIPES);
   for (const name of names) {
-    if (!RECIPES[name]) throw new Error(`no recipe "${name}"; one of: ${Object.keys(RECIPES).join(', ')}`);
+    if (!RECIPES[name])
+      throw new Error(`no recipe "${name}"; one of: ${Object.keys(RECIPES).join(', ')}`);
     const t0 = Date.now();
     await RECIPES[name]();
     say(`  ${name} took ${((Date.now() - t0) / 1000).toFixed(1)} s`);

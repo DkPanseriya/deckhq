@@ -78,7 +78,15 @@ export function startDemo(opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
-      [stepped ? STEPPED_SCRIPT : DEMO_SCRIPT, '--population', population, '--theme', theme, '--port', '0'],
+      [
+        stepped ? STEPPED_SCRIPT : DEMO_SCRIPT,
+        '--population',
+        population,
+        '--theme',
+        theme,
+        '--port',
+        '0',
+      ],
       { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe', ...(stepped ? ['ipc'] : [])], env },
     );
     let out = '';
@@ -87,17 +95,17 @@ export function startDemo(opts = {}) {
     const setNow = (ms) =>
       new Promise((heard, failed) => {
         if (!stepped) return failed(new Error('this demo floor was not started stepped'));
-        child.once('message', () => heard());
+        child.once('message', () => heard(undefined));
         child.send({ now: new Date(ms).toISOString() });
       });
     const stop = () =>
       new Promise((done) => {
-        if (child.exitCode != null) return done();
-        child.once('exit', () => done());
+        if (child.exitCode != null) return done(undefined);
+        child.once('exit', () => done(undefined));
         try {
           child.kill();
         } catch {
-          done();
+          done(undefined);
         }
         setTimeout(done, 5000).unref();
       }).then(() => {
@@ -314,7 +322,12 @@ export async function withStage(opts, fn) {
         /** One key, as a person presses it. */
         async key(key) {
           for (const type of ['rawKeyDown', 'char', 'keyUp']) {
-            await client.send('Input.dispatchKeyEvent', { type, text: key, key, unmodifiedText: key });
+            await client.send('Input.dispatchKeyEvent', {
+              type,
+              text: key,
+              key,
+              unmodifiedText: key,
+            });
           }
           await sleep(150);
         },
@@ -373,12 +386,19 @@ export async function withStage(opts, fn) {
           // would otherwise encode thirty megapixels to keep six.
           const whole = (n) => Number.isInteger(n);
           const native =
-            clip && whole(dpr) && [clip.x, clip.y, clip.w, clip.h].every(whole) && clip.x >= 0 &&
-            clip.y >= 0 && clip.x + clip.w <= width && clip.y + clip.h <= height;
+            clip &&
+            whole(dpr) &&
+            [clip.x, clip.y, clip.w, clip.h].every(whole) &&
+            clip.x >= 0 &&
+            clip.y >= 0 &&
+            clip.x + clip.w <= width &&
+            clip.y + clip.h <= height;
           const { data } = await client.send('Page.captureScreenshot', {
             format: 'png',
             captureBeyondViewport: false,
-            ...(native ? { clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 1 } } : {}),
+            ...(native
+              ? { clip: { x: clip.x, y: clip.y, width: clip.w, height: clip.h, scale: 1 } }
+              : {}),
           });
           const img = decodePng(Buffer.from(data, 'base64'));
           if (!clip || native) return img;
@@ -569,7 +589,8 @@ export function writeGif(file, frames, fps, opts = {}) {
     height,
     palette,
     frames: frames.map((f, i) => {
-      if (!opts.ownPalettes) return { indices: indexPixels(load(f).data, palette, cache), delayCs: delays[i] };
+      if (!opts.ownPalettes)
+        return { indices: indexPixels(load(f).data, palette, cache), delayCs: delays[i] };
       // Each picture cut to its own 255 colours, for pictures that share none.
       const { data } = load(f);
       const own = buildPalette([data], 255);
@@ -584,7 +605,11 @@ export function writeGif(file, frames, fps, opts = {}) {
   const total = delays.reduce((a, b) => a + b, 0);
   const ends = [];
   delays.reduce((sum, d) => (ends.push(sum + d), sum + d), 0);
-  const at = (cs) => Math.max(0, ends.findIndex((end) => cs < end));
+  const at = (cs) =>
+    Math.max(
+      0,
+      ends.findIndex((end) => cs < end),
+    );
   const picks = Array.from({ length: 12 }, (_, i) => at((i * (total - delays.at(-1))) / 11));
   const base = file.replace(/\.gif$/, '');
   writePng(`${base}.frames.png`, contactSheet(picks.map((i) => load(frames[i]))));
