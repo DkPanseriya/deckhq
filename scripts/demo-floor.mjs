@@ -70,6 +70,7 @@ import {
   THEME,
 } from './demo-args.mjs';
 import {
+  CAST_NUMBERS,
   CREW_JUNIORS,
   CREW_PARENT,
   DEMO_TOOLS,
@@ -78,6 +79,8 @@ import {
   SESSIONS,
   STUDIO_PROJECT,
   JUNIOR_PARENT,
+  LEAD_JUNIORS,
+  LEAD_PARENT,
   WAITING_CREW_JUNIORS,
   WAITING_CREW_PARENT,
   WORKTREES_AT,
@@ -184,7 +187,8 @@ if (PACK_FILE) {
 const root = path.join(ROOT, 'code');
 writeProjectDirs(root);
 const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
-  const id = fakeId(i + 1);
+  // A population may name its own cast numbers (`CAST_NUMBERS`); the rest count from one.
+  const id = fakeId(CAST_NUMBERS ? CAST_NUMBERS[i] : i + 1);
   const cwd = path.join(root, project);
   // A session in a linked worktree reports that worktree's branch, or `HEAD`
   // where its checkout is detached.
@@ -205,7 +209,7 @@ const built = SESSIONS.map(([project, title, state, ageHours, tokensM], i) => {
 // WP-41. The juniors, once their parent's transcript exists to hang them off.
 // Only the `demo` population has them: `reference` photographs `08` §0's
 // machine, which had none, and `single` and `empty` are controls.
-if (POPULATION === 'demo' || POPULATION === 'away') {
+if (POPULATION === 'demo' || POPULATION === 'away' || POPULATION === 'juniors') {
   const parent = built.find((s) => s.title === JUNIOR_PARENT);
   if (parent) {
     for (const junior of JUNIORS) {
@@ -222,6 +226,16 @@ if (POPULATION === 'crew') {
   const parent = built.find((s) => s.title === CREW_PARENT);
   if (parent) {
     for (const junior of CREW_JUNIORS) {
+      writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
+    }
+  }
+}
+
+// The `lead` floor: three juniors, all writing, on the one senior in the building.
+if (POPULATION === 'lead') {
+  const parent = built.find((s) => s.title === LEAD_PARENT);
+  if (parent) {
+    for (const junior of LEAD_JUNIORS) {
       writeSubagent({ parentId: parent.id, cwd: parent.cwd, junior });
     }
   }

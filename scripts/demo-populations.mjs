@@ -428,7 +428,75 @@ export const POPULATIONS = {
     ['checkout-flow', 'Address autocomplete', 'benched', 58, 0.6],
     ['checkout-flow', 'Coupon stacking rules', 'benched', 74, 0.4],
   ],
+  /**
+   * ONE CROWN, AND ONE PLAIN ROBOT BESIDE IT. Two sessions at two desks in one
+   * room, for the picture of a rare robot next to an ordinary one.
+   *
+   * Rarity is a pure function of the session id (`appearanceFor`,
+   * `public/render/palette.js`): one roll in a hundred is `legendary`, and half
+   * of those wear the crown. A demo id is a pure function of its cast number
+   * (`fakeId`), so which numbers are crowned can be listed, and the first is
+   * 183 — past the end of every other population, the largest of which has 137
+   * sessions. `CAST_NUMBERS` below gives this floor's second row that number;
+   * nothing about the robot is set, it is simply the session with that id.
+   */
+  rare: () => [
+    ['orbital-api', 'Rate limiter for the public API', 'working', 0.4, 0.4],
+    ['orbital-api', 'Backfill the events table', 'working', 0.6, 1.6],
+  ],
+  /**
+   * ONE SENIOR AND ITS TWO JUNIORS, alone in the building: the `demo` floor's
+   * `JUNIOR_PARENT` and `JUNIORS` with nobody sharing their desk, for a close
+   * picture of two juniors on the floor beside a lead. The title is written
+   * out for the reason `away`'s is.
+   */
+  juniors: () => [['design-system', 'Dark mode audit across 40 components', 'working', 0.05, 3.1]],
+  /**
+   * A LEAD WITH THREE JUNIORS, and one session of the same repo waiting in the
+   * office: the floor for
+   * the recording of a lead whose turn ends while its crew is still working.
+   * The juniors are `LEAD_JUNIORS` below, and the title is `LEAD_PARENT`,
+   * written out because that constant is declared below this table.
+   */
+  lead: () => [
+    ['orbital-api', 'Split the deploy pipeline', 'working', 0.05, 2.4],
+    // Somebody already waiting, so the queue strip is up before the recording
+    // starts and the stage does not change height when the lead joins it.
+    ['orbital-api', 'Backfill the events table', 'for_review', 5.2, 1.6],
+  ],
+  /**
+   * EVERY ROOM BUT ONE WITH SOMEBODY AT A DESK, for a picture of room colours:
+   * `crowded` under the Colour plan style is four dark rooms and one lit one,
+   * which is mostly grey. Five repos here have people working and their lights
+   * on; the sixth has one person, who is in the office waiting.
+   */
+  colours: () => [
+    ['orbital-api', 'Rate limiter for the public API', 'working', 2.1, 0.4],
+    ['orbital-api', 'Backfill the events table', 'working', 0.6, 1.6],
+    ['orbital-api', 'Fix flaky integration suite', 'for_review', 5.2, 0.8],
+    ['checkout-flow', 'Apple Pay in the express lane', 'working', 1.2, 2.2],
+    ['checkout-flow', 'Tax rounding off by a cent', 'working', 0.4, 0.5],
+    ['checkout-flow', 'Stripe webhook retries', 'idle', 26, 0.4],
+    ['design-system', 'Token pipeline to Figma', 'working', 0.8, 1.3],
+    ['design-system', 'Drop the old Button API', 'working', 0.3, 0.5],
+    ['design-system', 'Storybook a11y violations', 'needs_input', 3.8, 0.4],
+    ['data-pipeline', 'dbt models for retention', 'working', 0.9, 0.7],
+    ['data-pipeline', 'Airflow DAG keeps timing out', 'idle', 40, 0.9],
+    ['mobile-app', 'Offline queue for draft posts', 'working', 3.0, 1.8],
+    ['mobile-app', 'Crash on cold start, Android 14', 'working', 0.5, 0.5],
+    ['mobile-app', 'Bump RN and unbreak the build', 'benched', 61, 2.4],
+    ['infra-terraform', 'Move state to a remote backend', 'for_review', 26, 0.6],
+    ['infra-terraform', 'Least-privilege the CI role', 'benched', 90, 0.3],
+  ],
 };
+
+/**
+ * The cast number of each row, where a population needs particular ids rather
+ * than the first so many — `rare` above, and nothing else. Null is the rule
+ * every other population has always had: row `i` is cast number `i + 1`.
+ * @type {number[]|null}
+ */
+export const CAST_NUMBERS = POPULATION === 'rare' ? [1, 183] : null;
 
 /** @returns {Array<[string, string, string, number, number]>} */
 function crowdedSessions() {
@@ -652,6 +720,27 @@ export const CREW_JUNIORS = [
     workflow: null,
   },
 ];
+
+/**
+ * THE `lead` FLOOR'S CREW: three juniors, all still writing. Three is the
+ * smallest crew that sits as a formation, and each is stamped once, a few
+ * seconds behind the pinned clock, for `CREW_JUNIORS`' reason.
+ */
+export const LEAD_PARENT = 'Split the deploy pipeline';
+export const LEAD_JUNIORS = [
+  ['Explore', 'Map the pipeline stages', 'Listing every job the deploy runs today.', 0],
+  ['test-engineer', 'Cover the rollback path', 'Writing the case where a stage fails half way.', 4],
+  ['code-reviewer', 'Read the split so far', 'Checking the two halves share no secret.', 8],
+].map(([agentType, description, text, quietSeconds], i) => ({
+  agentId: `ad3m00000000003${String(i).padStart(2, '0')}`,
+  agentType: String(agentType),
+  description: String(description),
+  text: String(text),
+  tool: { name: 'Read', input: { file_path: `ci/stage-${i + 1}.yml` } },
+  ageMinutes: Number(quietSeconds) / 60,
+  quietSeconds: Number(quietSeconds),
+  workflow: null,
+}));
 
 export const JUNIOR_PARENT = 'Dark mode audit across 40 components';
 export const JUNIORS = [
