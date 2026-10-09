@@ -26,7 +26,7 @@
  */
 import { daemonScratch, scratchDir } from '../helpers/isolate.mjs';
 
-import { test } from 'node:test';
+import { mock, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -412,5 +412,42 @@ test('a project with no grant is refused, and is not watched', async () => {
     } finally {
       await fsp.rm(other, { recursive: true, force: true, maxRetries: 10, retryDelay: 60 });
     }
+  });
+});
+
+test('RULE: a handover whose flag could not be written is owed, not lost', async (t) => {
+  // What the full suite met about one run in three, made to happen every time.
+  // On Windows a rename over `board.json` is refused while another handle has
+  // the board open, and under load something always does: this file's own
+  // `untilBoard`, the page's `GET /api/studio`, an editor, a virus scanner.
+  // The watch had already marked the handover as seen, the file never changed
+  // again, and the card was never flagged. Here the board is "busy" for longer
+  // than one write waits, so the first attempt fails whole.
+  const real = fsp.rename.bind(fsp);
+  let refusals = 12;
+  let refused = 0;
+  t.after(() => mock.restoreAll());
+  mock.method(fsp, 'rename', async (from, to) => {
+    if (path.basename(String(to)) === 'board.json' && refusals > 0) {
+      refusals--;
+      refused++;
+      throw Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' });
+    }
+    return real(from, to);
+  });
+
+  await withStudio(async ({ d, project, boardFile, handovers }) => {
+    const before = columnHash(boardFile);
+    await writeHandover(handovers, 'c1.md', HANDOVER);
+
+    const board = await untilBoard(boardFile, (b) => flagged(b, 'c1'));
+    assert.ok(refused >= 6, `the first write was refused at every try (${refused} refusals)`);
+    assert.ok(flagged(board, 'c1'), 'the handover was lost: its flag never reached the board');
+
+    const snap = await snapshotOf(d, project);
+    const c1 = snap.studio.board.board.cards.find((c) => c.id === 'c1');
+    const flags = (c1.flags || []).filter((f) => f.kind === 'handover');
+    assert.equal(flags.length, 1, 'offered again is not flagged twice');
+    assert.equal(columnHash(boardFile), before, 'and a handover still moves no card');
   });
 });

@@ -54,6 +54,35 @@ import {
   validateRoster,
 } from './schema.mjs';
 
+/** What Windows answers when the file being replaced is open in another handle. */
+const RENAME_BUSY = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+/** The waits between tries, in milliseconds: six tries inside a third of a second. */
+export const RENAME_WAITS_MS = Object.freeze([10, 25, 50, 100, 150]);
+
+/**
+ * The rename of an atomic write, tried again while the target is busy.
+ *
+ * These files are read by other things while DeckHQ writes them: its own
+ * routes, an editor, an indexer, a virus scanner. On Windows a rename over a
+ * file that another handle has open is refused for as long as the handle
+ * lives, which is usually a millisecond. Any other failure, and a file still
+ * busy after the last wait, is thrown as it came.
+ *
+ * @param {string} from @param {string} to
+ */
+export async function renameOver(from, to) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fsp.rename(from, to);
+    } catch (err) {
+      const busy = RENAME_BUSY.has(/** @type {any} */ (err)?.code);
+      if (!busy || attempt >= RENAME_WAITS_MS.length) throw err;
+      await new Promise((r) => setTimeout(r, RENAME_WAITS_MS[attempt]));
+    }
+  }
+}
+
 /**
  * The most this store will read from one file. A brief, a handover and a
  * board are documents a person reads; anything past a megabyte is not one,
@@ -144,7 +173,7 @@ export class StudioStore {
     const tmp = `${file}.tmp-${process.pid}`;
     await fsp.mkdir(path.dirname(file), { recursive: true });
     await fsp.writeFile(tmp, String(text), 'utf8');
-    await fsp.rename(tmp, file);
+    await renameOver(tmp, file);
     return file;
   }
 

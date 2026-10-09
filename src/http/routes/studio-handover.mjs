@@ -128,27 +128,46 @@ export function registerHandover(router, ctx, helpers) {
    * @type {Promise<any>}
    */
   let chain = Promise.resolve();
+  /** The job's own outcome goes to its caller; the chain carries on whatever it was. */
   const enqueue = (fn) => {
-    chain = chain.then(fn).catch((err) => {
-      ctx.log.warn('studio handover', err?.message || err);
-    });
-    return chain;
+    const job = chain.then(fn);
+    chain = job.catch(() => {});
+    return job;
+  };
+  /**
+   * root → the last thing warned about it. A tick that was not taken is
+   * offered again every poll, and a board somebody has open for a minute must
+   * not be sixty lines in the log.
+   * @type {Map<string,string>}
+   */
+  const warned = new Map();
+  const warnOnce = (root, message) => {
+    if (warned.get(root) === message) return;
+    warned.set(root, message);
+    ctx.log.warn(message);
   };
 
   /**
    * One tick's worth of changed files, folded onto the board.
+   *
+   * Answers whether the tick was TAKEN. `false` is "offer these files again":
+   * the board could not be read or could not be written just now, and the
+   * watch keeps the files as unseen (`watchHandovers`). It never rejects.
+   *
    * @param {string} root
    * @param {Array<{name:string, path:string, mtime:number}>} files
+   * @returns {Promise<boolean>}
    */
   function onHandovers(root, files) {
-    enqueue(async () => {
+    return enqueue(async () => {
       const studio = new StudioStore(root, { log: ctx.log });
       const current = studio.readBoard();
       if (current.error) {
         // A board that does not parse is REPORTED, never replaced (§150.2
-        // item 5). The handover is still on disk and still in the snapshot.
-        ctx.log.warn(`studio board for ${root} does not parse; handover flags wait`);
-        return;
+        // item 5). The handover is still on disk and still in the snapshot,
+        // and its flag arrives when the board parses again.
+        warnOnce(root, `studio board for ${root} does not parse; handover flags wait`);
+        return false;
       }
       const board = { ...current.board, cards: current.board.cards.map((c) => ({ ...c })) };
       let touched = false;
@@ -164,13 +183,21 @@ export function registerHandover(router, ctx, helpers) {
         }
         touched = true;
       }
-      if (!touched) return;
-      const check = validateBoard(board, { raw: null });
-      if ('error' in check) {
-        ctx.log.warn(`studio handover flag refused by the board's own validator: ${check.error}`);
-        return;
+      if (touched) {
+        const check = validateBoard(board, { raw: null });
+        if ('error' in check) {
+          ctx.log.warn(`studio handover flag refused by the board's own validator: ${check.error}`);
+          return true;
+        }
+        await studio.writeBoard(check.board);
       }
-      await studio.writeBoard(check.board);
+      warned.delete(root);
+      return true;
+    }).catch((err) => {
+      // The write failed: on Windows a rename over a file another handle has
+      // open is refused. The flag is owed, not lost; the next poll asks again.
+      warnOnce(root, `studio handover flag for ${root} not written yet: ${err?.message || err}`);
+      return false;
     });
   }
 

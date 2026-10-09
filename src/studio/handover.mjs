@@ -313,14 +313,23 @@ export async function stampDir(dir) {
  * (`src/http/routes/studio-handover.mjs`), so reporting a file twice costs
  * nothing.
  *
+ * **A tick the listener did not take is offered again.** `onChange` may be
+ * async. If it throws, rejects or answers `false`, the files it was given are
+ * not marked as seen, and the next poll offers them again, once per poll and
+ * for as long as it takes. A handover is one file written once: there is no
+ * second event to wait for.
+ *
  * @param {string} dir absolute path to `<project>/.deckhq/studio/handovers`
- * @param {{onChange?:(files:Array<{name:string, path:string, mtime:number}>) => void,
+ * @param {{onChange?:(files:Array<{name:string, path:string, mtime:number}>) =>
+ *            (void|boolean|Promise<void|boolean>),
  *          pollMs?:number, debounceMs?:number}} [opts]
  * @returns {Promise<() => void>} a stop function; calling it twice is safe.
  */
 export async function watchHandovers(dir, opts = {}) {
-  /** name → `size:mtime`, as of the last tick. @type {Map<string,string>} */
+  /** name → `size:mtime`, as of the last tick that was TAKEN. @type {Map<string,string>} */
   const seen = new Map();
+  /** How many ticks the listener did not take. Part of the stamp while it is not zero. */
+  let owed = 0;
 
   return watchPath({
     resolve: async () => {
@@ -330,9 +339,14 @@ export async function watchHandovers(dir, opts = {}) {
         return null;
       }
     },
-    stamp: stampDir,
+    // The poll compares this, and a tick nobody took changes it, so the poll
+    // asks again at its own pace and the directory need not change for it to.
+    stamp: async (target) => {
+      const stamp = await stampDir(target);
+      return owed ? `${stamp}|owed:${owed}` : stamp;
+    },
     tick: async (target) => {
-      /** @type {Array<{name:string, path:string, mtime:number}>} */
+      /** @type {Array<{name:string, path:string, mtime:number, stamp:string}>} */
       const changed = [];
       const names = (await fsp.readdir(target)).sort();
       const present = new Set();
@@ -347,12 +361,33 @@ export async function watchHandovers(dir, opts = {}) {
         }
         const stamp = `${info.size}:${info.mtimeMs}`;
         if (seen.get(name) === stamp) continue;
-        seen.set(name, stamp);
-        changed.push({ name, path: path.join(target, name), mtime: info.mtimeMs });
+        changed.push({ name, path: path.join(target, name), mtime: info.mtimeMs, stamp });
       }
       // A file the user deleted is forgotten, so writing it again is news.
       for (const name of [...seen.keys()]) if (!present.has(name)) seen.delete(name);
-      if (changed.length && typeof opts.onChange === 'function') opts.onChange(changed);
+      if (!changed.length) {
+        owed = 0;
+        return;
+      }
+      // A file is SEEN once the listener has taken it, and not before. Marking
+      // it first lost a handover whenever the board could not be written at
+      // that moment: nothing changes on disk afterwards, so nothing reported
+      // the file again until the daemon was restarted.
+      let taken = true;
+      if (typeof opts.onChange === 'function') {
+        try {
+          const files = changed.map(({ stamp: _stamp, ...file }) => file);
+          taken = (await opts.onChange(files)) !== false;
+        } catch {
+          taken = false;
+        }
+      }
+      if (!taken) {
+        owed += 1;
+        return;
+      }
+      owed = 0;
+      for (const file of changed) seen.set(file.name, file.stamp);
     },
     pollMs: opts.pollMs,
     debounceMs: opts.debounceMs,
