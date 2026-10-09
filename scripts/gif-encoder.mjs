@@ -326,8 +326,12 @@ const u16 = (n) => Buffer.from([n & 255, (n >> 8) & 255]);
 /**
  * Encode indexed frames into a looping GIF89a.
  *
- * @param {{width:number, height:number, palette:number[][], frames:{indices:Uint8Array, delayCs:number}[]}} opts
- *   `palette` has ≤ 255 entries; index 255 is the transparent slot.
+ * @param {{width:number, height:number, palette:number[][],
+ *   frames:{indices:Uint8Array, delayCs:number, palette?:number[][]}[]}} opts
+ *   `palette` has ≤ 255 entries; index 255 is the transparent slot. A frame may
+ *   carry a `palette` of its own, for a recording whose pictures share no
+ *   colours (one floor in eleven styles): it is then stored whole, with a local
+ *   colour table, and so is the frame after it.
  * @returns {Buffer}
  */
 export function encodeGif({ width, height, palette, frames }) {
@@ -349,6 +353,9 @@ export function encodeGif({ width, height, palette, frames }) {
   /** @type {Uint8Array|null} */
   let prev = null;
   for (const frame of frames) {
+    // A frame with a palette of its own is written whole: its indices mean
+    // other colours than the ones on screen, so there is no difference to take.
+    if (frame.palette) prev = null;
     let x0 = 0;
     let y0 = 0;
     let x1 = width - 1;
@@ -393,17 +400,22 @@ export function encodeGif({ width, height, palette, frames }) {
       u16(frame.delayCs),
       Buffer.from([TRANSPARENT, 0x00]),
     );
-    // Image descriptor, no local colour table.
+    // Image descriptor, and the frame's own 256-entry colour table if it has one.
     parts.push(
       Buffer.from([0x2c]),
       u16(x0),
       u16(y0),
       u16(x1 - x0 + 1),
       u16(y1 - y0 + 1),
-      Buffer.from([0x00]),
+      Buffer.from([frame.palette ? 0x87 : 0x00]),
     );
+    if (frame.palette) {
+      const local = Buffer.alloc(256 * 3);
+      frame.palette.forEach((c, i) => local.set(c, i * 3));
+      parts.push(local);
+    }
     parts.push(Buffer.from([8]), subBlocks(lzwEncode(pixels, 8)));
-    prev = frame.indices;
+    prev = frame.palette ? null : frame.indices;
   }
   parts.push(Buffer.from([0x3b]));
   return Buffer.concat(parts);
