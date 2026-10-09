@@ -350,6 +350,11 @@ DeckHQ window pinned to the Windows taskbar keeps DeckHQ's icon.
 
 ### Fixed
 
+- **A project in a deep folder can be pinned.** Pinning a room, or keeping it in a saved room
+  order, silently did nothing when the project's path was long: a worktree a few folders down, or
+  anything under a temp directory. A project's id is its whole path, and it was being held to 128
+  characters. The limit is now 1,024.
+
 - **Everyone waiting sits on the sofas.** With sixteen sessions waiting, five of them stood in the
   middle of the rug while most of the cushions behind them were empty. A sofa now seats one person
   on each cushion, and nobody stands while a cushion is free. The three sofas fill together, the

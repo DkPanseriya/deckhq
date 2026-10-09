@@ -493,3 +493,22 @@ test('the lounge grows for the people it has to hold, and nothing else does', ()
   assert.ok(crowd > quietHouse, 'sixty people in the lounge must not fit in an empty one');
   assert.equal(placesFor(0), placesFor(0), 'and the answer is a function of the population');
 });
+
+test('a project whose path is long can be pinned: the id is bounded as a path, not as a name', async () => {
+  const { Store } = await import('../../src/core/store.mjs');
+  const { projectIdFromCwd } = await import('../../src/core/model.mjs');
+  const { scratchDir } = await import('../helpers/isolate.mjs');
+  const store = new Store(path.join(scratchDir('pins-long-'), 'state.json'));
+  await store.load();
+  // A worktree under a CI runner's temp directory, which is where this was found.
+  const deep =
+    'C:\Users\runneradmin\AppData\Local\Temp\deckhq-test-1a2b3c\wt-repo-4d5e6f\career-ops' +
+    '\.claude\worktrees\awesome-franklin-2d1495\packages\service\handlers';
+  const id = projectIdFromCwd(deep);
+  assert.ok(id.length > 128, `the fixture is long enough to have failed before (${id.length})`);
+  assert.equal(store.setProjectPinned(id, true), true);
+  assert.equal(store.isProjectPinned(id), true);
+  // Still a bound, and still an alphabet.
+  assert.equal(store.setProjectPinned('a'.repeat(1025), true), false);
+  assert.equal(store.setProjectPinned('Not A Slug', true), false);
+});

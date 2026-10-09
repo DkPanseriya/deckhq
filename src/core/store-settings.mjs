@@ -477,7 +477,7 @@ export function sanitizeRoomOrder(v) {
   for (const raw of v) {
     if (typeof raw !== 'string') continue;
     const id = raw.trim();
-    if (!/^[a-z0-9][a-z0-9-]{0,127}$/.test(id) || out.includes(id)) continue;
+    if (!PROJECT_ID_RE.test(id) || out.includes(id)) continue;
     out.push(id);
     if (out.length >= MAX_ROOM_ORDER) break;
   }
@@ -531,8 +531,16 @@ export function sanitizePins(v) {
  * else. Restated here rather than imported for the reason `MAX_ROOM_ORDER` is:
  * the store is the bottom of the dependency graph. `test/unit/layout-io.test.mjs`
  * asserts the two agree.
+ *
+ * THE LENGTH IS A PATH'S, NOT A NAME'S. The bound was 128 characters, and a
+ * project id is the whole path slugged: a worktree three folders down, or
+ * anything under a temp directory, is longer than that. Such a project could
+ * not be pinned and fell out of a saved room order, silently — found when the
+ * pin test for worktrees failed on every CI runner whose temp path is long and
+ * passed on the machines whose is short. 1,024 holds any path a session can
+ * have and is still a bound.
  */
-export const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,127}$/;
+export const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,1023}$/;
 
 /**
  * WP-66's per-project Studio grants, coerced into range.
