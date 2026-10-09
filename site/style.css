@@ -452,8 +452,10 @@ kbd {
   border-color: var(--accent);
 }
 
+/* Its own width, or the window's less the gutters, whichever is the smaller:
+   a percentage would be measured against a parent that is sized by it. */
 .cmd--hero {
-  width: 22rem;
+  width: min(22rem, calc(100vw - 2 * var(--gutter)));
 }
 
 .cmd--hero code {
@@ -519,6 +521,7 @@ kbd {
 
   .hero-note {
     text-align: right;
+    max-width: 46ch;
   }
 }
 

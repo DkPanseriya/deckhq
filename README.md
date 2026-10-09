@@ -58,7 +58,7 @@ you — and a `swallowed` row: what a running daemon quietly failed at instead o
   waiting, what they said as the markdown they actually wrote, and what changed in that project's
   working tree — then `1` reply, `2` approve, `3` bench.
 - **The crew, when a session fires three or more sub-agents.** The desk becomes a formation: the
-  juniors cross-legged in an arc around it, a laptop on each lap, and a cable from each to the desk
+  juniors cross-legged in an arc around it, a laptop before each, and a cable from each to the desk
   with a pulse running up it while that junior's transcript is still being written. A junior that
   has stopped keeps its cable and it goes grey. Twelve are drawn; beyond that a `+N` chip, with the
   rest in the panel and in the deck.
@@ -144,7 +144,7 @@ deckhq look import my-floor.json     # refused whole if it is not paintable
 Studio is the opt-in "idea to office" mode, per project, off until `deckhq studio enable <project>`
 writes one marked file; a real `claude` session then interviews you and writes the blueprint, the
 roster and the board. The loop is complete — plan, hire, board, handover, tracking, drift, budget —
-and is on [the site](https://dkpanseriya.github.io/deckhq/studio.html). **Not yet watched:** a real
+and is on [the site](https://dkpanseriya.github.io/deckhq/features.html#studio). **Not yet watched:** a real
 planner interview, or a hired session's real reply — the maintainer's `claude` login has expired.
 
 **Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** gives a role a git worktree of its own,

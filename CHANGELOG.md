@@ -6,12 +6,21 @@
 
 ## Unreleased
 
+## 1.7.0 — 2026-10-11
+
 ### Highlights
 
-The floor's settings are in the header now, and there are six of them: a **Look** button opens
-agent size, theme, style, density, light and room colours right under it, and a gear opens
-Settings. Everything finer — which floor is in the corridor, which rug, which plants — is still
-there, one click further, under **Advanced**. And a choice you make now stays chosen.
+The office has been redrawn, and it is lit. Daylight comes in through the windows, furniture looks
+like furniture, rooms stand behind solid, glass or low partitions and are dressed like rooms
+somebody works in, and each project's room can have a colour of its own; there are eleven styles
+to choose from, with **Light** and **Room colours** beside them. Sub-agents read as juniors: a
+size smaller than their lead, cross-legged on the floor with a laptop and a **Junior** chip, and a
+lead whose crew is still working stays at its desk. A git worktree is a bench inside its
+repository's room, not a room of its own. **Go to session** — one button, or `O` — brings the
+window a session is already running in to the front, and the panel's transcript reads like a
+document, with tables, code you can copy and each tool call folded to one line. A **Look** button
+and a **Settings** button are in the header. A floor where nothing is moving is not redrawn, and a
+DeckHQ window pinned to the Windows taskbar keeps DeckHQ's icon.
 
 ### Added
 
@@ -42,10 +51,6 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   rooms. Solid is a band that casts like a wall. Glass is a sheet between two thin dark frame lines
   with a post every few units, and casts nothing. Low is a waist-high divider with rounded ends
   that stops short of each corner. The building's outside wall does not change.
-- **Two more styles: Daylight studio and Nordic wool.** Daylight studio is pale ash under noon
-  light with glass between the rooms. Nordic wool is cool ash, cork and broadloom with low
-  dividers under morning light. `?look=daylight-studio` and `?look=nordic-wool` open the floor in
-  them.
 - **Three more floors: oak plank, fine herringbone and felt carpet.** In the floor pickers under
   Advanced — oak plank for the office, the rooms and the lounge, fine herringbone for the office
   and the lounge, felt for the office and the rooms. They are laid at the size of a real floor: a
@@ -63,12 +68,14 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   night shift and 11.7:1 on blueprint, and two neighbouring rooms are at least 14.7, 23.0 and 21.6
   RGB apart (subtle: 1 to 3). It works on every floor a room can have, wood included. Off is the
   bare floor. Your agents keep their own colours.
-- **Three more styles: Graphite loft, Colour plan and Walnut executive.** They needed room colours
-  and are in the Style picker now, which shows eleven. Colour plan is the one that gives every
-  repository its own colour on a neutral building. `?look=graphite-loft`, `?look=colour-plan` and
-  `?look=walnut-executive` open the floor in them, and a look file exported before today still
-  imports exactly as it was. Graphite loft is grey terrazzo and loop pile with dark frames behind
-  glass, under evening light; Walnut executive is fine herringbone and cork in a clay wash.
+- **Five more styles, which makes eleven.** Daylight studio is pale ash under noon light with
+  glass between the rooms. Nordic wool is cool ash, cork and broadloom with low dividers under
+  morning light. Graphite loft is grey terrazzo and loop pile with dark frames behind glass, under
+  evening light. Colour plan gives every repository its own colour on a neutral building. Walnut
+  executive is fine herringbone and cork in a clay wash. `?look=daylight-studio`,
+  `?look=nordic-wool`, `?look=graphite-loft`, `?look=colour-plan` and `?look=walnut-executive`
+  open the floor in them, and a look file exported from an earlier version still imports exactly
+  as it was.
 - **A style's card shows its rooms, its walls and its light.** Each of the eleven cards is painted
   by the floor's own painter, and now shows two project rooms side by side in the colours that
   style gives them, the partition between them, and shadows as long as its light throws. Colour
@@ -123,6 +130,29 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
 
 ### Changed
 
+- **The floor is lit.** Every floor looks different after this update, in every style and theme.
+  - **Windows.** The top and left outside walls are glazed, pane by pane, because that is where
+    the light comes from. Each pane lays a faint patch of daylight on the floor of the room behind
+    it, at most three to a room and never over the corner where the room's name is. A room with no
+    outside wall gets one skylight patch instead. A room with the lights off keeps its daylight at
+    half strength.
+  - **Rooms fall away from their windows.** The far side of a room is slightly darker than the
+    side by the glass: at most 1.10:1 against the bare floor, and a name on it measures 7.08:1 or
+    better on the default theme.
+  - **Shade at the foot of the walls.** A soft ramp along all four walls of a room, deeper under
+    the two the light comes over, in place of the two wide bands there were.
+  - **No more ovals under furniture.** The oval shadow along the bottom of every desk, rug and
+    plant is gone. A piece of furniture now darkens the floor in its own outline, straight
+    underneath it, and a tall one — a desk, a sofa, a bookcase — also throws a short, crisp shadow
+    in the direction of the light.
+  - **Doors stand open.** The wall stops at a doorway, and the door is drawn as a leaf standing
+    30° open with a faint arc for its swing, where there was a dashed quarter-circle over an
+    unbroken wall.
+  - **Baseboards and frame lines.** A one-pixel line of the floor's own colour, a step darker,
+    runs along the foot of the full-height walls, and the outside wall carries a thin dark line on
+    both faces.
+  - **The partition between two rooms is wider and casts a shadow.** It is about 9 cm on the plan
+    where it was about 5, and a wall shared by two rooms is drawn once instead of twice.
 - **Furniture looks like furniture.** Every piece on the floor is redrawn in the same footprint.
   A desk has a screen and a keyboard on the side its person sits at, and a bench has a groove down
   its middle. A task chair has a five-star base with castors, arm pads and a curved back, and an
@@ -143,18 +173,33 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   input".
 - **A rug's corners follow the furniture set** — rounder in Soft, squarer in Industrial — and it
   has a fine line inside its border.
-- **A sub-agent is drawn one agent size smaller than its lead, everywhere.** Agent size has three
-  steps — small, medium, large — and a sub-agent is now one step under the session that started
-  it: beside a large lead it is medium-sized, beside a medium one small. It was 80% beside its
-  lead and 65% in a crew, and on a crowded floor it was not smaller at all, because nobody was
-  drawn under 16 pixels tall. It is 80% in every case now, at small, medium, large and auto. The
-  cost: on the most crowded floors a sub-agent's body is 12.8 pixels tall where its lead's is 16.
-  Its name is still set at 11 pixels. In a crew with room to spare it is larger than it was, 80%
-  where it was 65%.
-- **A crew's type label is never shortened.** `code-reviewer` and `general-purpose` used to be cut
-  to `code.` and `gene.` where the floor was tight. They are written in full and, where there is
-  no room beside the figure, stand off on a thin line to it.
-
+- **The floor is sharp.** The floor under the figures — walls, carpets, furniture — was drawn once
+  at a fixed size and stretched to fit your window, so it was always a little soft, and softer on
+  a quiet floor or a magnified one. It is now drawn at exactly the size it is shown at, one pixel
+  of the picture to one pixel of your screen, at any display scaling. While you zoom or drag the
+  window the floor is stretched for a moment and is redrawn sharp about a sixth of a second after
+  you stop. Walls, carpet weave and tile grout sit on whole pixels instead of straddling two.
+- **Wide ash boards have seams on whole pixels.** Each seam is drawn once, on the pixel grid, where
+  it was drawn twice and could fall between two rows.
+- **Names and room signs have a thinner outline.** The pale outline round a name was about a
+  quarter of the letter's height, which filled in the openings of `a`, `e` and `s` at small sizes.
+  It is 0.16 of the letter's height now, and never thinner than a pixel and a half of your screen.
+- **A room with the lights off looks dimmed, not olive.** The dimming was a brown veil, which
+  turned a pale carpet khaki. A dark room is now the same colours as a lit one, about a quarter
+  less light and a third less colourful, in all three themes. Its name and its `N need you` line
+  are as easy to read as before, and the desk still stands out of the carpet.
+- **The project rooms get most of the floor.** The lounge and your office could take more than
+  half the building between them, with the project rooms squeezed into what was left. The rooms
+  now get at least 55% of it unless they are already as large as a room may be (see "A room has a
+  maximum size"), your office at most a fifth and the lounge at most a quarter. On a
+  floor with five projects, sixteen sessions waiting and seventy-nine resting, on a 2000 x 1185
+  window, the rooms went from 28% of the building to 59%, the lounge from 50% to 22%, and your
+  office from 16% to 13%.
+- **Every room is the shape of a room.** One project could get a hall while the others got thin
+  strips showing only a desk top. Rooms now stand in rows of the same depth, each between 0.7 and
+  1.8 times as wide as it is deep, and no room is more than two and a half times the size of the
+  smallest. A room comes in one of three sizes: one desk, a team of two to four, or a team of five
+  or more.
 - **A room has a maximum size.** With one, two or three projects open, each room used to be a
   hall — most of the window round a single desk, filled with meeting tables and sofas nobody sat
   at. A room for one desk, for a team and for a large team now each have a ceiling, and a room is
@@ -164,6 +209,27 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   room — except where one project has the floor to itself (below). No room is more than 45% bare
   floor any more. A floor of many projects, whose rooms were already under their ceilings, is laid
   exactly as before.
+- **Rooms are furnished.** A project room is much bigger than its desks now, and the rest of it
+  was empty carpet. Each room is furnished for its size. A team's room (two to four desks) gets a
+  small meeting table and a credenza along a wall. A big team's room gets a table for six or eight
+  with a standing whiteboard at its head, a shelving wall and a planter beside each corner plant. A
+  room that still has a lot of open floor after that gets more, the quietest pieces first —
+  storage against the walls, then a table, then a sofa with two armchairs — until less than 45%
+  of its floor is open. A room that is the size of its desks gets nothing. On the 2000 x 1185
+  floor above, the five rooms went from 46–66% open floor to 34–41%; two rooms of two and three
+  desks on a 1440 x 1000 window went from 75% and 77% to 40% and 42%.
+- **The new furniture stays out of the way.** The desks are where they were, with the meeting
+  table and the sofas on the far side of the room and storage against the walls. Nothing is put in
+  front of the door, in the strip where the room's name is written, behind a desk where a junior
+  stands, or where a crew sits — a room with a crew has no meeting table. The new pieces are in the
+  pale wood of the lounge's tables and are not lit, so the working desks are still what you see
+  first. Nobody is ever drawn sitting in a meeting chair.
+- **A project whose sessions are all waiting on you keeps its room, with the lights off.** In
+  1.6.2 such a project shrank to a small room along the bottom. It now keeps the room it would
+  have with somebody at the desk: the same size and shape, one empty desk, dimmed, with its name
+  and its `N need you` line as easy to read as before. The lights come back when one of its
+  sessions starts working again. A pinned project with nothing running is drawn the same way, as
+  the small room in its row.
 - **A quiet office is a small office.** With four or fewer waiting on you, Your Office is your
   desk, the visitor chair and one sofa for them, instead of three sofas round an empty rug. With
   five or fewer resting, the lounge is its one sofa group; the café, the reading corner and the
@@ -189,6 +255,24 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   up to twelve, the reading corner for up to twenty, and the games after that. A fifth person
   waiting used to bring all three sofas back at once, and a sixth resting the whole lounge. On a
   floor of four or more projects they still do.
+- **When more sessions are waiting than your office has sofas for, the rest stand.** Your office
+  is as big as its sofas and its desk need, up to a fifth of the building. Past that it stops
+  growing: every cushion fills, and the remaining sessions stand in a queue along the wall.
+  Everyone waiting is still drawn.
+- **A crowd in the lounge is a number.** Resting sessions used to stand in rows until everyone had
+  a place, which could be sixty figures in a line. The lounge now shows the people on its seats
+  and one row standing, and the rest as a `+N resting` chip at the end of that row. Clicking the
+  chip opens the deck on a new **Resting** tab that lists everyone in the lounge, most recent
+  first. The lounge's plate and the header still count all of them.
+- **A full lounge or a long queue no longer shrinks everything else.** The floor is first laid out
+  with everything it wants. If that is too big to draw at 12 pixels per unit in your window (a
+  30-pixel figure, the smallest that keeps its detail), your office and the lounge are held to
+  their share instead, and the lounge gives up games tables before your office gives up a seat.
+  Only the project rooms can make the building bigger than that.
+- **A very busy floor is drawn with smaller people before it scrolls.** If the rooms need more
+  width than the window has at the smallest scale, the floor is laid out one agent size smaller.
+  With 22 rooms on a 1420-pixel-wide window this is the difference between scrolling and fitting.
+  On a 1366-pixel window that floor is still 3% wider than the window, and scrolls.
 - **Agent size "auto" follows how large the floor is drawn**, not only how many agents there are.
   A dozen agents in two rooms are a small building in a big window, so they are drawn at the
   larger size. A size you picked yourself is never overruled.
@@ -210,6 +294,17 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
 - **Nothing you set is lost.** A room you pinned while it was a worktree's room keeps its
   repository's room pinned, and unpinning that room takes the old pin away. Tokens already
   recorded under a worktree are counted under its repository. Nothing on disk is rewritten.
+- **A sub-agent is drawn one agent size smaller than its lead, everywhere.** Agent size has three
+  steps — small, medium, large — and a sub-agent is now one step under the session that started
+  it: beside a large lead it is medium-sized, beside a medium one small. It was 80% beside its
+  lead and 65% in a crew, and on a crowded floor it was not smaller at all, because nobody was
+  drawn under 16 pixels tall. It is 80% in every case now, at small, medium, large and auto. The
+  cost: on the most crowded floors a sub-agent's body is 12.8 pixels tall where its lead's is 16.
+  Its name is still set at 11 pixels. In a crew with room to spare it is larger than it was, 80%
+  where it was 65%.
+- **A crew's type label is never shortened.** `code-reviewer` and `general-purpose` used to be cut
+  to `code.` and `gene.` where the floor was tight. They are written in full and, where there is
+  no room beside the figure, stand off on a thin line to it.
 - **The Look section is six choices, and an Advanced section you open if you want it.** Agent
   size, theme and style are at the top; density, light and room colours are in one line under the
   style cards, and the live preview is under those. The partitions, the floor material for each
@@ -224,46 +319,6 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   rule.
 - **Theme is in the Look section.** It moved from Floor, so it sits beside the others and
   there is one place to change it in Settings. Pointing at a theme still previews it.
-- **The floor is sharp.** The floor under the figures — walls, carpets, furniture — was drawn once
-  at a fixed size and stretched to fit your window, so it was always a little soft, and softer on
-  a quiet floor or a magnified one. It is now drawn at exactly the size it is shown at, one pixel
-  of the picture to one pixel of your screen, at any display scaling. While you zoom or drag the
-  window the floor is stretched for a moment and is redrawn sharp about a sixth of a second after
-  you stop. Walls, carpet weave and tile grout sit on whole pixels instead of straddling two.
-- **The floor is lit.** Every floor looks different after this update, in every style and theme.
-  - **Windows.** The top and left outside walls are glazed, pane by pane, because that is where
-    the light comes from. Each pane lays a faint patch of daylight on the floor of the room behind
-    it, at most three to a room and never over the corner where the room's name is. A room with no
-    outside wall gets one skylight patch instead. A room with the lights off keeps its daylight at
-    half strength.
-  - **Rooms fall away from their windows.** The far side of a room is slightly darker than the
-    side by the glass: at most 1.10:1 against the bare floor, and a name on it measures 7.08:1 or
-    better on the default theme.
-  - **Shade at the foot of the walls.** A soft ramp along all four walls of a room, deeper under
-    the two the light comes over, in place of the two wide bands there were.
-  - **No more ovals under furniture.** The oval shadow along the bottom of every desk, rug and
-    plant is gone. A piece of furniture now darkens the floor in its own outline, straight
-    underneath it, and a tall one — a desk, a sofa, a bookcase — also throws a short, crisp shadow
-    in the direction of the light.
-  - **Doors stand open.** The wall stops at a doorway, and the door is drawn as a leaf standing
-    30° open with a faint arc for its swing, where there was a dashed quarter-circle over an
-    unbroken wall.
-  - **Baseboards and frame lines.** A one-pixel line of the floor's own colour, a step darker,
-    runs along the foot of the full-height walls, and the outside wall carries a thin dark line on
-    both faces.
-  - **The partition between two rooms is wider and casts a shadow.** It is about 9 cm on the plan
-    where it was about 5, and a wall shared by two rooms is drawn once instead of twice.
-- **Wide ash boards have seams on whole pixels.** Each seam is drawn once, on the pixel grid, where
-  it was drawn twice and could fall between two rows.
-- **Names and room signs have a thinner outline.** The pale outline round a name was about a
-  quarter of the letter's height, which filled in the openings of `a`, `e` and `s` at small sizes.
-  It is 0.16 of the letter's height now, and never thinner than a pixel and a half of your screen.
-- **A busy floor on a HiDPI display uses less memory.** The floor's picture is the size of what is
-  on screen rather than a fixed size per room: with 150 agents at a display scaling of 200% it is
-  32 MB where it was 73 MB. A floor of forty at the same scaling is 32 MB where it was 25 MB,
-  because it is no longer stretched. Magnified, a second picture of the part you are looking at is
-  kept beside it. No one picture is ever more than 16 million pixels (64 MB); past that the floor
-  is drawn slightly smaller and stretched, as before.
 - **A floor where nothing is happening is not redrawn.** The floor used to be drawn again sixty
   times a second whether or not anything on it had changed. A frame is now drawn only when it
   would be a different picture from the one on screen. With **reduce motion** on, that means when
@@ -279,6 +334,12 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   machine — the same frame takes 4 ms where it took 23 ms, and 10 ms at a display scaling of 200%
   where it took 78 ms. The floor looks exactly as it did. One more picture the size of the window
   is kept in memory for this: 8 MB for a 2000 × 1055 window, 34 MB at 200%.
+- **A busy floor on a HiDPI display uses less memory.** The floor's picture is the size of what is
+  on screen rather than a fixed size per room: with 150 agents at a display scaling of 200% it is
+  32 MB where it was 73 MB. A floor of forty at the same scaling is 32 MB where it was 25 MB,
+  because it is no longer stretched. Magnified, a second picture of the part you are looking at is
+  kept beside it. No one picture is ever more than 16 million pixels (64 MB); past that the floor
+  is drawn slightly smaller and stretched, as before.
 - **A very large floor is laid out in about a sixth of the time.** Working out the building for
   300 agents in 80 projects took two thirds of a second or more each time somebody started,
   finished or was benched, and the floor stood still while it did. It takes between a tenth and a
@@ -289,24 +350,34 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
 
 ### Fixed
 
-- **"Resume in app" opened the app and not your session.** The link DeckHQ sent carried the wrong
-  kind of id, which the Claude desktop app refuses. It sends the app's own id for the session now,
-  and the app opens on it. **Resume in app** is offered only for a session the app can open: one
-  started in a terminal is not in the app, and the option is no longer shown for it.
-- **A numbered list with blank lines between its items was several lists.** `1.`, `2.`, a blank
-  line and `3.` rendered as two lists. It is one.
-- **A chair somebody is sitting in is square to its desk.** Every task chair was drawn turned a
-  few degrees, as if pushed back, including the ones with somebody in them, so a person at a desk
-  sat askew to their own screen. A taken chair now faces its desk; only empty chairs are left
-  turned.
-- **A screen on a worktree bench faces the person at it by rule.** It did not say which side of
-  the bench its user sits on, and the keyboard side was guessed from the screen's shape.
-- **A chair's back was on the wrong side.** Every task chair had its backrest between the person
-  and the desk, and the visitor's tub chair had its high back in front of the sitter. Both backs
-  are behind whoever sits there.
-- **A bookcase in a reception laid on its side was drawn across its own footprint.** On a wide
-  window Your Office is laid along the front of the building, and its bookcase came out as a short
-  stub. It is drawn along the wall it stands against.
+- **A project in a deep folder can be pinned.** Pinning a room, or keeping it in a saved room
+  order, silently did nothing when the project's path was long: a worktree a few folders down, or
+  anything under a temp directory. A project's id is its whole path, and it was being held to 128
+  characters. The limit is now 1,024.
+
+- **Everyone waiting sits on the sofas.** With sixteen sessions waiting, five of them stood in the
+  middle of the rug while most of the cushions behind them were empty. A sofa now seats one person
+  on each cushion, and nobody stands while a cushion is free. The three sofas fill together, the
+  longest wait nearest your desk. People sit on every other cushion first and close up only when
+  a sofa has no other place left. A session with its hand raised waits there too, on a cushion
+  like anyone else. The session you open still walks to the chair at your desk, and its cushion is
+  kept for it.
+- **If the sofas are full, the rest queue along the wall.** Only when every cushion is taken does
+  anyone stand, and then in one line along the wall at the desk end of the room. Nobody stands on
+  the rug or between the sofas and your desk. A long queue closes up along that wall rather than
+  spreading into the room.
+- **Wait badges and names in a full office are readable.** A badge is over its own head and a name
+  under its own feet, or right beside the body where the next person's badge is below it, and
+  nobody else's name is put between the two. Where two people sit next to each other, one name is
+  under the feet and the next is one line lower, joined to its figure by a thin line. A badge
+  that would touch the badge beside it shows only its largest unit — `2d 23h` becomes `2d` — and
+  the panel and the queue strip still show the full time.
+- **The office's name plate no longer runs through a wait badge.** With somebody on the first
+  cushion of the top sofa, `16 waiting · oldest 1d 2h` was written across their badge. The plate
+  now stops before the badge and reads `16 waiting`.
+- **A wait badge never sits on the person above.** On a sofa that runs down the screen, two people
+  a cushion apart put the lower one's badge on the upper one's body. People there now sit a full
+  sofa place apart, whatever length the sofa was cut to.
 - **Sub-agents were working round an empty chair.** When a session finished its turn while its
   sub-agents were still working, it walked to your office like any session waiting on you, and
   its sub-agents stayed in its room round a desk with nobody at it. A session with at least one
@@ -316,12 +387,69 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   Benching it still sends it to the lounge, and firing it still takes it off the floor. When its
   last working sub-agent stops it goes to your office, as it would have. The header's **at desk**
   counts it while it is there.
+- **A crew no longer sits on the room's other table.** A room with nine or more people at desks
+  has a second table, behind the far chairs of the first. A crew whose parent sat in a chair
+  between the two was laid over the other table: juniors on its desk top and on its chairs, and
+  with ten or more of them two to six cables through it. A crew now sits in its arc only where
+  every junior and laptop is clear of the tables and of other people's chairs, and every cable is
+  clear of the tables. Where it is not, the juniors stand in a row behind their parent, in the
+  aisle between the tables, which is what they already do behind a chair that backs onto a wall.
+  That row keeps off the furniture too: with twenty or more juniors its second rank used to stand
+  on the next table. Measured on one room with 1 to 24 people at desks and 1 to 24 juniors, with
+  each chair as the parent's and with the parent away, at four window sizes: 1,278 of 6,040 floors
+  had a junior on a desk or a chair, or a cable through a desk, and none do now; at the small,
+  large and auto agent sizes it was 1,268, 969 and 1,231 of them, and is none. Fewer crews sit in
+  an arc as a result: 2,552 of those floors draw one, where 3,856 did. In a room with two full
+  tables, only the four chairs on the far side of the first table have open floor behind them, so
+  a crew is an arc behind one chair in four. Nobody on a demo floor moves: 1,156 seats on thirteen
+  demo floors at four window sizes are where they were, and every floor picture taken before the
+  change matched after it with 0 pixels changed.
+- **A crew's cables are planned round the desks that are in the room.** The router was handed each
+  table one room-offset away from where it stands: in a room 39 units from the building's left
+  edge, a table at 67.4 was given to it at 106.4. Only a room in the building's top-left corner got
+  the right rectangle. It now gets the tables where they are. No cable on a demo floor moves: 984
+  cables on every demo floor and 48 made-up ones, at four window sizes, take the same route as
+  before, and the `crew` and `crew-waiting` goldens match with 0 pixels changed.
+- **A chair somebody is sitting in is square to its desk.** Every task chair was drawn turned a
+  few degrees, as if pushed back, including the ones with somebody in them, so a person at a desk
+  sat askew to their own screen. A taken chair now faces its desk; only empty chairs are left
+  turned.
+- **A chair's back was on the wrong side.** Every task chair had its backrest between the person
+  and the desk, and the visitor's tub chair had its high back in front of the sitter. Both backs
+  are behind whoever sits there.
+- **A screen on a worktree bench faces the person at it by rule.** It did not say which side of
+  the bench its user sits on, and the keyboard side was guessed from the screen's shape.
+- **A bookcase in a reception laid on its side was drawn across its own footprint.** On a wide
+  window Your Office is laid along the front of the building, and its bookcase came out as a short
+  stub. It is drawn along the wall it stands against.
 - **Shadows were half size on a HiDPI display.** At a display scaling of 200% every shadow on the
   floor — under furniture, round a room, round the building — reached half as far as it does at
   100%, so the floor looked flatter than it was designed to. A shadow is now the same size on
   screen at every scaling: a piece of furniture's reaches 10.5 pixels at 100%, 150% and 200%,
   where at 200% it reached 5.5.
-
+- **Changing a look no longer puts the floor back on the default theme.** On Night shift or
+  Blueprint, choosing a floor, a rug or a style repainted the building in the default theme's
+  colours while the rest of the window stayed dark. And switching theme a second time in one
+  session changed the window and left the floor on the first one until something else redrew it.
+  Both came from one mistake: the floor remembered a theme by the wrong thing. A look is now
+  painted on the theme you are on, and every theme change repaints the floor.
+- **A choice in the Look section stays highlighted.** You would click Large, or a floor, or a rug;
+  the floor changed, and a moment later the highlight jumped back to what it was before. The floor
+  was right and the control was wrong. It now shows what you chose, and goes back only if the
+  choice is refused — with the reason under it.
+- **A second change no longer undoes the first.** Because the section was working from the look it
+  was opened with, changing the colour scheme after the agent size quietly put the agent size
+  back. Each change is now made on top of the last one.
+- **Arrow keys keep working in the Look section.** Moving a choice with an arrow key lost the
+  keyboard's place after one step. The focus now stays on the option you moved to.
+- **The Look button and Settings always agree.** A theme changed in Settings could show as the old
+  one in the Look panel until the floor next refreshed.
+- **"Resume in app" opened the app and not your session.** The link DeckHQ sent carried the wrong
+  kind of id, which the Claude desktop app refuses. It sends the app's own id for the session now,
+  and the app opens on it. **Resume in app** is offered only for a session the app can open: one
+  started in a terminal is not in the app, and the option is no longer shown for it.
+- **A numbered list with blank lines between its items was several lists.** `1.`, `2.`, a blank
+  line and `3.` rendered as two lists. It is one.
 - **A pinned DeckHQ window keeps the DeckHQ icon (Windows).** Pin the app window to the taskbar and
   it turned into a Chrome or Edge icon, which then opened the browser instead of DeckHQ. Windows
   draws a pin from the Start Menu shortcut that carries the window's own name, and DeckHQ's
@@ -347,142 +475,6 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   "already running" and started nothing — yours had no way up. It now starts on the port it would
   otherwise use, says in the log whose port that is, and shows the reinstall banner. A DeckHQ for
   your own state directory on that port is still "already running", as before.
-- **A wait badge never sits on the person above.** On a sofa that runs down the screen, two people
-  a cushion apart put the lower one's badge on the upper one's body. People there now sit a full
-  sofa place apart, whatever length the sofa was cut to.
-- **Changing a look no longer puts the floor back on the default theme.** On Night shift or
-  Blueprint, choosing a floor, a rug or a style repainted the building in the default theme's
-  colours while the rest of the window stayed dark. And switching theme a second time in one
-  session changed the window and left the floor on the first one until something else redrew it.
-  Both came from one mistake: the floor remembered a theme by the wrong thing. A look is now
-  painted on the theme you are on, and every theme change repaints the floor.
-- **A choice in the Look section stays highlighted.** You would click Large, or a floor, or a rug;
-  the floor changed, and a moment later the highlight jumped back to what it was before. The floor
-  was right and the control was wrong. It now shows what you chose, and goes back only if the
-  choice is refused — with the reason under it.
-- **A second change no longer undoes the first.** Because the section was working from the look it
-  was opened with, changing the colour scheme after the agent size quietly put the agent size
-  back. Each change is now made on top of the last one.
-- **Arrow keys keep working in the Look section.** Moving a choice with an arrow key lost the
-  keyboard's place after one step. The focus now stays on the option you moved to.
-- **The Look button and Settings always agree.** A theme changed in Settings could show as the old
-  one in the Look panel until the floor next refreshed.
-- **Everyone waiting sits on the sofas.** With sixteen sessions waiting, five of them stood in the
-  middle of the rug while most of the cushions behind them were empty. A sofa now seats one person
-  on each cushion, and nobody stands while a cushion is free. The three sofas fill together, the
-  longest wait nearest your desk. People sit on every other cushion first and close up only when
-  a sofa has no other place left. The session you open still walks to the chair at your desk, and
-  its cushion is kept for it.
-- **If the sofas are full, the rest queue along the wall.** Only when every cushion is taken does
-  anyone stand, and then in one line along the wall at the desk end of the room. Nobody stands on
-  the rug or between the sofas and your desk. A long queue closes up along that wall rather than
-  spreading into the room.
-- **Wait badges and names in a full office are readable.** A badge is over its own head and a name
-  under its own feet, or right beside the body where the next person's badge is below it, and
-  nobody else's name is put between the two. Where two people sit next to each other, one name is
-  under the feet and the next is one line lower, joined to its figure by a thin line. A badge
-  that would touch the badge beside it shows only its largest unit — `2d 23h` becomes `2d` — and
-  the panel and the queue strip still show the full time.
-- **The office's name plate no longer runs through a wait badge.** With somebody on the first
-  cushion of the top sofa, `16 waiting · oldest 1d 2h` was written across their badge. The plate
-  now stops before the badge and reads `16 waiting`.
-- **Wait badges and names in a full office are readable.** With sixteen sessions waiting, the
-  ones standing stood right in front of the ones sitting: their badges landed on the heads behind
-  them, and the names of the people on the sofa were pushed two rows away or across the wall. A
-  badge is now over its own head and a name under its own feet, or right beside the body where the
-  next person's badge is below it, and nobody else's name is put between the two. The people
-  standing stand a full row in front of the sofa, in the gaps between the people sitting, and a
-  second row stands in the gaps of the first.
-- **The corner of the sofas is left empty once somebody has to stand.** While everyone waiting
-  fits on the sofas they all sit. When one more arrives, the two end cushions of the back sofa are
-  left free, so two people's badges no longer meet in the corner. Sixteen waiting are now eleven
-  sitting and five standing, where they were twelve and four.
-- **A crew's cables are planned round the desks that are in the room.** The router was handed each
-  table one room-offset away from where it stands: in a room 39 units from the building's left
-  edge, a table at 67.4 was given to it at 106.4. Only a room in the building's top-left corner got
-  the right rectangle. It now gets the tables where they are. No cable on a demo floor moves: 984
-  cables on every demo floor and 48 made-up ones, at four window sizes, take the same route as
-  before, and the `crew` and `crew-waiting` goldens match with 0 pixels changed.
-- **A crew no longer sits on the room's other table.** A room with nine or more people at desks
-  has a second table, behind the far chairs of the first. A crew whose parent sat in a chair
-  between the two was laid over the other table: juniors on its desk top and on its chairs, and
-  with ten or more of them two to six cables through it. A crew now sits in its arc only where
-  every junior and laptop is clear of the tables and of other people's chairs, and every cable is
-  clear of the tables. Where it is not, the juniors stand in a row behind their parent, in the
-  aisle between the tables, which is what they already do behind a chair that backs onto a wall.
-  That row keeps off the furniture too: with twenty or more juniors its second rank used to stand
-  on the next table. Measured on one room with 1 to 24 people at desks and 1 to 24 juniors, with
-  each chair as the parent's and with the parent away, at four window sizes: 1,278 of 6,040 floors
-  had a junior on a desk or a chair, or a cable through a desk, and none do now; at the small,
-  large and auto agent sizes it was 1,268, 969 and 1,231 of them, and is none. Fewer crews sit in
-  an arc as a result: 2,552 of those floors draw one, where 3,856 did. In a room with two full
-  tables, only the four chairs on the far side of the first table have open floor behind them, so
-  a crew is an arc behind one chair in four. Nobody on a demo floor moves: 1,156 seats on thirteen
-  demo floors at four window sizes are where they were, and all 24 goldens match with 0 pixels
-  changed.
-
-### Changed
-
-- **The project rooms get most of the floor.** The lounge and your office could take more than
-  half the building between them, with the project rooms squeezed into what was left. The rooms
-  now get at least 55% of it, your office at most a fifth and the lounge at most a quarter. On a
-  floor with five projects, sixteen sessions waiting and seventy-nine resting, on a 2000 x 1185
-  window, the rooms went from 28% of the building to 59%, the lounge from 50% to 22%, and your
-  office from 16% to 13%.
-- **Rooms are furnished.** A project room is much bigger than its desks now, and the rest of it
-  was empty carpet. Each room is furnished for its size. A team's room (two to four desks) gets a
-  small meeting table and a credenza along a wall. A big team's room gets a table for six or eight
-  with a standing whiteboard at its head, a shelving wall and a planter beside each corner plant. A
-  room that still has a lot of open floor after that gets more, the quietest pieces first —
-  storage against the walls, then a table, then a sofa with two armchairs — until less than 45%
-  of its floor is open. A room that is the size of its desks gets nothing. On the 2000 x 1185
-  floor above, the five rooms went from 46–66% open floor to 34–41%; two rooms of two and three
-  desks on a 1440 x 1000 window went from 75% and 77% to 40% and 42%.
-- **The new furniture stays out of the way.** The desks are where they were, with the meeting
-  table and the sofas on the far side of the room and storage against the walls. Nothing is put in
-  front of the door, in the strip where the room's name is written, behind a desk where a junior
-  stands, or where a crew sits — a room with a crew has no meeting table. The new pieces are in the
-  pale wood of the lounge's tables and are not lit, so the working desks are still what you see
-  first. Nobody is ever drawn sitting in a meeting chair.
-- **A room with the lights off looks dimmed, not olive.** The dimming was a brown veil, which
-  turned a pale carpet khaki. A dark room is now the same colours as a lit one, about a quarter
-  less light and a third less colourful, in all three themes. Its name and its `N need you` line
-  are as easy to read as before, and the desk still stands out of the carpet.
-- **Every room is the shape of a room.** One project could get a hall while the others got thin
-  strips showing only a desk top. Rooms now stand in rows of the same depth, each between 0.7 and
-  1.8 times as wide as it is deep, and no room is more than two and a half times the size of the
-  smallest. A room comes in one of three sizes: one desk, a team of two to four, or a team of five
-  or more.
-- **A project whose sessions are all waiting on you keeps its room, with the lights off.** In
-  1.6.2 such a project shrank to a small room along the bottom. It now keeps the room it would
-  have with somebody at the desk: the same size and shape, one empty desk, dimmed, with its name
-  and its `N need you` line as easy to read as before. The lights come back when one of its
-  sessions starts working again. A pinned project with nothing running is drawn the same way, as
-  the small room in its row.
-- **A crowd in the lounge is a number.** Resting sessions used to stand in rows until everyone had
-  a place, which could be sixty figures in a line. The lounge now shows the people on its seats
-  and one row standing, and the rest as a `+N resting` chip at the end of that row. Clicking the
-  chip opens the deck on a new **Resting** tab that lists everyone in the lounge, most recent
-  first. The lounge's plate and the header still count all of them.
-- **When more sessions are waiting than your office has sofas for, the rest stand.** Your office
-  is as big as its sofas and its desk need, up to a fifth of the building. Past that it stops
-  growing: every cushion fills, and the remaining sessions stand in a queue along the wall.
-  Everyone waiting is still drawn.
-- **A full lounge or a long queue no longer shrinks everything else.** The floor is first laid out
-  with everything it wants. If that is too big to draw at 12 pixels per unit in your window (a
-  30-pixel figure, the smallest that keeps its detail), your office and the lounge are held to
-  their share instead, and the lounge gives up games tables before your office gives up a seat.
-  Only the project rooms can make the building bigger than that.
-- **Two projects are two rooms side by side, in any shape of window.** With your office and the
-  lounge down the left, two rooms in a window about one and a half times as wide as it is tall
-  could only keep a room's shape in a very large building, with everybody in it drawn small. Your
-  office and the lounge now go side by side across the top there, with the rooms in a row behind
-  them. Two projects on a 1600 x 1000 canvas went from a building 208 units wide, drawn at 7.7
-  pixels per unit, to one 107 wide at 15.
-- **A very busy floor is drawn with smaller people before it scrolls.** If the rooms need more
-  width than the window has at the smallest scale, the floor is laid out one agent size smaller.
-  With 22 rooms on a 1420-pixel-wide window this is the difference between scrolling and fitting.
-  On a 1366-pixel window that floor is still 3% wider than the window, and scrolls.
 
 ### Testing
 
@@ -519,7 +511,6 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   from the amber of "needs input" and 105 from the red of "for review", against a floor of 60.
   Three existing game-room colours — the pool table's two rail browns and a packing carton's flap
   — are 51 to 59 from that amber and are listed as exceptions rather than changed.
-
 - **The floor's sharpness is measured, at real display scalings.** `node scripts/render-crisp.mjs`
   starts a demo floor and one headless Chrome per scaling, and reports four things from the page
   itself: how far the floor's picture is stretched on its way to the screen, how sharp its wall
@@ -532,11 +523,13 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   room's shadow is 7% short of its size at 100%, which is the browser rounding its blur. Drawing
   the 150-agent floor at 200% took 224 ms where it took 653 ms, in software, with no GPU. The
   floor's canvas is the size the browser snapped it to at every scaling from 100% to 225%.
-- **Two pictures of the floor at 200% are defined, and not yet taken.** `crowded@2x` and
-  `single@2x` are captures at a real display scaling of 2 — a second browser started at that
-  scaling, because the test tool's emulated scaling resamples a canvas. Every existing picture of
-  the floor changes with this version and has to be taken again: the floor in them is no longer
-  stretched, and names sit on whole pixels.
+- **Two pictures of the floor are taken at 200%.** `crowded@2x` and `single@2x` are captures at a
+  real display scaling of 2 — a second browser started at that scaling, because the test tool's
+  emulated scaling resamples a canvas.
+- **Every picture of the floor was taken again, on Windows and on Linux.** The floor in them is
+  lit, is no longer stretched, and has names on whole pixels, so none of the old pictures could be
+  kept. Each set now holds the same 35 pictures, and both were taken again as each of this
+  version's changes to the floor landed.
 - **The floor's proportions are measured on every demo floor.** `floor-proportions.test.mjs` lays
   out nine floors at four window sizes and checks each rule on the result: the three area shares,
   every room's shape, the largest room against the smallest, the row depths, and that the building
@@ -626,16 +619,21 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
 - **In a tight corner a sub-agent's tag stands further off than its name used to.** The tag is a
   row deeper, so where the floor beside a figure is taken it is placed further away, on a thin
   line back to its figure, and its name may be cut to four letters.
-- **The Linux goldens have not been rebaked.** Nine pictures changed — `demo` and its four
-  variants, `crew`, `crew@reduced`, `crew-waiting` and `away` — and only the Windows set was baked
-  again. `npm run goldens:check` on Linux will disagree on those nine until it is.
-
+- **Go to session is measured on Windows only, and not for every window.** On Windows 11 it was
+  run end to end with the Claude desktop app, which opened on the one session it was sent, and
+  with Windows Terminal tabs and a classic console window opened for the purpose, holding a
+  stand-in process rather than a live session. A session inside VS Code, Cursor or a JetBrains
+  terminal has not been run: the editor's window is raised, and which of its terminals holds the
+  session is not something DeckHQ can select. macOS and Linux are written and have never been
+  run; on Wayland it cannot work, and the button says so. Only Claude Code reports which process
+  a session runs in, so for Codex, Gemini CLI and OpenCode the button is Resume.
+- **Tool calls in the panel are Claude Code only.** Codex, Gemini CLI and OpenCode sessions show
+  what was said, rendered the same way, and not what was run.
 - **With motion on, a busy floor is still drawn in full on every frame.** What was taken out of a
   frame is everything that does not move. The figures do, and each is still drawn stroke by
   stroke — about 130 drawing calls a figure, 11,500 a frame on the 150-agent floor — whichever of
   them actually changed since the last frame. Turning on **reduce motion** in your system
   settings is what stops the floor being drawn between changes.
-
 - **Two projects are just under half the floor on a wide window, with a planted strip beside the
   corridor.** The two rooms are 54% of the floor on a 1440 × 1000 window, 49% at 1600 × 1000 and
   44% at 1920 × 1080, and the strip is 6%, 11% and 16%. Two rooms one above the other can each be
@@ -651,9 +649,9 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   hall of a third. A lounge for thirteen is deep, a strip down the side with Your Office above it
   needs a larger building, and everybody would be drawn smaller; the floor is never made larger
   for the sake of its plan.
-- **On a window nearer square than about 4:3, one project still has Your Office and the Lounge
-  across the top** and is a quarter to a third of the floor. A strip down the side would be over a
-  third of a building that narrow.
+- **On a 4:3 window, or one nearer square, one project still has Your Office and the Lounge across
+  the top** and is about a quarter of the floor (22% to 26% at 1024 × 768, 1280 × 960, 1400 × 1050
+  and 1200 × 1000). A strip down the side would be over a third of a building that narrow.
 - **On a floor of four or more projects the fifth person waiting still brings back all three
   sofas at once**, and the sixth resting the whole lounge.
 - **With many agents resting and few projects, the lounge shows more of them as `+N resting`.**
@@ -677,11 +675,6 @@ there, one click further, under **Advanced**. And a choice you make now stays ch
   shortcut carry the same name, and the shortcut's icon is DeckHQ's; both are read back from
   Windows. That the taskbar then draws a pin from that shortcut has not been run by this project,
   because the only way to run it is to pin something to a real taskbar.
-- **A floor with one or two projects has large rooms.** The rooms get at least 55% of the building
-  however few they are, and your office and the lounge need a minimum of floor for their
-  furniture, so a single one-desk project gets a room far bigger than its desk needs. Such a room
-  is furnished with everything there is — up to three tables and three sofa groups — and is
-  still about half open floor (49–65% on the floors measured, where it was 81–88%).
 - **A floor with more than about twenty rooms uses a fourth row.** Three rows is the limit only up
   to there: more rooms than that cannot keep a room's shape in three rows without the building
   becoming much larger.

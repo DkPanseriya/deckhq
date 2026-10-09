@@ -57,7 +57,7 @@ export const MAX_ROOMS = 512;
 export const MAX_LAYOUT_BYTES = 256 * 1024;
 
 /** A project id is a slug of a path — `projectIdFromCwd`'s alphabet, and nothing else. */
-const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,127}$/;
+const PROJECT_ID_RE = /^[a-z0-9][a-z0-9-]{0,1023}$/;
 
 /** The floor preferences a layout carries, and the range each is legal in. */
 export const LAYOUT_PREFERENCES = Object.freeze({

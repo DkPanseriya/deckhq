@@ -784,7 +784,9 @@ await withChrome(
               data: Buffer.concat(images.map((image) => image.data)),
             };
             const kb = (encodeIndexedPng(strip).length / 1024).toFixed(0);
-            say(`       as a strip of PNG frames: ${kb} KB, against ${(r.bytes / 1024).toFixed(0)} KB`);
+            say(
+              `       as a strip of PNG frames: ${kb} KB, against ${(r.bytes / 1024).toFixed(0)} KB`,
+            );
           }
           say(
             `  ok   ${asset.name.padEnd(22)} ${r.width}x${r.height}  ${r.frames} frames @ ` +
