@@ -127,7 +127,7 @@ test('SECURITY: neither installer reaches a host that is not a package manager',
   // Every absolute URL in either file, and where each one is allowed to point.
   // `nodejs.org` and `brew.sh` are printed for a human to visit; nothing here
   // fetches either. Anything else is a host this project did not agree to.
-  const allowed = new Set(['nodejs.org', 'brew.sh', 'dkpanseriya.github.io']);
+  const allowed = new Set(['nodejs.org', 'brew.sh', 'deckhq.dev']);
   for (const [name, text] of [
     ['install.sh', sh],
     ['install.ps1', ps1],
@@ -199,18 +199,18 @@ test('SECURITY: a launcher reaches the Pages origin and no other host', () => {
     const hosts = [...text.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map((m) => m[1].toLowerCase());
     assert.ok(hosts.length > 0, `${name} names no URL at all`);
     for (const host of hosts) {
-      assert.equal(host, 'dkpanseriya.github.io', `${name} names ${host}`);
+      assert.equal(host, 'deckhq.dev', `${name} names ${host}`);
     }
   }
 
   assert.match(
     fs.readFileSync(CMD, 'utf8'),
-    /irm https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.ps1 \| iex/,
+    /irm https:\/\/deckhq\.dev\/install\.ps1 \| iex/,
     'Install-DeckHQ.cmd does not run the published PowerShell installer',
   );
   assert.match(
     fs.readFileSync(COMMAND, 'utf8'),
-    /curl -fsSL https:\/\/dkpanseriya\.github\.io\/deckhq\/install\.sh \| sh/,
+    /curl -fsSL https:\/\/deckhq\.dev\/install\.sh \| sh/,
     'Install-DeckHQ.command does not run the published shell installer',
   );
 });

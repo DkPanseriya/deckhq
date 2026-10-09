@@ -1,7 +1,7 @@
 <#
   DeckHQ - the one line, for Windows. WP-75.
 
-      irm https://dkpanseriya.github.io/deckhq/install.ps1 | iex
+      irm https://deckhq.dev/install.ps1 | iex
 
   What it does, in order, and nothing else:
 
