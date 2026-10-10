@@ -256,3 +256,28 @@ test('a crew that falls under three keeps its floor and lays no longer desk', ()
   hold.update(new Map(), NOW + MIN);
   assert.equal(hold.update(new Map([['api', desks(1)]]), NOW + 2 * MIN).size, 0);
 });
+
+test('a lead whose juniors end one by one stays at the desk it was at', () => {
+  const lead = agent('lead', 'api');
+  const junior = (i, over = {}) =>
+    agent(`j${i}`, 'api', { subagent: true, parentId: 'lead', subagentType: 'Explore', ...over });
+  const opts = { stage: STAGE, now: NOW };
+  const page = new FurnishingHold();
+  const others = [agent('w1', 'web'), agent('w2', 'web')];
+  const three = [lead, junior(1), junior(2), junior(3), ...others];
+  page.update(roomHeadcounts(three, { now: NOW }), NOW);
+  const full = buildPlan(PROJECTS, three, opts);
+  const desk = assignSeats(full, three).get('lead');
+  for (const left of [2, 1, 0]) {
+    const now = NOW + (3 - left) * 1000;
+    const crew = [1, 2, 3].map((i) => junior(i, i > left ? { activityState: 'ended' } : {}));
+    const agents = [lead, ...crew, ...others];
+    const held = page.update(roomHeadcounts(agents, { now }), now);
+    const plan = buildPlan(PROJECTS, agents, { ...opts, held: held.size ? held : undefined });
+    assert.equal(laid(plan, 'api'), laid(full, 'api'), `${left} juniors left: the same room`);
+    assert.ok(samePoint(assignSeats(plan, agents).get('lead'), desk), `${left} left: same desk`);
+    // Unheld, a crew of two is no formation and the room is laid again.
+    if (left === 2)
+      assert.notEqual(laid(buildPlan(PROJECTS, agents, opts), 'api'), laid(full, 'api'));
+  }
+});
