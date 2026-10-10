@@ -17,7 +17,34 @@
  *                     That directory holds `commondir` (usually `../..`), which
  *                     names the repository's own `.git`; its parent is the root.
  *   submodule         `<sub>/.git` is a FILE too, but its gitdir sits under
- *                     `.git/modules/`. A submodule is its own repository.
+ *                     `<outer>/.git/modules/`. It is its own repository, held
+ *                     by the one that path names.
+ *
+ * A REPOSITORY INSIDE A REPOSITORY IS NOT A PROJECT EITHER, in exactly two
+ * cases. The owner's floor had a room called `internal`: a private clone
+ * mounted inside this checkout, which to him is part of this project.
+ *
+ *   submodule         as above. The outer repository is read off the gitdir,
+ *                     and has to be there.
+ *   mounted clone     `<dir>/.git` is a DIRECTORY, the nearest `.git` above
+ *                     `<dir>` is another repository's, and that repository
+ *                     NAMES `<dir>` by a literal line in its root `.gitignore`
+ *                     or its `info/exclude`: `/internal/`, `internal`,
+ *                     `/vendor/tools/`. The line is the directory's whole path
+ *                     from the outer root. A pattern (`*`, `?`, `[`) names
+ *                     nothing, because people keep a home directory in git
+ *                     with `*` ignored and every project below it would
+ *                     become one room. `repo-ignores.mjs` is that rule.
+ *
+ * Either way `root` is the OUTER repository, which is the room, and the nested
+ * one stays visible as what it is: `worktree` is `{ name, path, kind }` with
+ * the nested repository's own directory as `path` and `kind` `nested` or
+ * `submodule` (a linked worktree's is `linked`), and `own` is its root. It is
+ * followed outward — a clone in a submodule in a repository ends at the
+ * repository, and so does a clone mounted in one of its linked worktrees — one
+ * holder at a time, for no more steps than a walk up the tree is given. A clone
+ * nobody names, and a submodule whose outer repository is not there, stay the
+ * projects they were.
  *
  * WHAT IT DOES WHEN IT CANNOT READ. A `.git` nobody can read, a directory with
  * no repository above it and a directory that no longer exists all fall back to
@@ -28,21 +55,37 @@
  * `<state>/worktrees/<project>-<role>`. Without them every finished worktree
  * session would come back as a project of its own.
  *
+ * An outer `.gitignore` that is missing, unreadable or bigger than
+ * `MAX_IGNORE_FILE` names nothing, so the clone below it stays its own project.
+ *
  * Reads files only, never throws, and remembers its answers: an answer is kept
- * for as long as the `.git` it was read from has not changed.
+ * for as long as the `.git` it was read from, and the ignore files of whatever
+ * repository was asked about it, have not changed. A repository that appears
+ * ABOVE one already answered for is noticed the next time that one's own `.git`
+ * changes, not before.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { namedIn, witnessOf, witnessStill } from './repo-ignores.mjs';
 import { samePath } from './same-path.mjs';
 
 /**
  * @typedef {object} RepoInfo
- * @property {string} root  the repository's working directory. The directory
- *   that was asked about when no repository could be found for it.
- * @property {'main'|'worktree'|'submodule'|'guess'|'none'} kind  how it was
- *   found: `guess` is the path heuristic, `none` is the fallback.
- * @property {{name: string, path: string}|null} worktree  set when the
- *   directory is inside a LINKED worktree of `root`; null in the main checkout.
+ * @property {string} root  the ROOM's repository: its working directory. The
+ *   outermost repository that holds the one the directory is in, and the
+ *   directory that was asked about when no repository could be found for it.
+ * @property {'main'|'worktree'|'submodule'|'nested'|'guess'|'none'} kind  how
+ *   it was found: `nested` is a mounted clone its outer repository names,
+ *   `submodule` one whether or not its outer repository could be found,
+ *   `guess` the path heuristic and `none` the fallback.
+ * @property {{name: string, path: string, kind: 'linked'|'nested'|'submodule'}|null} worktree
+ *   the checkout the directory is in when that is not `root` itself: a LINKED
+ *   worktree, or a repository NESTED in `root` (a mounted clone, a submodule).
+ *   `path` is where anything that runs for the session runs. Null in the main
+ *   checkout of a repository nothing holds.
+ * @property {string} own  the repository the directory is in by git's own
+ *   account. `root`, except inside a nested repository, where `root` is the
+ *   outer one and this is the nested one's.
  * @property {boolean} bare  the worktree hangs off a bare repository, so
  *   `root` is a name to show rather than a checkout.
  */
@@ -168,19 +211,24 @@ function studioSlug(/** @type {string} */ base) {
 /**
  * What a `.git` file's `gitdir` says about the directory it sits in.
  *
+ * `git` is the directory its `info/exclude` is in: the repository's own git
+ * directory, which a linked worktree shares with the main checkout.
+ *
  * @param {string} dir the directory holding the `.git` file
  * @param {string} gitdir the path inside it, as written
- * @returns {{kind: 'worktree', root: string, bare: boolean}|{kind: 'submodule'|'main'}}
+ * @returns {{kind: 'worktree', root: string, bare: boolean, git: string}
+ *   |{kind: 'submodule', outer: string, git: string}|{kind: 'main', git: string}}
  */
 function readGitdir(dir, gitdir) {
   const target = resolveFrom(dir, gitdir);
   const linked = /^(.+)\/worktrees\/[^/]+$/.exec(target);
   // A submodule's git directory lives under `.git/modules/`, and so does the
   // git directory of a worktree OF a submodule. Neither is a worktree of the
-  // repository above it.
-  if (/\/\.git\/modules\//i.test(`${target}/`)) return { kind: 'submodule' };
+  // repository above it; both are inside it, and the path says which it is.
+  const held = submoduleOf(target);
+  if (held) return { kind: 'submodule', outer: held, git: target };
   // `git init --separate-git-dir`: a main checkout whose `.git` lives elsewhere.
-  if (!linked) return { kind: 'main' };
+  if (!linked) return { kind: 'main', git: target };
   let common = linked[1];
   try {
     const text = fs.readFileSync(`${target}/commondir`, 'utf8').slice(0, MAX_GIT_FILE).trim();
@@ -189,9 +237,10 @@ function readGitdir(dir, gitdir) {
     // The repository moved or is gone. `commondir` is `../..` unless somebody
     // set it by hand, which is what the path already said.
   }
-  if (/\/\.git\/modules\//i.test(`${common}/`)) return { kind: 'submodule' };
+  const heldBy = submoduleOf(common);
+  if (heldBy) return { kind: 'submodule', outer: heldBy, git: common };
   if (baseOf(common).toLowerCase() === '.git') {
-    return { kind: 'worktree', root: parentOf(common), bare: false };
+    return { kind: 'worktree', root: parentOf(common), bare: false, git: common };
   }
   // A bare repository has no checkout to name. `project.git` is named for
   // itself; anything else (`project/.bare`) for the directory that holds it.
@@ -200,7 +249,80 @@ function readGitdir(dir, gitdir) {
     kind: 'worktree',
     root: named ? `${parentOf(common)}/${named[1]}`.replace(/^\/\//, '/') : parentOf(common),
     bare: true,
+    git: common,
   };
+}
+
+/**
+ * The repository whose `.git/modules/` a git directory sits under — the one a
+ * submodule is a submodule OF — or '' when it sits under none. The first such
+ * marker in the path, so a submodule of a submodule names the outermost; and
+ * `.git/worktrees/<name>/modules/` too, which is where a submodule checked out
+ * in a linked worktree keeps its own.
+ * @param {string} gitDir
+ */
+function submoduleOf(gitDir) {
+  const m = /^(.+?)\/\.git\/(?:worktrees\/[^/]+\/)?modules\//i.exec(`${gitDir}/`);
+  return m ? m[1] : '';
+}
+
+/**
+ * The outermost repository that HOLDS a checkout, followed outward one holder
+ * at a time (the header says which two things make one repository hold
+ * another). `root` is '' when nothing holds it; `seen` is every file the
+ * answer was read from, whichever way it came out.
+ *
+ * @param {string} dir the checkout: the directory whose `.git` is `p`
+ * @param {{type: 'dir'|'file'|'unreadable', text?: string}|null} p
+ * @returns {{root: string, seen: import('./repo-ignores.mjs').Witness[]}}
+ */
+function outward(dir, p) {
+  /** @type {import('./repo-ignores.mjs').Witness[]} */
+  const seen = [];
+  let root = '';
+  let at = slashed(dir);
+  let git = p;
+  for (let left = MAX_DEPTH; git && git.type !== 'unreadable' && left > 0; left--) {
+    const gitdir = git.type === 'file' ? parseGitFile(git.text || '') : null;
+    if (git.type === 'file' && !gitdir) break;
+    const read = gitdir ? readGitdir(at, gitdir) : null;
+    let next = '';
+    let holder = null;
+    if (read && read.kind === 'submodule') next = read.outer;
+    else if (read && read.kind === 'worktree') {
+      // A linked worktree of a repository: the repository is the room, and may
+      // be held in turn. A bare one has no directory to be inside anything.
+      if (read.bare) break;
+      next = read.root;
+    } else {
+      // A main checkout. The nearest repository above it holds it only if it
+      // names it; one further up never gets a say.
+      next = parentOf(at);
+      while (next && left > 0) {
+        holder = probe(next);
+        if (holder) break;
+        next = parentOf(next);
+        left--;
+      }
+      if (!holder || holder.type === 'unreadable') break;
+      const its = holder.type === 'file' ? parseGitFile(holder.text || '') : null;
+      if (holder.type === 'file' && !its) break;
+      const gitDir = its ? readGitdir(next, its).git : `${next}/.git`;
+      const rel = at.slice(next.length);
+      const asked = namedIn([`${gitDir}/info/exclude`, `${next}/.gitignore`], rel);
+      seen.push(witnessOf(`${next}/.git`), ...asked.seen);
+      if (!asked.named) break;
+    }
+    if (!holder) {
+      holder = next && next !== at ? probe(next) : null;
+      if (!holder) break;
+      seen.push(witnessOf(`${next}/.git`));
+    }
+    root = next;
+    at = next;
+    git = holder;
+  }
+  return { root, seen };
 }
 
 /**
@@ -225,7 +347,10 @@ function probe(dir) {
   }
 }
 
-/** `cwd → {info, at, mtimeMs, type}`: the answer and the `.git` it came from. */
+/**
+ * `cwd → {info, at, mtimeMs, type, seen}`: the answer, the `.git` it came from,
+ * and the outer repositories' files that were read to place it.
+ */
 const cache = new Map();
 const CACHE_MAX = 4096;
 
@@ -234,18 +359,27 @@ export function clearRepoCache() {
   cache.clear();
 }
 
-/** Is the `.git` an answer was read from still what it was? */
-function stillTrue(/** @type {{at: string, mtimeMs: number, type: string}} */ entry) {
+/**
+ * Are the `.git` an answer was read from, and the ignore files of whatever
+ * holds it, still what they were?
+ * @param {{at: string, mtimeMs: number, type: string,
+ *   seen?: import('./repo-ignores.mjs').Witness[]}} entry
+ */
+function stillTrue(entry) {
   let st = null;
   try {
     st = fs.statSync(entry.at);
   } catch {
     /* gone, or never there */
   }
-  if (entry.type === 'absent') return st === null || st.mtimeMs === entry.mtimeMs;
-  if (!st) return false;
-  const type = st.isDirectory() ? 'dir' : 'file';
-  return type === entry.type && st.mtimeMs === entry.mtimeMs;
+  if (entry.type === 'absent') {
+    if (st !== null && st.mtimeMs !== entry.mtimeMs) return false;
+  } else {
+    if (!st) return false;
+    const type = st.isDirectory() ? 'dir' : 'file';
+    if (type !== entry.type || st.mtimeMs !== entry.mtimeMs) return false;
+  }
+  return (entry.seen || []).every(witnessStill);
 }
 
 /**
@@ -260,7 +394,7 @@ function stillTrue(/** @type {{at: string, mtimeMs: number, type: string}} */ en
 export function repoRootFor(cwd, opts = {}) {
   const asked = String(cwd || '');
   /** @type {RepoInfo} */
-  const none = { root: asked, kind: 'none', worktree: null, bare: false };
+  const none = { root: asked, kind: 'none', worktree: null, own: asked, bare: false };
   if (!asked.trim()) return none;
   try {
     const key = `${asked}\u0000${opts.stateDir || ''}\u0000${(opts.knownRoots || []).length}`;
@@ -276,10 +410,12 @@ export function repoRootFor(cwd, opts = {}) {
 }
 
 /**
- * The walk itself: up from `cwd` to the nearest `.git`.
+ * The walk itself: up from `cwd` to the nearest `.git`, and then outward from
+ * that repository to whatever holds it.
  * @param {string} asked
  * @param {{stateDir?: string, knownRoots?: string[]}} opts
- * @returns {{info: RepoInfo, at: string, mtimeMs: number, type: string}}
+ * @returns {{info: RepoInfo, at: string, mtimeMs: number, type: string,
+ *   seen: import('./repo-ignores.mjs').Witness[]}}
  */
 function resolve(asked, opts) {
   const start = slashed(path.isAbsolute(asked) || isAbsolute(asked) ? asked : path.resolve(asked));
@@ -288,23 +424,52 @@ function resolve(asked, opts) {
   /** The worktree directory a path heuristic names, if either does. */
   const marked = claude ? claude.path : studio ? studio.path : '';
 
-  /** @param {RepoInfo} info @param {string} at @param {{type:string, mtimeMs:number}|null} p */
-  const answer = (info, at, p) => ({
+  /**
+   * @param {RepoInfo} info @param {string} at
+   * @param {{type:string, mtimeMs:number}|null} p
+   * @param {import('./repo-ignores.mjs').Witness[]} [seen]
+   */
+  const answer = (info, at, p, seen = []) => ({
     info,
     at: `${at}/.git`,
     mtimeMs: p ? p.mtimeMs : 0,
     type: p ? (p.type === 'dir' ? 'dir' : 'file') : 'absent',
+    seen,
   });
-  /** @param {string} root @param {RepoInfo['kind']} kind @param {RepoInfo['worktree']} worktree */
-  const info = (root, kind, worktree, bare = false) => ({
+  /**
+   * @param {string} root @param {RepoInfo['kind']} kind @param {RepoInfo['worktree']} worktree
+   * @param {{bare?: boolean, own?: string}} [more] `own` when it is not `root`
+   * @returns {RepoInfo}
+   */
+  const info = (root, kind, worktree, more = {}) => ({
     root: respell(root, asked),
     kind,
-    worktree: worktree && { name: worktree.name, path: respell(worktree.path, asked) },
-    bare,
+    worktree: worktree && {
+      name: worktree.name,
+      path: respell(worktree.path, asked),
+      kind: worktree.kind,
+    },
+    own: respell(more.own || root, asked),
+    bare: more.bare === true,
   });
   /** `asked`, not `start`, at depth 0: a main checkout keeps the id it had. */
   const spelt = (/** @type {string} */ dir, /** @type {number} */ depth) =>
     depth === 0 ? asked.replace(/(.)[\\/]+$/, '$1') : dir;
+  /**
+   * A repository read where it stands: in its own room, or — when another
+   * repository holds it — at a bench of its own in that one's.
+   * @param {string} own its root, as it is to be spelt
+   * @param {'main'|'submodule'} kind @param {string} dir
+   * @param {NonNullable<ReturnType<typeof probe>>} p
+   */
+  const placed = (own, kind, dir, p) => {
+    const out = outward(dir, p);
+    if (!out.root) return answer(info(own, kind, null), dir, p, out.seen);
+    /** @type {'nested'|'submodule'} */
+    const how = kind === 'submodule' ? 'submodule' : 'nested';
+    const bench = { name: baseOf(dir), path: own, kind: how };
+    return answer(info(out.root, how, bench, { own }), dir, p, out.seen);
+  };
 
   let dir = start;
   for (let depth = 0; dir && depth < MAX_DEPTH; depth++, dir = parentOf(dir)) {
@@ -315,26 +480,42 @@ function resolve(asked, opts) {
     // unrelated one for Studio's. The path is the better witness in both.
     const above = marked && !within(dir, marked);
     if (above) break;
-    if (p.type === 'dir') return answer(info(spelt(dir, depth), 'main', null), dir, p);
+    if (p.type === 'dir') return placed(spelt(dir, depth), 'main', dir, p);
     const gitdir = p.type === 'file' ? parseGitFile(p.text || '') : null;
     if (!gitdir) return answer(info(asked, 'none', null), dir, p);
     const read = readGitdir(dir, gitdir);
     if (read.kind === 'worktree') {
-      const wt = { name: baseOf(dir), path: dir };
-      return answer(info(read.root, 'worktree', wt, read.bare), dir, p);
+      /** @type {RepoInfo['worktree']} */
+      const wt = { name: baseOf(dir), path: dir, kind: 'linked' };
+      // The repository it is a worktree of may be held by another in turn.
+      const out = read.bare ? { root: '', seen: [] } : outward(read.root, probe(read.root));
+      const more = { bare: read.bare, own: read.root };
+      return answer(info(out.root || read.root, 'worktree', wt, more), dir, p, out.seen);
     }
-    return answer(info(spelt(dir, depth), read.kind, null), dir, p);
+    return placed(spelt(dir, depth), read.kind, dir, p);
   }
 
   if (claude) {
-    // The repository may itself be a worktree's checkout; ask once more.
-    const up = repoRootFor(claude.root, opts);
-    const wt = { name: claude.name, path: claude.path };
-    return answer(info(up.kind === 'none' ? claude.root : up.root, 'guess', wt), start, null);
+    // The repository may itself be a worktree's checkout, or held by another;
+    // ask once more, and keep what that answer was read from.
+    const up = resolve(claude.root, opts);
+    const known = up.info.kind !== 'none';
+    /** @type {RepoInfo['worktree']} */
+    const wt = { name: claude.name, path: claude.path, kind: 'linked' };
+    const more = { own: known ? up.info.own : claude.root };
+    const seen = [...up.seen, witnessOf(up.at)];
+    return answer(info(known ? up.info.root : claude.root, 'guess', wt, more), start, null, seen);
   }
   if (studio && studio.root) {
-    const wt = { name: studio.name, path: studio.path };
-    return answer(info(studio.root, 'guess', wt), start, null);
+    // The repository it was hired for may be a nested one: its room is the
+    // outer repository's, and it is still that repository's worktree.
+    const up = resolve(studio.root, { stateDir: opts.stateDir });
+    const known = up.info.kind !== 'none';
+    /** @type {RepoInfo['worktree']} */
+    const wt = { name: studio.name, path: studio.path, kind: 'linked' };
+    const more = { own: studio.root };
+    const seen = [...up.seen, witnessOf(up.at)];
+    return answer(info(known ? up.info.root : studio.root, 'guess', wt, more), start, null, seen);
   }
   return answer(info(asked, 'none', null), start, null);
 }

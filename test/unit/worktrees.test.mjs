@@ -42,8 +42,15 @@ const { repoKeys, projectNames } = await import('../../src/cli/stats.mjs');
 const { readOffline } = await import('../../src/cli/source.mjs');
 const { floorPopulation, homeProjectOf, agentIndex, splitProjectsByOccupancy } =
   await import('../../public/floor-rule.js');
-const { benchSeatsIn, clipLabel, whereOf, worktreeBenches, worktreeName, WORKTREE_LABEL_MAX } =
-  await import('../../public/floor-worktrees.js');
+const {
+  benchSeatsIn,
+  clipLabel,
+  isNestedRepo,
+  whereOf,
+  worktreeBenches,
+  worktreeName,
+  WORKTREE_LABEL_MAX,
+} = await import('../../public/floor-worktrees.js');
 const { buildPlan } = await import('../../public/render/plan.js');
 const { assignSeats } = await import('../../public/render/agents-seats.js');
 const { moduleFor } = await import('../../public/render/plan-proportions.js');
@@ -177,6 +184,7 @@ test('three worktrees and the main checkout of one repo are ONE project; another
     name: WORKTREES[0],
     path: career.worktrees[0].replace(/\//g, path.sep),
     branch: 'worktree-agent-a0fedbce8c57e1bf9',
+    kind: 'linked',
   });
   // The branch is the session's own `gitBranch`, and null where it gave none.
   assert.equal(byTitle['title-wt1'].worktree.branch, 'claude/awesome-franklin-2d1495');
@@ -356,9 +364,193 @@ test('a removed Studio worktree is placed with the repository the same scan foun
   assert.deepEqual(aliasesOf([{ cwd: root, ...placed.get(root) }]), { ids: {}, keys: {} });
 });
 
-// ------------------------------------------------------------------ the floor
+// ------------------------------------------------- a repository in a repository
 
-/** A floor agent in `career-ops`, in a worktree or not. */
+/**
+ * The owner's second floor: `deckhq`, whose `.gitignore` says `/internal/`, and
+ * a private clone mounted at `deckhq/internal` with a `.git` of its own.
+ */
+async function mountedFloor(opts = {}) {
+  clearRepoCache();
+  const { root } = repoWithWorktrees('deckhq', []);
+  fs.writeFileSync(path.join(root, '.gitignore'), 'node_modules/\n*.log\n/internal/\n');
+  const nested = path.join(root, 'internal');
+  fs.mkdirSync(path.join(nested, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(nested, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  const docs = path.join(nested, 'docs', 'plan');
+  fs.mkdirSync(docs, { recursive: true });
+  const summaries = [
+    summary('main', root, { gitBranch: 'main' }),
+    summary('clone', nested, { gitBranch: 'main' }),
+    summary('deep', docs, { gitBranch: 'main' }),
+  ];
+  const store = new Store(path.join(scratchDir('mount-state-'), 'state.json'));
+  await store.load();
+  if (opts.before) await opts.before(store, { root, nested, docs });
+  const registry = new Registry({
+    store,
+    adapters: [adapterWith(summaries)],
+    log: quiet,
+    identity: new Identity(store),
+  });
+  await registry.refresh();
+  return { registry, store, root, nested, docs, summaries };
+}
+
+test('a clone mounted inside a repository is ONE room with it, at a bench named for its folder', async () => {
+  const { registry, root, nested, docs } = await mountedFloor();
+  const snap = registry.snapshot();
+  const repoId = projectIdFromCwd(root);
+  assert.deepEqual(
+    snap.projects.map((p) => p.name),
+    ['deckhq'],
+    'no room called internal',
+  );
+  assert.equal(snap.projects[0].id, repoId);
+  assert.equal(snap.projects[0].sessionCount, 3);
+  assert.equal(snap.projects[0].cwd, root, "the room's own directory is the outer repository's");
+
+  const byTitle = Object.fromEntries(snap.agents.map((a) => [a.title, a]));
+  assert.equal(byTitle['title-main'].worktree, null);
+  for (const [title, cwd] of [
+    ['title-clone', nested],
+    ['title-deep', docs],
+  ]) {
+    const a = byTitle[title];
+    assert.equal(a.projectId, repoId);
+    assert.equal(a.repoName, 'deckhq');
+    assert.equal(a.repoRoot, root);
+    assert.deepEqual(a.worktree, {
+      name: 'internal',
+      path: nested,
+      branch: 'main',
+      kind: 'nested',
+    });
+    // What runs for a SESSION runs where the session is: the terminal, the diff
+    // and `git status` are all given `agent.cwd`, and that is inside the clone.
+    assert.equal(a.cwd, cwd);
+    assert.deepEqual(whereOf(a), ['deckhq', 'internal']);
+  }
+
+  // The bench says `internal`, not the clone's branch: `main` is the room's too.
+  assert.equal(worktreeName(byTitle['title-clone'].worktree), 'internal');
+  assert.equal(worktreeName({ name: 'lib', branch: 'v2', kind: 'submodule' }), 'lib');
+  assert.equal(worktreeName({ name: 'wt', branch: 'feat/x', kind: 'linked' }), 'feat/x');
+  assert.equal(isNestedRepo(byTitle['title-clone'].worktree), true);
+  assert.equal(isNestedRepo({ name: 'wt', kind: 'linked' }), false);
+  assert.equal(isNestedRepo({ name: 'wt' }), false, 'a worktree with no kind is a linked one');
+  const plan = buildPlan(snap.projects, snap.agents, { now: NOW, stage: { w: 1600, h: 1000 } });
+  assert.deepEqual(
+    plan.rooms.filter((r) => r.kind === 'project').map((r) => r.name),
+    ['deckhq'],
+  );
+  assert.deepEqual(
+    plan.worktreeBenches.map((b) => [b.projectId, b.label, b.seats]),
+    [[repoId, 'internal', 2]],
+    'one bench for the clone, and both of its sessions at it',
+  );
+  assert.equal(plan.seats.get(repoId).length, 1, 'one desk: the outer checkout');
+});
+
+test('Studio in a nested repository is that repository’s, never the one around it', async () => {
+  const { root, nested, docs } = await mountedFloor();
+  // A hire is a `git worktree add`, and git makes it in the repository the
+  // directory is in. The room is shared; the repository is not.
+  for (const dir of [nested, docs]) {
+    const got = resolveProject(dir);
+    assert.equal(got.root, nested);
+    assert.equal(got.projectKey, projectKeyFor(nested));
+  }
+  assert.equal(resolveProject(root).root, root);
+  assert.notEqual(resolveProject(root).projectKey, resolveProject(nested).projectKey);
+  assert.equal(projectOf(docs).repoRoot, root, 'the room');
+  assert.equal(projectOf(docs).ownRoot, nested, 'the repository');
+  assert.equal(projectOf(root).ownRoot, root);
+
+  // A hire's worktree of the clone, once it has been removed: still the
+  // clone's, and in the room the clone is in.
+  const stateDir = scratchDir('mount-studio-state-');
+  const gone = path.join(stateDir, 'worktrees', 'internal-backend-dev');
+  const placed = resolveProjects([root, nested, gone], { stateDir });
+  assert.equal(placed.get(gone).projectId, projectIdFromCwd(root));
+  assert.equal(placed.get(gone).ownRoot, nested);
+  assert.deepEqual(
+    { name: placed.get(gone).worktree.name, kind: placed.get(gone).worktree.kind },
+    { name: 'backend-dev', kind: 'linked' },
+  );
+});
+
+test('pins and usage filed while the clone was a room of its own are read through to the repository', async () => {
+  const was = {};
+  const { registry, store, root, nested, docs, summaries } = await mountedFloor({
+    before: async (s, at) => {
+      // What the build before this one wrote: the clone was the project `internal`.
+      was.id = projectIdFromCwd(at.nested);
+      assert.equal(s.setProjectPinned(was.id, true), true);
+    },
+  });
+  const repoId = projectIdFromCwd(root);
+  const repoKey = projectKeyFor(root);
+  assert.notEqual(was.id, repoId);
+
+  // The pin: honoured on the room the clone is in now, and taken back with it.
+  assert.equal(store.isProjectPinned(repoId), false, 'nothing was rewritten on disk');
+  assert.equal(registry.snapshot().projects.find((p) => p.id === repoId).pinned, true);
+  const { ids, keys } = registry.projectAliases();
+  // Both of a session's old names: its own repository, and — for the one that
+  // was started below it, in a build older still — its own directory.
+  assert.deepEqual(legacyIdsOf(ids, repoId).sort(), [was.id, projectIdFromCwd(docs)].sort());
+  assert.equal(registry.setProjectPinned(repoId, false), false);
+  assert.equal(store.isProjectPinned(was.id), false);
+
+  // The ledger: every directory in the clone writes the repository's key now,
+  // and a record already on disk under the clone's is counted with them.
+  for (const cwd of [root, nested, docs]) assert.equal(registry._projectKeyOf(cwd), repoKey);
+  assert.equal(keys[projectKeyFor(nested)], repoKey);
+  assert.equal(keys[projectKeyFor(docs)], repoKey);
+  assert.equal(Object.keys(keys).length, 2, 'the outer checkout needs no alias');
+  const records = [
+    { t: 1, kind: 'tokens', projectKey: projectKeyFor(nested), delta: 10 },
+    { t: 2, kind: 'tokens', projectKey: repoKey, delta: 5 },
+  ];
+  assert.deepEqual(
+    rekeyRecords(records, keys).map((r) => r.projectKey),
+    [repoKey, repoKey],
+  );
+  assert.equal(records[0].projectKey, projectKeyFor(nested), 'the record itself is left alone');
+  const today = foldByRepo(
+    { [projectKeyFor(nested)]: { tokens: 10, cache: 1 }, [repoKey]: { tokens: 5, cache: 0 } },
+    keys,
+  );
+  assert.deepEqual(today, { [repoKey]: { tokens: 15, cache: 1 } });
+
+  // A session below the clone's root alone still maps the clone's old name:
+  // nobody has to be sitting in `internal` itself for its history to be found.
+  const alone = resolveProjects([docs]);
+  const only = aliasesOf([{ cwd: docs, ...alone.get(docs) }]);
+  assert.equal(only.ids[was.id], repoId);
+  assert.equal(only.keys[projectKeyFor(nested)], repoKey);
+  // From a snapshot's agent, which carries the clone as its `worktree`.
+  const agent = registry.snapshot().agents.find((a) => a.cwd === docs);
+  assert.equal(aliasesOf([agent]).ids[was.id], repoId);
+
+  // The offline CLI reads the same way, from the scan cache alone.
+  assert.deepEqual(repoKeys(summaries), keys);
+  assert.equal(projectNames(summaries)[repoKey], 'deckhq');
+  const offline = readOffline({
+    state: { ack: {}, identity: { projects: {}, agents: {}, projectOf: {}, names: {} } },
+    summaries: [summary('clone', nested)],
+    stateFile: path.join(scratchDir('mount-offline-'), 'state.json'),
+  });
+  assert.equal(offline.agents[0].projectId, repoId);
+  assert.equal(offline.agents[0].projectName, 'deckhq');
+  assert.deepEqual(offline.agents[0].worktree, {
+    name: 'internal',
+    path: nested,
+    kind: 'nested',
+    branch: null,
+  });
+});
 function floorAgent(id, wt = null, over = {}) {
   return {
     id,

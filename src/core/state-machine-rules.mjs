@@ -130,7 +130,10 @@ export function freshObserved(runtime) {
     projectName: 'unknown',
     /** The repository's working directory (`project-of.mjs`). */
     repoRoot: '',
-    /** @type {{name: string, path: string}|null} the linked worktree it is in */
+    /**
+     * The linked worktree, or the nested repository, it is in.
+     * @type {{name: string, path: string, kind: 'linked'|'nested'|'submodule'}|null}
+     */
     worktree: null,
     gitBranch: /** @type {string|null} */ (null),
     model: /** @type {string|null} */ (null),
@@ -455,7 +458,7 @@ export function changeKey(agents) {
       K +
       text(a.repoRoot) +
       K +
-      (wt ? text(wt.name) + K + text(wt.path) + K + wt.branch : '');
+      (wt ? text(wt.name) + K + text(wt.path) + K + wt.branch + K + text(wt.kind) : '');
   }
   return key;
 }

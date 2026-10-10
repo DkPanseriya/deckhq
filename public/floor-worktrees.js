@@ -11,6 +11,11 @@
  * What is left for the floor is the table in the corner: inside that room, the
  * sessions working in one LINKED worktree share one bench, named for it.
  *
+ * A repository NESTED in the room's — a clone mounted inside it that it names
+ * in its `.gitignore`, or a submodule — has the same table: the daemon gives
+ * it the same `worktree` shape with `kind` `nested` or `submodule`, and its
+ * bench is named for its directory rather than for its branch.
+ *
  * THE RULE, and the whole of it:
  *
  *   - a session the user started, at a desk (working or stalled), whose
@@ -68,15 +73,29 @@ export function clipLabel(text, max = WORKTREE_LABEL_MAX) {
 }
 
 /**
+ * Is this a repository NESTED in the room's — a mounted clone it names, or a
+ * submodule — rather than a linked worktree of it? The daemon says so in
+ * `kind`; a worktree with none is a linked one, which is all there used to be.
+ * @param {{kind?: string}|null|undefined} wt
+ */
+export function isNestedRepo(wt) {
+  return !!wt && typeof wt === 'object' && (wt.kind === 'nested' || wt.kind === 'submodule');
+}
+
+/**
  * What a worktree is called: its branch if the session knows one, else its
  * directory name. Not clipped — the panel has room for the whole of it.
- * @param {{name?: string, path?: string, branch?: string|null}|null|undefined} wt
+ *
+ * A NESTED repository is called for its directory always. Its branch is a
+ * branch of a different repository: a bench reading `main` in a room whose own
+ * checkout is on `main` would say nothing, and `internal` says what it is.
+ * @param {{name?: string, path?: string, branch?: string|null, kind?: string}|null|undefined} wt
  * @returns {string}
  */
 export function worktreeName(wt) {
   if (!wt || typeof wt !== 'object') return '';
   const branch = typeof wt.branch === 'string' ? wt.branch.trim() : '';
-  if (branch && branch !== 'HEAD') return branch;
+  if (branch && branch !== 'HEAD' && !isNestedRepo(wt)) return branch;
   return String(wt.name || '').trim();
 }
 

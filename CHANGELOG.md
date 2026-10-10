@@ -29,9 +29,22 @@
   `deckhq look presets` lists them; the help names no count. The notice `deckhq shortcut` and
   `deckhq autostart` print on macOS and Linux no longer points at a document that is not in the
   repository.
+- **A submodule is in the room of the repository that holds it.** It used to be a project of its
+  own, and the guide said so. Its sessions now sit at a bench in the outer repository's room with
+  the submodule's folder name on it, and everything opened from one of them still runs inside the
+  submodule. A submodule whose outer repository cannot be found stays a room of its own.
 
 ### Fixed
 
+- **A repository mounted inside another one no longer gets a room of its own, when the outer one
+  names it.** A session in a clone such as `project/internal` — its own `.git`, and `/internal/` on
+  a line of the outer repository's root `.gitignore` or `.git/info/exclude` — was drawn in a room
+  called `internal`. It is now in the outer repository's room, at a bench with the folder's name on
+  it; a terminal, a diff and the changes list still run inside the clone, and Studio opened on it is
+  still the clone's. Only a line that is exactly that folder's path counts: a pattern such as `*`
+  does not, so a home directory kept in git with everything ignored leaves every project below it
+  in its own room. Pins and usage recorded under the old room are counted in the new one. See the
+  guide, "Worktrees".
 - **A Studio handover is no longer lost when the board is busy.** When a hired session handed its
   work over, DeckHQ marks the card on the board. On Windows that write is refused for an instant
   while anything else has the board file open — the page reading it, an editor, a virus scanner —

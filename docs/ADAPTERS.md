@@ -124,18 +124,21 @@ no argument is legal and the type gate enforces the `= {}` default.
 - **Report the directory the session is really in, worktree or not.** An adapter does not resolve
   repositories and must not run git to try. The registry does it for every runtime, from files
   alone (`src/core/repo-root.mjs`): it walks up from `cwd` to the nearest `.git`, and where that is
-  a linked worktree's `.git` file it follows `gitdir` and `commondir` to the main checkout. Every
-  agent on the snapshot then carries, beside the `cwd` you reported:
+  a linked worktree's `.git` file it follows `gitdir` and `commondir` to the main checkout. A
+  submodule, and a clone mounted inside a repository that names it by a literal line of its root
+  `.gitignore` or `info/exclude`, resolve to that outer repository. Every agent on the snapshot
+  then carries, beside the `cwd` you reported:
 
   | field | what it is |
   | --- | --- |
   | `projectId`, `projectName` | the **repository's** id and name — the room key |
   | `repoId`, `repoName` | the same two values, under the name that says what they are |
   | `repoRoot` | the repository's working directory |
-  | `worktree` | `{ name, path, branch }` in a linked worktree, `null` in the main checkout |
+  | `worktree` | `{ name, path, branch, kind }` in a linked worktree (`kind: 'linked'`) or in a repository nested in the room's (`'nested'`, `'submodule'`); `null` in the main checkout |
 
   `worktree.branch` is the `gitBranch` your adapter reported for that session, or `null`; nothing
-  else supplies it. A session whose directory has no readable `.git` above it is its own project,
+  else supplies it. `worktree.path` is the root of the checkout the session is in, which for a
+  nested repository is that repository's own root and not `repoRoot`. A session whose directory has no readable `.git` above it is its own project,
   with `repoRoot` equal to its `cwd`. Measured on Windows against the maintainer's own floor (41
   projects became 20); on macOS and Linux only the hand-built layouts in
   `test/unit/repo-root.test.mjs` have been run.
