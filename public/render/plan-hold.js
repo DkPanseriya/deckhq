@@ -215,6 +215,22 @@ export class FurnishingHold {
   }
 }
 
+/**
+ * ARE THESE TWO PLANS THE SAME BUILDING? The same envelope, the same rooms in
+ * the same rectangles and the same doors — which is what a held floor is after
+ * a snapshot that only moved somebody. The walkable lines are a function of
+ * exactly those, so a path laid on one is a path on the other, and somebody
+ * mid-walk can carry on instead of being stood at their seat (`AgentRuntime`).
+ * @param {any} a @param {any} b
+ */
+export function sameBuilding(a, b) {
+  if (!a || !b || a.width !== b.width || a.height !== b.height) return false;
+  const rooms = (/** @type {any} */ p) =>
+    (p.rooms || []).map((r) => `${r.id}:${r.kind}:${r.x}:${r.y}:${r.w}:${r.h}`).join('|');
+  const doors = (/** @type {any} */ p) => (p.doors || []).map((d) => `${d.x}:${d.y}`).join('|');
+  return rooms(a) === rooms(b) && doors(a) === doors(b);
+}
+
 /** One headcount as a string: two that furnish a room alike say the same. */
 export function headcountKey(h) {
   const benches = h.benches.map((b) => `${b.key}*${b.ids.length}`).join(',');

@@ -13,7 +13,9 @@ import {
   roomHeadcounts,
 } from '../../public/render/plan-hold.js';
 
-import { assignSeats, deskSeatsOf } from '../../public/render/agents.js';
+import { AgentRuntime, assignSeats, deskSeatsOf, samePoint } from '../../public/render/agents.js';
+import { Scene } from '../../public/render/scene.js';
+import { adoptSnapshotClock, now as clockNow } from '../../public/clock.js';
 import { buildPlan } from '../../public/render/plan.js';
 
 const NOW = Date.UTC(2026, 8, 1, 12, 0, 0);
@@ -153,6 +155,93 @@ test('whoever stays keeps the chair they are in while the room still has it', ()
     [...assignSeats(small, two)],
     'no chair of the old room is looked for in the new one',
   );
+});
+
+/** A scene with no canvas: `setState` and the hold are real, the bake is not. */
+function bareScene() {
+  const scene = Object.create(Scene.prototype);
+  Object.assign(scene, {
+    canvas: { setAttribute() {} },
+    _snapshot: { agents: [], projects: [], counts: {} },
+    _plan: null,
+    _planSignature: null,
+    _planGeometry: null,
+    _runtime: new AgentRuntime(),
+    _selectedId: null,
+    _running: true,
+    _stateGen: 0,
+    _paintGen: 0,
+    _fadeFrom: null,
+    plans: 0,
+    _rebuildPlan() {
+      this.plans++;
+      this._plan = buildPlan(this._snapshot.projects, this._snapshot.agents, {
+        stage: STAGE,
+        now: clockNow(),
+        held: this._held || undefined,
+      });
+    },
+    _bakeFloor() {},
+    _draw() {},
+  });
+  return scene;
+}
+
+test('the page holds a room through a walk, grows it after, and shrinks it in five minutes', () => {
+  adoptSnapshotClock({ now: NOW, nowFixed: true });
+  const scene = bareScene();
+  const snap = (agents) => ({ projects: PROJECTS, agents, counts: {}, settings: {} });
+  const before = [agent('a1', 'api'), agent('a2', 'api'), agent('w1', 'web'), agent('w2', 'web')];
+  scene.setState(snap(before));
+  const first = laid(scene._plan, 'api');
+  const chair = scene._runtime.get('a2').targetSeat;
+  assert.equal(scene._held, null, 'a floor at rest holds nothing');
+
+  // `a1`'s turn ends. The room is the room it was, and `a1` walks out of it.
+  const left = before.map((a) =>
+    a.id === 'a1' ? { ...a, activityState: 'for_review', reviewSince: NOW } : a,
+  );
+  scene.setState(snap(left));
+  assert.equal(laid(scene._plan, 'api'), first, 'not re-laid when one of two stands up');
+  assert.ok(scene._runtime.get('a1').path.length > 0, 'a1 is walking to the office');
+  assert.ok(samePoint(scene._runtime.get('a2').targetSeat, chair), 'a2 kept its chair');
+  assert.ok(scene._walkingRooms().has('api'));
+
+  // Two more start in that room while a1 is still on its way out of it.
+  const more = [...left, agent('a3', 'api'), agent('a4', 'api')];
+  scene.setState(snap(more));
+  assert.equal(laid(scene._plan, 'api'), first, 'not re-laid under a walker');
+  assert.equal(scene._hold.waiting, true);
+  assert.ok(
+    scene._runtime.get('a1').path.length > 0,
+    'and a1 is still walking, not stood at its seat',
+  );
+  const plans = scene.plans;
+  scene._settleHold();
+  assert.equal(scene.plans, plans, 'and nothing is asked again while the walker is the same');
+
+  // The walk ends: the room is laid for the three now in it, the same tick.
+  for (const rec of scene._runtime.all()) rec.path = [];
+  scene._settleHold();
+  assert.equal(scene._plan.seats.get('api').length >= 3, true);
+  assert.notEqual(laid(scene._plan, 'api'), first);
+  assert.equal(scene._hold.waiting, false);
+
+  // Two of the three leave. Nothing moves for five minutes of the injected
+  // clock, and then the room is the one a fresh floor would lay for one.
+  const one = more.filter((a) => a.id !== 'a3' && a.id !== 'a4');
+  scene.setState(snap(one));
+  for (const rec of scene._runtime.all()) rec.path = [];
+  const three = laid(scene._plan, 'api');
+  adoptSnapshotClock({ now: NOW + FURNISH_HOLD_MS - 1, nowFixed: true });
+  scene._settleHold();
+  assert.equal(laid(scene._plan, 'api'), three, 'held to the last millisecond');
+  adoptSnapshotClock({ now: NOW + FURNISH_HOLD_MS, nowFixed: true });
+  scene._settleHold();
+  const fresh = buildPlan(PROJECTS, one, { stage: STAGE, now: clockNow() });
+  assert.equal(laid(scene._plan, 'api'), laid(fresh, 'api'));
+  assert.equal(scene._held, null);
+  adoptSnapshotClock({ now: NOW, nowFixed: true });
 });
 
 test('a crew that falls under three keeps its floor and lays no longer desk', () => {

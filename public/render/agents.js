@@ -377,7 +377,9 @@ export class AgentRuntime {
    * @param {AgentLike[]} agents
    * @param {Plan} plan
    * @param {Map<string, Seat|LoungeSpot>} seatMap
-   * @param {{now?:number}} [opts] WP-87. `now` is the INJECTED clock
+   * @param {{now?:number, steady?:boolean}} [opts] `steady`: this plan is the
+   *   same building as the last one (`sameBuilding`), so whoever is mid-walk
+   *   to a seat that has not moved carries on. WP-87. `now` is the INJECTED clock
    *   (`public/clock.js` through `scene-agent.js`'s `animMs()`), and passing it
    *   is what switches on the two one-shots at the ends of a session's life:
    *   with a real instant a departing figure folds away over `despawn`'s 0.42 s
@@ -410,6 +412,7 @@ export class AgentRuntime {
     // Snap instead, and let motion mean what it is supposed to mean: this
     // agent's own state changed.
     const replanned = plan !== this._plan;
+    const steady = opts.steady === true;
     this._plan = plan || null;
     const findRoom = (id) => rooms.find((r) => r.id === id) || null;
     // A desk is in the agent's HOME room — a junior's is its parent's (bug 201).
@@ -495,6 +498,15 @@ export class AgentRuntime {
 
       const placementChanged = rec.placement !== placement;
       const seatChanged = !samePoint(rec.targetSeat, seat);
+      // …UNLESS IT IS THE SAME BUILDING AND THIS ONE IS ALREADY ON ITS WAY
+      // (`steady`, `plan-hold.js`). A snapshot that only moved somebody else is
+      // a new plan object for the same rooms and doors; a path laid on the old
+      // one is a path on this one, and standing a walker at the seat it was
+      // walking to made it vanish from a corridor in the middle of a stride.
+      if (replanned && steady && rec.path.length > 0 && !placementChanged && !seatChanged) {
+        rec.targetSeat = seat;
+        continue;
+      }
       if (replanned) {
         rec.x = seat ? seat.x : destRoom ? destRoom.x + destRoom.w / 2 : rec.x;
         rec.y = seat ? seat.y : destRoom ? destRoom.y + destRoom.h / 2 : rec.y;

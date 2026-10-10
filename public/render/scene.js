@@ -49,7 +49,7 @@
  */
 
 import { AgentRuntime, assignSeats, deskSeatsOf } from './agents.js';
-import { FurnishingHold, roomHeadcounts } from './plan-hold.js';
+import { FurnishingHold, roomHeadcounts, sameBuilding } from './plan-hold.js';
 import { now as clockNow } from '../clock.js';
 import { computeTargetAspect } from './scene-camera.js';
 import { makeActivityRotation, makeIdleRotation } from './clips.js';
@@ -219,6 +219,7 @@ export class Scene extends SceneInput {
       this._bakeFloor();
       this._fadeFrom = null;
     } else if (signature !== this._planSignature) {
+      const replaced = this._plan;
       this._rebuildPlan(computeTargetAspect(this._viewW, this._viewH));
       this._planSignature = signature;
       this._planGeometry = geometry;
@@ -228,10 +229,13 @@ export class Scene extends SceneInput {
       // whole floor on a rebuilt plan (see `sync`). Bridge it: seat everybody
       // in the new building where they *were*, as one snap, and only then
       // apply the new snapshot, so the agents whose own state changed walk
-      // from their old seat to their new one and nobody else moves.
+      // from their old seat to their new one and nobody else moves. Where it
+      // is the same building — the same rooms and doors, which is what a held
+      // room keeps it — whoever was already walking carries on (`steady`).
       if (this._plan) {
         this._runtime.sync(previousAgents, this._plan, this._seats(previousAgents), {
           now: animMs(),
+          steady: sameBuilding(replaced, this._plan),
         });
       }
     }
