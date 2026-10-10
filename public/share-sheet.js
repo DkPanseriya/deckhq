@@ -31,6 +31,7 @@ import { el, latestSnapshot, sceneModule, toast } from './app-state.js';
 import { pngBytes, stripColors } from './snapshot.js';
 import { redactForShare } from './share-redact.js';
 import {
+  SHARE_MARGIN,
   SHARE_SCALE,
   SHARE_SHAPES,
   composeSharePicture,
@@ -109,6 +110,11 @@ let io;
 /** @type {any} `PictureScene`, made once the renderer's `Scene` is known */
 let PictureSceneClass = null;
 
+/** The box the building is fitted to: the frame, less the margin on every side. */
+function insetBox(w, h) {
+  return { w: Math.max(1, w - SHARE_MARGIN * 2), h: Math.max(1, h - SHARE_MARGIN * 2) };
+}
+
 /**
  * The floor's own `Scene`, with the three things a picture needs different.
  *
@@ -123,7 +129,7 @@ function pictureSceneClass(Scene) {
     /**
      * The frame's size and `SHARE_SCALE`, not this window's box and this
      * display's pixel ratio. The canvas says how big it is meant to be; a 1x
-     * laptop and a 3x phone make the same 3200 x 1800 picture.
+     * laptop and a 3x phone make the same 3520 x 1980 picture.
      */
     _resizeCanvasBacking() {
       const w = Number(this.canvas.dataset.w) || SHARE_SHAPES.wide.w;
@@ -139,6 +145,36 @@ function pictureSceneClass(Scene) {
       if (this.canvas.width !== pw) this.canvas.width = pw;
       if (this.canvas.height !== ph) this.canvas.height = ph;
     }
+
+    /**
+     * The building is fitted to the frame LESS A MARGIN, and centred in it.
+     *
+     * On screen the floor runs to the edge of its stage, which is right for a
+     * window and wrong for a picture: a room plate that sits on the top wall
+     * is cut by the edge, and a floor with no ground round it reads as a crop.
+     * So the scale is the one that fits the frame inset by `SHARE_MARGIN`, and
+     * the camera — which centres any floor smaller than its stage — does the
+     * rest. The margin is the floor's own ground and the building's own
+     * shadow, painted by the painter that paints them on screen.
+     */
+    _recomputeFitScale() {
+      super._recomputeFitScale();
+      if (!this._plan) return;
+      const { computeFill, snapScaleToDevice } = sceneModule;
+      const inner = insetBox(this._viewW, this._viewH);
+      const fit = computeFill(this._plan.width, this._plan.height, inner.w, inner.h).scale;
+      this._fitScale = snapScaleToDevice(fit, this._plan.width, this._dpr);
+      this._clampCamera();
+    }
+
+    /** The building is planned for the shape it will be fitted to: the inset one. */
+    _rebuildPlan() {
+      const inner = insetBox(this._viewW, this._viewH);
+      super._rebuildPlan(sceneModule.computeTargetAspect(inner.w, inner.h));
+    }
+
+    /** A frame never changes size, so there is no settled resize to re-plan for. */
+    _checkAspectRebuild() {}
 
     /** The in-room "+" is a control. A picture has nothing to click. */
     _drawPlusAffordance() {}
@@ -296,6 +332,13 @@ function dropScene() {
   if (ui) ui.stage.textContent = '';
 }
 
+/** How many project rooms the scene's plan has: what the band may call "rooms". */
+function roomsDrawn(scene) {
+  const plan = scene.frame().plan;
+  const rooms = plan && Array.isArray(plan.rooms) ? plan.rooms : [];
+  return rooms.filter((room) => room.kind === 'project').length;
+}
+
 /**
  * Draw the picture again from the floor as it is now, and show it.
  *
@@ -321,7 +364,7 @@ function refresh() {
     picture = composeSharePicture({
       floor: scene.canvas,
       layout,
-      footer: options.footer ? shareFooterModel(safe) : null,
+      footer: options.footer ? shareFooterModel(safe, { rooms: roomsDrawn(scene) }) : null,
       colors: stripColors(document),
       ...io.snapshotFonts(),
     });

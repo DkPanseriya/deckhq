@@ -28,20 +28,35 @@
 import { WORDMARK, formatWait } from './snapshot.js';
 
 /**
- * The two frames, in CSS pixels, and how many output pixels each one is.
- * 1600 x 900 at 2x is a 3200 x 1800 PNG: what a timeline shows at full width
- * on a dense display, with room to zoom into.
+ * The two frames, in CSS pixels. At 2x the wide one is a 3520 x 1980 PNG.
+ *
+ * WHY 1760 x 990 AND NOT 1600 x 900. The frame was 1600 x 900 first, and the
+ * demo floor photographed in it lost every wait badge. The floor draws a
+ * waiting agent's badge only at 14 px to the unit or more
+ * (`BADGE_MIN_PX_PER_UNIT`): a building's height in units is its rooms', so its
+ * scale is the stage's height, and 900 less the band and the margin left 756 —
+ * 13.0 px to the unit, measured, where the window the same floor is watched in
+ * gives 14.9. The wait is the point of the picture. Ten per cent more frame
+ * gives the building 842 px and 14.5; the shape is still 16:9 and the scale
+ * is still a whole 2.
  */
 export const SHARE_SHAPES = Object.freeze({
-  wide: Object.freeze({ id: 'wide', label: '16:9', w: 1600, h: 900 }),
-  square: Object.freeze({ id: 'square', label: '1:1', w: 1200, h: 1200 }),
+  wide: Object.freeze({ id: 'wide', label: '16:9', w: 1760, h: 990 }),
+  square: Object.freeze({ id: 'square', label: '1:1', w: 1320, h: 1320 }),
 });
 
 /** Output pixels per CSS pixel. The floor is drawn at this, not resampled to it. */
 export const SHARE_SCALE = 2;
 
+/**
+ * Ground left round the building on every side, in CSS pixels. Enough that a
+ * room plate on the top wall is whole and the building's shadow has somewhere
+ * to fall; little enough that the floor is still the picture.
+ */
+export const SHARE_MARGIN = 36;
+
 /** The band's metrics, in CSS pixels. */
-export const SHARE_FOOTER = Object.freeze({ height: 72, padX: 36, mark: 30, gap: 12 });
+export const SHARE_FOOTER = Object.freeze({ height: 76, padX: 40, mark: 32, gap: 12 });
 
 /**
  * Where the floor and the band go in a frame.
@@ -70,7 +85,10 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
  * is the point: counts, states and times are what the redaction keeps.
  *
  * @param {any} snapshot
- * @param {{now?: number}} [opts]
+ * @param {{now?: number, rooms?: number}} [opts] `rooms`: how many project rooms
+ *   the picture actually draws, where the caller has the plan to count them. A
+ *   project with nobody active has no room, so the list of projects is only
+ *   the fallback: the band must not count a room the picture does not show.
  * @returns {{line:string, parts:string[], wordmark:string, name:string}}
  */
 export function shareFooterModel(snapshot, opts = {}) {
@@ -86,7 +104,8 @@ export function shareFooterModel(snapshot, opts = {}) {
     if (since && now) oldest = Math.max(oldest, now - since);
   }
   const sessions = agents.filter((a) => a && a.subagent !== true && a.ackState !== 'let_go').length;
-  const rooms = (Array.isArray(src.projects) ? src.projects : []).length;
+  const listed = (Array.isArray(src.projects) ? src.projects : []).length;
+  const rooms = Number.isFinite(opts.rooms) ? Number(opts.rooms) : listed;
   const needsYou = Number(counts.needsYou) || 0;
   const handsUp = Number(counts.handsUp) || 0;
 
@@ -206,12 +225,12 @@ export function drawShareFooter(ctx, model, opts) {
   drawMark(ctx, padX, mid - mark / 2, mark, colors);
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  ctx.font = `600 22px ${sans}`;
+  ctx.font = `600 24px ${sans}`;
   ctx.fillStyle = colors.ink;
   ctx.fillText(model.name, padX + mark + gap, mid + 1);
   const left = padX + mark + gap + ctx.measureText(model.name).width;
 
-  ctx.font = `20px ${mono}`;
+  ctx.font = `21px ${mono}`;
   ctx.fillStyle = colors.muted;
   ctx.textAlign = 'right';
   ctx.fillText(model.wordmark, width - padX, mid + 1);
@@ -220,7 +239,7 @@ export function drawShareFooter(ctx, model, opts) {
   // Centred on the frame, not on the gap between the two ends: the eye reads
   // the band against the picture above it. It gives way only if it would
   // touch either end, and then it loses parts from the back before it moves.
-  ctx.font = `500 22px ${sans}`;
+  ctx.font = `500 24px ${sans}`;
   ctx.fillStyle = colors.ink2;
   ctx.textAlign = 'center';
   const room = Math.max(0, right - left - gap * 4);
