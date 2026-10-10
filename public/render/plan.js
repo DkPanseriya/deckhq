@@ -57,6 +57,9 @@
  *   plan-quiet.js    one or two rooms: the two service rooms a strip down the
  *                    left, and the rooms the rest of the building
  *   plan-seated.js   which chairs somebody is sitting in, for the bake
+ *   plan-hold.js     the headcount a room is furnished for, held by the page
+ *                    for five minutes so a room is not re-laid when one person
+ *                    stands up (`opts.held`)
  *   plan-deco.js     what a furnished room is dressed in, by rule: bins, coat
  *                    stands, wall panels, lamps, and a second place in a void
  *
