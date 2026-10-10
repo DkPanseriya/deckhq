@@ -41,6 +41,7 @@ import {
   referencedMedia,
   resolveOptional,
 } from './media.mjs';
+import { placeholderTones } from './placeholder.mjs';
 import {
   atomFeed,
   FEED,
@@ -456,8 +457,9 @@ function build() {
   const media = publishMedia(OUT, [...shown]);
   written += media.count;
 
+  const tones = placeholderTones(read(path.join('site', STYLES[0])));
   for (const { page, body } of bodies) {
-    const html = shell({ ...page, body: dressImages(body, OUT) });
+    const html = shell({ ...page, body: dressImages(body, OUT, tones) });
     assertNothingInternal(`${page.slug}.html`, html);
     write(`${page.slug}.html`, html);
   }

@@ -175,7 +175,9 @@ ${items}
  * @param {string} body @param {Record<string, string>} slots
  */
 export function fill(body, slots) {
-  return body.replace(/[ \t]*<!-- slot: ([\w-]+) -->\n?/g, (_m, name) => {
+  // A marker may carry a note for whoever edits the page: `<!-- slot: name`,
+  // then anything, then `-->`. The note goes with the marker.
+  return body.replace(/[ \t]*<!-- slot: ([\w-]+)(?:\s[\s\S]*?)?\s*-->\n?/g, (_m, name) => {
     if (!(name in slots)) throw new Error(`no block is written for the slot "${name}"`);
     return slots[name];
   });
