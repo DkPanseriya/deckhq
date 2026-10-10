@@ -10,7 +10,7 @@
       "name": "deckhq",
       "source": "./plugin",
       "description": "An office for your AI coding agents. DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your queue until you clear it. Local, free, MIT, zero dependencies.",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "author": { "name": "Darshak Panseriya" },
       "homepage": "https://github.com/DkPanseriya/deckhq#readme",
       "repository": "https://github.com/DkPanseriya/deckhq",

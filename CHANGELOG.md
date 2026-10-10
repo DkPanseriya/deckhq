@@ -6,6 +6,19 @@
 
 ## Unreleased
 
+## 1.7.1 — 2026-10-11
+
+### Highlights
+
+The floor holds still. A room keeps its furniture while people come and go instead of rearranging
+itself each time somebody stands up, and the words on it stay out of each other's way: a thought
+cloud and a tool bubble move aside for a name, a name is always inside its own room, and nothing
+is left hanging over a desk when a crew has gone. `X` makes a picture of your floor that is meant
+to be posted, with project names and session details hidden unless you switch them on. A
+repository mounted inside another one, such as a private clone or a submodule, sits in the outer
+repository's room at a bench of its own. And `deckhq doctor`, the command to run before
+installing anything, now leaves a machine it has never run on exactly as it found it.
+
 ### Added
 
 - **Share picture of the floor.** Press `X`, or choose **Share picture of the floor…** in `⌘K`, or

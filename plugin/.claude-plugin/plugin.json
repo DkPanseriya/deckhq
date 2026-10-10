@@ -1,7 +1,7 @@
 {
   "name": "deckhq",
   "displayName": "DeckHQ",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "An office for your AI coding agents. Installs DeckHQ's hooks, starts the daemon with your first session, and answers what is waiting on you.",
   "author": {
     "name": "Darshak Panseriya"
