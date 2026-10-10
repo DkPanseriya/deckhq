@@ -623,3 +623,7 @@ export function writeGif(file, frames, fps, opts = {}) {
 }
 
 export { boxDownscale, cropImage };
+
+// A recording as a video: H.264 at sixty frames a second from Chrome's own
+// encoder, written as an MP4 and then measured in Chrome (`video.mjs`).
+export { describeVideo, measureVideo, writeVideo } from './video.mjs';
