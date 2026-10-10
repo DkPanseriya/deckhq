@@ -538,6 +538,10 @@ img.ph-floor {
 }
 
 /* The corner cell sets the first column; the others share what is left. */
+:is(.versus, .os) thead td {
+  background: var(--surface);
+}
+
 .versus thead td {
   width: 16%;
 }
@@ -565,6 +569,50 @@ tbody th {
   color: var(--ink-2);
   font-weight: 400;
   white-space: normal;
+}
+
+/* On a phone neither table scrolls sideways, because the column that would
+   be off the screen is the one being compared. Each row's head runs the full
+   width, and its cells sit under it, side by side. */
+@media (max-width: 39.99rem) {
+  :is(.versus, .os) {
+    display: block;
+    min-width: 0;
+  }
+
+  :is(.versus, .os) :is(thead, tbody) {
+    display: block;
+  }
+
+  :is(.versus, .os) tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .os tr {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  :is(.versus, .os) :is(thead td, tbody th) {
+    grid-column: 1 / -1;
+    width: auto;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  :is(.versus, .os) thead td {
+    padding: 0;
+  }
+
+  :is(.versus, .os) :is(thead th, tbody td) {
+    padding: 0.6rem 0.75rem;
+    font-size: var(--t-micro);
+    line-height: 1.5;
+  }
+
+  .versus tbody td {
+    font-size: var(--t-small);
+  }
 }
 
 /* A real sequence, so it is numbered: six steps, three to a row. */
