@@ -575,6 +575,10 @@ tbody th {
    be off the screen is the one being compared. Each row's head runs the full
    width, and its cells sit under it, side by side. */
 @media (max-width: 39.99rem) {
+  .coming-shots {
+    grid-template-columns: 1fr;
+  }
+
   :is(.versus, .os) {
     display: block;
     min-width: 0;
