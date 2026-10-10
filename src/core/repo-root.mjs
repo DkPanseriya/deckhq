@@ -410,10 +410,12 @@ export function repoRootFor(cwd, opts = {}) {
 }
 
 /**
- * The walk itself: up from `cwd` to the nearest `.git`.
+ * The walk itself: up from `cwd` to the nearest `.git`, and then outward from
+ * that repository to whatever holds it.
  * @param {string} asked
  * @param {{stateDir?: string, knownRoots?: string[]}} opts
- * @returns {{info: RepoInfo, at: string, mtimeMs: number, type: string}}
+ * @returns {{info: RepoInfo, at: string, mtimeMs: number, type: string,
+ *   seen: import('./repo-ignores.mjs').Witness[]}}
  */
 function resolve(asked, opts) {
   const start = slashed(path.isAbsolute(asked) || isAbsolute(asked) ? asked : path.resolve(asked));

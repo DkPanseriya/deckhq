@@ -211,7 +211,28 @@ A room is a repository, not a folder. If you start a session in another git work
 repository — one you made with `git worktree add`, one Claude Code made for an isolated agent, or
 one Studio made for a hire — it is in that repository's room, not in a new one. DeckHQ works this
 out by reading the worktree's `.git` file; it never runs git to do it. A session started in a
-subfolder is in its repository's room as well, and a submodule is its own project.
+subfolder is in its repository's room as well.
+
+A repository that sits inside another repository's folder is in the outer one's room in two cases,
+and only these two:
+
+- **A submodule.** Its `.git` file says which repository holds it.
+- **A clone you mounted there and told the outer repository about**: a folder with a `.git`
+  directory of its own that the outer repository names on a line of its root `.gitignore` or its
+  `.git/info/exclude`. The line has to be that folder's own path from the outer root and nothing
+  else — `/internal/`, `internal` and `/vendor/tools/` all count. A pattern does not (`*`,
+  `vendor/*`, `**/internal`), and neither does a line that names only a parent folder. That is
+  deliberate: if you keep your home directory in git with `*` ignored, the projects under it stay
+  separate rooms.
+
+A clone the outer repository does not name stays a room of its own, as before. Either kind of
+nested repository is still shown as what it is: its sessions share a bench with its folder name
+on it, the panel says `repo · folder`, and a terminal, a diff or the changes list opened from one of
+those sessions runs inside the nested repository. Studio opened on a nested repository is that
+repository's own, because a hire is a git worktree and git makes it there. Only the room's own
+actions — its screen, and opening its folder — use the outer repository's folder. A `.gitignore` that cannot
+be read, or is larger than 256 KB, is treated as naming nothing. Pins and usage recorded while the
+nested repository had a room to itself are counted in the room it is in now.
 
 Inside the room, the main checkout has the desks in the middle. Each worktree somebody is
 **working** in has a bench against the foot wall, with the worktree's branch written on it, or its
