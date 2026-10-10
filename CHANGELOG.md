@@ -15,7 +15,7 @@
   counted as seen only once its flag is written; one that could not be written is tried again, and
   the write itself retries for a third of a second before giving up.
 
-## 1.7.0 — 2026-10-11
+## 1.7.0 — 2026-10-09
 
 ### Highlights
 
