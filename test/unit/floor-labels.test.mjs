@@ -48,6 +48,7 @@ import {
   isLiveAgent,
   frameLabelTexts,
   planFrameLabels,
+  wallBoxes,
 } from '../../public/render/scene-frame-labels.js';
 import {
   layoutPlate,
@@ -65,6 +66,7 @@ import {
   abbreviateName,
   LOWER_REACH,
   NEAR_REACH,
+  WALL_CLEAR_PX,
   resolveLabelCollisions,
 } from '../../public/render/label-spots.js';
 
@@ -177,6 +179,7 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       crewCounts,
       badgeBoxes,
       plateBoxes: plates.map((p) => p.rect),
+      wallBoxes: wallBoxes(plan, camera),
       selectedId: null,
       bounds: buildingRect(plan, camera),
       uOf,
@@ -766,6 +769,52 @@ test('a name that is not under, over or beside its own figure is on a leader', (
   const spot = resolveLabelCollisions([chip, item]).get('tag');
   assert.deepEqual(spot, { offsetY: 0, offsetX: -50, leader: true });
   assert.equal(resolveLabelCollisions([item]).get('tag').leader, undefined);
+});
+
+test('no name is set across a wall: it is in a room or out of it', () => {
+  let stepped = 0;
+  /** @type {string[]} */
+  const across = [];
+  for (const name of ['crew', 'demo', 'crowded', 'away']) {
+    for (const [w, h] of [...STAGES, [1600, 869]]) {
+      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+      const walls = wallBoxes(f.plan, f.camera);
+      assert.ok(walls.length > 4, `${name}: the floor has walls`);
+      for (const it of f.labels.labels) {
+        const spot = f.labels.plan.get(it.id);
+        if (!spot) continue;
+        const box = drawnBox(it, spot);
+        // Counted where its own place was on one: it has been set clear of it.
+        if (walls.some((wall) => hits(it, wall))) stepped++;
+        if (!walls.some((wall) => hits(box, wall))) continue;
+        // ONE EXCEPTION, AND IT IS A NAME KEPT: somebody waiting on the user
+        // with no place at all clear of a wall is set across it, not dropped.
+        across.push(`${name} ${w}x${h} ${f.labels.texts.get(it.id)}`);
+        assert.equal(it.keep, true, `${across.at(-1)}: a resting name is never across a wall`);
+        assert.equal(
+          spot.leader,
+          true,
+          `${across.at(-1)}: and it is far from its feet, on a leader`,
+        );
+      }
+      // And nobody at a desk or waiting lost their name to a wall.
+      for (const rec of f.records) {
+        if (!isLiveAgent(rec.agent) || !f.labels.texts.has(rec.id)) continue;
+        assert.ok(f.labels.plan.get(rec.id), `${name}: ${rec.agent.label} lost its name`);
+      }
+    }
+  }
+  assert.ok(stepped > 20, 'these floors seat people against walls: the test has cases');
+  // The narrowest office of sixteen, at the owner's stage, is the one frame of
+  // the twelve with such a name; `demo`, `crew` and `away` have none anywhere.
+  assert.ok(across.length <= 1, `names across a wall: ${across.join('; ')}`);
+  assert.ok(across.every((line) => line.startsWith('crowded 1420x690')));
+  // The step itself: a wall across a name, and the name set clear of its far side.
+  const item = { id: 'n', x: 80, y: 104, w: 40, h: 12, keep: true, variants: [] };
+  const feet = { feet: { x: 100, y: 100 }, bh: 40, side: 8 };
+  const wall = { id: 'wall:0', x: 0, y: 108, w: 400, h: 4, pin: true, wall: true };
+  const spot = resolveLabelCollisions([wall, { ...item, ...feet }]).get('n');
+  assert.deepEqual(spot, { offsetY: 108 + 4 + WALL_CLEAR_PX - 104 });
 });
 
 test('a cloud takes its own side, then the other, then none', () => {

@@ -42,7 +42,7 @@
 import { badgeBox, characterBox, formatElapsed, formatElapsedShort } from './rig.js';
 import { BADGE_MIN_PX_PER_UNIT } from './scene-lod.js';
 import { layoutPlate, plateLimit, resolveBadgeCollisions } from './scene-labels.js';
-import { buildingRect, planFrameLabels } from './scene-frame-labels.js';
+import { buildingRect, planFrameLabels, wallBoxes } from './scene-frame-labels.js';
 import { worldToScreen } from './agents.js';
 import { animMs, stateForAgent } from './scene-agent.js';
 import { now as clockNow } from '../clock.js';
@@ -365,6 +365,7 @@ export class SceneFrame extends SceneStatic {
       crewCounts: this._crewCounts,
       badgeBoxes,
       plateBoxes: [...plates.values()].map((p) => p.rect),
+      wallBoxes: wallBoxes(this._plan, camera),
       selectedId: this._selectedId,
       bounds: this._plan ? buildingRect(this._plan, camera) : undefined,
       uOf: (rec) => this._scaleOf(rec),

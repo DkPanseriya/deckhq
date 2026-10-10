@@ -42,6 +42,8 @@ import { worldToScreen } from './agents.js';
 import { crewChipAt } from './crew.js';
 import { abbreviateName, resolveLabelCollisions } from './label-spots.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
+import { WALL_PX, wallPieces } from './backdrop-floor.js';
+import { U_DEFAULT } from './backdrop-paint.js';
 import { JUNIOR_MARK, bareName, roleWordFor } from '../names.js';
 import { ROLE_CHIP_GAP } from './name-tag.js';
 import { agentLabelFor, isNeedsYouAgent } from './scene-agent.js';
@@ -139,13 +141,40 @@ export function buildingRect(plan, camera) {
   return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
 }
 
+/** @type {WeakMap<object, any[]>} a plan's walls with their doorways cut, worked out once */
+const WALL_PIECES = new WeakMap();
+
+/**
+ * EVERY WALL ON SCREEN, AS A BOX NO NAME IS SET ACROSS. Under the office's
+ * bottom sofa a name hung exactly on the wall between the office and the
+ * lounge: half of it in each room, and belonging to neither. A wall is pinned
+ * like a plate, so a name is wholly on one side of it or the other. A doorway
+ * is an opening and is left open (`wallPieces`).
+ * @param {{walls?:any[], doors?:any[]}} plan
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ * @returns {{x:number, y:number, w:number, h:number}[]}
+ */
+export function wallBoxes(plan, camera) {
+  if (!plan || !Array.isArray(plan.walls)) return [];
+  let pieces = WALL_PIECES.get(plan);
+  if (!pieces) WALL_PIECES.set(plan, (pieces = wallPieces(plan.walls, plan.doors || [])));
+  const unit = camera.zoom * camera.U;
+  return pieces.map((p) => {
+    // As thick as it is painted, and never thinner than the line it is drawn as.
+    const half = Math.max(1, ((WALL_PX[p.kind] ?? WALL_PX.solid) / U_DEFAULT) * unit * 0.5);
+    const a = worldToScreen({ x: Math.min(p.x1, p.x2), y: Math.min(p.y1, p.y2) }, camera);
+    const b = worldToScreen({ x: Math.max(p.x1, p.x2), y: Math.max(p.y1, p.y2) }, camera);
+    return { x: a.x - half, y: a.y - half, w: b.x - a.x + half * 2, h: b.y - a.y + half * 2 };
+  });
+}
+
 /**
  * Every obstacle a name must clear this frame, then every name, through the
  * frame's collision pass.
  *
  * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
  * @param {{records:any[], agentsById:Map<string,any>, camera:any, charU:number,
- *   crewCounts:Map<string,number>, badgeBoxes?:any[], plateBoxes?:any[],
+ *   crewCounts:Map<string,number>, badgeBoxes?:any[], plateBoxes?:any[], wallBoxes?:any[],
  *   selectedId?:string|null, uOf?:(rec:any)=>number,
  *   bounds?:{x:number,y:number,w:number,h:number}}} view `records` in paint order;
  *   `uOf` is the scale a figure is DRAWN at (a junior's is smaller), `charU` by default;
@@ -217,6 +246,18 @@ export function planFrameLabels(ctx, view) {
   }
   for (const [i, box] of (view.plateBoxes || []).entries()) {
     obstacles.push({ id: `plate:${i}`, x: box.x, y: box.y, w: box.w, h: box.h, pin: true });
+  }
+  // And every wall (`wallBoxes`): a name is in a room or out of it, never across.
+  for (const [i, box] of (view.wallBoxes || []).entries()) {
+    obstacles.push({
+      id: `wall:${i}`,
+      x: box.x,
+      y: box.y,
+      w: box.w,
+      h: box.h,
+      pin: true,
+      wall: true,
+    });
   }
 
   const { texts, members, roles } = labelGroups(records, view.agentsById);
