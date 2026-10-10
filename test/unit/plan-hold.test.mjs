@@ -13,6 +13,7 @@ import {
   roomHeadcounts,
 } from '../../public/render/plan-hold.js';
 
+import { assignSeats, deskSeatsOf } from '../../public/render/agents.js';
 import { buildPlan } from '../../public/render/plan.js';
 
 const NOW = Date.UTC(2026, 8, 1, 12, 0, 0);
@@ -119,6 +120,39 @@ test('a held room is the room it was: same box, same furniture, same chairs', ()
   // No hold in force is no `held` at all: the plan is the one it always was.
   const none = buildPlan(PROJECTS, before, { ...opts, held: new Map() });
   assert.equal(laid(none, 'api'), laid(full, 'api'));
+});
+
+test('whoever stays keeps the chair they are in while the room still has it', () => {
+  const opts = { stage: STAGE, now: NOW };
+  const ids = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
+  const all = ids.map((id) => agent(id, 'api'));
+  const plan = buildPlan(PROJECTS, all, opts);
+  const first = assignSeats(plan, all);
+  const keep = deskSeatsOf(plan, first);
+  assert.equal(keep.size, 6);
+  // The same people, remembered: the seats the population alone gives.
+  const same = assignSeats(plan, all, { keep });
+  for (const id of ids) assert.equal(same.get(id), first.get(id), id);
+  // Each of them leaves in turn; nobody who stays is given another chair.
+  let moved = 0;
+  for (const gone of ids) {
+    const rest = all.filter((a) => a.id !== gone);
+    const fresh = assignSeats(plan, rest);
+    const kept = assignSeats(plan, rest, { keep });
+    for (const a of rest) {
+      assert.equal(kept.get(a.id), first.get(a.id), `${a.id} when ${gone} leaves`);
+      if (fresh.get(a.id) !== first.get(a.id)) moved++;
+    }
+  }
+  assert.ok(moved > 0, 'unremembered, somebody changes chairs: the test has a case to hold');
+  // A room with a different number of chairs is a different room: hashed afresh.
+  const two = all.slice(0, 2);
+  const small = buildPlan(PROJECTS, two, opts);
+  assert.deepEqual(
+    [...assignSeats(small, two, { keep })],
+    [...assignSeats(small, two)],
+    'no chair of the old room is looked for in the new one',
+  );
 });
 
 test('a crew that falls under three keeps its floor and lays no longer desk', () => {
