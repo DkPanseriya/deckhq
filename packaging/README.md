@@ -37,10 +37,10 @@ tool is byte-for-byte what `npx deckhq` runs, with zero runtime dependencies.
 To see what a release would contain without tagging one:
 
 ```sh
-node scripts/release/changelog-section.mjs 1.2.0
-node scripts/release/manifests.mjs --version 1.2.0 \
-  --tarball-url https://registry.npmjs.org/deckhq/-/deckhq-1.2.0.tgz --tarball-sha256 <hex> \
-  --zip-url https://github.com/DkPanseriya/deckhq/releases/download/v1.2.0/deckhq-1.2.0-win.zip \
+node scripts/release/changelog-section.mjs 1.7.0
+node scripts/release/manifests.mjs --version 1.7.0 \
+  --tarball-url https://registry.npmjs.org/deckhq/-/deckhq-1.7.0.tgz --tarball-sha256 <hex> \
+  --zip-url https://github.com/DkPanseriya/deckhq/releases/download/v1.7.0/deckhq-1.7.0-win.zip \
   --zip-sha256 <hex> --out dist
 ```
 
