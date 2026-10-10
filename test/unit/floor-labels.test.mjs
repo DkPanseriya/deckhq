@@ -66,7 +66,6 @@ import {
   abbreviateName,
   LOWER_REACH,
   NEAR_REACH,
-  WALL_CLEAR_PX,
   resolveLabelCollisions,
 } from '../../public/render/label-spots.js';
 
@@ -180,6 +179,7 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       badgeBoxes,
       plateBoxes: plates.map((p) => p.rect),
       wallBoxes: wallBoxes(plan, camera),
+      rooms: plan.rooms,
       selectedId: null,
       bounds: buildingRect(plan, camera),
       uOf,
@@ -778,50 +778,84 @@ test('a name that is not under, over or beside its own figure is on a leader', (
   assert.equal(resolveLabelCollisions([item]).get('tag').leader, undefined);
 });
 
-test('no name is set across a wall: it is in a room or out of it', () => {
-  let stepped = 0;
-  /** @type {string[]} */
-  const across = [];
-  for (const name of ['crew', 'demo', 'crowded', 'away']) {
-    for (const [w, h] of [...STAGES, [1600, 869]]) {
-      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
-      const walls = wallBoxes(f.plan, f.camera);
-      assert.ok(walls.length > 4, `${name}: the floor has walls`);
-      for (const it of f.labels.labels) {
-        const spot = f.labels.plan.get(it.id);
-        if (!spot) continue;
-        const box = drawnBox(it, spot);
-        // Counted where its own place was on one: it has been set clear of it.
-        if (walls.some((wall) => hits(it, wall))) stepped++;
-        if (!walls.some((wall) => hits(box, wall))) continue;
-        // ONE EXCEPTION, AND IT IS A NAME KEPT: somebody waiting on the user
-        // with no place at all clear of a wall is set across it, not dropped.
-        across.push(`${name} ${w}x${h} ${f.labels.texts.get(it.id)}`);
-        assert.equal(it.keep, true, `${across.at(-1)}: a resting name is never across a wall`);
-        assert.equal(
-          spot.leader,
-          true,
-          `${across.at(-1)}: and it is far from its feet, on a leader`,
-        );
-      }
-      // And nobody at a desk or waiting lost their name to a wall.
-      for (const rec of f.records) {
-        if (!isLiveAgent(rec.agent) || !f.labels.texts.has(rec.id)) continue;
-        assert.ok(f.labels.plan.get(rec.id), `${name}: ${rec.agent.label} lost its name`);
+/** The floors the rule is held over; `wide` is `three` in a 1920 × 1080 window. */
+const ROOMED = [
+  ...['demo', 'crowded', 'three', 'pair', 'crew', 'away'].flatMap((name) =>
+    [...STAGES, [1600, 869]].map(([w, h]) => [name, w, h]),
+  ),
+  ['three', 1920, 949],
+];
+
+test('a name is always inside its own room: never across a wall, never past it', () => {
+  let brought = 0;
+  for (const [name, w, h] of ROOMED) {
+    const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+    const at = `${name} ${w}x${h}`;
+    const walls = wallBoxes(f.plan, f.camera);
+    const names = []; // every name drawn, in the box it is drawn in
+    for (const it of f.labels.labels) {
+      const spot = f.labels.plan.get(it.id);
+      if (spot) names.push({ ...drawnBox(it, spot), it });
+    }
+    // No two names intersect.
+    for (let i = 0; i < names.length; i++) {
+      for (let j = i + 1; j < names.length; j++) {
+        assert.ok(!hits(names[i], names[j]), `${at}: ${names[i].id} and ${names[j].id} overlap`);
       }
     }
+    for (const n of names) {
+      const rec = f.records.find((r) => r.id === n.id);
+      const room = f.plan.rooms.find(
+        (r) =>
+          r.kind !== 'corridor' &&
+          rec.x >= r.x &&
+          rec.x <= r.x + r.w &&
+          rec.y >= r.y &&
+          rec.y <= r.y + r.h,
+      );
+      assert.ok(room, `${at}: ${rec.agent.label} is seated in a room`);
+      const a = worldToScreen({ x: room.x, y: room.y }, f.camera);
+      const b = worldToScreen({ x: room.x + room.w, y: room.y + room.h }, f.camera);
+      const who = `${at}: ${f.labels.texts.get(n.id)} (${room.kind})`;
+      // Entirely inside its own room's rectangle…
+      assert.ok(n.x > a.x && n.y > a.y && n.x + n.w < b.x && n.y + n.h < b.y, `${who} is outside`);
+      // …and not touching the band a wall is painted in.
+      assert.ok(!walls.some((wall) => hits(n, wall)), `${who} touches a wall`);
+      // Counted where its own place was on one: it has been brought inside.
+      if (walls.some((wall) => hits(n.it, wall))) brought++;
+    }
+    // And nobody at a desk or waiting lost their name for it.
+    for (const rec of f.records) {
+      if (!isLiveAgent(rec.agent) || !f.labels.texts.has(rec.id)) continue;
+      assert.ok(f.labels.plan.get(rec.id), `${at}: ${rec.agent.label} lost its name`);
+    }
   }
-  assert.ok(stepped > 20, 'these floors seat people against walls: the test has cases');
-  // The narrowest office of sixteen, at the owner's stage, is the one frame of
-  // the twelve with such a name; `demo`, `crew` and `away` have none anywhere.
-  assert.ok(across.length <= 1, `names across a wall: ${across.join('; ')}`);
-  assert.ok(across.every((line) => line.startsWith('crowded 1420x690')));
-  // The step itself: a wall across a name, and the name set clear of its far side.
-  const item = { id: 'n', x: 80, y: 104, w: 40, h: 12, keep: true, variants: [] };
-  const feet = { feet: { x: 100, y: 100 }, bh: 40, side: 8 };
-  const wall = { id: 'wall:0', x: 0, y: 108, w: 400, h: 4, pin: true, wall: true };
-  const spot = resolveLabelCollisions([wall, { ...item, ...feet }]).get('n');
-  assert.deepEqual(spot, { offsetY: 108 + 4 + WALL_CLEAR_PX - 104 });
+  assert.ok(brought > 20, 'these floors seat people against walls: the test has cases');
+});
+
+test('against a wall a name is lifted under its feet, then set beside, then over its badge', () => {
+  // A room whose floor ends 12 px under the feet; the name hangs 4 px under them.
+  const room = { x: 0, y: 0, w: 400, h: 112 };
+  const base = { id: 'n', x: 80, y: 104, w: 40, h: 12, keep: true, variants: [], room };
+  const item = { ...base, feet: { x: 100, y: 100 }, bh: 40, side: 8 };
+  const body = { id: 'body:n', x: 92, y: 60, w: 16, h: 40, pin: true };
+  // (1) Lifted by the least that brings it inside: its foot on the room's.
+  assert.deepEqual(resolveLabelCollisions([body, item]).get('n'), { offsetY: 112 - 116 });
+  // (2) No room under the feet at all: beside the body, at seat height.
+  const low = { ...room, h: 108 };
+  const beside = resolveLabelCollisions([body, { ...item, room: low }]).get('n');
+  assert.ok(beside.offsetX < 0 && beside.offsetY < 0 && beside.leader === undefined);
+  assert.equal(104 + beside.offsetY + 12, 99, 'its foot a pixel over the floor line');
+  // (3) Neighbours either side as well: over its own wait badge.
+  const left = { id: 'body:l', x: 40, y: 60, w: 50, h: 40, pin: true };
+  const right = { id: 'body:r', x: 110, y: 60, w: 50, h: 40, pin: true };
+  const badge = { id: 'badge:n', x: 85, y: 30, w: 30, h: 14, pin: true };
+  const over = 30 - 1 - 12 - 104;
+  const boxed = [body, left, right, badge, { ...item, room: low, unit: true, over }];
+  assert.deepEqual(resolveLabelCollisions(boxed).get('n'), { offsetY: over });
+  // Never past the wall: with no room to hold it at all, a resting name is not drawn.
+  const tiny = { ...room, y: 200 };
+  assert.equal(resolveLabelCollisions([body, { ...item, keep: false, room: tiny }]).get('n'), null);
 });
 
 test('a cloud takes its own side, then the other, then none', () => {

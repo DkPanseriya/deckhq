@@ -82,9 +82,12 @@ export const LOWER_REACH = 1.6;
  * @param {{id:string, x:number, y:number, w:number, h:number, keep?:boolean,
  *   pin?:boolean, wall?:boolean, unit?:boolean, lower?:boolean, alts?:number[][], up?:number,
  *   feet?:{x:number, y:number},
+ *   room?:{x:number, y:number, w:number, h:number}, over?:number,
  *   bh?:number, side?:number, lift?:number,
  *   variants?:{x:number, y:number, w:number, h:number, text:string, px:number}[]}[]} items
- *   `x,y,w,h`: the label's un-offset screen box; `up`: the offsetY that puts it
+ *   `x,y,w,h`: the label's un-offset screen box; `room`: the floor of the
+ *   figure's own room, inside its walls, which the whole name stays in; `over`:
+ *   the offsetY that sets it over its own wait badge; `up`: the offsetY that puts it
  *   over its figure's head; `feet`, `bh`, `side`: the feet point, the body's
  *   height and half-width, all in screen px; `lift`: half the depth of a
  *   two-row tag's second row (`rowCentre`); `variants`: the same label smaller,
@@ -106,12 +109,17 @@ export function resolveLabelCollisions(items, bounds) {
   // west wall used to hang the name off the floor and off the canvas).
   const inside = (a, b) =>
     a.x + a.w / 2 >= b.x && a.x + a.w / 2 <= b.x + b.w && a.y + a.h / 2 >= b.y;
-  // `through`: walls are not asked about. Only ever for a live name that has
-  // no place at all clear of one — across a wall is still better than gone.
-  const free = (rect, through = false) =>
+  // A NAME IS INSIDE ITS OWN ROOM (`room`, every seated figure's): the whole
+  // box, clear of the wall band, with no exception — a name past a wall is a
+  // name in somebody else's room. A figure with no room of its own (one that is
+  // walking, between rooms) is asked about the walls instead, and `through`
+  // lets a live name that has no place at all clear of one be set anyway.
+  const within = (a, b) =>
+    a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h;
+  const free = (rect, it = null, through = false) =>
     !(bounds && !inside(rect, bounds)) &&
     !placed.some((p) => overlaps(rect, p)) &&
-    (through || !walls.some((w) => overlaps(rect, w)));
+    (it && it.room ? within(rect, it.room) : through || !walls.some((w) => overlaps(rect, w)));
 
   // `pin` is an exemption and `keep` is only a priority. Making needs-you
   // labels exempt collapsed in the case that matters most: every agent in the
@@ -156,23 +164,25 @@ export function resolveLabelCollisions(items, bounds) {
           const rect = { x: form.x, y: form.y + form.h, w: form.w, h: form.h };
           const line = { x: it.feet.x - 0.5, y: it.feet.y, w: 1, h: rect.y - it.feet.y };
           const reach = (rowCentre(it, rect) - it.feet.y) / it.bh;
-          if (reach <= LOWER_REACH + 1e-6 && free(rect) && (line.h <= 0 || free(line))) {
+          if (reach <= LOWER_REACH + 1e-6 && free(rect, it) && (line.h <= 0 || free(line))) {
             placed.push(rect);
             if (line.h > 0) placed.push(line);
             result.set(it.id, spotOf(it, form, 0, form.h, true));
             continue;
           }
         }
-        // On a wall at its feet, the first place tried is just past that wall.
-        const past = wallStep(it, form, walls);
+        // Where its own place is on its room's wall, the first place tried is
+        // that one brought inside the room (`insideStep`).
+        const inward = insideStep(it, form);
         const ring = nearSpots(it, form);
-        for (const [dx, dy] of past === null ? ring : [[0, past], ...ring]) {
+        for (const spot of inward === null ? ring : [inward, ...ring]) {
+          const [dx, dy] = spot;
           const rect = { x: form.x + dx, y: form.y + dy, w: form.w, h: form.h };
-          // Under its own feet a unit's name claims the floor up to them. Past
-          // a wall it claims only itself: the wall is what is between them.
-          const gap = it.unit && dy === 0 ? Math.max(0, rect.y - it.feet.y) : 0;
+          // Under its own feet a unit's name claims the floor up to them.
+          const below = dy === 0 || spot === inward;
+          const gap = it.unit && below ? Math.max(0, rect.y - it.feet.y) : 0;
           const claim = gap > 0 ? { ...rect, y: it.feet.y, h: rect.h + gap } : rect;
-          if (!free(claim)) continue;
+          if (!free(claim, it)) continue;
           placed.push(claim);
           result.set(it.id, spotOf(it, form, dx, dy, detached(it, rect)));
           break;
@@ -195,16 +205,44 @@ export function resolveLabelCollisions(items, bounds) {
       const spots = it.keep ? LABEL_SPOTS : LABEL_SPOTS_DOWN;
       // `alts`: other figures the same label may hang under instead, as offsets
       // from this one — a crew's `Explore ×3` belongs to any of its three.
-      // Clear of every wall first; a live name with nowhere at all is then set
-      // as it would have been before walls were asked about, and not dropped.
-      for (const through of it.keep && walls.length ? [false, true] : [false]) {
+      // THE LAST PLACES INSIDE ITS ROOM that are still plainly this figure's
+      // (`lastInside`): closer under its feet, then over its own wait badge.
+      const last = it.room
+        ? lastInside(it, form).find(([dx, dy]) =>
+            free({ x: form.x + dx, y: form.y + dy, w: form.w, h: form.h }, it),
+          )
+        : undefined;
+      if (last) {
+        placed.push({ x: form.x + last[0], y: form.y + last[1], w: form.w, h: form.h });
+        result.set(it.id, spotOf(it, form, last[0], last[1], false));
+        continue;
+      }
+      // WHAT IS ASKED OF A PLACE, IN TURN. In its own room; then, for a live
+      // name, the free place in its room nearest its feet (`roomScan`). Only a
+      // live name with no place in its room at all — a crew's tag half as wide
+      // as the room it is in, on a floor of a hundred and fifty — is then set
+      // as a figure between rooms is: clear of every wall, and last of all as
+      // if no wall were there. A live name is never dropped.
+      const outside = it.keep && walls.length ? ['walls', 'any'] : ['walls'];
+      const passes = it.room ? (it.keep ? ['room', 'scan', ...outside] : ['room']) : outside;
+      for (const pass of passes) {
+        if (pass === 'scan') {
+          const at = roomScan(it, form).find(([dx, dy]) =>
+            free({ x: form.x + dx, y: form.y + dy, w: form.w, h: form.h }, it),
+          );
+          if (!at) continue;
+          placed.push({ x: form.x + at[0], y: form.y + at[1], w: form.w, h: form.h });
+          chosen = spotOf(it, form, at[0], at[1], true);
+          break;
+        }
+        const owner = pass === 'room' ? it : null;
         for (const [bx, by] of [[0, 0], ...(it.alts || [])]) {
           for (const [fx, fy] of spots) {
             if (fy === LABEL_UP && (it.unit || typeof it.up !== 'number')) continue;
             const offsetX = bx + fx * form.w;
             const offsetY = by + (fy === LABEL_UP ? upFor(it, form) : fy * form.h);
             const rect = { x: form.x + offsetX, y: form.y + offsetY, w: form.w, h: form.h };
-            if (!free(rect, through)) continue;
+            if (!free(rect, owner, pass === 'any')) continue;
             // On a leader wherever it is far from its feet — or within reach
             // of them and under no part of its own figure (`detached`).
             const loose = !!it.feet && (!isNear(it, rect) || detached(it, rect));
@@ -243,32 +281,78 @@ function detached(it, rect) {
   return !under && !level;
 }
 
-/** How far past a wall a name is set, in screen px: clear of it, not against it. */
+/** How far inside a wall's face a name is set, in screen px: clear of it, not against it. */
 export const WALL_CLEAR_PX = 2;
 
 /**
- * THE WALL STEP. A figure on a sofa against a room's foot wall has that wall
- * where its name hangs, and a name across a wall is in neither room. Its first
- * place is then the same one, lowered until its top is clear of the wall: on
- * the far side, under its own feet, and still its figure's — if that is within
- * the second level's reach (`LOWER_REACH`). A name across a wall at its SIDE
- * has no step: the ring's own sideways slides take it to one side or the other.
+ * THE STEP INSIDE. A figure on a sofa that backs onto its room's wall has that
+ * wall where its name hangs. A name across the wall is in neither room, and a
+ * name past it is in the wrong one — under the office's bottom sofa that was
+ * the lounge, beside the lounge's own plate. So its first place is its own
+ * place brought back inside its room by the least it takes: lifted over the
+ * sofa's front edge, still under its feet. Where the figure leaves no room for
+ * that — the lifted name would be on its body — the ring's own places follow:
+ * beside the body, at seat height.
  * @param {any} it @param {{x:number, y:number, w:number, h:number}} form
- * @param {{x:number, y:number, w:number, h:number}[]} walls
- * @returns {number|null} the offsetY of that place, or null where there is none
+ * @returns {number[]|null} `[dx, dy]` of that place; null for a name that is
+ *   inside its room where it hangs, or has no room
  */
-function wallStep(it, form, walls) {
-  if (!walls.length || !it.feet || !(it.bh > 0)) return null;
-  let foot = -Infinity;
-  for (const w of walls) {
-    const across = form.x < w.x + w.w && form.x + form.w > w.x;
-    const on = form.y < w.y + w.h && form.y + form.h > w.y;
-    if (across && on && w.w > w.h && w.y + w.h > it.feet.y) foot = Math.max(foot, w.y + w.h);
+function insideStep(it, form) {
+  const room = it.room;
+  if (!room) return null;
+  const dx = Math.max(room.x - form.x, Math.min(0, room.x + room.w - form.x - form.w));
+  const dy = Math.max(room.y - form.y, Math.min(0, room.y + room.h - form.y - form.h));
+  if (dx === 0 && dy === 0) return null;
+  // Still its figure's: no farther from its feet than a second-level name is.
+  const mid = { x: form.x + dx + form.w / 2, y: rowCentre(it, { y: form.y + dy, h: form.h }) };
+  const far = it.feet ? Math.hypot(mid.x - it.feet.x, mid.y - it.feet.y) : 0;
+  return it.bh > 0 && far > LOWER_REACH * it.bh ? null : [dx, dy];
+}
+
+/**
+ * WHERE A LIVE NAME GOES WHEN ITS RING IS FULL AND IT MAY NOT LEAVE ITS ROOM,
+ * before it is sent away on a leader. In order:
+ *
+ *   1. under its feet still, but closer: lifted two pixels at a time until its
+ *      top is against the floor line. A name hangs a little under its figure,
+ *      and in a packed office that gap is often all the room there is;
+ *   2. over its own wait badge (`over`), straight, then a few sixteenths to
+ *      either side. A waiting figure's name is never set there while it has a
+ *      place under or beside it; with neither, over its own badge it is still
+ *      plainly that figure's.
+ * @param {any} it @param {{x:number, y:number, w:number, h:number}} form
+ * @returns {number[][]} offsets from the form's un-offset box
+ */
+function lastInside(it, form) {
+  /** @type {number[][]} */
+  const out = [];
+  if (!it.feet) return out;
+  for (let dy = -2; form.y + dy >= it.feet.y + 1; dy -= 2) out.push([0, dy]);
+  if (typeof it.over === 'number') {
+    const dy = it.y + it.over + it.h - form.h - form.y;
+    out.push([0, dy]);
+    for (const f of [1, 2, 3, 4]) out.push([(-f * form.w) / 16, dy], [(f * form.w) / 16, dy]);
   }
-  if (foot === -Infinity) return null;
-  const dy = foot + WALL_CLEAR_PX - form.y;
-  const reach = (rowCentre(it, { y: form.y + dy, h: form.h }) - it.feet.y) / it.bh;
-  return reach <= LOWER_REACH + 1e-6 ? dy : null;
+  return out;
+}
+
+/**
+ * Every place round a figure a name could be looked for, nearest its feet
+ * first: a quarter of the name's width apart across two widths either way, and
+ * half its height apart from six heights over where it hangs to three under.
+ * The caller keeps the first that is free and inside the room.
+ * @param {any} it @param {{x:number, y:number, w:number, h:number}} form
+ * @returns {number[][]} offsets from the form's un-offset box
+ */
+function roomScan(it, form) {
+  /** @type {number[][]} */
+  const out = [];
+  for (let j = -12; j <= 6; j++) {
+    for (let i = -8; i <= 8; i++) out.push([(i * form.w) / 4, (j * form.h) / 2]);
+  }
+  const far = (/** @type {number[]} */ [dx, dy]) =>
+    Math.hypot(form.x + dx + form.w / 2 - it.feet.x, form.y + dy + form.h / 2 - it.feet.y);
+  return out.sort((a, b) => far(a) - far(b) || a[1] - b[1] || a[0] - b[0]);
 }
 
 /** `up` for a smaller form of the same label: the same bottom line over the head. */

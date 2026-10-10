@@ -366,6 +366,7 @@ export class SceneFrame extends SceneStatic {
       badgeBoxes,
       plateBoxes: [...plates.values()].map((p) => p.rect),
       wallBoxes: wallBoxes(this._plan, camera),
+      rooms: this._plan ? this._plan.rooms : undefined,
       selectedId: this._selectedId,
       bounds: this._plan ? buildingRect(this._plan, camera) : undefined,
       uOf: (rec) => this._scaleOf(rec),

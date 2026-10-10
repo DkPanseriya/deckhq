@@ -40,7 +40,7 @@ import {
 } from './rig-metrics.js';
 import { worldToScreen } from './agents.js';
 import { crewChipAt } from './crew.js';
-import { abbreviateName, resolveLabelCollisions } from './label-spots.js';
+import { abbreviateName, resolveLabelCollisions, WALL_CLEAR_PX } from './label-spots.js';
 import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
 import { WALL_PX, wallPieces } from './backdrop-floor.js';
 import { U_DEFAULT } from './backdrop-paint.js';
@@ -169,12 +169,44 @@ export function wallBoxes(plan, camera) {
 }
 
 /**
+ * THE FLOOR A FIGURE'S NAME STAYS ON: its own room's rectangle on screen, in
+ * from every side by the thickest wall's inner half and `WALL_CLEAR_PX`. A
+ * name is always wholly inside it — never across a wall, never past one.
+ *
+ * Nobody walking has one: a figure in a doorway is in two rooms at once, and
+ * it is asked about the walls themselves instead (`wallBoxes`). Nor has a
+ * figure standing in a corridor.
+ * @param {any[]|undefined} rooms the plan's rooms, in units
+ * @param {any} rec the figure's record, feet in units
+ * @param {{zoom:number, panX:number, panY:number, U:number}} camera
+ * @returns {{x:number, y:number, w:number, h:number}|undefined}
+ */
+export function roomFloor(rooms, rec, camera) {
+  if (!Array.isArray(rooms) || (rec.path && rec.path.length > 0)) return undefined;
+  const room = rooms.find(
+    (r) =>
+      r.kind !== 'corridor' &&
+      rec.x >= r.x &&
+      rec.x <= r.x + r.w &&
+      rec.y >= r.y &&
+      rec.y <= r.y + r.h,
+  );
+  if (!room) return undefined;
+  const pad =
+    Math.max(1, (WALL_PX.exterior / U_DEFAULT) * camera.zoom * camera.U * 0.5) + WALL_CLEAR_PX;
+  const a = worldToScreen({ x: room.x, y: room.y }, camera);
+  const b = worldToScreen({ x: room.x + room.w, y: room.y + room.h }, camera);
+  return { x: a.x + pad, y: a.y + pad, w: b.x - a.x - pad * 2, h: b.y - a.y - pad * 2 };
+}
+
+/**
  * Every obstacle a name must clear this frame, then every name, through the
  * frame's collision pass.
  *
  * @param {{font:string, measureText:(t:string)=>{width:number}}} ctx
  * @param {{records:any[], agentsById:Map<string,any>, camera:any, charU:number,
  *   crewCounts:Map<string,number>, badgeBoxes?:any[], plateBoxes?:any[], wallBoxes?:any[],
+ *   rooms?:any[],
  *   selectedId?:string|null, uOf?:(rec:any)=>number,
  *   bounds?:{x:number,y:number,w:number,h:number}}} view `records` in paint order;
  *   `uOf` is the scale a figure is DRAWN at (a junior's is smaller), `charU` by default;
@@ -220,14 +252,14 @@ export function planFrameLabels(ctx, view) {
     }
   }
   const screenOf = new Map(records.map((rec) => [String(rec.id), rec]));
-  /** @type {Set<string>} the figures drawn under a wait badge of their own */
-  const badged = new Set();
+  /** @type {Map<string, number>} the figures drawn under a wait badge, and its top */
+  const badged = new Map();
   for (const box of view.badgeBoxes || []) {
     obstacles.push({ ...box, pin: true });
     const id = /^badge:/.test(String(box.id)) ? String(box.id).slice(6) : '';
     const rec = screenOf.get(id);
     if (!rec) continue;
-    badged.add(id);
+    badged.set(id, box.y);
     // The slot between a badge and the head under it, where the state icon is
     // drawn: pinned, so no name is set between a figure and its own badge.
     const u = view.uOf ? view.uOf(rec) : charU;
@@ -302,6 +334,12 @@ export function planFrameLabels(ctx, view) {
       pin: rec.id === view.selectedId,
       keep: live,
       unit: badged.has(String(rec.id)),
+      // The floor of its own room, which the whole name stays on (`roomFloor`);
+      // and the one place left when that floor has none: over its own badge.
+      room: roomFloor(view.rooms, rec, camera),
+      over: badged.has(String(rec.id))
+        ? /** @type {number} */ (badged.get(String(rec.id))) - 1 - box.h - box.y
+        : undefined,
       // On a cushion between two taken ones: the second level (`label-spots.js`).
       lower: !!(rec.targetSeat && rec.targetSeat.nameRow === 1),
       alts,
