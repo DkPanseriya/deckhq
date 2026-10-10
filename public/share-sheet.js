@@ -439,13 +439,27 @@ export function openShareSheet(handed) {
   // The floor goes on changing under the sheet, and the preview is live: a
   // newer snapshot is a newer picture. Compared by identity, once a second —
   // the root replaces `latestSnapshot` on every push and mutates nothing.
+  window.clearInterval(watcher);
   watcher = window.setInterval(() => {
-    if (latestSnapshot !== drawnFrom && !io.busy()) refresh();
+    // Shut, and nobody has said so yet: see `teardown`.
+    if (!ui.dialog.open) teardown();
+    else if (latestSnapshot !== drawnFrom && !io.busy()) refresh();
   }, 1000);
 }
 
-/** Closing the sheet lets go of the second floor and its bitmaps. */
+/**
+ * Closing the sheet lets go of the second floor and its bitmaps.
+ *
+ * Called on the dialog's `close` event and, as a backstop, by the watcher. The
+ * backstop is not belt and braces: Chrome delivers `close` with the next
+ * animation frame, and a tab in the background has none — measured, the event
+ * had not arrived a second and a half after `close()`. Without the watcher the
+ * second floor would stay in memory until the tab was looked at again; and the
+ * event arriving late must not tear down a sheet that has since been reopened,
+ * which is what the first line is for.
+ */
 function teardown() {
+  if (ui && ui.dialog.open) return;
   window.clearInterval(watcher);
   watcher = 0;
   dropScene();
