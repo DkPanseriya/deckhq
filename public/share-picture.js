@@ -42,7 +42,7 @@ import { WORDMARK, formatWait } from './snapshot.js';
  */
 export const SHARE_SHAPES = Object.freeze({
   wide: Object.freeze({ id: 'wide', label: '16:9', w: 1760, h: 990 }),
-  square: Object.freeze({ id: 'square', label: '1:1', w: 1320, h: 1320 }),
+  square: Object.freeze({ id: 'square', label: '1:1', w: 1400, h: 1400 }),
 });
 
 /** Output pixels per CSS pixel. The floor is drawn at this, not resampled to it. */
