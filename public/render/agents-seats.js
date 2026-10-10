@@ -122,6 +122,69 @@ export function assignHashed(agents, seats, result) {
 }
 
 /**
+ * WHO KEEPS THE CHAIR THEY ARE IN. `assignHashed` is a function of who is in
+ * the room, so one person leaving can hand a neighbour's chair to somebody
+ * else: the hash that lost a contested chair wins it back. A page that
+ * remembers where its people sat (`keep`, from `deskSeatsOf`) seats them there
+ * again first — while the room still has that chair, which is while it has the
+ * same number of them — and hashes only the rest over what is left.
+ *
+ * With no `keep`, or nobody in it, this is `assignHashed` exactly.
+ * @param {AgentLike[]} agents @param {Seat[]} seats one room's desk seats
+ * @param {string} projectId
+ * @param {Map<string, {pid:string, i:number, n:number}>|null|undefined} keep
+ * @param {Map<string, PlacedSeat>} result written into
+ */
+export function assignKept(agents, seats, projectId, keep, result) {
+  if (!keep || !keep.size || !seats || !seats.length) {
+    assignHashed(agents, seats, result);
+    return;
+  }
+  const free = new Set(seats);
+  /** @type {AgentLike[]} */
+  const rest = [];
+  for (const agent of [...agents].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    const k = keep.get(String(agent.id));
+    const seat = k && k.pid === String(projectId) && k.n === seats.length ? seats[k.i] : null;
+    if (seat && free.has(seat)) {
+      free.delete(seat);
+      result.set(agent.id, seat);
+    } else rest.push(agent);
+  }
+  // Nobody kept anything, or more people than chairs: the whole room is hashed
+  // over the whole room, as it always was.
+  if (free.size === seats.length || rest.length > free.size) assignHashed(agents, seats, result);
+  else if (rest.length) {
+    assignHashed(
+      rest,
+      seats.filter((s) => free.has(s)),
+      result,
+    );
+  }
+}
+
+/**
+ * Which desk chair each seated agent is in, for `assignKept` next time: the
+ * room, the chair's place in that room's list and how many chairs it had.
+ * @param {Plan} plan @param {Map<string, PlacedSeat>} seatMap
+ * @returns {Map<string, {pid:string, i:number, n:number}>}
+ */
+export function deskSeatsOf(plan, seatMap) {
+  /** @type {Map<any, {pid:string, i:number, n:number}>} */
+  const where = new Map();
+  for (const [pid, seats] of (plan && plan.seats) || []) {
+    seats.forEach((s, i) => where.set(s, { pid: String(pid), i, n: seats.length }));
+  }
+  /** @type {Map<string, {pid:string, i:number, n:number}>} */
+  const out = new Map();
+  for (const [id, seat] of seatMap || []) {
+    const at = where.get(seat);
+    if (at) out.set(String(id), at);
+  }
+  return out;
+}
+
+/**
  * How far a point may travel along `u` before it leaves `rect`, less `pad`.
  *
  * A ray-box clip, and it has to be one rather than a width: a junior's row
@@ -329,9 +392,14 @@ export function chairFootprints(seats, own) {
  *
  * @param {Plan} plan
  * @param {AgentLike[]} agents
- * @param {{selectedId?: string|null}} [opts] `selectedId`: the session whose
- *   panel is open. A waiting one walks to the manager's desk; anybody else is
- *   left exactly where their state puts them.
+ * @param {{selectedId?: string|null,
+ *   keep?: Map<string, {pid:string, i:number, n:number}>|null}} [opts]
+ *   `selectedId`: the session whose panel is open. A waiting one walks to the
+ *   manager's desk; anybody else is left exactly where their state puts them.
+ *   `keep`: the desk chairs the page's people were last in (`deskSeatsOf`), so
+ *   nobody changes chairs because a neighbour left (`assignKept`). The page's
+ *   own memory, like the selection: never persisted, and a floor seated
+ *   without it is the floor the population alone says.
  * @returns {Map<string, PlacedSeat>}
  */
 export function assignSeats(plan, agents, opts = {}) {
@@ -411,7 +479,7 @@ export function assignSeats(plan, agents, opts = {}) {
 
   for (const [projectId, list] of deskByProject) {
     const seats = (plan.seats && plan.seats.get(projectId)) || [];
-    assignHashed(list, seats, result);
+    assignKept(list, seats, projectId, opts && opts.keep, result);
   }
 
   // The reception is a literal queue: the longest wait takes the sofa place

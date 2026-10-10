@@ -25,7 +25,10 @@ import {
   largeFloor,
   LARGE_NOW,
   ownerShapedFloor,
+  populationFloor,
 } from '../helpers/large-floor.mjs';
+import { cloudBox, placeClouds } from '../../public/render/cloud-spots.js';
+import { drawDots } from '../../public/render/rig-props.js';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
@@ -45,6 +48,7 @@ import {
   isLiveAgent,
   frameLabelTexts,
   planFrameLabels,
+  wallBoxes,
 } from '../../public/render/scene-frame-labels.js';
 import {
   layoutPlate,
@@ -62,6 +66,7 @@ import {
   abbreviateName,
   LOWER_REACH,
   NEAR_REACH,
+  WALL_CLEAR_PX,
   resolveLabelCollisions,
 } from '../../public/render/label-spots.js';
 
@@ -174,6 +179,7 @@ function frameAt(viewW, viewH, floor = largeFloor, { badges = false } = {}) {
       crewCounts,
       badgeBoxes,
       plateBoxes: plates.map((p) => p.rect),
+      wallBoxes: wallBoxes(plan, camera),
       selectedId: null,
       bounds: buildingRect(plan, camera),
       uOf,
@@ -702,4 +708,158 @@ test('a dense run sets its names at two levels, and the sixteen all sit', () => 
   const blocked = [{ id: 'wall', x: 100, y: 134, w: 60, h: 14, pin: true }, ...three];
   const moved = resolveLabelCollisions(blocked).get('b');
   assert.ok(moved && !(moved.offsetY === 14 && !moved.offsetX));
+});
+
+// ------------------------------------------- a thought cloud yields to a name
+
+test('no thought cloud is over a name, a role chip, a wait badge or a crew chip', () => {
+  let mirrored = 0;
+  let dropped = 0;
+  let wouldCover = 0;
+  for (const name of ['crew', 'demo', 'crowded']) {
+    for (const [w, h] of [...STAGES, [1600, 869]]) {
+      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+      const names = f.labels.labels
+        .filter((it) => f.labels.plan.get(it.id))
+        .map((it) => drawnBox(it, f.labels.plan.get(it.id)));
+      const chrome = f.labels.obstacles.filter((o) => /^(badge|pill|chip):/.test(o.id));
+      const taken = [...names, ...chrome];
+      assert.ok(names.length > 0, `${name}: the floor has names to be covered`);
+      for (const rec of f.records) {
+        const s = worldToScreen(rec, f.camera);
+        const side = f.labels.clouds.get(rec.id);
+        assert.ok(side === 1 || side === -1 || side === 0, `${name} ${rec.id}: a side`);
+        // Every figure is asked, cloud or not: a cloud can open on any of them.
+        const natural = cloudBox(s.x, s.y, f.uOf(rec), 1);
+        if (taken.some((t) => hits(natural, t))) wouldCover++;
+        if (side === -1) mirrored++;
+        if (side === 0) dropped++;
+        if (side === 0) continue;
+        const box = cloudBox(s.x, s.y, f.uOf(rec), side);
+        const over = taken.find((t) => hits(box, t));
+        assert.equal(over, undefined, `${name} ${w}x${h}: ${rec.id}'s cloud is over ${over?.id}`);
+        // On its own side wherever that side is clear: nothing moves for nothing.
+        if (!taken.some((t) => hits(natural, t))) assert.equal(side, 1);
+      }
+    }
+  }
+  assert.ok(wouldCover > 0, 'unplaced, a cloud covers a name on these floors');
+  assert.ok(mirrored > 0, 'and the other side of the head is where most of them go');
+  assert.equal(wouldCover, mirrored + dropped);
+});
+
+test('a name that is not under, over or beside its own figure is on a leader', () => {
+  let tied = 0;
+  for (const name of ['crew', 'demo', 'crowded']) {
+    for (const [w, h] of [...STAGES, [1600, 869]]) {
+      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+      for (const it of f.labels.labels) {
+        const spot = f.labels.plan.get(it.id);
+        if (!spot) continue;
+        const box = drawnBox(it, spot);
+        // The body is half as wide as the ring `side` is the radius of.
+        const half = it.side / 2;
+        const under = box.x < it.feet.x + half && box.x + box.w > it.feet.x - half;
+        const level = box.y < it.feet.y && box.y + box.h > it.feet.y - it.bh;
+        if (under || level) continue;
+        tied++;
+        assert.equal(spot.leader, true, `${name}: ${f.labels.texts.get(it.id)} stands alone`);
+      }
+    }
+  }
+  assert.ok(tied > 0, 'these floors set a name clear of its figure: the test has a case');
+  // The rule itself, on the case the crew floor drew: a tag wider than the
+  // body it names, pushed aside at its own depth until none of it is under it.
+  const wide = { id: 'tag', x: 60, y: 104, w: 80, h: 12, keep: true };
+  const item = { ...wide, feet: { x: 100, y: 100 }, bh: 60, side: 6, variants: [] };
+  const chip = { id: 'chip', x: 92, y: 100, w: 16, h: 20, pin: true };
+  const spot = resolveLabelCollisions([chip, item]).get('tag');
+  assert.deepEqual(spot, { offsetY: 0, offsetX: -50, leader: true });
+  assert.equal(resolveLabelCollisions([item]).get('tag').leader, undefined);
+});
+
+test('no name is set across a wall: it is in a room or out of it', () => {
+  let stepped = 0;
+  /** @type {string[]} */
+  const across = [];
+  for (const name of ['crew', 'demo', 'crowded', 'away']) {
+    for (const [w, h] of [...STAGES, [1600, 869]]) {
+      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+      const walls = wallBoxes(f.plan, f.camera);
+      assert.ok(walls.length > 4, `${name}: the floor has walls`);
+      for (const it of f.labels.labels) {
+        const spot = f.labels.plan.get(it.id);
+        if (!spot) continue;
+        const box = drawnBox(it, spot);
+        // Counted where its own place was on one: it has been set clear of it.
+        if (walls.some((wall) => hits(it, wall))) stepped++;
+        if (!walls.some((wall) => hits(box, wall))) continue;
+        // ONE EXCEPTION, AND IT IS A NAME KEPT: somebody waiting on the user
+        // with no place at all clear of a wall is set across it, not dropped.
+        across.push(`${name} ${w}x${h} ${f.labels.texts.get(it.id)}`);
+        assert.equal(it.keep, true, `${across.at(-1)}: a resting name is never across a wall`);
+        assert.equal(
+          spot.leader,
+          true,
+          `${across.at(-1)}: and it is far from its feet, on a leader`,
+        );
+      }
+      // And nobody at a desk or waiting lost their name to a wall.
+      for (const rec of f.records) {
+        if (!isLiveAgent(rec.agent) || !f.labels.texts.has(rec.id)) continue;
+        assert.ok(f.labels.plan.get(rec.id), `${name}: ${rec.agent.label} lost its name`);
+      }
+    }
+  }
+  assert.ok(stepped > 20, 'these floors seat people against walls: the test has cases');
+  // The narrowest office of sixteen, at the owner's stage, is the one frame of
+  // the twelve with such a name; `demo`, `crew` and `away` have none anywhere.
+  assert.ok(across.length <= 1, `names across a wall: ${across.join('; ')}`);
+  assert.ok(across.every((line) => line.startsWith('crowded 1420x690')));
+  // The step itself: a wall across a name, and the name set clear of its far side.
+  const item = { id: 'n', x: 80, y: 104, w: 40, h: 12, keep: true, variants: [] };
+  const feet = { feet: { x: 100, y: 100 }, bh: 40, side: 8 };
+  const wall = { id: 'wall:0', x: 0, y: 108, w: 400, h: 4, pin: true, wall: true };
+  const spot = resolveLabelCollisions([wall, { ...item, ...feet }]).get('n');
+  assert.deepEqual(spot, { offsetY: 108 + 4 + WALL_CLEAR_PX - 104 });
+});
+
+test('a cloud takes its own side, then the other, then none', () => {
+  const me = { id: 'a', x: 100, y: 100, u: 10 };
+  assert.equal(placeClouds([me], []).get('a'), 1);
+  const right = cloudBox(100, 100, 10, 1);
+  const left = cloudBox(100, 100, 10, -1);
+  assert.ok(right.x > left.x && right.y === left.y, 'mirrored about the head');
+  assert.equal(placeClouds([me], [right]).get('a'), -1);
+  assert.equal(placeClouds([me], [right, left]).get('a'), 0);
+});
+
+test('the box a cloud is placed by holds every lobe of the cloud that is drawn', () => {
+  for (const side of [1, -1]) {
+    for (const sway of [-1, 0, 1]) {
+      /** @type {{x:number, y:number, r:number}[]} */
+      const arcs = [];
+      const noop = () => {};
+      const ctx = {
+        globalAlpha: 1,
+        lineWidth: 1,
+        beginPath: noop,
+        moveTo: noop,
+        fill: noop,
+        stroke: noop,
+        arc: (x, y, r) => arcs.push({ x, y, r }),
+      };
+      drawDots(/** @type {any} */ (ctx), 200, 300, 20, 1, 3, sway, side);
+      const box = cloudBox(200, 300, 20, side);
+      // The two trailing beats lead from the head to the cloud and are under
+      // it; the cloud itself is every arc from the third on.
+      const lobes = arcs.slice(2);
+      assert.ok(lobes.length >= 4);
+      const edge = ctx.lineWidth / 2;
+      for (const a of lobes) {
+        assert.ok(a.x - a.r - edge >= box.x - 1e-6 && a.x + a.r + edge <= box.x + box.w + 1e-6);
+        assert.ok(a.y - a.r - edge >= box.y - 1e-6 && a.y + a.r + edge <= box.y + box.h + 1e-6);
+      }
+    }
+  }
 });

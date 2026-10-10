@@ -426,7 +426,7 @@ export const REST_LIFE = Object.freeze({
  * @param {import('./clips.js').Pose} pose
  * @param {{ x:number, y:number, u:number, lod:0|1|2, color:string, state?:string,
  *   label?:string, labelOffsetY?:number, labelOffsetX?:number, labelPx?:number, labelLeader?:boolean,
- *   labelRole?:string|null,
+ *   labelRole?:string|null, cloudSide?:1|-1|0,
  *   icon?:'hand'|'hourglass'|'check'|null,
  *   badge?:string|null, selected?:boolean, reduced?:boolean, seconds?:number,
  *   walking?:boolean, tool?:{name:string, summary:string}|null,
@@ -573,6 +573,9 @@ export function drawCharacter(ctx, pose, opts) {
   // its whole 2.52 U rather than a third of it.
   const tool = opts.tool || null;
   const showTool = tool && !opts.icon && !opts.badge;
+  // Which side of the head a cloud hangs on, from the frame's label pass: the
+  // right unless a name is there, and `0` where one is on both sides.
+  const cloudSide = opts.cloudSide === -1 || opts.cloudSide === 0 ? opts.cloudSide : 1;
   if (opts.icon) {
     drawIcon(ctx, ox, oy, u, opts.icon, color, pose.ringPhase);
   } else if (showTool && lod >= 1 && !reduced) {
@@ -587,16 +590,19 @@ export function drawCharacter(ctx, pose, opts) {
     // thought/speech dots because a stalled session is not thinking: it has
     // gone quiet, and that is the one thing the slot has to say about it.
     drawStallDots(ctx, ox, oy, u, life.dots);
+  } else if (cloudSide === 0) {
+    // A name, a wait badge or a crew's chip is where the cloud would be on
+    // either side of this head (`cloud-spots.js`): no cloud this frame.
   } else if (life.lobes > 0) {
     // WP-87 · the thinking cloud: a turn open, no tool running, and nothing
     // written for N seconds. Its SIZE is how long that has been true and its
     // sway is the only part of it that moves.
-    drawDots(ctx, ox, oy, u, 1, life.lobes, life.cloud);
+    drawDots(ctx, ox, oy, u, 1, life.lobes, life.cloud, cloudSide);
   } else {
     const thoughtOpacity = Math.sin(Math.min(1, Math.max(0, pose.thoughtPhase)) * Math.PI);
-    if (thoughtOpacity > 0.02) drawDots(ctx, ox, oy, u, thoughtOpacity);
+    if (thoughtOpacity > 0.02) drawDots(ctx, ox, oy, u, thoughtOpacity, 3, 0, cloudSide);
     const speechOpacity = Math.sin(Math.min(1, Math.max(0, pose.speechPhase)) * Math.PI);
-    if (speechOpacity > 0.02) drawDots(ctx, ox, oy, u, speechOpacity);
+    if (speechOpacity > 0.02) drawDots(ctx, ox, oy, u, speechOpacity, 3, 0, cloudSide);
   }
 
   if (opts.badge) drawBadge(ctx, ox, oy, u, opts.badge, color);

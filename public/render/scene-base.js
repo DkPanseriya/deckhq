@@ -100,6 +100,16 @@ export class SceneBase {
   /** @type {number} */ // how far it has travelled, for the click/drag threshold
   _dragMoved;
 
+  /** @type {any} */ // `plan-hold.js`: what each room is furnished for, in this page only
+  _hold = null;
+  /** @type {Map<string, any>|null} */ // the rooms it holds furniture in now, for `buildPlan`
+  _held = null;
+  /** @type {string} */ // the walkers a waiting hold was last asked about
+  _holdBusy = '';
+  /** @type {Map<string, any>|null} */ // the desk chair each agent is in (`deskSeatsOf`)
+  _seatKeep = null;
+  /** Whether a held room is owed a re-plan; `scene.js` has the rule. */
+  _settleHold() {}
   /** @type {number} */ // bumped by every `setState`: the snapshot the frame is laid out from
   _stateGen = 0;
   /** @type {number} */ // bumped by every `repaint`: the palette the frame is painted in

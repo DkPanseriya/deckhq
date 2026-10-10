@@ -57,6 +57,9 @@
  *   plan-quiet.js    one or two rooms: the two service rooms a strip down the
  *                    left, and the rooms the rest of the building
  *   plan-seated.js   which chairs somebody is sitting in, for the bake
+ *   plan-hold.js     the headcount a room is furnished for, held by the page
+ *                    for five minutes so a room is not re-laid when one person
+ *                    stands up (`opts.held`)
  *   plan-deco.js     what a furnished room is dressed in, by rule: bins, coat
  *                    stands, wall panels, lamps, and a second place in a void
  *
@@ -106,7 +109,10 @@ import { ASPECT_MAX, ASPECT_MIN, DEFAULT_ASPECT, DOOR_WIDTH, clamp } from './pla
  * @param {AgentLike[]} agents
  * @param {{ targetAspect?: number, stage?: {w:number, h:number},
  *   goneHomeDays?: number, now?: number, agentSize?: string, furnish?: boolean,
- *   dress?: boolean }} [opts]
+ *   dress?: boolean,
+ *   held?: Map<string, {desks:number, crews:number[], benches:any[]}> }} [opts]
+ *   `held` is the page's (`plan-hold.js`): the rooms furnished for more people
+ *   than they hold this snapshot, and what for.
  *   `goneHomeDays` is `settings.goneHomeDays`; `now` is injectable so a test and
  *   a golden are both pure functions of their fixture. `stage` is the canvas the
  *   floor will be drawn on (WP-59), read only for its SHAPE, and `targetAspect`
@@ -139,13 +145,29 @@ export function buildPlan(projects, agents, opts = {}) {
   // at that worktree's bench in the repository's room, and the desks are the
   // main checkout's (`floor-worktrees.js`). One desk at least, as ever.
   const benches = worktreeBenches(list, pop);
+  // A ROOM THE PAGE IS HOLDING FURNITURE IN (`plan-hold.js`) is laid for the
+  // headcount it is handed and not for the one counted here: its desks, its
+  // crews' floor and its benches. Who is in it, and whether its lights are on,
+  // are still the snapshot's. No `held`, or no entry for a room, and the room
+  // is exactly what it always was.
+  const held = opts.held instanceof Map ? opts.held : null;
+  const heldIn = (p) => (held && held.get(idOf(p))) || null;
+  /** @type {Map<string, number[]>} */
+  const crews = new Map(pop.crews);
+  for (const [pid, h] of held || []) {
+    benches.set(pid, h.benches);
+    crews.set(pid, h.crews);
+  }
+  const crewed = { crews };
   const benched = { benches };
   const desksIn = (p) =>
     Math.max(
       1,
-      pop.known.has(idOf(p))
-        ? (pop.desks.get(idOf(p)) ?? 0) - benchSeatsIn(benched, idOf(p))
-        : (p.activeCount ?? p.sessionCount ?? 0),
+      heldIn(p)
+        ? heldIn(p).desks
+        : pop.known.has(idOf(p))
+          ? (pop.desks.get(idOf(p)) ?? 0) - benchSeatsIn(benched, idOf(p))
+          : (p.activeCount ?? p.sessionCount ?? 0),
     );
 
   // WHICH REPOS ARE WORTH FLOOR SPACE — `splitProjectsByOccupancy`, and the
@@ -198,7 +220,7 @@ export function buildPlan(projects, agents, opts = {}) {
   // and lounge share the building as they always have (`plan-classic.js`),
   // which is also what a floor no legal grid was found for falls back to.
   const crewIn = (p) => {
-    const crew = crewFloorFor(pop, idOf(p));
+    const crew = crewFloorFor(crewed, idOf(p));
     const bench = benchFloorFor(benches.get(idOf(p)));
     return bench ? { w: crew ? crew.w : 0, h: crew ? crew.h : 0, bench } : crew;
   };
@@ -213,7 +235,7 @@ export function buildPlan(projects, agents, opts = {}) {
       ...shared,
       stage,
       rooms: gridRooms,
-      crewSizeIn: (p) => pop.crews.get(idOf(p))?.[0] ?? 0,
+      crewSizeIn: (p) => crews.get(idOf(p))?.[0] ?? 0,
       benchSeatsIn: (p) => benchSeatsIn(benched, idOf(p)),
     }) || layClassic({ ...shared, activeProjects, pinnedProjects });
   const { W, H, office, lounge, projectRooms, working } = layout;

@@ -22,6 +22,7 @@ import {
   DOT_COLOR,
 } from './rig-metrics.js';
 import { roundRectFill, _rHx, _rHy, _lHx, _lHy } from './rig-pose.js';
+import { CLOUD_ASIDE_U } from './cloud-spots.js';
 
 // ------------------------------------------------------------------- props
 
@@ -260,8 +261,10 @@ export function drawStallDots(ctx, ox, oy, u, opacity) {
  * @param {number} opacity
  * @param {number} [lobes] 1..3, default 3 (the whole cloud)
  * @param {number} [sway] -1..1, default 0
+ * @param {1|-1} [side] `-1` draws the whole cloud mirrored, to the left of the
+ *   head: where it goes when a name is where it would be (`cloud-spots.js`)
  */
-export function drawDots(ctx, ox, oy, u, opacity, lobes, sway) {
+export function drawDots(ctx, ox, oy, u, opacity, lobes, sway, side = 1) {
   // A thought cloud beside the head, in the comic-strip idiom: two small
   // trailing bubbles leading up to a lobed cloud. Three dots in a row read as
   // "loading" rather than "thinking" — the cloud is what makes it legible as
@@ -270,7 +273,7 @@ export function drawDots(ctx, ox, oy, u, opacity, lobes, sway) {
   const prevAlpha = ctx.globalAlpha;
   const grown = Math.max(1, Math.min(3, Math.round(lobes ?? 3)));
   const drift = Number.isFinite(sway) ? sway : 0;
-  const cx = ox + u * (0.95 + drift * 0.06);
+  const cx = ox + side * u * (CLOUD_ASIDE_U + drift * 0.06);
   const cy = oy - u * CHROME_BUBBLE_U;
 
   // The trail, rising from beside the head toward the cloud.
@@ -278,8 +281,8 @@ export function drawDots(ctx, ox, oy, u, opacity, lobes, sway) {
   ctx.strokeStyle = CLOUD_EDGE;
   ctx.lineWidth = Math.max(0.6, u * 0.045);
   const trail = [
-    [ox + u * 0.5, oy - u * (CHROME_BUBBLE_U - 0.95), u * 0.1],
-    [ox + u * 0.72, oy - u * (CHROME_BUBBLE_U - 0.55), u * 0.14],
+    [ox + side * u * 0.5, oy - u * (CHROME_BUBBLE_U - 0.95), u * 0.1],
+    [ox + side * u * 0.72, oy - u * (CHROME_BUBBLE_U - 0.55), u * 0.14],
   ];
   for (const [tx, ty, tr] of trail) {
     ctx.globalAlpha = opacity * 0.85;
@@ -297,8 +300,8 @@ export function drawDots(ctx, ox, oy, u, opacity, lobes, sway) {
   ctx.beginPath();
   for (let i = 0; i <= grown; i++) {
     const [lx, ly, lr] = CLOUD_LOBES[i];
-    ctx.moveTo(cx + lx * u + lr * u, cy + ly * u);
-    ctx.arc(cx + lx * u, cy + ly * u, lr * u, 0, TAU);
+    ctx.moveTo(cx + side * lx * u + lr * u, cy + ly * u);
+    ctx.arc(cx + side * lx * u, cy + ly * u, lr * u, 0, TAU);
   }
   ctx.fill();
   ctx.stroke();

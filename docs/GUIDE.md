@@ -51,7 +51,10 @@ small meeting table and a credenza, a big team's a larger table, a shelving wall
 a room with a lot of floor left over gets storage, a table or a sofa until less than 45% of it is
 open. Nobody is ever drawn in a meeting chair. A project whose people are all waiting in your
 office keeps the room it had, with one empty desk and **the lights off** — the same room, dimmed —
-and the lights come back when one of them goes back to work. The
+and the lights come back when one of them goes back to work. A room is furnished for the most
+people it has held in the last five minutes, so it does not rearrange itself when somebody stands
+up; it is never rearranged while anybody is walking to it or from it, and this is remembered by
+the open page only. The
 lounge draws its seats and one row of people standing; a bigger crowd is a **`+N resting`** chip at
 the end of that row, and clicking it opens the deck on everybody resting. Everyone waiting sits on
 the sofas in your office, one to a cushion; only when every cushion is taken do the rest stand, in
