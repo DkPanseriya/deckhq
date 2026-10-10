@@ -630,6 +630,17 @@ export class AgentRuntime {
     const plan = opts.plan;
     const now = typeof opts.now === 'number' && Number.isFinite(opts.now) ? opts.now : 0;
     const loungeRoom = plan && plan.rooms ? plan.rooms.find((r) => r.kind === 'lounge') : null;
+    // WHO HAS FINISHED LEAVING. `sync` drops a departed record once its fold
+    // has run, but `sync` is called by a snapshot, and after the last junior of
+    // a crew ends nothing else on a quiet floor changes: no snapshot came, the
+    // record stayed, and its name and its crew's `+2` stayed over an empty
+    // desk with it. The clock that times the fold is the one that ends it.
+    if (typeof opts.now === 'number' && Number.isFinite(opts.now)) {
+      const gone = LIFE.despawn.period * 1000;
+      for (const [id, rec] of this._records) {
+        if (typeof rec.leftAt === 'number' && now - rec.leftAt >= gone) this._records.delete(id);
+      }
+    }
     const records = [...this._records.values()];
 
     for (const rec of records) {

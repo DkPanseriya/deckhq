@@ -334,14 +334,18 @@ export function drawLabel(ctx, ox, oy, u, rawLabel, offsetY, offsetX, form) {
     // From the point of the label's box nearest the feet, to the feet.
     const bx = box.x + (offsetX || 0);
     const by = box.y + dy;
-    ctx.globalAlpha = 0.55;
+    // A SHARE OF THE ALPHA IT WAS HANDED, and handed back: this set 0.55 and
+    // then 1, so under a figure folding away — drawn at its own fading alpha
+    // — a name on a leader was drawn whole, over nobody.
+    const alpha = ctx.globalAlpha;
+    ctx.globalAlpha = alpha * 0.55;
     ctx.strokeStyle = PALETTE.inkWarm;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(Math.min(Math.max(ox, bx), bx + box.w), Math.min(Math.max(oy, by), by + box.h));
     ctx.lineTo(ox, oy);
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = alpha;
   }
   // The first row of a sub-agent's tag, over the name and moving with it.
   if (box.chip && box.role) drawRoleChip(ctx, box.chip, box.role, offsetX || 0, dy);

@@ -240,18 +240,26 @@ function drawChip(ctx, view, parentId, members) {
  * the members whose transcripts are moving, which is the clock's to say; a
  * layout is not redone when a transcript goes quiet, so it is given the text
  * at its longest, every member working.
- * @param {any} view @param {string} parentId @param {any[]} members
+ * @param {any} view @param {string} parentId
+ * @param {any[]} all the crew's records, the ones folding away among them
  * @param {boolean} widest
  * @returns {{text:string, at:{x:number, y:number}, lead:{x:number, y:number}|null}|null}
  *   null for a crew with nothing to say: all of it drawn, and its pulses on
  */
-function chipOf(view, parentId, members, widest) {
+function chipOf(view, parentId, all, widest) {
+  // ONLY THE MEMBERS WHO ARE THERE. A junior that has left the snapshot is
+  // held for the 0.42 s it takes to fold away (`leftAt`), on the seat it was
+  // last given, and that seat still says how many were at the desk before it
+  // went: one junior folding away alone read `+2`, for the two that had gone
+  // ahead of it. Its cable is still drawn, retracting; it is in no count.
+  const members = all.filter((rec) => typeof rec.leftAt !== 'number');
+  if (!members.length) return null;
   // The desk the crew is cabled to, and how many are AT it — read off the seat
   // `assignSeats` wrote, because since bug 201 neither is the parent's: the
   // parent may be on a reception sofa while its crew works at the room's
   // primary desk, and a junior that finished is resting in the lounge rather
   // than being one of the `+N` this chip stands for.
-  const seat = members[0] && members[0].targetSeat;
+  const seat = members[0].targetSeat;
   const anchor = (seat && seat.crewAnchor) || view.seatOf(parentId);
   const total = (seat && seat.crewTotal) ?? view.crewCounts.get(parentId) ?? members.length;
   // Audit F10: "working" is over the WHOLE crew at the desk — the seat carries

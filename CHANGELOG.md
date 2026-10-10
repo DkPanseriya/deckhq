@@ -44,6 +44,11 @@
   beside every lead with juniors for the crew's `+N` count, whether the crew had one or not. Two
   juniors have none, and the second one's cloud was withheld on both sides of its head by the empty
   space. Room is now kept only for a count that is drawn, exactly where it is drawn.
+- **Nothing is left over a desk when the juniors have gone.** When the last junior of a crew
+  ended and nothing else on the floor changed afterwards, a small `+2` stayed beside the empty
+  desk, and one junior's name with it, until something else happened. A robot that has left is now
+  cleared away as soon as it has finished folding, without waiting for the next change; a crew's
+  count is of the juniors who are still there; and a name on a leader line fades with its robot.
 - **A name is always inside its own room.** Under the bottom sofa of Your Office each name hung
   exactly on the wall between the office and the lounge. A name on a sofa that backs onto a wall is
   now lifted onto the sofa's front edge, under the same feet and inside the room; where there is no

@@ -20,8 +20,13 @@ import assert from 'node:assert/strict';
 
 import { LARGE_NOW, populationFloor } from '../helpers/large-floor.mjs';
 import { frameAt } from '../helpers/label-frame.mjs';
+import { paintRecorder } from '../helpers/paint-recorder.mjs';
 import { fakeId } from '../../scripts/demo-write.mjs';
+import { AgentRuntime, assignSeats } from '../../public/render/agents.js';
 import { drawCrews } from '../../public/render/crew-draw.js';
+import { LIFE } from '../../public/render/life.js';
+import { drawLabel } from '../../public/render/rig.js';
+import { planFrameLabels } from '../../public/render/scene-frame-labels.js';
 import { PALETTE } from '../../public/render/palette.js';
 
 /**
@@ -149,4 +154,76 @@ test('a box is kept for every crew chip that is drawn, where it is drawn, and fo
     }
   }
   assert.ok(chips >= 6, `these floors draw chips: ${chips}`);
+});
+
+// ------------------------------------- 2 · nothing is left of somebody who went
+
+/** The `lead` floor's four records, held by a runtime the way the scene holds them. */
+function leadRuntime() {
+  const f = frameAt(1600, 869, () => demoFloor('lead'), { badges: true });
+  const runtime = new AgentRuntime();
+  runtime.sync(f.agents, f.plan, f.seats, { now: LARGE_NOW });
+  const stay = f.agents.filter((a) => a.subagent !== true);
+  return { f, runtime, stay, seats: assignSeats(f.plan, stay) };
+}
+
+test('a figure that has folded away is gone when the clock says so, with no snapshot to say it', () => {
+  // `crew.lead-supervises`: the three juniors end, and nothing else on the
+  // floor changes afterwards, so no snapshot follows the one they left in.
+  const { f, runtime, stay, seats } = leadRuntime();
+  assert.equal(runtime.size, f.agents.length);
+  const left = LARGE_NOW + 100;
+  runtime.sync(stay, f.plan, seats, { now: left });
+  assert.equal(runtime.size, f.agents.length, 'three figures folding away');
+  const fold = LIFE.despawn.period * 1000;
+  runtime.step(0.04, { plan: f.plan, now: left + fold - 1 });
+  assert.equal(runtime.size, f.agents.length, 'kept for the whole of the fold');
+  runtime.step(0.04, { plan: f.plan, now: left + fold });
+  assert.deepEqual(
+    [...runtime.all()].map((rec) => rec.id).sort(),
+    stay.map((a) => a.id).sort(),
+    'a record outlived its figure',
+  );
+  // A caller with no clock to give collects nothing here, as it never did.
+  const other = leadRuntime();
+  other.runtime.sync(other.stay, other.f.plan, other.seats, { now: left });
+  other.runtime.step(0.04, { plan: other.f.plan });
+  assert.equal(other.runtime.size, other.f.agents.length);
+});
+
+test('a crew’s chip counts the members who are there: none left, no chip, and no box for one', () => {
+  const { f, runtime, stay, seats } = leadRuntime();
+  runtime.sync(stay, f.plan, seats, { now: LARGE_NOW + 100 });
+  // The frame while they fold: every junior's record is still held, on the
+  // crew seat it was last given, and that seat still says "three at this desk".
+  const records = [...runtime.all()].sort((a, b) => a.y - b.y);
+  const going = records.filter((rec) => typeof rec.leftAt === 'number');
+  assert.equal(going.length, 3);
+  assert.ok(going.every((rec) => rec.targetSeat.crew === true && rec.targetSeat.crewTotal === 3));
+  const agentsById = new Map(stay.map((a) => [a.id, a]));
+  const crewCounts = new Map();
+  // One of the three alone, as the capture had it: `+2` over an empty desk.
+  for (const some of [going, going.slice(0, 1)]) {
+    const frame = { ...f, records: [...records.filter((r) => !going.includes(r)), ...some] };
+    const drawn = platesDrawn({ ...frame, agentsById, crewCounts }, false);
+    assert.deepEqual(drawn, [], `${some.length} folding away: ${drawn.map((p) => p.text)}`);
+    const labels = planFrameLabels(f.ctx, { ...f.view, records: frame.records, agentsById });
+    assert.deepEqual(
+      labels.obstacles.filter((o) => /^chip:/.test(o.id)),
+      [],
+    );
+  }
+});
+
+test('a name on a leader fades with the figure it names', () => {
+  const ctx = paintRecorder();
+  ctx.globalAlpha = 0.25;
+  drawLabel(ctx, 100, 100, 20, 'Femi', 0, -40, { leader: true, role: 'Junior' });
+  const line = ctx.paints.find((p) => p.op === 'stroke');
+  assert.ok(line, 'the leader is drawn');
+  assert.ok(Math.abs(line.alpha - 0.25 * 0.55) < 1e-9, `the leader at ${line.alpha}`);
+  const after = ctx.paints.slice(ctx.paints.indexOf(line) + 1);
+  assert.ok(after.some((p) => p.op === 'fillText' && p.args[0] === 'Femi'));
+  for (const p of after) assert.equal(p.alpha, 0.25, `${p.op} ${p.args[0]} at ${p.alpha}`);
+  assert.equal(ctx.globalAlpha, 0.25, 'and the context is handed back as it came');
 });
