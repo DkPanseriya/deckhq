@@ -1,15 +1,17 @@
 # DeckHQ for VS Code
 
-**Every AI coding session on your machine, on one office floor — in a panel, and a count in your
-status bar.** It sees the ones your terminal forgot, and it remembers what's waiting on you even
-after you've read it. Local, private, MIT.
+**An office for your AI coding agents — in a panel, and a count in your
+status bar.** DeckHQ puts every Claude Code and Codex session on one office floor and keeps each
+one in your queue until you clear it. Local, free, MIT.
 
 <!-- The image URL is absolute on purpose. `vsce` rewrites a relative one using
      `repository.url` alone and ignores `repository.directory`, so a relative
      `media/panel.png` here becomes `…/deckhq/raw/HEAD/media/panel.png` on the
-     Marketplace — a path that does not exist. docs/DEVIATIONS.md §104. -->
+     Marketplace — a path that does not exist. -->
 
-![The DeckHQ floor in a VS Code panel: project rooms with agents at desks, a lounge of benched agents, four sessions waiting in your office for review, and the status bar reading "7 waiting, 2 hands up"](https://github.com/DkPanseriya/deckhq/raw/HEAD/vscode/media/panel.png)
+![The DeckHQ floor in a VS Code panel: project rooms with agents at desks, a lounge of benched agents, four sessions waiting in Your Office for review, and the status bar reading "7 waiting, 2 hands up"](https://github.com/DkPanseriya/deckhq/raw/HEAD/vscode/media/panel.png)
+
+_Capture — from an early build: the header and the figures have changed since._
 
 ## What it is for
 
@@ -19,7 +21,7 @@ terminals in a dozen repositories. `claude agents` lists what is **running**. De
 records that it asked you a question twenty minutes ago.
 
 DeckHQ reads every transcript on disk, so it has all of them. Every project is a room, every
-session is a person at a desk, and the sessions waiting on you queue in your office, oldest first,
+session is a person at a desk, and the sessions waiting on you sit in Your Office, oldest first,
 with how long they have been waiting.
 
 This extension is the thin part: it finds the DeckHQ daemon on `127.0.0.1`, starts one if there
@@ -40,7 +42,7 @@ isn't one, and puts the floor where you already are.
 Install the extension, and it does the rest: on the first window it looks for a DeckHQ on
 `127.0.0.1:4317`–`4326` and, finding none, starts one with `npx --yes deckhq --no-open`. That
 first start downloads the `deckhq` package from npm, which is the one moment anything reaches the
-network — install it yourself (`npm i -g deckhq`, Homebrew, winget, scoop) and even that stops.
+network — install it yourself (`npm i -g deckhq`) and even that stops.
 
 Set `deckhq.autoStart` to `false` if you would rather start it yourself, and `deckhq.startCommand`
 if `npx` is not how you want it started. Node 18 or newer.
