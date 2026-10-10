@@ -19,7 +19,7 @@ import { esc } from './markdown.mjs';
  * `test/unit/site.test.mjs` takes this address's host into its allow-list.
  * It must be an `https://` address.
  */
-export const WAITLIST_URL = 'https://deckhq.kit.com/e4794f71f8';
+export const WAITLIST_URL = 'https://deckhq.kit.com/deckhq-3d';
 
 /** The release feed, beside the pages. */
 export const FEED = 'feed.xml';
