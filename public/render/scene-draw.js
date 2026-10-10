@@ -594,6 +594,8 @@ export class SceneDraw extends SceneFrame {
       labelOffsetX,
       labelPx,
       labelLeader,
+      // Beside the head, on whichever side no name is (`cloud-spots.js`).
+      cloudSide: labels && labels.clouds ? labels.clouds.get(rec.id) : undefined,
       icon,
       badge,
       // WP-52: what this session is doing right now, straight off the

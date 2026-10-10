@@ -41,6 +41,7 @@ import {
 import { worldToScreen } from './agents.js';
 import { crewChipAt } from './crew.js';
 import { abbreviateName, resolveLabelCollisions } from './label-spots.js';
+import { placeClouds, placedLabelBoxes } from './cloud-spots.js';
 import { JUNIOR_MARK, bareName, roleWordFor } from '../names.js';
 import { ROLE_CHIP_GAP } from './name-tag.js';
 import { agentLabelFor, isNeedsYouAgent } from './scene-agent.js';
@@ -150,7 +151,9 @@ export function buildingRect(plan, camera) {
  *   `uOf` is the scale a figure is DRAWN at (a junior's is smaller), `charU` by default;
  *   `bounds` is the building's screen rect (`resolveLabelCollisions`)
  * @returns {{plan:Map<string,{offsetY:number, offsetX?:number}|null>,
- *   texts:Map<string,string>, roles:Map<string,string>, obstacles:any[], labels:any[]}}
+ *   texts:Map<string,string>, roles:Map<string,string>, obstacles:any[], labels:any[],
+ *   clouds:Map<string, 1|-1|0>}} `clouds`: which side of its head each figure's
+ *   thought cloud hangs on this frame, `0` for none
  */
 export function planFrameLabels(ctx, view) {
   const { records, camera, charU } = view;
@@ -282,5 +285,23 @@ export function planFrameLabels(ctx, view) {
   }
   const labels = tiers.flat();
   const plan = resolveLabelCollisions([...obstacles, ...labels], view.bounds);
-  return { plan, texts, roles, obstacles, labels };
+  // THE CLOUDS, LAST, AND BELOW EVERYTHING ABOVE: a thought cloud goes beside
+  // its head where no name, role chip, wait badge or crew's chip already is —
+  // the other side if its own is taken, and nowhere if both are
+  // (`cloud-spots.js`). Decided here because it is a function of the same
+  // things the names are, so it is laid out when they are and not per frame.
+  const taken = [
+    ...placedLabelBoxes(labels, plan),
+    ...obstacles.filter((o) => /^(badge|pill|chip):/.test(String(o.id))),
+  ];
+  const clouds = placeClouds(
+    records.map((rec) => ({
+      id: rec.id,
+      x: at.get(rec.id).x,
+      y: at.get(rec.id).y,
+      u: view.uOf ? view.uOf(rec) : charU,
+    })),
+    taken,
+  );
+  return { plan, texts, roles, obstacles, labels, clouds };
 }
