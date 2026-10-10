@@ -14,6 +14,29 @@
   and when it was refused the handover was never flagged and never offered again. A handover is now
   counted as seen only once its flag is written; one that could not be written is tried again, and
   the write itself retries for a third of a second before giving up.
+- **A room no longer rearranges itself the moment somebody stands up.** When a session's turn ended
+  and it walked to Your Office, the room it left was laid out again at once for one person fewer:
+  the desk became a smaller desk, the meeting table moved, and the walker crossed a table that had
+  not been there a frame before. A room is now furnished for the most people it has held in the
+  last five minutes: it grows the moment it has to, gives furniture back only after its headcount
+  has stayed lower for five minutes, and does neither while anybody is walking to it or from it. A
+  crew that falls under three keeps its floor for the same five minutes. Whoever stays in the room
+  keeps the chair they are in. This is remembered by the open page only — nothing is written, and a
+  reload shows the room furnished for who is in it now.
+- **A thought cloud no longer covers a name.** A cloud hangs beside a robot's head, and on a crew's
+  arc or across a two-sided desk that was where somebody else's name was. A cloud now goes to the
+  other side of the head when a name, a **Junior** chip, a wait badge or a crew's count is on its
+  own side, and is not drawn that frame when one is on both.
+- **A name is never set across a wall.** Under the bottom sofa of Your Office each name hung exactly
+  on the wall between the office and the lounge. A name is now in its room or wholly past the wall,
+  under the same feet. The one exception is a session waiting on you with no place at all clear of
+  a wall, in the narrowest office: its name is kept, not dropped.
+- **A name that has slid away from its robot is tied back to it.** A long tag under a small body —
+  a junior's `code-reviewer` — could step sideways until none of it was under the robot it named.
+  It now carries the thin leader line a name that moved further away already had.
+- **The panel's portrait shows a waiting session's icon whole.** The raised hand, hourglass or tick
+  over the head was cut off by the top edge of the portrait. A robot that carries one is drawn a
+  little smaller so both fit.
 
 ## 1.7.0 — 2026-10-11
 
