@@ -332,9 +332,17 @@ export function createHeaderPart(ctx) {
     // FEET and fills `BODY_HEIGHT_U` (2.52) units above them, where the old rig
     // hung half its height either side of the centre. `u` is the height the
     // box can give it, less a little air for the crown accessory.
-    const u = closeupCanvas.height / 2.9;
-    const cx = closeupCanvas.width / 2;
+    //
+    // AND ITS STATE ICON IS IN THE BOX TOO. A raised hand, an hourglass or a
+    // tick is drawn over the head (`drawIcon`: `CHROME_TOP_U` above the feet
+    // and nine tenths of a unit tall), which is more than the box gave: the
+    // top half of the icon was cut off by the canvas's own edge. A figure that
+    // carries one is drawn as large as lets both stand whole, with the same
+    // air over the icon; one that carries none is the size it always was.
     const cy = closeupCanvas.height * 0.94;
+    const iconTop = (rig.CHROME_TOP_U ?? 2.35) + 0.9;
+    const u = icon ? (cy - closeupCanvas.height * 0.03) / iconTop : closeupCanvas.height / 2.9;
+    const cx = closeupCanvas.width / 2;
     // The same hair, accent and glyph the floor draws (CONTRACTS-WP15.md §2),
     // so the close-up is recognisably the same person.
     const identity = palette?.identityFor ? palette.identityFor(a.projectMk, a.avatar) : undefined;
