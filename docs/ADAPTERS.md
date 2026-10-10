@@ -172,9 +172,11 @@ whole feature rather than to a field.
 
 ### `conversation()`
 
-Text only, most recent last. **No tool calls, no reasoning, no UI notices.** The panel is a review
-surface for a conversation, not a trace: a `[tool: write_file]` artefact in it is a bug. Every
-adapter here has a test asserting that tool payloads do not reach the messages.
+Text only, most recent last. **No tool calls, no reasoning, no UI notices** in a `user` or an
+`assistant` message: a `[tool: write_file]` artefact in one is a bug, and every adapter here has a
+test asserting that tool payloads do not reach the messages. The one way a tool call or a line of
+reasoning may be returned is as an entry of its own, role `tool` or `thinking`, and only when the
+caller passed `detail`. Claude Code is the only adapter here that does; the other three ignore it.
 
 ### `send()` and the terminal methods
 
@@ -218,7 +220,7 @@ These are the rules that survive contact with a runtime changing its format unde
 2. **Head the file with the shapes you handle**, as a numbered list, and update that list *before*
    you change the code. Every `parse.mjs` here does this. It is the fastest way for the next person
    to see whether a new format version is covered.
-3. **Prefer a supported surface over file parsing wherever both exist** (§2.1). `claude agents
+3. **Prefer a supported surface over file parsing wherever both exist.** `claude agents
    --json` beats guessing at liveness. `opencode db … --format json` beats parsing SQLite pages.
 4. **Never throw on bad input.** A corrupt line yields `null` and the caller skips it. A missing
    directory reads as empty. Assume the file is being appended to *while you read it* — a head read
@@ -405,7 +407,8 @@ So:
    and whether it was checked against a real profile.
 2. Say it in the `CHANGELOG.md` entry for the release that ships it.
 3. Say it in the README's **Honest limits**, in a sentence a user will understand — the model is
-   the line that has said Codex is unverified since the day it was written.
+   the line there that says Gemini CLI and OpenCode support is unverified, and the one after it,
+   which says exactly how far Codex has been run and no further.
 4. When somebody does run it against real data: fix what breaks, then **delete the warnings in the
    same commit**. A stale "unverified" is its own kind of dishonesty.
 
