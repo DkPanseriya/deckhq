@@ -27,10 +27,11 @@
   arc or across a two-sided desk that was where somebody else's name was. A cloud now goes to the
   other side of the head when a name, a **Junior** chip, a wait badge or a crew's count is on its
   own side, and is not drawn that frame when one is on both.
-- **A name is never set across a wall.** Under the bottom sofa of Your Office each name hung exactly
-  on the wall between the office and the lounge. A name is now in its room or wholly past the wall,
-  under the same feet. The one exception is a session waiting on you with no place at all clear of
-  a wall, in the narrowest office: its name is kept, not dropped.
+- **A name is always inside its own room.** Under the bottom sofa of Your Office each name hung
+  exactly on the wall between the office and the lounge. A name on a sofa that backs onto a wall is
+  now lifted onto the sofa's front edge, under the same feet and inside the room; where there is no
+  room for that it goes beside its robot, and only then over its own wait badge. It is never across
+  a wall and never past one.
 - **A name that has slid away from its robot is tied back to it.** A long tag under a small body —
   a junior's `code-reviewer` — could step sideways until none of it was under the robot it named.
   It now carries the thin leader line a name that moved further away already had.
