@@ -135,6 +135,82 @@ export function largerHeadcount(held, now) {
   };
 }
 
+/**
+ * THE HOLD: what each room is furnished for, remembered between snapshots.
+ *
+ * One per scene. `update` is handed what every room holds now and answers with
+ * what each is to be furnished for; nothing else is ever asked of it.
+ */
+export class FurnishingHold {
+  /** @param {number} [ms] how long a lower headcount is held for */
+  constructor(ms = FURNISH_HOLD_MS) {
+    this._ms = ms;
+    /** @type {Map<string, {held:Headcount, lowSince:number|null, peak:Headcount|null}>} */
+    this._rooms = new Map();
+    /** @type {Map<string, Headcount>} the rooms furnished for more than they hold */
+    this._inForce = new Map();
+    /** Whether a room is waiting for somebody to finish walking. */
+    this.waiting = false;
+    /** When the next room gives furniture back, ms epoch; `Infinity` for never. */
+    this.dueAt = Infinity;
+  }
+
+  /**
+   * Take a snapshot's headcounts, and say what each room is furnished for.
+   * @param {Map<string, Headcount>} actual `roomHeadcounts` of the snapshot
+   * @param {number} now the injected clock, ms epoch
+   * @param {Set<string>} [busy] rooms somebody is walking to or from: they
+   *   neither grow nor give anything back on this call
+   * @returns {Map<string, Headcount>} only the rooms furnished for something
+   *   other than what they hold now; empty on a floor nothing is held on
+   */
+  update(actual, now, busy) {
+    this.waiting = false;
+    this.dueAt = Infinity;
+    this._inForce = new Map();
+    for (const pid of [...this._rooms.keys()]) if (!actual.has(pid)) this._rooms.delete(pid);
+    for (const [pid, a] of actual) {
+      const st = this._rooms.get(pid);
+      if (!st) {
+        this._rooms.set(pid, { held: a, lowSince: null, peak: null });
+        continue;
+      }
+      const frozen = !!busy && busy.has(pid);
+      // Growing is at once, unless somebody is on their way in or out.
+      const up = largerHeadcount(st.held, a);
+      if (headcountKey(up) === headcountKey(st.held) || !frozen) st.held = up;
+      else this.waiting = true;
+      if (headcountKey(st.held) === headcountKey(a)) {
+        Object.assign(st, { held: a, lowSince: null, peak: null });
+        continue;
+      }
+      // Lower than it is furnished for: the clock runs from the first such
+      // snapshot, and what it shrinks to is the most it held while it ran.
+      st.peak = st.lowSince === null || !st.peak ? a : largerHeadcount(st.peak, a);
+      if (st.lowSince === null) st.lowSince = now;
+      if (now - st.lowSince >= this._ms) {
+        if (frozen) this.waiting = true;
+        else {
+          const lower = headcountKey(st.peak) !== headcountKey(a);
+          Object.assign(st, { held: st.peak, lowSince: lower ? now : null, peak: lower ? a : null });
+        }
+      }
+      if (headcountKey(st.held) === headcountKey(a)) continue;
+      this._inForce.set(pid, st.held);
+      if (st.lowSince !== null) this.dueAt = Math.min(this.dueAt, st.lowSince + this._ms);
+    }
+    return this._inForce;
+  }
+
+  /** The rooms a hold is in force in, as one string for the plan's signature. */
+  key() {
+    return [...this._inForce]
+      .map(([pid, h]) => `${pid}=${headcountKey(h)}`)
+      .sort()
+      .join('|');
+  }
+}
+
 /** One headcount as a string: two that furnish a room alike say the same. */
 export function headcountKey(h) {
   const benches = h.benches.map((b) => `${b.key}*${b.ids.length}`).join(',');
