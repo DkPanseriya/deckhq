@@ -25,7 +25,10 @@ import {
   largeFloor,
   LARGE_NOW,
   ownerShapedFloor,
+  populationFloor,
 } from '../helpers/large-floor.mjs';
+import { cloudBox, placeClouds } from '../../public/render/cloud-spots.js';
+import { drawDots } from '../../public/render/rig-props.js';
 import { buildPlan } from '../../public/render/plan.js';
 import { assignSeats, worldToScreen } from '../../public/render/agents.js';
 import { computeFill } from '../../public/render/scene-camera.js';
@@ -702,4 +705,82 @@ test('a dense run sets its names at two levels, and the sixteen all sit', () => 
   const blocked = [{ id: 'wall', x: 100, y: 134, w: 60, h: 14, pin: true }, ...three];
   const moved = resolveLabelCollisions(blocked).get('b');
   assert.ok(moved && !(moved.offsetY === 14 && !moved.offsetX));
+});
+
+// ------------------------------------------- a thought cloud yields to a name
+
+test('no thought cloud is over a name, a role chip, a wait badge or a crew chip', () => {
+  let mirrored = 0;
+  let dropped = 0;
+  let wouldCover = 0;
+  for (const name of ['crew', 'demo', 'crowded']) {
+    for (const [w, h] of [...STAGES, [1600, 869]]) {
+      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+      const names = f.labels.labels
+        .filter((it) => f.labels.plan.get(it.id))
+        .map((it) => drawnBox(it, f.labels.plan.get(it.id)));
+      const chrome = f.labels.obstacles.filter((o) => /^(badge|pill|chip):/.test(o.id));
+      const taken = [...names, ...chrome];
+      assert.ok(names.length > 0, `${name}: the floor has names to be covered`);
+      for (const rec of f.records) {
+        const s = worldToScreen(rec, f.camera);
+        const side = f.labels.clouds.get(rec.id);
+        assert.ok(side === 1 || side === -1 || side === 0, `${name} ${rec.id}: a side`);
+        // Every figure is asked, cloud or not: a cloud can open on any of them.
+        const natural = cloudBox(s.x, s.y, f.uOf(rec), 1);
+        if (taken.some((t) => hits(natural, t))) wouldCover++;
+        if (side === -1) mirrored++;
+        if (side === 0) dropped++;
+        if (side === 0) continue;
+        const box = cloudBox(s.x, s.y, f.uOf(rec), side);
+        const over = taken.find((t) => hits(box, t));
+        assert.equal(over, undefined, `${name} ${w}x${h}: ${rec.id}'s cloud is over ${over?.id}`);
+        // On its own side wherever that side is clear: nothing moves for nothing.
+        if (!taken.some((t) => hits(natural, t))) assert.equal(side, 1);
+      }
+    }
+  }
+  assert.ok(wouldCover > 0, 'unplaced, a cloud covers a name on these floors');
+  assert.ok(mirrored > 0, 'and the other side of the head is where most of them go');
+  assert.equal(wouldCover, mirrored + dropped);
+});
+
+test('a cloud takes its own side, then the other, then none', () => {
+  const me = { id: 'a', x: 100, y: 100, u: 10 };
+  assert.equal(placeClouds([me], []).get('a'), 1);
+  const right = cloudBox(100, 100, 10, 1);
+  const left = cloudBox(100, 100, 10, -1);
+  assert.ok(right.x > left.x && right.y === left.y, 'mirrored about the head');
+  assert.equal(placeClouds([me], [right]).get('a'), -1);
+  assert.equal(placeClouds([me], [right, left]).get('a'), 0);
+});
+
+test('the box a cloud is placed by holds every lobe of the cloud that is drawn', () => {
+  for (const side of [1, -1]) {
+    for (const sway of [-1, 0, 1]) {
+      /** @type {{x:number, y:number, r:number}[]} */
+      const arcs = [];
+      const noop = () => {};
+      const ctx = {
+        globalAlpha: 1,
+        lineWidth: 1,
+        beginPath: noop,
+        moveTo: noop,
+        fill: noop,
+        stroke: noop,
+        arc: (x, y, r) => arcs.push({ x, y, r }),
+      };
+      drawDots(/** @type {any} */ (ctx), 200, 300, 20, 1, 3, sway, side);
+      const box = cloudBox(200, 300, 20, side);
+      // The two trailing beats lead from the head to the cloud and are under
+      // it; the cloud itself is every arc from the third on.
+      const lobes = arcs.slice(2);
+      assert.ok(lobes.length >= 4);
+      const edge = ctx.lineWidth / 2;
+      for (const a of lobes) {
+        assert.ok(a.x - a.r - edge >= box.x - 1e-6 && a.x + a.r + edge <= box.x + box.w + 1e-6);
+        assert.ok(a.y - a.r - edge >= box.y - 1e-6 && a.y + a.r + edge <= box.y + box.h + 1e-6);
+      }
+    }
+  }
 });
