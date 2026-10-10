@@ -40,6 +40,10 @@
   arc or across a two-sided desk that was where somebody else's name was. A cloud now goes to the
   other side of the head when a name, a **Junior** chip, a wait badge or a crew's count is on its
   own side, and is not drawn that frame when one is on both.
+- **A junior no longer loses its thought cloud to a count that is not there.** Room was kept
+  beside every lead with juniors for the crew's `+N` count, whether the crew had one or not. Two
+  juniors have none, and the second one's cloud was withheld on both sides of its head by the empty
+  space. Room is now kept only for a count that is drawn, exactly where it is drawn.
 - **A name is always inside its own room.** Under the bottom sofa of Your Office each name hung
   exactly on the wall between the office and the lounge. A name on a sofa that backs onto a wall is
   now lifted onto the sofa's front edge, under the same feet and inside the room; where there is no

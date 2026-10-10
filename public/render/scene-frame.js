@@ -265,6 +265,7 @@ export class SceneFrame extends SceneStatic {
     tape.num(camera.zoom);
     tape.num(this._scale());
     tape.num(charU);
+    tape.num(this._reduced ? 1 : 0);
     tape.ref(this._plan);
     tape.ref(this._selectedId);
     this._tapeSettings(tape);
@@ -370,6 +371,8 @@ export class SceneFrame extends SceneStatic {
       selectedId: this._selectedId,
       bounds: this._plan ? buildingRect(this._plan, camera) : undefined,
       uOf: (rec) => this._scaleOf(rec),
+      // Under reduced motion a crew's chip says who is working, and is wider.
+      reduced: this._reduced,
     });
     return { charU, badgePlan, plates, labels };
   }
