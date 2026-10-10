@@ -532,15 +532,34 @@ img.ph-floor {
   font-size: var(--t-body);
 }
 
+tbody th {
+  color: var(--ink);
+  font: 600 var(--t-small) / 1.5 var(--sans);
+  background: none;
+}
+
 .versus tbody th {
   width: 9.5rem;
-  color: var(--ink);
-  font: 600 var(--t-body) / 1.5 var(--sans);
-  background: none;
+  font-size: var(--t-body);
 }
 
 .versus td {
   width: 44%;
+}
+
+/* What has been run where: one row a capability, one column a system. */
+.os {
+  min-width: 40rem;
+}
+
+.os tbody th {
+  width: 30%;
+}
+
+.os tbody td {
+  color: var(--ink-2);
+  font-weight: 400;
+  white-space: normal;
 }
 
 /* A real sequence, so it is numbered: six steps, three to a row. */

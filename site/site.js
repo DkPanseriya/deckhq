@@ -1,7 +1,10 @@
 /*
  * Everything on this site that needs a script.
  *
- * Four things, and the page is whole without any of them:
+ * Five things, and the page is whole without any of them:
+ *
+ *   - a link to one answer on the Questions page opens that answer. Without
+ *     the script the link lands on the question, closed;
  *
  *   - a command line gets a "copy" button. The line is selectable text with or
  *     without it;
@@ -108,4 +111,14 @@
     box.appendChild(line);
     box.classList.add('is-live');
   });
+
+  /* ------------------------------------------------------------ answers */
+
+  function openTarget() {
+    const id = location.hash.slice(1);
+    const target = id ? document.getElementById(id) : null;
+    if (target && target.tagName === 'DETAILS') target.open = true;
+  }
+  openTarget();
+  window.addEventListener('hashchange', openTarget);
 })();

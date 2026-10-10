@@ -113,7 +113,11 @@ export const releaseAnchor = (version) => `v${version.replace(/\./g, '-')}`;
 export function atomFeed({ origin, releases, render }) {
   const dated = releases.filter((r) => /^\d{4}-\d{2}-\d{2}$/.test(r.date));
   const stamp = (date) => `${date}T00:00:00Z`;
-  const newest = dated.map((r) => r.date).sort().pop() ?? '1970-01-01';
+  const newest =
+    dated
+      .map((r) => r.date)
+      .sort()
+      .pop() ?? '1970-01-01';
   const entries = dated.map((r) => {
     const url = `${origin}/changelog.html#${releaseAnchor(r.version)}`;
     return `  <entry>

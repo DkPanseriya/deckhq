@@ -92,13 +92,73 @@
         </p>
       </div>
     </details>
-    <details>
-      <summary>Does it work on macOS and Linux?</summary>
+    <details id="os">
+      <summary>Does it work on Windows, macOS and Linux?</summary>
       <div>
         <p>
-          The floor, the queue and the terminal commands run on all three, and every change is
-          tested on each. Four things have been run on Windows only so far: the app window's
-          installers, opening a session in a terminal, Go to session, and OS notifications.
+          Windows is fully supported: every row below has been run on Windows. On macOS and Linux
+          the floor, the queue and the commands are covered by the test suite on every change, and
+          the parts that reach into the desktop are written and have not been run on a real machine
+          yet.
+        </p>
+        <div class="table-scroll">
+          <table class="os">
+            <thead>
+              <tr>
+                <td></td>
+                <th scope="col">Windows</th>
+                <th scope="col">macOS</th>
+                <th scope="col">Linux</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">The floor, the queue, the panel and the terminal commands</th>
+                <td>Run. Tested on every change.</td>
+                <td>Tested on every change.</td>
+                <td>Tested on every change.</td>
+              </tr>
+              <tr>
+                <th scope="row">Desktop icon and start at login</th>
+                <td>Run.</td>
+                <td>Written, not yet run.</td>
+                <td>Written, not yet run.</td>
+              </tr>
+              <tr>
+                <th scope="row">Open in terminal</th>
+                <td>Run.</td>
+                <td>Written for six terminals, not yet run.</td>
+                <td>Written for eight terminals, not yet run.</td>
+              </tr>
+              <tr>
+                <th scope="row">Go to session</th>
+                <td>
+                  Run for Windows Terminal, a classic console and the Claude desktop app. Not yet
+                  run for a terminal inside an editor.
+                </td>
+                <td>Written, not yet run.</td>
+                <td>
+                  Written for X11, not yet run. It cannot work on Wayland, and the button says so.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">OS notifications</th>
+                <td>Run.</td>
+                <td>Written, not yet run.</td>
+                <td>Written, not yet run.</td>
+              </tr>
+              <tr>
+                <th scope="row">A pinned window keeps DeckHQ's icon</th>
+                <td>Run, with Chrome and with Edge.</td>
+                <td>Not applicable.</td>
+                <td>Not applicable.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The tests run on all three systems, on Node 18, 20 and 22.
+          <code>deckhq doctor</code> prints whether Go to session is supported on your machine.
         </p>
       </div>
     </details>

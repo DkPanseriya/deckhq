@@ -33,7 +33,7 @@ export function meanColour(bytes) {
   let ihdr = null;
   let plte = null;
   const idat = [];
-  for (let at = 8; at + 12 <= bytes.length; ) {
+  for (let at = 8; at + 12 <= bytes.length;) {
     const length = bytes.readUInt32BE(at);
     const type = bytes.toString('latin1', at + 4, at + 8);
     const data = bytes.subarray(at + 8, at + 8 + length);
