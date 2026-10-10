@@ -439,7 +439,7 @@ export function planShortcut(opts) {
     }
     notes.push(
       'DOCS-ONLY: this bundle is written from Apple documentation and has never been run on a ' +
-        'Mac. docs/plan/08-PLAN-V2-100X.md §1.1 rule 11 — treat it as a hypothesis.',
+        'Mac. Treat it as a hypothesis until somebody has.',
       'The icon is a PNG, not an `.icns`. Converting one needs `iconutil`, which is a shell-out ' +
         'to a tool this package will not depend on, so Finder may show the generic application ' +
         'icon until somebody runs `iconutil -c icns` themselves.',
@@ -462,7 +462,7 @@ export function planShortcut(opts) {
       kind: 'text',
       contents: desktopEntry({
         name: 'DeckHQ',
-        comment: 'Every AI coding session on your machine, on one office floor.',
+        comment: 'An office for your AI coding agents.',
         exec: shQuote([launcher.target, ...launcher.argv]),
         icon: 'deckhq',
       }),
@@ -477,7 +477,7 @@ export function planShortcut(opts) {
     }
     notes.push(
       'DOCS-ONLY: written from the freedesktop.org Desktop Entry Specification and never run ' +
-        'on a Linux desktop. docs/plan/08-PLAN-V2-100X.md §1.1 rule 11.',
+        'on a Linux desktop. Treat it as a hypothesis until somebody has.',
       'Some desktops cache the menu; `update-desktop-database ~/.local/share/applications` if ' +
         'the entry does not appear. DeckHQ does not run it for you.',
     );
@@ -595,7 +595,7 @@ export function planAutostart(opts) {
     });
     notes.push(
       'DOCS-ONLY: written from Apple documentation and never loaded by a real launchd. ' +
-        'docs/plan/08-PLAN-V2-100X.md §1.1 rule 11.',
+        'Treat it as a hypothesis until somebody has.',
       'launchd reads the directory at login. `launchctl load ~/Library/LaunchAgents/' +
         'dev.deckhq.daemon.plist` starts it now; DeckHQ does not run that for you.',
     );
@@ -625,7 +625,7 @@ export function planAutostart(opts) {
     });
     notes.push(
       'DOCS-ONLY: written from the freedesktop.org Autostart Specification and never run on a ' +
-        'Linux desktop. docs/plan/08-PLAN-V2-100X.md §1.1 rule 11.',
+        'Linux desktop. Treat it as a hypothesis until somebody has.',
     );
     return {
       surface: 'autostart',

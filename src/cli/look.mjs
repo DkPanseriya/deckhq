@@ -44,7 +44,7 @@ export const LOOK_HELP = `
   Usage: deckhq look export [--port N]        write it to stdout
          deckhq look show   [--port N]        the same thing, for reading
          deckhq look import <file> [--port N] apply one
-         deckhq look presets                  the six starting points
+         deckhq look presets                  the styles to start from
 
   What a look carries: the floor material in each of the four zones, the colour
   scheme, the furniture set, both rugs, the planting, the prop density, the

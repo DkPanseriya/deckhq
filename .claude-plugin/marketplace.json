@@ -1,6 +1,6 @@
 {
   "name": "deckhq",
-  "description": "DeckHQ — every AI coding session on your machine, on one office floor. Local, private, MIT.",
+  "description": "DeckHQ — an office for your AI coding agents. Local, free, MIT.",
   "owner": {
     "name": "Darshak Panseriya",
     "url": "https://github.com/DkPanseriya"
@@ -9,7 +9,7 @@
     {
       "name": "deckhq",
       "source": "./plugin",
-      "description": "Every AI coding session on your machine, on one office floor. Local, private, zero dependencies.",
+      "description": "An office for your AI coding agents. DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your queue until you clear it. Local, free, MIT, zero dependencies.",
       "version": "1.7.0",
       "author": { "name": "Darshak Panseriya" },
       "homepage": "https://github.com/DkPanseriya/deckhq#readme",

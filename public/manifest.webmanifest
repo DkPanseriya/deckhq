@@ -1,7 +1,7 @@
 {
   "name": "DeckHQ",
   "short_name": "DeckHQ",
-  "description": "Every AI coding session on your machine, on one office floor.",
+  "description": "An office for your AI coding agents.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
