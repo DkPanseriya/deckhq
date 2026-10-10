@@ -9,10 +9,10 @@ you rather than a template.
 The latest published release on npm is the only supported version. Fixes go out as a new patch or
 minor release; there are no backports.
 
-| Version | Supported |
-| ------- | --------- |
-| 1.2.x   | Yes       |
-| < 1.2   | No        |
+| Version                                       | Supported |
+| --------------------------------------------- | --------- |
+| The latest on npm (`npm view deckhq version`) | Yes       |
+| Anything older                                | No        |
 
 ## Reporting a vulnerability
 
@@ -120,13 +120,22 @@ core permanently; see [`CONTRIBUTING.md`](CONTRIBUTING.md) §2.
 
 ## What it writes
 
-- `~/.deckhq/state.json` — your acknowledgements, benches and let-gos. Nothing else.
+The full list, file by file, is in [`docs/GUIDE.md`](docs/GUIDE.md#what-it-writes). What matters
+for this document:
+
+- `~/.deckhq/` — DeckHQ's own directory: your acknowledgements, names and settings in
+  `state.json`, a cache it can rebuild, the event ledger, the pictures you ask for, installed
+  packs, and the browser profile `deckhq app` gives its window. `DECKHQ_STATE_DIR` moves it.
 - `~/.deckhq/backups/` — a timestamped copy of your runtime settings file, taken before DeckHQ
   edits it to install hooks.
-- Your runtime's settings file, **only** when you install hooks, **only** after you have been shown
-  the literal JSON that will be added, and **only** after you click through. The write is atomic —
-  a temporary file in the same directory, then a rename — so an interrupted install cannot leave
-  you with a truncated settings file.
+- A Desktop icon, a Start Menu entry and a login entry, **only** after `deckhq shortcut` or
+  `deckhq autostart` has printed each path and you have passed `--yes` or answered `y`. Each file
+  is tagged and recorded, and removal takes back only those.
+- `<project>/.deckhq/studio/`, **only** after `deckhq studio enable <dir> --yes`, per project.
+- Your runtime's settings file, **only** when you install hooks or the status line, **only** after
+  you have been shown the literal JSON that will be added, and **only** after you click through or
+  pass `--yes`. The write is atomic — a temporary file in the same directory, then a rename — so
+  an interrupted install cannot leave you with a truncated settings file.
 - A short `.command` wrapper in the system temp directory on macOS, when you open a session in
   Terminal. It exists so that your project path and session id are never interpolated into a shell
   command string.
