@@ -749,18 +749,25 @@ test('no thought cloud is over a name, a role chip, a wait badge or a crew chip'
 });
 
 test('a name that is not under, over or beside its own figure is on a leader', () => {
+  let tied = 0;
   for (const name of ['crew', 'demo', 'crowded']) {
-    const f = frameAt(1600, 869, () => populationFloor(name), { badges: true });
-    for (const it of f.labels.labels) {
-      const spot = f.labels.plan.get(it.id);
-      if (!spot) continue;
-      const box = drawnBox(it, spot);
-      const under = box.x < it.feet.x + it.side && box.x + box.w > it.feet.x - it.side;
-      const level = box.y < it.feet.y && box.y + box.h > it.feet.y - it.bh;
-      if (under || level) continue;
-      assert.equal(spot.leader, true, `${name}: ${f.labels.texts.get(it.id)} stands alone`);
+    for (const [w, h] of [...STAGES, [1600, 869]]) {
+      const f = frameAt(w, h, () => populationFloor(name), { badges: true });
+      for (const it of f.labels.labels) {
+        const spot = f.labels.plan.get(it.id);
+        if (!spot) continue;
+        const box = drawnBox(it, spot);
+        // The body is half as wide as the ring `side` is the radius of.
+        const half = it.side / 2;
+        const under = box.x < it.feet.x + half && box.x + box.w > it.feet.x - half;
+        const level = box.y < it.feet.y && box.y + box.h > it.feet.y - it.bh;
+        if (under || level) continue;
+        tied++;
+        assert.equal(spot.leader, true, `${name}: ${f.labels.texts.get(it.id)} stands alone`);
+      }
     }
   }
+  assert.ok(tied > 0, 'these floors set a name clear of its figure: the test has a case');
   // The rule itself, on the case the crew floor drew: a tag wider than the
   // body it names, pushed aside at its own depth until none of it is under it.
   const wide = { id: 'tag', x: 60, y: 104, w: 80, h: 12, keep: true };

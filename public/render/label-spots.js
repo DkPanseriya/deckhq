@@ -205,7 +205,10 @@ export function resolveLabelCollisions(items, bounds) {
             const offsetY = by + (fy === LABEL_UP ? upFor(it, form) : fy * form.h);
             const rect = { x: form.x + offsetX, y: form.y + offsetY, w: form.w, h: form.h };
             if (!free(rect, through)) continue;
-            chosen = spotOf(it, form, offsetX, offsetY, !!it.feet && !isNear(it, rect));
+            // On a leader wherever it is far from its feet — or within reach
+            // of them and under no part of its own figure (`detached`).
+            const loose = !!it.feet && (!isNear(it, rect) || detached(it, rect));
+            chosen = spotOf(it, form, offsetX, offsetY, loose);
             placed.push(rect);
             break;
           }
@@ -232,7 +235,9 @@ export function resolveLabelCollisions(items, bounds) {
  */
 function detached(it, rect) {
   if (!it.feet || !(it.bh > 0)) return false;
-  const side = it.side || 0;
+  // Under the BODY, which is half as wide as the ring `side` measures: a name
+  // whose last few pixels are under the ring's rim is under nothing drawn.
+  const side = (it.side || 0) / 2;
   const under = rect.x < it.feet.x + side && rect.x + rect.w > it.feet.x - side;
   const level = rect.y < it.feet.y && rect.y + rect.h > it.feet.y - it.bh;
   return !under && !level;
