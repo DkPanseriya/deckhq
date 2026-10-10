@@ -56,6 +56,17 @@ export function tildify(p, home = os.homedir()) {
   return np;
 }
 
+/**
+ * The word for the state row. A machine DeckHQ has never run on has no data
+ * directory, and the doctor does not make one: it says so instead of claiming
+ * a write it never tried.
+ * @param {{writable:boolean, exists?:boolean}} state
+ */
+export function stateWord(state) {
+  if (!state.writable) return 'NOT WRITABLE';
+  return state.exists === false ? 'not created yet (the doctor wrote nothing)' : 'writable';
+}
+
 /** @param {string} label @param {string} value */
 export function row(label, value) {
   return `  ${label.padEnd(LABEL_WIDTH)}${value}`;
@@ -126,7 +137,7 @@ export function renderReport(report, opts = {}) {
   lines.push(
     row(
       'state',
-      `${tildify(report.state.path, opts.home)}, ${report.state.writable ? 'writable' : 'NOT WRITABLE'}` +
+      `${tildify(report.state.path, opts.home)}, ${stateWord(report.state)}` +
         (report.state.writable || !report.state.error ? '' : ` (${report.state.error})`),
     ),
   );

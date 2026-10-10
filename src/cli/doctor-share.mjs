@@ -15,7 +15,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 import { DATA_DIR } from '../core/paths.mjs';
-import { plural, describeDeck, describeRuntime, ago, group } from './doctor-report.mjs';
+import { plural, describeDeck, describeRuntime, ago, group, stateWord } from './doctor-report.mjs';
 
 // ---------------------------------------------------------------------------
 // The share block
@@ -177,7 +177,7 @@ export function renderShare(report, opts = {}) {
     lines.push(srow(label, describeHooksForShare(h, report.generatedAt)));
   }
 
-  lines.push(srow('state', report.state.writable ? 'writable' : 'NOT WRITABLE'));
+  lines.push(srow('state', stateWord(report.state)));
   lines.push(srow('egress', report.egress.note));
 
   if (report.problems.length) {

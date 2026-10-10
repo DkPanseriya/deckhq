@@ -36,6 +36,12 @@
 
 ### Fixed
 
+- **`deckhq doctor` no longer creates `~/.deckhq` on a machine DeckHQ has never run on.** It is
+  the command the site tells you to run before installing anything, on the promise that it writes
+  nothing, and it made the folder to test that it could. Now a missing folder is left missing and
+  the `state` row reads `not created yet (the doctor wrote nothing)`; `--json` carries
+  `state.exists`. Where the folder already exists the write test is unchanged.
+
 - **A repository mounted inside another one no longer gets a room of its own, when the outer one
   names it.** A session in a clone such as `project/internal` — its own `.git`, and `/internal/` on
   a line of the outer repository's root `.gitignore` or `.git/info/exclude` — was drawn in a room

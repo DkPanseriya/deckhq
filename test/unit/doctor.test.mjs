@@ -49,6 +49,7 @@ import {
   renderReport,
   renderShare,
   runDoctor,
+  stateWord,
   tildify,
 } from '../../src/cli/doctor.mjs';
 import { getAdapters } from '../../src/adapters/index.mjs';
@@ -1300,7 +1301,7 @@ test('--json emits one JSON document with a stable shape', async () => {
     'waiting',
     'waitingNotRunning',
   ]);
-  assert.deepEqual(Object.keys(parsed.state).sort(), ['error', 'path', 'writable']);
+  assert.deepEqual(Object.keys(parsed.state).sort(), ['error', 'exists', 'path', 'writable']);
   assert.deepEqual(Object.keys(parsed.terminal).sort(), [
     'id',
     'label',
@@ -1755,6 +1756,21 @@ test('checkState proves writability by writing, and leaves no probe file behind'
   assert.equal(result.writable, true);
   assert.equal(result.error, null);
   assert.deepEqual(await fsp.readdir(dataDir), []);
+});
+
+test('on a machine DeckHQ has never run on, the doctor creates nothing and says so', async () => {
+  const { dataDir } = await tmpStateDir();
+  const absent = path.join(dataDir, 'never', '.deckhq');
+  const result = checkState({ dataDir: absent, stateFile: path.join(absent, 'state.json') });
+  assert.deepEqual(
+    { writable: result.writable, error: result.error, exists: result.exists },
+    { writable: true, error: null, exists: false },
+  );
+  // Nothing was made on the way: not the directory, not its parent, not a probe.
+  assert.deepEqual(await fsp.readdir(dataDir), []);
+  assert.equal(stateWord(result), 'not created yet (the doctor wrote nothing)');
+  assert.equal(stateWord({ writable: true, exists: true }), 'writable');
+  assert.equal(stateWord({ writable: false, exists: false }), 'NOT WRITABLE');
 });
 
 // ---------------------------------------------------------------------------

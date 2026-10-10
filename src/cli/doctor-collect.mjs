@@ -208,17 +208,38 @@ export const NO_DECK = {
  * fails on — and a doctor whose answer is wrong in the one case it exists for
  * is not worth shipping.
  *
+ * A MACHINE DECKHQ HAS NEVER RUN ON IS LEFT AS IT WAS. `npx deckhq doctor` is
+ * what the site tells a reader to run before installing anything, on the
+ * promise that it writes nothing. So when the data directory does not exist it
+ * is not created and nothing is probed: the row says `not created yet`, and
+ * `writable` is what the nearest directory that does exist answers to
+ * `access` — the weaker check, said as such by `exists: false`.
+ *
  * @param {{stateFile:string, dataDir:string}} opts
- * @returns {{path:string, writable:boolean, error:string|null}}
+ * @returns {{path:string, writable:boolean, error:string|null, exists:boolean}}
  */
 export function checkState({ stateFile, dataDir }) {
+  if (!fs.existsSync(dataDir)) {
+    let dir = path.dirname(dataDir);
+    while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+    try {
+      fs.accessSync(dir, fs.constants.W_OK);
+    } catch (err) {
+      return {
+        path: stateFile,
+        writable: false,
+        error: err?.message || String(err),
+        exists: false,
+      };
+    }
+    return { path: stateFile, writable: true, error: null, exists: false };
+  }
   const probe = path.join(dataDir, `.doctor-probe-${process.pid}`);
   try {
-    fs.mkdirSync(dataDir, { recursive: true });
     fs.writeFileSync(probe, 'deckhq doctor\n', 'utf8');
     fs.unlinkSync(probe);
   } catch (err) {
-    return { path: stateFile, writable: false, error: err?.message || String(err) };
+    return { path: stateFile, writable: false, error: err?.message || String(err), exists: true };
   }
   // The directory being writable does not make an existing file writable —
   // a root-owned or read-only state.json is the exact failure this catches.
@@ -226,10 +247,10 @@ export function checkState({ stateFile, dataDir }) {
     try {
       fs.accessSync(stateFile, fs.constants.W_OK);
     } catch (err) {
-      return { path: stateFile, writable: false, error: err?.message || String(err) };
+      return { path: stateFile, writable: false, error: err?.message || String(err), exists: true };
     }
   }
-  return { path: stateFile, writable: true, error: null };
+  return { path: stateFile, writable: true, error: null, exists: true };
 }
 
 /**
