@@ -23,7 +23,7 @@ Closes #
 - [ ] **Screenshot attached, if the floor changed.** Anything under `public/render/` or
       `public/style.css` needs a before-and-after image. The three worst bugs in this project's
       history were invisible to the whole unit suite and obvious in one PNG.
-- [ ] `npm run lint` and `npm run format:check` pass.
+- [ ] `npm run lint`, `npm run format:check` and `npm run typecheck` pass.
 
 ## Screenshots
 

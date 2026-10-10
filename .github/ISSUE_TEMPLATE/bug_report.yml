@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Thanks for reporting this. The single most useful thing you can include is the output of
-        `deckhq doctor` — it answers most of the environment questions in one paste.
+        `deckhq doctor --share` — it answers most of the environment questions in one paste.
 
         **If this is a security problem, please do not file it here.** See
         [SECURITY.md](https://github.com/DkPanseriya/deckhq/blob/main/SECURITY.md) for the private
@@ -40,13 +40,13 @@ body:
     attributes:
       label: Output of `deckhq doctor`
       description: >
-        Run `npx deckhq doctor` (or `deckhq doctor` if you installed it globally) and paste the
-        whole thing. It reports your runtime versions, how many transcripts were found, hook
-        installation and delivery, and whether the state file is writable. Redact project names if
-        you would rather not share them — the shape of the output is what matters.
+        Run `npx deckhq doctor --share` (or `deckhq doctor --share` if you installed it globally)
+        and paste the whole thing. It reports your runtime versions, how many transcripts were
+        found, hook installation and delivery, and whether the state file is writable. `--share`
+        prints the same numbers with paths, project names and the machine name taken out.
       render: shell
       placeholder: |
-        $ deckhq doctor
+        $ deckhq doctor --share
         ...
     validations:
       required: true
@@ -74,7 +74,7 @@ body:
     attributes:
       label: DeckHQ version
       description: Output of `npx deckhq --version`, or the commit you are running from.
-      placeholder: 1.2.0
+      placeholder: 1.x.y
     validations:
       required: true
 
