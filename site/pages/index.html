@@ -1,90 +1,43 @@
 <section class="hero wrap">
   <div class="hero-copy">
-    <h1>Every AI coding session on your machine, on one office floor.</h1>
+    <p class="eyebrow">An office for your AI coding agents</p>
+    <h1>The agent that finished an hour ago is still waiting for you.</h1>
     <p class="lede">
-      DeckHQ draws each session as a robot at a desk. You see who is working, who is waiting on you,
-      and for how long.
+      DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your
+      queue until you clear it.
     </p>
     <div class="actions">
       <p class="cmd cmd--hero"><code>npx deckhq app</code></p>
-      <a class="btn btn--ghost" href="features.html">See what it does</a>
+      <a class="btn btn--ghost" href="#doctor">Or count yours first</a>
     </div>
     <p class="hero-note">
-      Node 18 or newer. Free, MIT, zero dependencies, and it stays on your machine.
+      Node 18 or newer. Free, MIT, zero dependencies, local. Claude Code is verified; Codex is
+      verified for reading and replying.
     </p>
   </div>
-  <figure class="shot shot--window hero-shot">
+  <figure class="shot shot--window hero-shot hero-loop">
     <img
-      src="media/hero.png"
-      data-narrow="media/hero-phone.png"
+      src="media/hero-walk.gif"
       fetchpriority="high"
-      alt="The DeckHQ window. The header reads 2 needs you: 1 hand up, 1 for review. Below it, an office seen from above: Your Office with two robots waiting on a sofa, one under a red badge reading 1d 2h; a lounge with five resting; and three project rooms, orbital-api, checkout-flow and design-system, each with a robot at a desk."
+      alt="The DeckHQ floor, moving. A robot named Elif finishes its turn at a desk in the orbital-api room and a red badge appears over it. It stands, the room's lights go down behind it, and it walks the corridor into Your Office and sits on the sofa beside the two already waiting. The plate on Your Office goes from 2 waiting to 3 waiting."
     />
+    <figcaption>
+      One real walk on the demo floor, recorded at 25 frames a second. Elif finishes in orbital-api,
+      crosses the corridor and sits in Your Office; the plate goes from 2 waiting to 3.
+    </figcaption>
   </figure>
-</section>
-
-<section class="band">
-  <div class="wrap">
-    <div class="section-head">
-      <h2>A session that finished is still on the floor.</h2>
-      <p class="lede">
-        An agent list shows what is running. DeckHQ reads every transcript on disk, so the session
-        that finished an hour ago is still here, with what it last said.
-      </p>
-    </div>
-    <figure class="shot shot--crop">
-      <img
-        src="media/loop-floor.gif"
-        alt="The demo floor, moving: five project rooms with robots typing at desks, six robots waiting in Your Office with their waiting times over their heads, and fifteen resting in the lounge."
-      />
-      <figcaption>
-        The demo floor: five repositories, twenty-one sessions. Every picture on this site is the
-        running product, on invented projects.
-      </figcaption>
-    </figure>
-
-    <div class="split split--flip after-figure">
-      <div class="split-copy">
-        <h3>One room per repository. One robot per session.</h3>
-        <p>
-          Start your agents anywhere: a terminal, your editor, the desktop app. Each one turns up in
-          its project's room with a first name it keeps for good.
-        </p>
-        <p>
-          The plate on the room says what you might act on in the biggest type:
-          <strong>2 need you · oldest 1d 2h</strong>. Under it, what somebody is running right now,
-          and today's tokens.
-        </p>
-      </div>
-      <figure class="split-media shot">
-        <img
-          src="media/room.png"
-          alt="One project room, orbital-api. Its plate reads: 2 need you, oldest 1d 2h; Elif, Bash npm test; today 5.8M tok. A green robot named Elif sits at the desk with a terminal bubble over its head."
-        />
-      </figure>
-    </div>
-  </div>
 </section>
 
 <section class="band band--deep">
   <div class="wrap">
-    <div class="section-head">
-      <h2>Everyone waiting on you is in your office.</h2>
-      <p class="lede">
-        A session that finishes its turn stands up, walks the corridor into Your Office and sits
-        down. How long it has waited is over its head, and the longest wait sits nearest your desk.
-      </p>
-    </div>
-    <figure class="shot shot--crop">
-      <img
-        src="media/loop-walk.gif"
-        alt="A robot named Elif finishes its turn in the orbital-api room, stands up from its desk, walks along the corridor into Your Office and sits on the sofa beside the two already waiting."
-      />
-      <figcaption>One real walk, recorded at 25 frames a second.</figcaption>
-    </figure>
-
-    <div class="split after-figure">
+    <div class="split">
       <div class="split-copy">
+        <h2>Everyone waiting on you is in your office.</h2>
+        <p>
+          A session that finishes its turn stands up, walks the corridor into Your Office and sits
+          down. How long it has waited is over its head, and the longest wait sits nearest your
+          desk.
+        </p>
         <h3>Two signals, because they need different answers.</h3>
         <ul class="facts">
           <li>
@@ -124,8 +77,7 @@
         </p>
         <p>
           <strong>Go to session</strong> brings the terminal, the editor or the Claude desktop app
-          that session is running in to the front. It is measured on Windows 11, and written and not
-          yet run on macOS and Linux.
+          that session is running in to the front.
         </p>
         <p><a href="features.html#panel">The panel, in full</a></p>
       </div>
@@ -140,6 +92,200 @@
 </section>
 
 <section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>A session that finished is still on the floor.</h2>
+      <p class="lede">
+        DeckHQ reads every transcript on disk. The session that finished an hour ago is still here,
+        with what it last said, and it did not have to be started from DeckHQ.
+      </p>
+    </div>
+    <figure class="shot shot--crop">
+      <img
+        src="media/loop-floor.gif"
+        alt="The demo floor, moving: five project rooms with robots typing at desks, six robots waiting in Your Office with their waiting times over their heads, and fifteen resting in the lounge."
+      />
+      <figcaption>
+        The demo floor: five repositories, twenty-one sessions. Every picture on this site is the
+        running product, on invented projects.
+      </figcaption>
+    </figure>
+
+    <div class="split split--flip after-figure">
+      <div class="split-copy">
+        <h3>One room per repository. One robot per session.</h3>
+        <p>
+          Start your agents anywhere: a terminal, your editor, the desktop app. Each one turns up in
+          its project's room with a first name it keeps for good.
+        </p>
+        <p>
+          The plate on the room says what you might act on in the biggest type:
+          <strong>2 need you · oldest 1d 2h</strong>. Under it, what somebody is running right now,
+          and today's tokens.
+        </p>
+      </div>
+      <figure class="split-media shot">
+        <img
+          src="media/room.png"
+          alt="One project room, orbital-api. Its plate reads: 2 need you, oldest 1d 2h; Elif, Bash npm test; today 5.8M tok. A green robot named Elif sits at the desk with a terminal bubble over its head."
+        />
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section class="band band--deep" id="agent-view">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Why not the agent view you already have?</h2>
+      <p class="lede">
+        Claude Code has one built in: <code>claude agents</code>. It starts sessions, keeps them
+        running in the background and lets you answer one from a list. Use both. They do different
+        jobs.
+      </p>
+    </div>
+    <div class="table-scroll">
+      <table class="versus">
+        <thead>
+          <tr>
+            <td></td>
+            <th scope="col">Agent view, in Claude Code</th>
+            <th scope="col">DeckHQ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Which sessions</th>
+            <td>
+              Every background session you have started, across your projects. A session open in
+              another terminal is listed once you send it to the background.
+            </td>
+            <td>
+              Every transcript on your disk, wherever the session was started: a terminal, your
+              editor, the desktop app.
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">For review</th>
+            <td>
+              A session with an open pull request that needs review, or with failing checks, moves
+              to <strong>Ready for review</strong>.
+            </td>
+            <td>
+              Every session that finishes its turn waits in Your Office with how long it has waited.
+              Reading it does not clear it; you reply, approve or bench.
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Running them</th>
+            <td>
+              Dispatches new sessions and runs them with no terminal open. Peek at one, reply from
+              the list, or attach to the whole conversation.
+            </td>
+            <td>
+              Reads the sessions your tools run and replies to them. It can start one. It never
+              stops one, and closing it stops nothing.
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Which tools</th>
+            <td>Claude Code sessions. Its pages name no other tool.</td>
+            <td>
+              Claude Code, verified. Codex, verified for reading and replying. Gemini CLI and
+              OpenCode adapters are written and unverified.
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">What you look at</th>
+            <td>
+              A list in your terminal, grouped by state, with the sessions that need you at the top.
+              A research preview.
+            </td>
+            <td>
+              An office seen from above in a window of its own: one room per repository, one robot
+              per session.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="quiet after-block">
+      As of October 2026. Agent view is described from Anthropic's own pages as they read on the
+      10th:
+      <a href="https://claude.com/blog/agent-view-in-claude-code">the announcement</a> and
+      <a href="https://code.claude.com/docs/en/agent-view">the documentation</a>. DeckHQ is
+      described from <a href="https://github.com/DkPanseriya/deckhq#readme">its README</a>.
+      <code>deckhq doctor</code> prints agent view's own count beside its own.
+    </p>
+  </div>
+</section>
+
+<section class="band" id="studio">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>Studio turns an idea into an office.</h2>
+      <p class="lede">
+        Off until you turn it on for one project. Then a real session interviews you and writes the
+        plan, the roster and the board into your own repository.
+      </p>
+    </div>
+    <figure class="shot">
+      <img
+        src="media/board.png"
+        alt="The Studio board: six columns named Backlog, Ready, In progress, Review, Done and Blocked. Each card has a title, the robot assigned to it, a count of criteria and its tokens. One card in Review is flagged waiting on you, handover."
+      />
+      <figcaption>The board on the demo floor: six columns, one card per piece of work.</figcaption>
+    </figure>
+    <ol class="steps after-block">
+      <li>
+        <h3>Describe the idea.</h3>
+        <p>
+          <code>deckhq studio enable</code> on one project, and a real <code>claude</code> session
+          asks you what you are building.
+        </p>
+      </li>
+      <li>
+        <h3>Get a plan.</h3>
+        <p>It writes the blueprint, the roster and the board as files in that repository.</p>
+      </li>
+      <li>
+        <h3>Hire.</h3>
+        <p>
+          A role gets a git worktree of its own, a brief that is yours to edit, and a real session
+          there, on the floor within one scan.
+        </p>
+      </li>
+      <li>
+        <h3>Run the board.</h3>
+        <p>
+          A column is yours. Nothing DeckHQ observes moves a card; you do, by drag or with
+          <kbd>[</kbd> and <kbd>]</kbd>.
+        </p>
+      </li>
+      <li>
+        <h3>Take the handover.</h3>
+        <p>
+          A role that thinks a card is done writes a handover. The card is flagged, and its review
+          shows the handover beside the worktree's diff. Accept it, or bounce it with a note.
+        </p>
+      </li>
+      <li>
+        <h3>Keep track.</h3>
+        <p>
+          Each card shows its tokens, its time in progress and the tests its handover quotes. A card
+          past its budget goes to <strong>Blocked</strong>, and nothing is killed.
+        </p>
+      </li>
+    </ol>
+    <p class="quiet after-block">
+      The loop is complete since 1.6.0. A real planner interview, and a hired session's real reply,
+      have not been watched yet; Codex, Gemini CLI and OpenCode roles are marked unverified launch.
+      <a href="features.html#studio">Studio, in full</a>
+    </p>
+  </div>
+</section>
+
+<section class="band band--deep">
   <div class="wrap">
     <div class="section-head">
       <h2>The details people notice.</h2>
@@ -207,7 +353,7 @@
   </div>
 </section>
 
-<section class="band band--deep">
+<section class="band">
   <div class="wrap">
     <div class="section-head">
       <h2>Eleven styles, one click apart.</h2>
@@ -254,18 +400,28 @@
   </div>
 </section>
 
-<section class="band">
+<section class="band band--deep" id="doctor">
   <div class="wrap split">
     <div class="split-copy">
-      <h2>It listens on 127.0.0.1 and nothing else.</h2>
+      <h2>Before you install anything.</h2>
+      <p class="cmd"><code>npx deckhq doctor</code></p>
       <p>
-        There is no <code>--host</code> flag and there never will be one. No account, no analytics,
-        no telemetry, no update check, no crash report, no font or script from a CDN.
+        It counts the sessions on your disk and installs nothing, writes nothing and sends nothing.
+        Read the <code>on the floor</code> row: that is how many you have, finished ones included.
       </p>
-      <p>
-        Before you install anything, <code>npx deckhq doctor</code> prints what is on your disk. Its
-        last line is the one to read.
-      </p>
+      <ul class="facts">
+        <li>
+          <strong>It listens on 127.0.0.1 and nothing else.</strong> There is no
+          <code>--host</code> flag and there never will be one.
+        </li>
+        <li>
+          <strong>Zero dependencies.</strong> The package installs itself and nothing under it.
+        </li>
+        <li>
+          <strong>MIT, and all of it is on GitHub.</strong> No account, no analytics, no telemetry,
+          no update check.
+        </li>
+      </ul>
       <p><a href="privacy.html">What it never does, and how to check</a></p>
     </div>
     <div class="split-media">
@@ -279,48 +435,15 @@
   hooks           installed, port 4400, 285 events, last 1m ago
   state           ~/.deckhq/state.json, writable
   egress          <b>none. no outbound sockets.</b></pre>
-      <p class="quiet after-small">
-        A real run on the development machine, 3 September 2026. Your numbers will differ.
-      </p>
+      <p class="quiet after-small">A real run, 3 September 2026. Your numbers will differ.</p>
     </div>
   </div>
 </section>
 
-<!-- if media/coming-office.png -->
-<section class="band band--deep">
-  <div class="wrap">
-    <div class="section-head">
-      <h2>The same office, stood up.</h2>
-      <p class="lede">Same rooms, same robots, same seats, in 3D; not out yet.</p>
-      <p class="quiet">
-        To hear the day it lands:
-        <a href="https://github.com/DkPanseriya/deckhq/releases">watch the releases on GitHub</a>
-        (Watch, Custom, Releases).
-      </p>
-    </div>
-    <div class="mosaic">
-      <figure class="shot c7">
-        <img
-          src="media/coming-office.png"
-          alt="Two pictures side by side. On the left, the DeckHQ floor as it is today, seen from above. On the right, the same building in three dimensions, seen at an angle, with the same rooms and name plates. A label in the corner reads Coming."
-        />
-        <figcaption>
-          <span class="tag tag--coming">Coming</span>The floor today, and the same building in 3D.
-        </figcaption>
-      </figure>
-      <figure class="shot c5">
-        <img
-          src="media/coming-robot.png"
-          alt="A close view of the 3D office: two round robots at a desk with terminals on their monitors, and two smaller ones sitting on the floor with laptops under tags that read Junior. A label in the corner reads Coming."
-        />
-        <figcaption>
-          <span class="tag tag--coming">Coming</span>A lead, a colleague and two juniors.
-        </figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-<!-- endif -->
+<!-- slot: quotes
+     What users have said: three at most, from site/quotes.json. That file is
+     empty, so nothing is rendered here. Add a quote only when a real person
+     has said it in public; the build writes the section when there is one. -->
 
 <section class="band" id="install">
   <div class="wrap">
@@ -366,3 +489,37 @@
     </div>
   </div>
 </section>
+
+<!-- if media/coming-office.png -->
+<section class="band band--deep band--tight">
+  <div class="wrap coming">
+    <div class="coming-copy">
+      <h2>The same office, stood up.</h2>
+      <p>Same rooms, same robots, same seats, in 3D; not out yet.</p>
+      <p class="quiet">To hear the day it lands, <a href="#follow">follow the releases</a>.</p>
+    </div>
+    <div class="coming-shots">
+      <figure class="shot">
+        <img
+          src="media/coming-office.png"
+          alt="Two pictures side by side. On the left, the DeckHQ floor as it is today, seen from above. On the right, the same building in three dimensions, seen at an angle, with the same rooms and name plates. A label in the corner reads Coming."
+        />
+        <figcaption>
+          <span class="tag tag--coming">Coming</span>The floor today, and the same building in 3D.
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <img
+          src="media/coming-robot.png"
+          alt="A close view of the 3D office: two round robots at a desk with terminals on their monitors, and two smaller ones sitting on the floor with laptops under tags that read Junior. A label in the corner reads Coming."
+        />
+        <figcaption>
+          <span class="tag tag--coming">Coming</span>A lead, a colleague and two juniors.
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+<!-- endif -->
+
+<!-- slot: follow -->

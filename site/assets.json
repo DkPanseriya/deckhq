@@ -45,6 +45,23 @@
       "note": "the hero for a narrow screen: the header, and Your Office under it"
     },
     {
+      "name": "hero-walk",
+      "kind": "gif",
+      "population": "three",
+      "mode": "live",
+      "endTurn": "orbital-api",
+      "fps": 25,
+      "seconds": 8,
+      "crop": {
+        "x": 0,
+        "y": 130,
+        "w": 1340,
+        "h": 468
+      },
+      "width": 1140,
+      "note": "the home page's first picture: a session finishes, crosses the corridor into Your Office and sits"
+    },
+    {
       "name": "header-count",
       "kind": "still",
       "population": "demo",

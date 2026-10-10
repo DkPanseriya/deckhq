@@ -21,6 +21,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { placeholderFor } from './placeholder.mjs';
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 
@@ -176,16 +178,23 @@ export function publishMedia(outDir, files) {
  * Done here so the numbers are the file's own and the next page somebody
  * writes cannot forget them.
  *
+ * And each gets a `ph-*` class naming the placeholder tone nearest its own
+ * colour, so the box a lazy picture arrives into is not an empty dark one.
+ *
  * @param {string} body
  * @param {string} outDir where the pictures were copied to
+ * @param {Record<string, [number, number, number]>} [tones] `placeholderTones()`
  */
-export function dressImages(body, outDir) {
+export function dressImages(body, outDir, tones = {}) {
   return body.replace(/<img\b[^>]*>/g, (tag) => {
     const src = attr(tag, 'src');
     if (!src || !src.startsWith('media/')) return tag;
     const size = imageSize(path.join(outDir, src));
     if (!size) throw new Error(`${src} is not a picture this build can measure`);
     let extra = '';
+    // A loop is read by its first frame, which is the still beside it.
+    const tone = placeholderFor(path.join(outDir, src.replace(/\.gif$/, '.png')), tones);
+    if (tone && !attr(tag, 'class')) extra += ` class="ph-${tone}"`;
     if (!attr(tag, 'width')) extra += ` width="${size.width}" height="${size.height}"`;
     const pair = src.endsWith('.png') && fs.existsSync(path.join(outDir, dense(src)));
     if (pair && !attr(tag, 'srcset')) extra += ` srcset="${src} 1x, ${dense(src)} 2x"`;

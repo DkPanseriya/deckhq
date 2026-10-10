@@ -507,6 +507,232 @@ td:first-child {
   border-bottom-color: var(--accent);
 }
 
+/* --------------------------------------------- the home page's own blocks */
+
+/* A picture's box before the picture: the tone the build measured for it. */
+img.ph-dark {
+  background: var(--ph-dark);
+}
+
+img.ph-dusk {
+  background: var(--ph-dusk);
+}
+
+img.ph-stone {
+  background: var(--ph-stone);
+}
+
+img.ph-floor {
+  background: var(--ph-floor);
+}
+
+/* Two tools, side by side. The row heads are words, not labels. */
+.versus,
+.os {
+  table-layout: fixed;
+}
+
+.versus {
+  min-width: 42rem;
+  font-size: var(--t-body);
+}
+
+/* The corner cell sets the first column; the others share what is left. */
+:is(.versus, .os) thead td {
+  background: var(--surface);
+}
+
+.versus thead td {
+  width: 16%;
+}
+
+.os thead td {
+  width: 28%;
+}
+
+tbody th {
+  color: var(--ink);
+  font: 600 var(--t-small) / 1.5 var(--sans);
+  background: none;
+}
+
+.versus tbody th {
+  font-size: var(--t-body);
+}
+
+/* What has been run where: one row a capability, one column a system. */
+.os {
+  min-width: 40rem;
+}
+
+:is(.versus, .os) tbody td {
+  color: var(--ink-2);
+  font-weight: 400;
+  white-space: normal;
+}
+
+/* On a phone neither table scrolls sideways, because the column that would
+   be off the screen is the one being compared. Each row's head runs the full
+   width, and its cells sit under it, side by side. */
+@media (max-width: 39.99rem) {
+  .coming-shots {
+    grid-template-columns: 1fr;
+  }
+
+  :is(.versus, .os) {
+    display: block;
+    min-width: 0;
+  }
+
+  :is(.versus, .os) :is(thead, tbody) {
+    display: block;
+  }
+
+  :is(.versus, .os) tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .os tr {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  :is(.versus, .os) :is(thead td, tbody th) {
+    grid-column: 1 / -1;
+    width: auto;
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  :is(.versus, .os) thead td {
+    padding: 0;
+  }
+
+  :is(.versus, .os) :is(thead th, tbody td) {
+    padding: 0.6rem 0.75rem;
+    font-size: var(--t-micro);
+    line-height: 1.5;
+  }
+
+  .versus tbody td {
+    font-size: var(--t-small);
+  }
+}
+
+/* A real sequence, so it is numbered: six steps, three to a row. */
+.steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--s-4) var(--s-5);
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.steps > li {
+  counter-increment: step;
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--line);
+}
+
+.steps h3 {
+  margin-bottom: var(--s-1);
+  font-size: var(--t-sub);
+}
+
+.steps h3::before {
+  content: counter(step) '  ';
+  color: var(--accent);
+  font: 500 var(--t-small) / 1 var(--mono);
+}
+
+/* What is not out yet: half a screen, under the one thing a reader can do. */
+.coming {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+  gap: var(--s-4) var(--s-5);
+  align-items: center;
+}
+
+.coming-copy {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.coming h2 {
+  font-size: var(--t-sub);
+}
+
+.coming-shots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-3);
+}
+
+.follow {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--s-4) var(--s-5);
+}
+
+.follow h2 {
+  margin-bottom: var(--s-2);
+  font-size: var(--t-sub);
+}
+
+.follow-ways {
+  display: grid;
+  gap: var(--s-2);
+  padding: 0;
+  list-style: none;
+}
+
+.follow-ways > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem var(--s-2);
+  align-items: baseline;
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.follow-ways span {
+  color: var(--muted);
+  font-size: var(--t-small);
+}
+
+.follow-ways > .follow-mail {
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 0;
+}
+
+.quotes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: var(--s-4);
+  margin-top: var(--s-4);
+}
+
+.quote blockquote {
+  margin: 0 0 var(--s-2);
+  color: var(--ink);
+  font-size: var(--t-lede);
+  line-height: 1.45;
+}
+
+.quote figcaption {
+  color: var(--muted);
+  font-size: var(--t-small);
+}
+
+@media (max-width: 55.99rem) {
+  .coming,
+  .follow {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* --------------------------------------------------------------- footer */
 
 .site-foot {
@@ -518,7 +744,7 @@ td:first-child {
 
 .foot-inner {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 2fr) repeat(4, minmax(0, 1fr));
   gap: var(--s-5) var(--s-4);
 }
 

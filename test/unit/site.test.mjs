@@ -21,11 +21,39 @@ import path from 'node:path';
 import { test, before, after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import {
+  atomFeed,
+  fill,
+  followBlock,
+  followLinks,
+  quotesBlock,
+  WAITLIST_URL,
+  waitlistHost,
+} from '../../site/slots.mjs';
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const siteDir = path.join(root, 'site');
 
-/** Hosts a reader may be sent to by a link they click. Nothing is fetched from them. */
-const LINKABLE = ['github.com', 'www.npmjs.com'];
+/**
+ * Hosts a reader may be sent to by a link they click. Nothing is fetched from
+ * them. Each one past the project's own two homes was added on purpose:
+ *
+ *   - `claude.com` and `code.claude.com`: Anthropic's own announcement and
+ *     documentation of agent view, which the home page's comparison cites as
+ *     its source for every word it says about that tool;
+ *   - `darshakpanseriya.com`: the maker's own site, one link in the footer;
+ *   - the host of `WAITLIST_URL` in `site/slots.mjs`, when that is set: the
+ *     hosted sign-up form the e-mail button opens. It is taken from the
+ *     constant, so setting the address is the whole change. Empty today.
+ */
+const LINKABLE = [
+  'github.com',
+  'www.npmjs.com',
+  'claude.com',
+  'code.claude.com',
+  'darshakpanseriya.com',
+  ...(waitlistHost() ? [waitlistHost()] : []),
+];
 
 /**
  * This site's own origin — WP-75.
@@ -90,11 +118,13 @@ test('the site builds every page it navigates to', () => {
     '404.html',
     'style.css',
     // The one script. Everything it does, the page does without it;
-    // `site/site.js`'s header says which four things they are. The second
+    // `site/site.js`'s header says which five things they are. The second
     // script, which stored a colour scheme, went with the light scheme.
     'site.js',
     'sitemap.txt',
     'robots.txt',
+    // The releases as an Atom feed, written from `CHANGELOG.md`.
+    'feed.xml',
     // WP-82 · the mark, both the SVG the tab strip gets and the dark raster
     // the pages show. `site/favicon.svg` — a crimson square that was nothing
     // the product used — is gone.
@@ -477,10 +507,10 @@ test('every image carries alt text, and every photograph carries words', () => {
   }
 });
 
-test('the only hosts anywhere on the site are GitHub, npm and this site', () => {
+test('the only hosts anywhere on the site are this site and the allow-list', () => {
   // A stricter restatement of the two SECURITY tests above, over every absolute
   // URL on every page whatever attribute or text it sits in: the Pages origin
-  // (printed as a line to copy), and the two places a reader is sent.
+  // (printed as a line to copy), and the places `LINKABLE` sends a reader.
   const allowed = new Set([...LINKABLE, SELF]);
   for (const page of walk(out, ['.html'])) {
     const html = fs.readFileSync(page, 'utf8');
@@ -1147,37 +1177,51 @@ test('the page works with its script removed', () => {
   }
 });
 
-test('the home page leads with the floor, and every band picture is lazy', async () => {
+test('the home page leads with the walk, and every band picture is lazy', async () => {
   const { imageSize } = await import('../../site/build.mjs');
   const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
 
-  // The first picture a stranger sees is the whole window on a fixture floor.
+  // The first picture a stranger sees MOVES: a session finishes, crosses the
+  // corridor into Your Office and sits. It was the whole window, as a still,
+  // until 10 October 2026; the walk is what the product is, so it leads.
   const first = home.match(/<img[^>]*\ssrc="(media\/[^"]+)"/);
   assert.ok(first, 'the home page shows no picture from the media directory');
-  assert.equal(first[1], 'media/hero.png', `the hero is ${first[1]}`);
+  assert.equal(first[1], 'media/hero-walk.gif', `the hero is ${first[1]}`);
 
-  // The hero is preloaded, at the density the screen has, and is the one
-  // picture that is not lazy; everything under it waits for the scroll.
-  // A narrow screen gets a closer crop of the same window, and its own hint,
-  // so a phone is not sent the whole floor to show at the size of a stamp.
-  for (const [name, media] of [
-    ['hero', '(min-width: 40rem)'],
-    ['hero-phone', '(max-width: 39.99rem)'],
+  // It sits in the first section, above every band, under the one headline.
+  const hero = home.slice(home.indexOf('<section class="hero'), home.indexOf('</section>'));
+  assert.match(hero, /<h1>The agent that finished an hour ago is still waiting for you\.<\/h1>/);
+  assert.ok(hero.includes('media/hero-walk.gif'), 'the walk is not in the first section');
+  assert.ok(hero.indexOf('<h1>') < hero.indexOf('media/hero-walk.gif'), 'the walk is over the h1');
+
+  // The loop is preloaded for a reader who takes motion, and its first frame
+  // for one who asked for less; a browser fetches the one whose query matches.
+  for (const [file, media] of [
+    ['hero-walk.gif', '(prefers-reduced-motion: no-preference)'],
+    ['hero-walk.png', '(prefers-reduced-motion: reduce)'],
   ]) {
     assert.ok(
       home.includes(
-        `<link rel="preload" as="image" href="media/${name}.png" imagesrcset="media/${name}.png 1x, ` +
-          `media/${name}@2x.png 2x" media="${media}" fetchpriority="high" />`,
+        `<link rel="preload" as="image" href="media/${file}" media="${media}" fetchpriority="high" />`,
       ),
-      `${name} is not preloaded`,
+      `${file} is not preloaded`,
     );
   }
+  // Reduced motion gets the still, in the markup and not from a script.
   assert.match(
-    home,
-    /<picture><source media="\(max-width: 39\.99rem\)" srcset="media\/hero-phone\.png 1x, media\/hero-phone@2x\.png 2x" width="\d+" height="\d+" \/><img\b/,
-    'the hero has no closer crop for a narrow screen',
+    hero,
+    /<picture><source media="\(prefers-reduced-motion: reduce\)" srcset="media\/hero-walk\.png" \/><img\b/,
+    'the hero plays whatever the reader asked for',
+  );
+  assert.ok(fs.existsSync(path.join(out, 'media', 'hero-walk.png')), 'the hero has no still');
+  // The still is the loop's own first frame, so nothing moves when it swaps.
+  assert.deepEqual(
+    imageSize(path.join(out, 'media', 'hero-walk.png')),
+    imageSize(path.join(out, 'media', 'hero-walk.gif')),
+    'the hero and its still are different sizes',
   );
   assert.ok(!/data-narrow/.test(home), 'an authoring attribute reached the page');
+  assert.ok(!/<video\b/.test(home), 'a video reached the page without a weight rule for it');
   const images = [...home.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
   const fromMedia = images.filter((tag) => /\ssrc="media\//.test(tag));
   assert.ok(
@@ -1228,7 +1272,8 @@ test('the home page leads with the floor, and every band picture is lazy', async
 
 test('what a reader downloads before scrolling the home page', async () => {
   // The document, the stylesheet, the script, the mark, and the one picture
-  // that is not lazy, on a dense screen. 600 KB; it was 1.5 MB.
+  // that is not lazy, on a dense screen. 600 KB; it was 1.5 MB. The picture is
+  // the walk loop now, which is most of it, and the ceiling did not move.
   const { BUDGET, pageWeight } = await import('../../site/build.mjs');
   assert.ok(BUDGET.firstView <= 600 * 1024, 'the first-view budget was raised');
   const bytes = pageWeight(out, 'index.html', { dpr: 2, all: false });
@@ -1246,4 +1291,341 @@ test('the deployment workflow builds the site it deploys', () => {
   assert.match(yml, /node site\/build\.mjs/, 'the workflow runs the build');
   assert.match(yml, /path:\s*site\/dist/, 'the workflow uploads what the build wrote');
   assert.match(yml, /branches:\s*\[main\]/, 'the workflow deploys from main');
+});
+
+/* ------------------------------------------------- the second pass, 10 Oct */
+
+/** The words between a page's `<main>` tags. @param {string} rel */
+function mainOf(rel) {
+  const html = fs.readFileSync(path.join(out, rel), 'utf8');
+  return html.slice(html.indexOf('<main id="main">'), html.indexOf('</main>'));
+}
+
+test('ONE TAGLINE: the title, the eyebrow, every footer and the card say the same line', async () => {
+  const { TAGLINE, PAGES } = await import('../../site/build.mjs');
+  assert.equal(TAGLINE, 'An office for your AI coding agents');
+  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  assert.match(home, /<title>DeckHQ: an office for your AI coding agents<\/title>/);
+  assert.ok(home.includes(`<p class="eyebrow">${TAGLINE}</p>`), 'the eyebrow is not the tagline');
+  assert.ok(
+    home.indexOf('class="eyebrow"') < home.indexOf('<h1>'),
+    'the eyebrow is not over the headline',
+  );
+  for (const page of PAGES) {
+    const html = fs.readFileSync(path.join(out, `${page.slug}.html`), 'utf8');
+    const foot = html.slice(html.indexOf('<footer'));
+    assert.ok(foot.includes(`<p>${TAGLINE}.</p>`), `${page.slug}.html: the footer's line`);
+    // The line it replaced is gone from every page, so there is one and not two.
+    assert.ok(!/Every AI coding session on your machine/.test(html), `${page.slug}.html: old line`);
+  }
+});
+
+test('ORDER: what a reader can do sits above what they cannot have yet', () => {
+  const home = mainOf('index.html');
+  const at = (needle) => {
+    const i = home.indexOf(needle);
+    assert.notEqual(i, -1, `the home page has no ${needle}`);
+    return i;
+  };
+  const order = [
+    'class="hero wrap"',
+    'Reading it does not clear it. Only you do.',
+    'id="agent-view"',
+    'id="studio"',
+    'id="doctor"',
+    'id="install"',
+    'id="follow"',
+  ].map(at);
+  assert.deepEqual(
+    order,
+    [...order].sort((a, b) => a - b),
+    'the home page is out of order',
+  );
+  // The unreleased band, when its pictures are in the repository: under
+  // Install, over Follow, half the height of an ordinary band, both pictures.
+  if (home.includes('The same office, stood up.')) {
+    const coming = at('The same office, stood up.');
+    assert.ok(coming > at('id="install"'), 'something not released sits above Install');
+    assert.ok(coming < at('id="follow"'), 'the unreleased band is under Follow');
+    const band = home.slice(
+      home.lastIndexOf('<section', coming),
+      home.indexOf('</section>', coming),
+    );
+    assert.match(band, /^<section class="band band--deep band--tight">/, 'the band is full height');
+    assert.equal((band.match(/class="tag tag--coming"/g) ?? []).length, 2, 'two Coming tags');
+    for (const file of ['coming-office.png', 'coming-robot.png']) {
+      assert.ok(band.includes(`media/${file}`), `the band lost ${file}`);
+    }
+  }
+  // The doctor invitation is a block of its own, and the hero points at it.
+  const doctor = home.slice(at('id="doctor"'), home.indexOf('</section>', at('id="doctor"')));
+  assert.match(doctor, /<h2>Before you install anything\.<\/h2>/);
+  assert.match(doctor, /<code>npx deckhq doctor<\/code>/);
+  assert.match(home.slice(0, home.indexOf('</section>')), /href="#doctor"/);
+  // A count of tests is not a reason to install anything, and is not offered.
+  assert.ok(!/\b\d[\d,]*\s+tests\b/i.test(home.replace(/<[^>]*>/g, ' ')), 'a test count is sold');
+});
+
+test('COMPARISON: agent view is described from its own pages, dated, in five rows or fewer', () => {
+  const home = mainOf('index.html');
+  const start = home.indexOf('id="agent-view"');
+  assert.notEqual(start, -1, 'the home page does not answer the agent view question');
+  const band = home.slice(start, home.indexOf('</section>', start));
+  assert.match(band, /<h2>Why not the agent view you already have\?<\/h2>/);
+  const rows = (band.slice(band.indexOf('<tbody>')).match(/<tr>/g) ?? []).length;
+  assert.ok(rows >= 4 && rows <= 5, `the comparison has ${rows} rows`);
+  // Every row says something about each of the two, and none is left empty.
+  for (const row of band.slice(band.indexOf('<tbody>')).matchAll(/<tr>([\s\S]*?)<\/tr>/g)) {
+    const cells = [...row[1].matchAll(/<td>([\s\S]*?)<\/td>/g)].map((m) => m[1].trim());
+    assert.equal(cells.length, 2, 'a row is not one cell for each tool');
+    for (const cell of cells) assert.ok(cell.length > 30, `a thin cell: ${cell}`);
+  }
+  // It says when it was true and where it was read, and sends a reader there.
+  assert.match(band, /As of October 2026\./);
+  assert.ok(band.includes('href="https://claude.com/blog/agent-view-in-claude-code"'));
+  assert.ok(band.includes('href="https://code.claude.com/docs/en/agent-view"'));
+  // Fair: it says what the other tool is good for, and that the two go together.
+  assert.match(band, /Use both\./);
+  const words = band.replace(/<[^>]*>/g, ' ');
+  for (const never of [/\bbetter\b/i, /\bworse\b/i, /\bunlike\b/i, /\blacks?\b/i, /\bfails?\b/i]) {
+    assert.ok(!never.test(words.replace(/failing checks/g, '')), `the comparison says ${never}`);
+  }
+});
+
+test('OS: where each part has been run is said once, as a table, in the FAQ', () => {
+  const faq = mainOf('faq.html');
+  const start = faq.indexOf('<details id="os">');
+  assert.notEqual(start, -1, 'the FAQ has no answer with the id "os"');
+  const answer = faq.slice(start, faq.indexOf('</details>', start));
+  const heads = [...answer.matchAll(/<th scope="col">([^<]+)<\/th>/g)].map((m) => m[1]);
+  assert.deepEqual(heads, ['Windows', 'macOS', 'Linux']);
+  const rows = [...answer.matchAll(/<tr>\s*<th scope="row">[\s\S]*?<\/tr>/g)];
+  assert.ok(rows.length >= 5, `the table has ${rows.length} rows`);
+  for (const row of rows) {
+    assert.equal((row[0].match(/<td>/g) ?? []).length, 3, 'a row is not one cell a system');
+  }
+  assert.match(answer, /Windows is fully supported/);
+  // Nothing claimed for a system it was not run on: those cells say so.
+  assert.ok(
+    (answer.match(/not yet run/g) ?? []).length >= 7,
+    'the table stopped saying "not yet run"',
+  );
+  // And it is off the home page, and nobody's machine is the subject anywhere.
+  assert.ok(!/macOS|Linux/.test(mainOf('index.html')), 'the home page carries the OS caveat');
+  for (const page of walk(out, ['.html'])) {
+    assert.ok(
+      !/development machine/i.test(fs.readFileSync(page, 'utf8')),
+      `${path.relative(out, page)} talks about the development machine`,
+    );
+  }
+});
+
+/**
+ * Whether a string is well-formed XML, near enough for a feed: every tag
+ * closes in order, one root, no bare ampersand and no stray angle bracket.
+ * Returns the reason it is not, or null.
+ *
+ * @param {string} xml
+ */
+function malformed(xml) {
+  const body = xml.replace(/^<\?xml [^?]*\?>\s*/, '');
+  if (body === xml) return 'no XML declaration';
+  const stack = [];
+  let roots = 0;
+  let last = 0;
+  for (const m of body.matchAll(/<(\/?)([A-Za-z][\w:.-]*)((?:\s+[\w:.-]+="[^"<]*")*)\s*(\/?)>/g)) {
+    const text = body.slice(last, m.index);
+    if (/[<>]/.test(text)) return `a stray bracket in "${text.trim().slice(0, 40)}"`;
+    if (/&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);)/i.test(text + m[3]))
+      return 'a bare ampersand';
+    if (stack.length === 0 && text.trim()) return 'text outside the root';
+    last = m.index + m[0].length;
+    if (m[1]) {
+      if (stack.pop() !== m[2]) return `</${m[2]}> closes the wrong element`;
+    } else if (!m[4]) {
+      if (stack.length === 0) roots++;
+      stack.push(m[2]);
+    }
+  }
+  if (/[<>]/.test(body.slice(last))) return 'a tag this could not read';
+  if (stack.length) return `<${stack.pop()}> is never closed`;
+  return roots === 1 ? null : `${roots} root elements`;
+}
+
+test('FEED: the releases are an Atom feed, well formed, from the changelog', async () => {
+  const { releaseHighlights, markdown, SITE_ORIGIN, PAGES } = await import('../../site/build.mjs');
+  const releases = releaseHighlights(fs.readFileSync(path.join(root, 'CHANGELOG.md'), 'utf8'));
+  const xml = fs.readFileSync(path.join(out, 'feed.xml'), 'utf8');
+  assert.equal(malformed(xml), null, 'feed.xml is not well-formed XML');
+  assert.equal(xml, atomFeed({ origin: SITE_ORIGIN, releases, render: markdown }));
+  assert.match(
+    xml,
+    /^<\?xml version="1\.0" encoding="utf-8"\?>\n<feed xmlns="http:\/\/www\.w3\.org\/2005\/Atom">/,
+  );
+
+  // One entry a dated release, newest first, each with what Atom requires.
+  const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((m) => m[1]);
+  assert.equal(entries.length, releases.filter((r) => r.date).length);
+  assert.ok(entries.length >= 5, `the feed has ${entries.length} entries`);
+  const changelog = fs.readFileSync(path.join(out, 'changelog.html'), 'utf8');
+  for (const [i, entry] of entries.entries()) {
+    const release = releases[i];
+    assert.ok(entry.includes(`<title>DeckHQ ${release.version}</title>`), `entry ${i}: title`);
+    assert.ok(
+      entry.includes(`<updated>${release.date}T00:00:00Z</updated>`),
+      `entry ${i}: updated`,
+    );
+    const id = (entry.match(/<id>([^<]+)<\/id>/) ?? [])[1];
+    assert.ok(id && id.startsWith(`${SITE_ORIGIN}/changelog.html#v`), `entry ${i}: id ${id}`);
+    assert.ok(changelog.includes(`id="${id.split('#')[1]}"`), `${id} lands on nothing`);
+    // Its Highlights, as the page shows them, escaped once.
+    const content = (entry.match(/<content type="html">([\s\S]*?)<\/content>/) ?? [])[1];
+    assert.ok(content && content.length > 80, `entry ${i} has no content`);
+    assert.ok(content.startsWith('&lt;p&gt;'), `entry ${i}: the content is not escaped HTML`);
+    const word = (release.highlights.match(/[A-Za-z]{5,}/) ?? [])[0];
+    assert.ok(word && content.includes(word), `entry ${i} does not carry its highlights`);
+  }
+  // 1.7.0 went out on 9 October, on the page and in the feed.
+  assert.ok(xml.includes('<title>DeckHQ 1.7.0</title>'));
+  assert.match(
+    xml,
+    /<title>DeckHQ 1\.7\.0<\/title>[\s\S]*?<updated>2026-10-09T00:00:00Z<\/updated>/,
+  );
+  assert.match(changelog, /1\.7\.0 <span class="release-date">2026-10-09<\/span>/);
+  // It names this site and the Atom namespace, and no other host.
+  for (const m of xml.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)) {
+    assert.ok([SELF, 'www.w3.org'].includes(m[1].toLowerCase()), `feed.xml names ${m[1]}`);
+  }
+  // Every page offers it to a feed reader, and every footer links it.
+  for (const page of PAGES) {
+    const html = fs.readFileSync(path.join(out, `${page.slug}.html`), 'utf8');
+    assert.ok(
+      html.includes(
+        '<link rel="alternate" type="application/atom+xml" title="DeckHQ releases" href="feed.xml" />',
+      ),
+      `${page.slug}.html does not offer the feed`,
+    );
+    const foot = html.slice(html.indexOf('<footer'));
+    assert.match(foot, /<a href="feed\.xml">Release feed<\/a>/, `${page.slug}.html: feed link`);
+    assert.match(foot, /releases">Watch releases on GitHub<\/a>/, `${page.slug}.html: watch link`);
+    assert.match(foot, /<a href="https:\/\/darshakpanseriya\.com">More by Darshak<\/a>/);
+  }
+  assert.equal(malformed('<?xml version="1.0"?>\n<a><b></a></b>'), '</a> closes the wrong element');
+  assert.equal(malformed('<?xml version="1.0"?>\n<a>R&D</a>'), 'a bare ampersand');
+});
+
+test('FOLLOW: the e-mail button is there when there is a form, and only then', () => {
+  const repo = 'https://github.com/DkPanseriya/deckhq';
+  // Without a form: the feed and GitHub, and not a word about e-mail.
+  const bare = followBlock({ repo, url: '' });
+  assert.match(bare, /<section class="band band--tight" id="follow">/);
+  assert.match(bare, /<a href="feed\.xml">The release feed<\/a>/);
+  assert.match(bare, /releases">Watch releases on GitHub<\/a>/);
+  assert.ok(!/e-mail|Tell me when|target="_blank"/.test(bare), 'a button with nowhere to go');
+  assert.equal(followLinks({ repo, url: '' }).length, 2);
+  assert.equal(waitlistHost(''), null);
+
+  // With one: one line, one button, a new tab, and the form's own address.
+  const form = 'https://deckhq.kit.com/3d';
+  const set = followBlock({ repo, url: form });
+  assert.ok(
+    set.includes(
+      `<span>One e-mail when it lands. Nothing else.</span>` +
+        `<a class="btn" href="${form}" target="_blank" rel="noopener">Tell me when 3D is ready</a>`,
+    ),
+    'the button is not the line and the label it was asked to be',
+  );
+  assert.equal((set.match(/<a class="btn"/g) ?? []).length, 1);
+  assert.equal(waitlistHost(form), 'deckhq.kit.com');
+  // The footer is on every page, and only the home page speaks of 3D.
+  const links = followLinks({ repo, url: form }).join('');
+  assert.match(links, /<a href="index\.html#follow">One e-mail<\/a>/);
+  assert.ok(!/\b3D\b/.test(links), 'the footer speaks of 3D');
+  assert.throws(() => waitlistHost('http://deckhq.kit.com/3d'), /not https/);
+
+  // The built site is in whichever state the constant is in, and the
+  // allow-list above took the form's host from the same constant.
+  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  assert.ok(home.includes(followBlock({ repo, url: WAITLIST_URL }).trim().split('\n')[0]));
+  assert.equal(home.includes('Tell me when 3D is ready'), WAITLIST_URL !== '');
+  if (WAITLIST_URL) {
+    assert.ok(LINKABLE.includes(waitlistHost()), 'the form is not a host a reader may be sent to');
+    assert.match(waitlistHost(), /(^|\.)(kit\.com|ck\.page)$/, 'the form is not on Kit');
+    assert.ok(home.includes(`href="${WAITLIST_URL}" target="_blank" rel="noopener"`));
+  } else {
+    assert.equal(LINKABLE.length, 5, 'a host is allowed that nothing links to');
+  }
+});
+
+test('QUOTES: nothing is shown as said until somebody has said it', () => {
+  assert.equal(quotesBlock([]), '');
+  assert.equal(quotesBlock([{ quote: '', name: 'Nobody' }]), '');
+  const four = [1, 2, 3, 4].map((n) => ({
+    quote: `It <b>works</b> ${n}`,
+    name: `P${n}`,
+    where: 'X',
+  }));
+  const block = quotesBlock(four);
+  assert.equal((block.match(/<figure class="quote">/g) ?? []).length, 3, 'three at most');
+  assert.ok(block.includes('It &lt;b&gt;works&lt;/b&gt; 1'), 'a quote is not escaped');
+  assert.ok(block.includes('<figcaption>P1, X</figcaption>'));
+
+  // The data file is the only source, and the page is in step with it.
+  const data = JSON.parse(fs.readFileSync(path.join(siteDir, 'quotes.json'), 'utf8'));
+  assert.ok(Array.isArray(data.quotes), 'site/quotes.json has no list');
+  const home = fs.readFileSync(path.join(out, 'index.html'), 'utf8');
+  assert.equal(home.includes('id="said"'), data.quotes.length > 0);
+  assert.equal(
+    (home.match(/<figure class="quote">/g) ?? []).length,
+    Math.min(3, data.quotes.length),
+  );
+  // The slot is in the source, says what it is for, and leaves no trace.
+  const source = fs.readFileSync(path.join(siteDir, 'pages', 'index.html'), 'utf8');
+  assert.match(source, /<!-- slot: quotes\s[\s\S]*?quotes\.json[\s\S]*?-->/);
+  for (const page of walk(out, ['.html'])) {
+    assert.ok(!/slot:/.test(fs.readFileSync(page, 'utf8')), 'a slot marker reached a page');
+  }
+  assert.throws(() => fill('<!-- slot: nothing -->\n', {}), /no block is written/);
+  assert.equal(fill('a\n<!-- slot: x\n  a note -->\nb\n', { x: 'X\n' }), 'a\nX\nb\n');
+});
+
+test('PLACEHOLDER: a lazy picture arrives into a box of its own tone', async () => {
+  const { meanColour, placeholderTones, placeholderFor } =
+    await import('../../site/placeholder.mjs');
+  const { MEDIA_DIR } = await import('../../site/build.mjs');
+  const css = fs.readFileSync(path.join(out, 'style.css'), 'utf8');
+  const tones = placeholderTones(css);
+  assert.ok(Object.keys(tones).length >= 3, 'the stylesheet defines too few placeholder tones');
+  assert.ok(Object.keys(tones).length <= 6, 'a tone per picture is a stylesheet nobody can afford');
+  for (const name of Object.keys(tones)) {
+    assert.match(css, new RegExp(`img\\.ph-${name} \\{\\s*background: var\\(--ph-${name}\\);`));
+  }
+
+  // Every picture from the media directory, on every page, carries one.
+  let dressed = 0;
+  const used = new Set();
+  for (const page of walk(out, ['.html'])) {
+    const html = fs.readFileSync(page, 'utf8');
+    for (const [tag] of html.matchAll(/<img\b[^>]*\ssrc="media\/[^"]+"[^>]*>/g)) {
+      const tone = (tag.match(/\sclass="ph-([a-z]+)"/) ?? [])[1];
+      assert.ok(
+        tone && tones[tone],
+        `${path.relative(out, page)}: no placeholder on ${tag.slice(0, 70)}`,
+      );
+      const src = tag.match(/\ssrc="media\/([^"]+)"/)[1].replace(/\.gif$/, '.png');
+      assert.equal(tone, placeholderFor(path.join(MEDIA_DIR, src), tones), `${src}: wrong tone`);
+      used.add(tone);
+      dressed++;
+    }
+  }
+  assert.ok(dressed > 40, `expected the site to carry pictures; dressed ${dressed}`);
+  assert.ok(used.size >= 2, 'every picture got the same tone, so nothing was measured');
+
+  // The measurement is a measurement: a floor is light and warm, a panel dark.
+  const floor = meanColour(fs.readFileSync(path.join(MEDIA_DIR, 'hero-walk.png')));
+  const panel = meanColour(fs.readFileSync(path.join(MEDIA_DIR, 'panel.png')));
+  assert.ok(floor && floor[0] > 150 && floor[0] > floor[2], `the floor measures ${floor}`);
+  assert.ok(panel && Math.max(...panel) < 80, `the panel measures ${panel}`);
+  assert.equal(meanColour(Buffer.from('not a picture at all, just some bytes')), null);
+  assert.equal(placeholderFor(path.join(MEDIA_DIR, 'no-such-picture.png'), tones), null);
 });
