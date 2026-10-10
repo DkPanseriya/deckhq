@@ -252,7 +252,8 @@ function clashes(cover, real) {
 export function coverProjectNames(projects, real) {
   const mk = (p) => (Number.isFinite(p.projectMk) ? Number(p.projectMk) : Number.MAX_SAFE_INTEGER);
   const order = [...projects].sort(
-    (a, b) => mk(a) - mk(b) || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0),
+    (a, b) =>
+      mk(a) - mk(b) || (String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0),
   );
   const usable = COVER_NAMES.some((n) => !clashes(n, real));
   /** @type {Map<string, string>} */
@@ -523,6 +524,11 @@ export function redactForShare(snapshot, options = {}) {
     }),
     shared: { hideProjects, hideDetails },
   };
+  // What the floor draws, as against what is on the payroll (WP-55): numbers
+  // under fixed keys, and the one part of `counts` that is not flat.
+  if (isRecord(src.counts) && isRecord(src.counts.drawn)) {
+    out.counts.drawn = plainFields(src.counts.drawn);
+  }
   if (Number.isFinite(src.now)) out.now = src.now;
   if (typeof src.nowFixed === 'boolean') out.nowFixed = src.nowFixed;
   if (Array.isArray(src.crews)) out.crews = redactCrews(src.crews, ids, byId);
