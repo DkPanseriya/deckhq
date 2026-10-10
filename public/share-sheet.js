@@ -432,6 +432,9 @@ export function openShareSheet(handed) {
   ui.reveal.hidden = true;
   say('');
   ui.dialog.showModal();
+  // A dialog focuses its first control, which here is the ✕: Enter would shut
+  // the sheet somebody just opened. Focus goes to what they came to do.
+  ui.save.focus();
   refresh();
   // The floor goes on changing under the sheet, and the preview is live: a
   // newer snapshot is a newer picture. Compared by identity, once a second —

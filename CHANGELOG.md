@@ -6,6 +6,19 @@
 
 ## Unreleased
 
+### Added
+
+- **Share picture of the floor.** Press `X`, or choose **Share picture of the floor…** in `⌘K`, or
+  use the button on a snapshot's toast. A small sheet opens with a live preview and three switches,
+  all on by default: **Hide project names** (each room gets an invented name and keeps it from one
+  picture to the next; a worktree's bench reads `branch 1`), **Hide session details** (no titles,
+  no tool text, no model — robot names, states and wait times stay) and **Add the footer** (the
+  mark, one line of the floor's own numbers, `deckhq.dev`). The picture is 16:9 or square, drawn
+  again in your theme from a copy of the floor that the hidden names were never put into, rather
+  than painted over. **Save picture** writes a PNG to `~/.deckhq/snapshots/`; **Copy image** and
+  **Reveal file** do what they say. Nothing is uploaded or sent anywhere, and making a picture
+  changes no session's state. See the guide, "Share a picture of your floor".
+
 ### Fixed
 
 - **A Studio handover is no longer lost when the board is busy.** When a hired session handed its
