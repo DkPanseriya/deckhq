@@ -2,25 +2,87 @@
 
 [![npm](https://img.shields.io/npm/v/deckhq)](https://www.npmjs.com/package/deckhq)
 [![CI](https://github.com/DkPanseriya/deckhq/actions/workflows/ci.yml/badge.svg)](https://github.com/DkPanseriya/deckhq/actions/workflows/ci.yml)
+[![licence](https://img.shields.io/npm/l/deckhq)](LICENSE)
 
-**An office for your AI coding agents.** The agent that finished an hour ago is still waiting for
-you. DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your
-queue until you clear it. Local, free, MIT, zero dependencies.
+## The agent that finished an hour ago is still waiting for you.
 
-![The DeckHQ floor seen from above: Your Office with two sessions waiting on the sofa, one of them with a hand up, three project rooms with a robot at a desk in two of them, and the Lounge with five resting](test/goldens/win32/three.png)
+DeckHQ puts every Claude Code and Codex session on one office floor and keeps each one in your
+queue until you clear it.
 
-_Screenshot — three repositories, nine sessions, two of them waiting on you._
+![The DeckHQ floor, moving. A robot finishes its turn at a desk and a red badge appears over it. It stands, walks the corridor into Your Office and sits on the sofa beside the two already waiting, and the plate on Your Office goes from 2 waiting to 3.](docs/media/site/hero-walk.gif)
 
-## Install
-
-**One line**, if you have Node 18 or newer. It starts the daemon, opens the floor in a window of
-its own, and — the first time only — asks once whether to write a Desktop and Start Menu icon.
+_Capture: the running product on its demo floor, where the projects are invented._
 
 ```bash
-npx deckhq app
+npx deckhq doctor   # count the sessions on your disk, finished ones included
+npx deckhq app      # the floor, in a window of its own
 ```
 
-**No Node on the machine?** Download and run [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd) on Windows or [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command) on macOS, or paste the matching line, which is all either file carries:
+Both need Node 18 or newer and nothing else. `doctor` only reports: it starts nothing, opens
+nothing and makes no outbound call, and the one thing it writes is a probe file in `~/.deckhq`,
+deleted at once. `app` starts the daemon, opens the floor in Chrome or Edge with no tab strip, and
+the first time asks once whether you want a Desktop and Start Menu icon.
+
+- **Local.** The daemon binds `127.0.0.1` and nothing else (`HOST` in
+  [`src/daemon.mjs`](src/daemon.mjs)) and makes no outbound call. No account, no telemetry.
+- **Zero runtime dependencies.** [`package.json`](package.json) has no `dependencies` field.
+- **MIT**, and all of it is in this repository: [`LICENSE`](LICENSE).
+
+## Why not the agent view you already have?
+
+Claude Code has one built in: `claude agents`. It starts sessions, keeps them running in the
+background and lets you answer one from a list. Use both. They do different jobs.
+
+|                      | Agent view, in Claude Code                                                                                                                        | DeckHQ                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Which sessions**   | Every background session you have started, across your projects. A session open in another terminal is listed once you send it to the background. | Every transcript on your disk, wherever the session was started: a terminal, your editor, the desktop app.                                        |
+| **For review**       | A session with an open pull request that needs review, or with failing checks, moves to **Ready for review**.                                     | Every session that finishes its turn waits in Your Office with how long it has waited. Reading it does not clear it; you reply, approve or bench. |
+| **Running them**     | Dispatches new sessions and runs them with no terminal open. Peek at one, reply from the list, or attach to the whole conversation.               | Reads the sessions your tools run and replies to them. It can start one. It never stops one, and closing it stops nothing.                        |
+| **Which tools**      | Claude Code sessions. Its pages name no other tool.                                                                                               | Claude Code, verified. Codex, verified for reading and replying. Gemini CLI and OpenCode adapters are written and unverified.                     |
+| **What you look at** | A list in your terminal, grouped by state, with the sessions that need you at the top. A research preview.                                        | An office seen from above in a window of its own: one room per repository, one robot per session.                                                 |
+
+As of October 2026. Agent view is described from Anthropic's own pages as they read on the 10th:
+[the announcement](https://claude.com/blog/agent-view-in-claude-code) and
+[the documentation](https://code.claude.com/docs/en/agent-view). `deckhq doctor` prints agent
+view's own count beside its own.
+
+## What you see
+
+- **A queue only you can clear.** What a session is doing changes on its own. What you owe it
+  changes when you press a button. Opening it, scrolling past it and reading it clear nothing.
+- **Every session, not only the live ones.** DeckHQ reads every transcript on disk, so a session
+  that finished an hour ago is still on the floor with what it last said. One room per repository;
+  a git worktree is a bench in it.
+- **Two "needs you" signals, counted separately.** A raised hand means _I am mid-task and blocked_.
+  A red badge with a waiting time means _I finished; review this_. Both wait in Your Office.
+- **A review card, not a notification.** Click anyone: how long they have waited, what they said
+  as the markdown they wrote, and what changed in that working tree. Then `1` reply, `2` approve,
+  `3` bench, or `O` to bring the window that session is running in to the front.
+- **A crew, when a session starts three or more sub-agents.** The juniors sit in an arc around the
+  desk, each with a cable to it that pulses while that junior's transcript is still being written
+  and goes grey when it stops.
+- **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` clears one,
+  and `deckhq statusline` gives a status bar `▣ 3 waiting · 1 hand up`.
+
+<table>
+  <tr>
+    <td valign="top"><img src="docs/media/site/loop-crew.gif" width="430" alt="A crew, moving: a lead robot named Elif at its desk with five juniors sitting in an arc behind it, each with a laptop and a cable running to the desk." /><br />Capture: a lead and its crew.</td>
+    <td valign="top"><img src="docs/media/site/panel.png" width="270" alt="The review panel for a robot named Emeka, for review in orbital-api, waiting 1d 2h. It shows what the session said, a block reading npm test, 214 passing, the files that changed, and three buttons: 1 Reply, 2 Approve, 3 Bench." /><br />Capture: the review card.</td>
+  </tr>
+</table>
+
+Tokens by project, session, model, day and tool, a picture of your floor you can post, and the
+rest, with a picture each: [the features](https://deckhq.dev/features.html).
+[The manual](docs/GUIDE.md) has every command, key and file.
+
+## Install, the other ways
+
+`npx deckhq app` is the whole install if you have Node 18 or newer.
+
+<details>
+<summary><strong>No Node, one line at a time, or an installer you can read first</strong></summary>
+
+**No Node on the machine?** Paste the line for your shell:
 
 ```powershell
 irm https://deckhq.dev/install.ps1 | iex
@@ -32,45 +94,19 @@ curl -fsSL https://deckhq.dev/install.sh | sh
 
 Each checks for Node 18 or newer and **offers** to install it (`winget`, `brew`, or your
 distribution's own command printed on Linux, never without asking), installs DeckHQ, offers the
-icon, and opens the window. Read them first — [`install.ps1`](scripts/install/install.ps1) and [`install.sh`](scripts/install/install.sh)
-are two short files in this repository, served from the site byte for byte, in no tarball and
-imported by nothing. SmartScreen may warn about the unsigned `.cmd`, and a downloaded `.command` arrives without its run bit; the two lines above have neither caveat.
+icon, and opens the window. Read them first: [`install.ps1`](scripts/install/install.ps1) and
+[`install.sh`](scripts/install/install.sh) are two short files in this repository, served from the
+site byte for byte.
 
-**A step at a time, if you prefer:** `npm install -g deckhq`, then `deckhq app`, then
+**Rather double-click?** [`Install-DeckHQ.cmd`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.cmd)
+on Windows and [`Install-DeckHQ.command`](https://github.com/DkPanseriya/deckhq/releases/latest/download/Install-DeckHQ.command)
+on macOS carry the same line and nothing else. SmartScreen may warn about the unsigned `.cmd`, and
+a downloaded `.command` arrives without its run bit; the pasted lines have neither caveat.
+
+**A step at a time:** `npm install -g deckhq`, then `deckhq app`, then
 `deckhq shortcut --install --yes` for the icon.
 
-**Before you install anything**, `npx deckhq doctor` prints the number nobody else counts —
-sessions that finished, left the agent view when their process exited, and are still waiting on
-you — and a `swallowed` row: what a running daemon quietly failed at instead of telling you.
-
-## What you see
-
-- **Every session, not only the live ones.** `claude agents` lists what is _running_. DeckHQ reads
-  every transcript on disk, so a session that finished an hour ago is still on the floor with what
-  it last said. One room per repository: a git worktree is a bench in it, not a room of its own.
-- **A queue only you can clear.** What a session is doing changes on its own. What you owe it
-  changes when you press a button. Opening a conversation does not clear it; scrolling past it does
-  not clear it; reading it does not clear it.
-- **Six states, and two different "needs you" signals.** Both wait in Your Office. A raised hand
-  means _I am mid-task and blocked_. A red badge with a waiting time means _I finished; review
-  this_. They need different responses, so they look different and are counted separately.
-- **A review card, not a notification.** Click anyone and the panel has how long they have been
-  waiting, what they said as the markdown they actually wrote, and what changed in that project's
-  working tree — then `1` reply, `2` approve, `3` bench. `O` brings the window that session is
-  already running in to the front.
-- **The crew, when a session fires three or more sub-agents.** The desk becomes a formation: the
-  juniors cross-legged in an arc around it, a laptop before each, and a cable from each to the desk
-  with a pulse running up it while that junior's transcript is still being written. A junior that
-  has stopped keeps its cable and it goes grey. Twelve are drawn; beyond that a `+N` chip, with the
-  rest in the panel and in the deck.
-- **Tokens, by project, session, model, day and tool**, from your own local ledger. Dollars are one
-  setting away and off by default, because most people run these tools on a subscription.
-- **The same queue in your terminal.** `deckhq waiting` prints it, `deckhq ack <id>` discharges one,
-  and `deckhq statusline` gives a status bar `▣ 3 waiting · 1 hand up`.
-- **A picture you can post.** `X` draws the floor again with project names and session details out.
-
-All of it, with a picture each, is on the site: [the features](https://deckhq.dev/features.html).
-[The manual](docs/GUIDE.md) has every command, key and file.
+</details>
 
 ## What it never does
 
@@ -105,68 +141,36 @@ it is why this table exists.
 ## Run it like an app
 
 ```bash
-deckhq app                        # the floor in a window of its own
-deckhq shortcut --install --yes   # + a Desktop and Start Menu icon for it
-deckhq autostart --install --yes  # + the daemon, quietly, when you log in
+deckhq shortcut --install --yes   # a Desktop and Start Menu icon for `deckhq app`
+deckhq autostart --install --yes  # the daemon, quietly, when you log in
 ```
 
-`deckhq app` reuses a running DeckHQ or starts one, then opens the floor in **Chrome or Edge in
-application mode** — no tab strip, no address bar, its own taskbar button, its own browser profile.
-Closing the window costs nothing: the daemon outlives it, which is the whole point.
-
-Both installers print every path they would write and the exact command each will run **before**
-`--yes`, tag every file they create, and remove only what they tagged. **Windows is the platform
-this was run on.** The macOS bundle and the Linux desktop entries are written from Apple's and
-freedesktop.org's documentation and have never been executed on a machine. Details, and the
-`?theme=` parameter that repaints one tab: [`docs/GUIDE.md`](docs/GUIDE.md).
+`deckhq app` reuses a running DeckHQ or starts one, and closing its window stops nothing: the
+daemon outlives it. Both installers print every path they would write and the exact command each
+will run **before** `--yes`, tag every file they create, and remove only what they tagged.
+**Windows is the platform this was run on.** The macOS bundle and the Linux desktop entries are
+written from Apple's and freedesktop.org's documentation and have never been executed on a machine.
+A machine with neither Chrome nor Edge gets its default browser, and is told so.
 
 ## Change the look
 
-**Look** in the header, or `L`, opens the six you reach for most: **agent size**, **theme**, **style**
-— eleven presets, Studio oak to Walnut executive — **density**, **light** and **room colours**, a
-switch for a colour per project room. Settings → Look (the gear, or `,`) has the same six over a live
-preview, and the rest under **Advanced**: partitions, a floor per zone, a colour scheme, furniture,
-rugs, plants, props, lounge kit. **72 options over fourteen pickers**, each chip by the floor painter.
-`⌘K` → `Look: Night lab` puts a style on in two keystrokes, and a style never touches your **agent
-size** — small, medium, large or auto — which moves the table, chair, sofa and rug with the people
-while the corridors, the room padding and every label stay put, so a floor of five fills the window
-and a floor of a hundred still fits. Nothing you can choose produces an illegible floor: a
-combination that would leave a rug unreadable on its floor is **refused with the reason and changes
-nothing**, and all three themes still apply on top. A look is a file you own, and unlike a layout it
-names no project, no path and no session — so you can post it:
-
-```bash
-deckhq look export > my-floor.json   # or the section's Export button
-deckhq look import my-floor.json     # refused whole if it is not paintable
-```
+**Look** in the header, or `L`, opens the six you reach for most: **agent size**, **theme**,
+**style** (eleven presets, Studio oak to Walnut executive), **density**, **light** and **room
+colours**. Settings → Look has the rest: **72 options over fourteen pickers**. A combination that
+would leave a rug unreadable on its floor is **refused with the reason and changes nothing**. A
+look is a file you own, and it names no project, no path and no session, so you can post it:
+`deckhq look export > my-floor.json`, then `deckhq look import my-floor.json`.
 
 ## Studio
 
 Studio is the opt-in "idea to office" mode, per project, off until `deckhq studio enable <project>`
-writes one marked file; a real `claude` session then interviews you and writes the blueprint, the
-roster and the board. The loop is complete — plan, hire, board, handover, tracking, drift, budget —
-and is on [the site](https://deckhq.dev/features.html#studio). **Not yet watched:** a real
-planner interview, or a hired session's real reply.
-
-**Hire starts people.** `⌘K` → **Studio: hire &lt;role&gt;** gives a role a git worktree of its own,
-a brief file that is yours to edit, and a real session there under that brief, on the floor within
-one scan. **Firing leaves the worktree and the process alone**; Codex, Gemini CLI and OpenCode roles
-are marked _unverified launch_.
-
-**The board is a view beside the floor.** `⌘K` → **Studio: board**: six columns, each card with its
-title, assignee and robot, acceptance count, budget and flags, and a real table underneath for a
-screen reader. Drag a card or move it with `[` and `]`; moving one into **Ready** hires its role.
-**A column is yours**: nothing DeckHQ observes moves a card, bar the budget stop.
-
-**The handover brings work back.** A role writes `.deckhq/studio/handovers/<cardId>.md` when it
-thinks a card is done; the card is **flagged, never moved**, and its review card shows the handover
-beside its worktree's diff. **Accept handover** and name the column, or **Bounce** with a note for
-the next brief. Counts are quoted — _"the handover says 41 passed"_ — never DeckHQ's own.
-
-**Tracking, drift and the budget.** Each card shows its tokens, time in progress and quoted tests —
-`no data`, never zero, where nothing was recorded — and each milestone its burn-down. Every 30
-minutes the planner flags drift, and a flag moves nothing. A card past its budget goes to
-**Blocked**, its session gets one message to stop and no more work, and **nothing is killed**.
+writes one marked file. A real `claude` session then interviews you and writes the blueprint, the
+roster and the board; hiring a role gives it a git worktree of its own and a real session there; a
+card its role thinks is done comes back as a handover, **flagged, never moved**; and a card past
+its budget goes to **Blocked** while **nothing is killed**. **Not yet watched:** a real planner
+interview, or a hired session's real reply. Codex, Gemini CLI and OpenCode roles are marked
+_unverified launch_. All of it: [the site](https://deckhq.dev/features.html#studio) and
+[the manual](docs/GUIDE.md#studio).
 
 ## Docs
 
@@ -178,8 +182,8 @@ minutes the planner flags drift, and a flag moves nothing. A card past its budge
 | [`LICENSE`](LICENSE)                   | MIT                                                                     |
 | [`docs/ADAPTERS.md`](docs/ADAPTERS.md) | For anyone adding support for another coding tool                       |
 
-[deckhq.dev](https://deckhq.dev/) is the product site: what it
-does, how it looks, how to install it, and the answers to the questions it gets asked.
+[deckhq.dev](https://deckhq.dev/) is the product site: what it does, how it looks, how to install
+it, and the answers to the questions it gets asked.
 
 ## Honest limits
 
@@ -234,15 +238,9 @@ official sponsorship programme, on purpose, and nothing in the product changes e
 
 Issues and pull requests are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first — it leads
 with the two things that get a change rejected regardless of how good it is: **letting anything but
-you decide what you owe**, and **sending anything off the machine**. Security policy in
-[`SECURITY.md`](SECURITY.md).
-
-```bash
-npm install     # dev tooling only; the product itself has zero runtime dependencies
-npm test        # node --test, no test framework
-npm run lint && npm run format:check && npm run typecheck
-npm run demo    # a synthetic floor in a temp directory, for screenshots
-```
+you decide what you owe**, and **sending anything off the machine**. The four gates are
+`npm run lint`, `npm run format:check`, `npm run typecheck` and `npm test`; `npm install` brings
+dev tooling only. Security policy in [`SECURITY.md`](SECURITY.md).
 
 ## Licence
 
