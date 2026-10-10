@@ -30,11 +30,11 @@ in the whole team at a glance, walk over to anyone and read what they are doing,
 the next task, send them to the lounge when there is nothing for them, let them go when the work
 is done.
 
-![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in your office for review](media/floor.png)
+![The DeckHQ floor: project rooms with agents at desks, a lounge of benched agents, and four sessions waiting in Your Office for review](media/floor.png)
 
 _Capture — September 2026, before the figure took its current form._
 
-**Read it in one glance.** The header counts what needs you. Your office, top left, holds the
+**Read it in one glance.** The header counts what needs you. Your Office, top left, holds the
 sessions that are waiting on you — finished and waiting on your reply, or **hand up** and blocked
 on a question — oldest first, with how long they have been waiting. Each project is a room with
 its own session count and token spend on the plate, and the people in it are that project's
@@ -43,7 +43,7 @@ have reviewed and benched — available capacity, resting, ready for the next jo
 
 **How the floor is shared out.** The project rooms get most of the building: at least 55% of it
 where the rooms are not already as large as a room may be (two projects are 54% of a 1440 × 1000
-window and 44% of a 1920 × 1080 one), with your office held to a fifth and the lounge to a quarter. Every room is the shape of a room,
+window and 44% of a 1920 × 1080 one), with Your Office held to a fifth and the lounge to a quarter. Every room is the shape of a room,
 between 0.7 and 1.8 times as wide as it is deep, and none is more than two and a half times the
 size of the smallest. A room comes in one of three sizes: one desk, a team of two to four, a team of
 five or more. A room is furnished for its size and for the floor it was given: a team's room has a
@@ -57,9 +57,9 @@ up; it is never rearranged while anybody is walking to it or from it, and this i
 the open page only. The
 lounge draws its seats and one row of people standing; a bigger crowd is a **`+N resting`** chip at
 the end of that row, and clicking it opens the deck on everybody resting. Everyone waiting sits on
-the sofas in your office, one to a cushion; only when every cushion is taken do the rest stand, in
+the sofas in Your Office, one to a cushion; only when every cushion is taken do the rest stand, in
 a queue along the wall at the desk end of the room, never on the rug.
-Where your office and the lounge stand depends on the window and on how many rooms there are. With
+Where Your Office and the lounge stand depends on the window and on how many rooms there are. With
 one or two projects on a window wider than it is tall they are a strip down the left, one over the
 other, and the project rooms are the rest of the building. Otherwise they are one over the other
 down the left, at the left ends of the top and bottom rows, or — for a few rooms in a window that
@@ -78,7 +78,7 @@ output, blocks, goes quiet, exits.
 
 **What you owe it** is _yours_. It changes only when you press a button.
 
-The waiting area in your office renders your acknowledgement, not the runtime's opinion. **Opening
+The waiting area in Your Office renders your acknowledgement, not the runtime's opinion. **Opening
 a conversation does not clear it. Scrolling past it does not clear it. Reading it does not clear
 it.** Only an explicit action does.
 
@@ -90,13 +90,13 @@ goes idle the item is "complete" and disappears. That is the bug this product ex
 | State         | What it means                                      | Where the agent is       | What you see                                                                       |
 | ------------- | -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------- |
 | `working`     | Live and producing output                          | Its project desk         | Typing, occasional coffee                                                          |
-| `needs_input` | Live, blocked on a question or a permission prompt | **Walks to your office** | Sitting on a sofa with **a hand raised** and a pulsing ring                        |
+| `needs_input` | Live, blocked on a question or a permission prompt | **Walks to Your Office** | Sitting on a sofa with **a hand raised** and a pulsing ring                        |
 | `stalled`     | Live but silent longer than the stall window       | Its desk                 | Slumped, amber                                                                     |
-| `for_review`  | Finished a turn, waiting on you                    | **Walks to your office** | Sitting on a sofa in the waiting area with a waiting-time badge                    |
+| `for_review`  | Finished a turn, waiting on you                    | **Walks to Your Office** | Sitting on a sofa in the waiting area with a waiting-time badge                    |
 | `benched`     | Reviewed, no work assigned, available              | The lounge               | Pool, table tennis, arcade, coffee                                                 |
 | `let_go`      | Off the floor                                      | Hidden                   | **Fired** — off the floor; the chat is kept and reachable from `⌘K` → "Show fired" |
 
-**The two "needs you" signals are deliberately different.** Both sit in your office, one to a
+**The two "needs you" signals are deliberately different.** Both sit in Your Office, one to a
 cushion. A raised hand means _I am mid-task and blocked_. A red badge with a waiting time means _I
 finished; review this_. Those need different responses from you, so they look different and are
 counted separately.
@@ -104,13 +104,13 @@ counted separately.
 `working`, `needs_input`, `stalled` and `for_review` are observed. `benched` and `let_go` are
 yours. `for_review` is entered automatically and can only be _left_ by you.
 
-**One exception to "walks to your office".** A session whose turn is over, or whose hand is up,
+**One exception to "walks to Your Office".** A session whose turn is over, or whose hand is up,
 stays at its own desk while at least one of its sub-agents is still working. It is not finished:
 it is waiting on them, and they will wake it. It holds its page instead of typing, its tooltip
-says `waiting on 3 juniors`, and everything else about it is as it would be in your office — the
+says `waiting on 3 juniors`, and everything else about it is as it would be in Your Office — the
 waiting badge, its place in the queue and the deck, and the number that needs you. Benching it
 still sends it to the lounge and firing it still takes it off the floor. When its last working
-sub-agent stops, it walks to your office.
+sub-agent stops, it walks to Your Office.
 
 ### Sub-agents
 
@@ -216,7 +216,7 @@ subfolder is in its repository's room as well, and a submodule is its own projec
 Inside the room, the main checkout has the desks in the middle. Each worktree somebody is
 **working** in has a bench against the foot wall, with the worktree's branch written on it, or its
 folder name when the checkout is detached. Two sessions in one worktree sit side by side at the
-same bench. A worktree session that is waiting on you is in your office and one that has finished
+same bench. A worktree session that is waiting on you is in Your Office and one that has finished
 is in the lounge, so a bench with nobody working at it is not drawn; the panel still says
 `repo · worktree-name`. One exception: a worktree session whose sub-agents are at work takes a desk
 until they finish, because that is where they have room to stand.
@@ -359,12 +359,12 @@ time. The macOS icon is a PNG rather than an `.icns`, because converting one mea
 ## More on `deckhq doctor`
 
 One command that says what DeckHQ actually knows about this machine, and whether the parts that
-have to be working are working. The sample at the top of this page is a real run.
+have to be working are working. It starts nothing and opens nothing. A sample of what it prints is
+on [the site](https://deckhq.dev/#doctor).
 
-Note what the `waiting on you` row is doing. Three sessions want something, and DeckHQ counts none
-of them as work the runtime has forgotten — **because all three are still running, so its own view
-lists them too**. It reports the number it can substantiate, which is the only kind worth
-reporting.
+Note what the `waiting on you` row does. A session that wants something and is **still running** is
+not counted as work the runtime has forgotten, because the runtime's own view lists it too. The row
+reports the number it can substantiate, which is the only kind worth reporting.
 
 `--share` is the pasteable version: the same numbers as a fenced block with everything that
 belongs to you taken out — no paths, no project names, no machine name, no hook port — so you can
@@ -532,9 +532,10 @@ receiving everything — the reinstall banner has nothing to warn you about on t
 Two things it needs from your machine. `node` must be on the `PATH` Claude Code runs hooks with,
 and `deckhq` must be findable for the `SessionStart` start to work — today that means a global
 install (`npm i -g deckhq`); `npx` leaves no binary behind, and the plugin will not fetch one,
-because DeckHQ makes no outbound network calls of any kind. The release job attaches Homebrew,
-winget and scoop manifests to a tagged release, so those routes exist as generated files rather
-than as anything somebody has installed with: that job has never run. Without `deckhq` on the
+because DeckHQ makes no outbound network calls of any kind. Each tagged release also carries a
+Homebrew formula and winget and scoop manifests, generated by the release job. They are files you
+can install from by hand; none is in a tap, in `winget-pkgs` or in a bucket, and nobody is known to
+have installed from one. Without `deckhq` on the
 `PATH` the plugin still delivers events to a daemon you started yourself; it just cannot start one
 for you.
 
@@ -575,6 +576,12 @@ Everything is read locally and nothing leaves the machine.
   modifies it.
 - `~/.deckhq/snapshots/` — the pictures you ask for and nothing else: `S`, a saved card, a
   [share picture](#share-a-picture-of-your-floor), and `doctor --capture-proof`.
+- `~/.deckhq/ledger/YYYY-MM-DD.jsonl` — the event ledger [`deckhq stats`](#deckhq-stats) reads: one
+  line per event, a project as a hash, no paths and no names. Kept for
+  `settings.ledgerRetentionDays`.
+- `~/.deckhq/ledger-key.pem` and `ledger-key.pub.pem` — **only after
+  `deckhq ledger export --signed`**: the Ed25519 key that signs an exported day. It is made on this
+  machine and stays on it.
 - `~/.deckhq/daemon.json` — the port a running daemon bound, so a hook can find it. Removed on a
   clean shutdown; nothing you own is in it.
 - `~/.deckhq/rates.json` — your own prices, if you set any. Edit it in the settings sheet or in a
@@ -955,6 +962,9 @@ These are real, and listed here rather than discovered later.
 - **Token totals for very large transcripts are approximate.** Reads are bounded to keep scans
   fast, so a multi-gigabyte session's historical usage is sampled rather than summed.
 - **Without hooks, `needs_input` and `stalled` are not detectable.** See above.
+- **Two steps of Studio have not been watched on a real session**: a planner interview from first
+  question to `written`, and a hired session's reply to its brief. Everything around them — the
+  files, the board, the handover, tracking, the budget stop — is covered by the test suite.
 - **Local only.** One machine, one human. No remote sessions, no team presence, no cloud sync.
 
 ## Keyboard
@@ -1000,6 +1010,37 @@ something — `A`, `D` and `S` belong to that card: allow, deny, and allow for t
 session. It holds only while the card is up and the composer is unfocused. With the day's card or
 Wrapped on screen, `S` saves **that** — the card plus a small photograph of the floor it is about.
 `Shift+S` is the redaction toggle either way.
+
+### Everything in `⌘K`
+
+Type a name and the palette finds an agent or a project; type anything else and it finds a command.
+A command with a letter beside it comes first when that letter is all you have typed, so
+`⌘K` `r` `Enter` rescans.
+
+| Command                               | What it does                                                        |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| **New agent** `a`, **New project** `p` | Start a session in a project you have, or in a directory you name   |
+| **Refresh** `r`                       | Rescan every session now                                            |
+| **Settle floor** `s`                  | Send every idle agent to the lounge                                 |
+| **Idle projects** `i`                 | The repos nobody is working in; **Pin** / **Unpin** a project by name |
+| **Float the office** `f`              | The small always-on-top window, as `P` does                         |
+| **Snapshot the office**               | As `S` does; **Redact project names** is `Shift+S`                  |
+| **Share picture of the floor…**       | As `X` does                                                         |
+| **Today's card**, **Wrapped**         | The day so far, and the week or the year                            |
+| **Watch yesterday**                   | The queue filling and emptying, replayed from your ledger at 60x    |
+| **Look**, **Look: _a style_**         | The Look panel, or one of the eleven styles straight away           |
+| **Look: reset / export / import**     | Back to the style you started from, or the look as a file           |
+| **Agents: small / medium / large / auto** | Agent size                                                      |
+| **Export layout**, **Import layout**  | The arrangement as a file, as `deckhq layout` does                  |
+| **Settings** `,`                      | The settings sheet                                                  |
+| **Install hooks** `h`                 | The consent screen for the hooks                                    |
+| **Install as app**                    | The browser's own install offer, or the command that does it        |
+| **Notifications** `n`, **Sound** `u`  | Turn each on or off                                                 |
+| **Show cost** / **Hide cost**         | The list-price estimate, everywhere it appears                      |
+| **Show fired** `l` / **Hide fired**   | The agents you fired: off the floor, and reachable from here        |
+| **Onboarding again** `o`              | The three coach marks, from the top                                 |
+| **Studio: plan this project**, **Studio: hire _role_**, **Studio: board** | [Studio](#studio). A project that has not enabled it is told so |
+| With an agent selected                | **Acknowledge**, **Mark for review**, **Bench**, **Recall**, **Fire** or **Rehire** — whichever apply to it |
 
 ## Share a picture of your floor
 
@@ -1222,6 +1263,10 @@ npx deckhq doctor         # the environment report above
 npx deckhq waiting        # the queue, in the terminal
 npx deckhq statusline     # the queue, as one line
 npx deckhq stats          # what the floor did, from the local ledger
+npx deckhq ledger days    # the ledger itself: days, export [--signed], verify <file>
+npx deckhq layout export  # the arrangement as a file: export, show, import <file>
+npx deckhq look export    # the look as a file: export, show, import <file>, presets
+npx deckhq pack list      # asset packs: build, verify, install, list, remove
 npx deckhq app            # the floor in a window of its own
 npx deckhq shortcut       # a Desktop and Start Menu icon for that window
 npx deckhq autostart      # the daemon, at login, with no window
@@ -1235,12 +1280,17 @@ npx deckhq --version
 | `--no-open`  | Start the daemon without opening a browser                          |
 | `--notify`   | OS notification when a hand goes up, or when a working session dies |
 | `--version`  | Print the version                                                   |
+| `--help`     | Every command on one screen. `doctor`, `look`, `layout`, `pack` and `ledger` print their own |
+
+`show` is `export` for reading: the same document, on your terminal. `deckhq look presets` lists the
+eleven styles by the id `?look=` takes.
 
 | Environment variable | Effect                                                                      |
 | -------------------- | --------------------------------------------------------------------------- |
 | `DECKHQ_STATE_DIR`   | Where state, cache, ledger, snapshots and backups live. Default `~/.deckhq` |
 | `DECKHQ_PORT`        | Default port, if `--port` is not given                                      |
 | `CLAUDE_CONFIG_DIR`  | Where to look for Claude Code. Default `~/.claude`                          |
+| `CHROME_PATH`        | The browser `deckhq app` opens its window in, if yours is somewhere unusual. `CHROME_BIN` is read too |
 | `DECKHQ_HOSTNAME`    | What the office is called in a snapshot. Default: the machine's own name    |
 | `DECKHQ_NOW`         | _Tests and demos._ Pin the clock to an ISO instant. No effect when unset    |
 | `DECKHQ_DEBUG`       | Verbose logging                                                             |
@@ -1280,27 +1330,31 @@ the project directory, and a manifest pointing outside its own repo is refused r
 ## Development
 
 ```bash
-npm install     # dev tooling only; the product itself has zero runtime dependencies
+npm install          # dev tooling only; the product itself has zero runtime dependencies
 npm start
-npm test        # node --test, no test framework
+npm test             # node --test, no test framework
 npm run lint
-npm run demo    # a synthetic floor in a temp directory, for screenshots
+npm run format:check
+npm run typecheck
+npm run demo         # a synthetic floor in a temp directory, for screenshots
 ```
 
-CI runs lint, format check and the full suite on Windows, macOS and Linux against Node 18, 20 and 22.
+CI runs lint, the format check and the full suite on Windows, macOS and Linux against Node 18, 20
+and 22, the type check once, and on Linux a pixel comparison of the floor against the pictures in
+`test/goldens/`. [`CONTRIBUTING.md`](../CONTRIBUTING.md) has the rest.
 
-The hero GIF above is generated, not drawn: `scripts/capture-hero.mjs` records the demo floor
-while one agent's turn ends through the real hook endpoint, and `scripts/gif-encoder.mjs` encodes
-the frames with no dependency, so it contains no real project names and can be regenerated after
-any change to the floor.
+`npm run demo` is the floor to photograph: synthetic sessions in a temp directory, so a picture
+needs no real project name. `scripts/capture-floor.mjs` photographs a running floor;
+`scripts/capture-hero.mjs` records one while an agent's turn ends through the real hook endpoint,
+and `scripts/gif-encoder.mjs` encodes the frames with no dependency.
 
-So is the mark at the top of this file. It lives once, as
-[`public/brand/deckhq-mark.svg`](../public/brand/deckhq-mark.svg) — six rounded rectangles, both
-grounds in one file, no font and no external reference — and every PNG, the `favicon.ico` and the
-VS Code tile are rendered from it by `node scripts/brand/render-icons.mjs`, which rasterises the
-shapes itself rather than driving a browser, so the bytes are the same on every machine.
-`--check` compares the committed files against a fresh render, and `test/unit/brand-mark.test.mjs`
-does the same on every run, so the source and its outputs cannot drift apart.
+The DeckHQ mark lives once, as [`public/brand/deckhq-mark.svg`](../public/brand/deckhq-mark.svg) —
+rounded shapes only, both grounds in one file, no font and no external reference — and every PNG,
+the `favicon.ico` and the VS Code tile are rendered from it by
+`node scripts/brand/render-icons.mjs`, which rasterises the shapes itself rather than driving a
+browser, so the bytes are the same on every machine. `--check` compares the committed files against
+a fresh render, and `test/unit/brand-mark.test.mjs` does the same on every run, so the source and
+its outputs cannot drift apart.
 
 What changed and when is in [`CHANGELOG.md`](../CHANGELOG.md). What DeckHQ does, with a picture for
 each of it, is on [the site](https://deckhq.dev/).
