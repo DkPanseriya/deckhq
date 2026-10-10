@@ -33,6 +33,9 @@ import {
 // surface that is hidden on every floor as the product ships has nothing to
 // add to the shell.
 import { closeStudioBoard, studioBoardOpen } from './board-shell.js';
+// The share picture loads its sheet on first use, so there is nothing for
+// `app.js` to build and hand in; the key reaches the loader directly.
+import { sharePicture } from './app-snapshot.js';
 
 /** @type {() => boolean} */
 let dismissCard = () => false;
@@ -215,6 +218,14 @@ export function handleKeydown(e) {
       // It is the thing on the screen, so it is the thing the key is about.
       else if (openCard) saveCard();
       else takeSnapshot();
+      break;
+    // `X` — the share picture: a small sheet with a live preview, project
+    // names and session details hidden unless switched on, then a PNG. `S` is
+    // the window as it is; this is the one made to be posted. Like every key
+    // here it does nothing while a dialog is up, so it cannot open twice.
+    case 'x':
+    case 'X':
+      sharePicture();
       break;
     // The review card's weighted actions (docs/plan/05-GUI-UX-SPEC.md §4.2):
     // 1 focuses the composer, 2 approves (a send), 3 benches. On the floor

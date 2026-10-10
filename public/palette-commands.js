@@ -275,6 +275,19 @@ export function buildCommandEntries(ctx) {
       run: () => actions.snapshot(),
     },
     {
+      // The picture made to be posted, as against the window as it is: a
+      // fixed frame, project names and session details hidden unless the
+      // sheet's switches say otherwise. The trailing ellipsis is the usual
+      // promise that this opens something and does nothing yet. No
+      // accelerator, for `Snapshot the office`'s reason: it has a key, `X`.
+      id: 'cmd:share-picture',
+      group: 'command',
+      label: 'Share picture of the floor…',
+      hint: 'names hidden by default; a PNG on this machine — X',
+      keywords: ['share', 'post', 'picture', 'image', 'png', 'screenshot', 'redact', 'social'],
+      run: () => actions.sharePicture(),
+    },
+    {
       id: 'cmd:redact',
       group: 'command',
       label: redacting ? 'Redact project names — turn off' : 'Redact project names',

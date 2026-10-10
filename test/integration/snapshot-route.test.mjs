@@ -134,6 +134,45 @@ test('a snapshot at the 2 MB target goes through', async () => {
   });
 });
 
+test('SECURITY: "Reveal file" opens the snapshots folder, and the request cannot name another', async () => {
+  const { dir, stateFile, publicDir } = daemonScratch('snap-reveal-');
+  const snapshotDir = path.join(dir, 'snapshots');
+  /** @type {string[]} what the file manager was asked to open */
+  const opened = [];
+  const d = await startDaemon({
+    port: 0,
+    stateFile,
+    publicDir,
+    snapshotDir,
+    revealFolder: (folder) => void opened.push(folder),
+  });
+  try {
+    // A body, a query and a header that each try to point it somewhere else.
+    const res = await fetch(d.url + 'api/snapshot/reveal?dir=C:%5CWindows&file=..%2F..%2Fx', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-dir': '/etc' },
+      body: JSON.stringify({ dir: '/etc', file: '../../escaped.png', path: 'C:\\Windows' }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal(path.resolve((await res.json()).dir), path.resolve(snapshotDir));
+    assert.deepEqual(
+      opened.map((p) => path.resolve(p)),
+      [path.resolve(snapshotDir)],
+    );
+    // Before anything was ever saved, there is still a folder to show.
+    assert.ok((await fs.stat(snapshotDir)).isDirectory());
+    assert.deepEqual(await fs.readdir(snapshotDir), []);
+    // And it is a POST: a link in a page cannot open a window by being fetched.
+    const get = await fetch(d.url + 'api/snapshot/reveal');
+    assert.ok(get.status >= 400);
+    await get.text();
+    assert.equal(opened.length, 1);
+  } finally {
+    await d.close();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 // DELIBERATE HOST READ — the only one in the suite. `docs/DEVIATIONS.md` §124.5.
 // Everything else runs against a temp root, but the claim here is that the
 // office is named after *this machine*, so the machine's own name is the

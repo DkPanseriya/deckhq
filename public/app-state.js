@@ -528,16 +528,35 @@ export function formatNumber(n) {
 
 /**
  * @param {string} message
- * @param {{isError?:boolean}} [opts]
+ * @param {{isError?:boolean, action?:{label:string, run:() => void}}} [opts]
+ *   `action`: one button after the sentence, for the thing a person is likely
+ *   to want next. A toast with one stays twice as long, because a button
+ *   nobody had time to reach is worse than no button.
  */
 export function toast(message, opts = {}) {
   el.toast.textContent = message;
+  const action = opts.action;
+  if (action) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toast-action';
+    button.textContent = action.label;
+    button.addEventListener('click', () => {
+      el.toast.hidden = true;
+      action.run();
+    });
+    el.toast.append(button);
+  }
   el.toast.classList.toggle('is-error', Boolean(opts.isError));
+  el.toast.classList.toggle('has-action', Boolean(action));
   el.toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    el.toast.hidden = true;
-  }, 4000);
+  toastTimer = setTimeout(
+    () => {
+      el.toast.hidden = true;
+    },
+    action ? 8000 : 4000,
+  );
 }
 
 /** Push text into the off-screen aria-live region, deduped. @param {string} text */

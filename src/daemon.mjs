@@ -240,6 +240,7 @@ function envHoldMs() {
  *           ledgerDir?: string, publicDir?: string, permissionHoldMs?: number,
  *           notify?: boolean, daemonFile?: string, snapshotDir?: string,
  *           packsDir?: string, ratesFile?: string,
+ *           revealFolder?: (dir:string) => Promise<void>|void,
  *           launchTerminal?: (opts:any) => Promise<any>,
  *           studioWatchOptions?: {pollMs?:number, debounceMs?:number},
  *           sessionFocus?: import('./core/session-focus.mjs').FocusRunner,
@@ -372,6 +373,9 @@ export async function startDaemon(opts = {}) {
     // Where `S` writes (WP-14). Overridable for the same reason `stateFile`
     // is: a test must never write into the user's real `~/.deckhq`.
     snapshotDir: opts.snapshotDir,
+    // What "Reveal file" in the share sheet runs. Overridable so a test opens
+    // no file manager on the machine it runs on.
+    revealFolder: opts.revealFolder,
     // WP-45. Where installed asset packs live. Overridable for the same
     // reason `stateFile` is: a test must never read the developer's own.
     packsDir,

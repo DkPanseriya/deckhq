@@ -29,6 +29,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { sendError, sendJson } from '../server.mjs';
+import { revealInFileManager } from '../../core/actions.mjs';
 import { SNAPSHOT_DIR } from '../../core/paths.mjs';
 
 /** Body ceiling for this route only. See rule 3 above. */
@@ -81,11 +82,13 @@ function readBytes(req, limit) {
 
 /**
  * @param {import('../server.mjs').Router} router
- * @param {{log:any, snapshotDir?:string}} ctx
+ * @param {{log:any, snapshotDir?:string, revealFolder?:(dir:string)=>Promise<void>|void}} ctx
+ *   `revealFolder` replaces the file manager, so a test opens no window.
  */
 export function register(router, ctx) {
   const { log } = ctx;
   const dir = ctx.snapshotDir || SNAPSHOT_DIR;
+  const reveal = ctx.revealFolder || revealInFileManager;
 
   router.post('/api/snapshot', async (req, res) => {
     /** @type {Buffer} */
@@ -113,5 +116,28 @@ export function register(router, ctx) {
     }
     log.info(`snapshot written to ${file}`);
     sendJson(res, 200, { file, bytes: body.length });
+  });
+
+  /**
+   * POST /api/snapshot/reveal   show the snapshots folder in the file manager
+   *
+   * The share sheet's "Reveal file". Rule 1 holds here as it does above: the
+   * request names nothing. There is no path, no filename and no body to read —
+   * the one directory this can ever open is the one this route writes to, and
+   * the daemon already knows where that is. It opens the folder rather than
+   * selecting a file for the same reason: selecting one would mean taking its
+   * name from the browser.
+   */
+  router.post('/api/snapshot/reveal', async (_req, res) => {
+    try {
+      // A folder nobody has saved into yet does not exist; opening it should
+      // show an empty folder, not an error about a missing one.
+      await fs.mkdir(dir, { recursive: true });
+      await reveal(dir);
+    } catch (err) {
+      log.warn('could not reveal the snapshots folder', err);
+      return sendError(res, 500, `Could not open ${dir}: ${err.message}`);
+    }
+    sendJson(res, 200, { ok: true, dir });
   });
 }
